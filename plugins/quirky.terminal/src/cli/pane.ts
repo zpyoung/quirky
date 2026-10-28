@@ -107,7 +107,16 @@ export const paneCommands: Record<string, Handler> = {
     atMost(args, ctx, 1)
     const direction = stringFlag(args, 'direction')
     if (direction === undefined) throw ctx.usage('missing required flag --direction')
-    showWorkspace(ctx, await call(ctx, 'splitPane', { pane: await paneIdOf(args.positionals[0], ctx), direction }))
+    const title = stringFlag(args, 'title')
+    const command = stringFlag(args, 'command')
+    const activate = args.flags.activate
+    showWorkspace(ctx, await call(ctx, 'splitPane', {
+      pane: await paneIdOf(args.positionals[0], ctx),
+      direction,
+      ...(title === undefined ? {} : { title }),
+      ...(command === undefined ? {} : { command }),
+      ...(typeof activate === 'boolean' ? { activate } : {})
+    }))
   },
   'pane-close': onPane('closePane'),
   'pane-restart': onPane('restartPane'),

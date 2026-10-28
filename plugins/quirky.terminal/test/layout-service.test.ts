@@ -541,6 +541,48 @@ describe('panes', () => {
     expect(lastTab(ws).activePane).toBe(panesOf(lastTab(ws))[2]!.id)
   })
 
+  test('splitPane returns the new session and pane while activate false preserves workspace focus', async () => {
+    const first = await newTab()
+    let target = (await api('newTab', { workspace: WT, activate: false })).workspace as Workspace
+    let targetTab = lastTab(target)
+    const source = panesOf(targetTab)[0]!
+    target = (await api('splitPane', { pane: source.id, direction: 'right', activate: false })).workspace as Workspace
+    targetTab = tabsOf(target).find((tab) => tab.id === targetTab.id)!
+    const otherPane = panesOf(targetTab)[1]!
+    target = (await api('expandPane', { pane: otherPane.id, expanded: true })).workspace as Workspace
+    targetTab = tabsOf(target).find((tab) => tab.id === targetTab.id)!
+    const activeGroup = target.activeGroup
+    const activeTabs = groupsOf(target).map((group) => [group.id, group.activeTab])
+    const activePanes = tabsOf(target).map((tab) => [tab.id, tab.activePane])
+    await api('focusContext', { workspace: 'wt_other' })
+
+    const created = await api('splitPane', { pane: source.id, direction: 'right', activate: false })
+    const after = created.workspace as Workspace
+    const splitTab = tabsOf(after).find((tab) => tab.id === targetTab.id)!
+    const added = panesOf(splitTab).find((pane) => pane.id === created.pane)!
+
+    expect(added.session).toBe(created.session)
+    expect(splitTab.activePane).toBe(otherPane.id)
+    expect(splitTab.expandedPane).toBeNull()
+    expect(after.activeGroup).toBe(activeGroup)
+    expect(groupsOf(after).map((group) => [group.id, group.activeTab])).toEqual(activeTabs)
+    expect(tabsOf(after).map((tab) => [tab.id, tab.activePane])).toEqual(activePanes)
+    expect(await api('focusContext')).toEqual({ workspace: 'wt_other' })
+    expect(groupsOf(after)[0]!.activeTab).toBe(tabsOf(first)[0]!.id)
+  })
+
+  test('splitPane rejects an overlong title before starting a session or changing the layout', async () => {
+    const before = await newTab()
+    const pane = panesOf(lastTab(before))[0]!
+    const creates = sessionCreates().length
+
+    const failed = await error(api('splitPane', { pane: pane.id, direction: 'right', title: 'x'.repeat(201) }))
+
+    expect([failed?.code, failed?.message]).toEqual([RpcErrorCode.InvalidParams, 'title must be at most 200 characters'])
+    expect(sessionCreates()).toHaveLength(creates)
+    expect(await layoutOf()).toEqual(before)
+  })
+
   test('a source directory that no longer exists falls back to the worktree root', async () => {
     const ws = await newTab()
     const source = panesOf(lastTab(ws))[0]!

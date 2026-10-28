@@ -2939,6 +2939,18 @@
               "right",
               "down"
             ]
+          },
+          "title": {
+            "type": "string",
+            "description": "title for the new shell session (at most 200 characters)"
+          },
+          "command": {
+            "type": "string",
+            "description": "a shell command to run instead of an interactive shell"
+          },
+          "activate": {
+            "type": "boolean",
+            "description": "whether to focus the new pane (default true; use --activate=false to preserve focus)"
           }
         },
         "methods": [
