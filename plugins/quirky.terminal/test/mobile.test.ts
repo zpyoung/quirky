@@ -226,4 +226,43 @@ describe('mobile terminal driver leases through the daemon API', () => {
     }
   })
 
+  test('phone display mode restores desktop ownership and clear remains lease-protected', async () => {
+    await call(desktop, 'quirky.terminal/resize', { session: shell.id, cols: 120, rows: 35 })
+    await admit('phone-a')
+    await phone('phone-a', 'quirky.terminal/attach', { session: shell.id, cols: 50, rows: 20 })
+
+    await phone('phone-a', 'quirky.terminal/displayMode', { session: shell.id, mode: 'desktop' })
+    expect(ptySize()).toEqual({ cols: 120, rows: 35 })
+    await expectConflict(phone('phone-a', 'quirky.terminal/write', { session: shell.id, data: 'watch only' }))
+    await call(desktop, 'quirky.terminal/resize', { session: shell.id, cols: 132, rows: 40 })
+    expect(ptySize()).toEqual({ cols: 132, rows: 40 })
+
+    await phone('phone-a', 'quirky.terminal/displayMode', { session: shell.id, mode: 'phone', cols: 60, rows: 22 })
+    expect(ptySize()).toEqual({ cols: 60, rows: 22 })
+    expect((await terminalState())[0]?.driver).toMatchObject({ deviceId: 'device-a' })
+    await phone('phone-a', 'quirky.terminal/clear', { session: shell.id })
+    await expectConflict(call(desktop, 'quirky.terminal/clear', { session: shell.id }))
+
+  })
+  test('phone driver state and mutations are bound to the authenticated socket as well as device', async () => {
+    await call(desktop, 'quirky.terminal/resize', { session: shell.id, cols: 120, rows: 35 })
+    await admit('phone-a')
+    await admit('phone-a-reconnect')
+    await phone('phone-a', 'quirky.terminal/attach', { session: shell.id, cols: 50, rows: 20 })
+    await phone('phone-a-reconnect', 'quirky.terminal/attach', { session: shell.id, cols: 60, rows: 22 })
+
+    const owner = await phone('phone-a', 'quirky.terminal/mobileState', { session: shell.id }) as { terminals: { controlledByCaller: boolean }[] }
+    const otherSocket = await phone('phone-a-reconnect', 'quirky.terminal/mobileState', { session: shell.id }) as { terminals: { controlledByCaller: boolean }[] }
+    expect(owner.terminals[0]?.controlledByCaller).toBe(true)
+    expect(otherSocket.terminals[0]?.controlledByCaller).toBe(false)
+
+    await phone('phone-a', 'quirky.terminal/write', { session: shell.id, data: 'owner input' })
+    await expectConflict(phone('phone-a-reconnect', 'quirky.terminal/write', { session: shell.id, data: 'other socket input' }))
+    await expectConflict(phone('phone-a-reconnect', 'quirky.terminal/clear', { session: shell.id }))
+    await expectConflict(phone('phone-a-reconnect', 'quirky.terminal/displayMode', { session: shell.id, mode: 'desktop' }))
+    const ownerAfter = await phone('phone-a', 'quirky.terminal/mobileState', { session: shell.id }) as { terminals: { controlledByCaller: boolean }[] }
+    expect(ownerAfter.terminals[0]?.controlledByCaller).toBe(true)
+    expect(ptySize()).toEqual({ cols: 50, rows: 20 })
+    expect(h.pty.inputs).toEqual([{ sessionId: shell.id, text: 'owner input' }])
+  })
 })

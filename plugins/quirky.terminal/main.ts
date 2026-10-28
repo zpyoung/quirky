@@ -24,6 +24,8 @@ export async function activate(context: PluginContext): Promise<void> {
     detach: terminal.detach,
     write: terminal.write,
     resize: terminal.resize,
+    clear: terminal.clear,
+    displayMode: terminal.displayMode,
     send: terminal.send,
     read: terminal.read,
     snapshot: terminal.snapshot,

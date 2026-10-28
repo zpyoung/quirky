@@ -160,11 +160,39 @@ export class TerminalService {
     return { ok: true }
   }
 
+  clear = async (params: Record<string, unknown>, caller: PluginCaller): Promise<{ ok: true }> => {
+    const session = await this.requireWritable(params.session as string)
+    this.mobile.assertCanInput(session.id, caller)
+    await this.context.pty.clear(session.id)
+    return { ok: true }
+  }
+
   resize = async (params: Record<string, unknown>, caller: PluginCaller): Promise<{ ok: true }> => {
     const session = await this.requireTerminal(params.session as string)
     return this.enqueue(session.id, () =>
       this.mobile.resize(session.id, params.cols as number, params.rows as number, params, caller)
     )
+  }
+
+  displayMode = async (params: Record<string, unknown>, caller: PluginCaller): Promise<{ ok: true }> => {
+    const session = await this.requireTerminal(params.session as string)
+    const keys = Object.keys(params)
+    if (params.mode === 'phone') {
+      if (keys.length !== 4 || keys.some((key) => !['session', 'mode', 'cols', 'rows'].includes(key)) ||
+        !Number.isSafeInteger(params.cols) || (params.cols as number) < 1 || (params.cols as number) > 1000 ||
+        !Number.isSafeInteger(params.rows) || (params.rows as number) < 1 || (params.rows as number) > 500) {
+        throw this.context.error('invalid-params', 'phone display mode requires a valid terminal viewport')
+      }
+    } else if (params.mode !== 'desktop' || keys.length !== 2 || keys.some((key) => key !== 'session' && key !== 'mode')) {
+      throw this.context.error('invalid-params', 'desktop display mode accepts only a session and mode')
+    }
+    return this.enqueue(session.id, () => this.mobile.displayMode(
+      session.id,
+      params.mode as 'phone' | 'desktop',
+      params.cols as number | undefined,
+      params.rows as number | undefined,
+      caller
+    ))
   }
 
   /** Types `text` into a shell; pastes it into an agent, and presses Enter after a pause when asked. */

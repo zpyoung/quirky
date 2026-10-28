@@ -2,6 +2,13 @@ import type { CallerConnection, MobileTerminalState, PluginCaller, PluginContext
 
 const messageOf = (error: unknown) => error instanceof Error ? error.message : String(error)
 
+export type MobileTerminalAccessState = MobileTerminalState & { controlledByCaller: boolean }
+
+function isCurrentPhoneDriver(driver: MobileTerminalState['driver'] | null | undefined, caller: PluginCaller): boolean {
+  return caller.role === 'mobile' && typeof caller.deviceId === 'string' && caller.connection !== undefined &&
+    driver !== null && driver !== undefined && driver.deviceId === caller.deviceId && driver.connectionId === caller.connection.id
+}
+
 type Lease = {
   driver: MobileTerminalState['driver']
   phoneFit: boolean
@@ -145,9 +152,7 @@ export class MobileDriverService {
     if (caller.role === 'plugin') return
     const driver = this.leases.get(sessionId)?.driver
     if (caller.role === 'mobile') {
-      if (!caller.deviceId || driver?.deviceId !== caller.deviceId) {
-        throw this.context.error('conflict', 'this phone does not control the terminal')
-      }
+      if (!isCurrentPhoneDriver(driver, caller)) throw this.context.error('conflict', 'this phone connection does not control the terminal')
       return
     }
     if (driver) throw this.context.error('conflict', 'phone is controlling the terminal; take back control before typing')
@@ -177,7 +182,35 @@ export class MobileDriverService {
     return { ok: true }
   }
 
-  mobileState(params: Record<string, unknown>, caller: PluginCaller): { terminals: MobileTerminalState[] } {
+  async displayMode(sessionId: string, mode: 'phone' | 'desktop', cols: number | undefined, rows: number | undefined, caller: PluginCaller): Promise<{ ok: true }> {
+    if (caller.role !== 'mobile') throw this.context.error('invalid-params', 'phone display mode is available only to mobile callers')
+    const connection = this.requireMobileConnection(caller)
+    const mobile = this.connections.get(connection.id)
+    if (!mobile || mobile.deviceId !== caller.deviceId || (mobile.sessions.get(sessionId) ?? 0) === 0) {
+      throw this.context.error('conflict', 'attach to the terminal before changing display mode')
+    }
+
+    if (mode === 'phone') {
+      if (!Number.isInteger(cols) || (cols as number) < 1 || (cols as number) > 1000 ||
+        !Number.isInteger(rows) || (rows as number) < 1 || (rows as number) > 500) throw this.context.error('invalid-params', 'invalid phone terminal viewport')
+      await this.claimPhone(sessionId, cols as number, rows as number, caller.deviceId!, connection.id)
+      return { ok: true }
+    }
+    if (mode !== 'desktop' || cols !== undefined || rows !== undefined) throw this.context.error('invalid-params', 'desktop display mode accepts only the session and mode')
+
+    const lease = this.leases.get(sessionId)
+    if (lease?.driver === null && lease.watchOnly.has(connection.id) && !lease.phoneFit) return { ok: true }
+    if (!lease || !isCurrentPhoneDriver(lease.driver, caller)) throw this.context.error('conflict', 'this phone connection does not control the terminal')
+    await this.restoreDesktopViewport(sessionId, lease)
+    this.cancelRestore(lease)
+    lease.driver = null
+    lease.watchOnly.add(connection.id)
+    lease.phoneFit = false
+    this.emitChanged()
+    return { ok: true }
+  }
+
+  mobileState(params: Record<string, unknown>, caller: PluginCaller): { terminals: MobileTerminalAccessState[] } {
     const session = params.session
     const attachedBy = caller.role === 'mobile' ? caller.deviceId : null
     if (caller.role === 'mobile' && !attachedBy) throw this.context.error('invalid-params', 'mobile terminal caller has no authenticated device identity')
@@ -189,7 +222,7 @@ export class MobileDriverService {
     const terminals = this.states().filter((item) =>
       (session === undefined || item.session === session) &&
       (visibleSessions === null || visibleSessions.has(item.session))
-    )
+    ).map((item) => ({ ...item, controlledByCaller: isCurrentPhoneDriver(item.driver, caller) }))
     return { terminals }
   }
 

@@ -265,6 +265,45 @@
         }
       },
       {
+        "id": "clear",
+        "description": "Clears terminal scrollback only for a desktop caller or the current phone driver.",
+        "connection": true,
+        "params": {
+          "type": "object",
+          "properties": { "session": { "type": "string" } },
+          "required": ["session"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": { "ok": { "type": "boolean" } },
+          "required": ["ok"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "displayMode",
+        "description": "Switches only the attached phone between owning the phone viewport and read-only desktop viewport.",
+        "connection": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": { "type": "string" },
+            "mode": { "type": "string", "enum": ["phone", "desktop"] },
+            "cols": { "type": "integer", "minimum": 1, "maximum": 1000 },
+            "rows": { "type": "integer", "minimum": 1, "maximum": 500 }
+          },
+          "required": ["session", "mode"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": { "ok": { "type": "boolean" } },
+          "required": ["ok"],
+          "additionalProperties": false
+        }
+      },
+      {
         "id": "send",
         "description": "Sends a prompt as a bracketed paste, then Enter as a separate write when `enter` is set.",
         "params": {
@@ -2286,13 +2325,14 @@
                 "properties": {
                   "session": { "type": "string" },
                   "driver": { "description": "Null when unowned; otherwise the authenticated device, connection and name." },
+                  "controlledByCaller": { "type": "boolean", "description": "True only for the exact authenticated phone connection that owns terminal input." },
                   "phoneFit": { "type": "boolean" },
                   "cols": { "type": "integer" },
                   "rows": { "type": "integer" },
                   "desktopCols": { "description": "Saved desktop cols, or null before one is reported." },
                   "desktopRows": { "description": "Saved desktop rows, or null before one is reported." }
                 },
-                "required": ["session", "driver", "phoneFit", "cols", "rows", "desktopCols", "desktopRows"]
+                "required": ["session", "driver", "controlledByCaller", "phoneFit", "cols", "rows", "desktopCols", "desktopRows"]
               }
             }
           },
