@@ -35,10 +35,18 @@ page-origin module requires a native development build, not Expo Go. To check th
 client and page code, use `bun run typecheck:mobile` and `bun run build:mobile-pages`.
 
 The companion opens workspaces, drives terminal sessions under an explicit input lease, and
-answers agent questions. Interactive native chat, dictation, reversible workspace Sleep, and
-filters requiring unavailable client provenance are not supported. Other mobile panels and
-signed distribution are tracked separately. Actual camera, secure-store, WebView and keyboard
-checks remain in [the native scenario handoff](docs/loop/native/sb-mobile-app.json).
+answers agent questions. Workspace **Sleep** parks its views without stopping processes;
+opening it wakes those views. **Stop sessions (retain history)** is a separate, explicit operation
+that preserves PTY history and supported agents' resume identities. Unknown workspace origins
+remain visible under automation/other-client filters. Markdown tabs use the actual editor
+document and tab identity, with revision-guarded edits and saves.
+
+**Browser (Chrome Watch)** is explicit opt-in, with a connection-owned stream and typed controls;
+selecting an existing Native tab never converts it silently. Interactive native chat, dictation,
+and Native browser mirroring still need their recorded architecture or host prerequisites.
+Signed distribution is tracked separately. Actual camera, secure-store,
+WebView and keyboard checks remain in the [base native handoff](docs/loop/native/sb-mobile-app.json)
+and [workspace/tab handoff](docs/loop/native/sb-mobile-app-prerequisites.json).
 
 ## Agent Session History
 

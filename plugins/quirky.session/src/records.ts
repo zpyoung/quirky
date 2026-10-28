@@ -13,7 +13,8 @@ import type {
   SessionLaunch,
   SessionProviderSession,
   SessionStatus,
-  StoreMigration
+  StoreMigration,
+  WorkspaceSleepState
 } from '@quirky/protocol'
 
 type Row = {
@@ -41,6 +42,18 @@ type Row = {
   unread: Session['unread']
   badges: string | null
 }
+type WorkspaceSleepRow = {
+  worktree_id: string
+  state: WorkspaceSleepState['state']
+  updated_at: number
+  sessions_json: string
+  instance_id: string | null
+}
+export type StoredWorkspaceSleep = {
+  state: WorkspaceSleepState
+  instanceId: string | null
+}
+
 export type PointerOperationResult =
   | { status: 'submitted'; transport: 'terminal_enter' | 'structured_session' }
   | { status: 'text_only'; reason: 'cursor_no_auto_enter' }
@@ -242,6 +255,19 @@ export function sessionMigrations(home: string): StoreMigration[] {
       // Older version 9 stores already have background but may not have pointer operations.
       ensureBadgeAndPointerSchema(store)
       ensureBackgroundColumn(store)
+    },
+    (store) => {
+      store.exec(`
+        CREATE TABLE workspace_sleep (
+          worktree_id TEXT PRIMARY KEY,
+          state TEXT NOT NULL CHECK (state IN ('awake', 'sleeping', 'asleep', 'waking', 'partial')),
+          updated_at INTEGER NOT NULL,
+          sessions_json TEXT NOT NULL
+        )
+      `)
+    },
+    (store) => {
+      store.exec('ALTER TABLE workspace_sleep ADD COLUMN instance_id TEXT')
     }
   ]
 }
@@ -276,6 +302,56 @@ export class SessionRecords {
   /** True when some record, in any state, belongs to the worktree ID. */
   hasWorktree(worktreeId: string): boolean {
     return this.store.get('SELECT 1 FROM sessions WHERE worktree_id = ? LIMIT 1', worktreeId) !== null
+  }
+
+  workspaceSleepRecord(worktreeId: string): StoredWorkspaceSleep | null {
+    const row = this.store.get<WorkspaceSleepRow>('SELECT * FROM workspace_sleep WHERE worktree_id = ?', worktreeId)
+    return row ? { state: this.toWorkspaceSleepState(row), instanceId: row.instance_id } : null
+  }
+
+  workspaceSleepRecords(): StoredWorkspaceSleep[] {
+    return this.store
+      .all<WorkspaceSleepRow>('SELECT * FROM workspace_sleep ORDER BY worktree_id')
+      .map((row) => ({ state: this.toWorkspaceSleepState(row), instanceId: row.instance_id }))
+  }
+
+  workspaceSleepState(worktreeId: string): WorkspaceSleepState | null {
+    return this.workspaceSleepRecord(worktreeId)?.state ?? null
+  }
+
+  workspaceSleepStates(): WorkspaceSleepState[] {
+    return this.workspaceSleepRecords().map(({ state }) => state)
+  }
+
+  hasWorkspaceSleep(worktreeId: string): boolean {
+    return this.workspaceSleepRecord(worktreeId) !== null
+  }
+
+  putWorkspaceSleepState(state: WorkspaceSleepState, instanceId: string | null = null): WorkspaceSleepState {
+    this.store.run(
+      `INSERT INTO workspace_sleep (worktree_id, state, updated_at, sessions_json, instance_id)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(worktree_id) DO UPDATE SET
+          state = excluded.state,
+          updated_at = excluded.updated_at,
+          sessions_json = excluded.sessions_json,
+          instance_id = excluded.instance_id`,
+      state.worktreeId,
+      state.state,
+      state.updatedAt,
+      JSON.stringify(state.sessions),
+      instanceId
+    )
+    return state
+  }
+
+  private toWorkspaceSleepState(row: WorkspaceSleepRow): WorkspaceSleepState {
+    return {
+      worktreeId: row.worktree_id,
+      state: row.state,
+      updatedAt: row.updated_at,
+      sessions: JSON.parse(row.sessions_json) as WorkspaceSleepState['sessions']
+    }
   }
 
   /** The repo recorded for a session, which `Session` does not carry. */

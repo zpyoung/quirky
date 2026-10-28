@@ -82,7 +82,7 @@ export function reconcileWorkspace(input: ReconcileInput): ReconcileOutput {
         if (leaf.exit) apply(setPaneExit(ws, leaf.id, null))
         continue
       }
-      if (session.exitCause === 'host-restart' || session.exitCause === 'host-lost') continue
+      if (session.exitCause === 'host-restart' || session.exitCause === 'host-lost' || session.exitCause === 'stopped') continue
       const lone = paneCounts.get(tab.id) === 1
       if (session.exitCode === 0 && session.exitCause === 'exited' && !(lone && !hasInput(session.id))) {
         apply(closePaneOp(ws, leaf.id, null))

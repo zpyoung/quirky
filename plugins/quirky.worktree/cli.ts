@@ -1,4 +1,4 @@
-import type { CliArgs, CliContext, CliModule, ProjectGroup, Worktree, WorktreeCreateResult, WorktreeRemoveResult } from '@quirky/protocol'
+import type { CliArgs, CliContext, CliModule, ProjectGroup, Worktree, WorktreeCreateResult, WorktreeRemoveResult, WorkspaceOriginView } from '@quirky/protocol'
 import type { CleanupCandidate, CleanupRemovalResult, CleanupSelection, StockWorktreeOptions, WorktreeSleepState } from './src/control-types'
 
 const worktreeRecord = (ctx: CliContext, worktree: Worktree) =>
@@ -95,6 +95,21 @@ const named: CliModule['commands'] = {
             worktrees.map((wt) => [wt.id, wt.name, wt.branch ?? (wt.kind === 'folder' ? '-' : '(detached)'), wt.status, wt.path])
           )
         : 'no worktrees'
+    )
+  },
+  async origins(_args, ctx) {
+    const origins = (await ctx.call('quirky.worktree/origins', {})) as WorkspaceOriginView[]
+    ctx.out.result(origins, () =>
+      origins.length
+        ? ctx.format.table(
+            ['WORKTREE', 'AUTOMATION', 'OTHER CLIENT'],
+            origins.map((origin) => [
+              origin.worktreeId,
+              origin.automation === null ? 'unknown' : origin.automation ? 'yes' : 'no',
+              origin.otherClient === null ? 'unknown' : origin.otherClient ? 'yes' : 'no'
+            ])
+          )
+        : 'no workspace origins'
     )
   },
 

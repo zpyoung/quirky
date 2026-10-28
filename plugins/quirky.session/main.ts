@@ -26,22 +26,30 @@ export async function activate(context: PluginContext): Promise<void> {
     identity: sessions.identity,
     pointer: sessions.pointer,
     create: (params: Record<string, unknown>, caller: PluginCaller) => sessionForCaller(sessions.create(params, caller), caller),
-    resume: (params: Record<string, unknown>, caller: PluginCaller) => sessionForCaller(sessions.resume(params), caller),
+    resume: (params: Record<string, unknown>, caller: PluginCaller) => sessionForCaller(sessions.resume(params, caller), caller),
     resumeExternal: sessions.resumeExternal,
     setName: (params: Record<string, unknown>, caller: PluginCaller) => sessionForCaller(sessions.setName(params), caller),
     setProviderSession: sessions.setProviderSession,
     register: sessions.register,
     close: sessions.close,
+    sleepWorkspace: (params: Record<string, unknown>, caller: PluginCaller) => sessions.sleepWorkspace(params, caller),
+    wakeWorkspace: (params: Record<string, unknown>, caller: PluginCaller) => sessions.wakeWorkspace(params, caller),
+    workspaceSleepStates: sessions.workspaceSleepStates,
     setStatus: sessions.setStatus,
     setUnread: sessions.setUnread,
     setBadge: sessions.setBadge,
-    restore: (params: Record<string, unknown>, caller: PluginCaller) => sessionForCaller(sessions.restore(params), caller)
+    restore: (params: Record<string, unknown>, caller: PluginCaller) => sessionForCaller(sessions.restore(params, caller), caller)
   }
   for (const [name, handler] of Object.entries(methods)) context.provide(`method:${context.pluginId}/${name}`, handler)
 
   context.pty.onExit(
     (sessionId, exitCode, { exitSignal, exitCause }) =>
-      void sessions.finish(sessionId, { exitCode, exitSignal, exitCause, restorable: exitCause === 'host-restart' })
+      void sessions.finish(sessionId, {
+        exitCode,
+        exitSignal,
+        exitCause,
+        restorable: exitCause === 'host-restart' || exitCause === 'stopped'
+      })
   )
   context.pty.onReconnect(() => void sessions.reconcile({ startup: false }))
   await sessions.reconcile({ startup: true })

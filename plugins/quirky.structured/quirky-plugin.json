@@ -49,8 +49,8 @@
             "lastActivityAt": { "type": "number" },
             "exitCode": { "description": "The exit code, or null while the process is alive." },
             "exitSignal": { "description": "The signal that ended the process, or null." },
-            "exitCause": { "description": "Why the session ended (exited, killed, host-restart or host-lost), or null while it is alive." },
-            "restorable": { "type": "boolean", "description": "True when the session ended with the PTY host and can be restored." },
+            "exitCause": { "description": "Why the session ended (exited, killed, stopped, host-restart or host-lost), or null while it is alive." },
+            "restorable": { "type": "boolean", "description": "True when the PTY host retains recoverable history after a host loss or reversible stop." },
             "background": {
               "type": "boolean",
               "description": "True when automatic terminal tab adoption is disabled; explicit viewing remains possible."

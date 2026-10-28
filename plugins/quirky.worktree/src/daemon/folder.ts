@@ -3,7 +3,8 @@ import { resolveRealPath } from '../../paths'
 import { InvalidNameError, sanitizeName } from './naming'
 import { pickGeneratedName } from './names'
 import { groupRepoId, listGroup, listProject, type ListEnv } from './list'
-import { insertRow } from './store'
+import { filesystemIdentitySource, instanceIdFor } from './identity'
+import { insertRow, recordWorktreeOrigin, type WorktreeOriginCreator } from './store'
 
 export type FolderEnv = ListEnv & {
   fail(kind: 'invalid-params' | 'not-found' | 'conflict', message: string, data?: unknown): Error
@@ -13,6 +14,7 @@ export type FolderEnv = ListEnv & {
 export type FolderCreateParams = {
   name?: string
   createdBy?: WorktreeCreatedBy
+  origin?: WorktreeOriginCreator
   displayName?: string
   comment?: string
   parentId?: string | null
@@ -32,6 +34,8 @@ export async function createFolderWorkspace(env: FolderEnv, target: { repo: Repo
   if (isGroup && !target.group.parentPath) throw env.fail('invalid-params', `group ${target.group.name} has no parent folder`)
   const repoId = isGroup ? groupRepoId(target.group.id) : target.repo.id
   const path = resolveRealPath(isGroup ? target.group.parentPath! : target.repo.path)
+  const identity = (env.identitySource ?? filesystemIdentitySource).stat(path)
+  const instanceId = identity === null ? undefined : instanceIdFor(identity)
   const existing = isGroup ? listGroup(env, target.group) : await listProject(env, target.repo)
 
   const typed = params.name?.trim() ?? ''
@@ -64,8 +68,10 @@ export async function createFolderWorkspace(env: FolderEnv, target: { repo: Repo
       displayName: params.displayName?.trim() || null,
       comment: params.comment ?? '',
       parentId: params.parentId ?? null,
-      groupId: isGroup ? target.group.id : null
+      groupId: isGroup ? target.group.id : null,
+      ...(instanceId === undefined ? {} : { instanceId })
     })
+    if (instanceId !== undefined && params.origin) recordWorktreeOrigin(env.store, id, instanceId, params.origin)
     if (generated) env.store.run('INSERT OR IGNORE INTO retired_names (repo_id, name) VALUES (?, ?)', repoId, name)
   })
   env.changed({ repoId, worktreeId: id })

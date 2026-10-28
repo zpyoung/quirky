@@ -511,8 +511,8 @@ worktree-contained file previews/editing, GitHub Tasks and linked workspace
 creation, Claude/Codex account usage and selection, agent-history search/resume,
 and direct foreground notification subscriptions. Host and session navigation
 uses the same validated route contract as paired-host deep links.
-Native background push, non-GitHub Tasks providers and grant-authorized terminal
-artifacts remain implementation work in `sb-mobile-app-panels-unbuilt-flows`.
+Native background push and non-GitHub Tasks providers remain separately tracked.
+Grant-authorized terminal artifacts use device/source/session-bound capabilities rather than a general path API.
 
 ```sh
 quirky mobile info --json
@@ -549,6 +549,45 @@ continues while typing is paused. Use **Take back** to restore desktop dimension
 or **Restore** after the phone leaves. The default retains phone dimensions until
 restored; Settings offers timed restoration. The corresponding APIs are
 `quirky.terminal/mobileState`, `/takeBack`, `/restoreFit` and `/claim`.
+
+Phone workspace **Sleep** uses `quirky.worktree/sleep` and `/wake` to park views while keeping
+processes and buffers. Hide sleeping uses that canonical worktree state.
+
+The separate **Stop sessions (retain history)** action uses `quirky.session/sleepWorkspace`,
+`/wakeWorkspace` and `/workspaceSleepStates`. It records recovery before stopping processes and
+preserves PTY history; unsupported agents are refused before teardown. Interrupted or wrong-filesystem-instance
+recovery stays visible as partial rather than restoring into a replacement workspace.
+
+`quirky.worktree/origins` returns caller-relative automation/other-client predicates, with `null`
+for unknown evidence. It never returns creator device IDs or guesses automation from `createdBy`.
+The phone hides only proven matches.
+
+Markdown tabs expose bounded text through `quirky.mobile/sessionTabs`, `/markdownCreate`,
+`/markdownRead`, `/markdownWrite`, `/markdownSave` and `/sessionTabAction`. Write and Save require
+the current content revision. Preview renders Markdown without executing HTML or fetching
+document-supplied images; Copy path uses a worktree-relative path.
+
+Explicit Chrome Watch uses `/browserWatchCreate`, `/browserWatchStart`, `/browserWatchFrame`,
+`/browserWatchFrameAck`, `/browserWatchStop`, `/browserWatchNavigate`, `/browserWatchControl`
+and `/browserWatchInput`. The broker checks the exact connection, workspace, tab and lease.
+Frames are bounded JPEGs, acknowledged after image load; hiding/leaving releases only the owned
+lease. Native tabs stay visible with an unavailable explanation, never an implicit engine switch.
+
+```sh
+quirky session sleep <worktree>
+quirky session wake <worktree>
+quirky session sleep-states --json
+quirky wt origins --json
+quirky mobile session-tabs --worktree <worktree> --json
+quirky mobile markdown-read --worktree <worktree> --tab-id <tab> --json
+quirky mobile markdown-write --worktree <worktree> --tab-id <tab> --text '# Note' --expected-revision 3
+quirky mobile markdown-save --worktree <worktree> --tab-id <tab> --expected-revision 4
+quirky mobile browser-watch control --worktree <worktree> --tab-id <tab> --watch-id <lease> --action reload
+```
+
+A Watch lease requires a persistent API connection: exiting its CLI process releases that
+connection's lease. Use the public API for a retained frame/input consumer. Interactive native
+chat and voice remain excluded until an authorized architecture/roadmap ruling.
 
 Trusted transport plugins can use the public
 [`PluginContext.clients.accept`](../packages/protocol/src/plugins.ts) API after

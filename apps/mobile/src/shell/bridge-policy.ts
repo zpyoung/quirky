@@ -1,21 +1,32 @@
+import { MOBILE_BROWSER_METHOD_PARAMS, validMobileBrowserParams } from '@quirky/protocol'
 import type { MobileConnectionState, MobileGrant, MobilePageInit, MobileRoute } from '../contracts'
 import { PANEL_METHOD_PARAMS, TERMINAL_ARTIFACT_TEXT_BYTES } from '@quirky/protocol'
 import { PANEL_ROUTE_FIELDS, validatePanelRoute } from '../panels/routes'
 import { PAGE_BUNDLE_ROUTES } from './generation'
 
 export const PAGE_METHOD_PARAMS: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  ...MOBILE_BROWSER_METHOD_PARAMS,
   'quirky.repo/list': [],
   'quirky.repo/groupList': [],
   'quirky.loops/summaries': [],
   'quirky.mobile/agentCatalog': [],
+  'quirky.mobile/sessionTabs': ['worktree'],
+  'quirky.mobile/markdownCreate': ['worktree'],
+  'quirky.mobile/markdownRead': ['worktree', 'tabId'],
+  'quirky.mobile/markdownWrite': ['worktree', 'tabId', 'text', 'expectedRevision'],
+  'quirky.mobile/markdownSave': ['worktree', 'tabId', 'expectedRevision'],
+  'quirky.mobile/sessionTabAction': ['worktree', 'tabId', 'action', 'name', 'discard'],
   'quirky.mobile/notificationPoll': ['subscriptionId', 'waitMs', 'after', 'epoch', 'onlyWhenDesktopAway', 'suppressWorktree'],
   'quirky.mobile/notificationCancel': ['subscriptionId'],
   'quirky.mobile/notificationTest': [],
   'quirky.worktree/list': ['repo'],
+  'quirky.worktree/origins': [],
   'quirky.worktree/show': ['worktree'],
   'quirky.worktree/resolve': ['selector'],
   'quirky.worktree/create': ['repo', 'name', 'branchName', 'base'],
   'quirky.worktree/describeRemove': ['worktree'],
+  'quirky.worktree/sleep': ['worktree'],
+  'quirky.worktree/wake': ['worktree'],
   'quirky.worktree/remove': ['worktree', 'yes'],
   'quirky.worktree/set': ['worktree', 'pinned', 'expectedInstanceId'],
   'quirky.session/list': ['worktree'],
@@ -23,6 +34,9 @@ export const PAGE_METHOD_PARAMS: Readonly<Record<string, readonly string[]>> = O
   'quirky.session/create': ['worktree', 'agent', 'cols', 'rows'],
   'quirky.session/setName': ['session', 'name'],
   'quirky.session/close': ['session'],
+  'quirky.session/sleepWorkspace': ['worktree'],
+  'quirky.session/wakeWorkspace': ['worktree'],
+  'quirky.session/workspaceSleepStates': [],
   'quirky.ask/list': ['pendingOnly'],
   'quirky.ask/answer': ['askId', 'answers', 'skipped'],
   'quirky.terminal/attach': ['session', 'cols', 'rows', 'historyLines'],
@@ -49,6 +63,13 @@ const FORBIDDEN_FIELDS: Record<string, true> = {
 }
 const SESSION_ID = /^[A-Za-z0-9_-]{1,128}$/
 const TERMINAL_ARTIFACT_METHOD = 'quirky.terminal/artifacts'
+const SESSION_TAB_METHODS: Record<string, true> = {
+  'quirky.mobile/markdownCreate': true,
+  'quirky.mobile/markdownRead': true,
+  'quirky.mobile/markdownWrite': true,
+  'quirky.mobile/markdownSave': true,
+  'quirky.mobile/sessionTabAction': true
+}
 const TERMINAL_ARTIFACT_ROUTE_METHODS: Record<string, true> = {
   [TERMINAL_ARTIFACT_METHOD]: true,
   'quirky.mobile/notificationPoll': true,
@@ -123,6 +144,23 @@ function boundedEditorChunk(value: unknown): value is string {
 }
 
 function validPageSpecificParams(method: string, params: Record<string, unknown>): boolean {
+  if (Object.hasOwn(MOBILE_BROWSER_METHOD_PARAMS, method)) return validMobileBrowserParams(method, params)
+  if (method === 'quirky.worktree/origins' || method === 'quirky.session/workspaceSleepStates') return Object.keys(params).length === 0
+  if (method === 'quirky.worktree/sleep' || method === 'quirky.worktree/wake' ||
+    method === 'quirky.session/sleepWorkspace' || method === 'quirky.session/wakeWorkspace' ||
+    method === 'quirky.mobile/sessionTabs' || method === 'quirky.mobile/markdownCreate') return boundedString(params, 'worktree')
+  if (method === 'quirky.mobile/markdownRead' || method === 'quirky.mobile/markdownWrite' ||
+    method === 'quirky.mobile/markdownSave' || method === 'quirky.mobile/sessionTabAction') {
+    if (!boundedString(params, 'worktree') || !boundedString(params, 'tabId') || (params.tabId as string).length > 128) return false
+    if (method === 'quirky.mobile/markdownRead') return true
+    if (method === 'quirky.mobile/markdownWrite' || method === 'quirky.mobile/markdownSave') {
+      if (!Number.isSafeInteger(params.expectedRevision) || (params.expectedRevision as number) < 0) return false
+      return method === 'quirky.mobile/markdownSave' || (typeof params.text === 'string' && utf8ByteLength(params.text) <= 64 * 1024)
+    }
+    if (params.action === 'rename') return boundedString(params, 'name') && (params.name as string).length <= 128 && !!(params.name as string).trim() && params.discard === undefined
+    if (params.action === 'close') return params.name === undefined && (params.discard === undefined || typeof params.discard === 'boolean')
+    return params.action === 'refresh' && params.name === undefined && params.discard === undefined
+  }
   if (method === TERMINAL_ARTIFACT_METHOD) return validTerminalArtifactParams(params)
   if (method === 'quirky.repo/list' || method === 'quirky.repo/groupList' || method === 'quirky.mobile/agentCatalog' ||
     method === 'quirky.loops/summaries' || method === 'quirky.mobile/notificationTest') return Object.keys(params).length === 0
@@ -135,7 +173,6 @@ function validPageSpecificParams(method: string, params: Record<string, unknown>
     params.subscriptionId.length > 0 && params.subscriptionId.length <= 128
   if (method === 'quirky.worktree/list') return boundedString(params, 'repo', false)
   if (method === 'quirky.worktree/show' || method === 'quirky.worktree/describeRemove') return boundedString(params, 'worktree')
-  if (method === 'quirky.worktree/resolve') return typeof params.selector === 'string' && params.selector.length > 0 && params.selector.length <= 1027
   if (method === 'quirky.worktree/remove') return boundedString(params, 'worktree') && params.yes === true && Object.keys(params).length === 2
   if (method === 'quirky.worktree/create') return boundedString(params, 'repo', false) && boundedString(params, 'name', false) &&
     boundedString(params, 'branchName', false) && boundedString(params, 'base', false) &&
@@ -195,6 +232,15 @@ export function validatePageRpc(
 ): asserts method is string {
   if (typeof method !== 'string' || !Object.hasOwn(PAGE_METHOD_PARAMS, method)) throw new Error('Quirky method is unavailable to page apps')
   if (!grants.includes('rpc')) throw new Error('page route does not have the rpc grant')
+  if ((Object.hasOwn(MOBILE_BROWSER_METHOD_PARAMS, method) || Object.hasOwn(SESSION_TAB_METHODS, method)) && route.kind !== 'session') {
+    throw new Error('workspace tab operations require the session route')
+  }
+  if ((method === 'quirky.mobile/sessionTabs' || method === 'quirky.worktree/origins' ||
+    method === 'quirky.worktree/sleep' || method === 'quirky.worktree/wake' ||
+    method === 'quirky.session/sleepWorkspace' || method === 'quirky.session/wakeWorkspace' ||
+    method === 'quirky.session/workspaceSleepStates') && route.kind !== 'workspaces' && route.kind !== 'session') {
+    throw new Error('workspace lifecycle operations require a base workspace route')
+  }
   if ((route.kind === 'terminal-artifacts' || route.kind === 'terminal-artifact') && !Object.hasOwn(TERMINAL_ARTIFACT_ROUTE_METHODS, method)) {
     throw new Error('RPC method is unavailable to terminal artifact routes')
   }
@@ -235,10 +281,18 @@ export function refreshedTerminalArtifactGrant(route: MobileRoute, result: unkno
 const PAGE_MUTATIONS: Record<string, true> = {
   'quirky.worktree/create': true,
   'quirky.worktree/remove': true,
+  'quirky.worktree/sleep': true,
+  'quirky.worktree/wake': true,
   'quirky.worktree/set': true,
   'quirky.session/create': true,
   'quirky.session/setName': true,
   'quirky.session/close': true,
+  'quirky.session/sleepWorkspace': true,
+  'quirky.session/wakeWorkspace': true,
+  'quirky.mobile/markdownCreate': true,
+  'quirky.mobile/markdownWrite': true,
+  'quirky.mobile/markdownSave': true,
+  'quirky.mobile/sessionTabAction': true,
   'quirky.ask/answer': true,
   'quirky.terminal/attach': true,
   'quirky.terminal/detach': true,
@@ -291,6 +345,7 @@ const PAGE_MUTATIONS: Record<string, true> = {
 }
 
 export function isPageMutation(method: string, params?: Record<string, unknown>): boolean {
+  if (Object.hasOwn(MOBILE_BROWSER_METHOD_PARAMS, method)) return method !== 'quirky.mobile/browserWatchFrame'
   if (method === TERMINAL_ARTIFACT_METHOD) return params?.action === 'refresh' || params?.action === 'save'
   return Object.hasOwn(PAGE_MUTATIONS, method)
 }

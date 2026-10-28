@@ -1,0 +1,30 @@
+{
+  "item": "sb-mobile-app-prerequisites",
+  "spec": "docs/quirk/specs/2026-10-28-sb-mobile-app-prerequisites/logic.md",
+  "scenarios": [
+    {
+      "id": "N1",
+      "title": "In a real iOS development build paired to a fresh temporary QUIRKY_HOME, open a Markdown note with the system keyboard visible. Enter composed/non-ASCII text, switch source/preview, save and copy its relative path through native clipboard. Cancel a dirty close and confirm the exact draft remains; discard only after explicit confirmation. At narrow and keyboard heights all controls remain reachable, and switching back focuses the actual terminal keyboard without losing input-lease behavior.",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    },
+    {
+      "id": "N2",
+      "title": "In the actual phone WebView explicitly create Browser (Chrome Watch) on an owned local fixture. Observe live JPEG frames, tap a page button, enter text with the system keyboard, and use Back/Forward/Reload. Background the phone and switch to a terminal: only its exact Watch consumer lease stops, desktop or another phone's unrelated lease stays active. Foreground and reselect explicitly reacquires the correct Watch tab, never converting an existing Native tab or sending input to another page.",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    },
+    {
+      "id": "N3",
+      "title": "On macOS, use the actual default Chrome launch (no --use-mock-keychain override) with a fresh temporary QUIRKY_HOME and an owned local HTTP page. Resolve any native keychain/Chrome permission prompt through the real OS surface, then verify explicit phone Watch navigation, JPEG delivery and cleanup. The unattended portable smoke stalled before Page.navigate answered without the isolated-keychain harness option; the option enabled navigation, so its result is not a default-launch native pass.",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    }
+  ]
+}
