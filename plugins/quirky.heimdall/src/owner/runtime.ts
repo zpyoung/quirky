@@ -1068,6 +1068,9 @@ export function createOwnerController(host: OwnerRuntimeHost): OwnerController {
       const detail = recordError(watcherId, state, 'record-owner-deviation', error)
       return { handled: false, reason: detail }
     }
+    // Reconcile a durable attempt even if that attempt itself parked or disarmed the watcher.
+    // The host stages proposals only; the runner still owns every effect and commit fence.
+    if (state.pending?.phase === 'ready') return applyReady(watcherId, enrollment, snapshot, state)
     if (!isActive(enrollment)) return { handled: stateChanged || state.pending !== null, reason: 'owner work is paused or disarmed' }
     if (state.pending?.phase === 'issuing') {
       const detail = recordUncertainty(watcherId, state, 'recover-owner-turn', new Error('an earlier create, send, or resume has an unknown outcome'))
@@ -1075,7 +1078,6 @@ export function createOwnerController(host: OwnerRuntimeHost): OwnerController {
     }
     if (state.pending?.phase === 'indeterminate') return { handled: true, reason: state.lastError ?? 'owner operation is indeterminate' }
     if (state.pending?.phase === 'parked') return { handled: true, reason: 'owner is parked for an exact escalation answer' }
-    if (state.pending?.phase === 'ready') return applyReady(watcherId, enrollment, snapshot, state)
     if (state.pending?.phase === 'waiting') {
       const pending = state.pending
       const recovering = Boolean(state.sessionId && state.instanceId !== instanceId)

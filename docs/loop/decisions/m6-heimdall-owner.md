@@ -132,5 +132,16 @@
 - **Revisit if:** incoming runtime changes the documented service signatures
 - **Source:** assumed — autonomous
 
+## D13: Reconcile the action that parked a watcher before applying inactivity guards
+- **Question:** integration analysis found ask-human could park the watcher before the controller recorded its landed proposal
+- **Options:** defer the park outside its write-ahead action; reconcile the durable outcome before refusing new inactive work
+- **Chose:** ready proposals may query host.apply before the controller's paused/disarmed guard. Driver first returns an existing durable attempt outcome, then refuses to stage any new proposal when disabled/paused/parked. No owner wake or effect bypasses ordinary runner gates.
+- **Why:** otherwise the next tick leaves phase ready forever, while exact answer requires phase parked. This is state reconciliation, not permission to execute inactive work.
+- **Evidence:** strengthened existing ask-human regression sets enrollment parked before reconciliation; failed ready versus parked before repair, focused test passed11assertions after; entire owner-runtime file19pass/144assertions
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** an inactive proposal reaches an effect without a pre-existing durable attempt
+- **Source:** assumed — autonomous
+
 ## Progress
-Runtime component ad985463 and detection5b305152 merged after full barrier; both worktrees removed. Tests: runtime19pass/144assertions, detector18pass/65assertions, parent owner gate/worker boundaries6pass/15assertions. Standalone actual daemon plugin-lifetime smoke passed owner stop/independent usability/client refusal with cleanup; owner driver/API module loads. Acceptance component remains uncommitted in /tmp/quirky-owner-acceptance-l12 awaiting real core runtime. Parent source/API/contracts/lifetime ready as checkpoint; core/controls hubs remain untouched until their committed runtime arrives. deps bg_5 returned ready:false pending core after510.34s; no active deps job. Next: merge core and controls runtime, central runner/registry/service/manifest integration, real owner/worker API+CLI flows, affected suite/scripts/typecheck, deps-ready/catch-up/final review/land. No whole-feature acceptance or land claimed.
+Runtime component ad985463 and detection5b305152 merged after barrier; worktrees removed. Parent checkpoint3ce5124a contains gated proposals/API/common worker effects/canonical contracts and opt-in structured lifetime. Runtime19pass/144assertions, detector18pass/65assertions, owner gate/worker boundaries6pass/15assertions. Standalone actual daemon lifetime smoke passed and cleaned. D13 fixed a reproduced parked-settlement deadlock; full runtime regression stays green. Acceptance component remains uncommitted in /tmp/quirky-owner-acceptance-l12, fixture updated to core inspect array and owned temporary worktree. Core/controls runtime still pending; their hubs remain untouched. deps bg_6 currently waiting core. Next: merge committed core/control runtime, central runner/registry/service/manifest integration, real owner/worker API+CLI flows, affected suite/scripts/typecheck, deps-ready/catch-up/final review/land. No whole-feature completion claimed.

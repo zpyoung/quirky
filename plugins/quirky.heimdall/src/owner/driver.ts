@@ -52,6 +52,7 @@ export function createOwnerDriver(options: DriverOptions): OwnerKernelPort & { c
         if (attempted.effect === 'indeterminate') return { kind: 'indeterminate', reason: attempted.reason }
         return { kind: 'refused', reason: attempted.reason ?? 'owner-action-not-landed' }
       }
+      if (!enrollment.enabled || enrollment.paused || enrollment.parkReason !== null) return { kind: 'held', reason: 'owner-work-inactive' }
       const kind = registry.get(enrollment.kind)
       let action: KernelAction
       if (intervention.kind === 'kind-action') {

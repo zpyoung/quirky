@@ -570,6 +570,9 @@ describe('owner runtime journal and conversation', () => {
     const before = fixture.controller.inspect(fixture.enrollment.watcherId).pending as OwnerPending & { contentIdentity: string }
     await writeReport(fixture, { kind: 'ask-human', question: 'Which result should be kept?' })
     expect(await fixture.controller.ready(fixture.enrollment.watcherId, before.reportKey)).toEqual({ kind: 'accepted' })
+    // The runner's landed ask-human action has already parked the enrollment before reconciliation.
+    fixture.enrollment.enabled = false
+    fixture.enrollment.parkReason = 'owner-escalation'
     await fixture.controller.step(fixture.enrollment, fixture.snapshot, [])
     const parked = fixture.controller.inspect(fixture.enrollment.watcherId).pending as OwnerPending & { contentIdentity: string }
     expect(parked.phase).toBe('parked')
