@@ -1448,8 +1448,7 @@
       "deps": [
         "m7-sweep-terminal-completion"
       ],
-      "status": "in-progress",
-      "lane": 11
+      "status": "done"
     },
     {
       "id": "sb-mobile-chat-voice-native-ruling",
