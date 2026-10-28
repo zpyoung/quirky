@@ -20,11 +20,21 @@ const fail = (message) => {
   process.exit(1)
 }
 if (args[0] === 'auth' && args[1] === 'status') {
-  process.stdout.write('Logged in to github.com account hosting-fixture (keyring)\nActive account: true\nToken scopes: repo, project, read:org\n')
+  process.stdout.write(typeof state.authStatus === 'string'
+    ? state.authStatus
+    : 'Logged in to github.com account hosting-fixture (keyring)\nActive account: true\nToken scopes: repo, project, read:org\n')
   process.exit(0)
 }
-if (args[0] === 'auth' && args[1] === 'token' && args.includes('--help')) {
-  process.stdout.write('gh auth token [--user USER] [--hostname HOST]')
+if (args[0] === 'auth' && args[1] === 'token') {
+  if (args.includes('--help')) {
+    process.stdout.write('gh auth token [--user USER] [--hostname HOST]')
+    process.exit(0)
+  }
+  const hostnameIndex = args.indexOf('--hostname')
+  const hostname = hostnameIndex >= 0 ? args[hostnameIndex + 1] : ''
+  const token = state.authTokens && state.authTokens[hostname]
+  if (typeof token !== 'string') fail('not logged in')
+  process.stdout.write(token)
   process.exit(0)
 }
 if (args[0] === 'pr' && args[1] === 'view') {
@@ -59,22 +69,24 @@ function pullRequest(options: {
   headRef?: string
   baseRef?: string
   maintainerCanModify?: boolean
+  host?: string
 } = {}): Record<string, unknown> {
   const number = options.number ?? 3
+  const host = options.host ?? 'github.com'
   const baseOwner = options.baseOwner ?? 'upstream'
   const baseRepo = options.baseRepo ?? 'base'
   const headOwner = options.headOwner === undefined ? 'fork-owner' : options.headOwner
   const headRepo = options.headRepo ?? 'fork-base'
-  const baseUrl = `https://github.com/${baseOwner}/${baseRepo}`
+  const baseUrl = `https://${host}/${baseOwner}/${baseRepo}`
   const head = headOwner === null ? null : {
     ref: options.headRef ?? 'feat/conflict',
     sha: options.headOid ?? 'a'.repeat(40),
     repo: {
       name: headRepo,
       owner: { login: headOwner },
-      html_url: `https://github.com/${headOwner}/${headRepo}`,
-      clone_url: `https://github.com/${headOwner}/${headRepo}.git`,
-      ssh_url: `git@github.com:${headOwner}/${headRepo}.git`
+      html_url: `https://${host}/${headOwner}/${headRepo}`,
+      clone_url: `https://${host}/${headOwner}/${headRepo}.git`,
+      ssh_url: `git@${host.replace(/:\d+$/, '')}:${headOwner}/${headRepo}.git`
     }
   }
   return {
@@ -96,12 +108,12 @@ function pullRequest(options: {
   }
 }
 
-function pullView(number = 3, repository = 'upstream/base'): Record<string, unknown> {
+function pullView(number = 3, repository = 'upstream/base', host = 'github.com'): Record<string, unknown> {
   return {
     number,
     title: 'Reword the README',
     state: 'OPEN',
-    url: `https://github.com/${repository}/pull/${number}`,
+    url: `https://${host}/${repository}/pull/${number}`,
     headRefName: 'feat/conflict',
     baseRefName: 'main',
     headRefOid: 'a'.repeat(40),
@@ -120,6 +132,7 @@ function issue(number = 4): Record<string, unknown> {
 
 function stateForPull(options: {
   number?: number
+  host?: string
   baseOwner?: string
   baseRepo?: string
   headOwner?: string | null
@@ -131,12 +144,13 @@ function stateForPull(options: {
   maintainerCanModify?: boolean
 } = {}, target = { owner: 'upstream', repo: 'base' }): Record<string, unknown> {
   const number = options.number ?? 3
+  const host = options.host ?? 'github.com'
   return {
     responses: {
       [`repos/${target.owner}/${target.repo}/issues/${number}`]: {
         number,
         title: 'Reword the README',
-        html_url: `https://github.com/${target.owner}/${target.repo}/issues/${number}`,
+        html_url: `https://${host}/${target.owner}/${target.repo}/issues/${number}`,
         pull_request: { url: `https://api.github.com/repos/${target.owner}/${target.repo}/pulls/${number}` }
       },
       [`repos/${target.owner}/${target.repo}/pulls/${number}`]: pullRequest({
@@ -146,8 +160,19 @@ function stateForPull(options: {
         baseRepo: options.baseRepo ?? target.repo
       })
     },
-    prViews: { [`${target.owner}/${target.repo}/${number}`]: pullView(number, `${target.owner}/${target.repo}`) }
+    prViews: { [`${target.owner}/${target.repo}/${number}`]: pullView(number, `${target.owner}/${target.repo}`, host) }
   }
+}
+function ghesPullState(webHost: string, sshUrl: string | null): Record<string, unknown> {
+  const state = stateForPull({ host: webHost }, { owner: 'test-owner', repo: 'test-repo' })
+  const responses = object(state.responses)
+  const pull = object(responses['repos/test-owner/test-repo/pulls/3'])
+  const headRepository = object(object(pull.head).repo)
+  if (sshUrl === null) delete headRepository.ssh_url
+  else headRepository.ssh_url = sshUrl
+  state.authStatus = `Logged in to ${webHost} account enterprise-fixture (keyring)\nActive account: true\nToken scopes: repo, project, read:org\n`
+  state.authTokens = { [webHost]: 'fixture-enterprise-token' }
+  return state
 }
 
 function object(value: unknown): Record<string, unknown> {
@@ -225,6 +250,52 @@ test('worktreeSource accepts same-repository PR heads and derives safe canonical
     httpsUrl: 'https://github.com/test-owner/test-repo.git'
   })
 })
+
+test('worktreeSource validates GHES SSH clones independently of the HTTPS web port', async () => {
+  const webHost = 'enterprise.example:8443'
+  const hostname = 'enterprise.example'
+  const reference = `https://${webHost}/test-owner/test-repo/pull/3`
+  const host = await hosting({ remote: `https://${webHost}/test-owner/test-repo.git` })
+
+  host.writeState(ghesPullState(webHost, `git@${hostname}:fork-owner/fork-base.git`))
+  const result = object(await host.call('worktreeSource', { reference }))
+  expect(result.item).toMatchObject({
+    repository: { host: webHost, owner: 'test-owner', repo: 'test-repo' }
+  })
+  expect(object(result.head)).toMatchObject({
+    repository: { host: webHost, owner: 'fork-owner', repo: 'fork-base' },
+    sshUrl: `git@${hostname}:fork-owner/fork-base.git`,
+    httpsUrl: `https://${webHost}/fork-owner/fork-base.git`
+  })
+  expect(JSON.stringify(result)).not.toContain('fixture-enterprise-token')
+  expect(JSON.stringify(result)).not.toContain('fixture-ambient-token')
+
+  const sshPort = 2222
+  host.writeState(ghesPullState(webHost, `ssh://git@${hostname}:${sshPort}/fork-owner/fork-base.git`))
+  expect(object(object(await host.call('worktreeSource', { reference })).head).sshUrl)
+    .toBe(`ssh://git@${hostname}:${sshPort}/fork-owner/fork-base.git`)
+
+  host.writeState(ghesPullState(webHost, null))
+  expect(object(object(await host.call('worktreeSource', { reference })).head).sshUrl)
+    .toBe(`git@${hostname}:fork-owner/fork-base.git`)
+
+  host.writeState(ghesPullState(webHost, 'git@attacker.invalid:fork-owner/fork-base.git'))
+  await expect(host.call('worktreeSource', { reference }))
+    .rejects.toMatchObject({ data: { reason: 'upstream_unavailable' } })
+
+  const wrongHttpsPort = ghesPullState(webHost, `git@${hostname}:fork-owner/fork-base.git`)
+  const responses = object(wrongHttpsPort.responses)
+  const pull = object(responses['repos/test-owner/test-repo/pulls/3'])
+  object(object(pull.head).repo).clone_url = 'https://enterprise.example:9443/fork-owner/fork-base.git'
+  host.writeState(wrongHttpsPort)
+  await expect(host.call('worktreeSource', { reference }))
+    .rejects.toMatchObject({ data: { reason: 'upstream_unavailable' } })
+
+  expect(host.invocations().some(({ args }) => {
+    const hostnameIndex = args.indexOf('--hostname')
+    return args[0] === 'api' && hostnameIndex >= 0 && args[hostnameIndex + 1] === webHost
+  })).toBe(true)
+}, 20_000)
 
 test('worktreeSource fails closed for unconfigured URLs, missing fork repositories, mismatches, and unavailable reads', async () => {
   const host = await hosting()

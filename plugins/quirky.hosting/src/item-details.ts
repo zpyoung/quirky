@@ -563,13 +563,18 @@ function httpsUrlMatches(value: unknown, identity: Identity, suffix: string): bo
   }
 }
 
-function sshCloneUrlMatches(value: unknown, identity: Identity): boolean {
-  if (typeof value !== 'string') return false
+type SourceRepository = { identity: Identity; sshUrl: string }
+
+function validatedSshCloneUrl(value: unknown, identity: Identity): string | null {
+  if (typeof value !== 'string') return null
+  const expectedHostname = identity.host.replace(/:\d+$/, '').toLowerCase()
   const scp = /^git@([^/:]+):([^/]+)\/([^/]+)\.git$/i.exec(value)
   if (scp) {
-    return scp[1]?.toLowerCase() === identity.host.toLowerCase() &&
+    return scp[1]?.toLowerCase() === expectedHostname &&
       scp[2]?.toLowerCase() === identity.owner.toLowerCase() &&
       scp[3]?.toLowerCase() === identity.repo.toLowerCase()
+      ? value
+      : null
   }
   try {
     const parsed = new URL(value)
@@ -578,22 +583,27 @@ function sshCloneUrlMatches(value: unknown, identity: Identity): boolean {
       parsed.password.length === 0 &&
       parsed.search.length === 0 &&
       parsed.hash.length === 0 &&
-      parsed.host.toLowerCase() === identity.host.toLowerCase() &&
+      parsed.hostname.toLowerCase() === expectedHostname &&
       parsed.pathname.toLowerCase() === `/${identity.owner}/${identity.repo}.git`.toLowerCase()
+      ? value
+      : null
   } catch {
-    return false
+    return null
   }
 }
 
-function sourceRepository(value: unknown, host: string): Identity | null {
+function sourceRepository(value: unknown, host: string): SourceRepository | null {
   const repository = record(value)
   const owner = record(repository?.owner)
   if (!repository || !owner || !safeRepositoryPart(owner.login) || !safeRepositoryPart(repository.name)) return null
   const identity = { host, owner: owner.login, repo: repository.name }
   if (!safeSourceIdentity(identity) || !httpsUrlMatches(repository.html_url, identity, '')) return null
   if (Object.hasOwn(repository, 'clone_url') && !httpsUrlMatches(repository.clone_url, identity, '.git')) return null
-  if (Object.hasOwn(repository, 'ssh_url') && !sshCloneUrlMatches(repository.ssh_url, identity)) return null
-  return identity
+  const sshUrl = Object.hasOwn(repository, 'ssh_url')
+    ? validatedSshCloneUrl(repository.ssh_url, identity)
+    : canonicalSshCloneUrl(identity)
+  if (!sshUrl) return null
+  return { identity, sshUrl }
 }
 
 function sourceSchemaError(env: HostingEnv): never {
@@ -650,9 +660,7 @@ async function validatedPullRef(
 }
 
 function canonicalSshCloneUrl(identity: Identity): string {
-  return identity.host.includes(':')
-    ? `ssh://git@${identity.host}/${identity.owner}/${identity.repo}.git`
-    : `git@${identity.host}:${identity.owner}/${identity.repo}.git`
+  return `git@${identity.host.replace(/:\d+$/, '')}:${identity.owner}/${identity.repo}.git`
 }
 
 async function pullRequestSource(
@@ -687,7 +695,7 @@ async function pullRequestSource(
     !safeSourceIdentity(identity) ||
     !headRepository ||
     !baseRepository ||
-    !sameIdentity(baseRepository, identity) ||
+    !sameIdentity(baseRepository.identity, identity) ||
     !headRefName ||
     !baseRefName ||
     !headOid ||
@@ -707,15 +715,15 @@ async function pullRequestSource(
       repository: identity
     },
     head: {
-      repository: headRepository,
+      repository: headRepository.identity,
       refName: headRefName,
       oid: headOid,
-      sshUrl: canonicalSshCloneUrl(headRepository),
-      httpsUrl: `https://${headRepository.host}/${headRepository.owner}/${headRepository.repo}.git`,
+      sshUrl: headRepository.sshUrl,
+      httpsUrl: `https://${headRepository.identity.host}/${headRepository.identity.owner}/${headRepository.identity.repo}.git`,
       maintainerCanModify: raw.maintainer_can_modify
     },
     base: {
-      repository: baseRepository,
+      repository: baseRepository.identity,
       refName: baseRefName,
       oid: baseOid
     }
