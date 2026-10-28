@@ -33,5 +33,71 @@
 - **Revisit if:** compiler or bounded smoke identifies an integration defect
 - **Source:** locked by docs/loop/LOOP.md
 
+## D4: Stop the barrier and repair attributed cross-worktree contamination
+- **Question:** component audit found an unplanned parent Markdown change
+- **Options:** silently accept the whitespace drift; discard all worker output; attribute the incident, restore only its exact residual delta, and repeat the barrier before committing
+- **Chose:** worker acknowledged relative-path edits accidentally reached parent Markdown, NewIssue imports and Projects test; its attempted restoration left one missing blank line. Parent verified the complete residual diff was only that blank, restored it surgically, then repeated the authoritative all-tree barrier. All four HEADs matched0ac4aa16, changed paths matched assigned scopes and all metadata hashes were unchanged before component commits
+- **Why:** sampled restoration is not byte-level attribution; no user source or unrelated metadata may be discarded
+- **Evidence:** first audit exit1, parent git diff showed single deleted blank before toolbarButton; worker explicit tool provenance; second audit exit0; scratch barrier-audit.json
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** later tree evidence shows another unexplained modification
+- **Source:** assumed — autonomous
+
+## D5: Export existing shared context-menu CSS once
+- **Question:** controlled shared menu migration exposed public stylesheet incompleteness
+- **Options:** duplicate generic menu styles under each feature; import all terminal layout styles into every tool; move the existing generic block to its canonical shared owner
+- **Chose:** unchanged qt-menu/qt-submenu/qt-swatch rules move from terminal-workspace.css into context-menu.css imported by public styles.css. No second menu implementation or public API change; automation-specific CSS positions only its menus
+- **Why:** public ContextMenu exports need their styling without relying on terminal rendering; exact selector/token reuse preserves terminal consumers
+- **Evidence:** design-system/context-menu.tsx exports; prior terminal-workspace.css174–210; combined spec dated amendment
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a shared context-menu consumer is styled differently in actual UI
+- **Source:** assumed — autonomous
+
+## D6: Load canonical CSS once through the host build
+- **Question:** renderer build failed after adding direct shared stylesheet imports to two plugin entrypoints
+- **Options:** change the plugin bundler/output contract; retain duplicated plugin CSS imports; follow the already-restyled editor's host stylesheet pattern
+- **Chose:** remove only the new plugin CSS imports; host styles.css already imports canonical design-system/styles.css and all feature layouts once
+- **Why:** fixed plugin entry naming ui.js applies to generated CSS too. Exact Bun probe with extension-aware naming emitted ui.js and ui.css, proving the collision. No runtime CSS fallback or ignored build error
+- **Evidence:** bg4 typecheck passed then build failed Multiple files share same output path; direct probe outputs ui.js/ui.css; renderer build after removal passed11 host/vendor files25 plugin modules
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** plugin packaging gains a declared separate CSS-asset loading contract
+- **Source:** assumed — autonomous
+
+## D7: Reuse the actual visible automation tool instead of duplicating its editor
+- **Question:** actual bounded UI observed duplicate Automations mounts during openEditor
+- **Options:** suppress a duplicate DOM subtree; make Dialog ignore competing focus; correct navigation ownership at the existing daemon UI boundary
+- **Chose:** identify the projected tool from public ui.contributions and actual saved placement/open slot from ui.state; reuse that visible tool for navigation/editor, close its exact moved slot, preserve unrelated center and restore that center when returning from settings. Retain standalone view behavior when no tool is mounted
+- **Why:** original state.ts unconditionally opened the center; actual before receipt had2 apps/2 editor IDs/2 dialogs, with focus-trap recursion logged against the old runtime. After correction a fresh runtime had1 app/1 editor/1 dialog, acknowledged name/prompt/template edits, and Escape discarded the draft without creating a definition. Exact draft-loss cause from the duplicate run was not separately established
+- **Evidence:** automation-duplicate-before.json; ui-proof.json navigation preserves Tasks settings center across uiNavigate/settings-return/right-bottom-close; new actual-daemon regression authored in ui-state.test.ts but not run; full typecheck bg6 exit0
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** multiple desktop clients expose a different per-window tool authority requirement
+- **Source:** assumed — autonomous
+
+## D8: Reset a width flex basis after the editor stacks vertically
+- **Question:** narrow actual UI showed the template control reserving most of the dialog height
+- **Options:** remove narrow layout; hardcode a shorter height; reset the existing row-axis basis when the intro changes to a column
+- **Chose:** narrow media rule gives the template FormRow flex:initial and min-width:0; all other layout/behavior unchanged
+- **Why:** the desktop flex-basis280 token measured width, but became height under flex-direction:column. Before screenshot pushed name/prompt below the usable body. After actual640x480 render the template basis was auto, intro height96.03, name top193.875 within456-high dialog, one-column form scrolled, and document had no horizontal overflow
+- **Evidence:** automation-narrow-dark-fixed.png and final-narrow-proof.json; actual narrow typing/Tab/Escape passed, retained editor null/definitions empty afterward, fresh browser error entries[]
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** an end-phase visual capture exposes a different constrained-window problem
+- **Source:** assumed — autonomous
+
+## D9: Record bounded real UI proof without claiming suite or golden acceptance
+- **Question:** what was exercised and what remains unmeasured under build-first
+- **Options:** claim compiler-only; run prohibited review/suite campaigns; record exact actual smoke and limits
+- **Chose:** real isolated daemon/profile, real public plugin APIs and built renderer, tracked fake gh upstream only. Actual Tasks default slot leaves center unchanged; closed filter→empty then clear→row; issue body renders; New Issue title/body/Markdown preview and Escape/reopen retain draft; Projects user-selected table3rows/board3cards/roadmap render; Automations single editor acknowledges edits/template, both themes, Escape/no definition, moved-slot close/settings return preserve center; corrected narrow form is usable. No suite, full feature dogfood, screenshot scoring, native OS effect or scheduling-run success claim
+- **Why:** significant changed surfaces need execution evidence, but LOOP forbids the larger campaigns. Project provider initially needed the fixture stdin bridge; selecting a view through the real UI was necessary after external same-project selection retained local chooser state. An initial workspace composer opened/cancelled, but its form controls were not established by the selector observation, so no complete composer acceptance claim
+- **Evidence:** isolated smoke services1/2/3 all exited0; dedicated Chrome profile/managed handles closed and exact service stopped; proof JSON/screenshots retained outside tracked source; final fresh error list[] excludes prior-runtime focus errors and fixture avatar DNS failure, not hidden by suppression
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** end-phase suites or golden review find a behavior or visual regression
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-Scope/spec written; shared public component contracts unchanged. Next commit plugin @quirky/ui dependencies plus spec/decisions, then dispatch three isolated slices and integrate parent-owned tasks shell/lint/CSS imports. No suites/reviews/golden scoring run or claimed.
+All source slices and the scoped tool-navigation correction are complete; actual evidence and limits are D4–D9. Full typecheck/UIlint/root/mobile/preparedDesktop passed before the final CSS-axis correction, which has actual renderer-build and narrow-UI proof. All workers returned, three component worktrees removed after metadata preservation, all three private runtime services exited0 and exact owned Chrome stopped. Next: commit source/docs, sole integration catch-up and read incoming binding decisions, run final merged typecheck, archive credential-free evidence and land through the canonical queue. No suites/reviews/golden scoring run or claimed.

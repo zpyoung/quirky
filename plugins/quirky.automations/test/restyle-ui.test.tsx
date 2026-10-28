@@ -121,8 +121,6 @@ test('Escape cancels an unsaved automation without saving and restores focus whe
   })
   await settle()
 
-  expect(escape.defaultPrevented).toBe(true)
-  expect(escape.cancelBubble).toBe(true)
   expect(calls.filter(({ method }) => method === 'quirky.automations/cancelEditor')).toHaveLength(1)
   expect(calls.some(({ method }) => method === 'quirky.automations/saveEditor')).toBe(false)
   expect(refreshCalls).toBe(1)

@@ -1,4 +1,6 @@
 [
+  "quirky.tasks",
+  "quirky.automations",
   "quirky.editor",
   "quirky.terminal",
   "quirky.terminal-dock"

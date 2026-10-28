@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { MountFunction, UiPluginContext } from '@quirky/protocol'
+import { Button, ContextMenu, EmptyState, FormRow, SectionHeader, Tabs, ToolPanelFrame } from '@quirky/ui'
 import { TASKS_VIEW, TASKS_SETTINGS_VIEW, type TasksState, type TaskPreferences } from './contracts'
 import { TasksList, WorkspaceComposer } from './list/TasksList'
 import { IssueSurface } from './issue/IssueSurface'
 import { NewIssueDialog } from './issue/NewIssueDialog'
 import { ProjectsSurface } from './projects/ProjectsSurface'
-import { TASKS_STYLE } from './style'
 
 function message(error: unknown): string { return error instanceof Error ? error.message : String(error) }
 function object(value: unknown): value is Record<string, unknown> { return value !== null && typeof value === 'object' && !Array.isArray(value) }
@@ -72,23 +72,26 @@ function TasksSettings({ context, state, refresh, report }: { context: UiPluginC
   }
   const sourceStatus = checking ? 'Checking…' : diagnosis ? diagnosis.ghAvailable !== true ? 'Not installed' : diagnosis.requiredHostAuthenticated === true ? 'Ready' : 'Connect required' : 'Unavailable'
   return <section className="tasks-settings" aria-label="Task Sources settings">
-    <h3>Task Sources</h3>
-    <label><input type="checkbox" checked={state.preferences.showTasksButton} onChange={event => void save({ showTasksButton: event.target.checked })} />Show Tasks button</label>
-    <div className="tasks-row">{['github', 'gitlab', 'linear', 'jira'].map(provider => <label key={provider}><input type="checkbox" checked={state.preferences.visibleTaskProviders.includes(provider)} disabled={state.preferences.visibleTaskProviders.length === 1 && state.preferences.visibleTaskProviders.includes(provider)} onChange={event => void save({ visibleTaskProviders: event.target.checked ? [...state.preferences.visibleTaskProviders, provider] : state.preferences.visibleTaskProviders.filter(value => value !== provider) })} />{provider === 'github' ? 'GitHub' : provider === 'gitlab' ? 'GitLab' : provider === 'linear' ? 'Linear' : 'Jira'}</label>)}</div>
-    <div className="tasks-row"><strong>GitHub · {sourceStatus}</strong><button disabled={checking} onClick={() => setCheckNonce(value => value + 1)}>Re-check GitHub</button></div>
+    <SectionHeader title="Task Sources" />
+    <FormRow label="Show Tasks button" htmlFor="tasks-show-button">
+      <input type="checkbox" checked={state.preferences.showTasksButton} onChange={event => void save({ showTasksButton: event.target.checked })} />
+    </FormRow>
+    <SectionHeader title="Visible providers" />
+    <div className="tasks-row">{['github', 'gitlab', 'linear', 'jira'].map(provider => <FormRow key={provider} label={provider === 'github' ? 'GitHub' : provider === 'gitlab' ? 'GitLab' : provider === 'linear' ? 'Linear' : 'Jira'} htmlFor={`tasks-provider-${provider}`}><input type="checkbox" checked={state.preferences.visibleTaskProviders.includes(provider)} disabled={state.preferences.visibleTaskProviders.length === 1 && state.preferences.visibleTaskProviders.includes(provider)} onChange={event => void save({ visibleTaskProviders: event.target.checked ? [...state.preferences.visibleTaskProviders, provider] : state.preferences.visibleTaskProviders.filter(value => value !== provider) })} /></FormRow>)}</div>
+    <div className="tasks-row"><strong>GitHub · {sourceStatus}</strong><Button disabled={checking} onClick={() => setCheckNonce(value => value + 1)}>Re-check GitHub</Button></div>
     {availabilityError && <p role="alert">{availabilityError}</p>}
-    {diagnosis?.ghAvailable === false && <button onClick={() => void context.executeCommand('command:quirky.tasks/open-link', { url: 'https://cli.github.com' }).catch(cause => setError(message(cause)))}>Install GitHub CLI</button>}
-    {diagnosis?.ghAvailable === true && diagnosis.requiredHostAuthenticated !== true && <p>Authenticate with <code>gh auth login</code> <button onClick={() => void context.executeCommand('command:quirky.tasks/copy-text', { text: 'gh auth login' }).catch(cause => setError(message(cause)))}>Copy sign-in command</button></p>}
+    {diagnosis?.ghAvailable === false && <Button onClick={() => void context.executeCommand('command:quirky.tasks/open-link', { url: 'https://cli.github.com' }).catch(cause => setError(message(cause)))}>Install GitHub CLI</Button>}
+    {diagnosis?.ghAvailable === true && diagnosis.requiredHostAuthenticated !== true && <p>Authenticate with <code>gh auth login</code> <Button onClick={() => void context.executeCommand('command:quirky.tasks/copy-text', { text: 'gh auth login' }).catch(cause => setError(message(cause)))}>Copy sign-in command</Button></p>}
     <p>GitHub uses your installed gh CLI and its authenticated account. Other task sources appear when their provider plugin is available.</p>
-    <label>Default source <select value={state.preferences.defaultTaskSource} onChange={event => void save({ defaultTaskSource: event.target.value })}>{['github', 'gitlab', 'linear', 'jira'].map(provider => <option key={provider} value={provider} disabled={provider !== 'github'}>{provider}{provider === 'github' ? '' : ' — provider plugin required'}</option>)}</select></label>
-    <button onClick={() => void integrations()}>Provider integration settings</button>
+    <FormRow label="Default source" htmlFor="tasks-default-source"><select value={state.preferences.defaultTaskSource} onChange={event => void save({ defaultTaskSource: event.target.value })}>{['github', 'gitlab', 'linear', 'jira'].map(provider => <option key={provider} value={provider} disabled={provider !== 'github'}>{provider}{provider === 'github' ? '' : ' — provider plugin required'}</option>)}</select></FormRow>
+    <Button onClick={() => void integrations()}>Provider integration settings</Button>
     {error && <p role="alert">{error}</p>}
   </section>
 }
 
 function TasksSettingsView({ context, report }: { context: UiPluginContext; report?: (state: unknown) => void }) {
   const { state, error, refresh } = useTasksState(context)
-  return <div className="quirky-tasks"><style>{TASKS_STYLE}</style><header className="tasks-header"><button onClick={() => void context.call('quirky.tasks/open', {}).catch(cause => context.toast('Could not open Tasks', message(cause)))}>Back to Tasks</button><h2>Task Sources</h2></header><main className="tasks-body">{error && <p role="alert">{error}<button onClick={() => void refresh()}>Retry</button></p>}{state ? <TasksSettings context={context} state={state} refresh={refresh} report={report} /> : <p role="status">Loading task settings…</p>}</main></div>
+  return <div className="quirky-tasks"><ToolPanelFrame title="Task Sources" actions={<Button onClick={() => void context.call('quirky.tasks/open', {}).catch(cause => context.toast('Could not open Tasks', message(cause)))}>Back to Tasks</Button>}><main className="tasks-body">{error && <p role="alert">{error}<Button onClick={() => void refresh()}>Retry</Button></p>}{state ? <TasksSettings context={context} state={state} refresh={refresh} report={report} /> : <p role="status">Loading task settings…</p>}</main></ToolPanelFrame></div>
 }
 
 function TasksApp({ context, report }: { context: UiPluginContext; report?: (state: unknown) => void }) {
@@ -118,26 +121,21 @@ function TasksApp({ context, report }: { context: UiPluginContext; report?: (sta
     catch (cause) { context.toast('Could not change Tasks view', message(cause)) }
   }
   return <div className="quirky-tasks" ref={root}>
-    <style>{TASKS_STYLE}</style>
-    <header className="tasks-header">
-      <button aria-label="Close tasks" title="Close · Esc" onClick={() => void context.call('quirky.tasks/close', {}).catch(cause => context.toast('Could not close Tasks', message(cause)))}>×</button>
-      <h2>Tasks</h2>
-      {state && <nav aria-label="Task mode" className="tasks-row">{(['issues', 'prs', 'projects'] as const).map(mode => <button key={mode} aria-pressed={state.navigation.mode === mode} onClick={() => void navigate(mode)}>{mode === 'issues' ? 'Issues' : mode === 'prs' ? 'PRs' : 'Projects'}</button>)}</nav>}
-      <button className="tasks-settings-button" onClick={() => void context.call('quirky.tasks/settings', {}).catch(cause => context.toast('Could not open task settings', message(cause)))}>Task settings</button>
-    </header>
-    {error && <div role="alert">{error}<button onClick={() => void refresh()}>Retry</button></div>}
-    {!state ? <p role="status">Loading Tasks…</p> : <>
-      <main className="tasks-body">{state.navigation.detail ? <IssueSurface context={context} state={state} refresh={refresh} /> : state.navigation.mode === 'projects' ? <ProjectsSurface context={context} state={state} refresh={refresh} /> : <TasksList context={context} state={state} refresh={refresh} />}</main>
-      {state.navigation.newIssue && <NewIssueDialog context={context} state={state} refresh={refresh} />}
-    </>}
+    <ToolPanelFrame title="Tasks" onMinimize={() => void context.call('quirky.tasks/close', {}).catch(cause => context.toast('Could not close Tasks', message(cause)))} actions={<Button onClick={() => void context.call('quirky.tasks/settings', {}).catch(cause => context.toast('Could not open task settings', message(cause)))}>Task settings</Button>}>
+      {state && <Tabs label="Task mode" items={[{ id: 'issues', label: 'Issues' }, { id: 'prs', label: 'PRs' }, { id: 'projects', label: 'Projects' }]} value={state.navigation.mode} onChange={mode => void navigate(mode as 'issues' | 'prs' | 'projects')} />}
+      {error && <EmptyState message={error} action={{ label: 'Retry', onAction: () => void refresh() }} />}
+      {!state ? <p role="status">Loading Tasks…</p> : <>
+        <main className="tasks-body">{state.navigation.detail ? <IssueSurface context={context} state={state} refresh={refresh} /> : state.navigation.mode === 'projects' ? <ProjectsSurface context={context} state={state} refresh={refresh} /> : <TasksList context={context} state={state} refresh={refresh} />}</main>
+        {state.navigation.newIssue && <NewIssueDialog context={context} state={state} refresh={refresh} />}
+      </>}
+    </ToolPanelFrame>
   </div>
 }
 
 function TasksComposerOverlay({ context, report }: { context: UiPluginContext; report?: (state: unknown) => void }) {
   const { state, refresh } = useTasksState(context)
   if (!state) return null
-  return <div className="quirky-tasks" style={{ display: 'contents', pointerEvents: 'auto' }}>
-    <style>{TASKS_STYLE}</style>
+  return <div className="quirky-tasks tasks-overlay-root">
     <WorkspaceComposer context={context} state={state} refresh={refresh} report={report} />
   </div>
 }
@@ -145,10 +143,10 @@ function TasksComposerOverlay({ context, report }: { context: UiPluginContext; r
 function TasksSidebar({ context, report }: { context: UiPluginContext; report?: (state: unknown) => void }) {
   const { state } = useTasksState(context)
   const [hover, setHover] = useState(false)
-  const [menu, setMenu] = useState(false)
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
   const [availability, setAvailability] = useState<string | null>(null)
   const prefetchedAt = useRef(0)
-  useEffect(() => { report?.({ visible: state?.preferences.showTasksButton ?? true, menu }) }, [state, report, menu])
+  useEffect(() => { report?.({ visible: state?.preferences.showTasksButton ?? true, menu: menu !== null }) }, [state, report, menu])
   const prefetch = () => {
     setHover(true)
     if (!state || Date.now() - prefetchedAt.current < 30_000) return
@@ -166,12 +164,10 @@ function TasksSidebar({ context, report }: { context: UiPluginContext; report?: 
     }).catch(cause => setAvailability(message(cause)))
   }
   if (state && !state.preferences.showTasksButton) return null
-  return <div style={{ position: 'relative', display: 'flex', gap: 4 }} onMouseEnter={prefetch} onMouseLeave={() => setHover(false)} onFocus={prefetch} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) { setHover(false); setMenu(false) } }}>
-    <button style={{ flex: 1, textAlign: 'left' }} onClick={() => void context.call('quirky.tasks/open', {}).catch(cause => context.toast('Could not open Tasks', message(cause)))} onContextMenu={event => { event.preventDefault(); setMenu(true) }}>☷ Tasks</button>
-    {hover && state?.preferences.visibleTaskProviders.includes('github') && <button aria-label="Open GitHub tasks" disabled={availability !== ''} title={availability ?? 'Checking GitHub availability…'} onClick={() => void context.call('quirky.tasks/preferences', { defaultTaskSource: 'github' }).then(() => context.call('quirky.tasks/open', { source: 'github' })).catch(cause => context.toast('Could not open GitHub tasks', message(cause)))}>GH</button>}
-    {menu && <div role="menu" style={{ position: 'absolute', top: '100%', left: 0, zIndex: 30, background: 'var(--bg-raised)', border: '1px solid var(--border)', padding: 5 }}>
-      <button role="menuitem" onClick={() => { setMenu(false); void context.call('quirky.tasks/preferences', { showTasksButton: false }).catch(cause => context.toast('Could not hide Tasks', message(cause))) }}>Hide from sidebar</button>
-    </div>}
+  return <div className="tasks-sidebar" onMouseEnter={prefetch} onMouseLeave={() => setHover(false)} onFocus={prefetch} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setHover(false) }}>
+    <Button className="tasks-sidebar-open" onClick={() => void context.call('quirky.tasks/open', {}).catch(cause => context.toast('Could not open Tasks', message(cause)))} onContextMenu={event => { event.preventDefault(); setMenu({ x: event.clientX, y: event.clientY }) }}>☷ Tasks</Button>
+    {hover && state?.preferences.visibleTaskProviders.includes('github') && <Button aria-label="Open GitHub tasks" disabled={availability !== ''} title={availability ?? 'Checking GitHub availability…'} onClick={() => void context.call('quirky.tasks/preferences', { defaultTaskSource: 'github' }).then(() => context.call('quirky.tasks/open', { source: 'github' })).catch(cause => context.toast('Could not open GitHub tasks', message(cause)))}>GH</Button>}
+    {menu && <ContextMenu label="Tasks options" x={menu.x} y={menu.y} onClose={() => setMenu(null)} items={[{ id: 'hide', label: 'Hide from sidebar', onSelect: () => { setMenu(null); void context.call('quirky.tasks/preferences', { showTasksButton: false }).catch(cause => context.toast('Could not hide Tasks', message(cause))) } }]} />}
   </div>
 }
 

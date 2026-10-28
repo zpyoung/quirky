@@ -965,7 +965,7 @@
 .quirky-tasks-project-roadmap__timeline {
   background-image: repeating-linear-gradient(
     to right,
-    transparent 0 calc(var(--roadmap-tick-width) - var(--ui-border-width)),
+    var(--ui-transparent) 0 calc(var(--roadmap-tick-width) - var(--ui-border-width)),
     var(--ui-border) calc(var(--roadmap-tick-width) - var(--ui-border-width)) var(--roadmap-tick-width)
   );
   min-height: var(--compat-px-38);

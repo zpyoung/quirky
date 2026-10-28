@@ -1,6 +1,7 @@
 import { Button, Dialog, FormRow, TextField } from '@quirky/ui'
 import { useEffect, useRef, useState } from 'react'
 import type { IssueDraft, TaskRepo, TasksSurfaceProps } from '../contracts'
+import { MarkdownComposer } from './Markdown'
 
 type RecordValue = Record<string, unknown>
 type SourceChoice = { id: 'origin' | 'upstream'; label: string }

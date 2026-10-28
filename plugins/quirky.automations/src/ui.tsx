@@ -5,7 +5,6 @@ import { API, AUTOMATIONS_VIEW, AUTOMATIONS_SETTINGS_VIEW, type AutomationUiStat
 import { AutomationEditor } from './editor/AutomationEditor'
 import { AutomationsPage } from './list/AutomationsPage'
 import { Button, ContextMenuList, EmptyState, FormRow, IconButton, ToolPanelFrame } from '@quirky/ui'
-import '@quirky/ui/styles.css'
 
 function message(cause: unknown): string { return cause instanceof Error ? cause.message : String(cause) }
 function useAutomationState(context: UiPluginContext) {

@@ -17,7 +17,7 @@ Use the existing @quirky/ui controls and centrally owned semantic feature layout
 - AC6: No plugin style injection/private CSS/raw styling remains in either opted-in plugin. Both IDs are added to the existing enforced list; bun run typecheck includes UI lint and must pass.
 
 ## Scope and non-goals
-Desktop visual migration only, including fallback sidebar mounts still registered for compatibility with existing public contributions. Default host slots stay unchanged. No daemon/API/schema/shortcut/business logic change, no phone UI, no new provider/network integration, no golden scoring or suite campaign during build-first mode. Existing behavior tests remain; add focused consumer-visible interaction coverage only where shared-control migration creates a plausible risk. No feature-doc-specific Orca defect is assigned to this visual-only item.
+Desktop visual migration only, including fallback sidebar mounts still registered for compatibility with existing public contributions and daemon-owned navigation integration that prevents duplicate tool/center mounts. Default host slots stay unchanged. No public API/schema/shortcut/business logic change, no phone UI, no new provider/network integration, no golden scoring or suite campaign during build-first mode. Existing behavior tests remain; add focused consumer-visible interaction coverage only where shared-control migration creates a plausible risk. No feature-doc-specific Orca defect is assigned to this visual-only item.
 
 ## Decisions locked
 - Layout: host-owned left-bottom tools; no custom shell buttons or center-tab takeover.
@@ -39,10 +39,14 @@ Tool: host-mounted slot panel. Shared semantic layout: feature presentation CSS 
 - Public @quirky/ui exports and existing components are the contract; add workspace dependencies to both plugin package manifests before dispatch. No new public types or API signatures required.
 - Three independent components: Tasks list/composer; Tasks issue/Projects; all Automations UI. Main integration owns Tasks ui.tsx/settings/sidebar, package/lock integration, lint list and shared CSS imports.
 - Owned canonical layouts: packages/ui/src/design-system/tasks-list.css, tasks-detail.css, automations.css; parent tasks-shell.css. All values use existing semantic or compatibility tokens; no arbitrary raw-value additions to tokens. No export/API changes without parent approval.
+- Parent also owns context-menu.css and the corresponding removal from terminal-workspace.css: move the existing shared ContextMenu selectors into the public canonical stylesheet once, unchanged. Preserve all terminal consumers; no plugin-specific duplicate menu styling.
+- Observed tool integration correction: parent-owned automations state.ts navigation must reuse an already-visible projected Automations tool without opening a second center view/editor; close targets that visible slot, preserving the unrelated center. Reuse the existing Tasks tool-aware navigation pattern and public ui.state/ui.contributions contracts. Add an actual-daemon regression in automations/test/ui-state.test.ts. Center-only legacy navigation remains available when no tool is mounted.
 - Workers never edit shared styles.css/index/contracts/tokens, package manifests, lockfile, lint list or loop metadata. All workers use absolute isolated worktree paths, do not stage/commit or run tests/build/lint/formatters. Parent audits at the all-worker barrier, then integrates and runs typecheck once.
 - Acceptance gate: bun run typecheck. Focused actual built-UI smoke on an isolated private profile exercises changed surfaces and both themes; this is not a suite or golden review. New authored regression tests remain unrun until end phase.
 
 ## Status & amendments
 Self-review: all assigned visual surfaces map to AC1–6; no API/state migration, unresolved decision or placeholder. Parent approved design remains authoritative.
 
-Amendments: none.
+Amendments: 2026-10-28 — shared ContextMenu styles were exported only through the terminal host stylesheet. Add a clean canonical CSS cutover (existing selectors unchanged) so Tasks and Automations can reuse the public control without feature-local copies.
+
+2026-10-28 — bounded actual UI showed openEditor mounting Automations twice (slot plus center), with duplicate dialog IDs/focus traps. A draft disappeared during interaction; its exact cancellation cause is not established. Fix the proven duplicate visible-tool navigation ownership as part of default-slot migration, without altering scheduling or definition APIs.

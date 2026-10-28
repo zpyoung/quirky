@@ -492,8 +492,14 @@ isolated Default storage and a run-owned system-browser session before clicking.
 ## GitHub Tasks
 
 `quirky.tasks` supplies Tasks lists, issue detail/creation, Project tables/boards/roadmaps,
-and the shared workspace composer. Its generated commands use the `tasks` group:
+and the shared workspace composer.
 
+Tasks is a host-owned tool in the left-bottom slot by default; moving it uses the
+shared tool layout. Its list, issue/Project surfaces, workspace composer and
+settings use `@quirky/ui` controls and canonical graphite tokens in both themes.
+The host stylesheet supplies those styles once; the plugin injects no private CSS.
+
+Generated commands use the `tasks` group:
 ```sh
 quirky tasks open --mode issues --json
 quirky tasks open --mode prs --page 3 --json

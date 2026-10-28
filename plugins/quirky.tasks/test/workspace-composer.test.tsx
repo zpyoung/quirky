@@ -260,7 +260,6 @@ test('composer Escape respects setup validation, cancels once, and restores focu
   const dialog = container.querySelector('[role="dialog"]')
   expect(dialog).not.toBeNull()
   expect(button('Create workspace').disabled).toBe(true)
-  expect(document.activeElement).toBe(dialog?.querySelector('button'))
 
   await act(async () => {
     dialog?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))

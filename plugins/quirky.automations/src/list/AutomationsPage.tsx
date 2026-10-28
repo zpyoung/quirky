@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { Badge, Button, ContextMenuList, EmptyState, FormRow, IconButton, StatusDot, Tabs, TextField, type ContextMenuItem } from '@quirky/ui'
+import type { UiPluginContext } from '@quirky/protocol'
 import type { AutomationDefinition, AutomationRun, AutomationRunsPage } from '../../types'
 import type { AutomationOwner, AutomationTargetResolution } from '../../dispatch-contract'
 import { describeAutomationSchedule } from '../../schedule'
