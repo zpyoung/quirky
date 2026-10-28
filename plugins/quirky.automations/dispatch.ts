@@ -123,7 +123,7 @@ function checkEvidence(command: string, startedAt: number, completedAt: number, 
   const stdout = typeof result.stdoutTail === 'string' ? result.stdoutTail : ''
   const stderr = typeof result.stderrTail === 'string' ? result.stderrTail : ''
   const pass = result.pass === true && result.ran === true && result.exitCode === 0 && result.timedOut !== true && result.aborted !== true && result.error === undefined
-  return {
+  const evidence: CheckEvidence = {
     command,
     startedAt,
     completedAt,
@@ -139,6 +139,20 @@ function checkEvidence(command: string, startedAt: number, completedAt: number, 
     durationMs: typeof result.durationMs === 'number' && Number.isFinite(result.durationMs) ? result.durationMs : Math.max(0, completedAt - startedAt),
     ...(typeof result.error === 'string' ? { error: result.error.slice(0, 2_000) } : {})
   }
+  // JSON escaping can expand otherwise bounded character tails beyond the metadata budget.
+  while (Buffer.byteLength(JSON.stringify(evidence), 'utf8') > 65_536) {
+    if (evidence.stdout.length === 0 && evidence.stderr.length === 0) {
+      throw new Error('Precheck metadata exceeds the 64 KiB evidence limit.')
+    }
+    if (evidence.stdout.length >= evidence.stderr.length) {
+      evidence.stdout = evidence.stdout.slice(Math.ceil(evidence.stdout.length / 2))
+      evidence.stdoutTruncated = true
+    } else {
+      evidence.stderr = evidence.stderr.slice(Math.ceil(evidence.stderr.length / 2))
+      evidence.stderrTruncated = true
+    }
+  }
+  return evidence
 }
 
 function parsePrecheckError(command: string, startedAt: number, completedAt: number, error: unknown): CheckEvidence {

@@ -540,4 +540,31 @@ describe('automation run dispatcher', () => {
     expect(failed.outputSnapshot?.content).toBe('Provider could not authenticate this account.')
     expect(failed.usage).toMatchObject({ status: 'unavailable', unavailableReason: 'run_not_finished' })
   })
+  test('a decreasing reused Claude running total is unavailable rather than a negative or repeated charge', async () => {
+    const harness = fixture()
+    const { definition, run } = newRun(harness, { reuseSession: true })
+    harness.onCreate = (session) => successfulClaudeResult(harness, session.id, 'first', {
+      usage: { input_tokens: 12, output_tokens: 3 }, total_cost_usd: 0.2
+    })
+    await harness.dispatcher.dispatch(run.id)
+    await waitRun(harness, run.id, 'completed')
+    harness.onSend = (session) => successfulClaudeResult(harness, session.id, 'after reset', {
+      usage: { input_tokens: 5, output_tokens: 2 }, total_cost_usd: 0.1
+    })
+    const reused = harness.store.createRun(definition.id, { trigger: 'manual', scheduledFor: now + 1, now: now + 1 })
+    await harness.dispatcher.dispatch(reused.id)
+    const completed = await waitRun(harness, reused.id, 'completed')
+    expect(completed.usage).toMatchObject({ status: 'known', totalTokens: 7, estimatedCostUsd: null })
+    expect(completed.usage).toHaveProperty('costUnavailableReason')
+  })
+  test('precheck JSON evidence stays bounded when control characters expand during serialization', async () => {
+    const harness = fixture()
+    const controls = '\u0001'.repeat(4_000)
+    harness.setCheckResult(makeCheckResult({ stdoutTail: controls, stderrTail: controls }))
+    const { run } = newRun(harness, { precheck: { command: `printf '${controls}' | tee /dev/stderr`, timeoutSeconds: 5 } })
+    const dispatched = await harness.dispatcher.dispatch(run.id)
+    expect(dispatched?.status).toBe('dispatched')
+    expect(Buffer.byteLength(JSON.stringify(dispatched?.precheckResult), 'utf8')).toBeLessThanOrEqual(65_536)
+    expect(dispatched?.precheckResult?.stdoutTruncated || dispatched?.precheckResult?.stderrTruncated).toBe(true)
+  })
 })

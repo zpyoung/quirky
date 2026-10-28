@@ -274,3 +274,11 @@ Registration update: `bun scripts/build-loop/queue.ts add /tmp/quirky-session-in
 - **MEDIUM, LOW confidence — Settings paired-device revoke reachability remains unconfirmed** (`plugins/quirky.mobile/src/ui.tsx:70`, `packages/ui/src/styles.css:1137-1144`). At1280x720, the guarded UI run found the Settings revoke button mostly below the status bar; scroll/PageDown produced no observable change. The host slot already supplies `overflow: auto`, so an app layout cause was not established and no speculative CSS change was made. The shorter Mobile-page revoke route worked for all three run-created pairings. Follow-up `sb-mobile-settings-visibility` owns distinguishing scroll-driver targeting from actual clipping.
 - **Tool limitations, not claimed passes:** stable interface Refresh produced no visible change twice; IP redaction hid the custom-address value signal although save/persistence worked; Cmd+R/Cmd+Shift+R did not establish a browser reload. Functional intro/settings/driving/devices goals passed; pairing/post-build goals remain partial in `.quirk/using-apps-like-a-user/runs/20261028T005355-6182/report.md`. No test overrides or kept-open windows.
 
+## m5-automations-dispatch: deferred constrained flows
+
+- **Source decisions:** `docs/loop/decisions/m5-automations-dispatch.md` D2-D3.
+- **Remote host flows:** SSH/runtime execution, registration-generation ownership, workspace pin/re-pin and re-adoption require public remote host registration/execution APIs that are absent. Remote contexts refuse and never execute locally. Complete the public prerequisite, then exercise these remote flows end-to-end.
+- **Raw extra agent arguments:** the binding structured-only architecture and m5-structured-runner D6 explicitly refuse them. Model and effort use native structured options; no hidden PTY fallback or partial argv interpretation was added. A later item must resolve that binding conflict before promising raw arguments.
+- **Follow-up:** `m5-automations-dispatch-remote-and-args`, dependent on local dispatch, covers both constrained flows.
+
+- **Verification limit:** no final cross-family review was started. LOOP's expired-item fast path was used after owned checks and typecheck passed (dispatch D26); this is not model-review clearance.

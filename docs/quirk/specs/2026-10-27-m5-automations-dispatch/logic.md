@@ -1,7 +1,7 @@
 # Automations dispatch
 
 ## Status & amendments
-Status: Approved autonomously under LOOP.md night mode; combined logic and technical spec.
+Status: Approved autonomously; implementation verified and ready for queue landing. Combined night-mode spec.
 
 **Amendments:** 2026-10-27: creator-lifetime cancellation belongs to checks because a revoked automation context cannot cancel during deactivate (D11). Catalog-declared opaque model IDs remain accepted under m1-launch-settings D10; invalid option values still refuse. A dispatched run retains its original provider identity even if the definition changes.
 
@@ -109,4 +109,4 @@ Owner: authority-local captured target identity, not a client-supplied execution
 - Parent owns the shared lifecycle seam in quirky.checks/main.ts, its method documentation, and test/owner.test.ts. Registered plugin creators are distinguished from clients; disabling one cancels only its checks. Check-ID uniqueness is checked after awaited owner resolution.
 - The public Session model adds optional background boolean. Structured create/register and resume persist it through an appended session-store migration. Terminal auto-adoption excludes true; ordinary and explicitly bound sessions remain unchanged. Dispatch state optionally stores claudeCostBaseline, captured before reused prompt delivery. The obsolete core-only claim/updateRun public handoff and its result parsers are removed; dispatch/runs is the sole production lifecycle surface.
 - Verification commands: implementers run only owned files. Parent runs `bun scripts/suite.ts packages/protocol plugins/quirky.automations plugins/quirky.structured plugins/quirky.checks plugins/quirky.session plugins/quirky.terminal`, `bun test scripts`, `bun run typecheck` once before land. Actual daemon + CLI + scripted native provider smoke covers native execution, background layout/focus invariance, reuse, new workspaces and the real60-second scheduler. No feature UI is added; API-observed layout evidence is not claimed as browser/native-window verification.
-- Reviewer binding: omp-task/OpenAI implementers; Gemini high via pi-watch after actual opus/sonnet probes fail. One final C/S/X promote/refute round, one blocking-fix batch, then verification; no separate spec review per night mode.
+- Reviewer binding: omp-task/OpenAI implementers; Gemini high was reachable after opus/sonnet probes failed. No final model-review stage was dispatched: the item exceeded two hours and LOOP's night-mode fast path explicitly skips unstarted rounds once owned checks/typecheck pass (decision D26). Deterministic checks and model availability are not review clearance.

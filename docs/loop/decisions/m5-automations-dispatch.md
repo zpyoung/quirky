@@ -220,5 +220,82 @@
 - **Revisit if:** a real provider diverges from its native protocol fixture
 - **Source:** assumed — autonomous
 
+## D21: Repair five test-only TypeScript diagnostics without repeating the broad suite
+- **Question:** Which part of the final affected gate failed?
+- **Options:** rerun the entire broad chain; preserve its actual component outcomes and repair the compiler diagnostics directly
+- **Chose:** the protocol/automations/structured/checks/session/terminal affected suite and scripts reached typecheck through an && chain; scripts reported68pass0fail562assertions. Typecheck exited2. A focused compiler command exposed five diagnostics in two automation test fixtures; fixed optional params, literal fixture typing and a union guard. Focused29tests and frozen-install/typecheck then passed, with no production-source change.
+- **Why:** The prepass retains only a bounded output tail, which obscured compiler diagnostics behind intentionally failing script-test fixture output. It is not evidence the outer scripts suite failed. The first broad result remains recorded as a failed combined gate, not relabeled pass. Production hashes matched the captured artifact before the focused repair.
+- **Evidence:** review/prepass.initial-failed.json exit2 after735759ms; focused compiler output; a8783ed2; review/prepass.json focused command exit0/26677ms,29tests162assertions,593installs607packages unchanged
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a production change requires broader regression verification
+- **Source:** assumed — autonomous
+
+## D22: Replace the three user-reported session snapshot pins with semantic assertions
+- **Question:** Lane6 reported background:false whole-record equality failures and assigned the three session files to this lane
+- **Options:** rerun to confirm or repin the default; preserve original migration/readback behavior and remove unrelated field pins
+- **Chose:** no confirmation rerun. Legacy-exit migration asserts retained original row/location/state and exit semantics. CLI JSON asserts identity/provider/worktree/launch settings. Record tests assert launch/provider/prompt persistence, corruption isolation and launch-setting changes, not the whole evolving Session object. No background:false expectation was added.
+- **Why:** The optional background field should not invalidate unrelated consumer contracts. The source already omits false on readback; the tests still needed the requested semantic repair instead of keeping brittle snapshots by accident.
+- **Evidence:** user-reported sessions.test.ts754,cli.test.ts599,records.test.ts141/171/195/230; audited commitbcdaea1b3fa66582e9093c06f4e7707446fec5dc; exact three-file command169pass0fail488assertions8.30s; accepted lane6 repair messagec3e68fb2-0f89-4c14-a0f9-af09aab338ec
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a removed field was actually part of that test's original consumer contract
+- **Source:** assumed — autonomous
+
+## D23: Bound escaped native precheck evidence as JSON, not only as characters
+- **Question:** Can a normalized4000-character stdout/stderr pair exceed the existing64KiB metadata invariant?
+- **Options:** trust character caps; reject a successful check because its evidence is large; retain bounded tails with truthful truncation flags
+- **Chose:** enforce the serialized UTF-8 JSON budget after normalization, shrinking only the longer output tail as needed and setting its truncation flag. The bounded command/result identity and exit evidence remain intact. An invalid internal record whose non-output metadata alone is oversized fails explicitly rather than looping.
+- **Why:** A concrete valid control-character command and two bounded streams serialized to72251bytes before the fix. The boundary regression failed at65536; all25dispatcher tests then passed with108assertions. No provider launch retry or unrelated validation framework was added.
+- **Evidence:** test/dispatch.test.ts control-character expansion regression, red72251bytes and green25pass0fail; dispatch.ts checkEvidence
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the public metadata budget changes
+- **Source:** locked by docs/loop/decisions/m5-automations-core.md D11
+
+## D24: Retain the real CLI/native-protocol smoke as a permanent flow test
+- **Question:** How do the in-memory race regressions satisfy LOOP's public-client acceptance requirement?
+- **Options:** discard the passing smoke; preserve its real-client flows as an isolated permanent test
+- **Chose:** translate the same smoke into native-cli.test.ts using the existing typed structured CLI fixture convention. It launches the actual daemon and CLI, speaks the native Codex app-server protocol, exercises the real scheduler interval and cleans its ProcessScope/home in finally. No production mock launcher or copied-argument-only test substitutes for it.
+- **Why:** The throwaway smoke proves current execution but would not prevent a later public API/CLI regression. The owned test passed1/0 with30assertions in67.34seconds before one incidental usage-message assertion was removed. The final focused gate re-exercises the retained version.
+- **Evidence:** plugins/quirky.automations/test/native-cli.test.ts; AutoCliRegression observed command output; prior D20 runtime proof
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the public native protocol or CLI changes
+- **Source:** locked by docs/roadmap.md
+
+## D25: Derive the real scheduler acceptance deadline from both clock phases
+- **Question:** Why can the native test see no scheduled row after its fixed85-second wait?
+- **Options:** treat a passing retry as flaky clearance; change the daemon interval; derive the test's bound from the saved due time and independently phased poll
+- **Chose:** keep the real60-second daemon timer unchanged. The test waits through saved nextRunAt plus one complete poll interval and10seconds transport margin; its outer watchdog covers the two possible minutes plus setup/cleanup. Removed the temporary manual-tick failure diagnostic.
+- **Why:** The combined focused gate observed200pass/1timeout and never reached typecheck. A source-backed calculation using the real occurrence function proves a normal counterexample: daemon04:00:57, creation04:01:13, due04:02:00, firsttick04:01:57 (not due), secondtick04:02:57, or104000ms after creation. The original failing run's precise phase was not retained, so that phase is not claimed as observed. An instrumented different-phase run passed201/0/684assertions; it is not by itself proof of flakiness. The inadequate test bound is independently demonstrated.
+- **Evidence:** failed focused prepass; actual nextAutomationOccurrenceAfter calculation; SchedulerIsolation source audit; instrumented six-file run201pass0fail136.88s
+- **Reversibility:** easy
+- **Confidence:** high for the invalid old bound and corrected phase calculation
+- **Revisit if:** scheduler cadence or recurrence alignment changes
+- **Source:** assumed — autonomous
+
+## D26: Use the night-mode two-hour fast path without inventing review clearance
+- **Question:** Should an unstarted cross-family review begin after this item has exceeded two hours?
+- **Options:** start another review phase; use LOOP's explicit expired-item fast path once the owned tests and typecheck pass
+- **Chose:** commit and land now; no promote/refute reviewer was dispatched and no model review is claimed. Gemini availability/model selection and deterministic prepasses are not a review.
+- **Why:** The branch was created after claim at2026-10-27 21:53:21 -0500. At04:53:04Z the corrected native test had passed1/0/29assertions in70.61seconds; only a test RuntimeInfo|null narrowing diagnostic remained. Its explicit guard was followed by a fresh frozen-install/typecheck passing in39.65seconds, necessarily beyond two hours even from branch creation. The earlier broad affected suite/scripts passed; the instrumented six-file acceptance run passed201/0/684assertions. No passing retry is used to erase the invalid old85-second test deadline.
+- **Evidence:** branch creation reflog; current corrected native prepass result; final bun run typecheck exit0 with593installs607packages unchanged; D21,D25
+- **Reversibility:** easy
+- **Confidence:** high for exercised runtime/compiler checks; independent final review remains unperformed
+- **Revisit if:** later independent review finds a concrete defect
+- **Source:** locked by docs/loop/LOOP.md
+
+## D27: Preserve actual evidence and its limits outside disposable scratch
+- **Question:** What survives removal of the item's temporary work and component trees?
+- **Options:** leave only narrative claims; archive the real deterministic records and reproducible native smoke
+- **Chose:** retain `.orca/loops/omp-until-done-deaecbdd/dispatch-evidence.tar.gz`, SHA256 `5b3f54d37f049c9eeba500922277d9860cda7b2ac6d21982623ba4fc099b9eaf`. It contains original/focused prepasses, actual model-availability selection, the fixed production diff/hash list, the initial journal, verbatim criteria, smoke source and a clearly labeled transcription of final observed tool results. It contains no pretend reviewer findings or PASS manifest.
+- **Why:** Both the compiler failures and corrected scheduler deadline must remain auditable. The native process is a deterministic app-server protocol fixture, not a paid-model or billing test. No browser/native-window visual proof or non-macOS product support is claimed.
+- **Evidence:** archive command and checksum; final-observed.json; production diff artifact SHA256 `57edba159598614199ed1c3fc0de9d5ed0a3da16079924a940be578cdd9e4f3f`
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** later evidence supersedes a recorded result
+- **Source:** assumed — autonomous
+
 ## Progress
-All original components and the background blocker-fix component are integrated and their owned worktrees removed. Source runtime hash959f4eb8 sent to lane6; optional false-background output now omitted and its incidental default assertion removed. Final native CLI smoke passed and all processes/home were cleaned. One integration catch-up is done. Next: commit final docs/wire cleanup, run the prepared affected prepass once, fix concrete diagnostics, run exactly one final C/S/X review and blocker-fix batch, add the single constrained-flow follow-up, then detach and authoritative queue land. No human asks or second item.
+Ready for authoritative queue landing. All workers and diagnostic runs returned; no processes remain from smoke/acceptance fixtures. Corrected permanent native acceptance passed1/0/29assertions; the six-file integration run passed201/0; dispatcher25/0; requested session repair169/0; scripts68/0; final frozen-install/typecheck0. The broad affected suite preceded the successful scripts through &&. The native runtime guard was a test-only type fix after its passing run. One catch-up is complete. Unstarted model review is skipped only under D26, not described as clearance. Register the single constrained-flow follow-up, commit/detach and queue land; on a land conflict use only the mandated recovery merge/check/retry path.
