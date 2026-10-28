@@ -15,6 +15,7 @@ const TERMINAL_LINK_ACTIONS = [
   { value: 'terminal', label: 'Leave to terminal' }
 ] as const
 const IDENTITY_LABELS = { clean: 'Cleaned', native: 'Native' } as const
+const PROFILE_ROW_STYLE = { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6 } as const
 const ZOOM_LEVELS = Array.from({ length: 17 }, (_, index) => -3 + index * 0.5)
 
 export function BrowserSettings(props: BrowserPreferencesProps & { embedded?: boolean }) {
@@ -178,7 +179,7 @@ export function BrowserSettings(props: BrowserPreferencesProps & { embedded?: bo
       <p>Clearing or removing profile data requires a native session-clear completion capability. It is currently unavailable; failed requests preserve profile data and metadata.</p>
       <button type="button" disabled={profilePending !== null} onClick={() => { setCreateOpen(true); setActionError(null); setSuccessMessage(null) }}>Add Profile</button>
       {preferences && <ul aria-label="Browser profiles">
-        {preferences.profiles.map((row) => <li key={row.profile.id}>
+        {preferences.profiles.map((row) => <li key={row.profile.id} style={PROFILE_ROW_STYLE}>
           <strong>{row.profile.label}</strong>
           {row.active && <span>Active</span>}
           {row.profile.scope === 'default'

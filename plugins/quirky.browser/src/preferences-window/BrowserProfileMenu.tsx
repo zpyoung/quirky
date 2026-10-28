@@ -3,6 +3,9 @@ import type { BrowserProfile } from '../profiles/store'
 import type { BrowserPreferencesProps } from '../preferences/contract'
 import { BROWSER_SETTING_IDS, ImportDetails, ProfileCreator, errorMessage, profileSourceLabel, useBrowserPreferenceData } from './shared'
 
+const PROFILE_ROWS_STYLE = { display: 'flex', flexDirection: 'column', gap: 4 } as const
+const PROFILE_ROW_STYLE = { display: 'flex', alignItems: 'center', gap: 4 } as const
+
 function profileIdForPane(pane: BrowserPreferencesProps['pane']): string {
   if (pane && 'profileId' in pane && typeof pane.profileId === 'string') return pane.profileId
   return 'default'
@@ -82,11 +85,11 @@ export function BrowserProfileMenu(props: BrowserPreferencesProps & { inline?: b
     {(inline || menuOpen) && <div id={menuId} aria-label="Browser profile menu">
       {loading && !preferences && <p>Loading browser profiles…</p>}
       {stateError && <p role="alert">{stateError}</p>}
-      {preferences && <fieldset>
+      {preferences && <fieldset style={PROFILE_ROWS_STYLE}>
         <legend>Browser profiles</legend>
         {profiles.map(({ profile }) => {
           const sourceLabel = profileSourceLabel(profile)
-          return <label key={profile.id}>
+          return <label key={profile.id} style={PROFILE_ROW_STYLE}>
             <input
               type="radio"
               name={`browser-profile-${pane?.id ?? 'current'}`}

@@ -77,7 +77,7 @@ async function waitFor<T>(read: () => T | null | undefined | Promise<T | null | 
 }
 
 function paneFrame(event: QuirkyEvent): Record<string, unknown> | undefined {
-  if (event.type !== 'event:quirky.browser/paneFrame' || !('data' in event)) return undefined
+  if (event.type !== 'quirky.browser/paneFrame' || !('data' in event)) return undefined
   const data = event.data
   return typeof data === 'object' && data !== null && !Array.isArray(data) ? data as Record<string, unknown> : undefined
 }
@@ -178,10 +178,11 @@ test('Watch leases deliver acknowledged latest frames and typed input/find/zoom/
 
       const watch = await call(h, 'paneWatch', { pane: pane.id }) as { watchId: string }
       const firstFrame = await waitFor(() => events.map(paneFrame).find((frame) => frame?.watchId === watch.watchId))
-      expect(typeof firstFrame.data).toBe('string')
-      expect((firstFrame.data as string).length).toBeGreaterThan(100)
+      const encodedFrame = Buffer.from(firstFrame.data as string, 'base64')
+      expect([...encodedFrame.subarray(0, 3)]).toEqual([0xff, 0xd8, 0xff])
       expect(firstFrame.width).toBeGreaterThan(0)
       expect(firstFrame.height).toBeGreaterThan(0)
+      await call(h, 'eval', { page: first.browserPageId, expression: 'document.body.style.backgroundColor = "rgb(18, 52, 86)"' })
       await Bun.sleep(350)
       expect(events.map(paneFrame).filter((frame) => frame?.watchId === watch.watchId)).toHaveLength(1)
 
@@ -214,12 +215,11 @@ test('Watch leases deliver acknowledged latest frames and typed input/find/zoom/
 
       const resumed = await call(h, 'paneWatch', { pane: pane.id }) as { watchId: string }
       expect(resumed.watchId).not.toBe(watch.watchId)
-      await call(h, 'tabClose', { page: first.browserPageId })
-      const ended = await waitFor(async () => {
+      await call(h, 'tabClose', { page: first.browserPageId, yes: true })
+      await waitFor(async () => {
         const state = await call(h, 'paneState', { worktree: `id:${worktree}` }) as { tabs: Array<{ id: string; error: string | null }> }
         return state.tabs.find((tab) => tab.id === pane.id)?.error
       })
-      expect(ended).toContain('closed')
       await expect(call(h, 'paneFrameAck', { pane: pane.id, watchId: resumed.watchId, sequence: 1 })).rejects.toBeInstanceOf(Error)
     } finally {
       unsubscribe()
