@@ -44,6 +44,22 @@ describe('badge and status', () => {
     expect(status.unreadWorktrees.map((w) => w.name).sort()).toEqual(['b', 'c'])
     expect(status.unreadSessions).toHaveLength(3)
   })
+  test('queued and resolved asks do not inflate pending attention', async () => {
+    rig = await Rig.start()
+    const session = await rig.session('b')
+    const first = (await ask(session.id, 'First?')) as { askId: string }
+    const second = (await ask(session.id, 'Second?')) as { askId: string }
+
+    expect(await rig.status()).toMatchObject({ badge: 1, label: '1', pendingAsks: 1 })
+    const queued = await rig.client.callAny('quirky.ask/list', { pendingOnly: true }) as { id: string; queued: boolean }[]
+    expect(queued.map((item) => [item.id, item.queued])).toEqual([[first.askId, false], [second.askId, true]])
+
+    await rig.client.callAny('quirky.ask/cancel', { askId: first.askId })
+    expect(await rig.status()).toMatchObject({ badge: 1, pendingAsks: 1 })
+    await rig.client.callAny('quirky.ask/cancel', { askId: second.askId })
+    expect(await rig.status()).toMatchObject({ badge: 0, label: '', pendingAsks: 0 })
+  })
+
 
   test('the badge label is empty at 0, the number up to 99 and 99+ above', () => {
     expect([0, 1, 99, 100, 120].map(badgeLabel)).toEqual(['', '1', '99', '99+', '99+'])

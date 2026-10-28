@@ -1049,6 +1049,73 @@
         }
       },
       {
+        "id": "dashboard",
+        "description": "Projects the retained Activity threads into Needs you, Working and Done columns. The total includes hidden idle cards; acknowledged completions remain Done.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "text": { "type": "string", "description": "Case-insensitive substring of prompt, provider, session or workspace text." },
+            "project": { "type": "string", "description": "A project selector accepted by quirky.worktree/list." },
+            "workspaceStatus": { "type": "string", "enum": ["todo", "in-progress", "in-review", "done"] },
+            "reviewStatus": { "type": "string", "enum": ["open", "draft", "merged", "closed", "no-review"] },
+            "showIdle": { "type": "boolean", "description": "Reveal idle Activity cards, hidden by default." }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "cards": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "bucket": { "type": "string", "enum": ["attention", "working", "done", "idle"] },
+                  "thread": {
+                    "type": "object",
+                    "properties": {
+                      "sessionId": { "type": "string" },
+                      "worktreeId": { "type": "string" },
+                      "worktreeName": { "type": "string" },
+                      "sessionName": { "type": "string" },
+                      "agent": { "type": "string" },
+                      "turn": { "type": "string" },
+                      "turnStartedAt": { "type": "number" },
+                      "updatedAt": { "type": "number" },
+                      "display": { "type": "string", "enum": ["waiting", "blocked", "permission", "failed", "unconfirmed", "working", "monitoring", "interrupted", "unverifiable", "done", "idle"] },
+                      "label": { "type": "string" },
+                      "prompt": { "type": "string" },
+                      "detail": { "type": "string", "description": "Readable status detail, never raw permission JSON." },
+                      "children": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": { "type": "string" },
+                            "kind": { "type": "string", "enum": ["agent", "shell", "cron"] },
+                            "state": { "type": "string", "enum": ["working", "waiting", "done"] }
+                          },
+                          "required": ["id", "kind", "state"]
+                        }
+                      },
+                      "unread": { "type": "boolean" },
+                      "live": { "type": "boolean" }
+                    },
+                    "required": ["sessionId", "worktreeId", "worktreeName", "sessionName", "agent", "turn", "turnStartedAt", "updatedAt", "display", "label", "prompt", "detail", "children", "unread", "live"]
+                  }
+                },
+                "required": ["thread", "bucket"]
+              }
+            },
+            "total": { "type": "integer", "description": "Matching Activity threads, including hidden idle cards." },
+            "hiddenIdle": { "type": "integer", "description": "Matching idle cards omitted because showIdle is false." },
+            "unavailable": { "type": "array", "items": { "type": "string" }, "description": "Optional GitHub review lookup failures; those unknown threads are excluded from review-filter results." }
+          },
+          "required": ["cards", "total", "hiddenIdle", "unavailable"]
+        }
+      },
+      {
         "id": "acknowledge",
         "description": "Acknowledges a specific Activity turn, or all current turns; an old token cannot acknowledge a newer turn.",
         "params": {
@@ -1347,6 +1414,19 @@
         "methods": ["quirky.agent-status/activity"]
       },
       {
+        "id": "dashboard",
+        "words": "dashboard",
+        "summary": "show retained Activity threads as a filterable Dashboard",
+        "flags": {
+          "text": { "type": "string", "description": "filter prompt, provider, session and workspace text" },
+          "project": { "type": "string", "description": "project selector (ID, name or path)" },
+          "workspace-status": { "type": "string", "description": "filter by workspace workflow status", "enum": ["todo", "in-progress", "in-review", "done"] },
+          "review-status": { "type": "string", "description": "filter by GitHub review state or absence", "enum": ["open", "draft", "merged", "closed", "no-review"] },
+          "show-idle": { "type": "boolean", "description": "include idle cards in the output" }
+        },
+        "methods": ["quirky.agent-status/dashboard"]
+      },
+      {
         "id": "acknowledge",
         "words": "acknowledge",
         "summary": "mark one Activity turn read, or all current turns",
@@ -1369,11 +1449,25 @@
         "methods": ["quirky.agent-status/clearCompleted"]
       }
     ],
+    "setting": [
+      {
+        "id": "dashboard-enabled",
+        "type": "boolean",
+        "title": "Agent Dashboard",
+        "description": "Show the in-window Agent Dashboard in the sidebar. A pop-out requires a public shell window API, which is not currently available.",
+        "category": "Experimental",
+        "section": "Agents",
+        "default": false,
+        "menu": "view"
+      }
+    ],
     "view": [
-      { "id": "activity", "title": "Activity" }
+      { "id": "activity", "title": "Activity" },
+      { "id": "dashboard", "title": "Agent Dashboard" }
     ],
     "sidebar-section": [
-      { "id": "activity", "title": "Activity", "order": 5 }
+      { "id": "activity", "title": "Activity", "order": 5 },
+      { "id": "dashboard", "title": "Agent Dashboard", "order": 6 }
     ],
     "command": [
       {
@@ -1400,6 +1494,36 @@
             "turn": { "type": "string" }
           },
           "required": ["sessionId", "worktreeId", "turn"]
+        }
+      },
+      {
+        "id": "openDashboard",
+        "title": "Open Agent Dashboard",
+        "args": {
+          "type": "object",
+          "properties": {
+            "text": { "type": "string" },
+            "project": { "type": "string" },
+            "workspaceStatus": { "type": "string", "enum": ["todo", "in-progress", "in-review", "done"] },
+            "reviewStatus": { "type": "string", "enum": ["open", "draft", "merged", "closed", "no-review"] },
+            "showIdle": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "toggleDashboard",
+        "title": "Toggle Agent Dashboard",
+        "args": {
+          "type": "object",
+          "properties": {
+            "text": { "type": "string" },
+            "project": { "type": "string" },
+            "workspaceStatus": { "type": "string", "enum": ["todo", "in-progress", "in-review", "done"] },
+            "reviewStatus": { "type": "string", "enum": ["open", "draft", "merged", "closed", "no-review"] },
+            "showIdle": { "type": "boolean" }
+          },
+          "additionalProperties": false
         }
       }
     ]

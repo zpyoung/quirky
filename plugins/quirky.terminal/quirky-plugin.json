@@ -4155,6 +4155,17 @@
         }
       },
       {
+        "id": "fork-agent-session",
+        "title": "Fork Agent Session",
+        "description": "Fork the exact provider conversation running in this terminal pane.",
+        "args": {
+          "type": "object",
+          "properties": { "session": { "type": "string", "description": "Exact source terminal session ID." } },
+          "required": ["session"],
+          "additionalProperties": false
+        }
+      },
+      {
         "id": "toggle-expand-pane",
         "title": "Expand / Collapse Pane",
         "args": {
@@ -4353,6 +4364,16 @@
       {
         "id": "minimize-floating",
         "title": "Minimize Floating Workspace Panel"
+      }
+    ],
+    "menu-item": [
+      {
+        "id": "fork-agent-session",
+        "menu": "quirky.terminal/pane",
+        "title": "Fork Agent Session",
+        "command": "command:quirky.terminal/fork-agent-session",
+        "when": { "agent": "any" },
+        "after": "quick-commands"
       }
     ],
     "overlay": [

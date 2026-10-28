@@ -63,6 +63,8 @@ export type CreateParams = {
   trustSetup?: boolean
   agent?: AgentKind
   prompt?: string
+  /** Overrides the default submit behavior for an initial agent prompt. */
+  submitPrompt?: boolean
   allowLocalBaseFallback?: boolean
   activate?: boolean
   createdBy?: WorktreeCreatedBy
@@ -347,6 +349,9 @@ export async function createWorkspace(env: CreateEnv, params: CreateParams, iden
   }
   const provenanceRequest = parseAutomationProvenanceRequest(env, params.automationProvenanceRequest)
   if (params.agent === 'shell') throw env.fail('invalid-params', 'agent must be an agent ID, not shell')
+  if (params.submitPrompt !== undefined && typeof params.submitPrompt !== 'boolean') {
+    throw env.fail('invalid-params', 'submitPrompt must be a boolean')
+  }
   const createdBy = params.createdBy ?? 'api'
   if (params.parent !== undefined && params.noParent === true) throw env.fail('invalid-params', 'parent and noParent cannot be used together')
   if (params.branch !== undefined && params.branchName !== undefined) throw env.fail('invalid-params', 'pass either a branch or a branch name, not both')
@@ -755,12 +760,28 @@ function watchSessionExit(env: CreateEnv, label: string, then: () => void) {
   }
 }
 
-/** Starts the agent session; resolves to its ID. */
-async function startAgent(env: CreateEnv, worktreeId: string, params: CreateParams): Promise<string> {
+/** The issue URL is the native provider's draft prompt unless a caller supplied other text or an explicit choice. */
+export function agentPromptParameters(
+  params: Pick<CreateParams, 'prompt' | 'submitPrompt'>,
+  source: GitHubWorktreeSource | null
+): { prompt?: string; submitPrompt?: boolean } {
+  const issueDerived = params.prompt === undefined && source?.item.kind === 'issue'
+  const prompt = params.prompt ?? (issueDerived ? source.item.url : undefined)
+  if (prompt === undefined) return {}
+  return {
+    prompt,
+    ...(params.submitPrompt !== undefined
+      ? { submitPrompt: params.submitPrompt }
+      : issueDerived ? { submitPrompt: false } : {})
+  }
+}
+
+/** Starts the agent session through the public session API; native provider readiness stays session-owned. */
+async function startAgent(env: CreateEnv, worktreeId: string, params: CreateParams, source: GitHubWorktreeSource | null): Promise<string> {
   const session = (await env.call('quirky.session/create', {
     worktree: worktreeId,
     agent: params.agent!,
-    ...(params.prompt !== undefined ? { prompt: params.prompt } : {})
+    ...agentPromptParameters(params, source)
   })) as SessionLike
   return session.id
 }
@@ -862,7 +883,7 @@ async function finish(env: CreateEnv, created: Created, params: CreateParams): P
   const waitsForSetup = runs && params.agent !== undefined && hooks?.agentStartup === 'wait-for-setup'
   const gate = waitsForSetup
     ? watchSessionExit(env, `${params.agent} in ${worktree.path}`, () => {
-        startAgent(env, worktree.id, params).catch((error) => env.log(`could not start ${params.agent} in ${worktree.path} after setup: ${messageOf(error)}`))
+        startAgent(env, worktree.id, params, created.source).catch((error) => env.log(`could not start ${params.agent} in ${worktree.path} after setup: ${messageOf(error)}`))
       })
     : null
 
@@ -884,7 +905,7 @@ async function finish(env: CreateEnv, created: Created, params: CreateParams): P
     else {
       gate?.dispose()
       try {
-        result.agentSessionId = await startAgent(env, worktree.id, params)
+        result.agentSessionId = await startAgent(env, worktree.id, params, created.source)
       } catch (error) {
         warnings.push(`could not start ${params.agent}: ${messageOf(error)}`)
       }

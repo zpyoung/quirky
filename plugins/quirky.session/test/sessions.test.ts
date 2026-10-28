@@ -13,6 +13,7 @@ import {
   writeModulePlugin
 } from '../../../packages/daemon/test/plugins/fixtures'
 import { fakeAgents, resetFakeAgents } from './fakes/quirky.agents/main'
+import { fakeAccountPreparationCalls, resetFakeAccountPreparation } from './fakes/quirky.accounts/main'
 import { CLAUDE_SETTINGS, resetPointerState, setPointerQuiet, setPointerState } from './fakes/quirky.agent-status/main'
 import { call, code, createSession, restartDaemon, SESSION_PLUGINS, startPluginHarness, storedSessions } from './support'
 
@@ -30,6 +31,7 @@ afterEach(async () => {
   delete process.env.QUIRKY_TEST_VANISHED_WORKTREES
   fakeAgents().gate = null
   await h.cleanup()
+  resetFakeAccountPreparation()
   removeTempDirs()
 })
 
@@ -1261,15 +1263,15 @@ describe('quirky.session/restore', () => {
     expect((error as RpcError).code).toBe(RpcErrorCode.Conflict)
   })
 
-  test('a restorable session starts a shell as the same session and clears its exit details', async () => {
-    const claude = await createSession(client, { worktree: 'id:wt_main', agent: 'claude' })
-    h.pty.exit(claude.id, null, { exitSignal: 'SIGHUP', exitCause: 'host-restart' })
+  test('a restorable shell starts the same shell session and clears its exit details', async () => {
+    const session = await shellSession()
+    h.pty.exit(session.id, null, { exitSignal: 'SIGHUP', exitCause: 'host-restart' })
     await waitFor(() => changedTo('exited'))
     const before = eventsOf('quirky.session/changed').length
 
-    const restored = await restore(claude.id)
+    const restored = await restore(session.id)
     expect(restored).toMatchObject({
-      id: claude.id,
+      id: session.id,
       status: 'running',
       agent: 'shell',
       exitCode: null,
@@ -1277,8 +1279,8 @@ describe('quirky.session/restore', () => {
       exitCause: null,
       restorable: false
     })
-    expect(await sessionOf(claude.id)).toEqual(restored)
-    const [request] = restoreRequests(claude.id)
+    expect(await sessionOf(session.id)).toEqual(restored)
+    const [request] = restoreRequests(session.id)
     expect(request).toMatchObject({
       restore: true,
       shellReady: true,
@@ -1288,12 +1290,142 @@ describe('quirky.session/restore', () => {
       rows: 24
     })
     expect((request as { env: Record<string, string> }).env).toMatchObject({
-      QUIRKY_SESSION_ID: claude.id,
+      QUIRKY_SESSION_ID: session.id,
       ZDOTDIR: join(h.home, 'shell', 'zsh')
     })
     await waitFor(() => eventsOf('quirky.session/changed').length > before || undefined)
-    expect(eventsOf('quirky.session/changed').at(-1)).toMatchObject({ data: { session: { id: claude.id, status: 'running' } } })
+    expect(eventsOf('quirky.session/changed').at(-1)).toMatchObject({ data: { session: { id: session.id, status: 'running' } } })
   })
+  test('a cold agent restore refuses a missing provider identity without replacing the agent with a shell', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'codex' })
+    h.pty.emit(session.id, 'retained history')
+    h.pty.exit(session.id, null, { exitCause: 'host-restart' })
+    await waitFor(() => changedTo('exited'))
+
+    const error = await restore(session.id).catch((cause: RpcError) => cause)
+    expect(error).toMatchObject({ code: RpcErrorCode.Conflict, message: expect.stringContaining('provider session') })
+    expect(await sessionOf(session.id)).toMatchObject({ status: 'exited', agent: 'codex', restorable: true, providerSession: null })
+    expect(restoreRequests(session.id)).toEqual([])
+    expect(Buffer.from(h.pty.sessions.get(session.id)!.buffer).toString()).toContain('retained history')
+  })
+
+  test('cold restore replays the captured provider ID, launch snapshot and cwd in the same session', async () => {
+    const created = await createSession(client, { worktree: 'id:wt_main', agent: 'codex' })
+    const providerSession = { id: 'codex-provider-17', transcriptPath: '/transcripts/codex-17.jsonl' }
+    await call(client, 'quirky.session/setProviderSession', { session: created.id, ...providerSession })
+    const launch = { command: 'codex', args: '--model snapshot-model --effort high', env: { CODEX_HOME: '/captured/codex-home', CODEX_PROFILE: 'original' } }
+    const launchSettings = {
+      agent: 'codex',
+      options: { model: { value: 'snapshot-model', source: 'explicit' }, effort: { value: 'high', source: 'explicit' } },
+      summary: 'Codex · snapshot-model · effort: high'
+    }
+    const db = new Database(join(h.home, 'plugin-data', 'quirky.session', 'store.db'))
+    try {
+      db.query('UPDATE sessions SET launch = ?, launch_settings = ? WHERE id = ?').run(JSON.stringify(launch), JSON.stringify(launchSettings), created.id)
+    } finally {
+      db.close()
+    }
+    const original = await sessionOf(created.id)
+    fakeAgents().args = '--dangerously-skip-permissions'
+    h.pty.exit(created.id, null, { exitCause: 'host-restart' })
+    await waitFor(() => changedTo('exited'))
+    const writesBefore = h.pty.inputs.length
+
+    const restored = await restore(created.id)
+
+    expect(restored).toMatchObject({
+      id: created.id,
+      status: 'running',
+      agent: 'codex',
+      restorable: false,
+      providerSession,
+      launch,
+      launchSettings
+    })
+    expect(restored.cwd).toBe(original.cwd)
+    const [request] = restoreRequests(created.id)
+    expect(request).toMatchObject({ restore: true, cwd: original.cwd })
+    expect(request?.type === 'create' ? request.argv.join(' ') : '').toContain('--model snapshot-model --effort high --resume codex-provider-17')
+    expect((request as { env: Record<string, string> }).env).toMatchObject({
+      QUIRKY_SESSION_ID: created.id,
+      CODEX_HOME: '/captured/codex-home',
+      CODEX_PROFILE: 'original'
+    })
+    expect(h.pty.inputs.length).toBe(writesBefore)
+    expect(fakeAgents().calls.filter((entry) => entry.method === 'prepareResume').at(-1)?.params).toMatchObject({
+      agent: 'codex',
+      cwd: original.cwd,
+      record: launch,
+      providerSession,
+      fork: false
+    })
+    expect((await call<Session[]>(client, 'quirky.session/list')).map((entry) => entry.id)).toEqual([created.id])
+  })
+  test('cold Codex restore re-applies provider account preparation before resolving the captured conversation', async () => {
+    await h.cleanup()
+    resetFakeAccountPreparation()
+    h = await startPluginHarness({ ...SESSION_PLUGINS, fakes: [...SESSION_PLUGINS.fakes, 'quirky.accounts'] })
+    ;({ client, events } = await h.connectWithEvents('cli'))
+
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'codex' })
+    const providerSession = { id: 'codex-account-provider', transcriptPath: null }
+    h.pty.emit(session.id, 'retained history')
+    await call(client, 'quirky.session/setProviderSession', { session: session.id, ...providerSession })
+    h.pty.exit(session.id, null, { exitCause: 'host-restart' })
+    await waitFor(() => changedTo('exited'))
+    expect(Buffer.from(h.pty.sessions.get(session.id)!.buffer).toString()).toContain('retained history')
+    const restored = await restore(session.id)
+    const accountResume = fakeAccountPreparationCalls().find((entry) => entry.resume !== undefined)
+    expect(accountResume).toMatchObject({
+      agent: 'codex',
+      sessionId: session.id,
+      cwd: session.cwd,
+      resume: { sourceSessionId: session.id, providerSession }
+    })
+    expect(fakeAgents().calls.find((entry) => entry.method === 'prepareResume')?.params).toMatchObject({
+      agent: 'codex',
+      providerSession,
+      hookEnv: { CODEX_HOME: '/account/codex-home' }
+    })
+    const request = restoreRequests(session.id)[0]
+    expect(request?.type === 'create' ? request.env.CODEX_HOME : undefined).toBe('/account/codex-home')
+    expect(restored.providerSession).toEqual(providerSession)
+  })
+
+
+  test('an unsupported cold agent restore refuses before spawning and keeps history restorable', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'aider' })
+    h.pty.emit(session.id, 'retained history')
+    await call(client, 'quirky.session/setProviderSession', { session: session.id, id: 'aider-provider-session' })
+    h.pty.exit(session.id, null, { exitCause: 'host-restart' })
+    await waitFor(() => changedTo('exited'))
+
+    const error = await restore(session.id).catch((cause: RpcError) => cause)
+    expect(error).toMatchObject({ code: RpcErrorCode.Conflict, message: "aider can't resume sessions" })
+    expect(await sessionOf(session.id)).toMatchObject({ status: 'exited', agent: 'aider', restorable: true })
+    expect(restoreRequests(session.id)).toEqual([])
+    expect(Buffer.from(h.pty.sessions.get(session.id)!.buffer).toString()).toContain('retained history')
+  })
+
+  test('concurrent cold agent restores share one provider launch and warm restores never launch again', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'claude' })
+    await call(client, 'quirky.session/setProviderSession', { session: session.id, id: 'claude-provider-18' })
+    const beforeWarm = h.pty.requests.length
+    const warm = await restore(session.id)
+    expect(warm).toEqual(session)
+    expect(h.pty.requests.slice(beforeWarm).filter((request) => request.type === 'create')).toEqual([])
+    expect(fakeAgents().calls.filter((entry) => entry.method === 'prepareResume')).toEqual([])
+
+    h.pty.exit(session.id, null, { exitCause: 'host-restart' })
+    await waitFor(() => changedTo('exited'))
+    const [first, second] = await Promise.all([restore(session.id), restore(session.id)])
+    expect(first).toEqual(second)
+    expect(first).toMatchObject({ id: session.id, agent: 'claude', status: 'running', providerSession: { id: 'claude-provider-18' } })
+    expect(restoreRequests(session.id)).toHaveLength(1)
+    expect(fakeAgents().calls.filter((entry) => entry.method === 'prepareResume')).toHaveLength(1)
+    expect(h.pty.inputs.filter((input) => input.sessionId === session.id)).toEqual([])
+  })
+
 
   test('two restores at once send the host one create', async () => {
     const session = await shellSession()

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { ProjectGroup, QuirkyEvent, Repo, Session, UiPluginContext, Worktree } from '@quirky/protocol'
+import type { ProjectGroup, QuirkyEvent, Repo, Session, UiPluginContext } from '@quirky/protocol'
+import type { WorktreeControl } from './control-types'
 
 function upsert(sessions: Session[], session: Session): Session[] {
   return sessions.some((s) => s.id === session.id)
@@ -94,7 +95,7 @@ function statusByWorktree(rows: readonly HeimdallFleetRow[]): Record<string, Hei
   return statuses
 }
 
-export type HeimdallAwareWorktree = Worktree & { heimdallStatus: HeimdallWorktreeStatus | null }
+export type HeimdallAwareWorktree = WorktreeControl & { heimdallStatus: HeimdallWorktreeStatus | null }
 
 export type TreeData = {
   repos: Repo[]
@@ -112,7 +113,7 @@ export type TreeData = {
 export function useTree(context: UiPluginContext): TreeData {
   const [repos, setRepos] = useState<Repo[]>([])
   const [groups, setGroups] = useState<ProjectGroup[]>([])
-  const [worktrees, setWorktrees] = useState<Worktree[]>([])
+  const [worktrees, setWorktrees] = useState<WorktreeControl[]>([])
   const [sessions, setSessions] = useState<Session[] | null>(null)
   const [heimdallByWorktree, setHeimdallByWorktree] = useState<Record<string, HeimdallWorktreeStatus>>({})
   const [loaded, setLoaded] = useState(false)
@@ -127,7 +128,7 @@ export function useTree(context: UiPluginContext): TreeData {
       const [nextRepos, nextGroups, nextWorktrees] = await Promise.all([
         context.call('quirky.repo/list') as Promise<Repo[]>,
         context.call('quirky.repo/groupList') as Promise<ProjectGroup[]>,
-        context.call('quirky.worktree/list') as Promise<Worktree[]>
+        context.call('quirky.worktree/list') as Promise<WorktreeControl[]>
       ])
       if (ticket !== latestTree.current) return
       setRepos(nextRepos)

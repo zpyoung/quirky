@@ -411,6 +411,37 @@ describe('session restore', () => {
     expect(lines).toEqual([`${session.id} is already running`])
     expect(h.pty.requests.filter((r) => r.type === 'create' && r.restore === true)).toHaveLength(1)
   })
+  test('the restore CLI resumes a cold agent in place from its provider session', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'codex' })
+    await call(client, 'quirky.session/setProviderSession', { session: session.id, id: 'codex-cli-provider' })
+    h.pty.exit(session.id, null, { exitCause: 'host-restart' })
+    await waitForAsync(async () => (await call<Session>(client, 'quirky.session/get', { session: session.id })).restorable)
+
+    const { ctx, lines } = testCliContext(client)
+    await run('restore', ctx, [session.id])
+    expect(lines).toEqual([`restored ${session.id}`])
+    expect(await call<Session>(client, 'quirky.session/get', { session: session.id })).toMatchObject({
+      id: session.id,
+      agent: 'codex',
+      status: 'running',
+      providerSession: { id: 'codex-cli-provider' }
+    })
+    const [request] = h.pty.requests.filter((entry) => entry.type === 'create' && entry.sessionId === session.id && entry.restore === true)
+    expect(request?.type).toBe('create')
+    expect(request?.type === 'create' ? request.argv.join(' ') : '').toContain('--resume codex-cli-provider')
+  })
+
+  test('the restore CLI refuses an agent without a captured provider identity', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'codex' })
+    h.pty.exit(session.id, null, { exitCause: 'host-restart' })
+    await waitForAsync(async () => (await call<Session>(client, 'quirky.session/get', { session: session.id })).restorable)
+    const { ctx } = testCliContext(client)
+
+    expect((await failure(run('restore', ctx, [session.id]))).message).toContain('provider session')
+    expect(await call<Session>(client, 'quirky.session/get', { session: session.id })).toMatchObject({ status: 'exited', agent: 'codex', restorable: true })
+    expect(h.pty.requests.filter((entry) => entry.type === 'create' && entry.sessionId === session.id && entry.restore === true)).toEqual([])
+  })
+
 
   test('--json prints the session', async () => {
     const session = await createSession(client, { worktree: 'id:wt_main', agent: 'shell' })

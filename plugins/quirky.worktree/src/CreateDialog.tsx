@@ -102,6 +102,7 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
   const [agent, setAgent] = useState('')
   const [agents, setAgents] = useState<AgentChoice[]>([])
   const [prompt, setPrompt] = useState('')
+  const [submitPrompt, setSubmitPrompt] = useState<boolean | null>(null)
   const [advanced, setAdvanced] = useState(false)
   const [displayName, setDisplayName] = useState('')
   const [branchName, setBranchName] = useState('')
@@ -135,6 +136,7 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
     setSetupChoice(null)
     setChoiceDemanded(false)
     setSelectedSource(null)
+    setSubmitPrompt(null)
     setSourceBusy(false)
     setSourceError(null)
     setSearch(null)
@@ -192,6 +194,7 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
       }
       setSelectedSource(null)
       setSourceBusy(true)
+      setSubmitPrompt(null)
       setSourceError(null)
       try {
         const result = parseWorktreeSource(await context.call('quirky.hosting/worktreeSource', { worktree: primary.id, reference }))
@@ -285,6 +288,7 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
     setSelectedSource(null)
     setSourceBusy(false)
     setSourceError(null)
+    setSubmitPrompt(null)
   }
   const changeMode = (next: Mode) => {
     if (mode === next) return
@@ -303,6 +307,7 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
   const defaultBase = project?.settings?.defaultBase ?? ''
   const currentSearch = search && mode === 'github' && search.repoId === repoId && search.primaryId === (primary?.id ?? '') && search.query === query.trim() ? search : null
   const currentBranchSearch = branchSearch && mode === 'branch' && branchSearch.repoId === repoId && branchSearch.primaryId === (primary?.id ?? '') && branchSearch.query === branch.trim() ? branchSearch : null
+  const issuePromptIsDerived = source?.item.kind === 'issue' && prompt.trim() === ''
   const plainSmartInputNeedsChoice = mode === 'smart' && smartInput.trim() !== '' && !explicitSmartReference
   const showBase = !folder && (source ? source.item.kind === 'issue' : mode !== 'github' && !fromBranch && !explicitSmartReference)
   const showBranchName = !folder && !isPullRequest && !fromBranch && (source ? source.item.kind === 'issue' : mode !== 'github' && !explicitSmartReference)
@@ -312,13 +317,15 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
 
   const fields = (): Record<string, unknown> => {
     const typedBase = base.trim()
+    const startupPrompt = prompt.trim() || (source?.item.kind === 'issue' ? source.item.url : '')
+    const submitPromptValue = submitPrompt ?? !(source?.item.kind === 'issue' && prompt.trim() === '')
     return {
       repo: repoId,
       ...(source ? { github: source.item.url } : {}),
       ...(workspaceName ? { name: workspaceName } : {}),
       ...(fromBranch ? { branch: branch.trim() } : !source && mode !== 'github' && !explicitSmartReference && showBase && typedBase && typedBase !== defaultBase ? { base: typedBase } :
         source?.item.kind === 'issue' && typedBase && typedBase !== defaultBase ? { base: typedBase } : {}),
-      ...(agent ? { agent, ...(prompt.trim() ? { prompt: prompt.trim() } : {}) } : {}),
+      ...(agent ? { agent, ...(startupPrompt ? { prompt: startupPrompt, submitPrompt: submitPromptValue } : {}) } : {}),
       ...(displayName.trim() ? { displayName: displayName.trim() } : {}),
       ...(branchName.trim() && !fromBranch && !isPullRequest && showBranchName ? { branchName: branchName.trim() } : {}),
       ...(parent ? { parent } : {}),
@@ -353,6 +360,7 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
     setQuery('')
     setAgent('')
     setPrompt('')
+    setSubmitPrompt(null)
     setSetupChoice(null)
     setChoiceDemanded(false)
     setSuggestion((n) => n + 1)
@@ -568,6 +576,17 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
           <label>
             <span>Prompt</span>
             <textarea rows={3} value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="What should the agent do first?" />
+          </label>
+        )}
+        {agent && (prompt.trim() !== '' || source?.item.kind === 'issue') && (
+          <label className="check-row">
+            <input
+              aria-label="Submit prompt automatically"
+              type="checkbox"
+              checked={submitPrompt ?? !issuePromptIsDerived}
+              onChange={(event) => setSubmitPrompt(event.currentTarget.checked)}
+            />
+            <span>Submit prompt automatically</span>
           </label>
         )}
         <button type="button" className="disclosure" aria-expanded={advanced} onClick={() => setAdvanced(!advanced)}>
