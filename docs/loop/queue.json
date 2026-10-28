@@ -299,8 +299,9 @@
       "deps": [
         "m6-heimdall-core"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 12
     },
     {
       "id": "fix-flaky-quirky-worktree-window-projects",
