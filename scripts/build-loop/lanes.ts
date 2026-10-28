@@ -11,8 +11,11 @@ import { load, next, pendingDeps, QUEUE_FILE, save, setStatus, STATUSES, type It
 
 export type Repo = { integration: string; lock: string; lands: string; landLock: string; verify: string }
 
-/** Run on every merge result that changes more than `docs/`; `bun run test` reruns a failing file alone once. */
-export const VERIFY = [
+/** Run on every merge result that changes more than `docs/`: lands only keep `build/roadmap` compiling, and testing waits for the end phase. */
+export const VERIFY = [['bun', 'run', 'typecheck']]
+
+/** The final check once every item is done; `bun run test` reruns a failing file alone once. */
+export const FULL_CHECK = [
   ['bun', 'run', 'test'],
   ['bun', 'test', 'scripts'],
   ['bun', 'run', 'typecheck'],
@@ -430,7 +433,7 @@ export async function main(argv: string[]): Promise<number> {
           console.log(`not done: ${result.kind}`)
           return 1
         }
-        return VERIFY.every((cmd) => run(cmd, repo.integration)) ? 0 : 1
+        return FULL_CHECK.every((cmd) => run(cmd, repo.integration)) ? 0 : 1
       }
       default:
         console.error('usage: queue.ts claim|wait --lane <n> | land <id> | merge <branch> | add <items.json> | block <id> <file> | deps <id> | set <id> <status> | status | check')
