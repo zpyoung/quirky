@@ -33,6 +33,7 @@ type GitStatus = {
   capped: boolean
 }
 type ReplyTarget = { commentId: number; queuedKeys: Set<string> }
+type ThreadTarget = { threadId: string; queuedKeys: Set<string> }
 type CommentTargets = { threads: ThreadTarget[]; replies: ReplyTarget[]; unsupported: string[]; selected: number }
 type AgentContext = {
   surface: 'checks' | 'detail'
@@ -1249,7 +1250,7 @@ function setAgentDialog(env: ReviewsEnv, params: Record<string, unknown>): JsonR
   }
   const agent = typeof requestedAgent === 'string' ? requestedAgent : reusable && typeof previous.agent === 'string' ? previous.agent : undefined
   const args = typeof requestedArgs === 'string' ? requestedArgs : reusable && typeof previous.args === 'string' ? previous.args : undefined
-  const dialog = {
+  const dialog: NonNullable<ChecksState['agentDialog']> = {
     action,
     prompt,
     surface,
