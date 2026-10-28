@@ -1136,8 +1136,7 @@
         "sb-mobile-daemon",
         "sb-mobile-app"
       ],
-      "status": "in-progress",
-      "lane": 11
+      "status": "blocked"
     },
     {
       "id": "sa-browser-pane-native-events",

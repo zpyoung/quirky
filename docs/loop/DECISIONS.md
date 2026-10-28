@@ -44,6 +44,7 @@ files, not this one.
 | hard (cross-feature runtime contracts) | high | [m7-sweep-automation D3](decisions/m7-sweep-automation.md) | Keep structured background execution and public plugin boundaries | locked by docs/architecture.md |
 | hard (engine/lifetime model) | high | [sa-browser-pane D2](decisions/sa-browser-pane.md) | Preserve native human browsing and Chrome Watch as separate modes | locked by docs/architecture.md |
 | hard | high | [m2-source-control-core D5](decisions/m2-source-control-core.md) | Extend `quirky.git` in place, with every composite (sync, discard-all, stage-all) in the daemon | assumed — autonomous |
+| hard | high | [sb-mobile-install-links D2](decisions/sb-mobile-install-links.md) | Preserve the Quirky identity and reject incompatible upstream destinations | locked by docs/architecture.md |
 | hard | high | [m3-handoff D5](decisions/m3-handoff.md) | A new built-in plugin, `quirky.handoff`, owns composition, launch and lineage in the daemon; the window is a thin view | assumed — autonomous |
 | hard for privacy, easy for bookkeeping | high | [m3-vault-consent-tip-completion D2](decisions/m3-vault-consent-tip-completion.md) | Seen is a consequence of successful local opt-in, never authorization to index | locked by docs/quirk/specs/2026-10-27-m3-vault/logic.md |
 | hard | high | [m0-core D6](decisions/m0-core.md) | v1's methods are renamed to their plugin's namespace, with no aliases, and the protocol version goes to 2 | supersedes m0-daemon-api D5 |
@@ -284,6 +285,8 @@ files, not this one.
 | medium | high | [m5-automations-core D2](decisions/m5-automations-core.md) | Honor the stored IANA timezone and use strict timestamp ordering across DST | assumed — autonomous |
 | medium | high | [m5-automations-core D5](decisions/m5-automations-core.md) | Durable row writes, 100 final runs, never prune active runs | assumed — autonomous |
 | medium | high | [m5-automations-core D10](decisions/m5-automations-core.md) | Bound occurrence metadata while preserving non-replay after pruning | supersedes m5-automations-core D5 |
+| medium | high | [sb-mobile-install-links D1](decisions/sb-mobile-install-links.md) | Keep signed Quirky installation as the complete item boundary | locked by docs/loop/queue.json |
+| medium | high | [sb-mobile-install-links D4](decisions/sb-mobile-install-links.md) | Require owned distribution inputs without inspecting credentials or publishing externally | assumed — autonomous |
 | medium | high | [m3-handoff D6](decisions/m3-handoff.md) | A source is a session; a live source is the agent running in a terminal session | assumed — autonomous |
 | medium | high | [m3-handoff D9](decisions/m3-handoff.md) | The pane menu gains a public contribution point other plugins use | locked by docs/roadmap.md |
 | medium | high | [m3-handoff D35](decisions/m3-handoff.md) | The brief is pasted after the agent's input is ready through `quirky.agents/deliver`, not passed on the command line | locked by handoff.md |
@@ -1205,6 +1208,9 @@ files, not this one.
 | easy | high | [m5-automations-core D11](decisions/m5-automations-core.md) | Bound arbitrary JSON metadata separately from output snapshots | assumed — autonomous |
 | easy | high for dispatch/trace facts, limited for review assurance | [m5-automations-core D12](decisions/m5-automations-core.md) | Record mechanical review PASS without claiming clean clearance | assumed — autonomous |
 | easy | high for observed results; medium for contention hypothesis | [m5-automations-core D13](decisions/m5-automations-core.md) | Serialize script checks with process-level smokes | assumed — autonomous |
+| easy | high | [sb-mobile-install-links D3](decisions/sb-mobile-install-links.md) | Block at distribution readiness rather than manufacture a partial install flow | assumed — autonomous |
+| easy | high | [sb-mobile-install-links D5](decisions/sb-mobile-install-links.md) | Apply unattended blocked-item protocol without new verification claims | locked by docs/loop/LOOP.md |
+| easy | high | [sb-mobile-install-links D6](decisions/sb-mobile-install-links.md) | Retain platform limits rather than claim native build parity | deferred: platform |
 | easy | high | [m3-handoff D1](decisions/m3-handoff.md) | Classify the item as Visual, API, CLI and Integration work, and run research phases A and B | assumed — autonomous |
 | easy | high | [m3-handoff D2](decisions/m3-handoff.md) | Skip the visual companion and the adhd offer; use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m3-handoff D3](decisions/m3-handoff.md) | Select every gray area that matters | locked by docs/loop/LOOP.md |
