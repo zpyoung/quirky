@@ -62,6 +62,8 @@ export type ActivityReport = {
   hiddenIds: string[]
   hiddenCount: number
   filterCount: number
+  reviewHiddenIds?: string[]
+  reviewHiddenCount?: number
 }
 export type FilterStatus = 'loading' | 'available' | 'missing' | 'error'
 export type DropPreviewReport = MembershipTarget
@@ -289,6 +291,8 @@ export type WorktreesReport = {
   visibleIds: string[] | null
   hiddenIds: string[]
   hiddenCount: number
+  reviewHiddenIds: string[]
+  reviewHiddenCount: number
   filterCount: number
   groupDepths: Record<string, number>
   groupParents: Record<string, string | null>
@@ -386,6 +390,8 @@ export function buildReport(input: ReportInput): WorktreesReport {
     visibleIds: input.visibleIds ? [...input.visibleIds] : null,
     hiddenIds: activity?.hiddenIds ?? [],
     hiddenCount: activity?.hiddenCount ?? 0,
+    reviewHiddenIds: activity?.reviewHiddenIds ?? [],
+    reviewHiddenCount: activity?.reviewHiddenCount ?? 0,
     filterCount: activity?.filterCount ?? 0,
     groupDepths: Object.fromEntries(groups.map(({ group, depth }) => [group.id, depth])),
     groupParents: Object.fromEntries(groups.map(({ group, parentId }) => [group.id, parentId])),

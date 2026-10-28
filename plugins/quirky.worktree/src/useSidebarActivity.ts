@@ -7,7 +7,17 @@ export type ActivityPreferences = {
   workspaceActivityCustomDays: number
   alwaysShowDefaultBranchWorkspace: boolean
   workspaceActivityWindowBeforeLiveOnly: Exclude<ActivityWindow, 'live-only'>
+  hideCompletedReviewWorkspaces: boolean
+  hidePassingCheckWorkspaces: boolean
 }
+export type ActivityPreferencePatch = Partial<Pick<
+  ActivityPreferences,
+  | 'workspaceActivityWindow'
+  | 'workspaceActivityCustomDays'
+  | 'alwaysShowDefaultBranchWorkspace'
+  | 'hideCompletedReviewWorkspaces'
+  | 'hidePassingCheckWorkspaces'
+>>
 export type SidebarActivityState = {
   client: string
   preferences: ActivityPreferences
@@ -20,12 +30,16 @@ export type SidebarProjection = SidebarActivityState & {
   hiddenIds: string[]
   hiddenCount: number
   filterCount: number
+  reviewHiddenIds: string[]
+  reviewHiddenCount: number
   workspaces: Array<{
     worktreeId: string
     activityAt: number
     live: boolean | null
     reason: 'selected' | 'all' | 'recent' | 'old' | 'live' | 'sleeping' | 'main' | 'folder' | 'unknown'
     error?: string
+    reviewReason?: 'completed' | 'passing' | 'unknown'
+    reviewError?: string
   }>
 }
 export type ActivityStatus = 'loading' | 'available' | 'missing' | 'error'
@@ -37,12 +51,17 @@ function isMissingMethod(error: unknown): boolean {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === RpcErrorCode.MethodNotFound
 }
 
+function isHostingReviewEvent(type: string): boolean {
+  return type.startsWith('quirky.hosting/')
+}
+
 function isRefreshEvent(type: string): boolean {
   return type === 'plugin.changed' ||
     type.startsWith('quirky.repo/') ||
     type.startsWith('quirky.worktree/') ||
     type.startsWith('quirky.session/') ||
     type.startsWith('quirky.sidebar-extras/') ||
+    isHostingReviewEvent(type) ||
     type.startsWith('setting.') ||
     type.startsWith('setting/') ||
     type.startsWith('settings/') ||
@@ -52,6 +71,7 @@ function isRefreshEvent(type: string): boolean {
 export function useSidebarActivity(context: UiPluginContext, selectedWorktree: string | null, loaded: boolean) {
   const [status, setStatus] = useState<ActivityStatus>('loading')
   const [projection, setProjection] = useState<SidebarProjection | null>(null)
+  const reviewFiltersActive = useRef(false)
   const [error, setError] = useState<string | null>(null)
   const statusRef = useRef<ActivityStatus>('loading')
   const selectedRef = useRef(selectedWorktree)
@@ -66,6 +86,10 @@ export function useSidebarActivity(context: UiPluginContext, selectedWorktree: s
   const refreshRef = useRef<(options?: RefreshOptions) => Promise<void>>(async () => {})
   selectedRef.current = selectedWorktree
   loadedRef.current = loaded
+  if (projection) {
+    reviewFiltersActive.current =
+      projection.preferences.hideCompletedReviewWorkspaces || projection.preferences.hidePassingCheckWorkspaces
+  }
 
   const setStatusValue = useCallback((next: ActivityStatus) => {
     statusRef.current = next
@@ -137,7 +161,7 @@ export function useSidebarActivity(context: UiPluginContext, selectedWorktree: s
   }, [context, reportFailure, setStatusValue])
   refreshRef.current = refresh
 
-  const setPreferences = useCallback(async (patch: Partial<Pick<ActivityPreferences, 'workspaceActivityWindow' | 'workspaceActivityCustomDays' | 'alwaysShowDefaultBranchWorkspace'>>) => {
+  const setPreferences = useCallback(async (patch: ActivityPreferencePatch) => {
     if (statusRef.current !== 'available') return false
     const request = ++latest.current
     try {
@@ -162,6 +186,7 @@ export function useSidebarActivity(context: UiPluginContext, selectedWorktree: s
   useEffect(() => {
     const unsubscribe = context.subscribe((event) => {
       if (!isRefreshEvent(event.type)) return
+      if (isHostingReviewEvent(event.type) && !reviewFiltersActive.current) return
       if (event.type === 'plugin.changed') {
         stateLoaded.current = false
         setProjection(null)
