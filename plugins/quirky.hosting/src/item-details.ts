@@ -52,6 +52,8 @@ const ITEM_DETAILS_QUERY = `query WorkItemDetails($owner: String!, $repo: String
 
 type ItemCaller = Parameters<Handler>[1]
 
+type SourceLookupState = { visibleRepositories: Set<string> }
+
 type ParsedReference = { number: number; kind: WorkItemKind | null; identity: Identity }
 
 function validateKind(env: HostingEnv, value: unknown): WorkItemKind | undefined {
@@ -110,22 +112,28 @@ function isNotFound(error: unknown): boolean {
   return safeErrorReason(error) === 'not_found'
 }
 
-async function readIssue(env: HostingEnv, scope: Scope, identity: Identity, number: number): Promise<unknown | null> {
+async function readIssue(env: HostingEnv, scope: Scope, identity: Identity, number: number, sourceLookup?: SourceLookupState): Promise<unknown | null> {
+  const endpoint = `repos/${identity.owner}/${identity.repo}/issues/${number}`
   try {
-    return await env.rest(scopeForRepository(scope, identity), `repos/${identity.owner}/${identity.repo}/issues/${number}`, 'GET', undefined, { idempotent: true })
+    return sourceLookup
+      ? await sourceRest(env, scope, identity, endpoint, sourceLookup)
+      : await env.rest(scopeForRepository(scope, identity), endpoint, 'GET', undefined, { idempotent: true })
   } catch (error: unknown) {
     if (isNotFound(error)) return null
     throw error
   }
 }
 
-async function readPullRequest(env: HostingEnv, scope: Scope, identity: Identity, number: number): Promise<unknown | null> {
+async function readPullRequest(env: HostingEnv, scope: Scope, identity: Identity, number: number, sourceLookup?: SourceLookupState): Promise<unknown | null> {
   const selected = scopeForRepository(scope, identity)
   try {
     return await env.json(selected, ['pr', 'view', String(number), '--repo', `${identity.owner}/${identity.repo}`, '--json', PR_DETAIL_FIELDS], { idempotent: true })
   } catch (viewError: unknown) {
     try {
-      return await env.rest(selected, `repos/${identity.owner}/${identity.repo}/pulls/${number}`, 'GET', undefined, { idempotent: true })
+      const endpoint = `repos/${identity.owner}/${identity.repo}/pulls/${number}`
+      return sourceLookup
+        ? await sourceRest(env, scope, identity, endpoint, sourceLookup)
+        : await env.rest(selected, endpoint, 'GET', undefined, { idempotent: true })
     } catch (restError: unknown) {
       if (isNotFound(restError) && isNotFound(viewError)) return null
       if (isNotFound(restError)) throw viewError
@@ -140,7 +148,8 @@ async function resolveWorkItem(
   number: number,
   kind: WorkItemKind | undefined,
   selectedIdentity: Identity | undefined,
-  includeRaw = false
+  includeRaw = false,
+  sourceLookup?: SourceLookupState
 ): Promise<{ item: WorkItemRecord; identity: Identity; raw?: unknown } | null> {
   const identities = selectedIdentity ? [selectedIdentity] : workItemRepositoryOrder(scope, kind)
   const preferredPullRepository = selectedIdentity ?? pullRequestRepositories(scope)[0]
@@ -148,12 +157,12 @@ async function resolveWorkItem(
   for (const identity of identities) {
     if (kind !== 'pullRequest') {
       try {
-        const issue = await readIssue(env, scope, identity, number)
+        const issue = await readIssue(env, scope, identity, number, sourceLookup)
         if (issue !== null) {
           const raw = record(issue)
           const resultKind: WorkItemKind = raw && isRecord(raw.pull_request) ? 'pullRequest' : 'issue'
           if (resultKind === 'pullRequest') {
-            const hydrated = await readPullRequest(env, scope, identity, number)
+            const hydrated = await readPullRequest(env, scope, identity, number, sourceLookup)
             const mapped = mapWorkItem(hydrated ?? issue, { identity, kind: 'pullRequest' })
             if (mapped) {
               if (hydrated === null) mapped.partial = true
@@ -171,7 +180,7 @@ async function resolveWorkItem(
     }
     if (kind !== 'issue' && (kind === 'pullRequest' || (preferredPullRepository !== undefined && identityKey(identity) === identityKey(preferredPullRepository)))) {
       try {
-        const pull = await readPullRequest(env, scope, identity, number)
+        const pull = await readPullRequest(env, scope, identity, number, sourceLookup)
         const mapped = pull === null ? null : mapWorkItem(pull, { identity, kind: 'pullRequest' })
         if (mapped) return { item: mapped, identity, ...(includeRaw ? { raw: pull } : {}) }
       } catch (error: unknown) {
@@ -563,6 +572,50 @@ function httpsUrlMatches(value: unknown, identity: Identity, suffix: string): bo
   }
 }
 
+function visibleSourceRepository(value: unknown, identity: Identity): boolean {
+  const repository = record(value)
+  const owner = record(repository?.owner)
+  if (!repository || !owner || !safeRepositoryPart(owner.login) || !safeRepositoryPart(repository.name)) return false
+  const reportedIdentity = { host: identity.host, owner: owner.login, repo: repository.name }
+  return safeSourceIdentity(reportedIdentity) &&
+    sameIdentity(reportedIdentity, identity) &&
+    httpsUrlMatches(repository.html_url, identity, '')
+}
+
+async function sourceRest(
+  env: HostingEnv,
+  scope: Scope,
+  identity: Identity,
+  endpoint: string,
+  sourceLookup: SourceLookupState
+): Promise<unknown> {
+  const selected = scopeForRepository(scope, identity)
+  try {
+    return await env.rest(selected, endpoint, 'GET', undefined, { idempotent: true })
+  } catch (itemError: unknown) {
+    const itemReason = safeErrorReason(itemError)
+    if (itemReason !== 'repository_unavailable' && itemReason !== 'not_found') throw itemError
+
+    const key = identityKey(identity)
+    if (sourceLookup.visibleRepositories.has(key)) {
+      throw env.invalid('not_found', 'The GitHub work item was not found in the configured repository.')
+    }
+    const repository = await env.rest(
+      selected,
+      `repos/${identity.owner}/${identity.repo}`,
+      'GET',
+      undefined,
+      { idempotent: true }
+    )
+    if (visibleSourceRepository(repository, identity)) {
+      sourceLookup.visibleRepositories.add(key)
+      throw env.invalid('not_found', 'The GitHub work item was not found in the configured repository.')
+    }
+    if (itemReason === 'repository_unavailable') throw itemError
+    throw env.invalid('repository_unavailable', 'The configured GitHub repository is unavailable or inaccessible.')
+  }
+}
+
 type SourceRepository = { identity: Identity; sshUrl: string }
 
 function validatedSshCloneUrl(value: unknown, identity: Identity): string | null {
@@ -667,15 +720,10 @@ async function pullRequestSource(
   env: HostingEnv,
   scope: Scope,
   identity: Identity,
-  number: number
+  number: number,
+  sourceLookup: SourceLookupState
 ): Promise<GitHubWorktreeSource> {
-  const response = await env.rest(
-    scopeForRepository(scope, identity),
-    `repos/${identity.owner}/${identity.repo}/pulls/${number}`,
-    'GET',
-    undefined,
-    { idempotent: true }
-  )
+  const response = await sourceRest(env, scope, identity, `repos/${identity.owner}/${identity.repo}/pulls/${number}`, sourceLookup)
   const raw = record(response)
   const normalized = raw ? normalizeRestPull(raw) : undefined
   const head = record(raw?.head)
@@ -737,27 +785,28 @@ async function worktreeSource(
 ): Promise<GitHubWorktreeSource> {
   const scope = await env.resolve(params, caller)
   const reference = sourceReference(env, scope, params.reference)
+  const sourceLookup: SourceLookupState = { visibleRepositories: new Set() }
   if (reference.identity && reference.kind === 'issue') {
-    const raw = await env.rest(
-      scopeForRepository(scope, reference.identity),
+    const raw = await sourceRest(
+      env,
+      scope,
+      reference.identity,
       `repos/${reference.identity.owner}/${reference.identity.repo}/issues/${reference.number}`,
-      'GET',
-      undefined,
-      { idempotent: true }
+      sourceLookup
     )
     const result = issueSource(env, raw, reference.identity, reference.number)
     ensureOutputBound(env, result, 'Worktree source')
     return result
   }
   if (reference.identity && reference.kind === 'pullRequest') {
-    const result = await pullRequestSource(env, scope, reference.identity, reference.number)
+    const result = await pullRequestSource(env, scope, reference.identity, reference.number, sourceLookup)
     ensureOutputBound(env, result, 'Worktree source')
     return result
   }
-  const resolved = await resolveWorkItem(env, scope, reference.number, undefined, undefined, true)
+  const resolved = await resolveWorkItem(env, scope, reference.number, undefined, undefined, true, sourceLookup)
   if (!resolved) throw env.invalid('not_found', 'The GitHub work item was not found in the configured repositories.')
   const result = resolved.item.kind === 'pullRequest'
-    ? await pullRequestSource(env, scope, resolved.identity, reference.number)
+    ? await pullRequestSource(env, scope, resolved.identity, reference.number, sourceLookup)
     : issueSource(env, resolved.raw, resolved.identity, reference.number)
   ensureOutputBound(env, result, 'Worktree source')
   return result

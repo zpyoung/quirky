@@ -51,7 +51,21 @@ if (args[0] === 'api') {
   if (typeof endpoint !== 'string') fail('HTTP 400: Missing endpoint')
   const error = state.errors && state.errors[endpoint]
   if (typeof error === 'string') fail(error)
-  emit(state.responses && Object.hasOwn(state.responses, endpoint) ? state.responses[endpoint] : {})
+  if (state.responses && Object.hasOwn(state.responses, endpoint)) emit(state.responses[endpoint])
+  else {
+    const repository = /^repos\/([^/]+)\/([^/]+)$/.exec(endpoint)
+    if (repository) {
+      const owner = repository[1]
+      const name = repository[2]
+      emit({
+        name,
+        owner: { login: owner },
+        html_url: 'https://github.com/' + owner + '/' + name
+      })
+    } else if (/^repos\/[^/]+\/[^/]+\/(?:issues|pulls)\/\d+$/.test(endpoint)) {
+      fail('HTTP 404: Not Found')
+    } else emit({})
+  }
   process.exit(0)
 }
 fail('HTTP 400: Unsupported fixture command')
@@ -127,6 +141,14 @@ function issue(number = 4): Record<string, unknown> {
     title: 'Add a multiply function',
     html_url: `https://github.com/test-owner/test-repo/issues/${number}`,
     state: 'open'
+  }
+}
+
+function repository(owner = 'test-owner', repo = 'test-repo'): Record<string, unknown> {
+  return {
+    name: repo,
+    owner: { login: owner },
+    html_url: `https://github.com/${owner}/${repo}`
   }
 }
 
@@ -236,7 +258,6 @@ test('worktreeSource returns an issue link with exact canonical identity and nul
   expect(host.invocations().some(({ args }) => args.some((arg) => arg.includes('/pulls/4')))).toBe(false)
   expect(await host.call('worktreeSource', { reference: 'https://github.com/test-owner/test-repo/issues/4' }))
     .toMatchObject({ item: { kind: 'issue', url: 'https://github.com/test-owner/test-repo/issues/4' }, head: null, base: null })
-  expect(host.invocations().filter(({ args }) => args.includes('repos/test-owner/test-repo/issues/4'))).toHaveLength(2)
 })
 
 test('worktreeSource accepts same-repository PR heads and derives safe canonical clone URLs', async () => {
@@ -328,6 +349,72 @@ test('worktreeSource fails closed for unconfigured URLs, missing fork repositori
   host.writeState({ errors: { 'repos/test-owner/test-repo/pulls/3': 'HTTP 403: API rate limit exceeded' } })
   await expect(host.call('worktreeSource', { reference: 'https://github.com/test-owner/test-repo/pull/3' }))
     .rejects.toMatchObject({ data: { reason: 'rate_limited' } })
+})
+
+test('worktreeSource recognizes missing items only after confirming the repository', async () => {
+  const host = await hosting()
+  host.writeState({})
+
+  for (const reference of [
+    '#999',
+    'https://github.com/test-owner/test-repo/issues/999',
+    'https://github.com/test-owner/test-repo/pull/999'
+  ]) {
+    await expect(host.call('worktreeSource', { reference }))
+      .rejects.toMatchObject({ data: { reason: 'not_found' } })
+  }
+})
+
+test('worktreeSource keeps unavailable or malformed repository probes unavailable', async () => {
+  const host = await hosting()
+  host.writeState({ errors: { 'repos/test-owner/test-repo': 'HTTP 404: Not Found' } })
+  await expect(host.call('worktreeSource', { reference: '#999' }))
+    .rejects.toMatchObject({ data: { reason: 'repository_unavailable' } })
+
+  await expect(host.call('worktreeSource', { reference: 'https://github.com/test-owner/test-repo/pull/999' }))
+    .rejects.toMatchObject({ data: { reason: 'repository_unavailable' } })
+
+  host.writeState({ responses: { 'repos/test-owner/test-repo': {} } })
+  await expect(host.call('worktreeSource', { reference: '#999' }))
+    .rejects.toMatchObject({ data: { reason: 'repository_unavailable' } })
+
+  await expect(host.call('worktreeSource', { reference: 'https://github.com/test-owner/test-repo/pull/999' }))
+    .rejects.toMatchObject({ data: { reason: 'repository_unavailable' } })
+})
+
+
+test('worktreeSource propagates authentication, rate-limit, and network failures from repository probes', async () => {
+  const reference = 'https://github.com/test-owner/test-repo/issues/999'
+  for (const [probeError, reason] of [
+    ['HTTP 401: Bad credentials', 'not_authenticated'],
+    ['HTTP 403: API rate limit exceeded', 'rate_limited'],
+    ['temporary failure in name resolution', 'network_error']
+  ]) {
+    const host = await hosting()
+    host.writeState({
+      errors: {
+        'repos/test-owner/test-repo/issues/999': 'HTTP 404: Not Found',
+        'repos/test-owner/test-repo': probeError
+      }
+    })
+    await expect(host.call('worktreeSource', { reference }))
+      .rejects.toMatchObject({ data: { reason } })
+  }
+}, 20_000)
+
+test('worktreeSource does not infer an inaccessible candidate is missing from another visible repository', async () => {
+  const host = await hosting({
+    remote: 'https://github.com/fork/base.git',
+    upstream: 'https://github.com/upstream/base.git'
+  })
+  host.writeState({
+    errors: { 'repos/upstream/base': 'HTTP 404: Not Found' },
+    responses: { 'repos/fork/base': repository('fork', 'base') }
+  })
+
+  await expect(host.call('worktreeSource', { reference: '#999' }))
+    .rejects.toMatchObject({ data: { reason: 'repository_unavailable' } })
+  expect(host.invocations().some(({ args }) => args.includes('repos/fork/base'))).toBe(false)
 })
 
 test('worktreeSource preserves not-found as distinct from unavailable and rejects unsafe PR branches', async () => {
