@@ -595,9 +595,8 @@
       "deps": [
         "sa-browser-pane"
       ],
-      "status": "in-progress",
-      "early": true,
-      "lane": 8
+      "status": "done",
+      "early": true
     },
     {
       "id": "m5-automations-core",
@@ -663,9 +662,8 @@
       "deps": [
         "m5-automations-core"
       ],
-      "status": "in-progress",
-      "early": true,
-      "lane": 6
+      "status": "done",
+      "early": true
     },
     {
       "id": "m5-loops-presets",
@@ -717,9 +715,8 @@
       "deps": [
         "m6-orchestration-workers"
       ],
-      "status": "in-progress",
-      "early": true,
-      "lane": 2
+      "status": "done",
+      "early": true
     },
     {
       "id": "m6-objective-plan",
@@ -956,14 +953,15 @@
         "hosting-api.md",
         "hosting-ui.md"
       ],
-      "status": "todo",
+      "status": "in-progress",
       "title": "Parity sweep for hosting-api.md, hosting-ui.md: every remaining flow in these feature docs, except the GitLab, Bitbucket, Gitea/Forgejo and Azure DevOps flows, the Objective runner and the PR sitter, which the user deferred. Find what earlier items left out or deferred, build or fix it, and record anything too large as a follow-up item",
       "deps": [
         "m4-hosting-api-github",
         "m4-hosting-ui-tasks",
         "m4-hosting-ui-reviews",
         "m4-worktrees-create-from-github"
-      ]
+      ],
+      "lane": 8
     },
     {
       "id": "m7-sweep-automation",
@@ -1050,7 +1048,8 @@
       "deps": [
         "m4-hosting-api-github"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 6
     },
     {
       "id": "fix-terminal-dock-unfinished-flows-20261027",
@@ -1062,8 +1061,9 @@
       "deps": [
         "m3-terminal-dock"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 2
     },
     {
       "id": "m3-vault-parity-completion",
@@ -1453,6 +1453,44 @@
       "deps": [
         "m5-automations-ui",
         "m5-automations-dispatch-remote-and-args"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m5-loops-ui-visible-stop-close-review",
+      "milestone": "M5",
+      "title": "Complete existing loop UI visible Stop (Cancel/After iteration/Now), Close (Cancel/Keep running/Stop), tool-limited setup verdict, and one bounded cross-family review; use unique native fixture conversation ids and retain all shipped tests/guards",
+      "docs": [
+        "fork-loops.md"
+      ],
+      "deps": [
+        "m5-loops-ui"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m3-accounts-complete-user-acceptance-20261028",
+      "milestone": "M3",
+      "title": "Finish Accounts user acceptance after the LOOP night cutoff: complete same-home daemon-restart Compact/Detailed Used/Remaining/provider-visibility UI persistence; all ten drill-ins and inactive refresh/debounce; native-login link/Cancel, Codex UI add, reauth/Needs-sign-in refusal; full Claude Ask Restart/Always/Never/busy-idle/supersession UI (ordinary Keep+opt-out Keep passed); Codex pane Keep old account and keyboard follow-through (pane Restart with prior rollout contents and public focus passed; driver refused opacity0 textarea); provider removal Cancel/confirm/System-default fallback; masked MiniMax/OpenCode Go/ZCode configure/clear and secret-free errors; reset stale-account/stale-offer/failure/retry matrix (opt-out redemption/replay and wrapped Cancel passed); retained Codex warning/recovery UI. Also resolve tracked MEDIUM existing cancellation-RPC failure stopping login polling and background/structured stale-account rows offering terminal-only Restart. Preserve actual daemon/PTY A→B→remove-A→C accumulated-content proof, authority/reload/C1 regressions, explicit review independence limits and pending native clipboard/browser/Keychain/OS-focus handoffs. Exact evidence and open findings: docs/loop/decisions/m3-accounts-remaining-flows.md and BLOCKERS.md; no full UI/native pass claimed.",
+      "docs": [
+        "accounts.md"
+      ],
+      "deps": [
+        "m3-accounts-remaining-flows"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m7-editor-source-control-completion",
+      "milestone": "M7",
+      "title": "Complete remaining editor/source-control/sidebar parity: lossless rich details/collapsible headings and document-link insertion/completion; edit-tab Changes and Markdown diff preview plus preview/permanent/split diff tabs; GitHub fork notices, validated PR-derived push targets and target-specific push-before-PR; permission-aware save/annotation UX; finish editor GUI acceptance SC-3–22 (mixed close/conflict/autosave/restart/deleted recovery, explorer mutations/undo/selection/ignored/symlinks/import/drag, Quick Open/search, rich slash/IME/table/math/Mermaid/emoji/images/notes/TOC/frontmatter/templates/PDF, notebook environment install/venv/trust/recovery, CSV/PDF/media/shortcuts/remount) and the all-17 sidebar edge audit (quiet aging, fresh-agent-only liveness, corrupt preferences, separator boundaries/persistence). Implement missing public APIs and prove real UI/native scenarios; preserve the separately blocked Finder-source-path item and exclude non-GitHub forges, Objective runner and PR sitter.",
+      "docs": [
+        "editor.md",
+        "sidebar-extras.md",
+        "source-control.md"
+      ],
+      "deps": [
+        "m7-sweep-editor-source-control"
       ],
       "status": "todo"
     }

@@ -6,6 +6,9 @@ files, not this one.
 
 | Reversibility | Confidence | Entry | Decision | Source |
 | --- | --- | --- | --- | --- |
+| evidence can be extended | high for the receipts, source runtime unresolved | [sa-browser-profiles-settings D18](decisions/sa-browser-profiles-settings.md) | Separate passing evidence from the remaining source-runtime failure | assumed — autonomous |
+| evidence can be extended | high for exercised results, residual flakes unattributed | [sa-browser-profiles-settings D20](decisions/sa-browser-profiles-settings.md) | Accept the runner's success without erasing its flakes | assumed — autonomous |
+| evidence can be extended | high for exercised compiled ui/api behavior, native assurance absent | [sa-browser-profiles-settings D25](decisions/sa-browser-profiles-settings.md) | Verify final compiled Watch switching, not only metadata | assumed — autonomous |
 | hard | medium | [m0-scripting D10](decisions/m0-scripting.md) | A plugin's methods become `quirky <group> <method>`, where the group is the plugin ID without the `quirky.` prefix | assumed — autonomous |
 | hard | medium | [m0-scripting D12](decisions/m0-scripting.md) | Each param is a kebab-case flag, objects take JSON, and `--params` passes the whole object | assumed — autonomous |
 | hard | medium | [m2-source-control-notes-ai D15](decisions/m2-source-control-notes-ai.md) | Approach: one-shot invocations are agent data in `quirky.agents`; prompts, recipes and notes stay in `quirky.git` | assumed — autonomous |
@@ -61,6 +64,9 @@ files, not this one.
 | hard | high | [m4-hosting-api-github D9](decisions/m4-hosting-api-github.md) | Share one head-guarded destructive merge seam before the sitter exists | locked by docs/roadmap.md |
 | hard | high | [m0-daemon-api D7](decisions/m0-daemon-api.md) | The four kinds are `method`, `event`, `job` and `launch-hook` | assumed — autonomous |
 | hard | high | [m0-daemon-api D13](decisions/m0-daemon-api.md) | Choose declared contributions with provided implementations | supersedes nothing; extends m0-registry D23 |
+| hard | high | [m5-automations-ui D4](decisions/m5-automations-ui.md) | Honor structured sessions and existing scheduling fixes | locked by docs/architecture.md |
+| hard for deployed migration order | high | [m5-automations-ui D14](decisions/m5-automations-ui.md) | Preserve canonical pointer migration9 and append background as migration10 | locked by docs/loop/decisions/m6-orchestration-core.md |
+| hard for migration order; medium otherwise | high for contract reconciliation | [m5-automations-ui D22](decisions/m5-automations-ui.md) | Reconcile final dispatch landing without weakening canonical session contracts | locked by docs/loop/decisions/m5-automations-dispatch.md D31-D34 |
 | hard | high | [m5-ledger D2](decisions/m5-ledger.md) | Use the same authenticated scripting surface for every ledger action | locked by docs/architecture.md |
 | hard | high | [m5-ledger D7](decisions/m5-ledger.md) | Preserve validation, history and no-op semantics exactly | locked by external research/orca-features/ledger.md |
 | hard | high | [m5-ledger D8](decisions/m5-ledger.md) | Keep imports replay-safe and evidence advisory | locked by external research/orca-features/ledger.md |
@@ -402,6 +408,15 @@ files, not this one.
 | medium (cross-feature integration) | high for the observed conflict; incoming deletion provenance still being traced | [m5-structured-runner D45](decisions/m5-structured-runner.md) | Reconcile a newer integration tip instead of discarding verified m5 work | assumed — autonomous (operator-directed landing continuation) |
 | medium (cross-feature merge composition) | high | [m5-structured-runner D46](decisions/m5-structured-runner.md) | Restore the unlanded candidate removed by handoff's cleanup, not an obsolete feature design | assumed — autonomous (operator-directed feature landing) |
 | medium (shared public launch/ui contracts) | high | [m5-structured-runner D47](decisions/m5-structured-runner.md) | Preserve the three new binding decision logs and their public contracts | locked by docs/loop/decisions/m3-session-info.md |
+| medium | high | [m5-automations-ui D1](decisions/m5-automations-ui.md) | Build the complete union of the three assigned UI and external-job slices | locked by docs/loop/LOOP.md |
+| medium | high | [m5-automations-ui D2](decisions/m5-automations-ui.md) | Use the existing plugin and public daemon-owned UI conventions | locked by docs/roadmap.md |
+| medium | high | [m5-automations-ui D7](decisions/m5-automations-ui.md) | Consume dispatch authority rather than inventing remote ownership | locked by docs/loop/decisions/m5-automations-dispatch.md |
+| medium | high | [m5-automations-ui D9](decisions/m5-automations-ui.md) | Preserve explicit setup consent and background-only structured sessions | locked by docs/loop/decisions/m5-automations-dispatch.md |
+| medium | high | [m5-automations-ui D15](decisions/m5-automations-ui.md) | Keep unavailable remote UI flows in one dependent follow-up | deferred: remote automation UI authorities |
+| medium | high for exercised explicit selection | [m5-automations-ui D18](decisions/m5-automations-ui.md) | Honor explicit structured-session navigation without creating a replacement shell | locked by docs/loop/decisions/m5-loops-core.md D19 |
+| medium | high for the ownership boundary; owning gate result recorded separately | [m5-automations-ui D26](decisions/m5-automations-ui.md) | Serialize repository base fetches without changing the immutable setup revision | assumed — autonomous |
+| medium | high for the traced acceptance race; owning gate result recorded separately | [m5-automations-ui D27](decisions/m5-automations-ui.md) | Preserve send arrival order before asynchronous preflight can reorder it | assumed — autonomous |
+| medium | high for reconciled contracts and exercised paths | [m5-automations-ui D29](decisions/m5-automations-ui.md) | Compose equivalent canonical publication and verify new Heimdall/profile contracts | locked by docs/loop/LOOP.md step7.3 |
 | medium | high | [m5-ledger D1](decisions/m5-ledger.md) | Implement the complete Project ledger feature | locked by docs/roadmap.md |
 | medium | high | [m5-ledger D4](decisions/m5-ledger.md) | Normalize ledger storage in the public plugin SQLite store | locked by docs/loop/decisions/m0-daemon-api.md |
 | medium | high | [m5-ledger D6](decisions/m5-ledger.md) | Preserve target distinctions and reject ambiguous selector combinations | locked by external research/orca-features/ledger.md |
@@ -457,6 +472,12 @@ files, not this one.
 | medium | high | [m2-ask-parity D12](decisions/m2-ask-parity.md) | Drafts are Orca's per-question partial, saved by the window 500 ms after typing stops | locked by research/orca-features/ask.md |
 | medium | high | [m2-ask-parity D14](decisions/m2-ask-parity.md) | One persisted counter stamps every ask change, and a promotion gets the next value | locked by research/orca-features/ask.md |
 | medium | high | [m2-ask-parity D20](decisions/m2-ask-parity.md) | Approach: extend `quirky.ask` in place with Orca's pure modules ported beside it | assumed — autonomous |
+| medium | high | [m6-orchestration-ui D1](decisions/m6-orchestration-ui.md) | Build the complete skill and local orchestration UI slice | locked by docs/loop/queue.json |
+| medium | high | [m6-orchestration-ui D3](decisions/m6-orchestration-ui.md) | Extend existing plugin and renderer conventions | assumed — autonomous |
+| medium | high | [m6-orchestration-ui D4](decisions/m6-orchestration-ui.md) | Keep depth policy separate from ordinary worker-writable settings | assumed — autonomous |
+| medium | high | [m6-orchestration-ui D5](decisions/m6-orchestration-ui.md) | Preserve uncertainty, identity and terminal ownership | locked by research/orca-features/orchestration.md |
+| medium | high | [m6-orchestration-ui D8](decisions/m6-orchestration-ui.md) | Resolve navigation in one public daemon operation, including context-only Dispatches | locked by research/orca-features/orchestration.md |
+| medium | high | [m6-orchestration-ui D15](decisions/m6-orchestration-ui.md) | Compose canonical service migrations and routing before retrying the land | assumed — autonomous |
 | medium | high | [m5-automations-dispatch D2](decisions/m5-automations-dispatch.md) | Preserve raw-argument refusal and defer that incompatible flow | deferred: raw extra agent arguments |
 | medium | high | [m5-automations-dispatch D3](decisions/m5-automations-dispatch.md) | Capture local registry identity and fail closed for remote host flows | deferred: remote host generation and execution |
 | medium | high | [m5-automations-dispatch D5](decisions/m5-automations-dispatch.md) | Prefer public existing seams to duplicate runners | assumed — autonomous |
@@ -469,6 +490,16 @@ files, not this one.
 | medium | high | [m5-automations-dispatch D28](decisions/m5-automations-dispatch.md) | Compose the failed-land recovery with landed orchestration contracts | locked by docs/loop/decisions/m6-orchestration-core.md |
 | medium | high | [m5-automations-dispatch D31](decisions/m5-automations-dispatch.md) | Compose loop evidence and honor canonical terminal-only auto-adoption | supersedes m5-automations-dispatch D15 |
 | medium | high | [m5-automations-dispatch D33](decisions/m5-automations-dispatch.md) | Preserve badge schema and transient-token security during the third recovery | assumed — autonomous |
+| medium (acceptance) | high | [sa-browser-profiles-settings D1](decisions/sa-browser-profiles-settings.md) | Follow unattended night-mode scope and approvals | locked by docs/loop/LOOP.md |
+| medium (api) | high | [sa-browser-profiles-settings D2](decisions/sa-browser-profiles-settings.md) | Reuse profiles and settings through public plugin contributions | locked by docs/roadmap.md |
+| medium (outside capability) | high for inspected apis; no claim all sdk versions lack hook | [sa-browser-profiles-settings D4](decisions/sa-browser-profiles-settings.md) | Treat missing import/native identity/localhost mapping as prerequisites, not success | deferred: import engine integration, native identity and localhost mapping |
+| medium (persisted identity) | high | [sa-browser-profiles-settings D5](decisions/sa-browser-profiles-settings.md) | Agree explicit native profile isolation and clear semantics with pane owner | assumed — autonomous |
+| medium (requires sdk capability) | high for inspected public api limitation; no claim private implementation never waits | [sa-browser-profiles-settings D9](decisions/sa-browser-profiles-settings.md) | Reject native clear before invocation until the SDK can acknowledge completion | deferred: native profile clear completion; supersedes sa-browser-profiles-settings D5 |
+| medium (lifetime invariants) | high for exercised boundaries; native storage isolation/removal remains unproved | [sa-browser-profiles-settings D11](decisions/sa-browser-profiles-settings.md) | Hold complete profile admissions and preserve existing editor gestures | assumed — autonomous |
+| medium (unstable public api before first pane land) | high for exercised api/cli/hosted-close behavior | [sa-browser-profiles-settings D12](decisions/sa-browser-profiles-settings.md) | Reveal routed panes and use the terminal's canonical boolean close contract | assumed — autonomous |
+| medium (dependency integration) | high for reconciliation; merged gates pending | [sa-browser-profiles-settings D22](decisions/sa-browser-profiles-settings.md) | Reconcile the dependency's completed controller repairs | assumed — autonomous, preserving incoming public contracts |
+| medium (shared lifecycle contracts) | high for reconciliation; final caught-up gates pending | [sa-browser-profiles-settings D23](decisions/sa-browser-profiles-settings.md) | Preserve final roadmap input custody and current-model routing | assumed — autonomous, preserving incoming public contracts |
+| medium (explicit watch transition lifetime) | high for exercised api/storage/lease/rollback paths | [sa-browser-profiles-settings D24](decisions/sa-browser-profiles-settings.md) | Complete explicit Watch profile transitions before returning | assumed — autonomous, completing the accepted lane8 Watch profile integration |
 | medium | high | [m1-launch-settings D8](decisions/m1-launch-settings.md) | A selection is `{model?, options?}`, with Orca's bounds | locked by research/orca-features/launch-settings.md |
 | medium | high | [m1-launch-settings D12](decisions/m1-launch-settings.md) | The snapshot comes from the same resolution as the command, so it can't misreport provenance | assumed — autonomous |
 | medium | high | [m1-launch-settings D16](decisions/m1-launch-settings.md) | A session stores its snapshot, and resume and fork replay the resolved arguments | assumed — autonomous |
@@ -658,6 +689,7 @@ files, not this one.
 | easy | medium | [m2-ask-parity D22](decisions/m2-ask-parity.md) | A `deadlines` job wakes the plugin after a restart | assumed — autonomous |
 | easy | medium | [m2-ask-parity D26](decisions/m2-ask-parity.md) | The suppression hook reads the current configuration, even for a resume | assumed — autonomous |
 | easy | medium | [m2-ask-parity D32](decisions/m2-ask-parity.md) | Patterns are screened more strictly than Orca does | assumed — autonomous |
+| easy | medium | [m6-orchestration-ui D13](decisions/m6-orchestration-ui.md) | Accept the bounded three-lens review without overstating full-context coverage | assumed — autonomous |
 | easy | medium | [m1-launch-settings D10](decisions/m1-launch-settings.md) | A model ID the catalog doesn't list is accepted when the agent declares options for unknown models or lists no models at all | assumed — autonomous |
 | easy | medium | [m1-launch-settings D17](decisions/m1-launch-settings.md) | Model discovery and retirement wait for the first item that saves picks | assumed — autonomous |
 | easy | medium | [m1-launch-settings D19](decisions/m1-launch-settings.md) | The catalog yields structured options, and `quirky.structured/create` uses them | assumed — autonomous |
@@ -1437,6 +1469,23 @@ files, not this one.
 | easy | high for recorded outcomes and index operation | [m5-structured-runner D51](decisions/m5-structured-runner.md) | Preserve all historical snapshot failures and reconcile the actual Git index before committing | assumed — autonomous |
 | easy | high for final exercised integration | [m5-structured-runner D52](decisions/m5-structured-runner.md) | Land the fully reconciled final source after consumer and smoke proof | assumed — autonomous |
 | easy | high | [m5-structured-runner D53](decisions/m5-structured-runner.md) | Use the operator's immediate landing gate ownership | assumed — autonomous (operator-directed verification ownership) |
+| easy | high | [m5-automations-ui D3](decisions/m5-automations-ui.md) | Prefer feature-document layout, explicit status, and capability-aware controls | locked by automations.md |
+| easy | high | [m5-automations-ui D5](decisions/m5-automations-ui.md) | Use night-mode workflow and verified cross-family review fallback | assumed — autonomous |
+| easy | high | [m5-automations-ui D6](decisions/m5-automations-ui.md) | Validate macOS only and preserve external-manager safety on other platforms | deferred: platform |
+| easy | high | [m5-automations-ui D8](decisions/m5-automations-ui.md) | Report actual surface data alongside daemon-owned navigation | locked by docs/roadmap.md |
+| easy | high for traced causes; final verification recorded below | [m5-automations-ui D10](decisions/m5-automations-ui.md) | Keep navigation inputs stable and invalidate data through native change events | assumed — autonomous |
+| easy | high for those exercised paths only | [m5-automations-ui D11](decisions/m5-automations-ui.md) | Separate actual native-process proof from incomplete test-gate results | assumed — autonomous |
+| easy | high | [m5-automations-ui D12](decisions/m5-automations-ui.md) | Fix evidence boundaries rather than accepting repeat failures as flaky | assumed — autonomous |
+| easy | high for exercised source/package paths; ui and native-menu proof are separate | [m5-automations-ui D13](decisions/m5-automations-ui.md) | Verify typed source and packaged output before visible UI verification | assumed — autonomous |
+| easy | high for process compliance; no independent-review assurance | [m5-automations-ui D16](decisions/m5-automations-ui.md) | Apply the two-hour rule without inventing independent review | locked by docs/loop/LOOP.md |
+| easy | high for exercised client and integration paths; visible ui outcome remains separately recorded | [m5-automations-ui D17](decisions/m5-automations-ui.md) | Verify the composed runtime with real clients, not only merge text | assumed — autonomous |
+| easy | high | [m5-automations-ui D19](decisions/m5-automations-ui.md) | Preserve native startup diagnostics and isolate a broken external Node installation | assumed — autonomous |
+| easy | high for the named observations only | [m5-automations-ui D20](decisions/m5-automations-ui.md) | Close the started visible campaign with specific continuation evidence | assumed — autonomous |
+| easy | high | [m5-automations-ui D21](decisions/m5-automations-ui.md) | Correct saved-output parsing, canonical launch evidence and clipped navigation controls | assumed — autonomous |
+| easy | high for the exercised gates | [m5-automations-ui D23](decisions/m5-automations-ui.md) | Use the final composed candidate's observed gates | assumed — autonomous |
+| easy | high for observed gate failure; causes remain under investigation | [m5-automations-ui D24](decisions/m5-automations-ui.md) | Repair the normal merged gate's owning failures rather than waive them | locked by docs/loop/LOOP.md step7.3 |
+| easy | high for traced causes; owning gate result recorded separately | [m5-automations-ui D25](decisions/m5-automations-ui.md) | Publish fixture replies atomically and observe the CLI's real recovery daemon | assumed — autonomous |
+| easy | high for exercised paths; authoritative normal land remains the final gate | [m5-automations-ui D28](decisions/m5-automations-ui.md) | Require actual recovery, PTY consumption and remote-base creation proof | assumed — autonomous |
 | easy | high | [m5-ledger D3](decisions/m5-ledger.md) | Use omp implementers with the reachable Gemini reviewer fallback | assumed — autonomous |
 | easy | high | [m5-ledger D11](decisions/m5-ledger.md) | Build and verify macOS behavior without claiming other platforms | deferred: platform |
 | easy | high | [m5-ledger D13](decisions/m5-ledger.md) | Use two independent implementation components with one integration owner | assumed — autonomous |
@@ -1581,6 +1630,14 @@ files, not this one.
 | easy | high | [m2-ask-parity D35](decisions/m2-ask-parity.md) | Catching up with build/roadmap (m1-term-daemon) needed no change here | assumed — autonomous |
 | easy | high | [m2-ask-parity D36](decisions/m2-ask-parity.md) | No native-only scenarios | assumed — autonomous |
 | easy | high | [m2-ask-parity D37](decisions/m2-ask-parity.md) | The first land was cut off by this iteration's own timeout, after its merge; land runs again once lane 2's land finishes | assumed — autonomous |
+| easy | high | [m6-orchestration-ui D2](decisions/m6-orchestration-ui.md) | Apply unattended night mode with one combined spec | locked by docs/loop/LOOP.md |
+| easy | high | [m6-orchestration-ui D6](decisions/m6-orchestration-ui.md) | Use OpenAI implementers and reachable Gemini review | assumed — autonomous |
+| easy | high | [m6-orchestration-ui D7](decisions/m6-orchestration-ui.md) | Verify macOS with private homes and no real agent configuration writes | deferred: platform |
+| easy | high | [m6-orchestration-ui D9](decisions/m6-orchestration-ui.md) | Separate current-assignment confidence from worker liveness | assumed — autonomous |
+| easy | high | [m6-orchestration-ui D10](decisions/m6-orchestration-ui.md) | Repair observed fixture boundaries without weakening product assertions | assumed — autonomous |
+| easy | high | [m6-orchestration-ui D11](decisions/m6-orchestration-ui.md) | Preserve sidebar workspace layout and isolate actual UI proof | assumed — autonomous |
+| easy | high | [m6-orchestration-ui D12](decisions/m6-orchestration-ui.md) | Keep catch-up and review provenance explicit | assumed — autonomous |
+| easy | high | [m6-orchestration-ui D14](decisions/m6-orchestration-ui.md) | Keep guarded dogfood limits separate from actual isolated-browser proof | assumed — autonomous |
 | easy | high | [m5-automations-dispatch D4](decisions/m5-automations-dispatch.md) | Resolve every relevant gray area autonomously | locked by docs/loop/LOOP.md |
 | easy | high | [m5-automations-dispatch D7](decisions/m5-automations-dispatch.md) | Explicit setup defaults to skip and never grants hook trust | assumed — autonomous |
 | easy | high | [m5-automations-dispatch D9](decisions/m5-automations-dispatch.md) | Use OpenAI implementers and reachable Gemini cross-family review | locked by docs/loop/LOOP.md |
@@ -1602,6 +1659,18 @@ files, not this one.
 | easy | high for exercised paths; final model review remains explicitly unperformed | [m5-automations-dispatch D30](decisions/m5-automations-dispatch.md) | Retry landing only after fresh composed-runtime proof | assumed — autonomous |
 | easy | high | [m5-automations-dispatch D32](decisions/m5-automations-dispatch.md) | Preserve prepared structured sessions owned by an activating creator | assumed — autonomous |
 | easy | high for the exercised protocol and storage paths | [m5-automations-dispatch D34](decisions/m5-automations-dispatch.md) | Pin only the disposable native-protocol stand-in to Bun | assumed — autonomous |
+| easy | high | [sa-browser-profiles-settings D3](decisions/sa-browser-profiles-settings.md) | Preserve source routing outcomes without changing file-link behavior | locked by browser.md |
+| easy | high | [sa-browser-profiles-settings D6](decisions/sa-browser-profiles-settings.md) | Select OpenAI implementers and reachable Gemini review | assumed — autonomous |
+| easy | high | [sa-browser-profiles-settings D7](decisions/sa-browser-profiles-settings.md) | Keep platform/native verification honest | deferred: platform |
+| easy (internal capability lifetime) | high for policy; runtime verification pending | [sa-browser-profiles-settings D8](decisions/sa-browser-profiles-settings.md) | Guard native clearing with one-use confirmation capabilities and admission control | assumed — autonomous |
+| easy (later review/native run can identify findings) | high | [sa-browser-profiles-settings D10](decisions/sa-browser-profiles-settings.md) | Follow overdue night mode without inventing review or UI-campaign evidence | locked by docs/loop/LOOP.md |
+| easy (further verification can add evidence) | high for exercised controls, no native deletion assurance | [sa-browser-profiles-settings D13](decisions/sa-browser-profiles-settings.md) | Report focused UI proof and native limits separately | assumed — autonomous |
+| easy | high | [sa-browser-profiles-settings D14](decisions/sa-browser-profiles-settings.md) | Cut URL gestures over from the temporary copy mapping | assumed — autonomous |
+| easy | high | [sa-browser-profiles-settings D15](decisions/sa-browser-profiles-settings.md) | Read click policy from the current model, not a stale render | assumed — autonomous |
+| easy | high for exercised scope | [sa-browser-profiles-settings D16](decisions/sa-browser-profiles-settings.md) | Count actual Find occurrences without replacing page content | assumed — autonomous |
+| easy | high | [sa-browser-profiles-settings D17](decisions/sa-browser-profiles-settings.md) | Reconcile incoming public UI contracts | assumed — autonomous |
+| easy | high for candidate exclusion, residual helper variability not attributed | [sa-browser-profiles-settings D19](decisions/sa-browser-profiles-settings.md) | Challenge only targets created by the requested new tab | assumed — autonomous |
+| easy when public native storage-root/completion support is proven | high for the safety rule; isolation remains unproven | [sa-browser-profiles-settings D21](decisions/sa-browser-profiles-settings.md) | Preflight every native handoff before touching Default | assumed — autonomous, applying the accepted lane4 native safety ruling |
 | easy | high | [m1-launch-settings D1](decisions/m1-launch-settings.md) | Classify the item as Data, API, CLI and Integration work, and run research phases A and B | assumed — autonomous |
 | easy | high | [m1-launch-settings D2](decisions/m1-launch-settings.md) | Skip the visual companion and the adhd offer, and use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m1-launch-settings D3](decisions/m1-launch-settings.md) | Select every gray area that matters: data-mapping, input-format, conflict-resolution, error-handling, output-format and flag-design | locked by docs/loop/LOOP.md |
