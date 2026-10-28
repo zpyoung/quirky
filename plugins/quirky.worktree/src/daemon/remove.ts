@@ -96,7 +96,12 @@ function blankRow(id: string, repoId: string, path: string): WorktreeRow {
     instance_id: `unverified:${id}`,
     linked_pr: null,
     linked_issue: null,
-    push_target: null
+    push_target: null,
+    manual_order: 0,
+    sleeping: 0,
+    sleep_changed_at: 0,
+    cleanup_ignored_fingerprint: null,
+    cleanup_ignored_at: null
   }
 }
 

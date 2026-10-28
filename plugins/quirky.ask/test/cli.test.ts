@@ -165,9 +165,17 @@ describe('quirky ask command module', () => {
     const answered = await caller.callAny('quirky.ask/answer', { askId: second.askId, answers: { go: { value: true, source: 'input' } } })
     expect(answered).toMatchObject({ status: 'answered', askId: second.askId, summary: 'Go?: Yes' })
     await waitFor(() => window.events.some((event) => event.type === 'quirky.ask/resolved' && (event.data as { askId: string }).askId === second.askId))
-    const askSequences = window.events
-      .filter((event) => ['quirky.ask/created', 'quirky.ask/surfaced', 'quirky.ask/resolved'].includes(event.type))
-      .map((event) => (event.data as { seq: number }).seq)
+    const askSequences = window.events.flatMap((event) => {
+      if (
+        event.type !== 'quirky.ask/created' &&
+        event.type !== 'quirky.ask/surfaced' &&
+        event.type !== 'quirky.ask/resolved'
+      ) return []
+      if (!('data' in event)) return []
+      const data = event.data
+      if (typeof data !== 'object' || data === null || Array.isArray(data) || !('seq' in data) || typeof data.seq !== 'number') return []
+      return [data.seq]
+    })
     expect(askSequences).toEqual([1, 2, 3, 4, 5])
     expect(await caller.callAny('quirky.ask/list', { pendingOnly: true })).toEqual([])
   })

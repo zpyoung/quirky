@@ -1,0 +1,22 @@
+{
+  "item": "m7-sweep-terminal-completion",
+  "spec": "docs/quirk/specs/2026-10-28-m7-sweep-terminal-completion/logic.md",
+  "scenarios": [
+    {
+      "id": "Q3-native-banner",
+      "title": "On a fresh private QUIRKY_HOME, a surfaced pending question in an unfocused session produces no immediate native banner and only escalates after three uninterrupted unattended minutes; focus or resolution before the deadline cancels it",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    },
+    {
+      "id": "Q2-native-no-focus-theft",
+      "title": "With another macOS application foreground, a new question for Quirky's selected session may reveal its Questions panel but never brings the Quirky native window forward or steals physical keyboard input",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    }
+  ]
+}

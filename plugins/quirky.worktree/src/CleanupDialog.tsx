@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
 import type { CleanupCandidate, CleanupRemovalResult, CleanupSelection } from './control-types'
+import { Dialog } from './Dialog'
 
 type Preview = { generatedAt: number; candidates: CleanupCandidate[] }
 type Props = { context: UiPluginContext; onClose(): void }
@@ -98,10 +99,9 @@ export function CleanupDialog({ context, onClose }: Props) {
   }
 
   return (
-    <div className="dialog-backdrop">
-      <section className="dialog cleanup-dialog" role="dialog" aria-modal="true" aria-label="Review worktree cleanup">
+    <Dialog title="Review worktree cleanup" onClose={() => { if (!busy) onClose() }} wide>
+      <section className="cleanup-dialog">
         <header>
-          <h2>Review inactive worktrees</h2>
           <p>Inspect current blockers before permanently deleting selected local worktrees.</p>
         </header>
         <div className="cleanup-actions">
@@ -152,6 +152,6 @@ export function CleanupDialog({ context, onClose }: Props) {
           </button>
         </footer>
       </section>
-    </div>
+    </Dialog>
   )
 }

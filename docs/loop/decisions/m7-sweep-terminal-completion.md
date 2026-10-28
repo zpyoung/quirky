@@ -110,5 +110,38 @@
 - **Revisit if:** A provider fails its declared native draft/readiness contract.
 - **Source:** assumed — autonomous
 
+## D11: Fix compiler and actual browser failures without starting an end-phase campaign
+- **Question:** What actually failed during integration and the minimum changed-path smoke?
+- **Options:** Treat worker reports or compilation as UI proof; suppress failures; repair the owning source path and retain exact limits.
+- **Chose:** Fix missing Dashboard UI closure, fixture imports/types, WorktreeRow defaults and mandatory CLI flag descriptions. Replace Ask's browser-inaccessible react-dom/server dependency with the maintained unified/remark/rehype string pipeline, keeping all sanitization/sandbox fences. Reuse the existing worktree Dialog for cleanup rather than its unstyled sidebar-clipped wrapper. Remove new mock-forwarding/class-copy assertions instead of re-pinning them; add Escape-dismiss consumer coverage.
+- **Why:** Initial typecheck reported one parse error, then38 diagnostics in7 files. Actual daemon rejected the Dashboard manifest for two missing flag descriptions. Actual browser could not load Ask due to the unmapped server module; cleanup appeared clipped within the sidebar. These are real new-path failures, not waived end-phase tests. No unrelated failure/debug campaign began.
+- **Evidence:** Compiler artifact17; manifest-diagnostics.json; actual browser text/error and screenshots omp-sshots-15b7f7bed59a56a2.webp versus repaired omp-sshots-15b7f8f6695a56a4.webp; repaired UI bundle9files/25modules and full typecheck exit0.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** End-phase acceptance finds a consumer-visible regression.
+- **Source:** assumed — autonomous
+
+## D12: Limit verification claims to observed private runtime and visible paths
+- **Question:** What is verified now versus written or pending?
+- **Options:** Claim all terminal parity; run prohibited suites/dogfood; state exact smoke and gate evidence.
+- **Chose:** Full typecheck passed after repairs. Actual standalone daemon/CLI/PTY smoke in fresh private HOME/QUIRKY_HOME exercised stock options/readback, selected parent+child sleep/wake, exclusion of fresh cleanup candidates and stale-preview refusal, Dashboard completion retained Done after acknowledgment, captured provider Fork and Ask answer. Killing only the owned PTY host then public restore preserved the exact session/provider/model/effort. Actual four-wait gate shed the fifth with Conflict/runtime_busy and released all slots on cancellation. Real Chrome rendered Dashboard, changed stock grouping with API readback, rendered hostile rich preview inertly and showed then dismissed the actual terminal summary; repaired cleanup modal was centered and fully visible.
+- **Why:** These observations establish runnable changed paths, not exhaustive scenario clearance. Tests are written but unrun by current LOOP policy. No formal review or dogfood campaign, paid-provider proof, physical-native clearance, eligible aged-candidate bulk-deletion proof or measured three-minute banner timing is claimed. Source-issue draft coverage is written, not live-GitHub acceptance.
+- **Evidence:** runtime-smoke.json; cold-restore-smoke.json; ask-wait-gate-smoke.json; ask-preview-ui-smoke.json; ui-smoke-summary.json; screenshots15b7f79a495a56a1,15b7f8e304da56a3,15b7f8f6695a56a4; private runtime printed CLEANED and exited0. New native Q2/Q3 scenarios pending.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** End-phase tests or native handoff contradict an observation.
+- **Source:** locked by docs/loop/LOOP.md
+
+## D13: Carry only exact unbuilt flows in one successor
+- **Question:** How do the unstarted inventory families remain owned without creating prohibited verification work?
+- **Options:** Omit them; falsely mark parity complete; register one unbuilt-flow successor and retain existing verification phase/native owners.
+- **Chose:** Register m7-terminal-runtime-native-and-worktree-parity depending on this item, with the exhaustive remaining rows of the logic spec. It owns unavailable/caller-preserving Ask bridges, external CLI/remote selection, pop-out, transcript/private-OSC/remote status, model discovery/retirement, recipe composition, remaining terminal composition/render/key controls, remaining worktree filters/visibility/navigation/references/board/create/project extras, missing cleanup classifiers/per-window routing, and native public bridge/packaging prerequisites. No test/verify/review/debug follow-up is added. Existing automation, sidebar-extras, native SC37 and completed dock owners are not duplicated.
+- **Why:** LOOP allows at most one successor for unbuilt flows and places verification in the end phase. Three components are implemented here; the original all-nine-doc parity obligation remains explicit rather than silently reduced.
+- **Evidence:** Final exhaustive disposition ledger in this item's logic.md; Q/D/S/W capability handoffs and source audit. Queue registration result is recorded in Progress when observed.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Another landed owner already implements one of those distinct flows; reconcile it before coding.
+- **Source:** deferred: terminal runtime/native/worktree unbuilt flows
+
 ## Progress
-Scope/design self-review complete. Single combined logic spec enumerates entire inherited inventory, Q1-Q3/D1-D2/S1/W1-W3, and public boundaries. Shared package-local types committed before at most three disjoint implementers. Next: dispatch those components, integrate their real implementations and acceptance tests, resolve compiler diagnostics, required isolated smoke, enumerate exact unbuilt flow successor just before landing, catch up once and canonical queue land. No checks/tests/build/dogfood/reviews run yet.
+All three components integrated (2126db5a/e4a48fa9/a6387223); each worker HEAD/scope audit passed and its worktree was removed normally after preserving unrelated .serena metadata. Compiler and minimum actual runtime/browser repairs are applied, full typecheck and refreshed UI bundle passed, and all private browser/runtime processes are stopped. Acceptance tests are written, not run; no suite/review/dogfood clearance claimed. Next: commit source/docs, catch up once to build/roadmap and read incoming decisions, rerun typecheck, register the single exact unbuilt-flow successor immediately before landing, then detach and canonical queue land. Do not claim whole-queue or terminal-parity completion.

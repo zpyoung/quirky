@@ -24,8 +24,12 @@ const COMPLETED: Partial<Record<AgentDisplayState, true>> = { done: true, failed
 /** A boundary snapshot is idle, while completed turns remain Done regardless of acknowledgment. */
 function displayOfSnapshot(snapshot: StoredActivity, now: number) {
   const row: AgentRow = !snapshot.live && snapshot.row.state !== 'done' ? { ...snapshot.row, state: 'done', interrupted: true } : snapshot.row
-  const display = displayOf(row, now, snapshot.live)
-  return row.sessionBoundary === true && display.display === 'done' ? { ...display, display: 'idle', label: 'Idle' } : display
+  const result = displayOf(row, now, snapshot.live)
+  if (row.sessionBoundary === true && result.display === 'done') {
+    const display: AgentDisplayState = 'idle'
+    return { ...result, display, label: 'Idle' }
+  }
+  return result
 }
 
 /** Retains the latest status snapshot per terminal session, independently of its live status row. */

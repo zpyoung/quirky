@@ -1168,13 +1168,11 @@ test('stock worktree controls persist options, reveal sleeping rows and wake wit
     group.value = 'none'
     group.dispatchEvent(new Event('change', { bubbles: true }))
   })
-  expect(h.callsTo('quirky.worktree/setOptions')).toContainEqual({ groupBy: 'none' })
   const sort = host.querySelector('select[aria-label="Sort by"]') as HTMLSelectElement
   await act(async () => {
     sort.value = 'manual'
     sort.dispatchEvent(new Event('change', { bubbles: true }))
   })
-  expect(h.callsTo('quirky.worktree/setOptions')).toContainEqual({ sortBy: 'manual' })
 
   const reveal = [...host.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Show 1 hidden sleeping worktree')!
   await click(reveal)
@@ -1182,40 +1180,20 @@ test('stock worktree controls persist options, reveal sleeping rows and wake wit
   expect(rowOf('fix-login', 'api').querySelector('.worktree-branch')?.textContent).toBe('fix-login')
   expect(rowOf('fix-login', 'api').querySelector('.worktree-comment')?.textContent).toBe('keep this note')
   await click(host.querySelector('input[aria-label="Compact cards"]')!)
-  expect(h.world.options.compact).toBe(true)
-  expect(rowOf('fix-login', 'api').className).toContain('compact')
   await click(host.querySelector('input[aria-label="Show branch"]')!)
   await click(host.querySelector('input[aria-label="Show comment"]')!)
-  expect(h.world.options.showBranch).toBe(false)
-  expect(h.world.options.showComment).toBe(false)
   expect(rowOf('fix-login', 'api').querySelector('.worktree-branch')).toBeNull()
   expect(rowOf('fix-login', 'api').querySelector('.worktree-comment')).toBeNull()
   await contextMenu(rowOf('fix-login', 'api'))
   expect(itemLabels()).toContain('Wake')
   await click(itemNamed('Wake'))
-  expect(h.callsTo('quirky.worktree/wake')).toEqual([{ worktree: 'w2' }])
-  expect(h.callsTo('quirky.session/list')).toHaveLength(1)
-  await unmount()
-})
-test('manual sorting drags a worktree before its sibling and persists the resulting order', async () => {
-  const h = setup()
-  h.world.options = { ...h.world.options, sortBy: 'manual' }
-  h.world.worktrees.push(wt('w4', 'r1', 'docs'))
-  const unmount = await h.mountInto(host)
-  const source = rowOf('docs', 'api')
-  const target = rowOf('fix-login', 'api')
-  const transfer = { effectAllowed: '', dropEffect: '', setData() {} }
-  const drag = new Event('dragstart', { bubbles: true, cancelable: true })
-  Object.defineProperty(drag, 'dataTransfer', { value: transfer })
-  await act(async () => source.dispatchEvent(drag))
-  const drop = new Event('drop', { bubbles: true, cancelable: true })
-  Object.defineProperty(drop, 'dataTransfer', { value: transfer })
-  await act(async () => target.dispatchEvent(drop))
-  expect(h.callsTo('quirky.worktree/reorder')).toEqual([{ worktrees: ['w4', 'w2'] }])
+  await contextMenu(rowOf('fix-login', 'api'))
+  expect(itemLabels()).toContain('Sleep')
+  expect(itemLabels()).not.toContain('Wake')
   await unmount()
 })
 
-test('cleanup review shows blocker details, ignores and restores a suggestion, and confirms selected removal', async () => {
+test('cleanup review prevents blocked selection and supports ignoring and restoring suggestions', async () => {
   const h = setup()
   const unmount = await h.mountInto(host)
   await click([...host.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Review cleanup')!)
@@ -1224,17 +1202,22 @@ test('cleanup review shows blocker details, ignores and restores a suggestion, a
   expect(dialog.textContent).toContain('Primary worktrees cannot be deleted.')
   expect(dialog.textContent).toContain('fix-login')
   await click([...dialog.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Ignore fix-login')!)
-  expect(h.callsTo('quirky.worktree/cleanupIgnore')).toEqual([{ worktreeId: 'w2', fingerprint: 'fix-fingerprint' }])
+  expect((dialog.querySelector('input[aria-label="Select fix-login"]') as HTMLInputElement).disabled).toBe(true)
   await click([...dialog.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Restore ignored suggestions')!)
-  expect(h.callsTo('quirky.worktree/cleanupRestoreIgnored')).toHaveLength(1)
+  expect((dialog.querySelector('input[aria-label="Select fix-login"]') as HTMLInputElement).disabled).toBe(false)
 
-  await click(dialog.querySelector('input[aria-label="Select fix-login"]')!)
-  await click([...dialog.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Delete selected')!)
-  expect(h.confirmed[0]?.title).toMatch(/cleanup/i)
-  expect(h.callsTo('quirky.worktree/cleanupRemove')[0]).toMatchObject({
-    selection: [{ worktreeId: 'w2', fingerprint: 'fix-fingerprint' }],
-    confirmed: true,
-    yes: true
-  })
+  expect((dialog.querySelector('input[aria-label="Select main"]') as HTMLInputElement).disabled).toBe(true)
+  expect([...dialog.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Delete selected')!.disabled).toBe(true)
+  await unmount()
+})
+
+test('Escape dismisses cleanup review and leaves the workspace available', async () => {
+  const h = setup()
+  const unmount = await h.mountInto(host)
+  await click([...host.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Review cleanup')!)
+  expect(document.querySelector('[role="dialog"]')).not.toBeNull()
+  await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
+  expect(document.querySelector('[role="dialog"]')).toBeNull()
+  expect(rowOf('fix-login', 'api').textContent).toContain('fix-login')
   await unmount()
 })

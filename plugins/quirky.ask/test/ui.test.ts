@@ -164,6 +164,13 @@ const resolved = (
   envelope: Ask['envelope'] = { status: 'answered', askId, answers: {}, skipped: [], summary: '' },
   seq = nextSeq++
 ): QuirkyEvent => ({ type: 'quirky.ask/resolved', data: { askId, envelope, seq } })
+const declined = (askId: string): Ask['envelope'] => ({
+  status: 'declined',
+  askId,
+  answers: {},
+  skipped: [],
+  summary: ''
+})
 const wait = (ms: number) =>
   act(async () => {
     await new Promise((resolve) => setTimeout(resolve, ms))
@@ -479,7 +486,7 @@ describe('the Questions panel module', () => {
     fake.drop('ask_a')
     fake.drop('ask_b')
     fake.add(promoted)
-    await fake.emit(resolved('ask_a', 3))
+    await fake.emit(resolved('ask_a', declined('ask_a'), 3))
     await fake.emit(surfaced(promoted, 4))
 
     expect([...element.querySelectorAll('.ask-card h3')].map((node) => node.textContent)).toEqual(['B'])
@@ -536,15 +543,15 @@ describe('the Questions panel module', () => {
     fake.add(next)
     await fake.emit(created(next, 2))
     fake.failLists('temporary RPC failure')
-    await fake.emit(resolved('ask_x', 3))
+    await fake.emit(resolved('ask_x', declined('ask_x'), 3))
     fake.failLists(null)
     release()
     await settled()
     expect(fake.badges.at(-1)).toBe(2)
 
-    const lists = () => fake.calls.filter((call) => call.method === 'quirky.ask/list').length
+    const lists = () => fake.calls.filter((call) => call.method === 'quirky.ask/list' && call.params?.pendingOnly === true).length
     const before = lists()
-    await fake.emit(resolved('ask_x', 3))
+    await fake.emit(resolved('ask_x', declined('ask_x'), 3))
     expect(lists()).toBe(before + 1)
   })
 
@@ -725,7 +732,8 @@ describe('the Questions panel module', () => {
     expect(preview.querySelector('script, img, iframe, object, embed, form, button, a, video, source, link, style, base')).toBeNull()
     expect([...preview.querySelectorAll('*')].some((node) => [...node.attributes].some((attribute) => /^on/i.test(attribute.name)))).toBe(false)
     expect(preview.documentElement.innerHTML).not.toContain('https://attacker.invalid')
-    const csp = preview.querySelector('meta[http-equiv="Content-Security-Policy"]')?.content ?? ''
+    const cspMeta = preview.querySelector<HTMLMetaElement>('meta[http-equiv="Content-Security-Policy"]')
+    const csp = cspMeta?.content ?? ''
     expect(csp).toContain("default-src 'none'")
     expect(csp).toContain("script-src 'none'")
     expect(csp).toContain("connect-src 'none'")
@@ -762,7 +770,7 @@ describe('the Questions panel module', () => {
     const queued = { ...selectAsk('ask_2', 'Next?', 2), sessionId: 'sess_1', queued: true }
     const fake = fakeContext([first, queued])
     await activated(fake)
-    const { element } = await mount(fake)
+    const { element, reports } = await mount(fake)
 
     expect(element.querySelectorAll('.ask-card')).toHaveLength(1)
     expect(fake.badges.at(-1)).toBe(1)
@@ -781,7 +789,7 @@ describe('the Questions panel module', () => {
     expect(element.querySelectorAll('.ask-card')).toHaveLength(1)
     expect(element.textContent).toContain('Next?')
     expect(fake.badges.at(-1)).toBe(1)
-    expect(fake.reports.at(-1)).toMatchObject({ pending: [{ askId: 'ask_2' }], queued: 0 })
+    expect(reports.at(-1)).toMatchObject({ pending: [{ askId: 'ask_2' }], queued: 0 })
   })
 
 

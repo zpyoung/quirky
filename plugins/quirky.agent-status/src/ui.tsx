@@ -70,3 +70,4 @@ export function activate(context: UiPluginContext): void {
     if (context.getLayout().view?.id === DASHBOARD_VIEW_ID) context.closeView()
     else context.openView(DASHBOARD_VIEW_ID, dashboardViewInput(args))
   })
+}

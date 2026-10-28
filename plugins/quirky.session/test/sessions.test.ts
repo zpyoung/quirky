@@ -12,6 +12,7 @@ import {
   waitForFile,
   writeModulePlugin
 } from '../../../packages/daemon/test/plugins/fixtures'
+import { fakeAgents, resetFakeAgents } from './fakes/quirky.agents/main'
 import { fakeAccountPreparationCalls, resetFakeAccountPreparation } from './fakes/quirky.accounts/main'
 import { CLAUDE_SETTINGS, resetPointerState, setPointerQuiet, setPointerState } from './fakes/quirky.agent-status/main'
 import { call, code, createSession, restartDaemon, SESSION_PLUGINS, startPluginHarness, storedSessions } from './support'

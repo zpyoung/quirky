@@ -1420,8 +1420,8 @@
         "flags": {
           "text": { "type": "string", "description": "filter prompt, provider, session and workspace text" },
           "project": { "type": "string", "description": "project selector (ID, name or path)" },
-          "workspace-status": { "type": "string", "enum": ["todo", "in-progress", "in-review", "done"] },
-          "review-status": { "type": "string", "enum": ["open", "draft", "merged", "closed", "no-review"] },
+          "workspace-status": { "type": "string", "description": "filter by workspace workflow status", "enum": ["todo", "in-progress", "in-review", "done"] },
+          "review-status": { "type": "string", "description": "filter by GitHub review state or absence", "enum": ["open", "draft", "merged", "closed", "no-review"] },
           "show-idle": { "type": "boolean", "description": "include idle cards in the output" }
         },
         "methods": ["quirky.agent-status/dashboard"]

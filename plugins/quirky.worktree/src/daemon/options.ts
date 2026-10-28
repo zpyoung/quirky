@@ -1,4 +1,4 @@
-import type { PluginStore } from '@quirky/protocol'
+import type { PluginStore, Worktree } from '@quirky/protocol'
 import { DEFAULT_STOCK_OPTIONS, type StockWorktreeOptions } from '../control-types'
 
 const OPTIONS_KEY = 'stock-worktree-options'

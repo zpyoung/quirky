@@ -1,5 +1,7 @@
-import ReactMarkdown from 'react-markdown'
-import { renderToStaticMarkup } from 'react-dom/server'
+import { unified } from 'unified'
+import remarkParse from 'remark-parse'
+import remarkRehype from 'remark-rehype'
+import rehypeStringify from 'rehype-stringify'
 import rehypeRaw from 'rehype-raw'
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
 import remarkGfm from 'remark-gfm'
@@ -79,6 +81,14 @@ const PREVIEW_SCHEMA = {
   strip: [...(defaultSchema.strip ?? []), ...PREVIEW_STRIPPED_CONTENT]
 } satisfies typeof defaultSchema
 
+const PREVIEW_PROCESSOR = unified()
+  .use(remarkParse)
+  .use(remarkGfm)
+  .use(remarkRehype, { allowDangerousHtml: true })
+  .use(rehypeRaw)
+  .use(rehypeSanitize, PREVIEW_SCHEMA)
+  .use(rehypeStringify)
+
 const PREVIEW_STYLE = `
   :root { color-scheme: light dark; }
   body { margin: 0; padding: 8px; color: CanvasText; background: Canvas; font: 13px/1.5 system-ui, sans-serif; overflow-wrap: anywhere; }
@@ -90,15 +100,7 @@ const PREVIEW_STYLE = `
 `
 
 function previewDocument(preview: AskPreview): string {
-  const content = renderToStaticMarkup(
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
-      rehypePlugins={[rehypeRaw, [rehypeSanitize, PREVIEW_SCHEMA]]}
-      components={{ a: ({ children }) => <span>{children}</span> }}
-    >
-      {preview.content}
-    </ReactMarkdown>
-  )
+  const content = String(PREVIEW_PROCESSOR.processSync(preview.content))
   return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${PREVIEW_CSP}"><style>${PREVIEW_STYLE}</style></head><body>${content}</body></html>`
 }
 
