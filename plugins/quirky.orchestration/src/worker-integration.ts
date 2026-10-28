@@ -1,6 +1,6 @@
 import type { PluginContext, PluginStore } from '@quirky/protocol'
 import type {
-  DispatchAdmissionInput, DispatchId, DispatchRow, DispatchStatus, LifecycleCorePort,
+  DispatchAdmissionInput, DispatchId, DispatchRow, DispatchStatus, JsonValue, LifecycleCorePort,
   MutationCheckpoint, MutationRequest, MutationResult, MutatingOrchestrationMethod,
   ResetMode, RunId, RunRow, RuntimeCallerEvidence, TaskCreateParams, TaskId, TaskRow, UtcTimestamp,
   WorkerOutcome, WorkerRow, WorkerState, WorkerTransitionInput,
@@ -58,7 +58,7 @@ export interface OrchestrationWorkerCore extends LifecycleCorePort {
   createTask(input: Omit<TaskCreateParams, keyof MutationRequest>, caller: RuntimeCallerEvidence): TaskRow
   reserveWorkerDispatch(input: Omit<DispatchAdmissionInput, 'assigneeSessionId'>, caller: RuntimeCallerEvidence): DispatchRow
   attachDispatchAuthority(dispatchId: DispatchId, identity: SessionIdentity, caller: RuntimeCallerEvidence): DispatchRow
-  emitWorkerStatus(dispatchId: DispatchId, subject: string, body: string, high: boolean): void
+  emitWorkerStatus(dispatchId: DispatchId, subject: string, body: string, high: boolean, type?: 'status' | 'escalation', payload?: JsonValue): void
   closeWorkerQuestions(dispatchId: DispatchId, at: UtcTimestamp): void
   mutate<T extends object>(
     method: MutatingOrchestrationMethod,

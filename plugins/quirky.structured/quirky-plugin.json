@@ -2,7 +2,7 @@
   "id": "quirky.structured",
   "name": "Structured sessions",
   "version": "0.1.0",
-  "description": "Background Claude sessions without a terminal: journaled messages and permission prompts as asks.",
+  "description": "Native Claude and Codex sessions without a terminal: journaled messages and permission prompts as asks.",
   "main": "main.ts",
   "activation": "lazy",
   "dependencies": ["quirky.session", "quirky.ask", "quirky.agents"],
@@ -10,13 +10,15 @@
     "method": [
       {
         "id": "create",
-        "description": "Starts a structured (no PTY) background agent session, optionally with a model and effort pick. Only the `claude` runner exists; extra arguments are refused.",
+        "description": "Starts a structured (no PTY) Claude or Codex conversation. `deferStart` reserves a live session and lease without an initial turn; otherwise `prompt` is required. Extra arguments are refused.",
         "params": {
           "type": "object",
           "properties": {
             "worktree": { "type": "string", "description": "A worktree selector; defaults to the caller's worktree." },
             "agent": { "type": "string", "description": "The agent to run." },
             "prompt": { "type": "string" },
+            "deferStart": { "type": "boolean", "description": "Reserve the live structured session and lease without sending an initial turn." },
+            "title": { "type": "string", "description": "Optional session title." },
             "model": { "type": "string", "description": "A model ID from the agent's catalog, 1 to 128 characters." },
             "options": {
               "type": "object",
@@ -25,7 +27,7 @@
             },
             "extraArgs": { "type": "string", "description": "Refused: a structured session has no command line." }
           },
-          "required": ["agent", "prompt"]
+          "required": ["agent"]
         },
         "result": {
           "type": "object",
@@ -76,19 +78,78 @@
         }
       },
       {
+        "id": "resume",
+        "description": "Resumes the persisted native Claude or Codex conversation into a new structured session; the optional prompt starts its first turn.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": { "type": "string", "description": "The structured session to resume." },
+            "prompt": { "type": "string", "description": "Optional first prompt; omit to connect idle and send later." }
+          },
+          "required": ["session"]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "kind": { "type": "string", "enum": ["structured"] },
+            "agent": { "type": "string", "enum": ["claude", "codex"] },
+            "worktreeId": { "type": "string" },
+            "cwd": { "type": "string" },
+            "title": { "type": "string" },
+            "status": { "type": "string", "enum": ["starting", "running", "working", "waiting", "done", "exited"] },
+            "createdAt": { "type": "number" },
+            "lastActivityAt": { "type": "number" },
+            "exitCode": { "description": "The exit code, or null while the process is alive." },
+            "launchSettings": { "description": "The original catalog launch snapshot." },
+            "providerSession": { "description": "The native provider conversation identity." },
+            "resumedFrom": { "type": "string", "description": "The Quirky session this record resumes." }
+          },
+          "required": ["id", "kind", "agent", "worktreeId", "cwd", "title", "status"]
+        }
+      },
+      {
+        "id": "stop",
+        "description": "Stops a structured provider connection without removing its session record or journal.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": { "type": "string" },
+            "expectedIncarnation": { "type": "string", "description": "Stops only this exact live lease incarnation." }
+          },
+          "required": ["session"]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": { "type": "boolean" },
+            "closed": { "type": "boolean" },
+            "sessionId": { "type": "string" },
+            "processIncarnation": { "type": "string" },
+            "reason": { "type": "string", "enum": ["recipient_changed", "recipient_gone"] }
+          },
+          "required": ["ok"]
+        }
+      },
+      {
         "id": "send",
         "description": "Sends a message to a structured session.",
         "params": {
           "type": "object",
           "properties": {
             "session": { "type": "string" },
-            "text": { "type": "string" }
+            "text": { "type": "string" },
+            "expectedIncarnation": { "type": "string", "description": "When present, sends only to this live structured lease incarnation." },
+            "operationId": { "type": "string", "description": "Optional durable idempotency key for exact retry; reusing it with different input is refused." }
           },
           "required": ["session", "text"]
         },
         "result": {
           "type": "object",
-          "properties": { "ok": { "type": "boolean" } },
+          "properties": {
+            "ok": { "type": "boolean" },
+            "reason": { "type": "string", "enum": ["operation_unknown", "recipient_changed", "recipient_gone"] }
+          },
           "required": ["ok"]
         }
       }

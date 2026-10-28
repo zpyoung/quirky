@@ -13,7 +13,7 @@ import {
   writeModulePlugin
 } from '../../../packages/daemon/test/plugins/fixtures'
 import { fakeAgents, resetFakeAgents } from './fakes/quirky.agents/main'
-import { CLAUDE_SETTINGS } from './fakes/quirky.agent-status/main'
+import { CLAUDE_SETTINGS, resetPointerState, setPointerQuiet, setPointerState } from './fakes/quirky.agent-status/main'
 import { call, code, createSession, restartDaemon, SESSION_PLUGINS, startPluginHarness, storedSessions } from './support'
 
 let h: Harness
@@ -22,6 +22,7 @@ let events: QuirkyEvent[]
 
 beforeEach(async () => {
   resetFakeAgents()
+  resetPointerState()
   h = await startPluginHarness(SESSION_PLUGINS)
   ;({ client, events } = await h.connectWithEvents('cli'))
 })
@@ -44,6 +45,421 @@ const changedTo = (status: string) =>
 
 const exportPath = () => `export PATH="${h.home}/bin:$PATH"; `
 
+
+describe('session identity and pointer delivery', () => {
+  test('returns a live terminal identity without exposing its launch token', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'shell' })
+    const identity = await call(client, 'quirky.session/identity', { session: session.id })
+    const token = spawned(session.id).env.QUIRKY_SESSION_TOKEN
+    expect(token).toEqual(expect.any(String))
+
+    expect(identity).toMatchObject({
+      sessionId: session.id,
+      live: true,
+      runtimeEpoch: expect.any(String),
+      processIncarnation: expect.any(String),
+      source: 'terminal_launch',
+      kind: 'terminal',
+      providerId: null,
+      worktreeId: session.worktreeId
+    })
+    expect(JSON.stringify(identity)).not.toContain(token)
+    const db = new Database(join(h.home, 'plugin-data', 'quirky.session', 'store.db'))
+    try {
+      db.query('UPDATE sessions SET launch = ? WHERE id = ?').run(
+        JSON.stringify({ command: 'shell', args: '', env: { SAFE_ENV: 'kept', QUIRKY_SESSION_TOKEN: token } }),
+        session.id
+      )
+    } finally {
+      db.close()
+    }
+    const stored = await call<Session>(client, 'quirky.session/get', { session: session.id })
+    expect(stored.launch?.env).toEqual({ SAFE_ENV: 'kept' })
+    expect(JSON.stringify(stored)).not.toContain(token)
+  })
+
+  test('replays one pointer operation without a second terminal submit and rejects payload mismatch', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'claude' })
+    setPointerState('idle')
+    const identity = await call(client, 'quirky.session/identity', { session: session.id })
+    const params = {
+      session: session.id,
+      expectedIncarnation: identity.processIncarnation,
+      operationId: 'pointer-op-1',
+      text: 'Run `quirky orchestration check`.'
+    }
+
+    const first = call(client, 'quirky.session/pointer', params)
+    await waitFor(() => h.pty.inputs.some((input) => input.sessionId === session.id))
+    const replay = call(client, 'quirky.session/pointer', params)
+    const [result, repeated] = await Promise.all([first, replay])
+
+    expect(repeated).toEqual(result)
+    expect(result).toEqual({
+      operationId: params.operationId,
+      result: { status: 'submitted', transport: 'terminal_enter' }
+    })
+    expect(h.pty.inputs.filter((input) => input.sessionId === session.id).map((input) => input.text)).toHaveLength(2)
+    await expect(
+      call(client, 'quirky.session/pointer', { ...params, text: 'different command' })
+    ).rejects.toMatchObject({ code: RpcErrorCode.Conflict })
+  })
+
+  test('singleflights distinct pointer operations for the exact recipient', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'claude' })
+    setPointerState('idle')
+    const identity = await call(client, 'quirky.session/identity', { session: session.id })
+    const first = call(client, 'quirky.session/pointer', {
+      session: session.id,
+      expectedIncarnation: identity.processIncarnation,
+      operationId: 'flight-one',
+      text: 'first'
+    })
+    await waitFor(() => h.pty.inputs.some((input) => input.sessionId === session.id))
+    const second = await call(client, 'quirky.session/pointer', {
+      session: session.id,
+      expectedIncarnation: identity.processIncarnation,
+      operationId: 'flight-two',
+      text: 'second'
+    })
+    expect(second).toEqual({
+      operationId: 'flight-two',
+      result: { status: 'deferred', reason: 'flight_active' }
+    })
+    await first
+    expect(h.pty.inputs.filter((input) => input.sessionId === session.id)).toHaveLength(2)
+  })
+
+  test('allows a live working agent to take the pointer at submit time', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'claude' })
+    setPointerState('idle')
+    const identity = await call(client, 'quirky.session/identity', { session: session.id })
+    const pointer = call(client, 'quirky.session/pointer', {
+      session: session.id,
+      expectedIncarnation: identity.processIncarnation,
+      operationId: 'working-submit-op',
+      text: 'check'
+    })
+    await waitFor(() => h.pty.inputs.some((input) => input.sessionId === session.id))
+    setPointerState('working')
+
+    expect(await pointer).toEqual({
+      operationId: 'working-submit-op',
+      result: { status: 'submitted', transport: 'terminal_enter' }
+    })
+    expect(h.pty.inputs.filter((input) => input.sessionId === session.id).map((input) => input.text).at(-1)).toBe('\r')
+  })
+
+  test('does not retype a pointer after post-write submission becomes uncertain', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'claude' })
+    setPointerState('idle')
+    const identity = await call(client, 'quirky.session/identity', { session: session.id })
+    const params = {
+      session: session.id,
+      expectedIncarnation: identity.processIncarnation,
+      operationId: 'post-write-unknown-op',
+      text: 'check'
+    }
+    const pointer = call(client, 'quirky.session/pointer', params)
+    await waitFor(() => h.pty.inputs.some((input) => input.sessionId === session.id))
+    setPointerState('blocked')
+
+    const uncertain = {
+      operationId: params.operationId,
+      result: { status: 'outcome_unknown', attemptedPhase: 'write_attempted', retryEnter: false }
+    }
+    expect(await pointer).toEqual(uncertain)
+    expect(await call(client, 'quirky.session/pointer', params)).toEqual(uncertain)
+    expect(h.pty.inputs.filter((input) => input.sessionId === session.id)).toHaveLength(1)
+  })
+
+  test('does not write while busy, non-quiescent, blocked or changed', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'claude' })
+    const identity = await call(client, 'quirky.session/identity', { session: session.id })
+    setPointerState('working')
+    const busy = await call(client, 'quirky.session/pointer', {
+      session: session.id,
+      expectedIncarnation: identity.processIncarnation,
+      operationId: 'busy-op',
+      text: 'check'
+    })
+    expect(busy).toEqual({
+      operationId: 'busy-op',
+      result: { status: 'deferred', reason: 'not_idle' }
+    })
+    expect(h.pty.inputs).toEqual([])
+    setPointerState('idle')
+    setPointerQuiet(false)
+    const unsettled = await call(client, 'quirky.session/pointer', {
+      session: session.id,
+      expectedIncarnation: identity.processIncarnation,
+      operationId: 'quiet-op',
+      text: 'check'
+    })
+    expect(unsettled).toEqual({
+      operationId: 'quiet-op',
+      result: { status: 'deferred', reason: 'not_quiescent' }
+    })
+    expect(h.pty.inputs).toEqual([])
+    setPointerQuiet(true)
+    setPointerState('blocked')
+    const blocked = await call(client, 'quirky.session/pointer', {
+      session: session.id,
+      expectedIncarnation: identity.processIncarnation,
+      operationId: 'blocked-op',
+      text: 'check'
+    })
+    expect(blocked).toEqual({
+      operationId: 'blocked-op',
+      result: { status: 'deferred', reason: 'blocked_dialog' }
+    })
+    expect(h.pty.inputs).toEqual([])
+
+    setPointerState('idle')
+    const changed = await call(client, 'quirky.session/pointer', {
+      session: session.id,
+      expectedIncarnation: 'replaced-process',
+      operationId: 'changed-op',
+      text: 'check'
+    })
+    expect(changed).toEqual({
+      operationId: 'changed-op',
+      result: { status: 'released', reason: 'recipient_changed' }
+    })
+    expect(h.pty.inputs).toEqual([])
+  })
+
+  test('reserves a structured pointer until its live lease is idle', async () => {
+    const session = (await call(client, 'quirky.structured/pointerSession', {
+      worktree: 'id:wt_main',
+      status: 'working'
+    })) as Session
+    const identity = await call(client, 'quirky.session/identity', { session: session.id })
+    const params = {
+      session: session.id,
+      expectedIncarnation: identity.processIncarnation,
+      operationId: 'structured-pointer-op',
+      text: 'check'
+    }
+
+    const busy = await call(client, 'quirky.session/pointer', params)
+    expect(busy).toEqual({
+      operationId: params.operationId,
+      result: { status: 'deferred', reason: 'not_idle' }
+    })
+    expect(await call(client, 'quirky.structured/pointerSends')).toEqual([])
+
+    await call(client, 'quirky.session/setStatus', { session: session.id, status: 'waiting' })
+    const blocked = await call(client, 'quirky.session/pointer', params)
+    expect(blocked).toEqual({
+      operationId: params.operationId,
+      result: { status: 'deferred', reason: 'blocked_dialog' }
+    })
+    expect(await call(client, 'quirky.structured/pointerSends')).toEqual([])
+
+    await call(client, 'quirky.session/setStatus', { session: session.id, status: 'running' })
+    const submitted = await call(client, 'quirky.session/pointer', params)
+    expect(submitted).toEqual({
+      operationId: params.operationId,
+      result: { status: 'submitted', transport: 'structured_session' }
+    })
+    expect(await call(client, 'quirky.structured/pointerSends')).toEqual([
+      expect.objectContaining({
+        session: session.id,
+        text: params.text,
+        operationId: params.operationId,
+        expectedIncarnation: identity.processIncarnation
+      })
+    ])
+    expect(await call(client, 'quirky.session/pointer', params)).toEqual(submitted)
+    expect(await call(client, 'quirky.structured/pointerSends')).toHaveLength(1)
+
+    expect(
+      await call(client, 'quirky.session/close', { session: session.id, expectedIncarnation: identity.processIncarnation })
+    ).toEqual({
+      ok: true,
+      closed: true,
+      sessionId: session.id,
+      processIncarnation: identity.processIncarnation
+    })
+  })
+
+  test('does not resend a deferred structured worker-start operation after idle', async () => {
+    const session = (await call(client, 'quirky.structured/pointerSession', {
+      worktree: 'id:wt_main',
+      status: 'working'
+    })) as Session
+    const identity = await call(client, 'quirky.session/identity', { session: session.id })
+    const params = {
+      session: session.id,
+      expectedIncarnation: identity.processIncarnation,
+      operationId: 'structured-deferred-worker-start',
+      text: 'initial task prompt',
+      purpose: 'worker_start'
+    }
+
+    const deferred = await call(client, 'quirky.session/pointer', params)
+    expect(deferred).toEqual({
+      operationId: params.operationId,
+      result: { status: 'deferred', reason: 'not_idle' }
+    })
+    await call(client, 'quirky.session/setStatus', { session: session.id, status: 'running' })
+    expect(await call(client, 'quirky.session/pointer', params)).toEqual(deferred)
+    expect(await call(client, 'quirky.structured/pointerSends')).toEqual([])
+    await call(client, 'quirky.session/close', {
+      session: session.id,
+      expectedIncarnation: identity.processIncarnation
+    })
+  })
+
+  test('sends Cursor mailbox pointer text without Enter and fences purpose reuse', async () => {
+    fakeAgents().pick = 'cursor'
+    const session = await createSession(client, { worktree: 'id:wt_main' })
+    setPointerState('idle')
+    const identity = await call(client, 'quirky.session/identity', { session: session.id })
+
+    const params = {
+      session: session.id,
+      expectedIncarnation: identity.processIncarnation,
+      operationId: 'cursor-op',
+      text: 'Run `quirky orchestration check`.'
+    }
+    const result = await call(client, 'quirky.session/pointer', params)
+
+    expect(result).toEqual({
+      operationId: params.operationId,
+      result: { status: 'text_only', reason: 'cursor_no_auto_enter' }
+    })
+    expect(h.pty.inputs.filter((input) => input.sessionId === session.id)).toHaveLength(1)
+    expect(h.pty.inputs.find((input) => input.sessionId === session.id)!.text).not.toContain('\r')
+    await expect(
+      call(client, 'quirky.session/pointer', { ...params, purpose: 'worker_start' })
+    ).rejects.toMatchObject({ code: RpcErrorCode.Conflict })
+  })
+
+  test('submits Cursor worker-start prompts with Enter', async () => {
+    fakeAgents().pick = 'cursor'
+    const session = await createSession(client, { worktree: 'id:wt_main' })
+    setPointerState('idle')
+    const identity = await call(client, 'quirky.session/identity', { session: session.id })
+
+    const result = await call(client, 'quirky.session/pointer', {
+      session: session.id,
+      expectedIncarnation: identity.processIncarnation,
+      operationId: 'cursor-worker-start-op',
+      text: 'start this worker',
+      purpose: 'worker_start'
+    })
+
+    expect(result).toEqual({
+      operationId: 'cursor-worker-start-op',
+      result: { status: 'submitted', transport: 'terminal_enter' }
+    })
+    const writes = h.pty.inputs.filter((input) => input.sessionId === session.id).map((input) => input.text)
+    expect(writes).toHaveLength(2)
+    expect(writes[1]).toBe('\r')
+  })
+  test('transports a maximum worker spec with preamble overhead without truncation', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'claude' })
+    setPointerState('idle')
+    const identity = await call(client, 'quirky.session/identity', { session: session.id })
+    const text = `Worker preamble:\n${'x'.repeat(1_214_464)}`
+
+    const result = await call(client, 'quirky.session/pointer', {
+      session: session.id,
+      expectedIncarnation: identity.processIncarnation,
+      operationId: 'large-worker-start-op',
+      text,
+      purpose: 'worker_start'
+    })
+
+    expect(result).toEqual({
+      operationId: 'large-worker-start-op',
+      result: { status: 'submitted', transport: 'terminal_enter' }
+    })
+    const writes = h.pty.inputs.filter((input) => input.sessionId === session.id).map((input) => input.text)
+    expect(writes[0]?.length).toBe(text.length + 12)
+    expect(writes[0]?.startsWith('\u001b[200~')).toBe(true)
+    expect(writes[0]?.endsWith('\u001b[201~')).toBe(true)
+    expect(writes[1]).toBe('\r')
+  })
+
+  test('does not replay a deferred worker-start operation after the recipient goes idle', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'claude' })
+    const identity = await call(client, 'quirky.session/identity', { session: session.id })
+    const params = {
+      session: session.id,
+      expectedIncarnation: identity.processIncarnation,
+      operationId: 'deferred-worker-start-op',
+      text: 'initial task prompt',
+      purpose: 'worker_start'
+    }
+    setPointerState('working')
+    const deferred = await call(client, 'quirky.session/pointer', params)
+    expect(deferred).toEqual({
+      operationId: params.operationId,
+      result: { status: 'deferred', reason: 'not_idle' }
+    })
+
+    setPointerState('idle')
+    expect(await call(client, 'quirky.session/pointer', params)).toEqual(deferred)
+    expect(h.pty.inputs).toEqual([])
+  })
+  test('closes only the expected live process incarnation', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'shell' })
+    const identity = await call(client, 'quirky.session/identity', { session: session.id })
+
+    const stale = await call(client, 'quirky.session/close', {
+      session: session.id,
+      expectedIncarnation: 'replaced-process'
+    })
+    expect(stale).toEqual({ ok: false, reason: 'recipient_changed' })
+    expect(await call(client, 'quirky.session/get', { session: session.id })).toMatchObject({ id: session.id })
+    expect(h.pty.requests.some((request) => request.type === 'forget' && request.sessionId === session.id)).toBe(false)
+
+    const closed = await call(client, 'quirky.session/close', {
+      session: session.id,
+      expectedIncarnation: identity.processIncarnation
+    })
+    expect(closed).toEqual({
+      ok: true,
+      closed: true,
+      sessionId: session.id,
+      processIncarnation: identity.processIncarnation
+    })
+    expect(await code(call(client, 'quirky.session/get', { session: session.id }))).toBe(RpcErrorCode.NotFound)
+  })
+
+  test('does not repeat Enter after a persisted uncertain write attempt', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_main', agent: 'claude' })
+    setPointerState('idle')
+    const identity = await call(client, 'quirky.session/identity', { session: session.id })
+    const params = {
+      session: session.id,
+      expectedIncarnation: identity.processIncarnation,
+      operationId: 'uncertain-op',
+      text: 'check'
+    }
+    await call(client, 'quirky.session/pointer', params)
+    const writes = h.pty.inputs.filter((input) => input.sessionId === session.id).map((input) => input.text)
+
+    const db = new Database(join(h.home, 'plugin-data', 'quirky.session', 'store.db'))
+    try {
+      db.query(
+        "UPDATE session_pointer_operations SET phase = 'write_attempted', result_json = NULL WHERE operation_id = ?"
+      ).run(params.operationId)
+    } finally {
+      db.close()
+    }
+
+    const retried = await call(client, 'quirky.session/pointer', params)
+    expect(retried).toEqual({
+      operationId: params.operationId,
+      result: { status: 'outcome_unknown', attemptedPhase: 'write_attempted', retryEnter: false }
+    })
+    expect(h.pty.inputs.filter((input) => input.sessionId === session.id).map((input) => input.text)).toEqual(writes)
+  })
+})
 describe('quirky.session/create', () => {
   test('starts a shell with the documented env and emits changed', async () => {
     const session = await createSession(client, { worktree: 'id:wt_main', agent: 'shell', cols: 100, rows: 30 })

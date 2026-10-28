@@ -34,6 +34,7 @@ export type Methods = {
       name?: string
       protocolVersion: number
       token?: string
+      sessionToken?: string
       cwd?: string
       sessionId?: string
       worktreeId?: string

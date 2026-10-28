@@ -10,6 +10,8 @@ export type ClientConn = {
   transport: 'websocket' | 'socket'
   cwd?: string
   sessionId?: string
+  /** Secret received in `client.hello`; never exposed to a plugin caller or diagnostic. */
+  sessionToken?: string
   worktreeId?: string
   /** Epoch milliseconds of the last `ui.window.focused` with `focused: true`. */
   focusedAt?: number
