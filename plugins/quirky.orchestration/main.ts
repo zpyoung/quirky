@@ -124,9 +124,10 @@ export async function activate(context: PluginContext): Promise<void> {
     activeFederation = engine
     activeMail = mail
   } catch (error) {
+    const mailDisposal = mail?.dispose().catch((cleanupError) => context.log(`activation cleanup failed: ${String(cleanupError)}`))
     try { await engine?.dispose() } catch (cleanupError) { context.log(`activation cleanup failed: ${String(cleanupError)}`) }
     try { await peers.dispose() } catch (cleanupError) { context.log(`activation cleanup failed: ${String(cleanupError)}`) }
-    try { await mail?.dispose() } catch (cleanupError) { context.log(`activation cleanup failed: ${String(cleanupError)}`) }
+    await mailDisposal
     try { await workers?.dispose() } catch (cleanupError) { context.log(`activation cleanup failed: ${String(cleanupError)}`) }
     try { await service.dispose() } catch (cleanupError) { context.log(`activation cleanup failed: ${String(cleanupError)}`) }
     throw error
@@ -144,9 +145,10 @@ export async function deactivate(): Promise<void> {
   activePeers = undefined
   activeFederation = undefined
   activeMail = undefined
+  const mailDisposal = mail?.dispose().catch((error) => service?.core.context.log(`deactivation cleanup failed: ${String(error)}`))
   try { await engine?.dispose() } catch (error) { service?.core.context.log(`deactivation cleanup failed: ${String(error)}`) }
   try { await peers?.dispose() } catch (error) { service?.core.context.log(`deactivation cleanup failed: ${String(error)}`) }
-  try { await mail?.dispose() } catch (error) { service?.core.context.log(`deactivation cleanup failed: ${String(error)}`) }
+  await mailDisposal
   try { await workers?.dispose() } catch (error) { service?.core.context.log(`deactivation cleanup failed: ${String(error)}`) }
   try { await service?.dispose() } catch (error) { service?.core.context.log(`deactivation cleanup failed: ${String(error)}`) }
 }
