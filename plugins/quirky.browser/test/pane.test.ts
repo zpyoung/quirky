@@ -257,7 +257,18 @@ test('Watch reload and hard reload navigate the bound page while preserving its 
       const page = await createAgentPage(h, worktree, `${fixture.url}reload`)
       const pane = await call(h, 'paneOpen', { worktree: `id:${worktree}`, mode: 'watch', page: page.browserPageId }) as { id: string }
       const watch = await call(h, 'paneWatch', { pane: pane.id }) as { watchId: string }
-      await waitFor(() => events.map(paneFrame).find((frame) => frame?.watchId === watch.watchId))
+      let acknowledgedSequence = 0
+      const acknowledgeNextFrame = async () => {
+        const frame = await waitFor(() => events.map(paneFrame).find((candidate) =>
+          candidate?.watchId === watch.watchId &&
+          typeof candidate.sequence === 'number' &&
+          candidate.sequence > acknowledgedSequence
+        ))
+        const sequence = frame.sequence as number
+        await call(h, 'paneFrameAck', { pane: pane.id, watchId: watch.watchId, sequence })
+        acknowledgedSequence = sequence
+      }
+      await acknowledgeNextFrame()
 
       expect(fixture.reloadRequestCount()).toBe(1)
       expect(await call(h, 'eval', {
@@ -271,12 +282,15 @@ test('Watch reload and hard reload navigate the bound page while preserving its 
         page: page.browserPageId,
         expression: 'document.querySelector("#request").textContent'
       })).toEqual({ value: '2' })
-      await call(h, 'click', { page: page.browserPageId, element: '#text' })
+      await acknowledgeNextFrame()
+      await call(h, 'paneInput', { pane: pane.id, kind: 'mouse', type: 'mousePressed', x: 45, y: 16, button: 'left' })
+      await call(h, 'paneInput', { pane: pane.id, kind: 'mouse', type: 'mouseReleased', x: 45, y: 16, button: 'left' })
       await call(h, 'paneInput', { pane: pane.id, kind: 'text', text: 'after reload' })
       expect(await call(h, 'eval', {
         page: page.browserPageId,
         expression: 'document.querySelector("#text").value'
       })).toEqual({ value: 'after reload' })
+      await acknowledgeNextFrame()
 
       await call(h, 'paneControl', { pane: pane.id, action: 'hardReload' })
       expect(fixture.reloadRequestCount()).toBe(3)
@@ -284,12 +298,15 @@ test('Watch reload and hard reload navigate the bound page while preserving its 
         page: page.browserPageId,
         expression: 'document.querySelector("#request").textContent'
       })).toEqual({ value: '3' })
-      await call(h, 'click', { page: page.browserPageId, element: '#text' })
+      await acknowledgeNextFrame()
+      await call(h, 'paneInput', { pane: pane.id, kind: 'mouse', type: 'mousePressed', x: 45, y: 16, button: 'left' })
+      await call(h, 'paneInput', { pane: pane.id, kind: 'mouse', type: 'mouseReleased', x: 45, y: 16, button: 'left' })
       await call(h, 'paneInput', { pane: pane.id, kind: 'text', text: 'after hard reload' })
       expect(await call(h, 'eval', {
         page: page.browserPageId,
         expression: 'document.querySelector("#text").value'
       })).toEqual({ value: 'after hard reload' })
+      await acknowledgeNextFrame()
     } finally {
       unsubscribe()
     }

@@ -305,5 +305,38 @@
 - **Revisit if:** the public SDK adds snapshot support or actual bounded image delivery fails.
 - **Source:** locked by docs/architecture.md and browser.md; assumed — autonomous image budget
 
+## D28: Distinguish clipboard-only success from a changed screenshot
+- **Question:** Did the second coordinate pick lose input?
+- **Options:** change rearm behavior from guard NO_EFFECT alone; inspect the missing clipboard outcome through visible UI.
+- **Chose:** inspect the clipboard outcome before changing code.
+- **Why:** successful auto-rearm clears hover and may display the identical Copied message.
+- **Evidence:** Run20261028T070420-ee9d obs33 visibly pasted `<p id="question">Why is this panel so wide?</p>` after the second pick. Its clipboard changed correctly; the guard's NO_EFFECT classification remains recorded. RepeatedGrabRepair returned no changes.
+- **Reversibility:** easy
+- **Confidence:** high, actual visible paste
+- **Revisit if:** a later visible paste retains the earlier target.
+- **Source:** assumed — autonomous
+
+## D29: Repair the actual merged Chrome gate failures
+- **Question:** Why did the affected gate fail its pane file while144remote and the other4Mac files passed?
+- **Options:** loosen Watch/timeout semantics; repair the fixture's controller usage and duplicate request continuation.
+- **Chose:** keep an acknowledged Watch lease and use paneInput throughout reload input; remove only the duplicate Fetch.requestPaused handler introduced by the merge.
+- **Why:** the unacknowledged fixture mixed general automation click with its Watch controller. Duplicate listeners also tried to continue the same request; a duplicate-resume rejection could end Watch and discard its auth handler.
+- **Evidence:** Initial and configured isolated retry each had2pane failures. After the fixes, pane.test.ts passed4tests/78expectations; no processes matched its four fresh homes. Against canonical1b6153b7, Fetch handling now matches; the remaining driver delta is the required new-loader/load-completion reload repair, still bounded30s.
+- **Reversibility:** medium
+- **Confidence:** high, named-failure recovery
+- **Revisit if:** exact Watch input or auth navigation fails on the final integration tree.
+- **Source:** assumed — autonomous; canonical sa-browser-pane lifecycle contract retained
+
+## D30: Preserve toolbar focus and own non-passive wheel input
+- **Question:** What remained after the final bounded UI campaign?
+- **Options:** suppress console warnings/force asynchronous focus; preserve focused arming controls and install the correct native wheel listener.
+- **Chose:** retain focusable Grab/Annotate controls while arming, with pending aria semantics and authoritative pending-click guards. Use one lifecycle-cleaned native non-passive Watch wheel listener instead of React's passive route.
+- **Why:** disabling the initiating focused control risks losing the pane's shortcut owner; forcing focus after await could steal a user's newer focus. A passive listener cannot honor preventDefault.
+- **Evidence:** Run20261028T070420-ee9d passed stale-target refusal, second-copy visible paste, immediate S, context-menu PNG and Escape. Fresh toolbar S lacked feedback; C feedback followed an intervening Dismiss click. Its one-pixel scroll emitted the passive-listener error at obs71. Ordinary selected-text copy stopped at the50-action goal cap (67/120run actions), a tool limit rather than a proved app defect.
+- **Reversibility:** easy
+- **Confidence:** source-backed; repaired wheel/toolbar paths require the final bounded UI rerun.
+- **Revisit if:** pending cancellation steals focus, wheel leaks to the host, or toolbar S remains silent.
+- **Source:** assumed — autonomous
+
 ## Progress
 Authoritative pane/helper landed and build/roadmap merged; incoming locks inspected. bg43 merged typecheck and latest20-module UI build passed. Old daemon/PTY fixtures stopped; current owned BrowserDesignFinalRuntime22297 uses fresh /tmp/qdesign-Lqhva8 with only recording fake OMP on runtimePATH. Guarded final regression20261028T070420-ee9d proved first Grab copy/full frame and actual stale-target Send refusal with note retained. A second copy produced identical visible Copied state and then no-hover feedback; its clipboard outcome is under diagnosis, since successful automatic rearm also clears hover. RepeatedGrabRepair owns isolated diagnosis; no speculative repair. Run2's three passing flows and partials remain recorded. Final affected suite/scripts/types/build must bind a clean committed tree, then queue-controlled land. Unstarted review skipped under D20; no newqueue. Stop owned runtime and archive/remove scratch after complete verification/land.

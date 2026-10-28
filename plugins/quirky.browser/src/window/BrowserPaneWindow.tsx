@@ -6,8 +6,7 @@ import {
   type ClipboardEvent as ReactClipboardEvent,
   type CompositionEvent as ReactCompositionEvent,
   type KeyboardEvent as ReactKeyboardEvent,
-  type PointerEvent as ReactPointerEvent,
-  type WheelEvent as ReactWheelEvent
+  type PointerEvent as ReactPointerEvent
 } from 'react'
 import type { NativeBrowserHandle, NativeBrowserRequest, NativeBrowserState, UiPluginContext } from '@quirky/protocol'
 import type { PaneCommand, PaneDownload, PaneFrame, PanePrompt, PaneState, PaneTab, PaneViewport } from '../pane-contract'
@@ -672,13 +671,32 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
       if (mountedRef.current) setWatchError(errorText(error))
     })
   }, [context, pane, watchError])
+  const sendInputRef = useRef(sendInput)
+  sendInputRef.current = sendInput
 
-  const pointForEvent = (clientX: number, clientY: number) => {
+  const pointForEvent = useCallback((clientX: number, clientY: number) => {
     const host = frameHostRef.current
-    if (!host || !frame) return null
+    const currentFrame = frameRef.current
+    if (!host || !currentFrame) return null
     const rect = host.getBoundingClientRect()
-    return pointerToFramePoint(clientX, clientY, rect, frame.width, frame.height)
-  }
+    return pointerToFramePoint(clientX, clientY, rect, currentFrame.width, currentFrame.height)
+  }, [])
+
+  useEffect(() => {
+    const host = frameHostRef.current
+    if (!host) return
+    const handleWheel = (event: WheelEvent) => {
+      if (paneRef.current?.mode !== 'watch') return
+      const point = pointForEvent(event.clientX, event.clientY)
+      if (!point) return
+      event.preventDefault()
+      const currentFrame = frameRef.current
+      const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? currentFrame?.height ?? 1 : 1
+      sendInputRef.current({ kind: 'wheel', ...point, deltaX: event.deltaX * unit, deltaY: event.deltaY * unit, modifiers: modifiers(event) })
+    }
+    host.addEventListener('wheel', handleWheel, { passive: false })
+    return () => host.removeEventListener('wheel', handleWheel)
+  }, [pointForEvent])
 
   const mouseEvent = (
     event: ReactPointerEvent<HTMLDivElement>,
@@ -724,15 +742,6 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
     if (now - lastPointerMoveRef.current < 16) return
     lastPointerMoveRef.current = now
     mouseEvent(event, 'mouseMoved', point)
-  }
-
-  const onWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
-    if (pane?.mode !== 'watch') return
-    const point = pointForEvent(event.clientX, event.clientY)
-    if (!point) return
-    event.preventDefault()
-    const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? frame?.height ?? 1 : 1
-    sendInput({ kind: 'wheel', ...point, deltaX: event.deltaX * unit, deltaY: event.deltaY * unit, modifiers: modifiers(event) })
   }
 
   const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -1027,7 +1036,6 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
         onPointerDown={onPointerDown}
         onPointerUp={onPointerUp}
         onPointerMove={onPointerMove}
-        onWheel={onWheel}
         onKeyDown={onKeyDown}
         onKeyUp={onKeyUp}
         onCompositionEnd={onCompositionEnd}

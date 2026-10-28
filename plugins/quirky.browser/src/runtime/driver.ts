@@ -654,12 +654,6 @@ export class BrowserRuntime {
         })
         subscribePage('Page.javascriptDialogOpening', (event) => this.emitJavaScriptPrompt(state, event))
         subscribePage('Fetch.authRequired', (event) => this.emitAuthPrompt(state, event))
-        subscribePage('Fetch.requestPaused', (event) => {
-          const requestId = asString(event.params.requestId)
-          if (!requestId) return
-          void epoch.cdp.send('Fetch.continueRequest', { requestId }, sessionId, 5_000)
-            .catch(() => this.endPaneWatch(state, 'The Watch request transport was lost.'))
-        })
         subscribePage('Security.certificateError', (event) => this.emitCertificatePrompt(state, event))
         subscribePage('Page.windowOpen', (event) => this.emitExternalPrompt(state, event))
         subscribePage('Page.frameNavigated', (event) => {

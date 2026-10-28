@@ -311,6 +311,8 @@ export function DesignWindow({ context, pane, nativeHandle, pageHost, nativePage
   const interactionLocked = Boolean(draft || selectionMenu || targetsOpen)
   const drawingDisabled = pane?.mode === 'native' || !active || operationPending || interactionLocked
   const currentOperation = operation?.identity === currentIdentity ? operation : null
+  const grabDisabled = !active || interactionLocked || Boolean(currentOperation && currentOperation.mode !== 'grab')
+  const annotateDisabled = !active || interactionLocked || Boolean(currentOperation && currentOperation.mode !== 'annotate')
   const notesAvailable = annotations.filter((annotation) => !heldIds.has(annotation.id))
   const geometryPayload = hoverPayload ?? annotations.find((annotation) => frameCurrent(annotation, pane?.url ?? ''))?.payload ?? null
   const pageGeometry = useMemo(() => {
@@ -1088,8 +1090,32 @@ export function DesignWindow({ context, pane, nativeHandle, pageHost, nativePage
   return <>
     <style>{styles}</style>
     <div className="qbp-design-toolbar" aria-label="Browser design tools">
-      <button type="button" aria-pressed={currentOperation?.mode === 'grab'} disabled={!active || operationPending || interactionLocked || Boolean(currentOperation && currentOperation.mode !== 'grab')} title="Grab page element (Mod+C)" onClick={() => currentOperation?.mode === 'grab' ? void cancelOperation() : void startOperation('grab')}>{operationPending ? 'Arming…' : 'Grab'}</button>
-      <button type="button" aria-pressed={currentOperation?.mode === 'annotate'} disabled={!active || operationPending || interactionLocked || Boolean(currentOperation && currentOperation.mode !== 'annotate')} title="Annotate page element (Mod+Shift+C)" onClick={() => currentOperation?.mode === 'annotate' ? void cancelOperation() : void startOperation('annotate')}>{operationPending ? 'Arming…' : 'Annotate'}{annotations.length ? ` (${annotations.length})` : ''}</button>
+      <button
+        type="button"
+        aria-pressed={currentOperation?.mode === 'grab'}
+        aria-disabled={grabDisabled || operationPending}
+        aria-busy={operationPending}
+        disabled={grabDisabled}
+        title="Grab page element (Mod+C)"
+        onClick={() => {
+          if (armPendingRef.current) return
+          if (currentOperation?.mode === 'grab') void cancelOperation()
+          else void startOperation('grab')
+        }}
+      >{operationPending ? 'Arming…' : 'Grab'}</button>
+      <button
+        type="button"
+        aria-pressed={currentOperation?.mode === 'annotate'}
+        aria-disabled={annotateDisabled || operationPending}
+        aria-busy={operationPending}
+        disabled={annotateDisabled}
+        title="Annotate page element (Mod+Shift+C)"
+        onClick={() => {
+          if (armPendingRef.current) return
+          if (currentOperation?.mode === 'annotate') void cancelOperation()
+          else void startOperation('annotate')
+        }}
+      >{operationPending ? 'Arming…' : 'Annotate'}{annotations.length ? ` (${annotations.length})` : ''}</button>
       <button type="button" aria-pressed={Boolean(markupScreenshot)} disabled={drawingDisabled} title={pane?.mode === 'native' ? 'Native Draw is unavailable: the pinned public SDK has no supported page snapshot capability.' : 'Draw on screenshot'} onClick={() => void beginDraw()}>Draw</button>
       {pane?.mode === 'native' ? <span className="qbp-design-hint">Native cropped screenshots and Draw are unavailable: the pinned public SDK has no supported page snapshot capability.</span> : null}
       {currentOperation ? <span className="qbp-design-hint" role="status">{currentOperation.mode === 'grab' ? grabHint : 'Click an element to annotate. Esc cancels.'}</span> : null}
