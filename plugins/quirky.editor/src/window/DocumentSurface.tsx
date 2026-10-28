@@ -130,6 +130,45 @@ function mergeSurfaceBuffer(
   }
   return merged
 }
+type DraftAcknowledgement = { contentRevision: number; draft: string | null }
+
+export function classifyDraftUpdate(
+  observation: DraftAcknowledgement,
+  acknowledged: ReadonlyMap<number, string | null>,
+  pending: readonly DraftAcknowledgement[]
+): 'acknowledged' | 'pending' | 'competing' {
+  if (acknowledged.has(observation.contentRevision) && acknowledged.get(observation.contentRevision) === observation.draft) {
+    return 'acknowledged'
+  }
+  if (pending.some((write) => write.contentRevision === observation.contentRevision && write.draft === observation.draft)) {
+    return 'pending'
+  }
+  return 'competing'
+}
+type AcknowledgedDocumentDraft = { content: string; draft: string | null }
+
+export function expectedDraftAcknowledgement(
+  content: string,
+  acknowledged: AcknowledgedDocumentDraft,
+  contentRevision: number
+): DraftAcknowledgement {
+  return {
+    contentRevision: contentRevision + Number((acknowledged.draft ?? acknowledged.content) !== content),
+    draft: content === acknowledged.content ? null : content
+  }
+}
+
+function rememberDraftAcknowledgement(
+  acknowledged: Map<number, string | null>,
+  observation: DraftAcknowledgement
+): void {
+  acknowledged.set(observation.contentRevision, observation.draft)
+  while (acknowledged.size > 64) {
+    const oldest = acknowledged.keys().next().value
+    if (oldest === undefined) break
+    acknowledged.delete(oldest)
+  }
+}
 
 
 async function uploadFiles(context: UiPluginContext, worktree: string, destination: string, files: File[]): Promise<string[]> {
@@ -215,8 +254,11 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
   }, [])
   const draftQueue = useRef<Promise<void>>(Promise.resolve())
   const ackRevision = useRef(info?.contentRevision ?? 0)
-  const pendingDrafts = useRef(new Set<string>())
-  const blockedDraft = useRef(false)
+  const acknowledgedBuffer = useRef<AcknowledgedDocumentDraft | null>(null)
+  const pendingDrafts = useRef(new Map<number, DraftAcknowledgement>())
+  const ownDraftAcknowledgements = useRef(new Map<number, string | null>())
+  const pendingSaveAcknowledgement = useRef<DraftAcknowledgement | null>(null)
+  const draftWriteId = useRef(0)
   const undoReloadTimer = useRef<number | undefined>(undefined)
   const activeActions = useRef<ActiveActions>({
     flush: async () => {},
@@ -254,34 +296,37 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
   useEffect(() => {
     if (!buffer) return
     if (localTextRef.current === null) {
-      ackRevision.current = buffer.contentRevision
+      acknowledgedBuffer.current = { content: buffer.content, draft: buffer.draft }
+      ackRevision.current = Math.max(ackRevision.current, buffer.contentRevision)
       if (buffer.draft !== null) {
         localTextRef.current = buffer.draft
         setLocalText(buffer.draft)
       }
       return
     }
-    if (buffer.draft !== null && pendingDrafts.current.has(buffer.draft)) {
-      ackRevision.current = buffer.contentRevision
-      if (buffer.draft === localTextRef.current) setDraftConflict(null)
+    const observation = { contentRevision: buffer.contentRevision, draft: buffer.draft }
+    const pending = [...pendingDrafts.current.values()]
+    if (pendingSaveAcknowledgement.current !== null) pending.push(pendingSaveAcknowledgement.current)
+    const origin = classifyDraftUpdate(observation, ownDraftAcknowledgements.current, pending)
+    if (origin === 'pending') return
+    if (origin === 'acknowledged') {
+      ackRevision.current = Math.max(ackRevision.current, buffer.contentRevision)
+      if (buffer.draft === null && buffer.content === localTextRef.current) {
+        localTextRef.current = null
+        setLocalText(null)
+        pendingDrafts.current.clear()
+        pendingSaveAcknowledgement.current = null
+        blockedDraft.current = false
+        setDraftConflict(null)
+        return
+      }
+      if (buffer.draft === localTextRef.current) {
+        blockedDraft.current = false
+        setDraftConflict(null)
+      }
       return
     }
-    if (buffer.draft === localTextRef.current) {
-      ackRevision.current = buffer.contentRevision
-      setDraftConflict(null)
-      blockedDraft.current = false
-      return
-    }
-    if (buffer.contentRevision === ackRevision.current) return
-    if (buffer.draft === null && buffer.content === localTextRef.current) {
-      ackRevision.current = buffer.contentRevision
-      localTextRef.current = null
-      setLocalText(null)
-      pendingDrafts.current.clear()
-      blockedDraft.current = false
-      setDraftConflict(null)
-      return
-    }
+    if (buffer.contentRevision <= ackRevision.current) return
     blockedDraft.current = true
     setDraftConflict('A newer shared draft arrived. Your local text is preserved for comparison.')
   }, [buffer?.content, buffer?.contentRevision, buffer?.draft])
@@ -301,16 +346,39 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
   const submitDraft = useCallback((content: string) => {
     localTextRef.current = content
     setLocalText(content)
-    pendingDrafts.current.add(content)
+    const writeId = ++draftWriteId.current
     draftQueue.current = draftQueue.current.then(async () => {
-      if (blockedDraft.current) return
+      if (blockedDraft.current) {
+        pendingDrafts.current.delete(writeId)
+        return
+      }
+      const expectedRevision = ackRevision.current
+      const acknowledged = acknowledgedBuffer.current ?? {
+        content: bufferRef.current?.content ?? '',
+        draft: bufferRef.current?.draft ?? null
+      }
+      pendingDrafts.current.set(writeId, expectedDraftAcknowledgement(content, acknowledged, expectedRevision))
       try {
-        const updated = await writeDraft(context, input.bufferId, content, ackRevision.current)
-        pendingDrafts.current.delete(content)
-        ackRevision.current = updated.contentRevision
-        if (localTextRef.current === content) setDraftConflict(null)
-        const current = bufferRef.current
-        if (current) setBuffer(mergeSurfaceBuffer(current, updated, { content: current.content, draft: content }))
+        const updated = await writeDraft(context, input.bufferId, content, expectedRevision)
+        pendingDrafts.current.delete(writeId)
+        ackRevision.current = Math.max(ackRevision.current, updated.contentRevision)
+        const latestAcknowledged = acknowledgedBuffer.current ?? {
+          content: bufferRef.current?.content ?? '',
+          draft: bufferRef.current?.draft ?? null
+        }
+        const acceptedContent = typeof updated.content === 'string' ? updated.content : latestAcknowledged.content
+        const acceptedDraft = updated.draftLength === null ? null : content
+        rememberDraftAcknowledgement(ownDraftAcknowledgements.current, {
+          contentRevision: updated.contentRevision,
+          draft: acceptedDraft
+        })
+        acknowledgedBuffer.current = { content: acceptedContent, draft: acceptedDraft }
+        if (localTextRef.current === content) {
+          blockedDraft.current = false
+          setDraftConflict(null)
+        }
+        const latest = bufferRef.current
+        if (latest) setBuffer(mergeSurfaceBuffer(latest, updated, { content: latest.content, draft: acceptedDraft }))
         refresh()
       } catch (reason) {
         pendingDrafts.current.clear()
@@ -325,14 +393,32 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
     const result = await context.call('quirky.editor/read', { bufferId: input.bufferId, action: 'buffer' }) as ReadBufferResult
     if (!result.buffer) throw new Error('The latest shared buffer could not be read.')
     const updated = await writeDraft(context, input.bufferId, content, result.buffer.contentRevision)
-    ackRevision.current = updated.contentRevision
+    const latestAcknowledged = {
+      content: typeof result.buffer.content === 'string'
+        ? result.buffer.content
+        : bufferRef.current?.content ?? acknowledgedBuffer.current?.content ?? '',
+      draft: result.buffer.draftLength === null
+        ? null
+        : typeof result.buffer.draft === 'string'
+          ? result.buffer.draft
+          : bufferRef.current?.draft ?? acknowledgedBuffer.current?.draft ?? null
+    }
+    const acceptedContent = typeof updated.content === 'string' ? updated.content : latestAcknowledged.content
+    const acceptedDraft = updated.draftLength === null ? null : content
+    acknowledgedBuffer.current = { content: acceptedContent, draft: acceptedDraft }
+    rememberDraftAcknowledgement(ownDraftAcknowledgements.current, {
+      contentRevision: updated.contentRevision,
+      draft: acceptedDraft
+    })
+    ackRevision.current = Math.max(ackRevision.current, updated.contentRevision)
     pendingDrafts.current.clear()
+    pendingSaveAcknowledgement.current = null
     blockedDraft.current = false
     localTextRef.current = content
     setLocalText(content)
     setDraftConflict(null)
     const current = bufferRef.current
-    if (current) setBuffer(mergeSurfaceBuffer(current, updated, { content: current.content, draft: content }))
+    if (current) setBuffer(mergeSurfaceBuffer(current, updated, { content: acceptedContent, draft: acceptedDraft }))
   }, [context, input.bufferId])
 
   const save = useCallback(async (trigger: 'user' | 'overwrite' = 'user') => {
@@ -345,14 +431,37 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
       await flushDrafts()
     }
     const snapshot = localTextRef.current
-    const saved = await context.call('quirky.editor/save', { bufferId: input.bufferId, trigger }) as EditorBufferInfo
-    ackRevision.current = saved.contentRevision
     const current = bufferRef.current
+    const acknowledgedBefore = acknowledgedBuffer.current ?? {
+      content: current?.content ?? '',
+      draft: current?.draft ?? null
+    }
+    if (snapshot !== null && acknowledgedBefore.draft !== null) {
+      pendingSaveAcknowledgement.current = { contentRevision: ackRevision.current + 1, draft: null }
+    }
+    let saved: EditorBufferInfo
+    try {
+      saved = await context.call('quirky.editor/save', { bufferId: input.bufferId, trigger }) as EditorBufferInfo
+    } catch (reason) {
+      pendingSaveAcknowledgement.current = null
+      throw reason
+    }
+    const savedContent = typeof saved.content === 'string' ? saved.content : snapshot ?? acknowledgedBefore.content
+    const savedDraft = saved.draftLength === null
+      ? null
+      : typeof saved.draft === 'string'
+        ? saved.draft
+        : snapshot ?? acknowledgedBefore.draft
+    acknowledgedBuffer.current = { content: savedContent, draft: savedDraft }
+    rememberDraftAcknowledgement(ownDraftAcknowledgements.current, {
+      contentRevision: saved.contentRevision,
+      draft: savedDraft
+    })
+    pendingSaveAcknowledgement.current = null
+    ackRevision.current = Math.max(ackRevision.current, saved.contentRevision)
     if (current) {
-      const content = typeof saved.content === 'string' ? saved.content : snapshot ?? current.draft ?? current.content
-      const draft = saved.draftLength === null ? null : typeof saved.draft === 'string' ? saved.draft : current.draft
       const stableText = localTextRef.current === snapshot
-      setBuffer(mergeSurfaceBuffer(current, saved, { content, draft: stableText ? draft : current.draft }))
+      setBuffer(mergeSurfaceBuffer(current, saved, { content: savedContent, draft: stableText ? savedDraft : current.draft }))
     }
     if (localTextRef.current === snapshot && saved.draftLength === null) {
       localTextRef.current = null
@@ -388,6 +497,9 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
           setUndoReloadUntil(0)
         }, 8000)
       }
+      ackRevision.current = Math.max(ackRevision.current, updated.contentRevision)
+      acknowledgedBuffer.current = null
+      pendingSaveAcknowledgement.current = null
       localTextRef.current = null
       setLocalText(null)
       setBuffer(null)
@@ -399,9 +511,12 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
       if (undoReloadTimer.current !== undefined) window.clearTimeout(undoReloadTimer.current)
       undoReloadTimer.current = undefined
       setUndoReloadUntil(0)
-      localTextRef.current = typeof updated.draft === 'string' ? updated.draft : null
-      setLocalText(localTextRef.current)
+      localTextRef.current = null
+      setLocalText(null)
       setBuffer(null)
+      ackRevision.current = Math.max(ackRevision.current, updated.contentRevision)
+      acknowledgedBuffer.current = null
+      pendingSaveAcknowledgement.current = null
       blockedDraft.current = false
       pendingDrafts.current.clear()
       setDraftConflict(null)
@@ -638,6 +753,17 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
           preview: false,
           focus: true
         })
+      } else if (actualMode === 'preview' && buffer.kind === 'markdown') {
+        await flushActiveDocument()
+        const updated = await context.call('quirky.editor/view', {
+          bufferId: buffer.id,
+          ...(actualTabId === null ? {} : { tabId: actualTabId }),
+          action: 'returnToEdit',
+          patch: { mode }
+        }) as EditorBufferInfo
+        const current = bufferRef.current
+        if (current) setBuffer(mergeSurfaceBuffer(current, updated, { content: current.content, draft: current.draft }))
+        refresh()
       } else {
         const updated = await context.call('quirky.editor/view', {
           bufferId: buffer.id,
@@ -832,7 +958,7 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
               <button type="button" aria-pressed={actualMode !== 'source'} onClick={() => void openMode('rich')}>Preview</button>
             </div>
           )}
-          {!buffer.readOnly && <button type="button" onClick={saveButton} disabled={!buffer.dirty && !buffer.external}>Save</button>}
+          {!buffer.readOnly && <button type="button" onClick={saveButton} disabled={!buffer.untitled && !buffer.dirty && !buffer.external}>{buffer.untitled ? 'Save As…' : 'Save'}</button>}
           <button type="button" onClick={() => void pin()} aria-pressed={buffer.pinned} title={buffer.pinned ? 'Unpin tab' : 'Pin tab'}>{buffer.pinned ? 'Unpin' : 'Pin'}</button>
           <button type="button" onClick={() => context.togglePanel(EXPLORER_PANEL, true)}>Explorer</button>
           <button type="button" onClick={() => void sourceControl()}>Source Control</button>
