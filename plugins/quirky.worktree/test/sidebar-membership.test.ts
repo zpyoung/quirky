@@ -114,6 +114,22 @@ function expectStale(result: CreateGroupResult) {
 }
 
 describe('canonical worktree project-group membership', () => {
+  test('group membership changes presentation without moving Git or session ownership', async () => {
+    const { client, repo } = await startWithSessions()
+    const selected = await createWorktree(client, repo, 'same-owner')
+    const session = await call<{ id: string; worktreeId: string }>(client, 'quirky.session/create', {
+      worktree: `id:${selected.id}`,
+      agent: 'shell'
+    })
+    const group = (await call(client, 'quirky.repo/groupCreate', { name: 'Presentation only' })) as GroupWithParent
+
+    await call(client, 'quirky.worktree/set', { worktree: selected.id, projectGroupId: group.id })
+
+    expect(await worktreeById(client, selected.id)).toMatchObject({ id: selected.id, repoId: repo.id, projectGroupId: group.id })
+    expect((await call<{ id: string; worktreeId: string }[]>(client, 'quirky.session/list')).find((item) => item.id === session.id))
+      .toMatchObject({ id: session.id, worktreeId: selected.id })
+  })
+
   test('createGroup moves only the selected Git worktree and preserves canonical identity and lineage', async () => {
     const { client, repo } = await start()
     const parent = await createWorktree(client, repo, 'parent')
