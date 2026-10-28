@@ -345,7 +345,7 @@
       },
       {
         "id": "options",
-        "description": "The models and launch options offered by an agent on the exact selected provider host.",
+        "description": "The models and launch options on local, an exact paired peer for reads, or runtime:<saved owner selector>; owner-runtime results retain the exact runtime identity.",
         "readOnly": true,
         "params": {
           "type": "object",
@@ -354,7 +354,7 @@
               "type": "string",
               "description": "The agent ID."
             },
-            "host": { "type": "string", "description": "Exact provider host ID; omitted means local." },
+            "host": { "type": "string", "description": "local, an exact saved paired peer ID, or runtime:<saved owner selector>; omitted means local." },
             "expectedIncarnation": { "type": "string", "description": "Internal paired-peer target incarnation fence." }
           },
           "required": [
@@ -500,23 +500,13 @@
               ]
             }
           },
-          "required": [
-            "agent",
-            "host",
-            "label",
-            "supported",
-            "discoverable",
-            "models",
-            "unlisted",
-            "unlistedOptions",
-            "structured",
-            "extraArgs"
-          ]
+          "description": "Local or paired OptionsInfo, or {runtime, result} from an owner runtime.",
+          "additionalProperties": true
         }
       },
       {
         "id": "discoverModels",
-        "description": "Runs the provider-owned bounded model probe on local or one exact authenticated paired host. Only nonempty valid snapshots are authoritative.",
+        "description": "Runs the provider-owned bounded model probe on local, one exact read-only paired host, or runtime:<saved owner selector>. Only nonempty valid snapshots are authoritative; runtime results retain exact owner identity.",
         "readOnly": true,
         "params": {
           "type": "object",
@@ -527,7 +517,7 @@
             },
             "host": {
               "type": "string",
-              "description": "Exact provider host identity: local or a saved paired peer ID."
+              "description": "local, an exact paired peer ID, or runtime:<saved owner selector>."
             },
             "expectedIncarnation": { "type": "string", "description": "Internal paired-peer target incarnation fence." }
           },
@@ -617,16 +607,8 @@
               "type": "string"
             }
           },
-          "required": [
-            "agent",
-            "host",
-            "observedAt",
-            "status",
-            "authoritative",
-            "models",
-            "unlisted",
-            "unlistedOptions"
-          ]
+          "description": "A local or paired ModelDiscovery, or {runtime, result} from an owner runtime.",
+          "additionalProperties": true
         }
       },
 
@@ -838,7 +820,8 @@
             },
             "enabled": {
               "type": "boolean"
-            }
+            },
+            "host": { "type": "string", "description": "local or runtime:<saved owner selector>; omitted means local." }
           },
           "required": [
             "agent",
@@ -932,27 +915,8 @@
               ]
             }
           },
-          "required": [
-            "id",
-            "label",
-            "plugin",
-            "installed",
-            "enabled",
-            "isDefault",
-            "promptMode",
-            "resumable",
-            "canFork",
-            "homepage",
-            "install",
-            "command",
-            "commandOverridden",
-            "args",
-            "argsOverridden",
-            "env",
-            "envOverridden",
-            "showEnv",
-            "permissions"
-          ]
+          "description": "Local AgentInfo or {runtime, result} from an owner runtime.",
+          "additionalProperties": true
         }
       },
       {
@@ -964,7 +928,8 @@
             "agent": {
               "type": "string",
               "description": "auto, shell or an agent ID."
-            }
+            },
+            "host": { "type": "string", "description": "local or runtime:<saved owner selector>; omitted means local." }
           },
           "required": [
             "agent"
@@ -1151,17 +1116,13 @@
               }
             }
           },
-          "required": [
-            "defaultAgent",
-            "workspaceTrust",
-            "permissions",
-            "agents"
-          ]
+          "description": "Local AgentListing or {runtime, result} from an owner runtime.",
+          "additionalProperties": true
         }
       },
       {
         "id": "configure",
-        "description": "Saves an agent's command, arguments or environment, or removes those overrides.",
+        "description": "Saves an agent's command, arguments or environment locally or through runtime:<saved owner selector>, or removes those overrides.",
         "params": {
           "type": "object",
           "properties": {
@@ -1193,7 +1154,8 @@
                 ]
               },
               "description": "Overrides to remove."
-            }
+            },
+            "host": { "type": "string", "description": "local or runtime:<saved owner selector>; omitted means local." }
           },
           "required": [
             "agent"
@@ -1286,32 +1248,13 @@
               ]
             }
           },
-          "required": [
-            "id",
-            "label",
-            "plugin",
-            "installed",
-            "enabled",
-            "isDefault",
-            "promptMode",
-            "resumable",
-            "canFork",
-            "homepage",
-            "install",
-            "command",
-            "commandOverridden",
-            "args",
-            "argsOverridden",
-            "env",
-            "envOverridden",
-            "showEnv",
-            "permissions"
-          ]
+          "description": "Local AgentInfo or {runtime, result} from an owner runtime.",
+          "additionalProperties": true
         }
       },
       {
         "id": "setPermissions",
-        "description": "Sets the permission mode of one agent or of every agent that has one.",
+        "description": "Sets the permission mode of one agent or of every agent that has one, locally or through runtime:<saved owner selector>.",
         "params": {
           "type": "object",
           "properties": {
@@ -1330,7 +1273,8 @@
             "replaceCustom": {
               "type": "boolean",
               "description": "Replace custom arguments on a single agent."
-            }
+            },
+            "host": { "type": "string", "description": "local or runtime:<saved owner selector>; omitted means local." }
           },
           "required": [
             "mode"
@@ -1356,10 +1300,8 @@
               "description": "Agents whose stored arguments or environment changed."
             }
           },
-          "required": [
-            "summary",
-            "changed"
-          ]
+          "description": "Local permission result or {runtime, result} from an owner runtime.",
+          "additionalProperties": true
         }
       },
       {
@@ -1469,7 +1411,7 @@
               "type": "string",
               "description": "The agent ID."
             },
-            "host": { "type": "string", "description": "Exact provider host ID; omitted means local." },
+            "host": { "type": "string", "description": "local, an exact saved paired peer ID for reads, or runtime:<saved owner selector>; omitted means local." },
             "expectedIncarnation": { "type": "string", "description": "Internal paired-peer target incarnation fence." },
             "model": {
               "type": "string",
@@ -1523,13 +1465,8 @@
               "description": "What the launch applied and where each value came from: { agent, options, args?, summary }, or null with no pick and no arguments."
             }
           },
-          "required": [
-            "added",
-            "args",
-            "structured",
-            "shadowed",
-            "launchSettings"
-          ]
+          "description": "Local launch resolution or {runtime, result} from an owner runtime.",
+          "additionalProperties": true
         }
       },
       {
@@ -2097,6 +2034,7 @@
         "resumeStyle": "claude-splice",
         "trust": "claude",
         "homepage": "https://code.claude.com/docs",
+        "modelDiscovery": { "protocol": "anthropic-models", "timeoutMs": 8000 },
         "launchOptions": {
           "model": {
             "flag": [
@@ -4383,10 +4321,11 @@
           }
         ],
         "flags": {
-          "host": { "type": "string", "description": "Exact provider host ID; omitted means local." }
+          "host": { "type": "string", "description": "Exact paired peer ID for reads or runtime:<saved owner selector>; omitted means local." }
         },
         "methods": [
-          "quirky.agents/options"
+          "quirky.agents/options",
+          "quirky.cli/runtimeCall"
         ]
       },
       {
@@ -4397,9 +4336,9 @@
           { "name": "agent", "description": "the agent ID", "required": true }
         ],
         "flags": {
-          "host": { "type": "string", "required": true, "description": "local or an exact saved paired peer ID." }
+          "host": { "type": "string", "required": true, "description": "local, an exact saved paired peer ID, or runtime:<saved owner selector>." }
         },
-        "methods": ["quirky.agents/discoverModels"]
+        "methods": ["quirky.agents/discoverModels", "quirky.cli/runtimeCall"]
       },
       {
         "id": "refresh",
@@ -4420,8 +4359,12 @@
             "required": true
           }
         ],
+        "flags": {
+          "host": { "type": "string", "description": "local or runtime:<saved owner selector>; omitted means local." }
+        },
         "methods": [
-          "quirky.agents/setEnabled"
+          "quirky.agents/setEnabled",
+          "quirky.cli/runtimeCall"
         ]
       },
       {
@@ -4435,8 +4378,12 @@
             "required": true
           }
         ],
+        "flags": {
+          "host": { "type": "string", "description": "local or runtime:<saved owner selector>; omitted means local." }
+        },
         "methods": [
-          "quirky.agents/setEnabled"
+          "quirky.agents/setEnabled",
+          "quirky.cli/runtimeCall"
         ]
       },
       {
@@ -4450,8 +4397,12 @@
             "required": true
           }
         ],
+        "flags": {
+          "host": { "type": "string", "description": "local or runtime:<saved owner selector>; omitted means local." }
+        },
         "methods": [
-          "quirky.agents/setDefault"
+          "quirky.agents/setDefault",
+          "quirky.cli/runtimeCall"
         ]
       },
       {
@@ -4466,6 +4417,7 @@
           }
         ],
         "flags": {
+          "host": { "type": "string", "description": "local or runtime:<saved owner selector>; omitted means local." },
           "command": {
             "type": "string",
             "description": "replace the whole command; the catalog command or an empty value removes the override"
@@ -4491,7 +4443,8 @@
           }
         },
         "methods": [
-          "quirky.agents/configure"
+          "quirky.agents/configure",
+          "quirky.cli/runtimeCall"
         ]
       },
       {
@@ -4506,6 +4459,7 @@
           }
         ],
         "flags": {
+          "host": { "type": "string", "description": "local or runtime:<saved owner selector>; omitted means local." },
           "agent": {
             "type": "string",
             "description": "change only this agent"
@@ -4516,7 +4470,8 @@
           }
         },
         "methods": [
-          "quirky.agents/setPermissions"
+          "quirky.agents/setPermissions",
+          "quirky.cli/runtimeCall"
         ]
       },
       {
@@ -4575,7 +4530,7 @@
         "flags": {
           "host": {
             "type": "string",
-            "description": "Exact provider host ID; omitted means local."
+            "description": "Exact paired peer ID for reads or runtime:<saved owner selector>; omitted means local."
           },
           "model": {
             "type": "string",
@@ -4596,7 +4551,8 @@
           }
         },
         "methods": [
-          "quirky.agents/resolveLaunch"
+          "quirky.agents/resolveLaunch",
+          "quirky.cli/runtimeCall"
         ]
       }
     ]

@@ -142,13 +142,24 @@
       },
       {
         "id": "prepare",
-        "description": "Required pre-spawn account preparation. Resolves home provenance and safely bridges one verified Codex rollout for a resume before returning the launch environment and actual account identity.",
+        "description": "Required pre-spawn account preparation. Resolves home provenance and safely bridges one verified Codex rollout for a resume before returning the launch environment and actual account identity, including its non-secret authKind.",
         "params": { "type": "object", "properties": { "agent": { "type": "string" }, "sessionId": { "type": "string" }, "worktreeId": { "type": "string" }, "cwd": { "type": "string" }, "homeOverrides": { "type": "object", "properties": { "claude": { "type": "object", "properties": { "value": {}, "source": { "type": "string", "enum": ["explicit", "inherited", "injected", "absent"] } }, "required": ["value", "source"] }, "codex": { "type": "object", "properties": { "value": {}, "source": { "type": "string", "enum": ["explicit", "inherited", "injected", "absent"] } }, "required": ["value", "source"] } }, "required": ["claude", "codex"] }, "resume": { "type": "object", "properties": { "sourceSessionId": { "type": "string" }, "providerSession": { "type": "object", "properties": { "id": { "type": "string" }, "transcriptPath": { "description": "Absolute captured Codex rollout path or null." } }, "required": ["id", "transcriptPath"], "additionalProperties": false } }, "required": ["sourceSessionId", "providerSession"], "additionalProperties": false } }, "required": ["agent", "sessionId", "worktreeId", "cwd", "homeOverrides"] },
-        "result": { "type": "object", "properties": { "env": { "type": "object", "additionalProperties": true }, "shellInit": { "description": "Absolute private path to a generated shell init file, or null." }, "account": { "description": "Actual resolved account identity, or null." }, "resumeTranscriptPath": { "type": "string", "description": "Absolute verified target rollout path for Codex resume preparation, when present." } }, "required": ["env", "shellInit", "account"] }
+        "result": {
+          "type": "object",
+          "properties": {
+            "env": { "type": "object", "additionalProperties": true },
+            "shellInit": { "description": "Absolute private path to a generated shell init file, or null." },
+            "account": {
+              "description": "The actual account identity {provider, id, label, source, authKind}, or null for shell. authKind is non-secret metadata (oauth, api-key, none or unknown); no credentials are returned."
+            },
+            "resumeTranscriptPath": { "type": "string", "description": "Absolute verified target rollout path for Codex resume preparation, when present." }
+          },
+          "required": ["env", "shellInit", "account"]
+        }
       },
       {
         "id": "prepareProviderEnv",
-        "description": "Resolves the effective Claude or Codex home for a short-lived provider-owned process using the current account selection. Unlike prepare, it accepts no session identity or resume and does not write account_sessions.",
+        "description": "Resolves the effective Claude or Codex home and non-secret selected authKind for a short-lived provider-owned process using the current account selection. It returns no credential, accepts no session identity or resume, and does not write account_sessions.",
         "params": {
           "type": "object",
           "properties": {
@@ -172,7 +183,19 @@
           "properties": {
             "env": { "type": "object", "additionalProperties": true },
             "shellInit": { "description": "Always null; provider processes do not source a shell init file." },
-            "account": { "description": "Resolved actual account identity, or null." }
+            "account": {
+              "description": "The selected identity with non-secret authKind metadata; no token or API-key value is returned.",
+              "type": "object",
+              "properties": {
+                "provider": { "type": "string", "enum": ["claude", "codex"] },
+                "id": { "description": "Managed UUID or null for System default or custom home." },
+                "label": { "type": "string" },
+                "source": { "type": "string", "enum": ["managed", "default", "custom"] },
+                "authKind": { "type": "string", "enum": ["oauth", "api-key", "none", "unknown"] }
+              },
+              "required": ["provider", "id", "label", "source", "authKind"],
+              "additionalProperties": false
+            }
           },
           "required": ["env", "shellInit", "account"],
           "additionalProperties": false
