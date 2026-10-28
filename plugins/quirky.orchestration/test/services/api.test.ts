@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { resolve } from 'node:path'
 import type { QuirkyEvent } from '@quirky/protocol'
 import {
-  callAs, failureOf, installAgentCli, openOrchestrationDb, requestId,
+  callAs, failureOf, installAgentCli, openOrchestrationDb, requestId, runAgentCli,
   startServicesE2E, waitFor, type ServiceE2E, type ServiceClientId
 } from './support'
 
@@ -27,6 +27,7 @@ type ServiceRun = {
   serviceOwner: { pluginId: string; key: string }
 }
 type ServiceWorker = {
+  assignmentActive: boolean
   dispatchId: string
   sessionId: string | null
   processIncarnation: string | null
@@ -114,7 +115,9 @@ function parseRunDetail(value: unknown): ServiceRunDetail {
     const worker = record(value)
     const state = worker.state
     if (state !== 'live' && state !== 'exited' && state !== 'unverifiable') throw new Error('worker detail has an invalid liveness state')
+    if (typeof worker.assignmentActive !== 'boolean') throw new Error('worker detail is missing assignment state')
     return {
+      assignmentActive: worker.assignmentActive,
       dispatchId: stringField(worker, 'dispatchId'),
       sessionId: nullableStringField(worker, 'sessionId'),
       processIncarnation: nullableStringField(worker, 'processIncarnation'),
@@ -493,21 +496,6 @@ describe('exact worker controls and guarded release', () => {
   }, 60_000)
 
   test('releases a settled worker through archive and custody guards without erasing its identity', async () => {
-    await harness.cleanup()
-    harness = await startServicesE2E({
-      fakes: {
-        claude: {
-          raw: true,
-          steps: [
-            { afterMs: 50, write: '\u001b[?2004h' },
-            { afterMs: 10, write: '> \r\n' },
-            { afterMs: 250, write: '\u001b]7501;state=working\u001b\\' }
-          ],
-          exitAfterMs: 3_000,
-          exitCode: 1
-        }
-      }
-    })
     const run = await createRun('a')
     const dispatchId = await startWorker(run.id)
     const live = parseRunDetail(await callAs(harness, 'a', 'serviceRunShow', { runId: run.id })).workers
@@ -516,12 +504,19 @@ describe('exact worker controls and guarded release', () => {
       throw new Error('the running worker did not expose its proven process identity')
     }
     const stableIdentity = { sessionId: live.sessionId, processIncarnation: live.processIncarnation }
-
-    const exited = await waitFor(async () => {
-      const worker = parseRunDetail(await callAs(harness, 'a', 'serviceRunShow', { runId: run.id })).workers
-        .find((candidate) => candidate.dispatchId === dispatchId)
-      return worker?.state === 'exited' ? worker : undefined
-    }, 10_000, 'worker process exit')
+    const dispatch = record(record(await harness.call('quirky.orchestration/workerShow', { dispatchId })).dispatch)
+    const report = await runAgentCli(harness, stableIdentity.sessionId, [
+      'orchestration', 'send', '--type', 'worker_done',
+      '--task-id', stringField(dispatch, 'taskId'), '--dispatch-id', dispatchId,
+      '--outcome', 'succeeded', '--subject', 'Service release fixture',
+      '--body', 'The isolated worker started its assigned task. This report uses its real inherited launch authority. The fixture is ready for guarded release.'
+    ])
+    expect(report.code).toBe(0)
+    expect(record(record(JSON.parse(report.stdout)).report).status).toBe('accepted')
+    const settled = parseRunDetail(await callAs(harness, 'a', 'serviceRunShow', { runId: run.id })).workers
+      .find((candidate) => candidate.dispatchId === dispatchId)
+    expect(settled?.state).toBe('live')
+    expect(settled?.assignmentActive).toBe(false)
     const unrelatedRun = await createRun('a')
     expect(await failureOf(callAs(harness, 'a', 'serviceWorkerRelease', {
       runId: unrelatedRun.id, dispatchId, requestId: requestId(), contractVersion: 1
@@ -532,8 +527,7 @@ describe('exact worker controls and guarded release', () => {
     }))
     expect(released.state).toBe('released')
     const archive = record(released.archive)
-    expect(stringField(archive, 'source').length).toBeGreaterThan(0)
-    expect(stringField(archive, 'status').length).toBeGreaterThan(0)
+    expect(archive.status).toBe('captured')
 
     const after = parseRunDetail(await callAs(harness, 'a', 'serviceRunShow', { runId: run.id })).workers
       .find((candidate) => candidate.dispatchId === dispatchId)
@@ -541,8 +535,7 @@ describe('exact worker controls and guarded release', () => {
     expect(after?.sessionId).toBe(stableIdentity.sessionId)
     expect(after?.processIncarnation).toBe(stableIdentity.processIncarnation)
     expect(after?.state).toBe('exited')
-    expect(exited.sessionId).toBe(stableIdentity.sessionId)
-    expect(exited.processIncarnation).toBe(stableIdentity.processIncarnation)
+    expect(after?.assignmentActive).toBe(false)
   }, 60_000)
 })
 

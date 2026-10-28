@@ -20,6 +20,11 @@ import { runTaskMethods } from './runs'
 import type { OrchestrationService } from './surface-contracts'
 import { createServiceCoordinator, type OrchestrationServiceCoordinator } from './services/coordinator'
 import { createServiceHandlers } from './services/handlers'
+import type { ServiceHandler, ServiceMethod, ServiceMethodInputs } from './services/contracts'
+
+function adaptServiceHandler<M extends ServiceMethod>(handler: ServiceHandler<M>): MethodHandler {
+  return (params, caller) => handler(params as unknown as ServiceMethodInputs[M], caller)
+}
 
 /** Compose the semantic core once around the caller-provided plugin store. */
 export type ComposedOrchestrationService = OrchestrationService & { readonly serviceCoordinator: OrchestrationServiceCoordinator }
@@ -28,6 +33,16 @@ export function createOrchestration(context: PluginContext, store: PluginStore):
   const messages = new OrchestrationMessages(context, core)
   const serviceCoordinator = createServiceCoordinator(context, core, messages)
   const serviceHandlers = createServiceHandlers(serviceCoordinator)
+  const serviceMethods: Record<ServiceMethod, MethodHandler> = {
+    serviceRunCreate: adaptServiceHandler<'serviceRunCreate'>(serviceHandlers.serviceRunCreate),
+    serviceRunShow: adaptServiceHandler<'serviceRunShow'>(serviceHandlers.serviceRunShow),
+    serviceWorkerStart: adaptServiceHandler<'serviceWorkerStart'>(serviceHandlers.serviceWorkerStart),
+    serviceCheck: adaptServiceHandler<'serviceCheck'>(serviceHandlers.serviceCheck),
+    serviceWorkerRelease: adaptServiceHandler<'serviceWorkerRelease'>(serviceHandlers.serviceWorkerRelease),
+    serviceWorkerStop: adaptServiceHandler<'serviceWorkerStop'>(serviceHandlers.serviceWorkerStop),
+    serviceReply: adaptServiceHandler<'serviceReply'>(serviceHandlers.serviceReply),
+    serviceSend: adaptServiceHandler<'serviceSend'>(serviceHandlers.serviceSend)
+  }
   const removeMessageEvent = messages.onArrival(({ messageId, type }) => {
     const row = store.get<{ run_id: string }>(`SELECT run_id FROM messages WHERE id = ?`, messageId)
     if (row) context.emit('message-arrived', { runId: row.run_id, messageId, type })
@@ -79,7 +94,7 @@ export function createOrchestration(context: PluginContext, store: PluginStore):
     },
     requestShow: runMethods.requestShow,
     reset: runMethods.reset,
-    ...serviceHandlers
+    ...serviceMethods
   } satisfies Record<OrchestrationMethod, MethodHandler>
 
   let disposed = false

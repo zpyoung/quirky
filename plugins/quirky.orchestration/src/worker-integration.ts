@@ -55,7 +55,8 @@ export interface OrchestrationWorkerCore extends LifecycleCorePort {
   getTask(taskId: TaskId): TaskRow
   getDispatch(dispatchId: DispatchId): DispatchRow
   createDispatch(input: DispatchAdmissionInput & { supervised?: boolean }, caller: RuntimeCallerEvidence, identity: SessionIdentity): DispatchRow
-  attachDispatchAuthority(dispatchId: DispatchId, identity: SessionIdentity, caller: RuntimeCallerEvidence): DispatchRow
+  /** Internal lifecycle fence; only exact supervised stops may block a live Task. */
+  blockTaskForWorkerStop(input: { taskId: TaskId; dispatchId: DispatchId; at: UtcTimestamp }): TaskRow
   createTask(input: Omit<TaskCreateParams, keyof MutationRequest>, caller: CoordinatorAuthority): TaskRow
   reserveWorkerDispatch(input: Omit<DispatchAdmissionInput, 'assigneeSessionId'>, caller: CoordinatorAuthority): DispatchRow
   attachWorkerAuthority(dispatchId: DispatchId, identity: SessionIdentity, caller: CoordinatorAuthority): DispatchRow

@@ -609,7 +609,6 @@ export function activate(context: PluginContext): void {
         ...(resolution?.structured ?? {}),
         env: environmentForLease(lease.env, environment)
       }
-      journal.setLaunchOptions(registered.id, resolution?.structured ?? {})
       startRunner(registered, agent, prompt, launchOptions, token)
     } catch (error) {
       startupFailed(registered.id, token, error)
@@ -645,7 +644,7 @@ export function activate(context: PluginContext): void {
 
     let options: StructuredLaunchOptions
     try {
-      options = journal.getLaunchOptions(old.id) ?? launchOptionsFromSnapshot(old)
+      options = launchOptionsFromSnapshot(old)
     } catch (error) {
       throw context.error('conflict', `session ${old.id} cannot replay its structured launch options: ${error instanceof Error ? error.message : String(error)}`)
     }
@@ -751,7 +750,6 @@ export function activate(context: PluginContext): void {
         ...options,
         env: environmentForLease(lease.env, environment)
       }
-      journal.setLaunchOptions(registered.id, options)
       startRunner(
         registered,
         agent,

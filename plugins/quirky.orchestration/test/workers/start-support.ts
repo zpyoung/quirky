@@ -4,10 +4,11 @@ import type {
   RuntimeCallerEvidence, TaskId, TaskRow, TaskStatus, UtcTimestamp, WorkerOutcome,
 } from '../../src/contracts'
 import type {
-  CoordinatorEvidence, TerminalResource, WorkerCore, WorkerLifecycle, WorkerPlacement, WorkerRecord,
-  WorkerRepository, WorkerRuntime, WorkerSetup, WorkerStartParams, WorkerStarter,
+  CoordinatorEvidence, ServiceCoordinatorEvidence, TerminalResource, WorkerCore, WorkerLifecycle,
+  WorkerPlacement, WorkerRecord, WorkerRepository, WorkerRuntime, WorkerSetup, WorkerStartParams, WorkerStarter,
   WorkerStartReceipt, WorkerUserInputParams, TurnStart,
 } from '../../src/worker-contracts'
+import type { DurableMutationOptions, WorkerLifecyclePort } from '../../src/worker-integration'
 import type { SessionIdentity } from '../../src/runtime-contracts'
 import { createWorkerStarter } from '../../src/workers/start'
 
@@ -19,6 +20,10 @@ const NOW = '2026-10-27T12:00:00.000Z' as UtcTimestamp
 
 function error(code: string, message: string): Error & { code: string } {
   return Object.assign(new Error(message), { code })
+}
+
+function isServiceCoordinator(evidence: CoordinatorEvidence): evidence is ServiceCoordinatorEvidence {
+  return 'kind' in evidence && evidence.kind === 'service'
 }
 
 function cloneMap<K, V>(map: Map<K, V>): Map<K, V> {
@@ -56,6 +61,7 @@ export interface WorkerStartHarness {
   caller: RuntimeCallerEvidence
   reportFromWorker(dispatchId: DispatchId, outcome: WorkerOutcome): void
   simulateUserInput(sessionId: string, expectedIncarnation: string): void
+  emitSetupExit(sessionId: string, exitCode: number): void
 }
 
 export function workerStartParams(overrides: Partial<WorkerStartParams> = {}): WorkerStartParams {
@@ -81,7 +87,7 @@ export function makeWorkerStartHarness(): WorkerStartHarness {
   const archives = new Map<DispatchId, never>()
   const receipts = new Map<string, { fingerprint: string; state: 'pending' | 'completed'; result?: object; checkpoint?: unknown }>()
   let sequence = 0
-  let workerPort: WorkerLifecycle | null = null
+  let workerPort: WorkerLifecyclePort | null = null
   let repository: WorkerRepository
   let core: WorkerCore
 
@@ -170,7 +176,7 @@ export function makeWorkerStartHarness(): WorkerStartHarness {
   }
 
   const requireCoordinator = (evidence: CoordinatorEvidence, requestedRunId?: RunId): RunRow => {
-    if ('kind' in evidence && evidence.kind === 'service') {
+    if (isServiceCoordinator(evidence)) {
       if (evidence.runId !== run.id || (requestedRunId && requestedRunId !== run.id)) throw error('consumer_fenced', 'service is not bound to this Run')
       return run
     }
@@ -184,7 +190,7 @@ export function makeWorkerStartHarness(): WorkerStartHarness {
     const current = tasks.get(input.taskId)
     if (!current) throw error('lifecycle_not_found', `Task ${input.taskId} was not found`)
     if (current.status !== input.expectedState) throw error('lifecycle_conflict', `Task ${input.taskId} is ${current.status}`)
-    const updated = { ...current, status: input.nextState, result: input.result ?? current.result, updatedAt: input.at } as TaskRow
+    const updated: TaskRow = { ...current, status: input.nextState, result: input.result ?? current.result }
     tasks.set(input.taskId, updated)
     return updated
   }
@@ -197,11 +203,38 @@ export function makeWorkerStartHarness(): WorkerStartHarness {
     dispatches.set(input.dispatchId, updated)
     return updated
   }
+  const blockTaskForWorkerStop = ({ taskId, dispatchId, at }: { taskId: TaskId; dispatchId: DispatchId; at: UtcTimestamp }): TaskRow => {
+    const task = tasks.get(taskId)
+    const dispatch = dispatches.get(dispatchId)
+    const worker = repository.get(dispatchId)
+    if (!task || !dispatch || task.runId !== dispatch.runId || dispatch.taskId !== taskId ||
+      (dispatch.status !== 'pending' && dispatch.status !== 'dispatched') ||
+      !worker || (worker.state !== 'stopping' && !(worker.state === 'stop_unknown' && worker.stage === 'stopping'))) {
+      throw error('task_not_startable', 'The Task does not have the exact active worker stop fence.')
+    }
+    const hasIdentity = worker.sessionId !== null || worker.processIncarnation !== null ||
+      worker.processRuntimeEpoch !== null || dispatch.assigneeSessionId !== null
+    if (hasIdentity && (!worker.sessionId || !worker.processIncarnation || !worker.processRuntimeEpoch ||
+      dispatch.assigneeSessionId !== worker.sessionId)) {
+      throw error('task_not_startable', 'The active worker stop fence no longer matches its process identity.')
+    }
+    const activeSibling = [...dispatches.values()].some(candidate =>
+      candidate.id !== dispatchId && candidate.taskId === taskId &&
+      (candidate.status === 'pending' || candidate.status === 'dispatched')
+    )
+    if (activeSibling || (task.status !== 'dispatched' && task.status !== 'blocked')) {
+      throw error('task_not_startable', 'The Task has another active attempt or is no longer dispatched.')
+    }
+    if (task.status === 'blocked') return task
+    const updated: TaskRow = { ...task, status: 'blocked' }
+    tasks.set(taskId, updated)
+    return updated
+  }
 
   core = {
     context: pluginContext,
     store,
-    registerWorkerPort: port => { workerPort = port as WorkerLifecycle },
+    registerWorkerPort: port => { workerPort = port },
     requireCoordinator,
     getRun: runId => runId === run.id ? run : (() => { throw error('run_not_found', `Run ${runId} was not found`) })(),
     getTask: taskId => tasks.get(taskId) ?? (() => { throw error('task_not_found', `Task ${taskId} was not found`) })(),
@@ -224,7 +257,7 @@ export function makeWorkerStartHarness(): WorkerStartHarness {
       const title = input.taskTitle?.trim() || 'New worker task'
       const task: TaskRow = {
         id, runId: input.runId ?? run.id, parentTaskId: input.parentTaskId ?? null,
-        dependencyTaskIds: input.dependencyTaskIds ?? [], createdBySessionId: 'kind' in evidence ? COORDINATOR_ID : evidence.callerSessionId,
+        dependencyTaskIds: input.dependencyTaskIds ?? [], createdBySessionId: isServiceCoordinator(evidence) ? null : evidence.callerSessionId,
         taskTitle: title, displayName: input.displayName?.trim() || title, spec: input.spec,
         status: 'ready', result: null, createdAt: NOW, completedAt: null,
       }
@@ -239,7 +272,7 @@ export function makeWorkerStartHarness(): WorkerStartHarness {
       if (input.retryOfDispatchId) {
         const prior = lineage.at(-1)
         const priorWorker = prior ? records.get(prior.id) : null
-        if (prior?.id !== input.retryOfDispatchId || prior.status !== 'failed' || !priorWorker || !['failed', 'stopped', 'abandoned'].includes(priorWorker.state) || !['failed', 'blocked'].includes(task.status)) {
+        if (!prior || prior.id !== input.retryOfDispatchId || prior.status !== 'failed' || !priorWorker || !['failed', 'stopped', 'abandoned'].includes(priorWorker.state) || !['failed', 'blocked'].includes(task.status)) {
           throw error('task_not_startable', `Task ${task.id} is not eligible for retry`)
         }
       } else if (task.status !== 'ready') {
@@ -249,7 +282,7 @@ export function makeWorkerStartHarness(): WorkerStartHarness {
       const dispatchId = `ctx_test_${++sequence}` as DispatchId
       const dispatch: DispatchRow = {
         id: dispatchId, runId: input.runId, taskId: input.taskId, contractVersion: 1, status: 'pending',
-        assigneeSessionId: null, creatorSessionId: evidence.callerSessionId,
+        assigneeSessionId: null, creatorSessionId: isServiceCoordinator(evidence) ? null : evidence.callerSessionId,
         creatorDispatchId: null, retryOfDispatchId: input.retryOfDispatchId ?? null, depth: 0,
         failureCount: lineage.at(-1)?.failureCount ?? 0, lastFailure: null, terminationReason: null,
         consumerGeneration: 1, createdAt: NOW, dispatchedAt: null, completedAt: null, lastHeartbeatAt: null,
@@ -275,7 +308,7 @@ export function makeWorkerStartHarness(): WorkerStartHarness {
       params: MutationRequest & object,
       _evidence: CoordinatorEvidence,
       operation: (store: PluginStore) => T,
-      options?: { beforeAccept?: () => void | Promise<void>; acceptedCheckpoint?: (accepted: T) => unknown; afterCommit?: (accepted: T) => T | Promise<T> },
+      options?: DurableMutationOptions<T>,
     ) => {
       const key = `${params.requestId}`
       const fingerprint = JSON.stringify(params)
@@ -300,6 +333,8 @@ export function makeWorkerStartHarness(): WorkerStartHarness {
         throw cause
       }
     },
+    mutate: (method, params, evidence, operation, options) =>
+      core.mutateWorker(method, params, evidence, operation, options),
     emitWorkerStatus: (dispatchId, subject, body, high) => { setupStatuses.push({ dispatchId, subject, body, high }) },
     closeWorkerQuestions: () => undefined,
     listDispatches: () => [...dispatches.values()],
@@ -307,6 +342,7 @@ export function makeWorkerStartHarness(): WorkerStartHarness {
     attentionFor: () => ({ guidance: false, input: false, approval: false, rootCompletion: false }),
     admitDispatch: () => ({ admitted: true, depth: 0, failureCount: 0, retryOfDispatchId: null }),
     transitionTask,
+    blockTaskForWorkerStop,
     transitionDispatch,
     transitionWorker: input => {
       const record = repository.get(input.dispatchId)
@@ -327,11 +363,11 @@ export function makeWorkerStartHarness(): WorkerStartHarness {
       if (!accepted) throw error('dispatch_inactive', 'Worker report was not accepted')
       if (dispatch.status === 'pending') transitionDispatch({ dispatchId: dispatch.id, expectedState: 'pending', nextState: input.outcome === 'succeeded' ? 'completed' : 'failed', at: NOW })
       else if (dispatch.status === 'dispatched') transitionDispatch({ dispatchId: dispatch.id, expectedState: 'dispatched', nextState: input.outcome === 'succeeded' ? 'completed' : 'failed', at: NOW })
-      transitionTask({ taskId: task.id, expectedState: task.status, nextState: input.outcome === 'succeeded' ? 'completed' : 'failed', at: NOW })
-      return { accepted: true, outcome: input.outcome } as never
+      const reportedTask = transitionTask({ taskId: task.id, expectedState: task.status, nextState: input.outcome === 'succeeded' ? 'completed' : 'failed', at: NOW })
+      return { status: 'accepted', task: reportedTask, dispatch: dispatches.get(dispatch.id)!, worker: accepted }
     },
-    recordHeartbeat: () => ({ accepted: true }) as never,
-  } as unknown as WorkerCore
+    recordHeartbeat: () => ({ status: 'accepted', lastHeartbeatAt: NOW }),
+  }
 
   const lifecycle = {
     hasLiveForTask: (_store: PluginStore, taskId: TaskId) => [...records.values()].some(record => dispatches.get(record.dispatchId)?.taskId === taskId && ['starting', 'ready', 'start_unknown', 'stopping', 'stop_unknown'].includes(record.state)),

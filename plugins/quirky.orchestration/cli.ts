@@ -98,7 +98,7 @@ function isTaskResult(value: unknown): value is TaskResult {
 
 function isTaskRow(value: unknown): value is TaskRow {
   return isObject(value) && hasId(value, 'id', 'task_') && hasId(value, 'runId', 'run_') &&
-    isStringOrNull(value.parentTaskId) && isStringArray(value.dependencyTaskIds) && hasString(value, 'createdBySessionId') &&
+    isStringOrNull(value.parentTaskId) && isStringArray(value.dependencyTaskIds) && isStringOrNull(value.createdBySessionId) &&
     hasString(value, 'taskTitle') && hasString(value, 'displayName') && hasString(value, 'spec') &&
     isOneOf(value.status, TASK_STATUSES) && (value.result === null || isTaskResult(value.result)) &&
     hasString(value, 'createdAt') && isStringOrNull(value.completedAt)

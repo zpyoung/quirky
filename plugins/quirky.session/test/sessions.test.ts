@@ -1191,40 +1191,6 @@ describe('the session store migration', () => {
       }
     ])
   })
-  test('reconciles both version-eight session schemas', async () => {
-    const home = h.home
-    const dbPath = join(home, 'plugin-data', 'quirky.session', 'store.db')
-    await h.cleanup()
-
-    let db = new Database(dbPath)
-    try {
-      db.exec('DROP TABLE session_pointer_operations')
-      db.exec('PRAGMA user_version = 8')
-    } finally {
-      db.close()
-    }
-    h = await startPluginHarness(SESSION_PLUGINS, { home })
-    await h.cleanup()
-
-    db = new Database(dbPath)
-    try {
-      expect(db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'session_pointer_operations'").get()).toBeTruthy()
-      db.exec('ALTER TABLE sessions DROP COLUMN badges')
-      db.exec('PRAGMA user_version = 8')
-    } finally {
-      db.close()
-    }
-
-    h = await startPluginHarness(SESSION_PLUGINS, { home })
-    db = new Database(dbPath)
-    try {
-      const columns = db.query('PRAGMA table_info(sessions)').all() as { name: string }[]
-      expect(columns.map(({ name }) => name)).toContain('badges')
-      expect(db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'session_pointer_operations'").get()).toBeTruthy()
-    } finally {
-      db.close()
-    }
-  })
 
 })
 

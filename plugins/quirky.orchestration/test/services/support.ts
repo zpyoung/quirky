@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { appendFileSync, chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { Database } from 'bun:sqlite'
@@ -7,6 +7,7 @@ import { QuirkyClient, type QuirkyEvent } from '@quirky/protocol'
 import { readRuntime, rpcUrl } from '@quirky/protocol/node'
 import { startAgentsE2E, type E2E, type FakeBehavior } from '../../../quirky.agents/test/support/e2e'
 import { writePlugin } from '../../../../packages/daemon/test/plugins/fixtures'
+import type { CliResult } from '../fixture'
 
 const PLUGINS_DIR = resolve(import.meta.dir, '../../../..', 'plugins')
 const ORCHESTRATION_DB = (home: string) => join(home, 'plugin-data', 'quirky.orchestration', 'store.db')
@@ -198,6 +199,25 @@ export function installAgentCli(harness: ServiceE2E, cliMain: string, args: read
   const path = join(harness.fakebin, 'claude')
   writeFileSync(path, source)
   chmodSync(path, 0o755)
+}
+
+export async function runAgentCli(harness: ServiceE2E, sessionId: string, args: readonly string[]): Promise<CliResult> {
+  const id = randomUUID()
+  const root = join(harness.home, 'worker-fixture')
+  const path = join(root, `${id}.reply.json`)
+  appendFileSync(join(root, `${sessionId}.requests.jsonl`), JSON.stringify({
+    id,
+    args: args.includes('--json') ? args : [...args, '--json']
+  }) + '\n')
+  const value: unknown = await waitFor(() => existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : null,
+    30_000, 'actual provider CLI reply')
+  if (typeof value !== 'object' || value === null ||
+    !('code' in value) || typeof value.code !== 'number' ||
+    !('stdout' in value) || typeof value.stdout !== 'string' ||
+    !('stderr' in value) || typeof value.stderr !== 'string') {
+    throw new Error('the actual provider CLI returned an invalid result')
+  }
+  return { code: value.code, stdout: value.stdout, stderr: value.stderr }
 }
 
 export async function waitFor<T>(

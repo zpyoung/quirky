@@ -2,7 +2,7 @@ import type { QuirkyEvent } from '@quirky/protocol'
 import { randomUUID } from 'node:crypto'
 import type { DispatchRow, DispatchStatus, JsonValue, RunRow, TaskRow, UtcTimestamp } from '../contracts'
 import type {
-  CoordinatorEvidence, TerminalResource, TurnStart, WorkerCore, WorkerEffect,
+  CoordinatorEvidence, ServiceCoordinatorEvidence, TerminalResource, TurnStart, WorkerCore, WorkerEffect,
   WorkerLifecycle, WorkerModeDecision, WorkerPlacement, WorkerRecord,
   WorkerRepository, WorkerRuntime, WorkerSetup, WorkerStartParams,
   WorkerStartReceipt, WorkerStarter,
@@ -37,7 +37,7 @@ function errorMessage(cause: unknown): string {
   return cause instanceof Error ? cause.message : String(cause)
 }
 
-function isServiceCaller(caller: CoordinatorEvidence): caller is Extract<CoordinatorEvidence, { kind: 'service' }> {
+function isServiceCaller(caller: CoordinatorEvidence): caller is ServiceCoordinatorEvidence {
   return 'kind' in caller && caller.kind === 'service'
 }
 
@@ -458,6 +458,7 @@ async function launchAccepted(
   const effects: WorkerEffect[] = []
   let residualResources: JsonValue[] = []
   let inputMayHaveBeenAccepted = false
+  let placement: WorkerPlacement | null = null
   let custodyRecorded = false
 
   try {
@@ -470,7 +471,7 @@ async function launchAccepted(
     stage = 'placing'
     repository.update(initial.dispatchId, { stage: params.worktree === 'new-child' || params.worktree === 'new-top-level' ? 'worktree_creating' : 'placing' }, 'starting')
     const deadline = Date.now() + timeoutMs
-    const placement = await runtime.place(params, task, dispatch, caller, placed => {
+    placement = await runtime.place(params, task, dispatch, caller, placed => {
       if (custodyRecorded) throw fail('lifecycle_conflict', 'Worker runtime attempted to record custody more than once.')
       if (placed.identity.kind !== (initial.mode.mode === 'structured' ? 'structured' : 'terminal')) {
         throw fail('worker_identity_changed', 'The placed session kind does not match the validated worker mode.')
