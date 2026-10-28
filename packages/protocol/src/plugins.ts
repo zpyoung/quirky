@@ -87,6 +87,9 @@ export type PluginPtyWriteError = Error & {
   acceptedBytes: number | null
 }
 
+/** Explicit human input intent, never inferred from PTY writes or terminal query replies. */
+export type PluginUserInput = Readonly<{ session: string; expectedIncarnation: string; at: number }>
+
 /** The PTY host operations a plugin may use. */
 export type PluginPty = {
   readonly connected: boolean
@@ -141,6 +144,12 @@ export type PluginPty = {
   onFact(listener: (sessionId: string, fact: PtyFact) => void): () => void
   /** Hears every write any plugin makes to a session, as text (invalid UTF-8 decodes lossily). */
   onInput(listener: (sessionId: string, data: string) => void): () => void
+  /** Runs custody guards synchronously; a guard failure prevents the caller's following write. */
+  reportUserInput(input: { session: string; expectedIncarnation: string }): void
+  /** Positive input evidence for custody established immediately after a new session was spawned. */
+  lastUserInput(sessionId: string): PluginUserInput | null
+  /** Listener must be synchronous. Does not activate an unused plugin or hear programmatic writes. */
+  onUserInput(listener: (input: PluginUserInput) => void): () => void
   onReconnect(listener: () => void): () => void
 }
 
