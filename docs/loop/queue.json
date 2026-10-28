@@ -1058,8 +1058,7 @@
       "deps": [
         "m3-session-info"
       ],
-      "status": "in-progress",
-      "lane": 10
+      "status": "done"
     },
     {
       "id": "m2-editor-complete-remaining-flows",

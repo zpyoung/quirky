@@ -41,6 +41,7 @@ files, not this one.
 | hard (security contract) | high | [m2-editor D9](decisions/m2-editor.md) | Treat notebooks as local arbitrary code execution | locked by editor.md |
 | hard (exact earlier configuration requires an independent baseline) | high | [m2-editor D22](decisions/m2-editor.md) | Stop unsafe smoke setup and preserve uncertain user configuration | assumed — autonomous |
 | hard | high | [m5-loops-ui D2](decisions/m5-loops-ui.md) | Use native structured output with a hosted loop tab | locked by docs/architecture.md |
+| hard (cross-feature runtime contracts) | high | [m7-sweep-automation D3](decisions/m7-sweep-automation.md) | Keep structured background execution and public plugin boundaries | locked by docs/architecture.md |
 | hard (engine/lifetime model) | high | [sa-browser-pane D2](decisions/sa-browser-pane.md) | Preserve native human browsing and Chrome Watch as separate modes | locked by docs/architecture.md |
 | hard | high | [m2-source-control-core D5](decisions/m2-source-control-core.md) | Extend `quirky.git` in place, with every composite (sync, discard-all, stage-all) in the daemon | assumed — autonomous |
 | hard | high | [m3-handoff D5](decisions/m3-handoff.md) | A new built-in plugin, `quirky.handoff`, owns composition, launch and lineage in the daemon; the window is a thin view | assumed — autonomous |
@@ -240,6 +241,9 @@ files, not this one.
 | medium | high | [m5-loops-ui D12](decisions/m5-loops-ui.md) | Host-computed opt-in close context closes the spec-review blocker | assumed — autonomous |
 | medium | high | [m5-loops-ui D15](decisions/m5-loops-ui.md) | Host identity removes the serialized close-guard read cycle | assumed — autonomous |
 | medium | high | [m5-loops-ui D24](decisions/m5-loops-ui.md) | Adapt to the landed generic tab-menu contract during the operator merge | assumed — autonomous, within operator-directed merge |
+| medium (review independence record) | high | [m7-sweep-automation D5](decisions/m7-sweep-automation.md) | Use OpenAI task implementers and verified Gemini reviewer fallback | assumed — autonomous |
+| medium | high | [m7-sweep-automation D8](decisions/m7-sweep-automation.md) | Fix menu dismissal and sidebar loop presentation in three disjoint slices | assumed — autonomous |
+| medium | high for source omissions; remote prerequisite design remains open. | [m7-sweep-automation D9](decisions/m7-sweep-automation.md) | Retain larger newly discovered flows in one completion item | deferred: automation workspace provenance, mobile loop projection and remote ledger ownership |
 | medium | high | [m4-hosting-ui-reviews D1](decisions/m4-hosting-ui-reviews.md) | Build the composite review scope, not only the sidebar | locked by docs/roadmap.md |
 | medium | high | [m4-hosting-ui-reviews D3](decisions/m4-hosting-ui-reviews.md) | Keep the review feature independently replaceable and share hosting policy | assumed — autonomous |
 | medium | high | [m4-hosting-ui-reviews D5](decisions/m4-hosting-ui-reviews.md) | Preserve data ownership and show failures rather than false success | locked by hosting-ui.md |
@@ -665,6 +669,8 @@ files, not this one.
 | easy | medium | [m2-source-control-core D60](decisions/m2-source-control-core.md) | Goals the tool could not fully drive are recorded, not failed | assumed — autonomous |
 | easy | medium | [m2-source-control-core D61](decisions/m2-source-control-core.md) | The file diff's changed-on-disk banner has no layout test | assumed — autonomous |
 | easy | medium | [m2-source-control-core D63](decisions/m2-source-control-core.md) | The second catch-up takes build/roadmap's test runner, which retires D55's three-process split | supersedes m2-source-control-core D55 |
+| easy | medium | [followup-m3-session-info-parity-20261027 D3](decisions/followup-m3-session-info-parity-20261027.md) | Audit supported narrow panels without inventing hidden-action fallbacks | assumed — autonomous |
+| easy | medium | [followup-m3-session-info-parity-20261027 D4](decisions/followup-m3-session-info-parity-20261027.md) | Establish signal readiness before changing timeout behavior | assumed — autonomous |
 | easy | medium | [m3-handoff D4](decisions/m3-handoff.md) | In scope is every flow of handoff.md that works on one Mac with a terminal session; native chat, SSH and runtime hosts, the AI Vault row entry and the dashboard are out | assumed — autonomous |
 | easy | medium | [m3-handoff D7](decisions/m3-handoff.md) | A source can also be an archived session given by agent, provider session id and transcript path | assumed — autonomous |
 | easy | medium | [m3-handoff D14](decisions/m3-handoff.md) | The base branch blank means the source worktree's current branch, not the repo's default | assumed — autonomous |
@@ -1000,6 +1006,23 @@ files, not this one.
 | easy | high | [m5-loops-ui D22](decisions/m5-loops-ui.md) | Keep native conversation ownership strict during UI verification | assumed — autonomous |
 | easy | high | [m5-loops-ui D23](decisions/m5-loops-ui.md) | Preserve explicit component attribution and current public API documentation | assumed — autonomous |
 | easy | high | [m5-loops-ui D25](decisions/m5-loops-ui.md) | Declare canonical context at both command-validation boundaries | assumed — autonomous |
+| easy (follow-up items remain explicit) | high | [m7-sweep-automation D1](decisions/m7-sweep-automation.md) | Audit all three documents; preserve explicit exclusions | locked by docs/roadmap.md |
+| easy | high | [m7-sweep-automation D2](decisions/m7-sweep-automation.md) | Resolve unattended workflow questions locally | locked by docs/loop/LOOP.md |
+| easy | high | [m7-sweep-automation D4](decisions/m7-sweep-automation.md) | Preserve existing follow-up ownership | assumed — autonomous |
+| easy | high | [m7-sweep-automation D6](decisions/m7-sweep-automation.md) | Leave inherited Serena state untouched | assumed — autonomous |
+| easy | high | [m7-sweep-automation D7](decisions/m7-sweep-automation.md) | Apply normal two-spec workflow after the night-mode deadline | assumed — autonomous |
+| easy | high | [m7-sweep-automation D10](decisions/m7-sweep-automation.md) | Model attachment as presentation evidence, not a new durable loop state | assumed — autonomous |
+| easy | high | [m7-sweep-automation D11](decisions/m7-sweep-automation.md) | Preserve current native owners and distinguish historical blockers | assumed — autonomous |
+| easy | high | [m7-sweep-automation D12](decisions/m7-sweep-automation.md) | Stage regression tests before production with parent-owned execution | assumed — autonomous |
+| easy | high | [m7-sweep-automation D13](decisions/m7-sweep-automation.md) | Accept specification finding F1 and make stale evidence override cached urgency | assumed — autonomous |
+| easy | high | [m7-sweep-automation D14](decisions/m7-sweep-automation.md) | Document nullable summary scalars without extending the kernel schema language | assumed — autonomous |
+| easy | high for observed boundaries; final owning summary rerun remains pending. | [m7-sweep-automation D15](decisions/m7-sweep-automation.md) | Correct test readiness and process custody without weakening behavior | assumed — autonomous |
+| easy | high for traced boundaries; integrated api receipt remains required. | [m7-sweep-automation D16](decisions/m7-sweep-automation.md) | Wait for the loaded catalog and use an existing focus sentinel in integration | assumed — autonomous |
+| easy | high | [m7-sweep-automation D17](decisions/m7-sweep-automation.md) | Compose the provider before the sidebar's real API acceptance | assumed — autonomous |
+| easy | high for faithful source composition; merged acceptance gates running. | [m7-sweep-automation D18](decisions/m7-sweep-automation.md) | Preserve both loop and Heimdall indicators in the roadmap catch-up | locked by docs/loop/decisions/m6-heimdall-control.md D6 and docs/loop/decisions/m6-heimdall-owner.md D35 |
+| easy | high | [m7-sweep-automation D19](decisions/m7-sweep-automation.md) | Wait for actual attached presentation, not just durable loop state | assumed — autonomous |
+| easy | high for instruction compliance; visible ui and final-code-review clearance are not claimed. | [m7-sweep-automation D20](decisions/m7-sweep-automation.md) | Apply the operator's build-first override and typecheck-only landing | supersedes m7-sweep-automation D7 (workflow only) |
+| easy | high for typed source; no built-web or final independent review result. | [m7-sweep-automation D21](decisions/m7-sweep-automation.md) | Repair only the observed type errors and retain exact earlier test evidence | assumed — autonomous |
 | easy | high | [m4-hosting-ui-reviews D2](decisions/m4-hosting-ui-reviews.md) | Resolve design questions unattended with one self-reviewed logic spec | locked by docs/loop/LOOP.md |
 | easy | high | [m4-hosting-ui-reviews D4](decisions/m4-hosting-ui-reviews.md) | Use OpenAI task implementers and Gemini cross-family review | locked by docs/loop/LOOP.md |
 | easy | high | [m4-hosting-ui-reviews D6](decisions/m4-hosting-ui-reviews.md) | Verify isolated macOS workflows and hand off OS effects | deferred: platform |
@@ -1078,6 +1101,15 @@ files, not this one.
 | easy | high | [m4-sidebar-review-filters D9](decisions/m4-sidebar-review-filters.md) | Preserve incoming editor contracts and existing refresh behavior | assumed — autonomous |
 | easy | high | [m4-sidebar-review-filters D10](decisions/m4-sidebar-review-filters.md) | Verify the real daemon and a bounded guarded web campaign | assumed — autonomous |
 | easy | high | [m4-sidebar-review-filters D12](decisions/m4-sidebar-review-filters.md) | Preserve truthful verification scope and retain consumer-visible regression assertions | assumed — autonomous |
+| easy | high | [m3-accounts-overflow-verification D1](decisions/m3-accounts-overflow-verification.md) | Verify the named slice without reopening Accounts | locked by docs/loop/LOOP.md |
+| easy | high | [m3-accounts-overflow-verification D2](decisions/m3-accounts-overflow-verification.md) | Resolve all verification gray areas autonomously | assumed — autonomous |
+| easy | high | [m3-accounts-overflow-verification D3](decisions/m3-accounts-overflow-verification.md) | Use reachable cross-family final review fallback | assumed — autonomous |
+| easy | high for missing evidence/current selection; no confidence claim for historical cause | [m3-accounts-overflow-verification D4](decisions/m3-accounts-overflow-verification.md) | Preserve historical uncertainty and reconstruct complete affected scope | assumed — autonomous |
+| easy | high for retained receipt contents | [m3-accounts-overflow-verification D5](decisions/m3-accounts-overflow-verification.md) | Preserve the original core and native transcript-content receipts | locked by docs/loop/decisions/m3-accounts.md |
+| easy | high | [m3-accounts-overflow-verification D6](decisions/m3-accounts-overflow-verification.md) | Accept the spec completion-criterion finding, reject packaging false positives | assumed — autonomous |
+| easy | high | [m3-accounts-overflow-verification D7](decisions/m3-accounts-overflow-verification.md) | Land immediately under the operator's build-first override | supersedes this item D1/D4/D6 verification schedule under explicit operator decision |
+| easy | high for the measured pre-catchup snapshot; no merged-source acceptance claim | [m3-accounts-overflow-verification D8](decisions/m3-accounts-overflow-verification.md) | Preserve measured defects without claiming a repair | assumed — autonomous |
+| easy | high for observed results only | [m3-accounts-overflow-verification D9](decisions/m3-accounts-overflow-verification.md) | Distinguish completed checks, cancellation and incoming Accounts changes | locked by operator decision and incoming Accounts decisions |
 | easy (ui presentation) | high | [sa-browser-pane D3](decisions/sa-browser-pane.md) | Adopt source-visible interaction, loading, error and settings defaults | locked by browser.md |
 | easy (next run) | high | [sa-browser-pane D6](decisions/sa-browser-pane.md) | Use three disjoint implementation components and Gemini review | assumed — autonomous |
 | easy | high | [sa-browser-pane D7](decisions/sa-browser-pane.md) | Verify macOS-native only by pending nightly scenarios and isolate all process tests | deferred: platform |
@@ -1135,6 +1167,13 @@ files, not this one.
 | easy | high | [m2-source-control-core D58](decisions/m2-source-control-core.md) | All seven Final Round 1 defects are closed by the fix batch, each with a test | assumed — autonomous |
 | easy | high | [m2-source-control-core D59](decisions/m2-source-control-core.md) | UI verification round 1: 18 goals pass, three app defects found and fixed on the branch | assumed — autonomous |
 | easy | high | [m2-source-control-core D62](decisions/m2-source-control-core.md) | The UI rerun passes SC-61, SC-45 and the conflict badge | assumed — autonomous |
+| easy | high | [followup-m3-session-info-parity-20261027 D1](decisions/followup-m3-session-info-parity-20261027.md) | Complete only the registered parity boundaries | locked by docs/loop/decisions/m3-session-info.md |
+| easy | high | [followup-m3-session-info-parity-20261027 D2](decisions/followup-m3-session-info-parity-20261027.md) | Separate native delivery from browser feedback | locked by docs/loop/LOOP.md |
+| easy | high | [followup-m3-session-info-parity-20261027 D5](decisions/followup-m3-session-info-parity-20261027.md) | Use unattended one-spec execution and cross-family review | locked by docs/loop/LOOP.md |
+| easy | high for observed ready-group behavior; medium for the historical startup-race explanation | [followup-m3-session-info-parity-20261027 D6](decisions/followup-m3-session-info-parity-20261027.md) | Correct the SIGTERM test's unproved readiness precondition | assumed — autonomous |
+| easy | high for the observed clipping; post-fix visual outcome unverified | [followup-m3-session-info-parity-20261027 D7](decisions/followup-m3-session-info-parity-20261027.md) | Wrap inherited panel text instead of hiding narrow controls | assumed — autonomous |
+| easy | high | [followup-m3-session-info-parity-20261027 D8](decisions/followup-m3-session-info-parity-20261027.md) | Stop the verification campaign and land through typecheck only | locked by operator instruction and docs/loop/LOOP.md |
+| easy | high | [followup-m3-session-info-parity-20261027 D9](decisions/followup-m3-session-info-parity-20261027.md) | Preserve incoming contracts and land the typechecked composition | locked by docs/loop/LOOP.md and incoming decision logs |
 | easy | high | [m5-automations-core D3](decisions/m5-automations-core.md) | Keep preset and cron semantics explicit and reject impossible new schedules | locked by automations.md |
 | easy | high | [m5-automations-core D4](decisions/m5-automations-core.md) | Preserve pause cursor, latest-only catch-up, and elapsed grace plus 120 seconds | assumed — autonomous |
 | easy | high | [m5-automations-core D6](decisions/m5-automations-core.md) | Use OpenAI implementers and verified Gemini cross-family review | assumed — autonomous |
