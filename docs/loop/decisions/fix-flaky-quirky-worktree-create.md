@@ -44,5 +44,16 @@
 - **Revisit if:** an observed package failure is demonstrated to be introduced by this test-only change
 - **Source:** locked by docs/loop/LOOP.md
 
+## D5: Migrate the shared fixture to the newly required runtime dependency after catch-up
+- **Question:** Why did the post-merge creation file fail before reaching the regression, and should its assertions be bypassed?
+- **Options:** ignore the new failures; remove the production dependency; install the real required CLI plugin in worktree test worlds
+- **Chose:** preserve the real worktree dependency on quirky.cli and add that plugin once to the shared harness whenever worktree is selected, including explicit real-session plugin lists
+- **Why:** the sole roadmap catch-up introduced `quirky.cli` as a required worktree dependency. The existing fixture linked only repo/worktree or its explicit session list, disabling the worktree plugin: the post-merge remote file returned 1 pass/41 fail at `setting:quirky.worktree/worktreesRoot`, before any creation. Adding the genuine dependency restores activation without a fake setting, altered admission, narrowed assertion or production fallback. Existing creation scenarios themselves provide consumer coverage; no wiring-only test was added.
+- **Evidence:** `plugins/quirky.worktree/quirky-plugin.json:12-15`; `plugins/quirky.repo/test/harness.ts:123-134`; post-merge remote run `1793222299634-12034`; corrected focused remote run passed with `suite-result {"ok":true,"flaky":[]}`, 21.83s; final root/UIlint/mobile/desktop typecheck exited 0, 30.29s
+- **Reversibility:** easy (test-world dependency installation only)
+- **Confidence:** high
+- **Revisit if:** the production worktree dependency declaration changes
+- **Source:** locked by docs/loop/decisions/m7-terminal-owner-provisioning-and-selector-flows.md D2,D14
+
 ## Progress
-Permanent timer-free regression passes remotely without a flaky rerun. Same-delay controlled red/green diagnostic was run and removed. Scripts suite passes 81/81; root/mobile/desktop typecheck passes. Baseline package run failed 25/44 files and its complete final file inventory plus concrete examples are preserved in BLOCKERS.md, without claiming package-wide success. All investigation/test jobs and the scout have returned. Next: commit this test/docs repair, catch up once with build/roadmap, run merged typecheck, detach and canonical queue land. No public/production contract changed and no UI/native scenario added.
+Repair committed initially as f99a1510, then caught up once with build/roadmap. Read the four incoming logs completely: fix-flaky-pty-host-manager, fix-flaky-terminal-features-pane, m7-terminal-owner-provisioning-and-selector-flows, ui-screenshot-review (including truncated evidence/progress lines). Their condition-based synchronization and owner boundaries do not conflict. The newly required CLI dependency needed the fixture migration in D5; the final caught-up creation file passes remotely without fallback or flaky rerun, and fresh final root/UIlint/mobile/desktop typecheck passes. Scripts passed 81/81 before catch-up; not claimed rerun against the newly merged UI review tests. Broad baseline failed 25/44 files, retained in BLOCKERS.md. All jobs/scout returned; no owned scratch, worktree, daemon or service was created outside test-runner-managed scopes. Ready to commit final fixture/receipt, detach and canonical queue land. No production/public API change or UI/native scenario added.
