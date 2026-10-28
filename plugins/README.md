@@ -120,7 +120,6 @@ PR; `stack.number` is a distinct stack resource ID, and `stack.entries[].number`
 contains the real member PR numbers. Unsupported or mismatched membership is
 explicitly unavailable, never synthesized from that stack ID. `truncated` reports
 omitted members. Optional `--pr-repo` preserves origin/upstream identity.
-
 ## Plugin settings pages
 
 A UI plugin can opt a declared view into the shell's **Settings → Plugin settings**
