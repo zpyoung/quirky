@@ -2159,6 +2159,12 @@ files, not this one.
 | easy | high for observed gate failure; causes remain under investigation | [m5-automations-ui D24](decisions/m5-automations-ui.md) | Repair the normal merged gate's owning failures rather than waive them | locked by docs/loop/LOOP.md step7.3 |
 | easy | high for traced causes; owning gate result recorded separately | [m5-automations-ui D25](decisions/m5-automations-ui.md) | Publish fixture replies atomically and observe the CLI's real recovery daemon | assumed — autonomous |
 | easy | high for exercised paths; authoritative normal land remains the final gate | [m5-automations-ui D28](decisions/m5-automations-ui.md) | Require actual recovery, PTY consumption and remote-base creation proof | assumed — autonomous |
+| easy | high | [fix-flaky-pty-host-clear D1](decisions/fix-flaky-pty-host-clear.md) | Diagnose the reported flake before changing timeouts or clear ordering | assumed — autonomous |
+| easy | high | [fix-flaky-pty-host-clear D2](decisions/fix-flaky-pty-host-clear.md) | Honor this fix item's explicit test-host load reproduction requirement | assumed — autonomous |
+| easy | high | [fix-flaky-pty-host-clear D3](decisions/fix-flaky-pty-host-clear.md) | Use an isolated checkout and owned bounded load processes on the configured host | assumed — autonomous |
+| easy | high | [fix-flaky-pty-host-clear D4](decisions/fix-flaky-pty-host-clear.md) | Give the real-PTY tests and cleanup the existing 60-second outer budget | assumed — autonomous |
+| easy | high | [fix-flaky-pty-host-clear D5](decisions/fix-flaky-pty-host-clear.md) | Use the existing end-to-end clear assertions as the regression, not a test of timeout configuration | assumed — autonomous |
+| easy | high for the exercised deadline failure and corrected paths; no claim about the unavailable historical assertion text or an exhaustive future flake rate | [fix-flaky-pty-host-clear D6](decisions/fix-flaky-pty-host-clear.md) | Preserve incoming owners and land the narrow compiled fix | assumed — autonomous; locked by incoming decision logs for their separate owners |
 | easy | high | [m5-ledger D3](decisions/m5-ledger.md) | Use omp implementers with the reachable Gemini reviewer fallback | assumed — autonomous |
 | easy | high | [m5-ledger D11](decisions/m5-ledger.md) | Build and verify macOS behavior without claiming other platforms | deferred: platform |
 | easy | high | [m5-ledger D13](decisions/m5-ledger.md) | Use two independent implementation components with one integration owner | assumed — autonomous |
