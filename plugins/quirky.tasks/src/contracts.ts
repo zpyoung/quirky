@@ -1,6 +1,7 @@
 import type { MethodHandler, PluginContext, UiPluginContext, UiLayout } from '@quirky/protocol'
 
 export const TASKS_VIEW = 'view:quirky.tasks/tasks'
+export const TASKS_SETTINGS_VIEW = 'view:quirky.tasks/settings'
 export const TASKS_API = 'quirky.tasks/'
 
 export type ItemKind = 'issue' | 'pullRequest'

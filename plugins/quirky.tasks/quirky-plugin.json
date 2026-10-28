@@ -1,0 +1,3410 @@
+{
+  "id": "quirky.tasks",
+  "name": "GitHub Tasks",
+  "version": "0.1.0",
+  "description": "Browse GitHub tasks, discuss issues and work with Projects v2.",
+  "main": "main.ts",
+  "ui": "dist/ui.js",
+  "dependencies": [
+    "quirky.hosting",
+    "quirky.repo",
+    "quirky.worktree"
+  ],
+  "contributes": {
+    "method": [
+      {
+        "id": "state",
+        "description": "Read daemon-owned Tasks navigation, preferences, session draft and workspace links.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string"
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "revision": {
+              "type": "integer"
+            },
+            "navigation": {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "type": "string"
+                },
+                "mode": {
+                  "type": "string",
+                  "enum": [
+                    "issues",
+                    "prs",
+                    "projects"
+                  ]
+                },
+                "repoIds": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Repository IDs, or null for sticky all."
+                },
+                "query": {
+                  "type": "string"
+                },
+                "page": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "scrollTop": {
+                  "type": "number"
+                },
+                "detail": {
+                  "description": "Nullable item target: worktree, kind, number, optional url, projectId, itemId, host, owner and repo."
+                },
+                "newIssue": {
+                  "type": "boolean"
+                },
+                "project": {
+                  "description": "Nullable Project target: id, owner, ownerType, number, url and optional host/title/viewId/viewNumber."
+                }
+              },
+              "required": [
+                "source",
+                "mode",
+                "repoIds",
+                "query",
+                "page",
+                "scrollTop",
+                "detail",
+                "newIssue",
+                "project"
+              ]
+            },
+            "preferences": {
+              "type": "object",
+              "properties": {
+                "showTasksButton": {
+                  "type": "boolean"
+                },
+                "visibleTaskProviders": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "defaultTaskSource": {
+                  "type": "string"
+                },
+                "defaultTaskViewPreset": {
+                  "type": "string",
+                  "enum": [
+                    "all",
+                    "issues",
+                    "assigned",
+                    "prs",
+                    "mine",
+                    "needs-review"
+                  ]
+                },
+                "defaultRepoSelection": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Repository IDs, or null for sticky all."
+                }
+              },
+              "required": [
+                "showTasksButton",
+                "visibleTaskProviders",
+                "defaultTaskSource",
+                "defaultTaskViewPreset",
+                "defaultRepoSelection"
+              ]
+            },
+            "issueDraft": {
+              "type": "object",
+              "properties": {
+                "title": {
+                  "type": "string"
+                },
+                "body": {
+                  "type": "string"
+                },
+                "labels": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "assignees": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "repoId": {
+                  "description": "Repository ID, or null."
+                }
+              },
+              "required": [
+                "title",
+                "body",
+                "labels",
+                "assignees",
+                "repoId"
+              ]
+            },
+            "projects": {
+              "type": "object",
+              "properties": {
+                "pinned": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                },
+                "recent": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                },
+                "lastViewByProject": {
+                  "type": "object",
+                  "additionalProperties": true
+                },
+                "queryByView": {
+                  "type": "object",
+                  "additionalProperties": true
+                },
+                "hiddenColumns": {
+                  "type": "object",
+                  "additionalProperties": true
+                },
+                "columnWidths": {
+                  "type": "object",
+                  "additionalProperties": true
+                },
+                "roadmapZoom": {
+                  "type": "string",
+                  "enum": [
+                    "month",
+                    "quarter",
+                    "year"
+                  ]
+                }
+              },
+              "required": [
+                "pinned",
+                "recent",
+                "lastViewByProject",
+                "queryByView",
+                "hiddenColumns",
+                "columnWidths",
+                "roadmapZoom"
+              ]
+            },
+            "links": {
+              "type": "object",
+              "description": "Canonical work-item identity to workspace link: worktree, name, url and repoId.",
+              "additionalProperties": true
+            }
+          },
+          "required": [
+            "revision",
+            "navigation",
+            "preferences",
+            "issueDraft",
+            "projects",
+            "links"
+          ]
+        }
+      },
+      {
+        "id": "repositories",
+        "description": "List registered Git repositories and their primary workspace contexts.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string"
+            }
+          }
+        },
+        "result": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string"
+              },
+              "displayName": {
+                "description": "User-facing name, or null."
+              },
+              "worktree": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "path",
+              "kind",
+              "worktree"
+            ]
+          }
+        }
+      },
+      {
+        "id": "open",
+        "description": "Open Tasks, optionally deep-linked to a mode, repository selection or item.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            },
+            "mode": {
+              "type": "string",
+              "enum": [
+                "issues",
+                "prs",
+                "projects"
+              ]
+            },
+            "repoIds": {
+              "items": {
+                "type": "string"
+              },
+              "description": "Repository IDs, or null for sticky all."
+            },
+            "query": {
+              "type": "string"
+            },
+            "page": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "scrollTop": {
+              "type": "number",
+              "minimum": 0
+            },
+            "detail": {
+              "description": "Work-item target {worktree,kind,number,url?,projectId?,itemId?,host?,owner?,repo?}, or null."
+            },
+            "newIssue": {
+              "type": "boolean"
+            },
+            "project": {
+              "description": "Project target {id,owner,ownerType,number,url,host?,title?,viewId?,viewNumber?}, or null."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "description": "The updated state projection; see the state method's result schema.",
+          "additionalProperties": true
+        }
+      },
+      {
+        "id": "navigate",
+        "description": "Change the exact Tasks view state; context changes reset paging unless an explicit page is supplied.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            },
+            "mode": {
+              "type": "string",
+              "enum": [
+                "issues",
+                "prs",
+                "projects"
+              ]
+            },
+            "repoIds": {
+              "items": {
+                "type": "string"
+              },
+              "description": "Repository IDs, or null for sticky all."
+            },
+            "query": {
+              "type": "string"
+            },
+            "page": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "scrollTop": {
+              "type": "number",
+              "minimum": 0
+            },
+            "detail": {
+              "description": "Work-item target {worktree,kind,number,url?,projectId?,itemId?,host?,owner?,repo?}, or null."
+            },
+            "newIssue": {
+              "type": "boolean"
+            },
+            "project": {
+              "description": "Project target {id,owner,ownerType,number,url,host?,title?,viewId?,viewNumber?}, or null."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "description": "The updated state projection; see the state method's result schema.",
+          "additionalProperties": true
+        }
+      },
+      {
+        "id": "close",
+        "description": "Close Tasks and restore its previous view.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string"
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "closed": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "closed"
+          ]
+        }
+      },
+      {
+        "id": "preferences",
+        "description": "Update durable Tasks defaults without storing credentials or issue drafts.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string"
+            },
+            "showTasksButton": {
+              "type": "boolean"
+            },
+            "visibleTaskProviders": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "defaultTaskSource": {
+              "type": "string"
+            },
+            "defaultTaskViewPreset": {
+              "type": "string",
+              "enum": [
+                "all",
+                "issues",
+                "assigned",
+                "prs",
+                "mine",
+                "needs-review"
+              ]
+            },
+            "defaultRepoSelection": {
+              "items": {
+                "type": "string"
+              },
+              "description": "Repository IDs, or null for sticky all."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "description": "The updated state projection; see the state method's result schema.",
+          "additionalProperties": true
+        }
+      },
+      {
+        "id": "list",
+        "description": "List bounded, per-repository GitHub issues or pull requests with source availability, provenance, pagination and partial failures.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Optional existing worktree context used by the API caller."
+            },
+            "mode": {
+              "type": "string",
+              "enum": [
+                "issues",
+                "prs"
+              ]
+            },
+            "repoIds": {
+              "description": "Repository IDs to include, or null for sticky all. Omit to use current Tasks navigation."
+            },
+            "query": {
+              "type": "string",
+              "description": "GitHub search query, limited to 8192 UTF-8 bytes."
+            },
+            "page": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "refresh": {
+              "type": "boolean",
+              "description": "Force a fresh provider read."
+            },
+            "noCache": {
+              "type": "boolean",
+              "description": "Force a fresh provider read."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "description": "Bounded list-row item; body text is omitted. Workspace context is attached when linked.",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "issue",
+                      "pullRequest"
+                    ]
+                  },
+                  "number": {
+                    "type": "integer"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "body": {
+                    "type": "string"
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "open",
+                      "closed",
+                      "merged",
+                      "draft",
+                      "unknown"
+                    ]
+                  },
+                  "url": {
+                    "type": "string"
+                  },
+                  "createdAt": {},
+                  "updatedAt": {},
+                  "author": {},
+                  "labels": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "assignees": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "isDraft": {
+                    "type": "boolean"
+                  },
+                  "headRefName": {
+                    "type": "string"
+                  },
+                  "baseRefName": {
+                    "type": "string"
+                  },
+                  "headRefOid": {
+                    "type": "string"
+                  },
+                  "additions": {
+                    "type": "integer"
+                  },
+                  "deletions": {
+                    "type": "integer"
+                  },
+                  "changedFiles": {
+                    "type": "integer"
+                  },
+                  "mergeStateStatus": {
+                    "type": "string"
+                  },
+                  "reviewDecision": {
+                    "type": "string"
+                  },
+                  "stateReason": {
+                    "type": "string"
+                  },
+                  "duplicateOf": {
+                    "type": "integer"
+                  },
+                  "worktree": {
+                    "type": "string"
+                  },
+                  "repoId": {
+                    "type": "string"
+                  },
+                  "repoName": {
+                    "type": "string"
+                  },
+                  "linkedWorkspace": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "worktree": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "required": [
+                  "kind",
+                  "number",
+                  "title",
+                  "body",
+                  "state",
+                  "url",
+                  "createdAt",
+                  "updatedAt",
+                  "author",
+                  "labels",
+                  "assignees",
+                  "isDraft",
+                  "worktree",
+                  "repoId",
+                  "repoName"
+                ]
+              }
+            },
+            "repositories": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "path": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string"
+                  },
+                  "displayName": {},
+                  "worktree": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "name",
+                  "path",
+                  "kind",
+                  "worktree"
+                ]
+              }
+            },
+            "page": {
+              "type": "integer"
+            },
+            "totalPages": {
+              "type": "integer"
+            },
+            "perRepo": {
+              "type": "integer"
+            },
+            "failures": {
+              "type": "array",
+              "description": "Source, list or count failures; successful repository rows remain available.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "repoId": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "reason": {
+                    "type": "string"
+                  },
+                  "stage": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "repoId",
+                  "message"
+                ]
+              }
+            },
+            "sources": {
+              "type": "object",
+              "description": "Per-repository availability, authenticated host, origin, issue source and fallback provenance.",
+              "additionalProperties": true
+            }
+          },
+          "required": [
+            "items",
+            "repositories",
+            "page",
+            "totalPages",
+            "perRepo",
+            "failures",
+            "sources"
+          ]
+        }
+      },
+      {
+        "id": "row",
+        "description": "Apply a validated issue or pull-request row mutation through the public GitHub hosting API.",
+        "destructive": true,
+        "confirm": "Apply the requested GitHub Tasks row mutation?",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string"
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "worktree": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "issue",
+                    "pullRequest"
+                  ]
+                },
+                "number": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "url": {
+                  "type": "string"
+                },
+                "projectId": {
+                  "type": "string"
+                },
+                "itemId": {
+                  "type": "string"
+                },
+                "host": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "worktree",
+                "kind",
+                "number"
+              ]
+            },
+            "action": {
+              "type": "string",
+              "enum": [
+                "issueStatus",
+                "assignees",
+                "reviewers",
+                "issueSource",
+                "merge",
+                "autoMerge"
+              ]
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "open",
+                "closed"
+              ]
+            },
+            "stateReason": {
+              "type": "string",
+              "enum": [
+                "completed",
+                "not_planned",
+                "duplicate"
+              ]
+            },
+            "duplicateOf": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "A positive, different issue number in the same repository."
+            },
+            "assignees": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Replace the issue assignee set; at most 100 values."
+            },
+            "reviewerAction": {
+              "type": "string",
+              "enum": [
+                "add",
+                "remove"
+              ]
+            },
+            "reviewerText": {
+              "type": "string",
+              "description": "Comma/space separated reviewer logins, at most 2048 UTF-8 bytes and 15 reviewers."
+            },
+            "logins": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "At most 15 reviewer logins."
+            },
+            "preference": {
+              "type": "string",
+              "enum": [
+                "origin",
+                "upstream"
+              ]
+            },
+            "method": {
+              "type": "string",
+              "enum": [
+                "squash",
+                "merge",
+                "rebase"
+              ]
+            },
+            "mergeAction": {
+              "type": "string",
+              "enum": [
+                "direct",
+                "queue"
+              ]
+            },
+            "expectedHead": {
+              "type": "string",
+              "description": "The confirmed current PR head SHA; the hosting API rechecks it before merge."
+            },
+            "autoMergeAction": {
+              "type": "string",
+              "enum": [
+                "enable",
+                "disable"
+              ]
+            }
+          },
+          "required": [
+            "target",
+            "action"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "description": "Explicit provider mutation outcome; queued/pending is never reported as merged.",
+          "properties": {
+            "kind": {
+              "type": "string"
+            },
+            "action": {
+              "type": "string"
+            },
+            "item": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "result": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "noChange": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        "describe": "rowConfirmation"
+      },
+      {
+        "id": "checks",
+        "description": "Read bounded check status for a pull request row.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string"
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "worktree": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "issue",
+                    "pullRequest"
+                  ]
+                },
+                "number": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "url": {
+                  "type": "string"
+                },
+                "host": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "worktree",
+                "kind",
+                "number"
+              ]
+            },
+            "noCache": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "target"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "description": "Hosting check rollup, bounded check rows, and partial failure metadata.",
+          "additionalProperties": true
+        }
+      },
+      {
+        "id": "options",
+        "description": "List bounded repository labels or assignable users, and recent pull-request participants, for Tasks pickers.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string"
+            },
+            "repoId": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "labels",
+                "assignees",
+                "reviewers"
+              ]
+            },
+            "query": {
+              "type": "string"
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "worktree": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "issue",
+                    "pullRequest"
+                  ]
+                },
+                "number": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "url": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "worktree",
+                "kind",
+                "number"
+              ]
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "description": "Hosting label/assignee results, or reviewer participant and suggestion lists.",
+          "properties": {
+            "recentlyActive": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "suggestions": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "labels": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "assignees": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            },
+            "totalCount": {
+              "type": "integer"
+            },
+            "truncated": {
+              "type": "boolean"
+            }
+          }
+        }
+      },
+      {
+        "id": "mergeMetadata",
+        "description": "Load current pull-request merge metadata before showing merge actions; absent safety metadata never enables merge.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string"
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "worktree": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "issue",
+                    "pullRequest"
+                  ]
+                },
+                "number": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "url": {
+                  "type": "string"
+                },
+                "host": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "worktree",
+                "kind",
+                "number"
+              ]
+            }
+          },
+          "required": [
+            "target"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "loaded"
+              ]
+            },
+            "number": {
+              "type": "integer"
+            },
+            "review": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "mergeMetadataKnown": {
+              "type": "boolean"
+            },
+            "mergeQueueRequired": {
+              "description": "True, false, or null when the public provider could not confirm queue policy."
+            },
+            "autoMergeAllowed": {
+              "description": "True, false, or null when repository auto-merge capability is unknown."
+            },
+            "mergeKnown": {
+              "type": "boolean"
+            },
+            "mergeEligible": {
+              "type": "boolean"
+            },
+            "queueEligible": {
+              "type": "boolean"
+            },
+            "autoMergeEnabled": {
+              "type": "boolean"
+            },
+            "autoMergeEnableEligible": {
+              "type": "boolean"
+            },
+            "directMethods": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "squash",
+                  "merge",
+                  "rebase"
+                ]
+              }
+            },
+            "queueMethods": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "squash",
+                  "merge",
+                  "rebase"
+                ]
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "number",
+            "review",
+            "mergeMetadataKnown",
+            "mergeQueueRequired",
+            "autoMergeAllowed",
+            "mergeKnown",
+            "mergeEligible",
+            "queueEligible",
+            "autoMergeEnabled",
+            "autoMergeEnableEligible",
+            "directMethods",
+            "queueMethods"
+          ]
+        }
+      },
+      {
+        "id": "workspace",
+        "description": "Resume, link, unlink, or start a real workspace for a GitHub task. Start returns a visible prefilled composer unless an explicit Project direct-start agent path is available.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string"
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "worktree": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "issue",
+                    "pullRequest"
+                  ]
+                },
+                "number": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "url": {
+                  "type": "string"
+                },
+                "projectId": {
+                  "type": "string"
+                },
+                "itemId": {
+                  "type": "string"
+                },
+                "host": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "worktree",
+                "kind",
+                "number"
+              ]
+            },
+            "action": {
+              "type": "string",
+              "enum": [
+                "start",
+                "resume",
+                "link",
+                "unlink"
+              ]
+            },
+            "newWorkspace": {
+              "type": "boolean"
+            },
+            "name": {
+              "type": "string"
+            },
+            "setup": {
+              "type": "string",
+              "enum": [
+                "run",
+                "skip",
+                "inherit"
+              ]
+            },
+            "agent": {
+              "type": "string"
+            },
+            "prompt": {
+              "type": "string"
+            },
+            "trustSetup": {
+              "type": "boolean",
+              "description": "Only accepted after an explicit composer approval to run this untrusted setup once."
+            },
+            "composerRequestId": {
+              "type": "string",
+              "description": "Active daemon-held composer request required when submitting the visible form."
+            }
+          },
+          "required": [
+            "target",
+            "action"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "created",
+                "resumed",
+                "linked",
+                "unlinked",
+                "composer"
+              ]
+            },
+            "target": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "worktree": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "requestId": {
+              "type": "string"
+            },
+            "repoId": {
+              "type": "string"
+            },
+            "repoName": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "prompt": {
+              "type": "string"
+            },
+            "setup": {
+              "type": "string"
+            },
+            "agent": {},
+            "error": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        }
+      },
+      {
+        "id": "workspaceComposerState",
+        "description": "Read the current daemon-owned visible workspace composer request, or null.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string"
+            }
+          }
+        },
+        "result": {
+          "description": "The pending composer request, or null when no request is open."
+        }
+      },
+      {
+        "id": "workspaceComposerCancel",
+        "description": "Cancel the matching daemon-held workspace composer request without changing any workspace.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string"
+            },
+            "requestId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "requestId"
+          ]
+        },
+        "result": {
+          "description": "The remaining composer request, or null."
+        }
+      },
+      {
+        "id": "issue",
+        "description": "Read the selected GitHub issue, bounded comments, participants, and timeline through the public hosting API.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Registered local Git worktree; omitted uses the open issue or caller context."
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Issue number; omitted uses the open issue detail."
+            },
+            "url": {
+              "type": "string",
+              "description": "Credential-free HTTPS GitHub issue URL, used to preserve repository identity."
+            },
+            "projectId": {
+              "type": "string"
+            },
+            "itemId": {
+              "type": "string"
+            },
+            "host": {
+              "type": "string"
+            },
+            "owner": {
+              "type": "string"
+            },
+            "repo": {
+              "type": "string"
+            },
+            "refresh": {
+              "type": "boolean",
+              "description": "Bypass the local issue-detail cache for an explicit re-read."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "description": "Normalized issue detail. Timeline and comments are bounded by quirky.hosting; partialFailures identify unavailable sources.",
+          "properties": {
+            "item": {
+              "type": "object",
+              "description": "Normalized GitHub issue.",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "issue"
+                  ]
+                },
+                "number": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "title": {
+                  "type": "string",
+                  "description": "Runtime bounds: maxLength=256."
+                },
+                "body": {
+                  "type": "string",
+                  "description": "Runtime bounds: maxLength=1048576."
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "open",
+                    "closed",
+                    "unknown"
+                  ]
+                },
+                "url": {
+                  "type": "string",
+                  "description": "Runtime bounds: maxLength=2048."
+                },
+                "createdAt": {},
+                "updatedAt": {},
+                "author": {},
+                "labels": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "description": "Runtime bounds: maxLength=256."
+                  },
+                  "description": "Runtime bounds: maxItems=100."
+                },
+                "assignees": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "description": "Runtime bounds: maxLength=256."
+                  },
+                  "description": "Runtime bounds: maxItems=100."
+                },
+                "isDraft": {
+                  "type": "boolean"
+                },
+                "stateReason": {
+                  "type": "string"
+                },
+                "duplicateOf": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "kind",
+                "number",
+                "title",
+                "body",
+                "state",
+                "url",
+                "createdAt",
+                "updatedAt",
+                "author",
+                "labels",
+                "assignees",
+                "isDraft"
+              ]
+            },
+            "comments": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "description": "Provider comment ID, or null when omitted upstream."
+                  },
+                  "issueNumber": {
+                    "type": "integer"
+                  },
+                  "body": {
+                    "type": "string",
+                    "description": "Runtime bounds: maxLength=65536."
+                  },
+                  "author": {
+                    "description": "Author login or null."
+                  },
+                  "createdAt": {
+                    "description": "Creation timestamp or null."
+                  },
+                  "updatedAt": {
+                    "description": "Update timestamp or null."
+                  },
+                  "url": {
+                    "description": "Comment URL or null."
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "issue"
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "issueNumber",
+                  "body",
+                  "author",
+                  "createdAt",
+                  "updatedAt",
+                  "url",
+                  "kind"
+                ]
+              },
+              "description": "Runtime bounds: maxItems=100."
+            },
+            "participants": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "login": {
+                    "type": "string"
+                  },
+                  "name": {},
+                  "url": {}
+                },
+                "required": [
+                  "login",
+                  "name",
+                  "url"
+                ]
+              },
+              "description": "Runtime bounds: maxItems=100."
+            },
+            "timeline": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "event": {
+                    "type": "string"
+                  },
+                  "createdAt": {},
+                  "actor": {},
+                  "label": {},
+                  "state": {},
+                  "body": {},
+                  "commitId": {}
+                },
+                "required": [
+                  "event",
+                  "createdAt",
+                  "actor",
+                  "label",
+                  "state",
+                  "body",
+                  "commitId"
+                ]
+              },
+              "description": "Runtime bounds: maxItems=300."
+            },
+            "partialFailures": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "Runtime bounds: maxLength=2048."
+              },
+              "description": "Runtime bounds: maxItems=10."
+            },
+            "truncated": {
+              "type": "boolean"
+            },
+            "viewerCanUpdate": {
+              "description": "Whether GitHub confirms this issue description can be edited; null means capability is unknown. Runtime bounds: nullable/variant values are validated by the handler."
+            },
+            "source": {
+              "type": "string",
+              "enum": [
+                "repository",
+                "project"
+              ]
+            }
+          },
+          "required": [
+            "item",
+            "comments",
+            "participants",
+            "timeline",
+            "partialFailures",
+            "truncated",
+            "viewerCanUpdate",
+            "source"
+          ]
+        }
+      },
+      {
+        "id": "issueEdit",
+        "description": "Edit issue title, Markdown body, status, duplicate target, labels or assignees; Project items use ambient public Project mutation routing.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string"
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "url": {
+              "type": "string"
+            },
+            "projectId": {
+              "type": "string"
+            },
+            "itemId": {
+              "type": "string"
+            },
+            "host": {
+              "type": "string"
+            },
+            "owner": {
+              "type": "string"
+            },
+            "repo": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string",
+              "description": "Runtime bounds: maxLength=256."
+            },
+            "body": {
+              "type": "string",
+              "description": "Local issues allow up to 1 MiB; GitHub Project issue mutations are bounded to 65,536 bytes by the public hosting API. Runtime bounds: maxLength=1048576."
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "open",
+                "closed"
+              ]
+            },
+            "stateReason": {
+              "type": "string",
+              "enum": [
+                "completed",
+                "not_planned"
+              ]
+            },
+            "duplicateOf": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "labels": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "Runtime bounds: maxLength=256."
+              },
+              "description": "Replace current issue labels; [] clears them. Runtime bounds: maxItems=100."
+            },
+            "assignees": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "Runtime bounds: maxLength=256."
+              },
+              "description": "Replace current issue assignees; [] clears them. Runtime bounds: maxItems=100."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "item": {
+              "type": "object",
+              "description": "Normalized GitHub issue.",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "issue"
+                  ]
+                },
+                "number": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "title": {
+                  "type": "string",
+                  "description": "Runtime bounds: maxLength=256."
+                },
+                "body": {
+                  "type": "string",
+                  "description": "Runtime bounds: maxLength=1048576."
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "open",
+                    "closed",
+                    "unknown"
+                  ]
+                },
+                "url": {
+                  "type": "string",
+                  "description": "Runtime bounds: maxLength=2048."
+                },
+                "createdAt": {},
+                "updatedAt": {},
+                "author": {},
+                "labels": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "description": "Runtime bounds: maxLength=256."
+                  },
+                  "description": "Runtime bounds: maxItems=100."
+                },
+                "assignees": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "description": "Runtime bounds: maxLength=256."
+                  },
+                  "description": "Runtime bounds: maxItems=100."
+                },
+                "isDraft": {
+                  "type": "boolean"
+                },
+                "stateReason": {
+                  "type": "string"
+                },
+                "duplicateOf": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "kind",
+                "number",
+                "title",
+                "body",
+                "state",
+                "url",
+                "createdAt",
+                "updatedAt",
+                "author",
+                "labels",
+                "assignees",
+                "isDraft"
+              ]
+            },
+            "changed": {
+              "type": "boolean"
+            },
+            "partial": {
+              "type": "boolean"
+            },
+            "completedSteps": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Runtime bounds: maxItems=3."
+            },
+            "refreshError": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "item",
+            "changed",
+            "partial"
+          ]
+        }
+      },
+      {
+        "id": "issueComment",
+        "description": "Add one Markdown comment to the open issue through the public hosting API.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string"
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "url": {
+              "type": "string"
+            },
+            "projectId": {
+              "type": "string"
+            },
+            "itemId": {
+              "type": "string"
+            },
+            "host": {
+              "type": "string"
+            },
+            "owner": {
+              "type": "string"
+            },
+            "repo": {
+              "type": "string"
+            },
+            "body": {
+              "type": "string",
+              "description": "Runtime bounds: minLength=1; maxLength=65536."
+            }
+          },
+          "required": [
+            "body"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "source": {
+              "type": "string",
+              "enum": [
+                "repository",
+                "project"
+              ]
+            },
+            "comment": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer"
+                },
+                "issueNumber": {
+                  "type": "integer"
+                },
+                "body": {
+                  "type": "string",
+                  "description": "Runtime bounds: maxLength=65536."
+                },
+                "author": {},
+                "createdAt": {},
+                "updatedAt": {},
+                "url": {},
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "issue"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "issueNumber",
+                "body",
+                "author",
+                "createdAt",
+                "updatedAt",
+                "url",
+                "kind"
+              ]
+            }
+          },
+          "required": [
+            "source",
+            "comment"
+          ]
+        }
+      },
+      {
+        "id": "issueChoices",
+        "description": "List selected Git repositories or bounded repository labels and assignable users for the issue editor and new-issue dialog.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string"
+            },
+            "repoId": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "repositories",
+                "labels",
+                "assignees",
+                "source"
+              ]
+            },
+            "query": {
+              "type": "string",
+              "description": "Runtime bounds: maxLength=256."
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "repositories",
+                "labels",
+                "assignees",
+                "source"
+              ]
+            },
+            "available": {
+              "type": "boolean"
+            },
+            "message": {
+              "type": "string"
+            },
+            "repoId": {
+              "type": "string"
+            },
+            "defaultRepoId": {},
+            "repositories": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "path": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string"
+                  },
+                  "displayName": {},
+                  "worktree": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "name",
+                  "path",
+                  "kind",
+                  "worktree"
+                ]
+              },
+              "description": "Runtime bounds: maxItems=100."
+            },
+            "labels": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Runtime bounds: maxItems=100."
+            },
+            "assignees": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "login": {
+                    "type": "string"
+                  },
+                  "avatarUrl": {}
+                },
+                "required": [
+                  "login",
+                  "avatarUrl"
+                ]
+              },
+              "description": "Runtime bounds: maxItems=100."
+            },
+            "source": {
+              "type": "string",
+              "enum": [
+                "origin",
+                "upstream"
+              ]
+            },
+            "sources": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "enum": [
+                      "origin",
+                      "upstream"
+                    ]
+                  },
+                  "label": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "label"
+                ]
+              },
+              "description": "Runtime bounds: maxItems=2."
+            },
+            "truncated": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "truncated"
+          ]
+        }
+      },
+      {
+        "id": "issueSource",
+        "description": "Set the selected repository's GitHub issue source to origin or upstream through the public hosting API.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "repoId": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string",
+              "enum": [
+                "origin",
+                "upstream"
+              ]
+            },
+            "worktree": {
+              "type": "string",
+              "description": "Optional registered workspace context."
+            }
+          },
+          "required": [
+            "repoId",
+            "source"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "repoId": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string",
+              "enum": [
+                "origin",
+                "upstream"
+              ]
+            }
+          },
+          "required": [
+            "repoId",
+            "source"
+          ]
+        }
+      },
+      {
+        "id": "draft",
+        "description": "Read or update the current-window, session-only new-issue draft; changing repository clears its repo-scoped labels and assignees.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string",
+              "description": "Runtime bounds: maxLength=256."
+            },
+            "body": {
+              "type": "string",
+              "description": "Runtime bounds: maxLength=1048576."
+            },
+            "labels": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "Runtime bounds: maxLength=256."
+              },
+              "description": "Runtime bounds: maxItems=100."
+            },
+            "assignees": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "Runtime bounds: maxLength=256."
+              },
+              "description": "Runtime bounds: maxItems=100."
+            },
+            "repoId": {
+              "description": "Runtime bounds: nullable/variant values are validated by the handler."
+            },
+            "reset": {
+              "type": "boolean"
+            },
+            "worktree": {
+              "type": "string",
+              "description": "Optional registered workspace context."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "draft": {
+              "type": "object",
+              "properties": {
+                "title": {
+                  "type": "string"
+                },
+                "body": {
+                  "type": "string"
+                },
+                "labels": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Runtime bounds: maxItems=100."
+                },
+                "assignees": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Runtime bounds: maxItems=100."
+                },
+                "repoId": {}
+              },
+              "required": [
+                "title",
+                "body",
+                "labels",
+                "assignees",
+                "repoId"
+              ]
+            }
+          },
+          "required": [
+            "draft"
+          ]
+        }
+      },
+      {
+        "id": "createIssue",
+        "description": "Create exactly one GitHub issue from the session draft or provided fields, then navigate to the provider-created issue; preserves its body as a draft if GitHub cannot save it.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string",
+              "description": "Runtime bounds: maxLength=256."
+            },
+            "body": {
+              "type": "string",
+              "description": "Runtime bounds: maxLength=1048576."
+            },
+            "labels": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "Runtime bounds: maxLength=256."
+              },
+              "description": "Runtime bounds: maxItems=100."
+            },
+            "assignees": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "Runtime bounds: maxLength=256."
+              },
+              "description": "Runtime bounds: maxItems=100."
+            },
+            "repoId": {
+              "type": "string"
+            },
+            "worktree": {
+              "type": "string",
+              "description": "Optional registered workspace context."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "item": {
+              "type": "object",
+              "description": "Normalized GitHub issue.",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "issue"
+                  ]
+                },
+                "number": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "title": {
+                  "type": "string",
+                  "description": "Runtime bounds: maxLength=256."
+                },
+                "body": {
+                  "type": "string",
+                  "description": "Runtime bounds: maxLength=1048576."
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "open",
+                    "closed",
+                    "unknown"
+                  ]
+                },
+                "url": {
+                  "type": "string",
+                  "description": "Runtime bounds: maxLength=2048."
+                },
+                "createdAt": {},
+                "updatedAt": {},
+                "author": {},
+                "labels": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "description": "Runtime bounds: maxLength=256."
+                  },
+                  "description": "Runtime bounds: maxItems=100."
+                },
+                "assignees": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "description": "Runtime bounds: maxLength=256."
+                  },
+                  "description": "Runtime bounds: maxItems=100."
+                },
+                "isDraft": {
+                  "type": "boolean"
+                },
+                "stateReason": {
+                  "type": "string"
+                },
+                "duplicateOf": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "kind",
+                "number",
+                "title",
+                "body",
+                "state",
+                "url",
+                "createdAt",
+                "updatedAt",
+                "author",
+                "labels",
+                "assignees",
+                "isDraft"
+              ]
+            },
+            "repositoryId": {
+              "type": "string"
+            },
+            "partial": {
+              "type": "boolean"
+            },
+            "bodySaveWarning": {
+              "type": "string"
+            },
+            "completedSteps": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Runtime bounds: maxItems=3."
+            },
+            "navigationWarning": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "item",
+            "repositoryId",
+            "partial"
+          ]
+        }
+      },
+      {
+        "id": "projects",
+        "description": "Discover accessible Projects with an in-memory bounded browse cache and explicit partial failures.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Runtime bounds: minLength=1; maxLength=4096."
+            },
+            "host": {
+              "type": "string",
+              "description": "Runtime bounds: minLength=1; maxLength=255."
+            },
+            "refresh": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "projects": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            },
+            "partialFailures": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            },
+            "truncated": {
+              "type": "boolean"
+            },
+            "cache": {
+              "type": "object",
+              "properties": {
+                "hit": {
+                  "type": "boolean"
+                },
+                "refreshed": {
+                  "type": "boolean"
+                },
+                "ageMs": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "ttlMs": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "entryCount": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 32
+                },
+                "capacity": {
+                  "type": "integer",
+                  "minimum": 32,
+                  "maximum": 32
+                }
+              },
+              "required": [
+                "hit",
+                "refreshed",
+                "ageMs",
+                "ttlMs",
+                "entryCount",
+                "capacity"
+              ]
+            }
+          },
+          "required": [
+            "projects",
+            "partialFailures",
+            "truncated",
+            "cache"
+          ]
+        }
+      },
+      {
+        "id": "projectSelect",
+        "description": "Resolve, add, select, clear, pin, or unpin a project and persist recent selections.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "resolve",
+                "add",
+                "select",
+                "clear",
+                "pin",
+                "unpin"
+              ]
+            },
+            "input": {
+              "type": "string",
+              "description": "Runtime bounds: minLength=1; maxLength=2048."
+            },
+            "project": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "Runtime bounds: minLength=1; maxLength=256."
+                },
+                "owner": {
+                  "type": "string",
+                  "description": "Runtime bounds: minLength=1; maxLength=256."
+                },
+                "ownerType": {
+                  "type": "string",
+                  "enum": [
+                    "user",
+                    "organization"
+                  ]
+                },
+                "number": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "url": {
+                  "type": "string",
+                  "description": "Runtime bounds: minLength=1; maxLength=2048."
+                },
+                "host": {
+                  "type": "string",
+                  "description": "Runtime bounds: minLength=1; maxLength=255."
+                },
+                "title": {
+                  "type": "string",
+                  "description": "Runtime bounds: maxLength=4096."
+                },
+                "viewId": {
+                  "type": "string",
+                  "description": "Runtime bounds: minLength=1; maxLength=256."
+                },
+                "viewNumber": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "id",
+                "owner",
+                "ownerType",
+                "number",
+                "url"
+              ],
+              "additionalProperties": false
+            },
+            "owner": {
+              "type": "string",
+              "description": "Runtime bounds: minLength=1; maxLength=256."
+            },
+            "ownerType": {
+              "type": "string",
+              "enum": [
+                "user",
+                "organization"
+              ]
+            },
+            "projectNumber": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "viewNumber": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "host": {
+              "type": "string",
+              "description": "Runtime bounds: minLength=1; maxLength=255."
+            },
+            "worktree": {
+              "type": "string",
+              "description": "Runtime bounds: minLength=1; maxLength=4096."
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      {
+        "id": "projectView",
+        "description": "List project views, persist a selected view, or load/refresh its bounded table with per-view query overrides.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "list",
+                "select",
+                "load",
+                "refresh"
+              ]
+            },
+            "project": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "Runtime bounds: minLength=1; maxLength=256."
+                },
+                "owner": {
+                  "type": "string",
+                  "description": "Runtime bounds: minLength=1; maxLength=256."
+                },
+                "ownerType": {
+                  "type": "string",
+                  "enum": [
+                    "user",
+                    "organization"
+                  ]
+                },
+                "number": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "url": {
+                  "type": "string",
+                  "description": "Runtime bounds: minLength=1; maxLength=2048."
+                },
+                "host": {
+                  "type": "string",
+                  "description": "Runtime bounds: minLength=1; maxLength=255."
+                },
+                "title": {
+                  "type": "string",
+                  "description": "Runtime bounds: maxLength=4096."
+                },
+                "viewId": {
+                  "type": "string",
+                  "description": "Runtime bounds: minLength=1; maxLength=256."
+                },
+                "viewNumber": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "id",
+                "owner",
+                "ownerType",
+                "number",
+                "url"
+              ],
+              "additionalProperties": false
+            },
+            "input": {
+              "type": "string",
+              "description": "Runtime bounds: minLength=1; maxLength=2048."
+            },
+            "owner": {
+              "type": "string",
+              "description": "Runtime bounds: minLength=1; maxLength=256."
+            },
+            "ownerType": {
+              "type": "string",
+              "enum": [
+                "user",
+                "organization"
+              ]
+            },
+            "projectNumber": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "viewId": {
+              "type": "string",
+              "description": "Runtime bounds: minLength=1; maxLength=256."
+            },
+            "viewNumber": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "viewName": {
+              "type": "string",
+              "description": "Runtime bounds: minLength=1; maxLength=256."
+            },
+            "query": {
+              "type": "string",
+              "description": "Runtime bounds: maxLength=8192."
+            },
+            "clearQueryOverride": {
+              "type": "boolean"
+            },
+            "host": {
+              "type": "string",
+              "description": "Runtime bounds: minLength=1; maxLength=255."
+            },
+            "worktree": {
+              "type": "string",
+              "description": "Runtime bounds: minLength=1; maxLength=4096."
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      {
+        "id": "projectEdit",
+        "description": "Set/clear a typed project field, edit issue or pull-request fields, or change issue type through public hosting methods.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "field",
+                "issue",
+                "issueType"
+              ]
+            },
+            "worktree": {
+              "type": "string",
+              "description": "Runtime bounds: minLength=1; maxLength=4096."
+            },
+            "host": {
+              "type": "string",
+              "description": "Runtime bounds: minLength=1; maxLength=255."
+            },
+            "projectId": {
+              "type": "string",
+              "description": "Runtime bounds: minLength=1; maxLength=256."
+            },
+            "itemId": {
+              "type": "string",
+              "description": "Runtime bounds: minLength=1; maxLength=256."
+            },
+            "fieldId": {
+              "type": "string",
+              "description": "Runtime bounds: minLength=1; maxLength=256."
+            },
+            "value": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string",
+                  "description": "Runtime bounds: maxLength=8192."
+                },
+                "number": {
+                  "type": "number"
+                },
+                "date": {
+                  "type": "string",
+                  "description": "Runtime bounds: pattern=\"^\\\\d{4}-\\\\d{2}-\\\\d{2}$\"."
+                },
+                "singleSelectOptionId": {
+                  "type": "string",
+                  "description": "Runtime bounds: minLength=1; maxLength=256."
+                },
+                "iterationId": {
+                  "type": "string",
+                  "description": "Runtime bounds: minLength=1; maxLength=256."
+                },
+                "multiSelectOptionIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "description": "Runtime bounds: minLength=1; maxLength=256."
+                  },
+                  "description": "Runtime bounds: maxItems=100."
+                }
+              },
+              "additionalProperties": false,
+              "description": "Runtime bounds: maxProperties=1."
+            },
+            "clear": {
+              "type": "boolean"
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "issue",
+                "pullRequest"
+              ]
+            },
+            "title": {
+              "type": "string",
+              "description": "Runtime bounds: minLength=1; maxLength=256."
+            },
+            "body": {
+              "type": "string",
+              "description": "Runtime bounds: maxLength=65536."
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "open",
+                "closed"
+              ]
+            },
+            "stateReason": {
+              "type": "string",
+              "enum": [
+                "completed",
+                "not_planned"
+              ]
+            },
+            "labels": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "Runtime bounds: minLength=1; maxLength=256."
+              },
+              "description": "Runtime bounds: maxItems=100."
+            },
+            "assignees": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "Runtime bounds: minLength=1; maxLength=256."
+              },
+              "description": "Runtime bounds: maxItems=100."
+            },
+            "addLabels": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "Runtime bounds: minLength=1; maxLength=256."
+              },
+              "description": "Runtime bounds: maxItems=100."
+            },
+            "removeLabels": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "Runtime bounds: minLength=1; maxLength=256."
+              },
+              "description": "Runtime bounds: maxItems=100."
+            },
+            "addAssignees": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "Runtime bounds: minLength=1; maxLength=256."
+              },
+              "description": "Runtime bounds: maxItems=100."
+            },
+            "removeAssignees": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "Runtime bounds: minLength=1; maxLength=256."
+              },
+              "description": "Runtime bounds: maxItems=100."
+            },
+            "issueTypeId": {
+              "type": "string",
+              "description": "Runtime bounds: minLength=1; maxLength=256."
+            },
+            "issueTypeName": {
+              "type": "string",
+              "description": "Runtime bounds: minLength=1; maxLength=256."
+            }
+          },
+          "required": [
+            "action",
+            "projectId",
+            "itemId"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      {
+        "id": "projectPreferences",
+        "description": "Read durable project preferences or atomically patch bounded project pins, recents, views, queries, columns, widths, and roadmap zoom.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "read",
+                "update"
+              ]
+            },
+            "patch": {
+              "type": "object",
+              "properties": {
+                "pinned": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "description": "Runtime bounds: minLength=1; maxLength=256."
+                      },
+                      "owner": {
+                        "type": "string",
+                        "description": "Runtime bounds: minLength=1; maxLength=256."
+                      },
+                      "ownerType": {
+                        "type": "string",
+                        "enum": [
+                          "user",
+                          "organization"
+                        ]
+                      },
+                      "number": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "url": {
+                        "type": "string",
+                        "description": "Runtime bounds: minLength=1; maxLength=2048."
+                      },
+                      "host": {
+                        "type": "string",
+                        "description": "Runtime bounds: minLength=1; maxLength=255."
+                      },
+                      "title": {
+                        "type": "string",
+                        "description": "Runtime bounds: maxLength=4096."
+                      },
+                      "viewId": {
+                        "type": "string",
+                        "description": "Runtime bounds: minLength=1; maxLength=256."
+                      },
+                      "viewNumber": {
+                        "type": "integer",
+                        "minimum": 1
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "owner",
+                      "ownerType",
+                      "number",
+                      "url"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "description": "Runtime bounds: maxItems=50."
+                },
+                "recent": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "description": "Runtime bounds: minLength=1; maxLength=256."
+                      },
+                      "owner": {
+                        "type": "string",
+                        "description": "Runtime bounds: minLength=1; maxLength=256."
+                      },
+                      "ownerType": {
+                        "type": "string",
+                        "enum": [
+                          "user",
+                          "organization"
+                        ]
+                      },
+                      "number": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "url": {
+                        "type": "string",
+                        "description": "Runtime bounds: minLength=1; maxLength=2048."
+                      },
+                      "host": {
+                        "type": "string",
+                        "description": "Runtime bounds: minLength=1; maxLength=255."
+                      },
+                      "title": {
+                        "type": "string",
+                        "description": "Runtime bounds: maxLength=4096."
+                      },
+                      "viewId": {
+                        "type": "string",
+                        "description": "Runtime bounds: minLength=1; maxLength=256."
+                      },
+                      "viewNumber": {
+                        "type": "integer",
+                        "minimum": 1
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "owner",
+                      "ownerType",
+                      "number",
+                      "url"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "description": "Runtime bounds: maxItems=10."
+                },
+                "lastViewByProject": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "description": "Runtime bounds: maxProperties=100. Map value types and bounds are enforced by the handler."
+                },
+                "queryByView": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "description": "Runtime bounds: maxProperties=100. Map value types and bounds are enforced by the handler."
+                },
+                "hiddenColumns": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "description": "Runtime bounds: maxProperties=100. Map value types and bounds are enforced by the handler."
+                },
+                "columnWidths": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "description": "Runtime bounds: maxProperties=100. Map value types and bounds are enforced by the handler."
+                },
+                "roadmapZoom": {
+                  "type": "string",
+                  "enum": [
+                    "month",
+                    "quarter",
+                    "year"
+                  ]
+                }
+              },
+              "additionalProperties": false
+            },
+            "worktree": {
+              "type": "string",
+              "description": "Optional registered workspace context."
+            }
+          },
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      {
+        "id": "settings",
+        "description": "Open the public Task Sources settings view.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string"
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "opened": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "opened"
+          ]
+        }
+      },
+      {
+        "id": "rowConfirmation",
+        "description": "Describe a repository- and head-bound PR merge; return null for reversible row edits.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string"
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "worktree": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "issue",
+                    "pullRequest"
+                  ]
+                },
+                "number": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "url": {
+                  "type": "string"
+                },
+                "projectId": {
+                  "type": "string"
+                },
+                "itemId": {
+                  "type": "string"
+                },
+                "host": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "worktree",
+                "kind",
+                "number"
+              ]
+            },
+            "action": {
+              "type": "string",
+              "enum": [
+                "issueStatus",
+                "assignees",
+                "reviewers",
+                "issueSource",
+                "merge",
+                "autoMerge"
+              ]
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "open",
+                "closed"
+              ]
+            },
+            "stateReason": {
+              "type": "string",
+              "enum": [
+                "completed",
+                "not_planned",
+                "duplicate"
+              ]
+            },
+            "duplicateOf": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "A positive, different issue number in the same repository."
+            },
+            "assignees": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Replace the issue assignee set; at most 100 values."
+            },
+            "reviewerAction": {
+              "type": "string",
+              "enum": [
+                "add",
+                "remove"
+              ]
+            },
+            "reviewerText": {
+              "type": "string",
+              "description": "Comma/space separated reviewer logins, at most 2048 UTF-8 bytes and 15 reviewers."
+            },
+            "logins": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "At most 15 reviewer logins."
+            },
+            "preference": {
+              "type": "string",
+              "enum": [
+                "origin",
+                "upstream"
+              ]
+            },
+            "method": {
+              "type": "string",
+              "enum": [
+                "squash",
+                "merge",
+                "rebase"
+              ]
+            },
+            "mergeAction": {
+              "type": "string",
+              "enum": [
+                "direct",
+                "queue"
+              ]
+            },
+            "expectedHead": {
+              "type": "string",
+              "description": "The confirmed current PR head SHA; the hosting API rechecks it before merge."
+            },
+            "autoMergeAction": {
+              "type": "string",
+              "enum": [
+                "enable",
+                "disable"
+              ]
+            }
+          },
+          "required": [
+            "target",
+            "action"
+          ]
+        },
+        "result": {
+          "description": "Merge confirmation question, or null for reversible actions."
+        }
+      }
+    ],
+    "event": [
+      {
+        "id": "changed",
+        "description": "Tasks state changed; refetch the current projection.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "revision": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "revision"
+          ]
+        }
+      },
+      {
+        "id": "workspaceComposer",
+        "description": "The readable workspace composer request changed or was cancelled.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "request": {
+              "description": "The pending source-bound workspace composer request, or null."
+            }
+          },
+          "required": [
+            "request"
+          ]
+        }
+      }
+    ],
+    "view": [
+      {
+        "id": "tasks",
+        "title": "Tasks"
+      },
+      {
+        "id": "settings",
+        "title": "Task Sources",
+        "settings": true
+      }
+    ],
+    "sidebar-section": [
+      {
+        "id": "tasks",
+        "title": "Tasks",
+        "order": 15
+      }
+    ],
+    "overlay": [
+      {
+        "id": "workspace-composer",
+        "title": "Start workspace",
+        "order": 50
+      }
+    ],
+    "setting": [
+      {
+        "id": "show-tasks-button",
+        "title": "Show Tasks Button",
+        "description": "Show GitHub Tasks in the sidebar; the Open Tasks command always remains available.",
+        "type": "boolean",
+        "default": true,
+        "menu": "view"
+      }
+    ],
+    "command": [
+      {
+        "id": "open",
+        "title": "Open Tasks",
+        "description": "Open the Tasks page; no default shortcut.",
+        "args": {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "type": "string"
+            },
+            "repoIds": {},
+            "detail": {},
+            "project": {}
+          }
+        }
+      },
+      {
+        "id": "copy-link",
+        "title": "Copy GitHub link",
+        "args": {
+          "type": "object",
+          "properties": {
+            "url": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "url"
+          ]
+        }
+      },
+      {
+        "id": "open-link",
+        "title": "Open GitHub link",
+        "args": {
+          "type": "object",
+          "properties": {
+            "url": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "url"
+          ]
+        }
+      },
+      {
+        "id": "copy-text",
+        "title": "Copy task text",
+        "args": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string",
+              "description": "Text no larger than 8192 UTF-8 bytes."
+            }
+          },
+          "required": [
+            "text"
+          ]
+        }
+      }
+    ],
+    "cli-command": [
+      {
+        "id": "state",
+        "method": "state",
+        "summary": "show daemon-owned Tasks state"
+      },
+      {
+        "id": "repositories",
+        "method": "repositories",
+        "summary": "list eligible Tasks repositories"
+      },
+      {
+        "id": "open",
+        "method": "open",
+        "summary": "open GitHub Tasks"
+      },
+      {
+        "id": "navigate",
+        "method": "navigate",
+        "summary": "change Tasks navigation"
+      },
+      {
+        "id": "close",
+        "method": "close",
+        "summary": "close Tasks"
+      },
+      {
+        "id": "preferences",
+        "method": "preferences",
+        "summary": "configure Tasks preferences"
+      },
+      {
+        "id": "list",
+        "method": "list",
+        "summary": "list bounded GitHub issues or pull requests across selected repositories"
+      },
+      {
+        "id": "row",
+        "method": "row",
+        "summary": "update an issue or pull-request row through the safe hosting API"
+      },
+      {
+        "id": "checks",
+        "method": "checks",
+        "summary": "read pull-request checks for a Tasks row"
+      },
+      {
+        "id": "options",
+        "method": "options",
+        "summary": "list bounded labels, assignees, or pull-request reviewer suggestions"
+      },
+      {
+        "id": "merge-metadata",
+        "method": "mergeMetadata",
+        "summary": "load pull-request merge metadata before confirmation"
+      },
+      {
+        "id": "workspace",
+        "method": "workspace",
+        "summary": "link, resume, or start a workspace for a GitHub item"
+      },
+      {
+        "id": "workspace-composer-state",
+        "method": "workspaceComposerState",
+        "summary": "read the current workspace composer request"
+      },
+      {
+        "id": "workspace-composer-cancel",
+        "method": "workspaceComposerCancel",
+        "summary": "cancel the current workspace composer request"
+      },
+      {
+        "id": "issue",
+        "method": "issue",
+        "summary": "read or refresh the open or numbered GitHub issue"
+      },
+      {
+        "id": "issue-edit",
+        "method": "issueEdit",
+        "summary": "edit issue title, body, state, labels and assignees"
+      },
+      {
+        "id": "issue-comment",
+        "method": "issueComment",
+        "summary": "post one Markdown issue comment"
+      },
+      {
+        "id": "issue-choices",
+        "method": "issueChoices",
+        "summary": "list issue repositories, labels, assignees or source choices"
+      },
+      {
+        "id": "issue-source",
+        "method": "issueSource",
+        "summary": "set the selected repository's issue source"
+      },
+      {
+        "id": "draft",
+        "method": "draft",
+        "summary": "read or update the session-only issue creation draft"
+      },
+      {
+        "id": "create-issue",
+        "method": "createIssue",
+        "summary": "create one GitHub issue from the session draft"
+      },
+      {
+        "id": "projects",
+        "method": "projects",
+        "summary": "discover Projects using an explicit or selected local Git repository"
+      },
+      {
+        "id": "project-select",
+        "method": "projectSelect",
+        "summary": "resolve, add, select, clear, pin, or unpin a project"
+      },
+      {
+        "id": "project-view",
+        "method": "projectView",
+        "summary": "list, select, load, or refresh a project view"
+      },
+      {
+        "id": "project-edit",
+        "method": "projectEdit",
+        "summary": "set or clear project fields and edit issue fields or issue type"
+      },
+      {
+        "id": "project-preferences",
+        "method": "projectPreferences",
+        "summary": "read or atomically update bounded durable project preferences"
+      },
+      {
+        "id": "settings",
+        "method": "settings",
+        "summary": "open Task Sources settings"
+      },
+      {
+        "id": "row-confirmation",
+        "method": "rowConfirmation",
+        "summary": "describe a Tasks PR merge confirmation"
+      }
+    ]
+  }
+}

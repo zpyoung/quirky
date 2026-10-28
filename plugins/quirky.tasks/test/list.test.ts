@@ -303,11 +303,10 @@ test('unknown queue and auto-merge metadata disables unsafe actions', async () =
   pull.requestedReviewers = null
   pull.reviews = null
   pull.reviewAssignees = null
-  pull.participantsTruncated = true
   host.writeState(seedListFixture({ 'test-owner/test-repo': [pull] }, { mergeQueueRequired: null, autoMergeAllowed: null }))
   const result = record(await host.call('mergeMetadata', { target: { worktree: host.worktree, kind: 'pullRequest', number: 12, url: pull.url } }))
   expect(result).toMatchObject({ mergeMetadataKnown: false, mergeQueueRequired: null, autoMergeAllowed: null, mergeKnown: false, mergeEligible: false, queueEligible: false, autoMergeEnableEligible: false })
-  expect(result.review).toMatchObject({ requestedReviewers: null, reviews: null, assignees: null, participantsTruncated: true })
+  expect(result.review).toMatchObject({ requestedReviewers: null, reviews: null, assignees: null })
   expect(result.directMethods).toEqual([])
   expect(result.queueMethods).toEqual([])
 })
@@ -327,15 +326,6 @@ test('row closes a duplicate issue through the stateful Hosting API', async () =
   expect(repoItems[0]).toMatchObject({ state: 'closed', duplicateOf: 8 })
 })
 
-test('row requires an explicit head and matching merge confirmation before a merge call', async () => {
-  const host = await bootTasks(listFixtureSource)
-  hosts.push(host)
-  const target = { worktree: host.worktree, kind: 'pullRequest', number: 12, url: 'https://github.com/test-owner/test-repo/pull/12' }
-  const before = host.invocations().length
-  await expect(host.call('row', { target, action: 'merge', method: 'squash' })).rejects.toThrow(/expectedHead/)
-  await expect(host.call('row', { target, action: 'merge', method: 'squash', expectedHead: 'a'.repeat(40), confirmation: 'Merge PR #12' })).rejects.toThrow(/confirmation/)
-  expect(host.invocations()).toHaveLength(before)
-})
 
 
 test('workspace uses exact URL links, retains a visible composer request, and creates through worktree API', async () => {

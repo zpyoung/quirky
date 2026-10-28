@@ -4,7 +4,7 @@ import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { bootTasks, type HostingTest } from './helpers'
+import { bootTasks, type TasksTest as HostingTest } from './helpers'
 import { issueFixtureRecord, issueFixtureSource, seedIssueFixture } from './fixtures/issue'
 import { Markdown, safeHttpUrl } from '../src/issue/Markdown'
 

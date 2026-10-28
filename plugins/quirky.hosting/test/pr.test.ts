@@ -1456,9 +1456,10 @@ describe('quirky.hosting PR mutations', () => {
 })
 
 test('Tasks review metadata exposes queue and auto-merge capabilities and refuses a disabled enable before mutation', async () => {
-  const instance = await host(fixtureState({ prs: [pr({ additions: 3, deletions: 1, changedFiles: 2, reviewRequests: [{ login: 'waiting-reviewer' }], reviews: [{ author: { login: 'reviewer' }, state: 'CHANGES_REQUESTED' }], assignees: [{ login: 'owner' }] })], mergeQueueRequired: true, autoMergeAllowed: false }))
+  const instance = await host(fixtureState({ prs: [pr({ updatedAt: '2026-10-27T18:00:00Z', additions: 3, deletions: 1, changedFiles: 2, reviewRequests: [{ login: 'waiting-reviewer' }], reviews: [{ author: { login: 'reviewer' }, state: 'CHANGES_REQUESTED' }], assignees: [{ login: 'owner' }] })], mergeQueueRequired: true, autoMergeAllowed: false }))
   const lookup = recordOf(await instance.call('review', { number: 7 }))
   const review = recordOf(lookup.review)
+  expect(review.updatedAt).toBe('2026-10-27T18:00:00Z')
   expect(review.mergeMetadataKnown).toBe(true)
   expect(review.mergeQueueRequired).toBe(true)
   expect(review.autoMergeAllowed).toBe(false)
@@ -1476,6 +1477,7 @@ test('unavailable review capability reads remain unknown instead of advertising 
   const instance = await host(fixtureState({ prs: [pr()], mergeMetadataAvailable: false }))
   const lookup = recordOf(await instance.call('review', { number: 7 }))
   const review = recordOf(lookup.review)
+  expect(review.updatedAt).toBeNull()
   expect(review.mergeMetadataKnown).toBe(false)
   expect(review.mergeQueueRequired).toBeNull()
   expect(review.autoMergeAllowed).toBeNull()

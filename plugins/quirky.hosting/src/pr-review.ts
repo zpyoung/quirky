@@ -44,6 +44,7 @@ export type Review = {
   url: string
   title: string
   body: string
+  updatedAt: string | null
   state: ReviewState
   headRefName: string
   baseRefName: string
@@ -195,9 +196,11 @@ function reviewFromRaw(raw: Record<string, unknown>, repository: IdentityValue, 
     parsedUrl.pathname.toLowerCase() !== expectedPath.toLowerCase()) return undefined
   const url = `${parsedUrl.origin}${expectedPath}`
 
+  const providerUpdatedAt = raw.updatedAt ?? raw.updated_at
   const review: Review = {
     ...reviewParticipants(raw),
     provider: 'github', number, url, title, body, state, headRefName, baseRefName, headRefOid, baseRefOid,
+    updatedAt: typeof providerUpdatedAt === 'string' && Number.isFinite(Date.parse(providerUpdatedAt)) ? providerUpdatedAt : null,
     mergeable: mergeability(raw), checksStatus: checksStatus(raw),
     reviewDecision: Object.hasOwn(raw, 'reviewDecision') && (
       raw.reviewDecision === null ||
