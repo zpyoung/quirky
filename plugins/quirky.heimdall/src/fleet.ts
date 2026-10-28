@@ -208,7 +208,7 @@ function rowFrom(inspection: Inspection, workers: WatcherWorker[], workspace: Wo
     observedAtMs,
     lastSuccessfulTickAtMs: lastSuccessfulTick(inspection.traces),
     budget: inspection.budget,
-    runningWorkers: workers.reduce((count, worker) => count + (worker.state === 'live' ? 1 : 0), 0),
+    runningWorkers: workers.reduce((count, worker) => count + (worker.state === 'live' && worker.assignmentActive === true ? 1 : 0), 0),
     maxConcurrency: maxConcurrencyOf(enrollment),
     openEscalations: latestOpenEscalations(inspection.journal),
     pendingQuestion: pendingQuestion(workers)
