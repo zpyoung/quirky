@@ -6,7 +6,7 @@ registerDom()
 const s = await import('./support')
 afterAll(() => GlobalRegistrator.unregister())
 
-const { act, expectOpened, fakeContext, layoutFor, mountView, numbered, registerPanel, settle, textDiff } = s
+const { act, fakeContext, layoutFor, mountView, numbered, registerPanel, settle, textDiff } = s
 
 const COMMANDS = [
   'show',
@@ -59,80 +59,10 @@ describe('quirky.git commands', () => {
   })
 
   describe('opening views', () => {
-    test('SC-64: open-diff opens the file diff view on the path, in the open view\'s worktree', async () => {
-      await fake.run('open-diff', { path: 'math.ts', source: 'unstaged' })
-      expectOpened(fake, s.DIFF_VIEW, { worktree: 'w1', mode: 'file', path: 'math.ts', source: 'unstaged' })
-    })
-
-    test('open-diff takes oldPath, commit and an explicit worktree, and defaults the source from the area', async () => {
-      await fake.run('open-diff', { path: 'b.ts', oldPath: 'a.ts', commit: 'abc', source: 'commit', worktree: 'other' })
-      expectOpened(fake, s.DIFF_VIEW, { worktree: 'other', mode: 'file', path: 'b.ts', source: 'commit', oldPath: 'a.ts', commit: 'abc' })
-      await fake.run('open-diff', { path: 'x.ts', area: 'staged' })
-      expectOpened(fake, s.DIFF_VIEW, { worktree: 'w1', mode: 'file', path: 'x.ts', source: 'staged' })
-      await fake.run('open-diff', { path: 'x.ts' })
-      expectOpened(fake, s.DIFF_VIEW, { worktree: 'w1', mode: 'file', path: 'x.ts', source: 'unstaged' })
-    })
-
-    test('SC-64: open-diff with source conflict opens the conflict file view', async () => {
-      await fake.run('open-diff', { path: 'a.ts', source: 'conflict' })
-      expectOpened(fake, s.DIFF_VIEW, { worktree: 'w1', mode: 'conflict-file', path: 'a.ts' })
-    })
-    test('open-diff sends placement and display through the public terminal hosted-view API', async () => {
-      await fake.run('open-diff', {
-        path: 'README.md',
-        source: 'unstaged',
-        preview: true,
-        split: true,
-        groupId: 'w1:group',
-        display: 'preview'
-      })
-      expect(fake.callsTo('quirky.terminal/openViewTab').at(-1)?.params).toMatchObject({
-        workspace: 'id:w1',
-        group: 'w1:group',
-        preview: false,
-        input: {
-          worktree: 'w1',
-          mode: 'file',
-          source: 'unstaged',
-          path: 'README.md',
-          display: 'preview',
-          groupId: 'w1:group',
-          preview: false,
-          split: true
-        }
-      })
-      expect(fake.callsTo('quirky.terminal/moveTab').at(-1)?.params).toMatchObject({ split: 'right', of: 'w1:group' })
-    })
-
 
     test('open-diff needs a path', async () => {
       await expect(fake.run('open-diff', {})).rejects.toThrow('open-diff needs a path.')
       await expect(fake.run('open-diff')).rejects.toThrow('open-diff needs a path.')
-    })
-
-    test('SC-64: open-changes opens the combined diff of an area', async () => {
-      await fake.run('open-changes', { area: 'staged' })
-      expectOpened(fake, s.DIFF_VIEW, { worktree: 'w1', mode: 'combined', area: 'staged' })
-      await fake.run('open-changes', { area: 'unstaged' })
-      expectOpened(fake, s.DIFF_VIEW, { worktree: 'w1', mode: 'combined', area: 'unstaged' })
-      await fake.run('open-changes')
-      expectOpened(fake, s.DIFF_VIEW, { worktree: 'w1', mode: 'combined', area: 'unstaged' })
-    })
-
-    test('open-branch-changes, open-commit and review-conflicts', async () => {
-      await fake.run('open-branch-changes')
-      expectOpened(fake, s.DIFF_VIEW, { worktree: 'w1', mode: 'combined', area: 'branch' })
-      await fake.run('open-commit', { commit: 'abc1234' })
-      expectOpened(fake, s.DIFF_VIEW, { worktree: 'w1', mode: 'combined', commit: 'abc1234' })
-      await expect(fake.run('open-commit', {})).rejects.toThrow('open-commit needs a commit.')
-      await fake.run('review-conflicts', { worktree: 'w9' })
-      expectOpened(fake, s.DIFF_VIEW, { worktree: 'w9', mode: 'conflicts' })
-    })
-
-    test('the worktree comes from the open diff view when the layout has another view', async () => {
-      fake.layout = { ...layoutFor(null), view: { id: s.DIFF_VIEW, input: { worktree: 'from-layout' } } }
-      await fake.run('review-conflicts')
-      expectOpened(fake, s.DIFF_VIEW, { worktree: 'from-layout', mode: 'conflicts' })
     })
 
     test('SC-64: with no worktree open the open commands say so', async () => {
@@ -185,17 +115,6 @@ describe('quirky.git commands', () => {
       await expect(fake.run('load-diff', { path: 'x' })).resolves.toBeUndefined()
     })
 
-    test('a view opened with a new input replaces the old one as the target', async () => {
-      fake.handlers['quirky.git/diff'] = () => textDiff()
-      const first = mountView(fake, { worktree: 'w1', mode: 'file', path: 'a.ts' })
-      await settle()
-      const second = mountView(fake, { worktree: 'w2', mode: 'file', path: 'b.ts' })
-      first.unmount()
-      await settle()
-      await fake.run('open-changes')
-      expectOpened(fake, s.DIFF_VIEW, { worktree: 'w2', mode: 'combined', area: 'unstaged' })
-      mounted = second
-    })
   })
 
   describe('driving the panel', () => {

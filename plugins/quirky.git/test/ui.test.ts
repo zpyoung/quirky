@@ -214,12 +214,14 @@ describe('quirky.git source-control panel', () => {
     unmount()
   })
 
-  test('closing the panel unsubscribes from events and layout', async () => {
+  test('closing the panel releases its listeners without removing plugin-owned listeners', async () => {
     const fake = fakeContext(layoutFor('w1'))
+    void activate(fake.context)
+    const persistentListeners = fake.listeners()
     const { unmount } = mountPanel(fake)
     await settle()
-    expect(fake.listeners().events).toBeGreaterThan(0)
+    expect(fake.listeners().events).toBeGreaterThan(persistentListeners.events)
     unmount()
-    expect(fake.listeners()).toEqual({ events: 0, layout: 0 })
+    expect(fake.listeners()).toEqual(persistentListeners)
   })
 })

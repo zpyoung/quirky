@@ -185,12 +185,17 @@ describe('quirky.git file diff view', () => {
     expect(element.querySelector('.cm-editor')).toBe(before)
   })
 
-  test('unmounting stops listening to events', async () => {
+  test('unmounting releases diff listeners without removing the plugin-owned listener', async () => {
+    const persistentListeners = fake.listeners()
     await open()
-    expect(fake.listeners()).toBeGreaterThan(0)
+    expect(fake.listeners()).toBeGreaterThan(persistentListeners)
+    const reads = fake.callsTo('quirky.git/diff').length
     mounted!.unmount()
     mounted = null
-    expect(fake.listeners()).toBe(0)
+    expect(fake.listeners()).toBe(persistentListeners)
+    await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'w1' } }))
+    await settle()
+    expect(fake.callsTo('quirky.git/diff')).toHaveLength(reads)
   })
 
   test('with no worktree in the input it asks for one', async () => {

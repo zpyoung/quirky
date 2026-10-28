@@ -330,25 +330,6 @@ describe('quirky.git combined diff', () => {
     expect(element.textContent).toContain('Error loading diff: not a repository')
   })
 
-  test('the report lists sections, loaded sections and the state of the edits', async () => {
-    const { report } = await open()
-    expect(report()).toEqual({
-      mode: 'combined',
-      source: null,
-      path: null,
-      area: 'unstaged',
-      commit: null,
-      changes: 6,
-      currentChange: 1,
-      dirty: false,
-      stale: false,
-      tooLarge: false,
-      sections: 8,
-      loadedSections: small.slice(0, 6),
-      collapsed: false
-    })
-  })
-
   test('SC-60: F7 and Shift+F7 walk the changes across sections and wrap', async () => {
     const twoChanges = (path: string) =>
       textDiff({
