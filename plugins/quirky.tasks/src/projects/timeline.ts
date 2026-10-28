@@ -254,7 +254,7 @@ export function buildRoadmapTimeline(
   const tickWidth = tickZoom === 'month' ? 148 : tickZoom === 'quarter' ? 128 : 160
   const choice = chooseField(Array.isArray(fields) ? fields : [])
   if (!choice) {
-    const undatedCount = (Array.isArray(items) ? items : []).reduce((count, value) => {
+    const undatedCount = (Array.isArray(items) ? items : []).reduce<number>((count, value) => {
       const item = record(value)
       return item && typeof item.id === 'string' && item.id.trim().length > 0 ? count + 1 : count
     }, 0)
