@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, readFileSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
-import { RpcErrorCode } from '@quirky/protocol'
-import type { HostedSession, PublicListResult } from '../src/types'
+import { RpcErrorCode, type QuirkyEvent } from '@quirky/protocol'
+import type { HostedSession, PublicListResult, SearchResponse } from '../src/types'
 import { VaultRig } from './support/harness'
 import { TrashVolume } from './support/trash-volume'
+import { writeJsonlFixture } from './fixtures/scanner-fixtures'
 
 let rig: VaultRig | undefined
 let trashVolume: TrashVolume | undefined
@@ -62,6 +63,60 @@ const agentSession = async (vault: VaultRig, agent: string): Promise<HostedSessi
   return session
 }
 
+type EventWait = { promise: Promise<void>; cancel(): void }
+
+function waitForEvent(vault: VaultRig, predicate: (event: QuirkyEvent) => boolean, description: string): EventWait {
+  const { promise, resolve, reject } = Promise.withResolvers<void>()
+  let settled = false
+  let unsubscribe = () => {}
+  // This integration wait observes a real Worker event; the guard prevents a missing event from leaking its listener.
+  const timeout = setTimeout(() => {
+    if (settled) return
+    settled = true
+    unsubscribe()
+    reject(new Error(`timed out waiting for ${description}`))
+  }, 30_000)
+  unsubscribe = vault.client.onEvent((event: QuirkyEvent) => {
+    if (settled || !predicate(event)) return
+    settled = true
+    clearTimeout(timeout)
+    unsubscribe()
+    resolve()
+  })
+  return {
+    promise,
+    cancel() {
+      if (settled) return
+      settled = true
+      clearTimeout(timeout)
+      unsubscribe()
+    }
+  }
+}
+
+function waitForScan(vault: VaultRig, filePath: string): EventWait {
+  return waitForEvent(vault, (event) => {
+    if (event.type !== 'quirky.vault/scanProgress') return false
+    const data = event.data as { phase?: unknown; current?: unknown }
+    return data.phase === 'reading' && data.current === filePath
+  }, `scan progress for ${filePath}`)
+}
+
+
+function largeTranscript(sessionId: string, cwd: string): Record<string, unknown>[] {
+  const base = Date.UTC(2026, 9, 1, 10, 0, 0)
+  return Array.from({ length: 16_000 }, (_, index) => {
+    const role = index % 2 === 0 ? 'user' : 'assistant'
+    return {
+      type: role,
+      sessionId,
+      timestamp: new Date(base + index * 1_000).toISOString(),
+      cwd,
+      message: { role, content: `${'owned concurrent source context '.repeat(12)} ${index}` }
+    }
+  })
+}
+
 describe('vault session actions', () => {
   test('inspection returns on-demand first prompt and parent-owned subagents', async () => {
     const vault = await start()
@@ -83,10 +138,14 @@ describe('vault session actions', () => {
     process.env.QUIRKY_TEST_OPEN_LOG = log
     try {
       expect(await vault.call('openSource', { id: session.id, mode: 'view' })).toMatchObject({ ok: true })
+      expect(await vault.call('openSource', { id: session.id, mode: 'open' })).toMatchObject({ ok: true })
+      expect(await vault.call('openSource', { id: session.id, mode: 'reveal' })).toMatchObject({ ok: true })
       expect(await vault.call('openWorkingDirectory', { id: session.id })).toMatchObject({ ok: true })
       const calls = readFileSync(log, 'utf8').trim().split('\n').map((line) => JSON.parse(line) as { target: string; reveal: boolean })
       expect(calls).toEqual([
         expect.objectContaining({ target: session.source.filePath, reveal: false }),
+        expect.objectContaining({ target: session.source.filePath, reveal: false }),
+        expect.objectContaining({ target: session.source.filePath, reveal: true }),
         expect.objectContaining({ target: session.cwd, reveal: false })
       ])
     } finally {
@@ -118,7 +177,7 @@ describe('vault session actions', () => {
   })
 
   test.skipIf(process.platform !== 'darwin')(
-    'local file and directory deletion use only the selected sources and disposable APFS Trash',
+    'APFS Trash rejects symlink swaps and invalidates concurrent scans/indexes while preserving unrelated originals',
     async () => {
       const volume = trashVolume = TrashVolume.create()
       const vault = await startWithVolumeTmpdir(volume)
@@ -148,11 +207,125 @@ describe('vault session actions', () => {
       expect(existsSync(claudePath)).toBe(true)
       expect(existsSync(grokDirectory)).toBe(true)
 
-      const claudeResult = await vault.call<DeleteResult>('deleteSession', { id: claude.id, yes: true })
+      const sentinelPath = join(vault.home, 'outside-sentinel.txt')
+      const sentinelBytes = Buffer.from('outside data must survive a symlink swap\n')
+      writeFileSync(sentinelPath, sentinelBytes)
+      unlinkSync(claudePath)
+      symlinkSync(sentinelPath, claudePath)
+      const swapped = await vault.call<DeleteResult>('deleteSession', { id: claude.id, yes: true }).then(
+        (result) => ({ result }),
+        (error: unknown) => ({ error })
+      )
+      if ('result' in swapped) {
+        expect(swapped.result).toMatchObject({ deleted: false, trashed: 0, alreadyMissing: false })
+      } else {
+        expect(swapped.error).toMatchObject({ code: RpcErrorCode.Conflict })
+      }
+      expect(lstatSync(claudePath).isSymbolicLink()).toBe(true)
+      expect(readFileSync(sentinelPath)).toEqual(sentinelBytes)
+      unlinkSync(claudePath)
+      writeFileSync(claudePath, claudeBytes)
 
-      expect(claudeResult).toMatchObject({ deleted: true, trashed: 1, alreadyMissing: false })
+      await vault.call('setSearchEnabled', { enabled: true })
+      const beforeDelete = await vault.call<SearchResponse>('search', {
+        query: 'vault-fixture-claude-marker',
+        freshness: 'wait-until-current',
+        filters: { agents: ['claude'] }
+      })
+      expect(beforeDelete.kind).toBe('results')
+      if (beforeDelete.kind === 'results') {
+        expect(beforeDelete.hits.some((hit) => hit.id === claude.id)).toBe(true)
+      }
+
+      const largeId = 'delete-race-large-source'
+      const largeCwd = join(vault.home, 'large-source-workspace')
+      mkdirSync(largeCwd, { recursive: true })
+      const largePath = await writeJsonlFixture(vault.sourceHome, 'claude', largeId, largeTranscript(largeId, largeCwd))
+      const pendingId = 'delete-race-index-pending'
+      await writeJsonlFixture(vault.sourceHome, 'claude', pendingId, [
+        {
+          type: 'user',
+          sessionId: pendingId,
+          timestamp: '2026-10-20T00:00:00.000Z',
+          cwd: largeCwd,
+          message: { role: 'user', content: 'pending index work' }
+        },
+        {
+          type: 'assistant',
+          sessionId: pendingId,
+          timestamp: '2026-10-20T00:00:01.000Z',
+          cwd: largeCwd,
+          message: { role: 'assistant', content: 'pending index response' }
+        }
+      ])
+      const scanProgress = waitForScan(vault, largePath)
+      let listSettled = false
+      let searchSettled = false
+      const inFlightList = vault.call<PublicListResult>('list', { agents: ['claude'], force: true, unlimited: true }).then(
+        (value) => {
+          listSettled = true
+          return { value }
+        },
+        (error: unknown) => {
+          listSettled = true
+          return { error }
+        }
+      )
+      const inFlightSearch = vault.call<SearchResponse>('search', {
+        query: 'vault-fixture-claude-marker',
+        freshness: 'wait-until-current',
+        filters: { agents: ['claude'] }
+      }).then(
+        (value) => {
+          searchSettled = true
+          return { value }
+        },
+        (error: unknown) => {
+          searchSettled = true
+          return { error }
+        }
+      )
+      let raceResults: { scanned: PublicListResult; indexed: SearchResponse; deleted: DeleteResult } | undefined
+      try {
+        await scanProgress.promise
+        expect(listSettled).toBe(false)
+        expect(searchSettled).toBe(false)
+        const inFlightDelete = vault.call<DeleteResult>('deleteSession', { id: claude.id, yes: true }).then(
+          (value) => ({ value }),
+          (error: unknown) => ({ error })
+        )
+        const [listOutcome, searchOutcome, deleteOutcome] = await Promise.all([
+          inFlightList,
+          inFlightSearch,
+          inFlightDelete
+        ])
+        if ('error' in listOutcome) throw listOutcome.error
+        if ('error' in searchOutcome) throw searchOutcome.error
+        if ('error' in deleteOutcome) throw deleteOutcome.error
+        raceResults = { scanned: listOutcome.value, indexed: searchOutcome.value, deleted: deleteOutcome.value }
+      } finally {
+        scanProgress.cancel()
+      }
+      if (!raceResults) throw new Error('the concurrent deletion work did not settle')
+      const { scanned, indexed, deleted } = raceResults
+
+      expect(scanned.scannedFiles).toBeGreaterThan(0)
+      expect(indexed.kind).toBe('results')
+      expect(deleted).toMatchObject({ deleted: true, trashed: 1, alreadyMissing: false })
       expect(existsSync(claudePath)).toBe(false)
       expect(readFileSync(volume.trashPathFor(basename(claudePath)))).toEqual(claudeBytes)
+      expect(readFileSync(sentinelPath)).toEqual(sentinelBytes)
+      const afterDeleteList = await vault.call<PublicListResult>('list', { agents: ['claude'], force: true, unlimited: true })
+      expect(afterDeleteList.sessions.some((session) => session.id === claude.id)).toBe(false)
+      const afterDeleteSearch = await vault.call<SearchResponse>('search', {
+        query: 'vault-fixture-claude-marker',
+        freshness: 'wait-until-current',
+        filters: { agents: ['claude'] }
+      })
+      expect(afterDeleteSearch.kind).toBe('results')
+      if (afterDeleteSearch.kind === 'results') {
+        expect(afterDeleteSearch.hits.some((hit) => hit.id === claude.id)).toBe(false)
+      }
       expect(readFileSync(unrelatedSourcePath)).toEqual(unrelatedSourceBytes)
       expect(existsSync(vault.sourceHome)).toBe(true)
 

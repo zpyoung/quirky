@@ -1,5 +1,6 @@
 import { createRoot } from 'react-dom/client'
 import type { MountFunction, UiPluginContext } from '@quirky/protocol'
+import type { ArchivedSource } from './daemon/types'
 import { DIALOG_OVERLAY_ID, messageOf, PLUGIN_ID, RESEND_CONFIRM_TITLE, SETTINGS_VIEW_ID } from './window/copy'
 import { Dialog } from './window/Dialog'
 import { HandoffDialog, reportOf, type CommandResult } from './window/model'
@@ -76,6 +77,29 @@ export function activate(context: UiPluginContext): void {
   provide('open', (args) => {
     const session = text(args.session)
     return session ? dialog.open(session) : refused('session-required')
+  })
+  provide('open-archived', (args) => {
+    const source = args.source
+    const archived = isRecord(source) && isRecord(source.archived) ? source.archived : null
+    if (!archived || typeof archived.agent !== 'string' || archived.agent === '') return refused('archived-source-required')
+    const providerSessionId = text(archived.providerSessionId)
+    const transcriptPath = text(archived.transcriptPath)
+    const title = text(archived.title)
+    const worktree = text(archived.worktree)
+    const cwd = text(archived.cwd)
+    const prompt = text(archived.prompt)
+    const lastMessage = text(archived.lastMessage)
+    const openSource: ArchivedSource = {
+      agent: archived.agent,
+      ...(providerSessionId === undefined ? {} : { providerSessionId }),
+      ...(transcriptPath === undefined ? {} : { transcriptPath }),
+      ...(title === undefined ? {} : { title }),
+      ...(worktree === undefined ? {} : { worktree }),
+      ...(cwd === undefined ? {} : { cwd }),
+      ...(prompt === undefined ? {} : { prompt }),
+      ...(lastMessage === undefined ? {} : { lastMessage })
+    }
+    return dialog.openArchived(openSource)
   })
   provide('set', (args) => dialog.set(text(args.field) ?? '', args.value))
   provide('edit', (args) => {

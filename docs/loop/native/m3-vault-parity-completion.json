@@ -1,0 +1,30 @@
+{
+  "item": "m3-vault-parity-completion",
+  "spec": "docs/quirk/specs/2026-10-28-m3-vault-parity-completion/logic.md",
+  "scenarios": [
+    {
+      "id": "SC-17-native-focus",
+      "title": "Use a new isolated packaged Quirky profile with HOME/XDG_CONFIG_HOME/QUIRKY_HOME/source roots owned by the run and an absolute fake-provider executable configured before launch. Resume the chosen history fixture in its registered worktree, verify exactly that provider ID/cwd reaches the terminal, and certify native keyboard input reaches that pane without focusing an unrelated window. Restore prior focus and stop every owned process.",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    },
+    {
+      "id": "SC-18-native-finder",
+      "title": "On a disposable local history source, use the fully visible row action menu to Reveal Log, verify Finder selects exactly that transcript, then Open Working Directory and verify Finder shows its original directory. Do not use a transcript from the real home; preserve source bytes and restore the previous frontmost app.",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    },
+    {
+      "id": "SC-18-native-clipboard",
+      "title": "Save the prior macOS clipboard. In a narrow/short packaged window with a disposable transcript whose source path and first prompt contain spaces, apostrophes, shell metacharacters and more than the preview limit, reach the visible Copy Resume Command, Copy Session ID, Copy Log Path and Copy First Prompt controls without clipping. Verify each actual macOS clipboard value equals the selected source's full literal prepared command/ID/path/prompt, not another row or truncated preview. Restore the prior clipboard and clean the isolated profile. Historical m3-vault clipboard failure remains evidence, not a pass.",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    }
+  ]
+}
