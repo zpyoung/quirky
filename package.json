@@ -12,6 +12,7 @@
     "dev": "bun run --filter './packages/ui' build && bun run --filter './apps/desktop' dev",
     "daemon": "bun packages/daemon/src/main.ts",
     "test": "bun scripts/suite.ts packages apps plugins",
+    "test:bash": "bun scripts/test-bash-versions.ts",
     "typecheck": "bun install --frozen-lockfile && bunx tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {

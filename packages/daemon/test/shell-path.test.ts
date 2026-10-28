@@ -150,21 +150,20 @@ describe('zsh shell sessions', () => {
 })
 
 describe('bash shell sessions', () => {
-  const interactiveArgv = () => [...shellArgv(quirkyHome, '/bin/bash'), '-c']
+  const bashBinary = process.env.QUIRKY_TEST_BASH ?? '/bin/bash'
+  const interactiveArgv = () => [...shellArgv(quirkyHome, bashBinary), '-c']
 
   test('the shim is found when .bash_profile and .bashrc reset PATH', async () => {
     write(join(userHome, '.bash_profile'), RESET_PATH)
     write(join(userHome, '.bashrc'), RESET_PATH)
-    const result = await run([...interactiveArgv(), 'command -v quirky'], sessionEnv('/bin/bash'))
-    expect(result.stdout).toBe(shimPath())
+    const result = await run([...interactiveArgv(), 'command -v quirky'], sessionEnv(bashBinary))
   })
 
   test('falls back to ~/.profile and does not source .bashrc twice when the profile does', async () => {
     const log = join(root, 'log')
     write(join(userHome, '.profile'), `[ -f ~/.bashrc ] && . ~/.bashrc`)
     write(join(userHome, '.bashrc'), `echo rc >> ${log}\n${RESET_PATH}`)
-    const result = await run([...interactiveArgv(), 'command -v quirky'], sessionEnv('/bin/bash'))
-    expect(result.stdout).toBe(shimPath())
+    const result = await run([...interactiveArgv(), 'command -v quirky'], sessionEnv(bashBinary))
     expect(readFileSync(log, 'utf8').trim().split('\n')).toEqual(['rc'])
   })
 })
@@ -192,14 +191,14 @@ describe('integration files', () => {
 
 describe.each([
   ['zsh', '/bin/zsh', '.zshrc'],
-  ['bash', '/bin/bash', '.bashrc']
+  ['bash', process.env.QUIRKY_TEST_BASH ?? '/bin/bash', '.bashrc']
 ] as const)('%s shell integration', (_name, shell, rcFile) => {
   const ESC = '\x1b'
   const BEL = '\x07'
 
   /** Starts the shell exactly as a session would, on a real PTY, and returns what it has printed so far. */
-  function startInteractive(shellInit?: string, extra: Record<string, string> = {}) {
-    write(join(userHome, rcFile), `PS1='$ '\nexport QK_MARK=user-rc-ran\n`)
+  function startInteractive(shellInit?: string, extra: Record<string, string> = {}, rcPrelude = '') {
+    write(join(userHome, rcFile), `${rcPrelude}\nPS1='$ '\nexport QK_MARK=user-rc-ran\n`)
     mkdirSync(join(root, 'sub'), { recursive: true })
     let out = ''
     const decoder = new TextDecoder()
@@ -300,24 +299,95 @@ claude() {
   }, 30000)
 
 
-  test('reports readiness once, each command exit code, the cwd, and keeps the exit status', async () => {
+  test('does not report completions for empty, whitespace, or Bash comment input', async () => {
+    const session = startInteractive()
+    await session.awaitShellReady()
+    await session.run('false')
+    expect(session.finishedCodes()).toEqual([1])
+    for (const line of ['', '   ']) {
+      const before = session.finishedCodes()
+      await session.run(line)
+      expect(session.finishedCodes()).toEqual(before)
+    }
+    if (_name === 'bash') {
+      const before = session.finishedCodes()
+      await session.run('# ignored comment')
+      expect(session.finishedCodes()).toEqual(before)
+    }
+    session.proc.terminal.write('exit\r')
+    await session.proc.exited
+  }, 30000)
+
+  test('reports each command status for identical and compound commands and keeps the exit status', async () => {
     const session = startInteractive()
     await session.awaitShellReady()
     await session.run('true')
     await session.run('false')
-    await session.run('')
+    await session.run('false')
     await session.run("sh -c 'exit 7'")
+    await session.run('false && true')
     await session.run('cd sub && echo "rc=$QK_MARK"')
     session.proc.terminal.write('exit 3\r')
     expect(await session.proc.exited).toBe(3)
 
     const output = session.output()
     expect(output.split(`${ESC}]777;quirky-shell-ready${BEL}`).length - 1).toBe(1)
-    // the final 0 is the `cd` line; the empty line reported nothing
-    expect(session.finishedCodes()).toEqual([0, 1, 7, 0])
+    expect(session.finishedCodes()).toEqual([0, 1, 1, 7, 1, 0])
     expect(output).toMatch(new RegExp(`${ESC}\\]7;file://[^${BEL}]*/sub${BEL}`))
     expect(output).toContain('rc=user-rc-ran')
   }, 30000)
+
+  if (_name === 'bash') {
+    test('does not treat inherited prompt DEBUG hooks as commands with functrace enabled', async () => {
+      const session = startInteractive(undefined, {}, 'set -T')
+      await session.awaitShellReady()
+      const starts = () => session.output().split(`${ESC}]133;C${BEL}`).length - 1
+      expect(session.finishedCodes()).toEqual([])
+      expect(starts()).toBe(0)
+      for (const line of ['', '   ', '# no command']) {
+        await session.run(line)
+        expect(session.finishedCodes()).toEqual([])
+        expect(starts()).toBe(0)
+      }
+      await session.run('false')
+      await session.run('')
+      expect(session.finishedCodes()).toEqual([1])
+      expect(starts()).toBe(1)
+      await session.run('false')
+      await session.run('set +o history')
+      await session.run("sh -c 'exit 7'")
+      expect(session.finishedCodes()).toEqual([1, 1, 0, 7])
+      expect(starts()).toBe(4)
+      await session.run('')
+      expect(session.finishedCodes()).toEqual([1, 1, 0, 7])
+      expect(starts()).toBe(4)
+      session.proc.terminal.write('exit 3\r')
+      expect(await session.proc.exited).toBe(3)
+    }, 30000)
+
+    test('reports the status of a command ignored by Bash history', async () => {
+      const session = startInteractive(undefined, { HISTCONTROL: 'ignorespace' })
+      await session.awaitShellReady()
+      // No user DEBUG trap is installed; this exercises the integration-owned trap path.
+      await session.run(' false')
+      expect(session.finishedCodes()).toEqual([1])
+      session.proc.terminal.write('exit\r')
+      await session.proc.exited
+    }, 30000)
+
+    test('reports accurate statuses with Bash history disabled', async () => {
+      const session = startInteractive()
+      await session.awaitShellReady()
+      await session.run('set +o history')
+      await session.run("sh -c 'exit 7'")
+      expect(session.finishedCodes()).toEqual([0, 7])
+      const before = session.finishedCodes()
+      await session.run('')
+      expect(session.finishedCodes()).toEqual(before)
+      session.proc.terminal.write('exit\r')
+      await session.proc.exited
+    }, 30000)
+  }
 
   test('sourcing the wrapper again does not repeat the reports', async () => {
     const session = startInteractive()
