@@ -110,6 +110,9 @@ export type AccountPrepareResult = {
   resumeTranscriptPath?: string
 }
 
+/** Account-scoped provider probes prepare an effective home without inventing a runtime session. */
+export type ProviderPrepareInput = Omit<PrepareInput, 'sessionId' | 'worktreeId' | 'resume'>
+
 export type AccountRecord = AccountSummary & {
   home: string
   identityKey: string | null

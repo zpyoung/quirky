@@ -88,5 +88,16 @@
 - **Revisit if:** Incoming authoritative decisions amend ownership or platform scope.
 - **Source:** deferred: platform
 
+## D9: Prepare provider probes through the account owner without fake sessions
+- **Question:** How can a Codex model-list process use the selected managed account while session prepare requires a real registered session?
+- **Options:** Spawn with generic process.env; fabricate a session ID for prepare; factor the actual account resolution into a no-session public preparation path.
+- **Chose:** Public quirky.accounts/prepareProviderEnv takes only agent/cwd/homeOverrides and returns the existing account preparation result with shellInit:null, no resume, no account_sessions insert/update. Share actual selection/home precedence/ownership/auth/config-sync behavior with prepare; existing session preparation still persists genuine identity. Explicitly materialize the probe's effective home environment. A's scope expands only to this account owner extension/tests/docs; parent commits the shared input type before resuming A.
+- **Why:** A probe must use the selected account, but fake provenance would corrupt restart/stale-session identity. A missing public method is reachable API growth, not an outside blocker.
+- **Evidence:** accounts/service.ts:392-480,988-1026; structured pre-spawn public prepare flow; ProviderPrepareInput in accounts/src/types.ts.
+- **Reversibility:** medium
+- **Confidence:** high for contract; source and smoke unverified
+- **Revisit if:** Existing account boundary cannot supply effective env without changing genuine session identity.
+- **Source:** assumed — autonomous
+
 ## Progress
 Claimed after twenty-one busy waits. Branch created from current integration. All predecessor decisions and source map read; combined spec self-reviewed. Shared exact-window type and RPC signatures authored; next commit spec/contracts, create isolated component trees and dispatch three implementers. No tests/reviews/dogfood run, no runtime smoke or typecheck pass yet. Foreign .serena preserved.
