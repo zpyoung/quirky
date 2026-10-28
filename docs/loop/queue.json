@@ -722,8 +722,9 @@
       "deps": [
         "m6-orchestration-workers"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 2
     },
     {
       "id": "m6-objective-plan",
