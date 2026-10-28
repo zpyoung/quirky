@@ -5,11 +5,11 @@ import { validateValue, type Schema } from '@quirky/protocol'
 import { fault, BrowserFault } from './errors'
 import { CdpConnection, type CdpEvent } from './cdp'
 import { startChrome, type OwnedChrome } from './chrome'
-import { FifoLock } from './lock'
+import { FifoLock, withLocks } from './lock'
 import { nativeData } from './native-response'
 import { NativeTransportError, nativeRequest, startNativeHelper, type NativeHelper, type NativeResponse } from './native'
-import type { BrowserDependencies, BrowserTestControl } from './dependencies'
-import type { BrowserPage } from '../profiles/store'
+import type { BrowserDependencies, BrowserTestControl, CookieTransport } from './dependencies'
+import type { Cookie } from '../cookies/types'
 import type { PaneViewport } from '../pane-contract'
 import { BrowserStore } from '../profiles/store'
 import type { BrowserIdentityMode } from '../preferences/contract'
@@ -26,14 +26,37 @@ export type RuntimeBinding = {
 }
 
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue }
+export type ConsoleEntry = { level: string; text: string; timestamp: number; url?: string; line?: number }
+export type NetworkEntry = { url: string; method: string; status: number; mimeType: string; size: number; timestamp: number }
+export type ViewportSetting = { width: number; height: number; deviceScaleFactor: number; mobile: boolean }
+export type PageSettings = {
+  viewport?: ViewportSetting
+  geolocation?: { latitude: number; longitude: number; accuracy: number }
+  deviceName?: string
+  userAgent?: string
+  offline: boolean
+  headers?: Record<string, string>
+  credentials?: { user: string; pass: string }
+  colorScheme?: 'dark' | 'light' | null
+  reducedMotion?: 'reduce' | 'no-preference' | null
+  routes: string[]
+}
+export type PendingDialog = {
+  browserEpoch: string
+  pageGeneration: number
+  type: 'alert' | 'confirm' | 'prompt' | 'beforeunload'
+  url: string
+  message: string
+  responding: boolean
+}
 
 
 export type NavigationEvent =
-  | { kind: 'frame'; frameId: string; loaderId?: string; url: string }
+  | { kind: 'frame'; frameId: string; loaderId?: string; url: string; navigationType?: string }
   | { kind: 'same-document'; frameId: string; url: string }
   | { kind: 'lifecycle'; frameId: string; loaderId: string; name: string }
   | { kind: 'document-request'; requestId: string; frameId: string; loaderId: string }
-  | { kind: 'loading-failed'; requestId: string; errorText: string }
+  | { kind: 'loading-failed'; requestId: string; errorText: string; canceled?: boolean }
 
 export type NavigationTracker = {
   frameId: string
@@ -47,13 +70,22 @@ export type NavigationTracker = {
 
 export type RuntimePageState = {
   binding: RuntimeBinding
+  consoleEntries: ConsoleEntry[]
+  networkById: Map<string, NetworkEntry>
+  networkEntries: NetworkEntry[]
+  harEntries: JsonValue[]
+  interceptRequests: Array<{ id: string; url: string; method: string; headers: Record<string, string>; resourceType: string }>
   navigationReady?: boolean
   mainFrameId?: string
   mainFrameLoaderId?: string
   mainFrameUrl?: string
+  domContentLoadedLoaders: Set<string>
+  loadedLoaders: Set<string>
   pendingNavigation?: NavigationTracker
   termination?: Promise<void>
   finishTermination?: () => void
+  captureStartedAt?: number
+  pendingDialog?: PendingDialog
 }
 
 export type PageCdp = Pick<CdpConnection, 'send' | 'subscribe'>
@@ -63,6 +95,7 @@ export type PageExecution = {
   binding: RuntimeBinding
   runtimePage: RuntimePageState
   signal?: AbortSignal
+  settings: PageSettings
   native(action: string, fields?: Record<string, unknown>, timeoutMs?: number): Promise<NativeResponse>
 }
 export type PaneInput = {
@@ -123,7 +156,7 @@ export type PaneWatchCallbacks = {
 }
 
 
-export type NavigationResult = { url: string; title: string; errorText?: string }
+export type NavigationResult = { url: string; title: string; errorText?: string; requestedUrl?: string }
 
 type BoundPage = {
   pageId: string
@@ -143,6 +176,8 @@ type RuntimeEpoch = {
   pages: Map<string, BoundPage>
   activeTabId?: string
   userAgent?: string
+  cookiePageId?: string
+  cookiePage?: BoundPage
   invalid: boolean
   stopping: boolean
   teardown?: Promise<void>
@@ -224,11 +259,74 @@ const BROWSER_VERSION_SCHEMA: Schema = {
 
 
 
+const COOKIE_ENTRY_SCHEMA: Schema = {
+  type: 'object',
+  properties: {
+    name: { type: 'string' }, value: { type: 'string' }, domain: { type: 'string' }, path: { type: 'string' },
+    secure: { type: 'boolean' }, httpOnly: { type: 'boolean' }, sameSite: { type: 'string' }, expires: { type: 'number' },
+    partitionKey: {
+      type: 'object',
+      properties: { topLevelSite: { type: 'string' }, hasCrossSiteAncestor: { type: 'boolean' } },
+      required: ['topLevelSite', 'hasCrossSiteAncestor'],
+      additionalProperties: true
+    }
+  },
+  required: ['name', 'value', 'domain', 'path', 'secure', 'httpOnly'],
+  additionalProperties: true
+}
+const COOKIE_LIST_SCHEMA: Schema = {
+  type: 'object',
+  properties: { cookies: { type: 'array', items: COOKIE_ENTRY_SCHEMA } },
+  required: ['cookies'],
+  additionalProperties: true
+}
+const COOKIE_SET_SCHEMA: Schema = {
+  type: 'object', properties: { success: { type: 'boolean' } }, required: ['success'], additionalProperties: true
+}
+const EVENT_CONSOLE_SCHEMA: Schema = {
+  type: 'object',
+  properties: { type: { type: 'string' }, timestamp: { type: 'number' }, args: { type: 'array', items: { type: 'object' } }, stackTrace: { type: 'object' } },
+  required: ['type', 'timestamp', 'args'],
+  additionalProperties: true
+}
 const EVENT_NETWORK_REQUEST_SCHEMA: Schema = {
   type: 'object',
-  properties: { requestId: { type: 'string' }, request: { type: 'object' } },
+  properties: { requestId: { type: 'string' }, request: { type: 'object' }, timestamp: { type: 'number' }, wallTime: { type: 'number' }, type: { type: 'string' }, frameId: { type: 'string' }, loaderId: { type: 'string' } },
   required: ['requestId', 'request'],
   additionalProperties: true
+}
+
+const DEVICE_PROFILES: Record<string, { width: number; height: number; scale: number; userAgent: string }> = {
+  'iphone 14': { width: 390, height: 844, scale: 3, userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1' },
+  'iphone 14 pro': { width: 393, height: 852, scale: 3, userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1' },
+  'pixel 7': { width: 412, height: 915, scale: 2.625, userAgent: 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36' },
+  ipad: { width: 820, height: 1180, scale: 2, userAgent: 'Mozilla/5.0 (iPad; CPU OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1' }
+}
+
+export function browserDevice(name: string): { width: number; height: number; scale: number; userAgent: string } | undefined {
+  return DEVICE_PROFILES[name.trim().toLowerCase()]
+}
+
+function initialSettings(): PageSettings {
+  return { offline: false, routes: [] }
+}
+
+function canonicalCookieDomain(domain: string): string {
+  return domain.replace(/^\\.+/, '').toLowerCase()
+}
+
+function asFiniteNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
+function headersAsStrings(value: unknown): Record<string, string> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return {}
+  const headers: Record<string, string> = Object.create(null)
+  for (const [name, header] of Object.entries(value)) {
+    if (typeof header !== 'string') return {}
+    headers[name] = header
+  }
+  return headers
 }
 
 
@@ -337,12 +435,13 @@ function cdpTransportFailure(error: unknown): boolean {
 export class BrowserRuntime {
   private readonly profiles = new Map<string, ProfileRuntime>()
   private readonly generations = new Map<string, number>()
+  private readonly settings = new Map<string, PageSettings>()
   private readonly closingTargets = new Set<string>()
   private readonly closingPages = new Set<string>()
+  private readonly changingPages = new Set<string>()
   private readonly paneWatches = new Map<string, PaneWatchState>()
   private readonly paneWatchesByPage = new Map<string, string>()
   private readonly paneDownloadOwners = new Map<string, { profileId: string; pageId: string; epochId: string }>()
-
   private readonly identityMode: BrowserIdentityMode
   constructor(
     private readonly store: BrowserStore,
@@ -354,6 +453,24 @@ export class BrowserRuntime {
     for (const page of store.listPages()) this.generations.set(page.browserPageId, 0)
     this.dependencies.onControl?.(this.testControl())
   }
+  pageSettings(pageId: string): PageSettings {
+    const current = this.settings.get(pageId)
+    return current ? structuredClone(current) : initialSettings()
+  }
+  pageIdentityUserAgent(pageId: string): string {
+    const page = this.store.getPage(pageId)
+    const userAgent = this.profile(page.profileId).epoch?.userAgent
+    if (!userAgent) throw fault('browser_tab_changed', 'the managed browser identity user agent is not established')
+    return userAgent
+  }
+
+  updatePageSettings(pageId: string, update: (settings: PageSettings) => void): PageSettings {
+    const settings = this.settings.get(pageId) ?? initialSettings()
+    update(settings)
+    this.settings.set(pageId, settings)
+    return structuredClone(settings)
+  }
+
   private testControl(): BrowserTestControl {
     return {
       crashHelper: async (profileId) => {
@@ -368,6 +485,9 @@ export class BrowserRuntime {
   generation(pageId: string): number {
     return this.generations.get(pageId) ?? 0
   }
+  isPageWatched(pageId: string): boolean {
+    return this.paneWatchesByPage.has(pageId)
+  }
 
   invalidatePage(pageId: string, preserveBinding = true): number {
     const generation = this.generation(pageId) + 1
@@ -379,12 +499,13 @@ export class BrowserRuntime {
       if (preserveBinding) {
         binding.generation = generation
         binding.runtime.binding.pageGeneration = generation
+        if (binding.runtime.pendingDialog) binding.runtime.pendingDialog.pageGeneration = generation
       } else profile.epoch?.pages.delete(pageId)
       const watchId = this.paneWatchesByPage.get(pageId)
       const watch = watchId ? this.paneWatches.get(watchId) : undefined
       if (!watch) continue
       if (
-        preserveBinding && !this.closingPages.has(pageId) && !profile.epoch?.invalid &&
+        preserveBinding && !this.closingPages.has(pageId) && !this.changingPages.has(pageId) && !profile.epoch?.invalid &&
         watch.binding.sessionId === binding.sessionId && watch.binding.targetId === binding.targetId
       ) {
         watch.generation = generation
@@ -401,6 +522,7 @@ export class BrowserRuntime {
   async withPage<T>(page: BrowserPage, method: string, operation: (execution: PageExecution) => Promise<T>): Promise<T> {
     const profile = this.profile(page.profileId)
     if (profile.clearing) throw fault('browser_error', 'browser profile is being cleared')
+    if (this.changingPages.has(page.browserPageId)) throw fault('browser_tab_changed', 'the managed page is changing browser profiles')
     const expectedGeneration = this.generation(page.browserPageId)
     const controller = new AbortController()
     const controllers = profile.controllers.get(page.browserPageId) ?? new Set<AbortController>()
@@ -408,8 +530,8 @@ export class BrowserRuntime {
     profile.controllers.set(page.browserPageId, controllers)
     try {
       return await profile.lock.run(async () => {
-        if (profile.clearing) throw fault('browser_error', 'browser profile is being cleared')
         if (this.closingPages.has(page.browserPageId)) throw fault('browser_tab_closed', 'the managed page is closing')
+        if (this.changingPages.has(page.browserPageId)) throw fault('browser_tab_changed', 'the managed page is changing browser profiles')
         let current: BrowserPage
         try { current = this.store.getPage(page.browserPageId) } catch { throw fault('browser_tab_closed', 'the managed page was closed before the operation ran') }
         if (current.profileId !== page.profileId) throw fault('browser_tab_changed', 'the managed page changed browser profiles before the operation ran')
@@ -446,11 +568,16 @@ export class BrowserRuntime {
           await binding.runtime.termination
           throw fault('browser_tab_closed', 'the managed page was closed during the operation')
         }
+        if (this.changingPages.has(page.browserPageId)) {
+          await binding.runtime.termination
+          throw fault('browser_tab_changed', 'the managed page changed browser profiles during the operation')
+        }
         if (epoch.invalid || this.generation(page.browserPageId) !== expectedGeneration) throw fault('browser_tab_changed', 'browser page identity changed during the operation')
         return result
       }, controller.signal)
     } catch (error) {
       if (this.closingPages.has(page.browserPageId)) throw fault('browser_tab_closed', 'the managed page was closed during the operation')
+      if (this.changingPages.has(page.browserPageId)) throw fault('browser_tab_changed', 'the managed page changed browser profiles during the operation')
       const transportFailure = this.profileTransportFailure(profile, error)
       if (transportFailure) throw transportFailure
       throw error
@@ -766,6 +893,19 @@ export class BrowserRuntime {
             return
           }
           // Authentication interception pauses ordinary requests too. Resume on this exact
+          const settings = this.pageSettings(page.browserPageId)
+          const request = objectValue(event.params.request)
+          if (settings.routes.length > 0 && request) {
+            const entries = binding.runtime.interceptRequests
+            entries.push({
+              id: requestId,
+              url: asString(request.url) ?? '',
+              method: asString(request.method) ?? 'GET',
+              headers: headersAsStrings(request.headers),
+              resourceType: asString(event.params.resourceType) ?? 'Other'
+            })
+            if (entries.length > 10_000) entries.splice(0, entries.length - 10_000)
+          }
           // session outside the profile FIFO held by the pending navigation.
           void epoch.cdp.send('Fetch.continueRequest', { requestId }, sessionId, 5_000)
             .catch(() => this.endPaneWatch(state, 'Watch could not resume an intercepted request.'))
@@ -879,7 +1019,11 @@ export class BrowserRuntime {
           downloadPath: downloadDir,
           eventsEnabled: true
         })
-        await epoch.cdp.send('Fetch.enable', { handleAuthRequests: true }, sessionId)
+        const watchSettings = this.pageSettings(page.browserPageId)
+        await epoch.cdp.send('Fetch.enable', {
+          ...(watchSettings.routes.length > 0 ? { patterns: watchSettings.routes.map((urlPattern) => ({ urlPattern: urlPattern.replaceAll('**', '*'), requestStage: 'Request' })) } : {}),
+          handleAuthRequests: true
+        }, sessionId)
         await epoch.cdp.send('Security.enable', {}, sessionId)
         await epoch.cdp.send('Security.setOverrideCertificateErrors', { override: true }, sessionId)
         await epoch.cdp.send('Target.setDiscoverTargets', { discover: true })
@@ -927,9 +1071,17 @@ export class BrowserRuntime {
     for (const unsubscribe of watch.subscriptions) unsubscribe()
     if (watch.downloads.size === 0) this.clearDownloadSubscriptions(watch)
     if (!watch.epoch.invalid && !watch.epoch.stopping) {
+      const settings = this.pageSettings(watch.pageId)
+      const restoreFetch = !this.closingPages.has(watch.pageId) && !this.changingPages.has(watch.pageId) &&
+        (settings.routes.length > 0 || settings.credentials)
+        ? watch.epoch.cdp.send('Fetch.enable', {
+          ...(settings.routes.length > 0 ? { patterns: settings.routes.map((urlPattern) => ({ urlPattern: urlPattern.replaceAll('**', '*'), requestStage: 'Request' })) } : {}),
+          ...(settings.credentials ? { handleAuthRequests: true } : {})
+        }, watch.binding.sessionId, 5_000)
+        : watch.epoch.cdp.send('Fetch.disable', {}, watch.binding.sessionId, 5_000)
       await Promise.allSettled([
         watch.epoch.cdp.send('Page.stopScreencast', {}, watch.binding.sessionId, 5_000),
-        watch.epoch.cdp.send('Fetch.disable', {}, watch.binding.sessionId, 5_000),
+        restoreFetch,
         watch.epoch.cdp.send('Security.setOverrideCertificateErrors', { override: false }, watch.binding.sessionId, 5_000),
         watch.epoch.cdp.send('Security.disable', {}, watch.binding.sessionId, 5_000)
       ])
@@ -1127,6 +1279,67 @@ export class BrowserRuntime {
     }
   }
 
+  async withProfiles<T>(profileIds: readonly string[], operation: () => Promise<T>): Promise<T> {
+    const profiles = [...new Set(profileIds)].map((profileId) => ({ profileId, runtime: this.profile(profileId) }))
+    const locks = new Map<string, FifoLock>()
+    for (const { profileId, runtime } of profiles) locks.set(profileId, runtime.lock)
+    try {
+      for (const { runtime } of profiles) {
+        if (runtime.clearing) throw fault('browser_error', 'browser profile is being cleared')
+      }
+      return await withLocks(locks, profileIds, async () => {
+        for (const { runtime } of profiles) {
+          if (runtime.clearing) throw fault('browser_error', 'browser profile is being cleared')
+        }
+        return await operation()
+      })
+    } catch (error) {
+      for (const { runtime } of profiles) {
+        const transportFailure = this.profileTransportFailure(runtime, error)
+        if (transportFailure) throw transportFailure
+      }
+      throw error
+    }
+  }
+
+  async withCookieMutation<T>(profileId: string, operation: (transport: CookieTransport) => Promise<T>): Promise<T> {
+    const profile = this.profile(profileId)
+    if (profile.clearing) throw fault('browser_error', 'browser profile is being cleared')
+    try {
+      return await profile.lock.run(async () => {
+        if (profile.clearing) throw fault('browser_error', 'browser profile is being cleared')
+        return await operation(await this.cookieTransportLocked(profileId))
+      })
+    } catch (error) {
+      const transportFailure = this.profileTransportFailure(profile, error)
+      if (transportFailure) throw transportFailure
+      throw error
+    }
+  }
+
+  async cookieTransportLocked(profileId: string): Promise<CookieTransport> {
+    const epoch = await this.ensureEpoch(this.profile(profileId), profileId)
+    const binding = await this.ensureCookieTarget(epoch)
+    const assertProfile = (requested: string): void => {
+      if (requested !== profileId) throw fault('invalid_argument', 'cookie transport cannot access another browser profile')
+    }
+    const transport: CookieTransport = {
+      list: async (requested) => {
+        assertProfile(requested)
+        return await this.readCdpCookies(epoch)
+      },
+      delete: async (requested, cookie) => {
+        assertProfile(requested)
+        await this.deleteCdpCookie(epoch, binding, cookie)
+      },
+      set: async (requested, cookie) => {
+        assertProfile(requested)
+        await this.setCdpCookie(epoch, binding, cookie)
+      }
+    }
+    return this.dependencies.wrapCookieTransport?.(transport) ?? transport
+  }
+
   async withProfileMaintenance<T>(profileId: string, operation: () => Promise<T> | T): Promise<T> {
     this.store.getProfile(profileId)
     const profile = this.profile(profileId)
@@ -1172,6 +1385,116 @@ export class BrowserRuntime {
     }
   }
 
+  async ensurePageLocked(page: BrowserPage): Promise<RuntimeBinding> {
+    if (this.closingPages.has(page.browserPageId)) throw fault('browser_tab_closed', 'the managed page is closing')
+    const epoch = await this.ensureEpoch(this.profile(page.profileId), page.profileId)
+    if (this.closingPages.has(page.browserPageId)) throw fault('browser_tab_closed', 'the managed page is closing')
+    const binding = await this.ensureBinding(epoch, page, this.generation(page.browserPageId))
+    if (this.closingPages.has(page.browserPageId)) {
+      await this.closeBinding(epoch, page.browserPageId, binding)
+      throw fault('browser_tab_closed', 'the managed page closed before its new binding was ready')
+    }
+    return this.publicBinding(epoch, binding)
+  }
+
+  async setPageProfile(page: BrowserPage, profileId: string): Promise<BrowserPage> {
+    const current = this.store.getPage(page.browserPageId)
+    this.store.getProfile(profileId)
+    if (current.profileId !== page.profileId) throw fault('browser_tab_changed', 'the managed page profile changed before it could be rebound')
+    if (this.closingPages.has(current.browserPageId)) throw fault('browser_tab_closed', 'the managed page is closing')
+    if (this.changingPages.has(current.browserPageId)) throw fault('browser_tab_changed', 'the managed page is already changing browser profiles')
+    if (current.profileId === profileId) return current
+    const oldProfileId = current.profileId
+    try {
+      await this.cancelPageForChange(current.browserPageId)
+      return await this.withProfiles([oldProfileId, profileId], async () => {
+        const latest = this.store.getPage(current.browserPageId)
+        if (this.closingPages.has(current.browserPageId)) throw fault('browser_tab_closed', 'the managed page is closing')
+        if (latest.profileId !== oldProfileId) throw fault('browser_tab_changed', 'the managed page profile changed before it could be rebound')
+        await this.rebindPageLocked(oldProfileId, current.browserPageId)
+        const moved = this.store.setPageProfile(current.browserPageId, profileId)
+        try {
+          await this.ensurePageLocked(moved)
+          return this.store.getPage(current.browserPageId)
+        } catch (error) {
+          if (this.closingPages.has(current.browserPageId)) {
+            try {
+              await this.rebindPageLocked(profileId, current.browserPageId)
+              this.store.setPageProfile(current.browserPageId, oldProfileId)
+            } catch { /* closing the page is already the active rollback */ }
+            throw fault('browser_tab_closed', 'the managed page was closed during profile rebinding')
+          }
+          let rollbackError: unknown
+          try {
+            await this.rebindPageLocked(profileId, current.browserPageId)
+            const restored = this.store.setPageProfile(current.browserPageId, oldProfileId)
+            await this.ensurePageLocked(restored)
+          } catch (failure) {
+            rollbackError = failure
+          }
+          if (rollbackError) throw fault('browser_unsafe_replace', 'profile switch failed and the previous page assignment could not be restored')
+          throw error
+        }
+      })
+    } finally {
+      this.finishPageChange(current.browserPageId)
+    }
+  }
+
+  async clonePageProfile(page: BrowserPage, destinationId: string): Promise<BrowserPage> {
+    const source = this.store.getPage(page.browserPageId)
+    if (source.profileId !== page.profileId) throw fault('browser_tab_changed', 'the source page profile changed before cloning')
+    const destination = this.store.getProfile(destinationId)
+    if (destination.scope !== 'isolated') throw fault('invalid_argument', 'profile clone destination must be an isolated profile')
+    if (this.store.listPages().some((candidate) => candidate.profileId === destinationId)) {
+      throw fault('invalid_argument', 'profile clone destination must be empty')
+    }
+    return await this.withProfiles([source.profileId, destinationId], async () => {
+      const latest = this.store.getPage(source.browserPageId)
+      if (latest.profileId !== source.profileId) throw fault('browser_tab_changed', 'the source page profile changed before cloning')
+      if (this.store.listPages().some((candidate) => candidate.profileId === destinationId)) {
+        throw fault('invalid_argument', 'profile clone destination must be empty')
+      }
+      const sourceTransport = await this.cookieTransportLocked(source.profileId)
+      const destinationTransport = await this.cookieTransportLocked(destinationId)
+      const destinationCookies = await destinationTransport.list(destinationId)
+      if (destinationCookies.length > 0) throw fault('invalid_argument', 'profile clone destination must not contain cookies')
+      const cookies = await sourceTransport.list(source.profileId)
+      const copied: Cookie[] = []
+      let clonedPage: BrowserPage | undefined
+      try {
+        for (const cookie of cookies) {
+          copied.push(cookie)
+          await destinationTransport.set(destinationId, cookie)
+        }
+        clonedPage = this.store.addPage({
+          worktreeId: source.worktreeId,
+          profileId: destinationId,
+          url: source.url,
+          title: source.title,
+          active: false
+        })
+        await this.ensurePageLocked(clonedPage)
+        return this.store.getPage(clonedPage.browserPageId)
+      } catch (error) {
+        if (clonedPage) {
+          try {
+            await this.closePageLocked(destinationId, clonedPage.browserPageId)
+            this.store.removePage(clonedPage.browserPageId)
+          } catch {
+            try { this.store.removePage(clonedPage.browserPageId) } catch { /* preserve the clone failure */ }
+          }
+        }
+        let rollbackFailed = false
+        for (const cookie of copied.reverse()) {
+          try { await destinationTransport.delete(destinationId, cookie) } catch { rollbackFailed = true }
+        }
+        if (rollbackFailed) throw fault('browser_unsafe_replace', 'profile clone failed and destination cookies could not be rolled back')
+        throw error
+      }
+    })
+  }
+
 
   async closePageOutOfBand(pageId: string): Promise<void> {
     this.closingPages.add(pageId)
@@ -1181,6 +1504,7 @@ export class BrowserRuntime {
       const epoch = profile.epoch
       const binding = epoch?.pages.get(pageId)
       if (!epoch || !binding || epoch.invalid) continue
+      binding.runtime.pendingDialog = undefined
       this.startPageTermination(binding.runtime)
       this.closingTargets.add(binding.targetId)
       targets.push({ epoch, binding })
@@ -1194,6 +1518,44 @@ export class BrowserRuntime {
       } catch { /* target close is bounded by queued cleanup */ }
       finally { this.finishPageTermination(binding.runtime) }
     }
+  }
+
+  async cancelPageForChange(pageId: string): Promise<void> {
+    if (this.closingPages.has(pageId)) throw fault('browser_tab_closed', 'the managed page is closing')
+    if (this.changingPages.has(pageId)) throw fault('browser_tab_changed', 'the managed page is already changing browser profiles')
+    this.changingPages.add(pageId)
+    const watchId = this.paneWatchesByPage.get(pageId)
+    const watch = watchId ? this.paneWatches.get(watchId) : undefined
+    if (watch) await this.endPaneWatch(watch, 'The managed page changed browser profiles.')
+    this.invalidatePage(pageId, true)
+    const targets: Array<{ epoch: RuntimeEpoch; binding: BoundPage }> = []
+    for (const profile of this.profiles.values()) {
+      const epoch = profile.epoch
+      const binding = epoch?.pages.get(pageId)
+      if (!epoch || !binding || epoch.invalid) continue
+      this.startPageTermination(binding.runtime)
+      binding.runtime.pendingDialog = undefined
+      this.closingTargets.add(binding.targetId)
+      targets.push({ epoch, binding })
+    }
+    for (const profile of this.profiles.values()) {
+      for (const controller of profile.controllers.get(pageId) ?? []) controller.abort()
+    }
+    for (const { epoch, binding } of targets) {
+      try { await epoch.cdp.send('Target.closeTarget', { targetId: binding.targetId }, undefined, 5_000) }
+      catch { /* profile switch will create a fresh target */ }
+      finally { this.finishPageTermination(binding.runtime) }
+    }
+  }
+
+  async rebindPageLocked(profileId: string, pageId: string): Promise<void> {
+    const epoch = this.profile(profileId).epoch
+    const binding = epoch?.pages.get(pageId)
+    if (epoch && binding && !epoch.invalid) await this.closeBinding(epoch, pageId, binding)
+  }
+
+  finishPageChange(pageId: string): void {
+    this.changingPages.delete(pageId)
   }
 
   private startPageTermination(state: RuntimePageState): void {
@@ -1228,6 +1590,8 @@ export class BrowserRuntime {
     this.invalidatePage(pageId, false)
     if (epoch && binding && !epoch.invalid) await this.closeBinding(epoch, pageId, binding)
     this.closingPages.delete(pageId)
+    this.changingPages.delete(pageId)
+    this.settings.delete(pageId)
     this.generations.delete(pageId)
   }
 
@@ -1292,6 +1656,152 @@ export class BrowserRuntime {
       throw fault('browser_error', `navigation failed: ${error instanceof Error ? error.message : String(error)}`)
     } finally {
       this.finishNavigation(execution, tracker, match)
+    }
+  }
+
+  async historyNavigate(execution: PageExecution, action: 'back' | 'forward' | 'reload'): Promise<NavigationResult> {
+    const history = safeRecord(await execution.cdp.send('Page.getNavigationHistory', {}, execution.binding.sessionId), {
+      type: 'object', properties: { currentIndex: { type: 'integer' }, entries: { type: 'array' } },
+      required: ['currentIndex', 'entries'], additionalProperties: true
+    }, 'navigation history')
+    const entries = (history.entries as unknown[]).map((entry) => safeRecord(entry, {
+      type: 'object', properties: { id: { type: 'integer' }, url: { type: 'string' } },
+      required: ['id', 'url'], additionalProperties: true
+    }, 'navigation history entry'))
+    const currentIndex = history.currentIndex as number
+    const target = entries[currentIndex + (action === 'back' ? -1 : action === 'forward' ? 1 : 0)]
+    if (!target) return await this.pageLocation(execution)
+
+    const tracker = this.beginNavigation(execution)
+    const timeoutMs = 30_000
+    const startedAt = Date.now()
+    const requestedUrl = target.url as string
+    let match: { frameId: string; loaderId?: string; url?: string } | undefined
+    try {
+      await execution.cdp.send(action === 'reload' ? 'Page.reload' : 'Page.navigateToHistoryEntry',
+        action === 'reload' ? {} : { entryId: target.id }, execution.binding.sessionId, timeoutMs)
+      const event = await this.waitForNavigationEvent(tracker, (events) => {
+        for (const candidate of events) {
+          if (candidate.kind === 'loading-failed') {
+            const request = events.find((item) => item.kind === 'document-request' && item.requestId === candidate.requestId)
+            if (request?.kind === 'document-request' && request.frameId === tracker.frameId) return candidate
+          }
+          if (candidate.kind === 'frame' && candidate.frameId === tracker.frameId &&
+              candidate.loaderId !== undefined && candidate.loaderId !== tracker.previousLoaderId) return candidate
+          if (candidate.kind === 'same-document' && candidate.frameId === tracker.frameId &&
+              (action === 'reload' || candidate.url === requestedUrl)) return candidate
+        }
+        return undefined
+      }, Math.max(0, timeoutMs - (Date.now() - startedAt)), `${action} navigation timed out`)
+      let errorText: string | undefined
+      if (event.kind === 'loading-failed') {
+        errorText = event.errorText
+        const request = tracker.events.find((candidate) => candidate.kind === 'document-request' && candidate.requestId === event.requestId)
+        if (request?.kind === 'document-request') match = { frameId: request.frameId, loaderId: request.loaderId }
+      } else if (event.kind === 'same-document') {
+        match = { frameId: event.frameId, url: event.url }
+      } else if (event.kind === 'frame') {
+        if (!event.loaderId) throw fault('browser_tab_changed', 'history navigation did not establish a document loader')
+        match = { frameId: event.frameId, loaderId: event.loaderId }
+        if (event.navigationType !== 'BackForwardCacheRestore') {
+          const loaded = await this.waitForDocumentLoad(tracker, event.frameId, event.loaderId, Math.max(0, timeoutMs - (Date.now() - startedAt)))
+          if (loaded.kind === 'loading-failed') errorText = loaded.errorText
+        }
+      }
+      if (action !== 'reload') {
+        const current = safeRecord(await execution.cdp.send('Page.getNavigationHistory', {}, execution.binding.sessionId), {
+          type: 'object', properties: { currentIndex: { type: 'integer' }, entries: { type: 'array' } },
+          required: ['currentIndex', 'entries'], additionalProperties: true
+        }, 'navigation history')
+        const selected = (current.entries as unknown[])[current.currentIndex as number]
+        if (typeof selected !== 'object' || selected === null || (selected as Record<string, unknown>).id !== target.id) {
+          throw fault('browser_tab_changed', 'history navigation was superseded by another page navigation')
+        }
+      }
+      const location = await this.pageLocation(execution)
+      return errorText ? { url: requestedUrl, title: location.title, errorText, requestedUrl } : location
+    } catch (error) {
+      if (error instanceof BrowserFault) throw error
+      if (error instanceof Error && error.message.toLowerCase().includes('timed out')) throw fault('browser_timeout', `${action} navigation timed out`)
+      throw fault('browser_error', `${action} navigation failed: ${error instanceof Error ? error.message : String(error)}`)
+    } finally {
+      this.finishNavigation(execution, tracker, match)
+    }
+  }
+
+  async waitForLoadState(execution: PageExecution, loadState: 'load' | 'domcontentloaded', timeoutMs: number): Promise<void> {
+    const state = execution.runtimePage
+    const frameId = state.mainFrameId
+    const loaderId = state.mainFrameLoaderId
+    if (!frameId || !loaderId) {
+      if (state.mainFrameUrl === 'about:blank') return
+      throw fault('browser_tab_changed', 'managed page main frame is not established')
+    }
+    const completed = loadState === 'load' ? state.loadedLoaders : state.domContentLoadedLoaders
+    if (completed.has(loaderId) || state.mainFrameUrl === 'about:blank') return
+    const eventName = loadState === 'load' ? 'load' : 'DOMContentLoaded'
+    const arrived = Promise.withResolvers<void>()
+    const unsubscribe = execution.cdp.subscribe('Page.lifecycleEvent', (event) => {
+      if (event.sessionId === execution.binding.sessionId && event.params.frameId === frameId &&
+          event.params.loaderId === loaderId && event.params.name === eventName) {
+        completed.add(loaderId)
+        arrived.resolve()
+      }
+    })
+    if (completed.has(loaderId)) {
+      unsubscribe()
+      return
+    }
+    const timeout = Promise.withResolvers<void>()
+    const aborted = Promise.withResolvers<void>()
+    const onAbort = () => aborted.resolve()
+    execution.signal?.addEventListener('abort', onAbort, { once: true })
+    const timer = setTimeout(() => timeout.resolve(), Math.min(timeoutMs, 95_000))
+    try {
+      const waits: Promise<'loaded' | 'timeout' | 'aborted'>[] = [
+        arrived.promise.then(() => 'loaded' as const),
+        timeout.promise.then(() => 'timeout' as const)
+      ]
+      if (execution.signal) waits.push(aborted.promise.then(() => 'aborted' as const))
+      const outcome = await Promise.race(waits)
+      if (outcome === 'aborted') {
+        await state.termination
+        throw fault('browser_tab_closed', 'page load wait was cancelled because its page is closing')
+      }
+      if (outcome === 'timeout') throw fault('browser_timeout', 'page load condition timed out')
+    } finally {
+      clearTimeout(timer)
+      execution.signal?.removeEventListener('abort', onAbort)
+      unsubscribe()
+    }
+  }
+
+  async answerDialog(pageId: string, accept: boolean, text?: string): Promise<void> {
+    const stored = this.store.getPage(pageId)
+    const profile = this.profile(stored.profileId)
+    const epoch = profile.epoch
+    const binding = epoch?.pages.get(pageId)
+    if (!epoch || epoch.invalid || !binding) throw fault('browser_tab_changed', 'dialog page binding is no longer live')
+    if (this.paneWatchesByPage.has(pageId)) throw fault('browser_error', 'answer this dialog through the active Watch prompt')
+    const pending = binding.runtime.pendingDialog
+    if (!pending) throw fault('browser_error', 'there is no pending JavaScript dialog for this page')
+    if (pending.browserEpoch !== epoch.id || pending.pageGeneration !== this.generation(pageId) ||
+        binding.generation !== this.generation(pageId)) throw fault('browser_tab_changed', 'pending dialog belongs to a stale page generation')
+    if (pending.responding) throw fault('browser_error', 'the pending dialog is already being answered')
+    pending.responding = true
+    try {
+      await epoch.cdp.send('Page.handleJavaScriptDialog', {
+        accept,
+        ...(text === undefined ? {} : { promptText: text })
+      }, binding.sessionId, 5_000)
+      if (epoch.invalid || this.store.getPage(pageId).profileId !== stored.profileId ||
+          this.generation(pageId) !== pending.pageGeneration) throw fault('browser_tab_changed', 'page binding changed while the dialog response was sent')
+    } catch (error) {
+      if (error instanceof BrowserFault) throw error
+      try { this.store.getPage(pageId) } catch { throw fault('browser_tab_closed', 'dialog page was closed while responding') }
+      throw fault('browser_error', 'JavaScript dialog response failed')
+    } finally {
+      if (binding.runtime.pendingDialog === pending) binding.runtime.pendingDialog = undefined
     }
   }
 
@@ -1434,7 +1944,7 @@ export class BrowserRuntime {
     const state = execution.runtimePage
     if (state.pendingNavigation !== tracker) return
     state.pendingNavigation = undefined
-    if (this.closingPages.has(execution.page.browserPageId)) return
+    if (this.closingPages.has(execution.page.browserPageId) || this.changingPages.has(execution.page.browserPageId)) return
     const epoch = this.profile(execution.page.profileId).epoch
     const binding = epoch?.pages.get(execution.page.browserPageId)
     if (!epoch || epoch.invalid || !binding) return
@@ -1448,7 +1958,7 @@ export class BrowserRuntime {
           state.mainFrameUrl = event.url
           matched = true
         } else {
-          this.observeMainFrameNavigation(epoch, binding, event.frameId, event.loaderId, event.url)
+          this.observeMainFrameNavigation(epoch, binding, event.frameId, event.loaderId, event.url, event.navigationType)
         }
       } else if (event.kind === 'same-document' && event.frameId === tracker.frameId) {
         if (match?.url === event.url) {
@@ -1467,6 +1977,10 @@ export class BrowserRuntime {
     state.mainFrameId = match.frameId
     if (match.loaderId) state.mainFrameLoaderId = match.loaderId
     if (match.url) state.mainFrameUrl = match.url
+    if (match.loaderId) {
+      for (const loader of state.domContentLoadedLoaders) if (loader !== match.loaderId) state.domContentLoadedLoaders.delete(loader)
+      for (const loader of state.loadedLoaders) if (loader !== match.loaderId) state.loadedLoaders.delete(loader)
+    }
   }
 
   private profile(profileId: string): ProfileRuntime {
@@ -1549,6 +2063,10 @@ export class BrowserRuntime {
       try { await epoch.cdp.send('Target.detachFromTarget', { sessionId: binding.sessionId }, undefined, 5_000) } catch { /* session is already detached */ }
     }
     epoch.pages.delete(pageId)
+    if (epoch.cookiePageId === pageId) {
+      epoch.cookiePageId = undefined
+      epoch.cookiePage = undefined
+    }
   }
   private async ensureBinding(epoch: RuntimeEpoch, page: BrowserPage, generation: number): Promise<BoundPage> {
     const existing = epoch.pages.get(page.browserPageId)
@@ -1569,8 +2087,98 @@ export class BrowserRuntime {
     const binding = await this.bindFreshPage(epoch, page, generation, tab.tabId, existingTargets)
     epoch.pages.set(page.browserPageId, binding)
     await this.enablePageDomains(epoch, binding)
+    await this.applySettings(epoch, binding, this.pageSettings(page.browserPageId), page.url)
     await this.navigateRetainedPage(epoch, page, binding)
     return binding
+  }
+
+  private async ensureCookieTarget(epoch: RuntimeEpoch): Promise<BoundPage> {
+    if (epoch.cookiePage && epoch.cookiePageId) return epoch.cookiePage
+    const pageId = `internal_cookie_${randomUUID()}`
+    const page: BrowserPage = {
+      browserPageId: pageId, worktreeId: null, profileId: epoch.profileId,
+      index: -1, active: false, url: 'about:blank', title: '', loadError: null
+    }
+    const binding = await this.ensureBinding(epoch, page, 0)
+    epoch.cookiePageId = pageId
+    epoch.cookiePage = binding
+    return binding
+  }
+
+  private async readCdpCookies(epoch: RuntimeEpoch): Promise<Cookie[]> {
+    const data = safeRecord(await epoch.cdp.send('Storage.getCookies'), COOKIE_LIST_SCHEMA, 'cookie list')
+    const cookies: Cookie[] = []
+    for (const raw of data.cookies as unknown[]) {
+      const row = safeRecord(raw, COOKIE_ENTRY_SCHEMA, 'cookie')
+      const domain = row.domain as string
+      const sameSite = row.sameSite === 'Strict' || row.sameSite === 'Lax' || row.sameSite === 'None' ? row.sameSite : undefined
+      let partitionKey: Cookie['partitionKey']
+      if (row.partitionKey !== undefined) {
+        const partition = safeRecord(row.partitionKey, {
+          type: 'object', properties: { topLevelSite: { type: 'string' }, hasCrossSiteAncestor: { type: 'boolean' } },
+          required: ['topLevelSite', 'hasCrossSiteAncestor'], additionalProperties: true
+        }, 'cookie partition key')
+        partitionKey = { topLevelSite: partition.topLevelSite as string, hasCrossSiteAncestor: partition.hasCrossSiteAncestor as boolean }
+      }
+      cookies.push({
+        name: row.name as string, value: row.value as string, domain, path: row.path as string,
+        secure: row.secure as boolean, httpOnly: row.httpOnly as boolean, hostOnly: !domain.startsWith('.'),
+        ...(sameSite ? { sameSite } : {}),
+        ...(typeof row.expires === 'number' && row.expires > 0 ? { expires: row.expires } : {}),
+        ...(partitionKey ? { partitionKey } : {})
+      })
+    }
+    return cookies
+  }
+
+  private async setCdpCookie(epoch: RuntimeEpoch, binding: BoundPage, cookie: Cookie): Promise<void> {
+    const host = canonicalCookieDomain(cookie.domain)
+    const params: Record<string, unknown> = {
+      name: cookie.name, value: cookie.value, path: cookie.path, secure: cookie.secure, httpOnly: cookie.httpOnly,
+      ...(cookie.hostOnly ? { url: `${cookie.secure ? 'https' : 'http'}://${host}/` } : { domain: `.${host}` }),
+      ...(cookie.sameSite ? { sameSite: cookie.sameSite } : {}),
+      ...(cookie.expires === undefined ? {} : { expires: cookie.expires }),
+      ...(cookie.partitionKey ? { partitionKey: cookie.partitionKey } : {})
+    }
+    const result = safeRecord(await epoch.cdp.send('Network.setCookie', params, binding.sessionId), COOKIE_SET_SCHEMA, 'cookie write')
+    if (result.success !== true) throw fault('browser_error', 'Chrome rejected the requested cookie write')
+  }
+
+  private async deleteCdpCookie(epoch: RuntimeEpoch, binding: BoundPage, cookie: Cookie): Promise<void> {
+    const before = await this.readCdpCookies(epoch)
+    if (!before.some((candidate) => this.sameCookieIdentity(candidate, cookie))) return
+    const siblings = before.filter((candidate) =>
+      candidate.name === cookie.name && canonicalCookieDomain(candidate.domain) === canonicalCookieDomain(cookie.domain) &&
+      candidate.path === cookie.path && !this.sameCookieIdentity(candidate, cookie)
+    )
+    const host = canonicalCookieDomain(cookie.domain)
+    await epoch.cdp.send('Network.deleteCookies', {
+      name: cookie.name, path: cookie.path,
+      ...(cookie.hostOnly ? { url: `${cookie.secure ? 'https' : 'http'}://${host}/` } : { domain: `.${host}` }),
+      ...(cookie.partitionKey ? { partitionKey: cookie.partitionKey } : {})
+    }, binding.sessionId)
+    let remaining = await this.readCdpCookies(epoch)
+    if (remaining.some((candidate) => this.sameCookieIdentity(candidate, cookie))) throw fault('browser_error', 'Chrome did not delete the selected cookie identity')
+    try {
+      for (const sibling of siblings) {
+        if (!remaining.some((candidate) => this.sameCookieIdentity(candidate, sibling))) {
+          await this.setCdpCookie(epoch, binding, sibling)
+          remaining = await this.readCdpCookies(epoch)
+        }
+      }
+    } catch {
+      throw fault('browser_unsafe_replace', 'Chrome could not restore sibling cookie identities after exact deletion')
+    }
+    if (siblings.some((sibling) => !remaining.some((candidate) => this.sameCookieIdentity(candidate, sibling)))) {
+      throw fault('browser_unsafe_replace', 'Chrome did not preserve sibling cookie identities during exact deletion')
+    }
+  }
+
+  private sameCookieIdentity(a: Cookie, b: Cookie): boolean {
+    return a.name === b.name && canonicalCookieDomain(a.domain) === canonicalCookieDomain(b.domain) &&
+      a.path === b.path && a.hostOnly === b.hostOnly &&
+      a.partitionKey?.topLevelSite === b.partitionKey?.topLevelSite &&
+      a.partitionKey?.hasCrossSiteAncestor === b.partitionKey?.hasCrossSiteAncestor
   }
 
   private async bindFreshPage(epoch: RuntimeEpoch, page: BrowserPage, generation: number, tabId: string, existingTargets: ReadonlySet<string>): Promise<BoundPage> {
@@ -1623,7 +2231,14 @@ export class BrowserRuntime {
         sessions.delete(candidateTarget)
       }
       const runtimePage: RuntimePageState = {
-        binding: { browserEpoch: epoch.id, pageGeneration: generation, targetId, sessionId, tabId }
+        binding: { browserEpoch: epoch.id, pageGeneration: generation, targetId, sessionId, tabId },
+        consoleEntries: [],
+        networkById: new Map(),
+        networkEntries: [],
+        harEntries: [],
+        interceptRequests: [],
+        domContentLoadedLoaders: new Set(),
+        loadedLoaders: new Set()
       }
       const binding: BoundPage = { pageId: page.browserPageId, tabId, targetId, sessionId, generation, runtime: runtimePage }
       return binding
@@ -1655,7 +2270,8 @@ export class BrowserRuntime {
       epoch.userAgent = userAgent
     }
     await epoch.cdp.send('Network.setUserAgentOverride', { userAgent }, sessionId)
-    await epoch.cdp.send('Network.enable', {}, sessionId)
+    await epoch.cdp.send('Network.enable', { maxTotalBufferSize: 50 * 1024 * 1024, maxResourceBufferSize: 10 * 1024 * 1024 }, sessionId)
+    await epoch.cdp.send('Log.enable', {}, sessionId)
     this.subscribePageEvents(epoch, binding)
     const tree = safeRecord(await epoch.cdp.send('Page.getFrameTree', {}, sessionId), {
       type: 'object',
@@ -1692,6 +2308,40 @@ export class BrowserRuntime {
     binding.runtime.navigationReady = true
   }
 
+  private async applySettings(epoch: RuntimeEpoch, binding: BoundPage, settings: PageSettings, pageUrl: string): Promise<void> {
+    const sessionId = binding.sessionId
+    if (settings.viewport) {
+      await epoch.cdp.send('Emulation.setDeviceMetricsOverride', {
+        width: Math.round(settings.viewport.width), height: Math.round(settings.viewport.height),
+        deviceScaleFactor: settings.viewport.deviceScaleFactor, mobile: settings.viewport.mobile
+      }, sessionId)
+    }
+    if (settings.geolocation) {
+      const origin = new URL(pageUrl).origin
+      if (origin !== 'null') await epoch.cdp.send('Browser.setPermission', { origin, permission: { name: 'geolocation' }, setting: 'granted' })
+      await epoch.cdp.send('Emulation.setGeolocationOverride', settings.geolocation, sessionId)
+    }
+    if (settings.userAgent) await epoch.cdp.send('Emulation.setUserAgentOverride', { userAgent: settings.userAgent }, sessionId)
+    if (settings.offline) {
+      await epoch.cdp.send('Network.emulateNetworkConditions', {
+        offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0, connectionType: 'none'
+      }, sessionId)
+    }
+    if (settings.headers) await epoch.cdp.send('Network.setExtraHTTPHeaders', { headers: settings.headers }, sessionId)
+    if (settings.colorScheme !== undefined || settings.reducedMotion !== undefined) {
+      await epoch.cdp.send('Emulation.setEmulatedMedia', { features: [
+        ...(settings.colorScheme === undefined || settings.colorScheme === null ? [] : [{ name: 'prefers-color-scheme', value: settings.colorScheme }]),
+        ...(settings.reducedMotion === undefined || settings.reducedMotion === null ? [] : [{ name: 'prefers-reduced-motion', value: settings.reducedMotion }])
+      ] }, sessionId)
+    }
+    if (settings.routes.length > 0 || settings.credentials) {
+      await epoch.cdp.send('Fetch.enable', {
+        ...(settings.routes.length > 0 ? { patterns: settings.routes.map((urlPattern) => ({ urlPattern: urlPattern.replaceAll('**', '*'), requestStage: 'Request' })) } : {}),
+        ...(settings.credentials ? { handleAuthRequests: true } : {})
+      }, sessionId)
+    }
+  }
+
   private subscribeBrowserEvents(epoch: RuntimeEpoch): void {
     epoch.cdp.subscribe('Target.targetDestroyed', (event) => {
       const targetId = asString(event.params.targetId)
@@ -1716,14 +2366,13 @@ export class BrowserRuntime {
       const url = asString(frame.url)
       if (!frameId || !url || frame.parentId !== undefined) return
       const loaderId = asString(frame.loaderId)
+      const navigationType = asString(event.params.type)
       const navigationEvent: NavigationEvent = {
-        kind: 'frame',
-        frameId,
-        ...(loaderId ? { loaderId } : {}),
-        url,
+        kind: 'frame', frameId, ...(loaderId ? { loaderId } : {}), url,
+        ...(navigationType ? { navigationType } : {})
       }
       if (this.pushNavigationEvent(state, navigationEvent)) return
-      this.observeMainFrameNavigation(epoch, binding, frameId, loaderId, url)
+      this.observeMainFrameNavigation(epoch, binding, frameId, loaderId, url, navigationType)
     })
     epoch.cdp.subscribe('Page.navigatedWithinDocument', (event) => {
       if (event.sessionId !== binding.sessionId) return
@@ -1739,7 +2388,10 @@ export class BrowserRuntime {
       const frameId = asString(event.params.frameId)
       const loaderId = asString(event.params.loaderId)
       const name = asString(event.params.name)
-      if (!frameId || !loaderId || !name || frameId !== state.mainFrameId) return
+      if (!frameId || !loaderId || !name || state.mainFrameId && frameId !== state.mainFrameId) return
+      if (name === 'DOMContentLoaded') state.domContentLoadedLoaders.add(loaderId)
+      if (name === 'load') state.loadedLoaders.add(loaderId)
+      if (!state.mainFrameId) return
       const navigationEvent: NavigationEvent = { kind: 'lifecycle', frameId, loaderId, name }
       if (this.pushNavigationEvent(state, navigationEvent)) return
       if (name === 'load' && loaderId === state.mainFrameLoaderId) {
@@ -1747,25 +2399,176 @@ export class BrowserRuntime {
         void this.refreshSpontaneousTitle(epoch, binding, generation, loaderId).catch(() => {})
       }
     })
+    epoch.cdp.subscribe('Runtime.consoleAPICalled', (event) => {
+      if (event.sessionId !== binding.sessionId || validateValue(EVENT_CONSOLE_SCHEMA, event.params, 'console event')) return
+      const args = event.params.args as Array<Record<string, unknown>>
+      const text = args.map((arg) => {
+        const value = arg.value ?? arg.description ?? arg.unserializableValue
+        return typeof value === 'string' ? value : value === undefined ? '' : JSON.stringify(value)
+      }).join(' ')
+      const stack = event.params.stackTrace as Record<string, unknown> | undefined
+      const frames = Array.isArray(stack?.callFrames) ? stack.callFrames : []
+      const frame = frames[0] as Record<string, unknown> | undefined
+      const url = asString(frame?.url)
+      const line = frame?.lineNumber
+      state.consoleEntries.push({
+        level: asString(event.params.type) ?? 'log',
+        text: text.slice(0, 100_000),
+        timestamp: asFiniteNumber(event.params.timestamp) ?? Date.now() / 1000,
+        ...(url === undefined ? {} : { url }),
+        ...(typeof line === 'number' ? { line: line + 1 } : {})
+      })
+      if (state.consoleEntries.length > 10_000) state.consoleEntries.splice(0, state.consoleEntries.length - 10_000)
+    })
     epoch.cdp.subscribe('Network.requestWillBeSent', (event) => {
-      if (event.sessionId !== binding.sessionId || validateValue(EVENT_NETWORK_REQUEST_SCHEMA, event.params, 'document request event')) return
+      if (event.sessionId !== binding.sessionId || validateValue(EVENT_NETWORK_REQUEST_SCHEMA, event.params, 'network request event')) return
+      const request = event.params.request as Record<string, unknown>
+      const url = asString(request.url)
+      const method = asString(request.method)
       const requestId = asString(event.params.requestId)
       const frameId = asString(event.params.frameId)
       const loaderId = asString(event.params.loaderId)
       if (event.params.type === 'Document' && requestId && frameId && loaderId) {
         this.pushNavigationEvent(state, { kind: 'document-request', requestId, frameId, loaderId })
       }
+      if (!url || !method || !requestId) return
+      const timestamp = asFiniteNumber(event.params.wallTime) ?? asFiniteNumber(event.params.timestamp) ?? Date.now() / 1000
+      const record: NetworkEntry = { url, method, status: 0, mimeType: '', size: 0, timestamp }
+      state.networkEntries.push(record)
+      state.networkById.set(requestId, record)
+      if (state.networkEntries.length > 10_000) {
+        const removed = state.networkEntries.splice(0, state.networkEntries.length - 10_000)
+        for (const [id, entry] of state.networkById) if (removed.includes(entry)) state.networkById.delete(id)
+      }
+      if (state.captureStartedAt === undefined || timestamp < state.captureStartedAt) return
+      const headers = headersAsStrings(request.headers)
+      let queryString: Array<{ name: string; value: string }> = []
+      try { queryString = [...new URL(url).searchParams].map(([name, value]) => ({ name, value })) } catch { /* retain the original URL */ }
+      const postData = asString(request.postData)
+      state.harEntries.push({
+        startedDateTime: new Date(timestamp * 1000).toISOString(),
+        time: 0,
+        request: {
+          method, url, httpVersion: 'HTTP/1.1',
+          headers: Object.entries(headers).map(([name, value]) => ({ name, value })),
+          queryString, cookies: [], headersSize: -1,
+          bodySize: postData === undefined ? 0 : Buffer.byteLength(postData),
+          ...(postData === undefined ? {} : { postData: { mimeType: asString(headers['content-type']) ?? '', text: postData } })
+        },
+        response: {
+          status: 0, statusText: '', httpVersion: 'HTTP/1.1', headers: [], cookies: [],
+          content: { size: 0, mimeType: '' }, redirectURL: '', headersSize: -1, bodySize: 0
+        },
+        cache: {}, timings: { send: 0, wait: 0, receive: 0 }, _requestId: requestId
+      })
+    })
+    epoch.cdp.subscribe('Network.responseReceived', (event) => {
+      if (event.sessionId !== binding.sessionId) return
+      const requestId = asString(event.params.requestId)
+      const response = event.params.response
+      if (!requestId || validateValue({
+        type: 'object',
+        properties: { status: { type: 'number' }, mimeType: { type: 'string' }, statusText: { type: 'string' }, headers: { type: 'object' } },
+        required: ['status', 'mimeType'], additionalProperties: true
+      }, response, 'network response')) return
+      const typed = response as Record<string, unknown>
+      const record = state.networkById.get(requestId)
+      if (record) {
+        record.status = asFiniteNumber(typed.status) ?? 0
+        record.mimeType = asString(typed.mimeType) ?? ''
+      }
+      const har = this.harEntry(state, requestId)
+      if (!har) return
+      const responseValue = har.response as Record<string, JsonValue>
+      responseValue.status = asFiniteNumber(typed.status) ?? 0
+      responseValue.statusText = asString(typed.statusText) ?? ''
+      responseValue.headers = Object.entries(headersAsStrings(typed.headers)).map(([name, value]) => ({ name, value }))
+      const content = responseValue.content as Record<string, JsonValue>
+      content.mimeType = asString(typed.mimeType) ?? ''
+    })
+    epoch.cdp.subscribe('Network.loadingFinished', (event) => {
+      if (event.sessionId !== binding.sessionId) return
+      const requestId = asString(event.params.requestId)
+      if (!requestId) return
+      const size = asFiniteNumber(event.params.encodedDataLength) ?? 0
+      const record = state.networkById.get(requestId)
+      if (record) record.size = size
+      this.finishHarEntry(state, requestId, size, '')
     })
     epoch.cdp.subscribe('Network.loadingFailed', (event) => {
       if (event.sessionId !== binding.sessionId) return
       const requestId = asString(event.params.requestId)
-      if (!requestId || !state.pendingNavigation?.events.some((candidate) => candidate.kind === 'document-request' && candidate.requestId === requestId)) return
-      this.pushNavigationEvent(state, {
-        kind: 'loading-failed',
-        requestId,
-        errorText: asString(event.params.errorText) ?? 'network error',
-      })
+      if (!requestId) return
+      const errorText = asString(event.params.errorText) ?? 'network error'
+      if (state.pendingNavigation?.events.some((candidate) => candidate.kind === 'document-request' && candidate.requestId === requestId)) {
+        this.pushNavigationEvent(state, { kind: 'loading-failed', requestId, errorText, canceled: event.params.canceled === true })
+      }
+      this.finishHarEntry(state, requestId, 0, errorText)
     })
+    epoch.cdp.subscribe('Fetch.requestPaused', (event) => {
+      if (event.sessionId !== binding.sessionId || this.paneWatchesByPage.has(binding.pageId) || validateValue({
+        type: 'object', properties: { requestId: { type: 'string' }, request: { type: 'object' }, resourceType: { type: 'string' } },
+        required: ['requestId', 'request', 'resourceType'], additionalProperties: true
+      }, event.params, 'intercepted request')) return
+      const params = event.params as Record<string, unknown>
+      const request = params.request as Record<string, unknown>
+      if (this.pageSettings(binding.pageId).routes.length > 0) {
+        state.interceptRequests.push({
+          id: params.requestId as string,
+          url: asString(request.url) ?? '',
+          method: asString(request.method) ?? 'GET',
+          headers: headersAsStrings(request.headers),
+          resourceType: params.resourceType as string
+        })
+        if (state.interceptRequests.length > 10_000) state.interceptRequests.splice(0, state.interceptRequests.length - 10_000)
+      }
+      void epoch.cdp.send('Fetch.continueRequest', { requestId: params.requestId }, binding.sessionId)
+        .catch((error) => this.invalidateEpoch(this.profile(epoch.profileId), epoch, error instanceof Error ? error.message : String(error)))
+    })
+    epoch.cdp.subscribe('Fetch.authRequired', (event) => {
+      if (event.sessionId !== binding.sessionId || this.paneWatchesByPage.has(binding.pageId)) return
+      const credentials = this.pageSettings(binding.pageId).credentials
+      const requestId = asString(event.params.requestId)
+      if (!credentials || !requestId) return
+      void epoch.cdp.send('Fetch.continueWithAuth', {
+        requestId,
+        authChallengeResponse: { response: 'ProvideCredentials', username: credentials.user, password: credentials.pass }
+      }, binding.sessionId).catch((error) => this.invalidateEpoch(this.profile(epoch.profileId), epoch, error instanceof Error ? error.message : String(error)))
+    })
+    epoch.cdp.subscribe('Page.javascriptDialogOpening', (event) => {
+      if (event.sessionId !== binding.sessionId || this.paneWatchesByPage.has(binding.pageId) || validateValue({
+        type: 'object', properties: { type: { type: 'string' }, url: { type: 'string' }, message: { type: 'string' } },
+        required: ['type', 'url', 'message'], additionalProperties: true
+      }, event.params, 'JavaScript dialog')) return
+      const data = event.params
+      const type = data.type
+      if (type !== 'alert' && type !== 'confirm' && type !== 'prompt' && type !== 'beforeunload') return
+      state.pendingDialog = {
+        browserEpoch: epoch.id, pageGeneration: binding.generation, type,
+        url: data.url as string, message: (data.message as string).slice(0, 10_000), responding: false
+      }
+      try { this.dependencies.onDialog?.({ pageId: binding.pageId, type }) } catch { /* observers cannot intercept browser execution */ }
+    })
+    epoch.cdp.subscribe('Page.javascriptDialogClosed', (event) => {
+      if (event.sessionId === binding.sessionId && !this.paneWatchesByPage.has(binding.pageId)) state.pendingDialog = undefined
+    })
+  }
+  private harEntry(state: RuntimePageState, requestId: string): Record<string, JsonValue> | undefined {
+    const entry = state.harEntries.find((candidate) =>
+      typeof candidate === 'object' && candidate !== null && !Array.isArray(candidate) &&
+      (candidate as Record<string, JsonValue>)._requestId === requestId
+    )
+    return entry && typeof entry === 'object' && !Array.isArray(entry) ? entry as Record<string, JsonValue> : undefined
+  }
+
+  private finishHarEntry(state: RuntimePageState, requestId: string, size: number, error: string): void {
+    const entry = this.harEntry(state, requestId)
+    if (!entry) return
+    if (error !== '') entry._failure = error
+    const response = entry.response as Record<string, JsonValue>
+    response.bodySize = size
+    const content = response.content as Record<string, JsonValue>
+    content.size = size
   }
   private pushNavigationEvent(state: RuntimePageState, event: NavigationEvent): boolean {
     const tracker = state.pendingNavigation
@@ -1780,11 +2583,16 @@ export class BrowserRuntime {
     binding: BoundPage,
     frameId: string,
     loaderId: string | undefined,
-    url: string
+    url: string,
+    _navigationType?: string
   ): void {
     const state = binding.runtime
     if (!state.navigationReady) return
     const changed = frameId !== state.mainFrameId || loaderId !== state.mainFrameLoaderId || url !== state.mainFrameUrl
+    if (loaderId !== state.mainFrameLoaderId) {
+      state.domContentLoadedLoaders.clear()
+      state.loadedLoaders.clear()
+    }
     state.mainFrameId = frameId
     state.mainFrameLoaderId = loaderId
     state.mainFrameUrl = url
@@ -1855,7 +2663,7 @@ export class BrowserRuntime {
       cdp,
       binding: this.publicBinding(epoch, binding),
       runtimePage: binding.runtime,
-      ...(signal ? { signal } : {}),
+      settings: this.pageSettings(page.browserPageId),
       native: async (action, fields = {}, timeoutMs = 90_000) => {
         if (signal?.aborted) return await cancellation()
         try {
