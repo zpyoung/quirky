@@ -211,4 +211,82 @@ describe('guarded structured sends', () => {
     expect((await failure(call('quirky.structured/send', { session: session.id, text: 'x', requireIdle: 'yes' }))).code).toBe(RpcErrorCode.InvalidParams)
     expect(runner!.delivered).toEqual([])
   })
+
+  test('a stale loop guard with an operation id writes no prompt bytes', async () => {
+    await boot()
+    const session = await createIdle()
+    await waitFor(() => runner?.started.length === 1 ? runner : undefined)
+    await call('quirky.structured/send', { session: session.id, text: 'external user turn' })
+
+    const error = await failure(
+      call('quirky.structured/send', {
+        session: session.id,
+        text: 'stale loop iteration',
+        requireIdle: true,
+        expectedAfterSeq: 0,
+        operationId: 'stale-guard-op'
+      })
+    )
+    expect(error.code).toBe(RpcErrorCode.Conflict)
+    expect(error.data).toMatchObject({ reason: 'stale-evidence' })
+    expect(runner!.delivered.map((entry) => entry.text)).toEqual(['external user turn'])
+  })
+
+  test('a completed guarded operation replays after its journal sequence advances', async () => {
+    await boot()
+    const session = await createIdle()
+    await waitFor(() => runner?.started.length === 1 ? runner : undefined)
+    const params = {
+      session: session.id,
+      text: 'loop iteration',
+      requireIdle: true,
+      expectedAfterSeq: 0,
+      operationId: 'completed-guard-op'
+    }
+
+    expect(await call('quirky.structured/send', params)).toMatchObject({ ok: true })
+    expect(await call('quirky.structured/send', params)).toMatchObject({ ok: true })
+    expect(runner!.delivered.map((entry) => entry.text)).toEqual(['loop iteration'])
+  })
+
+  test('reusing an operation id with changed loop guards is refused', async () => {
+    await boot()
+    const session = await createIdle()
+    await waitFor(() => runner?.started.length === 1 ? runner : undefined)
+    const params = {
+      session: session.id,
+      text: 'loop iteration',
+      requireIdle: true,
+      expectedAfterSeq: 0,
+      operationId: 'changed-guard-op'
+    }
+
+    await call('quirky.structured/send', params)
+    const error = await failure(call('quirky.structured/send', { ...params, expectedAfterSeq: 1 }))
+    expect(error.code).toBe(RpcErrorCode.Conflict)
+    expect(runner!.delivered.map((entry) => entry.text)).toEqual(['loop iteration'])
+  })
+
+  test('an exact incarnation guard does not bypass a stale journal sequence', async () => {
+    await boot()
+    const session = await createIdle()
+    await waitFor(() => runner?.started.length === 1 ? runner : undefined)
+    const identity = await call<{ processIncarnation: string }>('quirky.session/identity', { session: session.id })
+    await call('quirky.structured/send', { session: session.id, text: 'external user turn' })
+
+    const error = await failure(
+      call('quirky.structured/send', {
+        session: session.id,
+        text: 'stale loop iteration',
+        requireIdle: true,
+        expectedAfterSeq: 0,
+        expectedIncarnation: identity.processIncarnation,
+        operationId: 'incarnation-stale-op'
+      })
+    )
+    expect(error.code).toBe(RpcErrorCode.Conflict)
+    expect(error.data).toMatchObject({ reason: 'stale-evidence' })
+    expect(runner!.delivered.map((entry) => entry.text)).toEqual(['external user turn'])
+  })
+
 })

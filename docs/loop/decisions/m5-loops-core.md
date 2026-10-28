@@ -233,5 +233,71 @@
 - **Revisit if:** a condition itself times out or a cleanup barrier is never reached
 - **Source:** assumed — autonomous
 
+## D22: Preserve all four caught-up feature contracts
+- **Question:** the one roadmap catch-up brought Reviews, Tasks, Automations core and Mobile daemon changes into shared runtime/protocol files
+- **Options:** reinterpret their ownership rules for loops; preserve additive contracts and verify the merge
+- **Chose:** preserve m4-hosting-ui-reviews D5/D22/D25, m4-hosting-ui-tasks D24, m5-automations-core D1/D5/D10/D11 and sb-mobile-daemon D5/D6/D12/D17. Automations pending dispatch remains separate from loop iterations. Mobile clients.accept authorization/revocation stays additive; no Orca RPC aliases or weakening of revoked plugin capabilities. Settings/hosting navigation is unchanged.
+- **Why:** the complete four logs were read by LoopCatchupDecisions; it found no conflict with structured loops, public stores/calls, guarded sends, notification policy or shutdown ownership. The automatic merge retained both read-only store access and the new client-admission API.
+- **Evidence:** LoopCatchupDecisions completed report and read list; git merge build/roadmap result; native real CLI smoke on the caught-up source bg27 NATIVE_LOOP_CLI_SMOKE_PASS
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the required merged-tree gate exposes a shared API incompatibility
+- **Source:** locked by docs/loop/decisions/sb-mobile-daemon.md
+
+## D23: Repair remote fixture discovery and explicitly adopt hosted structured views
+- **Question:** the required affected run had206of210remote files pass, two macOS-only files pass, and four initial failed files
+- **Options:** treat the failed gate as green; weaken evaluator availability/background focus; repair the actual fixture/caller mismatches
+- **Chose:** preserve evaluator availability checks. The isolated provider rig now sets its own agent search directory and temporary Bash login PATH, so remote shells cannot drop the fixture executable. SC-69 now explicitly invokes the existing public adoptSession API before testing its hosted viewer, and asserts background registration did not auto-adopt a pane. The caught-up Mobile clients.accept member is explicit in the engine test context.
+- **Why:** CLI/safety failures were No evaluator CLI installed on the remote login PATH; the viewer test depended on the removed focus-stealing auto-adoption behavior. The scheduler failure passed the suite's automatic isolated retry (6/0), so its code is unchanged. No production contract or condition deadline was relaxed.
+- **Evidence:** first affected gate487.806seconds, stdout/stderr under /tmp/quirky-m5-loops-run.0VUATs/final-gates; repaired CLI+safety+viewer gate20pass/0fail/135assertions; engine context gate17pass/0fail/76assertions; bun test scripts68pass/0fail/564assertions; final bun run typecheck exit0 with594installs/608packages checked and no lock changes.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** authoritative land's full merged-tree suite exposes another consumer
+- **Source:** assumed — autonomous
+
+## D24: Reconcile loop admission with orchestration leases and durable receipts
+- **Question:** the first authoritative land attempt stopped on concurrent m6-orchestration-core changes to structured lifecycle/send methods, schemas and the plugin guide
+- **Options:** keep only loop guards; keep only orchestration receipts/leases; compose both admission and lifetime contracts
+- **Chose:** one per-session serialized send admission path with startup, exact-incarnation, idle and journal-sequence checks. Preserve operation single-flight and durable completed/uncertain receipt replay; guard veto precedes new receipt reservation and prompt bytes. Existing no-loop-guard fingerprints remain stable; supplied loop guards participate in new payload identity. Keep native lease/deferStart/account-preparation ordering, plugin-owner cleanup on early/late registration and shared awaited stop cleanup. Both guide sections and the union of send schema fields remain.
+- **Why:** losing either side would permit unsafe prompt delivery or duplicate/unauthorized orchestration effects. The integration owner read the complete incoming decision log through D42/Progress and reconciled D28/D30/D31/D39/D42; D41's automatic idle-nudging deferral remains untouched.
+- **Evidence:** authoritative land exit1/conflict result; scoped MergeLoopLeases handoff (only main.ts, manifest, README and guarded-send tests); added combined idle/sequence/incarnation/receipt boundary cases. Merged typing, loop/structured tests and native smoke must pass before the merge is committed.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** merged verification exposes an admission or receipt incompatibility
+- **Source:** locked by docs/loop/decisions/m6-orchestration-core.md
+
+## D25: Keep shutdown cleanup independent of revoked identity lookups
+- **Question:** merged verification found two deterministic structured-deactivation failures plus timeout failures in the large local combined run
+- **Options:** relax deactivation assertions; query a revoked launch capability during cleanup; use already-held lease revokers while inactive
+- **Chose:** inactive shutdown skips the guarded sessionIdentity lookup and still releases its retained native lease and stops each runner. Active guarded stops retain exact-incarnation checks. Add the incoming required CliContext.requestBase to the loop CLI fixture. No test assertions or condition deadlines were relaxed.
+- **Why:** stopSession's identity lookup ran before provider cleanup and threw after kernel context revocation, leaving the runner untouched. The existing two deactivation regressions now pass2/0, and combined idle/incarnation/sequence/receipt tests pass10/0 with35assertions. The native CLI smoke passes3iterations on the reconciled lease runtime; typecheck passes595/609 unchanged installs. The earlier local156pass/23fail run is not represented as green; remote structured/loops/orchestration verification remains required.
+- **Evidence:** merged local run artefact99; shutdown regressions bg39; guarded-send bg41; native smoke bg34; final typecheck bg38. The short120second typecheck attempt timed out, not a diagnostic success.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** remote verification exposes another lease/owner lifecycle incompatibility
+- **Source:** locked by docs/loop/decisions/m6-orchestration-core.md
+
+## D26: Accept the recovered boundary only after remote verification
+- **Question:** the large local combined run was not green after the concurrent orchestration merge
+- **Options:** infer success from a native smoke; change deadlines; use the prescribed isolated remote suite for the complete recovered boundary
+- **Chose:** run structured, loops and orchestration through scripts/suite.ts on the recovered committed source. All20files passed, zero failures and no flaky retries. Keep all existing condition deadlines. The two deterministic deactivation failures were fixed and exercised separately; the earlier local failed run remains recorded rather than relabeled.
+- **Why:** this verifies the union of loop admission, native lease identity, durable receipt replay and owner cleanup under the repository's required runner, including the actual plugin/API consumers.
+- **Evidence:** bg43 `bun scripts/suite.ts plugins/quirky.structured plugins/quirky.loops plugins/quirky.orchestration`:20/20, suite-result ok:true/flaky:[],51.53seconds. Recovered checkpoint24c6e028; typecheck bg38 exit0, guard tests bg41 10/0, shutdown bg39 2/0 and native smoke bg34 pass.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** authoritative land's full merged-tree gate fails
+- **Source:** locked by docs/loop/LOOP.md
+
+## D27: Isolate guardian test discovery before rerunning shared gates
+- **Question:** lane5 reported that scripts/process-scope.test.ts selected the first machine-global new guardian and could register or kill another lane's guardian during cleanup
+- **Options:** trust a prior script pass; broaden waits; stop the pending gate and import the committed ownership-isolation fix
+- **Chose:** cancel the in-flight second land attempt before unsafe script testing. Review and cherry-pick standalone9dcbd033 as5ffc4032; only scripts/process-scope.test.ts changes. Discovery now reads each guardian config and requires both exact home and current owner PID, ignoring foreign/disappeared candidates. An owned decoy proves target selection and survives until its own cleanup. Keep the15second test budget and all production process deadlines unchanged.
+- **Why:** a green run cannot disprove this concurrency race, and shared-test cleanup must never affect another lane. The user supplied deterministic wrong-owned-decoy red evidence; no unsafe old-selector rerun was needed.
+- **Evidence:** reviewed git-show diff (one file,46insertions/6deletions); narrow post-pick regression1pass/0fail/6assertions in6.36seconds. Land job bg44 was explicitly cancelled, not reported as a gate pass.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** ownership-qualified discovery or its decoy regression fails
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-Audited source checkpoint e0582785 published to early presets lane. All implementation/fix workers are now frozen; original worktrees removed, tool-only metadata preserved in named stashes. Source repairs and public safety acceptance tests are ready to commit. Targeted gate138pass/3fail was followed by the repaired engine/notification gate24pass/0fail; native real CLI smoke passes and TypeScript is clean. Next: commit repair tip and notify lane5, catch up once with build/roadmap, read incoming decisions, run required affected suite/scripts/typecheck, then authoritative queue land. No final model review was started; D18 records the night-mode skip. Native-only checks remain pending, not falsely passed.
+Remote recovered boundary20/20 and merged typing/guard/shutdown/native smoke proof remain recorded. Second land attempt was cancelled on the reported unsafe shared guardian fixture; standalone test-only fix9dcbd033 is imported as5ffc4032 and its narrow regression passes1/0/6assertions without changing deadlines. Commit this evidence, detach and retry authoritative land with the safe fixture. No worker or verification job remains active. The item is not done until the controller's full merged-tree gate passes; native-only scenarios remain pending.

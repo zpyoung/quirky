@@ -193,8 +193,9 @@ export function activate(context: PluginContext): void {
   const agentRunners = new Map<StructuredAgent, StructuredRunner>()
   const runnerBySession = new Map<string, StructuredRunner>()
   const startTasks = new Map<string, Promise<void>>()
-  const sendFlights = new Map<string, { payloadHash: string; promise: Promise<StructuredSendResult> }>()
   const sendTails = new Map<string, Promise<void>>()
+  const sendFlights = new Map<string, { payloadHash: string; promise: Promise<StructuredSendResult> }>()
+  const stopTasks = new Map<string, { processIncarnation: string | null; promise: Promise<void> }>()
   let statusQueue: Promise<void> = Promise.resolve()
   const ensureActive = (): void => {
     if (!active) throw new Error('structured plugin is deactivated')
@@ -593,7 +594,7 @@ export function activate(context: PluginContext): void {
       lastAssistantMessage: null,
       owner: token,
       ownerPluginId,
-      hasSent: false,
+      hasSent: prompt !== undefined && prompt !== '',
       stopping: false,
       lease: null
     }
@@ -625,6 +626,7 @@ export function activate(context: PluginContext): void {
         throw error
       }
     }
+    if (ownerPluginId !== null) await reconcileOwnedSessions()
     if (!active || live.get(registered.id) !== entry || entry.stopping || entry.status === 'exited') {
       releaseOwnerToken(token)
       return registered
@@ -730,7 +732,7 @@ export function activate(context: PluginContext): void {
         lastAssistantMessage: null,
         owner: token,
         ownerPluginId,
-        hasSent: false,
+        hasSent: typeof params.prompt === 'string' && params.prompt !== '',
         stopping: false,
         lease: null
       }
@@ -767,6 +769,7 @@ export function activate(context: PluginContext): void {
         throw error
       }
     }
+    if (ownerPluginId !== null) await reconcileOwnedSessions()
     if (!active || !entry || live.get(registered.id) !== entry || entry.stopping || entry.status === 'exited') {
       releaseOwnerToken(token)
       return registered
@@ -819,95 +822,108 @@ export function activate(context: PluginContext): void {
   }
 
   const send: MethodHandler = async (params) => {
-    if (typeof params.session !== 'string') throw context.error('invalid-params', 'session must be a string')
-    if (typeof params.text !== 'string') throw context.error('invalid-params', 'text must be a string')
+    const admitAndSend = (
+      sessionId: string,
+      text: string,
+      guards: {
+        requireIdle?: boolean
+        expectedAfterSeq?: number
+        expectedIncarnation?: string
+      },
+      receipt?: { operationId: string; payloadHash: string }
+    ): Promise<StructuredSendResult> => enqueueSend<StructuredSendResult>(sessionId, async () => {
+      await startTasks.get(sessionId)
+      ensureActive()
+      const session = await requireStructured(sessionId)
+      if (!isStructuredAgent(session.agent)) {
+        throw context.error('conflict', `structured sessions cannot send to provider ${session.agent}`)
+      }
+      const entry = live.get(sessionId)
+      const rejectGuard = (reason: 'agent-busy' | 'stale-evidence'): never => {
+        const error = context.error('conflict', `structured send refused: ${reason}`)
+        Object.assign(error, { data: { reason } })
+        throw error
+      }
+      if (guards.expectedIncarnation !== undefined) {
+        const identity = context.launch.sessionIdentity(sessionId)
+        if (!identity || identity.source !== 'structured_lease') return { ok: false, reason: 'recipient_gone' }
+        if (identity.sessionId !== sessionId || identity.processIncarnation !== guards.expectedIncarnation) {
+          return { ok: false, reason: 'recipient_changed' }
+        }
+      }
+      if (guards.requireIdle === true && (
+        !entry ||
+        !entry.lease ||
+        entry.stopping ||
+        !(entry.status === 'done' || (entry.status === 'running' && !entry.hasSent))
+      )) {
+        rejectGuard('agent-busy')
+      }
+      if (entry?.stopping) rejectGuard('agent-busy')
+      if (guards.expectedAfterSeq !== undefined) {
+        const latestSeq = journal.list(sessionId, 0, 1, true)[0]?.seq ?? 0
+        if (latestSeq !== guards.expectedAfterSeq) rejectGuard('stale-evidence')
+      }
+      if (receipt) {
+        const reservation = journal.reserveSendReceipt(
+          { operationId: receipt.operationId, sessionId, payloadHash: receipt.payloadHash },
+          Date.now()
+        )
+        if (!reservation) throw context.error('conflict', 'structured send receipt ledger is full')
+        if (!reservation.created) {
+          const existing = reservation.receipt
+          if (existing.sessionId !== sessionId || existing.payloadHash !== receipt.payloadHash) {
+            throw context.error('conflict', `structured send operation ${receipt.operationId} was reused with different input`)
+          }
+          return existing.state === 'completed' ? { ok: true } : { ok: false, reason: 'operation_unknown' }
+        }
+      }
+      if (entry) entry.hasSent = true
+      const runner = runnerBySession.get(sessionId) ?? runnerFor(session.agent)
+      await runner.send(sessionId, text)
+      if (receipt) journal.completeSendReceipt(receipt.operationId, Date.now())
+      return { ok: true }
+    })
+
     const unsupported = Object.keys(params).find(
-      (key) => !['session', 'text', 'expectedIncarnation', 'operationId', 'requireIdle', 'expectedAfterSeq'].includes(key)
+      (key) => !['session', 'text', 'requireIdle', 'expectedAfterSeq', 'expectedIncarnation', 'operationId'].includes(key)
     )
     if (unsupported !== undefined) throw context.error('invalid-params', `structured send does not support ${unsupported}`)
-    const sessionId = params.session
-    const text = params.text
-    const expectedIncarnation = params.expectedIncarnation
-    if (expectedIncarnation !== undefined && typeof expectedIncarnation !== 'string') {
-      throw context.error('invalid-params', 'expectedIncarnation must be a string')
-    }
-    const requireIdle = params.requireIdle
-    if (requireIdle !== undefined && typeof requireIdle !== 'boolean') {
+    if (typeof params.session !== 'string') throw context.error('invalid-params', 'session must be a string')
+    if (typeof params.text !== 'string') throw context.error('invalid-params', 'text must be a string')
+    if (params.requireIdle !== undefined && typeof params.requireIdle !== 'boolean') {
       throw context.error('invalid-params', 'requireIdle must be a boolean')
     }
     const expectedAfterSeq = params.expectedAfterSeq
     if (expectedAfterSeq !== undefined && (!Number.isInteger(expectedAfterSeq) || (expectedAfterSeq as number) < 0)) {
       throw context.error('invalid-params', 'expectedAfterSeq must be a non-negative integer')
     }
-    const expectedSeq = expectedAfterSeq as number | undefined
+    const expectedIncarnation = params.expectedIncarnation
+    if (expectedIncarnation !== undefined && typeof expectedIncarnation !== 'string') {
+      throw context.error('invalid-params', 'expectedIncarnation must be a string')
+    }
+    const sessionId = params.session
+    const text = params.text
+    const guards = {
+      requireIdle: params.requireIdle as boolean | undefined,
+      expectedAfterSeq: expectedAfterSeq as number | undefined,
+      expectedIncarnation: expectedIncarnation as string | undefined
+    }
     const operationId = params.operationId
-    if (operationId !== undefined && (typeof operationId !== 'string' || operationId.length === 0)) {
+    if (operationId === undefined) return admitAndSend(sessionId, text, guards)
+    if (typeof operationId !== 'string' || operationId.length === 0) {
       throw context.error('invalid-params', 'operationId must be a non-empty string')
     }
-    const recipientRefusal = (): StructuredSendResult | null => {
-      if (typeof expectedIncarnation !== 'string') return null
-      const identity = context.launch.sessionIdentity(sessionId)
-      if (!identity || identity.source !== 'structured_lease') return { ok: false, reason: 'recipient_gone' }
-      if (identity.sessionId !== sessionId || identity.processIncarnation !== expectedIncarnation) {
-        return { ok: false, reason: 'recipient_changed' }
-      }
-      return null
+    const hasRequireIdle = params.requireIdle !== undefined
+    const hasExpectedAfterSeq = expectedAfterSeq !== undefined
+    const fingerprint: unknown[] = [sessionId, text, expectedIncarnation ?? null]
+    if (hasRequireIdle || hasExpectedAfterSeq) {
+      fingerprint.push([
+        hasRequireIdle ? params.requireIdle : null,
+        hasExpectedAfterSeq ? expectedAfterSeq : null
+      ])
     }
-    const rejectGuard = (reason: 'agent-busy' | 'stale-evidence'): never => {
-      const error = context.error('conflict', `structured send refused: ${reason}`)
-      Object.assign(error, { data: { reason } })
-      throw error
-    }
-    const sendQueued = (
-      session: Session,
-      receipt?: { operationId: string; sessionId: string; payloadHash: string }
-    ): Promise<StructuredSendResult> => enqueueSend(session.id, async () => {
-      const refused = recipientRefusal()
-      if (refused) return refused
-      await startTasks.get(session.id)
-      ensureActive()
-      const revalidated = recipientRefusal()
-      if (revalidated) return revalidated
-      const entry = live.get(session.id)
-      if (requireIdle === true && (
-        !entry ||
-        entry.stopping ||
-        !(entry.status === 'done' || (entry.status === 'running' && !entry.hasSent))
-      )) {
-        rejectGuard('agent-busy')
-      }
-      if (expectedSeq !== undefined) {
-        const latestSeq = journal.list(session.id, 0, 1, true)[0]?.seq ?? 0
-        if (latestSeq !== expectedSeq) rejectGuard('stale-evidence')
-      }
-      const reservation = receipt ? journal.reserveSendReceipt(receipt, Date.now()) : undefined
-      if (receipt && !reservation) throw context.error('conflict', 'structured send receipt ledger is full')
-      if (reservation && !reservation.created) {
-        return reservation.receipt.state === 'completed' ? { ok: true } : { ok: false, reason: 'operation_unknown' }
-      }
-      if (entry) entry.hasSent = true
-      const runner = runnerBySession.get(session.id) ?? runnerFor(session.agent as StructuredAgent)
-      if (entry?.stopping) rejectGuard('agent-busy')
-      await runner.send(session.id, text)
-      if (receipt) journal.completeSendReceipt(receipt.operationId, Date.now())
-      return { ok: true }
-    })
-    if (operationId === undefined) {
-      const session = await requireStructured(sessionId)
-      if (!isStructuredAgent(session.agent)) {
-        throw context.error('conflict', `structured sessions cannot send to provider ${session.agent}`)
-      }
-      const refused = recipientRefusal()
-      if (refused) return refused
-      return sendQueued(session)
-    }
-    const payloadHash = createHash('sha256')
-      .update(JSON.stringify(
-        requireIdle === undefined && expectedSeq === undefined
-          ? [sessionId, text, expectedIncarnation ?? null]
-          : [sessionId, text, expectedIncarnation ?? null, requireIdle ?? null, expectedSeq ?? null]
-      ))
-      .digest('hex')
+    const payloadHash = createHash('sha256').update(JSON.stringify(fingerprint)).digest('hex')
     const existingFlight = sendFlights.get(operationId)
     if (existingFlight) {
       if (existingFlight.payloadHash !== payloadHash) {
@@ -922,51 +938,47 @@ export function activate(context: PluginContext): void {
       }
       return existing.state === 'completed' ? { ok: true } : { ok: false, reason: 'operation_unknown' }
     }
-    const session = await requireStructured(sessionId)
-    if (!isStructuredAgent(session.agent)) {
-      throw context.error('conflict', `structured sessions cannot send to provider ${session.agent}`)
-    }
-    const racedFlight = sendFlights.get(operationId)
-    if (racedFlight) {
-      if (racedFlight.payloadHash !== payloadHash) {
-        throw context.error('conflict', `structured send operation ${operationId} was reused with different input`)
-      }
-      return racedFlight.promise
-    }
-    const racedReceipt = journal.sendReceipt(operationId)
-    if (racedReceipt) {
-      if (racedReceipt.sessionId !== sessionId || racedReceipt.payloadHash !== payloadHash) {
-        throw context.error('conflict', `structured send operation ${operationId} was reused with different input`)
-      }
-      return racedReceipt.state === 'completed' ? { ok: true } : { ok: false, reason: 'operation_unknown' }
-    }
-    const refused = recipientRefusal()
-    if (refused) return refused
-    const receipt = { operationId, sessionId, payloadHash }
-    const promise = sendQueued(session, receipt)
+    const promise = admitAndSend(sessionId, text, guards, { operationId, payloadHash })
     const flight = { payloadHash, promise }
     sendFlights.set(operationId, flight)
     try {
       return await promise
     } finally {
       if (sendFlights.get(operationId) === flight) sendFlights.delete(operationId)
+
     }
   }
 
-  const stopSession = async (sessionId: string, stopExited = false): Promise<void> => {
+  const stopSession = (sessionId: string, updateStatus = true): Promise<void> => {
+    const existing = stopTasks.get(sessionId)
+    if (existing) return existing.promise
     const entry = live.get(sessionId)
-    if (entry?.stopping || (entry?.status === 'exited' && !stopExited)) return
+    if (entry?.status === 'exited') return Promise.resolve()
+    const identity = active ? context.launch.sessionIdentity(sessionId) : null
+    const processIncarnation =
+      entry?.lease && identity?.source === 'structured_lease' && identity.sessionId === sessionId
+        ? identity.processIncarnation
+        : null
     if (entry) entry.stopping = true
-    releaseStructuredLease(sessionId)
-    const runner = runnerBySession.get(sessionId)
-    try {
-      await runner?.stop(sessionId)
-    } finally {
-      await cancelPendingAsks(sessionId)
-      setStatus(sessionId, 'exited')
-      releaseOwner(sessionId)
-      runnerBySession.delete(sessionId)
+    const promise = Promise.resolve().then(async () => {
+      const runner = runnerBySession.get(sessionId)
+      releaseStructuredLease(sessionId)
+      try {
+        await runner?.stop(sessionId)
+      } finally {
+        await cancelPendingAsks(sessionId)
+        if (updateStatus) setStatus(sessionId, 'exited')
+        releaseOwner(sessionId)
+        runnerBySession.delete(sessionId)
+      }
+    })
+    const flight = { processIncarnation, promise }
+    stopTasks.set(sessionId, flight)
+    const clearFlight = (): void => {
+      if (stopTasks.get(sessionId) === flight) stopTasks.delete(sessionId)
     }
+    void promise.then(clearFlight, clearFlight)
+    return promise
   }
 
   const stop: MethodHandler = async (params) => {
@@ -974,7 +986,25 @@ export function activate(context: PluginContext): void {
     if (expectedIncarnation !== undefined && typeof expectedIncarnation !== 'string') {
       throw context.error('invalid-params', 'expectedIncarnation must be a string')
     }
-    const session = await requireStructured(params.session as string)
+    if (typeof params.session !== 'string') throw context.error('invalid-params', 'session must be a string')
+    const sessionId = params.session
+    const waitForStop = async (flight: { processIncarnation: string | null; promise: Promise<void> }) => {
+      if (typeof expectedIncarnation === 'string') {
+        if (flight.processIncarnation === null) return { ok: false as const, reason: 'recipient_gone' as const }
+        if (flight.processIncarnation !== expectedIncarnation) {
+          return { ok: false as const, reason: 'recipient_changed' as const }
+        }
+        await flight.promise
+        return { ok: true as const, closed: true as const, sessionId, processIncarnation: expectedIncarnation }
+      }
+      await flight.promise
+      return { ok: true as const }
+    }
+    const inFlight = stopTasks.get(sessionId)
+    if (inFlight) return waitForStop(inFlight)
+    const session = await requireStructured(sessionId)
+    const racedStop = stopTasks.get(session.id)
+    if (racedStop) return waitForStop(racedStop)
     const entry = live.get(session.id)
     if (typeof expectedIncarnation === 'string') {
       const identity = context.launch.sessionIdentity(session.id)
@@ -985,7 +1015,7 @@ export function activate(context: PluginContext): void {
         return { ok: false as const, reason: 'recipient_changed' as const }
       }
     }
-    await stopSession(session.id, true)
+    await stopSession(session.id)
     return typeof expectedIncarnation === 'string'
       ? { ok: true as const, closed: true as const, sessionId: session.id, processIncarnation: expectedIncarnation }
       : { ok: true as const }
@@ -1021,9 +1051,7 @@ export function activate(context: PluginContext): void {
     if (active && event.type === 'plugin.changed') void reconcileOwnedSessions()
   })
   const release = async (sessionId: string): Promise<void> => {
-    releaseStructuredLease(sessionId)
-    const runner = runnerBySession.get(sessionId)
-    await runner?.stop(sessionId).catch(() => undefined)
+    await stopSession(sessionId, false).catch(() => undefined)
     await startTasks.get(sessionId)
     await cancelPendingAsks(sessionId)
     runnerBySession.delete(sessionId)

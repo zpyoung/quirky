@@ -20,7 +20,7 @@ const PLUGINS = [
   'quirky.notifications',
   'quirky.loops'
 ]
-const ENV_KEYS = ['HOME', 'PATH', 'QUIRKY_HOME', 'CLAUDE_CONFIG_DIR', 'CODEX_HOME', 'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM'] as const
+const ENV_KEYS = ['HOME', 'PATH', 'QUIRKY_HOME', 'CLAUDE_CONFIG_DIR', 'CODEX_HOME', 'QUIRKY_AGENT_SEARCH_DIRS', 'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM'] as const
 
 type RunnerContext = {
   appendMessage(input: { sessionId: string; role: 'user' | 'assistant' | 'system' | 'tool' | 'result'; text: string; data?: unknown }): unknown
@@ -144,6 +144,9 @@ printf '%s\\n' 'VERDICT: not-met' 'REASON: isolated evaluator fixture'
   for (const providerHome of providerHomes) mkdirSync(providerHome, { recursive: true })
   process.env.HOME = home
   process.env.PATH = `${providerBin}${process.env.PATH ? `:${process.env.PATH}` : ''}`
+  process.env.QUIRKY_AGENT_SEARCH_DIRS = providerBin
+  // Login shells may replace inherited PATH; the disposable provider fixture must remain discoverable there too.
+  writeFileSync(join(home, '.bash_profile'), `export PATH='${process.env.PATH.replaceAll("'", "'\\''")}'\n`, { mode: 0o600 })
   process.env.QUIRKY_HOME = home
   process.env.CLAUDE_CONFIG_DIR = providerHomes[0]
   process.env.CODEX_HOME = providerHomes[1]
@@ -167,7 +170,7 @@ printf '%s\\n' 'VERDICT: not-met' 'REASON: isolated evaluator fixture'
 
   try {
     for (const pluginId of new Set([...PLUGINS, ...(options.extraPlugins ?? [])])) symlinkSync(join(PLUGINS_ROOT, pluginId), join(builtinPluginsDir, pluginId))
-    const start = async () => startHarness({ home, builtinPluginsDir })
+    const start = async () => startHarness({ home, builtinPluginsDir, shell: '/bin/bash' })
     harness = await start()
     const setupClient = await harness.connect('cli')
     await setupClient.callAny('setting.set', { id: 'setting:quirky.worktree/worktreesRoot', value: join(home, 'worktrees') })
@@ -217,6 +220,7 @@ printf '%s\\n' 'VERDICT: not-met' 'REASON: isolated evaluator fixture'
       cliContext(json = false) {
         const lines: string[] = []
         const context: CliContext = {
+          requestBase: crypto.randomUUID(),
           call: (method, params = {}) => client.callAny(method, params),
           out: {
             json,
