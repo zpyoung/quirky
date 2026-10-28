@@ -99,5 +99,16 @@
 - **Revisit if:** final smoke fails to exercise the same actual process/API surface
 - **Source:** assumed — autonomous
 
+## D10: Publish a fenced control seam without implementing lane10's controls
+- **Question:** incoming lane10 request for safe runner mutations, deletion and host access
+- **Options:** drain first then fence; fence synchronously before draining; duplicate the control plane in core
+- **Chose:** optional generic Runner.withControl(operation,drain), provided in production; it synchronously fences new action commits before any drain and serializes control operations. KernelStore.remove atomically removes target state/history without any worker effect. Exported KernelService exposes readonly store/registry, runner(watcherId), inspect and lifecycle methods. Lane10 owns all listed control/fleet/API/CLI/UI files, untouched by lane11.
+- **Why:** draining before fencing permits a new action to start behind the current tick. Store deletion is not worker authority. The published host accessors avoid control code importing private internals.
+- **Evidence:** user lane10 interjection; plugins/quirky.heimdall/src/contracts.ts Runner/KernelStore; /tmp/quirky-lane10-core-control-reply.md; implementer messages confirming service exports
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** lane10 KernelControlHost needs a narrower adapter
+- **Source:** assumed — autonomous
+
 ## Progress
 Iteration4: spec/contracts committed6764039; three disjoint implementation worktrees running, no checks/commits until their wave barrier. Worker dependency query returned ready:false pending m6-orchestration-workers after510s; independent implementation continues. Lanes1+9 approved service authority extension reserved to lane11, parent authored type contracts; actual core/worker runtime still pending. Missing feature/API smoke completed with isolated actual quirkyd and cleanup. Next: accept/audit components after all return, integrate dependency implementation and additive service APIs, exercise AC1-11 including real worker adapter, affected suite/scripts/typecheck, deps-ready/catch-up/final independent review/queue landing. No runtime feature acceptance claim.

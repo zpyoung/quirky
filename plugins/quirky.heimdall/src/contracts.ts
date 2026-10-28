@@ -112,6 +112,8 @@ export interface KernelStore {
   terminal(enrollment: Enrollment, summary: TerminalSummary): void
   summary(id: string): TerminalSummary | null
   registrations(): KindRegistration[]; saveRegistration(registration: KindRegistration): void
+  /** Atomically removes only this watcher's state/history; never stops or releases workers. */
+  remove?(id: string): void
   close(): void
 }
 export interface EnrollmentService {
@@ -132,6 +134,8 @@ export interface Runner {
   pulse(): Promise<void>
   schedule(delayMs: number): void
   suspend(): void; resume(): void
+  /** Fences new actions before optionally draining the current tick; serializes control mutations. */
+  withControl?<T>(operation: () => Promise<T>, drain: boolean): Promise<T>
   shutdown(deadlineMs?: number): Promise<void>
 }
 export interface KernelOptions {
