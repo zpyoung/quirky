@@ -194,6 +194,10 @@ files, not this one.
 | medium | high | [m4-sidebar-review-filters D4](decisions/m4-sidebar-review-filters.md) | Match conservative visibility and preserve activity-only hidden count | locked by sidebar-extras.md |
 | medium | high | [m2-source-control-core D8](decisions/m2-source-control-core.md) | The status record grows additively, read from porcelain v2 | assumed — autonomous |
 | medium | high | [m2-source-control-core D20](decisions/m2-source-control-core.md) | The compare base is the worktree's base, else the project's, else the detected default, and Change Base Ref writes where the base came from | locked by research/orca-features/source-control.md |
+| medium | high | [m5-automations-core D1](decisions/m5-automations-core.md) | Ship the core slice only, with a durable pending dispatch handoff | locked by docs/loop/queue.json |
+| medium | high | [m5-automations-core D2](decisions/m5-automations-core.md) | Honor the stored IANA timezone and use strict timestamp ordering across DST | assumed — autonomous |
+| medium | high | [m5-automations-core D5](decisions/m5-automations-core.md) | Durable row writes, 100 final runs, never prune active runs | assumed — autonomous |
+| medium | high | [m5-automations-core D10](decisions/m5-automations-core.md) | Bound occurrence metadata while preserving non-replay after pruning | supersedes m5-automations-core D5 |
 | medium | high | [m3-handoff D6](decisions/m3-handoff.md) | A source is a session; a live source is the agent running in a terminal session | assumed — autonomous |
 | medium | high | [m3-handoff D9](decisions/m3-handoff.md) | The pane menu gains a public contribution point other plugins use | locked by docs/roadmap.md |
 | medium | high | [m3-handoff D35](decisions/m3-handoff.md) | The brief is pasted after the agent's input is ready through `quirky.agents/deliver`, not passed on the command line | locked by handoff.md |
@@ -779,6 +783,15 @@ files, not this one.
 | easy | high | [m2-source-control-core D58](decisions/m2-source-control-core.md) | All seven Final Round 1 defects are closed by the fix batch, each with a test | assumed — autonomous |
 | easy | high | [m2-source-control-core D59](decisions/m2-source-control-core.md) | UI verification round 1: 18 goals pass, three app defects found and fixed on the branch | assumed — autonomous |
 | easy | high | [m2-source-control-core D62](decisions/m2-source-control-core.md) | The UI rerun passes SC-61, SC-45 and the conflict badge | assumed — autonomous |
+| easy | high | [m5-automations-core D3](decisions/m5-automations-core.md) | Keep preset and cron semantics explicit and reject impossible new schedules | locked by automations.md |
+| easy | high | [m5-automations-core D4](decisions/m5-automations-core.md) | Preserve pause cursor, latest-only catch-up, and elapsed grace plus 120 seconds | assumed — autonomous |
+| easy | high | [m5-automations-core D6](decisions/m5-automations-core.md) | Use OpenAI implementers and verified Gemini cross-family review | assumed — autonomous |
+| easy | high | [m5-automations-core D7](decisions/m5-automations-core.md) | One combined spec, at most three independent implementers, one final review | locked by docs/loop/LOOP.md |
+| easy | high | [m5-automations-core D8](decisions/m5-automations-core.md) | macOS validation only, preserve inherited files | deferred: platform |
+| easy | high | [m5-automations-core D9](decisions/m5-automations-core.md) | Distinguish retention ordering from history paging ordering | locked by automations.md |
+| easy | high | [m5-automations-core D11](decisions/m5-automations-core.md) | Bound arbitrary JSON metadata separately from output snapshots | assumed — autonomous |
+| easy | high for dispatch/trace facts, limited for review assurance | [m5-automations-core D12](decisions/m5-automations-core.md) | Record mechanical review PASS without claiming clean clearance | assumed — autonomous |
+| easy | high for observed results; medium for contention hypothesis | [m5-automations-core D13](decisions/m5-automations-core.md) | Serialize script checks with process-level smokes | assumed — autonomous |
 | easy | high | [m3-handoff D1](decisions/m3-handoff.md) | Classify the item as Visual, API, CLI and Integration work, and run research phases A and B | assumed — autonomous |
 | easy | high | [m3-handoff D2](decisions/m3-handoff.md) | Skip the visual companion and the adhd offer; use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m3-handoff D3](decisions/m3-handoff.md) | Select every gray area that matters | locked by docs/loop/LOOP.md |
