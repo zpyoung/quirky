@@ -1778,7 +1778,7 @@
         "session-info.md",
         "terminal-dock.md"
       ],
-      "status": "todo",
+      "status": "in-progress",
       "title": "Parity sweep for accounts.md, ai-vault.md, handoff.md, session-info.md, terminal-dock.md: every remaining flow in these feature docs, except the GitLab, Bitbucket, Gitea/Forgejo and Azure DevOps flows, the Objective runner and the PR sitter, which the user deferred. Find what earlier items left out or deferred, build or fix it, and record anything too large as a follow-up item",
       "deps": [
         "m3-session-info",
@@ -1787,7 +1787,8 @@
         "m3-accounts",
         "m3-vault",
         "m3-accounts-remaining-flows"
-      ]
+      ],
+      "lane": 3
     },
     {
       "id": "m7-sweep-browser-mobile",
