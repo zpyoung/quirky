@@ -1479,6 +1479,20 @@
         "m3-accounts-remaining-flows"
       ],
       "status": "todo"
+    },
+    {
+      "id": "m7-editor-source-control-completion",
+      "milestone": "M7",
+      "title": "Complete remaining editor/source-control/sidebar parity: lossless rich details/collapsible headings and document-link insertion/completion; edit-tab Changes and Markdown diff preview plus preview/permanent/split diff tabs; GitHub fork notices, validated PR-derived push targets and target-specific push-before-PR; permission-aware save/annotation UX; finish editor GUI acceptance SC-3–22 (mixed close/conflict/autosave/restart/deleted recovery, explorer mutations/undo/selection/ignored/symlinks/import/drag, Quick Open/search, rich slash/IME/table/math/Mermaid/emoji/images/notes/TOC/frontmatter/templates/PDF, notebook environment install/venv/trust/recovery, CSV/PDF/media/shortcuts/remount) and the all-17 sidebar edge audit (quiet aging, fresh-agent-only liveness, corrupt preferences, separator boundaries/persistence). Implement missing public APIs and prove real UI/native scenarios; preserve the separately blocked Finder-source-path item and exclude non-GitHub forges, Objective runner and PR sitter.",
+      "docs": [
+        "editor.md",
+        "sidebar-extras.md",
+        "source-control.md"
+      ],
+      "deps": [
+        "m7-sweep-editor-source-control"
+      ],
+      "status": "todo"
     }
   ]
 }
