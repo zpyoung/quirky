@@ -1,7 +1,7 @@
 import type { PluginCaller } from '@quirky/protocol'
 import type {
   CheckResult, DeliveryId, MessageType, MutationRequest, MutationResult,
-  QuestionThreadRow, ReplyResult, RunId, RunRow, RuntimeCallerEvidence,
+  QuestionThreadRow, ReplyResult, RunId, RunRow, RuntimeCallerEvidence, SendResult,
 } from '../contracts'
 import type { WorkerControlResult, WorkerStartParams, WorkerStartReceipt } from '../worker-contracts'
 
@@ -48,6 +48,7 @@ export interface ServiceWorkerStopParams extends ServiceWorkerReleaseParams {
   expectedIdentity: { sessionId: string; processIncarnation: string }
 }
 export interface ServiceReplyParams extends MutationRequest { runId: RunId; messageId: string; body: string }
+export interface ServiceSendParams extends MutationRequest { runId: RunId; dispatchId: string; body: string }
 export interface ServiceMethodInputs {
   serviceRunCreate: ServiceRunCreateParams
   serviceRunShow: ServiceRunShowParams
@@ -56,6 +57,7 @@ export interface ServiceMethodInputs {
   serviceWorkerRelease: ServiceWorkerReleaseParams
   serviceWorkerStop: ServiceWorkerStopParams
   serviceReply: ServiceReplyParams
+  serviceSend: ServiceSendParams
 }
 export interface ServiceMethodResults {
   serviceRunCreate: MutationResult<{ run: ServiceRun }>
@@ -65,6 +67,7 @@ export interface ServiceMethodResults {
   serviceWorkerRelease: MutationResult<WorkerControlResult>
   serviceWorkerStop: MutationResult<WorkerControlResult>
   serviceReply: ReplyResult
+  serviceSend: Extract<SendResult, { kind: 'message' }>
 }
 export type ServiceMethod = keyof ServiceMethodInputs
 export type ServiceHandler<M extends ServiceMethod> = (
