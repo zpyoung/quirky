@@ -176,5 +176,27 @@
 - **Revisit if:** the revised coherent observation fails.
 - **Source:** assumed — autonomous
 
+## D17: Repair the landing gate through the prescribed merge path, not protected-script edits
+- **Question:** What stopped the first queue landing after its whole feature suite passed?
+- **Options:** change protected scripts or extend deadlines; isolate the failed gate and use normal7.3 repair.
+- **Chose:** leave scripts/build-loop and scripts/suite tests unchanged. The first land passed711remote+6Mac files with four isolated load retries, then scripts reported two timeouts (profile-off runFiles5s and queue-concurrency land20s). After the mandated clean roadmap repair merge, a serial `bun test scripts` passed68tests/580assertions in177.15s without deadline changes.
+- **Why:** the unchanged scripts pass in isolation; no product or deterministic script defect is established by the overloaded landing run. `[INFERENCE]` The timeout-only failures are load-sensitive. Normal landing still runs its entire gate again.
+- **Evidence:** first land bg23 whole-suite result and scripts66pass2fail; serial scripts bg24; repair merge b7ee11292eb886b5c2e1c2e9d6188d9a6057915b.
+- **Reversibility:** easy
+- **Confidence:** high for observed checks; medium for load attribution
+- **Revisit if:** the next gate has a reproducible non-timeout failure.
+- **Source:** assumed — autonomous
+
+## D18: Preserve the five repair-merge logs and Git recipe source precedence
+- **Question:** Do the additional landed decisions change this item's public contracts?
+- **Options:** ignore new bindings; read and preserve them before retrying.
+- **Chose:** read every entry in Loops UI D1–D25, Heimdall controls D1–D15, Heimdall owner D1–D43, hosting sweep D1–D12 and terminal sweep D1–D20. Preserve per-field repo/global/default recipe inheritance, raw > picks > configured launch choices, generic option-only provenance, canonical Session.launchSettings, desktop-role readiness, logical-versus-transport request identity, additive sidebar/UI contributions and exact worker authority. No conflict with this sweep's canonical note/file ownership was found.
+- **Why:** these are newly binding decisions, not permission to alter adjacent owners or fabricate capabilities. The hosting sweep also explicitly retains this lane's Git panel/notes ownership.
+- **Evidence:** full ParityRepairBindings report; clean normal7.3 merge; caught-up real daemon/CLI smoke passed24.29s with owned cleanup. Updated CLI/protocol/editor/Git/worktree consumer tests and full typecheck are running.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** repair-merge verification shows a concrete incompatible contract.
+- **Source:** locked by docs/loop/decisions/m5-loops-ui.md, docs/loop/decisions/m6-heimdall-control.md, docs/loop/decisions/m6-heimdall-owner.md, docs/loop/decisions/m7-sweep-hosting.md and docs/loop/decisions/m7-sweep-terminal.md
+
 ## Progress
-Ready for detached queue land. One roadmap catch-up is complete and all incoming decisions are preserved (D15). Post-catch-up affected suite passed162remote+1Mac files with two isolated retries; the own GitHub observation race was then repaired (D16), and its targeted remote file passed without a retry. Post-catch-up actual daemon/CLI smoke and full typecheck passed; full build, scripts68tests572assertions and all five guarded web goals are exercised evidence. All workers, browser and process scopes returned; owned component worktrees/homes were removed. One explicit completion follow-up is queued; native Finder remains independently blocked. Commit this evidence, detach and run the authoritative queue land. No second normal catch-up, new review campaign, repeated green preflight or second work item. Only a concrete landing conflict/failure reopens repair.
+Ready to retry queue land. Normal7.3 repair merge b7ee1129 is complete; every incoming decision entry was read (D18). Unchanged serial scripts passed68tests/580assertions; repaired consumer scope passed153remote+2Mac files without a flaky retry; full typecheck passed; actual daemon/CLI canonical-note and Save As smoke passed with teardown. The first landing's711remote+6Mac feature gate was green and stopped only at two scripts-test timeouts; no protected script or deadline was changed. All agents/jobs have returned. Commit this evidence, detach and retry authoritative queue land now. No new review campaign, second follow-up or second work item.
