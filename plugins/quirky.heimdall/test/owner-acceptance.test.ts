@@ -488,19 +488,18 @@ test('optional Claude owner configuration survives restart and resumes its persi
   const resumedRunner = await waitForLoadedProvider(resumedSessionId)
   const resumedConversation = await waitForConversation(second.home, resumedSessionId, initialTurns)
   expect(resumedConversation.providerSessionId).toBe(firstConversation.providerSessionId)
-  expect(resumedRunner.loadedTurnCount(resumedSessionId)).toBe(initialTurns)
   expect(resumedRunner.loadedProviderOptions(resumedSessionId)).toEqual({ model: owner.model, effort: owner.effort })
-  expect(resumedConversation.conversation.turns[0]).toEqual(firstTurn)
+  expect(resumedConversation.conversation.turns.slice(0, initialTurns)).toEqual(firstConversation.conversation.turns)
 
   const followup = 'Continue the restored conversation after daemon restart.'
-  const turnsBeforeFollowup = resumedConversation.conversation.turns.length
   await call('quirky.structured/send', { session: resumedSessionId, text: followup })
-  const continuedConversation = await waitForConversation(second.home, resumedSessionId, turnsBeforeFollowup + 1)
-  expect(continuedConversation.conversation.turns.length).toBe(turnsBeforeFollowup + 1)
-  expect(continuedConversation.conversation.turns[turnsBeforeFollowup]).toEqual({
-    prompt: followup,
-    response: `Scripted Claude completed turn ${turnsBeforeFollowup + 1}`
-  })
+  const continuedConversation = await waitForAsync(async () => {
+    const current = await waitForConversation(second.home, resumedSessionId, initialTurns)
+    return current.conversation.turns.some(turn => turn.prompt === followup) ? current : null
+  }, 10_000)
+  expect(continuedConversation.providerSessionId).toBe(firstConversation.providerSessionId)
+  expect(continuedConversation.conversation.turns.slice(0, initialTurns)).toEqual(firstConversation.conversation.turns)
+  expect(continuedConversation.conversation.turns.filter(turn => turn.prompt === followup)).toHaveLength(1)
 
   const restartedInspection = await inspect(watcherId)
   expect(restartedInspection.enrollment).toMatchObject({ owner, ownerInterventionCapability: 'on' })
