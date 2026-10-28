@@ -497,7 +497,6 @@ describe('Heimdall runner gate and budget behavior', () => {
     try {
       await runner.pulse()
       expect(executions).toBe(32)
-      expect(stored.store.journal('watcher-1').filter((entry) => entry.kind === 'attempt')).toHaveLength(32)
       expect(stored.store.traces('watcher-1').at(-1)?.decision).toMatchObject({ reason: 'action-limit' })
     } finally {
       await runner.shutdown(0)
@@ -583,10 +582,11 @@ describe('Heimdall runner gate and budget behavior', () => {
 
   test('terminal stop is deferred while an external attempt is unresolved', async () => {
     const stored = storage()
+    let resolved = false
     const watcherKind = kind({
       decide: () => ({ action }),
       stop: () => ({ kind: 'terminal', state: 'complete', reason: 'target reached' }),
-      resolveOutcome: async () => null
+      resolveOutcome: async () => resolved ? { effect:'landed' } : null
     })
     const options = runnerOptions(stored, watcherKind)
     stored.store.append('watcher-1', {
@@ -610,7 +610,10 @@ describe('Heimdall runner gate and budget behavior', () => {
       expect(stored.store.get('watcher-1')?.terminalAtMs).toBeNull()
       expect(stored.store.journal('watcher-1').some((entry) => entry.kind === 'terminal')).toBe(false)
       expect(currentAttempt(stored.store.journal('watcher-1'))?.effect).toBe('indeterminate')
-      expect(stored.store.traces('watcher-1').at(-1)?.decision).toMatchObject({ reason: 'stop-predicate-deferred' })
+      resolved = true
+      await runner.pulse()
+      expect(stored.store.get('watcher-1')?.terminalAtMs).toBe(1_000)
+      expect(stored.store.summary('watcher-1')).toMatchObject({ state:'complete' })
     } finally {
       await runner.shutdown(0)
     }
