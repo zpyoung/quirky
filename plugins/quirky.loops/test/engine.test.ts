@@ -311,7 +311,6 @@ describe('LoopService background engine', () => {
     const loops = service(runtime)
     await loops.start()
     await expect(loops.create({ ...input(), agent: 'shell' as 'claude' })).rejects.toThrow(/agent/i)
-    await expect(loops.create({ ...input(), preset: 'queue' as 'until-done' })).rejects.toThrow(/until-done/i)
     await expect(loops.create(input({ ...input().config, promptSource: { kind: 'repeat', body: '  ' } }))).rejects.toThrow(/prompt/i)
     await expect(loops.create(input({ ...input().config, caps: { maxIterations: 1.5 } }))).rejects.toThrow(/maxIterations/i)
     await expect(loops.create(input({

@@ -1,6 +1,7 @@
 import { appendFileSync } from 'node:fs'
 import { RpcErrorCode, type PluginContext, type Session, type StructuredMessage } from '@quirky/protocol'
 import { decideNext } from './decision'
+import { computePacing } from './pacing'
 import { sessionCumulativeCostUsd } from './evidence'
 import { buildIterationPrompt } from './prompt'
 import { LoopStore, type LoopRequests, type SteerNote } from './store'
@@ -125,7 +126,14 @@ export function appendLoopLog(context: PluginContext, detail: IterationDetail, l
   const diff = detail.diff === null ? 'n/a' : `+${detail.diff.added} -${detail.diff.removed}`
   const cost = detail.costUsd === null ? 'n/a' : `$${detail.costUsd.toFixed(2)}`
   try {
-    appendFileSync(loop.notesPath.replace(/notes\.md$/, 'log.md'), `#${detail.n} ${detail.endReason} | check ${check} | diff ${diff} | cost ${cost}\n`, { encoding: 'utf8', mode: 0o600 })
+    const skippedTicks = detail.endedAt === null ? 0 : computePacing({
+      pacing: detail.pacingConfig ?? loop.config.pacing,
+      createdAt: loop.createdAt,
+      iterationStartedAt: detail.startedAt,
+      iterationEndedAt: detail.endedAt,
+    }).skippedTicks
+    const skipped = skippedTicks > 0 ? ` | skipped ${skippedTicks} ticks` : ''
+    appendFileSync(loop.notesPath.replace(/notes\.md$/, 'log.md'), `#${detail.n} ${detail.endReason} | check ${check} | diff ${diff} | cost ${cost}${skipped}\n`, { encoding: 'utf8', mode: 0o600 })
   } catch (error) {
     context.log(`could not append loop ${loop.id} log: ${error instanceof Error ? error.message : String(error)}`)
   }
@@ -171,6 +179,10 @@ export class LoopDriver {
     if (this.runPromise !== null) return
     this.runPromise = this.run().finally(() => this.hooks.finished(this))
   }
+  waitForFinish(): Promise<void> {
+    return this.runPromise ?? Promise.resolve()
+  }
+
   waitForFinish(): Promise<void> {
     return this.runPromise ?? Promise.resolve()
   }
@@ -246,6 +258,14 @@ export class LoopDriver {
     const loop = this.current()
     if (!loop) throw new Error(`Loop ${this.loopId} disappeared from the store`)
     return loop
+  }
+  private skippedTicksFor(detail: IterationDetail, loop: LoopSnapshot): number {
+    return computePacing({
+      pacing: detail.pacingConfig ?? loop.config.pacing,
+      createdAt: loop.createdAt,
+      iterationStartedAt: detail.startedAt,
+      iterationEndedAt: detail.endedAt,
+    }).skippedTicks
   }
 
   private assertActive(signal?: AbortSignal): void {
@@ -653,6 +673,7 @@ export class LoopDriver {
   private async sendPrompt(
     loopAtTurnStart: LoopSnapshot,
     configAtTurnStart: LoopSnapshot['config'],
+    body: string,
     sessionId: string,
     newConversation: boolean,
     n: number,
@@ -719,7 +740,7 @@ export class LoopDriver {
       const costBefore = newConversation ? 0 : measuredCost
       const notes: SteerNote[] = this.store.steerNotes(this.loopId)
       const prompt = buildIterationPrompt({
-        body: configAtTurnStart.promptSource.body,
+        body,
         n,
         ...(configAtTurnStart.caps.maxIterations === undefined ? {} : { maxIterations: configAtTurnStart.caps.maxIterations }),
         notesPath: loopAtTurnStart.notesPath,
@@ -896,6 +917,7 @@ export class LoopDriver {
       endedAt: null,
       endReason: null,
       doneConfig: structuredClone(capturedConfig.done),
+      pacingConfig: structuredClone(capturedConfig.pacing),
       check: null,
       evaluator: null,
       markers: { done: false },
@@ -911,7 +933,22 @@ export class LoopDriver {
     const sending = this.requireLoop()
     sending.phase = 'sending'
     sending.nextIterationAt = null
-    this.commit(sending, detail)
+    sending.updatedAt = this.now()
+    let promptBody: string
+    if (capturedConfig.promptSource.kind === 'queue') {
+      if (initial.preset !== 'queue') throw new Error('queue prompt source requires a queue preset')
+      const claim = this.store.claimQueueAttempt(sending, detail, capturedConfig.promptSource.repeatQueue)
+      if (claim === null) {
+        if (retrying) throw new Error('could not reclaim the in-flight queue item for a retry')
+        return
+      }
+      promptBody = claim.body
+      this.hooks.publish(initial, this.store.getLoop(this.loopId) ?? sending)
+    } else {
+      if (initial.preset === 'queue') throw new Error('queue preset is missing its queue prompt source')
+      promptBody = capturedConfig.promptSource.body
+      this.commit(sending, detail)
+    }
     this.currentController = new AbortController()
     const signal = this.currentController.signal
     let sessionId: string | null = null
@@ -925,7 +962,7 @@ export class LoopDriver {
       this.commit(this.requireLoop(), detail)
       if (this.store.requests(this.loopId).stopNow) throw new StopNow()
 
-      const sent = await this.sendPrompt(loopAtTurnStart, capturedConfig, sessionId, session.newConversation, n, signal, (prompt, treeBefore, cursor) => {
+      const sent = await this.sendPrompt(loopAtTurnStart, capturedConfig, promptBody, sessionId, session.newConversation, n, signal, (prompt, treeBefore, cursor) => {
         detail.promptSent = prompt
         detail.treeBefore = treeBefore
         sentSeq = cursor
@@ -945,9 +982,17 @@ export class LoopDriver {
         detail.error = observation.detail
         this.setEligible(false)
         const failed = this.requireLoop()
+        const previous = { ...failed }
         failed.phase = null
-        this.commit(failed, detail)
-        appendLoopLog(this.context, detail, failed)
+        failed.updatedAt = this.now()
+        const current = this.store.saveEndedAttempt(
+          failed,
+          detail,
+          detail.queueItemId ?? null,
+          this.skippedTicksFor(detail, failed)
+        )
+        this.hooks.publish(previous, current)
+        appendLoopLog(this.context, detail, current)
         await this.stopOwnedSession(sessionId)
         return
       }
@@ -992,17 +1037,32 @@ export class LoopDriver {
         endedAt: this.now(),
         endReason: 'settled',
         doneConfig: structuredClone(capturedConfig.done),
+        pacingConfig: latestAttempt.pacingConfig ?? structuredClone(capturedConfig.pacing),
         treeBefore: sent.treeBefore
       }
       this.setEligible(false)
       const finished = this.requireLoop()
+      const previous = { ...finished }
       const priorCostUsd = finished.iterationsCompleted === 0 ? 0 : finished.costUsd
       finished.iterationsCompleted += 1
       finished.phase = null
       finished.sessionId = sessionId
       finished.costUsd = priorCostUsd === null || evidence.costUsd === null ? null : priorCostUsd + evidence.costUsd
-      this.commit(finished, detail)
-      appendLoopLog(this.context, detail, finished)
+      finished.nextIterationAt = computePacing({
+        pacing: finished.config.pacing,
+        createdAt: finished.createdAt,
+        iterationStartedAt: startedAt,
+        iterationEndedAt: detail.endedAt,
+      }).nextIterationAt
+      finished.updatedAt = this.now()
+      const current = this.store.saveEndedAttempt(
+        finished,
+        detail,
+        detail.queueItemId ?? null,
+        this.skippedTicksFor(detail, finished)
+      )
+      this.hooks.publish(previous, current)
+      appendLoopLog(this.context, detail, current)
     } catch (error) {
       if (this.shuttingDown) {
         this.setEligible(false)
@@ -1023,9 +1083,17 @@ export class LoopDriver {
           detail.endReason = 'interrupted'
           detail.error = 'paused before prompt delivery'
           const paused = this.requireLoop()
+          const previous = { ...paused }
           paused.phase = null
-          this.commit(paused, detail)
-          appendLoopLog(this.context, detail, paused)
+          paused.updatedAt = this.now()
+          const current = this.store.saveEndedAttempt(
+            paused,
+            detail,
+            detail.queueItemId ?? null,
+            this.skippedTicksFor(detail, paused)
+          )
+          this.hooks.publish(previous, current)
+          appendLoopLog(this.context, detail, current)
         }
         return
       }
@@ -1035,10 +1103,18 @@ export class LoopDriver {
       detail.error = error instanceof Error ? error.message.slice(0, OUTPUT_LIMIT) : String(error).slice(0, OUTPUT_LIMIT)
       const failed = this.current()
       if (failed) {
+        const previous = { ...failed }
         failed.phase = null
+        failed.updatedAt = this.now()
         try {
-          this.commit(failed, detail)
-          appendLoopLog(this.context, detail, failed)
+          const current = this.store.saveEndedAttempt(
+            failed,
+            detail,
+            detail.queueItemId ?? null,
+            this.skippedTicksFor(detail, failed)
+          )
+          this.hooks.publish(previous, current)
+          appendLoopLog(this.context, detail, current)
         } catch (persistError) {
           this.context.log(`could not persist crashed loop attempt ${this.loopId}: ${persistError instanceof Error ? persistError.message : String(persistError)}`)
           await this.stopOwnedSession(sessionId)
@@ -1059,15 +1135,24 @@ export class LoopDriver {
     else delete detail.error
     const snapshot = this.current()
     if (!snapshot) return
+    const previous = { ...snapshot }
     snapshot.state = 'stopped'
     snapshot.pauseReason = null
     snapshot.pauseDetail = null
     snapshot.endedAt = this.now()
     snapshot.updatedAt = snapshot.endedAt
     snapshot.phase = null
+    snapshot.nextIterationAt = null
     snapshot.sessionId = sessionId ?? snapshot.sessionId
-    this.commit(snapshot, detail, { pause: false, stop: false, stopNow: false, needsResume: false, resumeNative: false })
-    appendLoopLog(this.context, detail, snapshot)
+    const current = this.store.saveEndedAttempt(
+      snapshot,
+      detail,
+      detail.queueItemId ?? null,
+      this.skippedTicksFor(detail, snapshot),
+      { pause: false, stop: false, stopNow: false, needsResume: false, resumeNative: false }
+    )
+    this.hooks.publish(previous, current)
+    appendLoopLog(this.context, detail, current)
     this.store.pruneEndedAttempts()
     await this.stopOwnedSession(sessionId)
     await this.closeOwnedSession(sessionId)
@@ -1115,7 +1200,7 @@ export class LoopDriver {
     snapshot.pauseReason = reason
     snapshot.pauseDetail = detail
     snapshot.phase = null
-    snapshot.nextIterationAt = null
+    if (state === 'stopped' || state === 'completed') snapshot.nextIterationAt = null
     snapshot.endedAt = state === 'stopped' || state === 'completed' ? this.now() : null
     snapshot.updatedAt = this.now()
     this.commit(snapshot, undefined, { pause: false, stop: false, stopNow: false, needsResume: false, resumeNative: false })
@@ -1175,15 +1260,25 @@ export class LoopDriver {
         unfinished.error = message.slice(0, OUTPUT_LIMIT)
       }
       const failed = this.requireLoop()
+      const previous = { ...failed }
       failed.state = 'paused'
       failed.pauseReason = 'crashed'
       failed.pauseDetail = message.slice(0, 500)
       failed.phase = null
+      failed.updatedAt = this.now()
       try {
         if (unfinished) {
-          this.commit(failed, unfinished)
-          appendLoopLog(this.context, unfinished, failed)
-        } else this.commit(failed)
+          const current = this.store.saveEndedAttempt(
+            failed,
+            unfinished,
+            unfinished.queueItemId ?? null,
+            this.skippedTicksFor(unfinished, failed)
+          )
+          this.hooks.publish(previous, current)
+          appendLoopLog(this.context, unfinished, current)
+        } else {
+          this.commit(failed)
+        }
       } catch (persistError) {
         this.context.log(`could not pause failed loop ${this.loopId}: ${persistError instanceof Error ? persistError.message : String(persistError)}`)
       }

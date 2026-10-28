@@ -1,6 +1,6 @@
 import type { MethodHandler, PluginCaller, PluginContext } from '@quirky/protocol'
 import { LoopService } from './src/service'
-import type { LoopConfig, LoopConfigPatch, LoopCreateInput } from './src/types'
+import type { LoopConfig, LoopConfigPatch, LoopCreateInput, LoopPreset, QueueOperation } from './src/types'
 
 let service: LoopService | undefined
 
@@ -72,15 +72,32 @@ function validateCaps(value: unknown, path: string, context: PluginContext): voi
 
 function validatePromptSource(value: unknown, path: string, context: PluginContext): void {
   const source = object(value, path, context)
-  onlyKeys(source, ['kind', 'body'], path, context)
-  if (source.kind !== 'repeat') invalid(context, `${path}.kind must be repeat`)
-  requiredString(source.body, `${path}.body`, context)
+  if (source.kind === 'repeat') {
+    onlyKeys(source, ['kind', 'body'], path, context)
+    requiredString(source.body, `${path}.body`, context)
+  } else if (source.kind === 'queue') {
+    onlyKeys(source, ['kind', 'repeatQueue'], path, context)
+    if (typeof source.repeatQueue !== 'boolean') invalid(context, `${path}.repeatQueue must be a boolean`)
+  } else {
+    invalid(context, `${path}.kind must be repeat or queue`)
+  }
 }
 
 function validatePacing(value: unknown, path: string, context: PluginContext): void {
   const pacing = object(value, path, context)
-  onlyKeys(pacing, ['kind'], path, context)
-  if (pacing.kind !== 'on-idle') invalid(context, `${path}.kind must be on-idle`)
+  if (pacing.kind === 'on-idle') {
+    onlyKeys(pacing, ['kind'], path, context)
+  } else if (pacing.kind === 'interval') {
+    onlyKeys(pacing, ['kind', 'minutes', 'anchor'], path, context)
+    if (typeof pacing.minutes !== 'number' || !Number.isInteger(pacing.minutes) || pacing.minutes < 1) {
+      invalid(context, `${path}.minutes must be a positive integer`)
+    }
+    if (pacing.anchor !== 'from-end' && pacing.anchor !== 'wall-clock') {
+      invalid(context, `${path}.anchor must be from-end or wall-clock`)
+    }
+  } else {
+    invalid(context, `${path}.kind must be on-idle or interval`)
+  }
 }
 
 const CONFIG_KEYS = [
@@ -88,15 +105,21 @@ const CONFIG_KEYS = [
   'checkpointCommits', 'askBeforeNext', 'resumeAtLimitReset'
 ] as const
 
-function validateConfig(value: unknown, context: PluginContext): LoopConfig {
+function validateConfig(
+  value: unknown,
+  context: PluginContext,
+  defaultSessionPolicy: LoopConfig['sessionPolicy']
+): LoopConfig {
   const config = object(value, 'config', context)
   onlyKeys(config, CONFIG_KEYS, 'config', context)
-  for (const key of ['promptSource', 'pacing', 'sessionPolicy', 'done', 'caps', 'noProgress', 'checkpointCommits', 'askBeforeNext', 'resumeAtLimitReset']) {
+  for (const key of ['promptSource', 'pacing', 'done', 'caps', 'noProgress', 'checkpointCommits', 'askBeforeNext', 'resumeAtLimitReset']) {
     if (config[key] === undefined) invalid(context, `config.${key} is required`)
   }
   validatePromptSource(config.promptSource, 'config.promptSource', context)
   validatePacing(config.pacing, 'config.pacing', context)
-  if (config.sessionPolicy !== 'fresh' && config.sessionPolicy !== 'continue') invalid(context, 'config.sessionPolicy must be fresh or continue')
+  if (config.sessionPolicy !== undefined && config.sessionPolicy !== 'fresh' && config.sessionPolicy !== 'continue') {
+    invalid(context, 'config.sessionPolicy must be fresh or continue')
+  }
   validateDone(config.done, 'config.done', context)
   validateCaps(config.caps, 'config.caps', context)
   for (const key of ['noProgress', 'checkpointCommits', 'askBeforeNext', 'resumeAtLimitReset'] as const) {
@@ -105,7 +128,76 @@ function validateConfig(value: unknown, context: PluginContext): LoopConfig {
   if (config.protectedPaths !== undefined && (!Array.isArray(config.protectedPaths) || config.protectedPaths.some((item) => typeof item !== 'string' || item.trim() === ''))) {
     invalid(context, 'config.protectedPaths must contain non-empty strings')
   }
-  return config as unknown as LoopConfig
+  return { ...config, sessionPolicy: config.sessionPolicy ?? defaultSessionPolicy } as unknown as LoopConfig
+}
+function validateQueueItems(value: unknown, context: PluginContext): { body: string }[] | undefined {
+  if (value === undefined) return undefined
+  if (!Array.isArray(value)) invalid(context, 'queueItems must be an array')
+  return value.map((candidate, index) => {
+    const item = object(candidate, `queueItems[${index}]`, context)
+    onlyKeys(item, ['body'], `queueItems[${index}]`, context)
+    return { body: requiredString(item.body, `queueItems[${index}].body`, context) }
+  })
+}
+
+function validatePresetConfig(
+  preset: LoopPreset,
+  config: LoopConfig,
+  queueItems: { body: string }[] | undefined,
+  context: PluginContext,
+  requireQueueItems = false
+): void {
+  if (preset === 'queue') {
+    if (config.promptSource.kind !== 'queue') invalid(context, 'queue preset requires a queue prompt source')
+    if (requireQueueItems && (queueItems === undefined || queueItems.length === 0)) {
+      invalid(context, 'queue preset requires at least one initial queue item')
+    }
+  } else if (preset === 'interval') {
+    if (config.promptSource.kind !== 'repeat') invalid(context, 'interval preset requires a repeat prompt source')
+    if (config.pacing.kind !== 'interval') invalid(context, 'interval preset requires interval pacing')
+  } else if (config.promptSource.kind !== 'repeat' || config.pacing.kind !== 'on-idle') {
+    invalid(context, 'until-done preset requires a repeat prompt source and on-idle pacing')
+  }
+  if (preset !== 'queue' && queueItems !== undefined) invalid(context, 'queueItems are only supported by the queue preset')
+}
+
+function validateQueueOperation(value: unknown, context: PluginContext): QueueOperation {
+  const operation = object(value, 'op', context)
+  if (operation.kind === 'add') {
+    onlyKeys(operation, ['kind', 'body', 'position'], 'op', context)
+    if (operation.position !== undefined && (
+      typeof operation.position !== 'number' || !Number.isInteger(operation.position) || operation.position < 0
+    )) invalid(context, 'op.position must be a nonnegative integer')
+    return {
+      kind: 'add',
+      body: requiredString(operation.body, 'op.body', context),
+      ...(operation.position === undefined ? {} : { position: operation.position as number })
+    }
+  }
+  if (operation.kind === 'edit') {
+    onlyKeys(operation, ['kind', 'id', 'body'], 'op', context)
+    return {
+      kind: 'edit',
+      id: requiredString(operation.id, 'op.id', context),
+      body: requiredString(operation.body, 'op.body', context)
+    }
+  }
+  if (operation.kind === 'move') {
+    onlyKeys(operation, ['kind', 'id', 'position'], 'op', context)
+    if (typeof operation.position !== 'number' || !Number.isInteger(operation.position) || operation.position < 0) {
+      invalid(context, 'op.position must be a nonnegative integer')
+    }
+    return {
+      kind: 'move',
+      id: requiredString(operation.id, 'op.id', context),
+      position: operation.position
+    }
+  }
+  if (operation.kind === 'remove') {
+    onlyKeys(operation, ['kind', 'id'], 'op', context)
+    return { kind: 'remove', id: requiredString(operation.id, 'op.id', context) }
+  }
+  return invalid(context, 'op.kind must be add, edit, move, or remove')
 }
 
 function validateOptions(value: unknown, context: PluginContext): void {
@@ -155,16 +247,22 @@ export async function activate(context: PluginContext): Promise<void> {
 
   const handlers: Record<string, MethodHandler> = {
     create: (params, caller: PluginCaller) => {
-      onlyKeys(params, ['worktree', 'worktreeId', 'name', 'agent', 'preset', 'config', 'model', 'options'], 'create', context)
+      onlyKeys(params, ['worktree', 'worktreeId', 'name', 'agent', 'preset', 'queueItems', 'config', 'model', 'options'], 'create', context)
       optionalString(params.worktree, 'worktree', context)
       optionalString(params.worktreeId, 'worktreeId', context)
       if (params.worktree !== undefined && params.worktreeId !== undefined) invalid(context, 'use worktree or worktreeId, not both')
       optionalString(params.name, 'name', context)
       if (params.agent !== 'claude' && params.agent !== 'codex') invalid(context, 'agent must be claude or codex')
-      if (params.preset !== undefined && params.preset !== 'until-done') invalid(context, 'only the until-done preset is supported')
+      if (params.preset !== undefined && params.preset !== 'until-done' && params.preset !== 'queue' && params.preset !== 'interval') {
+        invalid(context, 'preset must be until-done, queue, or interval')
+      }
+      const preset = (params.preset ?? 'until-done') as LoopPreset
       optionalString(params.model, 'model', context)
       if (params.options !== undefined) validateOptions(params.options, context)
-      return active.create({ ...params, config: validateConfig(params.config, context) } as LoopCreateInput, caller)
+      const config = validateConfig(params.config, context, preset === 'until-done' ? 'fresh' : 'continue')
+      const queueItems = validateQueueItems(params.queueItems, context)
+      validatePresetConfig(preset, config, queueItems, context, true)
+      return active.create({ ...params, preset, queueItems, config } as LoopCreateInput, caller)
     },
     list: (params) => {
       onlyKeys(params, ['worktreeId', 'worktree'], 'list', context)
@@ -205,7 +303,17 @@ export async function activate(context: PluginContext): Promise<void> {
     },
     edit: (params) => {
       onlyKeys(params, ['loopId', 'patch'], 'edit', context)
-      return active.edit(loopId(params, context), validateConfigPatch(params.patch, context))
+      const id = loopId(params, context)
+      const patch = validateConfigPatch(params.patch, context)
+      if (patch.promptSource !== undefined || patch.pacing !== undefined) {
+        const current = active.get(id)
+        validatePresetConfig(current.preset, { ...current.config, ...patch }, undefined, context)
+      }
+      return active.edit(id, patch)
+    },
+    queue: (params) => {
+      onlyKeys(params, ['loopId', 'op'], 'queue', context)
+      return active.queue(loopId(params, context), validateQueueOperation(params.op, context))
     }
   }
   for (const [name, handler] of Object.entries(handlers)) context.provide(`method:${context.pluginId}/${name}`, handler)
