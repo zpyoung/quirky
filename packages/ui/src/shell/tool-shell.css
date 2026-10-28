@@ -374,3 +374,9 @@
   height: calc(var(--tool-bottom-panel-height) * var(--compat-px-1));
   cursor: col-resize;
 }
+
+.tool-shell__icon {
+  width: var(--ui-icon-size);
+  height: var(--ui-icon-size);
+  flex: none;
+}

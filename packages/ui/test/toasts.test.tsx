@@ -34,7 +34,8 @@ beforeAll(async () => {
       subscribe: () => () => {},
       openTool: () => {}
     }
-    const value = { store, connection: connection as unknown as Connection, plugins: shellPlugins as WindowPluginHost }
+    // This isolated toast fixture implements only the host surface consumed by its mounted components.
+    const value = { store, connection: connection as unknown as Connection, plugins: shellPlugins as unknown as WindowPluginHost }
     await act(async () => {
       root!.render(react.createElement(context.AppContext.Provider, { value }, react.createElement(component.Toasts)))
     })

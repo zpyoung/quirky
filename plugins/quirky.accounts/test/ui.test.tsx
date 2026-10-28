@@ -316,7 +316,7 @@ test('Codex settings show configuration warnings for the selected account only',
   expect(container.textContent).not.toContain(otherWarning.message)
 })
 
-test('the unconfigured Usage CTA is visible in the status bar and hiding it leaves a restore path', async () => {
+test('unconfigured Usage opens setup without expanding the status bar and keeps a restore path after hiding', async () => {
   listResponse = () => emptyAccountState(1, preferencesValue)
   usageValue = { ...emptyUsage, providers: emptyUsage.providers.map((provider) => ({ ...provider, accountId: null })) }
   const context = makeContext()
@@ -327,8 +327,10 @@ test('the unconfigured Usage CTA is visible in the status bar and hiding it leav
   })
   await settle()
 
-  expect(container.textContent).toContain('Configure usage tracking')
-  expect(buttonByLabel('Open Usage')).not.toBeNull()
+  expect(container.querySelector('[role="dialog"]')).toBeNull()
+  await act(async () => { buttonByLabel('Open Usage').click() })
+  await settle()
+  expect(uiStateValue.open).toBe(true)
   await act(async () => { buttonByLabel('Hide from status bar').click() })
   await settle()
   expect(preferencesValue.hidden).toBe(true)

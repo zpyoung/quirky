@@ -168,7 +168,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
             </li>
           ))}
         </ul>
-      )}
+      ) : null}
     </Dialog>
   )
 }

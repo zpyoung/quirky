@@ -72,3 +72,5 @@ Tool: host-owned slot frame around plugin content. Stripe: the tool's placement 
 ## Self-review and amendments
 
 2026-10-28: checked against parent shell regions, six-slot rules, scenarios1–4/6–7 and rollout row. Geometry, authority, duplicate mapping, exact-window behavior and failures are explicit; no open human questions. Locked defaults accepted autonomously under LOOP.md. No separate tech.md or spec review under build-first.
+
+2026-10-28 amendments: `ui.tool.open` is idempotent; clicking the selected stripe icon explicitly calls close. The removed editor activity-bar preference is not retained as an inert setting. Actual Tasks tool navigation/close stays in its resolved slot, Usage setup stays behind its existing status popover, and worktree pending-Ask counts derive from the public Ask API. These changes implement SC2/5/8 without introducing feature authority or an area restyle. Focused evidence and its limits are recorded in decisions D11–D14; suites, native acceptance and screenshot scoring remain unrun under build-first.

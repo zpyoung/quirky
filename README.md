@@ -190,10 +190,33 @@ does not evaluate arbitrary runtime style computations or trace imported style o
 
 ### Public plugin UI and grouping APIs
 
-UI plugins can declare an `activity-item` contribution beside the right sidebar. It mounts even
-when no panel is open and uses the ordinary module, override, report and cleanup lifecycle.
-`quirky ui contributions --json` exposes `activityItems`; `quirky ui state --json` exposes each
-mounted item's report. Existing main-header panel toggles and right-column panel placement remain.
+The desktop host places tools in six movable slots: left top/bottom, right top/bottom and
+bottom left/right. Click an icon to open its tool or close that slot; drag it to another stripe
+or use its Move menu. Slot sizes, split proportions and placements persist across projects
+in the user profile. Worktrees and Changes open on first launch.
+
+`ui.contributions` exposes the effective `tools` projection alongside the original panel,
+sidebar-section and activity-item registrations. Equivalent built-in launchers share a tool;
+third-party content retains its own destination. Panels, sidebar sections and activity items
+may declare `defaultSlot` and `icon`. Views remain center contributions; the host's center tabs
+contain only opened views and retain each view's input in its exact window. Commands, settings,
+overlays and status items keep their dedicated host regions.
+
+Use the same public layout API from scripts:
+
+```sh
+quirky ui open-tool host:inbox
+quirky ui move-tool panel:quirky.ledger/ledger right-bottom
+quirky ui resize-tools --left 290 --right-split 0.6
+quirky ui close-tool left-bottom
+quirky ui state --json
+```
+
+`ui.tool.open` is idempotent; the stripe explicitly closes an already open tool.
+The existing panel/sidebar APIs update the same tool state. The obsolete editor top/side
+activity-bar setting is removed. ⌘K searches commands, tools, views and worktrees while
+preserving contributed shortcut priority. Off-worktree questions raise eight-second corner
+toasts and amber worktree/Inbox counts; dismissing a toast never answers its durable question.
 
 Setting declarations can provide optional `category` and `section` strings. The generic Settings
 dialog groups these declarations by category and section; uncategorized settings retain their

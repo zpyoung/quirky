@@ -340,6 +340,34 @@ function ToolMenu({ entry, placement, slot, position, onMove }: {
   )
 }
 
+const TOOL_ICON_PATHS: Record<string, string> = {
+  'git-branch': 'M6 3v12a4 4 0 0 0 4 4h2M18 5v3a4 4 0 0 1-4 4H6M6 3a2 2 0 1 0 0 4 2 2 0 0 0 0-4M18 3a2 2 0 1 0 0 4 2 2 0 0 0 0-4M14 17a2 2 0 1 0 0 4 2 2 0 0 0 0-4',
+  'git-pull-request': 'M6 7v10M6 3a2 2 0 1 0 0 4 2 2 0 0 0 0-4M6 17a2 2 0 1 0 0 4 2 2 0 0 0 0-4M14 3h2a3 3 0 0 1 3 3v11M12 5l2-2 2 2M19 17a2 2 0 1 0 0 4 2 2 0 0 0 0-4',
+  inbox: 'M4 4h16l2 13v3H2v-3L4 4M2 14h6l2 3h4l2-3h6',
+  'list-checks': 'm3 5 2 2 3-4M11 5h10M3 12h4M11 12h10M3 19h4M11 19h10',
+  bot: 'M5 7h14v13H5V7M12 3v4M2 12h3M19 12h3M8 12h1M15 12h1M8 17h8',
+  workflow: 'M3 3h6v6H3V3M15 15h6v6h-6v-6M6 9v6a3 3 0 0 0 3 3h6M9 6h6a3 3 0 0 1 3 3v6',
+  smartphone: 'M7 2h10v20H7V2M11 18h2',
+  files: 'M8 3h8l4 4v14H8V3M16 3v5h4M4 7v14',
+  check: 'm4 12 5 5L20 6',
+  'message-circle': 'M21 11a9 9 0 0 1-13 8l-6 3 2-6A9 9 0 1 1 21 11',
+  info: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18M12 10v7M12 7v1',
+  archive: 'M3 3h18v5H3V3M5 8v13h14V8M9 12h6',
+  'book-open': 'M12 5c-3-2-7-2-10-1v16c3-1 7-1 10 1 3-2 7-2 10-1V4c-3-1-7-1-10 1v16',
+  terminal: 'M3 4h18v16H3V4m4 4 4 4-4 4M13 16h4',
+  command: 'M8 8h8v8H8V5a3 3 0 1 0-3 3h14a3 3 0 1 0-3-3v14a3 3 0 1 0 3-3H5a3 3 0 1 0 3 3V8',
+  'panel-left': 'M3 4h18v16H3V4M9 4v16',
+  'panel-right': 'M3 4h18v16H3V4M15 4v16',
+  activity: 'M2 12h5l3-9 4 18 3-9h5'
+}
+
+function ToolIcon({ tool }: { tool: UiToolEntry }) {
+  const path = TOOL_ICON_PATHS[tool.icon]
+  return path
+    ? <svg className="tool-shell__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={path} /></svg>
+    : <span aria-hidden="true">{tool.title.slice(0, 1)}</span>
+}
+
 function ToolItem({
   tool,
   slot,
@@ -389,7 +417,7 @@ function ToolItem({
         onDragEnd={() => { dragging.current = null }}
         onClick={() => selected ? onClose(slot) : onOpen(tool.id)}
       >
-        {tool.icon || tool.title.slice(0, 1)}
+        <ToolIcon tool={tool} />
       </IconButton>
       {badge && <Badge tone="needs-you" label={badge.title}>{badge.count}</Badge>}
       <ToolMenu

@@ -42,7 +42,8 @@
   border-top: var(--ui-border-width) solid var(--ui-border);
   color: var(--ui-muted);
   display: flex;
-  flex-wrap: wrap;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
   font-size: var(--ui-font-label);
   gap: var(--ui-space-8) var(--ui-space-16);
   justify-content: space-between;
@@ -55,7 +56,8 @@
 .shell-statusbar__plugins {
   align-items: center;
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  min-width: 0;
   gap: var(--ui-space-6);
 }
 

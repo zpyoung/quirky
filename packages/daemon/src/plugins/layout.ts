@@ -463,23 +463,18 @@ export class LayoutService {
     const tool = this.requireTool(id)
     return this.change((layout) => {
       const slot = layout.tools!.placements[id]!
-      const closing = layout.tools!.open[slot] === id
-      const open = { ...layout.tools!.open, [slot]: closing ? null : id }
+      const open = { ...layout.tools!.open, [slot]: id }
       const tools = { ...layout.tools!, open }
       const panel = this.panelForOpen(
         tools,
-        !closing && parseContributionId(tool.contributionId ?? '')?.kind === 'panel' ? tool.contributionId : layout.panel
+        parseContributionId(tool.contributionId ?? '')?.kind === 'panel' ? tool.contributionId : layout.panel
       )
-      const focusTarget = focusTargetOfTool(tool)
+      const isWorktrees = id === 'sidebar-section:quirky.worktree/worktrees'
       return {
         ...layout,
         tools,
         panel,
-        ...(id === 'sidebar-section:quirky.worktree/worktrees' ? { sidebar: !closing } : {}),
-        focus: closing && focusTarget !== undefined && layout.focus === focusTarget &&
-          (focusTarget !== 'panel' || panel === null)
-          ? null
-          : layout.focus
+        ...(isWorktrees ? { sidebar: true } : {})
       }
     })
   }

@@ -145,17 +145,7 @@ textarea {
   flex-direction: column;
 }
 
-.plugin-status-bar {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: var(--compat-px-8);
-  padding: 0 var(--compat-px-8);
-  overflow: visible;
-  background: var(--bg-raised);
-}
-
-.plugin-status-bar .plugin-status-bar-slot {
+.shell-statusbar__plugins .plugin-status-bar-slot {
   display: flex;
   flex: 1 1 auto;
   flex-direction: row;

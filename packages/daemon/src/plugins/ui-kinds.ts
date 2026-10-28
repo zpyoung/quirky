@@ -9,6 +9,7 @@ import {
   TERMINAL_PANE_MENU,
   TERMINAL_TAB_MENU,
   THEME_TOKENS,
+  UI_KINDS,
   UI_TOOL_SLOTS,
   type SettingDeclaration,
 } from '@quirky/protocol'

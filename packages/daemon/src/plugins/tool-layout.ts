@@ -79,7 +79,7 @@ const TOOL_ORDER = [
   'panel:quirky.terminal/sessions',
   'panel:quirky.terminal/quick-commands'
 ] as const
-const RULE_ORDER = new Map(TOOL_ORDER.map((id, index) => [id, index]))
+const RULE_ORDER = new Map<string, number>(TOOL_ORDER.map((id, index) => [id, index]))
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)

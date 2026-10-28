@@ -199,7 +199,18 @@ describe('effective tool projection', () => {
 })
 
 describe('tool layout mutations', () => {
-  test('opens, toggles, moves and resizes tools through RPC, then restores the same profile state after restart', async () => {
+  test('repeated open requests do not close an already visible tool', async () => {
+    const harness = await makeEnv().start()
+    const caller = await harness.connect('cli')
+    await caller.call('ui.tool.open', { id: TASKS })
+    const repeated = await caller.call('ui.tool.open', { id: TASKS })
+    expect(repeated.tools?.open['left-bottom']).toBe(TASKS)
+    const closed = await caller.call('ui.tool.close', { slot: 'left-bottom' })
+    expect(closed.tools?.open['left-bottom']).toBeNull()
+    expect(closed.tools?.open['left-top']).toBe(WORKTREES)
+  })
+
+  test('opens, moves and resizes tools through RPC, then restores the same profile state after restart', async () => {
     const env = makeEnv()
     const first = await env.start()
     const caller = await first.connect('cli')
@@ -207,8 +218,6 @@ describe('tool layout mutations', () => {
     const opened = await caller.call('ui.tool.open', { id: TASKS })
     expect(opened.tools?.open['left-bottom']).toBe(TASKS)
     expect(opened.tools?.open['left-top']).toBe(WORKTREES)
-    const toggled = await caller.call('ui.tool.open', { id: TASKS })
-    expect(toggled.tools?.open['left-bottom']).toBeNull()
 
     const moved = await caller.call('ui.tool.move', { id: LEDGER, slot: 'right-bottom' })
     expect(moved.tools?.placements[LEDGER]).toBe('right-bottom')

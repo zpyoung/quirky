@@ -110,5 +110,49 @@
 - **Revisit if:** the barrier audit finds a changed path or hash outside these known owners
 - **Source:** assumed — autonomous
 
+## D11: Repair observed shell composition defects at their real owners
+- **Question:** actual surface smoke exposed clipped icon names, a tall status card, Tasks center navigation and missing worktree Ask attention
+- **Options:** hide failures with CSS clipping; treat feature placement as complete; repair each public presentation/navigation seam
+- **Chose:** host SVG glyphs for icon identifiers; unconfigured Usage setup stays behind its existing popover; Tasks navigation recognizes its actually open projected tool and closes that slot without replacing the center; worktree rows read canonical pending asks and show shared amber count/dot controls. Repeated ui.tool.open is idempotent; stripe toggling uses ui.tool.close explicitly
+- **Why:** these are required host integration behaviors, not area restyles or new authority. The actual first smoke showed17overflowing icon labels, a154px status bar, an extra Tasks center tab, and a question with Inbox attention but no worktree count
+- **Evidence:** initial/final browser observations; tool-shell SVG boundary; quirky.accounts Usage.tsx; quirky.tasks env.ts; quirky.worktree useWorktreeAttention.ts/Tree.tsx; final-runtime-proof.json
+- **Reversibility:** medium (public location semantics)
+- **Confidence:** high
+- **Revisit if:** end-phase acceptance finds another contribution whose placement mutates unrelated center state
+- **Source:** assumed — autonomous
+
+## D12: Record focused runtime proof without claiming the end-phase suite or visual score
+- **Question:** what verification is actually supported under build-first
+- **Options:** claim full acceptance; run prohibited campaigns; report only exercised compiler/runtime evidence
+- **Chose:** full root/mobile/prepared-desktop typecheck and UI lint passed; actual UI build emitted11host/vendor files and25plugin modules. A fresh private HOME/QUIRKY_HOME daemon, real PTY and dedicated owned Chrome exercised defaults, slot replacement/close, native HTML5 Ledger drag, keyboard resize, public CLI move/resize/open, unified search, canonical breadcrumb, center input restoration, off-worktree question answer without navigation, and a7992ms toast expiry with its Ask still pending. Final cold-start source proved Tasks no-center-steal/close and worktree count removal after canonical answer. Recreating the real daemon handle on the same profile restored identical saved tool state; this is not a separate-process restart claim
+- **Why:** evidence must distinguish minimum changed-surface proof from suites, full dogfood, native-host behavior and screenshot-review scoring, all unrun here. Authored regression tests cover remaining boundaries but no test pass is claimed
+- **Evidence:** initial-runtime-proof.json, final-runtime-proof.json, exact-window-api-proof.json, final-readback.json and saved screenshots in the iteration evidence; typecheck/build command outputs
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** end-phase tests or the screenshot-review owner find a failure
+- **Source:** locked by docs/loop/LOOP.md
+
+## D13: Preserve exact-window evidence limits and peer test repairs
+- **Question:** automation's second named browser handle reused the same actual target; lane1 announced overlapping test repairs
+- **Options:** claim two visual windows; duplicate lane1's fixes; use a second real UI-role client for isolation and retain peer ownership
+- **Chose:** one actual browser plus a second real authenticated UI-role API connection proved unchanged first-window view/history and isolated second-window input/history. Two-browser visual isolation is not claimed. Lane1 owns test-only gallery/theme/Questions/focus/dialog repairs; its handoff says no shared shell source changes, so the one roadmap catch-up preserves those tests without importing a partial topic
+- **Why:** target reuse and selecting a different matching search command are driver observations, not proof of an application window bug. No duplicate debugging/review campaign or new dependency is warranted
+- **Evidence:** exact-window-api-proof.json; actual ui.window.self/state/open responses; lane1 handoff and accepted terminal messages; /tmp/quirky-ui-shell-lane9-overlap.md
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** genuine two-window native acceptance contradicts the exact-window API result
+- **Source:** assumed — autonomous
+
+## D14: Keep platform and capture claims bounded to this Mac
+- **Question:** where platform/native verification still differs from web surface proof
+- **Options:** infer all web engines and OS shortcuts; test only macOS and retain the standing end-phase/native obligations
+- **Chose:** macOS build/CLI and an owned Chromium surface only. Linux/Windows shortcut/drag geometry and real WKWebView/window-frame behavior still need their own platform acceptance. No new OS integration or native notification behavior was introduced
+- **Why:** locked platform policy is macOS-only; no fake native capture or cross-platform pass is justified
+- **Evidence:** workstation/tool outputs and actual browser application path; approved redesign desktop-only scope
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** platform support is expanded
+- **Source:** deferred: platform
+
 ## Progress
-Committed contracts/spec077cb9e6. Three isolated source workers active under /tmp/quirky-shell-lane9.UWEAD5/{layout,shell,attention}; journal.json records exact HEAD/untracked metadata hashes. Parent owns only independent editor clean-cutover source +shared activityBarPosition removal after dispatch. Prepared private smoke service, not run. Next collect all workers, audit scope/HEAD/metadata, integrate, typecheck and minimum real shell smoke, one roadmap catch-up/read decisions/typecheck and canonical land. No tests/review/full dogfood run.
+All source components and bounded integration fixes are complete. Full typecheck/UIlint and UI build passed after the final pinned-row callsite correction; no suites/review/full dogfood or screenshot score run. All source workers returned, all3component worktrees removed with inherited metadata preserved. Both private runtime services exited0 after owned browser cleanup; no real user home was used. README updated for actual public shell controls. Next commit the integrated fixes/evidence, perform the sole roadmap catch-up, read incoming binding decisions, rerun typecheck and canonical queue land.
