@@ -98,9 +98,14 @@ export function assertPanelParameters(method: string, params: Record<string, unk
 
   if (method.startsWith('quirky.git/')) {
     if (params.path !== undefined && !relativePath(params.path)) throw new Error('mobile Git paths must be worktree-relative')
+    if (params.oldPath !== undefined && !relativePath(params.oldPath)) throw new Error('mobile Git paths must be worktree-relative')
     if (params.paths !== undefined && (!Array.isArray(params.paths) || params.paths.some(path => !relativePath(path)))) throw new Error('mobile Git paths must be worktree-relative')
     if (method === 'quirky.git/stage' && params.scope !== undefined && !['all', 'tracked'].includes(String(params.scope))) throw new Error('invalid mobile staging scope')
     if (method === 'quirky.git/sendNotes' && !['all', 'file', 'note'].includes(String(params.scope))) throw new Error('invalid mobile note scope')
+    if (method === 'quirky.git/addNote' && (!Number.isInteger(params.line) || (params.line as number) < 1 ||
+      (params.startLine !== undefined && (!Number.isInteger(params.startLine) || (params.startLine as number) < 1)) ||
+      typeof params.body !== 'string' || Buffer.byteLength(params.body) > 64 * 1024)) throw new Error('invalid mobile Git note')
+    if (method === 'quirky.git/editNote' && (typeof params.body !== 'string' || Buffer.byteLength(params.body) > 64 * 1024)) throw new Error('mobile Git note is too large')
   }
 
   if (method === 'quirky.editor/open' || method === 'quirky.editor/explorer') {

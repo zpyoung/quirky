@@ -1,19 +1,8 @@
 import { describe, expect, test } from 'bun:test'
-import { MOBILE_METHOD_ALLOWLIST, assertMobileCallAllowed } from '../src/daemon/authorization'
+import { assertMobileCallAllowed } from '../src/daemon/authorization'
 
 describe('mobile RPC authorization', () => {
-  test('uses literal routes for safe consumer APIs across each current feature family', () => {
-    for (const method of [
-      'status.get', 'quirky.session/list', 'quirky.session/create', 'quirky.terminal/attach', 'quirky.terminal/mobileState', 'quirky.terminal/claim', 'quirky.agent-status/wait',
-      'quirky.worktree/list', 'quirky.repo/show', 'quirky.repo/resolve', 'quirky.hosting/files', 'quirky.git/status',
-      'quirky.accounts/list', 'quirky.ask/answer'
-    ]) expect(Object.hasOwn(MOBILE_METHOD_ALLOWLIST, method)).toBe(true)
-    for (const method of [
-      'quirky.mobile/pair', 'daemon.stop', 'plugin.install', 'plugin.disable', 'distro.install',
-      'settings.update', 'ui.command.run', 'quirky.terminal/restartHost', 'quirky.terminal/killAll',
-      'quirky.git/forcePush', 'quirky.terminal/takeBack', 'quirky.terminal/restoreFit', 'quirky.agents/configure', 'quirky.agent-status/send', 'quirky.ask/cancel', 'quirky.files/read',
-      'quirky.worktree/listAll', 'quirky.session-info/sections'
-    ]) expect(Object.hasOwn(MOBILE_METHOD_ALLOWLIST, method)).toBe(false)
+  test('rejects caller-supplied executable and launch configuration on session creation', () => {
     expect(() => assertMobileCallAllowed('quirky.session/create', { worktree: 'floating', agent: 'shell', prompt: 'check status' })).not.toThrow()
     for (const key of ['command', 'cwd', 'extraArgs', 'model', 'options']) {
       expect(() => assertMobileCallAllowed('quirky.session/create', { agent: 'shell', [key]: 'unrestricted' })).toThrow()

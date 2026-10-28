@@ -165,5 +165,27 @@
 - **Revisit if:** the kernel changes destructive describer argument forwarding.
 - **Source:** assumed — autonomous
 
+## D16: Prepare private-branch panel admission before the base queue item lands
+- **Question:** baseD7 delays shared admission edits until its landing, but the canonical early-item procedure requires implementing and verifying against pending dependency branches.
+- **Options:** leave completed panel consumers unverifiable until the base full-suite land; prepare the additive cutover only on this item's private branch.
+- **Chose:** parent alone wires its bounded panel-policy module into this branch's existing admission function, removes replaced literal definitions and the scope/identity collision, and runs sealed consumer acceptance. Lane5's worktree and branch remain untouched. Preserve all incoming base methods on the final dependency merge and wait for queue readiness before landing.
+- **Why:** several canonical deps checks returned ready:false with only sb-mobile-app pending. The new contained-editor acceptance failed -32001 before cutover. This is implementation against committed contracts, not a base ownership takeover or a bypass of landing dependencies. A single integration owner resolves any additive merge overlap.
+- **Evidence:** authoritative LOOP.md Early items steps2–4; scoped editor acceptance red; component source/HEAD audits; parent-only panel-authorization module and actual producer schemas.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the base changes the admission contract rather than adding methods.
+- **Source:** supersedes sb-mobile-app D7 (private-branch admission timing only)
+
+## D17: Apply the already-over-two-hours completion rule without overstating verification
+- **Question:** which remaining review/dogfood steps apply after the item's time window while the base is still pending?
+- **Options:** start new full campaigns; finish existing source/integration and required test/typecheck/runtime smoke, then land as soon as dependencies allow.
+- **Chose:** no new feature flows, formal review round or full dogfood campaign. Finish encrypted API acceptance, typecheck and actual changed-surface smoke; record exact exercised evidence and limits. The native handoff and one completion follow-up retain unmet prerequisite-dependent flows and any unexercised full UI variants. Never end while dependency work or owned helpers run, and never land before deps ready.
+- **Why:** authoritative night mode says an already-over-two-hours item lands as soon as its own checks pass, skipping a review/dogfood pass not started. Developer verification still requires a real runtime smoke; compilation alone is not surface proof.
+- **Evidence:** authoritative LOOP.md Night mode and Early items; iteration checkpoint clock; canonical deps ready:false.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the operator changes the completion rule.
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
 Feature source components merged and original trees removed. Parent safe metadata APIs and vault projection verified; scoped panel admission module written and unit-verified but not wired into shared base authorization until base lands perD7. Two isolated encrypted acceptance components exist at /tmp/quirky-panels-{git-editor-proof,activity-proof}, source-only and not yet accepted; parent must run them against final policy. Browser host helper is being authored under /tmp/quirky-panel-run.42yijv/ui against actual final PageApp and sealed RPC, no fake backend. Dependency still pending; current base through3fc2dceb merged, full native/pages/bundle still awaited. Final affected suite/scripts/typecheck/build/real UI/review/followup/land remain. No whole-suite local run: night mode reserves it for queue land.

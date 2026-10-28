@@ -1,3 +1,5 @@
+import { PANEL_METHOD_PARAMS, assertPanelParameters } from './panel-authorization'
+
 export class MobileAuthorizationError extends Error {
   constructor(message: string) {
     super(message)
@@ -41,30 +43,7 @@ const PARAMS: Readonly<Record<string, readonly string[]>> = {
   'quirky.repo/list': [],
   'quirky.repo/show': ['repo'],
   'quirky.repo/resolve': ['selector'],
-  'quirky.git/status': ['worktree'],
-  'quirky.git/diff': ['worktree', 'path', 'staged', 'source', 'oldPath', 'mergeBase', 'head', 'commit', 'parent'],
-  'quirky.git/stage': ['worktree', 'paths', 'scope'],
-  'quirky.git/unstage': ['worktree', 'paths'],
-  'quirky.git/commit': ['worktree', 'message'],
-  'quirky.git/push': ['worktree'],
-  'quirky.git/pull': ['worktree'],
-  'quirky.git/fetch': ['worktree'],
-  'quirky.git/sync': ['worktree'],
-  'quirky.git/compare': ['worktree', 'base'],
-  'quirky.git/branches': ['worktree', 'query'],
-  'quirky.git/history': ['worktree', 'limit'],
-  'quirky.git/commitFiles': ['worktree', 'commit'],
-  'quirky.git/conflictFile': ['worktree', 'path', 'peek'],
-  'quirky.git/notes': ['worktree', 'path'],
-  'quirky.git/addNote': ['worktree', 'path', 'line', 'startLine', 'body'],
-  'quirky.git/editNote': ['worktree', 'id', 'body'],
-  'quirky.git/deleteNote': ['worktree', 'id'],
-  'quirky.git/formatNotes': ['worktree', 'ids', 'path'],
-  'quirky.git/noteTargets': ['worktree'],
-  'quirky.accounts/list': ['provider'],
-  'quirky.accounts/usage': [],
-  'quirky.accounts/refresh': ['provider', 'force'],
-  'quirky.accounts/select': ['provider', 'accountId'],
+  ...PANEL_METHOD_PARAMS,
   'quirky.ask/list': ['pendingOnly'],
   'quirky.ask/wait': ['askId', 'timeoutMs'],
   'quirky.ask/answer': ['askId', 'answers', 'skipped'],
@@ -75,15 +54,12 @@ const PARAMS: Readonly<Record<string, readonly string[]>> = {
 
 const FORBIDDEN_KEYS: Readonly<Record<string, true>> = {
   deviceId: true, role: true, token: true, deviceToken: true, credential: true, credentials: true,
-  caller: true, connection: true, client: true, clientId: true, scope: true
+  caller: true, connection: true, client: true, clientId: true
 }
 const MAX_STRING_LENGTH = 64 * 1024
 const MAX_ARRAY_LENGTH = 2048
 const MAX_OBJECT_KEYS = 256
 
-export const MOBILE_METHOD_ALLOWLIST: Readonly<Record<string, true>> = Object.freeze(
-  Object.fromEntries(Object.keys(PARAMS).map((method) => [method, true] as const))
-)
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
@@ -139,17 +115,6 @@ function checkMethodSpecific(method: string, params: Record<string, unknown>): v
     if (params.timeoutMs !== undefined && (!Number.isInteger(params.timeoutMs) || (params.timeoutMs as number) < 0 || (params.timeoutMs as number) > 60000)) throw new MobileAuthorizationError('invalid mobile wait timeout')
     if (params.lines !== undefined && (!Number.isInteger(params.lines) || (params.lines as number) < 0 || (params.lines as number) > 2000)) throw new MobileAuthorizationError('invalid mobile output line limit')
   }
-  if (method === 'quirky.git/diff' || method === 'quirky.git/conflictFile' || method === 'quirky.git/notes' || method === 'quirky.git/addNote' || method === 'quirky.git/editNote' || method === 'quirky.git/deleteNote' || method === 'quirky.git/formatNotes') {
-    if (params.path !== undefined && !isSafeRelativePath(params.path)) throw new MobileAuthorizationError('mobile git paths must be relative to a worktree')
-  }
-  if (method === 'quirky.git/addNote') {
-    if (!Number.isInteger(params.line) || (params.line as number) < 1 || (params.startLine !== undefined && (!Number.isInteger(params.startLine) || (params.startLine as number) < 1)) ||
-      typeof params.body !== 'string' || Buffer.byteLength(params.body) > 64 * 1024) throw new MobileAuthorizationError('invalid mobile Git note')
-  }
-  if (method === 'quirky.git/editNote' && (typeof params.body !== 'string' || Buffer.byteLength(params.body) > 64 * 1024)) throw new MobileAuthorizationError('mobile Git note is too large')
-  if (method === 'quirky.git/stage' || method === 'quirky.git/unstage') {
-    if (params.paths !== undefined && (!Array.isArray(params.paths) || params.paths.some((path) => !isSafeRelativePath(path)))) throw new MobileAuthorizationError('mobile git paths must be relative to a worktree')
-  }
   if (method === 'quirky.hosting/fileContents' && !isSafeRelativePath(params.path)) throw new MobileAuthorizationError('mobile file path must be relative')
   if (method === 'quirky.hosting/files' || method === 'quirky.hosting/fileContents') {
     const repository = params.prRepo
@@ -167,4 +132,5 @@ export function assertMobileCallAllowed(method: string, params: unknown): assert
   if (Object.keys(params).some((key) => !allowed.includes(key))) throw new MobileAuthorizationError('mobile method params contain an unsupported field')
   checkTree(params)
   checkMethodSpecific(method, params)
+  assertPanelParameters(method, params)
 }
