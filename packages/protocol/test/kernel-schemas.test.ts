@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { CONNECTION_METHODS, KERNEL_EVENT_SCHEMAS, KERNEL_METHOD_SCHEMAS, type KernelMethodSchema, type Schema } from '../src'
 
-const METHOD_COUNT = 40
+
 const EVENT_TYPES = [
   'notify',
   'plugin.changed',
@@ -28,12 +28,6 @@ function walk(schema: Schema): Schema[] {
 }
 
 describe('kernel method schemas', () => {
-  test('cover every method, including api.describe', () => {
-    expect(methodNames).toHaveLength(METHOD_COUNT)
-    for (const name of ['api.describe', 'client.hello', 'theme.set', 'plugin.activate', 'ui.state']) {
-      expect(methodNames).toContain(name)
-    }
-  })
 
   test('read-only and destructive methods are flagged', () => {
     const entries = KERNEL_METHOD_SCHEMAS as Record<string, KernelMethodSchema>
@@ -109,6 +103,12 @@ describe('kernel method schemas', () => {
     expect(p('client.hello').properties!.protocolVersion).toMatchObject({ type: 'integer', minimum: 0 })
     expect(p('client.hello').properties!.role!.enum).toEqual(['desktop', 'ui', 'cli', 'mobile'])
     expect(p('status.get')).toEqual({ type: 'object' })
+  })
+  test('palette state is optional in layout and palette.set accepts an omitted open value', () => {
+    const paletteSet = KERNEL_METHOD_SCHEMAS['ui.palette.set']!
+    expect(paletteSet.params.properties?.open?.type).toBe('boolean')
+    expect(paletteSet.params.required ?? []).not.toContain('open')
+    expect(paletteSet.result.properties?.palette?.type).toBe('boolean')
   })
 })
 

@@ -18,8 +18,8 @@ import {
   splitPane as splitPaneInTree
 } from './tree'
 import type { GroupSide, IdSource, TreeError, TreeResult } from './tree'
-import { MAX_CLOSED_TABS, TAB_COLORS, TITLE_MAX } from './types'
-import type { ClosedTab, Edge, Group, GroupNode, PaneExit, PaneLeaf, PaneNode, SplitDirection, Tab, TabColor, Workspace } from './types'
+import { isTerminalTab, isViewTab, MAX_CLOSED_TABS, TAB_COLORS, TITLE_MAX } from './types'
+import type { ClosedTab, Edge, Group, GroupNode, PaneExit, PaneLeaf, PaneNode, SplitDirection, Tab, TabColor, TerminalTab, ViewTab, Workspace } from './types'
 
 export type OpResult<T = Workspace> = TreeResult<T>
 
@@ -29,7 +29,7 @@ const fail = (kind: TreeError['kind'], message: string): OpResult<never> => ({ o
 export const LAST_PANE_MESSAGE = "the last pane of a tab can't be moved out"
 
 export type TabLocation = { group: Group; tab: Tab; index: number }
-export type PaneLocation = TabLocation & { pane: PaneLeaf }
+export type PaneLocation = { group: Group; tab: TerminalTab; index: number; pane: PaneLeaf }
 
 /** Every tab of a workspace in visual order (groups left to right, tabs in strip order). */
 export function workspaceTabs(ws: Workspace): Tab[] {
@@ -49,6 +49,7 @@ export function locateTab(ws: Workspace, tabId: string): TabLocation | null {
 export function locatePane(ws: Workspace, paneId: string): PaneLocation | null {
   for (const group of groupsInOrder(ws.root)) {
     for (const [index, tab] of group.tabs.entries()) {
+      if (!isTerminalTab(tab)) continue
       const pane = findPane(tab.root, paneId)
       if (pane) return { group, tab, index, pane }
     }
@@ -60,6 +61,7 @@ export function locatePane(ws: Workspace, paneId: string): PaneLocation | null {
 export function locateSession(ws: Workspace, sessionId: string): PaneLocation | null {
   for (const group of groupsInOrder(ws.root)) {
     for (const [index, tab] of group.tabs.entries()) {
+      if (!isTerminalTab(tab)) continue
       const pane = paneLeaves(tab.root).find((leaf) => leaf.session === sessionId)
       if (pane) return { group, tab, index, pane }
     }
@@ -69,7 +71,7 @@ export function locateSession(ws: Workspace, sessionId: string): PaneLocation | 
 
 /** The sessions held by the workspace's panes. */
 export function boundSessions(ws: Workspace): string[] {
-  return workspaceTabs(ws).flatMap((tab) => paneLeaves(tab.root).map((leaf) => leaf.session))
+  return workspaceTabs(ws).flatMap((tab) => (isTerminalTab(tab) ? paneLeaves(tab.root).map((leaf) => leaf.session) : []))
 }
 
 function mapGroupNode(node: GroupNode, fn: (group: Group) => Group): GroupNode {
@@ -114,7 +116,7 @@ export function emptyWorkspace(id: string, ids: IdSource, revision = 0): Workspa
 export function makeTab(
   ids: IdSource,
   spec: { defaultTitle: string; session: string; now: string; customTitle?: string | null; color?: TabColor }
-): Tab {
+): TerminalTab {
   const pane: PaneLeaf = { kind: 'pane', id: ids.next('pane'), session: spec.session, title: null, exit: null }
   return {
     id: ids.next('tab'),
@@ -139,11 +141,11 @@ function activate(ws: Workspace, groupId: string, tabId: string | null): Workspa
   return { ...next, activeGroup: groupId }
 }
 
-/** Adds `tab` at the end of group `groupId`; unless `focus` is false it becomes the group's active tab and the group the active one. */
-export function appendTab(ws: Workspace, groupId: string, tab: Tab, focus = true): OpResult {
+/** Adds `tab` at the end of group `groupId` and makes it the group's active tab. */
+export function appendTab(ws: Workspace, groupId: string, tab: Tab, activateNew = true): OpResult {
   if (!findGroup(ws.root, groupId)) return fail('not-found', `no group ${groupId}`)
   const added = updateGroup(ws, groupId, (group) => ({ ...group, tabs: [...group.tabs, tab] }))
-  return ok(focus ? activate(added, groupId, tab.id) : added)
+  return ok(activateNew ? activate(added, groupId, tab.id) : added)
 }
 
 /** Records which quick command the group's strip button ran last. */
@@ -183,10 +185,11 @@ export function removeTab(ws: Workspace, tabId: string, record: ClosedTab | null
 
 /** Sets a tab's custom title; the empty string clears it. */
 export function renameTab(ws: Workspace, tabId: string, title: string): OpResult {
-  if (!locateTab(ws, tabId)) return fail('not-found', `no tab ${tabId}`)
+  const loc = locateTab(ws, tabId)
+  if (!loc) return fail('not-found', `no tab ${tabId}`)
   const trimmed = title.trim()
   if (trimmed.length > TITLE_MAX) return fail('invalid-params', `title must be at most ${TITLE_MAX} characters`)
-  return ok(updateTab(ws, tabId, (tab) => ({ ...tab, customTitle: trimmed === '' ? null : trimmed })))
+  return ok(updateTab(ws, tabId, (tab) => isViewTab(tab) ? { ...tab, title: trimmed } : { ...tab, customTitle: trimmed === '' ? null : trimmed }))
 }
 
 export function setTabColor(ws: Workspace, tabId: string, color: string): OpResult {
@@ -195,13 +198,22 @@ export function setTabColor(ws: Workspace, tabId: string, color: string): OpResu
   return ok(updateTab(ws, tabId, (tab) => ({ ...tab, color: color as TabColor })))
 }
 
+/** Updates the content fields of a hosted view while preserving its stable tab identity and strip state. */
+export function updateViewTab(ws: Workspace, tabId: string, update: (tab: ViewTab) => ViewTab): OpResult {
+  const loc = locateTab(ws, tabId)
+  if (!loc) return fail('not-found', `no tab ${tabId}`)
+  if (!isViewTab(loc.tab)) return fail('invalid-params', `tab ${tabId} is not a hosted view`)
+  return ok(updateTab(ws, tabId, (tab) => isViewTab(tab) ? update(tab) : tab))
+}
+
 /** Pins or unpins a tab; pinned tabs sort before unpinned ones, and a tab joins the end of its new section. */
 export function pinTab(ws: Workspace, tabId: string, pinned: boolean): OpResult {
   const loc = locateTab(ws, tabId)
   if (!loc) return fail('not-found', `no tab ${tabId}`)
   if (loc.tab.pinned === pinned) return ok(ws)
   const others = loc.group.tabs.filter((tab) => tab.id !== tabId)
-  const tabs = [...others.filter((tab) => tab.pinned), { ...loc.tab, pinned }, ...others.filter((tab) => !tab.pinned)]
+  const changed = isViewTab(loc.tab) ? { ...loc.tab, pinned, ...(pinned ? { preview: false } : {}) } : { ...loc.tab, pinned }
+  const tabs = [...others.filter((tab) => tab.pinned), changed, ...others.filter((tab) => !tab.pinned)]
   return ok(updateGroup(ws, loc.group.id, (group) => ({ ...group, tabs })))
 }
 
@@ -271,7 +283,7 @@ export function splitPaneOp(ws: Workspace, paneId: string, direction: SplitDirec
   if (!loc) return fail('not-found', `no pane ${paneId}`)
   const root = splitPaneInTree(loc.tab.root, paneId, direction, leaf, ids)
   if (!root.ok) return root
-  return ok(updateTab(ws, loc.tab.id, (tab) => ({ ...tab, root: root.value, activePane: leaf.id, expandedPane: null })))
+  return ok(updateTab(ws, loc.tab.id, (tab) => isTerminalTab(tab) ? { ...tab, root: root.value, activePane: leaf.id, expandedPane: null } : tab))
 }
 
 /** Removes a pane; closing a tab's only pane closes the tab (and remembers it when `record` is given). */
@@ -282,12 +294,12 @@ export function closePaneOp(ws: Workspace, paneId: string, record: ClosedTab | n
   if (!root) return removeTab(ws, loc.tab.id, record)
   const leaves = paneLeaves(root)
   return ok(
-    updateTab(ws, loc.tab.id, (tab) => ({
+    updateTab(ws, loc.tab.id, (tab) => isTerminalTab(tab) ? {
       ...tab,
       root,
       activePane: tab.activePane === paneId ? leaves[0]!.id : tab.activePane,
       expandedPane: tab.expandedPane === paneId || leaves.length < 2 ? null : tab.expandedPane
-    }))
+    } : tab)
   )
 }
 
@@ -299,28 +311,28 @@ export function rebindPane(ws: Workspace, paneId: string, session: string): OpRe
     const { typed: _typed, ...rest } = leaf
     return { ...rest, session, exit: null }
   }
-  return ok(updateTab(ws, loc.tab.id, (tab) => ({ ...tab, root: mapLeaf(tab.root, paneId, fresh) })))
+  return ok(updateTab(ws, loc.tab.id, (tab) => isTerminalTab(tab) ? { ...tab, root: mapLeaf(tab.root, paneId, fresh) } : tab))
 }
 
 /** Records that a pane's session received driving input; the revision is the caller's to bump. */
 export function setPaneTyped(ws: Workspace, paneId: string): OpResult {
   const loc = locatePane(ws, paneId)
   if (!loc) return fail('not-found', `no pane ${paneId}`)
-  return ok(updateTab(ws, loc.tab.id, (tab) => ({ ...tab, root: mapLeaf(tab.root, paneId, (leaf) => ({ ...leaf, typed: true as const })) })))
+  return ok(updateTab(ws, loc.tab.id, (tab) => isTerminalTab(tab) ? { ...tab, root: mapLeaf(tab.root, paneId, (leaf) => ({ ...leaf, typed: true as const })) } : tab))
 }
 
 /** Records how a pane's process ended (or clears it with null). */
 export function setPaneExit(ws: Workspace, paneId: string, exit: PaneExit | null): OpResult {
   const loc = locatePane(ws, paneId)
   if (!loc) return fail('not-found', `no pane ${paneId}`)
-  return ok(updateTab(ws, loc.tab.id, (tab) => ({ ...tab, root: mapLeaf(tab.root, paneId, (leaf) => ({ ...leaf, exit })) })))
+  return ok(updateTab(ws, loc.tab.id, (tab) => isTerminalTab(tab) ? { ...tab, root: mapLeaf(tab.root, paneId, (leaf) => ({ ...leaf, exit })) } : tab))
 }
 
 /** Makes a pane its tab's active pane (collapsing an expanded one), its tab active, and its group the active group. */
 export function focusPaneOp(ws: Workspace, paneId: string): OpResult {
   const loc = locatePane(ws, paneId)
   if (!loc) return fail('not-found', `no pane ${paneId}`)
-  const focused = updateTab(ws, loc.tab.id, (tab) => ({ ...tab, activePane: paneId, expandedPane: null }))
+  const focused = updateTab(ws, loc.tab.id, (tab) => isTerminalTab(tab) ? { ...tab, activePane: paneId, expandedPane: null } : tab)
   return ok(activate(focused, loc.group.id, loc.tab.id))
 }
 
@@ -329,16 +341,18 @@ export function focusPaneBy(ws: Workspace, tabId: string | undefined, offset: 1 
   const resolved = tabId ?? findGroup(ws.root, ws.activeGroup)?.activeTab ?? null
   const loc = resolved ? locateTab(ws, resolved) : null
   if (!loc) return tabId ? fail('not-found', `no tab ${tabId}`) : fail('invalid-params', 'there is no tab to move focus in')
+  if (!isTerminalTab(loc.tab)) return fail('invalid-params', `view tab ${loc.tab.id} has no panes`)
   const next = neighborPane(loc.tab.root, loc.tab.activePane, offset)
   return next ? focusPaneOp(ws, next) : ok(ws)
 }
+
 
 export function setPaneTitle(ws: Workspace, paneId: string, title: string): OpResult {
   const loc = locatePane(ws, paneId)
   if (!loc) return fail('not-found', `no pane ${paneId}`)
   const trimmed = title.trim()
   if (trimmed.length > TITLE_MAX) return fail('invalid-params', `title must be at most ${TITLE_MAX} characters`)
-  return ok(updateTab(ws, loc.tab.id, (tab) => ({ ...tab, root: mapLeaf(tab.root, paneId, (leaf) => ({ ...leaf, title: trimmed === '' ? null : trimmed })) })))
+  return ok(updateTab(ws, loc.tab.id, (tab) => isTerminalTab(tab) ? { ...tab, root: mapLeaf(tab.root, paneId, (leaf) => ({ ...leaf, title: trimmed === '' ? null : trimmed })) } : tab))
 }
 
 /** Expands a pane to fill its tab (making it active), or collapses whatever is expanded. */
@@ -347,21 +361,23 @@ export function expandPaneOp(ws: Workspace, paneId: string, expanded: boolean): 
   if (!loc) return fail('not-found', `no pane ${paneId}`)
   if (expanded && paneLeaves(loc.tab.root).length < 2) return fail('invalid-params', 'a tab with one pane has nothing to expand')
   return ok(
-    updateTab(ws, loc.tab.id, (tab) => ({
+    updateTab(ws, loc.tab.id, (tab) => isTerminalTab(tab) ? {
       ...tab,
       activePane: expanded ? paneId : tab.activePane,
       expandedPane: expanded ? paneId : null
-    }))
+    } : tab)
   )
 }
 
 export function equalizeTab(ws: Workspace, tabId: string): OpResult {
-  if (!locateTab(ws, tabId)) return fail('not-found', `no tab ${tabId}`)
-  return ok(updateTab(ws, tabId, (tab) => ({ ...tab, root: equalizeTree(tab.root) })))
+  const loc = locateTab(ws, tabId)
+  if (!loc) return fail('not-found', `no tab ${tabId}`)
+  if (!isTerminalTab(loc.tab)) return fail('invalid-params', `view tab ${tabId} has no panes`)
+  return ok(updateTab(ws, tabId, (tab) => isTerminalTab(tab) ? { ...tab, root: equalizeTree(tab.root) } : tab))
 }
 
-function paneSplitOwner(ws: Workspace, splitId: string): Tab | null {
-  return workspaceTabs(ws).find((tab) => hasSplit(tab.root, splitId)) ?? null
+function paneSplitOwner(ws: Workspace, splitId: string): TerminalTab | null {
+  return workspaceTabs(ws).find((tab): tab is TerminalTab => isTerminalTab(tab) && hasSplit(tab.root, splitId)) ?? null
 }
 
 function hasSplit(node: PaneNode | GroupNode, id: string): boolean {
@@ -375,7 +391,9 @@ export function hasDivider(ws: Workspace, splitId: string): boolean {
 
 /** Sets what a tab shows when it has no custom title: the active pane's latest terminal title. */
 export function setLiveTitle(ws: Workspace, tabId: string, title: string | null): Workspace {
-  return updateTab(ws, tabId, (tab) => ({ ...tab, liveTitle: title }))
+  const loc = locateTab(ws, tabId)
+  if (!loc || !isTerminalTab(loc.tab)) return ws
+  return updateTab(ws, tabId, (tab) => isTerminalTab(tab) ? { ...tab, liveTitle: title } : tab)
 }
 
 export type ResizeTarget = { split: string; ratio: number } | { pane: string; share: number } | { group: string; share: number }
@@ -386,7 +404,7 @@ export function resizeSplitOp(ws: Workspace, target: ResizeTarget): OpResult {
     const loc = locatePane(ws, target.pane)
     if (!loc) return fail('not-found', `no pane ${target.pane}`)
     const root = setPaneShare(loc.tab.root, target.pane, target.share)
-    return root.ok ? ok(updateTab(ws, loc.tab.id, (tab) => ({ ...tab, root: root.value }))) : root
+    return root.ok ? ok(updateTab(ws, loc.tab.id, (tab) => isTerminalTab(tab) ? { ...tab, root: root.value } : tab)) : root
   }
   if ('group' in target) {
     const root = setGroupShare(ws.root, target.group, target.share)
@@ -399,7 +417,7 @@ export function resizeSplitOp(ws: Workspace, target: ResizeTarget): OpResult {
   const owner = paneSplitOwner(ws, target.split)
   if (!owner) return fail('not-found', `no split ${target.split}`)
   const root = setPaneRatio(owner.root, target.split, target.ratio)
-  return root.ok ? ok(updateTab(ws, owner.id, (tab) => ({ ...tab, root: root.value }))) : root
+  return root.ok ? ok(updateTab(ws, owner.id, (tab) => isTerminalTab(tab) ? { ...tab, root: root.value } : tab)) : root
 }
 
 /** Moves a pane to an edge of another pane, in the same tab or another tab of the workspace. */
@@ -412,7 +430,7 @@ export function movePaneToPane(ws: Workspace, paneId: string, toPaneId: string, 
   if (from.tab.id === to.tab.id) {
     const root = movePaneInTree(from.tab.root, paneId, toPaneId, edge, ids)
     if (!root.ok) return root
-    return ok(updateTab(ws, from.tab.id, (tab) => ({ ...tab, root: root.value, activePane: paneId, expandedPane: null })))
+    return ok(updateTab(ws, from.tab.id, (tab) => isTerminalTab(tab) ? { ...tab, root: root.value, activePane: paneId, expandedPane: null } : tab))
   }
   return moveAcross(ws, from, to.tab, (root) => insertPane(root, toPaneId, from.pane, edge, ids))
 }
@@ -423,23 +441,25 @@ export function movePaneToTab(ws: Workspace, paneId: string, toTabId: string, id
   if (!from) return fail('not-found', `no pane ${paneId}`)
   const to = locateTab(ws, toTabId)
   if (!to) return fail('not-found', `no tab ${toTabId}`)
+  const targetTab = to.tab
+  if (!isTerminalTab(targetTab)) return fail('invalid-params', `view tab ${toTabId} has no panes`)
   if (from.tab.id === toTabId) return fail('invalid-params', `pane ${paneId} is already in tab ${toTabId}`)
-  return moveAcross(ws, from, to.tab, (root) => insertPane(root, to.tab.activePane, from.pane, 'right', ids))
+  return moveAcross(ws, from, targetTab, (root) => insertPane(root, targetTab.activePane, from.pane, 'right', ids))
 }
 
-function moveAcross(ws: Workspace, from: PaneLocation, target: Tab, insert: (root: PaneNode) => OpResult<PaneNode>): OpResult {
+function moveAcross(ws: Workspace, from: PaneLocation, target: TerminalTab, insert: (root: PaneNode) => OpResult<PaneNode>): OpResult {
   const remaining = removePane(from.tab.root, from.pane.id)
   if (!remaining) return fail('invalid-params', LAST_PANE_MESSAGE)
   const inserted = insert(target.root)
   if (!inserted.ok) return inserted
   const leaves = paneLeaves(remaining)
-  const shrunk = updateTab(ws, from.tab.id, (tab) => ({
+  const shrunk = updateTab(ws, from.tab.id, (tab) => isTerminalTab(tab) ? {
     ...tab,
     root: remaining,
     activePane: tab.activePane === from.pane.id ? leaves[0]!.id : tab.activePane,
     expandedPane: tab.expandedPane === from.pane.id || leaves.length < 2 ? null : tab.expandedPane
-  }))
-  const grown = updateTab(shrunk, target.id, (tab) => ({ ...tab, root: inserted.value, activePane: from.pane.id, expandedPane: null }))
+  } : tab)
+  const grown = updateTab(shrunk, target.id, (tab) => isTerminalTab(tab) ? { ...tab, root: inserted.value, activePane: from.pane.id, expandedPane: null } : tab)
   const group = locateTab(grown, target.id)!.group
   return ok(activate(grown, group.id, target.id))
 }
@@ -458,6 +478,7 @@ export function reopenTabOp(ws: Workspace, groupId: string, tab: Tab): OpResult 
 }
 
 function repairTab(tab: Tab): Tab {
+  if (!isTerminalTab(tab)) return tab
   const leaves = paneLeaves(tab.root)
   const ids = new Set(leaves.map((leaf) => leaf.id))
   const activePane = ids.has(tab.activePane) ? tab.activePane : leaves[0]!.id

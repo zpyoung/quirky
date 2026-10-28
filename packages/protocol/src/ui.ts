@@ -1,10 +1,10 @@
 import type { QuirkyEvent } from './rpc'
 
 /** The contribution kinds the UI plugin API adds. */
-export const UI_KINDS = ['status-bar', 'sidebar-section', 'panel', 'view', 'overlay', 'command', 'keybinding', 'setting', 'theme', 'menu-item'] as const
+export const UI_KINDS = ['status-bar', 'sidebar-section', 'activity-item', 'panel', 'view', 'overlay', 'command', 'keybinding', 'setting', 'settings-section', 'theme', 'menu-item'] as const
 
 /** UI kinds whose implementation is code a plugin's UI module provides. */
-export const CODE_BACKED_KINDS = ['status-bar', 'view', 'panel', 'sidebar-section', 'overlay', 'command'] as const
+export const CODE_BACKED_KINDS = ['status-bar', 'view', 'panel', 'sidebar-section', 'activity-item', 'settings-section', 'overlay', 'command'] as const
 
 /** The color slots a theme fills; window tokens map to CSS custom properties `--<token>`. */
 export const THEME_TOKENS = [
@@ -68,13 +68,15 @@ export const DEFAULT_THEME: ThemeInfo = {
 
 export type ThemeList = { chosen: string; active: string; themes: ThemeInfo[] }
 
-/** A status bar, sidebar section, panel, view or overlay in the UI model. */
+/** A code-backed status bar, sidebar section, activity item, panel, view, overlay, or generic settings section in the UI model. */
 export type UiSlotEntry = {
   id: string
-  kind: 'status-bar' | 'sidebar-section' | 'panel' | 'view' | 'overlay'
+  kind: 'status-bar' | 'sidebar-section' | 'activity-item' | 'panel' | 'view' | 'overlay' | 'settings-section'
   /** The plugin whose declaration is in effect. */
   plugin: string
   title: string
+  /** Optional descriptive copy for generic settings sections. */
+  description?: string
   order: number
   /** URL of the owning plugin's UI module; null when it has none. */
   module: string | null
@@ -122,6 +124,9 @@ export type SettingDeclaration = {
   type: 'boolean' | 'number' | 'string' | 'enum'
   title: string
   description?: string
+  /** Optional generic settings navigation metadata. */
+  category?: string
+  section?: string
   default: boolean | number | string
   minimum?: number
   maximum?: number
@@ -146,6 +151,8 @@ export type UiModel = {
   /** Order ascending, then ID. */
   statusBars: UiSlotEntry[]
   /** Order ascending, then ID. */
+  activityItems: UiSlotEntry[]
+  /** Order ascending, then ID. */
   panels: UiSlotEntry[]
   /** ID ascending. */
   views: UiSlotEntry[]
@@ -161,6 +168,8 @@ export type UiModel = {
   keybindings: UiKeybinding[]
   /** ID ascending. */
   settings: UiSettingEntry[]
+  /** Rich, code-backed content inside the generic Settings dialog, ordered by contribution order then ID. */
+  settingsSections: UiSlotEntry[]
   /** ID ascending. */
   menuItems: UiMenuItemEntry[]
   /** The default theme first, then by title. */
@@ -171,12 +180,18 @@ export type UiModel = {
   modules: Record<string, { url: string; provides: string[] }>
 }
 
-/** Which view and panel are open, whether the sidebar shows, and where focus is; owned by the daemon. */
+/** The daemon-owned layout: open view/panel, sidebar visibility and desired panel geometry; `palette` is absent when the command palette is closed. */
 export type UiLayout = {
   view: { id: string; input?: unknown } | null
   panel: string | null
   sidebar: boolean
   focus: 'sidebar' | 'view' | 'panel' | null
+  /** Desired width by effective panel ID; absent entries retain the shell's default width. */
+  panelWidths?: Record<string, number>
+  /** Global activity-bar position; absence retains the shell's existing default geometry. */
+  activityBarPosition?: 'top' | 'side'
+  /** Whether the command palette is open; absent means closed. */
+  palette?: boolean
 }
 
 /** A connected window (a client with role `ui`). */
@@ -196,7 +211,7 @@ export const DESKTOP_AWAY_MS = 180_000
 /** One slot in the UI model, with the latest report from its mounted window. */
 export type UiSlotState = {
   id: string
-  kind: 'status-bar' | 'sidebar-section' | 'panel' | 'view' | 'overlay'
+  kind: 'status-bar' | 'sidebar-section' | 'activity-item' | 'panel' | 'view' | 'overlay' | 'settings-section'
   plugin: string
   title: string
   shown: boolean
@@ -263,9 +278,20 @@ export type UiPluginContext = {
   /** Reads a setting by short name in the plugin's own namespace, or by full setting ID. */
   getSetting(name: string): unknown
   executeCommand(id: string, args?: unknown): Promise<void>
+  /**
+   * Mints a one-use, same-window drag capability. Put only its opaque token in DataTransfer;
+   * external bytes cannot create a capability.
+   */
+  createCommandDrag(commandId: string, args?: Record<string, unknown>): string
+  /** Consumes a capability once, returning the trusted command and its snapshotted arguments. */
+  consumeCommandDrag(token: string): { command: string; args: Record<string, unknown> } | null
+  /** Cancels a capability minted by this context. */
+  cancelCommandDrag(token: string): void
   openView(id: string, input?: unknown): void
   closeView(): void
   togglePanel(id: string, open?: boolean): void
+  /** Opens or closes the command palette; omitting `open` toggles the daemon-owned state. */
+  setPalette(open?: boolean): void
   getLayout(): UiLayout
   /** Listens to layout changes; the returned function unsubscribes. */
   onLayout(listener: (layout: UiLayout) => void): () => void
@@ -301,8 +327,6 @@ export type UiPluginModule = {
 /** Platform whose chord conventions apply: on `darwin`, `cmd` means `mod` and `metaKey` is `mod`. */
 export const CHORD_PLATFORM: string = 'darwin'
 
-/** Chords the window keeps for itself: the command palette. */
-export const RESERVED_CHORDS: readonly string[] = ['mod+shift+p']
 
 const MODIFIER_ORDER = ['mod', 'ctrl', 'alt', 'shift'] as const
 type Modifier = (typeof MODIFIER_ORDER)[number]

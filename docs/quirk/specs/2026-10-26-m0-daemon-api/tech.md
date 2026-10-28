@@ -437,3 +437,7 @@ uses a fresh temporary `QUIRKY_HOME`, the fake PTY host and fake git, and kills 
 Everything in the logic spec's [Scope & non-goals](logic.md#scope--non-goals), plus: a generic
 `quirky call` command (m0-scripting generates CLI groups), limits on store size, and backup of
 plugin stores.
+
+## Subsequent public API addition (2026-10-27)
+
+The activation-scoped file-resource capability used by M2 viewers is documented in the [M2 editor resource contract](../2026-10-27-m2-editor/tech.md#public-file-resource-capability).

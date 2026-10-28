@@ -22,7 +22,9 @@ const WORKTREE_DEFAULTS = {
   baseRef: null,
   keepBranch: false,
   removing: false,
-  groupId: null
+  groupId: null,
+  projectGroupId: null,
+  lastActivityAt: 0
 } as const
 
 function worktree(id: string, path: string, name: string, isMain: boolean): Worktree {
@@ -34,7 +36,8 @@ function worktree(id: string, path: string, name: string, isMain: boolean): Work
     head: id.padEnd(40, 'a'),
     isMain,
     name,
-    ...WORKTREE_DEFAULTS
+    ...WORKTREE_DEFAULTS,
+    instanceId: `instance:${id}`,
   }
 }
 

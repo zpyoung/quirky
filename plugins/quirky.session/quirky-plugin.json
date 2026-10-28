@@ -409,13 +409,17 @@
       },
       {
         "id": "resume",
-        "description": "Starts a new terminal session that resumes an agent session in its original folder with the launch it recorded; `fork` opens a copy for agents that fork by argument. The old session is untouched.",
+        "description": "Resumes a terminal session using its recorded launch, or delegates a structured session to quirky.structured; structured sessions accept an optional first-turn prompt but reject forks and provider overrides.",
         "params": {
           "type": "object",
           "properties": {
             "session": {
               "type": "string",
               "description": "The session to resume."
+            },
+            "prompt": {
+              "type": "string",
+              "description": "Optional first prompt for a structured session."
             },
             "providerSession": {
               "type": "string",
@@ -504,6 +508,146 @@
             },
             "resumedFrom": {
               "description": "The session this one was resumed or forked from; null otherwise."
+            },
+            "agentStatus": {
+              "description": "The agent-status summary ({state, display, label, detail, progress, stateStartedAt, evidenceAt, restoredUnconfirmed}) the window draws; null or absent when no agent has reported one."
+            },
+            "name": {
+              "description": "The session's name (lowercase; unique among sessions that have not exited), or null when it has none."
+            },
+            "unread": {
+              "description": "Why the session is marked unread: `agent`, `bell` or `notification`; null or absent when it is not."
+            }
+          },
+          "required": [
+            "id",
+            "kind",
+            "agent",
+            "worktreeId",
+            "cwd",
+            "title",
+            "status",
+            "createdAt",
+            "lastActivityAt",
+            "exitCode"
+          ]
+        }
+      },
+      {
+        "id": "resumeExternal",
+        "description": "Starts a new terminal session from an agent-owned transcript, preserving its source cwd independently from the optional destination worktree. Launch planning and hooks remain session-owned.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "agent": {
+              "type": "string"
+            },
+            "cwd": {
+              "type": "string",
+              "description": "The existing source working directory; it is not registered as a project."
+            },
+            "providerSession": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "transcriptPath": {
+                  "description": "The source transcript path, or null for providers that resume by ID."
+                }
+              },
+              "required": [
+                "id",
+                "transcriptPath"
+              ]
+            },
+            "worktree": {
+              "type": "string",
+              "description": "Optional destination workspace selector; omitted uses floating ownership."
+            },
+            "record": {
+              "description": "A recorded launch {command,args,env}, or null to use current provider configuration."
+            },
+            "fork": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "agent",
+            "cwd",
+            "providerSession"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "terminal",
+                "structured"
+              ]
+            },
+            "agent": {
+              "type": "string",
+              "description": "`shell` or the ID of the agent the session runs."
+            },
+            "worktreeId": {
+              "type": "string"
+            },
+            "cwd": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "starting",
+                "running",
+                "working",
+                "waiting",
+                "done",
+                "exited"
+              ]
+            },
+            "createdAt": {
+              "type": "number"
+            },
+            "lastActivityAt": {
+              "type": "number"
+            },
+            "exitCode": {
+              "description": "The exit code, or null while the process is alive."
+            },
+            "exitSignal": {
+              "description": "The signal that ended the process, or null."
+            },
+            "exitCause": {
+              "description": "Why the session ended (exited, killed, host-restart or host-lost), or null while it is alive."
+            },
+            "restorable": {
+              "type": "boolean",
+              "description": "True when the session ended with the PTY host and can be restored."
+            },
+            "launch": {
+              "description": "The actual planner record that was launched."
+            },
+            "launchSettings": {
+              "description": "What the launch applied ({agent, options, args, summary}); null when it applied nothing."
+            },
+            "providerSession": {
+              "description": "The provider identity passed to the resumed agent, or null for a fork."
+            },
+            "promptDelivery": {
+              "description": "How the first prompt reached the agent: null (no prompt), command-line, pending, pasted, unconfirmed or not-delivered."
+            },
+            "resumedFrom": {
+              "description": "Null because this session came from an agent-owned transcript."
             },
             "agentStatus": {
               "description": "The agent-status summary ({state, display, label, detail, progress, stateStartedAt, evidenceAt, restoredUnconfirmed}) the window draws; null or absent when no agent has reported one."
@@ -792,6 +936,14 @@
             },
             "title": {
               "type": "string"
+            },
+            "cwd": {
+              "type": "string",
+              "description": "Original absolute directory for a resumed structured session; it must still exist."
+            },
+            "resumedFrom": {
+              "type": "string",
+              "description": "The earlier session this structured session resumes."
             },
             "launchSettings": {
               "type": "object",

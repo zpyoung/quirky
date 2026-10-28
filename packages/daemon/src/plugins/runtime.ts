@@ -27,6 +27,7 @@ import { LayoutService } from './layout'
 import { createPtyApi } from './pty-api'
 import { Scheduler } from './scheduler'
 import { openPluginStore, pluginDataDir } from './stores'
+import { FileResourceRegistry } from '../file-resources'
 import { UiService } from './ui-service'
 
 export type PluginRuntimeOptions = {
@@ -51,6 +52,7 @@ type LaunchInput = Omit<LaunchHookInput, 'env' | 'args' | 'jsonArgs'>
 
 export type PluginRuntime = {
   extension: ContextExtension
+  fileResources: FileResourceRegistry
   dispatcher: Dispatcher
   events: PluginEvents
   scheduler: Scheduler
@@ -125,6 +127,7 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
   const admittedByPlugin = new Map<string, Set<() => void>>()
   const openedStores = new Map<string, OpenedStore>()
   const ptyApis = new Map<string, { revoke(): void }>()
+  const fileResources = new FileResourceRegistry()
 
   const extension: ContextExtension = {
     create({ id }, isRevoked) {
@@ -298,6 +301,10 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
           if (!isPlainObject(resolved)) return Promise.reject(invalidParams('params must be an object'))
           return dispatcher.dispatch(method, resolved, { pluginId: id })
         },
+        createFileResource(options) {
+          guard()
+          return fileResources.create(id, options, isRevoked)
+        },
         openStore(migrations: StoreMigration[]) {
           guard()
           if (opened) {
@@ -329,11 +336,12 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
         }
       }
     },
-    revoke(pluginId) {
+    async revoke(pluginId) {
       const admitted = admittedByPlugin.get(pluginId)
       if (admitted !== undefined) {
         for (const revoke of [...admitted]) revoke()
       }
+      await fileResources.revokePlugin(pluginId)
       events.removeAll(pluginId)
       scheduler.revokePlugin(pluginId)
       ptyApis.get(pluginId)?.revoke()
@@ -358,5 +366,5 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
     }
   }
 
-  return { extension, dispatcher, events, scheduler, layout, distros, prepareLaunch }
+  return { extension, dispatcher, events, scheduler, layout, distros, fileResources, prepareLaunch }
 }

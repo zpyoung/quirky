@@ -1,4 +1,4 @@
-import { isAbsolute, sep } from 'node:path'
+import { isAbsolute, relative, sep } from 'node:path'
 import type { GitDiff, GitStatus, Repo, Session, Worktree } from '@quirky/protocol'
 import { boundCapture } from '../core'
 import { DIFF_CHAR_CAP } from '../core/repo-state'
@@ -230,8 +230,8 @@ export async function readRepoState(call: Call, worktreeId: string, withDiffs: b
 }
 
 /**
- * The documents the editor plugin reports open in a worktree, relative to it. Null when no editor
- * answers, so the brief leaves the block out.
+ * Reads the editor's open tabs for a worktree, in tab order. Null when no editor answers, so the
+ * brief leaves the block out.
  */
 export async function readEditorTabs(call: Call, worktree: { id: string; path: string }): Promise<string[] | null> {
   let result: unknown
@@ -240,14 +240,43 @@ export async function readEditorTabs(call: Call, worktree: { id: string; path: s
   } catch {
     return null
   }
-  const documents = (result as { documents?: unknown } | null)?.documents
-  if (!Array.isArray(documents)) return null
-  const root = worktree.path.endsWith(sep) ? worktree.path : worktree.path + sep
-  const paths = documents.flatMap((item) => {
-    const path = typeof item === 'string' ? item : (item as { path?: unknown } | null)?.path
-    if (typeof path !== 'string' || path === '') return []
-    if (!isAbsolute(path)) return [path]
-    return path.startsWith(root) ? [path.slice(root.length)] : []
-  })
-  return [...new Set(paths)]
+  if (typeof result !== 'object' || result === null) return null
+  const state = result as { buffers?: unknown; tabs?: unknown }
+  if (!Array.isArray(state.buffers) || !Array.isArray(state.tabs)) return null
+  if (typeof worktree.path !== 'string' || !isAbsolute(worktree.path)) return []
+
+  const pathsByBuffer = new Map<string, string>()
+  for (const value of state.buffers) {
+    if (typeof value !== 'object' || value === null) continue
+    const buffer = value as { id?: unknown; path?: unknown; relativePath?: unknown }
+    if (
+      typeof buffer.id !== 'string' ||
+      buffer.id === '' ||
+      typeof buffer.path !== 'string' ||
+      !isAbsolute(buffer.path) ||
+      typeof buffer.relativePath !== 'string'
+    ) continue
+    const path = relative(worktree.path, buffer.path)
+    if (
+      path === '' ||
+      path === '..' ||
+      path.startsWith(`..${sep}`) ||
+      isAbsolute(path) ||
+      buffer.relativePath !== path
+    ) continue
+    if (!pathsByBuffer.has(buffer.id)) pathsByBuffer.set(buffer.id, path)
+  }
+
+  const paths: string[] = []
+  const seen = new Set<string>()
+  for (const value of state.tabs) {
+    if (typeof value !== 'object' || value === null) continue
+    const tab = value as { tabId?: unknown; bufferId?: unknown }
+    if (typeof tab.tabId !== 'string' || tab.tabId === '' || typeof tab.bufferId !== 'string') continue
+    const path = pathsByBuffer.get(tab.bufferId)
+    if (path === undefined || seen.has(path)) continue
+    seen.add(path)
+    paths.push(path)
+  }
+  return paths
 }

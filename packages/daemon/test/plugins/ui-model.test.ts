@@ -386,19 +386,28 @@ describe('keybindings', () => {
     expect(warnings.size).toBe(0)
   })
 
-  test('reserved chords are shadowed by the kernel, each with a warning', () => {
+  test('an active conditional dock chord can coexist with the unconditional palette chord', () => {
     const { model, warnings } = build(
-      [decl('command', 'a.p', 'go'), decl('command', 'b.q', 'go'), key('a.p', 'k', 'mod+shift+p'), key('b.q', 'k', 'Cmd+Shift+P')],
-      [withUi('a.p'), withUi('b.q')]
+      [
+        decl('command', 'quirky.palette', 'toggle'),
+        decl('command', 'quirky.terminal', 'passthrough'),
+        decl('keybinding', 'quirky.palette', 'toggle', { key: 'mod+shift+p', command: 'toggle' }),
+        decl('keybinding', 'quirky.terminal', 'passthrough', {
+          key: 'mod+shift+p',
+          command: 'passthrough',
+          when: 'terminalDockMounted && terminalFocus || terminalDockMounted && terminalDockFocus'
+        })
+      ],
+      [withUi('quirky.palette', 'builtin'), withUi('quirky.terminal', 'builtin')]
     )
-    expect(model.keybindings.map((k) => [k.status, k.shadowedBy])).toEqual([
-      ['shadowed', 'kernel'],
-      ['shadowed', 'kernel'],
-    ])
-    expect(warnings.get('a.p')).toEqual([
-      { level: 'warning', message: "keybinding:a.p/k is shadowed by the window's own shortcut mod+shift+p" },
-    ])
-    expect(warnings.get('b.q')?.[0].message).toBe("keybinding:b.q/k is shadowed by the window's own shortcut mod+shift+p")
+    const byId = Object.fromEntries(model.keybindings.map((binding) => [binding.id, binding]))
+    expect(byId['keybinding:quirky.palette/toggle']).toMatchObject({ status: 'active', key: 'mod+shift+p' })
+    expect(byId['keybinding:quirky.terminal/passthrough']).toMatchObject({
+      status: 'active',
+      key: 'mod+shift+p',
+      when: 'terminalDockMounted && terminalFocus || terminalDockMounted && terminalDockFocus'
+    })
+    expect(warnings.size).toBe(0)
   })
 
   test('installed beats builtin and the loser carries the warning (SC-16)', () => {
@@ -540,21 +549,6 @@ describe('keybindings', () => {
     expect(byId['keybinding:quirky.sample/other'].status).toBe('active')
   })
 
-  test('a reserved chord is shadowed by the kernel in every when group', () => {
-    const { model, warnings } = build(
-      [
-        decl('command', 'a.p', 'go'),
-        key('a.p', 'plain', 'mod+shift+p'),
-        decl('keybinding', 'a.p', 'cond', { key: 'mod+shift+p', command: 'go', when: 'terminalFocus' }),
-      ],
-      [withUi('a.p')]
-    )
-    expect(model.keybindings.map((k) => [k.id, k.status, k.shadowedBy])).toEqual([
-      ['keybinding:a.p/cond', 'shadowed', 'kernel'],
-      ['keybinding:a.p/plain', 'shadowed', 'kernel'],
-    ])
-    expect(warnings.get('a.p')).toHaveLength(2)
-  })
 
   test('an unbound binding with a when drops out of its group before the clash', () => {
     const { model } = build(
@@ -616,7 +610,6 @@ describe('keybindings', () => {
       chosenTheme: 'default',
       distroKeybindings: [
         { key: 'mod+z', command: 'command:a.p/go' },
-        { key: 'mod+shift+p', command: 'command:a.p/go' },
         { key: 'mod+a', command: 'command:a.p/ghost' },
         { key: 'mod+k', command: 'command:a.p/go' },
       ],
@@ -624,9 +617,8 @@ describe('keybindings', () => {
     })
     expect(model.keybindings.map((k) => [k.id, k.status])).toEqual([
       ['keybinding:night/k1', 'active'],
-      ['keybinding:night/k2', 'shadowed'],
-      ['keybinding:night/k3', 'unbound'],
-      ['keybinding:night/k4', 'active'],
+      ['keybinding:night/k2', 'unbound'],
+      ['keybinding:night/k3', 'active'],
       ['keybinding:a.p/j', 'active'],
       ['keybinding:a.p/k', 'shadowed'],
     ])
@@ -651,7 +643,7 @@ describe('warnings', () => {
       ],
       [plugin('acme.bare')]
     )
-    expect(warnings.get('acme.bare')).toMatchObject([{ level: 'warning' }])
+    expect(warnings.get('acme.bare')).toHaveLength(1)
   })
 
   test('a plugin whose only code-backed entry is an overlay and has no ui is warned', () => {
@@ -791,13 +783,31 @@ describe('distro keybindings', () => {
     expect(warnings.get('acme.keys')?.[0].message).toBe('keybinding:acme.keys/k is shadowed by keybinding:night/k1 on mod+k')
   })
 
-  test('on a reserved chord it is shadowed by the kernel like any other binding', () => {
-    const { model } = withDistro([decl('command', 'a.p', 'go')], [withUi('a.p')], [
-      { key: 'mod+shift+p', command: 'command:a.p/go' },
-    ])
-    expect(model.keybindings).toEqual([
-      { id: 'keybinding:night/k1', plugin: 'night', key: 'mod+shift+p', command: 'command:a.p/go', status: 'shadowed', shadowedBy: 'kernel' },
-    ])
+  test('a distro binding normally overrides the unconditional palette binding', () => {
+    const { model } = withDistro(
+      [
+        decl('command', 'quirky.palette', 'toggle'),
+        decl('command', 'a.p', 'go'),
+        key('quirky.palette', 'toggle', 'mod+shift+p', 'toggle')
+      ],
+      [withUi('quirky.palette', 'builtin'), withUi('a.p')],
+      [{ key: 'mod+shift+p', command: 'command:a.p/go' }]
+    )
+    expect(model.keybindings).toContainEqual({
+      id: 'keybinding:quirky.palette/toggle',
+      plugin: 'quirky.palette',
+      key: 'mod+shift+p',
+      command: 'command:quirky.palette/toggle',
+      status: 'shadowed',
+      shadowedBy: 'keybinding:night/k1'
+    })
+    expect(model.keybindings).toContainEqual({
+      id: 'keybinding:night/k1',
+      plugin: 'night',
+      key: 'mod+shift+p',
+      command: 'command:a.p/go',
+      status: 'active'
+    })
   })
 
   test('a command that is not effective leaves it unbound and does not shadow others', () => {

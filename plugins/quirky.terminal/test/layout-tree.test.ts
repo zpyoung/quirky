@@ -25,11 +25,11 @@ import {
   splitPane,
   type TreeResult
 } from '../src/layout/tree'
-import type { Group, GroupNode, PaneLeaf, PaneNode, PaneSplit, Tab } from '../src/layout/types'
+import type { Group, GroupNode, PaneLeaf, PaneNode, PaneSplit, TerminalTab } from '../src/layout/types'
 
 const leaf = (id: string): PaneLeaf => ({ kind: 'pane', id, session: `s-${id}`, title: null, exit: null })
 const split = (id: string, direction: 'right' | 'down', first: PaneNode, second: PaneNode, ratio = 0.5): PaneSplit => ({ kind: 'split', id, direction, ratio, first, second })
-const tab = (id: string): Tab => ({
+const tab = (id: string): TerminalTab => ({
   id,
   defaultTitle: id,
   customTitle: null,

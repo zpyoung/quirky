@@ -2,7 +2,8 @@ import { act } from 'react'
 import { RpcError, RpcErrorCode, type Session } from '@quirky/protocol'
 import * as ops from '../../src/layout/ops'
 import { sequentialIds } from '../../src/layout/tree'
-import type { Group, GroupNode, PaneLeaf, PaneNode, Tab, Workspace } from '../../src/layout/types'
+import { isTerminalTab } from '../../src/layout/types'
+import type { Group, GroupNode, PaneLeaf, PaneNode, Tab, TerminalTab, Workspace } from '../../src/layout/types'
 import { fakeContext, paneHandlers, settle, type FakeContext } from '../ui-fake'
 import { loadPane, startRecording, stopRecording, terminals, unloadPane } from './pane-support'
 
@@ -59,7 +60,7 @@ export function paneSplit(id: string, direction: 'right' | 'down', first: PaneNo
   return { kind: 'split', id, direction, ratio, first, second }
 }
 
-export function tab(id: string, root: PaneNode, over: Partial<Tab> = {}): Tab {
+export function tab(id: string, root: PaneNode, over: Partial<TerminalTab> = {}): TerminalTab {
   const first = root.kind === 'pane' ? root.id : firstLeaf(root)
   return {
     id,
@@ -138,7 +139,7 @@ export function leavesOf(node: PaneNode): PaneLeaf[] {
 
 export function allSessionIds(ws: Workspace): string[] {
   const groups = (node: GroupNode): Group[] => (node.kind === 'group' ? [node] : [...groups(node.first), ...groups(node.second)])
-  return groups(ws.root).flatMap((entry) => entry.tabs.flatMap((candidate) => leavesOf(candidate.root).map((leaf) => leaf.session)))
+  return groups(ws.root).flatMap((entry) => entry.tabs.flatMap((candidate) => isTerminalTab(candidate) ? leavesOf(candidate.root).map((leaf) => leaf.session) : []))
 }
 
 // ---- fake daemon

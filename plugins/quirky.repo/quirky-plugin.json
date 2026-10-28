@@ -1039,6 +1039,9 @@
               "parentPath": {
                 "description": "Folder the group was scanned from; null for a hand-made group."
               },
+              "parentId": {
+                "description": "Parent project group, or null."
+              },
               "collapsed": {
                 "type": "boolean"
               },
@@ -1063,6 +1066,7 @@
               "id",
               "name",
               "collapsed",
+              "parentId",
               "order",
               "createdFrom",
               "repoIds"
@@ -1071,8 +1075,22 @@
         }
       },
       {
+        "id": "groupDeletedIds",
+        "description": "Durable IDs of groups deleted from this repository store.",
+        "readOnly": true,
+        "params": {
+          "type": "object"
+        },
+        "result": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      {
         "id": "groupCreate",
-        "description": "Creates an empty group.",
+        "description": "Creates an empty group, optionally nested under another group.",
         "params": {
           "type": "object",
           "properties": {
@@ -1082,6 +1100,10 @@
             "parentPath": {
               "type": "string",
               "description": "Folder the group stands for."
+            },
+            "parent": {
+              "type": "string",
+              "description": "A parent group ID or exact name."
             }
           },
           "required": [
@@ -1099,6 +1121,9 @@
             },
             "parentPath": {
               "description": "Folder the group was scanned from; null for a hand-made group."
+            },
+            "parentId": {
+              "description": "Parent project group, or null."
             },
             "collapsed": {
               "type": "boolean"
@@ -1123,6 +1148,72 @@
           "required": [
             "id",
             "name",
+            "parentId",
+            "collapsed",
+            "order",
+            "createdFrom",
+            "repoIds"
+          ]
+        }
+      },
+      {
+        "id": "groupSetParent",
+        "description": "Sets or clears a group's parent after rejecting missing, self and cyclic parents.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "group": {
+              "type": "string",
+              "description": "A group ID or exact name."
+            },
+            "parent": {
+              "description": "A parent group ID or exact name, or null to make this a root group."
+            }
+          },
+          "required": [
+            "group",
+            "parent"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "parentPath": {
+              "description": "Folder the group was scanned from; null for a hand-made group."
+            },
+            "parentId": {
+              "description": "Parent project group, or null."
+            },
+            "collapsed": {
+              "type": "boolean"
+            },
+            "order": {
+              "type": "number"
+            },
+            "createdFrom": {
+              "type": "string",
+              "enum": [
+                "manual",
+                "folder-scan"
+              ]
+            },
+            "repoIds": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "parentId",
             "collapsed",
             "order",
             "createdFrom",
@@ -1161,6 +1252,9 @@
             "parentPath": {
               "description": "Folder the group was scanned from; null for a hand-made group."
             },
+            "parentId": {
+              "description": "Parent project group, or null."
+            },
             "collapsed": {
               "type": "boolean"
             },
@@ -1184,6 +1278,7 @@
           "required": [
             "id",
             "name",
+            "parentId",
             "collapsed",
             "order",
             "createdFrom",
@@ -1193,7 +1288,7 @@
       },
       {
         "id": "groupDelete",
-        "description": "Deletes a group; its projects stay, ungrouped.",
+        "description": "Deletes a group and every descendant, preserving repository and worktree state.",
         "params": {
           "type": "object",
           "properties": {
@@ -1261,6 +1356,9 @@
             "parentPath": {
               "description": "Folder the group was scanned from; null for a hand-made group."
             },
+            "parentId": {
+              "description": "Parent project group, or null."
+            },
             "collapsed": {
               "type": "boolean"
             },
@@ -1284,6 +1382,7 @@
           "required": [
             "id",
             "name",
+            "parentId",
             "collapsed",
             "order",
             "createdFrom",
@@ -1323,6 +1422,9 @@
             "parentPath": {
               "description": "Folder the group was scanned from; null for a hand-made group."
             },
+            "parentId": {
+              "description": "Parent project group, or null."
+            },
             "collapsed": {
               "type": "boolean"
             },
@@ -1346,6 +1448,7 @@
           "required": [
             "id",
             "name",
+            "parentId",
             "collapsed",
             "order",
             "createdFrom",
@@ -1384,6 +1487,9 @@
             "parentPath": {
               "description": "Folder the group was scanned from; null for a hand-made group."
             },
+            "parentId": {
+              "description": "Parent project group, or null."
+            },
             "collapsed": {
               "type": "boolean"
             },
@@ -1407,6 +1513,7 @@
           "required": [
             "id",
             "name",
+            "parentId",
             "collapsed",
             "order",
             "createdFrom",
@@ -1708,10 +1815,39 @@
           "parent-path": {
             "type": "string",
             "description": "folder the group stands for"
+          },
+          "parent": {
+            "type": "string",
+            "description": "parent group ID or exact name"
           }
         },
         "methods": [
           "quirky.repo/groupCreate"
+        ]
+      },
+      {
+        "id": "group-set-parent",
+        "words": "group set-parent",
+        "summary": "set or clear a project group's parent",
+        "positionals": [
+          {
+            "name": "group",
+            "description": "the group (ID or name)",
+            "required": true
+          }
+        ],
+        "flags": {
+          "parent": {
+            "type": "string",
+            "description": "parent group ID or exact name"
+          },
+          "no-parent": {
+            "type": "boolean",
+            "description": "make this a root group"
+          }
+        },
+        "methods": [
+          "quirky.repo/groupSetParent"
         ]
       },
       {

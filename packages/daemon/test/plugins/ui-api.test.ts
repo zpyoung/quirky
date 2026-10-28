@@ -115,7 +115,16 @@ function tableRows(stdout: string, header: string): string[][] {
 }
 
 const notesSetting = 'setting:acme.notes/fontSize'
-const fontSize = { id: 'fontSize', type: 'number', title: 'Font size', default: 13, minimum: 8, maximum: 32 }
+const fontSize = {
+  id: 'fontSize',
+  type: 'number',
+  title: 'Font size',
+  default: 13,
+  minimum: 8,
+  maximum: 32,
+  category: 'Editor',
+  section: 'Typography'
+}
 
 describe('the UI model', () => {
   test('SC-1: sidebar sections are listed in order, and nothing loads', async () => {
@@ -168,13 +177,15 @@ describe('the UI model', () => {
         ui: 'ui.js',
         contributes: {
           'sidebar-section': [{ id: 'list', title: 'Notes', order: 20 }],
+          'activity-item': [{ id: 'source-control', title: 'Source Control', order: 6 }],
           'status-bar': [{ id: 'usage', title: 'Usage', order: 7 }],
           panel: [{ id: 'outline', title: 'Outline', order: 3 }],
           view: [{ id: 'page', title: 'Page' }],
           command: [{ id: 'new', title: 'New note' }],
           keybinding: [{ id: 'new-key', key: 'cmd+shift+n', command: 'new' }],
           setting: [fontSize],
-          theme: [{ id: 'solar', title: 'Solar', appearance: 'light', colors: { bg: '#fdf6e3' } }]
+          theme: [{ id: 'solar', title: 'Solar', appearance: 'light', colors: { bg: '#fdf6e3' } }],
+          'menu-item': [{ id: 'new-menu', menu: 'quirky.terminal/pane', title: 'New note', command: 'new', when: { agent: 'any' }, after: 'quick-commands' }]
         }
       },
       { files: { 'ui.js': uiSource(env.marker, 'acme.notes') } }
@@ -185,14 +196,38 @@ describe('the UI model', () => {
     const module = '/plugins/acme.notes/ui.js'
 
     expect(model.sidebarSections).toMatchObject([{ id: 'sidebar-section:acme.notes/list', title: 'Notes', order: 20, plugin: 'acme.notes', module }])
+    expect(model.activityItems).toMatchObject([{ id: 'activity-item:acme.notes/source-control', title: 'Source Control', order: 6, module }])
     expect(model.statusBars).toMatchObject([{ id: 'status-bar:acme.notes/usage', title: 'Usage', order: 7, module }])
+    expect(model.menuItems).toEqual([
+      {
+        id: 'menu-item:acme.notes/new-menu',
+        plugin: 'acme.notes',
+        menu: 'quirky.terminal/pane',
+        title: 'New note',
+        command: 'command:acme.notes/new',
+        when: { agent: 'any' },
+        after: 'quick-commands'
+      }
+    ])
     expect(model.panels).toMatchObject([{ id: 'panel:acme.notes/outline', title: 'Outline', order: 3, module }])
     expect(model.views).toMatchObject([{ id: 'view:acme.notes/page', title: 'Page', module }])
     expect(model.commands).toMatchObject([{ id: 'command:acme.notes/new', title: 'New note', plugin: 'acme.notes', module }])
     expect(model.keybindings).toEqual([
       { id: 'keybinding:acme.notes/new-key', plugin: 'acme.notes', key: 'mod+shift+n', command: 'command:acme.notes/new', status: 'active' }
     ])
-    expect(model.settings).toEqual([{ id: notesSetting, plugin: 'acme.notes', type: 'number', title: 'Font size', default: 13, minimum: 8, maximum: 32 }])
+    expect(model.settings).toEqual([
+      {
+        id: notesSetting,
+        plugin: 'acme.notes',
+        type: 'number',
+        title: 'Font size',
+        default: 13,
+        minimum: 8,
+        maximum: 32,
+        category: 'Editor',
+        section: 'Typography'
+      }
+    ])
 
     const solar = model.themes.find((theme) => theme.id === 'theme:acme.notes/solar')!
     expect(solar).toMatchObject({ plugin: 'acme.notes', title: 'Solar', appearance: 'light' })
@@ -266,6 +301,8 @@ describe('the UI model', () => {
   describe('SC-5: malformed UI contributions make the plugin invalid', () => {
     const problems: [string, Record<string, unknown>, string][] = [
       ['sidebar section with no title', { contributes: { 'sidebar-section': [{ id: 'list' }] } }, 'sidebar-section list: title is required'],
+      ['status bar with no title', { contributes: { 'status-bar': [{ id: 'usage' }] } }, 'status-bar usage: title is required'],
+      ['activity item with no title', { contributes: { 'activity-item': [{ id: 'source-control' }] } }, 'activity-item source-control: title is required'],
       ['panel with a string order', { contributes: { panel: [{ id: 'p', title: 'P', order: 'high' }] } }, 'panel p: order must be a number'],
       ['command with an unknown field', { contributes: { command: [{ id: 'go', icon: 'x' }] } }, 'command go: unknown field `icon`'],
       ['keybinding without a modifier', { contributes: { keybinding: [{ id: 'k', key: 'x', command: 'go' }] } }, 'keybinding k: key needs a modifier or a function key'],
@@ -418,7 +455,7 @@ describe('commands and keybindings', () => {
     ])
   })
 
-  test('SC-17: the window\'s own shortcuts are reserved', async () => {
+  test('Mod+Shift+P is a normal contributed shortcut and remains inspectable from the CLI', async () => {
     const env = makeEnv()
     modulePlugin(env.installed, env.marker, {
       id: 'acme.keys',
@@ -438,18 +475,12 @@ describe('commands and keybindings', () => {
         plugin: 'acme.keys',
         key: 'mod+shift+p',
         command: 'command:acme.keys/term',
-        status: 'shadowed',
-        shadowedBy: 'kernel'
+        status: 'active'
       }
     ])
-    const [warning] = warnings(await pluginInfo(client, 'acme.keys'))
-    expect(warning).toContain('keybinding:acme.keys/t is shadowed by')
-    expect(warning).toContain('mod+shift+p')
-
-    const listed = await env.cli('ui', 'contributions')
-    expect(tableRows(listed.stdout, 'KEYBINDINGS')).toEqual([
-      ['keybinding:acme.keys/t', 'mod+shift+p', 'command:acme.keys/term', 'shadowed by kernel']
-    ])
+    expect(warnings(await pluginInfo(client, 'acme.keys'))).toEqual([])
+    const json = await env.cliJson<UiModel>('ui', 'contributions')
+    expect(json.keybindings[0]).toMatchObject({ id: 'keybinding:acme.keys/t', key: 'mod+shift+p', status: 'active' })
   })
 
   test('SC-18: a keybinding whose command isn\'t in effect is unbound, and never takes part in a clash', async () => {

@@ -1,4 +1,4 @@
-import type { ExitCause, PtyFact, PtyHistoryPage, PtySessionInfo, PtySnapshot, PtySubscription } from './pty'
+import type { ExitCause, PtyFact, PtyHistoryPage, PtySessionInfo, PtySnapshot, PtySubscription, PtyWriteErrorCode } from './pty'
 import type { ClientRole, QuirkyEvent } from './rpc'
 import type { ToastAction, ToastKind } from './ui'
 import type { SessionLaunch } from './model'
@@ -51,6 +51,8 @@ export type ContributionInfo = {
 export type PluginContext = {
   readonly pluginId: string
   readonly dir: string
+  /** Absolute file URL for a worker entrypoint declared by name in `workers`; throws for undeclared names. */
+  workerEntrypoint(name: string): string
   /** The plugin's private data directory, `<home>/plugin-data/<pluginId>`; it exists (mode 0700). */
   readonly dataDir: string
   /** Writes to the daemon log, prefixed with the plugin ID. */
@@ -63,6 +65,12 @@ export type PluginContext = {
   subscribe(listener: (event: QuirkyEvent) => void | Promise<void>): () => void
   /** Invokes a daemon or plugin method as this plugin. */
   call(method: string, params?: Record<string, unknown>): Promise<unknown>
+  /** Creates a same-origin opaque capability URL for an authorized local file. */
+  createFileResource(options: {
+    path: string
+    contentType: string
+    disposition?: 'inline' | 'attachment'
+  }): Promise<{ url: string; revoke(): void }>
   /** Opens this plugin's private SQLite store, applying any migrations it has not yet run. */
   openStore(migrations: StoreMigration[]): PluginStore
   /** The current value of a setting: a short name in this plugin's own namespace, or a full setting ID. */
@@ -104,6 +112,12 @@ export type PluginClients = {
   }
 }
 
+/** The certainty metadata attached to a rejected `PluginPty.writeAccepted` call. */
+export type PluginPtyWriteError = Error & {
+  code: PtyWriteErrorCode
+  acceptedBytes: number | null
+}
+
 /** The PTY host operations a plugin may use. */
 export type PluginPty = {
   readonly connected: boolean
@@ -121,6 +135,8 @@ export type PluginPty = {
     }
   ): Promise<{ pid: number; restored: boolean; cwd: string; cols: number; rows: number }>
   write(sessionId: string, data: string | Uint8Array): void
+  /** Resolves after every byte is accepted by the live child PTY; rejects with `PluginPtyWriteError` otherwise. */
+  writeAccepted(sessionId: string, data: string | Uint8Array): Promise<void>
   resize(sessionId: string, cols: number, rows: number): Promise<void>
   /**
    * The visible screen plus up to `lines` of scrollback, as text. `unwrap` joins rows the terminal
@@ -384,6 +400,8 @@ export type PluginManifest = {
   ui?: string
   /** Relative path of the CLI module. */
   cli?: string
+  /** Worker name to root-relative entrypoint, bundled and rewritten to its packaged path by the desktop bundler. */
+  workers?: Record<string, string>
   /** Extra words that reach this plugin's CLI group. */
   cliAliases?: string[]
   /** Defaults to `lazy`. */

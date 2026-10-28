@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { bundlePlugins } from '../scripts/bundle-plugins'
@@ -75,6 +75,21 @@ describe('bundlePlugins', () => {
     expect(readManifest('quirky.demo').ui).toBe('dist/ui.js')
   })
 
+  test('preserves root LICENSE, LICENCE, and NOTICE files in the distribution', async () => {
+    const notices = {
+      'LICENSE.orca': 'Lovecast copyright and MIT terms',
+      'LICENCE.third-party': 'Third-party permission terms',
+      'NOTICE.txt': 'Attribution notice'
+    }
+    writePlugin('quirky.demo', { main: 'main.ts' }, { 'main.ts': 'export const x = 1\n', ...notices })
+
+    await bundlePlugins(src, out)
+
+    for (const [name, content] of Object.entries(notices)) {
+      expect(readFileSync(join(out, 'quirky.demo', name), 'utf8')).toBe(content)
+    }
+  })
+
   test('copies a sounds/ directory when the plugin has one', async () => {
     const dir = writePlugin('quirky.demo', { main: 'main.ts' }, { 'main.ts': 'export const x = 1\n' })
     write(join(dir, 'sounds', 'ding.wav'), 'RIFF-ding')
@@ -86,6 +101,35 @@ describe('bundlePlugins', () => {
     expect(readFileSync(join(out, 'quirky.demo', 'sounds', 'ding.wav'), 'utf8')).toBe('RIFF-ding')
     expect(readFileSync(join(out, 'quirky.demo', 'sounds', 'nested', 'blip.wav'), 'utf8')).toBe('RIFF-blip')
     expect(existsSync(join(out, 'quirky.plain', 'sounds'))).toBe(false)
+  })
+
+  test('packages declared native and license assets with their bytes and executable mode', async () => {
+    const dir = writePlugin('quirky.demo', { main: 'main.ts' }, {
+      'main.ts': 'export const x = 1\n',
+      'package.json': JSON.stringify({
+        dependencies: { 'demo-native': '1.0.0' },
+        quirky: { assets: [
+          { dependency: 'demo-native', source: 'bin/native-{platform}-{arch}', destination: 'bin/worker', executable: true },
+          { dependency: 'demo-native', source: 'LICENSE', destination: 'licenses/demo-native.LICENSE' }
+        ] }
+      })
+    })
+    write(join(dir, 'node_modules', 'demo-native', 'package.json'), JSON.stringify({ name: 'demo-native', version: '1.0.0' }))
+    const nativeBytes = '#!/bin/sh\nprintf fixture-helper\n'
+    write(join(dir, 'node_modules', 'demo-native', 'bin', `native-${process.platform}-${process.arch}`), nativeBytes)
+    const licenseBytes = 'Apache-2.0 terms for the native helper'
+    write(join(dir, 'node_modules', 'demo-native', 'LICENSE'), licenseBytes)
+
+    await bundlePlugins(src, out)
+
+    const packaged = join(out, 'quirky.demo', 'bin', 'worker')
+    expect(existsSync(packaged)).toBe(true)
+    expect(readFileSync(packaged, 'utf8')).toBe(nativeBytes)
+    expect(statSync(packaged).mode & 0o111).toBe(0o111)
+    const license = join(out, 'quirky.demo', 'licenses', 'demo-native.LICENSE')
+    expect(readFileSync(license, 'utf8')).toBe(licenseBytes)
+    expect(statSync(license).mode & 0o111).toBe(0)
+    expect(existsSync(join(out, 'quirky.demo', 'node_modules'))).toBe(false)
   })
 
   test('a plugin without cli.ts gets no cli entry', async () => {
@@ -115,5 +159,128 @@ describe('bundlePlugins', () => {
   test('fails when a bundle does not compile', async () => {
     writePlugin('quirky.demo', { main: 'main.ts' }, { 'main.ts': "import './missing'\n" })
     await expect(bundlePlugins(src, out)).rejects.toThrow(/quirky\.demo/)
+  })
+  test('rejects a native asset whose dependency is not declared by that plugin', async () => {
+    const dir = writePlugin('quirky.demo', { main: 'main.ts' }, {
+      'main.ts': 'export const x = 1\n',
+      'package.json': JSON.stringify({
+        dependencies: {},
+        quirky: { assets: [{ dependency: 'demo-native', source: 'bin/native', destination: 'bin/native' }] }
+      })
+    })
+    write(join(dir, 'node_modules', 'demo-native', 'package.json'), JSON.stringify({ name: 'demo-native', version: '1.0.0' }))
+    write(join(dir, 'node_modules', 'demo-native', 'bin', 'native'), 'not allowed')
+    await expect(bundlePlugins(src, out)).rejects.toThrow(/quirky\.demo.*demo-native.*declared dependency/i)
+  })
+
+  test('does not copy an existing source outside its declared dependency', async () => {
+    const dir = writePlugin('quirky.demo', { main: 'main.ts' }, {
+      'main.ts': 'export const x = 1\n',
+      'package.json': JSON.stringify({
+        dependencies: { 'demo-native': '1.0.0' },
+        quirky: { assets: [{ dependency: 'demo-native', source: '../outside-native', destination: 'bin/worker' }] }
+      })
+    })
+    write(join(dir, 'node_modules', 'demo-native', 'package.json'), JSON.stringify({ name: 'demo-native', version: '1.0.0' }))
+    const outside = join(dir, 'node_modules', 'outside-native')
+    write(outside, 'outside-payload')
+
+    await expect(bundlePlugins(src, out)).rejects.toThrow()
+    expect(readFileSync(outside, 'utf8')).toBe('outside-payload')
+    expect(existsSync(join(out, 'quirky.demo', 'bin', 'worker'))).toBe(false)
+  })
+
+  test('does not copy a literal source name with an unknown asset placeholder', async () => {
+    const dir = writePlugin('quirky.demo', { main: 'main.ts' }, {
+      'main.ts': 'export const x = 1\n',
+      'package.json': JSON.stringify({
+        dependencies: { 'demo-native': '1.0.0' },
+        quirky: { assets: [{ dependency: 'demo-native', source: 'native-{unknown}', destination: 'bin/worker' }] }
+      })
+    })
+    write(join(dir, 'node_modules', 'demo-native', 'package.json'), JSON.stringify({ name: 'demo-native', version: '1.0.0' }))
+    write(join(dir, 'node_modules', 'demo-native', 'native-{unknown}'), 'literal-payload')
+
+    await expect(bundlePlugins(src, out)).rejects.toThrow()
+    expect(existsSync(join(out, 'quirky.demo', 'bin', 'worker'))).toBe(false)
+  })
+
+  test('rejects native asset sources that escape their dependency through a symlink', async () => {
+    const dir = writePlugin('quirky.demo', { main: 'main.ts' }, {
+      'main.ts': 'export const x = 1\n',
+      'package.json': JSON.stringify({
+        dependencies: { 'demo-native': '1.0.0' },
+        quirky: { assets: [{ dependency: 'demo-native', source: 'bin/escape', destination: 'bin/worker' }] }
+      })
+    })
+    const dependencyDir = join(dir, 'node_modules', 'demo-native')
+    const outside = join(work, 'outside')
+    mkdirSync(dependencyDir, { recursive: true })
+    write(join(dependencyDir, 'package.json'), JSON.stringify({ name: 'demo-native', version: '1.0.0' }))
+    write(outside, 'secret')
+    mkdirSync(join(dependencyDir, 'bin'))
+    symlinkSync(outside, join(dependencyDir, 'bin', 'escape'))
+    await expect(bundlePlugins(src, out)).rejects.toThrow(/quirky\.demo.*(escape|symlink)/i)
+  })
+
+  test('rejects asset destinations colliding with manifest or bundled entries', async () => {
+    const dir = writePlugin('quirky.demo', { main: 'main.ts' }, {
+      'main.ts': 'export const x = 1\n',
+      'package.json': JSON.stringify({
+        dependencies: { 'demo-native': '1.0.0' },
+        quirky: { assets: [{ dependency: 'demo-native', source: 'asset', destination: 'main.js' }] }
+      })
+    })
+    write(join(dir, 'node_modules', 'demo-native', 'package.json'), JSON.stringify({ name: 'demo-native', version: '1.0.0' }))
+    write(join(dir, 'node_modules', 'demo-native', 'asset'), 'not an entry point')
+    await expect(bundlePlugins(src, out)).rejects.toThrow(/quirky\.demo.*(collision|collid)/i)
+  })
+  test('fails with a plugin-specific error when a declared asset source is missing', async () => {
+    const dir = writePlugin('quirky.demo', { main: 'main.ts' }, {
+      'main.ts': 'export const x = 1\n',
+      'package.json': JSON.stringify({
+        dependencies: { 'demo-native': '1.0.0' },
+        quirky: { assets: [{ dependency: 'demo-native', source: 'bin/missing', destination: 'bin/worker' }] }
+      })
+    })
+    write(join(dir, 'node_modules', 'demo-native', 'package.json'), JSON.stringify({ name: 'demo-native', version: '1.0.0' }))
+
+    await expect(bundlePlugins(src, out)).rejects.toThrow(/plugin quirky\.demo.*asset source bin\/missing.*missing/i)
+  })
+
+  test('rejects absolute destinations and manifest collisions', async () => {
+    for (const destination of [join(work, 'outside-native'), 'quirky-plugin.json']) {
+      const id = destination.startsWith('/') ? 'quirky.absolute' : 'quirky.manifest'
+      const dir = writePlugin(id, { main: 'main.ts' }, {
+        'main.ts': 'export const x = 1\n',
+        'package.json': JSON.stringify({
+          dependencies: { 'demo-native': '1.0.0' },
+          quirky: { assets: [{ dependency: 'demo-native', source: 'asset', destination }] }
+        })
+      })
+      write(join(dir, 'node_modules', 'demo-native', 'package.json'), JSON.stringify({ name: 'demo-native', version: '1.0.0' }))
+      write(join(dir, 'node_modules', 'demo-native', 'asset'), 'fixture')
+      await expect(bundlePlugins(src, out)).rejects.toThrow(/asset (destination|.*)/i)
+      rmSync(src, { recursive: true, force: true })
+      mkdirSync(src)
+    }
+  })
+
+  test('rejects colliding asset destinations before either asset overwrites the other', async () => {
+    const dir = writePlugin('quirky.demo', { main: 'main.ts' }, {
+      'main.ts': 'export const x = 1\n',
+      'package.json': JSON.stringify({
+        dependencies: { 'demo-native': '1.0.0' },
+        quirky: { assets: [
+          { dependency: 'demo-native', source: 'first', destination: 'bin/worker' },
+          { dependency: 'demo-native', source: 'second', destination: 'bin/worker' }
+        ] }
+      })
+    })
+    write(join(dir, 'node_modules', 'demo-native', 'package.json'), JSON.stringify({ name: 'demo-native', version: '1.0.0' }))
+    write(join(dir, 'node_modules', 'demo-native', 'first'), 'first')
+    write(join(dir, 'node_modules', 'demo-native', 'second'), 'second')
+
+    await expect(bundlePlugins(src, out)).rejects.toThrow(/quirky\.demo.*collid/i)
   })
 })

@@ -2,7 +2,6 @@ import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, re
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import {
   DISTRO_MANIFEST_FILE,
-  RESERVED_CHORDS,
   checkSettingValue,
   parseDistroManifest,
   type DistroInfo,
@@ -45,8 +44,7 @@ const pad = (word: string) => word.padEnd(10)
 
 /**
  * The text a person sees before a distro installs: each bundled plugin with its contributions, the
- * IDs it turns off, each setting with its current and new value, the theme, the keybindings, and
- * a warning for every keybinding on a chord the window reserves.
+ * IDs it turns off, each setting with its current and new value, the theme and the keybindings.
  */
 export function renderDistroInspection(inspection: DistroInspection): string {
   const { manifest } = inspection
@@ -60,11 +58,6 @@ export function renderDistroInspection(inspection: DistroInspection): string {
   if (manifest.theme !== undefined) layer.push(`${pad('theme')} ${manifest.theme}`)
   for (const [chord, command] of Object.entries(manifest.keybindings ?? {})) {
     layer.push(`${pad('keybinding')} ${chord}  ${command}`)
-  }
-  for (const [chord, command] of Object.entries(manifest.keybindings ?? {})) {
-    if (RESERVED_CHORDS.includes(chord)) {
-      layer.push(`${pad('warning')} ${chord} is a shortcut the window keeps for itself, so ${command} will not run on it`)
-    }
   }
   if (layer.length > 0) lines.push('', ...layer)
   return lines.join('\n')
