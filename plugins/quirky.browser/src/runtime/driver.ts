@@ -12,6 +12,9 @@ import type { BrowserDependencies, BrowserTestControl } from './dependencies'
 import type { BrowserPage } from '../profiles/store'
 import type { PaneViewport } from '../pane-contract'
 import { BrowserStore } from '../profiles/store'
+import type { BrowserIdentityMode } from '../preferences/contract'
+import { identityModeFromSetting, userAgentForIdentity } from '../preferences/identity'
+import { findWatchOccurrences } from './find'
 
 
 export type RuntimeBinding = {
@@ -90,7 +93,7 @@ export type PaneControlResult = {
   title?: string
   canGoBack?: boolean
   canGoForward?: boolean
-  found?: boolean
+  current?: number
   total?: number
 }
 
@@ -139,6 +142,7 @@ type RuntimeEpoch = {
   cdp: CdpConnection
   pages: Map<string, BoundPage>
   activeTabId?: string
+  userAgent?: string
   invalid: boolean
   stopping: boolean
   teardown?: Promise<void>
@@ -165,6 +169,7 @@ type ProfileRuntime = {
   starting?: Promise<RuntimeEpoch>
   lossReported: boolean
   failureReason?: string
+  clearing: boolean
   controllers: Map<string, Set<AbortController>>
 }
 
@@ -209,6 +214,13 @@ const TAB_SWITCH_SCHEMA: Schema = {
   required: ['tabId'],
   additionalProperties: true
 }
+const BROWSER_VERSION_SCHEMA: Schema = {
+  type: 'object',
+  properties: { userAgent: { type: 'string' } },
+  required: ['userAgent'],
+  additionalProperties: true
+}
+
 
 
 
@@ -227,9 +239,7 @@ function safeRecord(value: unknown, schema: Schema, description: string): Record
 }
 
 function objectValue(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : undefined
+  return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : undefined
 }
 
 function asString(value: unknown): string | undefined {
@@ -252,11 +262,14 @@ export class BrowserRuntime {
   private readonly paneWatchesByPage = new Map<string, string>()
   private readonly paneDownloadOwners = new Map<string, { profileId: string; pageId: string; epochId: string }>()
 
+  private readonly identityMode: BrowserIdentityMode
   constructor(
     private readonly store: BrowserStore,
     private readonly dependencies: BrowserDependencies,
-    private readonly onPageInvalidated: (pageId: string) => void
+    private readonly onPageInvalidated: (pageId: string) => void,
+    identityMode: unknown = 'clean'
   ) {
+    this.identityMode = identityModeFromSetting(identityMode)
     for (const page of store.listPages()) this.generations.set(page.browserPageId, 0)
     this.dependencies.onControl?.(this.testControl())
   }
@@ -306,6 +319,7 @@ export class BrowserRuntime {
 
   async withPage<T>(page: BrowserPage, method: string, operation: (execution: PageExecution) => Promise<T>): Promise<T> {
     const profile = this.profile(page.profileId)
+    if (profile.clearing) throw fault('browser_error', 'browser profile is being cleared')
     const expectedGeneration = this.generation(page.browserPageId)
     const controller = new AbortController()
     const controllers = profile.controllers.get(page.browserPageId) ?? new Set<AbortController>()
@@ -313,6 +327,7 @@ export class BrowserRuntime {
     profile.controllers.set(page.browserPageId, controllers)
     try {
       return await profile.lock.run(async () => {
+        if (profile.clearing) throw fault('browser_error', 'browser profile is being cleared')
         if (this.closingPages.has(page.browserPageId)) throw fault('browser_tab_closed', 'the managed page is closing')
         let current: BrowserPage
         try { current = this.store.getPage(page.browserPageId) } catch { throw fault('browser_tab_closed', 'the managed page was closed before the operation ran') }
@@ -463,30 +478,64 @@ export class BrowserRuntime {
         await execution.cdp.send('Page.stopLoading', {}, sessionId)
       } else if (control.action === 'find') {
         const text = control.text ?? ''
-        if (text.length === 0) {
-          await execution.cdp.send('Runtime.evaluate', {
-            expression: 'window.getSelection()?.removeAllRanges(); true',
-            returnByValue: true
-          }, sessionId)
-          return { found: false, total: 0 }
-        }
-        const backward = control.forward === false
-        // DOM.performSearch counts matching nodes, not occurrences within a node.
-        const expression = `(() => {
-          const q = ${JSON.stringify(text)}.toLowerCase();
-          const content = (document.body?.innerText ?? '').toLowerCase();
-          let total = 0, offset = 0;
-          while ((offset = content.indexOf(q, offset)) !== -1) { total++; offset += q.length; }
-          return { found: window.find(${JSON.stringify(text)}, false, ${backward}, true, false, true, false), total };
-        })()`
-        const evaluated = objectValue(await execution.cdp.send('Runtime.evaluate', { expression, returnByValue: true }, sessionId))
-        const result = objectValue(evaluated?.result)
-        const value = objectValue(result?.value)
-        if (evaluated?.exceptionDetails !== undefined || !value || typeof value.found !== 'boolean' ||
-            typeof value.total !== 'number' || !Number.isSafeInteger(value.total) || value.total < 0) {
-          throw fault('browser_error', 'page find returned an invalid occurrence count')
-        }
-        return { found: value.found, total: value.total }
+        const current = typeof control.findCurrent === 'number' &&
+          Number.isSafeInteger(control.findCurrent) && control.findCurrent > 0
+          ? control.findCurrent
+          : 0
+        const expression = `(${findWatchOccurrences.toString()})(${JSON.stringify(text)}, ${control.forward !== false}, ${current})`
+        const evaluated = safeRecord(await execution.cdp.send('Runtime.evaluate', {
+          expression,
+          returnByValue: true
+        }, sessionId), {
+          type: 'object',
+          properties: {
+            result: {
+              type: 'object',
+              properties: {
+                type: { type: 'string' },
+                value: {
+                  type: 'object',
+                  properties: {
+                    current: { type: 'integer' },
+                    total: { type: 'integer' }
+                  },
+                  required: ['current', 'total'],
+                  additionalProperties: true
+                }
+              },
+              required: ['type', 'value'],
+              additionalProperties: true
+            },
+            exceptionDetails: {}
+          },
+          required: ['result'],
+          additionalProperties: true
+        }, 'find evaluation')
+        if (evaluated.exceptionDetails !== undefined) throw fault('browser_error', 'page find failed')
+        const remote = safeRecord(evaluated.result, {
+          type: 'object',
+          properties: {
+            type: { type: 'string' },
+            value: {
+              type: 'object',
+              properties: {
+                current: { type: 'integer' },
+                total: { type: 'integer' }
+              },
+              required: ['current', 'total'],
+              additionalProperties: true
+            }
+          },
+          required: ['type', 'value'],
+          additionalProperties: true
+        }, 'find evaluation result')
+        const result = safeRecord(remote.value, {
+          type: 'object',
+          properties: { current: { type: 'integer' }, total: { type: 'integer' } },
+          required: ['current', 'total'],
+          additionalProperties: true
+        }, 'page find result')
+        return { current: result.current as number, total: result.total as number }
       } else if (control.action === 'zoom') {
         if (typeof control.level !== 'number' || !Number.isFinite(control.level)) throw fault('invalid_argument', 'zoom level must be finite')
         const level = Math.max(-3, Math.min(5, Math.round(control.level * 2) / 2))
@@ -547,6 +596,8 @@ export class BrowserRuntime {
           match = { frameId: event.frameId, ...(event.loaderId ? { loaderId: event.loaderId } : {}) }
         } else if (event.kind === 'same-document') {
           match = { frameId: event.frameId, url: event.url }
+        } else {
+          throw fault('browser_tab_changed', 'history navigation did not identify its destination document')
         }
       }
       await this.pageLocation(execution)
@@ -961,12 +1012,61 @@ export class BrowserRuntime {
 
   async withProfileLock<T>(profileId: string, operation: () => Promise<T>): Promise<T> {
     const profile = this.profile(profileId)
+    if (profile.clearing) throw fault('browser_error', 'browser profile is being cleared')
     try {
-      return await profile.lock.run(operation)
+      return await profile.lock.run(async () => {
+        if (profile.clearing) throw fault('browser_error', 'browser profile is being cleared')
+        return await operation()
+      })
     } catch (error) {
       const transportFailure = this.profileTransportFailure(profile, error)
       if (transportFailure) throw transportFailure
       throw error
+    }
+  }
+
+  async withProfileMaintenance<T>(profileId: string, operation: () => Promise<T> | T): Promise<T> {
+    this.store.getProfile(profileId)
+    const profile = this.profile(profileId)
+    if (profile.clearing) throw fault('browser_error', 'browser profile maintenance is already in progress')
+    profile.clearing = true
+    try {
+      for (const controllers of profile.controllers.values()) {
+        for (const controller of controllers) controller.abort()
+      }
+
+      const starting = profile.starting
+      if (starting) {
+        try { await starting } catch { /* a failed startup leaves no browser data operation in flight */ }
+      }
+
+      const epoch = profile.epoch
+      if (epoch) {
+        epoch.stopping = true
+        const bindings = [...epoch.pages.values()]
+        for (const binding of bindings) this.startPageTermination(binding.runtime)
+        for (const page of this.store.listPages()) {
+          if (page.profileId === profileId) this.invalidatePage(page.browserPageId, false)
+        }
+        for (const controllers of profile.controllers.values()) {
+          for (const controller of controllers) controller.abort()
+        }
+        try {
+          await this.teardownEpoch(epoch)
+        } finally {
+          for (const binding of bindings) this.finishPageTermination(binding.runtime)
+          if (profile.epoch === epoch) profile.epoch = undefined
+        }
+      }
+
+      return await profile.lock.run(async () => {
+        if (profile.starting || profile.epoch) {
+          throw fault('browser_error', 'browser profile did not quiesce before maintenance')
+        }
+        return await operation()
+      })
+    } finally {
+      profile.clearing = false
     }
   }
 
@@ -1270,7 +1370,7 @@ export class BrowserRuntime {
   private profile(profileId: string): ProfileRuntime {
     let profile = this.profiles.get(profileId)
     if (!profile) {
-      profile = { lock: new FifoLock(), lossReported: false, controllers: new Map() }
+      profile = { lock: new FifoLock(), lossReported: false, clearing: false, controllers: new Map() }
       this.profiles.set(profileId, profile)
     }
     return profile
@@ -1442,6 +1542,17 @@ export class BrowserRuntime {
     await epoch.cdp.send('Page.enable', {}, sessionId)
     await epoch.cdp.send('Page.setLifecycleEventsEnabled', { enabled: true }, sessionId)
     await epoch.cdp.send('Runtime.enable', {}, sessionId)
+    let userAgent = epoch.userAgent
+    if (!userAgent) {
+      const version = safeRecord(await epoch.cdp.send('Browser.getVersion'), BROWSER_VERSION_SCHEMA, 'browser version')
+      const actualUserAgent = version.userAgent
+      if (typeof actualUserAgent !== 'string' || actualUserAgent.length === 0) {
+        throw fault('browser_error', 'owned Chrome did not report its user agent')
+      }
+      userAgent = userAgentForIdentity(this.identityMode, actualUserAgent)
+      epoch.userAgent = userAgent
+    }
+    await epoch.cdp.send('Network.setUserAgentOverride', { userAgent }, sessionId)
     await epoch.cdp.send('Network.enable', {}, sessionId)
     this.subscribePageEvents(epoch, binding)
     const tree = safeRecord(await epoch.cdp.send('Page.getFrameTree', {}, sessionId), {

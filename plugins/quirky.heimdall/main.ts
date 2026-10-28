@@ -1,0 +1,35 @@
+import type { PluginCaller, PluginContext } from '@quirky/protocol'
+import type { EnrollmentInput, KindRegistration } from './src/contracts'
+import { createKernelService, type KernelService } from './src/service'
+
+let activeService: KernelService | undefined
+
+export async function activate(context: PluginContext): Promise<void> {
+  const service = createKernelService(context)
+  activeService = service
+  context.provide('method:quirky.heimdall/registerKind', (params: Record<string, unknown>, caller: PluginCaller) =>
+    service.registerKind(params as unknown as KindRegistration, caller)
+  )
+  context.provide('method:quirky.heimdall/enroll', (params: Record<string, unknown>) =>
+    service.enroll(params as unknown as EnrollmentInput)
+  )
+  context.provide('method:quirky.heimdall/inspect', (params: Record<string, unknown>) =>
+    service.inspect(typeof params.watcherId === 'string' ? params.watcherId : undefined)
+  )
+  context.provide('method:quirky.heimdall/reconcile', (params: Record<string, unknown>) =>
+    service.reconcile(params.watcherId as string)
+  )
+  try {
+    await service.start()
+  } catch (error) {
+    activeService = undefined
+    await service.shutdown()
+    throw error
+  }
+}
+
+export async function deactivate(): Promise<void> {
+  const service = activeService
+  activeService = undefined
+  await service?.shutdown()
+}

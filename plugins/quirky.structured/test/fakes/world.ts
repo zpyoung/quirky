@@ -90,16 +90,35 @@ export class FakeWorld {
       this.sessions.set(session.id, session)
       return session
     },
-    setProviderSession: (params: { session: string; id: string; transcriptPath?: string | null }, context: PluginCtx) => {
-      const session = this.require(params.session, context)
-      session.providerSession = { id: params.id, transcriptPath: params.transcriptPath ?? null }
-      return session
-    },
     setStatus: (params: any, context: PluginCtx) => {
       const session = this.require(params.session, context)
       this.statusLog.push({ sessionId: session.id, status: params.status })
       session.status = params.status
       return session
+    },
+    setProviderSession: (params: Record<string, unknown>, context: PluginCtx) => {
+      if (typeof params.session !== 'string') throw context.error('invalid-params', 'session must be a string')
+      const session = this.require(params.session, context)
+      const id = params.id
+      if (typeof id !== 'string') throw context.error('invalid-params', 'id must be a string')
+      if (id.length === 0) throw context.error('invalid-params', "provider session id can't be empty")
+      if (id.length > 512) {
+        throw context.error('invalid-params', "provider session id can't be longer than 512 characters")
+      }
+      if (id.startsWith('-')) throw context.error('invalid-params', "provider session id can't start with '-'")
+      if (/[\x00-\x1f\x7f-\x9f]/.test(id)) {
+        throw context.error('invalid-params', "provider session id can't contain control characters")
+      }
+      const transcriptPath = params.transcriptPath
+      if (transcriptPath !== undefined && typeof transcriptPath !== 'string') {
+        throw context.error('invalid-params', 'transcriptPath must be a string')
+      }
+      const updated: Session = {
+        ...session,
+        providerSession: { id, transcriptPath: transcriptPath ?? null }
+      }
+      this.sessions.set(updated.id, updated)
+      return updated
     },
     get: (params: any, context: PluginCtx) => this.require(params.session, context),
     list: (params: any) =>

@@ -30,9 +30,9 @@ export function startWorkerControl(onSettledReport?: () => void) {
         const [stdout, stderr, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited])
         children.delete(child)
         const reply = join(root, `${request.id}.reply.json`)
-        const temporary = `${reply}.${process.pid}.tmp`
-        writeFileSync(temporary, JSON.stringify({ stdout, stderr, code }))
-        renameSync(temporary, reply)
+        const staging = `${reply}.pending`
+        writeFileSync(staging, JSON.stringify({ stdout, stderr, code }))
+        renameSync(staging, reply)
         if (request.args.includes('worker_done')) onSettledReport?.()
       }
     } catch (error) {

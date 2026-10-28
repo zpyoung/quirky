@@ -6,6 +6,9 @@ files, not this one.
 
 | Reversibility | Confidence | Entry | Decision | Source |
 | --- | --- | --- | --- | --- |
+| evidence can be extended | high for the receipts, source runtime unresolved | [sa-browser-profiles-settings D18](decisions/sa-browser-profiles-settings.md) | Separate passing evidence from the remaining source-runtime failure | assumed — autonomous |
+| evidence can be extended | high for exercised results, residual flakes unattributed | [sa-browser-profiles-settings D20](decisions/sa-browser-profiles-settings.md) | Accept the runner's success without erasing its flakes | assumed — autonomous |
+| evidence can be extended | high for exercised compiled ui/api behavior, native assurance absent | [sa-browser-profiles-settings D25](decisions/sa-browser-profiles-settings.md) | Verify final compiled Watch switching, not only metadata | assumed — autonomous |
 | hard | medium | [m0-scripting D10](decisions/m0-scripting.md) | A plugin's methods become `quirky <group> <method>`, where the group is the plugin ID without the `quirky.` prefix | assumed — autonomous |
 | hard | medium | [m0-scripting D12](decisions/m0-scripting.md) | Each param is a kebab-case flag, objects take JSON, and `--params` passes the whole object | assumed — autonomous |
 | hard | medium | [m2-source-control-notes-ai D15](decisions/m2-source-control-notes-ai.md) | Approach: one-shot invocations are agent data in `quirky.agents`; prompts, recipes and notes stay in `quirky.git` | assumed — autonomous |
@@ -266,6 +269,26 @@ files, not this one.
 | medium | high | [m5-loops-presets D9](decisions/m5-loops-presets.md) | Merge audited core repairs without treating the dependency as landed | locked by docs/loop/LOOP.md |
 | medium | high | [m5-loops-presets D11](decisions/m5-loops-presets.md) | Keep queue writes explicit and skip reads constant-time | assumed — autonomous |
 | medium | high | [m5-loops-presets D14](decisions/m5-loops-presets.md) | Preserve lease-aware send admission and durable CLI request identity | locked by docs/loop/decisions/m6-orchestration-core.md |
+| medium | high | [m6-heimdall-core D1](decisions/m6-heimdall-core.md) | Preserve the queue's kernel-only boundary | locked by docs/loop/queue.json |
+| medium | high | [m6-heimdall-core D3](decisions/m6-heimdall-core.md) | Keep kinds replaceable through declared public method hooks | locked by docs/loop/decisions/m0-daemon-api.md |
+| medium | high | [m6-heimdall-core D4](decisions/m6-heimdall-core.md) | Preserve private-store downgrade refusal and forward-schema diagnostics | locked by docs/loop/decisions/m0-daemon-api.md |
+| medium | high | [m6-heimdall-core D6](decisions/m6-heimdall-core.md) | Implement against early dependencies without fabricating authority | locked by docs/loop/decisions/m6-orchestration-core.md |
+| medium | high | [m6-heimdall-core D8](decisions/m6-heimdall-core.md) | Add scoped service coordinator authority without weakening worker identity | assumed — autonomous |
+| medium | high | [m6-heimdall-core D10](decisions/m6-heimdall-core.md) | Publish a fenced control seam without implementing lane10's controls | assumed — autonomous |
+| medium | high | [m6-heimdall-core D11](decisions/m6-heimdall-core.md) | Expose exact worker identity only through a non-consuming owner read | assumed — autonomous |
+| medium | high | [m6-heimdall-core D12](decisions/m6-heimdall-core.md) | Preserve owner configuration while reserving owner execution to lane12 | assumed — autonomous |
+| medium | high | [m6-heimdall-core D14](decisions/m6-heimdall-core.md) | Preserve Run sender authority for owner-to-worker messages | assumed — autonomous |
+| medium | high | [m6-heimdall-core D17](decisions/m6-heimdall-core.md) | Make RPC description and worker-request replies explicit | assumed — autonomous |
+| medium | high | [m6-heimdall-core D21](decisions/m6-heimdall-core.md) | Defer automatic native host-power binding behind a real trusted publisher | deferred: automatic host sleep/wake binding |
+| medium | high for source composition; runtime acceptance remains gated | [m6-heimdall-core D22](decisions/m6-heimdall-core.md) | Wire the concrete service facade through the actual shared worker components | assumed — autonomous |
+| medium | high for source reconciliation; owned native gates remain required | [m6-heimdall-core D25](decisions/m6-heimdall-core.md) | Preserve actual native provider identity and forward journal versions | assumed — autonomous |
+| medium | high for history preservation; final structured api gates remain required | [m6-heimdall-core D27](decisions/m6-heimdall-core.md) | Use canonical Session launch settings, not a second private snapshot | supersedes m6-heimdall-core D25 |
+| medium | high for the invariant; runtime confirmation remains gated | [m6-heimdall-core D28](decisions/m6-heimdall-core.md) | Persist an exact logical stop fence before asynchronous process control | assumed — autonomous |
+| medium | high for the contract; final cli verification remains required | [m6-heimdall-core D30](decisions/m6-heimdall-core.md) | Separate logical receipt identity from a fresh CLI transport invocation | locked by /Users/zpyoung/PycharmProjects/PERSONAL/quirky/research/orca-features/orchestration.md |
+| medium | high | [m6-heimdall-core D32](decisions/m6-heimdall-core.md) | Settle Worker state from the accepted attested report | assumed — autonomous |
+| medium | high for the binding reconciliation; merged runtime gates remain required | [m6-heimdall-core D34](decisions/m6-heimdall-core.md) | Reconcile the ready roadmap once without restoring superseded behavior | locked by docs/loop/LOOP.md and incoming m6-orchestration-core/m6-orchestration-workers decisions |
+| medium | high | [m6-heimdall-core D35](decisions/m6-heimdall-core.md) | Preserve terminal history without reviving live worker authority | assumed — autonomous |
+| medium | high | [m6-heimdall-core D37](decisions/m6-heimdall-core.md) | Land the passing scope under the operator's final sprint instruction | locked by operator instruction in this iteration |
 | medium | high | [m1-worktrees D9](decisions/m1-worktrees.md) | New worktrees go under `<worktrees folder>/<repo>/<name>`, with nesting and a per-project location as settings | locked by research/orca-features/worktrees.md (the rules); assumed — autonomous (v1's root) |
 | medium | high | [m1-worktrees D11](decisions/m1-worktrees.md) | Branches get a prefix, by default the git username | locked by research/orca-features/worktrees.md |
 | medium | high | [m1-worktrees D14](decisions/m1-worktrees.md) | The base is the requested one, else the project's saved base, else the detected default | locked by research/orca-features/worktrees.md |
@@ -449,6 +472,16 @@ files, not this one.
 | medium | high | [m5-automations-dispatch D28](decisions/m5-automations-dispatch.md) | Compose the failed-land recovery with landed orchestration contracts | locked by docs/loop/decisions/m6-orchestration-core.md |
 | medium | high | [m5-automations-dispatch D31](decisions/m5-automations-dispatch.md) | Compose loop evidence and honor canonical terminal-only auto-adoption | supersedes m5-automations-dispatch D15 |
 | medium | high | [m5-automations-dispatch D33](decisions/m5-automations-dispatch.md) | Preserve badge schema and transient-token security during the third recovery | assumed — autonomous |
+| medium (acceptance) | high | [sa-browser-profiles-settings D1](decisions/sa-browser-profiles-settings.md) | Follow unattended night-mode scope and approvals | locked by docs/loop/LOOP.md |
+| medium (api) | high | [sa-browser-profiles-settings D2](decisions/sa-browser-profiles-settings.md) | Reuse profiles and settings through public plugin contributions | locked by docs/roadmap.md |
+| medium (outside capability) | high for inspected apis; no claim all sdk versions lack hook | [sa-browser-profiles-settings D4](decisions/sa-browser-profiles-settings.md) | Treat missing import/native identity/localhost mapping as prerequisites, not success | deferred: import engine integration, native identity and localhost mapping |
+| medium (persisted identity) | high | [sa-browser-profiles-settings D5](decisions/sa-browser-profiles-settings.md) | Agree explicit native profile isolation and clear semantics with pane owner | assumed — autonomous |
+| medium (requires sdk capability) | high for inspected public api limitation; no claim private implementation never waits | [sa-browser-profiles-settings D9](decisions/sa-browser-profiles-settings.md) | Reject native clear before invocation until the SDK can acknowledge completion | deferred: native profile clear completion; supersedes sa-browser-profiles-settings D5 |
+| medium (lifetime invariants) | high for exercised boundaries; native storage isolation/removal remains unproved | [sa-browser-profiles-settings D11](decisions/sa-browser-profiles-settings.md) | Hold complete profile admissions and preserve existing editor gestures | assumed — autonomous |
+| medium (unstable public api before first pane land) | high for exercised api/cli/hosted-close behavior | [sa-browser-profiles-settings D12](decisions/sa-browser-profiles-settings.md) | Reveal routed panes and use the terminal's canonical boolean close contract | assumed — autonomous |
+| medium (dependency integration) | high for reconciliation; merged gates pending | [sa-browser-profiles-settings D22](decisions/sa-browser-profiles-settings.md) | Reconcile the dependency's completed controller repairs | assumed — autonomous, preserving incoming public contracts |
+| medium (shared lifecycle contracts) | high for reconciliation; final caught-up gates pending | [sa-browser-profiles-settings D23](decisions/sa-browser-profiles-settings.md) | Preserve final roadmap input custody and current-model routing | assumed — autonomous, preserving incoming public contracts |
+| medium (explicit watch transition lifetime) | high for exercised api/storage/lease/rollback paths | [sa-browser-profiles-settings D24](decisions/sa-browser-profiles-settings.md) | Complete explicit Watch profile transitions before returning | assumed — autonomous, completing the accepted lane8 Watch profile integration |
 | medium | high | [m1-launch-settings D8](decisions/m1-launch-settings.md) | A selection is `{model?, options?}`, with Orca's bounds | locked by research/orca-features/launch-settings.md |
 | medium | high | [m1-launch-settings D12](decisions/m1-launch-settings.md) | The snapshot comes from the same resolution as the command, so it can't misreport provenance | assumed — autonomous |
 | medium | high | [m1-launch-settings D16](decisions/m1-launch-settings.md) | A session stores its snapshot, and resume and fork replay the resolved arguments | assumed — autonomous |
@@ -1048,6 +1081,23 @@ files, not this one.
 | easy | high | [m5-loops-presets D17](decisions/m5-loops-presets.md) | Select fixture guardians by exact home and current process owner | assumed — autonomous |
 | easy | high | [m5-loops-presets D18](decisions/m5-loops-presets.md) | Separate EDIT pacing policy from strict CREATE preset combinations | locked by research/orca-features/fork-loops.md |
 | easy | high | [m5-loops-presets D19](decisions/m5-loops-presets.md) | Catch up once after authoritative dependency completion | locked by docs/loop/LOOP.md |
+| easy | high | [m6-heimdall-core D2](decisions/m6-heimdall-core.md) | Resolve all design questions autonomously under night mode | locked by docs/loop/LOOP.md |
+| easy | high | [m6-heimdall-core D5](decisions/m6-heimdall-core.md) | OpenAI implementers and verified Gemini fallback review | assumed — autonomous |
+| easy | high | [m6-heimdall-core D7](decisions/m6-heimdall-core.md) | Verify macOS and isolate every process | deferred: platform |
+| easy | high | [m6-heimdall-core D9](decisions/m6-heimdall-core.md) | Confirm missing APIs through an actual isolated quirkyd process | assumed — autonomous |
+| easy | high | [m6-heimdall-core D13](decisions/m6-heimdall-core.md) | Repair escaped adapter writes before accepting the wave | assumed — autonomous |
+| easy | high for exact source restoration; runtime/build verification remains pending | [m6-heimdall-core D15](decisions/m6-heimdall-core.md) | Restore the actual landed Codex resolver omitted by a dependency merge | assumed — autonomous |
+| easy | high | [m6-heimdall-core D16](decisions/m6-heimdall-core.md) | Replace a failed persistence writer without discarding its regression source | assumed — autonomous |
+| easy | high for exercised paths; service backend and full api verification remain pending | [m6-heimdall-core D18](decisions/m6-heimdall-core.md) | Accept source checkpoints only with observed behavioral checks | assumed — autonomous |
+| easy | high for exercised boundaries | [m6-heimdall-core D19](decisions/m6-heimdall-core.md) | Retain budget history as facts and release only positively resolved trace pins | assumed — autonomous |
+| easy | high | [m6-heimdall-core D20](decisions/m6-heimdall-core.md) | Apply the aged-item night-mode exit policy | locked by docs/loop/LOOP.md |
+| easy | high | [m6-heimdall-core D23](decisions/m6-heimdall-core.md) | Use the supported manifest subset and actual core nesting policy | assumed — autonomous |
+| easy | high | [m6-heimdall-core D24](decisions/m6-heimdall-core.md) | Make provider fixtures input-driven and retain real caller authentication | assumed — autonomous |
+| easy | high for executable source and stated evidence | [m6-heimdall-core D26](decisions/m6-heimdall-core.md) | Publish executable service source without overstating unresolved worker checks | assumed — autonomous |
+| easy | high | [m6-heimdall-core D29](decisions/m6-heimdall-core.md) | Keep structured accepted-work observation distinct from startup acknowledgement | assumed — autonomous |
+| easy | high for the mapping; native end-to-end verification remains required | [m6-heimdall-core D31](decisions/m6-heimdall-core.md) | Describe real Codex structured model and effort support in the catalog | assumed — autonomous |
+| easy | high | [m6-heimdall-core D33](decisions/m6-heimdall-core.md) | Repair fixture transport and native API preconditions, not production readiness | assumed — autonomous |
+| easy | high | [m6-heimdall-core D36](decisions/m6-heimdall-core.md) | Distinguish pre-acceptance waiter refusal from post-ack interruption | locked by docs/loop/decisions/m6-orchestration-core.md D7 |
 | easy | high | [m1-worktrees D1](decisions/m1-worktrees.md) | Classify the item as an API, CLI, Organization, Visual and Data design, and run research phases A and B | assumed — autonomous |
 | easy | high | [m1-worktrees D2](decisions/m1-worktrees.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m1-worktrees D4](decisions/m1-worktrees.md) | Select every gray area that matters for worktrees | assumed — autonomous |
@@ -1565,6 +1615,18 @@ files, not this one.
 | easy | high for exercised paths; final model review remains explicitly unperformed | [m5-automations-dispatch D30](decisions/m5-automations-dispatch.md) | Retry landing only after fresh composed-runtime proof | assumed — autonomous |
 | easy | high | [m5-automations-dispatch D32](decisions/m5-automations-dispatch.md) | Preserve prepared structured sessions owned by an activating creator | assumed — autonomous |
 | easy | high for the exercised protocol and storage paths | [m5-automations-dispatch D34](decisions/m5-automations-dispatch.md) | Pin only the disposable native-protocol stand-in to Bun | assumed — autonomous |
+| easy | high | [sa-browser-profiles-settings D3](decisions/sa-browser-profiles-settings.md) | Preserve source routing outcomes without changing file-link behavior | locked by browser.md |
+| easy | high | [sa-browser-profiles-settings D6](decisions/sa-browser-profiles-settings.md) | Select OpenAI implementers and reachable Gemini review | assumed — autonomous |
+| easy | high | [sa-browser-profiles-settings D7](decisions/sa-browser-profiles-settings.md) | Keep platform/native verification honest | deferred: platform |
+| easy (internal capability lifetime) | high for policy; runtime verification pending | [sa-browser-profiles-settings D8](decisions/sa-browser-profiles-settings.md) | Guard native clearing with one-use confirmation capabilities and admission control | assumed — autonomous |
+| easy (later review/native run can identify findings) | high | [sa-browser-profiles-settings D10](decisions/sa-browser-profiles-settings.md) | Follow overdue night mode without inventing review or UI-campaign evidence | locked by docs/loop/LOOP.md |
+| easy (further verification can add evidence) | high for exercised controls, no native deletion assurance | [sa-browser-profiles-settings D13](decisions/sa-browser-profiles-settings.md) | Report focused UI proof and native limits separately | assumed — autonomous |
+| easy | high | [sa-browser-profiles-settings D14](decisions/sa-browser-profiles-settings.md) | Cut URL gestures over from the temporary copy mapping | assumed — autonomous |
+| easy | high | [sa-browser-profiles-settings D15](decisions/sa-browser-profiles-settings.md) | Read click policy from the current model, not a stale render | assumed — autonomous |
+| easy | high for exercised scope | [sa-browser-profiles-settings D16](decisions/sa-browser-profiles-settings.md) | Count actual Find occurrences without replacing page content | assumed — autonomous |
+| easy | high | [sa-browser-profiles-settings D17](decisions/sa-browser-profiles-settings.md) | Reconcile incoming public UI contracts | assumed — autonomous |
+| easy | high for candidate exclusion, residual helper variability not attributed | [sa-browser-profiles-settings D19](decisions/sa-browser-profiles-settings.md) | Challenge only targets created by the requested new tab | assumed — autonomous |
+| easy when public native storage-root/completion support is proven | high for the safety rule; isolation remains unproven | [sa-browser-profiles-settings D21](decisions/sa-browser-profiles-settings.md) | Preflight every native handoff before touching Default | assumed — autonomous, applying the accepted lane4 native safety ruling |
 | easy | high | [m1-launch-settings D1](decisions/m1-launch-settings.md) | Classify the item as Data, API, CLI and Integration work, and run research phases A and B | assumed — autonomous |
 | easy | high | [m1-launch-settings D2](decisions/m1-launch-settings.md) | Skip the visual companion and the adhd offer, and use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m1-launch-settings D3](decisions/m1-launch-settings.md) | Select every gray area that matters: data-mapping, input-format, conflict-resolution, error-handling, output-format and flag-design | locked by docs/loop/LOOP.md |

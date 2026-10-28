@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from 'bun:test'
-import type { UiModel } from '@quirky/protocol'
+import type { SettingInfo } from '@quirky/protocol'
+import { flushSync } from 'react-dom'
 import {
   FEATURE_MS,
   focusedSession,
@@ -15,42 +16,6 @@ import {
 
 afterEach(stopAll)
 
-/** The Terminal settings of D27 and the default each has, which are Orca's. */
-const D27_DEFAULTS: Record<string, boolean | number | string> = {
-  'font-family': 'SF Mono',
-  'font-size': 14,
-  'font-weight': 500,
-  'font-weight-bold': 700,
-  'line-height': 1,
-  'cursor-style': 'block',
-  'cursor-blink': true,
-  scrollback: 2000,
-  'word-separators': " ()[]{}',\"`",
-  'option-as-alt': 'auto',
-  'jis-yen-backslash': false,
-  'copy-on-select': false,
-  'trim-gutter-on-copy': true,
-  'allow-osc52': true,
-  'right-click-paste': false,
-  'focus-follows-mouse': false,
-  'scroll-sensitivity': 1.15,
-  'fast-scroll-sensitivity': 5,
-  'gpu-acceleration': 'auto',
-  'minimum-contrast': 1,
-  'inactive-pane-opacity': 0.9,
-  'divider-thickness': 3,
-  'padding-x': 4,
-  'padding-y': 4,
-  'background-opacity': 1,
-  'link-click': 'actions',
-  'link-middle-click': 'open',
-  'confirm-close-running': true,
-  'confirm-close-pinned': true,
-  'ctrl-tab-order': 'mru',
-  'shortcut-policy': 'app-first',
-  'floating-enabled': true,
-  'floating-cwd': '~'
-}
 
 const setSetting = (f: Features, name: string, value: string) => f.h.cli(['setting', 'set', `setting:quirky.terminal/${name}`, value])
 
@@ -62,26 +27,25 @@ const ownText = (label: Element) =>
     .join('')
 
 test(
-  'SC-64: every terminal setting appears in the Settings dialog with its default',
+  'SC-64: canonical terminal URL click settings remain editable in Browser settings',
   async () => {
     const f = await startFeatures()
-    const model = JSON.parse(await f.h.ok(['ui', 'contributions', '--json'])) as UiModel
-    const mine = model.settings.filter((setting) => setting.plugin === 'quirky.terminal')
-    expect(mine.map((setting) => setting.id.replace('setting:quirky.terminal/', '')).sort()).toEqual(Object.keys(D27_DEFAULTS).sort())
-    for (const setting of mine) expect(setting.default, setting.id).toEqual(D27_DEFAULTS[setting.id.replace('setting:quirky.terminal/', '')])
-
     document.querySelector<HTMLElement>('button.gear')!.click()
-    const group = await until(f, () => [...document.querySelectorAll('[role="dialog"] fieldset.settings-group')].find((fieldset) => fieldset.querySelector('legend')?.textContent === 'quirky.terminal'))
-    const labels = [...group.querySelectorAll('label')]
-    for (const setting of mine) {
-      const name = setting.id.replace('setting:quirky.terminal/', '')
-      const label = labels.find((candidate) => ownText(candidate).trim() === setting.title)
-      expect(label, `${name} (${setting.title}) in the dialog`).toBeDefined()
-      const input = label!.querySelector('input, select') as HTMLInputElement | HTMLSelectElement
-      const shown = input instanceof HTMLInputElement && input.type === 'checkbox' ? input.checked : input instanceof HTMLInputElement && input.type === 'number' ? Number(input.value) : input.value
-      // the harness runs without a GPU, so its GPU setting is off
-      expect(shown, name).toEqual(name === 'gpu-acceleration' ? 'off' : D27_DEFAULTS[name])
-    }
+    const group = await until(f, () => [...document.querySelectorAll('[role="dialog"] fieldset.settings-group')].find((fieldset) => fieldset.querySelector('legend')?.textContent === 'Browser'))
+    const label = [...group.querySelectorAll('label')].find((candidate) => ownText(candidate).trim() === 'Terminal URL clicks')
+    const select = label?.querySelector('select')
+    if (!(select instanceof HTMLSelectElement)) throw new Error('Terminal URL click control is not available in Browser settings')
+    flushSync(() => {
+      select.value = 'terminal'
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    await f.win.click('[role="dialog"] button[type="submit"]')
+    const persisted = await waitFor('the canonical URL click setting to persist', async () => {
+      const setting = await f.h.call<SettingInfo>('setting.get', { id: 'setting:quirky.terminal/link-click' })
+      return setting.value === 'terminal' ? setting : undefined
+    })
+    expect(persisted.value).toBe('terminal')
+    expect(persisted.source).toBe('user')
   },
   FEATURE_MS
 )

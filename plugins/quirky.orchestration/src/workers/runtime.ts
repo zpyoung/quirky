@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import type { JsonValue, TaskRow } from '../contracts'
 import type { SessionIdentity } from '../runtime-contracts'
 import type {
-  CoordinatorEvidence, TerminalResource, TurnStart, WorkerEffect, WorkerMode,
+  CoordinatorEvidence, ServiceCoordinatorEvidence, TerminalResource, TurnStart, WorkerEffect, WorkerMode,
   WorkerModeDecision, WorkerObservation, WorkerPlacement, WorkerRuntime,
   WorkerSetup, WorkerStartParams, WorkerRecord,
 } from '../worker-contracts'
@@ -223,14 +223,14 @@ async function repoHooks(context: PluginContext, repoId: string, ref?: string): 
   return call<RepoHooks>(context, 'quirky.repo/hooks', params)
 }
 
-function isServiceCoordinator(caller: CoordinatorEvidence): caller is Extract<CoordinatorEvidence, { kind: 'service' }> {
+function isServiceCoordinator(caller: CoordinatorEvidence): caller is ServiceCoordinatorEvidence {
   return 'kind' in caller && caller.kind === 'service'
 }
 
 async function resolveServicePlan(
   context: PluginContext,
   params: WorkerStartParams,
-  caller: Extract<CoordinatorEvidence, { kind: 'service' }>,
+  caller: ServiceCoordinatorEvidence,
 ): Promise<StartPlan> {
   if (!params.runId || params.runId !== caller.runId) {
     throw failure('consumer_fenced', 'A service worker start must name the Run owned by that service.')
@@ -288,7 +288,7 @@ async function resolveServicePlan(
   validateModelPicks(params, agentOptions)
   const preferred: WorkerMode = params.mode ?? 'terminal'
   const mode: WorkerMode = selectedSession ? 'terminal' : preferred
-  if (mode === 'structured' && !agentOptions.structured) {
+  if (mode === 'structured' && (!agentOptions.structured || (agentId !== 'claude' && agentId !== 'codex'))) {
     throw failure('agent_unconfigured', `Agent ${agentId} does not support a structured background session.`)
   }
   const decision: WorkerModeDecision = {
@@ -394,7 +394,7 @@ async function resolvePlan(context: PluginContext, params: WorkerStartParams, ca
 
   const preferred: WorkerMode = params.mode ?? 'terminal'
   const mode: WorkerMode = selectedSession ? 'terminal' : preferred
-  if (mode === 'structured' && !agentOptions.structured) {
+  if (mode === 'structured' && (!agentOptions.structured || (agentId !== 'claude' && agentId !== 'codex'))) {
     throw failure('agent_unconfigured', `Agent ${agentId} does not support a structured background session.`)
   }
   const decision: WorkerModeDecision = {
