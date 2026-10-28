@@ -37,9 +37,9 @@ test('SC-41: a sync that stops on a conflict leads, in the window, to Continue m
   await click(rowOf('math.ts', 'conflicts'))
   await w.win.waitFor(async () => (await openView(w))?.id === DIFF_VIEW)
   expect((await openView(w))!.input).toMatchObject({ mode: 'conflict-file', path: 'math.ts' })
-  await w.win.waitFor(() => q('.cm-editor') && q('.qgv-banner'))
-  expect(text(q('.qgv-banner'))).toContain('Unresolved conflict · Both modified')
-  await w.win.waitFor(() => text(q('.qgv-counter')) === '1 / 1')
+  await w.win.waitFor(() => q('[data-git-view-root] .cm-editor') && q('[data-git-view-root] [role="status"]'))
+  expect(text(q('[data-git-view-root] [role="status"]'))).toContain('Unresolved conflict · Both modified')
+  await w.win.waitFor(() => text(q('[data-git-view-root] [aria-label="Conflict 1 of 1"]')) === '1 / 1')
   expect(rowOf('math.ts', 'conflicts')).not.toBeNull()
   expect(byLabel('Stage math.ts', q('[data-section="conflicts"]')!)).toBeNull()
 
