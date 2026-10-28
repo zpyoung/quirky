@@ -1,4 +1,4 @@
-import type { PluginContext, PluginStore, Schema } from '@quirky/protocol'
+import type { OrchestrationSubmission, OrchestrationSubmissionVerdict, PluginContext, PluginStore, Schema } from '@quirky/protocol'
 import type { OwnerDeviation, OwnerKernelPort } from './owner/contracts'
 
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json }
@@ -80,6 +80,13 @@ export interface RunnerStatus {
   reason?: string; detail?: string; nextPulseAtMs: number | null; consecutiveErrors: number; consecutiveGateHolds: number
 }
 export interface TerminalSummary { watcherId: string; kind: string; state: string; reason: string; atMs: number; budget: BudgetUsage }
+export type JudgmentQuestion =
+  | { type: 'choice'; instructions: string; criteria: Record<string, string | null> }
+  | { type: 'score'; instructions: string; criteria: string[] }
+  | { type: 'noul'; instructions: string; criteria?: { true?: string; false?: string } }
+export interface JudgmentQuestionRequest {
+  id: string; questionId: string; subjectId: string; question: JudgmentQuestion
+}
 export interface WatcherKind<W = Json, A extends KernelAction = KernelAction> {
   id: string; displayName: string; enrollmentPayloadSchema: Schema
   authorizeEnrollment(input: EnrollmentInput): Promise<AuthorizedEnrollment>
@@ -90,6 +97,12 @@ export interface WatcherKind<W = Json, A extends KernelAction = KernelAction> {
   describeSnapshot?(snapshot: Snapshot<W>): Json | Promise<Json>
   decide(snapshot: Snapshot<W>, journal: JournalEntry[], enrollment: Enrollment): Decision<A> | Promise<Decision<A>>
   preflight?(action: A, snapshot: Snapshot<W>, journal: JournalEntry[], enrollment: Enrollment): Promise<GateVerdict>
+  submission?(submission: OrchestrationSubmission, enrollment: Enrollment): Promise<OrchestrationSubmissionVerdict>
+  judgmentQuestions?(
+    enrollment: Enrollment,
+    snapshot: Snapshot<W>,
+    journal: JournalEntry[]
+  ): Promise<JudgmentQuestionRequest[]>
   execute(action: A, context: ExecuteContext): Promise<ExecuteResult>
   resolveOutcome?(attempt: Attempt, snapshot: Snapshot<W>, journal: JournalEntry[], enrollment: Enrollment): Promise<ExecuteResult | null>
   pace?(snapshot: Snapshot<W>, journal: JournalEntry[]): PacingTier | Promise<PacingTier>
@@ -101,7 +114,7 @@ export interface WatcherKind<W = Json, A extends KernelAction = KernelAction> {
 /** Serializable public kind registration. All hook references belong to the authenticated declaring plugin. */
 export interface KindRegistration {
   id: string; displayName: string; enrollmentPayloadSchema: Schema
-  hooks: { authorize: string; read: string; decide: string; execute: string; validate?: string; undo?: string; describeEnrollment?: string; describeSnapshot?: string; resolveOutcome?: string; preflight?: string; pace?: string; stop?: string; reconcile?: string; ownerAction?: string }
+  hooks: { authorize: string; read: string; decide: string; execute: string; validate?: string; undo?: string; describeEnrollment?: string; describeSnapshot?: string; resolveOutcome?: string; preflight?: string; submission?: string; judgmentQuestions?: string; pace?: string; stop?: string; reconcile?: string; ownerAction?: string }
   concurrency?: WatcherKind['concurrency']; pluginId?: string
 }
 export interface KindRegistry {
@@ -140,6 +153,7 @@ export interface KernelWorkerObservation {
   lastContactAtMs: number | null
 }
 export interface OrchestrationPort {
+  restore(enrollment: Enrollment): Promise<void>
   dispatch(enrollment: Enrollment, attempt: Attempt, request: WorkerRequest): Promise<DispatchResult>
   recover(enrollment: Enrollment, attempt: Attempt): Promise<DispatchResult | null>
   observeWorkers(enrollment: Enrollment): Promise<KernelWorkerObservation[]>
@@ -154,8 +168,8 @@ export interface Runner {
   pulse(): Promise<void>
   schedule(delayMs: number): void
   suspend(): void; resume(): void
-  /** Fences new actions before optionally draining the current tick; serializes control mutations. */
   withControl?<T>(operation: () => Promise<T>, drain: boolean): Promise<T>
+  terminateWorkspaceRemoved(): Promise<void>
   shutdown(deadlineMs?: number): Promise<void>
 }
 export interface KernelOptions {

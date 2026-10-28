@@ -7,7 +7,7 @@
   "cli": "src/control-cli.ts",
   "ui": "dist/ui.js",
   "activation": "startup",
-  "dependencies": ["quirky.orchestration"],
+  "dependencies": ["quirky.orchestration", "quirky.worktree"],
   "contributes": {
     "method": [
       {
@@ -32,6 +32,8 @@
                 "describeSnapshot": { "type": "string" },
                 "resolveOutcome": { "type": "string" },
                 "preflight": { "type": "string" },
+                "submission": { "type": "string" },
+                "judgmentQuestions": { "type": "string" },
                 "pace": { "type": "string" },
                 "stop": { "type": "string" },
                 "reconcile": { "type": "string" },
@@ -2077,7 +2079,40 @@
           ],
           "additionalProperties": false
         }
-      }
+      },
+      {
+        "id": "submissionPreflight",
+        "description": "Runs the registered kind submission hook before an owned worker report is settled.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "runId": { "type": "string" },
+            "taskId": { "type": "string" },
+            "dispatchId": { "type": "string" },
+            "type": { "type": "string", "enum": ["worker_done", "status"] },
+            "subject": { "type": "string" },
+            "body": { "type": "string" },
+            "payload": { "description": "A JSON object or null." }
+          },
+          "required": ["runId", "taskId", "dispatchId", "type", "subject", "body", "payload"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "kind": { "type": "string", "enum": ["accepted", "rejected"] },
+            "code": { "type": "string" },
+            "reason": { "type": "string" }
+          },
+          "required": ["kind"],
+          "additionalProperties": false
+        }
+      },
+      { "id": "remoteFleet", "description": "Read mirrored remote Heimdall watchers." },
+      { "id": "remoteDetail", "description": "Read one mirrored remote Heimdall watcher." },
+      { "id": "remoteDebugReport", "description": "Read a remote Heimdall watcher debug report." },
+      { "id": "remoteCommand", "description": "Run an owner-fenced remote Heimdall watcher command." }
     ],
     "event": [
       {
