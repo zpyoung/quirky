@@ -7,3 +7,8 @@ plugins/quirky.browser/test/automation.test.ts  exercises the owned headless bro
 plugins/quirky.browser/test/pane.test.ts  Watch cases use the same owned macOS Chrome harness as automation.test.ts; the remote Linux host has no Chrome/Chromium
 plugins/quirky.browser/test/design-runtime.test.ts  real picker and PNG crop regressions require the installed macOS Chrome used by the owned browser runtime
 packages/cli/test/open.e2e.test.ts  exercises macOS-only desktop opening through an owned open shim; production refuses non-macOS platforms
+plugins/quirky.browser/test/extras-automation.test.ts  real cookie/profile/input/HAR/CDP flows require installed macOS Chrome; remote host has no Chrome/Chromium
+plugins/quirky.browser/test/import.test.ts  real managed-profile cookie imports require installed macOS Chrome; remote host has no Chrome/Chromium
+plugins/quirky.browser/test/extras-api.test.ts  public profile/cookie API integration launches installed macOS Chrome; remote host has no Chrome/Chromium
+plugins/quirky.browser/test/extras-cli.test.ts  CLI fill and import acceptance launches installed macOS Chrome; remote host has no Chrome/Chromium
+plugins/quirky.mobile/test/browser-watch.test.ts  owned phone Watch frames/input require installed macOS Chrome; remote host has no Chrome/Chromium
