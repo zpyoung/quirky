@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Button, Dialog, FormRow, TextField } from '@quirky/ui'
 import type { TasksSurfaceProps, ItemTarget, WorkspaceComposerRequest } from '../contracts'
 
 type WorkspaceComposerState = { open: boolean; request: WorkspaceComposerRequest | null; busy: boolean; error: string | null }
@@ -299,101 +300,65 @@ export function WorkspaceComposer({ context, refresh, report }: WorkspaceCompose
   const trustRequired = trustKind !== null && typeof request.trustScript === 'string'
   const trustLabel = trustKind === 'issue' ? 'Issue command' : 'Repository setup'
   const consentLabel = trustKind === 'setup' ? 'setup' : 'issue command'
-  const style = {
-    position: 'fixed' as const,
-    inset: 0,
-    zIndex: 10000,
-    display: 'grid',
-    placeItems: 'center',
-    background: 'rgba(0, 0, 0, .5)',
-    padding: 20
-  }
-  const panel = {
-    width: 'min(720px, 100%)',
-    maxHeight: '90vh',
-    overflow: 'auto',
-    border: '1px solid var(--border, #444)',
-    borderRadius: 12,
-    background: 'var(--surface, #202124)',
-    color: 'var(--text, #f4f4f5)',
-    padding: 20,
-    boxShadow: '0 18px 60px rgba(0,0,0,.45)'
-  }
-  const field = { display: 'grid', gap: 6, marginBlock: 14 }
-  const input = { width: '100%', boxSizing: 'border-box' as const, padding: '8px 10px', color: 'inherit', background: 'var(--surface-raised, #2b2c30)', border: '1px solid var(--border, #555)', borderRadius: 6 }
-
   return (
-    <div style={style}>
-      <section role="dialog" aria-modal="true" aria-labelledby="tasks-workspace-title" style={panel}>
-        <header style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'start' }}>
-          <div>
-            <h2 id="tasks-workspace-title" style={{ margin: '0 0 4px' }}>{title}</h2>
-            <div style={{ opacity: .75 }}>{request.repoName} · #{request.target.number} · {request.title}</div>
-          </div>
-          <button type="button" aria-label="Close workspace composer" onClick={() => void cancel()} disabled={busy}>×</button>
-        </header>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBlock: 14 }}>
+    <Dialog open title={title} closeOnBackdrop={false} onClose={() => void cancel()}>
+      <div className="tasks-composer">
+        <div className="tasks-composer__context">{request.repoName} · #{request.target.number} · {request.title}</div>
+        <div className="tasks-composer__source">
           <span>{request.target.kind === 'issue' ? 'Issue' : 'Pull request'} context</span>
-          {request.target.url ? <button type="button" onClick={openSource}>Open on GitHub</button> : null}
+          {request.target.url ? <Button type="button" onClick={openSource}>Open on GitHub</Button> : null}
         </div>
-        <form onSubmit={(event) => { event.preventDefault(); void submit() }}>
-          <label style={field}>
-            <span>Workspace name</span>
-            <input style={input} value={name} onChange={(event) => setName(event.currentTarget.value)} maxLength={200} />
-          </label>
-          <label style={field}>
-            <span>Initial prompt</span>
-            <textarea style={{ ...input, minHeight: 110, resize: 'vertical' }} value={prompt} onChange={(event) => setPrompt(event.currentTarget.value)} />
-          </label>
-          <label style={field}>
-            <span>Agent (optional)</span>
-            <select style={input} value={agent} onChange={(event) => { agentTouched.current = true; setAgent(event.currentTarget.value) }}>
+        <form className="tasks-composer__form" onSubmit={(event) => { event.preventDefault(); void submit() }}>
+          <TextField label="Workspace name" value={name} onChange={(event) => setName(event.currentTarget.value)} maxLength={200} />
+          <FormRow label="Initial prompt" htmlFor="tasks-workspace-prompt">
+            <textarea id="tasks-workspace-prompt" className="ui-text-field__input tasks-composer__textarea" value={prompt} onChange={(event) => setPrompt(event.currentTarget.value)} />
+          </FormRow>
+          <FormRow label="Agent (optional)" htmlFor="tasks-workspace-agent">
+            <select id="tasks-workspace-agent" className="ui-text-field__input" value={agent} onChange={(event) => { agentTouched.current = true; setAgent(event.currentTarget.value) }}>
               <option value="">Create without starting an agent</option>
               {agentSelection.options.map((option) => <option key={option.id} value={option.id}>{option.label}{option.id === agentSelection.defaultAgent ? ' · default' : ''}</option>)}
             </select>
-          </label>
+          </FormRow>
           {setupChoiceRequired || trustKind === 'setup' ? (
-            <label style={field}>
-              <span>Repository setup</span>
-              <select style={input} value={setup} onChange={(event) => setSetup(event.currentTarget.value as SetupChoice)}>
+            <FormRow label="Repository setup" htmlFor="tasks-workspace-setup">
+              <select id="tasks-workspace-setup" className="ui-text-field__input" value={setup} onChange={(event) => setSetup(event.currentTarget.value as SetupChoice)}>
                 <option value="inherit" disabled>Choose whether to run setup</option>
                 <option value="run">Run setup</option>
                 <option value="skip">Skip setup</option>
               </select>
-            </label>
-          ) : <p style={{ opacity: .75 }}>Repository setup will follow the project policy.</p>}
+            </FormRow>
+          ) : <p className="tasks-composer__policy">Repository setup will follow the project policy.</p>}
           {request.target.kind === 'issue' ? (
-            <label style={field}>
-              <span>Issue command</span>
-              <select style={input} value={issueCommand} onChange={(event) => setIssueCommand(event.currentTarget.value as IssueCommandChoice)}>
+            <FormRow label="Issue command" htmlFor="tasks-workspace-issue-command">
+              <select id="tasks-workspace-issue-command" className="ui-text-field__input" value={issueCommand} onChange={(event) => setIssueCommand(event.currentTarget.value as IssueCommandChoice)}>
                 <option value="inherit">Follow repository issue-command settings</option>
                 <option value="run">Run issue command</option>
                 <option value="skip">Skip issue command</option>
               </select>
-            </label>
+            </FormRow>
           ) : null}
           {trustRequired ? (
-            <details style={{ marginBlock: 12 }} open>
+            <details className="tasks-composer__trust" open>
               <summary>{trustLabel} script needs your approval{request.trustChanged ? ' (script changed)' : ''}</summary>
-              <p style={{ marginBlock: 8 }}>{trustLabel} content must match this displayed hash before it can run.</p>
+              <p>{trustLabel} content must match this displayed hash before it can run.</p>
               <code>Displayed SHA-256: {request.trustHash ?? 'Unavailable'}</code>
-              <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 240, overflow: 'auto', padding: 10, background: 'var(--surface-raised, #2b2c30)' }}>{request.trustScript}</pre>
+              <pre className="tasks-composer__trust-script">{request.trustScript}</pre>
             </details>
           ) : null}
-          {error ? <p role="alert" style={{ color: 'var(--error, #ff7676)' }}>{error}</p> : null}
-          <footer style={{ display: 'flex', justifyContent: 'end', gap: 8, marginTop: 18 }}>
-            <button type="button" onClick={() => void cancel()} disabled={busy}>Cancel</button>
+          {error ? <p role="alert" className="tasks-composer__error">{error}</p> : null}
+          <footer className="tasks-composer__actions">
+            <Button type="button" onClick={() => void cancel()} disabled={busy}>Cancel</Button>
             {trustRequired && trustKind ? (
               <>
-                <button type="button" onClick={() => void submit({ kind: trustKind, choice: 'skip' })} disabled={busy}>Skip {consentLabel}</button>
-                <button type="button" onClick={() => void submit({ kind: trustKind, choice: 'run' })} disabled={busy || !request.trustHash}>Run {consentLabel} once</button>
+                <Button type="button" onClick={() => void submit({ kind: trustKind, choice: 'skip' })} disabled={busy}>Skip {consentLabel}</Button>
+                <Button variant="primary" type="button" onClick={() => void submit({ kind: trustKind, choice: 'run' })} disabled={busy || !request.trustHash}>Run {consentLabel} once</Button>
               </>
             ) : (
-              <button type="submit" disabled={busy || (setupChoiceRequired && setup === 'inherit')}>{busy ? 'Creating…' : 'Create workspace'}</button>
+              <Button variant="primary" type="submit" disabled={busy || (setupChoiceRequired && setup === 'inherit')}>{busy ? 'Creating…' : 'Create workspace'}</Button>
             )}
           </footer>
         </form>
-      </section>
-    </div>
+      </div>
+    </Dialog>
   )
 }
