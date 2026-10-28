@@ -1606,8 +1606,7 @@
         "ui-terminal-theme",
         "ui-screenshot-review"
       ],
-      "status": "in-progress",
-      "lane": 2
+      "status": "done"
     },
     {
       "id": "ui-restyle-browser",
@@ -1619,8 +1618,7 @@
         "ui-terminal-theme",
         "ui-screenshot-review"
       ],
-      "status": "in-progress",
-      "lane": 8
+      "status": "done"
     },
     {
       "id": "ui-restyle-worktrees",
@@ -1645,8 +1643,7 @@
         "ui-terminal-theme",
         "ui-screenshot-review"
       ],
-      "status": "in-progress",
-      "lane": 1
+      "status": "done"
     },
     {
       "id": "ui-restyle-orchestration",
@@ -1658,8 +1655,7 @@
         "ui-terminal-theme",
         "ui-screenshot-review"
       ],
-      "status": "in-progress",
-      "lane": 10
+      "status": "done"
     },
     {
       "id": "ui-restyle-tasks",
@@ -1684,7 +1680,7 @@
         "ui-terminal-theme",
         "ui-screenshot-review"
       ],
-      "status": "todo"
+      "status": "done"
     },
     {
       "id": "ui-restyle-accounts",
@@ -1696,7 +1692,8 @@
         "ui-terminal-theme",
         "ui-screenshot-review"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 11
     },
     {
       "id": "ui-restyle-ask",
@@ -1708,7 +1705,8 @@
         "ui-terminal-theme",
         "ui-screenshot-review"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 8
     },
     {
       "id": "ui-restyle-settings",
@@ -1720,7 +1718,8 @@
         "ui-terminal-theme",
         "ui-screenshot-review"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 10
     },
     {
       "id": "ui-final-review",
@@ -1936,6 +1935,31 @@
       "status": "done"
     },
     {
+      "id": "m3-accounts-complete-user-acceptance-20261028",
+      "milestone": "M3",
+      "title": "Finish Accounts user acceptance after the LOOP night cutoff: complete same-home daemon-restart Compact/Detailed Used/Remaining/provider-visibility UI persistence; all ten drill-ins and inactive refresh/debounce; native-login link/Cancel, Codex UI add, reauth/Needs-sign-in refusal; full Claude Ask Restart/Always/Never/busy-idle/supersession UI (ordinary Keep+opt-out Keep passed); Codex pane Keep old account and keyboard follow-through (pane Restart with prior rollout contents and public focus passed; driver refused opacity0 textarea); provider removal Cancel/confirm/System-default fallback; masked MiniMax/OpenCode Go/ZCode configure/clear and secret-free errors; reset stale-account/stale-offer/failure/retry matrix (opt-out redemption/replay and wrapped Cancel passed); retained Codex warning/recovery UI. Also resolve tracked MEDIUM existing cancellation-RPC failure stopping login polling and background/structured stale-account rows offering terminal-only Restart. Preserve actual daemon/PTY A→B→remove-A→C accumulated-content proof, authority/reload/C1 regressions, explicit review independence limits and pending native clipboard/browser/Keychain/OS-focus handoffs. Exact evidence and open findings: docs/loop/decisions/m3-accounts-remaining-flows.md and BLOCKERS.md; no full UI/native pass claimed.",
+      "docs": [
+        "accounts.md"
+      ],
+      "deps": [
+        "m3-accounts-remaining-flows"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "m7-native-notification-and-signed-terminal-host",
+      "milestone": "M7",
+      "title": "Implement the remaining native notification permission/click/dismiss lifecycle only after supported public Electrobun SDK callbacks are available, and production signed terminal-host launchd/TCC/admission/upgrade packaging only after an authorized signing/packaging identity is supplied. These remain unbuilt source flows from m7-vm-and-owner-bound-host-workspaces; inherited missing public callbacks and zero authorized signing identities are prerequisites, not permission to fabricate callbacks, private SDK patches, ad-hoc production identity or delivery success. Keep Native Browser and remote automation/model retirement with their existing canonical owners; no VM/registered-host duplication.",
+      "docs": [
+        "notifications.md",
+        "term-daemon.md"
+      ],
+      "deps": [
+        "m7-vm-and-owner-bound-host-workspaces"
+      ],
+      "status": "todo"
+    },
+    {
       "id": "m7-sweep-sessions",
       "milestone": "M7",
       "docs": [
@@ -2001,19 +2025,6 @@
       "status": "blocked"
     },
     {
-      "id": "m3-accounts-complete-user-acceptance-20261028",
-      "milestone": "M3",
-      "title": "Finish Accounts user acceptance after the LOOP night cutoff: complete same-home daemon-restart Compact/Detailed Used/Remaining/provider-visibility UI persistence; all ten drill-ins and inactive refresh/debounce; native-login link/Cancel, Codex UI add, reauth/Needs-sign-in refusal; full Claude Ask Restart/Always/Never/busy-idle/supersession UI (ordinary Keep+opt-out Keep passed); Codex pane Keep old account and keyboard follow-through (pane Restart with prior rollout contents and public focus passed; driver refused opacity0 textarea); provider removal Cancel/confirm/System-default fallback; masked MiniMax/OpenCode Go/ZCode configure/clear and secret-free errors; reset stale-account/stale-offer/failure/retry matrix (opt-out redemption/replay and wrapped Cancel passed); retained Codex warning/recovery UI. Also resolve tracked MEDIUM existing cancellation-RPC failure stopping login polling and background/structured stale-account rows offering terminal-only Restart. Preserve actual daemon/PTY A→B→remove-A→C accumulated-content proof, authority/reload/C1 regressions, explicit review independence limits and pending native clipboard/browser/Keychain/OS-focus handoffs. Exact evidence and open findings: docs/loop/decisions/m3-accounts-remaining-flows.md and BLOCKERS.md; no full UI/native pass claimed.",
-      "docs": [
-        "accounts.md"
-      ],
-      "deps": [
-        "m3-accounts-remaining-flows"
-      ],
-      "status": "in-progress",
-      "lane": 11
-    },
-    {
       "id": "fix-test-browser-1028",
       "milestone": "M7",
       "title": "Repair end-phase plugins/quirky.browser failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.browser). Files and exact failed tests: plugins/quirky.browser/test/cookie-import-window.test.tsx: source detection begins only when opened and empty/error states retain file import recovery | plugins/quirky.browser/test/extras-api.test.ts: daemon imports an explicit JSON cookie source into a managed profile; page profile methods select, report, restore Default, and clone through the public API | plugins/quirky.browser/test/extras-automation.test.ts: SC3: cookies retain exact host, path, partition identity and storage stays in its profile/page scope; SC4: page profile rebinding is isolated and clone copies cookies transactionally into an independent page; SC5: history, advanced interactions, signed nth and full-page capture operate on the exact page; SC6-SC7: HAR, multiple intercept patterns, headers, emulation, clipboard and out-of-band dialog response are real; SC4 rollback: a failed cookie clone restores every destination identity | plugins/quirky.browser/test/extras-cli.test.ts: CLI keeps @file text literal and reads large fill values only through explicit file mode; file import uses an explicit --file source and the dispatcher confirmation path | plugins/quirky.browser/test/import.test.ts: daemon import replaces only safe families and accepts explicit file and JSON bytes; daemon import reads Chromium Local State profiles, decrypts v24 rows, and skips unreadable families; daemon imports Firefox SQLite/WAL and Safari binarycookies without modifying source bytes; daemon replacement rolls back exact cookie values, reports jobs, and drains imports on shutdown | plugins/quirky.browser/test/preferences-window.test.tsx: import controls detect only after expansion, preserve the settings link, and persist hint hiding. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
@@ -2032,7 +2043,8 @@
       "deps": [
         "m7-test-triage"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 2
     },
     {
       "id": "fix-test-git-1028",
@@ -2042,7 +2054,8 @@
       "deps": [
         "m7-test-triage"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 1
     },
     {
       "id": "fix-test-heimdall-1028",
@@ -2313,7 +2326,8 @@
         "fix-test-accounts-1028",
         "fix-test-packages-protocol-1028",
         "fix-test-scripts-ui-review-1028",
-        "fix-test-scripts-profile-timeout-1028"
+        "fix-test-scripts-profile-timeout-1028",
+        "m7-native-notification-and-signed-terminal-host"
       ],
       "status": "todo",
       "early": true

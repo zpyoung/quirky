@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Button, TextField } from '@quirky/ui'
 import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'
 import type { BrowserProfile } from '../profiles/store'
 import type { BrowserPreferencesProps, PreferencesState, ProfileUsage } from '../preferences/contract'
@@ -214,12 +215,23 @@ export function ProfileCreator({ context, onCreated, onCancel, onError }: {
       setSaving(false)
     }
   }
-  return <div role="dialog" aria-modal="true" aria-label="New Browser Profile">
-    <h3>New Profile</h3>
-    <label>Profile name<input aria-label="Profile name" autoFocus value={name} onChange={(event) => setName(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void submit() } }} /></label>
-    {error && <p role="alert">{error}</p>}
-    <button type="button" disabled={saving} onClick={() => void submit()}>{saving ? 'Creating…' : 'Create Profile'}</button>
-    <button type="button" disabled={saving} onClick={onCancel}>Cancel</button>
+  return <div className="ui-dialog" role="dialog" aria-modal="true" aria-label="New Browser Profile">
+    <div className="ui-dialog__header">
+      <h3 className="ui-dialog__title">New Profile</h3>
+    </div>
+    <TextField
+      label="Profile name"
+      aria-label="Profile name"
+      autoFocus
+      value={name}
+      onChange={(event) => setName(event.currentTarget.value)}
+      onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void submit() } }}
+    />
+    {error && <p className="ui-error-text" role="alert" style={{ margin: 0, overflowWrap: 'anywhere' }}>{error}</p>}
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--ui-space-8)' }}>
+      <Button type="button" variant="primary" disabled={saving} onClick={() => void submit()}>{saving ? 'Creating…' : 'Create Profile'}</Button>
+      <Button type="button" disabled={saving} onClick={onCancel}>Cancel</Button>
+    </div>
   </div>
 }
 

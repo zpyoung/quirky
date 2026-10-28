@@ -1,12 +1,15 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useId, useMemo, useState, type FormEvent } from 'react'
+import { createPortal } from 'react-dom'
+import { Button, Dialog, FormRow, SectionHeader, TextField } from '@quirky/ui'
 import type { LedgerEntry, LedgerLocation, LedgerResponse, LedgerType } from './types'
 import { errorMessage } from './api'
+import { ledgerStyles } from './styles'
 
 export type LocationBaseOption = { value: string; label: string; base: LedgerLocation['base'] }
 
-type TextField = { key: string; label: string; multiline?: boolean; options?: readonly string[] }
+type FieldDefinition = { key: string; label: string; multiline?: boolean; options?: readonly string[] }
 
-const TYPE_FIELDS: Record<LedgerType, TextField[]> = {
+const TYPE_FIELDS: Record<LedgerType, FieldDefinition[]> = {
   bug: [
     { key: 'file', label: 'File' },
     { key: 'description', label: 'Description', multiline: true },
@@ -40,7 +43,7 @@ const TYPE_NAMES: Record<LedgerType, string> = {
   decision: 'Decision'
 }
 
-function initialField(content: Record<string, unknown>, field: TextField): string {
+function initialField(content: Record<string, unknown>, field: FieldDefinition): string {
   const value = content[field.key]
   if (typeof value === 'string') return value
   if (typeof value === 'number' || typeof value === 'boolean') return String(value)
@@ -60,7 +63,7 @@ function baseKey(base: LedgerLocation['base']): string {
   return `${base.kind}:${base.id}`
 }
 
-function fieldLabel(field: TextField): string {
+function fieldLabel(field: FieldDefinition): string {
   if (field.key === 'file') return 'File'
   if (field.key === 'file_under_test') return 'File under test'
   return field.label
@@ -80,6 +83,7 @@ export function LedgerForm({
   onCancel(): void
   onSave(type: LedgerType, content: Record<string, unknown>): Promise<LedgerResponse>
 }) {
+  const formId = useId()
   const [type, setType] = useState<LedgerType>(entry?.type ?? initialType ?? 'bug')
   const [content, setContent] = useState<Record<string, string>>(() => {
     const values: Record<string, string> = { title: typeof entry?.content.title === 'string' ? entry.content.title : '' }
@@ -198,105 +202,95 @@ export function LedgerForm({
   }
 
   const title = entry ? `Edit ${entry.id}` : 'New ledger entry'
-  return (
-    <div className="ledger-modal-backdrop" role="presentation">
-      <section className="ledger-dialog ledger-form-dialog" role="dialog" aria-modal="true" aria-label={title}>
-        <header className="ledger-dialog-header">
-          <h2>{title}</h2>
-          {entry && <p>Source revision: {entry.revision}. Save will be checked against this revision.</p>}
-        </header>
-        <form className="ledger-dialog-body ledger-form" noValidate onSubmit={(event) => void submit(event)}>
-          {!entry && (
-            <label>
-              <span>Type</span>
-              <select value={type} onChange={(event) => {
-                const nextType = event.target.value as LedgerType
-                setType(nextType)
-                setContent((previous) => ({ title: previous.title ?? '' }))
-                setPath('')
-                setLine('')
-                setSelectedBase('')
-                setExternal(false)
-                setHost('')
-                setErrors({})
-              }}>
-                {(Object.keys(TYPE_NAMES) as LedgerType[]).map((value) => <option key={value} value={value}>{TYPE_NAMES[value]}</option>)}
-              </select>
-            </label>
+  return createPortal(
+    <Dialog
+      open
+      scrollBody
+      title={title}
+      closeOnBackdrop={false}
+      onClose={onCancel}
+      actions={
+        <div style={ledgerStyles.actions}>
+          <Button onClick={onCancel}>{createdMatches ? 'Done' : 'Cancel'}</Button>
+          {!createdMatches && (
+            <Button type="submit" form={formId} variant="primary" disabled={busy}>
+              {entry ? 'Save changes' : 'Create entry'}
+            </Button>
           )}
-          <label aria-invalid={Boolean(errors.title)}>
-            <span>Title</span>
-            <input value={content.title ?? ''} onChange={(event) => setField('title', event.target.value)} />
-            {errors.title && <small role="alert">{errors.title}</small>}
-          </label>
-          {TYPE_FIELDS[type].map((field) => {
-            const label = fieldLabel(field)
-            if (field.key === 'file' || field.key === 'file_under_test') {
-              return (
-                <fieldset className="ledger-location-fields" key={field.key}>
-                  <legend>{label}</legend>
-                  <label aria-invalid={Boolean(errors[locationKey])}>
-                    <span>{label}</span>
-                    <input value={path} placeholder="Repository-relative path" onChange={(event) => setPath(event.target.value)} />
-                    {errors[locationKey] && <small role="alert">{errors[locationKey]}</small>}
-                  </label>
-                  <label aria-invalid={Boolean(errors.line)}>
-                    <span>Line (optional)</span>
-                    <input type="number" min="1" step="1" value={line} onChange={(event) => setLine(event.target.value)} />
-                    {errors.line && <small role="alert">{errors.line}</small>}
-                  </label>
-                  <label aria-invalid={Boolean(errors.base)}>
-                    <span>Location base</span>
-                    <select value={selectedBase} onChange={(event) => setSelectedBase(event.target.value)}>
-                      <option value="">Choose a location base</option>
-                      {availableBases.map((base) => <option key={base.value} value={base.value}>{base.label}</option>)}
-                    </select>
-                    {errors.base && <small role="alert">{errors.base}</small>}
-                  </label>
-                  <label className="ledger-check-row">
-                    <input type="checkbox" checked={external} onChange={(event) => setExternal(event.target.checked)} />
-                    <span>External location</span>
-                  </label>
-                  {external && <label aria-invalid={Boolean(errors.host)}>
-                    <span>External host</span>
-                    <input value={host} onChange={(event) => setHost(event.target.value)} />
-                    {errors.host && <small role="alert">{errors.host}</small>}
-                  </label>}
-                </fieldset>
-              )
-            }
+        </div>
+      }
+    >
+      <form id={formId} noValidate onSubmit={(event) => void submit(event)} style={ledgerStyles.stack}>
+        {!entry && (
+          <FormRow label="Type" htmlFor={`${formId}-type`}>
+            <select id={`${formId}-type`} className="ui-text-field__input" value={type} onChange={(event) => {
+              const nextType = event.target.value as LedgerType
+              setType(nextType)
+              setContent((previous) => ({ title: previous.title ?? '' }))
+              setPath('')
+              setLine('')
+              setSelectedBase('')
+              setExternal(false)
+              setHost('')
+              setErrors({})
+            }}>
+              {(Object.keys(TYPE_NAMES) as LedgerType[]).map((value) => <option key={value} value={value}>{TYPE_NAMES[value]}</option>)}
+            </select>
+          </FormRow>
+        )}
+        <TextField label="Title" value={content.title ?? ''} onChange={(event) => setField('title', event.target.value)} error={errors.title || undefined} />
+        {TYPE_FIELDS[type].map((field) => {
+          const label = fieldLabel(field)
+          const id = `${formId}-${field.key}`
+          if (field.key === 'file' || field.key === 'file_under_test') {
             return (
-              <label key={field.key} aria-invalid={Boolean(errors[field.key])}>
-                <span>{label}</span>
-                {field.options ? (
-                  <select value={content[field.key] ?? ''} onChange={(event) => setField(field.key, event.target.value)}>
-                    <option value="">Choose {label.toLowerCase()}</option>
-                    {field.options.map((option) => <option value={option} key={option}>{option}</option>)}
+              <fieldset style={ledgerStyles.location} key={field.key}>
+                <legend>{label}</legend>
+                <TextField label={label} value={path} placeholder="Repository-relative path" onChange={(event) => setPath(event.target.value)} error={errors[locationKey] || undefined} />
+                <TextField label="Line (optional)" type="number" min="1" step="1" value={line} onChange={(event) => setLine(event.target.value)} error={errors.line || undefined} />
+                <FormRow label="Location base" htmlFor={`${id}-base`} error={errors.base || undefined}>
+                  <select id={`${id}-base`} className="ui-text-field__input" value={selectedBase} onChange={(event) => setSelectedBase(event.target.value)}>
+                    <option value="">Choose a location base</option>
+                    {availableBases.map((base) => <option key={base.value} value={base.value}>{base.label}</option>)}
                   </select>
-                ) : field.multiline ? (
-                  <textarea rows={3} value={content[field.key] ?? ''} onChange={(event) => setField(field.key, event.target.value)} />
-                ) : (
-                  <input value={content[field.key] ?? ''} onChange={(event) => setField(field.key, event.target.value)} />
-                )}
-                {errors[field.key] && <small role="alert">{errors[field.key]}</small>}
-              </label>
+                </FormRow>
+                <label style={ledgerStyles.check}>
+                  <input type="checkbox" style={ledgerStyles.checkbox} checked={external} onChange={(event) => setExternal(event.target.checked)} />
+                  <span>External location</span>
+                </label>
+                {external && <TextField label="External host" value={host} onChange={(event) => setHost(event.target.value)} error={errors.host || undefined} />}
+              </fieldset>
             )
-          })}
-          {message && <p role="alert" className={conflictRevision === null ? 'ledger-form-message' : 'ledger-form-conflict'}>{message}</p>}
-          {createdMatches && <section aria-label="Possible duplicate entries">
-            <h3>Possible duplicate entries</h3>
+          }
+          if (field.options) {
+            return (
+              <FormRow key={field.key} label={label} htmlFor={id} error={errors[field.key] || undefined}>
+                <select id={id} className="ui-text-field__input" value={content[field.key] ?? ''} onChange={(event) => setField(field.key, event.target.value)}>
+                  <option value="">Choose {label.toLowerCase()}</option>
+                  {field.options.map((option) => <option value={option} key={option}>{option}</option>)}
+                </select>
+              </FormRow>
+            )
+          }
+          if (field.multiline) {
+            return (
+              <FormRow key={field.key} label={label} htmlFor={id} error={errors[field.key] || undefined}>
+                <textarea id={id} className="ui-text-field__input" rows={3} value={content[field.key] ?? ''} onChange={(event) => setField(field.key, event.target.value)} />
+              </FormRow>
+            )
+          }
+          return <TextField key={field.key} label={label} value={content[field.key] ?? ''} onChange={(event) => setField(field.key, event.target.value)} error={errors[field.key] || undefined} />
+        })}
+        {message && <p role="alert" style={conflictRevision === null ? ledgerStyles.message : ledgerStyles.error}>{message}</p>}
+        {createdMatches && (
+          <section aria-label="Possible duplicate entries" style={ledgerStyles.section}>
+            <SectionHeader title="Possible duplicate entries" />
             <p>These similar records are advisory only; creating a duplicate is allowed.</p>
-            <ul>{createdMatches.map((match) => <li key={match.id}>{match.id} · {String(match.content.title ?? '')}</li>)}</ul>
-          </section>}
-        </form>
-        <footer className="ledger-dialog-actions">
-          <button type="button" onClick={onCancel}>{createdMatches ? 'Done' : 'Cancel'}</button>
-          {!createdMatches && <button type="button" className="primary" disabled={busy} onClick={(event) => {
-            const form = event.currentTarget.closest('.ledger-dialog')?.querySelector('form')
-            form?.requestSubmit()
-          }}>{entry ? 'Save changes' : 'Create entry'}</button>}
-        </footer>
-      </section>
-    </div>
+            <ul style={ledgerStyles.list}>{createdMatches.map((match) => <li key={match.id} style={ledgerStyles.row}>{match.id} · {String(match.content.title ?? '')}</li>)}</ul>
+          </section>
+        )}
+      </form>
+    </Dialog>,
+    document.body
   )
 }

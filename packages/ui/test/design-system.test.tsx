@@ -1,10 +1,11 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
-import { act, createElement as h, type ReactNode } from 'react'
+import { act, createElement as h, createRef, useState, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import {
   Badge,
   Button,
+  ContextMenu,
   Dialog,
   EmptyState,
   FormRow,
@@ -12,10 +13,13 @@ import {
   InlineAgentCard,
   ListRow,
   Menu,
+  Popover,
   SectionHeader,
   StatusDot,
   Tabs,
   TextField,
+  TextArea,
+  SelectField,
   Toast,
   ToolPanelFrame,
 } from '../src/design-system'
@@ -127,6 +131,31 @@ describe('shared graphite components', () => {
     expect(container.textContent).toContain('Message is required')
   })
 
+  test('multiline and selection fields preserve native form values and accessible error ownership', async () => {
+    await render(<form>
+      <span id="existing-help">Inherited description</span>
+      <TextArea label="Instructions" name="instructions" defaultValue={'first line\nsecond line'} help="Keep line breaks" error="Review instructions" aria-describedby="existing-help" />
+      <SelectField label="Agent" name="agent" defaultValue="codex">
+        <option value="claude">Claude</option>
+        <option value="codex">Codex</option>
+      </SelectField>
+      <TextArea label="Unavailable" name="disabled" defaultValue="not submitted" disabled />
+    </form>)
+    const form = container.querySelector('form')!
+    const instructions = form.querySelector<HTMLTextAreaElement>('textarea[name="instructions"]')!
+    const agent = form.querySelector('select')!
+    expect(Object.fromEntries(new FormData(form))).toEqual({ instructions: 'first line\nsecond line', agent: 'codex' })
+    expect([...form.querySelectorAll('label')].map((label) => label.control)).toEqual([
+      instructions, agent, form.querySelector<HTMLTextAreaElement>('textarea[name="disabled"]'),
+    ])
+    expect(instructions.getAttribute('aria-invalid')).toBe('true')
+    const describedIds = instructions.getAttribute('aria-describedby')!.split(' ')
+    expect(describedIds.map((id) => document.getElementById(id)?.textContent)).toEqual([
+      'Inherited description', 'Keep line breaks', 'Review instructions',
+    ])
+    expect(new Set([...form.querySelectorAll('textarea,select')].map((field) => field.id)).size).toBe(3)
+  })
+
   test('list rows announce selection and disabled rows ignore activation', async () => {
     const calls: number[] = []
     await render(<ListRow title="provider-host" description="codex · editing host.ts" status="working" count={2} selected disabled onClick={() => calls.push(1)} />)
@@ -222,6 +251,88 @@ describe('shared graphite components', () => {
       outside.dispatchEvent(new Event('pointerdown', { bubbles: true }))
     })
     expect(container.querySelector('[role="menu"]')).toBeNull()
+  })
+
+  test('context menus skip headings and disabled rows before selecting an enabled nested item', async () => {
+    const actions: string[] = []
+    function Example() {
+      const [open, setOpen] = useState(true)
+      return open ? <ContextMenu x={0} y={0} label="File actions" onClose={() => setOpen(false)} items={[
+        { label: 'Destinations', heading: true },
+        { label: 'Unavailable', enabled: false, onSelect: () => actions.push('disabled') },
+        { label: 'Send to', submenu: [
+          { label: 'Unavailable target', enabled: false, onSelect: () => actions.push('disabled target') },
+          { label: 'Agent', icon: '★', detail: 'Ready', badge: 2, title: 'Agent destination', onSelect: () => actions.push('agent') },
+        ] },
+        { label: 'Copy', icon: '⧉', detail: 'Copies the path', badge: 'Current', checked: true, title: 'Current action', separatorBefore: true },
+      ]} /> : null
+    }
+    await render(<Example />)
+    const parent = document.querySelector<HTMLElement>('[role="menu"][aria-label="File actions"]')!
+    expect(parent.querySelector('[role="presentation"]')?.textContent).toBe('Destinations')
+    const current = [...parent.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find((item) => item.textContent?.includes('Copy'))!
+    expect(current.title).toBe('Current action')
+    expect(current.getAttribute('aria-checked')).toBe('true')
+    expect(current.hasAttribute('data-current')).toBe(true)
+    expect(current.textContent).toContain('⧉')
+    expect(current.querySelector('.ui-help-text')?.textContent).toBe('Copies the path')
+    expect(current.querySelector('.ui-badge')?.textContent).toBe('Current')
+    expect(parent.querySelector('[role="separator"]')).not.toBeNull()
+
+    await key(parent, 'ArrowDown')
+    await key(parent, 'ArrowRight')
+    const child = document.querySelector<HTMLElement>('[role="menu"][aria-label="Send to"]')!
+    expect(child.querySelector<HTMLButtonElement>('[role="menuitem"]:disabled')?.textContent).toContain('Unavailable target')
+    const agent = child.querySelector<HTMLButtonElement>('[role="menuitem"]:not(:disabled)')!
+    expect(agent.title).toBe('Agent destination')
+    expect(agent.textContent).toContain('★')
+    expect(agent.querySelector('.ui-help-text')?.textContent).toBe('Ready')
+    expect(agent.querySelector('.ui-badge')?.textContent).toBe('2')
+    await key(child, 'ArrowDown')
+    await key(child, 'Enter')
+    expect(actions).toEqual(['agent'])
+    expect(document.querySelector('[role="menu"]')).toBeNull()
+  })
+
+  test('menu checkbox actions receive current state and restore focus without changing ordinary item semantics', async () => {
+    function Example() {
+      const [checked, setChecked] = useState(false)
+      return <Menu label="Diff options" items={[
+        { id: 'wrap', label: 'Word Wrap', checked, onAction: () => setChecked((value) => !value) },
+        { id: 'copy', label: 'Copy', onAction: () => {} },
+      ]} />
+    }
+    await render(<Example />)
+    const trigger = container.querySelector('button[aria-haspopup="menu"]')!
+    await click(trigger)
+    expect(container.querySelector('[role="menuitemcheckbox"]')?.getAttribute('aria-checked')).toBe('false')
+    expect(container.querySelector('[role="menuitem"]')?.textContent).toBe('Copy')
+    await click(container.querySelector('[role="menuitemcheckbox"]')!)
+    expect(document.activeElement).toBe(trigger)
+    await click(trigger)
+    expect(container.querySelector('[role="menuitemcheckbox"]')?.getAttribute('aria-checked')).toBe('true')
+  })
+
+  test('popover interaction stays nonmodal and inside actions do not dismiss it', async () => {
+    const anchor = createRef<HTMLButtonElement>()
+    const calls: string[] = []
+    function Example() {
+      const [open, setOpen] = useState(true)
+      return <><button ref={anchor}>Notes</button><button>Outside</button>
+        <Popover open={open} label="AI notes" anchor={anchor} onClose={() => { calls.push('close'); setOpen(false) }}>
+          <Button onClick={() => calls.push('copy')}>Copy</Button>
+        </Popover></>
+    }
+    await render(<Example />)
+    const dialog = document.querySelector('[role="dialog"][aria-label="AI notes"]')!
+    expect(dialog.hasAttribute('aria-modal')).toBe(false)
+    await act(async () => { dialog.dispatchEvent(new Event('pointerdown', { bubbles: true })) })
+    await click(dialog.querySelector('button')!)
+    expect(calls).toEqual(['copy'])
+    const outside = [...container.querySelectorAll('button')].find((button) => button.textContent === 'Outside')!
+    await act(async () => { outside.dispatchEvent(new Event('pointerdown', { bubbles: true })) })
+    expect(calls).toEqual(['copy', 'close'])
+    expect(document.querySelector('[role="dialog"][aria-label="AI notes"]')).toBeNull()
   })
 
   test('toasts dismiss on expiration and expiration never invokes the action', async () => {

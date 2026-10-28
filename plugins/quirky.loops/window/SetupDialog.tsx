@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
+import { Button, Dialog, EmptyState, FormRow, SelectField, TextArea, TextField } from '@quirky/ui'
 import type { UiPluginContext } from '@quirky/protocol'
 import type { LoopSnapshot } from '../src/types'
 import { ConfigFields, initialDraft, validateDraft } from './config-form'
 import type { LoopDraft, SetupDialogProps, SurfaceHandle } from './contracts'
-import { setupStyles } from './setup-styles'
 
 type AgentChoice = { id: 'claude' | 'codex'; label: string; isDefault: boolean }
 type WorkspaceChoice = { id: string; kind: 'git' | 'folder'; path: string }
@@ -174,6 +174,7 @@ function validatePatch(value: unknown, agents: AgentChoice[]): Partial<LoopDraft
 }
 
 export function SetupDialog(props: SetupDialogProps) {
+  const checkboxId = useId()
   const [draft, setDraft] = useState<LoopDraft>(() => initialDraft())
   const [agents, setAgents] = useState<AgentChoice[]>([])
   const [workspace, setWorkspace] = useState<WorkspaceChoice | null>(null)
@@ -551,153 +552,133 @@ export function SetupDialog(props: SetupDialogProps) {
   const loopLoadError = loadErrors.loops
 
   return (
-    <>
-      <style>{setupStyles}</style>
-      <div className="loop-setup-backdrop">
-        <form className="loop-setup-dialog" role="dialog" aria-modal="true" aria-label="New loop" onSubmit={onSubmit}>
-          <header className="loop-setup-header">
-            <h2>New loop</h2>
-            <button type="button" className="loop-setup-close" aria-label="Close new loop dialog" disabled={!canEdit} onClick={() => void dispatch('cancel')}>
-              ×
-            </button>
-          </header>
-          <div className="loop-setup-main">
-            <section className="loop-setup-left" aria-label="Loop prompt">
-              {warning && <p className="loop-setup-warning" role="status">{warning}</p>}
-              <label className="loop-visually-hidden" htmlFor="loop-setup-name">Loop name</label>
-              <input
-                id="loop-setup-name"
-                className="loop-setup-name"
-                aria-label="Loop name"
-                type="text"
-                value={draft.name}
-                placeholder={namePlaceholder}
-                disabled={!canEdit}
-                onChange={(event) => void dispatch('update', { patch: { name: event.currentTarget.value } })}
-              />
-              {draft.preset === 'queue' ? (
-                <div className="loop-queue-editor">
-                  <div className="loop-queue-list" aria-label="Queue prompts">
-                    {draft.queueItems.map((body, index) => (
-                      <div className="loop-queue-item" key={index}>
-                        <div>
-                          <label className="loop-visually-hidden" htmlFor={`loop-queue-item-${index}`}>Queue item {index + 1}</label>
-                          <textarea
-                            id={`loop-queue-item-${index}`}
-                            aria-label={`Queue item ${index + 1}`}
-                            value={body}
-                            rows={3}
-                            disabled={!canEdit}
-                            onChange={(event) => void dispatch('queue-edit', { index, body: event.currentTarget.value })}
-                          />
-                          {validation.errors[`queueItems.${index}`] && (
-                            <span className="loop-field-error" role="alert">{validation.errors[`queueItems.${index}`]}</span>
-                          )}
-                        </div>
-                        <div className="loop-queue-controls">
-                          <button type="button" aria-label={`Move queue item ${index + 1} up`} disabled={!canEdit || index === 0} onClick={() => void dispatch('queue-move', { index, position: 'up' })}>↑</button>
-                          <button type="button" aria-label={`Move queue item ${index + 1} down`} disabled={!canEdit || index === draft.queueItems.length - 1} onClick={() => void dispatch('queue-move', { index, position: 'down' })}>↓</button>
-                          <button type="button" aria-label={`Remove queue item ${index + 1}`} disabled={!canEdit} onClick={() => void dispatch('queue-remove', { index })}>Remove</button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  {draft.queueItems.length === 0 && <p className="loop-queue-empty">Add at least one prompt to the queue.</p>}
-                  {validation.errors.queueItems && draft.queueItems.length > 0 && (
-                    <p className="loop-setup-empty-error" role="alert">{validation.errors.queueItems}</p>
-                  )}
-                  <div className="loop-queue-composer">
-                    <label className="loop-code-label" htmlFor="loop-queue-new">New queue item</label>
-                    <textarea
-                      id="loop-queue-new"
-                      aria-label="New queue item"
-                      value={queueComposer}
-                      rows={3}
-                      disabled={!canEdit}
-                      onChange={(event) => setQueueComposer(event.currentTarget.value)}
-                    />
-                    <button
-                      type="button"
-                      disabled={!canEdit}
-                      onClick={() => {
-                        void dispatch('queue-add', { body: queueComposer })
-                        setQueueComposer('')
-                      }}
-                    >
-                      Add to queue
-                    </button>
-                  </div>
-                  <label className="loop-check-field">
-                    <input
-                      type="checkbox"
-                      checked={draft.repeatQueue}
-                      disabled={!canEdit}
-                      onChange={(event) => void dispatch('update', { patch: { repeatQueue: event.currentTarget.checked } })}
-                    />
-                    <span>Start over when the queue is empty</span>
-                  </label>
-                </div>
-              ) : (
-                <>
-                  <label className="loop-code-label" htmlFor="loop-setup-prompt">Prompt</label>
-                  <textarea
-                    id="loop-setup-prompt"
-                    className="loop-code-editor"
-                    aria-label="Prompt"
-                    value={draft.prompt}
+    <Dialog
+      open
+      title="New loop"
+      onClose={() => {
+        if (canEdit) void dispatch('cancel')
+      }}
+      closeOnBackdrop={false}
+    >
+      <form className="ui-stack" aria-label="New loop" onSubmit={onSubmit}>
+        <section className="ui-stack" aria-label="Loop prompt">
+          {warning && <p role="status">{warning}</p>}
+          <TextField
+            id="loop-setup-name"
+            label="Loop name"
+            aria-label="Loop name"
+            type="text"
+            value={draft.name}
+            placeholder={namePlaceholder}
+            disabled={!canEdit}
+            onChange={(event) => void dispatch('update', { patch: { name: event.currentTarget.value } })}
+          />
+          {draft.preset === 'queue' ? (
+            <div className="ui-stack" aria-label="Queue prompts">
+              {draft.queueItems.map((body, index) => (
+                <div className="ui-stack" key={index}>
+                  <TextArea
+                    id={`loop-queue-item-${index}`}
+                    label={`Queue item ${index + 1}`}
+                    aria-label={`Queue item ${index + 1}`}
+                    value={body}
+                    rows={3}
                     disabled={!canEdit}
-                    onChange={changeText}
+                    error={validation.errors[`queueItems.${index}`]}
+                    onChange={(event) => void dispatch('queue-edit', { index, body: event.currentTarget.value })}
                   />
-                  {validation.errors.prompt && <p className="loop-setup-empty-error" role="alert">{validation.errors.prompt}</p>}
-                </>
+                  <div className="ui-cluster">
+                    <Button type="button" aria-label={`Move queue item ${index + 1} up`} disabled={!canEdit || index === 0} onClick={() => void dispatch('queue-move', { index, position: 'up' })}>↑</Button>
+                    <Button type="button" aria-label={`Move queue item ${index + 1} down`} disabled={!canEdit || index === draft.queueItems.length - 1} onClick={() => void dispatch('queue-move', { index, position: 'down' })}>↓</Button>
+                    <Button type="button" variant="destructive" aria-label={`Remove queue item ${index + 1}`} disabled={!canEdit} onClick={() => void dispatch('queue-remove', { index })}>Remove</Button>
+                  </div>
+                </div>
+              ))}
+              {draft.queueItems.length === 0 && <EmptyState message="Add at least one prompt to the queue." />}
+              {validation.errors.queueItems && draft.queueItems.length > 0 && (
+                <p role="alert">{validation.errors.queueItems}</p>
               )}
-            </section>
-            <section className="loop-setup-right" aria-label="Loop configuration">
-              {loading && <p role="status">Loading workspace and agents…</p>}
-              {workspaceLoadError && <p className="loop-setup-load-error" role="alert">Could not load the workspace: {workspaceLoadError}</p>}
-              {agentLoadError && <p className="loop-setup-load-error" role="alert">Could not load agents: {agentLoadError}</p>}
-              {loopLoadError && <p className="loop-setup-load-error" role="alert">Could not check for existing loops: {loopLoadError}</p>}
-              {!agentsLoading && !agentLoadError && agents.length === 0 && (
-                <p className="loop-setup-load-error" role="status">No installed and enabled Claude or Codex agents are available.</p>
-              )}
-              <label className="loop-field">
-                <span>Agent</span>
-                <select
-                  aria-label="Agent"
-                  value={draft.agent}
-                  disabled={!canEdit || agentsLoading || agents.length === 0}
-                  onChange={(event) => void dispatch('update', { patch: { agent: event.currentTarget.value } })}
+              <div className="ui-stack">
+                <TextArea
+                  id="loop-queue-new"
+                  label="New queue item"
+                  aria-label="New queue item"
+                  value={queueComposer}
+                  rows={3}
+                  disabled={!canEdit}
+                  onChange={(event) => setQueueComposer(event.currentTarget.value)}
+                />
+                <Button
+                  type="button"
+                  disabled={!canEdit}
+                  onClick={() => {
+                    void dispatch('queue-add', { body: queueComposer })
+                    setQueueComposer('')
+                  }}
                 >
-                  {agents.length === 0 && <option value={draft.agent}>Unavailable</option>}
-                  {agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.label}</option>)}
-                </select>
-              </label>
-              <ConfigFields
-                draft={draft}
-                onChange={onConfigChange}
-                errors={validation.errors}
-                workspaceKind={workspace?.kind ?? 'folder'}
-                showCost={showCost}
-                disabled={!canEdit}
-              />
-            </section>
-          </div>
-          {(serverError || loadError) && (
-            <p className="loop-setup-error" role="alert">
-              {serverError ?? loadError}
-            </p>
-          )}
-          <footer className="loop-setup-footer">
-            <p>Run an agent in this workspace over and over until the work is done.</p>
-            <div className="loop-setup-footer-actions">
-              <button type="button" disabled={busy} onClick={() => void dispatch('cancel')}>Cancel</button>
-              <button type="submit" className="loop-primary" disabled={!canStart}>
-                {busy ? 'Starting…' : 'Start loop'}
-              </button>
+                  Add to queue
+                </Button>
+              </div>
+              <FormRow label="Start over when the queue is empty" htmlFor={`${checkboxId}-repeat-queue`}>
+                <input
+                  id={`${checkboxId}-repeat-queue`}
+                  type="checkbox"
+                  checked={draft.repeatQueue}
+                  disabled={!canEdit}
+                  onChange={(event) => void dispatch('update', { patch: { repeatQueue: event.currentTarget.checked } })}
+                />
+              </FormRow>
             </div>
-          </footer>
-        </form>
-      </div>
-    </>
+          ) : (
+            <TextArea
+              id="loop-setup-prompt"
+              label="Prompt"
+              aria-label="Prompt"
+              value={draft.prompt}
+              disabled={!canEdit}
+              error={validation.errors.prompt}
+              onChange={changeText}
+            />
+          )}
+        </section>
+        <section className="ui-stack" aria-label="Loop configuration">
+          {loading && <p role="status">Loading workspace and agents…</p>}
+          {workspaceLoadError && <p role="alert">Could not load the workspace: {workspaceLoadError}</p>}
+          {agentLoadError && <p role="alert">Could not load agents: {agentLoadError}</p>}
+          {loopLoadError && <p role="alert">Could not check for existing loops: {loopLoadError}</p>}
+          {!agentsLoading && !agentLoadError && agents.length === 0 && (
+            <p role="status">No installed and enabled Claude or Codex agents are available.</p>
+          )}
+          <SelectField
+            label="Agent"
+            aria-label="Agent"
+            value={draft.agent}
+            disabled={!canEdit || agentsLoading || agents.length === 0}
+            onChange={(event) => void dispatch('update', { patch: { agent: event.currentTarget.value } })}
+          >
+            {agents.length === 0 && <option value={draft.agent}>Unavailable</option>}
+            {agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.label}</option>)}
+          </SelectField>
+          <ConfigFields
+            draft={draft}
+            onChange={onConfigChange}
+            errors={validation.errors}
+            workspaceKind={workspace?.kind ?? 'folder'}
+            showCost={showCost}
+            disabled={!canEdit}
+          />
+        </section>
+        {(serverError || loadError) && (
+          <p role="alert">{serverError ?? loadError}</p>
+        )}
+        <p>Run an agent in this workspace over and over until the work is done.</p>
+        <div className="ui-cluster">
+          <Button type="button" disabled={busy} onClick={() => void dispatch('cancel')}>Cancel</Button>
+          <Button type="submit" variant="primary" disabled={!canStart}>
+            {busy ? 'Starting…' : 'Start loop'}
+          </Button>
+        </div>
+      </form>
+    </Dialog>
   )
 }

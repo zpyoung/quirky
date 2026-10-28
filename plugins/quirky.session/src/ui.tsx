@@ -1,3 +1,4 @@
+import { EmptyState } from '@quirky/ui'
 import { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { RpcErrorCode, type MountFunction, type QuirkyEvent, type Session, type UiPluginContext } from '@quirky/protocol'
@@ -72,7 +73,7 @@ function StructuredSession({ context, id }: { context: UiPluginContext; id: stri
     }
   }, [context, id])
 
-  if (loaded.status === 'missing') return <p className="muted pad">Session not found</p>
+  if (loaded.status === 'missing') return <EmptyState message="Session not found" />
   if (loaded.status === 'loading') return null
   return <StructuredView context={context} session={loaded.session} />
 }
@@ -90,7 +91,7 @@ export function activate(context: UiPluginContext): void {
     Object.assign(element.style, { display: 'flex', flexDirection: 'column', flex: '1', minHeight: '0' })
     const root = createRoot(element)
     if (worktree === null) {
-      root.render(<p className="muted pad">Pick a worktree to see its sessions.</p>)
+      root.render(<EmptyState message="Pick a worktree to see its sessions." />)
       report?.({ worktree: null, tabs: [], active: null, visibleSessions: [] })
       return () => root.unmount()
     }

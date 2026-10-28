@@ -150,6 +150,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@quirky/protocol": "workspace:*",
+        "@quirky/ui": "workspace:*",
         "react": "19.2.0",
         "react-dom": "19.2.0",
       },
@@ -164,6 +165,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@quirky/protocol": "workspace:*",
+        "@quirky/ui": "workspace:*",
         "react": "19.2.0",
         "react-dom": "19.2.0",
       },
@@ -214,6 +216,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@quirky/protocol": "workspace:*",
+        "@quirky/ui": "workspace:*",
         "agent-browser": "0.27.0",
         "pngjs": "7.0.0",
         "react": "19.2.0",
@@ -321,6 +324,7 @@
         "@codemirror/view": "^6.43.15",
         "@quirky/git": "workspace:*",
         "@quirky/protocol": "workspace:*",
+        "@quirky/ui": "workspace:*",
         "react": "19.2.0",
         "react-dom": "19.2.0",
       },
@@ -337,6 +341,7 @@
         "@codemirror/state": "^6.7.6",
         "@codemirror/view": "^6.43.15",
         "@quirky/protocol": "workspace:*",
+        "@quirky/ui": "workspace:*",
         "react": "19.2.0",
         "react-dom": "19.2.0",
       },
@@ -352,6 +357,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@quirky/protocol": "workspace:*",
+        "@quirky/ui": "workspace:*",
         "react": "19.2.0",
         "react-dom": "19.2.0",
       },
@@ -373,6 +379,7 @@
       "dependencies": {
         "@quirky/git": "workspace:*",
         "@quirky/protocol": "workspace:*",
+        "@quirky/ui": "workspace:*",
         "react": "19.2.0",
         "react-dom": "19.2.0",
       },
@@ -387,6 +394,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@quirky/protocol": "workspace:*",
+        "@quirky/ui": "workspace:*",
         "react": "19.2.0",
         "react-dom": "19.2.0",
       },
@@ -434,6 +442,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@quirky/protocol": "workspace:*",
+        "@quirky/ui": "workspace:*",
         "react": "19.2.0",
         "react-dom": "19.2.0",
       },
@@ -464,6 +473,7 @@
       "dependencies": {
         "@quirky/plugin-tasks": "workspace:*",
         "@quirky/protocol": "workspace:*",
+        "@quirky/ui": "workspace:*",
         "react": "19.2.0",
         "react-dom": "19.2.0",
       },
@@ -497,6 +507,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@quirky/protocol": "workspace:*",
+        "@quirky/ui": "workspace:*",
         "react": "19.2.0",
         "react-dom": "19.2.0",
       },

@@ -1,5 +1,6 @@
 import { useSyncExternalStore, type ReactNode } from 'react'
 import type { AgentListing, PermissionMode } from '../core/types'
+import { Badge, Button, EmptyState, SectionHeader, ToolPanelFrame } from '@quirky/ui'
 import { AgentRow } from './AgentRow'
 import { Segmented, Switch } from './controls'
 import { MODE_LABEL, startable, type AgentsStore } from './model'
@@ -9,22 +10,16 @@ const TRUST_TITLE = 'Trust the folder when Quirky starts an agent'
 const MODES: PermissionMode[] = ['manual', 'auto', 'yolo']
 
 function Section({ title, hint, badge, action, children }: { title: string; hint?: string; badge?: string; action?: ReactNode; children: ReactNode }) {
+  const actions = badge !== undefined || action !== undefined ? (
+    <div style={s.headActions}>
+      {badge !== undefined && <Badge>{badge}</Badge>}
+      {action}
+    </div>
+  ) : undefined
   return (
     <section style={s.section}>
-      <div style={s.headRow}>
-        <div>
-          <div style={s.headRow}>
-            <h2 style={s.sectionTitle}>{title}</h2>
-            {badge !== undefined && (
-              <span className="badge" style={{ margin: 0 }}>
-                {badge}
-              </span>
-            )}
-          </div>
-          {hint !== undefined && <p style={s.hint}>{hint}</p>}
-        </div>
-        {action !== undefined && <div style={s.spacer}>{action}</div>}
-      </div>
+      <SectionHeader title={title} actions={actions} />
+      {hint !== undefined && <p style={s.sectionHint}>{hint}</p>}
       {children}
     </section>
   )
@@ -40,15 +35,15 @@ function permissionsHint({ summary, nonAuto }: AgentListing['permissions']): str
 
 function DefaultAgent({ listing, store }: { listing: AgentListing; store: AgentsStore }) {
   const choice = (value: string, label: string) => (
-    <button
+    <Button
       key={value}
       type="button"
+      variant={listing.defaultAgent === value ? 'primary' : 'secondary'}
       aria-pressed={listing.defaultAgent === value}
-      className={listing.defaultAgent === value ? 'active' : undefined}
       onClick={() => void store.setDefault(value)}
     >
       {label}
-    </button>
+    </Button>
   )
   return (
     <Section title="Default Agent" hint="Defaults for new agents.">
@@ -65,14 +60,12 @@ function Permissions({ listing, store }: { listing: AgentListing; store: AgentsS
   const { summary } = listing.permissions
   return (
     <Section title="Agent Permissions" hint={permissionsHint(listing.permissions)}>
-      <div>
-        <Segmented
-          value={summary === 'mixed' ? null : summary}
-          options={MODES.map((value) => ({ value, label: MODE_LABEL[value] }))}
-          label="Agent permissions"
-          onChange={(mode) => mode !== summary && void store.setPermissions(mode)}
-        />
-      </div>
+      <Segmented
+        value={summary === 'mixed' ? null : summary}
+        options={MODES.map((value) => ({ value, label: MODE_LABEL[value] }))}
+        label="Agent permissions"
+        onChange={(mode) => mode !== summary && void store.setPermissions(mode)}
+      />
     </Section>
   )
 }
@@ -93,12 +86,12 @@ function Listing({ listing, store, refreshing }: { listing: AgentListing; store:
         title="Installed"
         badge={`${installed.length} detected`}
         action={
-          <button type="button" disabled={refreshing} onClick={() => void store.refresh()}>
+          <Button type="button" disabled={refreshing} onClick={() => void store.refresh()}>
             {refreshing ? 'Refreshing…' : 'Refresh'}
-          </button>
+          </Button>
         }
       >
-        {installed.length === 0 ? <p className="muted">No agents detected. Install one below, then Refresh.</p> : rows(installed)}
+        {installed.length === 0 ? <EmptyState message="No agents detected. Install one below, then Refresh." /> : rows(installed)}
       </Section>
       {available.length > 0 && (
         <Section title="Available to install" badge={`${available.length} agents`}>
@@ -114,36 +107,30 @@ export function AgentsView({ store }: { store: AgentsStore }) {
   const { status, listing, error, refreshing } = useSyncExternalStore(store.subscribe, store.getSnapshot)
   return (
     <div style={s.page}>
-      <div style={s.column}>
-        <header>
-          <h1 style={s.title}>Agents</h1>
-          <p style={s.hint}>Manage AI agents, set a default, and customize commands.</p>
-        </header>
-        {status === 'loading' && <p className="muted">Loading agents…</p>}
-        {status === 'error' && (
-          <div>
-            <p className="form-error" role="alert">
-              {error}
-            </p>
-            <button type="button" onClick={() => store.retry()}>
-              Try again
-            </button>
-          </div>
-        )}
-        {listing && (
-          <>
-            <DefaultAgent listing={listing} store={store} />
-            <Permissions listing={listing} store={store} />
-            <Listing listing={listing} store={store} refreshing={refreshing} />
-            <Section title="This Mac">
-              <div style={s.inline}>
+      <ToolPanelFrame title="Agents">
+        <div style={s.column}>
+          <p style={s.intro}>Manage AI agents, set a default, and customize commands.</p>
+          {status === 'loading' && <p className="ui-help-text" role="status">Loading agents…</p>}
+          {status === 'error' && (
+            <div role="alert">
+              <p className="ui-error-text">{error}</p>
+              <Button type="button" onClick={() => store.retry()}>
+                Try again
+              </Button>
+            </div>
+          )}
+          {listing && (
+            <>
+              <DefaultAgent listing={listing} store={store} />
+              <Permissions listing={listing} store={store} />
+              <Listing listing={listing} store={store} refreshing={refreshing} />
+              <Section title="This Mac">
                 <Switch checked={listing.workspaceTrust} label={TRUST_TITLE} onChange={(value) => void store.setTrust(value)} />
-                <span>{TRUST_TITLE}</span>
-              </div>
-            </Section>
-          </>
-        )}
-      </div>
+              </Section>
+            </>
+          )}
+        </div>
+      </ToolPanelFrame>
     </div>
   )
 }

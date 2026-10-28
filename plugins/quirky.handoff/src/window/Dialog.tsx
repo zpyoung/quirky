@@ -1,4 +1,14 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
+import {
+  Button,
+  Dialog as SharedDialog,
+  EmptyState,
+  ListRow,
+  SectionHeader,
+  SelectField,
+  TextArea,
+  TextField
+} from '@quirky/ui'
 import { TEMPLATE_BODY_MAX, TEMPLATE_NAME_MAX } from '../core/template'
 import {
   agentsMessage,
@@ -25,8 +35,19 @@ const NEW_TEMPLATE = '__new__'
 
 const relationshipLabel = (value: string) => `${value[0]!.toUpperCase()}${value.slice(1).replace('-', ' ')}`
 
-function WorktreeCombobox({ dialog, snapshot, onOpenChange }: { dialog: HandoffDialog; snapshot: Snapshot; onOpenChange: (open: boolean) => void }) {
+function WorktreeCombobox({
+  dialog,
+  snapshot,
+  disabled,
+  onOpenChange
+}: {
+  dialog: HandoffDialog
+  snapshot: Snapshot
+  disabled: boolean
+  onOpenChange: (open: boolean) => void
+}) {
   const [open, setOpen] = useState(false)
+  const listboxId = useId()
   const shown = visibleCandidates(snapshot)
   const selected = snapshot.candidates.find((candidate) => candidate.id === snapshot.worktree)
   const toggle = (next: boolean) => {
@@ -34,49 +55,53 @@ function WorktreeCombobox({ dialog, snapshot, onOpenChange }: { dialog: HandoffD
     onOpenChange(next)
     if (!next) dialog.search('')
   }
+
   return (
-    <div className="hf-combo">
-      <button
+    <div className="ui-stack">
+      <span>Worktree</span>
+      <Button
         type="button"
         role="combobox"
         aria-label="Worktree"
         aria-expanded={open}
         aria-haspopup="listbox"
-        className="hf-combo-button"
+        aria-controls={listboxId}
+        disabled={disabled}
         onClick={() => toggle(!open)}
       >
         {selected ? selected.name : 'Select a worktree'}
-      </button>
-      {selected && <div className="muted hf-path">{selected.path}</div>}
+      </Button>
+      {selected && <ListRow title={<span className="ui-text-muted">{selected.path}</span>} />}
       {open && (
-        <div className="hf-combo-pop">
-          <input
-            type="text"
+        <div className="ui-stack">
+          <TextField
+            label="Search worktrees"
             aria-label="Search worktrees"
             placeholder="Search worktrees…"
             autoFocus
             value={snapshot.search}
+            disabled={disabled}
             onChange={(event) => dialog.search(event.target.value)}
           />
-          <div role="listbox" aria-label="Worktrees">
+          <div id={listboxId} role="listbox" aria-label="Worktrees" className="ui-option-list ui-stack">
             {shown.length === 0 ? (
-              <div className="muted hf-empty">No matching worktrees.</div>
+              <EmptyState message="No matching worktrees." />
             ) : (
               shown.map((candidate) => (
-                <button
+                <Button
                   key={candidate.id}
                   type="button"
                   role="option"
                   aria-selected={candidate.id === snapshot.worktree}
-                  className="hf-option"
+                  disabled={disabled}
                   onClick={() => {
                     dialog.set('worktree', candidate.id)
                     toggle(false)
                   }}
                 >
                   <span>{candidate.id === snapshot.worktree ? '✓ ' : ''}{candidate.name}</span>
-                  <span className="muted hf-path">{candidate.path}</span>
-                </button>
+                  <span className="ui-text-muted">{candidate.path}</span>
+                </Button>
               ))
             )}
           </div>
@@ -89,74 +114,64 @@ function WorktreeCombobox({ dialog, snapshot, onOpenChange }: { dialog: HandoffD
 function Destination({ dialog, snapshot, onOpenChange }: { dialog: HandoffDialog; snapshot: Snapshot; onOpenChange: (open: boolean) => void }) {
   const creating = snapshot.mode === 'create'
   const message = agentsMessage(snapshot.agents)
+  const disabled = snapshot.detached
+
   return (
-    <fieldset className="form-group" disabled={snapshot.detached} aria-label="Destination">
-      <legend>Destination</legend>
+    <section role="group" aria-label="Destination" aria-disabled={disabled || undefined} className="ui-stack">
+      <SectionHeader title="Destination" />
       {creating ? (
-        <>
-          <label>
-            <span>Worktree name</span>
-            <input
-              type="text"
-              aria-label="Worktree name"
-              placeholder="handoff-follow-up"
-              value={snapshot.createName}
-              onChange={(event) => dialog.set('createName', event.target.value)}
-            />
-          </label>
-          <label>
-            <span>Base branch (optional)</span>
-            <input
-              type="text"
-              aria-label="Base branch (optional)"
-              placeholder="Current branch"
-              value={snapshot.createBase}
-              onChange={(event) => dialog.set('createBase', event.target.value)}
-            />
-          </label>
-        </>
-      ) : (
-        <div>
-          <span>Worktree</span>
-          <WorktreeCombobox dialog={dialog} snapshot={snapshot} onOpenChange={onOpenChange} />
+        <div className="ui-stack">
+          <TextField
+            label="Worktree name"
+            aria-label="Worktree name"
+            type="text"
+            placeholder="handoff-follow-up"
+            value={snapshot.createName}
+            disabled={disabled}
+            onChange={(event) => dialog.set('createName', event.target.value)}
+          />
+          <TextField
+            label="Base branch (optional)"
+            aria-label="Base branch (optional)"
+            type="text"
+            placeholder="Current branch"
+            value={snapshot.createBase}
+            disabled={disabled}
+            onChange={(event) => dialog.set('createBase', event.target.value)}
+          />
         </div>
+      ) : (
+        <WorktreeCombobox dialog={dialog} snapshot={snapshot} disabled={disabled} onOpenChange={onOpenChange} />
       )}
       {snapshot.source?.canCreateWorktree && (
-        <button type="button" onClick={() => dialog.set('create', !creating)}>
+        <Button type="button" disabled={disabled} onClick={() => dialog.set('create', !creating)}>
           {creating ? 'Use an existing worktree' : 'Create a new worktree'}
-        </button>
+        </Button>
       )}
-      <label>
-        <span>Agent</span>
-        <select
-          aria-label="Agent"
-          value={snapshot.agent ?? ''}
-          disabled={snapshot.agents.list.length === 0}
-          onChange={(event) => dialog.set('agent', event.target.value)}
-        >
-          {snapshot.agents.list.map((agent) => (
-            <option key={agent.id} value={agent.id}>
-              {agent.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      {message !== null && (
-        <small className="muted" data-agents-state={snapshot.agents.state}>
-          {message}
-        </small>
-      )}
-      <label>
-        <span>Relationship</span>
-        <select aria-label="Relationship" value={snapshot.relationship} onChange={(event) => dialog.set('relationship', event.target.value)}>
-          {RELATIONSHIPS.map((value) => (
-            <option key={value} value={value}>
-              {relationshipLabel(value)}
-            </option>
-          ))}
-        </select>
-      </label>
-    </fieldset>
+      <SelectField
+        label="Agent"
+        aria-label="Agent"
+        value={snapshot.agent ?? ''}
+        disabled={disabled || snapshot.agents.list.length === 0}
+        onChange={(event) => dialog.set('agent', event.target.value)}
+      >
+        {snapshot.agents.list.map((agent) => (
+          <option key={agent.id} value={agent.id}>{agent.label}</option>
+        ))}
+      </SelectField>
+      {message !== null && <p className="ui-text-muted" data-agents-state={snapshot.agents.state}>{message}</p>}
+      <SelectField
+        label="Relationship"
+        aria-label="Relationship"
+        value={snapshot.relationship}
+        disabled={disabled}
+        onChange={(event) => dialog.set('relationship', event.target.value)}
+      >
+        {RELATIONSHIPS.map((value) => (
+          <option key={value} value={value}>{relationshipLabel(value)}</option>
+        ))}
+      </SelectField>
+    </section>
   )
 }
 
@@ -164,107 +179,106 @@ function Content({ dialog, snapshot }: { dialog: HandoffDialog; snapshot: Snapsh
   const usable = snapshot.analysis?.probe.verdict === 'usable'
   const reason = snapshot.analysis?.probe.verdict === 'unverifiable' ? FULL_UNVERIFIABLE : FULL_UNREACHABLE
   const { include } = snapshot
+  const disabled = snapshot.detached
+
   return (
-    <fieldset className="form-group" disabled={snapshot.detached} aria-label="Content">
-      <legend>Content</legend>
-      <div role="radiogroup" aria-label="Session context" className="hf-radios">
+    <section role="group" aria-label="Content" aria-disabled={disabled || undefined} className="ui-stack">
+      <SectionHeader title="Content" />
+      <div role="radiogroup" aria-label="Session context" className="ui-stack">
         <span>Session context</span>
-        <label>
-          <input type="radio" name="hf-context" checked={snapshot.context === 'focused'} onChange={() => dialog.set('context', 'focused')} />
+        <label className="ui-cluster">
+          <input type="radio" name="hf-context" checked={snapshot.context === 'focused'} disabled={disabled} onChange={() => dialog.set('context', 'focused')} />
           <span>Focused handoff (Recommended)</span>
         </label>
-        <small className="muted">Carries status hints and reads older transcript details only when needed.</small>
-        <label>
+        <small className="ui-text-muted">Carries status hints and reads older transcript details only when needed.</small>
+        <label className="ui-cluster">
           <input
             type="radio"
             name="hf-context"
             checked={snapshot.context === 'full'}
-            disabled={!usable}
+            disabled={disabled || !usable}
             onChange={() => dialog.set('context', 'full')}
           />
           <span>Full session transcript</span>
         </label>
-        {!usable && snapshot.analysis !== null && <small className="muted">{reason}</small>}
+        {!usable && snapshot.analysis !== null && <small className="ui-text-muted">{reason}</small>}
       </div>
-      <div className="hf-checks">
+      <div className="ui-stack">
         <span>Include in brief</span>
-        <label>
-          <input type="checkbox" checked={include.repoState} onChange={(event) => dialog.set('repoState', event.target.checked)} />
+        <label className="ui-cluster">
+          <input type="checkbox" checked={include.repoState} disabled={disabled} onChange={(event) => dialog.set('repoState', event.target.checked)} />
           <span>Git status and changed file paths</span>
         </label>
-        <label>
+        <label className="ui-cluster">
           <input
             type="checkbox"
             checked={include.diffBodies}
-            disabled={!include.repoState}
+            disabled={disabled || !include.repoState}
             onChange={(event) => dialog.set('diffBodies', event.target.checked)}
           />
           <span>Diff bodies</span>
         </label>
-        <small className="muted">Opt-in and capped at 12,000 characters.</small>
-        <label>
-          <input type="checkbox" checked={include.openEditorTabs} onChange={(event) => dialog.set('openEditorTabs', event.target.checked)} />
+        <small className="ui-text-muted">Opt-in and capped at 12,000 characters.</small>
+        <label className="ui-cluster">
+          <input type="checkbox" checked={include.openEditorTabs} disabled={disabled} onChange={(event) => dialog.set('openEditorTabs', event.target.checked)} />
           <span>Open editor tabs</span>
         </label>
       </div>
-    </fieldset>
+    </section>
   )
 }
 
 function Notes({ dialog, snapshot }: { dialog: HandoffDialog; snapshot: Snapshot }) {
   const editor = snapshot.templateEditor
   const name = editor?.name ?? ''
+  const disabled = snapshot.detached
+
   return (
-    <fieldset className="form-group" disabled={snapshot.detached} aria-label="Notes">
-      <legend>Notes</legend>
-      <label>
-        <span>Reusable template</span>
-        <select
-          aria-label="Reusable template"
-          value={editor ? NEW_TEMPLATE : (snapshot.templateId ?? '')}
-          onChange={(event) => {
-            const value = event.target.value
-            dialog.set('template', value === NEW_TEMPLATE ? 'new' : value === '' ? null : value)
-          }}
-        >
-          <option value="">No template</option>
-          <option value={NEW_TEMPLATE}>New Template</option>
-          {snapshot.templates.map((template) => (
-            <option key={template.id} value={template.id}>
-              {template.name}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label>
-        <span>Steering note</span>
-        <textarea
-          aria-label="Steering note"
-          rows={4}
-          placeholder="What should the new Agent focus on?"
-          value={snapshot.note}
-          onChange={(event) => dialog.set('note', event.target.value)}
-        />
-      </label>
+    <section role="group" aria-label="Notes" aria-disabled={disabled || undefined} className="ui-stack">
+      <SectionHeader title="Notes" />
+      <SelectField
+        label="Reusable template"
+        aria-label="Reusable template"
+        value={editor ? NEW_TEMPLATE : (snapshot.templateId ?? '')}
+        disabled={disabled}
+        onChange={(event) => {
+          const value = event.target.value
+          dialog.set('template', value === NEW_TEMPLATE ? 'new' : value === '' ? null : value)
+        }}
+      >
+        <option value="">No template</option>
+        <option value={NEW_TEMPLATE}>New Template</option>
+        {snapshot.templates.map((template) => (
+          <option key={template.id} value={template.id}>{template.name}</option>
+        ))}
+      </SelectField>
+      <TextArea
+        label="Steering note"
+        aria-label="Steering note"
+        rows={4}
+        placeholder="What should the new Agent focus on?"
+        value={snapshot.note}
+        disabled={disabled}
+        onChange={(event) => dialog.set('note', event.target.value)}
+      />
       {editor && (
-        <div className="hf-template-save">
-          <label>
-            <span>Template name</span>
-            <input
-              type="text"
-              aria-label="Template name"
-              maxLength={TEMPLATE_NAME_MAX}
-              value={name}
-              onChange={(event) => dialog.set('templateName', event.target.value)}
-            />
-          </label>
-          <button type="button" disabled={!dialog.canSaveTemplate()} onClick={() => void dialog.saveTemplate()}>
+        <div className="ui-stack">
+          <TextField
+            label="Template name"
+            aria-label="Template name"
+            type="text"
+            maxLength={TEMPLATE_NAME_MAX}
+            value={name}
+            disabled={disabled}
+            onChange={(event) => dialog.set('templateName', event.target.value)}
+          />
+          <Button type="button" disabled={disabled || !dialog.canSaveTemplate()} onClick={() => void dialog.saveTemplate()}>
             Save template
-          </button>
-          {snapshot.note.length > TEMPLATE_BODY_MAX && <small className="muted">The note is over {TEMPLATE_BODY_MAX.toLocaleString('en-US')} characters.</small>}
+          </Button>
+          {snapshot.note.length > TEMPLATE_BODY_MAX && <small className="ui-text-muted">The note is over {TEMPLATE_BODY_MAX.toLocaleString('en-US')} characters.</small>}
         </div>
       )}
-    </fieldset>
+    </section>
   )
 }
 
@@ -272,68 +286,60 @@ function Preview({ dialog, snapshot }: { dialog: HandoffDialog; snapshot: Snapsh
   const { analysis } = snapshot
   const secrets = analysis?.secrets ?? []
   return (
-    <div className="hf-right">
-      <h3>Brief preview</h3>
-      <div className="muted hf-cost" aria-live="polite">
+    <section className="ui-stack" aria-label="Brief preview">
+      <SectionHeader title="Brief preview" />
+      <div className="ui-cluster ui-text-muted" aria-live="polite">
         {analysis ? `${analysis.characters} characters · about ${analysis.tokens} tokens` : ' '}
       </div>
       <PreviewEditor text={snapshot.text} secrets={secrets} onEdit={(text) => dialog.edit(text)} />
-      {secrets.length > 0 && <div className="hf-secrets-line">{secretsMarkerLine(secrets.length)}</div>}
+      {secrets.length > 0 && <ListRow title={secretsMarkerLine(secrets.length)} status="failing" />}
       {snapshot.detached && (
-        <div className="hf-detached">
-          <span>{DETACHED_NOTICE}</span>
-          <button type="button" onClick={() => void dialog.regenerate()}>
-            Regenerate from controls
-          </button>
-        </div>
+        <ListRow
+          title={DETACHED_NOTICE}
+          status="needs-you"
+          trailing={<Button type="button" onClick={() => void dialog.regenerate()}>Regenerate from controls</Button>}
+        />
       )}
-      <div className="hf-locked">
-        <div className="muted hf-locked-title">Locked safety note · always appended last</div>
-        <pre>{analysis?.notice ?? ''}</pre>
-      </div>
-    </div>
+      <section className="ui-stack" aria-label="Locked safety note">
+        <SectionHeader title="Locked safety note · always appended last" />
+        <pre className="ui-readout">{analysis?.notice ?? ''}</pre>
+      </section>
+    </section>
   )
 }
 
 function Strip({ dialog, snapshot }: { dialog: HandoffDialog; snapshot: Snapshot }) {
   const warnings = warningsOf(snapshot)
   return (
-    <div className="hf-strips">
+    <div className="ui-stack">
       {warnings.map((warning) => (
-        <div key={warning.code} className="hf-warning" data-warning={warning.code}>
-          {warning.message}
+        <div key={warning.code} data-warning={warning.code}>
+          <ListRow title={warning.message} status="needs-you" />
         </div>
       ))}
       {snapshot.working && (
-        <div className="hf-warning hf-busy" data-busy>
-          <span>{snapshot.waiting ? WAITING_MESSAGE : BUSY_MESSAGE}</span>
-          <span className="hf-busy-actions">
-            <button type="button" disabled={snapshot.waiting} onClick={() => dialog.waitIdle()}>
-              Wait for idle
-            </button>
-            <button type="button" onClick={() => void dialog.capture()}>
-              Capture anyway
-            </button>
-          </span>
+        <div data-busy>
+          <ListRow
+            title={snapshot.waiting ? WAITING_MESSAGE : BUSY_MESSAGE}
+            status="working"
+            trailing={(
+              <div className="ui-cluster">
+                <Button type="button" disabled={snapshot.waiting} onClick={() => dialog.waitIdle()}>Wait for idle</Button>
+                <Button type="button" onClick={() => void dialog.capture()}>Capture anyway</Button>
+              </div>
+            )}
+          />
         </div>
       )}
-      {snapshot.error !== null && (
-        <div className="hf-warning hf-error" role="alert">
-          {snapshot.error}
-        </div>
-      )}
+      {snapshot.error !== null && <div role="alert"><ListRow title={snapshot.error} status="failing" /></div>}
     </div>
   )
 }
 
-/**
- * Continue in New Session: destination, content and notes on the left, the editable brief on
- * the right, a strip of warnings above Cancel and Start New Session. Draws nothing while closed.
- */
+/** Continue in New Session: all lifecycle state and reporting remain owned by HandoffDialog. */
 export function Dialog({ dialog }: { dialog: HandoffDialog }) {
   const snapshot = useSyncExternalStore(dialog.subscribe, dialog.getSnapshot)
   const comboOpen = useRef(false)
-
   useEffect(() => {
     if (!snapshot.shown) return
     const onKey = (event: KeyboardEvent) => {
@@ -346,39 +352,39 @@ export function Dialog({ dialog }: { dialog: HandoffDialog }) {
     return () => window.removeEventListener('keydown', onKey, true)
   }, [snapshot.shown, dialog])
 
-  if (!snapshot.shown) return null
-  const { source } = snapshot
   return (
-    <div className="overlay hf-overlay">
-      <div className="dialog dialog-wide hf-dialog" role="dialog" aria-label={DIALOG_TITLE}>
-        <h2>{DIALOG_TITLE}</h2>
-        <p className="muted">{DIALOG_DESCRIPTION}</p>
-        {source && (
-          <div className="hf-source" data-source>
-            <div>{source.title ?? source.session ?? 'Archived session'}</div>
-            <div className="muted">{`Original Agent: ${source.agent}`}</div>
+    <SharedDialog
+      open={snapshot.shown}
+      title={DIALOG_TITLE}
+      closeOnBackdrop={false}
+      onClose={() => void dialog.cancel()}
+      actions={(
+        <>
+          <Button type="button" disabled={snapshot.starting} onClick={() => void dialog.cancel()}>Cancel</Button>
+          <Button type="button" variant="primary" disabled={!canStartOf(snapshot)} onClick={() => void dialog.start()}>
+            {snapshot.starting ? 'Starting…' : 'Start New Session'}
+          </Button>
+        </>
+      )}
+    >
+      <div className="ui-stack">
+        <p className="ui-text-muted">{DIALOG_DESCRIPTION}</p>
+        {snapshot.source && (
+          <div data-source>
+            <ListRow
+              title={snapshot.source.title ?? snapshot.source.session ?? 'Archived session'}
+              description={`Original Agent: ${snapshot.source.agent}`}
+            />
           </div>
         )}
-        <div className="hf-columns">
-          <div className="hf-left">
-            <Destination dialog={dialog} snapshot={snapshot} onOpenChange={(open) => {
-                comboOpen.current = open
-              }} />
-            <Content dialog={dialog} snapshot={snapshot} />
-            <Notes dialog={dialog} snapshot={snapshot} />
-          </div>
+        <div className="ui-stack">
+          <Destination dialog={dialog} snapshot={snapshot} onOpenChange={(open) => { comboOpen.current = open }} />
+          <Content dialog={dialog} snapshot={snapshot} />
+          <Notes dialog={dialog} snapshot={snapshot} />
           <Preview dialog={dialog} snapshot={snapshot} />
         </div>
         <Strip dialog={dialog} snapshot={snapshot} />
-        <div className="dialog-actions">
-          <button type="button" disabled={snapshot.starting} onClick={() => void dialog.cancel()}>
-            Cancel
-          </button>
-          <button type="button" className="primary" disabled={!canStartOf(snapshot)} onClick={() => void dialog.start()}>
-            {snapshot.starting ? 'Starting…' : 'Start New Session'}
-          </button>
-        </div>
       </div>
-    </div>
+    </SharedDialog>
   )
 }

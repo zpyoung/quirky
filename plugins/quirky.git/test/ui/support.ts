@@ -174,7 +174,7 @@ export const byText = (root: ParentNode, text: string): HTMLButtonElement | null
 
 /** The CodeMirror view that holds the modified side of the n-th diff in `root`. */
 export function modifiedEditor(root: ParentNode, n = 0): InstanceType<typeof EditorView> {
-  const pane = root.querySelectorAll('.qgv-host')[n]
+  const pane = root.querySelectorAll('[data-diff-editor]')[n]
   if (!pane) throw new Error(`no editor ${n}`)
   const editors = [...pane.querySelectorAll<HTMLElement>('.cm-editor')]
   const modified = editors[editors.length - 1]

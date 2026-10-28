@@ -13,6 +13,18 @@ are unchanged. Context menus render above adjacent tools, including nested comma
 
 See the [terminal presentation specification](../docs/quirk/specs/2026-10-28-ui-restyle-terminal/logic.md).
 
+## Supervised-work presentation
+
+**Heimdall** opens its fleet in the left-bottom tool slot by default. Orchestration
+settings and remote-worker output, Session handoff settings and previews, and
+background-loop setup and views use the shared graphite controls in both themes.
+Multiline instructions, searchable handoff destinations, secret-marked editable
+previews, queue drafts and confirmation dialogs retain their existing public APIs
+and lifecycle rules. A visual or theme change does not approve, launch or cancel work.
+
+See the [supervised-work presentation specification](../docs/quirk/specs/2026-10-28-ui-restyle-orchestration/logic.md).
+
+
 ## Terminal dock
 
 `quirky.terminal-dock` provides an opt-in composer below recognized terminal agents.

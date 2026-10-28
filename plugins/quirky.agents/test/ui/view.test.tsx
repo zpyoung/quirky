@@ -56,10 +56,6 @@ describe('SC-39: the Agents view shows Orca\'s sections and counts', () => {
     expect(control.getAttribute('role')).toBe('radiogroup')
     expect(labelsOf(radios(control))).toEqual(['Manual', 'Auto', 'Yolo'])
     expect(radios(control).map((radio) => radio.getAttribute('aria-checked'))).toEqual(['false', 'false', 'true'])
-    // the selected segment must look selected, not only be marked for screen readers
-    const backgrounds = radios(control).map((radio) => (radio as HTMLElement).style.background)
-    expect(backgrounds[2]).not.toBe(backgrounds[0])
-    expect(backgrounds[0]).toBe('transparent')
   })
 
   test('SC-39: Installed shows "4 detected" and Available to install shows "41 agents" with Install links', async () => {

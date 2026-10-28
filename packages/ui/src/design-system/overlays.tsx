@@ -49,7 +49,7 @@ const focusableSelector = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(',')
 
-export function Dialog({ open, title, children, actions, onClose, variant = 'dialog', closeOnBackdrop = true }: DialogProps) {
+export function Dialog({ open, title, children, actions, onClose, variant = 'dialog', closeOnBackdrop = true, scrollBody = false }: DialogProps) {
   const dialogRef = useRef<HTMLElement | null>(null)
   const titleId = useId()
 
@@ -107,7 +107,7 @@ export function Dialog({ open, title, children, actions, onClose, variant = 'dia
     >
       <section
         ref={dialogRef}
-        className={classNames('ui-dialog', variant === 'sheet' && 'ui-dialog--sheet')}
+        className={classNames('ui-dialog', variant === 'sheet' && 'ui-dialog--sheet', scrollBody && 'ui-dialog--scroll-body')}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}

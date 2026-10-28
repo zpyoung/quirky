@@ -197,7 +197,7 @@ export async function boot(scratch: () => string, options: BootOptions = {}): Pr
   await agent.callAny('ui.view.open', { id: SESSION_VIEW, input: { worktree: feat.id } })
   if (!options.noPanel) {
     await agent.callAny('ui.panel.open', { id: PANEL })
-    await win.waitFor(() => document.querySelector('.scm-header'))
+    await win.waitFor(() => document.querySelector('[data-git-panel]'))
     await win.waitFor(async () => (await world.report())?.primary)
   }
   return world

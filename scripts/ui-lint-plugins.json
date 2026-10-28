@@ -1,7 +1,20 @@
 [
   "quirky.tasks",
   "quirky.automations",
+  "quirky.agents",
+  "quirky.agent-status",
+  "quirky.browser",
+  "quirky.checks",
   "quirky.editor",
+  "quirky.git",
+  "quirky.reviews",
+  "quirky.ledger",
+  "quirky.session",
+  "quirky.session-info",
   "quirky.terminal",
-  "quirky.terminal-dock"
+  "quirky.terminal-dock",
+  "quirky.orchestration",
+  "quirky.heimdall",
+  "quirky.handoff",
+  "quirky.loops"
 ]

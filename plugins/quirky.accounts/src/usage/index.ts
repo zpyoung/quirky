@@ -448,7 +448,7 @@ export class UsageService {
 
     const key = resetIdKey(options.idempotencyKey)
     const existing = this.ledger.get(key)
-    if (existing && !sameScope(existing.scope, options.expectedScope)) throw new Error('Codex reset idempotency key is already bound to another offer')
+    if (existing && !sameScope(existing.scope, options.expectedScope)) throw this.context.error('conflict', 'Codex reset idempotency key is already bound to another offer')
     if (existing?.status === 'completed' && existing.outcome) return existing.outcome
     if (!existing) {
       this.ledger.set(key, { scope: clone(options.expectedScope), status: 'reserved' })
@@ -459,14 +459,14 @@ export class UsageService {
     try {
       targets = await this.targets()
     } catch {
-      throw new Error('Codex reset offer is no longer current')
+      throw this.context.error('conflict', 'Codex reset offer is no longer current')
     }
     this.synchronizeActiveTargets(targets)
     const target = this.selected.get('codex')
     const snapshot = this.current.get('codex')
     const currentScope = snapshot?.rateLimitResetCredits?.expectedScope
     if (!target || snapshot?.status !== 'ok' || !currentScope || !sameScope(options.expectedScope, currentScope) || target.accountId !== options.expectedScope.accountId || revisionFor(target) !== options.expectedScope.accountRevision) {
-      throw new Error('Codex reset offer changed; refresh usage and confirm again')
+      throw this.context.error('conflict', 'Codex reset offer changed; refresh usage and confirm again')
     }
     const controller = new AbortController()
     this.controllers.add(controller)
@@ -474,7 +474,7 @@ export class UsageService {
     try {
       const latest = await this.targets()
       const stillSelected = latest.some((candidate) => candidate.provider === 'codex' && candidate.active && candidate.accountId === target.accountId && candidate.home === target.home && revisionFor(candidate) === revisionFor(target))
-      if (!stillSelected) throw new Error('Codex reset offer changed; refresh usage and confirm again')
+      if (!stillSelected) throw this.context.error('conflict', 'Codex reset offer changed; refresh usage and confirm again')
       this.ledger.set(key, { scope: clone(options.expectedScope), status: 'in-flight' })
       persistResetLedger(this.context.dataDir, this.ledger)
       attemptStarted = true
