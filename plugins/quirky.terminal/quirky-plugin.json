@@ -81,6 +81,44 @@
   "contributes": {
     "method": [
       {
+        "id": "artifacts",
+        "description": "Discover local terminal-output file artifacts, preview through an opaque caller-bound grant, refresh authorization or conditionally save complete text. Never accepts a file path.",
+        "connection": true,
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "action": { "type": "string", "enum": ["list", "preview", "refresh", "save"] },
+            "worktree": { "type": "string", "minLength": 1, "maxLength": 1024 },
+            "session": { "type": "string", "minLength": 1, "maxLength": 1024 },
+            "artifactId": { "type": "string", "minLength": 1, "maxLength": 128 },
+            "grant": { "type": "string", "minLength": 1, "maxLength": 128 },
+            "expectedRevision": { "type": "string", "minLength": 64, "maxLength": 64 },
+            "content": { "type": "string", "maxLength": 49152 }
+          },
+          "required": ["action", "worktree", "session"]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "kind": { "type": "string", "enum": ["listed", "preview", "refreshed", "saved", "refused"] },
+            "artifacts": { "type": "array", "items": { "type": "object" }, "maxItems": 50 },
+            "limited": { "type": "boolean" },
+            "artifact": { "type": "object" },
+            "format": { "type": "string", "enum": ["text", "markdown", "image", "binary"] },
+            "content": { "type": "string" },
+            "image": { "type": "object" },
+            "bytes": { "type": "integer", "minimum": 0 },
+            "truncated": { "type": "boolean" },
+            "writable": { "type": "boolean" },
+            "revision": { "type": "string" },
+            "reason": { "type": "string", "enum": ["grant-expired", "grant-invalid", "source-unavailable", "file-changed", "unsupported", "too-large", "read-only"] },
+            "guidance": { "type": "string" }
+          },
+          "required": ["kind"]
+        }
+      },
+      {
         "id": "attach",
         "description": "Starts streaming a terminal session to this client: base64 replay of recent output, then live binary frames tagged with `streamId`.",
         "connection": true,
