@@ -133,6 +133,7 @@ export interface WorkerReadResult {
   clipping: { clipped: boolean; maxBytes: number }; nextCursor: string | null
   terminalLiveness: WorkerObservation['status']; agentLiveness: WorkerLiveness
   warnings: readonly string[]; sourceIdentity: string
+  remote?: { peerId: string; bindingId: string; hostDispatchId: string; hostIncarnation: string }
 }
 
 /** Adapter to core's concrete task/receipt/staged-authority APIs, never another store. */
@@ -192,8 +193,14 @@ export interface WorkerLifecycle extends WorkerLifecyclePort {
   onExit(sessionId: string, incarnation: string | null, reason: string, exitCode: number | null): void
   dispose(): void
 }
+export interface FederatedWorkerStartHooks {
+  accepted(receipt: WorkerStartReceipt, worker: WorkerRecord): void
+  beforeLaunch(receipt: WorkerStartReceipt, worker: WorkerRecord): Promise<void>
+  attached(worker: WorkerRecord, dispatch: DispatchRow): Promise<void>
+}
 export interface WorkerStarter {
   start(params: WorkerStartParams, caller: CoordinatorEvidence): Promise<MutationResult<WorkerStartReceipt>>
+  startFederated(params: WorkerStartParams, caller: ServiceCoordinatorEvidence, hooks: FederatedWorkerStartHooks): Promise<MutationResult<WorkerStartReceipt>>
   dispose(): void
 }
 export interface WorkerFleet {

@@ -5,6 +5,7 @@ import { isIP } from 'node:net'
 import { createServer as createHttpsServer, request as httpsRequest, type Server as HttpsServer } from 'node:https'
 import type { PeerCertificate } from 'node:tls'
 import type { PluginCaller, PluginContext, PluginStore, RuntimePeer, RuntimePeerCall, RuntimePeerReply, RuntimePeerStatus } from '@quirky/protocol'
+import type { FederationInboundHandler, FederationPeerPrincipal } from './federation/contracts'
 import { fail } from './errors'
 const REMOTE_HEIMDALL_METHODS: Record<string, true> = {
   'quirky.heimdall/remoteFleet': true,
@@ -12,20 +13,42 @@ const REMOTE_HEIMDALL_METHODS: Record<string, true> = {
   'quirky.heimdall/remoteDebugReport': true,
   'quirky.heimdall/remoteCommand': true,
 }
+const FEDERATION_METHODS: Record<string, true> = {
+  'quirky.orchestration/federationAttachStart': true,
+  'quirky.orchestration/federationShow': true,
+  'quirky.orchestration/federationRead': true,
+  'quirky.orchestration/federationFleetSnapshot': true,
+  'quirky.orchestration/federationStop': true,
+  'quirky.orchestration/federationRelease': true,
+  'quirky.orchestration/federationRetain': true,
+  'quirky.orchestration/federationAbandon': true,
+  'quirky.orchestration/federationPull': true,
+  'quirky.orchestration/federationAck': true,
+  'quirky.orchestration/federationImport': true,
+}
 const REMOTE_PEER_METHODS: Record<string, true> = {
   peerList: true,
   peerStatus: true,
+  ...FEDERATION_METHODS,
 }
 const MUTATING_REMOTE_METHODS: Record<string, true> = {
   'quirky.heimdall/remoteCommand': true,
+  'quirky.orchestration/federationAttachStart': true,
+  'quirky.orchestration/federationStop': true,
+  'quirky.orchestration/federationRelease': true,
+  'quirky.orchestration/federationRetain': true,
+  'quirky.orchestration/federationAbandon': true,
+  'quirky.orchestration/federationAck': true,
+  'quirky.orchestration/federationImport': true,
 }
-type InboundPeerPrincipal = { peerId: string; fingerprint: string; pairingRevision: number }
+type InboundPeerPrincipal = Omit<FederationPeerPrincipal, 'incarnation'>
 type InboundIdentity = { kind: 'bootstrap' } | { kind: 'paired'; principal: InboundPeerPrincipal }
 
 const LISTEN_PATH = '/rpc'
-const MAX_REQUEST_BYTES = 1024 * 1024
-const MAX_RESPONSE_BYTES = 1024 * 1024
+const MAX_REQUEST_BYTES = 4 * 1024 * 1024
+const MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 const REQUEST_TIMEOUT_MS = 15_000
+const MAX_REQUEST_TIMEOUT_MS = 180_000
 const MIN_TOKEN_BYTES = 32
 const CAPABILITIES = Object.freeze([
   'quirky.heimdall/remoteFleet',
@@ -188,13 +211,14 @@ function requestPeer(
   params: Record<string, unknown>,
   requestId?: string,
   timeoutMs = REQUEST_TIMEOUT_MS,
+  sourceIncarnation?: string,
 ): Promise<{ status: RuntimePeerStatus; result: unknown }> {
   const target = validEndpoint(context, endpoint)
   const body = Buffer.from(JSON.stringify({ method, params, ...(requestId ? { requestId } : {}) }), 'utf8')
   if (body.byteLength > MAX_REQUEST_BYTES) {
     return Promise.reject(Object.assign(new Error('Peer request exceeds size limit.'), { code: 'peer_request_too_large' }))
   }
-  const timeout = Math.max(1, Math.min(60_000, Math.floor(timeoutMs)))
+  const timeout = Math.max(1, Math.min(MAX_REQUEST_TIMEOUT_MS, Math.floor(timeoutMs)))
   const expectedFingerprint = normalizeFingerprint(fingerprint)
   const { promise, resolve, reject } = Promise.withResolvers<{ status: RuntimePeerStatus; result: unknown }>()
   let request: ClientRequest
@@ -242,6 +266,7 @@ function requestPeer(
       'content-type': 'application/json',
       'content-length': String(body.byteLength),
       connection: 'close',
+      ...(sourceIncarnation ? { 'x-quirky-peer-incarnation': sourceIncarnation } : {}),
     },
   }
   request = target.protocol === 'https:'
@@ -266,8 +291,49 @@ export class PeerManager {
   private readonly incarnation = randomUUID()
   private server: ListenerServer | null = null
   private disposed = false
+  private federationHandler: FederationInboundHandler | null = null
 
   constructor(private readonly context: PluginContext, private readonly store: PluginStore) {}
+
+  get localIncarnation(): string {
+    return this.incarnation
+  }
+
+  setFederationHandler(handler: FederationInboundHandler | null): void {
+    if (this.disposed) fail(this.context, 'peer_listener_unavailable', 'Peer manager is deactivated.')
+    if (handler !== null && this.federationHandler !== null && this.federationHandler !== handler) {
+      throw new Error('federation peer handler is already registered')
+    }
+    this.federationHandler = handler
+  }
+
+  getPeer(peerId: string): RuntimePeer {
+    return publicPeer(this.requirePeer(peerId))
+  }
+
+  async remoteStatus(peerId: string, pairingRevision?: number): Promise<{ peer: RuntimePeer; status: RuntimePeerStatus }> {
+    const peer = this.requirePeer(peerId)
+    this.checkRevision(peer, pairingRevision)
+    const status = await this.getRemoteStatus(peer)
+    this.recordRemoteStatus(peer, status)
+    return { peer: publicPeer(peer), status }
+  }
+
+  async callFederation(
+    peerId: string,
+    pairingRevision: number,
+    method: string,
+    params: Record<string, unknown>,
+    requestId?: string,
+    timeoutMs = REQUEST_TIMEOUT_MS,
+  ): Promise<RuntimePeerReply> {
+    const peer = this.requirePeer(peerId)
+    this.checkRevision(peer, pairingRevision)
+    if (!Object.hasOwn(FEDERATION_METHODS, method)) {
+      fail(this.context, 'peer_method_forbidden', `Remote method ${method} is outside the federation method ceiling.`, { method })
+    }
+    return this.performPeerCall(peer, method, params, requestId, timeoutMs)
+  }
 
   readonly methods: Record<string, (params: Record<string, unknown>, caller: PluginCaller) => unknown> = {
     peerList: (params, caller) => this.peerList(params, caller),
@@ -330,13 +396,23 @@ export class PeerManager {
     }
     const peer = this.requirePeer(input.peerId)
     this.checkRevision(peer, input.pairingRevision)
-    this.assertRemoteMethod(input.method, input.params, input.requestId)
-    const expectedIncarnation = input.params.expectedIncarnation
-    const timeoutMs = input.timeoutMs ?? REQUEST_TIMEOUT_MS
-    if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 60_000) {
-      return fail(this.context, 'peer_invalid_call', 'peerCall timeoutMs must be between 1 and 60000.')
+    return this.performPeerCall(peer, input.method, input.params, input.requestId, input.timeoutMs ?? REQUEST_TIMEOUT_MS)
+  }
+
+  private async performPeerCall(
+    peer: PeerRow,
+    method: string,
+    params: Record<string, unknown>,
+    requestId: string | undefined,
+    timeoutMs: number,
+  ): Promise<RuntimePeerReply> {
+    this.assertRemoteMethod(method, params, requestId)
+    if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > MAX_REQUEST_TIMEOUT_MS) {
+      return fail(this.context, 'peer_invalid_call', `Peer timeoutMs must be between 1 and ${MAX_REQUEST_TIMEOUT_MS}.`)
     }
     const status = await this.getRemoteStatus(peer)
+    this.recordRemoteStatus(peer, status)
+    const expectedIncarnation = params.expectedIncarnation
     if (typeof expectedIncarnation === 'string' && expectedIncarnation !== status.incarnation) {
       return fail(this.context, 'peer_incarnation_changed', 'Remote peer process incarnation changed before the call.', {
         peerId: peer.peer_id,
@@ -344,17 +420,14 @@ export class PeerManager {
         actualIncarnation: status.incarnation,
       })
     }
-    const requiredCapabilities = input.method.startsWith('quirky.heimdall/') ? [input.method] : []
-    const missingCapability = requiredCapabilities.find((capability) => !status.capabilities.includes(capability))
-    if (missingCapability) {
-      return fail(this.context, 'peer_capability_missing', `Peer ${peer.peer_id} does not advertise ${missingCapability}.`, {
+    const requiredCapability = method.startsWith('quirky.heimdall/') || Object.hasOwn(FEDERATION_METHODS, method) ? method : null
+    if (requiredCapability !== null && !status.capabilities.includes(requiredCapability)) {
+      return fail(this.context, 'peer_capability_missing', `Peer ${peer.peer_id} does not advertise ${requiredCapability}.`, {
         peerId: peer.peer_id,
-        capability: missingCapability,
+        capability: requiredCapability,
       })
     }
-    if (input.method === 'peerStatus') {
-      return { peer: publicPeer(peer), status, result: status }
-    }
+    if (method === 'peerStatus') return { peer: publicPeer(peer), status, result: status }
     let response: { status: RuntimePeerStatus; result: unknown }
     try {
       response = await requestPeer(
@@ -362,10 +435,11 @@ export class PeerManager {
         peer.endpoint,
         peer.auth_token,
         peer.fingerprint,
-        input.method,
-        input.params,
-        input.requestId,
+        method,
+        params,
+        requestId,
         timeoutMs,
+        this.incarnation,
       )
     } catch (error) {
       const reason = safeReason(error)
@@ -383,13 +457,7 @@ export class PeerManager {
         actualIncarnation: response.status.incarnation,
       })
     }
-    this.store.run(
-      `UPDATE orchestration_peers SET last_incarnation = ?, last_capabilities_json = ? WHERE peer_id = ? AND pairing_revision = ?`,
-      response.status.incarnation,
-      JSON.stringify(response.status.capabilities),
-      peer.peer_id,
-      peer.pairing_revision,
-    )
+    this.recordRemoteStatus(peer, response.status)
     return { peer: publicPeer(peer), status: response.status, result: response.result }
   }
 
@@ -464,7 +532,7 @@ export class PeerManager {
     }
     let remote: { status: RuntimePeerStatus; result: unknown }
     try {
-      remote = await requestPeer(this.context, endpoint.toString(), input.token, fingerprint, 'peerStatus', {}, undefined)
+      remote = await requestPeer(this.context, endpoint.toString(), input.token, fingerprint, 'peerStatus', {}, undefined, REQUEST_TIMEOUT_MS, this.incarnation)
     } catch (error) {
       const reason = safeReason(error)
       if (reason.code === 'peer_pin_mismatch') return fail(this.context, 'peer_pin_mismatch', 'Peer certificate does not match the supplied pin.', { peerId: input.peerId })
@@ -604,12 +672,38 @@ export class PeerManager {
       if (typeof expectedIncarnation === 'string' && expectedIncarnation !== this.incarnation) {
         fail(this.context, 'peer_incarnation_changed', 'Peer process incarnation changed.')
       }
-      const result = value.method === 'peerStatus'
-        ? this.localStatus(fingerprint)
-        : await this.context.call(
+      let result: unknown
+      if (value.method === 'peerStatus') {
+        result = this.localStatus(fingerprint)
+      } else if (Object.hasOwn(FEDERATION_METHODS, value.method)) {
+        if (inbound.kind !== 'paired' || this.federationHandler === null) {
+          fail(this.context, 'peer_method_forbidden', 'Federation handler is not connected.')
+        }
+        const sourceIncarnation = request.headers['x-quirky-peer-incarnation']
+        if (typeof sourceIncarnation !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sourceIncarnation)) {
+          fail(this.context, 'peer_invalid_call', 'Federation calls require the transport source incarnation header.')
+        }
+        const sourcePeer = this.requirePeer(inbound.principal.peerId)
+        this.checkRevision(sourcePeer, inbound.principal.pairingRevision)
+        if (normalizeFingerprint(sourcePeer.fingerprint) !== inbound.principal.fingerprint) {
+          fail(this.context, 'peer_pin_mismatch', 'Authenticated source fingerprint no longer matches its pairing.', { peerId: sourcePeer.peer_id })
+        }
+        const liveSource = await this.getRemoteStatus(sourcePeer)
+        if (liveSource.incarnation !== sourceIncarnation) {
+          fail(this.context, 'peer_incarnation_changed', 'Federation request source process incarnation is not current.', {
+            peerId: sourcePeer.peer_id,
+            expectedIncarnation: liveSource.incarnation,
+            actualIncarnation: sourceIncarnation,
+          })
+        }
+        const principal: FederationPeerPrincipal = { ...inbound.principal, incarnation: sourceIncarnation }
+        result = await this.federationHandler(value.method, value.params, principal, value.requestId as string | undefined)
+      } else {
+        result = await this.context.call(
           value.method === 'peerList' ? `${this.context.pluginId}/peerList` : value.method,
           value.params,
         )
+      }
       writeJson(response, 200, { status: this.localStatus(fingerprint), result })
     } catch (error) {
       const reason = safeReason(error)
@@ -651,14 +745,14 @@ export class PeerManager {
     return {
       fingerprint: normalizeFingerprint(currentFingerprint),
       incarnation: this.incarnation,
-      capabilities: [...CAPABILITIES],
+      capabilities: [...CAPABILITIES, ...(this.federationHandler === null ? [] : Object.keys(FEDERATION_METHODS))],
     }
   }
 
   private async getRemoteStatus(peer: PeerRow): Promise<RuntimePeerStatus> {
     let result: { status: RuntimePeerStatus; result: unknown }
     try {
-      result = await requestPeer(this.context, peer.endpoint, peer.auth_token, peer.fingerprint, 'peerStatus', {})
+      result = await requestPeer(this.context, peer.endpoint, peer.auth_token, peer.fingerprint, 'peerStatus', {}, undefined, REQUEST_TIMEOUT_MS, this.incarnation)
     } catch (error) {
       const reason = safeReason(error)
       if (reason.code === 'peer_pin_mismatch') return fail(this.context, 'peer_pin_mismatch', 'Peer certificate does not match the pinned fingerprint.', { peerId: peer.peer_id })
@@ -666,7 +760,18 @@ export class PeerManager {
       return fail(this.context, 'peer_unavailable', `Peer ${peer.peer_id} is unavailable (${reason.code}).`, { peerId: peer.peer_id })
     }
     this.assertPinnedStatus(peer, result.status)
+    this.recordRemoteStatus(peer, result.status)
     return result.status
+  }
+
+  private recordRemoteStatus(peer: PeerRow, status: RuntimePeerStatus): void {
+    this.store.run(
+      `UPDATE orchestration_peers SET last_incarnation = ?, last_capabilities_json = ? WHERE peer_id = ? AND pairing_revision = ?`,
+      status.incarnation,
+      JSON.stringify(status.capabilities),
+      peer.peer_id,
+      peer.pairing_revision,
+    )
   }
 
   private assertPinnedStatus(peer: PeerRow, status: RuntimePeerStatus): void {
@@ -678,6 +783,10 @@ export class PeerManager {
   private assertRemoteMethod(method: string, params: Record<string, unknown>, requestId?: string): void {
     const allowed = Object.hasOwn(REMOTE_PEER_METHODS, method) || Object.hasOwn(REMOTE_HEIMDALL_METHODS, method)
     if (!allowed) fail(this.context, 'peer_method_forbidden', `Remote method ${method} is outside the peer method ceiling.`, { method })
+    if (Object.hasOwn(FEDERATION_METHODS, method) &&
+      (typeof params.expectedIncarnation !== 'string' || params.expectedIncarnation.length === 0)) {
+      fail(this.context, 'peer_invalid_call', `Federation method ${method} requires expectedIncarnation.`, { method })
+    }
     if (Object.hasOwn(MUTATING_REMOTE_METHODS, method)) {
       if (typeof requestId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestId)) {
         fail(this.context, 'peer_request_id_required', `Remote mutation ${method} requires a UUID requestId.`, { method })
