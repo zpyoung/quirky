@@ -51,6 +51,76 @@ ordering is unchanged. See the public
 [launch types](../packages/protocol/src/plugins.ts) and the
 [composition contract](../docs/quirk/specs/2026-10-27-m3-session-info/tech.md#json-launch-argument-composition).
 
+## Background structured sessions
+
+`quirky.structured` runs Claude through its Agent SDK and Codex through `codex app-server` over
+stdio JSONL. Neither allocates a PTY. Start a background session from a registered worktree:
+
+```sh
+quirky session new --background --agent codex --prompt "Review this repository" \
+  --model gpt-5.5 --effort high --json
+```
+
+The model and effort use the agent catalog. Omit both to leave the provider defaults untouched.
+Raw extra arguments are refused for structured sessions.
+
+With `quirky.accounts` enabled, creation and resume prepare the selected Claude or Codex account
+before starting the native process. Explicit provider-home configuration takes precedence;
+preparation failure refuses the launch. Prepared environment values are not saved in the launch
+snapshot. Codex resume retains the native conversation ID and records its relocated transcript
+path when account preparation moves the conversation.
+
+The plugin exposes `create`, `messages`, `send`, `stop`, and `resume`. Creation returns a session
+record before startup finishes; `send` waits for native startup before submitting input. Messages
+are journaled and status comes from native events. Command/file permissions become ordinary
+`quirky.ask` questions. Cancellation denies approval; disabling the creating plugin cancels its
+pending approvals.
+
+Stop a connected runner before resuming its conversation:
+
+```sh
+quirky structured stop --session "$SESSION_ID"
+quirky session resume "$SESSION_ID" --json
+```
+
+Resume returns a new Quirky session ID with `resumedFrom`, preserving the original directory,
+native conversation ID, model/effort and launch snapshot—even after a daemon restart. The old
+record and journal remain unchanged. A connected conversation has one owner; competing resumes,
+missing native identity, a missing directory, forks and launch overrides are refused. Use the new
+ID with `quirky structured send --session <id> --text <prompt>`.
+
+Codex stop bounds its final pipe cleanup even when an independently detached child retains an
+output descriptor. Its process group is the execution ownership boundary; it does not adopt
+independently detached services.
+
+## Shared checks
+
+`quirky.checks` executes local shell commands independently of agent sessions:
+
+```sh
+quirky checks run --cwd "$PWD" --command "bun run typecheck" --timeout-seconds 60 --json
+```
+
+Plugins call `quirky.checks/run` with `command`, optional `cwd` or `worktree` (mutually exclusive),
+optional `timeoutSeconds` (1–600, default 60), and optional `checkId`. Without a target it resolves
+the caller's current worktree. A consumer can pass its own timeout, run/skip policy and evidence
+retention; this plugin does not schedule work.
+
+The result includes `ran`, `pass`, `exitCode`, `timedOut`, `aborted`, `durationMs`, stdout/stderr
+tails and independent truncation flags. Each tail holds at most 4000 decoded Unicode characters.
+Inspect `pass` in the JSON result: a nonzero command exit is returned as failed check evidence,
+not an RPC error. Timeout, cancellation and spawn errors never pass.
+
+Provide a unique active `checkId` to cancel from another invocation:
+
+```sh
+quirky checks cancel --check-id "$CHECK_ID" --json
+```
+
+Timeout/cancel sends TERM to the process group, then KILL after a two-second grace period,
+including descendants retaining output pipes. Plugin shutdown cancels and awaits active checks.
+Completed IDs can be reused; cancelling an unknown/completed ID returns `cancelled: false`.
+Process-tree cleanup is verified on macOS; Windows requires separate process-tree support.
 ## GitHub hosting
 
 `quirky.hosting` provides GitHub's API and generated `quirky hosting` commands. It
@@ -172,3 +242,32 @@ Other-provider review/create/settings and in-app link routing have explicit
 prerequisite-dependent queue items; current cards and routing never claim those
 unavailable capabilities succeeded. Clipboard/system-browser/focus behavior is
 handed to the native scenario run, not inferred from headless web output.
+## GitHub Tasks
+
+`quirky.tasks` supplies Tasks lists, issue detail/creation, Project tables/boards/roadmaps,
+and the shared workspace composer. Its generated commands use the `tasks` group:
+
+```sh
+quirky tasks open --mode issues --json
+quirky tasks open --mode prs --page 3 --json
+quirky tasks projects --json
+quirky tasks --help
+```
+
+`quirky.tasks/workspace` with `action: "start"` opens the retained composer; it does not
+create a workspace until confirmation. Targets contain `worktree`, `kind` (`issue` or
+`pullRequest`), `number`, and the exact GitHub `url`. Creation delegates to
+`quirky.worktree/create` with that URL as `github`; there is no plain-create fallback.
+Merge uses conditional kernel confirmation and the canonical hosting expected-head guard.
+Ordinary issue edits, reviewer changes and opening the composer do not ask.
+
+The public UI-library exports are `@quirky/plugin-tasks/markdown`
+(`Markdown`, `MarkdownComposer`, `safeHttpUrl`) and
+`@quirky/plugin-tasks/review-navigation` (`openReview`).
+PR navigation calls `quirky.reviews/open` with `{worktree, number, tab?}`;
+`tab` is `conversation`, `checks`, or `files`. Missing contributions produce an error,
+not an issue page pretending to be PR detail.
+
+Task Sources is a contributed Settings view. A boolean setting can also declare
+`"menu": "view"` for a native View-menu toggle backed by the same public setting value.
+Native clipboard, system-browser and focus effects remain pending in the nightly handoff.

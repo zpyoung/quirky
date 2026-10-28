@@ -2226,7 +2226,8 @@
                 ],
                 "valuePrefix": "model="
               }
-            ]
+            ],
+            "structured": "model"
           },
           "options": [
             {
@@ -2280,7 +2281,8 @@
                   ],
                   "valuePrefix": "model_reasoning_effort="
                 }
-              ]
+              ],
+              "structured": "effort"
             }
           ],
           "models": [
@@ -3455,6 +3457,10 @@
         "detect": "cline",
         "prompt": "stdin-after-start",
         "yolo": "--auto-approve true",
+        "resume": [
+          "--id",
+          "{id}"
+        ],
         "homepage": "https://docs.cline.bot/cline-cli/overview"
       },
       {
@@ -3732,6 +3738,10 @@
         "launch": "acli rovodev run",
         "prompt": "stdin-after-start",
         "yolo": "--yolo",
+        "resume": [
+          "--restore",
+          "{id}"
+        ],
         "homepage": "https://support.atlassian.com/rovo/docs/install-and-run-rovo-dev-cli-on-your-device/"
       },
       {
@@ -3741,6 +3751,10 @@
         "launch": "hermes --tui",
         "prompt": "hermes-query",
         "yolo": "--yolo",
+        "resume": [
+          "--resume",
+          "{id}"
+        ],
         "homepage": "https://hermes-agent.nousresearch.com/docs/"
       },
       {
@@ -3759,6 +3773,10 @@
         "id": "openclaw",
         "label": "OpenClaw",
         "detect": "openclaw",
+        "resume": [
+          "--resume",
+          "{id}"
+        ],
         "prompt": "stdin-after-start",
         "homepage": "https://github.com/openclaw/openclaw"
       },

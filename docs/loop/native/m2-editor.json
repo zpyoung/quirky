@@ -1,0 +1,36 @@
+{
+  "item": "m2-editor",
+  "spec": "docs/quirk/specs/2026-10-27-m2-editor/logic.md",
+  "scenarios": [
+    {
+      "id": "SC-9-native",
+      "title": "On a disposable worktree, every Finder file drop into the editor/explorer imports a collision-safe copy, including a source already inside the worktree; explorer row drag into a terminal inserts shell-escaped paths; Copy Path/Relative Path use the system clipboard and Reveal in Finder selects the file without stealing unrelated state.",
+      "status": "pending", "lastRun": null, "report": null, "summary": null
+    },
+    {
+      "id": "SC-8-trash-native",
+      "title": "Delete a file created by this run from Explorer: it moves to macOS Trash, undo restores its exact text, redo removes it again; deleting a dirty file with failed guarded save is refused and preserves disk/draft.",
+      "status": "pending", "lastRun": null, "report": null, "summary": null
+    },
+    {
+      "id": "SC-14-pdf-native",
+      "title": "Export Markdown from rich and preview modes through the native save dialog: initial name is document.pdf, folder selection works, replacement asks before overwriting, Cancel writes nothing, Save produces a valid rendered PDF and reports the destination.",
+      "status": "pending", "lastRun": null, "report": null, "summary": null
+    },
+    {
+      "id": "SC-17-python-native",
+      "title": "Browse for a local Python interpreter using the native chooser; cancelling leaves the notebook unchanged, choosing validates it and first execution still requires Run Notebook Code trust; no package installation happens without its separate confirmation.",
+      "status": "pending", "lastRun": null, "report": null, "summary": null
+    },
+    {
+      "id": "SC-20-default-app-native",
+      "title": "Open a disposable audio/video/image/PDF file in the macOS default application from its viewer; unsupported codec error is visible and opening does not execute notebook content or leak the daemon token.",
+      "status": "pending", "lastRun": null, "report": null, "summary": null
+    },
+    {
+      "id": "SC-21-shortcuts-native",
+      "title": "With terminal then editor focus, macOS Cmd+P, Cmd+S, Cmd+W, Cmd+Shift+T, Cmd+L and Cmd+Shift+E/F/G reach exactly one declared action; Source Control does not also open editor Find; native menu/focus routing agrees with daemon UI state.",
+      "status": "pending", "lastRun": null, "report": null, "summary": null
+    }
+  ]
+}

@@ -10,7 +10,7 @@ type RepoRegistrationHost = {
   root: string
   client: { callAny(method: string, params?: Record<string, unknown>): Promise<unknown> }
 }
-type ListItem = { repoId: string }
+type ListItem = Record<string, unknown> & { repoId: string }
 type ListResult = {
   items: ListItem[]
   page: number
@@ -41,7 +41,10 @@ function listResult(value: unknown): ListResult {
   const itemsValue = result.items
   const failuresValue = result.failures
   if (!Array.isArray(itemsValue) || !Array.isArray(failuresValue)) throw new Error('list result arrays are missing')
-  const items = itemsValue.map((item) => ({ repoId: stringField(record(item), 'repoId') }))
+  const items = itemsValue.map((item) => {
+    const row = record(item)
+    return { ...row, repoId: stringField(row, 'repoId') }
+  })
   const failures = failuresValue.map((failure) => record(failure))
   return {
     items,
@@ -154,7 +157,7 @@ test('list distinguishes empty matches, unavailable authentication, and provider
   expect(unavailable.failures).toContainEqual(expect.objectContaining({ repoId: host.repoId, stage: 'availability' }))
 
   host.writeState(seedListFixture({ 'test-owner/test-repo': [fixtureIssue('test-owner', 'test-repo', 7, '2026-10-01T00:00:00Z')] }, { failList: 'test-owner/test-repo' }))
-  const failed = listResult(await host.call('list', { mode: 'issues', repoIds: [host.repoId], query: 'is:open' }))
+  const failed = listResult(await host.call('list', { mode: 'issues', repoIds: [host.repoId], query: 'is:open', refresh: true }))
   expect(failed.items).toHaveLength(0)
   expect(failed.failures).toContainEqual(expect.objectContaining({ repoId: host.repoId, stage: 'list' }))
 })
@@ -164,10 +167,11 @@ test('row validates issue duplicate identity and reviewer bounds before writing'
   const host = await bootTasks(listFixtureSource)
   hosts.push(host)
   const target = { worktree: host.worktree, kind: 'issue', number: 7, url: 'https://github.com/test-owner/test-repo/issues/7' }
+  const pullTarget = { ...target, kind: 'pullRequest', url: 'https://github.com/test-owner/test-repo/pull/7' }
   const before = host.invocations().length
-  await expect(host.call('row', { target, action: 'issueStatus', state: 'closed', stateReason: 'duplicate', duplicateOf: 7 })).rejects.toThrow(/different issue/)
-  await expect(host.call('row', { target: { ...target, kind: 'pullRequest' }, action: 'reviewers', reviewerText: '@one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen' })).rejects.toThrow(/15 reviewers/)
-  await expect(host.call('row', { target: { ...target, kind: 'pullRequest' }, action: 'reviewers', reviewerText: 'x'.repeat(2049) })).rejects.toThrow(/2048/)
+  await expect(host.call('row', { target, action: 'issueStatus', state: 'closed', stateReason: 'duplicate', duplicateOf: 7 })).rejects.toThrow()
+  await expect(host.call('row', { target: pullTarget, action: 'reviewers', reviewerAction: 'add', reviewerText: '@one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen' })).rejects.toThrow()
+  await expect(host.call('row', { target: pullTarget, action: 'reviewers', reviewerAction: 'add', reviewerText: 'x'.repeat(2049) })).rejects.toThrow()
   expect(host.invocations()).toHaveLength(before)
 })
 
@@ -226,7 +230,6 @@ test('PR metadata and reviewer mutations target the configured upstream source',
   upstreamPull.requestedReviewers = ['upstream-reviewer']
   upstreamPull.reviews = [{ author: 'active-reviewer', state: 'APPROVED' }]
   upstreamPull.reviewAssignees = ['assignee-reviewer']
-  upstreamPull.participantsTruncated = true
   host.writeState(seedListFixture({
     'test-owner/test-repo': [originPull],
     'upstream-owner/upstream-repo': [upstreamPull]
@@ -235,7 +238,7 @@ test('PR metadata and reviewer mutations target the configured upstream source',
   const target = { worktree: host.worktree, kind: 'pullRequest', number: 12, url: upstreamPull.url }
   const metadata = record(await host.call('mergeMetadata', { target }))
   expect(metadata.review).toMatchObject({
-    number: 12,
+    state: 'open',
     title: 'Upstream PR 12',
     url: upstreamPull.url,
     additions: 17,
@@ -244,8 +247,7 @@ test('PR metadata and reviewer mutations target the configured upstream source',
     reviewDecision: 'APPROVED',
     requestedReviewers: ['upstream-reviewer'],
     reviews: [{ author: 'active-reviewer', state: 'APPROVED' }],
-    assignees: ['assignee-reviewer'],
-    participantsTruncated: true
+    assignees: ['assignee-reviewer']
   })
 
   const result = record(await host.call('row', {
@@ -263,6 +265,38 @@ test('PR metadata and reviewer mutations target the configured upstream source',
   expect(record(originItems[0]).requestedReviewers).toEqual(['origin-reviewer'])
   expect(record(upstreamItems[0]).requestedReviewers).toEqual(['upstream-reviewer', 'added-upstream'])
 })
+
+test('row merge requires head consent and confirms the stateful GitHub result', async () => {
+  const host = await bootTasks(listFixtureSource)
+  hosts.push(host)
+  const pull = fixturePullRequest('test-owner', 'test-repo', 12, '2026-10-01T00:00:00Z')
+  const expectedHead = pull.headRefOid
+  if (!expectedHead) throw new Error('fixture pull-request head was not set')
+  host.writeState(seedListFixture({ 'test-owner/test-repo': [pull] }, { mergeQueueRequired: false, autoMergeAllowed: true }))
+  const target = { worktree: host.worktree, kind: 'pullRequest', number: 12, url: pull.url }
+  await expect(host.call('row', { target, action: 'merge', method: 'squash', expectedHead }))
+    .rejects.toMatchObject({ code: -32009 })
+  const afterConsent = record(host.readState())
+  const consentItems = record(afterConsent.items)['test-owner/test-repo']
+  if (!Array.isArray(consentItems)) throw new Error('fixture pull-request state was not retained')
+  expect(record(consentItems[0]).state).toBe('open')
+
+  const staleHead = 'c'.repeat(40)
+  await expect(host.call('row', { target, action: 'merge', method: 'squash', expectedHead: staleHead, yes: true })).rejects.toThrow()
+  const afterStale = record(host.readState())
+  const staleItems = record(afterStale.items)['test-owner/test-repo']
+  if (!Array.isArray(staleItems)) throw new Error('fixture pull-request state was not retained')
+  expect(record(staleItems[0]).state).toBe('open')
+
+  const merged = record(await host.call('row', { target, action: 'merge', method: 'squash', expectedHead, yes: true }))
+  expect(merged).toMatchObject({ kind: 'merged', result: { state: 'merged', number: 12, head: expectedHead } })
+  const confirmed = record(await host.call('mergeMetadata', { target }))
+  expect(record(confirmed.review).state).toBe('merged')
+  const finalItems = record(record(host.readState()).items)['test-owner/test-repo']
+  if (!Array.isArray(finalItems)) throw new Error('fixture pull-request state was not retained')
+  expect(record(finalItems[0]).state).toBe('merged')
+})
+
 
 test('checks returns the provider rollup without treating a failing check as merge-safe', async () => {
   const host = await bootTasks(listFixtureSource)

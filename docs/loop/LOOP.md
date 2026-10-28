@@ -63,6 +63,9 @@ After 4am, `docs/loop/BLOCKERS.md` lists the deferred items to requeue.
   [Blocking an item](#blocking-an-item) describes. An item claimed before this rule, or already
   past two hours, lands as soon as its own tests and typecheck pass: skip any review round or
   dogfood pass it hasn't started.
+- **One follow-up per item.** Each follow-up is a whole item to build and land before 4am, so
+  defer flows sparingly. Add follow-ups only once, just before landing, as a single item naming
+  every flow this item defers.
 - **No research swarms.** The feature doc, the roadmap and earlier decision logs are the research.
   Brainstorm with the standard gray areas and answer them yourself.
 - **One spec.** Write `logic.md` with the tech decisions in a final section, and skip `tech.md` and

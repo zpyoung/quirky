@@ -108,6 +108,8 @@ const settingInfo = object(
     plugin: string(),
     type: { type: 'string', enum: ['boolean', 'number', 'string', 'enum'] },
     title: string(),
+    category: string(),
+    section: string(),
     description: string(),
     default: {},
     minimum: { type: 'number' },
@@ -166,18 +168,20 @@ const uiModel = object(
   {
     sidebarSections: listOf({ type: 'object' }),
     statusBars: listOf({ type: 'object' }),
+    activityItems: listOf({ type: 'object' }),
     panels: listOf({ type: 'object' }),
     views: listOf({ type: 'object' }),
     overlays: listOf({ type: 'object' }),
     commands: listOf({ type: 'object' }),
     keybindings: listOf(uiKeybinding, 'Registry precedence order: distro bindings first, then plugin bindings.'),
     settings: listOf({ type: 'object' }),
+    settingsSections: listOf({ type: 'object' }),
     menuItems: listOf(uiMenuItem),
     themes: listOf({ type: 'object' }),
     theme: object({ chosen: string(), active: string() }, ['chosen', 'active']),
     modules: { type: 'object', additionalProperties: true }
   },
-  ['sidebarSections', 'statusBars', 'panels', 'views', 'overlays', 'commands', 'keybindings', 'settings', 'menuItems', 'themes', 'theme', 'modules']
+  ['sidebarSections', 'statusBars', 'activityItems', 'panels', 'views', 'overlays', 'commands', 'keybindings', 'settings', 'settingsSections', 'menuItems', 'themes', 'theme', 'modules']
 )
 const apiDescription = object(
   {
@@ -196,7 +200,10 @@ const uiLayout = object(
     view: { description: 'The open view as {id, input?}, or null.' },
     panel: { description: 'The open panel ID, or null.' },
     sidebar: boolean(),
-    focus: { description: "'sidebar', 'view', 'panel' or null." }
+    focus: { description: "'sidebar', 'view', 'panel' or null." },
+    panelWidths: { type: 'object', additionalProperties: true, description: 'Desired width by panel ID.' },
+    activityBarPosition: { type: 'string', enum: ['top', 'side'], description: 'Global panel activity-bar position.' },
+    palette: { type: 'boolean', description: 'Whether the command palette is open; absent means closed.' }
   },
   ['view', 'panel', 'sidebar', 'focus']
 )
@@ -416,6 +423,11 @@ export const KERNEL_METHOD_SCHEMAS = {
     params: noParams,
     result: uiState
   },
+  'ui.palette.set': {
+    description: 'Opens or closes the shared command palette; omitting `open` toggles its current state.',
+    params: object({ open: { type: 'boolean', description: 'True opens, false closes; omitted toggles.' } }),
+    result: uiLayout
+  },
   'ui.view.open': {
     description: 'Opens view `id` with `input` (JSON up to 64 KiB); `id` must be an effective view.',
     params: object({ id: string(), input: { description: 'Passed to the view as its input.' } }, ['id']),
@@ -428,6 +440,19 @@ export const KERNEL_METHOD_SCHEMAS = {
     result: uiLayout
   },
   'ui.panel.close': { description: 'Closes the open panel.', params: noParams, result: uiLayout },
+  'ui.panel.configure': {
+    description:
+      'Configures an effective panel width (an integer from 220 through 4096) and/or the global activity bar position.',
+    params: object(
+      {
+        id: string('An effective panel contribution ID.'),
+        width: { type: 'integer', minimum: 220, maximum: 4096 },
+        activityBarPosition: { type: 'string', enum: ['top', 'side'] }
+      },
+      ['id']
+    ),
+    result: uiLayout
+  },
   'ui.sidebar.set': {
     description: 'Shows or hides the sidebar.',
     params: object({ visible: boolean() }, ['visible']),

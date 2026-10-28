@@ -1,6 +1,8 @@
-import type { Handler, HostingEnv, Scope } from './env'
+import type { Worktree } from '@quirky/protocol'
+import type { Handler, HostingConfiguration, HostingEnv, Scope } from './env'
 import { isRecord, nonEmptyString, parseBranch, parseOid, parsePositiveInteger, parseIdentity, sameIdentity, providerReason, type IdentityValue } from './pr-data'
 import { reviewParticipants, type ReviewParticipants } from './review-participants'
+import type { CachedReviewsResult, CachedWorkspaceReview } from './cached-review-types'
 
 const LOOKUP_FIELDS = [
   'id', 'number', 'title', 'body', 'state', 'url', 'isDraft', 'updatedAt', 'mergeable', 'reviewDecision', 'mergeStateStatus',
@@ -12,6 +14,8 @@ const ACTIVE_TTL = 60_000
 const ABSENT_TTL = 15 * 60_000
 const MERGED_TTL = 6 * 60 * 60_000
 const CACHE_CAPACITY = 500
+const REVIEW_CACHE_CAPACITY = 500
+const MAX_CACHED_REVIEW_WORKTREES = 1_000
 
 const PROVIDER_FAILURE_MESSAGES: Record<string, string> = {
   not_found: 'The GitHub pull request was not found in the configured repository.',
@@ -103,12 +107,17 @@ type CachedLookup = { expiresAt: number; value: Lookup }
 export type PRLookup = {
   forBranch(params: Record<string, unknown>, caller: Parameters<Handler>[1], options?: { noCache?: boolean }): Promise<Lookup>
   review(params: Record<string, unknown>, caller: Parameters<Handler>[1]): Promise<Lookup>
+  cachedReviews(params: Record<string, unknown>, caller: Parameters<Handler>[1]): Promise<CachedReviewsResult>
   readFresh(params: Record<string, unknown>, caller: Parameters<Handler>[1]): Promise<PRRead | null>
   invalidate(scope: Scope, data?: Record<string, unknown>): void
 }
 
 function inputError(env: HostingEnv, message: string): never {
   throw env.invalid('validation_error', message)
+}
+function isCachedReviewSelectors(value: unknown): value is string[] {
+  return Array.isArray(value) && value.length <= MAX_CACHED_REVIEW_WORKTREES &&
+    value.every((selector: unknown) => typeof selector === 'string' && selector.length > 0 && selector.length <= 4096)
 }
 
 function identityLabel(identity: IdentityValue): string {
@@ -560,14 +569,99 @@ function cacheTtl(result: Lookup, active: boolean): number {
 }
 
 export function createPRLookup(env: HostingEnv): PRLookup {
-  const resultCache = new Map<string, CachedLookup>()
-  let cacheGeneration = 0
-
-  const invalidate = (scope: Scope, data?: Record<string, unknown>) => {
-    cacheGeneration += 1
-    resultCache.clear()
-    env.changed(scope, data)
+  type NormalizedLookup = {
+    params: Record<string, unknown>
+    branch?: string
+    linked?: number
+    fallback?: number
+    headOid?: string
   }
+  type LocalIdentity = {
+    branch: string | null
+    headOid: string
+    remotes: { origin: string | null; upstream: string | null }
+  }
+  type ReviewSnapshot = {
+    entry: CachedWorkspaceReview
+    repoId: string
+    path: string
+    scope: Scope
+    scopeKey: string
+    fetchedAt: number
+    expiresAt: number
+  }
+  type StaleSnapshot = { repoId: string; expiresAt: number }
+
+  const resultCache = new Map<string, CachedLookup>()
+  const reviewCache = new Map<string, ReviewSnapshot>()
+  const staleSnapshots = new Map<string, StaleSnapshot>()
+  let cacheGeneration = 0
+  let reviewExpiryTimer: ReturnType<typeof setTimeout> | undefined
+  let reviewExpiryAt: number | undefined
+  let disposed = false
+
+  const emitReviewCacheChanged = (worktreeId: string, repoId: string): void => {
+    env.context.emit('reviewCacheChanged', { worktreeId, repoId })
+  }
+  const markSnapshotStale = (worktreeId: string, repoId: string, expiresAt: number): void => {
+    if (expiresAt <= Date.now()) return
+    staleSnapshots.delete(worktreeId)
+    staleSnapshots.set(worktreeId, { repoId, expiresAt })
+    while (staleSnapshots.size > REVIEW_CACHE_CAPACITY) {
+      const oldest = staleSnapshots.keys().next().value
+      if (oldest === undefined) break
+      staleSnapshots.delete(oldest)
+    }
+  }
+  const scheduleReviewExpiryTimer = (): void => {
+    if (disposed) return
+    let nextExpiry: number | undefined
+    for (const snapshot of reviewCache.values()) {
+      if (nextExpiry === undefined || snapshot.expiresAt < nextExpiry) nextExpiry = snapshot.expiresAt
+    }
+    for (const snapshot of staleSnapshots.values()) {
+      if (nextExpiry === undefined || snapshot.expiresAt < nextExpiry) nextExpiry = snapshot.expiresAt
+    }
+    if (nextExpiry === undefined) {
+      if (reviewExpiryTimer !== undefined) clearTimeout(reviewExpiryTimer)
+      reviewExpiryTimer = undefined
+      reviewExpiryAt = undefined
+      return
+    }
+    if (reviewExpiryTimer !== undefined && reviewExpiryAt === nextExpiry) return
+    if (reviewExpiryTimer !== undefined) clearTimeout(reviewExpiryTimer)
+    reviewExpiryAt = nextExpiry
+    reviewExpiryTimer = setTimeout(() => {
+      reviewExpiryTimer = undefined
+      reviewExpiryAt = undefined
+      if (disposed) return
+      const now = Date.now()
+      for (const [worktreeId, snapshot] of reviewCache) {
+        if (snapshot.expiresAt > now) continue
+        reviewCache.delete(worktreeId)
+        staleSnapshots.delete(worktreeId)
+        emitReviewCacheChanged(worktreeId, snapshot.repoId)
+      }
+      for (const [worktreeId, snapshot] of staleSnapshots) {
+        if (snapshot.expiresAt > now) continue
+        staleSnapshots.delete(worktreeId)
+        emitReviewCacheChanged(worktreeId, snapshot.repoId)
+      }
+      scheduleReviewExpiryTimer()
+    }, Math.max(0, Math.min(nextExpiry - Date.now(), 2_147_000_000)))
+    reviewExpiryTimer.unref()
+  }
+
+  const clearReviewCache = (scope: Scope): void => {
+    for (const [worktreeId, snapshot] of reviewCache) {
+      if (snapshot.repoId !== scope.worktree.repoId) continue
+      reviewCache.delete(worktreeId)
+      markSnapshotStale(worktreeId, snapshot.repoId, snapshot.expiresAt)
+      emitReviewCacheChanged(worktreeId, snapshot.repoId)
+    }
+    scheduleReviewExpiryTimer()
+  }
+
   const resolveExact = async (scope: Scope, repositories: IdentityValue[], number: number, fresh = false): Promise<PRRead | null> => {
     let firstError: unknown
     for (const repository of repositories) {
@@ -582,18 +676,31 @@ export function createPRLookup(env: HostingEnv): PRLookup {
     return null
   }
 
-  const lookupFresh = async (params: Record<string, unknown>, caller: Parameters<Handler>[1]): Promise<Lookup> => {
-    const fetchedAt = Date.now()
-    const scope = await env.resolve(params, caller)
+  const normalizeLookup = (params: Record<string, unknown>, scope: Scope): NormalizedLookup => {
     const branch = params.branch === '' || params.branch === undefined ? undefined : parseBranch(params.branch)
     if (params.branch !== undefined && params.branch !== '' && !branch) inputError(env, 'branch must be a valid branch name.')
     const linked = params.number === undefined ? undefined : parsePositiveInteger(params.number)
     if (params.number !== undefined && !linked) inputError(env, 'number must be a positive integer.')
     const fallback = params.fallbackPRNumber === undefined ? undefined : parsePositiveInteger(params.fallbackPRNumber)
     if (params.fallbackPRNumber !== undefined && !fallback) inputError(env, 'fallbackPRNumber must be a positive integer.')
-    const headOid = params.headOid
+    const headOid = params.headOid === undefined ? scope.worktree.head : parseOid(params.headOid)
+    if (params.headOid !== undefined && !headOid) inputError(env, 'headOid must be a 40- or 64-character hexadecimal commit SHA.')
+    return {
+      params: { ...params, branch: branch ?? '', ...(headOid ? { headOid } : {}) },
+      ...(branch ? { branch } : {}),
+      ...(linked ? { linked } : {}),
+      ...(fallback ? { fallback } : {}),
+      ...(headOid ? { headOid } : {})
+    }
+  }
+
+  const lookupResolved = async (request: NormalizedLookup, scope: Scope): Promise<Lookup> => {
+    const fetchedAt = Date.now()
+    const { params, branch, linked, fallback, headOid } = request
     const repositories = selectRepositories(env, scope, params.prRepo)
-    if (repositories.length === 0) return { kind: 'unavailable', reason: 'repo_unavailable', message: 'No configured GitHub repository is available for this worktree.', fetchedAt }
+    if (repositories.length === 0) {
+      return { kind: 'unavailable', reason: 'repo_unavailable', message: 'No configured GitHub repository is available for this worktree.', fetchedAt }
+    }
     if (linked) {
       try {
         const read = await resolveExact(scope, repositories, linked)
@@ -657,43 +764,237 @@ export function createPRLookup(env: HostingEnv): PRLookup {
     return { kind: 'no-review', fetchedAt }
   }
 
+  const localIdentity = async (worktree: Worktree): Promise<LocalIdentity> => {
+    const [branchText, headText, remotes] = await Promise.all([
+      env.gitWorktree(worktree, ['symbolic-ref', '--quiet', '--short', 'HEAD']).catch(() => ''),
+      env.gitWorktree(worktree, ['rev-parse', '--verify', 'HEAD']),
+      env.remoteUrls(worktree)
+    ])
+    const headOid = parseOid(headText.trim())
+    if (!headOid) throw env.invalid('git_failed', 'The local Git query failed.')
+    return {
+      branch: parseBranch(branchText.trim()) ?? null,
+      headOid,
+      remotes
+    }
+  }
+
+  const snapshotSignature = (snapshot: ReviewSnapshot): string =>
+    JSON.stringify({ entry: snapshot.entry, repoId: snapshot.repoId, path: snapshot.path, scopeKey: snapshot.scopeKey })
+
+  const captureSnapshot = async (
+    result: Lookup,
+    scope: Scope,
+    request: NormalizedLookup,
+    generation: number,
+    mode: 'branch' | 'review',
+    active: boolean,
+    expiresAt: number
+  ): Promise<void> => {
+    if (generation !== cacheGeneration || scope.worktree.kind !== 'git') return
+    let local: LocalIdentity
+    try {
+      local = await localIdentity(scope.worktree)
+    } catch {
+      return
+    }
+    if (generation !== cacheGeneration) return
+    const requestHeadMatches = request.headOid === local.headOid
+    if (request.branch !== undefined && request.branch !== local.branch) return
+    if (result.kind === 'found' && request.branch === undefined && result.review.headRefName !== local.branch) return
+
+    let resolvedReview: CachedWorkspaceReview['review'] = null
+    let stale = !requestHeadMatches
+    let error: string | undefined
+    if (result.kind === 'unavailable') {
+      error = result.message
+    } else if (result.kind === 'found') {
+      const inferred = mode === 'branch' && request.linked === undefined && request.branch !== undefined
+      const matchingHead = result.review.headRefOid === local.headOid
+      const matchingBranch = result.review.headRefName === local.branch
+      const establishedMerged = result.review.state === 'merged' && inferred && request.headOid === local.headOid
+      if (requestHeadMatches && (inferred || (matchingBranch && matchingHead)) && (matchingHead || establishedMerged)) {
+        resolvedReview = {
+          state: result.review.state,
+          checksStatus: result.review.checksStatus,
+          headRefOid: result.review.headRefOid,
+          number: result.review.number,
+          url: result.review.url
+        }
+      } else {
+        stale = true
+      }
+    }
+    if (expiresAt <= Date.now()) return
+    const entry: CachedWorkspaceReview = {
+      worktreeId: scope.worktree.id,
+      instanceId: scope.worktree.instanceId,
+      branch: local.branch,
+      headOid: local.headOid,
+      review: resolvedReview,
+      stale,
+      ...(error ? { error } : {})
+    }
+    const snapshot: ReviewSnapshot = {
+      entry,
+      repoId: scope.worktree.repoId,
+      path: scope.worktree.path,
+      scope,
+      scopeKey: env.cacheKey(scope, 'cached-workspace-review'),
+      fetchedAt: result.fetchedAt,
+      expiresAt
+    }
+    const previous = reviewCache.get(entry.worktreeId)
+    if (previous && previous.fetchedAt > result.fetchedAt) return
+    staleSnapshots.delete(entry.worktreeId)
+    reviewCache.delete(entry.worktreeId)
+    reviewCache.set(entry.worktreeId, snapshot)
+    while (reviewCache.size > REVIEW_CACHE_CAPACITY) {
+      const oldest = reviewCache.keys().next().value
+      if (oldest === undefined) break
+      reviewCache.delete(oldest)
+    }
+    scheduleReviewExpiryTimer()
+    if (!previous || snapshotSignature(previous) !== snapshotSignature(snapshot)) {
+      emitReviewCacheChanged(entry.worktreeId, snapshot.repoId)
+    }
+  }
+
+  const cachedForWorktree = async (worktree: Worktree): Promise<CachedWorkspaceReview> => {
+    if (worktree.kind === 'folder') {
+      return { worktreeId: worktree.id, instanceId: worktree.instanceId, branch: null, headOid: null, review: null, stale: true }
+    }
+    let local: LocalIdentity
+    try {
+      local = await localIdentity(worktree)
+    } catch {
+      return {
+        worktreeId: worktree.id,
+        instanceId: worktree.instanceId,
+        branch: null,
+        headOid: null,
+        review: null,
+        stale: true,
+        error: 'The current local worktree identity could not be verified.'
+      }
+    }
+    const ordinaryMiss: CachedWorkspaceReview = {
+      worktreeId: worktree.id,
+      instanceId: worktree.instanceId,
+      branch: local.branch,
+      headOid: local.headOid,
+      review: null,
+      stale: false
+    }
+    const snapshot = reviewCache.get(worktree.id)
+    if (!snapshot) {
+      const staleSnapshot = staleSnapshots.get(worktree.id)
+      if (staleSnapshot && staleSnapshot.expiresAt > Date.now()) return { ...ordinaryMiss, stale: true }
+      return ordinaryMiss
+    }
+    if (snapshot.expiresAt <= Date.now()) {
+      return ordinaryMiss
+    }
+
+    let configuration: HostingConfiguration
+    try {
+      configuration = env.configuration(worktree)
+    } catch {
+      reviewCache.delete(worktree.id)
+      markSnapshotStale(worktree.id, snapshot.repoId, snapshot.expiresAt)
+      return { ...ordinaryMiss, stale: true, error: 'Hosting configuration could not be verified.' }
+    }
+    const currentScope = { ...snapshot.scope, worktree }
+    const configMatches = configuration.issueSourcePreference === snapshot.scope.issueSourcePreference &&
+      JSON.stringify(configuration.account) === JSON.stringify(snapshot.scope.binding ?? null)
+    const remotesMatch = snapshot.scope.remotes?.origin === local.remotes.origin &&
+      snapshot.scope.remotes?.upstream === local.remotes.upstream
+    const currentScopeKey = env.cacheKey(currentScope, 'cached-workspace-review')
+    const identityMatches = snapshot.entry.instanceId === worktree.instanceId &&
+      snapshot.repoId === worktree.repoId &&
+      snapshot.path === worktree.path &&
+      snapshot.entry.branch === local.branch &&
+      snapshot.entry.headOid === local.headOid &&
+      configMatches &&
+      remotesMatch &&
+      snapshot.scopeKey === currentScopeKey
+    if (!identityMatches) {
+      reviewCache.delete(worktree.id)
+      markSnapshotStale(worktree.id, snapshot.repoId, snapshot.expiresAt)
+      return { ...ordinaryMiss, stale: true }
+    }
+    return { ...snapshot.entry }
+  }
+
+  const cachedReviews = async (params: Record<string, unknown>, caller: Parameters<Handler>[1]): Promise<CachedReviewsResult> => {
+    if (Object.keys(params).some((key) => key !== 'worktrees')) inputError(env, 'cachedReviews only accepts worktrees.')
+    const selectors = params.worktrees
+    if (!isCachedReviewSelectors(selectors)) {
+      inputError(env, 'worktrees must contain at most 1000 valid worktree selectors.')
+    }
+    const workspaces: CachedWorkspaceReview[] = []
+    const seen = new Set<string>()
+    for (const selector of selectors) {
+      const worktree = await env.resolveWorktree(selector, caller)
+      if (seen.has(worktree.id)) continue
+      seen.add(worktree.id)
+      workspaces.push(await cachedForWorktree(worktree))
+    }
+    return { workspaces }
+  }
+
+  const invalidate = (scope: Scope, data?: Record<string, unknown>): void => {
+    env.changed(scope, data)
+  }
+
   const forBranch = async (
     params: Record<string, unknown>,
     caller: Parameters<Handler>[1],
     options?: { noCache?: boolean }
   ): Promise<Lookup> => {
     const scope = await env.resolve(params, caller)
-    const branch = params.branch === '' || params.branch === undefined ? undefined : parseBranch(params.branch)
-    if (params.branch !== undefined && params.branch !== '' && !branch) inputError(env, 'branch must be a valid branch name.')
-    const number = params.number === undefined ? undefined : parsePositiveInteger(params.number)
-    if (params.number !== undefined && !number) inputError(env, 'number must be a positive integer.')
-    const fallback = params.fallbackPRNumber === undefined ? undefined : parsePositiveInteger(params.fallbackPRNumber)
-    if (params.fallbackPRNumber !== undefined && !fallback) inputError(env, 'fallbackPRNumber must be a positive integer.')
-    const headOid = params.headOid === undefined ? scope.worktree.head : parseOid(params.headOid)
-    if (params.headOid !== undefined && !headOid) inputError(env, 'headOid must be a 40- or 64-character hexadecimal commit SHA.')
-    const normalizedParams = { ...params, branch: branch ?? '', ...(headOid ? { headOid } : {}) }
+    const request = normalizeLookup(params, scope)
+    const { branch, linked, fallback, headOid } = request
     const supplied = params.prRepo === undefined ? '' : JSON.stringify(params.prRepo)
-    const rawKey = `pr-lookup:${scope.worktree.repoId}:${scope.origin.host}/${scope.origin.owner}/${scope.origin.repo}:${branch ?? ''}:${number ?? ''}:${fallback ?? ''}:${headOid ?? ''}:${supplied}`
+    const rawKey = `pr-lookup:${scope.worktree.repoId}:${scope.origin.host}/${scope.origin.owner}/${scope.origin.repo}:${branch ?? ''}:${linked ?? ''}:${fallback ?? ''}:${headOid ?? ''}:${supplied}`
     const key = env.cacheKey(scope, rawKey)
     const active = params.active === true
-    if (options?.noCache === true) return lookupFresh(normalizedParams, caller)
-    const cached = resultCache.get(key)
-    if (cached && cached.expiresAt > Date.now()) return cached.value
-    if (cached) resultCache.delete(key)
     const generation = cacheGeneration
-    const value = await env.cache(key, 60_000, () => lookupFresh(normalizedParams, caller))
+    if (options?.noCache === true) {
+      const value = await lookupResolved(request, scope)
+      const expiresAt = Date.now() + cacheTtl(value, active)
+      await captureSnapshot(value, scope, request, generation, 'branch', active, expiresAt)
+      return value
+    }
+    const cached = resultCache.get(key)
+    if (cached && cached.expiresAt > Date.now()) {
+      await captureSnapshot(cached.value, scope, request, generation, 'branch', active, cached.expiresAt)
+      return cached.value
+    }
+    if (cached) resultCache.delete(key)
+    const value = await env.cache(key, 60_000, () => lookupResolved(request, scope))
+    const expiresAt = Date.now() + cacheTtl(value, active)
     if (generation === cacheGeneration) {
-      resultCache.set(key, { expiresAt: Date.now() + cacheTtl(value, active), value })
+      resultCache.set(key, { expiresAt, value })
       if (resultCache.size > CACHE_CAPACITY) resultCache.delete(resultCache.keys().next().value!)
     }
+    await captureSnapshot(value, scope, request, generation, 'branch', active, expiresAt)
     return value
   }
 
   const review = async (params: Record<string, unknown>, caller: Parameters<Handler>[1]): Promise<Lookup> => {
     const number = parsePositiveInteger(params.number)
     if (!number) inputError(env, 'number must be a positive integer.')
-    return lookupFresh({ ...params, number }, caller)
+    const generation = cacheGeneration
+    const normalizedParams = { ...params, number }
+    const scope = await env.resolve(normalizedParams, caller)
+    const request = normalizeLookup(normalizedParams, scope)
+    const value = await lookupResolved(request, scope)
+    const expiresAt = Date.now() + cacheTtl(value, false)
+    await captureSnapshot(value, scope, request, generation, 'review', false, expiresAt)
+    return value
   }
+
 
   const readFresh = async (params: Record<string, unknown>, caller: Parameters<Handler>[1]): Promise<PRRead | null> => {
     const number = parsePositiveInteger(params.number)
@@ -703,5 +1004,21 @@ export function createPRLookup(env: HostingEnv): PRLookup {
     return resolveExact(scope, repositories, number, true)
   }
 
-  return { forBranch, review, readFresh, invalidate }
+  env.onInvalidate((scope) => {
+    cacheGeneration += 1
+    resultCache.clear()
+    clearReviewCache(scope)
+  })
+  env.onDispose(() => {
+    disposed = true
+    if (reviewExpiryTimer !== undefined) clearTimeout(reviewExpiryTimer)
+    reviewExpiryTimer = undefined
+    reviewExpiryAt = undefined
+    cacheGeneration += 1
+    resultCache.clear()
+    reviewCache.clear()
+    staleSnapshots.clear()
+  })
+
+  return { forBranch, review, cachedReviews, readFresh, invalidate }
 }

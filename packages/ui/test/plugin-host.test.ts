@@ -151,7 +151,7 @@ async function boot(write: Writer, options: BootOptions = {}) {
       }),
     inModel: (id: string) => {
       const model = host.getState().model!
-      return [...model.sidebarSections, ...model.statusBars, ...model.panels, ...model.views, ...model.overlays, ...model.commands].some((e) => e.id === id)
+      return [...model.sidebarSections, ...model.activityItems, ...model.statusBars, ...model.panels, ...model.views, ...model.overlays, ...model.commands].some((e) => e.id === id)
     },
     waitForLine: (line: string) => waitFor(() => readMarker(marker).includes(line)),
     waitForGone: (id: string) => waitFor(() => !booted.inModel(id) && host.getState().slots[id] === undefined),
@@ -292,7 +292,7 @@ describe('window plugin host against a real daemon', () => {
     )
     const plugins = await t.agent.call('plugin.list', {})
     expect(plugins.find((plugin) => plugin.id === 'acme.bare')).toMatchObject({
-      diagnostics: [{ level: 'warning' }]
+      diagnostics: [expect.objectContaining({ level: 'warning' })]
     })
     expect(t.state().settings.find((setting) => setting.id === 'setting:acme.bare/size')?.value).toBe(5)
 
@@ -821,24 +821,6 @@ describe('window plugin host against a real daemon', () => {
     expect(t.host.handleKey(press('K'))).toBe(true)
     await t.waitForLine('ran sample')
     expect(t.lines().filter((line) => line === 'ran keys')).toHaveLength(1)
-  })
-
-  test('G1: a plugin keybinding on mod+shift+p is reported shadowed by the kernel, and Cmd+Shift+P runs nothing', async () => {
-    const t = await boot((installed, marker) =>
-      installUi(installed, marker, 'acme.tabs', {
-        command: [{ id: 'new', title: 'New' }],
-        keybinding: [{ id: 'k', key: 'mod+shift+p', command: 'new' }]
-      }, {
-        activate: provideCommand('command:acme.tabs/new', "record('ran tabs')")
-      })
-    )
-    expect(t.state().model!.keybindings).toMatchObject([
-      { id: 'keybinding:acme.tabs/k', key: 'mod+shift+p', status: 'shadowed', shadowedBy: 'kernel' }
-    ])
-
-    expect(t.host.handleKey(press('P', { shiftKey: true }))).toBe(false)
-    await Bun.sleep(50)
-    expect(t.lines()).not.toContain('ran tabs')
   })
 
   test('SC-18: a keybinding whose command isn\'t in effect is unbound', async () => {

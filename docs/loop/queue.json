@@ -229,8 +229,7 @@
         "m1-launch-settings",
         "m1-agent-status"
       ],
-      "status": "in-progress",
-      "lane": 12
+      "status": "done"
     },
     {
       "id": "m6-orchestration-core",
@@ -258,8 +257,9 @@
       "deps": [
         "m6-orchestration-core"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 9
     },
     {
       "id": "m6-heimdall-core",
@@ -271,8 +271,9 @@
       "deps": [
         "m6-orchestration-workers"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 11
     },
     {
       "id": "m6-heimdall-control",
@@ -284,8 +285,9 @@
       "deps": [
         "m6-heimdall-core"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 10
     },
     {
       "id": "m6-heimdall-owner",
@@ -297,8 +299,9 @@
       "deps": [
         "m6-heimdall-core"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 12
     },
     {
       "id": "fix-flaky-quirky-worktree-window-projects",
@@ -318,8 +321,7 @@
         "term-daemon.md"
       ],
       "deps": [],
-      "status": "in-progress",
-      "lane": 11
+      "status": "done"
     },
     {
       "id": "fix-flaky-quirky-git-files-scenarios",
@@ -339,8 +341,7 @@
         "term-daemon.md"
       ],
       "deps": [],
-      "status": "in-progress",
-      "lane": 10
+      "status": "done"
     },
     {
       "id": "m1-agent-status-scripting",
@@ -365,8 +366,7 @@
       "deps": [
         "m1-worktrees"
       ],
-      "status": "in-progress",
-      "lane": 4
+      "status": "done"
     },
     {
       "id": "m2-sidebar-extras",
@@ -380,8 +380,7 @@
         "m2-source-control-core",
         "m1-agent-status"
       ],
-      "status": "in-progress",
-      "lane": 7
+      "status": "done"
     },
     {
       "id": "m3-session-info",
@@ -407,8 +406,7 @@
         "m1-agent-status",
         "m1-providers"
       ],
-      "status": "in-progress",
-      "lane": 9
+      "status": "done"
     },
     {
       "id": "m3-handoff",
@@ -460,8 +458,7 @@
       "deps": [
         "m1-providers"
       ],
-      "status": "in-progress",
-      "lane": 8
+      "status": "done"
     },
     {
       "id": "m4-hosting-api-gitlab",
@@ -567,7 +564,7 @@
         "m4-hosting-api-github",
         "m2-sidebar-extras"
       ],
-      "status": "todo",
+      "status": "done",
       "early": true
     },
     {
@@ -592,7 +589,8 @@
       "deps": [
         "sa-browser-agent"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 4
     },
     {
       "id": "sa-browser-profiles-settings",
@@ -603,6 +601,35 @@
       ],
       "deps": [
         "sa-browser-pane"
+      ],
+      "status": "in-progress",
+      "early": true,
+      "lane": 8
+    },
+    {
+      "id": "m5-automations-core",
+      "milestone": "M5",
+      "title": "Automations core: definitions, schedules and scheduler (automations.md 'Data model', 'Schedules', 'The scheduler tick', 'Storage and retention', 'Run statuses', 'CLI' and Run now, Pause, Edit, Delete behaviour): RRULE subset and cron dialect with DST, occurrence math and labels, 60 s tick with missed-run grace and per-automation lane, run records and retention, `quirky automations` list, show, create, edit, remove, run, runs with paging. Not target resolution, dispatch, UI or OpenClaw",
+      "docs": [
+        "automations.md"
+      ],
+      "deps": [
+        "m5-structured-runner",
+        "m1-worktrees"
+      ],
+      "status": "in-progress",
+      "early": true,
+      "lane": 7
+    },
+    {
+      "id": "m5-loops-core",
+      "milestone": "M5",
+      "title": "Scope: all of the parts below together; a \"Not ...\" note in one part excludes only what no other part here covers. Part 1: Loops core: Until done engine (fork-loops.md 'RPC methods', 'Config shape', 'Persistence', 'Creating a loop', 'The iteration cycle', 'Detecting that an iteration is finished', 'Session policy and pane lifecycle', 'Restart behavior', iteration and time caps in 'Iteration limits and caps', CLI create, list, show, pause, resume, stop, steer, edit): loop service and driver, prompt delivery gated on user idle, settle detection from agent status, crash retry, fresh and continue sessions, restart pause. Not done checks, evaluator, markers, queue or interval presets, UI Part 2: Loops completion and safety rules (fork-loops.md 'Evidence gathered after a settled iteration', 'Check-command mode', 'Evaluator mode', 'Stop conditions: decideNext' completion, protected-path and marker branches, cost cap in 'Iteration limits and caps', 'No-progress rule', 'Notifications'): working-tree snapshot and diff, LOOP_DONE, LOOP_BLOCKED and LOOP_DECIDE markers, done check command, evaluator, protected paths, no-progress pause, checkpoint commits, cost cap and usage-limit resume, notifications",
+      "docs": [
+        "fork-loops.md"
+      ],
+      "deps": [
+        "m5-structured-runner"
       ],
       "status": "todo",
       "early": true
@@ -616,20 +643,6 @@
       ],
       "deps": [
         "sa-browser-pane"
-      ],
-      "status": "todo",
-      "early": true
-    },
-    {
-      "id": "m5-automations-core",
-      "milestone": "M5",
-      "title": "Automations core: definitions, schedules and scheduler (automations.md 'Data model', 'Schedules', 'The scheduler tick', 'Storage and retention', 'Run statuses', 'CLI' and Run now, Pause, Edit, Delete behaviour): RRULE subset and cron dialect with DST, occurrence math and labels, 60 s tick with missed-run grace and per-automation lane, run records and retention, `quirky automations` list, show, create, edit, remove, run, runs with paging. Not target resolution, dispatch, UI or OpenClaw",
-      "docs": [
-        "automations.md"
-      ],
-      "deps": [
-        "m5-structured-runner",
-        "m1-worktrees"
       ],
       "status": "todo",
       "early": true
@@ -656,19 +669,6 @@
       ],
       "deps": [
         "m5-automations-core"
-      ],
-      "status": "todo",
-      "early": true
-    },
-    {
-      "id": "m5-loops-core",
-      "milestone": "M5",
-      "title": "Scope: all of the parts below together; a \"Not ...\" note in one part excludes only what no other part here covers. Part 1: Loops core: Until done engine (fork-loops.md 'RPC methods', 'Config shape', 'Persistence', 'Creating a loop', 'The iteration cycle', 'Detecting that an iteration is finished', 'Session policy and pane lifecycle', 'Restart behavior', iteration and time caps in 'Iteration limits and caps', CLI create, list, show, pause, resume, stop, steer, edit): loop service and driver, prompt delivery gated on user idle, settle detection from agent status, crash retry, fresh and continue sessions, restart pause. Not done checks, evaluator, markers, queue or interval presets, UI Part 2: Loops completion and safety rules (fork-loops.md 'Evidence gathered after a settled iteration', 'Check-command mode', 'Evaluator mode', 'Stop conditions: decideNext' completion, protected-path and marker branches, cost cap in 'Iteration limits and caps', 'No-progress rule', 'Notifications'): working-tree snapshot and diff, LOOP_DONE, LOOP_BLOCKED and LOOP_DECIDE markers, done check command, evaluator, protected paths, no-progress pause, checkpoint commits, cost cap and usage-limit resume, notifications",
-      "docs": [
-        "fork-loops.md"
-      ],
-      "deps": [
-        "m5-structured-runner"
       ],
       "status": "todo",
       "early": true
@@ -1213,6 +1213,145 @@
         "term-daemon.md"
       ],
       "deps": [],
+      "status": "todo"
+    },
+    {
+      "id": "m4-hosting-ui-review-provider-parity",
+      "milestone": "M4",
+      "title": "Complete deferred GitLab/Bitbucket/Gitea/Azure Checks, creation composer and integration settings from hosting-ui.md sections10–12 when their currently blocked canonical provider APIs are available; preserve MR labels, no-draft Bitbucket and provider auth/settings contracts rather than fake success",
+      "docs": [
+        "hosting-ui.md"
+      ],
+      "deps": [
+        "m4-hosting-ui-reviews",
+        "m4-hosting-api-gitlab",
+        "m4-hosting-api-bitbucket-gitea-azure"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m4-hosting-ui-review-browser-routing",
+      "milestone": "M4",
+      "title": "Complete review and stack-link in-app browser routing plus Shift+Cmd destination inversion after the public human browser pane and Link Routing setting land; current review links support the canonical system opener and explicitly refuse unavailable in-app delivery",
+      "docs": [
+        "hosting-ui.md",
+        "browser.md"
+      ],
+      "deps": [
+        "m4-hosting-ui-reviews",
+        "sa-browser-pane",
+        "sa-browser-profiles-settings"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "sb-mobile-install-links",
+      "milestone": "Side B",
+      "title": "Publish compatible Quirky companion install artifacts and wire desktop iOS Preview/Stable and Android install links/QRs; blocked until the Quirky Expo fork has signed installable builds and supported distribution URLs (never direct users to incompatible Orca apps)",
+      "docs": [
+        "mobile.md"
+      ],
+      "deps": [
+        "sb-mobile-daemon",
+        "sb-mobile-app"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "sa-browser-pane-native-events",
+      "milestone": "Side A",
+      "title": "Complete native system-webview browser page-event flows: JS alert/confirm/prompt/beforeunload overlays with120s fail-closed responses; basic-auth and loopback-only certificate prompts; collision-safe download destination/progress/cancel/open/reveal shelf; opener/postbody-preserving OAuth popup windows and external-app launch interception. Blocked by pinned public Electrobun SDK missing synchronous dialog/auth/cert responders, native download destination/cancel APIs and opener-preserving popup interception; resume when supported hooks exist without private FFI, a Chrome-only human-browser replacement or fake JS dialogs.",
+      "docs": [
+        "browser.md"
+      ],
+      "deps": [
+        "sa-browser-pane"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "sa-browser-profile-import-ui",
+      "milestone": "Side A",
+      "title": "Browser profile UI: connect Import Cookies menus, detected browser/profile source rows, From File dialog, imported-source badges and import summary/error toasts to sa-browser-agent-extras real import engine. Source detection only on explicit opening; Google exclusion disclosed. Blocked prerequisite: import engine removed from shipped core, not fake menu success.",
+      "docs": [
+        "browser.md"
+      ],
+      "deps": [
+        "sa-browser-profiles-settings",
+        "sa-browser-agent-extras"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "sa-browser-native-identity",
+      "milestone": "Side A",
+      "title": "Browser identity: apply Cleaned/Native user-agent mode to human Native system-webview after supported SDK UA override hook becomes available; current public BrowserView exposes partition but no UA setter. Preserve restart requirement and never substitute Chrome for native.",
+      "docs": [
+        "browser.md"
+      ],
+      "deps": [
+        "sa-browser-profiles-settings"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "sa-browser-localhost-label-routing",
+      "milestone": "Side A",
+      "title": "Browser Localhost Worktree Labels: implement reachable per-worktree localhost host/port mapping for native and agent engines using supported routing/DNS capability; do not only rewrite displayed hostnames. Requires a real native mapping/proxy prerequisite absent from current local-only Browser API.",
+      "docs": [
+        "browser.md"
+      ],
+      "deps": [
+        "sa-browser-profiles-settings"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "sa-browser-native-profile-clear-completion",
+      "milestone": "Side A",
+      "title": "Browser profiles: complete Default/native cookies-site-data clear and isolated profile removal ONLY after public native Session deletion completion acknowledgement/barrier exists; current Session.clearStorageData void proves invocation only, so preserve Chrome/metadata and reject before native invocation. Also prove isolated native storage-root configuration before Default nightly clearing; QUIRKY_HOME alone does not relocate websiteDataStore.",
+      "docs": [
+        "browser.md"
+      ],
+      "deps": [
+        "sa-browser-profiles-settings"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "sa-browser-pane-native-host-controls",
+      "milestone": "Side A",
+      "title": "Complete native browser hard reload with genuine cache bypass and explicit network/TLS load-error state while retaining requested URL/retry controls. Pinned public Electrobun tag exposes normal reload and load-started/committed/finished only, no ignoreCache/reloadFromOrigin or load-failed signal; resume with supported native APIs, never simulate hard reload by normal reload or URL mutation and never invent a failure flag.",
+      "docs": [
+        "browser.md"
+      ],
+      "deps": [
+        "sa-browser-pane"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "sa-browser-pane-workspace-preview",
+      "milestone": "Side A",
+      "title": "Complete workspace-document browser preview conversion and Back across convertedFrom/convertedTo: grant-scoped active HTML and in-grant assets in an isolated nonpersistent guest with outbound network/permissions/download denial. Current public file resources intentionally allow only passive MIME and sandbox responses; native SDK lacks equivalent grant protocol/network policy hooks. Add a safe public preview capability before rendering, never relax active HTML onto daemon origin or claim direct file browsing is equivalent.",
+      "docs": [
+        "browser.md"
+      ],
+      "deps": [
+        "sa-browser-pane"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "sb-mobile-settings-visibility",
+      "milestone": "Side B",
+      "title": "Recheck Settings > Mobile paired-device revoke visibility at 1280x720: guarded scroll/PageDown could not reach the clipped button; diagnose host overflow versus driver targeting and fix only reproduced app clipping (Mobile-page revoke path already works)",
+      "docs": [
+        "mobile.md"
+      ],
+      "deps": [
+        "sb-mobile-daemon"
+      ],
       "status": "todo"
     }
   ]

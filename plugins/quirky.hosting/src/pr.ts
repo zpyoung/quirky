@@ -10,6 +10,7 @@ export function prMethods(env: HostingEnv): Record<string, Handler> {
   return {
     forBranch: lookup.forBranch,
     review: lookup.review,
+    cachedReviews: lookup.cachedReviews,
     ...createPRCreationMethods(env, lookup),
     ...createPRMutationMethods(env, lookup),
     ...createPRConversationMethods(env, lookup),

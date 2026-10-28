@@ -174,10 +174,14 @@ export function fakeContext(initial: UiLayout): Fake {
         return fake.settings[key]
       },
       executeCommand: async () => {},
+      createCommandDrag() { throw new Error('command dragging is unavailable in this fake') },
+      consumeCommandDrag() { return null },
+      cancelCommandDrag() {},
       openView: (id, input) => void fake.views.push({ id, input }),
       closeView() {},
       togglePanel() {},
       getLayout: () => layout,
+      setPalette() {},
       onLayout(listener) {
         layoutListeners.add(listener)
         return () => layoutListeners.delete(listener)

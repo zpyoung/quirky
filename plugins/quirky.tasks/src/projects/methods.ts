@@ -526,6 +526,7 @@ async function projectView(env: TasksEnv, params: Params): Promise<unknown> {
         const oldest = keys.find((candidate) => candidate !== queryKey)
         if (oldest !== undefined) delete queryByView[oldest]
       }
+      state.projects = { ...state.projects, queryByView }
     })
   }
   return {

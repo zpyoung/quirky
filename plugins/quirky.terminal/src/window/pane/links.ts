@@ -96,6 +96,16 @@ export function resolveAgainst(path: string, cwd: string): string | null {
   return `/${segments.join('/')}`
 }
 
+/** The normalized path relative to `root`, only when an absolute file stays inside that root. */
+export function relativeWithinRoot(root: string, absolutePath: string): string | null {
+  if (!root.startsWith('/') || !absolutePath.startsWith('/')) return null
+  const normalizedRoot = resolveAgainst(root, '/')
+  const normalizedPath = resolveAgainst(absolutePath, '/')
+  if (!normalizedRoot || !normalizedPath || normalizedPath === normalizedRoot) return null
+  const prefix = normalizedRoot === '/' ? '/' : `${normalizedRoot}/`
+  return normalizedPath.startsWith(prefix) ? normalizedPath.slice(prefix.length) : null
+}
+
 /** The hover text for a file link: the absolute path with its `:line:column`. */
 export function describeTarget(absolutePath: string, line: number | null, column: number | null): string {
   return `${absolutePath}${line === null ? '' : `:${line}`}${line !== null && column !== null ? `:${column}` : ''}`

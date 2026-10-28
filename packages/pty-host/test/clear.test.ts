@@ -300,7 +300,7 @@ describe('resetModes', () => {
     const before = manager.list()[0]!.offset
 
     await manager.resetModes('m2')
-    await Bun.sleep(300)
+    await waitFor(() => stream.bytes().length >= MODE_RESET.length, 5000, 'mode reset bytes')
 
     expect(stream.bytes()).toEqual(MODE_RESET)
     expect(manager.list()[0]!.offset).toBe(before + MODE_RESET.length)

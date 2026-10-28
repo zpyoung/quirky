@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import {
   DEFAULT_THEME,
-  RESERVED_CHORDS,
   THEME_COLOR_RE,
   THEME_TOKENS,
   checkSettingValue,
@@ -163,15 +162,6 @@ describe('chordFromKeyEvent', () => {
   })
 })
 
-describe('RESERVED_CHORDS', () => {
-  test('holds only the command palette', () => {
-    expect([...RESERVED_CHORDS]).toEqual(['mod+shift+p'])
-  })
-
-  test('every entry is already canonical', () => {
-    for (const reserved of RESERVED_CHORDS) expect(chord(reserved)).toBe(reserved)
-  })
-})
 
 describe('checkSettingValue', () => {
   const id = 'setting:acme.notes/x'
@@ -258,6 +248,7 @@ describe('theme tokens and the default theme', () => {
     }
   })
 })
+
 
 function canonicalWhen(text: string): string {
   const result = parseWhen(text)

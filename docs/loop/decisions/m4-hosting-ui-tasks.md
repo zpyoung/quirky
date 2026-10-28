@@ -209,5 +209,38 @@
 - **Revisit if:** a feature's public route or package export changes.
 - **Source:** locked by user lane coordination; assumed — autonomous (UI-library subpaths)
 
+## D20: Finish the exercised core under the operator's immediate landing directive
+- **Question:** which remaining work can start after the explicit 4am sprint interjection?
+- **Options:** begin the prepared review/dogfood campaign; land without checks; finish concrete gates and register one exact completion item.
+- **Chose:** skip the unstarted final review and dogfood passes, commit the implemented core, register at most one dependent completion item, merge current roadmap and run typecheck plus affected tests once before normal queue landing. Preserve the complete scenario catalog as the follow-up contract.
+- **Why:** the latest operator directive explicitly supersedes the earlier workflow and narrows this delivery to what passes. No reviewer or browser campaign had begun; preparation is not evidence.
+- **Evidence:** operator interjection in iteration3; actual full typecheck/build exit0 and scripts68pass/552assertions before the latest gate repairs; first affected gate121/125 with four concrete failures preserved.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a core flow cannot pass the required affected gate.
+- **Source:** user ruling 2026-10-27 (4am sprint)
+
+## D21: Retain behavioral tests and repair observed projection/lifecycle defects
+- **Question:** which failed assertions are product defects rather than incidental representations?
+- **Options:** weaken provider safety/sanitization; repin raw fixture shapes; repair actual bugs and keep public readback.
+- **Chose:** persist explicit Project query maps back into durable state; preserve list row fields; parse the actual GraphQL top-level query while retaining the helper's real captured-input transport; validate reviewer bounds with otherwise valid targets; retain actual issue/Project/CLI state readbacks instead of raw wording/storage pins. Add stateful merge consent/head/readback coverage. Release stale UI mounts before model replacement and defer React-owned nested-root cleanup; the existing failing real UI exit scenarios remain the regression.
+- **Why:** the gate exposed one lost state assignment and deterministic nested-root DOM disposal errors. Sanitized provider messages and raw REST label representations are not consumer contracts.
+- **Evidence:** source commits3e3aaf77,56fc7a66,00ed8640,dbe30d2a,e1cfe566; actual affected failure artifact://115; all fixes are pending final affected verification, not inferred passing.
+- **Reversibility:** medium
+- **Confidence:** high for source causes; runtime closure pending
+- **Revisit if:** the final affected gate exposes remaining projection or cleanup defects.
+- **Source:** assumed — autonomous (observed gate repairs)
+
+## D22: Keep external integration and unexercised parity explicit
+- **Question:** what remains unproved when the sprint stops new campaigns?
+- **Options:** claim all25 scenarios passed; discard the full requirements; retain one named completion item and honest evidence boundaries.
+- **Chose:** the completion item owns sourced workspace creation/Project default-agent ready-gated delivery after canonical create.github lands; full built-web Tasks/issue/Project/settings flows; sticky-all new-repo and deep-link variants; lagging comment/index and overlapping source/view/write races; full API/CLI/UI parity and PR navigation/check/merge/auto-merge/queue variants. Existing native-only effects remain pending in the nightly handoff.
+- **Why:** the prepared eight-goal fixture was never launched. Current roadmap rejected github before lane2's pending authoritative landing; no plain-create substitute is acceptable. Successful component/API smoke and builds do not establish those unperformed outcomes.
+- **Evidence:** /tmp/quirky-lane6-ui-prep/goals.json; actual retained composer error params.github-is-not-allowed; lane2's latest117/0/typecheck/build/source-consent smoke and controller retry report, not yet its landing result.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the dependent completion item provides actual end-to-end evidence.
+- **Source:** deferred: remaining Tasks parity and cross-feature acceptance — operator-directed 4am sprint
+
 ## Progress
-All three components were audited, committed and merged; temporary component worktrees removed. Canonical runtime/manifest and default harness are assembled. Shared hosting read tests passed48/0, forced Project refresh1/0, Markdown consumer smoke5assertions and actual Start/link/generated CLI smoke7assertions. This is not a full green claim: the first complete typecheck found59 diagnostics; two parent/shared type fixes are applied and slice repairs are next. Remaining work: finish type/runtime integration, incorporate canonical sourced creation after lane2 lands, final scoped gates/build, cross-family review and one fix batch, visible web goals, evidence/docs, then normal queue land.
+All components and concrete gate repairs are merged; full aggregate source is published. The operator now requires immediate core landing with no unstarted review/dogfood campaign. Typecheck/build and scripts have prior green observations; final affected verification must cover the latest repairs and dependency catch-up. Next: register the one completion item, commit the core/docs/cleanup, merge current roadmap, run typecheck plus affected tests once, commit/detach and queue.ts land m4-hosting-ui-tasks. Preserve any failed output and repair only named blockers; no full-parity, final-review or browser-pass claim.

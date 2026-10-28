@@ -1,4 +1,4 @@
-import { RESERVED_CHORDS, type DistroInspection, type PluginInspection } from '@quirky/protocol'
+import type { DistroInspection, PluginInspection } from '@quirky/protocol'
 
 const singleLine = (text: string) => text.replace(/\r\n|\r|\n/g, '\\n')
 
@@ -48,12 +48,6 @@ export function renderDistroInspection(inspection: DistroInspection): string {
       'keybinding',
       `${chord}  ${command}`
     ]),
-    ...Object.entries(manifest.keybindings ?? {})
-      .filter(([chord]) => RESERVED_CHORDS.includes(chord))
-      .map(([chord, command]): [string, string] => [
-        'warning',
-        `${chord} is a shortcut the window keeps for itself, so ${command} will not run on it`
-      ])
   ]
   const sections = [
     `${manifest.id} ${manifest.version} (${manifest.name})`,
