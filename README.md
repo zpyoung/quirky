@@ -58,6 +58,7 @@ CLI. It uses the existing pinned-key E2EE listener; no relay or second transport
 quirky mobile owner-pair --name 'My remote CLI' --address <reachable-address> --confirm --json
 quirky runtime add --name remote --code '<offer from owner-pair>' --json
 quirky --runtime remote api --json
+quirky runtime call --target remote --method quirky.mobile/state --arguments '{}' --json
 quirky --pairing-code '<offer from owner-pair>' mobile state --json
 quirky mobile owner-grants --json
 quirky mobile owner-revoke '<grant id>' --confirm --json
@@ -77,6 +78,10 @@ Workspace navigation and Sleep resolve `id:`, `name:`, `branch:` and absolute `p
 to their actual workspace owner before changing lifecycle state. Unknown or ambiguous workspace
 views refuse the operation. Exact-window routing and compare-and-close preserve other windows
 and a view selected concurrently.
+
+The first-party UI stores a durable installation UUID and binds it to its authenticated connection.
+It is not a machine or OS identity. Clearing browser storage creates a new installation identity;
+old workspace origins remain unchanged, and absent origin evidence stays unknown.
 
 ## Agent Session History
 

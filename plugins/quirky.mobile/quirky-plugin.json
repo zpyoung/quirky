@@ -714,7 +714,7 @@
       {
         "id": "owner-revoke",
         "summary": "explicitly revoke a full-owner CLI grant",
-        "positionals": [{ "name": "grantId", "description": "the owner grant UUID", "required": true }],
+        "positionals": [{ "name": "grant-id", "description": "the owner grant UUID", "required": true }],
         "flags": { "confirm": { "type": "boolean", "description": "Required explicit confirmation to revoke the grant." } },
         "methods": ["quirky.mobile/ownerRevoke"]
       },

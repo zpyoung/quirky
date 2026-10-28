@@ -158,9 +158,9 @@
         "words": "runtime call",
         "summary": "call an exact remote method through a saved owner-cli target",
         "flags": {
-          "runtime": { "type": "string", "description": "Saved owner runtime ID or name.", "required": true },
+          "target": { "type": "string", "description": "Saved owner runtime ID or name.", "required": true },
           "method": { "type": "string", "description": "Exact remote API method.", "required": true },
-          "params": { "type": "string", "description": "Optional JSON object of remote method parameters." }
+          "arguments": { "type": "string", "description": "Optional JSON object of remote method parameters." }
         },
         "methods": ["quirky.cli/runtimeCall"]
       }

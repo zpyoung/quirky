@@ -7,11 +7,11 @@ Each runtime owns its hook installation, provider event normalization, status ro
 CLI examples:
 
 ```sh
-orca agent-status get <session-id> --host <saved-peer-id> --json
-orca agent-status hooks status --host <saved-peer-id> --json
-orca agent-status hooks status --host 'runtime:dev-laptop' --json
-orca agent-status hooks setup gemini --host 'runtime:dev-laptop'
-orca agent-status hooks remove gemini --host 'runtime:dev-laptop'
+quirky agent-status get <session-id> --host <saved-peer-id> --json
+quirky agent-status hooks status --host <saved-peer-id> --json
+quirky agent-status hooks status --host 'runtime:dev-laptop' --json
+quirky agent-status hooks setup gemini --host 'runtime:dev-laptop'
+quirky agent-status hooks remove gemini --host 'runtime:dev-laptop'
 ```
 
 Without `--host`, hooks setup/removal and status reads retain their local behavior. Paired-peer federation remains read-only; remote config mutation requires a separately saved owner runtime.

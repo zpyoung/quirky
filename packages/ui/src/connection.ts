@@ -85,6 +85,8 @@ export class Connection {
 
   private async loop(url: string): Promise<void> {
     const initialDelay = this.options.initialDelayMs ?? INITIAL_DELAY_MS
+    let delay = initialDelay
+    let failures = 0
     let desktopClientId: string | undefined
     try { desktopClientId = loadDesktopClientId(globalThis.localStorage) } catch {}
     while (!this.stopped) {

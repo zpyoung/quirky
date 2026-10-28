@@ -127,15 +127,15 @@ export const commands: CliModule['commands'] = {
   },
 
   async runtimeCall(args, context) {
-    if (args.positionals.length > 0) throw context.usage('runtime-call accepts only --runtime, --method, and optional --params')
-    const runtime = stringFlag(args, context, 'runtime', true)!
+    if (args.positionals.length > 0) throw context.usage('runtime-call accepts only --target, --method, and optional --arguments')
+    const runtime = stringFlag(args, context, 'target', true)!
     const method = stringFlag(args, context, 'method', true)!
-    const encodedParams = stringFlag(args, context, 'params')
+    const encodedParams = stringFlag(args, context, 'arguments')
     let params: Record<string, unknown> | undefined
     if (encodedParams !== undefined) {
       let parsed: unknown
-      try { parsed = JSON.parse(encodedParams) as unknown } catch { throw context.usage('--params must be valid JSON') }
-      if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) throw context.usage('--params must encode a JSON object')
+      try { parsed = JSON.parse(encodedParams) as unknown } catch { throw context.usage('--arguments must be valid JSON') }
+      if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) throw context.usage('--arguments must encode a JSON object')
       params = parsed as Record<string, unknown>
     }
     const result = await context.call('quirky.cli/runtimeCall', { runtime, method, ...(params === undefined ? {} : { params }) })

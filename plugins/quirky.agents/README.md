@@ -13,13 +13,13 @@ Other protocols, including Gemini's models API and Pi's `get_available_models` R
 CLI examples:
 
 ```sh
-orca agents options codex
-orca agents options claude --host local
-orca agents discover-models claude --host local
-orca agents options claude --host 'runtime:dev-laptop'
-orca agents discover-models claude --host 'runtime:dev-laptop'
-orca agents resolve claude --host 'runtime:dev-laptop' --model <id>
-orca agents configure claude --host 'runtime:dev-laptop' --command claude
+quirky agents options codex
+quirky agents options claude --host local
+quirky agents discover-models claude --host local
+quirky agents options claude --host 'runtime:dev-laptop'
+quirky agents discover-models claude --host 'runtime:dev-laptop'
+quirky agents resolve claude --host 'runtime:dev-laptop' --model <id>
+quirky agents configure claude --host 'runtime:dev-laptop' --command claude
 ```
 
 Provider process creation remains owned by `quirky.session`. To launch remotely, call `quirky.cli/runtimeCall` for the saved target with `method: "quirky.session/create"`; do not return a target launch plan to a local session owner or relabel local execution as remote.
