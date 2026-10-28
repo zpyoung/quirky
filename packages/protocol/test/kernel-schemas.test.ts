@@ -98,6 +98,7 @@ describe('kernel method schemas', () => {
     expect(paletteSet.params.required ?? []).not.toContain('open')
     expect(paletteSet.result.properties?.palette?.type).toBe('boolean')
   })
+
 })
 
 describe('kernel event schemas', () => {

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import type { CliArgs, CliContext, CliModule } from '@quirky/protocol'
+import type { CallOptions, CliArgs, CliContext, CliModule } from '@quirky/protocol'
 import type {
   AskResult,
   CheckResult,
@@ -36,6 +36,13 @@ const MUTATION_METHODS = [
   'runCreate', 'runUse', 'taskCreate', 'taskUpdate', 'dispatch', 'send', 'check', 'reply', 'ask', 'gateCreate',
   'gateResolve', 'workerStart', 'workerStop', 'workerAbandon', 'workerRelease', 'workerRetain', 'reset'
 ] as const
+
+function hasDurableMutationRequest(method: OrchestrationMethod, params: ObjectValue): boolean {
+  if (!MUTATION_METHODS.some((candidate) => candidate === method)) return false
+  if (method === 'dispatch' && params.dryRun === true) return false
+  if (method === 'check' && (params.mode === 'peek' || params.mode === 'all') && params.ackDeliveryId === undefined) return false
+  return true
+}
 const PROVIDER_IDS = ['claude', 'openclaude', 'codex', 'opencode', 'mimo', 'gemini', 'droid', 'grok', 'cursor'] as const
 
 function isObject(value: unknown): value is ObjectValue {
@@ -100,17 +107,21 @@ function isTaskResult(value: unknown): value is TaskResult {
 
 function isTaskRow(value: unknown): value is TaskRow {
   return isObject(value) && hasId(value, 'id', 'task_') && hasId(value, 'runId', 'run_') &&
-    isStringOrNull(value.parentTaskId) && isStringArray(value.dependencyTaskIds) && hasString(value, 'createdBySessionId') &&
+    isStringOrNull(value.parentTaskId) && isStringArray(value.dependencyTaskIds) && isStringOrNull(value.createdBySessionId) &&
     hasString(value, 'taskTitle') && hasString(value, 'displayName') && hasString(value, 'spec') &&
     isOneOf(value.status, TASK_STATUSES) && (value.result === null || isTaskResult(value.result)) &&
     hasString(value, 'createdAt') && isStringOrNull(value.completedAt)
 }
 
 function isTaskListRow(value: unknown): value is TaskListRow {
-  return isObject(value) &&
-    (value.dispatchId === undefined || (isString(value.dispatchId) && value.dispatchId.startsWith('ctx_'))) &&
-    (value.assigneeSessionId === undefined || isString(value.assigneeSessionId)) &&
-    (value.specTruncated === undefined || value.specTruncated === true) && isTaskRow(value)
+  if (!isObject(value)) return false
+  const dispatchId = value.dispatchId
+  const assigneeSessionId = value.assigneeSessionId
+  const specTruncated = value.specTruncated
+  return isTaskRow(value) &&
+    (dispatchId === undefined || (isString(dispatchId) && dispatchId.startsWith('ctx_'))) &&
+    (assigneeSessionId === undefined || isString(assigneeSessionId)) &&
+    (specTruncated === undefined || specTruncated === true)
 }
 
 function isDispatchRow(value: unknown): value is DispatchRow {
@@ -140,7 +151,7 @@ function isMailboxAddress(value: unknown): boolean {
 
 function isMessageRow(value: unknown): value is MessageRow {
   return isObject(value) && hasId(value, 'id', 'msg_') && hasId(value, 'runId', 'run_') &&
-    hasString(value, 'fromSessionId') && isMailboxAddress(value.sender) && isMailboxAddress(value.mailbox) &&
+    isStringOrNull(value.fromSessionId) && isMailboxAddress(value.sender) && isMailboxAddress(value.mailbox) &&
     hasString(value, 'subject') && hasString(value, 'body') && isOneOf(value.type, MESSAGE_TYPES) &&
     isOneOf(value.priority, MESSAGE_PRIORITIES) && isStringOrNull(value.threadId) &&
     (value.payload === null || isJsonValue(value.payload)) && isBoolean(value.read) &&
@@ -429,12 +440,14 @@ async function call<M extends OrchestrationMethod>(
   method: M,
   params: ObjectValue,
   guard: ResponseGuard<M>,
-  options?: { timeoutMs?: number }
+  options?: Pick<CallOptions, 'requestId' | 'timeoutMs'>
 ): Promise<OrchestrationMethodResult<M>> {
-  const requestId = isString(params.requestId) ? params.requestId : undefined
   let result: unknown
+  const requestId = isString(params.requestId) ? params.requestId : undefined
+  const transportRequestId = hasDurableMutationRequest(method, params) ? randomUUID() : undefined
+  const callOptions = transportRequestId === undefined ? options : { ...options, requestId: transportRequestId }
   try {
-    result = await context.call(`quirky.orchestration/${method}`, params, { ...options, requestId: randomUUID() })
+    result = await context.call(`quirky.orchestration/${method}`, params, callOptions)
   } catch (error) {
     if (requestId !== undefined && isConnectionLost(error)) {
       throw context.fail(recoveryText(

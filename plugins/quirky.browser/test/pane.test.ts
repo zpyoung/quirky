@@ -4,6 +4,7 @@ import { basename, dirname, join } from 'node:path'
 import { expect, test } from 'bun:test'
 import type { QuirkyEvent } from '@quirky/protocol'
 import { startBrowserHarness, type BrowserTestHarness } from './harness'
+import type { PaneFrame, PaneState, PaneTab } from '../src/pane-contract'
 type CertificateServer = { port: number; stop(): Promise<void> }
 
 const call = (h: BrowserTestHarness, name: string, params: Record<string, unknown> = {}) =>
@@ -79,10 +80,10 @@ async function waitFor<T>(read: () => T | null | undefined | Promise<T | null | 
   throw new Error(`pane fixture condition did not become true within ${timeoutMs}ms`)
 }
 
-function paneFrame(event: QuirkyEvent): Record<string, unknown> | undefined {
+function paneFrame(event: QuirkyEvent): PaneFrame | undefined {
   if (event.type !== 'quirky.browser/paneFrame' || !('data' in event)) return undefined
   const data = event.data
-  return typeof data === 'object' && data !== null && !Array.isArray(data) ? data as Record<string, unknown> : undefined
+  return typeof data === 'object' && data !== null && !Array.isArray(data) ? data as PaneFrame : undefined
 }
 
 async function createAgentPage(h: BrowserTestHarness, worktree: string, url: string) {
@@ -181,10 +182,11 @@ test('Watch leases deliver acknowledged latest frames and typed input/find/zoom/
 
       const watch = await call(h, 'paneWatch', { pane: pane.id }) as { watchId: string }
       const firstFrame = await waitFor(() => events.map(paneFrame).find((frame) => frame?.watchId === watch.watchId))
-      expect(typeof firstFrame.data).toBe('string')
-      expect((firstFrame.data as string).length).toBeGreaterThan(100)
+      const encodedFrame = Buffer.from(firstFrame.data, 'base64')
+      expect([...encodedFrame.subarray(0, 3)]).toEqual([0xff, 0xd8, 0xff])
       expect(firstFrame.width).toBeGreaterThan(0)
       expect(firstFrame.height).toBeGreaterThan(0)
+      await call(h, 'eval', { page: first.browserPageId, expression: 'document.body.style.backgroundColor = "rgb(18, 52, 86)"' })
       await Bun.sleep(350)
       expect(events.map(paneFrame).filter((frame) => frame?.watchId === watch.watchId)).toHaveLength(1)
 
@@ -192,10 +194,10 @@ test('Watch leases deliver acknowledged latest frames and typed input/find/zoom/
       // CDP only captures damaged frames; a static page need not emit another image.
       expect(await call(h, 'eval', {
         page: first.browserPageId,
-        expression: "document.body.style.backgroundColor='rgb(230,20,20)';'repainted'"
+        expression: "document.body.style.backgroundColor='rgb(230,20,20)'; (() => { const { promise, resolve } = Promise.withResolvers(); requestAnimationFrame(() => requestAnimationFrame(() => resolve('repainted'))); return promise })()"
       })).toEqual({ value: 'repainted' })
       const nextFrame = await waitFor(() => events.map(paneFrame).find((frame) => frame?.watchId === watch.watchId && frame.sequence !== firstFrame.sequence))
-      expect(nextFrame.sequence).toBeGreaterThan(firstFrame.sequence as number)
+      expect(nextFrame.sequence).toBeGreaterThan(firstFrame.sequence)
 
       await call(h, 'paneInput', { pane: pane.id, kind: 'mouse', type: 'mousePressed', x: 45, y: 16, button: 'left' })
       await call(h, 'paneInput', { pane: pane.id, kind: 'mouse', type: 'mouseReleased', x: 45, y: 16, button: 'left' })
@@ -203,11 +205,39 @@ test('Watch leases deliver acknowledged latest frames and typed input/find/zoom/
       expect(await call(h, 'eval', { page: first.browserPageId, expression: 'document.querySelector("#text").value' })).toEqual({ value: 'only-the-watched-page' })
       expect(await call(h, 'eval', { page: second.browserPageId, expression: 'document.querySelector("#text").value' })).toEqual({ value: '' })
 
+      await call(h, 'eval', {
+        page: first.browserPageId,
+        expression: 'window.__watchFindTextNode = document.querySelector("p").firstChild; true'
+      })
       const find = await call(h, 'paneControl', { pane: pane.id, action: 'find', text: 'needle' }) as { find: { current: number; total: number } }
       expect(find.find.total).toBe(3)
       expect(find.find.current).toBe(1)
+      expect(await call(h, 'eval', {
+        page: first.browserPageId,
+        expression: 'window.__watchFindTextNode === document.querySelector("p").firstChild && window.getSelection()?.toString() === "needle" && window.getSelection()?.getRangeAt(0).startOffset === 0'
+      })).toEqual({ value: true })
+      expect(await call(h, 'eval', {
+        page: second.browserPageId,
+        expression: 'window.getSelection()?.rangeCount === 0'
+      })).toEqual({ value: true })
       const nextFind = await call(h, 'paneControl', { pane: pane.id, action: 'find', text: 'needle', forward: true }) as { find: { current: number; total: number } }
-      expect(nextFind.find.current).toBe(2)
+      expect(nextFind.find).toMatchObject({ current: 2, total: 3 })
+      const previousFind = await call(h, 'paneControl', { pane: pane.id, action: 'find', text: 'needle', forward: false }) as { find: { current: number; total: number } }
+      expect(previousFind.find).toMatchObject({ current: 1, total: 3 })
+      const previousWrap = await call(h, 'paneControl', { pane: pane.id, action: 'find', text: 'needle', forward: false }) as { find: { current: number; total: number } }
+      expect(previousWrap.find).toMatchObject({ current: 3, total: 3 })
+      const nextWrap = await call(h, 'paneControl', { pane: pane.id, action: 'find', text: 'needle', forward: true }) as { find: { current: number; total: number } }
+      expect(nextWrap.find).toMatchObject({ current: 1, total: 3 })
+      const advanceBeforeChange = await call(h, 'paneControl', { pane: pane.id, action: 'find', text: 'needle', forward: true }) as { find: { current: number; total: number } }
+      expect(advanceBeforeChange.find).toMatchObject({ current: 2, total: 3 })
+      const changedFind = await call(h, 'paneControl', { pane: pane.id, action: 'find', text: 'dle' }) as { find: { current: number; total: number } }
+      expect(changedFind.find).toMatchObject({ current: 1, total: 3 })
+      const clearedFind = await call(h, 'paneControl', { pane: pane.id, action: 'find', text: '' }) as { find: { current: number; total: number } }
+      expect(clearedFind.find).toMatchObject({ current: 0, total: 0 })
+      expect(await call(h, 'eval', {
+        page: first.browserPageId,
+        expression: 'window.__watchFindTextNode === document.querySelector("p").firstChild && window.getSelection()?.rangeCount === 0'
+      })).toEqual({ value: true })
       const zoom = await call(h, 'paneControl', { pane: pane.id, action: 'zoom', level: 1 }) as { zoom: number }
       expect(zoom.zoom).toBe(1)
       const viewport = await call(h, 'paneControl', { pane: pane.id, action: 'viewport', preset: 'mobile-m' }) as { viewport: string }
@@ -235,6 +265,141 @@ test('Watch leases deliver acknowledged latest frames and typed input/find/zoom/
   } finally {
     fixture.stop()
     await h.cleanup()
+  }
+}, 90_000)
+
+test('profileSet rebinds a Watch pane to isolated managed pages and retires the previous lease', async () => {
+  const h = await startBrowserHarness()
+  const events: QuirkyEvent[] = []
+  try {
+    const worktree = await h.addFolderWorktree('pane-watch-profiles')
+    await h.client.call('events.subscribe', {})
+    const unsubscribe = h.client.onEvent((event) => events.push(event))
+    try {
+      const profileA = ((await call(h, 'profileCreate', { name: 'Owned A' }) as { profile: { id: string } }).profile).id
+      const profileB = ((await call(h, 'profileCreate', { name: 'Owned B' }) as { profile: { id: string } }).profile).id
+      const original = await call(h, 'tabCreate', {
+        worktree: `id:${worktree}`, profile: profileA, url: `${h.fixtureUrl}events`
+      }) as { browserPageId: string }
+      await call(h, 'eval', {
+        page: original.browserPageId,
+        expression: "localStorage.setItem('lane8-profile', 'owned-A'); document.cookie='lane8-cookie=owned-A; path=/'; document.title"
+      })
+      const pane = await call(h, 'paneOpen', {
+        worktree: `id:${worktree}`, mode: 'watch', page: original.browserPageId
+      }) as { id: string; tabId: string; worktreeId: string; url: string }
+      const oldLease = await call(h, 'paneWatch', { pane: pane.id }) as { watchId: string }
+      const oldFrame = await waitFor(() => events.map(paneFrame).find((frame) => frame?.watchId === oldLease.watchId))
+
+      const switched = (await call(h, 'profileSet', { pane: pane.id, profile: profileB }) as { pane: PaneTab }).pane
+      expect(switched).toMatchObject({
+        id: pane.id, tabId: pane.tabId, worktreeId: pane.worktreeId, mode: 'watch', url: pane.url,
+        profileId: profileB, partition: `persist:quirky-browser-${profileB}`,
+        title: 'Events', loading: false, error: null
+      })
+      expect(switched.page).not.toBe(original.browserPageId)
+      const pageB = (await call(h, 'tabShow', { page: switched.page! }) as { tab: { browserPageId: string; worktreeId: string; profileId: string } }).tab
+      expect(pageB).toMatchObject({ browserPageId: switched.page, worktreeId: worktree, profileId: profileB })
+      expect(await call(h, 'eval', { page: switched.page!, expression: "localStorage.getItem('lane8-profile')" })).toEqual({ value: null })
+      expect(await call(h, 'eval', { page: switched.page!, expression: 'document.cookie' })).toEqual({ value: '' })
+      await expect(call(h, 'paneFrameAck', {
+        pane: pane.id, watchId: oldLease.watchId, sequence: oldFrame.sequence
+      })).rejects.toBeInstanceOf(Error)
+
+      const newLease = await call(h, 'paneWatch', { pane: pane.id }) as { watchId: string }
+      expect(newLease.watchId).not.toBe(oldLease.watchId)
+      const newFrame = await waitFor(() => events.map(paneFrame).find((frame) => frame?.watchId === newLease.watchId))
+      const afterSwitch = await call(h, 'paneState') as PaneState
+      const watchedB = afterSwitch.tabs.find((tab) => tab.id === pane.id)!
+      expect(watchedB.page).toBe(switched.page)
+      expect(await call(h, 'paneFrameAck', {
+        pane: pane.id, watchId: newLease.watchId, sequence: newFrame.sequence
+      })).toEqual({ acknowledged: true })
+
+      const restoredSelection = (await call(h, 'profileSet', { pane: pane.id, profile: profileA }) as { pane: PaneTab }).pane
+      expect(restoredSelection).toMatchObject({
+        id: pane.id, tabId: pane.tabId, worktreeId: pane.worktreeId, mode: 'watch', url: pane.url,
+        profileId: profileA, partition: `persist:quirky-browser-${profileA}`,
+        title: 'Events', loading: false, error: null
+      })
+      expect(restoredSelection.page).not.toBe(switched.page)
+      const pageA = (await call(h, 'tabShow', { page: restoredSelection.page! }) as { tab: { browserPageId: string; worktreeId: string; profileId: string } }).tab
+      expect(pageA).toMatchObject({ browserPageId: restoredSelection.page, worktreeId: worktree, profileId: profileA })
+      expect(await call(h, 'eval', { page: restoredSelection.page!, expression: "localStorage.getItem('lane8-profile')" })).toEqual({ value: 'owned-A' })
+      expect(await call(h, 'eval', { page: restoredSelection.page!, expression: 'document.cookie' })).toEqual({ value: 'lane8-cookie=owned-A' })
+      expect(await call(h, 'eval', { page: original.browserPageId, expression: "localStorage.getItem('lane8-profile')" })).toEqual({ value: 'owned-A' })
+      const restoredLease = await call(h, 'paneWatch', { pane: pane.id }) as { watchId: string }
+      const restoredFrame = await waitFor(() => events.map(paneFrame).find((frame) => frame?.watchId === restoredLease.watchId))
+      const afterRestore = await call(h, 'paneState') as PaneState
+      const restored = afterRestore.tabs.find((tab) => tab.id === pane.id)!
+      expect(restored.page).toBe(restoredSelection.page)
+      expect(await call(h, 'paneFrameAck', {
+        pane: pane.id, watchId: restoredLease.watchId, sequence: restoredFrame.sequence
+      })).toEqual({ acknowledged: true })
+      await call(h, 'paneClose', { pane: pane.id })
+    } finally {
+      unsubscribe()
+    }
+  } finally {
+    await h.cleanup()
+  }
+}, 90_000)
+
+test('profileSet closes only its prepared target page when its pane closes during preparation', async () => {
+  const requested = Promise.withResolvers<void>()
+  const released = Promise.withResolvers<void>()
+  let profileLoads = 0
+  const fixture = Bun.serve({
+    hostname: '127.0.0.1',
+    port: 0,
+    async fetch(request) {
+      const path = new URL(request.url).pathname
+      if (path === '/favicon.ico') return new Response(null, { status: 204 })
+      if (path !== '/profile') return new Response('not found', { status: 404 })
+      profileLoads++
+      if (profileLoads === 2) {
+        requested.resolve()
+        await released.promise
+      }
+      return new Response('<!doctype html><title>Profile fixture</title><main>profile</main>', {
+        headers: { 'content-type': 'text/html; charset=utf-8' }
+      })
+    }
+  })
+  let h: BrowserTestHarness | undefined
+  let unsubscribe: (() => void) | undefined
+  let switching: Promise<unknown> | undefined
+  try {
+    h = await startBrowserHarness()
+    const worktree = await h.addFolderWorktree('pane-profile-switch-close')
+    await h.client.call('events.subscribe', {})
+    unsubscribe = h.client.onEvent(() => {})
+    const profileA = ((await call(h, 'profileCreate', { name: 'Close race A' }) as { profile: { id: string } }).profile).id
+    const profileB = ((await call(h, 'profileCreate', { name: 'Close race B' }) as { profile: { id: string } }).profile).id
+    const original = await call(h, 'tabCreate', {
+      worktree: `id:${worktree}`, profile: profileA, url: `${fixture.url}profile`
+    }) as { browserPageId: string }
+    const pane = await call(h, 'paneOpen', {
+      worktree: `id:${worktree}`, mode: 'watch', page: original.browserPageId
+    }) as { id: string }
+    await call(h, 'paneWatch', { pane: pane.id })
+
+    switching = call(h, 'profileSet', { pane: pane.id, profile: profileB })
+    await requested.promise
+    await call(h, 'paneClose', { pane: pane.id })
+    released.resolve()
+    await expect(switching).rejects.toBeInstanceOf(Error)
+
+    const state = await call(h, 'paneState') as PaneState
+    expect(state.tabs.some((tab) => tab.id === pane.id)).toBe(false)
+    const pages = await call(h, 'tabList', { worktree: `id:${worktree}` }) as { tabs: Array<{ browserPageId: string }> }
+    expect(pages.tabs.map((page) => page.browserPageId)).toEqual([original.browserPageId])
+    expect(await call(h, 'eval', { page: original.browserPageId, expression: 'document.title' })).toEqual({ value: 'Profile fixture' })
+  } finally {
+    released.resolve()
+    if (switching) await switching.catch(() => undefined)
+    unsubscribe?.()
+    try { fixture.stop(true) } finally { await h?.cleanup() }
   }
 }, 90_000)
 
@@ -307,21 +472,42 @@ test('Watch JavaScript dialogs resolve pending eval outside the profile lock and
     await call(h, 'paneWatch', { pane: downloadPane.id })
     await call(h, 'click', { page: downloadPage.browserPageId, element: '#safe' })
     const downloaded = await waitFor(async () => {
-      const state = await call(h, 'paneState', { worktree: `id:${worktree}` }) as { tabs: Array<{ id: string; downloads: Array<{ id: string; state: string; path?: string }> }> }
+      const state = await call(h, 'paneState', { worktree: `id:${worktree}` }) as PaneState
       return state.tabs.find((tab) => tab.id === downloadPane.id)?.downloads.find((download) => download.state === 'completed')
     })
-    expect(downloaded.path).toBeTruthy()
-    expect(basename(downloaded.path!)).toBe('safe (1).txt')
+    const firstPath = downloaded.path
+    if (typeof firstPath !== 'string') throw new Error('Completed download has no published path')
+    expect(downloaded.name).toBe('safe (1).txt')
+    expect(basename(firstPath)).toBe(downloaded.name)
+    expect(existsSync(firstPath)).toBe(true)
+    expect(dirname(realpathSync(firstPath))).toBe(realpathSync(downloads))
+    expect(readFileSync(firstPath, 'utf8')).toBe('owned download contents')
+    writeFileSync(firstPath, 'keep first publication')
+
+    await call(h, 'click', { page: downloadPage.browserPageId, element: '#safe' })
+    const collision = await waitFor(async () => {
+      const state = await call(h, 'paneState', { worktree: `id:${worktree}` }) as PaneState
+      return state.tabs.find((tab) => tab.id === downloadPane.id)?.downloads.find((download) => download.state === 'completed' && download.id !== downloaded.id)
+    })
+    const collisionPath = collision.path
+    if (typeof collisionPath !== 'string') throw new Error('Completed collision download has no published path')
+    expect(collisionPath).not.toBe(firstPath)
+    expect(dirname(realpathSync(collisionPath))).toBe(realpathSync(downloads))
+    expect(collision.name).toBe(basename(collisionPath))
+    expect(readFileSync(firstPath, 'utf8')).toBe('keep first publication')
     expect(readFileSync(join(downloads, 'safe.txt'), 'utf8')).toBe('keep existing file')
-    expect(existsSync(downloaded.path!)).toBe(true)
-    expect(readFileSync(downloaded.path!, 'utf8')).toBe('owned download contents')
+    expect(readFileSync(collisionPath, 'utf8')).toBe('owned download contents')
     await call(h, 'click', { page: downloadPage.browserPageId, element: '#unsafe' })
     const unsafe = await waitFor(async () => {
-      const state = await call(h, 'paneState', { worktree: `id:${worktree}` }) as { tabs: Array<{ id: string; downloads: Array<{ id: string; state: string; path?: string }> }> }
-      return state.tabs.find((tab) => tab.id === downloadPane.id)?.downloads.find((download) => download.id !== downloaded.id && download.state === 'completed')
+      const state = await call(h, 'paneState', { worktree: `id:${worktree}` }) as PaneState
+      return state.tabs.find((tab) => tab.id === downloadPane.id)?.downloads.find((download) =>
+        download.state === 'completed' && download.id !== downloaded.id && download.id !== collision.id)
     })
-    expect(realpathSync(dirname(unsafe.path!))).toBe(realpathSync(downloads))
-    expect(readFileSync(unsafe.path!, 'utf8')).toBe('owned unsafe-name download')
+    const unsafePath = unsafe.path
+    if (typeof unsafePath !== 'string') throw new Error('Completed unsafe-name download has no published path')
+    expect(dirname(realpathSync(unsafePath))).toBe(realpathSync(downloads))
+    expect(unsafe.name).toBe(basename(unsafePath))
+    expect(readFileSync(unsafePath, 'utf8')).toBe('owned unsafe-name download')
     expect(readFileSync(join(downloads, 'safe.txt'), 'utf8')).toBe('keep existing file')
   } finally {
     fixture.stop()

@@ -1,3 +1,4 @@
+import { CHORD_PLATFORM } from '@quirky/protocol'
 import type { LinkClickSetting } from './settings'
 
 export type PathMatch = {
@@ -112,25 +113,36 @@ export function describeTarget(absolutePath: string, line: number | null, column
 }
 
 export type LinkKind = 'url' | 'path'
-export type LinkAction = 'popover' | 'open' | 'copy' | 'reveal' | 'none'
+export type LinkAction = 'popover' | 'open' | 'reveal' | 'none'
+export type LinkPlatform = 'mac' | 'other'
 
 type ClickLike = { button: number; metaKey: boolean; shiftKey: boolean; altKey: boolean; ctrlKey: boolean }
 
+const DEFAULT_LINK_PLATFORM: LinkPlatform = CHORD_PLATFORM === 'darwin' ? 'mac' : 'other'
+
+/** Whether a click uses this platform's direct-open modifier: Command on macOS, Control elsewhere. */
+export function hasCommandModifier(event: Pick<ClickLike, 'metaKey' | 'ctrlKey'>, platform = DEFAULT_LINK_PLATFORM): boolean {
+  return platform === 'mac' ? event.metaKey : event.ctrlKey
+}
+
 /**
  * What a click on a link does: a plain click follows the `link-click` setting and a middle
- * click `link-middle-click`; Cmd-click opens, Shift-Cmd-click copies a URL or reveals a path;
- * every other combination is left alone.
+ * click `link-middle-click`; the platform modifier opens, Shift+modifier routes a URL with its
+ * modifiers or reveals a path, and every other combination is left alone.
  */
 export function decideLinkClick(
   kind: LinkKind,
   event: ClickLike,
-  settings: { 'link-click': LinkClickSetting; 'link-middle-click': LinkClickSetting }
+  settings: { 'link-click': LinkClickSetting; 'link-middle-click': LinkClickSetting },
+  platform = DEFAULT_LINK_PLATFORM
 ): LinkAction {
-  if (event.altKey || event.ctrlKey) return 'none'
+  const modifier = hasCommandModifier(event, platform)
+  const otherPlatformModifier = platform === 'mac' ? event.ctrlKey : event.metaKey
+  if (event.altKey || otherPlatformModifier) return 'none'
   const fromSetting = (value: LinkClickSetting): LinkAction => (value === 'actions' ? 'popover' : value === 'open' ? 'open' : 'none')
-  if (event.button === 1) return event.metaKey || event.shiftKey ? 'none' : fromSetting(settings['link-middle-click'])
+  if (event.button === 1) return modifier || event.shiftKey ? 'none' : fromSetting(settings['link-middle-click'])
   if (event.button !== 0) return 'none'
-  if (event.metaKey) return event.shiftKey ? (kind === 'url' ? 'copy' : 'reveal') : 'open'
+  if (modifier) return kind === 'path' && event.shiftKey ? 'reveal' : 'open'
   if (event.shiftKey) return 'none'
   return fromSetting(settings['link-click'])
 }

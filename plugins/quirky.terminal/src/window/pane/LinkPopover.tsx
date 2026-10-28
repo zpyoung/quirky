@@ -1,6 +1,6 @@
-import { useEffect, useRef, type CSSProperties } from 'react'
+import { useEffect, useRef, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react'
 
-export type PopoverItem = { label: string; run(): void }
+export type PopoverItem = { label: string; run(event: ReactMouseEvent<HTMLButtonElement>): void }
 
 type Props = { x: number; y: number; items: PopoverItem[]; onClose(): void }
 
@@ -47,9 +47,9 @@ export function LinkPopover({ x, y, items, onClose }: Props) {
           type="button"
           role="menuitem"
           style={style.item}
-          onClick={() => {
+          onClick={(event) => {
             onClose()
-            item.run()
+            item.run(event)
           }}
         >
           {item.label}

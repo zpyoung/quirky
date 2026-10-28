@@ -8,7 +8,7 @@ const createFlags = [
   'reuseSession', 'freshSession', 'precheck', 'precheckTimeout', 'sourceContext', 'creationKey', 'model', 'effort',
   'extraAgentArgs'
 ] as const
-const editFlags: readonly string[] = ['id', ...createFlags.filter((name) => name !== 'creationKey')]
+const editFlags: readonly string[] = ['id', 'expectedOwner', ...createFlags.filter((name) => name !== 'creationKey')]
 
 type Flags = Record<string, unknown>
 type ScheduleChoice = { rule?: string; timezone?: string }
@@ -40,7 +40,11 @@ function assertKnownFlags(flags: Flags, allowed: readonly string[], ctx: CliCont
   for (const name of Object.keys(flags)) {
     if (!known.has(name)) usage(ctx, `Unknown flag --${name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`)
   }
-  if (own(flags, 'extraAgentArgs')) usage(ctx, 'Raw --extra-agent-args are refused: automations use structured sessions without command-line arguments.')
+  if (own(flags, 'extraAgentArgs')) {
+    const value = flags.extraAgentArgs
+    if (typeof value !== 'string') usage(ctx, '--extra-agent-args must be text.')
+    if (value.trim() !== '') usage(ctx, 'Raw --extra-agent-args are refused: automations use structured sessions without command-line arguments.')
+  }
 }
 
 function positionals(args: CliArgs, expected: number, ctx: CliContext): string[] {
@@ -135,6 +139,10 @@ function parseJsonRecord(value: string | undefined, flag: string, ctx: CliContex
   if (parsed === null) return null
   if (typeof parsed !== 'object' || Array.isArray(parsed)) usage(ctx, `--${flag} must contain a JSON object or null.`)
   return parsed as Record<string, unknown>
+}
+function expectedOwnerInput(flags: Flags, ctx: CliContext): { expectedOwner?: Record<string, unknown> | null } {
+  const value = parseJsonRecord(stringFlag(flags, 'expectedOwner', ctx), 'expected-owner', ctx)
+  return value === undefined ? {} : { expectedOwner: value }
 }
 
 function targetPatch(flags: Flags, ctx: CliContext, mode: 'create' | 'edit', old?: AutomationDefinition): Record<string, unknown> {
@@ -359,11 +367,17 @@ function definitionSummary(definition: AutomationDefinition): string {
   const next = definition.enabled ? displayTime(definition.nextRunAt) : 'Paused'
   return `${scheduleLabel(definition.rrule)}  ${definition.enabled ? 'enabled' : 'disabled'}  next: ${next}`
 }
+function ownerLabel(definition: AutomationDefinition): string {
+  const owner = definition.owner
+  if (!owner) return 'not captured'
+  return `${owner.repoPath}${owner.workspacePath ? ` / ${owner.workspacePath}` : ''}`
+}
+
 
 function definitionText(definition: AutomationDefinition): string {
   const pairs: Array<[string, string]> = [
     ['id', definition.id], ['name', definition.name], ['provider', definition.agentId], ['projectId', definition.projectId],
-    ['workspaceMode', definition.workspaceMode], ['workspaceId', definition.workspaceId ?? 'none'], ['enabled', definition.enabled ? 'yes' : 'no'],
+    ['owner', ownerLabel(definition)], ['workspaceMode', definition.workspaceMode], ['workspaceId', definition.workspaceId ?? 'none'], ['enabled', definition.enabled ? 'yes' : 'no'],
     ['timezone', definition.timezone], ['schedule', scheduleLabel(definition.rrule)], ['rrule', definition.rrule],
     ['nextRunAt', definition.enabled ? displayTime(definition.nextRunAt) : 'Paused'],
     ['prompt', definition.prompt]
@@ -372,7 +386,10 @@ function definitionText(definition: AutomationDefinition): string {
 }
 
 function runLine(run: AutomationRun): string {
-  return `${run.id}  ${run.title}  ${run.status}  ${run.trigger}  ${displayTime(run.scheduledFor)}`
+  const dispatch = run.dispatchState
+    ? `  ${run.dispatchState.reused ? 'reused' : 'new'} structured session (cursor ${run.dispatchState.messageCursor})`
+    : ''
+  return `${run.id}  ${run.title}  ${run.status}  ${run.trigger}  ${displayTime(run.scheduledFor)}${dispatch}`
 }
 
 async function list(args: CliArgs, ctx: CliContext): Promise<void> {
@@ -385,12 +402,13 @@ async function list(args: CliArgs, ctx: CliContext): Promise<void> {
       definition.id,
       definition.name,
       definition.agentId,
+      ownerLabel(definition),
       definition.enabled ? 'enabled' : 'disabled',
       scheduleLabel(definition.rrule),
       definition.enabled ? displayTime(definition.nextRunAt) : 'Paused'
     ])
   }
-  ctx.out.result(definitions, () => ctx.format.table(['ID', 'NAME', 'PROVIDER', 'STATE', 'SCHEDULE', 'NEXT RUN'], rows))
+  ctx.out.result(definitions, () => ctx.format.table(['ID', 'NAME', 'PROVIDER', 'TARGET', 'STATE', 'SCHEDULE', 'NEXT RUN'], rows))
 }
 
 async function show(args: CliArgs, ctx: CliContext): Promise<void> {
@@ -417,22 +435,47 @@ async function edit(args: CliArgs, ctx: CliContext): Promise<void> {
     && !own(args.flags, 'provider') && Object.keys(args.flags).every((name) => name === 'model' || name === 'effort')
   const old = clearsAllOverrides ? undefined : await ctx.call('quirky.automations/show', { id }) as AutomationDefinition
   const patch = await definitionInput(args, ctx, 'edit', old)
-  const definition = await ctx.call('quirky.automations/edit', { id, ...patch }) as AutomationDefinition
+  const definition = await ctx.call('quirky.automations/edit', { id, ...patch, ...expectedOwnerInput(args.flags, ctx) }) as AutomationDefinition
   ctx.out.result(definition, () => `Updated automation ${definition.id} (${definition.name}).\n${definitionSummary(definition)}`)
 }
 
 async function remove(args: CliArgs, ctx: CliContext): Promise<void> {
-  assertKnownFlags(args.flags, ['id'], ctx)
+  assertKnownFlags(args.flags, ['id', 'expectedOwner'], ctx)
   const id = idOf(args, ctx)
-  const result = await ctx.call('quirky.automations/remove', { id })
+  const result = await ctx.call('quirky.automations/remove', { id, ...expectedOwnerInput(args.flags, ctx) })
   ctx.out.result(result, () => `Removed automation ${id} and its run history.`)
 }
 
 async function run(args: CliArgs, ctx: CliContext): Promise<void> {
+  assertKnownFlags(args.flags, ['id', 'expectedOwner'], ctx)
+  const id = idOf(args, ctx)
+  const result = await ctx.call('quirky.automations/run', { id, ...expectedOwnerInput(args.flags, ctx) }) as AutomationRun
+  ctx.out.result(result, () => `Run ${result.id} is ${result.status}.\nHistory: quirky automations runs --id ${id}`)
+}
+
+async function target(args: CliArgs, ctx: CliContext): Promise<void> {
   assertKnownFlags(args.flags, ['id'], ctx)
   const id = idOf(args, ctx)
-  const result = await ctx.call('quirky.automations/run', { id }) as AutomationRun
-  ctx.out.result(result, () => `Queued run ${result.id} (${result.status}).\nHistory: quirky automations runs --id ${id}`)
+  const result = await ctx.call('quirky.automations/target', { id }) as {
+    available: boolean
+    target?: { repoId: string; repoPath: string; cwd: string; workspaceId: string | null }
+    error?: string
+  }
+  ctx.out.result(result, () => result.available
+    ? `Target ${result.target!.repoId} at ${result.target!.cwd}.`
+    : `Target unavailable: ${result.error ?? 'No reason was returned.'}`)
+}
+
+async function dispatch(args: CliArgs, ctx: CliContext): Promise<void> {
+  assertKnownFlags(args.flags, ['runId'], ctx)
+  if (args.positionals.length > 1) usage(ctx, 'Provide at most one run ID.')
+  const positional = args.positionals[0]
+  const flagRunId = stringFlag(args.flags, 'runId', ctx)
+  if (positional !== undefined && flagRunId !== undefined) usage(ctx, 'Provide the run ID either positionally or with --run-id, not both.')
+  const runId = positional ?? flagRunId
+  if (typeof runId !== 'string' || runId.trim() === '') usage(ctx, 'A run ID is required.')
+  const result = await ctx.call('quirky.automations/dispatch', { runId: runId.trim() }) as AutomationRun
+  ctx.out.result(result, () => `Run ${result.id} is ${result.status}.`)
 }
 
 function isReplyTooLarge(error: unknown): boolean {
@@ -516,5 +559,7 @@ export const commands: CliModule['commands'] = {
   edit: command(edit),
   remove: command(remove),
   run: command(run),
-  runs: command(runs)
+  runs: command(runs),
+  target: command(target),
+  dispatch: command(dispatch)
 }

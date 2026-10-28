@@ -188,6 +188,7 @@ describe('kernel runtime session authority', () => {
       identity: { sessionId: string; runtimeEpoch: string; processIncarnation: string; source: string; live: true }
     }
     const sessionToken = childEnv(sessionId).QUIRKY_SESSION_TOKEN
+
     const child = await clientFor(sessionId, sessionToken)
     expect(await child.callAny(`${pluginId}/caller`, {})).toMatchObject({
       sessionAuthority: {

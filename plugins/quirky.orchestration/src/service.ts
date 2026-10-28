@@ -17,11 +17,35 @@ import { verifyCaller } from './identity'
 import { OrchestrationMessages } from './messaging'
 import { runTaskMethods } from './runs'
 import type { OrchestrationService } from './surface-contracts'
+import { createServiceCoordinator, type OrchestrationServiceCoordinator } from './services/coordinator'
+import { createServiceHandlers } from './services/handlers'
+import type { ServiceHandler, ServiceMethod, ServiceMethodInputs } from './services/contracts'
+
+function adaptServiceHandler<M extends ServiceMethod>(handler: ServiceHandler<M>): MethodHandler {
+  return (params, caller) => handler(params as unknown as ServiceMethodInputs[M], caller)
+}
 
 /** Compose the semantic core once around the caller-provided plugin store. */
-export function createOrchestration(context: PluginContext, store: PluginStore): OrchestrationService {
+export type ComposedOrchestrationService = OrchestrationService & { readonly serviceCoordinator: OrchestrationServiceCoordinator }
+export function createOrchestration(context: PluginContext, store: PluginStore): ComposedOrchestrationService {
   const core = new OrchestrationCore(context, store)
   const messages = new OrchestrationMessages(context, core)
+  const serviceCoordinator = createServiceCoordinator(context, core, messages)
+  const serviceHandlers = createServiceHandlers(serviceCoordinator)
+  const serviceMethods: Record<ServiceMethod, MethodHandler> = {
+    serviceRunCreate: adaptServiceHandler<'serviceRunCreate'>(serviceHandlers.serviceRunCreate),
+    serviceRunShow: adaptServiceHandler<'serviceRunShow'>(serviceHandlers.serviceRunShow),
+    serviceWorkerStart: adaptServiceHandler<'serviceWorkerStart'>(serviceHandlers.serviceWorkerStart),
+    serviceCheck: adaptServiceHandler<'serviceCheck'>(serviceHandlers.serviceCheck),
+    serviceWorkerRelease: adaptServiceHandler<'serviceWorkerRelease'>(serviceHandlers.serviceWorkerRelease),
+    serviceWorkerStop: adaptServiceHandler<'serviceWorkerStop'>(serviceHandlers.serviceWorkerStop),
+    serviceReply: adaptServiceHandler<'serviceReply'>(serviceHandlers.serviceReply),
+    serviceSend: adaptServiceHandler<'serviceSend'>(serviceHandlers.serviceSend)
+  }
+  const removeMessageEvent = messages.onArrival(({ messageId, type }) => {
+    const row = store.get<{ run_id: string }>(`SELECT run_id FROM messages WHERE id = ?`, messageId)
+    if (row) context.emit('message-arrived', { runId: row.run_id, messageId, type })
+  })
   const gates = new OrchestrationGates(core)
   const runMethods = runTaskMethods(context, core, (mode: ResetMode) => messages.resetWaiters(mode))
 
@@ -58,16 +82,19 @@ export function createOrchestration(context: PluginContext, store: PluginStore):
       return gates.list(params, verified.evidence)
     },
     requestShow: runMethods.requestShow,
-    reset: runMethods.reset
+    reset: runMethods.reset,
+    ...serviceMethods
   } satisfies Record<OrchestrationMethod, MethodHandler>
 
   let disposed = false
   return {
     core,
+    serviceCoordinator,
     methods,
     async dispose() {
       if (disposed) return
       disposed = true
+      removeMessageEvent()
       messages.dispose()
       await core.dispose()
     }
