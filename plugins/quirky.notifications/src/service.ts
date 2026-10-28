@@ -73,11 +73,14 @@ export type ServiceOptions = {
   /** How long a delivered banner silences its worktree. */
   cooldownMs?: number
   now?: () => number
+  setTimeout?: (run: () => void, delay: number) => unknown
+  clearTimeout?: (handle: unknown) => void
   /** How long a call to another plugin may take before it is given up on. */
   lookupTimeoutMs?: number
 }
 
 export const BELL_HOLD_MS = 250
+export const ASK_UNATTENDED_DELAY_MS = 3 * 60 * 1000
 export const LOOKUP_TIMEOUT_MS = 2000
 const PROGRAM_TEXT_MAX = 256
 const OWN_WRITE_TTL_MS = 60_000
@@ -99,6 +102,7 @@ type Pending = {
 class LookupTimeout extends Error {}
 
 type BellHold = { sessionId: string; superseded: boolean }
+type AskEscalation = { key: string; ask: Ask; timer: unknown | null; escalated: boolean }
 
 const SOURCE_SWITCH: Partial<Record<Source, string>> = {
   agent: 'agentTaskComplete',
@@ -127,6 +131,8 @@ export function badgeLabel(count: number): string {
  */
 export class NotificationsService {
   private readonly cooldown: Cooldown
+  private readonly setTimer: (run: () => void, delay: number) => unknown
+  private readonly clearTimer: (handle: unknown) => void
   private readonly now: () => number
   private readonly bellHoldMs: number
   private readonly lookupTimeoutMs: number
@@ -135,7 +141,10 @@ export class NotificationsService {
   private lastStatus: string | null = null
   private readonly ownWrites = new Map<string, number[]>()
   private readonly holds = new Set<BellHold>()
-  private readonly timers = new Set<ReturnType<typeof setTimeout>>()
+  private readonly timers = new Set<unknown>()
+  private readonly askHeads = new Map<string, AskEscalation>()
+  private askWatermark = 0
+  private askReconcileQueued = false
   private stopped = false
 
   constructor(
@@ -143,6 +152,8 @@ export class NotificationsService {
     options: ServiceOptions = {}
   ) {
     this.now = options.now ?? Date.now
+    this.setTimer = options.setTimeout ?? ((run, delay) => setTimeout(run, delay))
+    this.clearTimer = options.clearTimeout ?? ((handle) => clearTimeout(handle as ReturnType<typeof setTimeout>))
     this.bellHoldMs = options.bellHoldMs ?? BELL_HOLD_MS
     this.lookupTimeoutMs = options.lookupTimeoutMs ?? LOOKUP_TIMEOUT_MS
     this.cooldown = new Cooldown({
@@ -154,12 +165,15 @@ export class NotificationsService {
   /** Stops timers and ignores later events. */
   shutdown(): void {
     this.stopped = true
-    for (const timer of this.timers) clearTimeout(timer)
+    for (const timer of this.timers) this.clearTimer(timer)
     this.timers.clear()
+    this.askHeads.clear()
+    this.askReconcileQueued = false
   }
 
   /** Computes the first status so later changes can be told from it. */
   start(): void {
+    this.requestAskReconcile()
     this.requestSync()
   }
 
@@ -186,23 +200,34 @@ export class NotificationsService {
         this.fire(() => this.loopNotification(event.data as LoopNotificationData))
         return
       case 'quirky.ask/created':
-        this.fire(() => this.askCreated(event.data as { ask: Ask }))
+      case 'quirky.ask/surfaced': {
+        const data = event.data as { seq?: unknown }
+        this.noteAskSequence(data.seq)
+        this.requestAskReconcile()
         this.requestSync()
         return
-      case 'quirky.ask/surfaced':
-        this.fire(() => this.askSurfaced((event.data as { ask: Ask }).ask))
+      }
+      case 'quirky.ask/resolved': {
+        const data = event.data as { askId?: unknown; seq?: unknown }
+        this.noteAskSequence(data.seq)
+        if (typeof data.askId === 'string') this.cancelAsk(data.askId)
+        this.requestAskReconcile()
         this.requestSync()
         return
-      case 'quirky.ask/resolved':
+      }
       case 'plugin.changed':
       case 'ui.window.changed':
       case 'ui.state.changed':
       case 'quirky.session/changed':
       case 'quirky.session/removed':
+        this.requestAskReconcile()
         this.requestSync()
         return
       case 'ui.report.changed':
-        if (event.slot === WORKTREE_VIEW_ID || event.slot === FLOATING_OVERLAY_ID) this.requestSync()
+        if (event.slot === WORKTREE_VIEW_ID || event.slot === FLOATING_OVERLAY_ID) {
+          this.requestAskReconcile()
+          this.requestSync()
+        }
         return
       case 'setting.changed':
         if (event.id.startsWith(SETTING_PREFIX)) this.requestSync()
@@ -308,17 +333,117 @@ export class NotificationsService {
       await this.sync()
     })
   }
+  private noteAskSequence(seq: unknown): void {
+    if (typeof seq === 'number' && Number.isSafeInteger(seq)) this.askWatermark = Math.max(this.askWatermark, seq)
+  }
+
+  private requestAskReconcile(): void {
+    if (this.stopped || this.askReconcileQueued) return
+    this.askReconcileQueued = true
+    this.fire(async () => {
+      this.askReconcileQueued = false
+      await this.reconcileAskHeads()
+    })
+  }
+
+  private askKey(ask: Ask): string {
+    return ask.sessionId === null ? `ask:${ask.id}` : `session:${ask.sessionId}`
+  }
+
+  private async reconcileAskHeads(): Promise<void> {
+    if (this.stopped) return
+    const revision = this.askWatermark
+    const pending = await this.lookup<Ask[]>('quirky.ask/list', { pendingOnly: true })
+    if (!pending || this.stopped || revision !== this.askWatermark) return
+    const viewing = await this.viewing()
+    if (this.stopped || revision !== this.askWatermark) return
+
+    const heads = new Map<string, Ask>()
+    let newestSeq = revision
+    for (const ask of pending) {
+      newestSeq = Math.max(newestSeq, ask.seq)
+      if (ask.envelope.status !== 'pending' || ask.queued) continue
+      const key = this.askKey(ask)
+      const current = heads.get(key)
+      if (!current || ask.seq >= current.seq) heads.set(key, ask)
+    }
+    this.askWatermark = newestSeq
+
+    for (const [key, current] of this.askHeads) {
+      const next = heads.get(key)
+      if (!next || next.id !== current.ask.id) {
+        this.clearAskTimer(current)
+        this.askHeads.delete(key)
+      } else {
+        current.ask = next
+      }
+    }
+    for (const [key, ask] of heads) {
+      if (!this.askHeads.has(key)) this.askHeads.set(key, { key, ask, timer: null, escalated: false })
+    }
+    for (const head of this.askHeads.values()) {
+      if (head.ask.sessionId !== null && sessionViewed(viewing, head.ask.sessionId)) this.clearAskTimer(head)
+      else if (!head.escalated && head.timer === null) this.armAskTimer(head)
+    }
+  }
+
+  private cancelAsk(askId: string): void {
+    for (const [key, head] of this.askHeads) {
+      if (head.ask.id !== askId) continue
+      this.clearAskTimer(head)
+      this.askHeads.delete(key)
+    }
+  }
+
+  private clearAskTimer(head: AskEscalation): void {
+    if (head.timer === null) return
+    this.clearTimer(head.timer)
+    this.timers.delete(head.timer)
+    head.timer = null
+  }
+
+  private armAskTimer(head: AskEscalation): void {
+    const timer = this.setTimer(() => {
+      this.timers.delete(timer)
+      if (head.timer === timer) head.timer = null
+      if (!this.stopped) this.fire(() => this.escalateAsk(head))
+    }, ASK_UNATTENDED_DELAY_MS)
+    head.timer = timer
+    this.timers.add(timer)
+  }
+
+  private async escalateAsk(head: AskEscalation): Promise<void> {
+    if (this.stopped || this.askHeads.get(head.key) !== head) return
+    const pending = await this.lookup<Ask[]>('quirky.ask/list', { pendingOnly: true })
+    if (!pending || this.stopped || this.askHeads.get(head.key) !== head) return
+    const current = pending.find((ask) => ask.id === head.ask.id && ask.envelope.status === 'pending' && !ask.queued)
+    if (!current || this.askKey(current) !== head.key) {
+      this.cancelAsk(head.ask.id)
+      this.requestAskReconcile()
+      return
+    }
+    const viewing = await this.viewing()
+    if (this.stopped || this.askHeads.get(head.key) !== head) return
+    head.ask = current
+    if (current.sessionId !== null && sessionViewed(viewing, current.sessionId)) return
+    const result = await this.askSurfaced(current)
+    if (result !== 'dropped' && this.askHeads.get(head.key) === head) head.escalated = true
+  }
+
 
   /** A call to another plugin that gives up after the lookup timeout, so one silent handler cannot hold the queue. */
   private async bounded(method: string, params: Record<string, unknown>): Promise<unknown> {
-    let timer: ReturnType<typeof setTimeout> | undefined
-    const timeout = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new LookupTimeout(`${method} did not answer within ${this.lookupTimeoutMs}ms`)), this.lookupTimeoutMs)
-    })
+    const { promise: timeout, reject } = Promise.withResolvers<never>()
+    const timer = this.setTimer(() => {
+      this.timers.delete(timer)
+      reject(new LookupTimeout(`${method} did not answer within ${this.lookupTimeoutMs}ms`))
+    }, this.lookupTimeoutMs)
+    this.timers.add(timer)
     try {
       return await Promise.race([this.context.call(method, params), timeout])
     } finally {
-      clearTimeout(timer)
+      this.clearTimer(timer)
+      this.timers.delete(timer)
     }
   }
 
@@ -474,7 +599,8 @@ export class NotificationsService {
   }
 
   private async pendingAskCount(): Promise<number> {
-    return (await this.lookup<Ask[]>('quirky.ask/list', { pendingOnly: true }))?.length ?? 0
+    const asks = await this.lookup<Ask[]>('quirky.ask/list', { pendingOnly: true })
+    return asks?.filter((ask) => ask.envelope.status === 'pending' && !ask.queued).length ?? 0
   }
 
   // sources
@@ -562,14 +688,6 @@ export class NotificationsService {
   }
 
 
-  private async askCreated(data: { ask: Ask }): Promise<void> {
-    const { ask } = data
-    if (ask.queued || ask.envelope.status !== 'pending') return
-    // a deadline already past resolves the ask right after `created`, and an expired ask is never announced
-    const pending = await this.lookup<Ask[]>('quirky.ask/list', { pendingOnly: true })
-    if (pending && !pending.some((candidate) => candidate.id === ask.id)) return
-    await this.askSurfaced(ask)
-  }
 
   private async heimdallNotification(data: unknown): Promise<void> {
     if (!isRecord(data) || typeof data.watcherId !== 'string' || data.watcherId.length === 0) return
@@ -589,11 +707,12 @@ export class NotificationsService {
     })
   }
 
-  private async askSurfaced(ask: Ask): Promise<void> {
-    await this.handle({
+  private askSurfaced(ask: Ask): Promise<Result | 'held'> {
+    return this.handle({
       source: 'ask',
       sessionId: ask.sessionId,
       worktreeId: ask.worktreeId,
+      marker: 'notification',
       banner: async () => askBanner({ title: ask.spec.title ?? null, firstQuestion: ask.spec.questions[0]?.question ?? '' })
     })
   }
@@ -602,6 +721,9 @@ export class NotificationsService {
 
   private async handle(pending: Pending): Promise<Result | 'held'> {
     const viewing = await this.viewing()
+    if (pending.source === 'ask' && pending.sessionId !== null && sessionViewed(viewing, pending.sessionId)) {
+      return this.decide(pending, 'dropped')
+    }
     if (pending.occasion === 'unfocused' && viewing.focused) return this.decide(pending, 'dropped')
     if (pending.occasion === 'invisible' && pending.sessionId !== null && sessionViewed(viewing, pending.sessionId)) {
       return this.decide(pending, 'dropped')
@@ -641,7 +763,7 @@ export class NotificationsService {
   /** A bell waits briefly so a completion that rang it can replace its banner. */
   private holdBell(pending: Pending): void {
     const hold = pending.hold!
-    const timer = setTimeout(() => {
+    const timer = this.setTimer(() => {
       this.timers.delete(timer)
       this.holds.delete(hold)
       if (this.stopped) return

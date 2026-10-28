@@ -33,7 +33,8 @@ afterEach(cleanupAll)
 const errors = {
   invalidParams: (m: string) => new Error(m),
   notFound: (m: string) => new Error(m),
-  conflict: (m: string) => new Error(m)
+  conflict: (m: string) => new Error(m),
+  busy: (m: string) => Object.assign(new Error(m), { data: { reason: 'runtime_busy' } })
 }
 const noHooks: AskServiceHooks = { created: () => {}, surfaced: () => {}, updated: () => {}, resolved: () => {} }
 
@@ -125,6 +126,56 @@ describe('asks', () => {
     expect(await call('wait', { askId, timeoutMs: 0 })).toMatchObject({ status: 'pending', askId })
     expect(Date.now() - immediate).toBeLessThan(60)
   })
+  test('Q4: four public waits may park; overflow reports typed runtime_busy without changing asks', async () => {
+    const created = await Promise.all(Array.from({ length: 5 }, () => call('create', { spec: confirmSpec })))
+    const askIds = created.map(({ askId }: { askId: string }) => askId)
+    const waitClients = await Promise.all(Array.from({ length: askIds.length }, () => connectAs(h)))
+    const waits = waitClients.map((waitClient, index) =>
+      waitClient.callAny('quirky.ask/wait', { askId: askIds[index]!, timeoutMs: 5000 }) as Promise<AskEnvelope>
+    )
+    const first = await Promise.race(
+      waits.map((waiting) =>
+        waiting.then(
+          (value) => ({ kind: 'result' as const, value }),
+          (error: unknown) => ({ kind: 'error' as const, error })
+        )
+      )
+    )
+
+    expect(first.kind).toBe('error')
+    if (first.kind === 'error') expect(first.error).toMatchObject({ code: RpcErrorCode.Conflict, data: { reason: 'runtime_busy' } })
+    expect(await call('list', { pendingOnly: true })).toHaveLength(5)
+
+    for (const askId of askIds) await call('answer', { askId, answers: { go: { value: true, source: 'input' } } })
+    const settledWaits = await Promise.allSettled(waits)
+    expect(settledWaits.filter((result) => result.status === 'fulfilled')).toHaveLength(4)
+    expect(settledWaits.filter((result) => result.status === 'rejected')).toHaveLength(1)
+    expect(await call('list', { pendingOnly: true })).toEqual([])
+  })
+  test('Q4: aborting a disconnected wait releases its slot without resolving the ask', async () => {
+    const service = new AskService(migratedStore(), errors, noHooks, fakeClock())
+    const asks = Array.from({ length: 5 }, () => service.create(confirmSpec, null, null, { checkCredentialText: true }))
+    const controllers = asks.map(() => new AbortController())
+    const waits = asks.slice(0, 4).map((ask, index) => service.wait(ask.id, 10_000, controllers[index]!.signal))
+    const disconnected = waits[0]!.then(
+      () => null,
+      (error: unknown) => error
+    )
+
+    await expect(service.wait(asks[4]!.id, 10_000)).rejects.toMatchObject({ data: { reason: 'runtime_busy' } })
+    expect(service.list(true)).toHaveLength(5)
+    controllers[0]!.abort()
+    expect(await disconnected).toMatchObject({ message: 'ask wait connection closed' })
+
+    const replacement = service.wait(asks[4]!.id, 10_000)
+    for (const ask of asks) service.answer(ask.id, { go: { value: true, source: 'input' } }, [])
+    const completed = await Promise.allSettled([...waits.slice(1), replacement])
+    expect(completed.every((result) => result.status === 'fulfilled')).toBe(true)
+    expect(service.list(true)).toEqual([])
+    service.shutdown()
+  })
+
+
 
   test('disabling the plugin during a wait settles the waiter and leaves no timer touching the closed store', async () => {
     const { askId } = await call('create', { spec })
