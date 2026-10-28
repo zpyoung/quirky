@@ -1,0 +1,382 @@
+.shell-workspace {
+  --tool-shell-rail-width: var(--compat-px-40);
+  --tool-shell-splitter-width: var(--ui-space-4);
+  --tool-shell-center-min-width: var(--compat-px-320);
+  --tool-shell-center-min-height: var(--compat-px-72);
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--ui-surface);
+}
+
+.shell-workspace--auxiliary > .main {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.shell-main-region {
+  position: absolute;
+  z-index: 0;
+  top: 0;
+  left: calc((var(--tool-left-rail) + var(--tool-left-panel-width) + var(--tool-left-edge)) * var(--compat-px-1));
+  right: calc((var(--tool-right-rail) + var(--tool-right-panel-width) + var(--tool-right-edge)) * var(--compat-px-1));
+  bottom: calc((var(--tool-bottom-panel-height) + var(--tool-bottom-edge) + var(--tool-bottom-rail)) * var(--compat-px-1));
+  min-width: 0;
+  min-height: 0;
+}
+
+.shell-main-region > .main {
+  width: 100%;
+  height: 100%;
+}
+
+.tool-shell {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  pointer-events: none;
+}
+
+.tool-shell__stripe {
+  position: absolute;
+  z-index: 2;
+  overflow: visible;
+  background: var(--ui-rail);
+  pointer-events: auto;
+}
+
+.tool-shell__stripe-scroll {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--ui-space-4);
+  overflow: auto;
+  padding: var(--ui-space-4);
+  background: var(--ui-rail);
+  pointer-events: auto;
+}
+
+.tool-shell__stripe--left-top .tool-shell__stripe-scroll,
+.tool-shell__stripe--left-bottom .tool-shell__stripe-scroll,
+.tool-shell__stripe--right-top .tool-shell__stripe-scroll,
+.tool-shell__stripe--right-bottom .tool-shell__stripe-scroll {
+  flex-direction: column;
+  align-items: center;
+}
+
+.tool-shell__stripe--left-top {
+  top: 0;
+  left: 0;
+  width: calc(var(--tool-left-rail) * var(--compat-px-1));
+  height: calc(var(--tool-left-top-stripe-height) * var(--compat-px-1));
+  border-right: var(--ui-border-width) solid var(--ui-border);
+}
+
+.tool-shell__stripe--left-bottom {
+  top: calc((var(--tool-side-height) - var(--tool-left-bottom-stripe-height)) * var(--compat-px-1));
+  left: 0;
+  width: calc(var(--tool-left-rail) * var(--compat-px-1));
+  height: calc(var(--tool-left-bottom-stripe-height) * var(--compat-px-1));
+  border-right: var(--ui-border-width) solid var(--ui-border);
+}
+
+.tool-shell__stripe--right-top {
+  top: 0;
+  right: 0;
+  width: calc(var(--tool-right-rail) * var(--compat-px-1));
+  height: calc(var(--tool-right-top-stripe-height) * var(--compat-px-1));
+  border-left: var(--ui-border-width) solid var(--ui-border);
+}
+
+.tool-shell__stripe--right-bottom {
+  top: calc((var(--tool-side-height) - var(--tool-right-bottom-stripe-height)) * var(--compat-px-1));
+  right: 0;
+  width: calc(var(--tool-right-rail) * var(--compat-px-1));
+  height: calc(var(--tool-right-bottom-stripe-height) * var(--compat-px-1));
+  border-left: var(--ui-border-width) solid var(--ui-border);
+}
+
+.tool-shell__stripe--bottom-left {
+  bottom: 0;
+  left: 0;
+  width: calc(var(--tool-bottom-left-stripe-width) * var(--compat-px-1));
+  height: calc(var(--tool-bottom-rail) * var(--compat-px-1));
+  border-top: var(--ui-border-width) solid var(--ui-border);
+}
+
+.tool-shell__stripe--bottom-right {
+  right: 0;
+  bottom: 0;
+  width: calc(var(--tool-bottom-right-stripe-width) * var(--compat-px-1));
+  height: calc(var(--tool-bottom-rail) * var(--compat-px-1));
+  border-top: var(--ui-border-width) solid var(--ui-border);
+}
+
+.tool-shell__stripe--bottom-left .tool-shell__stripe-scroll,
+.tool-shell__stripe--bottom-right .tool-shell__stripe-scroll {
+  gap: var(--ui-space-8);
+}
+
+.tool-shell__stripe[data-drop-target='true'] {
+  outline: var(--ui-focus-width) solid var(--ui-accent);
+  outline-offset: var(--compat-px-n1);
+}
+
+.tool-shell__stripe[data-drop-target='true'] .tool-shell__stripe-scroll {
+  background: var(--ui-selected);
+}
+
+.tool-shell__tool {
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: var(--compat-px-28);
+  min-height: var(--compat-px-28);
+}
+
+.tool-shell__tool-button.ui-icon-button {
+  width: var(--compat-px-28);
+  min-height: var(--compat-px-28);
+  padding: var(--ui-space-4);
+  border-color: var(--compat-color-transparent);
+  background: var(--compat-color-transparent);
+  color: var(--ui-muted);
+  font-size: var(--ui-icon-size);
+}
+
+.tool-shell__tool-button.ui-icon-button:hover:not(:disabled),
+.tool-shell__tool-button.ui-icon-button[aria-pressed='true'] {
+  background: var(--ui-selected);
+  color: var(--ui-accent);
+}
+
+.tool-shell__tool > .ui-badge {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  right: 0;
+  max-width: 100%;
+  transform: translate(25%, -25%);
+  pointer-events: none;
+}
+
+.tool-shell__menu-portal {
+  position: fixed;
+  z-index: 1000;
+  top: 0;
+  left: 0;
+  transform: translate(
+    calc(var(--tool-menu-left) * var(--compat-px-1)),
+    calc(var(--tool-menu-top) * var(--compat-px-1))
+  );
+  pointer-events: auto;
+}
+
+.tool-shell__menu-portal .ui-menu__trigger {
+  width: var(--compat-px-16);
+  min-width: var(--compat-px-16);
+  height: var(--compat-px-16);
+  min-height: var(--compat-px-16);
+  padding: var(--ui-space-2);
+  border-color: var(--ui-border);
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  font-size: 0;
+}
+
+.tool-shell__menu-portal .ui-menu__trigger-icon {
+  font-size: var(--ui-font-section);
+}
+
+.tool-shell__menu-portal .ui-menu__list {
+  z-index: 1001;
+  min-width: var(--compat-px-160);
+  max-height: 70vh;
+  overflow: auto;
+}
+
+.tool-shell__menu-portal[data-menu-side='right'] .ui-menu__list {
+  right: 0;
+  left: auto;
+}
+
+.tool-shell__menu-portal[data-menu-edge='bottom'] .ui-menu__list {
+  top: auto;
+  bottom: 100%;
+  margin: 0 0 var(--ui-space-4);
+}
+
+.tool-shell__panels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.tool-shell__panel {
+  position: absolute;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--ui-surface);
+  pointer-events: auto;
+}
+
+.tool-shell__panel--left-top,
+.tool-shell__panel--left-bottom {
+  left: calc(var(--tool-left-rail) * var(--compat-px-1));
+  width: calc(var(--tool-left-panel-width) * var(--compat-px-1));
+}
+
+.tool-shell__panel--left-top {
+  top: 0;
+  height: calc(var(--tool-left-top-height) * var(--compat-px-1));
+}
+
+.tool-shell__panel--left-bottom {
+  top: calc(var(--tool-left-bottom-top) * var(--compat-px-1));
+  height: calc(var(--tool-left-bottom-height) * var(--compat-px-1));
+}
+
+.tool-shell__panel--right-top,
+.tool-shell__panel--right-bottom {
+  right: calc(var(--tool-right-rail) * var(--compat-px-1));
+  width: calc(var(--tool-right-panel-width) * var(--compat-px-1));
+}
+
+.tool-shell__panel--right-top {
+  top: 0;
+  height: calc(var(--tool-right-top-height) * var(--compat-px-1));
+}
+
+.tool-shell__panel--right-bottom {
+  top: calc(var(--tool-right-bottom-top) * var(--compat-px-1));
+  height: calc(var(--tool-right-bottom-height) * var(--compat-px-1));
+}
+
+.tool-shell__panel--bottom-left,
+.tool-shell__panel--bottom-right {
+  top: calc(var(--tool-bottom-panel-top) * var(--compat-px-1));
+  height: calc(var(--tool-bottom-panel-height) * var(--compat-px-1));
+}
+
+.tool-shell__panel--bottom-left {
+  left: 0;
+  width: calc(var(--tool-bottom-left-panel-width) * var(--compat-px-1));
+}
+
+.tool-shell__panel--bottom-right {
+  right: 0;
+  width: calc(var(--tool-bottom-right-panel-width) * var(--compat-px-1));
+}
+
+.tool-shell__panel .ui-tool-panel-frame {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+}
+
+.tool-shell__panel .ui-tool-panel-frame__body {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 0;
+}
+
+.tool-shell__panel .plugin-slot {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+.tool-shell__panel .plugin-slot-body {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.tool-shell__resize {
+  position: absolute;
+  z-index: 4;
+  display: block;
+  pointer-events: auto;
+  touch-action: none;
+  user-select: none;
+}
+
+.tool-shell__resize:hover,
+.tool-shell__resize:focus-visible {
+  background: var(--ui-accent);
+  outline: none;
+}
+
+.tool-shell__resize[aria-disabled='true'] {
+  cursor: default;
+  pointer-events: none;
+}
+
+.tool-shell__resize--left-edge {
+  top: 0;
+  left: calc((var(--tool-left-rail) + var(--tool-left-panel-width)) * var(--compat-px-1));
+  width: calc(var(--tool-left-edge) * var(--compat-px-1));
+  height: calc(var(--tool-side-height) * var(--compat-px-1));
+  cursor: col-resize;
+}
+
+.tool-shell__resize--right-edge {
+  top: 0;
+  right: calc((var(--tool-right-rail) + var(--tool-right-panel-width)) * var(--compat-px-1));
+  width: calc(var(--tool-right-edge) * var(--compat-px-1));
+  height: calc(var(--tool-side-height) * var(--compat-px-1));
+  cursor: col-resize;
+}
+
+.tool-shell__resize--left-split {
+  top: calc(var(--tool-left-top-height) * var(--compat-px-1));
+  left: calc(var(--tool-left-rail) * var(--compat-px-1));
+  width: calc(var(--tool-left-panel-width) * var(--compat-px-1));
+  height: calc(var(--tool-left-split-handle-height) * var(--compat-px-1));
+  cursor: row-resize;
+}
+
+.tool-shell__resize--right-split {
+  top: calc(var(--tool-right-top-height) * var(--compat-px-1));
+  right: calc(var(--tool-right-rail) * var(--compat-px-1));
+  width: calc(var(--tool-right-panel-width) * var(--compat-px-1));
+  height: calc(var(--tool-right-split-handle-height) * var(--compat-px-1));
+  cursor: row-resize;
+}
+
+.tool-shell__resize--bottom-edge {
+  top: calc(var(--tool-side-height) * var(--compat-px-1));
+  left: 0;
+  width: 100%;
+  height: calc(var(--tool-bottom-edge) * var(--compat-px-1));
+  cursor: row-resize;
+}
+
+.tool-shell__resize--bottom-split {
+  top: calc(var(--tool-bottom-panel-top) * var(--compat-px-1));
+  left: calc(var(--tool-bottom-left-panel-width) * var(--compat-px-1));
+  width: calc(var(--tool-bottom-split-handle-width) * var(--compat-px-1));
+  height: calc(var(--tool-bottom-panel-height) * var(--compat-px-1));
+  cursor: col-resize;
+}
+
+.tool-shell__icon {
+  width: var(--ui-icon-size);
+  height: var(--ui-icon-size);
+  flex: none;
+}

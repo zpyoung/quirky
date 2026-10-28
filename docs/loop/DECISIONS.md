@@ -111,6 +111,7 @@ files, not this one.
 | hard | high | [m5-ledger D8](decisions/m5-ledger.md) | Keep imports replay-safe and evidence advisory | locked by external research/orca-features/ledger.md |
 | hard | high | [m7-orchestration-worker-federation D2](decisions/m7-orchestration-worker-federation.md) | Reuse one store and real paired transport with distinct remote authority | assumed — autonomous |
 | hard | high | [m7-orchestration-worker-federation D4](decisions/m7-orchestration-worker-federation.md) | Commit home verdict before host report acceptance | locked by docs/loop/decisions/m6-orchestration-core.md |
+| hard (public state contract) | high | [ui-shell-slots D2](decisions/ui-shell-slots.md) | Keep per-user tool layout in the canonical daemon store | locked by docs/architecture.md |
 | hard | high | [m0-ui-api D4](decisions/m0-ui-api.md) | The seven UI kinds are `view`, `panel`, `sidebar-section`, `command`, `keybinding`, `setting` and `theme` | assumed — autonomous |
 | hard | high | [m0-ui-api D29](decisions/m0-ui-api.md) | Choose declared slots with lazily imported modules that mount into host elements | assumed — autonomous |
 | hard | high | [m0-registry D12](decisions/m0-registry.md) | Every contribution is declared in the manifest, and code can only provide declared ones | assumed — autonomous |
@@ -185,6 +186,7 @@ files, not this one.
 | medium | medium | [m0-daemon-api D15](decisions/m0-daemon-api.md) | Jobs run on a fixed delay, at least one second apart, never overlapping | assumed — autonomous |
 | medium | medium | [m0-daemon-api D19](decisions/m0-daemon-api.md) | Launch hooks are a sequential pipeline in contribution-ID order | assumed — autonomous |
 | medium | medium | [m0-daemon-api D20](decisions/m0-daemon-api.md) | Launch hooks change only environment variables and agent arguments | assumed — autonomous |
+| medium | medium | [ui-shell-slots D5](decisions/ui-shell-slots.md) | Retain exact-window and plugin-internal view behavior | assumed — autonomous |
 | medium | medium | [m0-ui-api D7](decisions/m0-ui-api.md) | The window shares its React with plugin UI modules through bare imports | assumed — autonomous |
 | medium | medium | [m0-ui-api D10](decisions/m0-ui-api.md) | Slot locations: sidebar sections under the repo list, panels in the right column, views in the main area | assumed — autonomous |
 | medium | medium | [m0-ui-api D17](decisions/m0-ui-api.md) | Settings have one scope, the user's | assumed — autonomous |
@@ -647,6 +649,12 @@ files, not this one.
 | medium (authorization/ledger ordering) | high | [m3-accounts D18](decisions/m3-accounts.md) | Bridge dispatcher authorization once and reserve reset scope before validation | assumed — autonomous |
 | medium (platform adapters) | high | [m3-accounts D21](decisions/m3-accounts.md) | Non-macOS account adapters remain explicit platform work | deferred: platform |
 | medium | high at the daemon/filesystem boundary; strengthened real-pty fixture smoke still required | [m3-accounts D24](decisions/m3-accounts.md) | Preserve real native conversation data across profile changes | assumed — autonomous |
+| medium (visible shell layout) | high | [ui-shell-slots D1](decisions/ui-shell-slots.md) | Follow the approved shell row without restyling feature interiors | locked by docs/quirk/specs/2026-10-28-ui-redesign/logic.md |
+| medium (projection can change without changing plugin ids) | high | [ui-shell-slots D3](decisions/ui-shell-slots.md) | Project effective legacy contributions into tools and preserve original IDs | assumed — autonomous |
+| medium | high | [ui-shell-slots D4](decisions/ui-shell-slots.md) | Use durable pending asks as actionable Inbox authority | locked by docs/quirk/specs/2026-10-28-ui-redesign/logic.md |
+| medium (old preference ceases to be effective) | high | [ui-shell-slots D9](decisions/ui-shell-slots.md) | Remove the obsolete top/side activity-bar preference at cutover | supersedes m2-editor D11 (activity-position clause only), under the approved redesign |
+| medium (public location semantics) | high | [ui-shell-slots D11](decisions/ui-shell-slots.md) | Repair observed shell composition defects at their real owners | assumed — autonomous |
+| medium | high | [ui-shell-slots D15](decisions/ui-shell-slots.md) | Compose the sole roadmap catch-up without weakening window identity | assumed — autonomous |
 | medium | high | [m0-ui-api D5](decisions/m0-ui-api.md) | Plugin UI code is one ES module named by a manifest `ui` field, loaded in the window only when needed | assumed — autonomous |
 | medium | high | [m0-ui-api D8](decisions/m0-ui-api.md) | The daemon resolves UI contributions into one model the window and agents read | assumed — autonomous |
 | medium | high | [m0-ui-api D12](decisions/m0-ui-api.md) | Keybindings are `mod+shift+k` chords that must include a modifier, or a function key | deferred: platform |
@@ -961,6 +969,7 @@ files, not this one.
 | easy | medium | [m7-sweep-hosting D8](decisions/m7-sweep-hosting.md) | Keep model findings, autonomous rulings and protocol limits separate | assumed — autonomous |
 | easy | medium | [m5-structured-runner D30](decisions/m5-structured-runner.md) | Diagnose the scripts fixture timeout without weakening its assertion or budget | assumed — autonomous |
 | easy (before dispatch) | medium (large account domain, contract integration risk) | [m3-accounts D13](decisions/m3-accounts.md) | Execute one four-component wave with disjoint scopes | assumed — autonomous |
+| easy | medium | [ui-shell-slots D8](decisions/ui-shell-slots.md) | Bound dimensions and use opaque same-window drag state | assumed — autonomous |
 | easy | medium | [m0-ui-api D11](decisions/m0-ui-api.md) | Commands run in the window, from a command palette or a keybinding | assumed — autonomous |
 | easy | medium | [m0-ui-api D14](decisions/m0-ui-api.md) | No `when` clauses yet | assumed — autonomous |
 | easy | medium | [m0-ui-api D20](decisions/m0-ui-api.md) | The active theme is chosen through `theme.list` and `theme.set`, and applies live | assumed — autonomous |
@@ -1708,6 +1717,10 @@ files, not this one.
 | easy | high | [m1-worktrees D69](decisions/m1-worktrees.md) | Final Round 1: accept all eight findings, which collapse to seven defects, and fix them in one batch | assumed — autonomous |
 | easy | high | [m1-worktrees D70](decisions/m1-worktrees.md) | The UI scenarios run as three web batches, each on its own daemon, temp HOME and fixture world | assumed — autonomous |
 | easy | high | [m1-worktrees D72](decisions/m1-worktrees.md) | The UI scenarios pass as a user, with SC-59's tooltip checked by its test because the tool can't hover | assumed — autonomous |
+| easy (test-only repair). | high | [fix-test-cli-1028 D1](decisions/fix-test-cli-1028.md) | Repair the current failure without adding obsolete API aliases | assumed — autonomous |
+| easy | high | [fix-test-cli-1028 D2](decisions/fix-test-cli-1028.md) | Prove retained credentials by encrypted use, not JSON encoding | assumed — autonomous |
+| easy | high | [fix-test-cli-1028 D3](decisions/fix-test-cli-1028.md) | Keep removal local and preserve explicit CLI consent | assumed — autonomous |
+| easy | high | [fix-test-cli-1028 D4](decisions/fix-test-cli-1028.md) | Land the bounded test repair after complete exercised checks | assumed — autonomous |
 | easy | high | [fix-test-process-leaks D2](decisions/fix-test-process-leaks.md) | Use OpenAI implementers and Gemini review | assumed — autonomous |
 | easy | high | [fix-test-process-leaks D3](decisions/fix-test-process-leaks.md) | Fix item skips brainstorming and specs | locked by docs/loop/LOOP.md |
 | easy | high | [fix-test-process-leaks D5](decisions/fix-test-process-leaks.md) | Add an owned CLI launch for unattended web passes | assumed — autonomous |
@@ -2083,6 +2096,12 @@ files, not this one.
 | easy | high | [m0-daemon-api D41](decisions/m0-daemon-api.md) | The daemon plugin API is kernel, not a built-in plugin | locked by docs/roadmap.md |
 | easy | high | [m0-daemon-api D43](decisions/m0-daemon-api.md) | The final review loop ends after the closure round passes on all three lenses | assumed — autonomous |
 | easy | high | [m0-daemon-api D44](decisions/m0-daemon-api.md) | Every scenario has an API test, and there are no Orca defects to test | locked by docs/loop/LOOP.md |
+| easy (bounded lifecycle/test repair). | high | [fix-test-packages-pty-host-1028 D1](decisions/fix-test-packages-pty-host-1028.md) | Preserve the stop-with-history lifecycle contract | assumed — autonomous |
+| easy (test fixture only). | high | [fix-test-packages-pty-host-1028 D2](decisions/fix-test-packages-pty-host-1028.md) | Exercise scrollback rather than searching the visible screen through history | locked by docs/loop/decisions/m1-term-daemon.md |
+| easy | high | [fix-test-packages-pty-host-1028 D3](decisions/fix-test-packages-pty-host-1028.md) | Verify preserved output, not an incidental newest-page boundary | locked by docs/quirk/specs/2026-10-26-m1-term-daemon/logic.md |
+| easy | high for the reported failure, not all possible scheduling failures. | [fix-test-packages-pty-host-1028 D4](decisions/fix-test-packages-pty-host-1028.md) | Keep the repair test-only and retain existing ownership safeguards | assumed — autonomous |
+| easy | high | [fix-test-packages-pty-host-1028 D5](decisions/fix-test-packages-pty-host-1028.md) | Preserve incoming repairs and their independent evidence boundaries | locked by incoming decision logs |
+| easy | high for the exercised lifecycle and exact failure. | [fix-test-packages-pty-host-1028 D6](decisions/fix-test-packages-pty-host-1028.md) | Land the bounded fixture repair with exercised lifecycle evidence | assumed — autonomous |
 | easy | high | [m2-editor-build-unbuilt-flows D2](decisions/m2-editor-build-unbuilt-flows.md) | Apply unattended build-first workflow | locked by docs/loop/LOOP.md |
 | easy | high | [m2-editor-build-unbuilt-flows D6](decisions/m2-editor-build-unbuilt-flows.md) | Clipboard ranges use source coordinates and quoted TSV | assumed — autonomous |
 | easy | high | [m2-editor-build-unbuilt-flows D8](decisions/m2-editor-build-unbuilt-flows.md) | Three disjoint vertical components share committed contracts | assumed — autonomous |
@@ -2285,6 +2304,12 @@ files, not this one.
 | easy | high | [m3-accounts D33](decisions/m3-accounts.md) | Retain proof and unexpected local state while cleaning owned worktrees | locked by docs/loop/LOOP.md |
 | easy | high | [m3-accounts D34](decisions/m3-accounts.md) | Install the merged workspace graph before typechecking it | assumed — autonomous |
 | easy | high for the observed load-sensitive result | [m3-accounts D35](decisions/m3-accounts.md) | Preserve protected script assertions after an isolated passing rerun | locked by docs/loop/LOOP.md |
+| easy | high | [ui-shell-slots D6](decisions/ui-shell-slots.md) | Reuse only the shared system and inherited theme resolver | locked by docs/quirk/specs/2026-10-28-ui-redesign/logic.md |
+| easy | high | [ui-shell-slots D7](decisions/ui-shell-slots.md) | Execute one combined spec and three disjoint source components | locked by docs/loop/LOOP.md |
+| easy (component path sets remain independently committable) | high | [ui-shell-slots D10](decisions/ui-shell-slots.md) | Recover two misplaced source slices through explicit parent ownership | assumed — autonomous |
+| easy | high | [ui-shell-slots D12](decisions/ui-shell-slots.md) | Record focused runtime proof without claiming the end-phase suite or visual score | locked by docs/loop/LOOP.md |
+| easy | high | [ui-shell-slots D13](decisions/ui-shell-slots.md) | Preserve exact-window evidence limits and peer test repairs | assumed — autonomous |
+| easy | high | [ui-shell-slots D14](decisions/ui-shell-slots.md) | Keep platform and capture claims bounded to this Mac | deferred: platform |
 | easy | high | [m0-ui-api D1](decisions/m0-ui-api.md) | Classify the item as an API and Visual design, and run both research phases | assumed — autonomous |
 | easy | high | [m0-ui-api D2](decisions/m0-ui-api.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m0-ui-api D3](decisions/m0-ui-api.md) | Select every gray area that matters for the UI plugin API | assumed — autonomous |
@@ -2466,6 +2491,14 @@ files, not this one.
 | easy | high | [sa-browser-profiles-settings D17](decisions/sa-browser-profiles-settings.md) | Reconcile incoming public UI contracts | assumed — autonomous |
 | easy | high for candidate exclusion, residual helper variability not attributed | [sa-browser-profiles-settings D19](decisions/sa-browser-profiles-settings.md) | Challenge only targets created by the requested new tab | assumed — autonomous |
 | easy when public native storage-root/completion support is proven | high for the safety rule; isolation remains unproven | [sa-browser-profiles-settings D21](decisions/sa-browser-profiles-settings.md) | Preflight every native handoff before touching Default | assumed — autonomous, applying the accepted lane4 native safety ruling |
+| easy (local repair) | high | [fix-test-agent-status-1028 D1](decisions/fix-test-agent-status-1028.md) | Repair the assigned agent-status contracts without widening provider APIs | locked by docs/loop/LOOP.md |
+| easy (review backend only) | high | [fix-test-agent-status-1028 D2](decisions/fix-test-agent-status-1028.md) | Use native task implementers and a reachable independent reviewer | assumed — autonomous |
+| easy (test contract only) | high for the matcher defect; no production-fix claim | [fix-test-agent-status-1028 D3](decisions/fix-test-agent-status-1028.md) | Assert absent OSC questions directly | assumed — autonomous |
+| easy (no additional runtime patch) | high | [fix-test-agent-status-1028 D4](decisions/fix-test-agent-status-1028.md) | Retain the already-landed duplicate-key repair for hooks settings | locked by docs/loop/decisions/m1-agent-status.md D26 |
+| easy (throwaway verification script) | high for cli/api behavior; no ui or native acceptance claim | [fix-test-agent-status-1028 D5](decisions/fix-test-agent-status-1028.md) | Exercise the public CLI in isolated plugin ownership | assumed — autonomous |
+| easy | high | [fix-test-agent-status-1028 D6](decisions/fix-test-agent-status-1028.md) | Preserve incoming native clipboard and PTY history decisions | locked by incoming decision logs |
+| easy (execution placement; no source/deadline changes) | high for observed outputs and operator load report; no causal attribution of the exact timeout | [fix-test-agent-status-1028 D7](decisions/fix-test-agent-status-1028.md) | Separate the overloaded local scripts timeout from the required remote run | locked by operator note in this conversation |
+| easy (test/docs changes only) | high for the named exercised checks; bounded as above | [fix-test-agent-status-1028 D8](decisions/fix-test-agent-status-1028.md) | Land only the exercised test-only repair and disclose the bounded review | assumed — autonomous |
 | easy | high | [m1-launch-settings D1](decisions/m1-launch-settings.md) | Classify the item as Data, API, CLI and Integration work, and run research phases A and B | assumed — autonomous |
 | easy | high | [m1-launch-settings D2](decisions/m1-launch-settings.md) | Skip the visual companion and the adhd offer, and use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m1-launch-settings D3](decisions/m1-launch-settings.md) | Select every gray area that matters: data-mapping, input-format, conflict-resolution, error-handling, output-format and flag-design | locked by docs/loop/LOOP.md |

@@ -1554,8 +1554,7 @@
       "deps": [
         "ui-tokens-and-components"
       ],
-      "status": "in-progress",
-      "lane": 9
+      "status": "done"
     },
     {
       "id": "m7-vm-and-owner-bound-host-workspaces",
@@ -1583,7 +1582,8 @@
         "ui-terminal-theme",
         "ui-screenshot-review"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 10
     },
     {
       "id": "ui-restyle-editor",
@@ -1595,7 +1595,8 @@
         "ui-terminal-theme",
         "ui-screenshot-review"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 9
     },
     {
       "id": "ui-restyle-git",
@@ -1863,6 +1864,24 @@
       "status": "done"
     },
     {
+      "id": "fix-native-m1-term-ui-1028",
+      "milestone": "M1",
+      "title": "Fix the native-only failures in m1-term-ui from the 2026-10-28 run: SC-37",
+      "docs": [],
+      "deps": [],
+      "status": "done"
+    },
+    {
+      "id": "fix-test-packages-pty-host-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase packages/pty-host failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area packages/pty-host). Files and exact failed tests: packages/pty-host/test/stop-with-history.test.ts: stop with history > stops the root and descendants, retains output, and restores the same history. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "done"
+    },
+    {
       "id": "m7-sweep-sessions",
       "milestone": "M7",
       "docs": [
@@ -1920,14 +1939,6 @@
       "lane": 4
     },
     {
-      "id": "fix-native-m1-term-ui-1028",
-      "milestone": "M1",
-      "title": "Fix the native-only failures in m1-term-ui from the 2026-10-28 run: SC-37",
-      "docs": [],
-      "deps": [],
-      "status": "done"
-    },
-    {
       "id": "fix-native-sa-browser-agent-1028",
       "milestone": "Side A",
       "title": "Fix the native-only failures in sa-browser-agent from the 2026-10-28 run: C2-native-focus End phase: native reruns are allowed now on a packaged app with fresh owned state (never mock-keychain in place of production credential protection); gather the causal evidence named in its BLOCKERS.md entry, then fix the cause.",
@@ -1971,17 +1982,6 @@
       "lane": 1
     },
     {
-      "id": "fix-test-packages-pty-host-1028",
-      "milestone": "M7",
-      "title": "Repair end-phase packages/pty-host failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area packages/pty-host). Files and exact failed tests: packages/pty-host/test/stop-with-history.test.ts: stop with history > stops the root and descendants, retains output, and restores the same history. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
-      "docs": [],
-      "deps": [
-        "m7-test-triage"
-      ],
-      "status": "in-progress",
-      "lane": 10
-    },
-    {
       "id": "fix-test-agent-status-1028",
       "milestone": "M7",
       "title": "Repair end-phase plugins/quirky.agent-status failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.agent-status). Files and exact failed tests: plugins/quirky.agent-status/test/transcript-producers.test.ts: captured provider status producers > private OSC status facts use the captured session owner and ignore provider identity changes; captured provider status producers > private OSC status facts are fenced to the provider turn as well as the session | plugins/quirky.agent-status/test/e2e/hooks-cli.e2e.test.ts: SC-27: the Agent status hooks switch > off removes the entries, a restart does nothing, setup refuses while off, and on installs again | plugins/quirky.agent-status/test/hooks.test.ts: SC-27: the Agent status hooks switch > off removes every entry and status shows hooks_disabled; the restart touches nothing; on installs again; SC-27: the Agent status hooks switch > setup while the switch is off refuses with the switch message; SC-27: the Agent status hooks switch > remove still works while the switch is off. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
@@ -1989,8 +1989,7 @@
       "deps": [
         "m7-test-triage"
       ],
-      "status": "in-progress",
-      "lane": 2
+      "status": "done"
     },
     {
       "id": "fix-test-ask-1028",
@@ -2022,7 +2021,7 @@
       "deps": [
         "m7-test-triage"
       ],
-      "status": "todo"
+      "status": "done"
     },
     {
       "id": "fix-test-editor-1028",
@@ -2306,6 +2305,16 @@
       ],
       "status": "todo",
       "early": true
+    },
+    {
+      "id": "fix-test-scripts-profile-timeout-1028",
+      "milestone": "M7",
+      "title": "Repair bun test scripts timeout in scripts/suite.test.ts:196: runFiles emits no profile rows when profiling is disabled. During caught-up fix-test-agent-status-1028 gates on macOS, bun test scripts returned125pass/1fail across126tests12files in284.50s; named case exceeded5000ms (5053.94ms). No diagnosed root cause or flake claim; no deadlines/assertions/source changed. Other suite fixture broken/flaky log lines are intentional nested test outputs, not extra top-level failures. Diagnose actual process/profile behavior and preserve deterministic private HOME/QUIRKY_HOME and child cleanup; delete incidental assertions rather than repin. Evidence docs/loop/decisions/fix-test-agent-status-1028.md and lane2 iteration11 raw artifact://30.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "todo"
     }
   ]
 }

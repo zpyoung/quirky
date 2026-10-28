@@ -3,6 +3,7 @@ import {
   DARK_THEME,
   DEFAULT_THEME,
   LIGHT_THEME,
+  UI_TOOL_SLOTS,
   parseChord,
   parseContributionId,
   parseWhen,
@@ -18,6 +19,7 @@ import {
   type UiSettingEntry,
   type UiSlotEntry,
 } from '@quirky/protocol'
+import { projectTools } from './tool-layout'
 
 const DEFAULT_ORDER = 100
 
@@ -328,18 +330,31 @@ export function buildUiModel(input: {
   const moduleOf = (pluginId: string): string | null => modules[pluginId]?.url ?? null
 
   const slot = (kind: UiSlotEntry['kind']): UiSlotEntry[] =>
-    ofKind(kind).map((declaration) => ({
-      id: declaration.id,
-      kind,
-      plugin: declaration.plugin,
-      title: stringField(declaration.data, 'title') ?? declaration.name,
-      ...(kind === 'settings-section' && stringField(declaration.data, 'description') !== undefined
-        ? { description: stringField(declaration.data, 'description') }
-        : {}),
-      order: typeof declaration.data.order === 'number' ? declaration.data.order : DEFAULT_ORDER,
-      module: moduleOf(declaration.plugin),
-      ...(kind === 'view' && declaration.data.settings === true ? { settings: true } : {}),
-    }))
+    ofKind(kind).map((declaration) => {
+      const defaultSlot =
+        kind === 'panel' || kind === 'sidebar-section' || kind === 'activity-item'
+          ? UI_TOOL_SLOTS.find((slot) => slot === declaration.data.defaultSlot)
+          : undefined
+      const icon =
+        (kind === 'panel' || kind === 'sidebar-section' || kind === 'activity-item') &&
+        typeof declaration.data.icon === 'string' && declaration.data.icon.length > 0
+          ? declaration.data.icon
+          : undefined
+      return {
+        id: declaration.id,
+        kind,
+        plugin: declaration.plugin,
+        title: stringField(declaration.data, 'title') ?? declaration.name,
+        ...(kind === 'settings-section' && stringField(declaration.data, 'description') !== undefined
+          ? { description: stringField(declaration.data, 'description') }
+          : {}),
+        order: typeof declaration.data.order === 'number' ? declaration.data.order : DEFAULT_ORDER,
+        module: moduleOf(declaration.plugin),
+        ...(defaultSlot ? { defaultSlot } : {}),
+        ...(icon ? { icon } : {}),
+        ...(kind === 'view' && declaration.data.settings === true ? { settings: true } : {})
+      }
+    })
   const byOrder = (a: UiSlotEntry, b: UiSlotEntry) => a.order - b.order || compare(a.id, b.id)
 
   const commands: UiCommandEntry[] = ofKind('command').map((declaration) => {
@@ -372,14 +387,21 @@ export function buildUiModel(input: {
   const themes = buildThemes(ofKind('theme'))
   const active = themes.some((theme) => theme.id === chosenTheme) ? chosenTheme : DEFAULT_THEME.id
 
+  const sidebarSections = slot('sidebar-section').sort(byOrder)
+  const statusBars = slot('status-bar').sort(byOrder)
+  const activityItems = slot('activity-item').sort(byOrder)
+  const panels = slot('panel').sort(byOrder)
+  const settingsSections = slot('settings-section').sort(byOrder)
+  const views = slot('view').sort((a, b) => compare(a.id, b.id))
+  const overlays = slot('overlay').sort(byOrder)
   const model: UiModel = {
-    sidebarSections: slot('sidebar-section').sort(byOrder),
-    statusBars: slot('status-bar').sort(byOrder),
-    activityItems: slot('activity-item').sort(byOrder),
-    panels: slot('panel').sort(byOrder),
-    settingsSections: slot('settings-section').sort(byOrder),
-    views: slot('view').sort((a, b) => compare(a.id, b.id)),
-    overlays: slot('overlay').sort(byOrder),
+    sidebarSections,
+    statusBars,
+    activityItems,
+    panels,
+    settingsSections,
+    views,
+    overlays,
     commands,
     keybindings,
     settings,
@@ -387,6 +409,7 @@ export function buildUiModel(input: {
     themes,
     theme: { chosen: chosenTheme, active },
     modules,
+    tools: projectTools({ panels, sidebarSections, activityItems, views })
   }
   return { model, warnings }
 }

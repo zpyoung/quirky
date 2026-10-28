@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test'
-import { readFileSync, rmSync, statSync, symlinkSync } from 'node:fs'
+import { statSync, symlinkSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { RpcErrorCode } from '@quirky/protocol'
 import { runCli } from '../../../packages/cli/test/fixtures/fake-daemon'
@@ -64,7 +64,7 @@ test('saved paired runtime APIs retain private offers but never return credentia
   const listed = await caller.callAny('quirky.cli/runtimeList', {}) as { runtimes: unknown[] }
   const shown = await caller.callAny('quirky.cli/runtimeShow', { selector: added.id })
   const status = await caller.callAny('quirky.cli/runtimeStatus', {})
-  for (const safeView of [listed, shown, status]) {
+  for (const safeView of [added, listed, shown, status]) {
     expect(JSON.stringify(safeView)).not.toContain(pairing.pairingUrl)
     expect(JSON.stringify(safeView)).not.toContain(code!)
     expect(JSON.stringify(safeView)).not.toContain(offer.deviceToken)
@@ -73,13 +73,24 @@ test('saved paired runtime APIs retain private offers but never return credentia
 
   const file = savedRuntimeStorePath(home)
   expect((statSync(file).mode & 0o777)).toBe(0o600)
-  const stored = readFileSync(file, 'utf8')
-  expect(stored).toContain(pairing.pairingUrl)
-  expect(stored).toContain(offer.deviceToken)
+
+  const savedLink = createPairedDaemonLink(home, { kind: 'saved', selector: added.id }, {})
+  try {
+    expect(await savedLink.callAny('quirky.mobile/api', {})).toEqual(
+      await caller.callAny('quirky.mobile/api', {})
+    )
+  } finally {
+    savedLink.close()
+  }
 
   await caller.callAny('quirky.cli/runtimeRemove', { selector: added.id, yes: true })
   expect(await caller.callAny('quirky.cli/runtimeList', {})).toEqual({ runtimes: [] })
-  expect(readFileSync(file, 'utf8')).not.toContain(offer.deviceToken)
+  const removedLink = createPairedDaemonLink(home, { kind: 'saved', selector: added.id }, {})
+  try {
+    await expect(removedLink.callAny('quirky.mobile/api', {})).rejects.toMatchObject({ code: RpcErrorCode.Conflict })
+  } finally {
+    removedLink.close()
+  }
 })
 
 test('a malformed pairing offer is rejected before any saved runtime is written', async () => {
