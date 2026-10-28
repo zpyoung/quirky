@@ -44,5 +44,27 @@
 - **Revisit if:** Actual native UI acceptance identifies a product failure.
 - **Source:** assumed — autonomous
 
+## D5: Validate the caught-up test-only repair without changing native acceptance
+- **Question:** What verification and integration evidence is required for this bounded end-phase item?
+- **Options:** Claim the targeted pass alone; run the required caught-up gates and retain their exact outcomes.
+- **Chose:** Run canonical daemon suite, scripts tests and full typecheck, plus the independent public-API smoke and read-only review.
+- **Why:** The single roadmap catch-up brought only queue status changes; no decision logs or runtime contracts changed. Read-only DaemonTestReviewer approved with no must-fix findings. Full caught-up typecheck passed, including UI lint, root, mobile and prepared desktop checks (exit0,37.23 seconds). Test-source-only changes do not require a new native scenario or product changelog entry; this decision log is the repair documentation.
+- **Evidence:** commit f15cf390; git merge build/roadmap output (queue.json only); bg_10; DaemonTestReviewer completed review; D1–D4.
+- **Reversibility:** easy
+- **Confidence:** high for exercised typecheck/review, daemon-suite and named smoke results; scripts gate failed as D6 records
+- **Revisit if:** Final suite or merge-result typecheck fails.
+- **Source:** assumed — autonomous
+
+## D6: Preserve the scripts failure inventory under its existing repair ownership
+- **Question:** Can this bounded daemon repair claim every required verification gate passed?
+- **Options:** Misrepresent the scripts result; broaden into another lane's scripts repair; record the exact failures and land the completed daemon item through the typecheck gate.
+- **Chose:** Record the failures in BLOCKERS.md and retain the existing scripts repair ownership.
+- **Why:** Final canonical daemon suite passed all77files,zero failures,no flaky reruns (71.44s), confirming the named baseline failure is repaired. Full scripts returned113pass/13fail/1,071assertions across12files (106.72s). Twelve failures concern UI-review fixtures/reviewer errors and one concerns its malformed-input error file. Canonical queue status places fix-test-scripts-1028 on lane12; BLOCKERS also records queued fix-test-scripts-ui-review-1028. No source, bypass or repinned assertion was added for these failures.
+- **Evidence:** bg_9 suite-result ok:true/flaky:[]; bg_11/artifact://24; docs/loop/BLOCKERS.md section for this item; canonical queue.ts status after checks.
+- **Reversibility:** easy
+- **Confidence:** high for observed results; no attribution of all failures to an earlier change
+- **Revisit if:** The scripts repair identifies an interaction with this test-only change.
+- **Source:** assumed — autonomous
+
 ## Progress
-Bounded regression repair implemented; focused test passes and isolated public-API smoke exits0 with cleanup marker. Canonical before suite reproduced exactly one failing file (76/77 pass). Static review is running. Next: commit, single roadmap catch-up/read incoming decisions, run scripts/typecheck/canonical daemon suite, record results, detach and land the one claimed item.
+Ready to land. Repair/source committed f15cf390; single roadmap catch-up brought queue status only, no incoming decisions. Focused auxiliary test1pass/0fail/19assertions; isolated public-API smoke exit0 with cleanup marker; review approved without findings; canonical daemon suite77/77files passed without flakes71.44s; full typecheck passed37.23s. Scripts113pass/13fail/1,071assertions106.72s retained in BLOCKERS under existing repair ownership. All workers and verification jobs returned; no owned runtime remains. Commit final decision/failure receipt, detach and canonical queue.ts land, then remove owned /tmp smoke.
