@@ -27,19 +27,20 @@
       },
       {
         "id": "workspaceNotes",
-        "description": "Read Markdown review notes across a worktree, including closed buffers, or settle exact delivered/cleared snapshots. Canonical notes remain editor-owned.",
+        "description": "Read Markdown review notes across a worktree, reserve/release delivery snapshots, or settle exact delivered/cleared snapshots. Canonical notes remain editor-owned.",
         "params": {
           "type": "object",
           "properties": {
             "worktree": { "type": "string" },
-            "action": { "type": "string", "enum": ["list", "settle"] },
+            "action": { "type": "string", "enum": ["list", "reserve", "release", "settle"] },
             "path": { "type": "string", "description": "Optional worktree-relative path filter for list." },
-            "snapshots": { "type": "array", "items": { "type": "object", "description": "Exact note object returned by list; every persisted field must still match before deletion." } }
+            "snapshots": { "type": "array", "items": { "type": "object", "description": "Exact note object returned by list; every persisted field must still match before reservation or deletion." } },
+            "holdId": { "type": "string", "description": "Required unique delivery identifier for reserve/release. When supplied to settle, only snapshots reserved by this identifier can be deleted." }
           },
           "required": ["action"],
           "additionalProperties": false
         },
-        "result": { "type": "object", "description": "list returns {notes: MarkdownReviewNote[]}; settle returns {deletedNoteIds:string[],retainedNoteIds:string[]}. Changed snapshots survive; another worktree is never modified." }
+        "result": { "type": "object", "description": "list returns {notes: MarkdownReviewNote[]}; reserve returns {reservedNoteIds,unavailableNoteIds}; release returns {releasedNoteIds}; settle returns {deletedNoteIds,retainedNoteIds}. ID lists contain strings. Changed snapshots survive; another worktree is never modified. A reservation is shared with Markdown-rail sends and released in finally on every outcome." }
       },
       {
         "id": "open",

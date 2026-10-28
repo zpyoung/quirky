@@ -77,5 +77,16 @@
 - **Revisit if:** metadata affects a required check.
 - **Source:** assumed — autonomous
 
+## D8: Coordinate Markdown sends in the canonical owner
+- **Question:** Can Git-local note holds prevent a simultaneous Markdown-rail send?
+- **Options:** rely only on Git-local holds; add editor-owned reserve/release shared with the rail.
+- **Chose:** workspaceNotes reserve/release with worktree-bound unique holdId; exact snapshots reserved before delivery; settle with that holder only after confirmed delivery; release in finally. Rail sends use the same map before their first await.
+- **Why:** separate local hold maps allow two surfaces to deliver the same note; an owning-store reservation provides the shared fence without private imports.
+- **Evidence:** editor markdown/notes.ts:261–308,364–367; git daemon/targets.ts:163–176; ParityMixedNotes proposed contract; committed schema amendment.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** cross-process plugin hosting is introduced.
+- **Source:** assumed — autonomous
+
 ## Progress
 Step4: source mapping complete, combined spec self-reviewed and shared saveAs/workspaceNotes schemas authored. Commit contracts/spec before <=3 implementation components. Parent owns sidebar edge verification and final integration/gates. No current passing implementation claim; original baseline source/test presence is only mapping evidence. Existing native Finder item remains blocked independently.
