@@ -291,8 +291,10 @@ unknown safety data still blocks merging.
 Project-item edits and comment updates do not prompt. Deleting a project-item
 comment uses the same kernel confirmation rule as merge; authorize it with
 `--yes` or an answered confirmation. `project-item-mutation-confirmation` previews
-that deletion without changing data. Issue-type actions currently require an
-organization-owned project; support for user-owned projects is tracked separately.
+that deletion without changing data. Issue types belong to the Issue's repository,
+not the Project containing it: user-owned Projects can edit organization-repository
+types. Personal repositories expose no organization types; unavailable or disabled
+types are refused before mutation.
 
 `gh` owns credentials. Normal requests use its ambient login or a repository's
 configured keyring-account binding; a failed binding never falls back to another
@@ -304,6 +306,11 @@ and review actions, file contents, issues, work-item searches, Projects v2, and
 connection-owned refreshes. Use `quirky api --json` for the live method, parameter,
 result, and event contracts. Fixed-cap reads report truncation, partial results, or a limit error;
 only work-item search exposes client `--page` and `--limit`.
+
+Concurrent work-item search/count reads batch within the same authenticated repository
+scope. Valid cursor pages are reused for up to two minutes within bounded caches;
+forced refresh and mutations invalidate them. A failed GraphQL alias does not discard
+another alias's successful result. Tasks' direct numbered pages remain direct requests.
 
 Top-level PR conversation comments use `hosting review-conversation`, not issue
 or Project mutation routes:
@@ -380,9 +387,12 @@ The live API catalog contains all method schemas and generated command aliases.
 slot reports are bounded summaries pointing to that method, so large comments or
 diffs do not exceed the kernel's 64-KiB report limit.
 
-Other-provider review/create/settings and in-app link routing have explicit
-prerequisite-dependent queue items; current cards and routing never claim those
-unavailable capabilities succeeded. Clipboard/system-browser/focus behavior is
+Review links use Browser's Link Routing setting and Shift+Cmd/Ctrl modifier policy.
+Each PR/Checks action carries its originating worktree, including when the two surfaces
+show different worktrees. API callers can supply `--worktree`; an omitted target is
+inferred only from an unambiguous visible Review/Checks context. Routing failures do
+not silently launch the system browser. Other-provider review/create/settings remain
+explicitly deferred. Clipboard/system-browser/focus and native guest behavior are
 handed to the native scenario run, not inferred from headless web output.
 ## GitHub Tasks
 
