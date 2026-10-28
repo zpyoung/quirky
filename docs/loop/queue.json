@@ -585,8 +585,7 @@
       "deps": [
         "sa-browser-agent"
       ],
-      "status": "in-progress",
-      "lane": 4
+      "status": "done"
     },
     {
       "id": "sa-browser-profiles-settings",
