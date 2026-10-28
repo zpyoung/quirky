@@ -69,7 +69,7 @@ export function startFixtureServer(): FixtureServer {
 }
 
 function createTestPluginDir(builtinPluginsDir: string, includeMobile: boolean): void {
-  const plugins = ['quirky.repo', 'quirky.worktree', 'quirky.agents', 'quirky.session', 'quirky.terminal', 'quirky.editor']
+  const plugins = ['quirky.cli', 'quirky.repo', 'quirky.worktree', 'quirky.agents', 'quirky.session', 'quirky.terminal', 'quirky.editor']
   if (includeMobile) plugins.push('quirky.mobile')
   for (const id of plugins) symlinkSync(join(PLUGINS, id), join(builtinPluginsDir, id))
   const pluginDir = join(builtinPluginsDir, 'quirky.browser')
