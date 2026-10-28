@@ -14,6 +14,7 @@ export type ListRowProps = {
   title: ReactNode
   description?: ReactNode
   status?: UiStatus
+  progress?: number
   count?: number
   trailing?: ReactNode
   selected?: boolean
