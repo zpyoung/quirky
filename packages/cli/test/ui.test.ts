@@ -112,6 +112,16 @@ describe('ui contributions', () => {
   })
 })
 
+describe('ui tool commands', () => {
+  test('invalid slots and empty size changes fail before reaching the daemon', async () => {
+    const close = await run(['ui', 'close-tool', 'middle'])
+    const resize = await run(['ui', 'resize-tools'])
+    expect(close.code).toBe(2)
+    expect(resize.code).toBe(2)
+    expect(daemon.calls).toEqual([])
+  })
+})
+
 describe('help', () => {
   test('lists the ui group and the command in the top-level help', async () => {
     const group = await run(['ui', '--help'])

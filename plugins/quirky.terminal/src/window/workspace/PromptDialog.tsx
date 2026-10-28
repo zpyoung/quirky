@@ -1,4 +1,5 @@
-import { useState, type FormEvent } from 'react'
+import { useId, useState, type FormEvent } from 'react'
+import { Button, FormRow } from '@quirky/ui'
 import { Dialog } from './Dialog'
 
 /** What a `+` menu row asks for: an agent session, optionally one that runs without a terminal. */
@@ -12,6 +13,7 @@ type Props = {
 
 /** Asks for the first prompt of a new agent session; a background session cannot start without one. */
 export function PromptDialog({ request, onSubmit, onClose }: Props) {
+  const promptId = useId()
   const [prompt, setPrompt] = useState('')
   const required = request.background
   const canSubmit = !required || prompt.trim().length > 0
@@ -24,9 +26,10 @@ export function PromptDialog({ request, onSubmit, onClose }: Props) {
   return (
     <Dialog title={`New ${request.label} session`} onClose={onClose}>
       <form className="qt-form" onSubmit={submit}>
-        <label>
-          {required ? 'Prompt' : 'Initial prompt (optional)'}
+        <FormRow label={required ? 'Prompt' : 'Initial prompt (optional)'} htmlFor={promptId}>
           <textarea
+            id={promptId}
+            className="ui-text-field__input"
             autoFocus
             rows={5}
             value={prompt}
@@ -35,14 +38,14 @@ export function PromptDialog({ request, onSubmit, onClose }: Props) {
               if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && canSubmit) onSubmit(prompt)
             }}
           />
-        </label>
-        <div className="qt-dialog-actions">
-          <button type="button" onClick={onClose}>
+        </FormRow>
+        <div className="ui-dialog__actions qt-dialog-actions">
+          <Button type="button" variant="secondary" onClick={onClose}>
             Cancel
-          </button>
-          <button type="submit" className="qt-primary" disabled={!canSubmit}>
+          </Button>
+          <Button type="submit" variant="primary" disabled={!canSubmit}>
             Start
-          </button>
+          </Button>
         </div>
       </form>
     </Dialog>

@@ -2,6 +2,17 @@
 
 This directory holds Quirky's built-in plugins, one per subdirectory, each with a `quirky-plugin.json` manifest. The daemon finds it through `QUIRKY_BUILTIN_PLUGINS_DIR`.
 
+## Terminal workspace
+
+Terminal views stay in the center; **Terminal sessions** and **Quick commands** open
+in the bottom-left tool slot by default and can be moved with the host's tool controls.
+Workspace tabs, pane actions, search, floating terminals, quick-command dialogs and the
+agent composer use the shared graphite controls in dark and light appearances.
+Existing terminal palette overrides, shortcuts, split layouts and pane-owned drafts
+are unchanged. Context menus render above adjacent tools, including nested command menus.
+
+See the [terminal presentation specification](../docs/quirk/specs/2026-10-28-ui-restyle-terminal/logic.md).
+
 ## Terminal dock
 
 `quirky.terminal-dock` provides an opt-in composer below recognized terminal agents.
@@ -882,6 +893,11 @@ supports nested/empty details sections, collapsible headings and `[[document lin
 unsupported forms still open in Source mode rather than silently losing content.
 Document-link completion is keyboard-accessible and does not run during IME composition.
 
+Explorer **Copy Path** copies the exact absolute path; **Copy Relative Path** is relative
+to the worktree even when Explorer displays a subfolder. Multi-selection copies one path
+per line without shell quoting. Row drags into a terminal retain worktree ownership and
+insert shell-escaped paths; **Open in Terminal** uses the selected directory directly.
+
 The buffer's optional `diskWritable` is advisory effective OS access, separate from the
 format's `readOnly` capability. A readable non-writable Markdown file can keep drafts and
 local review notes. The actual save is authoritative: denial retains the draft and dirty
@@ -912,4 +928,17 @@ preferences retain conservative corrupt-state recovery. Separator presentation e
 first, host-adjacent, sticky and nested boundaries without changing row geometry.
 
 [Completion contracts and acceptance scenarios](../docs/quirk/specs/2026-10-28-m7-editor-source-control-completion/logic.md).
+
+## Saved CLI runtimes
+
+`quirky cli runtime add --name <name> --code <pairing-offer>` saves a paired
+target in the private `QUIRKY_HOME` store (mode `0600`). Treat the offer as a
+credential even when its token is encoded in a pairing URL. Add, list, show and
+status return only credential-free summaries; using a saved target resolves its
+private offer for the encrypted connection. Malformed offers are rejected before
+the runtime store is created.
+
+Remove a saved target with `quirky cli runtime remove --selector <id> --yes`.
+Removal prevents new connections through that saved selector; it does not revoke
+the remote device grant or terminate an already established connection.
 

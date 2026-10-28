@@ -96,7 +96,7 @@ const openPaneMenu = async (view: Mounted, pane: string) => {
 }
 const labels = (view: Mounted): string[] => view.last().menu.items.map((item: any) => (item.separator ? '---' : item.label))
 const row = (view: Mounted, label: string) =>
-  [...view.element.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((el) => el.querySelector('.qt-menu-label')?.textContent === label) ?? null
+  [...view.element.ownerDocument.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((el) => el.querySelector('.qt-menu-label')?.textContent === label) ?? null
 
 describe('SC-1: agent panes offer the handoff, shell panes do not', () => {
   test('an agent pane shows the contributed row directly below Quick Commands', async () => {

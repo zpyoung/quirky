@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test'
 import { join } from 'node:path'
 import { Terminal } from '@xterm/headless'
 import { base64ToBytes } from '@quirky/protocol'
@@ -8,7 +8,9 @@ import { MODE_RESET } from '../src/history/restore'
 import { type CreateParams, SessionManager, type SessionManagerOptions } from '../src/session'
 import { concat, onCleanup, runCleanups, scopeForHome, tempHome, text, trackSessionProcesses, waitFor } from './helpers'
 
-afterEach(runCleanups)
+// The 10 s screen wait and scoped process cleanup must fit inside the outer test deadline.
+setDefaultTimeout(60_000)
+afterEach(runCleanups, 60_000)
 
 const ENV = { PATH: '/usr/bin:/bin', TERM: 'xterm-256color' }
 const enc = (s: string) => new TextEncoder().encode(s)

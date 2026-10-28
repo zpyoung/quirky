@@ -782,7 +782,6 @@
       { "id": "showGitIgnoredFiles", "type": "boolean", "default": true, "title": "Show Git-Ignored Files", "description": "Include ignored paths in explorer inventory." },
       { "id": "followSymlinkedDirectories", "type": "boolean", "default": false, "title": "Follow Symlinked Directories", "description": "Follow only linked directories whose targets remain inside the worktree." },
       { "id": "editorFontZoomLevel", "type": "number", "default": 0, "minimum": -6, "maximum": 18, "title": "Editor Font Zoom", "description": "Editor-only font zoom level." },
-      { "id": "activityBarPosition", "type": "enum", "default": "top", "values": ["top", "side"], "title": "Activity Bar Position", "description": "Place the activity bar above or beside the sidebar." },
       { "id": "editorSidebarWidth", "type": "number", "default": 350, "minimum": 220, "maximum": 900, "title": "Editor Sidebar Width", "description": "Preferred sidebar width in CSS pixels." }
     ],
     "command": [

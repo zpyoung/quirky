@@ -1,15 +1,15 @@
 import { useEffect } from 'react'
+import { ContextMenu } from '@quirky/ui'
 import { displayTitle } from '../../layout/titles'
 import { ClosePinnedDialog, CloseRunningDialog } from './CloseDialogs'
 import type { ControllerState, DialogState, WorkspaceController } from './controller'
-import { Menu } from './Menu'
 import { PromptDialog } from './PromptDialog'
 import { locateTab } from './model'
 
 function PlusSearch({ controller, query }: { controller: WorkspaceController; query: string }) {
   return (
     <input
-      className="qt-menu-search"
+      className="ui-text-field__input qt-menu-search"
       autoFocus
       aria-label="Search open tabs and agents…"
       placeholder="Search open tabs and agents…"
@@ -25,7 +25,7 @@ export function MenuLayer({ controller, state }: { controller: WorkspaceControll
   if (!menu) return null
   const plus = menu.kind === 'plus'
   return (
-    <Menu
+    <ContextMenu
       key={`${menu.kind}:${menu.target}`}
       items={controller.menuItems()}
       label={menu.kind === 'plus' ? 'New tab' : `${menu.kind} menu`}

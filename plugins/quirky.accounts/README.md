@@ -11,3 +11,7 @@ The returned `env` is an environment patch, not credentials. String values are a
 ```sh
 orca accounts prepare-provider-env --agent codex --cwd "$PWD" --home-overrides '{"claude":{"value":null,"source":"absent"},"codex":{"value":null,"source":"absent"}}'
 ```
+
+## Native sign-in links
+
+Codex sign-in's **Open** button sends the displayed, approved authorize URL through the public `quirky.terminal/openExternal` system-handler API rather than a webview popup. While the handoff is pending, **Copy link** and **Cancel** remain available. A failed handoff shows a recoverable error; retrying does not restart sign-in or change the URL.

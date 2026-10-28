@@ -373,7 +373,7 @@ describe('spec refusals', () => {
         { id: 'free', type: 'text', question: 'Anything else?', default: 'API token' }
       ]
     }
-    const cli = await cliFor({ QUIRKY_SESSION_ID: 'sess_1' })
+    const cli = await cliFor()
     await run(cli, 'ask', { spec: JSON.stringify(accepted), 'chunk-ms': 100 })
     expect(cli.lines).toHaveLength(2)
     expect((cli.lines[0] as { status: string }).status).toBe('registered')
@@ -565,6 +565,7 @@ describe('--chunk-ms', () => {
   test('SC-20: the real quirky binary prints the same two lines', async () => {
     const userHome = mkdtempSync(join(tmpdir(), 'qa-cli-home-'))
     try {
+      await openWindow(h)
       const proc = Bun.spawn([process.execPath, CLI_MAIN, 'ask', '--spec', specJson, '--chunk-ms', '300'], {
         cwd: dir,
         env: { PATH: '/usr/bin:/bin', HOME: userHome, QUIRKY_HOME: h.home },

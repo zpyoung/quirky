@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { RpcErrorCode, type QuirkyEvent, type Session, type UiMenuItemEntry, type UiPluginContext } from '@quirky/protocol'
+import { CONTEXT_MENU_SEPARATOR, type ContextMenuItem } from '@quirky/ui'
 import { displayTitle } from '../../layout/titles'
 import { findGroup, groupsInOrder, paneLeaves, setGroupRatio, setPaneRatio } from '../../layout/tree'
 import type { DropZone } from '../../layout/tree'
@@ -7,7 +8,6 @@ import { FLOATING_WORKSPACE, isTerminalTab, isViewTab, TAB_COLOR_HEX, TAB_COLORS
 import type { Edge, Group, GroupNode, PaneLeaf, PaneNode, Tab, Workspace } from '../../layout/types'
 import type { PaneReport, SearchOptions, TerminalPaneHandle, TerminalPaneProps } from '../pane/TerminalPaneView'
 import type { DockState } from '../dock/types'
-import { SEPARATOR, type MenuItem } from './Menu'
 import { AGENTS_VIEW_ID, TERMINAL_ONLY_MENU, filterEntries, loadMenuEntries, type MenuEntry } from './menuEntries'
 import { focusedController } from './registry'
 import {
@@ -82,7 +82,7 @@ export type ControllerState = {
 }
 type DockHostState = { mounted: boolean; focused: boolean; composerFocused: boolean }
 
-export type MenuContributionItem = MenuItem & Pick<UiMenuItemEntry, 'after'>
+export type MenuContributionItem = ContextMenuItem & Pick<UiMenuItemEntry, 'after'>
 /** The slots and switches a host of the workspace can set. */
 export type WorkspaceOptions = {
   /** `floating` mounts the floating workspace: no tab is created for it, and closing its last tab minimizes the panel. */
@@ -90,9 +90,9 @@ export type WorkspaceOptions = {
   /** Rendered after the `+` button of each group's strip. */
   stripExtras?: (group: Group) => ReactNode
   /** Quick-command rows supplied by the terminal host for this pane. */
-  paneMenuExtras?: (pane: PaneLeaf) => MenuItem[]
+  paneMenuExtras?: (pane: PaneLeaf) => ContextMenuItem[]
   /** Rows other plugins contribute to the pane menu, shown right after the Quick Commands row. */
-  paneMenuContributions?: (pane: PaneLeaf, session: Session | undefined) => MenuItem[]
+  paneMenuContributions?: (pane: PaneLeaf, session: Session | undefined) => ContextMenuItem[]
   /** After-placed tab rows are searchable; unplaced rows are static, before Agent settings. */
   tabMenuContributions?: (group: Group, workspace: string) => MenuContributionItem[]
   /** The public menu contribution list changes, keeping an open + menu current. */
@@ -100,7 +100,7 @@ export type WorkspaceOptions = {
   /** Effective user-remappable shortcut labels; null hides disabled or shadowed commands. */
   shortcutKey?: (command: string) => string | null
   /** Menus beyond `tab`, `pane`, `plus` and `actions`, opened by `openMenu(kind, target)`. */
-  extraMenus?: Record<string, (target: string | null) => MenuItem[]>
+  extraMenus?: Record<string, (target: string | null) => ContextMenuItem[]>
   /** The element carrying the theme's custom properties; defaults to the mount element. */
   themeSource?: Element
   createWebgl?: TerminalPaneProps['createWebgl']
@@ -1046,7 +1046,7 @@ export class WorkspaceController {
   }
 
   /** The rows of the open menu, in display order. */
-  menuItems(): MenuItem[] {
+  menuItems(): ContextMenuItem[] {
     const menu = this.state.menu
     if (!menu) return []
     switch (menu.kind) {
@@ -1077,14 +1077,14 @@ export class WorkspaceController {
   }
 
 
-  private tabMenuItems(tabId: string): MenuItem[] {
+  private tabMenuItems(tabId: string): ContextMenuItem[] {
     const ws = this.ws
     const loc = ws ? locateTab(ws, tabId) : null
     if (!ws || !loc) return []
     const { group, tab } = loc
     const index = group.tabs.findIndex((entry) => entry.id === tabId)
     const sides: ['Right' | 'Left' | 'Down' | 'Up', 'right' | 'left' | 'down' | 'up'][] = [['Right', 'right'], ['Left', 'left'], ['Down', 'down'], ['Up', 'up']]
-    const items: MenuItem[] = [
+    const items: ContextMenuItem[] = [
       {
         label: 'Move Tab to Split',
         enabled: group.tabs.length > 1,
@@ -1118,7 +1118,7 @@ export class WorkspaceController {
     return items
   }
 
-  private paneMenuItems(paneId: string): MenuItem[] {
+  private paneMenuItems(paneId: string): ContextMenuItem[] {
     const ws = this.ws
     const loc = ws ? locatePane(ws, paneId) : null
     if (!ws || !loc) return []
@@ -1126,19 +1126,19 @@ export class WorkspaceController {
     const split = paneLeaves(tab.root).length > 1
     const quick = this.options.paneMenuExtras?.(leaf) ?? []
     const contributed = this.options.paneMenuContributions?.(leaf, this.state.sessions[leaf.session]) ?? []
-    const items: MenuItem[] = [
+    const items: ContextMenuItem[] = [
       { label: 'Copy', key: this.menuKey('copy', '⌘C'), onSelect: () => this.copy(paneId) },
       { label: 'Select All', key: this.menuKey('select-all', '⌘A'), onSelect: () => this.selectAll(paneId) },
       { label: 'Paste', key: this.menuKey('paste', '⌘V'), onSelect: () => void this.pasteFromClipboard(paneId) },
       { label: 'Quick Commands', submenu: quick.length > 0 ? quick : [{ label: 'No quick commands', enabled: false }] },
       ...contributed,
-      SEPARATOR,
+      CONTEXT_MENU_SEPARATOR,
       { label: 'Split Terminal Right', key: this.menuKey('split-right', '⌘D'), onSelect: () => void this.splitRight(paneId) },
       { label: 'Split Terminal Down', key: this.menuKey('split-down', '⌘⇧D'), onSelect: () => void this.splitDown(paneId) }
     ]
     const dock = this.state.dockStates[paneId]
     if (this.state.sessions[leaf.session]?.kind === 'terminal' && dock?.enabled && dock.supported) {
-      items.push(SEPARATOR, {
+      items.push(CONTEXT_MENU_SEPARATOR, {
         label: dock.docked ? 'Hide agent composer' : 'Show agent composer',
         key: this.menuKey('command:quirky.terminal-dock/toggle', '⌘⇧K'),
         onSelect: () => {
@@ -1154,7 +1154,7 @@ export class WorkspaceController {
         { label: tab.expandedPane === null ? 'Expand Pane' : 'Collapse Pane', key: this.menuKey('toggle-expand-pane', '⌘⇧Enter'), onSelect: () => void this.toggleExpand(paneId) }
       )
     }
-    items.push(SEPARATOR, { label: 'Set Title…', onSelect: () => void this.setTitle(paneId) })
+    items.push(CONTEXT_MENU_SEPARATOR, { label: 'Set Title…', onSelect: () => void this.setTitle(paneId) })
     if (leaf.title) items.push({ label: 'Clear Pane Title', onSelect: () => void this.clearTitle(paneId) })
     items.push(
       { label: 'Copy Terminal ID', onSelect: () => void this.copyText(leaf.session) },
@@ -1162,20 +1162,20 @@ export class WorkspaceController {
     )
     if (split) items.push({ label: 'Close Pane', key: this.menuKey('close-pane', '⌘W'), danger: true, onSelect: () => void this.closePane(paneId) })
     items.push(
-      SEPARATOR,
+      CONTEXT_MENU_SEPARATOR,
       { label: 'Clear Screen', key: this.menuKey('clear', '⌘K'), onSelect: () => void this.clearPane(paneId) },
       { label: 'Reset Terminal', onSelect: () => void this.resetPane(paneId) }
     )
     return items
   }
 
-  private plusItems(groupId: string | null, query: string): MenuItem[] {
+  private plusItems(groupId: string | null, query: string): ContextMenuItem[] {
     const group = groupId && this.ws ? findGroup(this.ws.root, groupId) : null
     const target = group?.id
     const needle = query.trim().toLowerCase()
     const contributed = group ? (this.options.tabMenuContributions?.(group, this.workspaceId) ?? []) : []
     const entries = filterEntries(this.state.agents, query)
-    const rows: MenuItem[] = entries.map((entry) => ({
+    const rows: ContextMenuItem[] = entries.map((entry) => ({
       label: entry.label,
       key: entry.kind === 'terminal' ? this.menuKey('command:quirky.session/new-shell', '⌘T') : null,
       onSelect: () => this.chooseEntry(entry, target)
@@ -1198,7 +1198,7 @@ export class WorkspaceController {
     return rows
   }
 
-  private actionItems(groupId: string): MenuItem[] {
+  private actionItems(groupId: string): ContextMenuItem[] {
     const split = this.ws?.root.kind === 'split'
     return split ? [{ label: 'Close Split Pane', onSelect: () => void this.closeGroup(groupId) }] : []
   }
@@ -1253,7 +1253,7 @@ export class WorkspaceController {
 
   private async pasteFromClipboard(paneId: string): Promise<void> {
     try {
-      const text = await navigator.clipboard?.readText()
+      const text = await this.context.readClipboardText()
       if (text) await this.paste(text, paneId)
     } catch (error) {
       this.context.toast('Could not paste', messageOf(error))

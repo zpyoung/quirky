@@ -1,9 +1,9 @@
 import { createRoot } from 'react-dom/client'
+import { EmptyState } from '@quirky/ui'
 import type { UiPluginContext } from '@quirky/protocol'
 import { FLOATING_WORKSPACE } from '../../layout/types'
 import { WorkspaceController, type WorkspaceOptions } from './controller'
 import { registerController } from './registry'
-import { injectWorkspaceStyles } from './styles'
 import { WorkspaceView } from './WorkspaceView'
 
 function parseInput(input: unknown): { worktree: string | null; session: string | undefined } {
@@ -25,14 +25,13 @@ export function mountWorkspace(
   props: { input?: unknown; report?(state: unknown): void },
   options: WorkspaceOptions = {}
 ): () => void {
-  injectWorkspaceStyles(element.ownerDocument)
   Object.assign(element.style, { display: 'flex', flexDirection: 'column', flex: '1', minHeight: '0', minWidth: '0', position: 'relative' })
   const root = createRoot(element)
   const { worktree, session } = parseInput(props.input)
   const floating = options.workspace === 'floating'
 
   if (!floating && worktree === null) {
-    root.render(<p className="muted pad qt-muted qt-pad">Pick a worktree to see its sessions.</p>)
+    root.render(<EmptyState message="Pick a worktree to see its sessions." />)
     props.report?.({ worktree: null, tabs: [], active: null, visibleSessions: [] })
     return () => root.unmount()
   }

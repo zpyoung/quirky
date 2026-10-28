@@ -17,10 +17,13 @@ const open: WindowEnv[] = []
  * A real daemon with the plugins `write` installs under its home, and a headless window connected
  * to it once the window's layout and UI model have loaded. `closeWindows` ends everything started.
  */
-export async function bootWindow(write: (installed: string) => void): Promise<WindowEnv> {
+export async function bootWindow(
+  write: (installed: string) => void,
+  options?: { builtinPluginsDir?: string | null }
+): Promise<WindowEnv> {
   const home = makeTempHome()
   write(join(home, 'plugins'))
-  const harness = await startHarness({ home, builtinPluginsDir: null })
+  const harness = await startHarness({ home, builtinPluginsDir: options?.builtinPluginsDir ?? null })
   const win = await startHeadlessWindow({ home, runtime: harness.runtime })
   const env = { harness, win, agent: await harness.connect('cli', 'agent') }
   open.push(env)
