@@ -2,7 +2,7 @@
 
 ## Status & amendments
 Status: Approved autonomously under LOOP.md night mode. One logic spec with technical decisions; no separate tech.md or spec review.
-Amendments: None.
+Amendments: 2026-10-27 — D7 adds opt-in authenticated plugin lifetime on public structured create/resume, required because plugin contexts are revoked before deactivate. Native worker/independent session lifetime stays unchanged.
 
 ## Purpose and conceptual model
 A watcher remains deterministic on its happy path. An optional resumable Claude owner is woken only to handle a typed deviation. The journal records the deviation, issued brief/report identity, session and intervention outcome. Ownership is not the shadow judgment service and never bypasses ordinary gates.
@@ -24,6 +24,7 @@ Enrollment optionally carries owner {agent: claude, model?, effort?} and a separ
 - Gates: independent owner-intervention plus native capability, ordinary exact approvals, stale evidence and write-ahead uncertainty. Kind-specific intervention is translated by the registered kind's own hook. Off cannot be bypassed by continue or a control command.
 - Recovery: persist issue before create/send. Lost create/send reply is uncertainty, not permission to duplicate the turn. Persist native conversation/session; after daemon restart resume through structured/resume, never silently start a replacement conversation.
 - Timing: idle at verified prompt for120000ms => stall/idle; no mailbox progress900000ms => stall/silent. Grace recheck capped15000ms. Owner silence900000ms => re-wake once; another900000ms => park owner-escalation. Pause/disarm/shutdown never launch new owner turns or effects; human answer targets exactly the current owner escalation.
+- Native lifetime: owner create/resume use `lifetime: plugin`. Structured derives the creating plugin from authenticated caller identity and stops that live owner connection after the creator is disabled/removed; independent sessions remain usable. Daemon shutdown continues to stop all native structured connections through the structured plugin's own teardown. Historical native conversation records remain resumable; each resumed live owner connection explicitly binds its current creator.
 - No owner: prose question in final paragraph (question mark plus interrogative/choice cue) => worker-escalation with messageId prose-question:<idleSinceMs>, park. Otherwise record deduplicated worker-idle only; uncertain observation never proves idle/exit.
 - Platform: portable Bun/TypeScript; verification macOS only. Linux/Windows lifecycle verification deferred: platform.
 

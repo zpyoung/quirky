@@ -7,6 +7,7 @@ import type {
   PluginCaller,
   PluginContext,
   Session,
+  PluginInfo,
   SessionProviderSession,
   SessionStatus,
   StructuredMessage,
@@ -185,6 +186,7 @@ export function activate(context: PluginContext): void {
   const agentRunners = new Map<StructuredAgent, StructuredRunner>()
   const runnerBySession = new Map<string, StructuredRunner>()
   const startTasks = new Map<string, Promise<void>>()
+  const pluginLifetimes = new Map<string, string>()
   let statusQueue: Promise<void> = Promise.resolve()
   const ensureActive = (): void => {
     if (!active) throw new Error('structured plugin is deactivated')
@@ -200,6 +202,7 @@ export function activate(context: PluginContext): void {
   const releaseOwner = (sessionId: string): void => {
     const token = ownersBySession.get(sessionId) ?? live.get(sessionId)?.owner
     if (token) releaseOwnerToken(token)
+    pluginLifetimes.delete(sessionId)
   }
 
   const appendMessage = (msg: NewStructuredMessage): StructuredMessage => {
@@ -477,6 +480,50 @@ export function activate(context: PluginContext): void {
     })
   }
 
+  const lifetimePlugin = async (params: Record<string, unknown>, caller: PluginCaller): Promise<string | undefined> => {
+    if (params.lifetime === undefined) return undefined
+    if (params.lifetime !== 'plugin' || caller.role !== 'plugin') {
+      throw context.error('invalid-params', 'plugin lifetime requires an authenticated creating plugin')
+    }
+    const plugins = await context.call('plugin.list') as PluginInfo[]
+    if (!plugins.some(plugin => plugin.id === caller.pluginId && (plugin.state === 'active' || plugin.state === 'activating'))) {
+      throw context.error('conflict', 'the creating plugin is not active')
+    }
+    return caller.pluginId
+  }
+
+  const stopTasks = new Map<string, Promise<void>>()
+  const stopSession = (sessionId: string): Promise<void> => {
+    const previous = stopTasks.get(sessionId)
+    if (previous) return previous
+    const entry = live.get(sessionId)
+    if (entry) {
+      entry.stopping = true
+    }
+    const runner = runnerBySession.get(sessionId)
+    const task = (async () => {
+      try {
+        await runner?.stop(sessionId)
+      } finally {
+        await cancelPendingAsks(sessionId)
+        setStatus(sessionId, 'exited')
+        releaseOwner(sessionId)
+        runnerBySession.delete(sessionId)
+      }
+    })()
+    stopTasks.set(sessionId, task)
+    void task.finally(() => { if (stopTasks.get(sessionId) === task) stopTasks.delete(sessionId) }).catch(() => undefined)
+    return task
+  }
+
+  const reconcilePluginLifetimes = async (): Promise<void> => {
+    if (!active || pluginLifetimes.size === 0) return
+    const plugins = await context.call('plugin.list') as PluginInfo[]
+    if (!active) return
+    const current = new Set(plugins.filter(plugin => plugin.state === 'active' || plugin.state === 'activating').map(plugin => plugin.id))
+    await Promise.all([...pluginLifetimes].filter(([, pluginId]) => !current.has(pluginId)).map(([id]) => stopSession(id)))
+  }
+
   const create: MethodHandler = async (params, caller) => {
     if (!isStructuredAgent(params.agent)) {
       throw context.error('invalid-params', 'structured sessions support only the claude or codex agent')
@@ -485,10 +532,11 @@ export function activate(context: PluginContext): void {
       throw context.error('invalid-params', "Extra arguments can't be applied to a structured session.")
     }
     const unsupported = Object.keys(params).find(
-      (key) => !['worktree', 'agent', 'prompt', 'model', 'options', 'extraArgs'].includes(key)
+      (key) => !['worktree', 'agent', 'prompt', 'model', 'options', 'extraArgs', 'lifetime'].includes(key)
     )
     if (unsupported !== undefined) throw context.error('invalid-params', `structured create does not support ${unsupported}`)
     if (typeof params.prompt !== 'string') throw context.error('invalid-params', 'prompt must be a string')
+    const lifetimePluginId = await lifetimePlugin(params, caller)
     const agent = params.agent
     const prompt = params.prompt
     const worktree = await resolveWorktree(params.worktree, caller)
@@ -558,6 +606,7 @@ export function activate(context: PluginContext): void {
       owner: token,
       stopping: false
     })
+    if (lifetimePluginId) pluginLifetimes.set(registered.id, lifetimePluginId)
     ownersBySession.set(registered.id, token)
     try {
       journal.setLaunchOptions(registered.id, resolution?.structured ?? {})
@@ -565,16 +614,19 @@ export function activate(context: PluginContext): void {
       startupFailed(registered.id, token, error)
       return registered
     }
+    await reconcilePluginLifetimes()
+    if (live.get(registered.id)?.stopping) return registered
     startRunner(registered, agent, prompt, launchOptions, token)
     return registered
   }
 
-  const resume: MethodHandler = async (params) => {
-    const unsupported = Object.keys(params).find((key) => key !== 'session' && key !== 'prompt')
+  const resume: MethodHandler = async (params, caller) => {
+    const unsupported = Object.keys(params).find((key) => key !== 'session' && key !== 'prompt' && key !== 'lifetime')
     if (unsupported !== undefined) throw context.error('invalid-params', `structured resume does not support ${unsupported}`)
     if (typeof params.prompt !== 'undefined' && typeof params.prompt !== 'string') {
       throw context.error('invalid-params', 'prompt must be a string')
     }
+    const lifetimePluginId = await lifetimePlugin(params, caller)
     const old = await requireStructured(params.session as string)
     ensureActive()
     if (!isStructuredAgent(old.agent)) {
@@ -693,6 +745,9 @@ export function activate(context: PluginContext): void {
       owner: token,
       stopping: false
     })
+    if (lifetimePluginId) pluginLifetimes.set(registered.id, lifetimePluginId)
+    await reconcilePluginLifetimes()
+    if (live.get(registered.id)?.stopping) return registered
     try {
       journal.setLaunchOptions(registered.id, options)
       startRunner(
@@ -725,17 +780,7 @@ export function activate(context: PluginContext): void {
 
   const stop: MethodHandler = async (params) => {
     const session = await requireStructured(params.session as string)
-    const entry = live.get(session.id)
-    if (entry) entry.stopping = true
-    const runner = runnerBySession.get(session.id)
-    try {
-      await runner?.stop(session.id)
-    } finally {
-      await cancelPendingAsks(session.id)
-      setStatus(session.id, 'exited')
-      releaseOwner(session.id)
-      runnerBySession.delete(session.id)
-    }
+    await stopSession(session.id)
     return { ok: true }
   }
 
@@ -755,6 +800,10 @@ export function activate(context: PluginContext): void {
   }
 
   context.subscribe(async (event) => {
+    if (active && event.type === 'plugin.changed') {
+      try { await reconcilePluginLifetimes() }
+      catch (error) { if (active) context.log(`could not stop plugin-lifetime sessions: ${error instanceof Error ? error.message : String(error)}`) }
+    }
     if (!active || event.type !== 'quirky.session/removed') return
     const sessionId = (event.data as { sessionId?: unknown } | null)?.sessionId
     if (typeof sessionId !== 'string') return

@@ -1,5 +1,5 @@
 import type { PluginContext } from '@quirky/protocol'
-import type { Enrollment, ExecuteResult, Json, KernelAction, KernelStore, Snapshot } from '../contracts'
+import type { Enrollment, ExecuteContext, ExecuteResult, Json, KernelAction, KernelStore, OwnerConfig, Snapshot } from '../contracts'
 
 export const OWNER_IDLE_GRACE_MS = 120_000
 export const OWNER_STALL_THRESHOLD_MS = 900_000
@@ -7,7 +7,7 @@ export const OWNER_RECHECK_MS = 15_000
 export const OWNER_BRIEF_MAX_STATE_BYTES = 32 * 1024
 export const MAX_OWNER_REPORT_BYTES = 64 * 1024
 
-export interface OwnerConfig { agent: 'claude'; model?: string; effort?: string }
+export type { OwnerConfig } from '../contracts'
 export const OWNER_DEVIATION_KINDS = [
   'report-rejected', 'node-failed', 'retry-exhausted', 'worker-question', 'worker-escalation',
   'worker-unverifiable', 'worker-exited', 'check-failed', 'review-blocked', 'landing-failed',
@@ -27,7 +27,7 @@ export type OwnerIntervention =
   | { kind: 'message-worker'; dispatchId: string; body: string }
   | { kind: 'kind-action'; action: Json }
 export interface OwnerEnrollment extends Enrollment {
-  owner?: OwnerConfig | null
+  owner?: OwnerConfig
   ownerInterventionCapability?: 'off' | 'gated' | 'on'
 }
 export interface WorkerActivity {
@@ -62,7 +62,7 @@ export interface OwnerRuntimeHost {
 }
 export interface OwnerPending {
   reportKey: string; reportPath: string; deviation: OwnerDeviation; escalationId: string
-  issuedAtMs: number; lastWakeAtMs: number; wakeCount: number
+  issuedAtMs: number; lastWakeAtMs: number; wakeCount: number; contentIdentity: string
   phase: 'issuing' | 'waiting' | 'ready' | 'indeterminate' | 'parked'
   intervention?: OwnerIntervention
 }
@@ -77,5 +77,12 @@ export interface OwnerController {
   ready(watcherId: string, reportKey: string): Promise<{ kind: 'accepted' | 'refused'; reason?: string }>
   answer(watcherId: string, escalationId: string, body: string): Promise<OwnerStepResult>
   inspect(watcherId: string): OwnerState
+  shutdown(): Promise<void>
+}
+
+/** Runner insertion port; proposals always use the ordinary native gate/write-ahead executor. */
+export interface OwnerKernelPort {
+  step(enrollment: Enrollment, snapshot: Snapshot, deviation?: OwnerDeviation): Promise<OwnerStepResult & { action?: KernelAction }>
+  execute(action: KernelAction, context: ExecuteContext): Promise<ExecuteResult>
   shutdown(): Promise<void>
 }

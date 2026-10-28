@@ -1,4 +1,5 @@
 import type { PluginContext, PluginStore, Schema } from '@quirky/protocol'
+import type { OwnerDeviation, OwnerKernelPort } from './owner/contracts'
 
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json }
 export type CapabilityMode = 'off' | 'gated' | 'on'
@@ -7,7 +8,7 @@ export interface OwnerConfig { agent: 'claude'; model?: string; effort?: string 
 export interface BudgetPolicy { wallClockActiveMs: number | null; turns: number | null }
 export interface BudgetUsage { activeMs: number; turns: number; exhausted: 'budget-wall-clock' | 'budget-turns' | null }
 export type PacingTier = 'rapid' | 'active' | 'idle' | 'stopped'
-export type ParkReason = 'budget' | 'stop-predicate' | 'worker-question' | 'worker-escalation' | 'coordinator-seat-lost' | 'configuration-error'
+export type ParkReason = 'budget' | 'stop-predicate' | 'worker-question' | 'worker-escalation' | 'coordinator-seat-lost' | 'configuration-error' | 'owner-escalation'
 export interface Snapshot<W = Json> { freshness: 'live' | 'cached'; contentIdentity: string; observedAtMs: number; world: W }
 export interface KernelAction {
   kind: string; capability: string; visibility: 'external' | 'local'
@@ -17,7 +18,7 @@ export interface KernelAction {
 }
 export interface ApprovalScope { actionKind: string; contentIdentity: string; evidenceKey: string; preparedCommitSha?: string }
 export type GateVerdict = { verdict: 'allow' } | { verdict: 'hold' | 'escalate'; reason: string; detail?: string }
-export interface Deviation { kind: string; detail?: string }
+export type Deviation = OwnerDeviation
 export type Decision<A extends KernelAction = KernelAction> =
   | { action: A; considered?: string[] }
   | { action: null; reason: string; detail?: string; considered?: string[]; deviation?: Deviation }
@@ -31,7 +32,7 @@ export interface ExecuteContext {
   enrollment: Enrollment; attemptId: string; fingerprint: string; signal: AbortSignal
   dispatchWorker(request: WorkerRequest): Promise<DispatchResult>
 }
-export type StopResult = { kind: 'terminal'; state: string; reason: string } | { kind: 'park'; reason: ParkReason; detail: string } | null
+export type StopResult = { kind: 'terminal'; state: string; reason: string } | { kind: 'park'; reason: ParkReason; detail: string; deviation?: OwnerDeviation } | null
 export interface EnrollmentInput {
   kind: string; kindPayload: Json; capabilities?: Record<string, CapabilityMode>; budget?: BudgetPolicy
   owner?: OwnerConfig; ownerInterventionCapability?: CapabilityMode
@@ -91,12 +92,13 @@ export interface WatcherKind<W = Json, A extends KernelAction = KernelAction> {
   pace?(snapshot: Snapshot<W>, journal: JournalEntry[]): PacingTier | Promise<PacingTier>
   stop?(snapshot: Snapshot<W>, journal: JournalEntry[], enrollment: Enrollment): StopResult | Promise<StopResult>
   reconcile?(enrollment: Enrollment, snapshot: Snapshot<W>, journal: JournalEntry[]): Promise<boolean>
+  ownerAction?(intervention: Json, snapshot: Snapshot<W>, journal: JournalEntry[], enrollment: Enrollment): Promise<A>
   concurrency?: { parallelActions?: boolean; drainOnBudget?: boolean }
 }
 /** Serializable public kind registration. All hook references belong to the authenticated declaring plugin. */
 export interface KindRegistration {
   id: string; displayName: string; enrollmentPayloadSchema: Schema
-  hooks: { authorize: string; read: string; decide: string; execute: string; validate?: string; undo?: string; describeSnapshot?: string; resolveOutcome?: string; preflight?: string; pace?: string; stop?: string; reconcile?: string }
+  hooks: { authorize: string; read: string; decide: string; execute: string; validate?: string; undo?: string; describeSnapshot?: string; resolveOutcome?: string; preflight?: string; pace?: string; stop?: string; reconcile?: string; ownerAction?: string }
   concurrency?: WatcherKind['concurrency']; pluginId?: string
 }
 export interface KindRegistry {
@@ -148,6 +150,7 @@ export interface KernelOptions {
   context: PluginContext; store: KernelStore; registry: KindRegistry; orchestration: OrchestrationPort
   now?: () => number; schedulerOwner?: string; executionHostId?: string
   onChanged?: (watcherId: string) => void
+  owner?: OwnerKernelPort
 }
 export interface RunnerOptions extends KernelOptions { enrollment: Enrollment }
 export interface Inspection {

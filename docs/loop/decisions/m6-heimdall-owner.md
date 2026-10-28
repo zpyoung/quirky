@@ -66,5 +66,71 @@
 - **Revisit if:** another platform is authorized
 - **Source:** deferred: platform
 
+## D7: Bind live owner connections to their authenticated creating plugin
+- **Question:** owner native cleanup after the kernel revokes context before deactivate
+- **Options:** bypass revocation/private imports; change kernel ordering; opt-in public structured connection lifetime
+- **Chose:** structured create/resume accept lifetime=plugin only from a registered active/activating authenticated PluginCaller. Structured retains the live connection's creator and reacts to plugin.changed by querying plugin.list and stopping only opt-in connections of inactive creators. Default sessions/workers are unchanged. Historical native conversations remain persisted; owner resume explicitly rebinds the new connection, so a persistent second ownership index is unnecessary.
+- **Why:** no pre-deactivate hook exists. Host marks the owner attempt revoked before deactivate, so its context.call cannot perform cleanup. Structured's own context remains usable after only Heimdall is disabled, and its own teardown stops every connection on daemon shutdown. This preserves locked revocation ordering and public-only composition.
+- **Evidence:** OwnerSurface exact lifecycle investigation; packages/daemon/src/plugins/host.ts:631-678; runtime.ts:123-126,177-180; plugins/quirky.structured/main.ts lifetimePlugin/reconcilePluginLifetimes; public manifest optional lifetime; logic.md amendment
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** a public before-revoke resource lifecycle appears
+- **Source:** assumed — autonomous
+
+## D8: Use scoped service worker effects and separate exact approvals
+- **Question:** common intervention effects, kind mapping, report evidence and control answer ownership
+- **Options:** raw session input/forged coordinator; authenticated owned-run service methods
+- **Chose:** serviceRunShow proves worker membership and exact incarnation; serviceSend messages, serviceReply answers an exact pending question, serviceWorkerStop stops exact live identity. Native common capability names equal intervention kind. owner-intervention has an independent exact approval actionKind owner-intervention:<native-kind>; native approval is insufficient. Report proposals preserve issued content identity. Driver stages a proposal and reads durable attempt results; runner executes it through ordinary gates/write-ahead. Lane10 owns final commandRevision/save/unpark after exact owner answer positively sends.
+- **Why:** source interventions cannot bypass native authority or invent worker credentials, and stale reports cannot silently acquire a fresh content identity. Applying effects outside the runner would violate the write-ahead contract.
+- **Evidence:** /tmp/quirky-lane12-owner-core-reply.md:32-38; /tmp/quirky-lane12-owner-control-reply.md:5-8; owner/{contracts,driver,gate,workers,api}.ts
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** concrete kind requires a different native capability mapping
+- **Source:** assumed — autonomous
+
+## D9: Add a real API/CLI acceptance component without shared writes
+- **Question:** flow-level proof beyond runtime/detector boundary tests
+- **Options:** mock-only unit tests; actual plugin-host/CLI with scripted provider boundary
+- **Chose:** third implementer owns owner-acceptance.test.ts and owner-fakes only, forked from the same63ec64f9 wave base. One wave remains width3, no overlap; parent waits for all returned components before checks/commits. Real daemon/CLI missing-owner smoke first returned -32601 for ownerReady/ownerInspect, daemon cleanup exit0. Final runtime API tests use injected non-paid Claude runner; timeout boundaries use injected clock, not900s sleeps.
+- **Why:** no general daemon clock injection exists. Source CLI and API behavior must actually run; native model work must not touch real accounts or spend tokens.
+- **Evidence:** /tmp/quirky-owner-l12-before.ts output REAL_DAEMON_OWNER_APIS_MISSING_CONFIRMED and daemonExit0; OwnerSurface fixture mapping; process-scope/helper signatures
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** fixture misses a production service ownership boundary
+- **Source:** assumed — autonomous
+
+## D10: Correct concrete red checks and remove incidental timing assertions
+- **Question:** first component acceptance failures and final write-scope attribution
+- **Options:** suppress failures; change source to satisfy incidental scheduling; repair real defects and retain behavioral criteria
+- **Chose:** fixed undefined ready enrollment, unclosed detector regex, bounded report-open/read/shutdown behavior and contact-loss checkpoint cutoff. Emit ordinary owner-deviation escalation revisions for existing inspection. Removed exact internal revision/fold-count assertions and the detector's nextCheck=null assertion, which contradicted an independently scheduled silent check; durable queue test now drives the next tick rather than requiring two work items in one call.
+- **Why:** source requires durable queue progression and exact boundary detection, not incidental per-call sequencing or internal fact counts. The production ready and parser defects were real and repaired, not masked.
+- **Evidence:** initial runtime13pass/6fail and detector syntax error; next runtime18pass/1fail and detector17pass/1fail; corrected runtime19pass/144assertions and detector18pass/65assertions. All component heads still63ec64f9 before parent commit. Scoped new-file lists matched contracts; all three inherited .serena files matched parent hashes in every component.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a flow-level test exposes lost queued work
+- **Source:** assumed — autonomous
+
+## D11: Keep local worker controls inside ordinary write-ahead owner proposals
+- **Question:** common intervention locality and queued-owner pacing
+- **Options:** classify local mailbox/process controls as publishing effects; classify them as local Quirky resource operations
+- **Chose:** common interventions are local actions, still gated by their native capability, separate owner capability, commit fences and durable attempt. Exact worker service identity/ownership remains mandatory. Kind-specific actions preserve their declared local/external visibility. A completed owner proposal requests an immediate next tick, so queued deviations do not wait for idle pacing.
+- **Why:** stop/message/answer operate on Quirky-owned resources, not publishing state; they must remain usable to reconcile a running worker. External native effects retain their existing unresolved-attempt wall. Runtime staging cannot itself execute an effect.
+- **Evidence:** owner/driver.ts action preparation and proposal staging; owner/workers.ts scoped services; pending core runner/gate write-ahead path
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** a future remote execution surface changes resource locality
+- **Source:** assumed — autonomous
+
+## D12: Preserve updated dependency authority contracts and canonical owner types
+- **Question:** early core branch updates and acceptance assumptions
+- **Options:** fork scheduler/worker authority; integrate the published public shapes
+- **Chose:** merge updated core configuration and orchestration store contracts; read core D11–D14 and orchestration D1–D35, including D28's superseding early execution rule. No authority conflict. Canonical OwnerConfig is the base core type. Publish optional OwnerKernelPort, typed natural-key deviation, park owner-escalation and ownerAction hook centrally. Core inspect remains an array even for a selected ID; acceptance selects the matching enrollment instead of changing that API.
+- **Why:** service sender authority is not synthetic session evidence, and owner effects must preserve those boundaries. Inert shared contracts are already published independently of pending runtime implementation.
+- **Evidence:** dependency merge output7files/358insertions; core reply Runtime integration checkpoint; src/contracts.ts; test acceptance inspect helper
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** incoming runtime changes the documented service signatures
+- **Source:** assumed — autonomous
+
 ## Progress
-Claimed lane12 m6-heimdall-owner. Merged early core contracts; dependency wait in bg_1 still pending. Spec self-review complete and shared owner type contracts ready to commit before two implementation components. Core lane notified and reply requested at /tmp/quirky-lane12-owner-core-reply.md. Next: implement runtime/detection, integrate with core as its code arrives, test actual API/CLI, dependency ready/catch-up/review/land. No feature acceptance claimed yet.
+Runtime component ad985463 and detection5b305152 merged after full barrier; both worktrees removed. Tests: runtime19pass/144assertions, detector18pass/65assertions, parent owner gate/worker boundaries6pass/15assertions. Standalone actual daemon plugin-lifetime smoke passed owner stop/independent usability/client refusal with cleanup; owner driver/API module loads. Acceptance component remains uncommitted in /tmp/quirky-owner-acceptance-l12 awaiting real core runtime. Parent source/API/contracts/lifetime ready as checkpoint; core/controls hubs remain untouched until their committed runtime arrives. deps bg_5 returned ready:false pending core after510.34s; no active deps job. Next: merge core and controls runtime, central runner/registry/service/manifest integration, real owner/worker API+CLI flows, affected suite/scripts/typecheck, deps-ready/catch-up/final review/land. No whole-feature acceptance or land claimed.
