@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import type { MountFunction, QuirkyEvent, UiPluginContext } from '@quirky/protocol'
 import type { OrchestrationSkillStatus } from './ui-contracts'
 import { OrchestrationSettings } from './window/OrchestrationSettings'
+import { RemoteWorkerOutputView } from './window/RemoteWorkerOutputView'
 import {
   announceSetupDismissed,
   createLatestRequestGuard,
@@ -13,6 +14,7 @@ import {
 } from './window/setup-state'
 
 const SETTINGS_VIEW_ID = 'view:quirky.orchestration/settings'
+const REMOTE_WORKER_OUTPUT_VIEW_ID = 'view:quirky.orchestration/remote-worker-output'
 const SETUP_OVERLAY_ID = 'overlay:quirky.orchestration/floating-setup'
 const OPEN_SETTINGS_COMMAND_ID = 'command:quirky.orchestration/open-settings'
 const DISMISS_SETUP_COMMAND_ID = 'command:quirky.orchestration/dismiss-setup'
@@ -151,6 +153,13 @@ export function activate(context: UiPluginContext): void {
     return () => root.unmount()
   }
   context.provide(SETTINGS_VIEW_ID, mountSettings)
+  const mountRemoteWorkerOutput: MountFunction = (element, props) => {
+    setViewStyle(element)
+    const root = createRoot(element)
+    root.render(<RemoteWorkerOutputView context={context} input={props.input} />)
+    return () => root.unmount()
+  }
+  context.provide(REMOTE_WORKER_OUTPUT_VIEW_ID, mountRemoteWorkerOutput)
 
   context.provide(SETUP_OVERLAY_ID, (element: HTMLElement, props: { report?: (state: unknown) => void }) => {
     element.style.display = 'contents'

@@ -180,6 +180,10 @@
                 "worktree": {
                   "type": "string"
                 },
+                "on": {
+                  "type": "string",
+                  "description": "Exact saved paired peer ID; remote execution requires an exact existing worktree or new-top-level placement."
+                },
                 "agent": {
                   "type": "string"
                 },
@@ -2270,6 +2274,18 @@
                           "type": "string"
                         }
                       },
+                      "remote": {
+                        "type": "object",
+                        "description": "Host provenance for a source read from a paired worker; sourceIdentity remains the host's exact source pin.",
+                        "properties": {
+                          "peerId": { "type": "string" },
+                          "bindingId": { "type": "string" },
+                          "hostDispatchId": { "type": "string" },
+                          "hostIncarnation": { "type": "string" }
+                        },
+                        "required": ["peerId", "bindingId", "hostDispatchId", "hostIncarnation"],
+                        "additionalProperties": false
+                      },
                       "sourceIdentity": {
                         "type": "string",
                         "description": "Opaque identifier for the exact source snapshot."
@@ -3593,17 +3609,54 @@
             },
             "result": {
               "type": "object",
+              "description": "Local navigation returns a proven terminal session target. A federated worker returns a discriminated read-only output-view route using its home Dispatch ID.",
               "properties": {
+                "kind": {"type": "string", "enum": ["remote_output"]},
                 "taskId": {"type": "string"},
                 "dispatchId": {"type": "string"},
                 "sessionId": {"type": "string"},
-                "worktreeId": {"type": "string"}
+                "worktreeId": {"type": "string"},
+                "viewId": {"type": "string", "description": "For remote_output, view:quirky.orchestration/remote-worker-output."},
+                "input": {
+                  "type": "object",
+                  "properties": {"dispatchId": {"type": "string", "description": "Home Dispatch ID; workerRead resolves the paired host binding."}},
+                  "required": ["dispatchId"],
+                  "additionalProperties": false
+                }
               },
-              "required": ["taskId", "dispatchId", "sessionId", "worktreeId"],
+              "required": ["taskId", "dispatchId"],
               "additionalProperties": false
             }
           }
       ,
+      {
+        "id": "federationSubmissionPreflight",
+        "description": "Plugin-only worker submission callback. Checks an authenticated host worker report against its exact paired home binding before host settlement.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "runId": {"type": "string"},
+            "taskId": {"type": "string"},
+            "dispatchId": {"type": "string"},
+            "type": {"type": "string", "enum": ["worker_done", "status"]},
+            "subject": {"type": "string"},
+            "body": {"type": "string"},
+            "payload": {"description": "Public submission payload object or null; the protocol schema subset cannot express nullable values."}
+          },
+          "required": ["runId", "taskId", "dispatchId", "type", "subject", "body", "payload"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "kind": {"type": "string", "enum": ["accepted", "rejected"]},
+            "code": {"type": "string"},
+            "reason": {"type": "string"}
+          },
+          "required": ["kind"],
+          "additionalProperties": false
+        }
+      },
       {
         "id": "serviceRunCreate",
         "description": "Create or reuse a stable-key Run owned by the authenticated kernel plugin.",
@@ -3676,7 +3729,7 @@
       {
         "id": "peerCall",
         "description": "Plugin-only bounded peer call through the federation method ceiling. Remote mutations require a UUID requestId and expectedIncarnation.",
-        "params": {"type": "object", "properties": {"peerId": {"type": "string"}, "pairingRevision": {"type": "integer"}, "method": {"type": "string"}, "params": {"type": "object", "additionalProperties": true}, "requestId": {"type": "string"}, "timeoutMs": {"type": "integer", "minimum": 1, "maximum": 60000}}, "required": ["peerId", "pairingRevision", "method", "params"], "additionalProperties": false},
+        "params": {"type": "object", "properties": {"peerId": {"type": "string"}, "pairingRevision": {"type": "integer"}, "method": {"type": "string"}, "params": {"type": "object", "additionalProperties": true}, "requestId": {"type": "string"}, "timeoutMs": {"type": "integer", "minimum": 1, "maximum": 180000}}, "required": ["peerId", "pairingRevision", "method", "params"], "additionalProperties": false},
         "result": {"type": "object", "properties": {"peer": {"type": "object"}, "status": {"type": "object"}, "result": {}}, "required": ["peer", "status", "result"]}
       },
       {
@@ -3758,6 +3811,10 @@
                 "type": "string",
                 "description": "Required worktree selector or placement mode.",
                 "required": true
+              },
+              "on": {
+                "type": "string",
+                "description": "Exact saved paired peer ID. Remote placement requires an exact existing worktree or new-top-level."
               },
               "agent": {
                 "type": "string",
@@ -4017,10 +4074,11 @@
           {"id": "skill-install", "words": "skill-install", "summary": "explicitly install or update the orchestration skill", "flags": {"agents": {"type": "json", "param": "agents", "description": "Optional JSON array of detected agent IDs; omitted installs all detected supported targets."}}, "methods": ["quirky.orchestration/skillInstall"]},
           {"id": "policy-show", "words": "policy-show", "summary": "show the nested worker depth policy", "flags": {}, "methods": ["quirky.orchestration/policyShow"]},
           {"id": "policy-set", "words": "policy-set", "summary": "set the nested worker depth policy", "flags": {"nested-worker-max-depth": {"type": "integer", "param": "nestedWorkerMaxDepth", "required": true, "description": "Maximum worker dispatch depth; integer at least 1."}}, "methods": ["quirky.orchestration/policySet"]},
-          {"id": "task-terminal", "words": "task-terminal", "summary": "resolve the exact current session and workspace for a Task", "flags": {"task-id": {"type": "string", "param": "taskId", "required": true, "description": "Task ID to navigate."}}, "methods": ["quirky.orchestration/taskTerminal"]}
+          {"id": "task-terminal", "words": "task-terminal", "summary": "resolve a Task's exact local terminal or read its remote worker output", "flags": {"task-id": {"type": "string", "param": "taskId", "required": true, "description": "Task ID to navigate."}}, "methods": ["quirky.orchestration/taskTerminal"]}
         ],
     "view": [
-      {"id": "settings", "title": "Orchestration", "settings": true}
+      {"id": "settings", "title": "Orchestration", "settings": true},
+      {"id": "remote-worker-output", "title": "Remote worker output"}
     ],
     "overlay": [
       {"id": "floating-setup", "title": "Orchestration setup"}
