@@ -426,3 +426,10 @@ session migrations8/9/10 and background ownership rules. Both newly incoming dec
 read without an M6 authority conflict. Changed-scope verification passed34/34 files with no flaky
 retry; full typecheck passed0diagnostics22.46s; the native kernel process smoke passed again in6.04s.
 Retry queue land without another review or repeat of unchanged green scopes.
+
+Landing attempt2 exercised the whole658-file remote suite plus5 local macOS files. Three initial
+load-sensitive files passed their isolated retries; the persistent failure was the Heimdall
+workspace package manifest missing from the import fence's inputs. Added the conventional private
+`@quirky/plugin-heimdall` package with its sole public protocol dependency and updated bun.lock.
+The actual import fence now passes9/9 tests. No test, runtime authority or deadline was relaxed.
+The roadmap was already up to date for this repair. Retry queue land on this metadata correction.

@@ -268,6 +268,13 @@
         "@types/react-dom": "^19.3.0",
       },
     },
+    "plugins/quirky.heimdall": {
+      "name": "@quirky/plugin-heimdall",
+      "version": "0.1.0",
+      "dependencies": {
+        "@quirky/protocol": "workspace:*",
+      },
+    },
     "plugins/quirky.hosting": {
       "name": "@quirky/plugin-hosting",
       "version": "0.1.0",
@@ -290,6 +297,13 @@
         "@types/react-dom": "^19.3.0",
       },
     },
+    "plugins/quirky.loops": {
+      "name": "@quirky/plugin-loops",
+      "version": "0.1.0",
+      "dependencies": {
+        "@quirky/protocol": "workspace:*",
+      },
+    },
     "plugins/quirky.mobile": {
       "name": "@quirky/plugin-mobile",
       "version": "0.1.0",
@@ -307,13 +321,6 @@
         "@types/react-dom": "^19.3.0",
         "@types/ws": "8.18.1",
       },
-    },
-    "plugins/quirky.loops": {
-      "name": "@quirky/plugin-loops",
-      "version": "0.1.0",
-      "dependencies": {
-        "@quirky/protocol": "workspace:*"
-      }
     },
     "plugins/quirky.notifications": {
       "name": "@quirky/plugin-notifications",
@@ -689,6 +696,7 @@
     "@quirky/plugin-ask": ["@quirky/plugin-ask@workspace:plugins/quirky.ask"],
 
     "@quirky/plugin-automations": ["@quirky/plugin-automations@workspace:plugins/quirky.automations"],
+
     "@quirky/plugin-browser": ["@quirky/plugin-browser@workspace:plugins/quirky.browser"],
 
     "@quirky/plugin-checks": ["@quirky/plugin-checks@workspace:plugins/quirky.checks"],
@@ -699,9 +707,13 @@
 
     "@quirky/plugin-handoff": ["@quirky/plugin-handoff@workspace:plugins/quirky.handoff"],
 
+    "@quirky/plugin-heimdall": ["@quirky/plugin-heimdall@workspace:plugins/quirky.heimdall"],
+
     "@quirky/plugin-hosting": ["@quirky/plugin-hosting@workspace:plugins/quirky.hosting"],
 
     "@quirky/plugin-ledger": ["@quirky/plugin-ledger@workspace:plugins/quirky.ledger"],
+
+    "@quirky/plugin-loops": ["@quirky/plugin-loops@workspace:plugins/quirky.loops"],
 
     "@quirky/plugin-mobile": ["@quirky/plugin-mobile@workspace:plugins/quirky.mobile"],
 
@@ -1696,6 +1708,7 @@
     "express/content-type": ["content-type@2.1.0", "", {}, "sha512-mj7UPXE0jaqaOsukNZRUEfEi2AcL7C/vwmwcHV0O97eO1E1pxBZuyjlZrx5seTaNBg1U6+o35wpa35Qfcc+7ag=="],
 
     "happy-dom/@types/ws": ["@types/ws@8.18.2", "", { "dependencies": { "@types/node": "*" } }, "sha512-67MQl+fpWKVTT1NYdnmo3U4sc/xPo/zQBncVnI74qmQa0z/b+1g6iYqNmGCPbxO+zz2aklb08a0oHfegiVd0/w=="],
+
     "hast-util-from-html/parse5": ["parse5@7.3.0", "", { "dependencies": { "entities": "^6.0.0" } }, "sha512-IInvU7fabl34qmi9gY8XOVxhYyMyuH2xUNpb2q8/Y+7552KlejkRvqvD19nMoUW/uQGGbqNpA6Tufu5FL5BZgw=="],
 
     "hast-util-raw/parse5": ["parse5@7.3.0", "", { "dependencies": { "entities": "^6.0.0" } }, "sha512-IInvU7fabl34qmi9gY8XOVxhYyMyuH2xUNpb2q8/Y+7552KlejkRvqvD19nMoUW/uQGGbqNpA6Tufu5FL5BZgw=="],
