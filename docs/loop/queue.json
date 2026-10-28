@@ -1345,8 +1345,7 @@
       "deps": [
         "m2-editor-complete-remaining-flows"
       ],
-      "status": "in-progress",
-      "lane": 6
+      "status": "done"
     },
     {
       "id": "m7-sweep-automation-completion",
@@ -1409,8 +1408,7 @@
       "deps": [
         "m7-sweep-automation-completion"
       ],
-      "status": "in-progress",
-      "lane": 1
+      "status": "blocked"
     },
     {
       "id": "m7-test-triage",
@@ -1431,8 +1429,7 @@
         "m2-editor-build-unbuilt-flows",
         "m7-sweep-automation-completion",
         "m7-orchestration-heimdall-unbuilt-flows",
-        "sb-mobile-app-panels-unbuilt-flows",
-        "m7-ledger-remote-host-flows"
+        "sb-mobile-app-panels-unbuilt-flows"
       ],
       "status": "todo"
     },

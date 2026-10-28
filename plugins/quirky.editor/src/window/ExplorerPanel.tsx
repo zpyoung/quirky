@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
+import type { ExplorerInteraction } from '../types'
 import { activeDocument } from './activeDocument'
 import { useEditorState, worktreeFromLayout } from './editorState'
 import { clearExplorerSearch, useExplorerSearchIntent } from './explorerIntent'
 import { setEditorSetting, useEditorSettings } from './settings'
 import { importFiles } from './transfers'
 
+const MAX_EXPLORER_CHILD_LISTINGS = 20_001
 const WORKTREE_PATHS_MIME = 'application/x-quirky-worktree-paths'
 
 type ExplorerEntry = { path: string; name: string; isDirectory: boolean; isSymlink: boolean; ignored?: boolean; error?: string }
@@ -21,6 +23,7 @@ type Worktree = { id: string; path: string; name?: string }
 type SearchMatch = { line: number; column: number; matchLength: number; lineContent: string; displayColumn?: number; displayMatchLength?: number }
 type SearchFile = { path: string; relativePath: string; matches: SearchMatch[] }
 type SearchResult = { files: SearchFile[]; totalMatches: number; truncated: boolean; error: string | null; loading: boolean; requestId?: string }
+type ExplorerInteractionResult = ExplorerListing & { expanded?: string[]; interaction?: ExplorerInteraction }
 type GitStatusFile = { path: string; index: string; worktree: string }
 type GitStatusResult = { files: GitStatusFile[] }
 type TreeRow = { entry: ExplorerEntry; depth: number }
@@ -42,6 +45,24 @@ function basename(path: string): string {
 function joinPath(parent: string, child: string): string {
   return parent === '.' ? child : `${parent}/${child}`
 }
+function explorerSeparator(root: string): string {
+  return root.includes('\\') && !root.includes('/') ? '\\' : '/'
+}
+
+function absoluteExplorerPath(root: string, relativePath: string): string {
+  if (relativePath === '' || relativePath === '.') return root
+  const separator = explorerSeparator(root)
+  const prefix = root.endsWith('/') || root.endsWith('\\') ? root : `${root}${separator}`
+  return `${prefix}${relativePath.split('/').join(separator)}`
+}
+
+function relativeExplorerPath(root: string, absolutePath: string): string | null {
+  if (absolutePath === root) return '.'
+  const separator = explorerSeparator(root)
+  const prefix = root.endsWith('/') || root.endsWith('\\') ? root : `${root}${separator}`
+  return absolutePath.startsWith(prefix) ? absolutePath.slice(prefix.length).replaceAll('\\', '/') : null
+}
+
 function topLevelPaths(paths: string[]): string[] {
   return paths.filter((path) => !paths.some((parent) => parent !== path && path.startsWith(`${parent}/`)))
 }
@@ -56,16 +77,20 @@ function escapedGlob(path: string): string {
 
 function flattenEntries(entries: ExplorerEntry[], expanded: Set<string>, children: Map<string, ExplorerEntry[]>): TreeRow[] {
   const rows: TreeRow[] = []
-  const visit = (items: ExplorerEntry[], depth: number) => {
-    for (const entry of items) {
-      rows.push({ entry, depth })
-      if (entry.isDirectory && expanded.has(entry.path)) {
-        const nested = children.get(entry.path)
-        if (nested) visit(nested, depth + 1)
-      }
+  const directories: { entries: ExplorerEntry[]; index: number; depth: number }[] = [{ entries, index: 0, depth: 0 }]
+  while (directories.length > 0 && rows.length < MAX_EXPLORER_CHILD_LISTINGS) {
+    const current = directories[directories.length - 1]!
+    if (current.index >= current.entries.length) {
+      directories.pop()
+      continue
+    }
+    const entry = current.entries[current.index++]!
+    rows.push({ entry, depth: current.depth })
+    if (entry.isDirectory && expanded.has(entry.path)) {
+      const nested = children.get(entry.path)
+      if (nested !== undefined && nested.length > 0) directories.push({ entries: nested, index: 0, depth: current.depth + 1 })
     }
   }
-  visit(entries, 0)
   return rows
 }
 
@@ -79,6 +104,8 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
   const [selectedWorktree, setSelectedWorktree] = useState<string | undefined>()
   const [worktrees, setWorktrees] = useState<Worktree[]>([])
   const worktree = layoutWorktree ?? activeDocument()?.worktreeId ?? selectedWorktree
+  const currentWorktree = useRef(worktree)
+  currentWorktree.current = worktree
   const { state, refresh: refreshEditorState } = useEditorState(context, worktree ? { worktree } : undefined)
   const { settings, error: settingsError } = useEditorSettings(context)
   const intent = useExplorerSearchIntent()
@@ -86,9 +113,22 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
   const [gitStatus, setGitStatus] = useState<Map<string, string>>(new Map())
   const [gitError, setGitError] = useState<string | null>(null)
   const [children, setChildren] = useState<Map<string, ExplorerEntry[]>>(new Map())
+  const childrenRef = useRef<Map<string, ExplorerEntry[]>>(new Map())
+  const directoryLoads = useRef(new Map<string, Promise<void>>())
+  const treeLoadGeneration = useRef(0)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const expandedRef = useRef<Set<string>>(new Set())
   const [selectedPaths, setSelectedPaths] = useState<string[]>([])
-  const selectionAnchor = useRef<string | null>(null)
+  const selectedPathsRef = useRef<string[]>([])
+  const [focusedPath, setFocusedPath] = useState<string | null>(null)
+  const focusedPathRef = useRef<string | null>(null)
+  const [worktreeRoot, setWorktreeRoot] = useState<string | null>(null)
+  const [resolvedWorktreeId, setResolvedWorktreeId] = useState<string | null>(null)
+  const worktreeRootRef = useRef<string | null>(null)
+  const worktreeRootSelectorRef = useRef<string | null>(null)
+  const interactionQueue = useRef(Promise.resolve())
+  const treeRef = useRef<HTMLDivElement>(null)
+  const renameInputRef = useRef<HTMLInputElement>(null)
   const [filterResult, setFilterResult] = useState<ExplorerListing | null>(null)
   const [searchMode, setSearchMode] = useState<'names' | 'contents'>('names')
   const [query, setQuery] = useState('')
@@ -109,7 +149,14 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
   const searchSequence = useRef(0)
   const inlineOpenedAt = useRef(0)
   const inlineBlurTimer = useRef<number | undefined>(undefined)
-
+  useEffect(() => {
+    if (renamePath === null || renameInputRef.current === null) return
+    const offset = Math.max(renamePath.lastIndexOf('/'), renamePath.lastIndexOf('\\')) + 1
+    const name = renamePath.slice(offset)
+    const extension = name.lastIndexOf('.')
+    const stemEnd = offset + (extension > 0 ? extension : name.length)
+    renameInputRef.current.setSelectionRange(offset, stemEnd)
+  }, [renamePath])
   useEffect(() => context.onLayout(() => setLayoutWorktree(worktreeFromLayout(context))), [context])
 
   useEffect(() => {
@@ -152,26 +199,89 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
   }, [context, worktree])
 
 
+  useEffect(() => {
+    if (!worktree) {
+      setWorktreeRoot(null)
+      setResolvedWorktreeId(null)
+      return
+    }
+    let cancelled = false
+    context.call('quirky.worktree/resolve', { selector: worktree }).then((value) => {
+      if (cancelled) return
+      const resolved = value as { id?: unknown; path?: unknown }
+      if (typeof resolved.id !== 'string' || typeof resolved.path !== 'string') {
+        setError('The selected worktree could not be resolved.')
+        return
+      }
+      worktreeRootRef.current = resolved.path
+      worktreeRootSelectorRef.current = worktree
+      setResolvedWorktreeId(resolved.id)
+      setWorktreeRoot(resolved.path)
+    }).catch((reason: unknown) => {
+      if (!cancelled && currentWorktree.current === worktree) setError(messageOf(reason))
+    })
+    return () => { cancelled = true }
+  }, [context, worktree])
   const loadDirectory = useCallback(async (path?: string) => {
     if (!worktree) return
-    setTreeLoading(true)
+    const requestedWorktree = worktree
+    const generation = treeLoadGeneration.current
+    const key = `${requestedWorktree}\0${path ?? ''}`
+    const existing = directoryLoads.current.get(key)
+    if (existing !== undefined) return await existing
+    const request = (async () => {
+      setTreeLoading(true)
+      try {
+        const listing = await context.call('quirky.editor/explorer', {
+          worktree: requestedWorktree,
+          action: 'list',
+          ...(path ? { path } : {})
+        }) as ExplorerListing
+        if (generation !== treeLoadGeneration.current || currentWorktree.current !== requestedWorktree) return
+        if (path) {
+          const next = new Map(childrenRef.current).set(path, listing.entries)
+          childrenRef.current = next
+          setChildren(next)
+        } else {
+          setRootListing(listing)
+        }
+        if (!path) setError(null)
+      } catch (reason) {
+        if (generation === treeLoadGeneration.current && currentWorktree.current === requestedWorktree) setError(messageOf(reason))
+      } finally {
+        if (generation === treeLoadGeneration.current && currentWorktree.current === requestedWorktree) setTreeLoading(false)
+      }
+    })()
+    directoryLoads.current.set(key, request)
     try {
-      const listing = await context.call('quirky.editor/explorer', {
-        worktree,
-        action: 'list',
-        ...(path ? { path } : {})
-      }) as ExplorerListing
-      if (path) setChildren((current) => new Map(current).set(path, listing.entries))
-      else setRootListing(listing)
-      setError(null)
-    } catch (reason) {
-      setError(messageOf(reason))
+      await request
     } finally {
-      setTreeLoading(false)
+      if (directoryLoads.current.get(key) === request) directoryLoads.current.delete(key)
     }
   }, [context, worktree])
+  const reloadExpandedDirectories = async () => {
+    let count = 0
+    for (const path of expandedRef.current) {
+      if (count >= MAX_EXPLORER_CHILD_LISTINGS) break
+      count++
+      await loadDirectory(path)
+    }
+  }
+
 
   useEffect(() => {
+    treeLoadGeneration.current++
+    setTreeLoading(false)
+    directoryLoads.current.clear()
+    childrenRef.current = new Map()
+    expandedRef.current = new Set()
+    setExpanded(new Set())
+    selectedPathsRef.current = []
+    setSelectedPaths([])
+    focusedPathRef.current = null
+    setFocusedPath(null)
+    setResolvedWorktreeId(null)
+    setWorktreeRoot(null)
     if (!worktree) {
       setRootListing(null)
       setChildren(new Map())
@@ -179,19 +289,69 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
     }
     setRootListing(null)
     setChildren(new Map())
-    setSelectedPaths([])
     void loadDirectory()
   }, [loadDirectory, worktree])
 
   useEffect(() => {
-    const paths = state?.explorer?.expanded
-    if (paths) setExpanded(new Set(paths))
-  }, [state?.explorer?.worktreeId])
+    const explorer = state?.explorer
+    if (explorer === undefined || explorer.worktreeId !== resolvedWorktreeId) return
+    const selected = explorer.selectedPaths ?? []
+    selectedPathsRef.current = selected
+    setSelectedPaths(selected)
+    focusedPathRef.current = explorer.focusedPath ?? null
+    setFocusedPath(explorer.focusedPath ?? null)
+  }, [resolvedWorktreeId, state?.explorer?.focusedPath, state?.explorer?.selectedPaths, state?.explorer?.worktreeId])
+
+  useEffect(() => {
+    const explorer = state?.explorer
+    if (explorer === undefined || explorer.worktreeId !== resolvedWorktreeId || worktreeRoot === null || rootListing === null) return
+    const next = new Set(explorer.expanded.map((path) => absoluteExplorerPath(worktreeRoot, path)))
+    expandedRef.current = next
+    setExpanded(next)
+    let loaded = 0
+    for (const path of next) {
+      if (childrenRef.current.has(path)) continue
+      if (loaded >= MAX_EXPLORER_CHILD_LISTINGS) break
+      loaded++
+      void loadDirectory(path)
+    }
+  }, [loadDirectory, resolvedWorktreeId, rootListing, state?.explorer?.expanded, state?.explorer?.worktreeId, worktreeRoot])
 
   const rows = useMemo(() => {
     if (searchMode === 'names' && query.trim() !== '' && filterResult) return filterResult.entries.map((entry) => ({ entry, depth: 0 }))
     return flattenEntries(rootListing?.entries ?? [], expanded, children)
   }, [children, expanded, filterResult, query, rootListing, searchMode])
+  const entryForPath = (path: string | null): ExplorerEntry | undefined => {
+    if (path === null) return undefined
+    if (searchMode === 'names' && query.trim() !== '') return filterResult?.entries.find((entry) => entry.path === path)
+    const visible = rows.find((row) => row.entry.path === path)
+    if (visible !== undefined) return visible.entry
+    if (worktreeRoot === null) return undefined
+    const relative = relativeExplorerPath(worktreeRoot, path)
+    if (relative === null) return undefined
+    const parts = relative.split('/')
+    let parent = '.'
+    for (let index = 0; index < parts.length - 1; index++) {
+      parent = joinPath(parent, parts[index]!)
+      if (!expandedRef.current.has(absoluteExplorerPath(worktreeRoot, parent))) return undefined
+    }
+    for (const entries of childrenRef.current.values()) {
+      const entry = entries.find((candidate) => candidate.path === path)
+      if (entry !== undefined) return entry
+    }
+    return rootListing?.entries.find((entry) => entry.path === path)
+  }
+
+
+  useEffect(() => {
+    if (focusedPath === null || treeRef.current === null) return
+    for (const row of treeRef.current.querySelectorAll<HTMLElement>('[data-path]')) {
+      if (row.dataset.path !== focusedPath) continue
+      row.scrollIntoView({ block: 'nearest' })
+      break
+    }
+  }, [focusedPath, rows])
+
   useEffect(() => {
     report?.({
       mounted: true,
@@ -304,15 +464,134 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
     }
   }
 
-  const toggleFolder = async (path: string) => {
-    const next = new Set(expanded)
-    if (next.has(path)) next.delete(path)
-    else {
-      next.add(path)
-      if (!children.has(path)) await loadDirectory(path)
+  const resolveWorktreeRoot = useCallback(async (requestedWorktree: string): Promise<string | null> => {
+    if (worktreeRootSelectorRef.current === requestedWorktree && worktreeRootRef.current !== null) return worktreeRootRef.current
+    const value = await context.call('quirky.worktree/resolve', { selector: requestedWorktree })
+    if (currentWorktree.current !== requestedWorktree) return null
+    const resolved = value as { id?: unknown; path?: unknown }
+    if (typeof resolved.id !== 'string' || typeof resolved.path !== 'string') throw new Error('The selected worktree could not be resolved.')
+    worktreeRootRef.current = resolved.path
+    worktreeRootSelectorRef.current = requestedWorktree
+    setResolvedWorktreeId(resolved.id)
+    setWorktreeRoot(resolved.path)
+    return resolved.path
+  }, [context])
+
+  const applyExplorerInteraction = useCallback(async (
+    requestedWorktree: string,
+    params: Record<string, unknown>
+  ): Promise<ExplorerInteractionResult> => {
+    const result = await context.call('quirky.editor/explorer', { worktree: requestedWorktree, ...params }) as ExplorerInteractionResult
+    if (currentWorktree.current !== requestedWorktree) return result
+    setError(null)
+    if (result.interaction !== undefined) {
+      selectedPathsRef.current = result.interaction.selectedPaths
+      setSelectedPaths(result.interaction.selectedPaths)
+      focusedPathRef.current = result.interaction.focusedPath
+      setFocusedPath(result.interaction.focusedPath)
     }
-    setExpanded(next)
+    if (result.expanded !== undefined) {
+      const root = await resolveWorktreeRoot(requestedWorktree)
+      if (root !== null) {
+        const previous = expandedRef.current
+        const next = new Set(result.expanded.map((path) => absoluteExplorerPath(root, path)))
+        expandedRef.current = next
+        setExpanded(next)
+        let loaded = 0
+        for (const path of next) {
+          if (previous.has(path) || childrenRef.current.has(path)) continue
+          if (loaded >= MAX_EXPLORER_CHILD_LISTINGS) break
+          loaded++
+          await loadDirectory(path)
+        }
+      }
+    }
+    return result
+  }, [context, loadDirectory, resolveWorktreeRoot])
+
+  const enqueueInteraction = useCallback((params: Record<string, unknown>) => {
+    const requestedWorktree = worktree
+    const request = interactionQueue.current.then(async () => {
+      if (!requestedWorktree || currentWorktree.current !== requestedWorktree) return null
+      return await applyExplorerInteraction(requestedWorktree, params)
+    })
+    interactionQueue.current = request.then(() => undefined, () => undefined)
+    return request.catch((reason: unknown) => {
+      if (currentWorktree.current === requestedWorktree) setError(messageOf(reason))
+      return null
+    })
+  }, [applyExplorerInteraction, worktree])
+
+  const activateDirectory = useCallback((path: string, queryParams: Record<string, unknown> = {}) => {
+    const requestedWorktree = worktree
+    const request = interactionQueue.current.then(async () => {
+      if (!requestedWorktree || currentWorktree.current !== requestedWorktree) return null
+      const selection = await applyExplorerInteraction(requestedWorktree, { action: 'select', path, ...queryParams })
+      if (selection.expanded === undefined) return selection
+      const root = await resolveWorktreeRoot(requestedWorktree)
+      if (root === null) return selection
+      const relativePath = relativeExplorerPath(root, path)
+      if (relativePath === null) return selection
+      const key = selection.expanded.includes(relativePath) ? 'ArrowLeft' : 'ArrowRight'
+      return await applyExplorerInteraction(requestedWorktree, { action: 'navigate', key, ...queryParams })
+    })
+    interactionQueue.current = request.then(() => undefined, () => undefined)
+    return request.catch((reason: unknown) => {
+      if (currentWorktree.current === requestedWorktree) setError(messageOf(reason))
+      return null
+    })
+  }, [applyExplorerInteraction, resolveWorktreeRoot, worktree])
+
+  const collapseAll = useCallback(() => {
+    const requestedWorktree = worktree
+    const request = interactionQueue.current.then(async () => {
+      if (!requestedWorktree || currentWorktree.current !== requestedWorktree) return
+      await context.call('quirky.editor/explorer', { worktree: requestedWorktree, action: 'preferences', expanded: [] })
+      if (currentWorktree.current !== requestedWorktree) return
+      expandedRef.current = new Set()
+      setExpanded(expandedRef.current)
+      refreshEditorState()
+    })
+    interactionQueue.current = request.then(() => undefined, () => undefined)
+    void request.catch((reason: unknown) => {
+      if (currentWorktree.current === requestedWorktree) setError(messageOf(reason))
+    })
+  }, [context, refreshEditorState, worktree])
+  const renameFocused = () => {
+    const requestedWorktree = worktree
+    const request = interactionQueue.current.then(() => {
+      if (!requestedWorktree || currentWorktree.current !== requestedWorktree) return
+      const path = focusedPathRef.current
+      if (path === null || entryForPath(path) === undefined) return
+      setRenamePath(path)
+      setRenameValue(path)
+    })
+    interactionQueue.current = request.then(() => undefined, () => undefined)
+    void request.catch((reason: unknown) => {
+      if (currentWorktree.current === requestedWorktree) setError(messageOf(reason))
+    })
   }
+
+  const activateFocused = (queryParams: Record<string, unknown>) => {
+    const requestedWorktree = worktree
+    const request = interactionQueue.current.then(async () => {
+      if (!requestedWorktree || currentWorktree.current !== requestedWorktree) return
+      const path = focusedPathRef.current
+      const entry = entryForPath(path)
+      if (path === null || entry === undefined) return
+      if (entry.isDirectory) {
+        const key = expandedRef.current.has(path) ? 'ArrowLeft' : 'ArrowRight'
+        await applyExplorerInteraction(requestedWorktree, { action: 'navigate', key, ...queryParams })
+      } else {
+        await openFile(path, { preview: true })
+      }
+    })
+    interactionQueue.current = request.then(() => undefined, () => undefined)
+    void request.catch((reason: unknown) => {
+      if (currentWorktree.current === requestedWorktree) setError(messageOf(reason))
+    })
+  }
+
 
   const copyPaths = async (relative: boolean, paths = selectedPaths) => {
     if (!rootListing || paths.length === 0) return
@@ -374,7 +653,9 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
     setItemBusy(true)
     try {
       for (const path of paths) await context.call('quirky.editor/mutate', { worktree, action: 'delete', path, yes: true })
-      setSelectedPaths((current) => current.filter((path) => !paths.includes(path)))
+      const remaining = selectedPathsRef.current.filter((path) => !paths.includes(path))
+      selectedPathsRef.current = remaining
+      setSelectedPaths(remaining)
       await loadDirectory()
     } catch (reason) {
       setError(messageOf(reason))
@@ -422,41 +703,57 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
   }
 
   const onRowClick = (event: ReactMouseEvent, path: string, isDirectory: boolean) => {
-    const index = rows.findIndex((row) => row.entry.path === path)
-    if (event.shiftKey && selectionAnchor.current) {
-      const start = rows.findIndex((row) => row.entry.path === selectionAnchor.current)
-      const low = Math.max(0, Math.min(start, index))
-      const high = Math.max(start, index)
-      setSelectedPaths(rows.slice(low, high + 1).map((row) => row.entry.path))
-    } else if (event.metaKey || event.ctrlKey) {
-      setSelectedPaths((current) => current.includes(path) ? current.filter((item) => item !== path) : [...current, path])
-      selectionAnchor.current = path
-    } else {
-      setSelectedPaths([path])
-      selectionAnchor.current = path
+    const queryParams = searchMode === 'names' && query.trim() !== '' ? { query } : {}
+    const params = {
+      action: 'select',
+      path,
+      ...(event.shiftKey ? { extend: true } : {}),
+      ...(event.metaKey || event.ctrlKey ? { toggle: true } : {}),
+      ...queryParams
     }
-    if (isDirectory) void toggleFolder(path)
-    else void openFile(path, { preview: settings.previewTabs })
+    treeRef.current?.focus()
+    if (event.shiftKey || event.metaKey || event.ctrlKey) {
+      void enqueueInteraction(params)
+      return
+    }
+    if (isDirectory) {
+      void activateDirectory(path, queryParams)
+      return
+    }
+    void enqueueInteraction(params).then((result) => {
+      if (result !== null) void openFile(path, { preview: settings.previewTabs })
+    })
   }
 
   const onTreeKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.target instanceof HTMLInputElement) return
-    const currentIndex = rows.findIndex((row) => row.entry.path === selectedPaths.at(-1))
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    const target = event.target
+    const interactiveTarget = target instanceof HTMLElement &&
+      target.closest('input, textarea, select, button, summary, a, [contenteditable]')
+    if (event.nativeEvent.isComposing || event.keyCode === 229 ||
+      interactiveTarget || newItemKind !== null || renamePath !== null) return
+    const queryParams = searchMode === 'names' && query.trim() !== '' ? { query } : {}
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown'].includes(event.key)) {
+      if (event.metaKey || event.ctrlKey || event.altKey) return
       event.preventDefault()
-      const next = Math.max(0, Math.min(rows.length - 1, currentIndex + (event.key === 'ArrowDown' ? 1 : -1)))
-      const row = rows[next]
-      if (row) setSelectedPaths([row.entry.path])
-    } else if (event.key === 'Enter' || event.key === ' ') {
-      const row = rows[currentIndex]
-      if (!row) return
+      void enqueueInteraction({
+        action: 'navigate',
+        key: event.key,
+        ...(event.shiftKey ? { extend: true } : {}),
+        ...queryParams
+      })
+      return
+    }
+    const unmodified = !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey
+    if (event.key === 'Enter' && unmodified) {
       event.preventDefault()
-      if (row.entry.isDirectory) void toggleFolder(row.entry.path)
-      else void openFile(row.entry.path, { preview: true })
+      renameFocused()
+    } else if (event.key === ' ' && unmodified) {
+      event.preventDefault()
+      activateFocused(queryParams)
     } else if (event.key === 'Delete' || (event.key === 'Backspace' && (event.metaKey || event.ctrlKey))) {
       event.preventDefault()
       void deleteSelected()
-    } else if (event.key.toLowerCase() === 'z' && (event.metaKey || event.ctrlKey)) {
+    } else if (event.key.toLowerCase() === 'z' && (event.metaKey || event.ctrlKey) && !event.altKey) {
       event.preventDefault()
       void context.call('quirky.editor/history', { worktree, action: event.shiftKey ? 'redo' : 'undo' }).then(() => loadDirectory()).catch((reason: unknown) => setError(messageOf(reason)))
     }
@@ -468,6 +765,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
       await context.call('quirky.editor/explorer', { worktree, action: 'preferences', showDotfiles: !(state?.explorer.showDotfiles ?? true) })
       refreshEditorState()
       await loadDirectory()
+      await reloadExpandedDirectories()
     } catch (reason) {
       setError(messageOf(reason))
     }
@@ -477,8 +775,8 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
     if (!worktree) return
     try {
       await context.call('quirky.editor/explorer', { worktree, action: 'refresh' })
-      setChildren(new Map())
       await loadDirectory()
+      await reloadExpandedDirectories()
     } catch (reason) {
       setError(messageOf(reason))
     }
@@ -542,7 +840,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
         <span className="qe-explorer-root" title={rootListing?.root ?? ''}>{rootListing?.root ?? 'Explorer'}</span>
         <button type="button" title="New File" onClick={() => startNewItem('file')}>New File</button>
         <button type="button" title="New Folder" onClick={() => startNewItem('folder')}>New Folder</button>
-        <button type="button" title="Collapse All" onClick={() => setExpanded(new Set())}>Collapse All</button>
+        <button type="button" title="Collapse All" onClick={() => void collapseAll()}>Collapse All</button>
         <button type="button" title="Refresh Explorer" onClick={() => void refreshExplorer()}>↻</button>
         <button type="button" title="Undo file operation" onClick={() => void context.call('quirky.editor/history', { worktree, action: 'undo' }).then(refreshExplorer).catch((reason: unknown) => setError(messageOf(reason)))}>Undo</button>
         <button type="button" title="Redo file operation" onClick={() => void context.call('quirky.editor/history', { worktree, action: 'redo' }).then(refreshExplorer).catch((reason: unknown) => setError(messageOf(reason)))}>Redo</button>
@@ -592,6 +890,8 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
           className="qe-explorer-tree"
           role="tree"
           tabIndex={0}
+          ref={treeRef}
+          aria-activedescendant={focusedPath === null ? undefined : `qe-explorer-row-${encodeURIComponent(focusedPath)}`}
           onKeyDown={onTreeKeyDown}
           onDragOver={(event) => {
             const types = event.dataTransfer.types
@@ -602,14 +902,26 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
           {rows.map(({ entry, depth }) => (
             <div
               key={entry.path}
+              id={`qe-explorer-row-${encodeURIComponent(entry.path)}`}
               className={`qe-explorer-row${selectedPaths.includes(entry.path) ? ' selected' : ''}${entry.ignored ? ' ignored' : ''}`}
               role="treeitem"
+              aria-level={depth + 1}
               aria-expanded={entry.isDirectory ? expanded.has(entry.path) : undefined}
               aria-selected={selectedPaths.includes(entry.path)}
               data-path={entry.path}
               style={{ paddingLeft: `${8 + depth * 16}px` }}
               draggable
               onClick={(event) => onRowClick(event, entry.path, entry.isDirectory)}
+              onContextMenu={() => {
+                treeRef.current?.focus()
+                if (!selectedPathsRef.current.includes(entry.path)) {
+                  void enqueueInteraction({
+                    action: 'select',
+                    path: entry.path,
+                    ...(searchMode === 'names' && query.trim() !== '' ? { query } : {})
+                  })
+                }
+              }}
               onDoubleClick={() => !entry.isDirectory && void openFile(entry.path, { preview: false, pinned: true })}
               onDragStart={(event) => {
                 const paths = topLevelPaths(selectedPaths.includes(entry.path) ? selectedPaths : [entry.path])
@@ -630,7 +942,16 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
               {entry.isSymlink && <span title="Symbolic link">↗</span>}
               {entry.ignored && <span aria-label="Ignored by .gitignore">⊘</span>}
               {entry.error && <span className="qe-explorer-row-error" title={entry.error}>!</span>}
-              <details className="qe-explorer-row-actions" onClick={(event) => { event.stopPropagation(); if (!selectedPaths.includes(entry.path)) setSelectedPaths([entry.path]) }}>
+              <details className="qe-explorer-row-actions" onClick={(event) => {
+                event.stopPropagation()
+                if (!selectedPathsRef.current.includes(entry.path)) {
+                  void enqueueInteraction({
+                    action: 'select',
+                    path: entry.path,
+                    ...(searchMode === 'names' && query.trim() !== '' ? { query } : {})
+                  })
+                }
+              }}>
                 <summary aria-label={`Actions for ${entry.name}`}>⋯</summary>
                 <div className="qe-file-actions-menu">
                   <button type="button" onClick={() => startNewItem('file', entry.isDirectory ? entry.path : '.')} >New File</button>
@@ -663,7 +984,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
           )}
           {renamePath !== null && (
             <div className="qe-explorer-inline-row">
-              <input autoFocus aria-label="Rename file" value={renameValue} onChange={(event) => setRenameValue(event.currentTarget.value)} onKeyDown={(event) => {
+              <input ref={renameInputRef} autoFocus aria-label="Rename file" value={renameValue} onChange={(event) => setRenameValue(event.currentTarget.value)} onKeyDown={(event) => {
                 if (event.key === 'Enter') { event.preventDefault(); void renameSelected() }
                 if (event.key === 'Escape') setRenamePath(null)
               }} />
