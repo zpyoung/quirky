@@ -2,7 +2,7 @@ import type { PluginContext, PluginStore } from '@quirky/protocol'
 import type {
   DispatchAdmissionInput, DispatchId, DispatchRow, DispatchStatus, LifecycleCorePort,
   MutationCheckpoint, MutationRequest, MutationResult, MutatingOrchestrationMethod,
-  RunId, RunRow, RuntimeCallerEvidence, TaskCreateParams, TaskId, TaskRow, UtcTimestamp,
+  ResetMode, RunId, RunRow, RuntimeCallerEvidence, TaskCreateParams, TaskId, TaskRow, UtcTimestamp,
   WorkerOutcome, WorkerRow, WorkerState, WorkerTransitionInput,
 } from './contracts'
 import type { SessionIdentity } from './runtime-contracts'
@@ -17,6 +17,7 @@ export interface WorkerLifecyclePort {
   workerForDispatch(store: PluginStore, dispatchId: DispatchId): WorkerRow | null
   settleDispatch(store: PluginStore, dispatchId: DispatchId, status: DispatchStatus, at: UtcTimestamp): void
   transitionWorker(store: PluginStore, input: WorkerTransitionInput): WorkerRow
+  reset(store: PluginStore, mode: ResetMode, at: UtcTimestamp): void
   acceptReport(store: PluginStore, input: {
     dispatchId: DispatchId
     outcome: WorkerOutcome

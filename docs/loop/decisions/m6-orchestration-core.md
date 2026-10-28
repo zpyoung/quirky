@@ -363,6 +363,28 @@
 - **Revisit if:** worker integration needs another source-backed lifecycle operation
 - **Source:** assumed — autonomous
 
+## D34: Reserve explicit service coordinator APIs to lane11 without synthetic sessions
+- **Question:** Heimdall needs a headless, service-owned Run while existing core coordinator evidence attests actual sessions
+- **Options:** forge runtime evidence; implicitly trust plugin metadata in ordinary APIs; explicit service APIs with a distinct scoped coordinator principal
+- **Chose:** confirm serviceRunCreate/serviceRunShow/serviceWorkerStart/serviceCheck/serviceWorkerRelease as additive future signatures owned by lane11 after core/worker integration. Kernel pluginId plus owned Run authorizes the service; distinct service-owner Task/Dispatch provenance, one store/ledger, explicit placement only. Ordinary core APIs remain session-authenticated.
+- **Why:** plugin service ownership is real authority but not process attestation. A service principal must never claim runtimeOwned/live process identity. Workers retain independent runtime evidence, lifecycle/custody/close and release checks.
+- **Evidence:** priority lane11/lane9 coordination interjections; /tmp/quirky-lane11-orchestration-service-reply.md Lane1 confirmation; ownership sent to lane9 and active core implementer. No service implementation claim.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** service integration cannot preserve scoped ownership without changing worker identity
+- **Source:** assumed — autonomous
+
+## D35: Repair a worktree-routing violation before accepting runtime output
+- **Question:** runtime agents reported absolute edit paths had modified the active checkout
+- **Options:** accept cross-tree writes; independently revert/recreate concurrently; pause both writers and transfer their exact owned edits with preserved originals
+- **Chose:** pause runtime and kernel helper, preserve active/base/target copies, three-way merge target-only deltas into the runtime worktree, restore only the 25 confirmed runtime-owned active paths from658dd9c, then resume using target-relative edit paths. Preserve unrelated .serena metadata and all domain files. No reset/restore/clean command or foreign work removal.
+- **Why:** simultaneous cleanup/recreation could lose code or erase another writer. Main tracked diff is now empty; isolated runtime diff contains25files +716/-50 plus its new pointer/authority-test files. Required acceptance still runs only after implementation.
+- **Evidence:** both writers' exact path reports and stop acknowledgements; /tmp/quirky-m6-journal-kiHvzE/scope-repair.json and preserved per-file .base/.active/.target; successful scope-transfer output and repaired-boundary command. Domain confirmed its source files existed only in its isolated tree.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** another write escapes its component
+- **Source:** assumed — autonomous
+
 ## Early preparation verification
 - `bun run typecheck`: exit0 on the final contracts, no diagnostics.
 - Actual Bun import of contracts.ts: `CONTRACT_MODULE_INERT_OK`; the module exports no runtime values. No daemon, model, process, real user state or placeholder contribution was started/installed.

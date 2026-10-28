@@ -295,6 +295,15 @@ export interface AcceptedWorkerCheckpoint {
   dispatchId: DispatchId
 }
 
+/** Accepted context-only dispatch before optional external prompt injection. */
+export interface AcceptedDispatchCheckpoint {
+  state: 'accepted'
+  accepted: true
+  runId: RunId
+  taskId: TaskId
+  dispatchId: DispatchId
+}
+
 /** Accepted acknowledgement/read boundary before a connection-aware mailbox wait. */
 export interface AcceptedCheckCheckpoint {
   state: 'accepted'
@@ -305,7 +314,11 @@ export interface AcceptedCheckCheckpoint {
   acknowledged: DeliveryId | null
 }
 
-export type MutationCheckpoint = AcceptedAskCheckpoint | AcceptedWorkerCheckpoint | AcceptedCheckCheckpoint
+export type MutationCheckpoint =
+  | AcceptedAskCheckpoint
+  | AcceptedWorkerCheckpoint
+  | AcceptedDispatchCheckpoint
+  | AcceptedCheckCheckpoint
 
 export type MutatingOrchestrationMethod =
   | 'runCreate'
