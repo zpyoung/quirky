@@ -99,5 +99,49 @@
 - **Revisit if:** plugin API freeze changes delivery schema ownership.
 - **Source:** locked by docs/roadmap.md
 
+## D10: Expose trusted live connection state without broad event subscription
+- **Question:** how base pages and later panels disable mutations immediately and refresh safely.
+- **Options:** generic daemon events.subscribe; role-filtered projected event service; live transport state plus bounded read-only polling.
+- **Chose:** MobilePageInit.connectionState and bridge readonly state/onState committed53b19b61. Shell forwards authenticated RPC lifecycle, native background closes/suspends owned direct clients, foreground reacquires a fresh channel, pages stop polling while disconnected/hidden. Keep events.subscribe denied; no implicit global subscription or generic event payload forwarding. Mounted pages refresh only safe read-only queries.
+- **Why:** lane4 supplied source evidence that Core.broadcast sends unfiltered events to subscribed clients except two special cases. A global subscription would reveal unrelated sensitive payloads. Socket state needs no event permission. Native transport stays generic rather than maintaining a third divergent method-policy catalog.
+- **Evidence:** priority lane4 source report packages/daemon/src/service.ts Core.broadcast; MobilePageBridge contract53b19b61; worker directives. Lane4 panel contracts eb750d27 and notification-only backend17bbe2b7 remain independent.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** a narrowly projected per-event consumer contract is introduced.
+- **Source:** assumed — autonomous
+
+## D11: Match terminal input authorization to its exact connection lease
+- **Question:** whether a phone can infer driver ownership from deviceId alone.
+- **Options:** optimistically treat any driver as this phone; compare same bearer identity; project exact connection-plus-device authority.
+- **Chose:** mobileState returns caller-scoped controlledByCaller in response entries, not stored/event state. Clear/displayMode obey the exact same connection lease. Scope the existing input guard to connection+device, preserving trusted plugin bypass.
+- **Why:** parent actual preimplementation two-socket probe showed a second socket using the same token, never attached, successfully wrote into the first socket's terminal. The expected denial failed with Missing expected rejection. Existing attach/claim already treats connection ID as owner identity; device-only input checking was inconsistent.
+- **Evidence:** /tmp/quirky-phone-lane5-GcxchL/lease-red.ts; actual bg8 exit1 in4.68s; mobile-driver.ts:84,144–151. Both encrypted peers and temporary daemon cleanup were awaited. Post-fix proof still required.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** explicit shared-device multi-socket driving is authorized.
+- **Source:** assumed — autonomous
+
+## D12: Reject wrong-worktree attempts and relocate only proven owned edits
+- **Question:** all three workers ignored assigned component roots and wrote into the parent.
+- **Options:** silently accept contamination; discard everything; freeze and attribute exact source before relocation.
+- **Chose:** froze all workers and waited for returns. Parsed raw write/edit payloads, confirmed component trees had no source changes and HEADd0f213c5, captured exact56file contents/hashes (23native/8pages/25bundle) and14tracked baseline blobs. Every changed source path was attributable and in its declared logical component; parent docs were separate. Copied exact contents into correct component trees through write tools, restored14tracked parent files byte-for-byte and removed42preserved new files through anchored edits. Inherited .serena untouched. Advanced components to53b19b61 and dispatched one fresh retry per component with explicit absolute path fences.
+- **Why:** relative tool edit headers and absolute writes to the default workspace bypassed requested worktree isolation. No contaminated source was committed or accepted as complete. Source preservation avoids discarding attributed work or unrelated user data.
+- **Evidence:** /tmp/quirky-phone-lane5-GcxchL/attribution-raw.json, relocation-snapshot.json, parent-owned-removal.patch; original worker freeze receipts; relocation preflight unexpected:[] and component HEAD checks.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** any subsequent source mutation targets the wrong worktree; stop that writer immediately.
+- **Source:** assumed — autonomous
+
+## D13: Project mobile Session results at their producer and use a safe agent catalog
+- **Question:** lane4 identified credentials in Session.launch.env and raw AgentsService.info environment results.
+- **Options:** guess recursive transport scrubbing; deny all sessions; producer-owned exact projection and safe catalog.
+- **Chose:** session plugin omits optional launch for mobile list/get/create/resume/restore/setName before serialization, leaving local CLI/desktop/plugin object and launch intact. Real encrypted-consumer regression covers all six methods and local retention; red failed at own launch presence, then green1test14assertions in911ms. Launch metadata is never sent to pages for client-side redaction. Raw quirky.agents/list remains denied; base launcher uses lane4-owned quirky.mobile/agentCatalog with only id/label/enabled/available/resumable/defaultAgent. No vault prepareResume exposure; lane4 handles vault producer separately.
+- **Why:** producer knows the specific credential-bearing field. Broad response scrubbing could miss it or corrupt unrelated typed results. Safe launch IDs still resolve full configuration on the desktop.
+- **Evidence:** priority lane4 source reports model.ts256–278, records.rowToSession and AgentsService.info538–558; main.ts producer projection; plugins/quirky.session/test/mobile-projection.test.ts red artifact32 then green bg11.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** new mobile Session-returning methods or catalog credential fields are added.
+- **Source:** assumed — autonomous
+
 ## Progress
-Design/spec self-review complete; shared native/page/bundle contracts authored before implementers. Next: commit contracts/spec/decisions, create three disjoint temporary component worktrees and dispatch native/transport, pages and bundle/bridge/server implementers. Dependency ready:true; inherited .serena untouched; no implementation code/tests run yet. LSP unavailable; reviewer preflight Gemini reachable.
+All original workers stopped;56attributed source files relocated into correct component trees and parent baseline restored. Fresh NativeCompletion/PagesCompletion/BundleCompletion retries running at53b19b61 with exact roots; parent owns session projection only, plus docs. Encrypted Session confidentiality1test14assertions passed after red; broader source/build/UI still unverified. Await source completion, audit HEAD/scope and run full affected acceptance; safe catalog helper from lane4 pending. Single-followup/onecatchup/finalreview/queue land still required. No wholequeuecompletion marker.

@@ -5,6 +5,8 @@ Approved autonomously under build/roadmap LOOP.md night mode on2026-10-28. One c
 
 **Amendments:** 2026-10-28: lane4 owns the separately queued panels/notification subscriptions and integrates route extensions after this base lands. Source investigation also defers workspace Sleep/Hide sleeping until a reversible PTY stop-with-history/session-resume lifecycle exists; current close/kill/delete are not substitutes. This gap joins the single core-flow follow-up before landing.
 
+**Amendments:** 2026-10-28 security coordination: mobile Session results omit optional launch at their producer before serialization; local consumers retain full launch. Raw agents/list remains denied because its info includes effective environment; the phone uses only the safe mobile/agentCatalog projection. Generic events.subscribe remains denied; live bridge connection state plus bounded safe polling provides refresh. Automation-created and other-client filters remain explicitly unavailable until reliable provenance exists, not guessed from createdBy=api.
+
 ## Purpose and conceptual model
 A fork of Orca's Expo phone application is a direct, pinned-key, encrypted client of Quirky's public API. Native screens own pairing, credentials, home/settings and diagnostics. Desktop-built workspace/session pages run in an isolated native WebView, with no socket or credential access; a bounded granted bridge proxies calls to the native authenticated client. A compatible page update is downloaded and verified before replacing the prior complete generation.
 
@@ -75,6 +77,8 @@ The committed contracts are authoritative exact signatures. MobileRpc.call(metho
 
 ### Public API growth
 Extend existing quirky.mobile built-in, not a new privileged service. `bundleManifest {}` returns manifest/chunkBytes/rangeBytes; `bundleChunk`/`bundleRange {buildId,path,offset}` return bounded base64 content/eof/hash, range optionally gzip. Local/phone calls use same schemas/CLI. Bundle root is packaged plugin asset dir, never caller supplied. Narrow phone preferences read/update owns autoRestoreFit only; no generic unrestricted configure. Extend literal mobile allowlist only for methods actually used by shipped pages and parameter-specific restrictions; no wildcard/admin/settings/agent bypass. Terminal clear/display-mode or other missing operations must be public plugin-owned methods respecting mobile lease; no private daemon imports.
+
+Credential-bearing producer contracts: mobile session list/get/create/resume/restore/setName omit `launch`; no generic transport scrub. `quirky.mobile/agentCatalog {}` returns only `{agents:[{id,label,enabled,available,resumable}],defaultAgent}`; raw `quirky.agents/list` is never phone-allowed. Lane4 owns the safe catalog helper and base wires it without concurrent shared-file edits. MobilePageInit includes actual connectionState; bridge readonly state/onState forwards transport lifecycle, including background disconnect and fresh foreground binding.
 
 ### Verification
 Own acceptance: `bun test apps/mobile/test plugins/quirky.mobile/test`; changed directories through `bun scripts/suite.ts apps/mobile plugins/quirky.mobile plugins/quirky.terminal` plus actual other changed consumers; `bun test scripts`; `bun run typecheck`; mobile Expo TS check and actual web-page bundle build; `bun run build`. Actual encrypted app client + real daemon/PTY smoke. Built phone-width page/native-web-export browser dogfood once; native-only OS scenarios pending. Queue land alone owns full repository suite.
