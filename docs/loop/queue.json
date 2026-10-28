@@ -1630,8 +1630,7 @@
         "ui-terminal-theme",
         "ui-screenshot-review"
       ],
-      "status": "in-progress",
-      "lane": 12
+      "status": "done"
     },
     {
       "id": "ui-restyle-agents",
