@@ -1621,7 +1621,8 @@
         "ui-terminal-theme",
         "ui-screenshot-review"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 8
     },
     {
       "id": "ui-restyle-worktrees",
