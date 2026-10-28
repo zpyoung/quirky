@@ -5,6 +5,7 @@ import type { Root, createRoot as ReactCreateRoot } from 'react-dom/client'
 import type { MobilePageBridge, MobileRoute } from '../src/contracts'
 import type { Session } from '@quirky/protocol'
 import { validatePageReport, validatePageRpc } from '../src/shell/bridge-policy'
+import { validatePanelRoute } from '../src/panels/routes'
 import { PAGE_BUNDLE_ROUTES } from '../src/shell/generation'
 import { TerminalArtifactsPanel } from '../src/panels/terminal-artifacts'
 import { SessionPage } from '../src/pages/SessionPage'
@@ -121,6 +122,17 @@ function buttonNamed(name: string): HTMLButtonElement {
   if (!(button instanceof HTMLButtonElement)) throw new Error(`No button named ${name}`)
   return button
 }
+async function waitForEnabledButton(name: string): Promise<HTMLButtonElement> {
+  const until = Date.now() + 1000
+  while (Date.now() < until) {
+    const button = buttonNamed(name)
+    if (!button.disabled) return button
+    const { promise, resolve } = Promise.withResolvers<void>()
+    setTimeout(resolve, 0)
+    await act(async () => { await promise })
+  }
+  throw new Error(`No enabled button named ${name} after loading the selected session`)
+}
 
 const artifactRoute = { kind: 'terminal-artifact' as const, ...source, artifactId: artifact.artifactId, grant: artifact.grant }
 const artifactListRoute = { kind: 'terminal-artifacts' as const, ...source }
@@ -165,23 +177,23 @@ test('Session More actions opens artifacts for the exact selected terminal sessi
     id: source.sessionId, kind: 'terminal', agent: 'shell', worktreeId: source.worktreeId, cwd: '/work', title: 'Shell', status: 'running',
     createdAt: 1, lastActivityAt: 1, exitCode: null, exitSignal: null, exitCause: null, restorable: false
   }
+  const otherSession: Session = { ...session, id: 'sess-other', title: 'Other shell' }
   const { bridge, navigations } = fakeBridge({ kind: 'session', ...source }, async <T,>(method) => {
-    if (method === 'quirky.session/list') return [session] as T
-    if (method === 'quirky.ask/list') return [] as T
-    if (method === 'quirky.worktree/list') return [] as T
+    if (method === 'quirky.session/list') return [otherSession, session] as T
+    if (method === 'quirky.ask/list' || method === 'quirky.worktree/list' || method === 'quirky.mobile/sessionTabs') return [] as T
     throw new Error(`Unexpected RPC ${method}`)
   }, ['rpc', 'navigate'])
   await mount(createElement(SessionPage, { bridge, route: { kind: 'session', ...source }, connected: true, onNavigate: async (route) => { navigations.push(route) }, onReport() {} }))
 
   await click(buttonNamed('More session actions'))
-  await click(buttonNamed('Terminal artifacts'))
+  await click(await waitForEnabledButton('Terminal artifacts'))
 
-  expect(navigations).toContainEqual(artifactListRoute)
+  expect(navigations).toEqual([artifactListRoute])
 })
 
 test('Session actions disable terminal artifacts when no terminal is selected', async () => {
   const { bridge, navigations } = fakeBridge({ kind: 'session', worktreeId: source.worktreeId }, async <T,>(method) => {
-    if (method === 'quirky.session/list' || method === 'quirky.ask/list' || method === 'quirky.worktree/list') return [] as T
+    if (method === 'quirky.session/list' || method === 'quirky.ask/list' || method === 'quirky.worktree/list' || method === 'quirky.mobile/sessionTabs') return [] as T
     throw new Error(`Unexpected RPC ${method}`)
   })
   await mount(createElement(SessionPage, {
