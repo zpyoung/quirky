@@ -1,3 +1,5 @@
+@import 'katex/dist/katex.min.css';
+
 .markdown-surface {
   background: var(--ui-surface);
   color: var(--ui-text);
@@ -75,7 +77,7 @@
 }
 
 .markdown-source {
-  background: transparent;
+  background: var(--ui-transparent);
   border: 0;
   border-radius: 0;
   flex: 1 1 auto;

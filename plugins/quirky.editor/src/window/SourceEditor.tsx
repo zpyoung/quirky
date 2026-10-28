@@ -9,10 +9,11 @@ import { markdown } from '@codemirror/lang-markdown'
 import { python } from '@codemirror/lang-python'
 import { sql } from '@codemirror/lang-sql'
 import { yaml } from '@codemirror/lang-yaml'
-import { bracketMatching, foldGutter, HighlightStyle, indentOnInput, syntaxHighlighting, tags } from '@codemirror/language'
+import { bracketMatching, foldGutter, HighlightStyle, indentOnInput, syntaxHighlighting } from '@codemirror/language'
 import { findNext, replaceAll, replaceNext, search, SearchQuery, searchKeymap, setSearchQuery } from '@codemirror/search'
 import { Compartment, EditorSelection, EditorState, Transaction, type Extension } from '@codemirror/state'
 import { EditorView, drawSelection, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from '@codemirror/view'
+import { tags } from '@lezer/highlight'
 import type { EditorSurfaceBuffer } from '../types'
 
 const PASTE_LIMIT = 16 * 1024 * 1024

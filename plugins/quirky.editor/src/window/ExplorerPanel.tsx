@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
+import { Button, IconButton, ListRow, TextField } from '@quirky/ui'
 import type { ExplorerInteraction } from '../types'
 import { activeDocument } from './activeDocument'
 import { useEditorState, worktreeFromLayout } from './editorState'

@@ -302,6 +302,14 @@ Keep those mappings aligned with `packages/protocol/package.json` exports.
 
 ## Editor documents and shared review notes
 
+The **Files** tool opens in the right-top slot by default; documents stay in center tabs.
+Editor controls, Quick Open, Save As, dirty-close and notebook trust dialogs use the shared
+graphite UI in dark and light. Source editing, Markdown modes, notebooks and file viewers keep
+their existing commands and save guards. `quirky.editor` is included in the UI lint gate:
+presentation changes must use `@quirky/ui` components and semantic tokens, with engine styles
+owned by the shared UI package rather than injected plugin CSS.
+
+
 New Markdown documents use collision-safe untitled placeholders. Save opens a relative-path
 Save As dialog; cancelling keeps the draft. The public `quirky.editor/saveAs` method accepts
 `bufferId`, `path` and `expectedRevision`, refuses existing destinations and preserves the

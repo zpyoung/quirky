@@ -16,7 +16,6 @@ import { filterSlashCatalog, SLASH_CATALOG, type SlashItem } from './slashCatalo
 import { MermaidDiagram } from './MermaidDiagram'
 import { destinationDirectory } from './files'
 import { MARKDOWN_PREVIEW_REHYPE_PLUGINS, previewHeadingId } from './previewPipeline'
-const KATEX_STYLESHEET = new URL('./katex/katex.min.css', import.meta.url).href
 
 const MARKDOWN_METHOD = 'quirky.editor/markdown'
 const NOTES_METHOD = 'quirky.editor/notes'
@@ -1529,8 +1528,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
 }
 
 export function MarkdownSurface(props: SurfaceProps): React.JSX.Element {
-  const stylesheet = <link rel="stylesheet" href={KATEX_STYLESHEET} />
-  if (props.buffer.mode === 'source') return <>{stylesheet}<SourceSurface props={props} /></>
-  if (props.buffer.mode === 'preview') return <>{stylesheet}<PreviewSurface props={props} /></>
-  return <>{stylesheet}<RichSurface props={props} /></>
+  if (props.buffer.mode === 'source') return <SourceSurface props={props} />
+  if (props.buffer.mode === 'preview') return <PreviewSurface props={props} />
+  return <RichSurface props={props} />
 }

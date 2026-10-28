@@ -55,8 +55,8 @@
 }
 
 .qe-document-path.ui-button {
-  background: transparent;
-  border-color: transparent;
+  background: var(--ui-transparent);
+  border-color: var(--ui-transparent);
   flex: 1 1 auto;
   justify-content: flex-start;
   min-width: 0;
@@ -124,7 +124,7 @@
   background: var(--ui-surface);
   border: var(--ui-border-width) solid var(--ui-border);
   border-radius: var(--ui-radius-window);
-  box-shadow: 0 0.75rem 2rem color-mix(in srgb, var(--ui-rail) 72%, transparent);
+  box-shadow: 0 0.75rem 2rem color-mix(in srgb, var(--ui-rail) 72%, var(--ui-transparent));
   display: flex;
   flex-direction: column;
   gap: var(--ui-space-4);
@@ -370,12 +370,12 @@
 }
 
 .qe-changes-inline-row.added {
-  background: color-mix(in srgb, var(--ui-working) 12%, transparent);
+  background: color-mix(in srgb, var(--ui-working) 12%, var(--ui-transparent));
   color: var(--ui-working);
 }
 
 .qe-changes-inline-row.removed {
-  background: color-mix(in srgb, var(--ui-failing) 12%, transparent);
+  background: color-mix(in srgb, var(--ui-failing) 12%, var(--ui-transparent));
   color: var(--ui-failing);
 }
 
@@ -445,12 +445,12 @@
 
 .qe-codemirror-host .cm-activeLineGutter,
 .qe-codemirror-host .cm-activeLine {
-  background: color-mix(in srgb, var(--ui-selected) 55%, transparent);
+  background: color-mix(in srgb, var(--ui-selected) 55%, var(--ui-transparent));
 }
 
 .qe-codemirror-host .cm-focused .cm-selectionBackground,
 .qe-codemirror-host .cm-selectionBackground {
-  background: color-mix(in srgb, var(--ui-accent) 34%, transparent);
+  background: color-mix(in srgb, var(--ui-accent) 34%, var(--ui-transparent));
 }
 
 .qe-codemirror-host .cm-cursor,
@@ -459,12 +459,12 @@
 }
 
 .qe-codemirror-host .cm-matchingBracket {
-  background: color-mix(in srgb, var(--ui-accent) 20%, transparent);
+  background: color-mix(in srgb, var(--ui-accent) 20%, var(--ui-transparent));
   outline: var(--ui-border-width) solid var(--ui-accent);
 }
 
 .qe-codemirror-host .cm-searchMatch {
-  background: color-mix(in srgb, var(--ui-needs-you) 25%, transparent);
+  background: color-mix(in srgb, var(--ui-needs-you) 25%, var(--ui-transparent));
 }
 
 .qe-codemirror-host .cm-searchMatch.cm-searchMatch-selected {
@@ -508,7 +508,7 @@
   background: var(--ui-surface);
   border: var(--ui-border-width) solid var(--ui-border);
   border-radius: var(--ui-radius-control);
-  box-shadow: 0 0.75rem 2rem color-mix(in srgb, var(--ui-rail) 72%, transparent);
+  box-shadow: 0 0.75rem 2rem color-mix(in srgb, var(--ui-rail) 72%, var(--ui-transparent));
   display: flex;
   flex-direction: column;
   min-width: 12rem;
@@ -750,8 +750,8 @@
 }
 
 .qe-explorer-row > .ui-list-row {
-  background: transparent;
-  border-color: transparent;
+  background: var(--ui-transparent);
+  border-color: var(--ui-transparent);
   border-radius: var(--ui-radius-mark);
   min-height: var(--ui-row-single);
   padding: var(--ui-space-2) var(--ui-space-4);
@@ -854,7 +854,7 @@
 }
 
 .qe-search-file mark {
-  background: color-mix(in srgb, var(--ui-needs-you) 26%, transparent);
+  background: color-mix(in srgb, var(--ui-needs-you) 26%, var(--ui-transparent));
   color: var(--ui-text);
 }
 
