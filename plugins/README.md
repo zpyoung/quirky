@@ -726,3 +726,42 @@ stopping worker or independent sessions. Unconfirmed cleanup retains uncertainty
 than starting a replacement conversation.
 
 Use `quirky heimdall --help` and `quirky api --json` for the live commands and schemas.
+
+## Editor, Git diffs and sidebar edges
+
+`quirky.editor` keeps one shared draft and disk precondition per buffer. Rich Markdown
+supports nested/empty details sections, collapsible headings and `[[document links]]`;
+unsupported forms still open in Source mode rather than silently losing content.
+Document-link completion is keyboard-accessible and does not run during IME composition.
+
+The buffer's optional `diskWritable` is advisory effective OS access, separate from the
+format's `readOnly` capability. A readable non-writable Markdown file can keep drafts and
+local review notes. The actual save is authoritative: denial retains the draft and dirty
+state, and a retry refreshes the permission fact.
+
+**Changes** stays in the edit tab and compares HEAD against its current shared draft,
+not against the index. Markdown diff preview renders the modified side only and says so.
+Detached diff previews omit local images; ordinary source-bound Markdown previews retain
+their existing authorized image support. The public text-only rendering action is
+`quirky.editor/markdown {action:"renderPreview",text}`, returning sanitized HTML without
+opening a buffer or granting filesystem access.
+
+Source Control single-click opens a replaceable diff preview; double-click or pin promotes
+it. Option-click opens a right split. Cmd-click toggles row selection and Shift-click extends
+it instead of reproducing Orca's unreachable-selection defect. Public `open-diff` command
+arguments include `preview`, `split`, `groupId` and `display` (`source` or `preview`).
+
+`quirky.git/pushTarget` accepts `purpose:"review"` or `"creation"`. A review target comes
+from fresh GitHub head identity matched to a configured remote, not from a guessed origin.
+Purpose-specific `push` and `forcePush` revalidate the exact destination and private URL
+snapshot before mutation; a missing or ambiguous head target never falls back to publishing
+another repository. Force push retains its explicit lease and confirmation. No remote is
+created and no public caller-supplied push URL is accepted.
+
+Sidebar activity reads canonical current agent display evidence; stale rows alone do not
+establish liveness. Quiet time windows refresh without unrelated events, and client-local
+preferences retain conservative corrupt-state recovery. Separator presentation excludes
+first, host-adjacent, sticky and nested boundaries without changing row geometry.
+
+[Completion contracts and acceptance scenarios](../docs/quirk/specs/2026-10-28-m7-editor-source-control-completion/logic.md).
+

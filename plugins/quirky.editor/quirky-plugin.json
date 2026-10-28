@@ -93,7 +93,7 @@
             "draft": { "description": "Draft text when present, or null when clean; a non-null draft may be omitted when it is lazy." },
             "baseline": { "description": "Saved-content baseline hash, or null when no saved baseline is available." },
             "size": { "type": "integer", "minimum": 0 },
-            "readOnly": { "type": "boolean" }, "dirty": { "type": "boolean" },
+            "readOnly": { "type": "boolean" }, "diskWritable": { "type": "boolean", "description": "Advisory effective OS write access; independent of format readOnly and not a save guarantee." }, "dirty": { "type": "boolean" },
             "external": { "description": "External disk state: 'changed', 'deleted', or null when there is no external change." },
             "diskContent": { "description": "Optional inline disk comparison text within the aggregate 256 KiB content budget, or null when unavailable." },
             "diskSignature": { "description": "Disk content signature, or null when no comparison signature is available." },
@@ -135,7 +135,7 @@
                   "draftLength": { "description": "Nonnegative draft length when present, or null when there is no draft." }, "draftBytes": { "description": "Nonnegative draft UTF-8 byte count when present, or null when there is no draft." },
                   "diskContentLength": { "description": "Nonnegative disk-content length when present, or null when no disk comparison is available." }, "diskContentBytes": { "description": "Nonnegative disk-content byte count when present, or null when no disk comparison is available." },
                   "diskSignature": { "description": "Disk content signature, or null when no comparison signature is available." },
-                  "readOnly": { "type": "boolean" }, "dirty": { "type": "boolean" },
+                  "readOnly": { "type": "boolean" }, "diskWritable": { "type": "boolean", "description": "Advisory effective OS write access; independent of format readOnly and not a save guarantee." }, "dirty": { "type": "boolean" },
                   "external": { "description": "External disk state: 'changed', 'deleted', or null when there is no external change." },
                   "mode": { "type": "string", "enum": ["source", "rich", "preview"] },
                   "tabId": { "description": "Stable terminal tab ID, or null when no editor tab is mapped." }, "preview": { "type": "boolean" }, "pinned": { "type": "boolean" },
@@ -191,7 +191,7 @@
             "content": { "type": "string", "description": "Optional inline text within the aggregate 256 KiB content budget." },
             "draft": { "description": "Draft text when present, or null when clean; a non-null draft may be omitted when it is lazy." },
             "baseline": { "description": "Saved-content baseline hash, or null when no saved baseline is available." }, "size": { "type": "integer", "minimum": 0 },
-            "readOnly": { "type": "boolean" }, "dirty": { "type": "boolean" },
+            "readOnly": { "type": "boolean" }, "diskWritable": { "type": "boolean", "description": "Advisory effective OS write access; independent of format readOnly and not a save guarantee." }, "dirty": { "type": "boolean" },
             "external": { "description": "External disk state: 'changed', 'deleted', or null when there is no external change." },
             "diskContent": { "description": "Optional inline disk comparison text, or null when unavailable." },
             "diskSignature": { "description": "Disk content signature, or null when no comparison signature is available." },
@@ -220,7 +220,7 @@
             "content": { "type": "string", "description": "Optional inline text within the aggregate 256 KiB content budget." },
             "draft": { "description": "Draft text when present, or null when clean; a non-null draft may be omitted when it is lazy." },
             "baseline": { "description": "Saved-content baseline hash, or null when no saved baseline is available." }, "size": { "type": "integer", "minimum": 0 },
-            "readOnly": { "type": "boolean" }, "dirty": { "type": "boolean" },
+            "readOnly": { "type": "boolean" }, "diskWritable": { "type": "boolean", "description": "Advisory effective OS write access; independent of format readOnly and not a save guarantee." }, "dirty": { "type": "boolean" },
             "external": { "description": "External disk state: 'changed', 'deleted', or null when there is no external change." },
             "diskContent": { "description": "Optional inline disk comparison text, or null when unavailable." },
             "diskSignature": { "description": "Disk content signature, or null when no comparison signature is available." },
@@ -254,7 +254,7 @@
         "description": "Reopen the most recently closed eligible edit tab, or return null when the stack is empty.",
         "params": { "type": "object", "properties": { "worktree": { "type": "string" }, "focus": { "type": "boolean" } }, "additionalProperties": false },
         "result": {
-          "description": "Either null when no eligible recently closed edit tab exists, or an editor-buffer snapshot with id/worktreeId/root/path/relativePath/name, kind, content, nullable draft and baseline, size/contentLength/contentBytes, nullable draftLength/draftBytes, readOnly/dirty, nullable external/diskContent/diskSignature/diskContentLength/diskContentBytes, mode/tabId, preview/pinned/untitled, revision/contentRevision, view and nullable error. kind is text, markdown, notebook, csv, image, pdf, audio, video, mermaid or binary; mode is source, rich or preview."
+          "description": "Either null when no eligible recently closed edit tab exists, or an editor-buffer snapshot with id/worktreeId/root/path/relativePath/name, kind, content, nullable draft and baseline, size/contentLength/contentBytes, nullable draftLength/draftBytes, readOnly/dirty, optional advisory diskWritable, nullable external/diskContent/diskSignature/diskContentLength/diskContentBytes, mode/tabId, preview/pinned/untitled, revision/contentRevision, view and nullable error. kind is text, markdown, notebook, csv, image, pdf, audio, video, mermaid or binary; mode is source, rich or preview."
         }
       },
       {
@@ -306,7 +306,7 @@
             "content": { "type": "string", "description": "Optional inline text within the aggregate 256 KiB content budget." },
             "draft": { "description": "Draft text when present, or null when clean; a non-null draft may be omitted when it is lazy." },
             "baseline": { "description": "Saved-content baseline hash, or null when no saved baseline is available." }, "size": { "type": "integer", "minimum": 0 },
-            "readOnly": { "type": "boolean" }, "dirty": { "type": "boolean" },
+            "readOnly": { "type": "boolean" }, "diskWritable": { "type": "boolean", "description": "Advisory effective OS write access; independent of format readOnly and not a save guarantee." }, "dirty": { "type": "boolean" },
             "external": { "description": "External disk state: 'changed', 'deleted', or null when there is no external change." },
             "diskContent": { "description": "Optional inline disk comparison text, or null when unavailable." },
             "diskSignature": { "description": "Disk content signature, or null when no comparison signature is available." },
@@ -467,9 +467,9 @@
         },
         "result": {
           "type": "object",
-          "description": "Action-dependent result union: buffer returns a complete editor-buffer snapshot with eof=true and size; bytes returns Base64 data/eof/size; text returns a UTF-16 text chunk with offset/nextOffset/eof/contentRevision and diskSignature only for kind=disk. Text chunks are at most 65,536 code units and byte reads at most 1 MiB.",
+          "description": "Action-dependent result union: buffer returns a complete editor-buffer snapshot with eof=true and size, including optional diskWritable; bytes returns Base64 data/eof/size; text returns a UTF-16 text chunk with offset/nextOffset/eof/contentRevision and diskSignature only for kind=disk. Text chunks are at most 65,536 code units and byte reads at most 1 MiB.",
           "properties": {
-            "buffer": { "type": "object", "description": "Complete editor-buffer snapshot documented on open's result.", "additionalProperties": true },
+            "buffer": { "type": "object", "description": "Complete editor-buffer snapshot documented on open's result, including optional advisory diskWritable.", "additionalProperties": true },
             "data": { "type": "string", "description": "Base64-encoded bytes for a bounded on-disk range." },
             "text": { "type": "string" },
             "offset": { "type": "integer", "minimum": 0, "description": "UTF-16 code-unit offset for text results." },
@@ -522,19 +522,19 @@
       },
       {
         "id": "markdown",
-        "description": "Source-preserving Markdown capabilities, edits, links, templates, search, TOC and export.",
+        "description": "Source-preserving Markdown capabilities, edits, links, templates, search, TOC, safe detached rendering and export.",
         "params": {
           "type": "object",
           "properties": {
-            "bufferId": { "type": "string", "description": "Required for every action except new and templates." },
+            "bufferId": { "type": "string", "description": "Required for every action except new, templates and text-only renderPreview." },
             "expectedRevision": { "type": "integer", "minimum": 0, "description": "Required for apply, format, insert, replace, link edit/remove and importImage operations that write content." },
             "worktree": { "type": "string", "description": "Optional worktree selector for new and templates." },
-            "action": { "type": "string", "enum": ["capabilities", "format", "insert", "apply", "links", "documents", "toc", "frontmatter", "search", "replace", "templates", "new", "importImage", "exportPdf"], "description": "apply requires expectedRevision and text. format requires expectedRevision, format and selection; insert requires expectedRevision and format, with selection optional. links uses operation; edit/remove require selection and expectedRevision, and all link operations except remove require target. search requires query; replace requires expectedRevision, non-empty query (at most 2 KiB UTF-8) and text. importImage requires expectedRevision and either name+data, an authorized path, or the native chooser; exportPdf requires rich/preview mode and source at most 600 KiB UTF-8, with an optional destination path. new creates a collision-safe untitled Markdown placeholder and opens it in an edit tab; Save As is the separate saveAs method with a required bufferId, relative path and expectedRevision. new/templates use worktree and optional title/template/query; other buffer actions require bufferId." },
+            "action": { "type": "string", "enum": ["capabilities", "format", "insert", "apply", "links", "documents", "toc", "frontmatter", "search", "replace", "templates", "new", "importImage", "exportPdf", "renderPreview"], "description": "apply requires expectedRevision and text. format requires expectedRevision, format and selection; insert requires expectedRevision and format, with selection optional. links uses operation; edit/remove require selection and expectedRevision, and all link operations except remove require target. search requires query; replace requires expectedRevision, non-empty query (at most 2 KiB UTF-8) and text. importImage requires expectedRevision and either name+data, an authorized path, or the native chooser; exportPdf requires rich/preview mode and source at most 600 KiB UTF-8, with an optional destination path. new creates a collision-safe untitled Markdown placeholder and opens it in an edit tab; Save As is the separate saveAs method with a required bufferId, relative path and expectedRevision. new/templates use worktree and optional title/template/query; renderPreview requires text, rejects bufferId/path/worktree and renders without opening a buffer or tab; other buffer actions require bufferId." },
             "query": { "type": "string", "description": "Search, template or document query. replace and documents queries are limited to 2 KiB UTF-8; replace also requires a non-empty query." },
-            "text": { "type": "string", "description": "Required by apply and replace; resulting rich apply/format/insert content is limited to 1 MiB UTF-8. Also supplies optional replacement text, code or image alt text for relevant formats." },
-            "format": { "type": "string", "enum": ["body", "heading1", "heading2", "heading3", "heading4", "heading5", "bold", "italic", "strike", "inlineCode", "bulletList", "orderedList", "taskList", "quote", "link", "image", "codeBlock", "divider", "table", "mermaid", "inlineMath", "blockMath", "emoji", "tableRowAbove", "tableRowBelow", "tableRowDelete", "tableColumnLeft", "tableColumnRight", "tableColumnDelete", "tableDelete", "codeLanguage", "indentCode", "outdentCode", "copyCode"], "description": "Required for format/insert; insert accepts insertion formats only. Details, collapsible headings and custom document-link insertion are not published until their rich round trips are supported; use Source for those constructs." },
+            "text": { "type": "string", "description": "Required by apply and replace; for renderPreview required and bounded by the existing 8 MiB preview, line and block limits. Also supplies optional replacement text, code or image alt text for relevant formats." },
+            "format": { "type": "string", "enum": ["body", "heading1", "heading2", "heading3", "heading4", "heading5", "bold", "italic", "strike", "inlineCode", "bulletList", "orderedList", "taskList", "quote", "link", "image", "codeBlock", "divider", "table", "details", "collapsibleHeading", "documentLink", "mermaid", "inlineMath", "blockMath", "emoji", "tableRowAbove", "tableRowBelow", "tableRowDelete", "tableColumnLeft", "tableColumnRight", "tableColumnDelete", "tableDelete", "codeLanguage", "indentCode", "outdentCode", "copyCode"], "description": "Required for format/insert; insert accepts insertion formats only. details inserts a collapsible section, collapsibleHeading accepts language heading1 through heading5, and documentLink requires target with an optional text label. Rich edits retain source-preserving validation." },
             "target": { "type": "string", "description": "Required for link operations other than remove and for link/image/document-link formats; interpreted as an authorized Markdown target." },
-            "path": { "type": "string", "description": "Optional authorized image source or PDF destination for importImage/exportPdf." },
+            "path": { "type": "string", "description": "Optional authorized image source or PDF destination for importImage/exportPdf; renderPreview rejects path." },
             "title": { "type": "string", "description": "Optional new-document title; the service uses at most 256 characters." },
             "template": { "type": "string", "description": "Optional worktree-relative Markdown template for new; template paths are at most 64 KiB UTF-8 and expanded content is at most 256 KiB." },
             "selection": { "type": "object", "description": "Markdown body offsets; required for format, link edit/remove and optional for insert/image insertion.", "properties": { "from": { "type": "integer", "minimum": 0 }, "to": { "type": "integer", "minimum": 0 } }, "required": ["from", "to"], "additionalProperties": false },
@@ -547,7 +547,7 @@
             "visible": { "type": "boolean", "description": "Set TOC or frontmatter visibility for toc/frontmatter actions." },
             "releaseImages": { "type": "boolean", "description": "For capabilities, release previously created Markdown image resources when true." },
             "operation": { "type": "string", "enum": ["open", "copy", "edit", "remove", "resolve"], "description": "Optional links operation; edit/remove require selection and a current revision, while open/copy/resolve resolve the target." },
-            "language": { "type": "string", "description": "Optional code-block language label; when used it is limited to 32 letters, digits, underscore, plus or hyphen characters." },
+            "language": { "type": "string", "description": "For codeBlock, a code label limited to 32 letters, digits, underscore, plus or hyphen; for collapsibleHeading, one of heading1 through heading5." },
             "name": { "type": "string", "description": "Required safe single filename when importImage supplies inline data." },
             "data": { "type": "string", "description": "Canonical Base64 image data for importImage, limited to 12 MiB of Base64 characters; larger images use transfer." }
           },
@@ -555,7 +555,11 @@
           "additionalProperties": false
         },
         "result": {
-          "description": "Action-dependent object union. new returns {buffer: full editor-buffer snapshot, path, template:string|null, templateCreated}; its buffer is untitled:true and uses an owned collision-safe placeholder. Save As is quirky.editor/saveAs. Expanded templates are limited to 256 KiB. templates returns up to 100 {relativePath,name,title} entries plus total/truncated. capabilities returns bufferId/mode, rich and preview eligibility/reasons/byte limits (600 KiB rich, 1 MiB openAnyway, 8 MiB preview), optional canonicalText and sanitized preview data, and frontMatter either null or {text,startLine,endLine,lineCount,visible}; releaseImages returns {bufferId,released:true}. apply/format/insert edits return a buffer snapshot with change/source-preservation fields; format=copyCode returns {text,contentRevision}. links resolution returns {target,href:string|null,safe,resolved:string|null,ambiguous,kind,anchor:string|null,missing?}; link edits return an edit result. documents returns up to 20,000 {relativePath,name,title} entries with an 8 MiB aggregate path budget, total and truncated. toc returns {headings,count,visible}; frontmatter returns {visible,text,startLine/endLine nullable,readOnly}. search returns {query,matches,total,truncated,activeIndex} with at most 10,000 matches; replace returns {replacements,changed,buffer} and source-preservation data when changed. importImage returns {buffer,relativePath,mimeType,size,inserted} or {cancelled:true}; exportPdf returns exported path/details with valid:true,cancelled:false or {cancelled:true}. Nested buffers are full editor-buffer snapshots documented on open's result."
+          "description": "Action-dependent object union. new returns {buffer: full editor-buffer snapshot, path, template:string|null, templateCreated}; its buffer is untitled:true and uses an owned collision-safe placeholder. Save As is quirky.editor/saveAs. Expanded templates are limited to 256 KiB. templates returns up to 100 {relativePath,name,title} entries plus total/truncated. capabilities returns bufferId/mode, rich and preview eligibility/reasons/byte limits (600 KiB rich, 1 MiB openAnyway, 8 MiB preview), optional canonicalText and sanitized preview data, and frontMatter either null or {text,startLine,endLine,lineCount,visible}; releaseImages returns {bufferId,released:true}. renderPreview returns {html:string} through the sanitized renderer, accepts no buffer/path/worktree context, does not open or mutate buffers/tabs, and omits local-image sources. apply/format/insert edits return a buffer snapshot with change/source-preservation fields; format=copyCode returns {text,contentRevision}. links resolution returns {target,href:string|null,safe,resolved:string|null,ambiguous,kind,anchor:string|null,missing?}; link edits return an edit result. documents returns up to 20,000 {relativePath,name,title} entries with an 8 MiB aggregate path budget, total and truncated. toc returns {headings,count,visible}; frontmatter returns {visible,text,startLine/endLine nullable,readOnly}. search returns {query,matches,total,truncated,activeIndex} with at most 10,000 matches; replace returns {replacements,changed,buffer} and source-preservation data when changed. importImage returns {buffer,relativePath,mimeType,size,inserted} or {cancelled:true}; exportPdf returns exported path/details with valid:true,cancelled:false or {cancelled:true}. Nested buffers are full editor-buffer snapshots documented on open's result.",
+          "type": "object",
+          "properties": {
+            "html": { "type": "string", "description": "Sanitized HTML returned only by the detached, text-only renderPreview action." }
+          }
         }
       },
       {

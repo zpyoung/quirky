@@ -43,6 +43,23 @@ export function isSafeMarkdownLink(target: string): boolean {
   return /^(?:https?:|mailto:|tel:)/i.test(value)
 }
 
+function escapeHtmlText(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  })[character]!)
+}
+
+function extensionlessDocumentTarget(target: string): string {
+  const anchor = target.indexOf('#')
+  const path = anchor < 0 ? target : target.slice(0, anchor)
+  const suffix = anchor < 0 ? '' : target.slice(anchor)
+  return `${path.replace(/\.(?:md|markdown|mdx)$/i, '')}${suffix}`
+}
+
 function blockText(format: MarkdownFormat, text: string, input: InsertInput): string {
   if (/^heading[1-5]$/.test(format)) {
     const level = Number(format.at(-1))
@@ -62,20 +79,31 @@ function blockText(format: MarkdownFormat, text: string, input: InsertInput): st
   if (format === 'divider') return '---'
   if (format === 'table') return '| Column 1 | Column 2 | Column 3 |\n| --- | --- | --- |\n|  |  |  |\n|  |  |  |'
   if (format === 'details' || format === 'collapsibleHeading') {
-    const summary = input.text?.trim() || (format === 'collapsibleHeading' ? 'Collapsible heading' : 'Toggle text')
-    const safeSummary = summary.replace(/[&<>]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[char]!)
-    const safeBody = (text || 'Content').replace(/[&<>]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[char]!)
-    return `<details><summary>${safeSummary}</summary>\n\n${safeBody}\n\n</details>`
+    const headingLevel = format === 'collapsibleHeading'
+      ? /^heading([1-5])$/.exec(input.language ?? '')?.[1]
+      : undefined
+    if (format === 'collapsibleHeading' && headingLevel === undefined) {
+      throw new TypeError('collapsibleHeading language must be heading1 through heading5.')
+    }
+    const summary = input.text ?? (format === 'collapsibleHeading' ? 'Collapsible heading' : 'Toggle Text')
+    const summaryText = escapeHtmlText(summary)
+    const summaryMarkup = headingLevel === undefined
+      ? summaryText
+      : `<h${headingLevel}>${summaryText}</h${headingLevel}>`
+    const safeBody = escapeHtmlText(text || 'Content')
+    return `<details><summary>${summaryMarkup}</summary>\n\n${safeBody}\n\n</details>`
   }
   if (format === 'mermaid') return `\`\`\`mermaid\ngraph TD\n  A[Start] --> B[End]\n\`\`\``
   if (format === 'inlineMath') return `$${text || 'x^2'}$`
   if (format === 'blockMath') return `$$\n${text || 'x^2'}\n$$`
   if (format === 'emoji') return text || '🙂'
   if (format === 'documentLink') {
-    const target = input.target?.trim()
-    if (!target || /[\r\n\[\]|]/.test(target)) throw new TypeError('Document links need a non-empty target without brackets or newlines.')
-    const label = text.trim()
-    return `[[${target}${label ? `|${label}` : ''}]]`
+    const target = typeof input.target === 'string' ? extensionlessDocumentTarget(input.target.trim()) : ''
+    if (target === '' || /[\r\n\[\]|]/.test(target)) throw new TypeError('Document links need a non-empty target without brackets or newlines.')
+    const label = text
+    if (/[\r\n\[\]|]/.test(label)) throw new TypeError('Document-link labels cannot contain brackets, pipes or newlines.')
+    const labelSuffix = label === '' ? '' : `|${label}`
+    return `[[${target}${labelSuffix}]]`
   }
   if (format === 'link') {
     const target = input.target?.trim()

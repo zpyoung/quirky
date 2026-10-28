@@ -134,6 +134,7 @@ type GitHubFixture = {
   pending(branch: string): string
   release(branch: string): void
   done(branch: string): string
+  installTransport(bare: string): void
 }
 
 let savedEnvironment: Map<string, string | undefined> | null = null
@@ -211,7 +212,21 @@ function startFixture(root: string): GitHubFixture {
     },
     pending: (branch) => signalPath('pending', branch),
     release: (branch) => writeFileSync(signalPath('release', branch), 'release'),
-    done: (branch) => signalPath('done', branch)
+    done: (branch) => signalPath('done', branch),
+    installTransport(bare) {
+      const realGit = Bun.which('git')
+      if (!realGit) throw new Error('the test Git executable is unavailable')
+      const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`
+      const wrapper = [
+        '#!/bin/sh',
+        'if [ "$1" = "push" ]; then',
+        '  shift',
+        `  exec ${quote(realGit)} -c remote.origin.pushurl=${quote(bare)} push "$@"`,
+        'fi',
+        `exec ${quote(realGit)} "$@"`
+      ].join(String.fromCharCode(10)) + String.fromCharCode(10)
+      writeFileSync(join(bin, 'git'), wrapper, { mode: 0o755 })
+    }
   }
 }
 
@@ -256,7 +271,7 @@ test('GitHub Source Control reports current PR status, ignores stale worktree re
   fixture = startFixture(join(root, 'github-ui'))
   const w = await boot(scratch, { noPanel: true })
   w.git('remote', 'set-url', 'origin', 'https://github.com/test-owner/test-repo.git')
-  w.git('remote', 'set-url', '--push', 'origin', w.originDir)
+  fixture.installTransport(w.originDir)
   await openGitHubPanel(w)
 
   await waitForReviewState(w, 'no-review', 'No pull request is linked')
@@ -359,7 +374,7 @@ test('SC-28: unpublished primary waits for current GitHub state before publishin
   fixture = startFixture(join(root, 'github-primary'))
   const w = await boot(scratch, { noPanel: true })
   w.git('remote', 'set-url', 'origin', 'https://github.com/test-owner/test-repo.git')
-  w.git('remote', 'set-url', '--push', 'origin', w.originDir)
+  fixture.installTransport(w.originDir)
   await openGitHubPanel(w)
 
   const noReview = await w.addWorktree('no-review-primary')

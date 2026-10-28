@@ -17,6 +17,8 @@ export type EditorBuffer = {
   baseline: string | null
   size: number
   readOnly: boolean
+  /** Advisory effective OS write access; actual saves remain authoritative. */
+  diskWritable?: boolean
   dirty: boolean
   external: 'changed' | 'deleted' | null
   diskContent: string | null

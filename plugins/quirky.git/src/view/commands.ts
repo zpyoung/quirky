@@ -5,7 +5,9 @@ import { activePanel } from '../panel/registry'
 import { worktreeOf } from '../scm'
 import { isHeld, postSendRequest } from '../notes/SendMenu'
 import type { Note } from '../notes/useNotes'
-import { DIFF_VIEW_ID, PANEL_ID, type DiffViewInput } from '../shared/view-input'
+import { PANEL_ID, type DiffViewInput } from '../shared/view-input'
+import { messageOf } from './data'
+import { openHostedDiff } from './hosted-tabs'
 import { activeView, openDiffView } from './registry'
 
 type Args = Record<string, unknown>
@@ -27,13 +29,29 @@ const AREAS = ['staged', 'unstaged', 'untracked', 'branch', 'all'] as const
 function openDiffInput(worktree: string, args: Args): DiffViewInput {
   const path = text(args.path)
   if (!path) throw new Error('open-diff needs a path.')
-  if (args.source === 'conflict') return { worktree, mode: 'conflict-file', path }
+  const groupId = text(args.groupId)
+  const display: DiffViewInput['display'] = args.display === 'source' || args.display === 'preview' ? args.display : undefined
+  const placement = {
+    ...(typeof args.preview === 'boolean' ? { preview: args.preview } : {}),
+    ...(args.split === true ? { split: true } : {}),
+    ...(groupId ? { groupId } : {}),
+    ...(display === undefined ? {} : { display })
+  }
+  if (args.source === 'conflict') return { worktree, mode: 'conflict-file', path, ...placement }
   const source =
     SOURCES.find((s) => s === args.source) ??
     (args.area === 'staged' || args.area === 'branch' ? args.area : args.commit ? 'commit' : 'unstaged')
   const oldPath = text(args.oldPath)
   const commit = text(args.commit)
-  return { worktree, mode: 'file', source, path, ...(oldPath ? { oldPath } : {}), ...(commit ? { commit } : {}) }
+  return {
+    worktree,
+    mode: 'file',
+    source,
+    path,
+    ...(oldPath ? { oldPath } : {}),
+    ...(commit ? { commit } : {}),
+    ...placement
+  }
 }
 
 /**
@@ -42,7 +60,13 @@ function openDiffInput(worktree: string, args: Args): DiffViewInput {
  * throw when there is none; the open commands default to the open view's worktree.
  */
 export function commandHandlers(context: UiPluginContext): Record<string, (args?: unknown) => unknown> {
-  const open = (input: DiffViewInput) => context.openView(DIFF_VIEW_ID, input)
+  const open = async (input: DiffViewInput) => {
+    try {
+      return await openHostedDiff(context, input)
+    } catch (error) {
+      context.toast('Could not open diff', messageOf(error))
+    }
+  }
   return {
     show: () => context.togglePanel(PANEL_ID, true),
     'open-diff': (args) => open(openDiffInput(worktreeFor(context, argsOf(args)), argsOf(args))),

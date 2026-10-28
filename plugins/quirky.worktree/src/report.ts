@@ -79,7 +79,7 @@ export type AutomationAvailabilitySnapshot = {
 }
 export type DropPreviewReport = MembershipTarget
 
-/** Projects eligible hairline boundaries from ordered logical top-level sections and sticky headers. */
+/** Projects top-level hairline boundaries, excluding the first, host-adjacent, and sticky edges. */
 export function projectSeparatorBoundaries(
   sectionKeys: readonly string[],
   stickySections: ReadonlySet<string>,
@@ -90,7 +90,12 @@ export function projectSeparatorBoundaries(
   for (let index = 1; index < sectionKeys.length; index++) {
     const previous = sectionKeys[index - 1]!
     const current = sectionKeys[index]!
-    if (!stickySections.has(previous) && !stickySections.has(current)) boundaries.push(current)
+    if (
+      !stickySections.has(previous) &&
+      !stickySections.has(current) &&
+      !previous.startsWith('host:') &&
+      !current.startsWith('host:')
+    ) boundaries.push(current)
   }
   return boundaries
 }

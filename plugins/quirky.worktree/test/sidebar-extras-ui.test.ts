@@ -3,6 +3,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from 'bun:te
 import type { ProjectGroup, QuirkyEvent, Repo, Session, UiLayout, UiPluginContext, Worktree } from '@quirky/protocol'
 import { RpcErrorCode } from '@quirky/protocol'
 import { resolveMembershipTarget } from '../src/membership'
+import type { DropPreviewReport } from '../src/report'
 
 const SLOT = 'sidebar-section:quirky.worktree/worktrees'
 const BASE = Date.now()
@@ -66,13 +67,15 @@ type RendererReport = {
   reviewHiddenIds: string[]
   reviewHiddenCount: number
   filterCount: number
-  dropPreview: { kind: 'group' | 'repo'; id: string } | null
+  separators: { enabled: boolean; eligibleBoundaries: string[] }
+  dropPreview: DropPreviewReport | null
 }
 type TestWorld = {
   repos: Repo[]
   groups: Group[]
   worktrees: Worktree[]
   sessions: Session[]
+  now: number
   preferences: Preferences
   active: SidebarState['active']
   visits: Record<string, number>
@@ -109,6 +112,46 @@ function callGate(): CallGate {
     wait: gate.promise,
     start: started.resolve,
     release: gate.resolve
+  }
+}
+function intervalClock() {
+  const realSetInterval = globalThis.setInterval
+  const realClearInterval = globalThis.clearInterval
+  const cleanup: Array<() => void> = []
+  const intervals: { callback: () => void; delay: number; elapsed: number }[] = []
+
+  const interceptSetInterval = (<TArgs extends unknown[]>(
+    callback: (...args: TArgs) => void,
+    delay?: number,
+    ...args: TArgs
+  ) => {
+    const handle = realSetInterval(() => {}, delay)
+    cleanup.push(() => realClearInterval(handle))
+    if (typeof callback === 'function') {
+      intervals.push({
+        callback: () => callback(...args),
+        delay: delay ?? 0,
+        elapsed: 0
+      })
+    }
+    return handle
+  }) as typeof globalThis.setInterval
+  globalThis.setInterval = interceptSetInterval
+
+  return {
+    advance(milliseconds: number) {
+      for (const interval of intervals) {
+        interval.elapsed += milliseconds
+        while (interval.delay > 0 && interval.elapsed >= interval.delay) {
+          interval.elapsed -= interval.delay
+          interval.callback()
+        }
+      }
+    },
+    restore() {
+      globalThis.setInterval = realSetInterval
+      for (const clear of cleanup) clear()
+    }
   }
 }
 
@@ -252,6 +295,7 @@ function setup(
   const world: TestWorld = {
     ...data,
     sessions: [session('s-other', 'w-other', 'working')],
+    now: BASE,
     preferences,
     active: null,
     visits: {},
@@ -308,7 +352,7 @@ function setup(
         }
       } else if (window !== 'all') {
         const days = window === 'today' ? 1 : window === 'week' ? 7 : window === 'month' ? 30 : snapshot.preferences.workspaceActivityCustomDays
-        visible = activityAt >= BASE - days * DAY
+        visible = activityAt >= world.now - days * DAY
         reason = visible ? 'recent' : 'old'
       }
       const review = world.reviews[item.id]
@@ -1235,6 +1279,68 @@ test('hosting review events refresh only active filters and late projections can
   await h.flush()
   expect(card('feature')).toBeUndefined()
   expect(lastReport(h).reviewHiddenIds).toContain('w-feature')
+})
+test('quiet activity aging refreshes at sixty seconds without store events', async () => {
+  const h = setup()
+  h.world.preferences.workspaceActivityWindow = 'today'
+  h.world.worktrees.find((item) => item.id === 'w-other')!.lastActivityAt = BASE - DAY + 1
+  const timers = intervalClock()
+  try {
+    await h.mount()
+    expect(card('other')).toBeDefined()
+    const projectionCalls = h.calls.filter((call) => call.method === 'quirky.sidebar-extras/projection').length
+
+    h.world.now = BASE + 59_999
+    await act(async () => {
+      timers.advance(59_999)
+      await Promise.resolve()
+    })
+    await h.flush()
+    expect(card('other')).toBeDefined()
+    expect(h.calls.filter((call) => call.method === 'quirky.sidebar-extras/projection')).toHaveLength(projectionCalls)
+
+    h.world.now = BASE + 60_000
+    await act(async () => {
+      timers.advance(1)
+      await Promise.resolve()
+    })
+    await h.flush()
+    expect(card('other')).toBeUndefined()
+    expect(lastReport(h).hiddenCount).toBeGreaterThan(0)
+  } finally {
+    await currentCleanup?.()
+    currentCleanup = null
+    timers.restore()
+  }
+})
+test('section separators mark top-level boundaries only with Pinned first', async () => {
+  const h = setup()
+  await h.mount()
+  const separators = lastReport(h).separators
+  expect(separators.enabled).toBe(true)
+  expect(separators.eligibleBoundaries).toContain('group:g-team')
+  expect(separators.eligibleBoundaries).not.toContain('pinned')
+  expect(host.querySelector('section.pinned')?.classList.contains('section-separator')).toBe(false)
+  expect(sectionForGroup('Team')?.classList.contains('section-separator')).toBe(true)
+  expect(sectionForGroup('Child')?.classList.contains('section-separator')).toBe(false)
+  expect(sectionForRepo('api')?.classList.contains('section-separator')).toBe(false)
+})
+test('sticky top-level headers suppress adjacent section separators', async () => {
+  const style = document.createElement('style')
+  style.textContent = 'section.group[data-top-level-section="group:g-team"] > .group-header { position: sticky; }'
+  document.head.append(style)
+  const h = setup()
+  try {
+    await h.mount()
+    const separators = lastReport(h).separators
+    expect(separators.eligibleBoundaries).not.toContain('group:g-team')
+    expect(separators.eligibleBoundaries).not.toContain('group:g-release')
+    expect(separators.eligibleBoundaries).toContain('repo:r-web')
+    expect(sectionForGroup('Team')?.classList.contains('section-separator')).toBe(false)
+    expect(sectionForGroup('Child')?.classList.contains('section-separator')).toBe(false)
+  } finally {
+    style.remove()
+  }
 })
 
 test('automation filtering uses only durable attribution and appears in visible counts', async () => {

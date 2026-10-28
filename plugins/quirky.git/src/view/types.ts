@@ -9,6 +9,13 @@ export type ViewReport = {
   source: string | null
   path: string | null
   area: string | null
+  /** Stable worktree and hosted-tab identity when the view is in the terminal tab strip. */
+  worktree?: string
+  tabId?: string | null
+  groupId?: string | null
+  /** The hosted view's placement in its terminal workspace. */
+  placement?: 'preview' | 'permanent' | 'split'
+  display?: 'source' | 'preview'
   commit: string | null
   changes: number
   currentChange: number | null

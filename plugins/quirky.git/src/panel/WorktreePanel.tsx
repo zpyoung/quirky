@@ -8,7 +8,7 @@ import { useAiFix } from '../ai/useAiFix'
 import { NotesShelf } from '../notes/NotesShelf'
 import { noteViewInput } from '../notes/open-note'
 import { noteCounts, useNotes, type Note } from '../notes/useNotes'
-import { DIFF_VIEW_ID, PANEL_ID, type DiffViewInput } from '../shared/view-input'
+import { PANEL_ID, type DiffViewInput } from '../shared/view-input'
 import { discardText } from '../shared/discard-text'
 import type { ScmReport } from '../scm'
 import { BlockedCard, CleanState, CompareUnavailable, HugeBanner, OperationCard } from './Cards'
@@ -36,6 +36,9 @@ import type { Notice } from './Notices'
 import { registerPanel } from './registry'
 import { toastFor, type RemoteAction } from './remote-messages'
 import { displayPaths, Rows, type ClickKind, type Expansion, type RowButton, type RowHandlers, type RowItem } from './Rows'
+import { openHostedDiff } from '../view/hosted-tabs'
+import { isRecord } from '../daemon/validation'
+import type { PushTargetResult } from '../daemon/push-target'
 import { SectionFrame } from './SectionFrame'
 import {
   actionPaths,
@@ -66,6 +69,55 @@ const RETRY_MS = 10_000
 const MESSAGE_REQUIRED = 'Enter a commit message to commit'
 
 type Blocked = { pill: 'Lint' | 'Hook'; summary: string; output: string }
+type PushTargetPurpose = 'review' | 'creation'
+type ReviewPushTarget =
+  | { key: string; state: 'loading' }
+  | { key: string; state: 'unavailable'; message: string }
+  | {
+      key: string
+      state: 'ready'
+      remote: string
+      branch: string
+      fork: boolean
+      repository: { host: string; owner: string; repo: string }
+    }
+type ForceConfirmation = { purpose?: PushTargetPurpose; expected?: string }
+const PUSH_TARGET_OID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/iu
+
+function pushTargetResult(value: unknown): PushTargetResult | undefined {
+  if (!isRecord(value)) return undefined
+  if (value.ready === false) {
+    return typeof value.reason === 'string' && typeof value.message === 'string' && value.message !== ''
+      ? { ready: false, reason: value.reason, message: value.message }
+      : undefined
+  }
+  if (value.ready !== true || !isRecord(value.repository)) return undefined
+
+  const repository = value.repository
+  const { remote, branch, localBranch, localHead, headOid, number, fork } = value
+  if (typeof remote !== 'string' || remote.length === 0 ||
+    typeof branch !== 'string' || branch.length === 0 ||
+    typeof localBranch !== 'string' || localBranch.length === 0 ||
+    typeof localHead !== 'string' || !PUSH_TARGET_OID.test(localHead) ||
+    (headOid !== undefined && (typeof headOid !== 'string' || !PUSH_TARGET_OID.test(headOid))) ||
+    (number !== undefined && (typeof number !== 'number' || !Number.isSafeInteger(number) || number <= 0)) ||
+    typeof fork !== 'boolean' ||
+    typeof repository.host !== 'string' || repository.host.length === 0 ||
+    typeof repository.owner !== 'string' || repository.owner.length === 0 ||
+    typeof repository.repo !== 'string' || repository.repo.length === 0) return undefined
+
+  return {
+    ready: true,
+    remote,
+    branch,
+    localBranch,
+    localHead,
+    ...(typeof headOid === 'string' ? { headOid } : {}),
+    ...(typeof number === 'number' ? { number } : {}),
+    fork,
+    repository: { host: repository.host, owner: repository.owner, repo: repository.repo }
+  }
+}
 
 type DialogState =
   | { kind: 'confirm'; title: string; body: string; confirm: string; danger: boolean; resolve(ok: boolean): void }
@@ -134,6 +186,43 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   const [localBusy, setLocalBusy] = useState<GitBusyOp | null>(null)
   const status = useMemo<GitStatus | null>(() => (polled === null ? null : { ...polled, busy: polled.busy ?? localBusy }), [polled, localBusy])
   const githubReview = useGitHubReview(context, worktree, status)
+  const [reviewPushTarget, setReviewPushTarget] = useState<ReviewPushTarget | null>(null)
+  const reviewPushKey = githubReview.kind === 'found'
+    ? `${githubReview.target.worktree}\\0${githubReview.target.branch}\\0${githubReview.target.head}\\0${githubReview.review.number}\\0${githubReview.review.state}`
+    : null
+  useEffect(() => {
+    if (githubReview.kind !== 'found' || reviewPushKey === null) {
+      setReviewPushTarget(null)
+      return
+    }
+    let alive = true
+    setReviewPushTarget({ key: reviewPushKey, state: 'loading' })
+    void context.call('quirky.git/pushTarget', { worktree, purpose: 'review' }).then((raw: unknown) => {
+      if (!alive) return
+      const target = pushTargetResult(raw)
+      if (target && target.ready === true) {
+        setReviewPushTarget({
+          key: reviewPushKey,
+          state: 'ready',
+          remote: target.remote,
+          branch: target.branch,
+          fork: target.fork,
+          repository: target.repository
+        })
+      } else {
+        setReviewPushTarget({
+          key: reviewPushKey,
+          state: 'unavailable',
+          message: target?.ready === false ? target.message : 'The linked pull-request push target is unavailable.'
+        })
+      }
+    }).catch((error: unknown) => {
+      if (alive) setReviewPushTarget({ key: reviewPushKey, state: 'unavailable', message: messageOf(error) })
+    })
+    return () => {
+      alive = false
+    }
+  }, [context, worktree, reviewPushKey])
   const compareTrigger = `${polled?.head ?? ''}|${polled?.upstreamStatus.sha ?? ''}|${settings.compareBase}`
   const compareData = useCompare(context, worktree, compareTrigger, polled !== null)
   const { compare } = compareData
@@ -298,7 +387,8 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
     githubReview.kind === 'loading' || githubReview.kind === 'waiting' ? 'loading'
       : githubReview.kind === 'unavailable' ? 'unavailable'
         : githubReview.kind === 'found' && githubReview.review.state === 'merged' ? 'merged'
-          : undefined
+          : githubReview.kind === 'found' ? 'linked'
+            : undefined
   const ladder: LadderState = {
     status,
     message,
@@ -315,7 +405,11 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   const fixFor = (action: FixAction): FixButtonProps | undefined =>
     aiEnabled ? { action, busy: aiFix.busy, onFix: () => void aiFix.start(action), onCustomize: () => setLaunch(action) } : undefined
 
-  const open = (input: Omit<DiffViewInput, 'worktree'>) => context.openView(DIFF_VIEW_ID, { worktree, ...input })
+  const open = (input: Omit<DiffViewInput, 'worktree'>) => {
+    void openHostedDiff(context, { worktree, ...input }).catch((error: unknown) =>
+      context.toast('Could not open diff', messageOf(error))
+    )
+  }
 
   const toggleSubmodule = (item: RowItem) => {
     const signature = JSON.stringify(item.entry?.submodule)
@@ -331,13 +425,14 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
       .catch(() => setSubmodules((prev) => ({ ...prev, [item.path]: { open: prev[item.path]?.open ?? true, entries: null, signature, failed: true } })))
   }
 
-  const openRow = (item: RowItem) => {
+  const openRow = (item: RowItem, options: { permanent?: boolean; split?: boolean } = {}) => {
     if (item.entry?.submodule) return toggleSubmodule(item)
+    const placement = options.split ? { split: true, preview: false } : { preview: options.permanent !== true }
     const area = item.entry?.area
     const oldPath = item.oldPath === undefined ? {} : { oldPath: item.oldPath }
-    if (area === 'conflicts') return open({ mode: 'conflict-file', path: item.path })
+    if (area === 'conflicts') return open({ mode: 'conflict-file', path: item.path, ...placement })
     const source = area === undefined ? 'branch' : area === 'staged' ? 'staged' : 'unstaged'
-    open({ mode: 'file', source, path: item.path, ...oldPath })
+    open({ mode: 'file', source, path: item.path, ...placement, ...oldPath })
   }
 
   const ask = (spec: { title: string; body: string; confirm: string; danger?: boolean }) =>
@@ -461,11 +556,12 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   const absolute = (path: string): string => (worktreePath === null ? path : `${worktreePath.replace(/\/$/, '')}/${path}`)
 
   const handlers: RowHandlers = {
-    click: (item, kind: ClickKind) => {
-      if (item.entry === undefined) return openRow(item)
+    click: (item, kind: ClickKind, permanent) => {
+      if (kind === 'split') return openRow(item, { split: true })
+      if (item.entry === undefined) return openRow(item, { permanent })
       const type = kind === 'mod' ? 'mod-click' : kind === 'shift' ? 'shift-click' : 'click'
       const action: SelectionAction = type === 'shift-click' ? { type, path: item.path, order } : { type, path: item.path }
-      if (dispatchSelection(action) !== null) openRow(item)
+      if (dispatchSelection(action) !== null) openRow(item, { permanent })
     },
     contextMenu: (item, x, y) => {
       if (item.entry) dispatchSelection({ type: 'context-click', path: item.path })
@@ -502,12 +598,36 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
     }
   ]
 
-  const remote = async (action: RemoteAction, params: Record<string, unknown> = {}): Promise<boolean> => {
+  const remote = async (
+    action: RemoteAction,
+    params: Record<string, unknown> = {},
+    requestedPurpose?: PushTargetPurpose
+  ): Promise<boolean> => {
+    let purpose = requestedPurpose
+    if (PUSH_ACTIONS.has(action)) {
+      if (purpose === undefined && githubReview.kind === 'found') purpose = 'review'
+      if (purpose === undefined && (
+        githubReview.kind === 'loading' || githubReview.kind === 'waiting' || githubReview.kind === 'unavailable'
+      )) {
+        const text = githubReview.kind === 'unavailable'
+          ? githubReview.message
+          : 'GitHub pull-request state is still being checked. Retry before pushing.'
+        setRemoteError(text)
+        context.toast('Push target unavailable', text)
+        return false
+      }
+      if (action === 'sync' && purpose === 'review') {
+        const text = 'Sync cannot safely choose a linked pull-request destination. Pull or push to the validated PR target separately.'
+        setRemoteError(text)
+        context.toast('Sync unavailable for linked pull request', text)
+        return false
+      }
+    }
     setRemoteError(null)
     setPushBlocked(null)
     setLocalBusy(action)
     try {
-      await context.call(REMOTE_METHODS[action], { worktree, ...params })
+      await context.call(REMOTE_METHODS[action], { worktree, ...params, ...(purpose === undefined ? {} : { purpose }) })
       return true
     } catch (e) {
       const reason = reasonOf(e)
@@ -528,25 +648,56 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
     }
   }
 
-  const confirmForcePush = async (): Promise<boolean> => {
+  const confirmForcePush = async (): Promise<ForceConfirmation | null> => {
+    if (githubReview.kind === 'found') {
+      let target: PushTargetResult | undefined
+      try {
+        target = pushTargetResult(await context.call('quirky.git/pushTarget', { worktree, purpose: 'review' }))
+      } catch (error) {
+        context.toast('Force push failed', messageOf(error))
+        return null
+      }
+      if (!target || target.ready === false || target.headOid === undefined) {
+        const message = target?.ready === false
+          ? target.message
+          : 'The linked pull-request push target is unavailable.'
+        context.toast('Force push unavailable', message)
+        return null
+      }
+      const body = `Force push ${target.localBranch} to ${target.remote}/${target.branch} (${target.repository.host}/${target.repository.owner}/${target.repository.repo}) at ${target.headOid}? The push uses an exact lease on this pull-request head.`
+      const ok = await ask({ title: 'Force push linked pull request?', body, confirm: 'Force Push', danger: true })
+      return ok ? { purpose: 'review', expected: target.headOid } : null
+    }
+    if (githubReview.kind === 'loading' || githubReview.kind === 'waiting' || githubReview.kind === 'unavailable') {
+      const message = githubReview.kind === 'unavailable'
+        ? githubReview.message
+        : 'GitHub pull-request state is still being checked. Retry before force pushing.'
+      context.toast('Force push unavailable', message)
+      return null
+    }
     let text: string
     try {
       text = (await context.call('quirky.git/describeForcePush', { worktree })) as string
     } catch (e) {
       context.toast('Force push failed', messageOf(e))
-      return false
+      return null
     }
     const { title, body } = splitQuestion(text)
-    return ask({ title, body, confirm: 'Force Push', danger: true })
+    const ok = await ask({ title, body, confirm: 'Force Push', danger: true })
+    return ok ? {} : null
   }
 
-  const forcePushParams = (): Record<string, unknown> => {
+  const forcePushParams = (expected?: string): Record<string, unknown> => {
+    if (expected !== undefined) return { yes: true, expected }
     const sha = status?.upstreamStatus.sha
     return sha ? { yes: true, expected: sha } : { yes: true }
   }
 
   const forcePush = async () => {
-    if (await confirmForcePush()) await remote('force-push', forcePushParams())
+    const confirmation = await confirmForcePush()
+    if (confirmation) {
+      await remote('force-push', forcePushParams(confirmation.expected), confirmation.purpose)
+    }
   }
 
   const doCommit = async (): Promise<boolean> => {
@@ -591,11 +742,17 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
         return void (await doCommit())
       case 'commit-push':
         if (lease) {
-          if (!(await confirmForcePush())) return
-          if (await doCommit()) await remote('force-push', forcePushParams())
+          const confirmation = await confirmForcePush()
+          if (!confirmation) return
+          if (await doCommit()) {
+            await remote('force-push', forcePushParams(confirmation.expected), confirmation.purpose)
+          }
         } else if (await doCommit()) await remote('push')
         return
       case 'commit-sync':
+        if (githubReview.kind === 'found' || githubReview.kind === 'loading' || githubReview.kind === 'waiting' || githubReview.kind === 'unavailable') {
+          return void (await remote('sync'))
+        }
         if (await doCommit()) await remote('sync')
         return
       case 'push':
@@ -700,7 +857,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
         fresh = await exactStatus(target, branch, expectedHead)
         if (fresh.entries.length > 0) throw new Error('Commit or stage the current changes before pushing this branch.')
         if (!stillCurrent()) return
-        if (!(await remote('push'))) return
+        if (!(await remote('push', {}, 'creation'))) return
         if (!stillCurrent()) return
         fresh = await exactStatus(target, branch, expectedHead)
         if (fresh.entries.length > 0) throw new Error('New changes appeared after pushing. Review Source Control before creating a pull request.')
@@ -991,6 +1148,19 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
             )}
             <div className="scm-create-review">
               <GitHubReviewStatus context={context} lookup={githubReview} />
+              {githubReview.kind === 'found' && reviewPushTarget?.key === reviewPushKey && (
+                reviewPushTarget.state === 'loading' ? (
+                  <p className="scm-push-target" role="status">Checking the configured push destination for this pull request…</p>
+                ) : reviewPushTarget.state === 'unavailable' ? (
+                  <p className="scm-push-target" role="alert">{reviewPushTarget.message}</p>
+                ) : (
+                  <p className="scm-push-target" role="status">
+                    <strong>{reviewPushTarget.fork ? 'Fork destination' : 'Push destination'}:</strong>{' '}
+                    <code>{reviewPushTarget.remote}/{reviewPushTarget.branch}</code>
+                    {' · '}{reviewPushTarget.repository.host}/{reviewPushTarget.repository.owner}/{reviewPushTarget.repository.repo}
+                  </p>
+                )
+              )}
               {showReviewAction && (
                 <button type="button" disabled={reviewActionDisabled} title={reviewBlocker ?? undefined} onClick={() => void createReview()}>
                   {reviewActionLabel}

@@ -7,6 +7,7 @@ import { ConflictFile } from './ConflictFile'
 import { ConflictReview } from './ConflictReview'
 import { FileDiff } from './FileDiff'
 import { registerView, type ViewHandle } from './registry'
+import { closeHostedDiff, updateHostedDiffDirty } from './hosted-tabs'
 import { useDiffSettings } from './settings'
 import type { Controller, ViewReport } from './types'
 
@@ -36,9 +37,36 @@ function DiffWindow({ context, input, report }: { context: UiPluginContext; inpu
     controller.current = next
   }, [])
   const close = useCallback(() => {
-    if (input.mode === 'conflict-file' && input.review) context.openView(DIFF_VIEW_ID, { worktree: input.worktree, mode: 'conflicts', review: input.review })
-    else context.openView(SESSIONS_VIEW_ID, { worktree: input.worktree })
+    if (input.tabId !== undefined) {
+      void closeHostedDiff(context, input).catch((error: unknown) =>
+        context.toast('Could not close diff', error instanceof Error ? error.message : String(error))
+      )
+    } else if (input.mode === 'conflict-file' && input.review) {
+      context.openView(DIFF_VIEW_ID, { worktree: input.worktree, mode: 'conflicts', review: input.review })
+    } else {
+      context.openView(SESSIONS_VIEW_ID, { worktree: input.worktree })
+    }
   }, [context, input])
+
+  const lastDirty = useRef<boolean | null>(null)
+  const send = useCallback((state: ViewReport) => {
+    const display = input.display ?? 'source'
+    report({
+      ...state,
+      worktree: input.worktree,
+      tabId: input.tabId ?? null,
+      groupId: input.groupId ?? null,
+      placement: input.split === true ? 'split' : input.preview === true ? 'preview' : 'permanent',
+      display
+    })
+    const dirty = state.dirty === true
+    if (input.tabId !== undefined && lastDirty.current !== dirty) {
+      lastDirty.current = dirty
+      void updateHostedDiffDirty(context, input, dirty).catch((error: unknown) =>
+        context.toast('Could not update diff tab close protection', error instanceof Error ? error.message : String(error))
+      )
+    }
+  }, [context, input, report])
 
   useEffect(() => {
     const call = <K extends keyof Controller>(name: K) =>
@@ -64,7 +92,7 @@ function DiffWindow({ context, input, report }: { context: UiPluginContext; inpu
     return registerView(handle)
   }, [input])
 
-  const props = { context, input, settings, setSetting, report, bind, close }
+  const props = { context, input, settings, setSetting, report: send, bind, close }
   switch (input.mode) {
     case 'combined':
       return <CombinedDiff {...props} />
