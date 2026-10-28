@@ -10,7 +10,7 @@
     "method": [
       {
         "id": "create",
-        "description": "Starts a structured (no PTY) Claude or Codex conversation. `deferStart` reserves a live session and lease without an initial turn; otherwise `prompt` is required. Extra arguments are refused.",
+        "description": "Starts a structured (no PTY) Claude or Codex conversation, optionally with model and effort picks. `deferStart` reserves a live session and lease without an initial turn; otherwise `prompt` is required. Extra arguments are refused.",
         "params": {
           "type": "object",
           "properties": {

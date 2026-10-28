@@ -30,10 +30,10 @@ import type {
 
 type StructuredAgent = 'claude' | 'codex'
 type OwnerToken = { key: string; sessionId: string | null }
-type PluginLifetimeOwner = { pluginId: string; key?: string }
 type StructuredSendResult =
   | { ok: true }
   | { ok: false; reason: 'operation_unknown' | 'recipient_changed' | 'recipient_gone' }
+type PluginLifetimeOwner = { pluginId: string; key?: string }
 type LiveSession = {
   worktreeId: string
   agent: StructuredAgent
@@ -192,8 +192,8 @@ export function activate(context: PluginContext): void {
   const agentRunners = new Map<StructuredAgent, StructuredRunner>()
   const runnerBySession = new Map<string, StructuredRunner>()
   const startTasks = new Map<string, Promise<void>>()
-  const pluginLifetimes = new Map<string, PluginLifetimeOwner>()
   const sendFlights = new Map<string, { payloadHash: string; promise: Promise<StructuredSendResult> }>()
+  const pluginLifetimes = new Map<string, PluginLifetimeOwner>()
   let statusQueue: Promise<void> = Promise.resolve()
   const ensureActive = (): void => {
     if (!active) throw new Error('structured plugin is deactivated')
@@ -535,6 +535,7 @@ export function activate(context: PluginContext): void {
     if (entry) {
       entry.stopping = true
     }
+    releaseStructuredLease(sessionId)
     const runner = runnerBySession.get(sessionId)
     const task = (async () => {
       try {
@@ -569,7 +570,19 @@ export function activate(context: PluginContext): void {
       throw context.error('invalid-params', "Extra arguments can't be applied to a structured session.")
     }
     const unsupported = Object.keys(params).find(
-      (key) => !['worktree', 'agent', 'prompt', 'model', 'options', 'extraArgs', 'title', 'deferStart', 'lifetime', 'lifetimeKey'].includes(key)
+      (key) =>
+        ![
+          'worktree',
+          'agent',
+          'prompt',
+          'model',
+          'options',
+          'extraArgs',
+          'title',
+          'deferStart',
+          'lifetime',
+          'lifetimeKey'
+        ].includes(key)
     )
     if (unsupported !== undefined) throw context.error('invalid-params', `structured create does not support ${unsupported}`)
     const deferStart = params.deferStart === true
@@ -577,7 +590,9 @@ export function activate(context: PluginContext): void {
     if (params.title !== undefined && (typeof params.title !== 'string' || params.title.trim() === '')) throw context.error('invalid-params', 'title must be a non-empty string')
     if (deferStart && params.prompt !== undefined) throw context.error('invalid-params', 'prompt cannot be combined with deferStart')
     if (!deferStart && typeof params.prompt !== 'string') throw context.error('invalid-params', 'prompt must be a string')
-    const lifetimeOwner = params.lifetime === undefined && params.lifetimeKey === undefined ? undefined : await lifetimePlugin(params, caller)
+    const lifetimeOwner = params.lifetime === undefined && params.lifetimeKey === undefined
+      ? undefined
+      : await lifetimePlugin(params, caller)
     const agent = params.agent
     const prompt = typeof params.prompt === 'string' ? params.prompt : undefined
     const worktree = await resolveWorktree(params.worktree, caller)
@@ -652,12 +667,18 @@ export function activate(context: PluginContext): void {
     }
     const environment = prepared === null ? {} : structuredEnvironment(userEnv, prepared)
     await reconcilePluginLifetimes()
-    if (entry.stopping) return registered
     try {
-      const lease = context.launch.openStructuredLease({ sessionId: registered.id, worktreeId: worktree.id, agent })
+      if (!active || live.get(registered.id) !== entry || entry.stopping) return registered
+      const lease = context.launch.openStructuredLease({
+        sessionId: registered.id,
+        worktreeId: worktree.id,
+        agent
+      })
       entry.lease = lease
-      const launchOptions: StructuredLaunchOptions = { ...(resolution?.structured ?? {}), env: environmentForLease(lease.env, environment) }
-      journal.setLaunchOptions(registered.id, resolution?.structured ?? {})
+      const launchOptions: StructuredLaunchOptions = {
+        ...(resolution?.structured ?? {}),
+        env: environmentForLease(lease.env, environment)
+      }
       startRunner(registered, agent, prompt, launchOptions, token)
     } catch (error) {
       startupFailed(registered.id, token, error)
@@ -694,7 +715,7 @@ export function activate(context: PluginContext): void {
 
     let options: StructuredLaunchOptions
     try {
-      options = journal.getLaunchOptions(old.id) ?? launchOptionsFromSnapshot(old)
+      options = launchOptionsFromSnapshot(old)
     } catch (error) {
       throw context.error('conflict', `session ${old.id} cannot replay its structured launch options: ${error instanceof Error ? error.message : String(error)}`)
     }
@@ -790,9 +811,10 @@ export function activate(context: PluginContext): void {
       prepared?.resumeTranscriptPath === undefined
         ? providerSession
         : { ...providerSession, transcriptPath: prepared.resumeTranscriptPath }
-    await reconcilePluginLifetimes()
-    if (entry.stopping) return registered
+
     try {
+      await reconcilePluginLifetimes()
+      if (!active || !entry || live.get(registered.id) !== entry || entry.stopping) return registered
       const lease = context.launch.openStructuredLease({
         sessionId: registered.id,
         worktreeId: old.worktreeId,
@@ -803,7 +825,6 @@ export function activate(context: PluginContext): void {
         ...options,
         env: environmentForLease(lease.env, environment)
       }
-      journal.setLaunchOptions(registered.id, options)
       startRunner(
         registered,
         agent,
@@ -883,6 +904,7 @@ export function activate(context: PluginContext): void {
     if (!isStructuredAgent(session.agent)) {
       throw context.error('conflict', `structured sessions cannot send to provider ${session.agent}`)
     }
+    if (live.get(session.id)?.stopping) throw context.error('conflict', 'structured session is stopping')
     const agent = session.agent
     const racedFlight = sendFlights.get(operationId)
     if (racedFlight) {
@@ -942,8 +964,12 @@ export function activate(context: PluginContext): void {
     const entry = live.get(session.id)
     if (typeof expectedIncarnation === 'string') {
       const identity = context.launch.sessionIdentity(session.id)
-      if (!identity || identity.source !== 'structured_lease' || !entry?.lease) return { ok: false as const, reason: 'recipient_gone' as const }
-      if (identity.sessionId !== session.id || identity.processIncarnation !== expectedIncarnation) return { ok: false as const, reason: 'recipient_changed' as const }
+      if (!identity || identity.source !== 'structured_lease' || !entry?.lease) {
+        return { ok: false as const, reason: 'recipient_gone' as const }
+      }
+      if (identity.sessionId !== session.id || identity.processIncarnation !== expectedIncarnation) {
+        return { ok: false as const, reason: 'recipient_changed' as const }
+      }
     }
     await stopSession(session.id)
     return typeof expectedIncarnation === 'string'

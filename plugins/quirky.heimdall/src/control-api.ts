@@ -11,6 +11,7 @@ import type {
   WatcherDetail,
   WatcherTarget
 } from './control-contracts'
+import { parseControlRequest } from './control-plane'
 
 const text = (description?: string): Schema => ({ type: 'string', ...(description === undefined ? {} : { description }) })
 const integer = (description?: string): Schema => ({ type: 'integer', ...(description === undefined ? {} : { description }) })
@@ -506,8 +507,8 @@ export function registerControlApi(host: KernelControlHost, controls: ControlPla
     return result
   })
   host.context.provide('method:quirky.heimdall/describeCommand', async (params: Record<string, unknown>) => {
-    const request = asCommandRequest(params, host)
-    if (isRemote(request.target) || request.command.kind !== 'delete') return null
+    const request = parseControlRequest(params)
+    if (!request || isRemote(request.target) || request.command.kind !== 'delete') return null
     const detail = await fleet.detail(request.target)
     return commandPreview(request, detail)
   })

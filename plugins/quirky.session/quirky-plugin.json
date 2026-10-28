@@ -110,7 +110,7 @@
               },
               "badges": {
                 "type": "object",
-                "description": "Chips on the session's tab, keyed `<plugin id>/<key>`; each is {label, tooltip?, command?, args?}. Absent when there are none."
+                "description": "Chips on the session's tab, keyed `<caller plugin id>/<key>` or `<client role>/<key>`; each is {label, tooltip?, command?, args?}. Absent when there are none."
               }
             },
             "required": [
@@ -226,7 +226,7 @@
             },
             "badges": {
               "type": "object",
-              "description": "Chips on the session's tab, keyed `<plugin id>/<key>`; each is {label, tooltip?, command?, args?}. Absent when there are none."
+              "description": "Chips on the session's tab, keyed `<caller plugin id>/<key>` or `<client role>/<key>`; each is {label, tooltip?, command?, args?}. Absent when there are none."
             }
           },
           "required": [
@@ -390,7 +390,7 @@
             },
             "badges": {
               "type": "object",
-              "description": "Chips on the session's tab, keyed `<plugin id>/<key>`; each is {label, tooltip?, command?, args?}. Absent when there are none."
+              "description": "Chips on the session's tab, keyed `<caller plugin id>/<key>` or `<client role>/<key>`; each is {label, tooltip?, command?, args?}. Absent when there are none."
             }
           },
           "required": [
@@ -634,7 +634,7 @@
             },
             "badges": {
               "type": "object",
-              "description": "Chips on the session's tab, keyed `<plugin id>/<key>`; each is {label, tooltip?, command?, args?}. Absent when there are none."
+              "description": "Chips on the session's tab, keyed `<caller plugin id>/<key>` or `<client role>/<key>`; each is {label, tooltip?, command?, args?}. Absent when there are none."
             }
           },
           "required": [
@@ -757,7 +757,7 @@
             },
             "badges": {
               "type": "object",
-              "description": "Chips on the session's tab, keyed `<plugin id>/<key>`; each is {label, tooltip?, command?, args?}. Absent when there are none."
+              "description": "Chips on the session's tab, keyed `<caller plugin id>/<key>` or `<client role>/<key>`; each is {label, tooltip?, command?, args?}. Absent when there are none."
             }
           },
           "required": [
@@ -1006,7 +1006,7 @@
             },
             "badges": {
               "type": "object",
-              "description": "Chips on the session's tab, keyed `<plugin id>/<key>`; each is {label, tooltip?, command?, args?}. Absent when there are none."
+              "description": "Chips on the session's tab, keyed `<caller plugin id>/<key>` or `<client role>/<key>`; each is {label, tooltip?, command?, args?}. Absent when there are none."
             }
           },
           "required": [
@@ -1166,7 +1166,7 @@
             },
             "badges": {
               "type": "object",
-              "description": "Chips on the session's tab, keyed `<plugin id>/<key>`; each is {label, tooltip?, command?, args?}. Absent when there are none."
+              "description": "Chips on the session's tab, keyed `<caller plugin id>/<key>` or `<client role>/<key>`; each is {label, tooltip?, command?, args?}. Absent when there are none."
             }
           },
           "required": [

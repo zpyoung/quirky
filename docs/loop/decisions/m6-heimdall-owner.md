@@ -165,5 +165,71 @@
 - **Revisit if:** the scripted boundary diverges from a public structured contract
 - **Source:** assumed — autonomous
 
+## D16: Release owner resources by authenticated plugin and watcher key before terminal persistence
+- **Question:** replacement, deletion, reconfiguration and an ambiguous native create/stop must not leak a connection or close a sibling
+- **Options:** stop a remembered session only; release all plugin sessions; scoped public stopOwned with positive settlement
+- **Chose:** owner create/resume use plugin lifetime and watcher lifetimeKey. Controller.release serializes per watcher, bounds cleanup, preserves uncertain reservations and refuses replacement until exact cleanup succeeds. Terminal runner release precedes terminal persistence; delete releases before row removal. No late controller write may recreate deleted state. Historical native conversations remain available.
+- **Why:** a lost create reply can commit a child without returning its session ID. A watcher key recovers that resource without broad cleanup authority. Unknown stop does not prove a native conversation is safe to resume.
+- **Evidence:** e05ba8b5,28a5e08a,348efc61; runtime32pass221assertions; standalone SCOPED_NATIVE_CLEANUP_SMOKE_OK proved unknown-stop reservation, exact retry, lost-reply cleanup, sibling/foreign-key isolation and independent real follow-up
+- **Reversibility:** medium
+- **Confidence:** high for exercised lifecycle boundaries
+- **Revisit if:** the public structured lifetime contract changes
+- **Source:** assumed — autonomous
+
+## D17: Admit only canonical effective hooks owned by their declaring plugin
+- **Question:** user-reported real-daemon registration failed because public contribution IDs already include method namespace
+- **Options:** concatenate plugin/id; accept legacy short IDs; parse the canonical contribution and enforce its owner
+- **Chose:** effectiveHookReferences parses contribution ID, requires method kind and parsed namespace equal to item.plugin, then admits the actual namespace/name RPC reference. Preserve effective status and method-kind filters. No legacy fallback or relaxed ownership fence.
+- **Why:** concatenation produced plugin/method:plugin/name and rejected every valid startup registration. Accepting a foreign namespace would instead create an authority bypass.
+- **Evidence:** user diagnostic; c8639c31 isolated fix, peer cherry-pick79110a3a; actual kind registration/enrollment/reconcile daemon smoke passed
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the public contribution ID contract changes
+- **Source:** assumed — autonomous
+
+## D18: Rebrief stale owner evidence and keep approval waits Held
+- **Question:** a report issued for snapshot A must not execute against B or leave the owner stranded; an ordinary approval hold must not become Escalated
+- **Options:** refresh report identity silently; retry the stale report; refuse it and issue a typed fresh deviation in the same native conversation
+- **Chose:** stale live content identity queues gate-held with a snapshot-bound natural key, refuses the old proposal and obtains a new issued report/key in the same conversation. Owner approval uses Hold. Preserve the user-published generic runner correction: recordGate escalates only verdict escalate, never merely reason awaiting-approval.
+- **Why:** permission for one snapshot does not authorize another. A fresh report restores progress without bypassing native or owner gates. The source shows pending approval as Held.
+- **Evidence:** 6c5bce1a; stale A-to-B API regression; runner.ts recordGate verdict branch; user controls checkpointccbfa0cb
+- **Reversibility:** easy
+- **Confidence:** high for exercised owner stale-report flow
+- **Revisit if:** a report can execute after its issue-time identity changes
+- **Source:** assumed — autonomous
+
+## D19: Preserve public schema bounds and prove owner behavior through real API and CLI effects
+- **Question:** initial manifest validation rejected unsupported length keywords and callback fixtures did not prove actual publication or process continuity
+- **Options:** loosen runtime validation; duplicate provider callbacks as evidence; supported public schemas with bounded runtime parsing and process-backed effects
+- **Chose:** supported manifest schemas; retain report-key, byte, UTF-8 and private-file checks in runtime. Explicit owner-ready and owner-inspect CLI declarations/handlers match public camelCase methods. Process-backed scripted provider stores native history and writes the report; the kind executor appends a real publication receipt. Shared fake selectors accept canonical id:/path: selectors. Delete incidental diagnostic/default/copy assertions rather than re-pin them.
+- **Why:** an invalid manifest prevents activation before the bounded parser runs. Parameter echoes are not evidence that a child, conversation or effect exists.
+- **Evidence:** 5de9734f,03d3c8c4; owner API acceptance15pass95assertions14.61s, actual daemon/CLI + real JSONL child + file publication; plugin-validator supported manifests PASS
+- **Reversibility:** easy
+- **Confidence:** high for exercised API flows before final dependency catch-up
+- **Revisit if:** final integrated acceptance exposes a public schema or native boundary mismatch
+- **Source:** assumed — autonomous
+
+## D20: Preserve canonical launch snapshots and the native receipt migration during serial hub integration
+- **Question:** old dependency ancestry restored a private launch-options table while the verified controls composition uses canonical Session.launchSettings
+- **Options:** retain both replay stores; discard current native behavior; preserve one canonical public snapshot and append only the receipt migration
+- **Chose:** merge actual core50fb4027 and controlsccbfa0cb, retain canonical journal migration1 plus send-receipts migration2 and public immutable Session.launchSettings for native model/effort replay. Keep account-prepared environment, real provider identities, exact-incarnation authority, keyed plugin lifetimes and unknown-stop reservations. Main owns lease acquisition/release; runner factories receive existing options.env, no invented callbacks. Public owner-answer callback maps only owner-answer-sent to applied; plane owns revision/save/unpark.
+- **Why:** a second launch replay store can diverge and renumber installed migrations. Native execution and service identity must remain real, not reconstructed from plugin metadata.
+- **Evidence:** user serial-hub handoffs; /tmp/quirky-lane12-owner-control-reply.md; 76eb1a28; read core D15–D19, control D1–D10, worker D1–D16 and prior orchestration D1–D35; no authority conflict
+- **Reversibility:** medium
+- **Confidence:** high for the public contract; final merged gate pending
+- **Revisit if:** final dependency integration changes canonical snapshot or receipt ownership
+- **Source:** assumed — autonomous
+
+## D21: Apply the aged-item rule without inventing completion evidence
+- **Question:** whether to start an unstarted final review or dogfood campaign after the item exceeded two hours
+- **Options:** begin another campaign; follow the current night-mode aged-item landing rule
+- **Chose:** finish reachable implementation, required affected tests/scripts/typecheck and already-started API/native smoke, then land without starting a new review or UI dogfood round. This item adds no owner UI. Preserve failed/partial evidence as such; peer checks are explicitly peer evidence.
+- **Why:** current LOOP requires aged items to land after their own tests/typecheck and skips unstarted review/dogfood. It does not authorize fake backend proof, partial owner effects or bypassed queue dependencies.
+- **Evidence:** authoritative build/roadmap:docs/loop/LOOP.md Night mode; owner spec commit63ec64f9 claim-age evidence; current verification progress
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the unattended loop policy changes
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-All owner implementers returned; runtime/detector components merged and removed, process-backed acceptance remains uncommitted in /tmp/quirky-owner-acceptance-l12 with scope audit clean and HEAD63ec. Main HEAD7f783 unchanged through that barrier.45owned boundary tests passed215assertions; actual real-child lifetime smoke passed and cleaned. Core source794266f1 now published, confirmed by event-driven ref watcher; watcher ended. Next: commit owner fence/contracts/test checkpoint, merge current core (resolve typed deviation/config overlaps), integrate runner/registry while controls finishes serial main/service/manifest handoff, then exercise actual owner API/CLI and worker services. Stale A-to-B owner report case is authored but driver recovery not yet implemented; reproduce after API wiring before fixing. No active deps job and no whole-feature completion/landing claim.
+Owner runtime/detector/release/API components are merged and their temporary worktrees removed. API acceptance passed15tests95assertions with actual daemon/CLI, real JSONL children/native history and real publication receipts before latest dependency composition. Core50fb4027 merged as76eb1a28; controlsccbfa0cb merge in progress. NativeCanonicalMerge returned canonical journal/Claude conflict resolutions; RuntimeSchemaMerge resolves protocol/session/orchestration conflicts; OwnerWorkerFinal aligns exact stop receipts and authors actual owner-worker/backend acceptance. Parent resolved native main conflicts preserving canonical launchSettings, indexed lifetimes, leases and Held approval. No final affected suite/scripts/typecheck or land yet. Next: finish merge barrier, run actual owner/worker acceptance and standalone smoke, repair concrete failures, await queue deps ready, merge build/roadmap once/read incoming logs, required gates, docs/notes/commit/detach/queue land. Aged-item policy skips unstarted review/dogfood; no scope silently deferred.

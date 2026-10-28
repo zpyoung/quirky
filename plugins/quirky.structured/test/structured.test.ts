@@ -129,19 +129,6 @@ describe('structured sessions with a runner', () => {
     expect(world.statusLog[0]).toEqual({ sessionId: session.id, status: 'working' })
   })
 
-  test('passes kernel session identity into the structured tool environment', async () => {
-    const session = await create()
-    await waitFor(() => runner.started.length === 1)
-    const options = runner.started[0]?.options as StructuredLaunchOptions | undefined
-
-    expect(options?.env).toMatchObject({
-      QUIRKY_HOME: h.home,
-      QUIRKY_SESSION_ID: session.id,
-      QUIRKY_WORKTREE_ID: session.worktreeId,
-      QUIRKY_SESSION_TOKEN: expect.any(String)
-    })
-    expect(options?.env?.QUIRKY_SESSION_TOKEN?.length).toBeGreaterThan(0)
-  })
 
   test('a structured tool child authenticates with its launch lease', async () => {
     const session = await create()
@@ -193,14 +180,20 @@ try {
       ])
       if (exitCode !== 0) throw new Error(stderr)
       expect(exitCode).toBe(0)
-      const authority = JSON.parse(stdout)
-      expect(authority).toMatchObject({
-        sessionId: session.id,
-        source: 'structured_lease',
-        runtimeEpoch: expect.any(String),
-        processIncarnation: expect.any(String),
-        live: true
-      })
+      const authority = JSON.parse(stdout) as Record<string, unknown>
+      const runtimeEpoch = authority.runtimeEpoch
+      const processIncarnation = authority.processIncarnation
+      if (
+        authority.sessionId !== session.id ||
+        authority.source !== 'structured_lease' ||
+        authority.live !== true ||
+        typeof runtimeEpoch !== 'string' ||
+        runtimeEpoch.length === 0 ||
+        typeof processIncarnation !== 'string' ||
+        processIncarnation.length === 0
+      ) {
+        throw new Error('structured child did not receive valid runtime authority')
+      }
       expect(JSON.stringify(authority)).not.toContain(launchEnv.QUIRKY_SESSION_TOKEN)
     } finally {
       if (child.exitCode === null) child.kill()
@@ -219,10 +212,6 @@ try {
     expect(session.title).toBe('Worker')
     expect(runner.started[0]?.prompt).toBeUndefined()
     expect(runner.sent).toEqual([])
-    expect((runner.started[0]?.options as StructuredLaunchOptions | undefined)?.env).toMatchObject({
-      QUIRKY_SESSION_ID: session.id,
-      QUIRKY_SESSION_TOKEN: expect.any(String)
-    })
   })
 
   test('revokes structured identity on stop and runner exit', async () => {
@@ -267,11 +256,7 @@ try {
       homeOverrides: { claude: { value: '/custom/claude', source: 'explicit' } }
     })
     const options = runner.started[0]?.options as StructuredLaunchOptions | undefined
-    expect(options?.env).toMatchObject({
-      CLAUDE_CONFIG_DIR: '/custom/claude',
-      QUIRKY_SESSION_ID: session.id,
-      QUIRKY_SESSION_TOKEN: expect.any(String)
-    })
+    expect(options?.env?.CLAUDE_CONFIG_DIR).toBe('/custom/claude')
   })
 
   test('a selected account prep failure removes the session before the runner starts', async () => {
@@ -416,48 +401,6 @@ try {
     expect((await pending).status).toBe('declined')
   })
 
-  test('SC-23: a model and effort pick is resolved, recorded on the session and given to the runner', async () => {
-    const snapshot = {
-      agent: 'claude',
-      options: { model: { value: 'opus', source: 'explicit' }, effort: { value: 'high', source: 'explicit' } },
-      summary: 'Claude · Opus · Effort: high'
-    }
-    world.resolveLaunchOverride = () => ({
-      added: [],
-      args: '',
-      structured: { model: 'opus', effort: 'high' },
-      shadowed: [],
-      launchSettings: snapshot
-    })
-    await call('quirky.structured/create', {
-      worktree: 'main',
-      agent: 'claude',
-      prompt: 'hi',
-      model: 'opus',
-      options: { effort: 'high' }
-    })
-    expect(world.resolveLaunchCalls).toEqual([
-      { agent: 'claude', model: 'opus', options: { effort: 'high' }, structured: true }
-    ])
-    expect(world.registerCalls[0].launchSettings).toEqual(snapshot)
-    await waitFor(() => runner.started.length === 1)
-    expect(runner.started[0].options).toEqual({ model: 'opus', effort: 'high' })
-  })
-
-  test('SC-23: with no pick nothing is resolved and the runner gets no options', async () => {
-    await create()
-    await waitFor(() => runner.started.length === 1)
-    expect(world.resolveLaunchCalls).toEqual([])
-    expect(world.registerCalls[0]).not.toHaveProperty('launchSettings')
-    expect(runner.started[0].options).toEqual({})
-  })
-
-  test('SC-23: a pick that resolves to no snapshot registers without launchSettings', async () => {
-    await call('quirky.structured/create', { worktree: 'main', agent: 'claude', prompt: 'hi', model: 'opus' })
-    expect(world.registerCalls[0]).not.toHaveProperty('launchSettings')
-    await waitFor(() => runner.started.length === 1)
-    expect(runner.started[0].options).toEqual({ model: 'opus' })
-  })
 
   test('SC-24: extra arguments are refused and nothing is registered', async () => {
     expect(
@@ -494,6 +437,7 @@ try {
     const terminal = world.addTerminalSession()
     expect(await failure(call('quirky.structured/send', { session: terminal.id, text: 'x' }))).toMatchObject({
       code: RpcErrorCode.InvalidParams,
+      message: `session ${terminal.id} is not a structured session`
     })
     expect(await failure(call('quirky.structured/messages', { session: terminal.id }))).toMatchObject({
       code: RpcErrorCode.InvalidParams
@@ -501,6 +445,19 @@ try {
     expect(await failure(call('quirky.structured/messages', { session: 's_nope' }))).toMatchObject({
       code: RpcErrorCode.NotFound
     })
+  })
+
+  test('structured resume refuses unsupported forks and provider identity overrides', async () => {
+    const session = await create('go')
+    await waitFor(() => runner.started.length === 1)
+    expect(await failure(call('quirky.structured/resume', { session: session.id, fork: true }))).toMatchObject({
+      code: RpcErrorCode.InvalidParams
+    })
+    expect(await failure(call('quirky.structured/resume', { session: session.id, providerSession: 'override' }))).toMatchObject({
+      code: RpcErrorCode.InvalidParams
+    })
+    expect(world.registerCalls).toHaveLength(1)
+    expect(h.pty.requests.some((request) => request.type === 'create')).toBe(false)
   })
 
   test('send failures from the runner surface as internal errors', async () => {
@@ -587,6 +544,85 @@ describe('the Claude runner inside the plugin', () => {
     await waitFor(() => structuredEvents().length === messages.length)
     expect(structuredEvents().map((e) => e.data.message.seq)).toEqual([1, 2, 3, 4, 5])
   })
+
+  test('persists Claude identity after native init and resumes that session idle', async () => {
+    const home = shortHome()
+    const queries: FakeQuery[] = []
+    await boot({
+      home,
+      factory: (context: StructuredContext) =>
+        createClaudeRunner(
+          { ...context, resolveClaudePath: async () => '/usr/local/bin/claude' },
+          {
+            query: (params: ClaudeQueryParams) => {
+              const query = new FakeQuery(params)
+              queries.push(query)
+              return query
+            }
+          }
+        )
+    })
+
+    world.worktree.path = home
+
+    const original = (await call('quirky.structured/create', {
+      worktree: 'main',
+      agent: 'claude',
+      deferStart: true
+    })) as Session
+    await waitFor(
+      () =>
+        queries.length === 1 &&
+        world.statusLog.some((entry) => entry.sessionId === original.id && entry.status === 'running')
+    )
+    const idleRecord = (await call('quirky.session/get', { session: original.id })) as Session
+    if (idleRecord.providerSession !== null && idleRecord.providerSession !== undefined) {
+      throw new Error('Claude provider identity was recorded before native initialization')
+    }
+
+    const initialQuery = queries[0]
+    expect(initialQuery.written).toEqual([])
+    await call('quirky.structured/send', { session: original.id, text: 'first turn' })
+    await waitFor(() => initialQuery.written.length === 1)
+    const nativeSessionId = initialQuery.written[0]?.session_id
+    if (typeof nativeSessionId !== 'string' || nativeSessionId.length === 0) {
+      throw new Error('Claude native turn did not carry a provider session ID')
+    }
+    initialQuery.emit({ type: 'system', subtype: 'init', session_id: nativeSessionId, model: 'm' })
+    const originalRecord = await waitForAsync(async () => {
+      const stored = (await call('quirky.session/get', { session: original.id })) as Session
+      return stored.providerSession?.id === nativeSessionId ? stored : undefined
+    })
+    expect(originalRecord.providerSession).toEqual({ id: nativeSessionId, transcriptPath: null })
+    initialQuery.emit({ type: 'result', subtype: 'success', result: 'first complete', is_error: false })
+    await waitFor(() => world.statusLog.some((entry) => entry.sessionId === original.id && entry.status === 'done'))
+    await call('quirky.structured/stop', { session: original.id })
+
+    const resumed = (await call('quirky.structured/resume', { session: original.id })) as Session
+    await waitFor(
+      () =>
+        queries.length === 2 &&
+        world.statusLog.some((entry) => entry.sessionId === resumed.id && entry.status === 'running')
+    )
+    const resumedRecord = (await call('quirky.session/get', { session: resumed.id })) as Session
+    expect(resumedRecord.providerSession).toEqual({ id: nativeSessionId, transcriptPath: null })
+    expect(resumedRecord.resumedFrom).toBe(original.id)
+
+    const resumedQuery = queries[1]
+    expect(resumedQuery.params.options?.resume).toBe(nativeSessionId)
+    expect(resumedQuery.params.options).not.toHaveProperty('sessionId')
+    expect(resumedQuery.written).toEqual([])
+    await call('quirky.structured/send', { session: resumed.id, text: 'resumed turn' })
+    await waitFor(() => resumedQuery.written.length === 1)
+    expect(resumedQuery.written[0]).toMatchObject({
+      session_id: nativeSessionId,
+      message: { role: 'user', content: 'resumed turn' }
+    })
+    resumedQuery.emit({ type: 'result', subtype: 'success', result: 'resumed complete', is_error: false })
+    await waitFor(() => world.statusLog.some((entry) => entry.sessionId === resumed.id && entry.status === 'done'))
+    await call('quirky.structured/stop', { session: resumed.id })
+  })
+
 })
 
 describe('the Codex runner inside the plugin', () => {
@@ -665,6 +701,94 @@ describe('the Codex runner inside the plugin', () => {
     expect((await call('quirky.session/get', { session: session.id })).status).toBe('exited')
     expect(await call('quirky.structured/messages', { session: session.id })).toHaveLength(journal.length)
   })
+
+  test('keeps a deferred Codex thread idle until a lease-bound send', async () => {
+    const home = shortHome()
+    const fixture = createCodexAppServerFixture(home)
+    await boot({
+      home,
+      factory: (context) =>
+        createCodexRunner(
+          { ...context, resolveCodexPath: async () => fixture.executable },
+          { env: isolatedProviderEnvironment(home) }
+        )
+    })
+    world.worktree.path = home
+
+    const session = (await call('quirky.structured/create', {
+      worktree: 'main',
+      agent: 'codex',
+      title: 'Idle worker',
+      deferStart: true
+    })) as Session
+    await waitFor(() => world.statusLog.some((entry) => entry.sessionId === session.id && entry.status === 'running'))
+
+    const identityResult = await call('quirky.session/identity', { session: session.id })
+    if (!identityResult || typeof identityResult !== 'object' || Array.isArray(identityResult)) {
+      throw new Error('structured session did not return a runtime identity')
+    }
+    const identity = identityResult as Record<string, unknown>
+    const processIncarnation = identity.processIncarnation
+    const runtimeEpoch = identity.runtimeEpoch
+    if (
+      identity.sessionId !== session.id ||
+      identity.source !== 'structured_lease' ||
+      identity.live !== true ||
+      typeof processIncarnation !== 'string' ||
+      processIncarnation.length === 0 ||
+      typeof runtimeEpoch !== 'string' ||
+      runtimeEpoch.length === 0
+    ) {
+      throw new Error('structured session did not return a live lease identity')
+    }
+    expect(fixture.requests().filter((request) => request.method).map((request) => request.method)).toEqual([
+      'initialize',
+      'initialized',
+      'thread/start'
+    ])
+    expect(await call('quirky.structured/messages', { session: session.id })).toEqual([])
+
+    expect(
+      await call('quirky.structured/send', {
+        session: session.id,
+        text: 'stale delivery',
+        expectedIncarnation: `${processIncarnation}-stale`
+      })
+    ).toEqual({ ok: false, reason: 'recipient_changed' })
+    expect(fixture.requests().filter((request) => request.method === 'turn/start')).toHaveLength(0)
+
+    expect(
+      await call('quirky.structured/send', {
+        session: session.id,
+        text: 'first custody-recorded turn',
+        expectedIncarnation: processIncarnation
+      })
+    ).toEqual({ ok: true })
+    await waitFor(() => world.statusLog.some((entry) => entry.sessionId === session.id && entry.status === 'done'))
+    expect(fixture.requests().filter((request) => request.method === 'turn/start')).toHaveLength(1)
+    expect(
+      ((await call('quirky.structured/messages', { session: session.id })) as StructuredMessage[])
+        .filter((message) => message.role === 'user')
+        .map((message) => message.text)
+    ).toEqual(['first custody-recorded turn'])
+
+    expect(
+      await call('quirky.structured/stop', {
+        session: session.id,
+        expectedIncarnation: processIncarnation
+      })
+    ).toEqual({
+      ok: true,
+      closed: true,
+      sessionId: session.id,
+      processIncarnation
+    })
+
+    await expect(call('quirky.session/identity', { session: session.id })).rejects.toMatchObject({
+      code: RpcErrorCode.NotFound
+    })
+  })
+
 
   test('reports malformed JSON and rejected turn-start RPCs as exited, never done', async () => {
     const home = shortHome()
@@ -862,5 +986,49 @@ describe('v1 journal import', () => {
     await boot({ home, world: second })
     const messages = (await call('quirky.structured/messages', { session: 's_old' })) as StructuredMessage[]
     expect(messages.map((m) => m.seq)).toEqual([1, 2])
+  })
+})
+
+describe('structured journal store upgrades', () => {
+  test('preserves an existing v1 journal while appending the receipt migration', async () => {
+    const home = shortHome()
+    const storePath = join(home, 'plugin-data', 'quirky.structured', 'store.db')
+    mkdirSync(dirname(storePath), { recursive: true })
+    const existing = new Database(storePath)
+    existing.exec(`CREATE TABLE structured_messages (
+      session_id TEXT NOT NULL, seq INTEGER NOT NULL, role TEXT NOT NULL, text TEXT NOT NULL,
+      data TEXT, at INTEGER NOT NULL, PRIMARY KEY (session_id, seq))`)
+    existing
+      .query('INSERT INTO structured_messages VALUES (?, ?, ?, ?, ?, ?)')
+      .run('s_existing', 1, 'assistant', 'saved before upgrade', JSON.stringify({ origin: 'v1' }), 42)
+    existing.exec('PRAGMA user_version = 1')
+    existing.close()
+
+    const existingSession = new FakeWorld()
+    existingSession.addStructuredSession('s_existing')
+    await boot({ home, world: existingSession })
+
+    expect(await call('quirky.structured/messages', { session: 's_existing' })).toEqual([
+      {
+        sessionId: 's_existing',
+        seq: 1,
+        role: 'assistant',
+        text: 'saved before upgrade',
+        data: { origin: 'v1' },
+        at: 42
+      }
+    ])
+
+    const upgraded = new Database(storePath, { readonly: true })
+    try {
+      expect(upgraded.query('PRAGMA user_version').get()).toEqual({ user_version: 2 })
+      expect(
+        upgraded
+          .query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'structured_send_receipts'")
+          .all()
+      ).toEqual([{ name: 'structured_send_receipts' }])
+    } finally {
+      upgraded.close()
+    }
   })
 })

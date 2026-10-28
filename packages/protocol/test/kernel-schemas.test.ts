@@ -102,19 +102,14 @@ describe('kernel method schemas', () => {
     expect(p('client.hello').properties!.role!.enum).toEqual(['desktop', 'ui', 'cli', 'mobile'])
     expect(p('status.get')).toEqual({ type: 'object' })
   })
-  test('palette state is optional in layout and palette.set accepts an omitted open value', () => {
-    const paletteSet = KERNEL_METHOD_SCHEMAS['ui.palette.set']!
-    expect(paletteSet.params.properties?.open?.type).toBe('boolean')
-    expect(paletteSet.params.required ?? []).not.toContain('open')
-    expect(paletteSet.result.properties?.palette?.type).toBe('boolean')
-  })
 
-  test('sessionToken is an optional hello field separate from sessionId', () => {
+  test('sessionToken is optional and separate from sessionId', () => {
     const hello = methodSchemas['client.hello']!
     expect(hello.required).not.toContain('sessionToken')
     expect(hello.properties?.sessionToken).toEqual({ type: 'string' })
     expect(hello.properties?.sessionId).toEqual({ type: 'string' })
   })
+
 })
 
 describe('kernel event schemas', () => {

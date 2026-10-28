@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { CanUseTool, Options, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { AskEnvelope, Session } from '@quirky/protocol'
-import type { StructuredContext, StructuredRunner, StructuredStartOptions } from './runner'
+import type { StructuredContext, StructuredStartOptions, StructuredRunner } from './runner'
 
 export type ClaudeQueryParams = { prompt: AsyncIterable<SDKUserMessage>; options?: Options }
 
@@ -63,7 +63,8 @@ function createInputStream(): InputStream {
 type Running = {
   query: ClaudeQuery
   input: InputStream
-  claudeSessionId: string
+  providerSessionId: string
+  providerSessionKnown: boolean
   stopped: boolean
   ended: boolean
 }
@@ -143,7 +144,7 @@ class ClaudeRunner implements StructuredRunner {
     private readonly deps: ClaudeRunnerDeps
   ) {}
 
-  async start(session: Session, prompt?: string, launchOptions: StructuredStartOptions = {}): Promise<void> {
+  async start(session: Session, prompt: string | undefined, launchOptions: StructuredStartOptions = {}): Promise<void> {
     if (session.agent !== 'claude') throw new Error('structured sessions support claude only')
     const providerSession = launchOptions.providerSession
     const providerSessionId = providerSession?.id ?? randomUUID()
@@ -155,11 +156,13 @@ class ClaudeRunner implements StructuredRunner {
       if (startup.stopped) return
       const pathToClaudeCodeExecutable = await this.context.resolveClaudePath()
       if (startup.stopped) return
-      await this.context.setProviderSession(session.id, {
-        id: providerSessionId,
-        transcriptPath: providerSession?.transcriptPath ?? null
-      })
-      if (startup.stopped) return
+      if (providerSession !== undefined) {
+        await this.context.setProviderSession(session.id, {
+          id: providerSessionId,
+          transcriptPath: providerSession.transcriptPath ?? null
+        })
+        if (startup.stopped) return
+      }
       this.launch(session, prompt, query, pathToClaudeCodeExecutable, launchOptions, providerSessionId)
     } finally {
       if (this.starting.get(session.id) === startup) this.starting.delete(session.id)
@@ -172,18 +175,19 @@ class ClaudeRunner implements StructuredRunner {
     query: NonNullable<ClaudeRunnerDeps['query']>,
     pathToClaudeCodeExecutable: string,
     launchOptions: StructuredStartOptions,
-    claudeSessionId: string
+    providerSessionId: string
   ): void {
     const input = createInputStream()
     if (prompt !== undefined) {
-      const first = userMessage(prompt, claudeSessionId)
+      const first = userMessage(prompt, providerSessionId)
       this.context.appendMessage({ sessionId: session.id, role: 'user', text: prompt, data: first })
       this.context.setStatus(session.id, 'working')
       input.push(first)
     }
     const run: Running = {
       input,
-      claudeSessionId,
+      providerSessionId,
+      providerSessionKnown: launchOptions.providerSession !== undefined,
       stopped: false,
       ended: false,
       query: query({
@@ -192,8 +196,8 @@ class ClaudeRunner implements StructuredRunner {
           cwd: session.cwd,
           pathToClaudeCodeExecutable,
           ...(launchOptions.providerSession === undefined
-            ? { sessionId: claudeSessionId }
-            : { resume: claudeSessionId }),
+            ? { sessionId: providerSessionId }
+            : { resume: providerSessionId }),
           permissionMode: 'default',
           canUseTool: this.canUseTool(session.id),
           ...(launchOptions.env !== undefined ? { env: environmentOf(launchOptions.env) } : {}),
@@ -210,7 +214,7 @@ class ClaudeRunner implements StructuredRunner {
   async send(sessionId: string, text: string): Promise<void> {
     const run = this.running.get(sessionId)
     if (!run || run.stopped || run.ended) throw new Error('session is not running')
-    const message = userMessage(text, run.claudeSessionId)
+    const message = userMessage(text, run.providerSessionId)
     this.context.appendMessage({ sessionId, role: 'user', text, data: message })
     this.context.setStatus(sessionId, 'working')
     run.input.push(message)
@@ -282,14 +286,13 @@ class ClaudeRunner implements StructuredRunner {
     let failure: Error | null = null
     try {
       for await (const msg of run.query) {
-        if (run.stopped) break
-        this.journal(sessionId, msg)
+        await this.journal(sessionId, msg)
       }
     } catch (error) {
       failure = error instanceof Error ? error : new Error(String(error))
     }
     run.ended = true
-    if (run.stopped) return
+    if (run.stopped || this.running.get(sessionId) !== run) return
     this.running.delete(sessionId)
     if (failure) {
       this.context.appendMessage({ sessionId, role: 'system', text: `claude failed: ${failure.message}` })
@@ -297,7 +300,7 @@ class ClaudeRunner implements StructuredRunner {
     this.context.setStatus(sessionId, 'exited')
   }
 
-  private journal(sessionId: string, msg: any): void {
+  private async journal(sessionId: string, msg: any): Promise<void> {
     const append = (role: Parameters<StructuredContext['appendMessage']>[0]['role'], text: string, data: unknown) =>
       this.context.appendMessage({ sessionId, role, text, data })
     switch (msg?.type) {
@@ -325,13 +328,45 @@ class ClaudeRunner implements StructuredRunner {
         }
         return
       }
-      case 'system':
+      case 'system': {
+        if (msg.subtype === 'init') {
+          const nativeSessionId = msg.session_id
+          const run = this.running.get(sessionId)
+          if (typeof nativeSessionId !== 'string' || nativeSessionId.length === 0) {
+            throw new Error('Claude initialized without a native session ID')
+          }
+          if (run) {
+            if (run.providerSessionKnown) {
+              if (run.providerSessionId !== nativeSessionId) {
+                throw new Error(`Claude resumed session ${run.providerSessionId}, received ${nativeSessionId}`)
+              }
+            } else {
+              run.providerSessionId = nativeSessionId
+              run.providerSessionKnown = true
+              await this.context.setProviderSession(sessionId, { id: nativeSessionId, transcriptPath: null })
+            }
+          }
+        }
         append('system', msg.subtype === 'init' ? `session started${msg.model ? ` (${msg.model})` : ''}` : `system: ${msg.subtype ?? 'event'}`, msg)
         return
-      case 'result':
+      }
+      case 'result': {
         append('result', resultText(msg), msg)
-        this.context.setStatus(sessionId, 'done')
+        const failed = msg.is_error === true || (typeof msg.subtype === 'string' && msg.subtype.startsWith('error'))
+        if (failed) {
+          const run = this.running.get(sessionId)
+          if (run) {
+            run.ended = true
+            run.input.end()
+            run.query.close()
+            this.running.delete(sessionId)
+          }
+          this.context.setStatus(sessionId, 'exited')
+        } else {
+          this.context.setStatus(sessionId, 'done')
+        }
         return
+      }
       default:
         append('system', String(msg?.type ?? 'event'), msg)
     }
