@@ -1081,8 +1081,7 @@
         "term-daemon.md"
       ],
       "deps": [],
-      "status": "in-progress",
-      "lane": 7
+      "status": "done"
     },
     {
       "id": "m3-vault-consent-tip-completion",
