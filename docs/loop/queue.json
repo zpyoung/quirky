@@ -1538,8 +1538,7 @@
       "title": "UI redesign: graphite terminal palette for dark and light that follows the app theme, with a Settings override. Follow docs/quirk/specs/2026-10-28-ui-redesign/logic.md (approved). Use only the shared components and tokens; the UI lint check must pass. Build-first mode applies: typecheck gates the land.",
       "docs": [],
       "deps": [],
-      "status": "in-progress",
-      "lane": 4
+      "status": "done"
     },
     {
       "id": "ui-screenshot-review",
