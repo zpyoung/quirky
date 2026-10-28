@@ -1420,6 +1420,12 @@ files, not this one.
 | easy | high | [m7-sweep-terminal-completion D11](decisions/m7-sweep-terminal-completion.md) | Fix compiler and actual browser failures without starting an end-phase campaign | assumed — autonomous |
 | easy | high | [m7-sweep-terminal-completion D12](decisions/m7-sweep-terminal-completion.md) | Limit verification claims to observed private runtime and visible paths | locked by docs/loop/LOOP.md |
 | easy | high | [m7-sweep-terminal-completion D13](decisions/m7-sweep-terminal-completion.md) | Carry only exact unbuilt flows in one successor | deferred: terminal runtime/native/worktree unbuilt flows |
+| easy (report and queue metadata only) | high | [m7-test-triage D1](decisions/m7-test-triage.md) | Triage the exact integration snapshot without product changes | locked by docs/loop/LOOP.md |
+| easy (report wording only) | high | [m7-test-triage D2](decisions/m7-test-triage.md) | Preserve complete command outcomes and configured retries | assumed — autonomous |
+| easy (queue metadata only) | high | [m7-test-triage D3](decisions/m7-test-triage.md) | Keep existing flaky and native repair ownership | locked by operator instruction |
+| easy (repair ownership only) | high | [m7-test-triage D4](decisions/m7-test-triage.md) | Leave sidebar-extras runtime and renderer repairs with lane 4 | locked by operator instruction |
+| easy (queue metadata and report only) | high for observed failures; root causes are intentionally uninvestigated | [m7-test-triage D5](decisions/m7-test-triage.md) | Queue residual area repairs without repinning incidental assertions | locked by docs/loop/LOOP.md |
+| easy (evidence and ownership annotation only) | high | [m7-test-triage D6](decisions/m7-test-triage.md) | Keep the baseline immutable across concurrent integration repairs | assumed — autonomous |
 | easy | high | [sb-mobile-install-links D3](decisions/sb-mobile-install-links.md) | Block at distribution readiness rather than manufacture a partial install flow | assumed — autonomous |
 | easy | high | [sb-mobile-install-links D5](decisions/sb-mobile-install-links.md) | Apply unattended blocked-item protocol without new verification claims | locked by docs/loop/LOOP.md |
 | easy | high | [sb-mobile-install-links D6](decisions/sb-mobile-install-links.md) | Retain platform limits rather than claim native build parity | deferred: platform |

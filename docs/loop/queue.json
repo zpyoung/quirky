@@ -1812,8 +1812,7 @@
         "m7-terminal-provider-host-and-worktree-remainder",
         "fix-desktop-startup-imports"
       ],
-      "status": "in-progress",
-      "lane": 8
+      "status": "done"
     },
     {
       "id": "m7-sweep-sessions",
