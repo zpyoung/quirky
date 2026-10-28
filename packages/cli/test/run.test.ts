@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test'
+import type { QuirkyClient } from '@quirky/protocol'
 import { route } from '../src/commands'
 import type { OpenResult } from '../src/commands/types'
-import type { DaemonLink } from '../src/link'
+import { createDaemonLink, type DaemonLink } from '../src/link'
 import { run } from '../src/main'
 
 function harness(open: OpenResult) {
@@ -9,7 +10,7 @@ function harness(open: OpenResult) {
   const err: string[] = []
   const link: DaemonLink = {
     requestBase: crypto.randomUUID(),
-    call: () => Promise.reject(new Error('daemon must not be contacted')),
+    call: () => Promise.resolve({ clients: [{ role: 'desktop' }] } as never),
     callAny: () => Promise.reject(new Error('daemon must not be contacted')),
     reconnect: async () => {},
     close: () => {}
@@ -19,6 +20,7 @@ function harness(open: OpenResult) {
       argv,
       env: {},
       cwd: '/',
+      platform: 'darwin',
       writer: { stdout: (text) => out.push(text), stderr: (text) => err.push(text) },
       link,
       openDesktopApp: async () => open
@@ -53,15 +55,43 @@ describe('route', () => {
 })
 
 describe('open', () => {
-  test('reports success', async () => {
+  test('reports desktop readiness as JSON', async () => {
     const { exec, out } = harness({ ok: true })
-    expect(await exec(['open'])).toBe(0)
-    expect(out.join('')).toContain('opened Quirky')
+    expect(await exec(['open', '--json'])).toBe(0)
+    expect(JSON.parse(out.join(''))).toEqual({ ready: true })
   })
 
-  test('reports a missing app as a runtime error', async () => {
-    const { exec, err } = harness({ ok: false, reason: 'the Quirky desktop app is not installed' })
-    expect(await exec(['open'])).toBe(1)
-    expect(err.join('')).toBe('quirky: the Quirky desktop app is not installed\n')
+  test('reconnects after the initial status read finds no daemon', async () => {
+    let connects = 0
+    let launches = 0
+    const link = createDaemonLink(async () => {
+      connects += 1
+      if (connects === 1) throw new Error('quirkyd is not running')
+      return {
+        callAny: async () => ({ clients: [{ role: 'desktop' }] }),
+        close() {}
+      } as unknown as QuirkyClient
+    })
+    const out: string[] = []
+    const err: string[] = []
+
+    const code = await run({
+      argv: ['open', '--json'],
+      env: {},
+      cwd: '/',
+      platform: 'darwin',
+      writer: { stdout: (text) => out.push(text), stderr: (text) => err.push(text) },
+      link,
+      openDesktopApp: async () => {
+        launches += 1
+        return { ok: true }
+      }
+    })
+
+    expect(code).toBe(0)
+    expect(JSON.parse(out.join(''))).toEqual({ ready: true })
+    expect(launches).toBe(1)
+    expect(connects).toBe(2)
+    expect(err).toEqual([])
   })
 })

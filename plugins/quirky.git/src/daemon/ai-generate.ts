@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { readStagedContext } from './ai-context'
 import { cleanGeneratedMessage, splitCommitMessage } from './ai-output'
 import { buildCommitMessagePrompt, renderTemplate } from './ai-prompts'
-import { pickDefaultAgent } from './ai-recipes'
+import { pickDefaultAgent, validateRecipeLaunchOptions } from './ai-recipes'
 import type { DaemonEnv, Handler } from './env'
 
 const CUSTOM_AGENT = 'custom'
@@ -42,8 +42,14 @@ export function generateCommitMessage(env: DaemonEnv): Handler {
     if (env.lanes.get(worktree.id)) throw env.errors.reasoned('conflict', 'busy', 'A commit message is already being generated.')
     const lane = env.lanes.open(worktree.id, given(params.requestId) ?? randomUUID())
     try {
-      const recipe = env.recipes.effective('commitMessage', worktree.repoId)
-      const agent = given(params.agent) ?? recipe.agent ?? (await pickDefaultAgent(env))
+      const savedRecipe = env.recipes.effective('commitMessage', worktree.repoId)
+      const agent = given(params.agent) ?? savedRecipe.agent ?? (await pickDefaultAgent(env))
+      const recipe = env.recipes.effective('commitMessage', worktree.repoId, agent)
+      const launchOptions = await validateRecipeLaunchOptions(
+        env,
+        agent,
+        Object.hasOwn(params, 'launchOptions') ? params.launchOptions : recipe.launchOptions
+      )
       let args = typeof params.args === 'string' ? params.args : recipe.args
       if (agent === CUSTOM_AGENT) {
         args = String(env.context.getSetting('ai-custom-command') ?? '').trim()
@@ -71,7 +77,9 @@ export function generateCommitMessage(env: DaemonEnv): Handler {
         prompt,
         requestId: lane.requestId,
         worktree: worktree.id,
-        ...(args.trim() === '' ? {} : { args })
+        ...(args.trim() === '' ? {} : { args }),
+        ...(launchOptions?.model === undefined ? {} : { model: launchOptions.model }),
+        ...(launchOptions?.optionValues === undefined ? {} : { optionValues: launchOptions.optionValues })
       })) as { text: string; agent: string }
       return { ...splitCommitMessage(cleanGeneratedMessage(generated.text, { custom: agent === CUSTOM_AGENT })), agent: generated.agent }
     } finally {

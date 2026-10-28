@@ -304,7 +304,7 @@
             "options": {
               "type": "object",
               "additionalProperties": true,
-              "description": "Option picks for the model, such as {effort: \"high\"}: up to 16 entries whose values are strings or booleans. Needs `model`."
+              "description": "Up to 16 string or boolean option picks, such as {effort: \"high\"}. Without model, only the catalog's generic options apply; the native model remains unchanged."
             },
             "extraArgs": {
               "type": "string",

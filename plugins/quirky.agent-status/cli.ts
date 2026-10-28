@@ -1,5 +1,6 @@
 import { RpcError, type CliArgs, type CliContext, type CliModule } from '@quirky/protocol'
 import type { Explanation } from './src/explain'
+import type { ActivityThread } from './src/activity-types'
 import { unsafePatternReason } from './src/rules/safety'
 import type { Matcher, Origin, RuleFile, RuleListing } from './src/rules/types'
 import type { SendResult } from './src/send'
@@ -250,6 +251,45 @@ export const commands: CliModule['commands'] = {
     const row = await ctx.call('quirky.agent-status/get', { session, ...(typeof at === 'number' ? { at } : {}) })
     ctx.out.result(row, () => (row === null ? 'no agent status' : JSON.stringify(row, null, 2)))
   },
+  async activity(args, ctx) {
+    const worktree = args.flags.worktree
+    const text = args.flags.text
+    const result = (await ctx.call('quirky.agent-status/activity', {
+      ...(typeof worktree === 'string' ? { worktree } : {}),
+      ...(typeof text === 'string' ? { text } : {}),
+      ...(args.flags['unread-only'] === true ? { unreadOnly: true } : {})
+    })) as { threads: ActivityThread[] }
+    ctx.out.result(result, () =>
+      result.threads.length === 0
+        ? 'no Activity threads match'
+        : result.threads
+            .map(
+              (thread) =>
+                `${thread.unread ? 'unread' : 'read'} ${thread.label} — ${thread.sessionName} (${thread.sessionId}) @ ${thread.worktreeName} [${thread.agent}]${thread.prompt ? `: ${thread.prompt}` : ''}${thread.live ? '' : ' (session unavailable)'}`
+            )
+            .join('\n')
+    )
+  },
+
+  async acknowledge(args, ctx) {
+    const session = args.positionals[0]
+    const turn = args.flags.turn
+    const all = args.flags.all === true
+    if (all && (session !== undefined || turn !== undefined)) throw ctx.usage('--all cannot be combined with <session> or --turn')
+    if (!all && session === undefined) throw ctx.usage('give <session> or --all')
+    if (turn !== undefined && typeof turn !== 'string') throw ctx.usage('--turn must be a string')
+    const params = all ? { all: true } : { session: session!, ...(typeof turn === 'string' ? { turn } : {}) }
+    const result = (await ctx.call('quirky.agent-status/acknowledge', params)) as { acknowledged: number }
+    ctx.out.result(result, () => `acknowledged ${result.acknowledged} ${result.acknowledged === 1 ? 'thread' : 'threads'}`)
+  },
+
+  async 'clear-completed'(args, ctx) {
+    const worktree = args.flags.worktree
+    if (worktree !== undefined && typeof worktree !== 'string') throw ctx.usage('--worktree must be a string')
+    const result = (await ctx.call('quirky.agent-status/clearCompleted', typeof worktree === 'string' ? { worktree } : {})) as { cleared: number }
+    ctx.out.result(result, () => `cleared ${result.cleared} terminal ${result.cleared === 1 ? 'thread' : 'threads'}`)
+  },
+
 
   async 'hooks-status'(_args, ctx) {
     const entries = (await ctx.call('quirky.agent-status/hooksStatus', {})) as StatusEntry[]

@@ -4,6 +4,7 @@ import {
   DEFAULT_THEME,
   CATALOG_SCHEMA_VERSION,
   PROTOCOL_VERSION,
+  type ClientRole,
   RpcErrorCode,
   type ApiMethodEntry,
   type ApiCliCommandEntry,
@@ -34,7 +35,7 @@ class FakeRpcError extends Error {
 }
 
 /** One client connection, whichever transport carried it. */
-type Conn = { transport: 'socket' | 'websocket'; send(value: unknown): void; close(): void }
+type Conn = { transport: 'socket' | 'websocket'; id: object; send(value: unknown): void; close(): void }
 
 type Outcome = { ok: true; value: unknown } | { ok: false; error: FakeRpcError }
 
@@ -102,6 +103,8 @@ export class FakeDaemon {
   private listener!: ReturnType<typeof Bun.listen>
   private readonly outcomes = new Map<string, Outcome>()
   private readonly drops = new Map<string, number>()
+  private readonly withheldReplies = new Map<string, number>()
+  private readonly connectedClients = new Map<object, { role: ClientRole; name?: string }>()
 
   get port(): number {
     return this.server.port as number
@@ -132,8 +135,16 @@ export class FakeDaemon {
           daemon.connections++
         },
         message(ws, raw) {
-          const conn: Conn = { transport: 'websocket', send: (value) => ws.send(JSON.stringify(value)), close: () => ws.close() }
+          const conn: Conn = {
+            transport: 'websocket',
+            id: ws,
+            send: (value) => ws.send(JSON.stringify(value)),
+            close: () => ws.close()
+          }
           void daemon.onRequest(conn, JSON.parse(String(raw)))
+        },
+        close(ws) {
+          daemon.connectedClients.delete(ws)
         }
       }
     })
@@ -152,6 +163,7 @@ export class FakeDaemon {
             socket.data.buffer = socket.data.buffer.slice(end + 1)
             const conn: Conn = {
               transport: 'socket',
+              id: socket,
               send: (value) => void socket.write(`${JSON.stringify(value)}\n`),
               close: () => void socket.end()
             }
@@ -172,7 +184,9 @@ export class FakeDaemon {
             void daemon.onRequest(conn, request)
           }
         },
-        close() {}
+        close(socket) {
+          daemon.connectedClients.delete(socket)
+        }
       }
     })
     const info: RuntimeInfo = {
@@ -198,6 +212,11 @@ export class FakeDaemon {
   /** Makes the next `times` calls to `method` run and then lose the connection before the reply. */
   dropAfter(method: string, times = 1): void {
     this.drops.set(method, times)
+  }
+
+  /** Leaves the next `times` calls to `method` unanswered without closing the client connection. */
+  withholdNextReply(method: string, times = 1): void {
+    this.withheldReplies.set(method, times)
   }
 
   /**
@@ -407,6 +426,11 @@ export class FakeDaemon {
     try {
       const result = await this.handle(request.method, request.params ?? {}, conn, request.requestId)
       if (result === DROP) return
+      const withheld = this.withheldReplies.get(request.method) ?? 0
+      if (withheld > 0) {
+        this.withheldReplies.set(request.method, withheld - 1)
+        return
+      }
       conn.send({ jsonrpc: '2.0', id: request.id, result })
     } catch (error) {
       const code = error instanceof FakeRpcError ? error.code : RpcErrorCode.Internal
@@ -460,6 +484,10 @@ export class FakeDaemon {
     }
     switch (method) {
       case 'client.hello':
+        this.connectedClients.set(conn.id, {
+          role: params.role as ClientRole,
+          ...(typeof params.name === 'string' ? { name: params.name } : {})
+        })
         return { protocolVersion: PROTOCOL_VERSION, daemonVersion: '0.0.0-fake' }
       case 'status.get':
         return {
@@ -468,7 +496,7 @@ export class FakeDaemon {
           startedAt: 1_700_000_000_000,
           home: this.home,
           ptyHost: { pid: 4242, alive: true },
-          clients: [{ role: 'cli', name: 'quirky' }],
+          clients: [...this.connectedClients.values()],
           safeMode: false,
           socket: null
         }
