@@ -62,8 +62,8 @@ Advanced parity and verification obligations are tracked in
 `bun run test` runs the whole suite through the configured test host. Use
 `bun scripts/suite.ts <dirs>` for affected packages and `bun test <file>` for a single file.
 
-Shell-integration changes also require the explicit Bash 5.2/5.3 matrix. Supply two installed
-GNU Bash executables (temporary source builds are sufficient):
+Verify shell integration with the explicit Bash 5.2/5.3 matrix. Supply two installed GNU Bash
+executables (temporary source builds are sufficient):
 
 ```sh
 bun run test:bash -- /path/to/bash-5.2/bin/bash /path/to/bash-5.3/bin/bash

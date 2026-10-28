@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { spawnPty } from '../../pty-host/src/pty-process'
 import { buildSessionEnv, commandArgv, installIntegrationFiles, shellArgv } from '../src/launch'
 import { makeTempHome, waitFor } from './helpers'
@@ -12,6 +12,7 @@ let quirkyHome: string
 let scope: ProcessScope
 
 const started: { pid: number; kill(): void }[] = []
+const bashBinary = resolve(process.env.QUIRKY_TEST_BASH ?? '/bin/bash')
 
 beforeEach(() => {
   root = makeTempHome('qd-shell-')
@@ -150,13 +151,13 @@ describe('zsh shell sessions', () => {
 })
 
 describe('bash shell sessions', () => {
-  const bashBinary = process.env.QUIRKY_TEST_BASH ?? '/bin/bash'
-  const interactiveArgv = () => [...shellArgv(quirkyHome, bashBinary), '-c']
+  const interactiveArgv = () => [bashBinary, ...shellArgv(quirkyHome, '/bin/bash').slice(1), '-c']
 
   test('the shim is found when .bash_profile and .bashrc reset PATH', async () => {
     write(join(userHome, '.bash_profile'), RESET_PATH)
     write(join(userHome, '.bashrc'), RESET_PATH)
     const result = await run([...interactiveArgv(), 'command -v quirky'], sessionEnv(bashBinary))
+    expect(result.stdout).toBe(shimPath())
   })
 
   test('falls back to ~/.profile and does not source .bashrc twice when the profile does', async () => {
@@ -164,6 +165,7 @@ describe('bash shell sessions', () => {
     write(join(userHome, '.profile'), `[ -f ~/.bashrc ] && . ~/.bashrc`)
     write(join(userHome, '.bashrc'), `echo rc >> ${log}\n${RESET_PATH}`)
     const result = await run([...interactiveArgv(), 'command -v quirky'], sessionEnv(bashBinary))
+    expect(result.stdout).toBe(shimPath())
     expect(readFileSync(log, 'utf8').trim().split('\n')).toEqual(['rc'])
   })
 })
@@ -191,7 +193,7 @@ describe('integration files', () => {
 
 describe.each([
   ['zsh', '/bin/zsh', '.zshrc'],
-  ['bash', process.env.QUIRKY_TEST_BASH ?? '/bin/bash', '.bashrc']
+  ['bash', bashBinary, '.bashrc']
 ] as const)('%s shell integration', (_name, shell, rcFile) => {
   const ESC = '\x1b'
   const BEL = '\x07'
@@ -202,7 +204,9 @@ describe.each([
     mkdirSync(join(root, 'sub'), { recursive: true })
     let out = ''
     const decoder = new TextDecoder()
-    const proc = spawnPty(shellArgv(quirkyHome, shell), {
+    const argv = shellArgv(quirkyHome, _name === 'bash' ? '/bin/bash' : shell)
+    argv[0] = shell
+    const proc = spawnPty(argv, {
       env: { ...sessionEnv(shell, 'shell', extra, shellInit), ...scope.env },
       cwd: root,
       cols: 100,
@@ -358,9 +362,10 @@ claude() {
       await session.run("sh -c 'exit 7'")
       expect(session.finishedCodes()).toEqual([1, 1, 0, 7])
       expect(starts()).toBe(4)
+      await session.run('qk_fail() { return 9; }; qk_fail')
       await session.run('')
-      expect(session.finishedCodes()).toEqual([1, 1, 0, 7])
-      expect(starts()).toBe(4)
+      expect(session.finishedCodes()).toEqual([1, 1, 0, 7, 9])
+      expect(starts()).toBe(5)
       session.proc.terminal.write('exit 3\r')
       expect(await session.proc.exited).toBe(3)
     }, 30000)

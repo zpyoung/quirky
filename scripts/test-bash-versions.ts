@@ -1,10 +1,10 @@
 #!/usr/bin/env bun
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { createProcessScope } from './test-support/process-scope'
 
-const bashPaths = Bun.argv.slice(2)
+const bashPaths = Bun.argv.slice(2).map(path => resolve(path))
 if (bashPaths.length !== 2) {
   console.error('usage: bun run test:bash -- <bash-5.2-path> <bash-5.3-path>')
   process.exit(2)

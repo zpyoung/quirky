@@ -60,11 +60,44 @@
 - **Options:** Only assert generated source text; only run the system Bash; run a strict matrix and separate live PTY smoke.
 - **Chose:** GNU5.2.0 and5.3.20 strict matrix plus an uninstrumented throwaway live-shell scenario in plain and functrace modes; retain ordinary system Bash3.2/zsh tests.
 - **Why:** The observable contract is readiness once, no starts/completions on empty/whitespace/comment input, one start/completion per real command even with ignored/disabled history, cwd tracking, and the actual shell exit status. A real PTY exercises parsing and hook inheritance instead of echoing implementation details.
-- **Evidence:** Final matrix each10pass/0fail/36assertions; system shell-path file25pass/0fail/70assertions. Separate four-way real-PTY smoke observed statuses[0,1,1,1,0,7,0],7command starts,1ready marker,cwd sub,exit3 in each mode/version. A wrong5.3 binary (5.2 supplied twice) was rejected with exit1. Every runtime used disposable homes and process-scope cleanup.
+- **Evidence:** Initial corrected matrix each10pass/0fail/36assertions; system shell-path file25pass/0fail/70assertions. After D8 review fixes, the final matrix also exercised relative, version-named executable paths: each10pass/0fail/38assertions; complete system file25pass/0fail/72assertions. Separate four-way real-PTY smoke observed statuses[0,1,1,1,0,7,0],7command starts,1ready marker,cwd sub,exit3 in each mode/version. A wrong5.3 binary (5.2 supplied twice) was rejected with exit1. Every runtime used disposable homes and process-scope cleanup.
 - **Reversibility:** easy
 - **Confidence:** high
 - **Revisit if:** CI gains a shared Bash-version provisioner, or the original environment still differs.
 - **Source:** assumed — autonomous
 
+## D7: Preserve incoming protocol and process-lifecycle decisions during catch-up
+- **Question:** Does the clean build/roadmap catch-up introduce a conflicting contract?
+- **Options:** Change unrelated lifecycle behavior; preserve the independently landed constraints.
+- **Chose:** Preserve the merged daemon/PTY incarnation logic, checks and native structured-runner process ownership, worker identity rules, and editor/hosting APIs unchanged.
+- **Why:** None changes Bash hook classification or requires a public protocol change. The matrix concerns interpreter versions, not daemon/PTY protocol compatibility.
+- **Evidence:** IncomingBashLocks read complete incoming decision logs fix-flaky-daemon-pty-client, m4-hosting-api-github-parity, m7-sweep-editor-source-control and updated m5-structured-runner/m6-heimdall-control. Relevant constraints: fix-flaky D1–D4/D8–D9; structured D7–D8/D17/D23; editor D15; Heimdall D14/D16. Catch-up merged cleanly after eca8d8e6.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** A later merge changes shell wrappers or the public process-scope contract.
+- **Source:** locked by docs/loop/decisions/fix-flaky-daemon-pty-client.md
+
+## D8: Close both blocking static-review findings without broadening the production fix
+- **Question:** Which findings from the single final review require a fix?
+- **Options:** Accept both test-runner findings; dismiss them because the production guard was sound.
+- **Chose:** Restore the two accidentally removed real shell PATH assertions; select generated Bash wrapper argv independently of an override executable's basename, and resolve supplied paths before changing subprocess cwd. Extend the functrace regression to retain a real user function's failing return status.
+- **Why:** A real command-path test must fail if the shim is missing. A valid GNU executable named bash-5.3 must not bypass the wrapper merely because production shellKind recognizes the canonical basename bash. Relative test executable paths must survive the disposable cwd. No production API alias or shell-detection change is needed.
+- **Evidence:** BashFixReview P2 findings at shell-path.test.ts PATH assertions and executable selection; final actual matrix passed both relative version-named symlinks on GNU5.2.0/5.3.20,10tests/38assertions each. Full local system file25tests/72assertions. Real user function returns9 in the traced command-status sequence. Static review identified no blocking production-guard defect; original5.3-only trigger uncertainty remains D4.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Test binary selection no longer delegates to generated Bash rcfile arguments.
+- **Source:** assumed — autonomous
+
+## D9: Stop unfinished verification and land under the operator's build-first policy
+- **Question:** Which gate applies after the priority operator update while the affected suite is still running?
+- **Options:** Finish the superseded suite/review/debug workflow; cancel unfinished verification and use the typecheck-only landing gate.
+- **Chose:** Cancel owned bg9 immediately; run no further tests, reviews, dogfood or test-failure fixes. Commit the completed patch and land once typecheck passes. Add no follow-up because no flow is unbuilt.
+- **Why:** The operator moved all remaining testing/debugging to the end phase and explicitly directed this in-progress item to land now. Earlier completed matrix/smoke evidence remains historical evidence, not an assertion that the cancelled affected suite passed.
+- **Evidence:** Priority operator message; canonical `git show build/roadmap:docs/loop/LOOP.md` Build first, test at the end. proc://bg_9/kill returned cancelled. Fresh `bun run typecheck` completed exit0 (frozen install598installs/612packages, tsc exit0).
+- **Reversibility:** easy (end-phase verification resumes under the canonical queue)
+- **Confidence:** high
+- **Revisit if:** The end-phase queue claims a verification/debugging item.
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-Source fix, permanent behavioral regressions and strict two-version runner are implemented. Failing-before/passing-after functrace regression and actual5.2.0/5.3.20 live smoke are recorded in D5–D6; original version-only trigger is not claimed proven. README documents mandatory matrix for shell-integration edits. BashFixReview is reviewing the narrow patch; next run affected daemon/PTY/terminal/consumer suites, scripts/typecheck, catch up, commit evidence and canonical queue-controlled landing. No UI surface changed, so no UI dogfood/native handoff is needed. Preserve untracked .serena metadata untouched.
+Production fix and completed review-fix batch are ready. Earlier strict GNU5.2.0/5.3.20 matrix and live PTY smoke passed; original version-only trigger remains unproven. Operator priority D9 cancelled unfinished bg9; do not run further tests/reviews/dogfood or chase test failures. Fresh `bun run typecheck` passed. Catch-up and incoming-lock read already completed. Commit the remaining test/runner/docs corrections, detach, and run canonical queue.ts land fix-bash53-shell-integration (typecheck-only merge gate). No unbuilt flows/follow-up. Preserve untracked .serena metadata untouched.
