@@ -154,7 +154,18 @@
 - **Revisit if:** the guarded driver gains reliable quoted-reference, browser-reload and terminal-input support
 - **Source:** assumed — autonomous
 
-## Final verification evidence
+## D15: Compose canonical service migrations and routing before retrying the land
+- **Question:** the first canonical land rejected conflicts after new Heimdall, automation and browser-profile work landed
+- **Options:** discard either feature; reorder existing store history; preserve both contracts and append our never-landed policy migration last
+- **Chose:** required recovery merge63b8c9a5 after land failure578s. Read all three incoming decision logs. Preserve distinct kernel-plugin service coordination and exact worker authority; service identity does not authorize policySet. Compose store migrations core→worker→already-canonical service→new policy, preserve service registration/binding, use creatorDepth(caller) with one persisted-cap read, retain atomic fixture reply publication, and combine task-link handling with canonical browser URL/file routing and modifiers. Preserve both README sections.
+- **Why:** an already-landed service migration occupies a historical store version; inserting policy before it would replay or skip the wrong SQL. Header/import conflicts are not permission to drop a feature or weaken worker/operator boundaries.
+- **Evidence:** first land conflict output; incoming m5-automations-dispatch D31, m6-heimdall-core D6/D8 and sa-browser-profiles-settings D23; main.ts migration composition; setup-migration.test.ts real prior-store activation
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** a new canonical migration or authority change conflicts with this append-only composition
+- **Source:** assumed — autonomous
+
+## Verification before the first landing attempt
 - Source snapshot: aeca4cc496328a6029c123510245941a6a836caa, unchanged by the later documentation/evidence updates.
 - Affected runner:183 remote files initially177pass/6fail, plus2macOS files passed. The exact6 repaired files then passed6/6 without flaky retries; no all-green initial-run claim.
 - `bun test scripts`:68pass,0fail,568assertions. Its deliberately failing nested verifier fixtures are part of that passing outer suite.
@@ -164,5 +175,13 @@
 - Raw guarded report is `.quirk/using-apps-like-a-user/runs/20261028T064737-a890/report.md`; actual supplemental proof/receipts/screenshots are in `.quirk/build-loop/m6-orchestration-ui/`. Final review raw artifacts are preserved there as `final-review.tgz`.
 - No native-only product scenario was added or claimed; no new native verification file is needed. D7 retains Linux/Windows verification as explicit platform work.
 
+## Post-conflict integration verification
+- `setup-migration.test.ts` seeds the actual prior canonical core/worker/service store, activates the new plugin through daemon API, proves Heimdall-owned Run/Task data preserved, default policy1, operator policy2 surviving restart, and corrupt depth normalized persistently to1. Removed the SQL-text mock. A duplicate test helper was corrected after typecheck reported it; no assertion was suppressed.
+- Focused merged boundary checks:43pass,0fail,230assertions across6files. Final affected suite:202remote files and4macOS files, all passed without flaky retries. `bun test scripts`:68pass,0fail,572assertions.
+- Post-merge `bun run typecheck` and packaged `bun run build` exited0;21pluginUI modules and29plugins. The same missing macOS icon-source warnings remain explicit.
+- Fresh actual daemon/CLI smoke established exact taskTerminal target, operator policy2 and denial of an attested worker's attempt to raise it to3. A separately owned CDP process exercised the newly built worker row, real terminal typing, task hover/action and existing-tab destination; physical custody was visibly user-owned/retained.
+- The actual provider CLI then reported completion; coordinator release returned retained/processAction:none and the same PTY remained alive. `integration-smoke-result.json` records passed:true. Private runtime service exited0 and cleaned daemon/PTy/providers/home; owned CDP tab and Chrome process were closed. Screenshots15b7af2e513274e6/15b7af6b2c7274e9/15b7af7d9b7274ea are preserved in the private evidence directory.
+- This is post-merge runtime/build/test verification, not a second model-review round or a relabelled formal guarded campaign.
+
 ## Progress
-Iteration5 is ready for canonical landing: sourceaeca4cc4, bounded final review and corrected affected checks green with the stated qualifications, packaged build/typecheck green, actual isolated-browser and retained-release smoke observed, all dispatched agents and owned verification services finished. No in-scope local feature flow is voluntarily deferred; guarded tool limitations stay explicit rather than becoming false UI passes. Next: commit these documentation/evidence records, detach, run canonical queue.ts land m6-orchestration-ui and wait for its full-merge verdict. Do not claim landed until the queue confirms it.
+Iteration5 is ready to retry canonical landing after merge63b8c9a5: canonical-store upgrade and all merged boundaries verified,202remote+4macOS files green, scripts68/0/572, post-merge typecheck/package build and actual retained-release UI/CLI smoke passed. All agents and owned verification services finished. No local feature flow is voluntarily deferred; guarded-driver and model-review coverage qualifications remain explicit. Next: commit regression/evidence updates, detach, invoke canonical queue.ts land m6-orchestration-ui and wait for the full-merge verdict. Do not claim landed until the queue confirms it.

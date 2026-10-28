@@ -1,9 +1,7 @@
 import { describe, expect, test } from 'bun:test'
-import type { PluginCaller, PluginStore } from '@quirky/protocol'
+import type { PluginCaller } from '@quirky/protocol'
 import { renderOrchestrationSkill, skillPathForAgent } from '../src/skill'
 import { canChangePolicy } from '../src/setup'
-import { readNestedWorkerMaxDepth } from '../src/store'
-
 
 describe('orchestration setup policy and skill', () => {
 
@@ -47,17 +45,4 @@ describe('orchestration setup policy and skill', () => {
   })
 
 
-  test('corrupt persisted nesting depth is normalized to the safe default', () => {
-    let normalized = false
-    const store = {
-      get: () => ({ nested_worker_max_depth: Number.NaN }),
-      run: (sql: string) => {
-        normalized = sql.includes('UPDATE orchestration_policy')
-        return { changes: 1, lastInsertRowid: 0 }
-      },
-      readOnly: false
-    } as unknown as PluginStore
-    expect(readNestedWorkerMaxDepth(store)).toBe(1)
-    expect(normalized).toBe(true)
-  })
 })
