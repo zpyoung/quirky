@@ -358,28 +358,29 @@ function makeContext(
   call: (method: string, params?: Record<string, unknown>) => Promise<unknown>,
   subscribe: (listener: (event: QuirkyEvent) => void | Promise<void>) => () => void = () => () => {}
 ): PluginContext {
-  const unusedCapability = (): never => { throw new Error('unexpected resource capability in orchestration adapter fixture') }
   return {
     pluginId: 'quirky.heimdall',
     dir: '/tmp/heimdall',
+    workerEntrypoint: () => { throw new Error('workerEntrypoint is unsupported in the orchestration fixture') },
     dataDir: '/tmp/heimdall-data',
     home: '/tmp/quirky-home',
     call,
     subscribe,
-    log: () => {},
-    provide: () => {},
-    emit: () => true,
-    workerEntrypoint: unusedCapability,
-    createFileResource: unusedCapability,
-    clients: { accept: unusedCapability },
-    openStore: () => { throw new Error('not used') },
-    getSetting: () => undefined,
-    storedSettingValue: () => undefined,
-    error: (_kind, message) => new Error(message),
-    pty: null as never,
-    notify: () => {},
-    launch: null as never
-  } as PluginContext
+    log: () => { throw new Error('log is unsupported in the orchestration fixture') },
+    provide: () => { throw new Error('provide is unsupported in the orchestration fixture') },
+    emit: () => { throw new Error('emit is unsupported in the orchestration fixture') },
+    createFileResource: async () => { throw new Error('createFileResource is unsupported in the orchestration fixture') },
+    openStore: () => { throw new Error('openStore is unsupported in the orchestration fixture') },
+    getSetting: () => { throw new Error('getSetting is unsupported in the orchestration fixture') },
+    storedSettingValue: () => { throw new Error('storedSettingValue is unsupported in the orchestration fixture') },
+    error: () => { throw new Error('error is unsupported in the orchestration fixture') },
+    get pty(): PluginContext['pty'] { throw new Error('pty is unsupported in the orchestration fixture') },
+    notify: () => { throw new Error('notify is unsupported in the orchestration fixture') },
+    get launch(): PluginContext['launch'] { throw new Error('launch is unsupported in the orchestration fixture') },
+    clients: {
+      accept: () => { throw new Error('clients are unsupported in the orchestration fixture') }
+    }
+  } satisfies PluginContext
 }
 
 function makeEnrollment(overrides: Partial<Enrollment> = {}): Enrollment {

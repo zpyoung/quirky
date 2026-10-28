@@ -39,6 +39,37 @@ export function createServiceCoordinator(
     return dispatch
   }
 
+  function exactCloseEvidence(detail: WorkerShowResult): boolean {
+    const { dispatch, worker, terminalResource: resource } = detail
+    if (!worker || !resource || worker.dispatchId !== dispatch.id ||
+      !worker.sessionId || !worker.processIncarnation ||
+      resource.ownerDispatchId !== dispatch.id || resource.sessionId !== worker.sessionId ||
+      resource.processIncarnation !== worker.processIncarnation || resource.worktreeId !== worker.worktreeId) {
+      return false
+    }
+    const rows = core.store.all<{ payload_json: string }>(
+      `SELECT payload_json FROM worker_observations
+       WHERE dispatch_id = ? AND facet IN ('stop_close', 'release_close')
+       ORDER BY id DESC`,
+      dispatch.id
+    )
+    for (const row of rows) {
+      let payload: unknown
+      try {
+        payload = JSON.parse(row.payload_json)
+      } catch {
+        continue
+      }
+      if (payload !== null && typeof payload === 'object' && !Array.isArray(payload)) {
+        const evidence = payload as Record<string, unknown>
+        if (evidence.confirmed === true && evidence.resourceId === resource.id &&
+          evidence.processIncarnation === worker.processIncarnation) return true
+      }
+    }
+    return false
+  }
+
+
   async function workersForRun(runId: RunId, caller: PluginCaller): Promise<readonly ServiceWorkerView[]> {
     const rows = core.store.all<{ id: DispatchId }>(
       `SELECT id FROM dispatches WHERE run_id = ? AND supervised = 1 ORDER BY created_at, id`,
@@ -48,14 +79,17 @@ export function createServiceCoordinator(
     const result: ServiceWorkerView[] = []
     for (const row of rows) {
       const detail = await show({ dispatchId: row.id }, caller) as WorkerShowResult
+      const closedExactly = exactCloseEvidence(detail) &&
+        detail.observation.status !== 'identity_changed' &&
+        !(detail.observation.status === 'live' && detail.observation.exactWorker)
       const state = detail.observation.status === 'live' && detail.observation.exactWorker
         ? 'live'
-        : detail.observation.status === 'exited'
+        : detail.observation.status === 'exited' || closedExactly
           ? 'exited'
           : 'unverifiable'
       const identity = detail.observation.exactWorker && detail.observation.identity
         ? detail.observation.identity
-        : detail.observation.status === 'exited' && detail.worker
+        : (detail.observation.status === 'exited' || closedExactly) && detail.worker
           ? detail.worker
           : null
       const lastHeartbeatAt = detail.dispatch.lastHeartbeatAt
@@ -66,7 +100,8 @@ export function createServiceCoordinator(
         processIncarnation: identity?.processIncarnation ?? null,
         state,
         lastContactAtMs: observedAt !== null && Number.isFinite(observedAt) ? observedAt : null,
-        assignmentActive: (detail.dispatch.status === 'pending' || detail.dispatch.status === 'dispatched') && detail.worker !== null
+        assignmentActive: (detail.dispatch.status === 'pending' || detail.dispatch.status === 'dispatched') &&
+          detail.worker !== null && state !== 'exited'
       })
     }
     return result

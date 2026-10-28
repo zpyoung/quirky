@@ -491,8 +491,16 @@ describe('exact worker controls and guarded release', () => {
     const stopped = record(await callAs(harness, 'a', 'serviceWorkerStop', {
       runId: run.id, dispatchId, expectedIdentity, requestId: requestId(), contractVersion: 1
     }))
-    expect(stringField(stopped, 'dispatchId')).toBe(dispatchId)
-    expect(['stopped', 'stop_unknown']).toContain(stringField(stopped, 'state'))
+    expect(stopped).toMatchObject({ dispatchId, state: 'stopped', processAction: 'closed_agent_terminal' })
+    const afterStop = parseRunDetail(await callAs(harness, 'a', 'serviceRunShow', { runId: run.id })).workers
+      .find((candidate) => candidate.dispatchId === dispatchId)
+    expect(afterStop).toMatchObject({
+      dispatchId,
+      sessionId: expectedIdentity.sessionId,
+      processIncarnation: expectedIdentity.processIncarnation,
+      state: 'exited',
+      assignmentActive: false
+    })
   }, 60_000)
 
   test('releases a settled worker through archive and custody guards without erasing its identity', async () => {
