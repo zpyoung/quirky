@@ -33,6 +33,17 @@
 - **Revisit if:** The authoritative loop adds a specific different policy for this fix.
 - **Source:** assumed — autonomous
 
+## D4: Land the narrow fixture regression with truthful stress limits
+- **Question:** What evidence supports the final cutover, and do incoming decisions change it?
+- **Options:** Claim all loaded tests pass; change a saturated screen fixture's deadline; preserve the named raw fix and disclose the separate overload finding.
+- **Chose:** Preserve all original timeouts and production paths; land only the existing raw test's stronger deterministic assertions plus investigation receipts. The single roadmap merge brought in fix-flaky-terminal-features-pane D1–D4, which changes a separate window replay/readiness fixture and does not conflict with this byte-level PTY test.
+- **Why:** Controlled two-writer reproduction establishes that more waiting cannot restore a split token; the corrected case passes twenty loaded repetitions, detects an echo-enabled mutation, and the complete manager file passes without synthetic overload. The separate saturated screen test's overload deadline failure remains explicit in BLOCKERS.md. No broad suite, native UI, Linux, Windows, or all-load flake-free claim is made.
+- **Evidence:** Loaded raw target: 20 pass/0 fail/180 assertions, 33.54 seconds; echo-enabled mutation: expected exact-prefix failure; final manager file: 57 pass/0 fail/230 assertions, 64.29 seconds; twenty-burner full-file finding: 56 pass/1 fail; all process scopes cleaned. Commit 3e407dee followed by one clean roadmap merge. Post-merge `bun run typecheck` exited 0 in 31.67 seconds, including UI lint and root/mobile/desktop TypeScript checks.
+- **Reversibility:** easy
+- **Confidence:** high for the specified two-writer cause and raw byte invariants, not an exhaustive flake-rate claim
+- **Revisit if:** The exact single-writer raw stream fails, or the end-phase saturated screen diagnosis finds a real output loss.
+- **Source:** assumed — autonomous
+
 ## Progress
 Root cause traced to an already-repaired two-writer fixture, not a demonstrated production attach gap. Historical one-write reproduction did not trigger in 100 sequential attempts under ten CPU burners or 200 attempts across eight concurrent PTYs under twenty burners. Controlled input splitting under the same twenty-burner load reproduced the causal failure: all 700 expected bytes and their character multiset arrived, but only one intact line-39 token remained; output was unchanged after 5.1 seconds. This is a controlled scheduling reproduction, not a claim that the unchanged historical one-write test failed locally. An initial controlled diagnostic had an off-by-one CRLF byte-count calculation; corrected it before the successful capture. Every diagnostic scope cleaned its children and temporary home.
 
@@ -40,4 +51,4 @@ The existing raw attach test now preserves the single-writer repair while checki
 
 The complete manager file with twenty CPU burners returned 56 pass/1 fail/218 assertions in 160.82 seconds: the unchanged 400,000-line saturated screen-attach case exceeded its 30-second output deadline. The changed raw attach case passed. This is recorded with exact conditions as a medium verification finding in docs/loop/BLOCKERS.md, not suppressed or called a production replay defect. No deadlines changed and no testing/debugging follow-up was added under build-first.
 
-Next: commit, catch up once with build/roadmap, typecheck, record the landing receipt and land. No production API or runtime changes.
+Implementation and required verification are complete. One clean roadmap catch-up is merged and its sole new decision log was read; post-merge typecheck passed. Ready to commit this receipt, detach and land fix-flaky-pty-host-manager through the authoritative queue script. All scout and runtime processes have returned; remove the two owned throwaway /tmp scripts after landing. No production API or runtime changes.
