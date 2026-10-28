@@ -242,5 +242,16 @@
 - **Revisit if:** the dependent completion item provides actual end-to-end evidence.
 - **Source:** deferred: remaining Tasks parity and cross-feature acceptance — operator-directed 4am sprint
 
+## D23: Consume authoritative creation and close only the remaining named gate failures
+- **Question:** what changed after the operator's final affected gate?
+- **Options:** drop sourced creation; weaken safety metadata; integrate the landed owner and repair actual caller/fixture boundaries.
+- **Chose:** integrate current roadmap containing authoritative source runtime ae72e378/finish ac44b15c; combine the independent detail imports and documentation. Consume canonical workItemPage errors keyed by origin/upstream/configured, not invented issues/prs/count keys. Correct the fake CLI's graphql dispatch with hostname options and use the declared flat issue read parameters. Delete uppercase check-conclusion and display-name pins, retaining failure rollup, requested folder and persisted exact source/repo identity assertions.
+- **Why:** the147-file gate passed145 files; the remaining two were genuine error-envelope handling plus fixture/request/representation mismatches. Canonical creation now returns a real linked workspace; its display label is distinct from the requested folder name.
+- **Evidence:** cd6493e7; subsequent focused run proves issue11/11 and list15/17, with only the two incidental pins remaining; current corrected list verification pending. Generic UI lifecycle, Project queries and all other affected files have passing observations. No complete147-file single-run claim is made.
+- **Reversibility:** easy
+- **Confidence:** high for observed boundary causes
+- **Revisit if:** corrected list or normal landing verification reports a concrete failure.
+- **Source:** assumed — autonomous (named gate repairs); locked by canonical sourced-worktree contract
+
 ## Progress
-All components and concrete gate repairs are merged; full aggregate source is published. The operator now requires immediate core landing with no unstarted review/dogfood campaign. Typecheck/build and scripts have prior green observations; final affected verification must cover the latest repairs and dependency catch-up. Next: register the one completion item, commit the core/docs/cleanup, merge current roadmap, run typecheck plus affected tests once, commit/detach and queue.ts land m4-hosting-ui-tasks. Preserve any failed output and repair only named blockers; no full-parity, final-review or browser-pass claim.
+Immediate sprint completion: one follow-up registered as m4-hosting-ui-tasks-complete-remaining-flows; no unstarted review/dogfood. Canonical sourced creation is integrated. Required typecheck passes; affected145/147 plus corrected issue11/11 pass, final list-only correction is next. Scripts68/0 and prior packaged build pass. After that exact file/typecheck evidence, commit final evidence/notes, detach and run queue.ts land m4-hosting-ui-tasks without another semantic campaign. Whole merged verification remains queue-owned; no full-parity or browser-pass claim.
