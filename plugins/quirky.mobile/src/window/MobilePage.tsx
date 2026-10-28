@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Badge, Button, SectionHeader, ToolPanelFrame } from '@quirky/ui'
 import type { MobilePairingResult, UiPluginContext } from '@quirky/protocol'
 import { createPairing } from './api'
 import { DeviceList } from './DeviceList'
 import { pairedDateLabel } from './date'
-import { MobileStyles } from './MobileStyles'
 import { NetworkPicker } from './NetworkPicker'
 import { PairingPanel } from './PairingPanel'
 import { useMobileState } from './useMobileState'
@@ -174,101 +174,103 @@ export function MobilePage({ context, input, report }: { context: UiPluginContex
     }
   }
 
-  if (mobile.loading && mobile.state === null) return <main className="mobile-root"><MobileStyles /><p role="status">Loading Mobile…</p></main>
+  if (mobile.loading && mobile.state === null) {
+    return <main className="ui-stack"><p role="status">Loading Mobile…</p></main>
+  }
   if (mobile.state === null) {
     return (
-      <main className="mobile-root">
-        <MobileStyles />
-        <h1 className="mobile-title">Mobile</h1>
-        <p className="mobile-error" role="alert">Unable to load Mobile settings: {mobile.error ?? 'The daemon returned no state.'}</p>
-        <button className="mobile-button" type="button" onClick={() => void mobile.refresh()}>Try again</button>
+      <main className="ui-stack">
+        <SectionHeader title="Mobile" />
+        <p className="ui-error-text" role="alert">Unable to load Mobile settings: {mobile.error ?? 'The daemon returned no state.'}</p>
+        <div className="ui-cluster"><Button onClick={() => void mobile.refresh()}>Try again</Button></div>
       </main>
     )
   }
 
   const currentStage = stage ?? 'intro'
   return (
-    <main className="mobile-root">
-      <MobileStyles />
-      <header className="mobile-header">
-        <div>
-          <h1 className="mobile-title">Mobile</h1>
-          <p className="mobile-description">Control terminals and agents from your phone.</p>
-        </div>
-        <div className="mobile-actions">
-          <button className="mobile-button" type="button" onClick={() => context.openView(MOBILE_SETTINGS_ID)}>Settings</button>
-          <button className="mobile-button" type="button" onClick={() => void updateSidebar()}>{mobile.state.showMobileButton ? 'Hide from sidebar' : 'Show in sidebar'}</button>
-        </div>
-      </header>
-      {mobile.error && <p className="mobile-error" role="alert">Could not refresh Mobile state: {mobile.error}</p>}
-      {actionError && <p className="mobile-error" role="alert">{actionError}</p>}
+    <main className="ui-stack">
+      <div className="ui-stack">
+        <SectionHeader
+          title="Mobile"
+          actions={
+            <>
+              <Button onClick={() => context.openView(MOBILE_SETTINGS_ID)}>Settings</Button>
+              <Button onClick={() => void updateSidebar()}>{mobile.state.showMobileButton ? 'Hide from sidebar' : 'Show in sidebar'}</Button>
+            </>
+          }
+        />
+        <p className="ui-text-muted">Control terminals and agents from your phone.</p>
+      </div>
+      {mobile.error && <p className="ui-error-text" role="alert">Could not refresh Mobile state: {mobile.error}</p>}
+      {actionError && <p className="ui-error-text" role="alert">{actionError}</p>}
 
       {currentStage === 'intro' && (
-        <section className="mobile-card">
-          <h2>Your workspaces, in your pocket.</h2>
-          <p className="mobile-muted">Pair Quirky Mobile directly with this desktop to watch sessions and control terminals.</p>
-          <div className="mobile-actions"><button className="mobile-button primary" type="button" onClick={() => void saveOnboardingSeen()}>Get started</button></div>
-        </section>
+        <ToolPanelFrame title="Your workspaces, in your pocket.">
+          <div className="ui-stack">
+            <p className="ui-text-muted">Pair Quirky Mobile directly with this desktop to watch sessions and control terminals.</p>
+            <div className="ui-cluster"><Button variant="primary" onClick={() => void saveOnboardingSeen()}>Get started</Button></div>
+          </div>
+        </ToolPanelFrame>
       )}
 
       {currentStage === 'install' && (
-        <section className="mobile-card">
-          <p className="mobile-muted">Step 1 of 2</p>
-          <h2>Get the app</h2>
-          <p>Choose your phone platform and release channel.</p>
-          <div className="mobile-choice-row" role="group" aria-label="Phone platform">
-            {(['iOS', 'Android'] as const).map((choice) => (
-              <button key={choice} className="mobile-button mobile-choice" type="button" aria-pressed={platform === choice} onClick={() => setPlatform(choice)}>{choice}</button>
-            ))}
+        <ToolPanelFrame title="Get the app">
+          <div className="ui-stack">
+            <p className="ui-text-muted">Step 1 of 2</p>
+            <p>Choose your phone platform and release channel.</p>
+            <div className="ui-cluster" role="group" aria-label="Phone platform">
+              {(['iOS', 'Android'] as const).map((choice) => (
+                <Button key={choice} variant={platform === choice ? 'primary' : 'secondary'} aria-pressed={platform === choice} onClick={() => setPlatform(choice)}>{choice}</Button>
+              ))}
+            </div>
+            <div className="ui-cluster" role="group" aria-label="Release channel">
+              {(['Preview', 'Stable'] as const).map((choice) => (
+                <Button key={choice} variant={channel === choice ? 'primary' : 'secondary'} aria-pressed={channel === choice} onClick={() => setChannel(choice)}>{choice}</Button>
+              ))}
+            </div>
+            <p role="status"><Badge tone="needs-you">Unavailable</Badge> Quirky mobile app is not available yet for {platform} ({channel.toLowerCase()}). Orca’s hosted mobile app uses an incompatible RPC protocol and cannot pair with Quirky.</p>
+            <div className="ui-cluster">
+              <Button onClick={() => setStage('intro')}>Back</Button>
+              <Button variant="primary" onClick={startPairing}>Continue</Button>
+            </div>
           </div>
-          <div className="mobile-choice-row" role="group" aria-label="Release channel">
-            {(['Preview', 'Stable'] as const).map((choice) => (
-              <button key={choice} className="mobile-button mobile-choice" type="button" aria-pressed={channel === choice} onClick={() => setChannel(choice)}>{choice}</button>
-            ))}
-          </div>
-          <p className="mobile-callout">Quirky mobile app is not available yet for {platform} ({channel.toLowerCase()}). Orca’s hosted mobile app uses an incompatible RPC protocol and cannot pair with Quirky.</p>
-          <div className="mobile-actions">
-            <button className="mobile-button" type="button" onClick={() => setStage('intro')}>Back</button>
-            <button className="mobile-button primary" type="button" onClick={startPairing}>Continue</button>
-          </div>
-        </section>
+        </ToolPanelFrame>
       )}
 
       {currentStage === 'pair' && (
         <>
-          <section className="mobile-card">
-            <p className="mobile-muted">Step 2 of 2</p>
-            <h2>Pair this desktop</h2>
-            <p>Pairing uses the selected LAN or Tailscale address. Relay is unavailable in this build.</p>
-            <NetworkPicker
-              interfaces={mobile.state.interfaces}
-              customAddresses={mobile.state.customAddresses}
-              selectedAddress={selectedAddress}
-              busy={busy}
-              onSelect={setSelectedAddress}
-              onRefresh={refreshInterfaces}
-              onAdd={addAddress}
-              onRemove={removeAddress}
-            />
-          </section>
+          <ToolPanelFrame title="Pair this desktop">
+            <div className="ui-stack">
+              <p className="ui-text-muted">Step 2 of 2</p>
+              <p>Pairing uses the selected LAN or Tailscale address. Relay is unavailable in this build.</p>
+              <NetworkPicker
+                interfaces={mobile.state.interfaces}
+                customAddresses={mobile.state.customAddresses}
+                selectedAddress={selectedAddress}
+                busy={busy}
+                onSelect={setSelectedAddress}
+                onRefresh={refreshInterfaces}
+                onAdd={addAddress}
+                onRemove={removeAddress}
+              />
+            </div>
+          </ToolPanelFrame>
           <PairingPanel offer={offer} busy={busy} error={null} buttonLabel="Generate code" onGenerate={generate} />
-          <div className="mobile-actions">
-            <button className="mobile-button" type="button" onClick={() => setStage('install')}>Back</button>
-          </div>
+          <div className="ui-cluster"><Button onClick={() => setStage('install')}>Back</Button></div>
         </>
       )}
 
       {currentStage === 'paired' && (
         <>
-          <section className="mobile-card">
-            <h2>{mobile.state.devices.length > 0 ? 'Your phone is paired.' : 'No phones paired yet.'}</h2>
-            <p className="mobile-muted">{mobile.state.devices.length > 0 ? 'Open Quirky Mobile to pick up where you left off, or pair another device.' : 'Pair a phone to connect this desktop to Quirky Mobile.'}</p>
-          </section>
+          <ToolPanelFrame title={mobile.state.devices.length > 0 ? 'Your phone is paired.' : 'No phones paired yet.'}>
+            <p className="ui-text-muted">{mobile.state.devices.length > 0 ? 'Open Quirky Mobile to pick up where you left off, or pair another device.' : 'Pair a phone to connect this desktop to Quirky Mobile.'}</p>
+          </ToolPanelFrame>
           <DeviceList context={context} devices={mobile.state.devices} onChanged={async () => { await mobile.refreshDevices() }} />
-          <div className="mobile-actions"><button className="mobile-button primary" type="button" onClick={startPairing}>Pair another device</button></div>
+          <div className="ui-cluster"><Button variant="primary" onClick={startPairing}>Pair another device</Button></div>
         </>
       )}
-      <button className="mobile-button" type="button" onClick={() => context.openView(MOBILE_SETTINGS_ID)}>Configure in Settings &gt; Mobile</button>
+      <div className="ui-cluster"><Button onClick={() => context.openView(MOBILE_SETTINGS_ID)}>Configure in Settings &gt; Mobile</Button></div>
     </main>
   )
 }

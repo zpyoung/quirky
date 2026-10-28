@@ -24,6 +24,21 @@ and lifecycle rules. A visual or theme change does not approve, launch or cancel
 
 See the [supervised-work presentation specification](../docs/quirk/specs/2026-10-28-ui-restyle-orchestration/logic.md).
 
+## Settings and utility presentation
+
+The host **Settings** window uses shared graphite forms and keeps edits local until
+Save; Cancel leaves stored preferences unchanged. Application and terminal appearance
+continue to use their existing theme controls. Plugin settings sections and dedicated
+settings links remain available from the same window.
+
+Desktop **Mobile**, **CLI settings**, command search and the Source Control activity
+contribution use the same dark/light controls. Mobile pairing offers remain deliberately
+visible only in the pairing surface; CLI pairing-offer entry stays masked. Launcher
+replacement confirmations, unavailable-target guards and device revocation behavior
+are unchanged. The phone application's presentation is not part of this restyle.
+
+See the [settings presentation specification](../docs/quirk/specs/2026-10-28-ui-restyle-settings/logic.md).
+
 
 ## Terminal dock
 

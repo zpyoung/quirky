@@ -18,5 +18,9 @@
   "quirky.session-info",
   "quirky.terminal",
   "quirky.terminal-dock",
+  "quirky.mobile",
+  "quirky.cli",
+  "quirky.palette",
+  "quirky.sidebar-extras",
   "quirky.worktree"
 ]

@@ -1,9 +1,9 @@
 import { useState, type FormEvent } from 'react'
 import { useConnection, usePluginHost, usePluginState } from '../context'
+import { Button, Dialog, EmptyState, FormRow, SectionHeader, SelectField, TextField } from '../design-system'
 import { settingsGroups, themePicker, type SettingField } from '../plugins/settingsGroups'
 import { changedSettings, draftOf, type DraftValue } from '../plugins/settingsDraft'
 import { PluginSlot } from '../plugins/PluginSlot'
-import { Dialog } from './Dialog'
 
 function PluginField({
   field,
@@ -17,11 +17,25 @@ function PluginField({
   onChange: (value: DraftValue) => void
 }) {
   const { control } = field
-  const input =
-    control.kind === 'checkbox' ? (
-      <input type="checkbox" checked={value === true} onChange={(event) => onChange(event.target.checked)} />
-    ) : control.kind === 'number' ? (
-      <input
+  if (control.kind === 'checkbox') {
+    return (
+      <FormRow label={field.title} htmlFor={field.id} help={field.description} error={error}>
+        <input
+          id={field.id}
+          type="checkbox"
+          checked={value === true}
+          onChange={(event) => onChange(event.target.checked)}
+        />
+      </FormRow>
+    )
+  }
+  if (control.kind === 'number') {
+    return (
+      <TextField
+        id={field.id}
+        label={field.title}
+        help={field.description}
+        error={error}
         type="number"
         step="any"
         min={control.min}
@@ -29,38 +43,35 @@ function PluginField({
         value={String(value)}
         onChange={(event) => onChange(event.target.value)}
       />
-    ) : control.kind === 'select' ? (
-      <select value={String(value)} onChange={(event) => onChange(event.target.value)}>
+    )
+  }
+  if (control.kind === 'select') {
+    return (
+      <SelectField
+        id={field.id}
+        label={field.title}
+        help={field.description}
+        error={error}
+        value={String(value)}
+        onChange={(event) => onChange(event.target.value)}
+      >
         {control.options.map((option) => (
           <option key={option} value={option}>
             {option}
           </option>
         ))}
-      </select>
-    ) : (
-      <input value={String(value)} onChange={(event) => onChange(event.target.value)} />
+      </SelectField>
     )
+  }
   return (
-    <>
-      <label className={control.kind === 'checkbox' ? 'check-row' : undefined} title={field.description}>
-        {control.kind === 'checkbox' ? (
-          <>
-            {input}
-            {field.title}
-          </>
-        ) : (
-          <>
-            {field.title}
-            {input}
-          </>
-        )}
-      </label>
-      {error && (
-        <p className="form-error" role="alert">
-          {error}
-        </p>
-      )}
-    </>
+    <TextField
+      id={field.id}
+      label={field.title}
+      help={field.description}
+      error={error}
+      value={String(value)}
+      onChange={(event) => onChange(event.target.value)}
+    />
   )
 }
 
@@ -119,103 +130,122 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <Dialog title="Settings" onClose={onClose}>
-      <form className="form" onSubmit={submit}>
-        {groups.length === 0 && settingsViews.length === 0 && settingsSections.length === 0 && themes.options.length <= 1 && <p className="muted pad">No settings to change.</p>}
+    <Dialog
+      open
+      title="Settings"
+      onClose={onClose}
+      scrollBody
+      actions={
+        <div className="ui-cluster">
+          <Button form="settings-form" type="button" onClick={onClose}>Cancel</Button>
+          <Button form="settings-form" type="submit" variant="primary" disabled={busy}>Save</Button>
+        </div>
+      }
+    >
+      <form id="settings-form" className="ui-stack" onSubmit={submit}>
+        {groups.length === 0 && settingsViews.length === 0 && settingsSections.length === 0 && themes.options.length <= 1 && (
+          <EmptyState message="No settings to change." />
+        )}
         {settingsViews.length > 0 && (
-          <fieldset className="settings-group">
-            <legend>Plugin settings</legend>
-            {settingsViews.map((view) => (
-              <button key={view.id} type="button" disabled={busy || view.module === null}
-                title={view.module === null ? 'This settings view has no active UI module.' : view.title}
-                onClick={async () => {
-                  setBusy(true)
-                  setNavigationError(null)
-                  try { await connection.callAny('ui.view.open', { id: view.id }); onClose() }
-                  catch (error) { setNavigationError(error instanceof Error ? error.message : 'Could not open plugin settings.') }
-                  finally { setBusy(false) }
-                }}
-              >{view.title}</button>
-            ))}
-            {navigationError && <p className="form-error" role="alert">{navigationError}</p>}
-          </fieldset>
+          <section className="ui-stack" role="group" aria-label="Plugin settings">
+            <SectionHeader title="Plugin settings" />
+            <div className="ui-stack">
+              {settingsViews.map((view) => (
+                <Button
+                  key={view.id}
+                  type="button"
+                  disabled={busy || view.module === null}
+                  title={view.module === null ? 'This settings view has no active UI module.' : view.title}
+                  onClick={async () => {
+                    setBusy(true)
+                    setNavigationError(null)
+                    try { await connection.callAny('ui.view.open', { id: view.id }); onClose() }
+                    catch (error) { setNavigationError(error instanceof Error ? error.message : 'Could not open plugin settings.') }
+                    finally { setBusy(false) }
+                  }}
+                >
+                  {view.title}
+                </Button>
+              ))}
+            </div>
+            {navigationError && <p className="ui-error-text" role="alert">{navigationError}</p>}
+          </section>
         )}
         {groups.map((group) =>
           group.kind === 'plugin' ? (
-            <fieldset key={`plugin:${group.plugin}`} className="settings-group">
-              <legend>{group.plugin}</legend>
+            <section key={`plugin:${group.plugin}`} className="ui-stack" role="group" aria-label={group.plugin}>
+              <SectionHeader title={group.plugin} />
               {renderFields(group.fields)}
-            </fieldset>
+            </section>
           ) : group.category !== undefined ? (
-            <fieldset key={`category:${group.category}`} className="settings-group">
-              <legend>{group.category}</legend>
+            <section key={`category:${group.category}`} className="ui-stack" role="group" aria-label={group.category}>
+              <SectionHeader title={group.category} />
               {group.sections.map((section) => (
-                <div key={`section:${section.section ?? ''}`} className="settings-section">
-                  {section.section !== undefined && <h3 className="settings-section-title">{section.section}</h3>}
+                <div key={`section:${section.section ?? ''}`} className="ui-stack">
+                  {section.section !== undefined && <SectionHeader title={section.section} />}
                   {renderFields(section.fields)}
                 </div>
               ))}
-            </fieldset>
+            </section>
           ) : (
             group.sections.map((section) => (
-              <fieldset key={`section:${section.section ?? ''}`} className="settings-group">
-                <legend>{section.section}</legend>
+              <section
+                key={`section:${section.section ?? ''}`}
+                className="ui-stack"
+                role="group"
+                aria-label={section.section ?? 'Settings'}
+              >
+                <SectionHeader title={section.section ?? 'Settings'} />
                 {renderFields(section.fields)}
-              </fieldset>
+              </section>
             ))
           )
         )}
         {settingsSections.map((section) => (
-          <fieldset key={section.id} className="settings-group">
-            <legend>{section.title}</legend>
-            {section.description && <p className="muted">{section.description}</p>}
+          <section key={section.id} className="ui-stack" role="group" aria-label={section.title}>
+            <SectionHeader title={section.title} />
+            {section.description && <p className="ui-text-muted">{section.description}</p>}
             <PluginSlot id={section.id} />
-          </fieldset>
+          </section>
         ))}
         {themes.options.length > 1 && (
-          <>
-            <label>
-              Theme
-              <select value={themeEdit ?? themes.selected} onChange={(event) => setThemeEdit(event.target.value)}>
-                {themes.options.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.title}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {fieldErrors.theme && (
-              <p className="form-error" role="alert">
-                {fieldErrors.theme}
-              </p>
-            )}
-          </>
-        )}
-        {settingsCommands.length > 0 && (
-          <section className="settings-plugin-actions" aria-label="Plugin settings">
-            <p className="muted">Open a plugin’s dedicated settings view.</p>
-            {settingsCommands.map((command) => (
-              <button
-                key={command.id}
-                type="button"
-                data-settings-command={command.id}
-                disabled={busy || openingCommand !== null}
-                onClick={() => void openPluginSettings(command.id)}
-              >
-                {openingCommand === command.id ? 'Opening…' : command.title}
-              </button>
-            ))}
-            {commandError && <p className="form-error" role="alert">{commandError}</p>}
+          <section className="ui-stack" role="group" aria-label="Appearance">
+            <SectionHeader title="Appearance" />
+            <SelectField
+              id="settings-theme"
+              label="Theme"
+              error={fieldErrors.theme}
+              value={themeEdit ?? themes.selected}
+              onChange={(event) => setThemeEdit(event.target.value)}
+            >
+              {themes.options.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.title}
+                </option>
+              ))}
+            </SelectField>
           </section>
         )}
-        <div className="dialog-actions">
-          <button type="button" onClick={onClose}>
-            Cancel
-          </button>
-          <button type="submit" className="primary" disabled={busy}>
-            Save
-          </button>
-        </div>
+        {settingsCommands.length > 0 && (
+          <section className="ui-stack" role="group" aria-label="Plugin settings commands">
+            <SectionHeader title="Plugin settings" />
+            <p className="ui-text-muted">Open a plugin’s dedicated settings view.</p>
+            <div className="ui-stack">
+              {settingsCommands.map((command) => (
+                <Button
+                  key={command.id}
+                  type="button"
+                  data-settings-command={command.id}
+                  disabled={busy || openingCommand !== null}
+                  onClick={() => void openPluginSettings(command.id)}
+                >
+                  {openingCommand === command.id ? 'Opening…' : command.title}
+                </Button>
+              ))}
+            </div>
+            {commandError && <p className="ui-error-text" role="alert">{commandError}</p>}
+          </section>
+        )}
       </form>
     </Dialog>
   )
