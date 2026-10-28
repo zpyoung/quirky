@@ -1492,6 +1492,26 @@
         "m7-sweep-editor-source-control"
       ],
       "status": "todo"
+    },
+    {
+      "id": "m7-sweep-terminal-completion",
+      "milestone": "M7",
+      "title": "Complete every remaining terminal-domain parity obligation inventoried in docs/quirk/specs/2026-10-28-m7-sweep-terminal/logic.md: ask handoff/provider-question bridges, session/surface liveness and unavailable outcomes, rich previews/result flash/autofocus/attention and delayed unattended escalation; CLI installed-command/profile shims and selectable paired remote runtimes; Activity Dashboard/pop-out/filters and hidden-idle zero-total defect; transcript/statusLine/private OSC producers and remote hooks; model discovery/retirement/stale-choice UI and host capability gates; remaining hosting AI recipe composition; issue-derived unsubmitted drafts, pane Fork action and cold agent resume; terminal cross-plugin tab/editor/dock/handoff/mobile composition, hidden view parking, rendering extras and shortcut remapping; worktree sleep/descendants/wake, safe cleanup preview/ignore/restore/bulk delete, stock grouping/sorting/card/property/filter controls, external-worktree visibility inbox/policies, back/forward/keyboard/Open-in navigation, manual references, board/custom status, sparse/pool/keep-main/host/environment/default-tab/model/shared-path create options and project identity extras; supported macOS notification permission/click/dismiss and signed terminal-host/folder-picker prerequisites. Finish guarded recipe settings/customize proof and post-repair Activity visibility closure once the UI driver initializes reliably (reports 20261028T081739-fab2 and 20261028T100639-4329). Reconcile later shipped owners and native reports before coding; do not duplicate existing automation remote/raw-args, terminal-dock or sidebar-extras follow-ups. Preserve explicit user hosting/Objective/sitter exclusions and macOS platform scope.",
+      "docs": [
+        "ask.md",
+        "cli.md",
+        "agent-status.md",
+        "launch-settings.md",
+        "notifications.md",
+        "providers.md",
+        "term-daemon.md",
+        "term-ui.md",
+        "worktrees.md"
+      ],
+      "deps": [
+        "m7-sweep-terminal"
+      ],
+      "status": "todo"
     }
   ]
 }
