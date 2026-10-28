@@ -32,7 +32,7 @@ function preview(result: TerminalArtifactResult): Preview {
 }
 
 type ServiceFixtureOptions = {
-  hostId?: string
+  live?: boolean
   onSessionLookup?: (count: number) => void
 }
 
@@ -47,8 +47,7 @@ function makeService(
     id: 'session-1',
     kind: 'terminal',
     worktreeId: 'worktree-1',
-    status: 'running',
-    ...(options.hostId === undefined ? {} : { hostId: options.hostId })
+    status: 'running'
   }
   let sessionLookups = 0
   const context = {
@@ -74,7 +73,7 @@ function makeService(
         if (sessionId !== session.id) return null
         return {
           sessionId,
-          live: true,
+          live: options.live ?? true,
           source: 'terminal_launch',
           processIncarnation: identity.processIncarnation,
           runtimeEpoch: identity.runtimeEpoch
@@ -115,7 +114,7 @@ test('caps discovered artifacts at fifty while reporting scan limits', async () 
   expect(result.limited).toBe(true)
 })
 
-test('refuses a remote-hosted session despite matching local PTY and launch identity metadata', async () => {
+test('requires live kernel launch authority even when terminal metadata names an existing local file', async () => {
   root = mkdtempSync(join(tmpdir(), 'terminal-artifact-remote-session-'))
   const cwd = join(root, 'cwd')
   mkdirSync(cwd)
@@ -125,11 +124,11 @@ test('refuses a remote-hosted session despite matching local PTY and launch iden
     () => 3_000,
     path,
     { processIncarnation: 'process-a', runtimeEpoch: 'runtime-a' },
-    { hostId: 'remote-host' }
+    { live: false }
   )
 
   expect(await service.handle(request('list'), callers.phoneA))
-    .toMatchObject({ kind: 'refused', reason: 'unsupported' })
+    .toMatchObject({ kind: 'refused', reason: 'source-unavailable' })
 })
 
 

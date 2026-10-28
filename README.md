@@ -73,6 +73,35 @@ quirky vault clear --yes
 Advanced parity and verification obligations are tracked in
 [the vault's open findings](docs/loop/BLOCKERS.md#m3-vault-open-review-findings) and the dependent
 `m3-vault-parity-completion` queue item.
+## Terminal artifacts on the phone
+
+In a local terminal session, open **More → Terminal artifacts** to browse files named in that
+terminal's recent output. Artifact previews can open files outside the worktree without granting
+the phone a general file-path API. Normal Files browsing remains worktree-contained.
+
+Complete writable UTF-8 text and Markdown up to 48 KiB can be edited with **Save terminal artifact**.
+Larger text is explicitly truncated and read-only. PNG, JPEG, GIF and WebP previews are bounded to
+192 KiB; other binary files show metadata only. The artifact service currently supports macOS hosts.
+
+The same operations are scriptable. Set the source IDs to the actual worktree and terminal session;
+take `ARTIFACT_ID` and `GRANT` from the list result, and `REVISION` from the preview:
+
+```sh
+quirky terminal artifacts list "$WORKTREE_ID" "$SESSION_ID" --json
+quirky terminal artifacts preview "$WORKTREE_ID" "$SESSION_ID" \
+  --artifact-id "$ARTIFACT_ID" --grant "$GRANT" --json
+quirky terminal artifacts save "$WORKTREE_ID" "$SESSION_ID" \
+  --artifact-id "$ARTIFACT_ID" --grant "$GRANT" \
+  --revision "$REVISION" --content-file ./draft.md --json
+quirky terminal artifacts refresh "$WORKTREE_ID" "$SESSION_ID" \
+  --artifact-id "$ARTIFACT_ID" --grant "$GRANT" --json
+```
+
+Grants belong to the authenticated caller and exact source session. They expire after five minutes;
+retained source authority lasts at most thirty minutes. Refresh returns a replacement grant but
+does not approve changed disk content. A stale revision, replaced file or lost source refuses the
+save and preserves the phone draft. Reload content explicitly to adopt disk changes.
+
 ## How it's built
 
 - **`packages/pty-host`:** `quirky-pty` owns every terminal and its history.

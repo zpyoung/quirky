@@ -23,6 +23,20 @@ function boundedInteger(value: unknown, max: number): boolean {
 export function assertPanelParameters(method: string, params: Record<string, unknown>): void {
   if (!Object.hasOwn(PANEL_METHOD_PARAMS, method)) return
   requireKeys(params, PANEL_METHOD_PARAMS[method]!)
+  if (method === 'quirky.terminal/artifacts') {
+    if ([params.worktree, params.session].some(value => typeof value !== 'string' || value.length === 0 || value.length > 1024 || value.includes('\0'))) throw new Error('terminal artifacts require an exact worktree and session')
+    if (params.action === 'list') {
+      requireKeys(params, ['action', 'worktree', 'session'])
+    } else if (params.action === 'preview' || params.action === 'refresh' || params.action === 'save') {
+      requireKeys(params, params.action === 'save'
+        ? ['action', 'worktree', 'session', 'artifactId', 'grant', 'expectedRevision', 'content']
+        : ['action', 'worktree', 'session', 'artifactId', 'grant'])
+      if ([params.artifactId, params.grant].some(value => typeof value !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(value))) throw new Error('terminal artifacts require opaque source authorization')
+      if (params.action === 'save' && (typeof params.expectedRevision !== 'string' || !/^[0-9a-f]{64}$/.test(params.expectedRevision) ||
+        typeof params.content !== 'string' || Buffer.byteLength(params.content) > 48 * 1024)) throw new Error('terminal artifact saves require a revision and bounded complete text')
+    } else throw new Error('unsupported terminal artifact action')
+    return
+  }
   if (params.yes !== undefined && typeof params.yes !== 'boolean') throw new Error('mobile confirmation must be boolean')
   if (params.confirmation !== undefined && typeof params.confirmation !== 'string') throw new Error('mobile confirmation must be an ask id')
   if (params.prRepo !== undefined && (!record(params.prRepo) || Object.keys(params.prRepo).some(key => !['host', 'owner', 'repo'].includes(key)))) throw new Error('invalid mobile hosted repository')

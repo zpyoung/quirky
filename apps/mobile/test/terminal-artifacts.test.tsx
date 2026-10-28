@@ -221,6 +221,7 @@ test('save advances only to the returned revision while a conflict preserves the
   await click(buttonNamed('Edit draft'))
   await inputValue('textarea[aria-label="Terminal artifact draft"]', 'first edit')
   await click(buttonNamed('Save terminal artifact'))
+  expect(document.body.textContent).toContain('10 B')
   await inputValue('textarea[aria-label="Terminal artifact draft"]', 'second edit')
   await click(buttonNamed('Save terminal artifact'))
 

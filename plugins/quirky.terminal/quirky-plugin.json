@@ -89,12 +89,12 @@
           "additionalProperties": false,
           "properties": {
             "action": { "type": "string", "enum": ["list", "preview", "refresh", "save"] },
-            "worktree": { "type": "string", "minLength": 1, "maxLength": 1024 },
-            "session": { "type": "string", "minLength": 1, "maxLength": 1024 },
-            "artifactId": { "type": "string", "minLength": 1, "maxLength": 128 },
-            "grant": { "type": "string", "minLength": 1, "maxLength": 128 },
-            "expectedRevision": { "type": "string", "minLength": 64, "maxLength": 64 },
-            "content": { "type": "string", "maxLength": 49152 }
+            "worktree": { "type": "string", "description": "Exact worktree ID, 1–1024 characters." },
+            "session": { "type": "string", "description": "Exact source terminal session ID, 1–1024 characters." },
+            "artifactId": { "type": "string", "description": "Opaque producer-issued artifact ID, at most128 characters." },
+            "grant": { "type": "string", "description": "Opaque caller-bound grant, at most128 characters." },
+            "expectedRevision": { "type": "string", "description": "Exact64-character preview revision required for save." },
+            "content": { "type": "string", "description": "Complete UTF-8 save content, at most48KiB." }
           },
           "required": ["action", "worktree", "session"]
         },
@@ -102,7 +102,7 @@
           "type": "object",
           "properties": {
             "kind": { "type": "string", "enum": ["listed", "preview", "refreshed", "saved", "refused"] },
-            "artifacts": { "type": "array", "items": { "type": "object" }, "maxItems": 50 },
+            "artifacts": { "type": "array", "items": { "type": "object" }, "description": "At most50 producer-issued artifacts." },
             "limited": { "type": "boolean" },
             "artifact": { "type": "object" },
             "format": { "type": "string", "enum": ["text", "markdown", "image", "binary"] },

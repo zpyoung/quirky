@@ -362,7 +362,7 @@ export function TerminalArtifactsPanel({ bridge, route, connected: routeConnecte
       setRevision(result.revision)
       setSavedDraft(content)
       setDraftLimitExceeded(false)
-      setPreview((current) => current ? { ...current, artifact: result.artifact, revision: result.revision, content } : current)
+      setPreview((current) => current ? { ...current, artifact: result.artifact, revision: result.revision, content, bytes: utf8ByteLength(content) } : current)
       setAuthorizationRefreshed(false)
       setNotice('Terminal artifact saved.')
     } catch (cause) {

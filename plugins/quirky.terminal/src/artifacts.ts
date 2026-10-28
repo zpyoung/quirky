@@ -349,12 +349,8 @@ export class TerminalArtifactsService {
   private async sourceOf(worktree: string, sessionId: string): Promise<SourceIdentity | TerminalArtifactRefusal> {
     if (!this.context.pty.connected) return unavailable()
     try {
-      const record = await this.context.call('quirky.session/get', { session: sessionId }) as Session & { hostId?: unknown }
+      const record = await this.context.call('quirky.session/get', { session: sessionId }) as Session
       if (!record || record.id !== sessionId || record.worktreeId !== worktree) return unavailable()
-      // A remote host marker overrides any matching local PTY ID or launch authority.
-      if (record.hostId !== undefined && record.hostId !== 'local') {
-        return refusal('unsupported', 'Remote terminal sessions cannot provide local file artifacts.')
-      }
       if (record.kind !== 'terminal') return refusal('unsupported', 'Only a local terminal session can provide file artifacts.')
       if (record.status === 'exited') return unavailable()
       const identity = this.context.launch.sessionIdentity(sessionId)
