@@ -1,0 +1,22 @@
+{
+  "item": "m7-sweep-hosting",
+  "spec": "docs/quirk/specs/2026-10-28-m7-sweep-hosting/logic.md",
+  "scenarios": [
+    {
+      "id": "N1",
+      "title": "Preflight before any review-link click: if routing would create a Default native guest without proven isolated native storage root, record blocked before the click; switching to UUID afterwards is not safe isolation. With supported run-owned UUID routing or proven root isolation, use only owned forge fixtures, open Review and Checks for different worktrees and verify each link reveals its exact originating worktree/tab. Never authenticate or mutate a real forge.",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    },
+    {
+      "id": "N2",
+      "title": "Preflight before any in-app link: no Default native guest without proven isolated native root; record blocked before clicking if UUID routing/root isolation is unavailable. With an owned fixture and supported isolation, verify system versus app links and Shift+Cmd under both invert settings, exact URL/workspace and no fallback launch on Browser failure. Real system browser delivery also requires an explicitly isolated run-owned opener/session; otherwise record blocked rather than touching the user's browser.",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    }
+  ]
+}

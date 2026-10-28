@@ -186,6 +186,29 @@ async function main() {
     respond({ nameWithOwner: 'source-owner/source-repo', url: 'https://github.com/source-owner/source-repo' })
     return
   }
+  if (args[0] === 'pr' && args[1] === 'view') {
+    const number = Number(args[2])
+    const repoAt = args.findIndex((arg) => arg === '--repo' || arg === '-R')
+    const repository = repoAt >= 0 ? String(args[repoAt + 1] || '').split('/').slice(-2).join('/') : 'source-owner/source-repo'
+    const route = 'GET repos/' + repository + '/pulls/' + number
+    const pull = state.pullRequest || (state.responses || {})[route] || (repository === 'source-owner/source-repo' && number === 12 ? ${JSON.stringify(pullRequest)} : null)
+    if (!pull) { respond(null); return }
+    const value = {
+      ...pull,
+      state: String(pull.state || 'open').toUpperCase(),
+      url: pull.html_url || pull.url,
+      author: pull.author || pull.user,
+      isDraft: pull.isDraft === true || pull.draft === true,
+      headRefName: pull.headRefName || pull.head?.ref,
+      baseRefName: pull.baseRefName || pull.base?.ref,
+      headRefOid: pull.headRefOid || pull.head?.sha,
+      baseRefOid: pull.baseRefOid || pull.base?.sha,
+    }
+    const jsonAt = args.indexOf('--json')
+    const fields = jsonAt >= 0 ? String(args[jsonAt + 1] || '').split(',') : Object.keys(value)
+    respond(Object.fromEntries(fields.filter((field) => Object.prototype.hasOwnProperty.call(value, field)).map((field) => [field, value[field]])))
+    return
+  }
   if (args[0] === 'pr' && args[1] === 'checks') {
     respond(state.porcelainChecks || [])
     return
@@ -201,7 +224,9 @@ async function main() {
     const operation = (query.match(/(?:query|mutation) +([A-Za-z_][A-Za-z0-9_]*)/) || [])[1] || 'anonymous'
     const key = 'graphql ' + operation
     const mutation = query.startsWith('mutation ')
-    const table = state.graphqlResponses || {}
+    const variables = input.variables || {}
+    const repository = String(variables.owner || '') + '/' + String(variables.repo || variables.name || '')
+    const table = { ...(state.graphqlResponses || {}), ...((state.graphqlResponsesByRepo || {})[repository] || {}) }
     const configured = Object.prototype.hasOwnProperty.call(table, operation)
     if (!fail(key)) {
       if (mutation && !configured) {
