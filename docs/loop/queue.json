@@ -1585,6 +1585,18 @@
       ],
       "status": "todo",
       "early": true
+    },
+    {
+      "id": "m2-editor-build-unbuilt-flows",
+      "milestone": "M2",
+      "title": "Build the still-unimplemented editor flows retained by m2-editor-complete-remaining-flows: lossless rich details/toggle headings and custom document-link insertion/completion; owned untitled creation, Save As/retarget and safe placeholder lifetime; effective-filesystem-permission indicators and denied-save UX; Explorer Home/End/Page/Left/Right and range-selection interactions; notebook idle-death state and restart-from-dead controls; CSV row/column/range clipboard controls; mounted-view-scoped resource release preserving split viewers. Existing source, public API and design map: docs/quirk/specs/2026-10-28-m2-editor-complete-remaining-flows/logic.md and its decision log D16-D18. These flows remain unbuilt because the user directed the in-progress item to land its current design checkpoint immediately. This item builds feature behavior only: all testing, verification, review, known-bug debugging and test-failure fixes belong to the end phase. Excludes the operator-owned Finder open-in-place flow.",
+      "docs": [
+        "editor.md"
+      ],
+      "deps": [
+        "m2-editor-complete-remaining-flows"
+      ],
+      "status": "todo"
     }
   ]
 }
