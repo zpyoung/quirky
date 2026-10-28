@@ -240,7 +240,7 @@ export async function createGenerationStore(fs: BundleFileSystem, root: string, 
     return highest
   }
 
-  return {
+  const store: GenerationStore = {
     async getActive(hostId) {
       const hostPath = await hostDirectory(hostId)
       if (!await fs.exists(hostPath)) return null
@@ -251,7 +251,7 @@ export async function createGenerationStore(fs: BundleFileSystem, root: string, 
           const installed = await verifyGeneration(hostPath, value.generationKey, value.buildId)
           if (installed) {
             const active = { ...installed, activatedAt: value.activatedAt as number }
-            await this.touch(hostId, now())
+            await store.touch(hostId, now())
             return active
           }
         } catch {
@@ -354,6 +354,7 @@ export async function createGenerationStore(fs: BundleFileSystem, root: string, 
       for (const host of hosts) if (evicted.has(host.hostId)) await fs.removePath(host.directory)
     }
   }
+  return store
 }
 
 async function pruneOldGenerations(fs: BundleFileSystem, hostPath: string, activeGenerationKey: string): Promise<void> {

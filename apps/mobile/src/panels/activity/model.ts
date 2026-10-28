@@ -135,7 +135,7 @@ export function projectAccountState(accountValue: unknown, usageValue: unknown):
       active: active[provider] === null,
       isSystemDefault: true,
       needsSignIn: false,
-      hasAuth: system.hasAuth,
+      hasAuth: typeof system.hasAuth === 'boolean' ? system.hasAuth : undefined,
       authKind: system.authKind as AccountRowView['authKind'],
       ...systemUsage
     })

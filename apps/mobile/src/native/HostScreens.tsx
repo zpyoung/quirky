@@ -247,7 +247,7 @@ export function DiagnosticsScreen(props: {
       <ScrollView contentContainerStyle={uiStyles.scroll}>
         <ScreenHeader title="Network diagnostics" onBack={props.onBack} />
         <Text accessibilityRole="header" style={uiStyles.title}>{hostDisplayName(props.host)}</Text>
-        <Text style={uiStyles.body}>{directPath(props.host.endpoint)} · {props.host.endpoint}</Text>
+        <Text style={uiStyles.body}>{describeDirectPath(props.host.endpoint)} · {props.host.endpoint}</Text>
         <Text style={uiStyles.body}>Connection: {connectionVerdict(props.state)} ({props.state.attempts} attempts)</Text>
         <Section title="Live checks">
           <Text style={uiStyles.body}>Authenticated daemon status: {daemonCheck === 'passed' ? 'passed' : daemonCheck === 'failed' ? 'failed' : 'not run'}</Text>

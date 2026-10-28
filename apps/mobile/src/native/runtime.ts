@@ -1,5 +1,6 @@
 import type {
   MobileConnectionState,
+  MobileCredentialRead,
   MobileHost,
   MobileLogEntry,
   MobileNativeActions,
@@ -471,7 +472,7 @@ export function createMobileRuntime(dependencies: MobileRuntimeDependencies): Mo
   })
 
   const savePairedHost = async (offer: MobilePairOffer, hostId: string, info: { machineName: string; platform: string }): Promise<StoredHost> => {
-    let previousCredential: Awaited<ReturnType<MobileSecretStorage['read']>> = { kind: 'missing' }
+    const rollback: { credential: MobileCredentialRead } = { credential: { kind: 'missing' } }
     let previousHost: StoredHost | undefined
     let writeAttempted = false
     let evictedId: string | undefined
@@ -480,8 +481,8 @@ export function createMobileRuntime(dependencies: MobileRuntimeDependencies): Mo
       const saved = await updateState(async (current) => {
         previousHost = current.hosts.find((host) => host.id === hostId)
         if (previousHost?.cleanupPending) throw new MobileRpcError('connection', 'Retry secure credential cleanup before pairing this desktop again')
-        previousCredential = previousHost ? await dependencies.secrets.read(hostId) : { kind: 'missing' }
-        if (previousCredential.kind === 'unavailable') throw new MobileRpcError('connection', 'Secure storage is temporarily unavailable')
+        rollback.credential = previousHost ? await dependencies.secrets.read(hostId) : { kind: 'missing' }
+        if (rollback.credential.kind === 'unavailable') throw new MobileRpcError('connection', 'Secure storage is temporarily unavailable')
         const activeHosts = current.hosts.filter((host) => !host.cleanupPending && host.id !== hostId)
         if (!previousHost && current.hosts.length >= MAX_HOSTS * 2 && activeHosts.length < MAX_HOSTS) {
           throw new MobileRpcError('connection', 'Retry secure credential cleanup before pairing more desktops')
@@ -510,7 +511,7 @@ export function createMobileRuntime(dependencies: MobileRuntimeDependencies): Mo
     } catch (error) {
       if (writeAttempted) {
         try {
-          if (previousHost && previousCredential.kind === 'available') await dependencies.secrets.write(hostId, previousCredential.token)
+          if (previousHost && rollback.credential.kind === 'available') await dependencies.secrets.write(hostId, rollback.credential.token)
           else await dependencies.secrets.remove(hostId)
         } catch {
           orphanedCredentialIds.add(hostId)

@@ -46,8 +46,9 @@ export interface MobileStorage {
   set(key: string, value: string): Promise<void>
   remove(key: string): Promise<void>
 }
+export type MobileCredentialRead = { kind: 'available'; token: string } | { kind: 'missing' } | { kind: 'unavailable' }
 export interface MobileSecretStorage {
-  read(hostId: string): Promise<{ kind: 'available'; token: string } | { kind: 'missing' } | { kind: 'unavailable' }>
+  read(hostId: string): Promise<MobileCredentialRead>
   write(hostId: string, token: string): Promise<void>
   remove(hostId: string): Promise<void>
 }

@@ -144,7 +144,7 @@ function safeExternalUrl(value: unknown): string | null {
 }
 
 
-function normalizeFileBytes(value: unknown): Uint8Array {
+function normalizeFileBytes(value: unknown): Uint8Array<ArrayBuffer> {
   if (typeof value !== 'string' || value.length === 0) return new Uint8Array()
   const binary = atob(value)
   const bytes = new Uint8Array(binary.length)
@@ -196,8 +196,8 @@ async function readBufferText(bridge: PanelBridge, bufferId: string, kind: 'cont
   }
 }
 
-async function readBufferBytes(bridge: PanelBridge, bufferId: string, size: number): Promise<Uint8Array[]> {
-  const chunks: Uint8Array[] = []
+async function readBufferBytes(bridge: PanelBridge, bufferId: string, size: number): Promise<Uint8Array<ArrayBuffer>[]> {
+  const chunks: Uint8Array<ArrayBuffer>[] = []
   let offset = 0
   while (offset < size) {
     const requested = Math.min(MEDIA_CHUNK_BYTES, size - offset)
@@ -508,6 +508,7 @@ function ExplorerPanel({ bridge, route }: { bridge: PanelBridge; route: Extract<
 
   const openFile = async (entry: ExplorerEntry) => {
     if (!connected) { setError(`Waiting for desktop. ${disconnectedNotice}`); return }
+    const path = safeExplorerPath(entry, worktreeRoot)
     if (!path) {
       setError(entry.error ? `Unable to open ${entry.name}: ${entry.error}` : 'This file path is outside the selected worktree.')
       return

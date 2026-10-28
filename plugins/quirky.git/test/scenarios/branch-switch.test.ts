@@ -89,7 +89,7 @@ describe('switchBranch', () => {
   test('rejects active conflicts before attempting to switch', async () => {
     s = await startScenario(scratch)
     diverge(s, { 'README.md': 'theirs\n' }, { 'README.md': 'ours\n' })
-    expect(s.gitTry(undefined, 'merge', 'other').code).not.toBe(0)
+    expect(s.gitTry(null, 'merge', 'other').code).not.toBe(0)
     const failure = await s.fails(s.api('switchBranch', { yes: true, branch: 'other' }))
     expect(failure.data.reason).toBe('conflicts')
     expect((await s.api('status')).operation).toBe('merge')

@@ -140,7 +140,8 @@ export function taskFilterValue(query: string, filter: TaskFilter): string {
 
 
 export type WorkspaceResult =
-  | { kind: 'created' | 'resumed'; worktreeId: string; name: string }
+  | { kind: 'created'; worktreeId: string; name: string }
+  | { kind: 'resumed'; worktreeId: string; name: string }
   | { kind: 'composer'; requestId: string; request: Record<string, unknown> }
   | { kind: 'invalid' }
 

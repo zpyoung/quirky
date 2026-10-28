@@ -37,6 +37,7 @@
         "expo-file-system": "55.0.26",
         "expo-haptics": "^55.0.18",
         "expo-linking": "^55.0.17",
+        "expo-modules-core": "55.0.27",
         "expo-notifications": "^55.0.27",
         "expo-secure-store": "^55.0.18",
         "react": "19.2.8",
@@ -45,6 +46,7 @@
         "react-native-safe-area-context": "^5.7.0",
         "react-native-web": "^0.21.3",
         "tweetnacl": "1.0.3",
+        "zod": "4.6.7",
       },
       "devDependencies": {
         "@types/react": "~19.2.0",
@@ -2630,7 +2632,7 @@
 
     "@quirky/desktop/@types/bun": ["@types/bun@1.4.0", "", { "dependencies": { "bun-types": "1.4.0" } }, "sha512-K+lZULY23vRgK/CfTjFIV+tyifaNdSMlPh9j+6mQ/cLfpOznLyAuzgV/JQysyECpkBQLVMSyvjlr2fBUSA9wFQ=="],
 
-    "@quirky/mobile/@quirky/quirky-page-origin": ["@quirky/quirky-page-origin@file:apps/mobile/modules/quirky-page-origin", { "peerDependencies": { "expo-modules-core": "*", "react": "*", "react-native": "*" } }],
+    "@quirky/mobile/@quirky/quirky-page-origin": ["@quirky/quirky-page-origin@file:apps/mobile/modules/quirky-page-origin", { "peerDependencies": { "expo-modules-core": "*", "react": "*", "react-native": "*", "zod": "^4.6.7" } }],
 
     "@quirky/plugin-accounts/@types/react": ["@types/react@19.3.0", "", { "dependencies": { "csstype": "^3.2.2" } }, "sha512-N0rFCuH9YoxG9/m61l9MfpJKfmLOVU0em7ipIz6TRgSSkvReLB9vL85GB+yr8Bs5leqpvg96JSwF4ZS1s4viQg=="],
 

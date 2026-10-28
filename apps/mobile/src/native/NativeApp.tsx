@@ -39,7 +39,7 @@ export function NativeApp() {
   const hostsLoadedRef = useRef(hostsLoaded)
   hostsLoadedRef.current = hostsLoaded
   hostsRef.current = hosts
-  const pendingPanelLink = useRef<string | undefined>()
+  const pendingPanelLink = useRef<string | undefined>(undefined)
 
   const openHostRoute = useCallback((hostId: string, nextRoute: MobileRoute) => {
     setSelectedHostId(hostId)
