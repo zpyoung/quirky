@@ -288,5 +288,16 @@
 - **Revisit if:** authoritative land's full merged-tree gate fails
 - **Source:** locked by docs/loop/LOOP.md
 
+## D27: Isolate guardian test discovery before rerunning shared gates
+- **Question:** lane5 reported that scripts/process-scope.test.ts selected the first machine-global new guardian and could register or kill another lane's guardian during cleanup
+- **Options:** trust a prior script pass; broaden waits; stop the pending gate and import the committed ownership-isolation fix
+- **Chose:** cancel the in-flight second land attempt before unsafe script testing. Review and cherry-pick standalone9dcbd033 as5ffc4032; only scripts/process-scope.test.ts changes. Discovery now reads each guardian config and requires both exact home and current owner PID, ignoring foreign/disappeared candidates. An owned decoy proves target selection and survives until its own cleanup. Keep the15second test budget and all production process deadlines unchanged.
+- **Why:** a green run cannot disprove this concurrency race, and shared-test cleanup must never affect another lane. The user supplied deterministic wrong-owned-decoy red evidence; no unsafe old-selector rerun was needed.
+- **Evidence:** reviewed git-show diff (one file,46insertions/6deletions); narrow post-pick regression1pass/0fail/6assertions in6.36seconds. Land job bg44 was explicitly cancelled, not reported as a gate pass.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** ownership-qualified discovery or its decoy regression fails
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-Recovered merge checkpoint24c6e028 is committed and published to lane5; remote structured/loops/orchestration gate20/20 passes without flaky retries. All workers and verification jobs have returned. Commit this observed evidence, detach, and retry authoritative queue.ts land m5-loops-core without an outer deadline; only its successful full merged-tree gate completes the item. Preserve earlier failed-run evidence, the night-mode review waiver and pending native-only scenarios. Source and shared core types are complete; no preset implementation was added on this branch.
+Remote recovered boundary20/20 and merged typing/guard/shutdown/native smoke proof remain recorded. Second land attempt was cancelled on the reported unsafe shared guardian fixture; standalone test-only fix9dcbd033 is imported as5ffc4032 and its narrow regression passes1/0/6assertions without changing deadlines. Commit this evidence, detach and retry authoritative land with the safe fixture. No worker or verification job remains active. The item is not done until the controller's full merged-tree gate passes; native-only scenarios remain pending.
