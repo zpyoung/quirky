@@ -11,7 +11,7 @@ Status: source-backed contracts as of 2026-10-27; this document does not claim a
 ```ts
 openViewTab({
   workspace?, group?, viewId, key, input?, title?, reuse?, replace?: string,
-  activate?, preview?, closeCommand?, closeMethod?, closeParams?, revision?
+  activate?, preview?, closeCommand?, closeMethod?, closeParams?, closeContext?: boolean, revision?
 }) -> { workspace, tab: string }
 
 rekeyViewTabs({
@@ -20,6 +20,9 @@ rekeyViewTabs({
   revision?
 }) -> { workspace }
 ```
+
+Additive API amendment, 2026-10-28: `closeContext: true` opts a guard into host-computed `closeReason` (`single`, `bulk`, or `replacement`), `closeViewId`, `closeViewKey`, and `closeViewInput`. These trusted keys override static `closeParams`; unopted calls receive no added context, and reserved trusted keys are stripped even when supplied as static parameters. Ordinary legacy close parameters remain unchanged. Static close parameters are not proof of removal intent or view identity. See the [current loop UI contract](../2026-10-28-m5-loops-ui/tech.md#contracts--interfaces).
+
 
 Reuse identity is workspace + `viewId` + `key`; `tab` is the stable terminal tab ID, whether created, reused, or replaced. `replace` names an existing unpinned view tab already marked `preview`; a refusal from its close guard leaves it intact. `rekeyViewTabs` may also change each tab's `preview` flag and rejects duplicate keys within that view. It preserves tab IDs.
 

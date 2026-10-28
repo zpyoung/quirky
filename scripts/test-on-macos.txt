@@ -5,3 +5,4 @@ plugins/quirky.terminal/test/e2e-ui/features-pane.test.ts  SC-37 pastes more tha
 plugins/quirky.editor/test/markdown.test.ts  SC-14 exports a real PDF with the installed macOS Chrome; the remote Linux host has no Chrome/Chromium
 plugins/quirky.browser/test/automation.test.ts  exercises the owned headless browser on macOS Chrome
 plugins/quirky.browser/test/pane.test.ts  Watch cases use the same owned macOS Chrome harness as automation.test.ts; the remote Linux host has no Chrome/Chromium
+packages/cli/test/open.e2e.test.ts  exercises macOS-only desktop opening through an owned open shim; production refuses non-macOS platforms

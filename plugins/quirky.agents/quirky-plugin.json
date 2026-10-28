@@ -1265,7 +1265,7 @@
             "options": {
               "type": "object",
               "additionalProperties": true,
-              "description": "Option picks for the model, such as {effort: \"high\"}: up to 16 entries whose values are strings or booleans. Needs `model`."
+              "description": "Option picks such as {effort: \"high\"}: up to 16 entries whose values are strings or booleans. Model is optional only when the agent offers generic unlisted options; no model is inferred."
             },
             "extraArgs": {
               "type": "string",
@@ -1351,7 +1351,7 @@
             "options": {
               "type": "object",
               "additionalProperties": true,
-              "description": "Option picks for the model, such as {effort: \"high\"}: up to 16 entries whose values are strings or booleans. Needs `model`."
+              "description": "Option picks such as {effort: \"high\"}: up to 16 entries whose values are strings or booleans. Model is optional only when the agent offers generic unlisted options; no model is inferred."
             },
             "extraArgs": {
               "type": "string",
@@ -1539,7 +1539,7 @@
             "options": {
               "type": "object",
               "additionalProperties": true,
-              "description": "Option picks for the model, such as {effort: \"high\"}: up to 16 entries whose values are strings or booleans. Needs `model`."
+              "description": "Option picks such as {effort: \"high\"}: up to 16 entries whose values are strings or booleans. Model is optional only when the agent offers generic unlisted options; no model is inferred."
             },
             "extraArgs": {
               "type": "string",
@@ -1817,7 +1817,7 @@
       },
       {
         "id": "generate",
-        "description": "Runs an agent (or a custom command) once, non-interactively, and returns what it printed. The prompt goes to the agent's stdin or argv by its one-shot shape; the run is limited to 60 seconds and 4 MiB of output.",
+        "description": "Runs an agent (or a custom command) once, non-interactively, and returns what it printed. Catalog model and option picks are checked and applied to the one-shot arguments; the prompt goes to the agent's stdin or argv by its one-shot shape. The run is limited to 60 seconds and 4 MiB of output.",
         "params": {
           "type": "object",
           "properties": {
@@ -1827,6 +1827,15 @@
             },
             "prompt": {
               "type": "string"
+            },
+            "model": {
+              "type": "string",
+              "description": "Catalog model to use; if omitted, the one-shot default applies."
+            },
+            "optionValues": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Catalog option picks such as {effort: \"high\"}; string or boolean values. An option-only pick uses the one-shot default model. Unsupported picks fail before a process starts. Custom commands do not accept catalog picks."
             },
             "args": {
               "type": "string",

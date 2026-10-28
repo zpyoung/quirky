@@ -419,6 +419,7 @@ if (query.includes('query ProjectItemContext')) {
   emit({ data: { project: { id: projectId, owner: { __typename: item.ownerType ?? 'Organization', login: item.owner ?? 'test-owner' } }, item: { id: itemId, project: { id: projectId }, type: item.kind === 'pullRequest' ? 'PULL_REQUEST' : item.kind === 'draft' ? 'DRAFT_ISSUE' : 'ISSUE', content: { __typename: item.kind === 'pullRequest' ? 'PullRequest' : item.kind === 'draft' ? 'DraftIssue' : 'Issue', number: item.number, url: item.url } } } })
 }
 if (query.includes('query OrganizationIssueTypes')) {
+
   const repoOwner = variable('repoOwner')
   const repo = variable('repo')
   const number = Number(variable('number'))
@@ -426,6 +427,10 @@ if (query.includes('query OrganizationIssueTypes')) {
   const repositoryOwnerType = repositories[repositoryIdentity]?.ownerType === 'User' ? 'User' : 'Organization'
   const issue = issues[repositoryIdentity + '/' + number]
   if (!issue) fail('HTTP 404: Issue not found')
+  const configuredOwnerType = repositories[repositoryIdentity]?.ownerType
+  const repositoryOwnerType = configuredOwnerType === 'User' || configuredOwnerType === 'Organization'
+    ? configuredOwnerType
+    : issue.repositoryOwnerType === 'User' ? 'User' : 'Organization'
   const repositoryOwner = repositoryOwnerType === 'Organization'
     ? {
         __typename: 'Organization',
@@ -436,8 +441,8 @@ if (query.includes('query OrganizationIssueTypes')) {
   emit({
     data: {
       repository: {
-        owner: repositoryOwner,
-        issue: { id: issue.nodeId ?? 'ISSUE_NODE_' + number }
+        issue: { id: issue.nodeId ?? 'ISSUE_NODE_' + number },
+        owner: repositoryOwner
       }
     }
   })

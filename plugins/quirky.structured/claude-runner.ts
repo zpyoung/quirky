@@ -1,6 +1,6 @@
 import type { CanUseTool, Options, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { AskEnvelope, Session } from '@quirky/protocol'
-import type { StructuredContext, StructuredRunner, StructuredStartOptions } from './runner'
+import type { StructuredContext, StructuredStartOptions, StructuredRunner } from './runner'
 
 export type ClaudeQueryParams = { prompt: AsyncIterable<SDKUserMessage>; options?: Options }
 
@@ -143,7 +143,7 @@ class ClaudeRunner implements StructuredRunner {
     private readonly deps: ClaudeRunnerDeps
   ) {}
 
-  async start(session: Session, prompt?: string, launchOptions: StructuredStartOptions = {}): Promise<void> {
+  async start(session: Session, prompt: string | undefined, launchOptions: StructuredStartOptions = {}): Promise<void> {
     if (session.agent !== 'claude') throw new Error('structured sessions support claude only')
     const providerSession = launchOptions.providerSession
     const providerSessionId = providerSession?.id

@@ -123,6 +123,8 @@ Keep those mappings aligned with `packages/protocol/package.json` exports.
   decisions made so far.
 - [docs/roadmap.md](docs/roadmap.md): the build order for every kept Orca feature and the plugin
   kernel, with each milestone's exit test.
+- [plugins/README.md](plugins/README.md): built-in command groups, including the Heimdall
+  fleet, watcher controls and optional Claude owner API.
 - [docs/stack-proposal.md](docs/stack-proposal.md): how the stack choice was settled, including the
   native Swift option, with the measurements.
 - [research/orca-features/](research/orca-features/README.md): how each Orca feature Quirky keeps

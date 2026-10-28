@@ -209,6 +209,17 @@
 - **Revisit if:** a public API reproduction returns an old held result to a post-invalidation caller.
 - **Source:** assumed — autonomous
 
+## D20: Reconcile only the advancing canonical fixture conflicts and retain all incoming authority rules
+- **Question:** normal queue land refused the candidate because build/roadmap advanced; how to reconcile its actual changes without duplicate source rewriting?
+- **Options:** choose whole-file ours/theirs; modify shared integration state; follow the normal item-branch merge and preserve the fixture union.
+- **Chose:** land635bfd82 stopped before tests after131.23s. Switched back to the item branch and merged build/roadmap; product source merged cleanly, only hosting work-items and Tasks projects fixtures conflict. A scoped resolver preserves canonical alias/per-expression/global-error and mixed-owner/readback behavior plus independent GH34/U01 positive-owner tests. Read all incoming decision logs via the read-only scout: m5-loops-ui D1–D25, m6-heimdall-control D1–D15, m6-heimdall-owner D1–D43, m7-sweep-hosting D1–D12, m7-sweep-terminal D1–D20.
+- **Why:** canonical m7-sweep-hosting is now done (candidate de8a3517); our queue item remains in progress and owns independent edge acceptance. Incoming rules preserve Hosting-local bounded search, content-repository type authority, public plugin/CLI routing, exact local worker identity and no fabricated readiness/stop evidence. No binding conflict requires a local source change. Keep sweep's C1 source-context finding distinct from our C1 pending-overlap claim; neither justifies a fallback. Numbered-page incomplete status remains unresolved, not silently cleared.
+- **Evidence:** canonical queue land failure and merge conflict output; canonical queue state read; ParityIncomingDecisions complete read report; incoming five decision logs; lane8 authoritative landing interjection reporting706remote+6Mac and scoped retry/scripts/typecheck receipts.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** resolved merged candidate fails owning/affected checks or canonical land rejects its next merge.
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
 
-Candidate is ready for normal queue land after committing this evidence. Source/regressions through008f2722, docs throughad1fe883, one canonical queue-only catch-up complete. Required affected125-file suite, scripts68/0 and typecheck passed; CLI/type/cursor acceptance and corrected build exercised. U01 has lane8-reported guarded PASS and independent lane6 tool-limited partial with visible saved-value persistence; browser/daemon/homes cleaned. Final cross-family Round1 complete, sole C1 rejected with exact runtime disproof, no accepted blocker or fix batch. Incidental unchanged numbered-page completeness finding remains documented/routed, not silently fixed or cleared. No running subagents/jobs/services. Next: commit final evidence, detach, canonical queue.ts land m4-hosting-api-github-parity; on land failure follow its exact repair path, otherwise archive scratch evidence and end this one-item iteration without a whole-queue completion sentinel.
+Normal land635bfd82 stopped before tests on advancing-roadmap conflicts; item branch merge is in progress, scoped fixture resolver pending. Incoming decision logs read and compatible under D20. Earlier own gates/review/smokes remain historical receipts; rerun affected checks/typecheck and actual CLI/pending-overlap smokes after fixture union, then commit/detach/retry normal queue land. All flow ownership and UI evidence qualifications remain unchanged; no new full review round is claimed.

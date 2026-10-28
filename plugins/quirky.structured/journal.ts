@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import type { PluginStore, StoreMigration, StructuredMessage, StructuredRole } from '@quirky/protocol'
 
 type Row = { session_id: string; seq: number; role: StructuredRole; text: string; data: string | null; at: number }
+
 export type StructuredSendReceipt = {
   operationId: string
   sessionId: string
@@ -67,10 +68,7 @@ function createAndImportV1(home: string): StoreMigration {
 
 /** The migrations of the plugin's store, for `context.openStore`. */
 export function journalMigrations(home: string): StoreMigration[] {
-  return [
-    createAndImportV1(home),
-    (store) => store.exec(CREATE_SEND_RECEIPTS_TABLE),
-  ]
+  return [createAndImportV1(home), (store) => store.exec(CREATE_SEND_RECEIPTS_TABLE)]
 }
 
 /** The structured sessions' message journal. */

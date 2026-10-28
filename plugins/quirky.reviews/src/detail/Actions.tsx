@@ -201,7 +201,7 @@ export function ReviewActions(props: ReviewActionsProps) {
       return
     }
     try {
-      await props.context.call('quirky.reviews/openLink', { url: safeUrl })
+      await props.context.call('quirky.reviews/openLink', { url: safeUrl, worktree: owner.worktree })
     } catch (error) {
       setErrorMessage(error)
     }

@@ -37,12 +37,12 @@ function workspaceSlots(context: UiPluginContext, workspace: string, source: Qui
     ...(workspace === FLOATING_WORKSPACE
       ? {}
       : {
-          stripExtras: (group: Group) => <StripQuickCommands context={context} workspace={workspace} group={group} source={source} />,
-          plusMenuContributions: (group, workspaceId) => tabMenuContributions(context, contributions, workspace, workspaceId, group),
-          subscribeMenuContributions: contributions.subscribe
+          stripExtras: (group: Group) => <StripQuickCommands context={context} workspace={workspace} group={group} source={source} />
         }),
     paneMenuExtras: (pane) => paneMenuQuickCommands(context, source, pane.id),
-    paneMenuContributions: (pane, session) => paneMenuContributions(context, contributions, pane, session)
+    paneMenuContributions: (pane, session) => paneMenuContributions(context, contributions, pane, session),
+    tabMenuContributions: (group, workspaceId) => tabMenuContributions(context, contributions, workspace, workspaceId, group),
+    subscribeMenuContributions: contributions.subscribe
   }
 }
 

@@ -47,15 +47,12 @@ export function validateSelection(
   if (typeof raw !== 'object' || raw === null) throw invalid('selection must be an object')
   const model = pickedModel(raw.model)
   const options = pickedOptions(raw.options)
-  if (model === null) {
-    if (options.length === 0) return null
-    throw new SelectionError(`${options[0]![0]} requires a model`)
-  }
+  if (model === null && options.length === 0) return null
 
   const catalog = entry.launchOptions
   if (!catalog) throw new SelectionError(`Agent ${entry.id} does not support launch-time model selection.`)
-  const listed = catalog.models.find((candidate) => candidate.id === model)
-  if (!listed && catalog.unlisted === 'refuse') {
+  const listed = model === null ? undefined : catalog.models.find((candidate) => candidate.id === model)
+  if (model !== null && !listed && catalog.unlisted === 'refuse') {
     throw new SelectionError(`Agent ${entry.id} does not support model ${model}.`)
   }
   const offered: OptionUse[] = listed ? listed.options : catalog.unlistedOptions
@@ -71,13 +68,13 @@ export function validateSelection(
     const use = offered.find((candidate) => candidate.id === id)
     const decl = catalog.options.find((candidate) => candidate.id === id)
     const accepted =
-      use && decl
+      use && decl && (model !== null || !decl.composed)
         ? decl.type === 'boolean'
           ? typeof value === 'boolean'
           : typeof value === 'string' &&
             (use.choices ?? decl.choices?.map((choice) => choice.value) ?? []).includes(value)
         : false
-    if (!accepted) throw new SelectionError(`Agent ${entry.id} model ${model} does not support ${id} ${value}.`)
+    if (!accepted) throw new SelectionError(`Agent ${entry.id} model ${model ?? 'default'} does not support ${id} ${value}.`)
     values[id] = value
   }
   return { model, values, listed: listed !== undefined }

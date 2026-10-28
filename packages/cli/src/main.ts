@@ -18,9 +18,10 @@ export type Runtime = {
   argv: string[]
   env: Record<string, string | undefined>
   cwd: string
+  platform?: string
   writer: Writer
   link: DaemonLink
-  openDesktopApp(): Promise<OpenResult>
+  openDesktopApp(signal?: AbortSignal): Promise<OpenResult>
 }
 
 /** True when the last of `--json`, `--json=true` and `--json=false` before `--` turns JSON on. */
@@ -82,6 +83,7 @@ async function dispatch(runtime: Runtime, out: Printer, argv: readonly string[])
     out,
     env: runtime.env,
     cwd: runtime.cwd,
+    platform: runtime.platform ?? process.platform,
     readFile: (path) => readFileSync(resolve(runtime.cwd, path), 'utf8'),
     sleep: (ms) => Bun.sleep(ms),
     now: () => Date.now(),
@@ -221,12 +223,23 @@ export async function run(runtime: Runtime): Promise<number> {
   }
 }
 
-async function openDesktopApp(): Promise<OpenResult> {
+async function openDesktopApp(signal?: AbortSignal): Promise<OpenResult> {
   if (process.platform !== 'darwin') return { ok: false, reason: '`quirky open` is only supported on macOS' }
   const proc = Bun.spawn(['open', '-a', 'Quirky'], { stdout: 'ignore', stderr: 'pipe' })
-  const [stderr, code] = await Promise.all([new Response(proc.stderr).text(), proc.exited])
-  if (code === 0) return { ok: true }
-  return { ok: false, reason: `the Quirky desktop app is not installed (${stderr.trim() || `open exited ${code}`})` }
+  const terminate = () => {
+    try {
+      proc.kill()
+    } catch {}
+  }
+  signal?.addEventListener('abort', terminate, { once: true })
+  if (signal?.aborted) terminate()
+  try {
+    const [stderr, code] = await Promise.all([new Response(proc.stderr).text(), proc.exited])
+    if (code === 0) return { ok: true }
+    return { ok: false, reason: `the Quirky desktop app is not installed (${stderr.trim() || `open exited ${code}`})` }
+  } finally {
+    signal?.removeEventListener('abort', terminate)
+  }
 }
 
 /** The link's settings from the argv; a malformed switch is left for `run` to report as a usage error. */
@@ -242,7 +255,10 @@ function linkOptions(argv: readonly string[]) {
 if (import.meta.main) {
   const argv = process.argv.slice(2)
   const stderr = (text: string) => void process.stderr.write(text)
+  const invocation = route(argv)
+  const isOpenCommand = invocation.kind === 'command' && invocation.command.name === 'open'
   const connectOptions: Parameters<typeof connectDaemon>[0] = {
+    ...(isOpenCommand ? { autostart: false } : {}),
     role: 'cli',
     name: 'quirky',
     transport: 'socket',
