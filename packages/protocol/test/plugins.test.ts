@@ -144,13 +144,13 @@ describe('launch hook JSON arguments', () => {
       shell: '/bin/sh',
       binDir: '/bin',
       env: () => ({}),
+      openStructuredLease: () => {
+        throw new Error('structured lease API is not used by this test')
+      },
+      sessionIdentity: () => null,
       shellArgv: () => ['/bin/sh'],
       shellReady: () => false,
       commandArgv: () => [],
-      openStructuredLease: () => {
-        throw new Error('structured leases are unsupported by this launch fixture')
-      },
-      sessionIdentity: () => null,
       hooks: async (received) => {
         seen = { ...received, env: {}, args: [], jsonArgs: patch.jsonArgs! }
         return { env: {}, args: [] }
