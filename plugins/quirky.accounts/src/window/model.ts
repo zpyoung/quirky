@@ -310,6 +310,7 @@ export class AccountsUiStore {
   private reloadTimer: ReturnType<typeof setTimeout> | null = null
   private fullReloadRequested = false
   private loginTimer: ReturnType<typeof setTimeout> | null = null
+  private readonly loginPollsInFlight = new Set<string>()
   private loginGeneration = 0
   private loginStarting = false
   private loginCancelling = false
@@ -626,27 +627,57 @@ export class AccountsUiStore {
     }
   }
 
+  private scheduleLoginPoll(pending: PendingLogin, generation: number): void {
+    if (this.stopped || generation !== this.loginGeneration || this.loginTimer !== null || this.loginPollsInFlight.has(pending.id)) return
+    const current = this.snapshot.login
+    if (!current || current.id !== pending.id || current.status !== 'pending') return
+    this.loginTimer = setTimeout(() => {
+      this.loginTimer = null
+      void this.pollLogin(pending, generation)
+    }, 900)
+  }
+
   private async pollLogin(previous: PendingLogin, generation: number): Promise<void> {
     if (this.stopped || generation !== this.loginGeneration) return
+    if (this.loginPollsInFlight.has(previous.id)) return
+    const current = this.snapshot.login
+    if (!current || current.id !== previous.id || current.status !== 'pending') return
+    if (this.loginTimer !== null) {
+      clearTimeout(this.loginTimer)
+      this.loginTimer = null
+    }
+    this.loginPollsInFlight.add(previous.id)
+    let next = previous
     try {
       const value = await this.context.call('quirky.accounts/loginStatus', { id: previous.id })
-      if (this.stopped || generation !== this.loginGeneration) return
-      const updated = parsePendingLogin({ ...previous, ...(isRecord(value) ? value : {}) })
-      if (updated) {
-        this.commit({ login: updated })
-        if (updated.status === 'complete') {
-          this.commit({ login: null })
-          void this.loadAccounts()
-          void this.loadUsage()
-          return
+      const current = this.snapshot.login
+      if (!this.stopped && generation === this.loginGeneration && current && current.id === previous.id && current.status === 'pending') {
+        const updated = parsePendingLogin({ ...previous, ...(isRecord(value) ? value : {}) })
+        if (updated) {
+          this.commit({ login: updated })
+          if (updated.status === 'complete') {
+            this.commit({ login: null })
+            void this.loadAccounts()
+            void this.loadUsage()
+            return
+          }
+          if (updated.status === 'error' || updated.status === 'cancelled') return
+          next = updated
         }
-        if (updated.status === 'error' || updated.status === 'cancelled') return
-        previous = updated
       }
     } catch {
       // Retry the status read while the native sign-in remains active.
+    } finally {
+      this.loginPollsInFlight.delete(previous.id)
     }
-    this.loginTimer = setTimeout(() => void this.pollLogin(previous, generation), 900)
+    if (this.stopped) return
+    const latest = this.snapshot.login
+    if (generation !== this.loginGeneration || !latest || latest.id !== previous.id) {
+      if (latest?.status === 'pending' && (latest.id !== previous.id || !this.loginStarting)) void this.pollLogin(latest, this.loginGeneration)
+      return
+    }
+    if (latest.status !== 'pending') return
+    this.scheduleLoginPoll(next, generation)
   }
 
   async cancelLogin(): Promise<void> {
@@ -654,20 +685,27 @@ export class AccountsUiStore {
     if (!pending || this.loginCancelling) return
     this.loginCancelling = true
     this.commit({ loginCancelling: true })
-    this.loginGeneration += 1
+    const generation = this.loginGeneration
     clearTimeout(this.loginTimer ?? undefined)
     this.loginTimer = null
     try {
       const result = await this.act('Could not cancel sign-in', 'quirky.accounts/cancelLogin', { id: pending.id })
-      if (result !== null) {
+      if (result !== null && generation === this.loginGeneration && this.snapshot.login?.id === pending.id) {
+        this.loginGeneration += 1
+        clearTimeout(this.loginTimer ?? undefined)
+        this.loginTimer = null
         this.commit({ login: null })
         void this.loadAccounts()
+      } else if (result === null && generation === this.loginGeneration) {
+        const current = this.snapshot.login
+        if (current?.id === pending.id && current.status === 'pending') this.scheduleLoginPoll(current, generation)
       }
     } finally {
       this.loginCancelling = false
       this.commit({ loginCancelling: false })
     }
   }
+
 
   async refresh(provider?: string): Promise<void> {
     if (this.snapshot.refreshing) return
@@ -808,12 +846,18 @@ export class AccountsUiStore {
       if (scopeChanged) void this.loadUsage()
       return scopeChanged ? 'scope-changed' : 'failed'
     }
-    if (result !== 'reset' && result !== 'alreadyRedeemed' && result !== 'nothingToReset' && result !== 'noCredit') {
+    const reply = isRecord(result) ? result : null
+    const outcome = reply?.outcome
+    const returnedState = reply ? parseUsageState(reply.state) : null
+    if (
+      !returnedState ||
+      outcome !== 'reset' && outcome !== 'alreadyRedeemed' && outcome !== 'nothingToReset' && outcome !== 'noCredit'
+    ) {
       this.context.toast('Could not reset Codex limits', 'The accounts service returned an unrecognized reset outcome.')
       return 'failed'
     }
     void this.loadUsage()
-    return result
+    return outcome
   }
 }
 

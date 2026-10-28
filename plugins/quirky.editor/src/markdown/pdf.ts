@@ -5,6 +5,7 @@ import { basename, dirname, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { createRequire } from 'node:module'
 
+import { createEditorPrintHtml } from '@quirky/ui/editor-print'
 const PDF_TIMEOUT_MS = 60_000
 const MAX_PROCESS_OUTPUT = 8192
 
@@ -86,9 +87,6 @@ function pdfProcessFailure(result: ProcessResult): Error {
 }
 
 
-function htmlEscape(value: string): string {
-  return value.replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]!)
-}
 
 function fileUrl(path: string): string {
   const encoded = path.split('/').map((part, index) => index === 0 ? '' : encodeURIComponent(part)).join('/')
@@ -139,9 +137,7 @@ function pdfKatexCss(): string {
 }
 
 function makePdfHtml(title: string, body: string): string {
-  const katexCss = pdfKatexCss()
-  const pageCss = `@page{size:A4;margin:0.75in}body{font:12pt/1.55 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;color:#202124}pre{white-space:pre-wrap;overflow-wrap:anywhere}table{border-collapse:collapse}th,td{border:1px solid #888;padding:.35em .6em}img{max-width:100%;height:auto}blockquote{border-left:3px solid #bbb;margin-left:0;padding-left:1em}`
-  return `<!doctype html><html><head><meta charset=\"utf-8\"><meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; img-src data: http: https: file:; style-src 'unsafe-inline'; font-src data:;\"><title>${htmlEscape(title)}</title><style>${katexCss}\n${pageCss}</style></head><body><main class=\"markdown-body\">${body}</main></body></html>`
+  return createEditorPrintHtml({ title, body, katexCss: pdfKatexCss(), theme: 'light' })
 }
 
 function assertPdfArtifact(path: string): void {
