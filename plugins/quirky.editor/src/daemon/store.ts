@@ -8,6 +8,11 @@ export type BufferMetrics = {
   diskContentBytes: number | null
   diskContentLength: number | null
   diskSignature: string | null
+  placeholderHash: string | null
+  placeholderDev: number | null
+  placeholderIno: number | null
+  placeholderTemplate: boolean
+  placeholderEdited: boolean
 }
 
 export const editorMigrations: StoreMigration[] = [
@@ -73,6 +78,13 @@ export const editorMigrations: StoreMigration[] = [
       buffer_id TEXT NOT NULL,
       payload TEXT NOT NULL
     );
+  `,
+  `
+    ALTER TABLE editor_buffers ADD COLUMN placeholder_hash TEXT;
+    ALTER TABLE editor_buffers ADD COLUMN placeholder_dev INTEGER;
+    ALTER TABLE editor_buffers ADD COLUMN placeholder_ino INTEGER;
+    ALTER TABLE editor_buffers ADD COLUMN placeholder_template INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE editor_buffers ADD COLUMN placeholder_edited INTEGER NOT NULL DEFAULT 0;
   `
 ]
 
@@ -140,8 +152,22 @@ export function loadBuffers(store: PluginStore): EditorBuffer[] {
 }
 
 export function loadBufferMetrics(store: PluginStore): Map<string, BufferMetrics> {
-  const rows = store.all<{ id: string; content_bytes: number; content_length: number; draft_bytes: number | null; draft_length: number | null; disk_content_bytes: number | null; disk_content_length: number | null; disk_signature: string | null }>(
-    'SELECT id, content_bytes, content_length, draft_bytes, draft_length, disk_content_bytes, disk_content_length, disk_signature FROM editor_buffers'
+  const rows = store.all<{
+    id: string
+    content_bytes: number
+    content_length: number
+    draft_bytes: number | null
+    draft_length: number | null
+    disk_content_bytes: number | null
+    disk_content_length: number | null
+    disk_signature: string | null
+    placeholder_hash: string | null
+    placeholder_dev: number | null
+    placeholder_ino: number | null
+    placeholder_template: number
+    placeholder_edited: number
+  }>(
+    'SELECT id, content_bytes, content_length, draft_bytes, draft_length, disk_content_bytes, disk_content_length, disk_signature, placeholder_hash, placeholder_dev, placeholder_ino, placeholder_template, placeholder_edited FROM editor_buffers'
   )
   return new Map(rows.map((row) => [row.id, {
     contentBytes: row.content_bytes,
@@ -150,17 +176,27 @@ export function loadBufferMetrics(store: PluginStore): Map<string, BufferMetrics
     draftLength: row.draft_length,
     diskContentBytes: row.disk_content_bytes,
     diskContentLength: row.disk_content_length,
-    diskSignature: row.disk_signature
+    diskSignature: row.disk_signature,
+    placeholderHash: row.placeholder_hash,
+    placeholderDev: row.placeholder_dev,
+    placeholderIno: row.placeholder_ino,
+    placeholderTemplate: row.placeholder_template !== 0,
+    placeholderEdited: row.placeholder_edited !== 0
   }]))
 }
 export function saveBuffer(store: PluginStore, buffer: EditorBuffer, autosaveHold: boolean, metrics: BufferMetrics): void {
   store.run(
     `INSERT INTO editor_buffers (
       id, worktree_id, root, path, relative_path, name, kind, content, content_bytes, content_length,
-      draft, draft_bytes, draft_length, baseline, size, read_only, dirty, external, disk_content,
-      disk_content_bytes, disk_content_length, disk_signature, mode, tab_id, preview, pinned, untitled,
-      revision, content_revision, view_json, error, autosave_hold, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      draft, draft_bytes, draft_length, baseline, size, read_only, dirty, external, disk_content, disk_content_bytes,
+      disk_content_length, disk_signature, mode, tab_id, preview, pinned, untitled, revision, content_revision, view_json,
+      error, autosave_hold, placeholder_hash, placeholder_dev, placeholder_ino, placeholder_template, placeholder_edited, updated_at
+    ) VALUES (
+      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+      ?, ?, ?, ?, ?, ?, ?, ?
+    )
     ON CONFLICT(id) DO UPDATE SET
       worktree_id=excluded.worktree_id, root=excluded.root, path=excluded.path,
       relative_path=excluded.relative_path, name=excluded.name, kind=excluded.kind,
@@ -172,7 +208,10 @@ export function saveBuffer(store: PluginStore, buffer: EditorBuffer, autosaveHol
       disk_signature=excluded.disk_signature, mode=excluded.mode, tab_id=excluded.tab_id,
       preview=excluded.preview, pinned=excluded.pinned, untitled=excluded.untitled,
       revision=excluded.revision, content_revision=excluded.content_revision, view_json=excluded.view_json,
-      error=excluded.error, autosave_hold=excluded.autosave_hold, updated_at=excluded.updated_at`,
+      error=excluded.error, autosave_hold=excluded.autosave_hold,
+      placeholder_hash=excluded.placeholder_hash, placeholder_dev=excluded.placeholder_dev,
+      placeholder_ino=excluded.placeholder_ino, placeholder_template=excluded.placeholder_template,
+      placeholder_edited=excluded.placeholder_edited, updated_at=excluded.updated_at`,
     buffer.id,
     buffer.worktreeId,
     buffer.root,
@@ -205,6 +244,11 @@ export function saveBuffer(store: PluginStore, buffer: EditorBuffer, autosaveHol
     JSON.stringify(buffer.view),
     buffer.error,
     Number(autosaveHold),
+    metrics.placeholderHash,
+    metrics.placeholderDev,
+    metrics.placeholderIno,
+    Number(metrics.placeholderTemplate),
+    Number(metrics.placeholderEdited),
     Date.now()
   )
 }

@@ -113,6 +113,7 @@ export interface EditorServices {
   path(worktreeId: string, relativePath: string, options?: { create?: boolean }): Promise<string>
   draft(bufferId: string, content: string, expectedRevision: number): Promise<EditorBuffer>
   save(bufferId: string, trigger?: 'user' | 'autosave' | 'overwrite'): Promise<EditorBuffer>
+  markUntitled(bufferId: string, templateCreated: boolean): Promise<EditorBuffer>
   readBytes(bufferId: string, offset: number, length: number): Promise<{ data: string; eof: boolean; size: number }>
   updateView(bufferId: string, patch: Record<string, unknown>): Promise<EditorBuffer>
   emit(): void

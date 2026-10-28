@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { UiPluginContext } from '@quirky/protocol'
 import { CloseOverlay } from './window/CloseOverlay'
@@ -206,6 +206,7 @@ const editorStyles = `
 .qe-undo-reload { align-self: flex-start; margin: 6px 10px; }
 .qe-compare-dialog,
 .qe-close-dialog,
+.qe-saveas-dialog,
 .qe-quick-open {
   width: min(760px, calc(100vw - 28px));
   max-height: min(82vh, 760px);
@@ -220,7 +221,10 @@ const editorStyles = `
 .qe-close-dialog { width: min(480px, calc(100vw - 28px)); }
 .qe-compare-dialog h2,
 .qe-close-dialog h2,
+.qe-saveas-dialog h2,
 .qe-quick-open h2 { margin: 0 0 8px; font-size: 16px; }
+.qe-saveas-dialog > label { display: block; margin: 12px 0 5px; color: var(--muted, #8a909e); }
+.qe-saveas-dialog > input { width: 100%; }
 .qe-compare-columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; margin: 12px 0; }
 .qe-compare-columns label { display: flex; flex-direction: column; gap: 5px; min-width: 0; color: var(--muted, #8a909e); }
 .qe-compare-columns textarea { min-height: 240px; resize: vertical; color: var(--text, #d7dae0); font-family: var(--terminal-font-family, ui-monospace, monospace); white-space: pre; }
@@ -319,6 +323,175 @@ function viewReport(input: unknown): Record<string, unknown> {
     tabId: nonEmptyString(value.tabId) ?? null,
     mode: mode === 'source' || mode === 'rich' || mode === 'preview' ? mode : null
   }
+}
+type SaveAsBuffer = { id: string; relativePath: string; contentRevision: number; untitled: boolean }
+type SaveAsReadResult = { buffer?: SaveAsBuffer }
+type SaveAsRequest = {
+  id: number
+  context: UiPluginContext
+  bufferId: string
+  relativePath: string
+  expectedRevision: number
+  resolve(value: unknown): void
+  reject(reason: Error): void
+}
+
+let nextSaveAsId = 0
+let saveAsRequest: SaveAsRequest | null = null
+const saveAsListeners = new Set<() => void>()
+
+function notifySaveAs(): void {
+  for (const listener of saveAsListeners) listener()
+}
+
+function subscribeSaveAs(listener: () => void): () => void {
+  saveAsListeners.add(listener)
+  return () => saveAsListeners.delete(listener)
+}
+
+function useSaveAsRequest(): SaveAsRequest | null {
+  return useSyncExternalStore(subscribeSaveAs, () => saveAsRequest, () => null)
+}
+
+function suggestedSaveAsPath(relativePath: string): string {
+  const slash = relativePath.lastIndexOf('/')
+  const directory = slash < 0 ? '' : relativePath.slice(0, slash + 1)
+  const filename = slash < 0 ? relativePath : relativePath.slice(slash + 1)
+  const replacement = /^untitled(?:-\d+)?(\.(?:md|markdown|mdx))$/i.exec(filename)
+  return `${directory}${replacement ? `document${replacement[1]}` : filename}`
+}
+
+function requestSaveAs(context: UiPluginContext, buffer: SaveAsBuffer): Promise<unknown> {
+  if (saveAsRequest !== null) return Promise.reject(new Error('A Save As dialog is already open.'))
+  const { promise, resolve, reject } = Promise.withResolvers<unknown>()
+  saveAsRequest = {
+    id: ++nextSaveAsId,
+    context,
+    bufferId: buffer.id,
+    relativePath: buffer.relativePath,
+    expectedRevision: buffer.contentRevision,
+    resolve,
+    reject
+  }
+  notifySaveAs()
+  return promise
+}
+
+function cancelSaveAs(id: number): void {
+  if (saveAsRequest?.id !== id) return
+  const request = saveAsRequest
+  saveAsRequest = null
+  notifySaveAs()
+  request.reject(new Error('Save As canceled; the untitled document remains open.'))
+}
+
+function clearSaveAsRequest(): void {
+  if (saveAsRequest === null) return
+  cancelSaveAs(saveAsRequest.id)
+}
+
+function editorUiContext(context: UiPluginContext): UiPluginContext {
+  const originalCall = context.call.bind(context)
+  const call = async (method: string, params?: Record<string, unknown>): Promise<unknown> => {
+    const request = params ?? {}
+    if (method === 'quirky.editor/save' && params && params.trigger !== 'autosave') {
+      const bufferId = nonEmptyString(request.bufferId)
+      if (bufferId) {
+        const result = await originalCall('quirky.editor/read', { bufferId, action: 'buffer' }) as SaveAsReadResult
+        if (result.buffer?.untitled) return await requestSaveAs(context, result.buffer)
+      }
+    }
+    if (method === 'quirky.editor/close' && params?.choice === 'save') {
+      const bufferId = nonEmptyString(request.bufferId)
+      if (bufferId) {
+        const result = await originalCall('quirky.editor/read', { bufferId, action: 'buffer' }) as SaveAsReadResult
+        if (result.buffer?.untitled) {
+          try {
+            await requestSaveAs(context, result.buffer)
+          } catch (reason) {
+            await originalCall(method, { ...request, choice: 'cancel' }).catch(() => undefined)
+            throw reason
+          }
+          const closeParams = { ...request }
+          delete closeParams.choice
+          return await originalCall(method, closeParams)
+        }
+      }
+    }
+    return await originalCall(method, params)
+  }
+  return new Proxy(context, {
+    get(target, property, receiver) {
+      if (property === 'call') return call
+      const value = Reflect.get(target, property, receiver)
+      return typeof value === 'function' ? value.bind(target) : value
+    }
+  })
+}
+
+function SaveAsOverlay() {
+  const request = useSaveAsRequest()
+  const [path, setPath] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => {
+    setPath(request ? suggestedSaveAsPath(request.relativePath) : '')
+    setError(null)
+    setBusy(false)
+  }, [request?.id, request?.relativePath])
+
+  if (!request) return null
+  const submit = async () => {
+    const destination = path.trim()
+    if (destination === '') {
+      setError('Enter a worktree-relative Markdown path.')
+      return
+    }
+    setBusy(true)
+    setError(null)
+    try {
+      const saved = await request.context.call('quirky.editor/saveAs', {
+        bufferId: request.bufferId,
+        path: destination,
+        expectedRevision: request.expectedRevision
+      })
+      if (saveAsRequest?.id !== request.id) return
+      saveAsRequest = null
+      notifySaveAs()
+      request.resolve(saved)
+    } catch (reason) {
+      if (saveAsRequest?.id !== request.id) return
+      setError(reason instanceof Error ? reason.message : String(reason))
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="qe-modal-layer">
+      <section className="qe-saveas-dialog" role="dialog" aria-modal="true" aria-labelledby="qe-saveas-title">
+        <h2 id="qe-saveas-title">Save Markdown As</h2>
+        <p>Choose a new worktree-relative path for <strong>{request.relativePath}</strong>. Existing files are never replaced.</p>
+        <label htmlFor="qe-saveas-path">Relative path</label>
+        <input
+          id="qe-saveas-path"
+          autoFocus
+          value={path}
+          placeholder="notes/plan.md"
+          disabled={busy}
+          onChange={(event) => setPath(event.currentTarget.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') { event.preventDefault(); void submit() }
+            if (event.key === 'Escape' && !busy) { event.preventDefault(); cancelSaveAs(request.id) }
+          }}
+        />
+        {error && <p className="qe-editor-error" role="alert">{error}</p>}
+        <div className="qe-dialog-actions">
+          <button type="button" disabled={busy} onClick={() => cancelSaveAs(request.id)}>Cancel</button>
+          <button type="button" className="primary" disabled={busy || path.trim() === ''} onClick={() => void submit()}>Save</button>
+        </div>
+      </section>
+    </div>
+  )
 }
 
 
@@ -438,11 +611,12 @@ function configureExplorerPanel(context: UiPluginContext): void {
 }
 
 export function activate(context: UiPluginContext): void {
+  const uiContext = editorUiContext(context)
   deactivateCurrent?.()
   const removeStyles = installStyles()
 
   context.provide(DOCUMENT_VIEW, (element: HTMLElement, props: MountProps) =>
-    mount(element, <DocumentSurface context={context} input={props.input} />, props.report, viewReport(props.input))
+    mount(element, <DocumentSurface context={uiContext} input={props.input} />, props.report, viewReport(props.input))
   )
   const mountExplorer = (element: HTMLElement, props: MountProps) =>
     mount(element, <ExplorerPanel context={context} report={props.report} />, props.report, {
@@ -455,10 +629,10 @@ export function activate(context: UiPluginContext): void {
     mount(element, <QuickOpenOverlay context={context} report={props.report} />, props.report, { open: false, requestId: null })
   )
   context.provide(CLOSE_OVERLAY, (element: HTMLElement, props: MountProps) =>
-    mount(element, <CloseOverlay report={props.report} />, props.report, { open: false, kind: null, targetCount: 0, dirtyCount: 0, error: null })
+    mount(element, <><CloseOverlay report={props.report} /><SaveAsOverlay /></>, props.report, { open: false, kind: null, targetCount: 0, dirtyCount: 0, error: null })
   )
 
-  for (const [name, handler] of Object.entries(commandHandlers(context))) {
+  for (const [name, handler] of Object.entries(commandHandlers(uiContext))) {
     context.provide(`command:quirky.editor/${name}`, handler)
   }
 
@@ -472,6 +646,7 @@ export function activate(context: UiPluginContext): void {
   deactivateCurrent = () => {
     unsubscribe()
     clearOverlayRequests()
+    clearSaveAsRequest()
     removeStyles()
   }
 }
