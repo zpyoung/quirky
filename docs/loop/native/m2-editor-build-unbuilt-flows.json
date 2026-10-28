@@ -1,0 +1,14 @@
+{
+  "item": "m2-editor-build-unbuilt-flows",
+  "spec": "docs/quirk/specs/2026-10-28-m2-editor-build-unbuilt-flows/logic.md",
+  "scenarios": [
+    {
+      "id": "C1-native-clipboard",
+      "title": "In a fresh owned Quirky home and disposable small CSV containing tabs, multiline values and quotes, use Copy row, Copy column and Copy range. Paste each from the macOS clipboard into another disposable table at the chosen source row/column and confirm exact cell boundaries and values. Sort/filter the source and confirm source coordinates stay stable. Denied clipboard access reports an error without clearing drafts or claiming success; no real user clipboard content is retained in reports.",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    }
+  ]
+}

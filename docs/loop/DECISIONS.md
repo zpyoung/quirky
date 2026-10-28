@@ -52,6 +52,7 @@ files, not this one.
 | hard | high | [sb-mobile-install-links D2](decisions/sb-mobile-install-links.md) | Preserve the Quirky identity and reject incompatible upstream destinations | locked by docs/architecture.md |
 | hard | high | [m3-handoff D5](decisions/m3-handoff.md) | A new built-in plugin, `quirky.handoff`, owns composition, launch and lineage in the daemon; the window is a thin view | assumed — autonomous |
 | hard for privacy, easy for bookkeeping | high | [m3-vault-consent-tip-completion D2](decisions/m3-vault-consent-tip-completion.md) | Seen is a consequence of successful local opt-in, never authorization to index | locked by docs/quirk/specs/2026-10-27-m3-vault/logic.md |
+| hard (durable origin/import identity must not be fabricated) | high | [m7-ledger-remote-host-flows D2](decisions/m7-ledger-remote-host-flows.md) | Never interpret remote scope as a local filesystem root | locked by docs/loop/decisions/m5-ledger.md D8 |
 | hard (engine/host boundary). | high for supported api absence; not a claim that webkit itself lacks the capability. | [sa-browser-pane-native-host-controls D3](decisions/sa-browser-pane-native-host-controls.md) | Preserve Native/Watch separation and supported host ownership | locked by docs/architecture.md and sa-browser-pane D17 |
 | hard | high | [m0-core D6](decisions/m0-core.md) | v1's methods are renamed to their plugin's namespace, with no aliases, and the protocol version goes to 2 | supersedes m0-daemon-api D5 |
 | hard | high | [m0-core D7](decisions/m0-core.md) | v1's events become the plugins' events | assumed — autonomous |
@@ -76,8 +77,10 @@ files, not this one.
 | hard | high | [sb-mobile-daemon D6](decisions/sb-mobile-daemon.md) | Strict v2 and bounded authorization/failures | locked by mobile.md |
 | hard | high | [m4-hosting-api-github D6](decisions/m4-hosting-api-github.md) | Keep gh as auth boundary with fail-closed per-repo binding | locked by hosting-api.md |
 | hard | high | [m4-hosting-api-github D9](decisions/m4-hosting-api-github.md) | Share one head-guarded destructive merge seam before the sitter exists | locked by docs/roadmap.md |
+| hard | high | [sa-browser-agent-extras D2](decisions/sa-browser-agent-extras.md) | Resolve API, CLI, data and integration gray areas explicitly | locked by docs/architecture.md |
 | hard | high | [m0-daemon-api D7](decisions/m0-daemon-api.md) | The four kinds are `method`, `event`, `job` and `launch-hook` | assumed — autonomous |
 | hard | high | [m0-daemon-api D13](decisions/m0-daemon-api.md) | Choose declared contributions with provided implementations | supersedes nothing; extends m0-registry D23 |
+| hard | high | [m2-editor-build-unbuilt-flows D3](decisions/m2-editor-build-unbuilt-flows.md) | Extend the canonical services, not a second editor state model | locked by docs/architecture.md |
 | hard (architecture) | high | [sa-browser-native-identity D4](decisions/sa-browser-native-identity.md) | Preserve the native engine and truthful capability state | locked by docs/architecture.md |
 | hard | high | [m5-automations-ui D4](decisions/m5-automations-ui.md) | Honor structured sessions and existing scheduling fixes | locked by docs/architecture.md |
 | hard for deployed migration order | high | [m5-automations-ui D14](decisions/m5-automations-ui.md) | Preserve canonical pointer migration9 and append background as migration10 | locked by docs/loop/decisions/m6-orchestration-core.md |
@@ -137,6 +140,7 @@ files, not this one.
 | medium | medium | [m1-notifications D9](decisions/m1-notifications.md) | Unread is a marker on the session and on its worktree, written before delivery and whatever the switches say | locked by research/orca-features/notifications.md |
 | medium | medium | [m1-notifications D10](decisions/m1-notifications.md) | Viewing means a focused window whose person is present and whose view shows the session | locked by research/orca-features/notifications.md |
 | medium | medium | [m1-notifications D35](decisions/m1-notifications.md) | The session record carries its unread reason; the worktree keeps its `unread` flag | assumed — autonomous |
+| medium | medium | [m6-heimdall-host-power D2](decisions/m6-heimdall-host-power.md) | Drive the native runloop source on the Bun JS thread | assumed — autonomous |
 | medium | medium | [m1-agent-status-scripting D2](decisions/m1-agent-status-scripting.md) | Screen rules decide what scripts see, never the dot (approach A) | supersedes m1-agent-status D23 (the rules engine is now built, for scripts) |
 | medium | medium | [m1-agent-status-scripting D4](decisions/m1-agent-status-scripting.md) | A fresh hook row decides working and idle; the screen may only add blocked, and decides alone without one | assumed — autonomous |
 | medium | medium | [m1-agent-status-scripting D6](decisions/m1-agent-status-scripting.md) | A user file replaces the whole rule set; then a plugin's contribution; then the built-in file | assumed — autonomous |
@@ -248,6 +252,9 @@ files, not this one.
 | medium | high | [m6-heimdall-owner D39](decisions/m6-heimdall-owner.md) | Perform the single supported roadmap catch-up after the dependency is marked done | locked by docs/loop/LOOP.md and final incoming decision logs |
 | medium | high for the tested historical variants | [m6-heimdall-owner D41](decisions/m6-heimdall-owner.md) | Reconcile divergent version-8/9 session stores without rewriting migration history | assumed — autonomous |
 | medium | high for the reproduced publication boundary and regression | [m6-heimdall-owner D43](decisions/m6-heimdall-owner.md) | Prevent asynchronous read head-of-line blocking without bypassing command publication | assumed — autonomous |
+| medium | high | [sa-browser-profile-import-ui D1](decisions/sa-browser-profile-import-ui.md) | Reuse the real importer and one shared tracked-job UI | locked by docs/architecture.md |
+| medium | high | [sa-browser-profile-import-ui D4](decisions/sa-browser-profile-import-ui.md) | Preserve native and platform boundaries | deferred: platform |
+| medium | high for observed gates only | [sa-browser-profile-import-ui D7](decisions/sa-browser-profile-import-ui.md) | Preserve incoming authority and pass the integrated landing gate | assumed — autonomous |
 | medium | high | [m5-loops-ui D1](decisions/m5-loops-ui.md) | Both UI slices ship as one item | locked by docs/loop/queue.json |
 | medium | high | [m5-loops-ui D3](decisions/m5-loops-ui.md) | Keep feature logic in its plugin and grow a generic plus-menu target | locked by docs/roadmap.md |
 | medium | high | [m5-loops-ui D6](decisions/m5-loops-ui.md) | Read authoritative snapshots; never infer stop from view absence | assumed — autonomous |
@@ -430,6 +437,11 @@ files, not this one.
 | medium | high | [m1-notifications D7](decisions/m1-notifications.md) | The old "Notify when agents finish" switch becomes Agent Task Complete, and its value carries over | supersedes m0-core D13 |
 | medium | high | [m1-notifications D11](decisions/m1-notifications.md) | The window reports input activity, and focus and presence changes reach plugins as an event | assumed — autonomous |
 | medium | high | [m1-notifications D28](decisions/m1-notifications.md) | The PTY host recognises OSC 9, OSC 99 and OSC 777 notifications | assumed — autonomous |
+| medium | high | [m6-orchestration-idle-pointer-shutdown D1](decisions/m6-orchestration-idle-pointer-shutdown.md) | Restore exactly the deferred automatic hint flow | locked by docs/loop/decisions/m6-orchestration-core.md |
+| medium | high for lifetime dependency; medium for historical hang cause | [m6-orchestration-idle-pointer-shutdown D3](decisions/m6-orchestration-idle-pointer-shutdown.md) | Fence scheduler lifetime rather than wait indefinitely for external work | assumed — autonomous |
+| medium | high | [m6-orchestration-idle-pointer-shutdown D4](decisions/m6-orchestration-idle-pointer-shutdown.md) | Keep existing identity, waiter and consumption authority | locked by research/orca-features/orchestration.md |
+| medium | high | [m6-heimdall-host-power D1](decisions/m6-heimdall-host-power.md) | Implement a daemon-owned synchronous lifecycle capability | locked by docs/loop/decisions/m6-heimdall-core.md |
+| medium | high for implementation ordering; native-cycle proof pending | [m6-heimdall-host-power D6](decisions/m6-heimdall-host-power.md) | Keep native callback lifetime and activation lifetime explicit | assumed — autonomous |
 | medium | high | [m1-agent-status-scripting D10](decisions/m1-agent-status-scripting.md) | Rows record the evidence that decided them, and explain reads it | assumed — autonomous |
 | medium | high | [m1-agent-status-scripting D19](decisions/m1-agent-status-scripting.md) | Distinct failures are plugin errors with a machine-readable reason | assumed — autonomous |
 | medium | high | [m1-agent-status-scripting D38](decisions/m1-agent-status-scripting.md) | Catching up with build/roadmap brought m1-notifications, m2-source-control-core and m3-terminal-dock; no decision conflicts | assumed — autonomous |
@@ -477,9 +489,16 @@ files, not this one.
 | medium | high | [m4-hosting-api-github D19](decisions/m4-hosting-api-github.md) | Authorize Projects routes explicitly without weakening ordinary remote checks | locked by hosting-api.md; supersedes m4-hosting-api-github D5 (Projects transport only) |
 | medium | high | [m4-hosting-api-github D21](decisions/m4-hosting-api-github.md) | Preserve provider lifecycle semantics instead of fixture mistakes | locked by hosting-api.md |
 | medium | high | [m4-hosting-api-github D29](decisions/m4-hosting-api-github.md) | Honor actual provider wire shapes and supported branch routes | locked by hosting-api.md |
+| medium | high | [sa-browser-agent-extras D1](decisions/sa-browser-agent-extras.md) | Recover extras onto the current core, not over it | assumed — autonomous |
+| medium | high | [sa-browser-agent-extras D3](decisions/sa-browser-agent-extras.md) | Preserve later profile and identity ownership | locked by docs/loop/decisions/sa-browser-profiles-settings.md |
+| medium | high | [sa-browser-agent-extras D12](decisions/sa-browser-agent-extras.md) | Reconcile the single roadmap catchup without broadening Native or mobile authority | assumed — autonomous |
 | medium | high | [m0-daemon-api D8](decisions/m0-daemon-api.md) | Method results and errors | assumed — autonomous |
 | medium | high | [m0-daemon-api D10](decisions/m0-daemon-api.md) | Stores migrate forward only, by an ordered list, and refuse a downgrade | assumed — autonomous |
 | medium | high | [m0-daemon-api D24](decisions/m0-daemon-api.md) | Plugin methods use the daemon's token, and any client may call any method | locked by docs/roadmap.md |
+| medium (work ownership) | high | [m2-editor-build-unbuilt-flows D1](decisions/m2-editor-build-unbuilt-flows.md) | Preserve the prior ownership cutover | locked by docs/loop/decisions/m2-editor-complete-remaining-flows.md D20 |
+| medium | high | [m2-editor-build-unbuilt-flows D4](decisions/m2-editor-build-unbuilt-flows.md) | Separate Explorer focus, anchor and selected membership | locked by editor.md |
+| medium | high | [m2-editor-build-unbuilt-flows D5](decisions/m2-editor-build-unbuilt-flows.md) | Preserve restart trust revocation and publish genuine idle death | locked by existing notebook public restart contract |
+| medium | high | [m2-editor-build-unbuilt-flows D7](decisions/m2-editor-build-unbuilt-flows.md) | Resource capabilities belong to exact mounted leases | locked by docs/loop/decisions/m2-editor-complete-remaining-flows.md D11 |
 | medium | high | [m4-worktrees-create-from-github D1](decisions/m4-worktrees-create-from-github.md) | Extend the existing worktree create owner through the public hosting API | locked by docs/loop/decisions/m1-worktrees.md |
 | medium | high | [m4-worktrees-create-from-github D4](decisions/m4-worktrees-create-from-github.md) | GitHub sources keep the existing lifecycle and fail visibly rather than become names | locked by worktrees.md; locked by docs/loop/decisions/m4-hosting-api-github.md |
 | medium | high | [m4-worktrees-create-from-github D5](decisions/m4-worktrees-create-from-github.md) | Resolve a source freshly in hosting, not from consumer-supplied checkout data | assumed — autonomous (method); locked by docs/loop/decisions/m4-hosting-api-github.md D5-D8 (auth) |
@@ -517,6 +536,9 @@ files, not this one.
 | medium | high | [m7-sweep-editor-source-control D14](decisions/m7-sweep-editor-source-control.md) | Keep cross-owner settlement limits explicit | assumed — autonomous |
 | medium | high | [m7-sweep-editor-source-control D15](decisions/m7-sweep-editor-source-control.md) | Preserve the single catch-up's routing and exact-session contracts | locked by docs/loop/decisions/m5-automations-ui.md, docs/loop/decisions/m6-orchestration-ui.md and docs/loop/decisions/sa-browser-profiles-settings.md |
 | medium | high | [m7-sweep-editor-source-control D18](decisions/m7-sweep-editor-source-control.md) | Preserve the five repair-merge logs and Git recipe source precedence | locked by docs/loop/decisions/m5-loops-ui.md, docs/loop/decisions/m6-heimdall-control.md, docs/loop/decisions/m6-heimdall-owner.md, docs/loop/decisions/m7-sweep-hosting.md and docs/loop/decisions/m7-sweep-terminal.md |
+| medium (public attribution shape and persisted metadata) | high | [m7-sweep-automation-completion D1](decisions/m7-sweep-automation-completion.md) | Complete independent local provenance and actual phone composition | locked by docs/loop/decisions/m7-sweep-automation.md D9 |
+| medium | high | [m7-sweep-automation-completion D2](decisions/m7-sweep-automation-completion.md) | Attribute only creation authorized by a live dispatch | assumed — autonomous |
+| medium | high for attribution/declarations; suites deliberately not executed | [m7-sweep-automation-completion D7](decisions/m7-sweep-automation-completion.md) | Integrate three scoped components and retain written consumer regressions | assumed — autonomous |
 | medium (acceptance scope) | high | [sa-browser-native-identity D2](decisions/sa-browser-native-identity.md) | Own only the deferred human Native identity flow | locked by docs/loop/decisions/sa-browser-profiles-settings.md |
 | medium (observable lifecycle) | high | [sa-browser-native-identity D3](decisions/sa-browser-native-identity.md) | Reuse the setting and preserve its restart boundary | locked by docs/loop/decisions/sa-browser-profiles-settings.md |
 | medium | high | [m5-automations-ui D1](decisions/m5-automations-ui.md) | Build the complete union of the three assigned UI and external-job slices | locked by docs/loop/LOOP.md |
@@ -537,6 +559,7 @@ files, not this one.
 | medium | high | [m5-ledger D16](decisions/m5-ledger.md) | Correct import paths, value flags and Quirky JSON rather than copy Orca's transport envelope | assumed — autonomous |
 | medium | high | [m5-ledger D25](decisions/m5-ledger.md) | Preserve imported source identity through automatic owner recovery | locked by external research/orca-features/ledger.md |
 | medium | high | [m5-ledger D30](decisions/m5-ledger.md) | Preserve reviewer write violations as an operational limitation | assumed — autonomous |
+| medium | high | [m4-hosting-ui-review-browser-routing D4](decisions/m4-hosting-ui-review-browser-routing.md) | Hand off native delivery only after isolation preflight | deferred: platform |
 | medium (provider contracts and ui scenarios) | high | [m3-accounts D1](decisions/m3-accounts.md) | Implement meters and only Claude/Codex switching | locked by docs/roadmap.md |
 | medium (provider adapter boundaries) | high for cli/codex; medium for observed private quota protocols | [m3-accounts D4](decisions/m3-accounts.md) | Native CLI login and provider-specific usage ports beat custom OAuth or imported snapshots | assumed — autonomous |
 | medium (inter-plugin preparation) | high | [m3-accounts D5](decisions/m3-accounts.md) | Required account preparation is separate from launch hooks | assumed — autonomous |
@@ -1052,6 +1075,10 @@ files, not this one.
 | easy | high | [m6-heimdall-owner D37](decisions/m6-heimdall-owner.md) | Repair roadmap typing and SDK-init fixture preconditions without changing native behavior | assumed — autonomous |
 | easy | high | [m6-heimdall-owner D40](decisions/m6-heimdall-owner.md) | Remove the final merged SDK-initialization duplicate rather than fabricate a native ID | assumed — autonomous |
 | easy | high | [m6-heimdall-owner D42](decisions/m6-heimdall-owner.md) | Replace fixture source-text rewriting with input-driven typed event production | assumed — autonomous |
+| easy | high | [sa-browser-profile-import-ui D2](decisions/sa-browser-profile-import-ui.md) | Resolve visual, data and integration gray areas without a person | assumed — autonomous |
+| easy | high | [sa-browser-profile-import-ui D3](decisions/sa-browser-profile-import-ui.md) | Follow unattended build-first process and isolate implementation | locked by docs/loop/LOOP.md |
+| easy | high | [sa-browser-profile-import-ui D5](decisions/sa-browser-profile-import-ui.md) | Repair actual wrapped-menu anchoring instead of bypassing hit tests | assumed — autonomous |
+| easy | high for exercised flows only | [sa-browser-profile-import-ui D6](decisions/sa-browser-profile-import-ui.md) | Separate focused real-path evidence from unrun suites and OS chooser assurance | locked by docs/loop/LOOP.md |
 | easy | high | [m5-loops-ui D4](decisions/m5-loops-ui.md) | Resolve all visual gray areas through feature defaults | locked by research/orca-features/fork-loops.md |
 | easy | high | [m5-loops-ui D5](decisions/m5-loops-ui.md) | Preserve draft text and full nested config sections | locked by research/orca-features/fork-loops.md |
 | easy | high | [m5-loops-ui D9](decisions/m5-loops-ui.md) | Autonomous spec review and full scoped work after the nightly target | locked by docs/loop/LOOP.md |
@@ -1331,6 +1358,9 @@ files, not this one.
 | easy | high | [m3-vault-consent-tip-completion D9](decisions/m3-vault-consent-tip-completion.md) | Retention rollback cannot prevent turning search off | assumed — autonomous |
 | easy | high | [m3-vault-consent-tip-completion D10](decisions/m3-vault-consent-tip-completion.md) | Qualify the final review rather than claim independent clearance | assumed — autonomous |
 | easy | high | [m3-vault-consent-tip-completion D11](decisions/m3-vault-consent-tip-completion.md) | Land now under the operator's build-first policy | locked by docs/loop/LOOP.md |
+| easy (resume after the public foundation lands) | high for checked-out declarations and source; no ssh runtime behavior claimed | [m7-ledger-remote-host-flows D1](decisions/m7-ledger-remote-host-flows.md) | Block on missing public host authority | locked by docs/loop/decisions/m7-sweep-automation-completion.md D4,D10 |
+| easy | high | [m7-ledger-remote-host-flows D3](decisions/m7-ledger-remote-host-flows.md) | Keep the remote ledger flow whole and preserve existing owners | assumed — autonomous |
+| easy | high for inspected contracts only | [m7-ledger-remote-host-flows D4](decisions/m7-ledger-remote-host-flows.md) | Resolve unattended design defaults and stop at feasibility | locked by docs/loop/LOOP.md |
 | easy (recheck a supported sdk capability when supplied) | high for inspected declarations; no native connection experiment claimed | [sa-browser-localhost-label-routing D2](decisions/sa-browser-localhost-label-routing.md) | The inspected native public SDK still lacks the prerequisite | assumed — autonomous |
 | easy (preserved blocked branch can resume after prerequisite) | high | [sa-browser-localhost-label-routing D4](decisions/sa-browser-localhost-label-routing.md) | Block the whole item rather than ship a Chrome-only fragment | locked by docs/loop/decisions/sa-browser-pane.md |
 | easy | high for unchanged current behavior; not a new ui acceptance claim | [sa-browser-localhost-label-routing D5](decisions/sa-browser-localhost-label-routing.md) | Preserve current unavailable UX and browser isolation | locked by docs/loop/decisions/sa-browser-profiles-settings.md |
@@ -1647,6 +1677,17 @@ files, not this one.
 | easy | high | [m1-notifications D60](decisions/m1-notifications.md) | The descriptor fix lives in `startHarness`, shared by every symlink-only built-in directory | supersedes m1-term-ui D51 |
 | easy | high | [m1-notifications D61](decisions/m1-notifications.md) | The final gate passes; nothing goes to BLOCKERS.md | locked by docs/loop/LOOP.md |
 | easy | high | [m1-notifications D62](decisions/m1-notifications.md) | The first land failed on the integration tree's missing package links for the new plugin; they were copied in, as m1-term-daemon D49 did | assumed — autonomous |
+| easy | high | [m6-orchestration-idle-pointer-shutdown D2](decisions/m6-orchestration-idle-pointer-shutdown.md) | Resolve standard gray areas autonomously using build-first rules | locked by docs/loop/LOOP.md |
+| easy | high | [m6-orchestration-idle-pointer-shutdown D5](decisions/m6-orchestration-idle-pointer-shutdown.md) | One isolated implementation component with already committed public contracts | assumed — autonomous |
+| easy | high | [m6-orchestration-idle-pointer-shutdown D6](decisions/m6-orchestration-idle-pointer-shutdown.md) | Isolate macOS runtime proof and preserve platform limits | deferred: platform |
+| easy | high for this demonstrated fixture hang; historical checkpoint's exact bytes were not recorded | [m6-orchestration-idle-pointer-shutdown D7](decisions/m6-orchestration-idle-pointer-shutdown.md) | Repair proven fixture response truncation rather than weakening AC9 | assumed — autonomous |
+| easy | high | [m6-orchestration-idle-pointer-shutdown D8](decisions/m6-orchestration-idle-pointer-shutdown.md) | Execute the hint command instead of preserving an incorrect substring pin | supersedes m6-orchestration-idle-pointer-shutdown D4's Dispatch command choice; locked by research/orca-features/orchestration.md |
+| easy | high for exercised smoke paths only; permanent regressions remain unrun | [m6-orchestration-idle-pointer-shutdown D9](decisions/m6-orchestration-idle-pointer-shutdown.md) | Keep exact smoke evidence and defer permanent test execution | assumed — autonomous |
+| easy | high for the observed type/smoke gates; no suite/ui/native pass claimed | [m6-orchestration-idle-pointer-shutdown D10](decisions/m6-orchestration-idle-pointer-shutdown.md) | Preserve incoming lifecycle decisions and final merged evidence | locked by docs/loop/LOOP.md |
+| easy | high | [m6-heimdall-host-power D3](decisions/m6-heimdall-host-power.md) | Apply unattended build-first execution | locked by docs/loop/LOOP.md |
+| easy | high | [m6-heimdall-host-power D4](decisions/m6-heimdall-host-power.md) | Hand off disruptive native verification and non-macOS support | deferred: platform |
+| easy | high for exercised paths; real os sleep/wake cycle remains unverified | [m6-heimdall-host-power D5](decisions/m6-heimdall-host-power.md) | Verify registration separately from a real system sleep cycle | assumed — autonomous |
+| easy | high for exercised evidence and inspected decision scopes | [m6-heimdall-host-power D7](decisions/m6-heimdall-host-power.md) | Preserve all incoming decisions at the one roadmap catch-up | assumed — autonomous |
 | easy | high | [m1-agent-status-scripting D1](decisions/m1-agent-status-scripting.md) | The item covers the roadmap's five bullets for scripts; the dot, the Activity view and `quirky terminal` stay as they are | locked by docs/roadmap.md |
 | easy | high | [m1-agent-status-scripting D7](decisions/m1-agent-status-scripting.md) | Rules are never downloaded | locked by docs/roadmap.md |
 | easy | high | [m1-agent-status-scripting D11](decisions/m1-agent-status-scripting.md) | Explain answers for any session, with or without a row | assumed — autonomous |
@@ -1758,6 +1799,14 @@ files, not this one.
 | easy | high | [fix-sc31-first-shell-race D7](decisions/fix-sc31-first-shell-race.md) | Resume the preserved correction after integration repairs | locked by docs/loop/decisions/fix-test-process-leaks.md |
 | easy | high for the exercised cli/api path; the guarded visual limitation remains d5. | [fix-sc31-first-shell-race D9](decisions/fix-sc31-first-shell-race.md) | Prove the skip/ordinary-shell contract with real CLI and PTY processes | assumed — autonomous |
 | easy | high for the observed result; no claim that the independent load sensitivity is fixed. | [fix-sc31-first-shell-race D10](decisions/fix-sc31-first-shell-race.md) | Retain the suite's existing isolated-rerun policy | locked by scripts/suite.ts |
+| easy | high | [sa-browser-agent-extras D4](decisions/sa-browser-agent-extras.md) | Apply unattended build-first gates without inventing test evidence | locked by docs/loop/LOOP.md |
+| easy | high | [sa-browser-agent-extras D5](decisions/sa-browser-agent-extras.md) | Keep platform and sensitive-state verification bounded | deferred: platform |
+| easy | high | [sa-browser-agent-extras D6](decisions/sa-browser-agent-extras.md) | Preserve the existing dependent import-UI item | locked by docs/loop/queue.json |
+| easy | high | [sa-browser-agent-extras D7](decisions/sa-browser-agent-extras.md) | Integrate only audited component scopes and repair concrete assembly faults | assumed — autonomous |
+| easy | high | [sa-browser-agent-extras D8](decisions/sa-browser-agent-extras.md) | Map public property queries onto the pinned helper's actual wire protocol | assumed — autonomous |
+| easy | high | [sa-browser-agent-extras D9](decisions/sa-browser-agent-extras.md) | Repair the cookie canonicalizer and dynamic CDP event schemas at their source | assumed — autonomous |
+| easy | high for exercised behavior only | [sa-browser-agent-extras D10](decisions/sa-browser-agent-extras.md) | Separate changed-path proof from deferred suite and native assurance | locked by docs/loop/LOOP.md |
+| easy | high for listed profile/disclosure rendering, no badge-menu/native parity claim | [sa-browser-agent-extras D11](decisions/sa-browser-agent-extras.md) | Verify imported metadata on the built Settings surface without claiming import-menu completion | assumed — autonomous |
 | easy | high | [m0-daemon-api D1](decisions/m0-daemon-api.md) | Classify the item as an API design, and run both research phases | assumed — autonomous |
 | easy | high | [m0-daemon-api D2](decisions/m0-daemon-api.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m0-daemon-api D3](decisions/m0-daemon-api.md) | Select every gray area that matters for the daemon plugin API | assumed — autonomous |
@@ -1783,6 +1832,18 @@ files, not this one.
 | easy | high | [m0-daemon-api D41](decisions/m0-daemon-api.md) | The daemon plugin API is kernel, not a built-in plugin | locked by docs/roadmap.md |
 | easy | high | [m0-daemon-api D43](decisions/m0-daemon-api.md) | The final review loop ends after the closure round passes on all three lenses | assumed — autonomous |
 | easy | high | [m0-daemon-api D44](decisions/m0-daemon-api.md) | Every scenario has an API test, and there are no Orca defects to test | locked by docs/loop/LOOP.md |
+| easy | high | [m2-editor-build-unbuilt-flows D2](decisions/m2-editor-build-unbuilt-flows.md) | Apply unattended build-first workflow | locked by docs/loop/LOOP.md |
+| easy | high | [m2-editor-build-unbuilt-flows D6](decisions/m2-editor-build-unbuilt-flows.md) | Clipboard ranges use source coordinates and quoted TSV | assumed — autonomous |
+| easy | high | [m2-editor-build-unbuilt-flows D8](decisions/m2-editor-build-unbuilt-flows.md) | Three disjoint vertical components share committed contracts | assumed — autonomous |
+| easy | high | [m2-editor-build-unbuilt-flows D9](decisions/m2-editor-build-unbuilt-flows.md) | Defer cross-family review under build-first, not as a passing review | locked by docs/loop/LOOP.md |
+| easy | high | [m2-editor-build-unbuilt-flows D10](decisions/m2-editor-build-unbuilt-flows.md) | Preserve compact accessible controls and platform boundaries | deferred: platform |
+| easy | high | [m2-editor-build-unbuilt-flows D11](decisions/m2-editor-build-unbuilt-flows.md) | Isolate all smoke dependencies and retain exact component ownership | assumed — autonomous |
+| easy | high | [m2-editor-build-unbuilt-flows D12](decisions/m2-editor-build-unbuilt-flows.md) | Keep the compiler gate authoritative and repair integration diagnostics | assumed — autonomous |
+| easy (evidence) | high for exercised paths only | [m2-editor-build-unbuilt-flows D13](decisions/m2-editor-build-unbuilt-flows.md) | Retain narrow runtime proof without claiming end-phase acceptance | assumed — autonomous |
+| easy | high | [m2-editor-build-unbuilt-flows D14](decisions/m2-editor-build-unbuilt-flows.md) | Capture clipboard input values synchronously before deferred state updates | assumed — autonomous |
+| easy | high | [m2-editor-build-unbuilt-flows D15](decisions/m2-editor-build-unbuilt-flows.md) | Distinguish browser permission limits from native clipboard proof | assumed — autonomous |
+| easy | high for inspected authority boundaries and exercised helper lifetime | [m2-editor-build-unbuilt-flows D16](decisions/m2-editor-build-unbuilt-flows.md) | Preserve all seven incoming owners and isolate physical Git fixture setup | locked by docs/loop/decisions/sb-mobile-app-panels.md D14 |
+| easy | high for structural scope only | [m2-editor-build-unbuilt-flows D17](decisions/m2-editor-build-unbuilt-flows.md) | Keep structural validation separate from runtime and semantic review | assumed — autonomous |
 | easy | high | [m4-worktrees-create-from-github D2](decisions/m4-worktrees-create-from-github.md) | Resolve unattended design questions locally using night-mode protocol | locked by docs/loop/LOOP.md |
 | easy | high | [m4-worktrees-create-from-github D3](decisions/m4-worktrees-create-from-github.md) | Use OpenAI task implementation and Gemini review after Opus fails preflight | locked by docs/loop/LOOP.md (pairing); assumed — autonomous (fallback and state preservation) |
 | easy | high | [m4-worktrees-create-from-github D8](decisions/m4-worktrees-create-from-github.md) | Commit contracts first and implement three isolated disjoint components | locked by docs/loop/LOOP.md (night-mode cap/contracts); assumed — autonomous (partition) |
@@ -1886,6 +1947,15 @@ files, not this one.
 | easy | high | [m7-sweep-editor-source-control D13](decisions/m7-sweep-editor-source-control.md) | Preserve truthful review and user-flow evidence under the aged-item rule | locked by docs/loop/LOOP.md |
 | easy | high | [m7-sweep-editor-source-control D16](decisions/m7-sweep-editor-source-control.md) | Observe the published and visible primary state in one polling boundary | assumed — autonomous |
 | easy | high for observed checks; medium for load attribution | [m7-sweep-editor-source-control D17](decisions/m7-sweep-editor-source-control.md) | Repair the landing gate through the prescribed merge path, not protected-script edits | assumed — autonomous |
+| easy | high | [m7-sweep-automation-completion D3](decisions/m7-sweep-automation-completion.md) | Resolve standard gray areas with existing surfaces and truthful uncertainty | assumed — autonomous |
+| easy | high for inspected contracts; no remote runtime behavior claimed | [m7-sweep-automation-completion D4](decisions/m7-sweep-automation-completion.md) | Keep SSH ledger flow whole behind the missing public authority | deferred: SSH ledger ownership/routing/import/evidence/selected-runtime availability |
+| easy | high | [m7-sweep-automation-completion D5](decisions/m7-sweep-automation-completion.md) | Apply one-spec build-first workflow with three disjoint implementers | locked by docs/loop/LOOP.md |
+| easy | high | [m7-sweep-automation-completion D6](decisions/m7-sweep-automation-completion.md) | Restore the attributable misplaced worker patch without touching user state | assumed — autonomous |
+| easy | high for observed failures and scoped repairs; final merged typecheck still required | [m7-sweep-automation-completion D8](decisions/m7-sweep-automation-completion.md) | Repair observed integration diagnostics without weakening assertions | assumed — autonomous |
+| easy | high for exercised boundaries; physical/native/full-app visual fidelity unverified | [m7-sweep-automation-completion D9](decisions/m7-sweep-automation-completion.md) | Record narrow runtime evidence without claiming suite, app or native clearance | assumed — autonomous |
+| easy | high | [m7-sweep-automation-completion D10](decisions/m7-sweep-automation-completion.md) | Retain the single unbuilt remote-ledger flow with its prerequisite | deferred: SSH ledger ownership/routing/import/evidence/selected-runtime availability |
+| easy | high for faithful contract composition; full suites remain unrun | [m7-sweep-automation-completion D11](decisions/m7-sweep-automation-completion.md) | Preserve concurrent panel admissions and local owner boundaries at catch-up | locked by docs/loop/decisions/sb-mobile-app-panels.md D21 |
+| easy | high | [m7-sweep-automation-completion D12](decisions/m7-sweep-automation-completion.md) | Delete incidental authorization-table assertions instead of repinning their import | assumed — autonomous |
 | easy (workflow) | high | [sa-browser-native-identity D1](decisions/sa-browser-native-identity.md) | Apply unattended build-first feasibility rules | locked by docs/loop/LOOP.md |
 | easy when supported api exists | high for this installed/pinned public sdk; no claim about all versions or private native capabilities | [sa-browser-native-identity D5](decisions/sa-browser-native-identity.md) | The installed public SDK still lacks the prerequisite | assumed — autonomous |
 | easy (reopen this item when supported api lands) | high | [sa-browser-native-identity D6](decisions/sa-browser-native-identity.md) | Block the sole flow instead of landing a scaffold or duplicate follow-up | assumed — autonomous |
@@ -1926,6 +1996,11 @@ files, not this one.
 | easy | high | [m5-ledger D29](decisions/m5-ledger.md) | Close XR1 despite its malformed first review packet, with one scoped fix batch | assumed — autonomous |
 | easy | high | [m5-ledger D31](decisions/m5-ledger.md) | Finish this item through queue-controlled integration without new flows or review rounds | locked by docs/loop/LOOP.md |
 | easy — prior snapshots remain in committed history | high | [m5-ledger D32](decisions/m5-ledger.md) | Keep only the ledger patch when catching up with the restored integration history | locked by docs/loop/LOOP.md; supersedes D27's integration snapshot selection, not its frozen review evidence |
+| easy | high | [m4-hosting-ui-review-browser-routing D1](decisions/m4-hosting-ui-review-browser-routing.md) | Reuse the implemented core and finish all three visible controls | locked by hosting-ui.md and docs/loop/decisions/m7-sweep-hosting.md |
+| easy | high | [m4-hosting-ui-review-browser-routing D2](decisions/m4-hosting-ui-review-browser-routing.md) | Resolve standard gray areas without a person | locked by docs/loop/decisions/sa-browser-profiles-settings.md |
+| easy | high | [m4-hosting-ui-review-browser-routing D3](decisions/m4-hosting-ui-review-browser-routing.md) | Follow build-first execution and keep inherited artifacts untouched | locked by docs/loop/LOOP.md |
+| easy | high | [m4-hosting-ui-review-browser-routing D5](decisions/m4-hosting-ui-review-browser-routing.md) | Retain the existing route owner after all incoming decisions | assumed — autonomous |
+| easy | high for the observed gate/module behavior; full acceptance and native effects unverified | [m4-hosting-ui-review-browser-routing D6](decisions/m4-hosting-ui-review-browser-routing.md) | Separate the typecheck gate and isolated module smoke from acceptance | assumed — autonomous |
 | easy (decision review) | high | [m3-accounts D2](decisions/m3-accounts.md) | Answer unattended design questions without a human gate | locked by docs/loop/LOOP.md |
 | easy (no implementation dispatched) | high | [m3-accounts D3](decisions/m3-accounts.md) | Use OpenAI task implementers and Gemini review fallback | assumed — autonomous |
 | easy (ui); medium (cache) | high | [m3-accounts D7](decisions/m3-accounts.md) | Retain documented presentation, errors and freshness defaults | locked by research/orca-features/accounts.md |

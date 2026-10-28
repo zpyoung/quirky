@@ -6,6 +6,7 @@ import { PAGE_BUNDLE_ROUTES } from './generation'
 export const PAGE_METHOD_PARAMS: Readonly<Record<string, readonly string[]>> = Object.freeze({
   'quirky.repo/list': [],
   'quirky.repo/groupList': [],
+  'quirky.loops/summaries': [],
   'quirky.mobile/agentCatalog': [],
   'quirky.mobile/notificationPoll': ['subscriptionId', 'waitMs', 'after', 'epoch', 'onlyWhenDesktopAway', 'suppressWorktree'],
   'quirky.mobile/notificationCancel': ['subscriptionId'],
@@ -123,7 +124,8 @@ function boundedEditorChunk(value: unknown): value is string {
 
 function validPageSpecificParams(method: string, params: Record<string, unknown>): boolean {
   if (method === TERMINAL_ARTIFACT_METHOD) return validTerminalArtifactParams(params)
-  if (method === 'quirky.repo/list' || method === 'quirky.repo/groupList' || method === 'quirky.mobile/agentCatalog' || method === 'quirky.mobile/notificationTest') return Object.keys(params).length === 0
+  if (method === 'quirky.repo/list' || method === 'quirky.repo/groupList' || method === 'quirky.mobile/agentCatalog' ||
+    method === 'quirky.loops/summaries' || method === 'quirky.mobile/notificationTest') return Object.keys(params).length === 0
   if (method === 'quirky.mobile/notificationPoll') return typeof params.subscriptionId === 'string' && params.subscriptionId.length > 0 && params.subscriptionId.length <= 128 &&
     Number.isSafeInteger(params.waitMs) && (params.waitMs as number) >= 0 && (params.waitMs as number) <= 25_000 &&
     (params.after === undefined || (Number.isSafeInteger(params.after) && (params.after as number) >= 0)) &&
@@ -341,6 +343,16 @@ function validIdArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.length <= 256 && value.every(validId)
 }
 
+function validLoopSummaryReport(value: unknown): boolean {
+  if (!Array.isArray(value) || value.length > 256) return false
+  return value.every((item) => {
+    if (!isPlainRecord(item)) return false
+    const fields = ['worktreeId', 'loopId', 'label']
+    return Object.keys(item).length === fields.length && Object.keys(item).every((key) => fields.includes(key)) &&
+      validId(item.worktreeId) && validId(item.loopId) && typeof item.label === 'string' && item.label.length > 0 && item.label.length <= 2048
+  })
+}
+
 export function validatePageReport(value: unknown): asserts value is Record<string, unknown> {
   if (!isPlainRecord(value) || !validTree(value) || typeof value.route !== 'string' ||
     typeof value.connectionPhase !== 'string' || !Object.hasOwn(CONNECTION_PHASE, value.connectionPhase) || typeof value.stale !== 'boolean') {
@@ -348,10 +360,13 @@ export function validatePageReport(value: unknown): asserts value is Record<stri
   }
   const common = ['route', 'connectionPhase', 'stale']
   if (value.route === 'workspaces') {
-    const fields = [...common, 'visibleWorktreeIds', 'searchOpen', 'optionsOpen', 'sidebarCollapsed', 'detailMode']
+    const fields = [...common, 'visibleWorktreeIds', 'searchOpen', 'optionsOpen', 'sidebarCollapsed', 'detailMode', 'loopSummaryStatus', 'loopSummaries']
     if (Object.keys(value).length !== fields.length || Object.keys(value).some((key) => !fields.includes(key)) ||
       !validIdArray(value.visibleWorktreeIds) || typeof value.searchOpen !== 'boolean' || typeof value.optionsOpen !== 'boolean' ||
-      typeof value.sidebarCollapsed !== 'boolean' || (value.detailMode !== 'detailed' && value.detailMode !== 'compact')) throw new Error('workspace page report is invalid')
+      typeof value.sidebarCollapsed !== 'boolean' || (value.detailMode !== 'detailed' && value.detailMode !== 'compact') ||
+      (value.loopSummaryStatus !== 'available' && value.loopSummaryStatus !== 'unavailable') || !validLoopSummaryReport(value.loopSummaries)) {
+      throw new Error('workspace page report is invalid')
+    }
     return
   }
   if (value.route === 'session') {

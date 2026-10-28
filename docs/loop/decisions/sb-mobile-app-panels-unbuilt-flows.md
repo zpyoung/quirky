@@ -110,5 +110,27 @@
 - **Revisit if:** end-phase API/native/browser execution contradicts them.
 - **Source:** locked by docs/loop/LOOP.md; assumed — autonomous
 
+## D11: Compose the single catch-up without broadening artifact or remote authority
+- **Question:** what incoming decisions and code must the final branch preserve?
+- **Options:** choose either side of the shared bridge predicate; compose their independent bounded admissions.
+- **Chose:** one git merge build/roadmap after84c11137. Resolved the only conflict by retaining artifact-specific parameter validation first and incoming zero-parameter quirky.loops/summaries alongside existing notification validation. Read all eight incoming decision logs through Progress: m2-editor-build-unbuilt-flows; m4-hosting-ui-review-browser-routing; m6-heimdall-host-power; m6-orchestration-idle-pointer-shutdown; m7-ledger-remote-host-flows; m7-sweep-automation-completion; sa-browser-agent-extras; sa-browser-profile-import-ui. Preserve exact viewer leases, notebook trust revocation, lifecycle fencing, single-use automation provenance, summary-only mobile authority and managed-local Browser ownership.
+- **Why:** incoming automation D11 explicitly requires both independent admission paths. Remote ledger remains blocked pending real host registration/generation-fenced resources; no incoming log supplies or authorizes remote artifact filesystem authority. The first scout handoff listed incorrect historical logs; parent rejected it and required the exact eight-file inventory before accepting the corrected full-read report.
+- **Evidence:** canonical incoming A-file diff; corrected IncomingArtifactBindings report; conflict://1 resolution; final caught-up bun run typecheck root/mobile exit0 in37.64seconds.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** a public remote execution/filesystem owner lands or end-phase evidence reveals a composed-policy defect.
+- **Source:** locked by docs/loop/LOOP.md; preserves m7-sweep-automation-completion D11
+
+## D12: Queue only the two externally prerequisite-bound implementation groups
+- **Question:** what remains after the terminal artifact vertical slice ships?
+- **Options:** re-defer implemented artifacts; add verification items; preserve only unbuilt push/provider flows.
+- **Chose:** canonical queue add registered one successor sb-mobile-push-provider-prerequisites, docs mobile.md, depending on this item plus m4-hosting-api-gitlab and m4-worktrees-create-from-gitlab. It names operator-controlled APNs/FCM gateway/credentials/entitlements, native token/lease/permission/sound/background-tap lifecycle and provider-owned GitLab/Linear/Jira Tasks list/filter/board/detail/comments/field mutations/linked workspace APIs. It explicitly excludes implemented artifacts. Append-only BLOCKERS records these conditions.
+- **Why:** push has an outside delivery prerequisite, and GitLab APIs/workspace creation remain explicitly user-parked; Linear/Jira provider APIs are absent. General parity does not authorize reusing Orca's hosted account, inventing credentials or silently overriding those blocked owners.
+- **Evidence:** parent D8–D10; docs/loop/BLOCKERS.md parked-items entry; current provider inventory; canonical queue add /tmp/quirky-artifact-smoke-lane2.6Oa7V1/followup.json exit0.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the named service/native/provider prerequisites land.
+- **Source:** deferred: native push and provider-owned Tasks prerequisites
+
 ## Progress
-Artifact implementation and acceptance tests integrated; both component worktrees removed. Minimal real CLI/encrypted API/rendered PageApp smoke and corrected root/mobile typecheck passed; owned smoke resources stopped and homes removed. Permanent acceptance tests, native assertions, review rounds and full dogfood campaigns NOT RUN. Next: commit parent admission/docs/corrections, catch up build/roadmap once and read incoming decisions, typecheck, add one implementation-only push/provider prerequisite successor, commit/detach/canonical land. Remove remaining owned scratch only after landing.
+Ready for canonical land. Artifact source/tests/docs and one prerequisite-only successor are complete; all workers returned, both component trees removed, every owned service exited and runtime homes were removed. Single roadmap catch-up resolved; all eight incoming decision logs read; caught-up root/mobile typecheck passed37.64seconds. Permanent suites/native assertions/review/dogfood remain NOT RUN under build-first. Commit merge/decision evidence, detach and canonical queue land; then remove owned scratch and record the actual receipt in loop notes. No second item this iteration.

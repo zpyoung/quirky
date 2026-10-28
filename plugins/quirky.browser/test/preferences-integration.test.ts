@@ -138,7 +138,6 @@ test('Browser routing CLI opens an actual worktree hosted pane and exposes truth
     expect(visible.layout.view).toMatchObject({ id: 'view:quirky.session/worktree', input: { worktree: `id:${worktree}` } })
     await expect(call(h, 'openLink', { worktree, url: 'javascript:alert(1)' })).rejects.toThrow()
     const before = await call(h, 'preferencesState') as PreferencesState
-    expect(before.imports.available).toBe(false)
     expect(before.localhostLabels.available).toBe(false)
     await h.client.call('setting.set', { id: 'setting:quirky.browser/identityMode', value: 'native' })
     const after = await call(h, 'preferencesState') as PreferencesState

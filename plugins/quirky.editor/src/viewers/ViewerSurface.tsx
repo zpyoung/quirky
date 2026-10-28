@@ -94,6 +94,7 @@ function CsvSurface({ props, sourceMode }: { props: SurfaceProps; sourceMode: bo
   const [pasteText, setPasteText] = useState('')
   const [pasteAt, setPasteAt] = useState({ row: 0, column: 0 })
   const [cellDrafts, setCellDrafts] = useState<Record<string, string>>({})
+  const [copyRange, setCopyRange] = useState({ row: '', column: '', endRow: '', endColumn: '' })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [changed, setChanged] = useState(false)
@@ -216,13 +217,43 @@ function CsvSurface({ props, sourceMode }: { props: SurfaceProps; sourceMode: bo
     }
   }
 
-  const copyCell = async (row: number, column: number) => {
+  const copySelection = async (fields: Record<string, unknown>) => {
+    if (Object.keys(cellDrafts).length > 0) {
+      setError('Apply or save pending cell edits before copying.')
+      return
+    }
+    setError(null)
     try {
-      const result = object(await call(props, 'copy', { row, column }))
-      if (typeof result.text === 'string') await navigator.clipboard.writeText(result.text)
+      const result = object(await call(props, 'copy', fields))
+      if (typeof result.text !== 'string') throw new Error('The viewer did not return clipboard text.')
+      if (typeof navigator.clipboard?.writeText !== 'function') throw new Error('Clipboard access is unavailable.')
+      await navigator.clipboard.writeText(result.text)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Clipboard access failed.')
     }
+  }
+
+  const copyCell = (row: number, column: number) => copySelection({ row, column })
+
+  const copySelectedRange = () => {
+    const values = [copyRange.row, copyRange.column, copyRange.endRow, copyRange.endColumn]
+    if (values.some((value) => !/^\d+$/.test(value))) {
+      setError('Copy range needs complete non-negative source row and column indices.')
+      return
+    }
+    const row = Number(copyRange.row)
+    const column = Number(copyRange.column)
+    const endRow = Number(copyRange.endRow)
+    const endColumn = Number(copyRange.endColumn)
+    if (![row, column, endRow, endColumn].every(Number.isSafeInteger)) {
+      setError('Copy range coordinates must be whole source indices.')
+      return
+    }
+    if (row > endRow || column > endColumn) {
+      setError('Copy range end coordinates must not be before the start coordinates.')
+      return
+    }
+    void copySelection({ row, column, endRow, endColumn })
   }
 
   const paste = async () => {
@@ -281,6 +312,14 @@ function CsvSurface({ props, sourceMode }: { props: SurfaceProps; sourceMode: bo
         <label>Paste row <input type="number" min="0" value={pasteAt.row} onChange={(event) => { const value = Number(event.currentTarget.value); setPasteAt((old) => ({ ...old, row: value })) }} /></label>
         <label>Paste column <input type="number" min="0" value={pasteAt.column} onChange={(event) => { const value = Number(event.currentTarget.value); setPasteAt((old) => ({ ...old, column: value })) }} /></label>
         <button type="button" onClick={() => void paste()} disabled={loading}>Paste</button>
+        <fieldset>
+          <legend>Copy rectangular range (zero-based source coordinates)</legend>
+          <label>Start row (source index) <input aria-label="Copy range start row (source index)" type="number" min="0" step="1" value={copyRange.row} onChange={(event) => { const value = event.currentTarget.value; setCopyRange((old) => ({ ...old, row: value })) }} /></label>
+          <label>Start column (source index) <input aria-label="Copy range start column (source index)" type="number" min="0" step="1" value={copyRange.column} onChange={(event) => { const value = event.currentTarget.value; setCopyRange((old) => ({ ...old, column: value })) }} /></label>
+          <label>End row (source index) <input aria-label="Copy range end row (source index)" type="number" min="0" step="1" value={copyRange.endRow} onChange={(event) => { const value = event.currentTarget.value; setCopyRange((old) => ({ ...old, endRow: value })) }} /></label>
+          <label>End column (source index) <input aria-label="Copy range end column (source index)" type="number" min="0" step="1" value={copyRange.endColumn} onChange={(event) => { const value = event.currentTarget.value; setCopyRange((old) => ({ ...old, endColumn: value })) }} /></label>
+          <button type="button" onClick={copySelectedRange} disabled={loading}>Copy range</button>
+        </fieldset>
       </>}
     </header>
     {changedBanner}
@@ -291,8 +330,9 @@ function CsvSurface({ props, sourceMode }: { props: SurfaceProps; sourceMode: bo
       <table style={tableStyle}>
         {header.length > 0 && <thead><tr>{header.map((title, column) => <th key={column} style={cellStyle}>
           <button type="button" onClick={() => !metadata?.paged && void sortColumn(column)} disabled={Boolean(metadata?.paged)}>{title || `Column ${column + 1}`}</button>
+          {!readOnly && <button type="button" aria-label={`Copy column ${column} (source index)`} onClick={() => void copySelection({ column })} disabled={loading}>Copy column</button>}
           {!readOnly && <button type="button" aria-label={`Delete column ${column + 1}`} onClick={() => void deleteColumn(column)} disabled={loading}>Delete column</button>}
-        </th>)}</tr></thead>}
+        </th>)}{!readOnly && <th style={cellStyle}><button type="button" aria-label="Copy row 0 (source index)" onClick={() => void copySelection({ row: 0 })} disabled={loading}>Copy row 0</button></th>}</tr></thead>}
         <tbody>{dataRows.map((row) => <tr key={row.index}>
           {row.cells.map((cell, column) => <td key={column} style={cellStyle} onDoubleClick={() => void copyCell(row.index, column)}>
             {readOnly ? <span>{cell}</span> : <input
@@ -301,7 +341,11 @@ function CsvSurface({ props, sourceMode }: { props: SurfaceProps; sourceMode: bo
               onChange={(event) => { const value = event.currentTarget.value; setCellDrafts((old) => ({ ...old, [`${row.index}:${column}`]: value })) }}
               onBlur={(event) => {
                 const value = event.currentTarget.value
-                if (value !== cell) void call(props, 'edit', { row: row.index, column, value }).then(() => {
+                if (value === cell) {
+                  setCellDrafts((old) => { const next = { ...old }; delete next[`${row.index}:${column}`]; return next })
+                  return
+                }
+                void call(props, 'edit', { row: row.index, column, value }).then(() => {
                   setCellDrafts((old) => { const next = { ...old }; delete next[`${row.index}:${column}`]; return next })
                   return refresh(page)
                 }).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)))
@@ -309,7 +353,10 @@ function CsvSurface({ props, sourceMode }: { props: SurfaceProps; sourceMode: bo
             />}
             <button type="button" onClick={() => void copyCell(row.index, column)}>Copy cell</button>
           </td>)}
-          {!readOnly && <td><button type="button" onClick={() => void call(props, 'deleteRow', { row: row.index }).then(() => refresh(page)).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)))}>Delete row</button></td>}
+          {!readOnly && <td>
+            <button type="button" aria-label={`Copy row ${row.index} (source index)`} onClick={() => void copySelection({ row: row.index })} disabled={loading}>Copy row</button>
+            <button type="button" onClick={() => void call(props, 'deleteRow', { row: row.index }).then(() => refresh(page)).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)))}>Delete row</button>
+          </td>}
         </tr>)}</tbody>
       </table>
     </div>
@@ -615,43 +662,58 @@ export function ViewerSurface(props: SurfaceProps) {
   const [loading, setLoading] = useState(false)
   const [retryKey, setRetryKey] = useState(0)
 
-  const refresh = async () => {
-    setLoading(true)
-    setError(null)
-    setUrl(null)
-    try {
-      const info = object(await call(props, 'metadata')) as ViewerMetadata
-      setMetadata(info)
-      if (info.error) {
-        setError(info.error)
-        return
-      }
-      if (info.changedOnDisk) {
-        setError('File changed on disk. Reload before previewing.')
-        return
-      }
-      if (buffer.kind === 'image' && info.previewable === false) {
-        setError(info.error ?? 'Failed to load file preview.')
-        return
-      }
-      if (buffer.kind === 'image' || buffer.kind === 'pdf' || buffer.kind === 'audio' || buffer.kind === 'video') {
-        const resource = object(await call(props, 'media'))
-        if (resource.changedOnDisk === true) {
-          setError(typeof resource.error === 'string' ? resource.error : 'File changed on disk. Reload before previewing.')
+  useEffect(() => {
+    let active = true
+    let mediaRequested = false
+    let leaseId: string | undefined
+    const refresh = async () => {
+      setLoading(true)
+      setError(null)
+      setUrl(null)
+      try {
+        const info = object(await call(props, 'metadata')) as ViewerMetadata
+        if (!active) return
+        setMetadata(info)
+        if (info.error) {
+          setError(info.error)
           return
         }
-        const resourceUrl = string(resource.url)
-        if (!resourceUrl) throw new Error(typeof resource.error === 'string' ? resource.error : 'The viewer resource is unavailable.')
-        setUrl(resourceUrl)
+        if (info.changedOnDisk) {
+          setError('File changed on disk. Reload before previewing.')
+          return
+        }
+        if (buffer.kind === 'image' && info.previewable === false) {
+          setError(info.error ?? 'Failed to load file preview.')
+          return
+        }
+        if (buffer.kind === 'image' || buffer.kind === 'pdf' || buffer.kind === 'audio' || buffer.kind === 'video') {
+          leaseId = crypto.randomUUID()
+          mediaRequested = true
+          const resource = object(await call(props, 'media', { leaseId }))
+          if (!active) {
+            void call(props, 'release', { leaseId }).catch(() => {})
+            return
+          }
+          if (resource.changedOnDisk === true) {
+            setError(typeof resource.error === 'string' ? resource.error : 'File changed on disk. Reload before previewing.')
+            return
+          }
+          const resourceUrl = string(resource.url)
+          if (!resourceUrl) throw new Error(typeof resource.error === 'string' ? resource.error : 'The viewer resource is unavailable.')
+          setUrl(resourceUrl)
+        }
+      } catch (cause) {
+        if (active) setError(cause instanceof Error ? cause.message : String(cause))
+      } finally {
+        if (active) setLoading(false)
       }
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause))
-    } finally {
-      setLoading(false)
     }
-  }
-
-  useEffect(() => { void refresh() }, [buffer.id, buffer.contentRevision, buffer.external, buffer.kind, retryKey])
+    void refresh()
+    return () => {
+      active = false
+      if (mediaRequested && leaseId !== undefined) void call(props, 'release', { leaseId }).catch(() => {})
+    }
+  }, [buffer.id, buffer.contentRevision, buffer.external, buffer.kind, retryKey, sourceMode])
 
   const retry = () => setRetryKey((value) => value + 1)
   const reload = async () => {

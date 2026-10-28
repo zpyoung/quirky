@@ -1080,8 +1080,7 @@
       "deps": [
         "sa-browser-agent"
       ],
-      "status": "in-progress",
-      "lane": 5
+      "status": "done"
     },
     {
       "id": "m4-hosting-ui-review-provider-parity",
@@ -1110,8 +1109,7 @@
         "sa-browser-pane",
         "sa-browser-profiles-settings"
       ],
-      "status": "in-progress",
-      "lane": 8
+      "status": "done"
     },
     {
       "id": "sb-mobile-install-links",
@@ -1149,7 +1147,7 @@
         "sa-browser-profiles-settings",
         "sa-browser-agent-extras"
       ],
-      "status": "todo"
+      "status": "done"
     },
     {
       "id": "sa-browser-native-identity",
@@ -1236,8 +1234,7 @@
       "deps": [
         "m6-heimdall-core"
       ],
-      "status": "in-progress",
-      "lane": 11
+      "status": "done"
     },
     {
       "id": "m6-orchestration-idle-pointer-shutdown",
@@ -1249,8 +1246,7 @@
       "deps": [
         "m6-orchestration-core"
       ],
-      "status": "in-progress",
-      "lane": 1
+      "status": "done"
     },
     {
       "id": "m5-automations-dispatch-remote-and-args",
@@ -1348,8 +1344,7 @@
       "deps": [
         "m2-editor-complete-remaining-flows"
       ],
-      "status": "in-progress",
-      "lane": 6
+      "status": "done"
     },
     {
       "id": "m7-sweep-automation-completion",
@@ -1363,8 +1358,7 @@
       "deps": [
         "m7-sweep-automation"
       ],
-      "status": "in-progress",
-      "lane": 12
+      "status": "done"
     },
     {
       "id": "m7-orchestration-heimdall-unbuilt-flows",
@@ -1402,6 +1396,18 @@
       ],
       "deps": [],
       "status": "done"
+    },
+    {
+      "id": "m7-ledger-remote-host-flows",
+      "milestone": "M7",
+      "title": "Build unimplemented SSH-host ledger workspace ownership/routing, remote import/evidence and selected-runtime availability from ledger.md after public host registration/incarnation lookup, remote repo/workspace identity and generation-fenced filesystem/execution APIs exist. Current ledger roots are local; never dereference SSH paths locally, invent synthetic generations or fall back to local reads. Preserve independent local ledger behavior and existing remote automation owner boundaries. Block if the public host prerequisite remains absent; this is unbuilt functionality, not verification/review/debugging.",
+      "docs": [
+        "ledger.md"
+      ],
+      "deps": [
+        "m7-sweep-automation-completion"
+      ],
+      "status": "blocked"
     },
     {
       "id": "m7-test-triage",

@@ -35,6 +35,19 @@ describe('mobile RPC authorization', () => {
     expect(() => assertMobileCallAllowed('quirky.editor/open', { worktree: 'wt', path: '../secret' })).toThrow()
   })
 
+  test('admits only empty-parameter compact loop summaries as read-only mobile access', () => {
+    expect(() => assertMobileCallAllowed('quirky.loops/summaries', {})).not.toThrow()
+    for (const params of [{ worktree: 'worktree-1' }, { includeEnded: true }, { token: 'secret' }]) {
+      expect(() => assertMobileCallAllowed('quirky.loops/summaries', params)).toThrow()
+    }
+    for (const method of [
+      'quirky.loops/list', 'quirky.loops/get', 'quirky.loops/history', 'quirky.loops/iterations',
+      'quirky.loops/create', 'quirky.loops/edit', 'quirky.loops/pause', 'quirky.loops/resume', 'quirky.loops/stop'
+    ]) {
+      expect(() => assertMobileCallAllowed(method, {})).toThrow()
+    }
+  })
+
   test('admits only bounded page bundles, safe agent catalog, phone preferences, and shipped workspace consumers', () => {
     expect(() => assertMobileCallAllowed('quirky.mobile/agentCatalog', {})).not.toThrow()
     expect(() => assertMobileCallAllowed('quirky.mobile/agentCatalog', { rawAgents: true })).toThrow()

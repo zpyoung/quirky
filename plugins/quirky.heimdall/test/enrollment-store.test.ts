@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import type { PluginContext, Schema } from '@quirky/protocol'
 import type { AuthorizedEnrollment, Enrollment, EnrollmentInput, KernelOptions, KernelStore, KindRegistry, OrchestrationPort, WatcherKind } from '../src/contracts'
 import { openPluginStore } from '../../../packages/daemon/src/plugins/stores'
+import { HostPowerService } from '../../../packages/daemon/src/host-power'
 import { createEnrollmentService } from '../src/enrollment'
 import { createKindRegistry } from '../src/registry'
 import { createKernelStore } from '../src/store'
@@ -35,6 +36,7 @@ function makeContext(options: {
     dir: home,
     dataDir,
     home,
+    hostPower: new HostPowerService(() => {}, null).forPlugin('quirky.heimdall', () => false),
     log() {},
     provide() {},
     emit() { return false },

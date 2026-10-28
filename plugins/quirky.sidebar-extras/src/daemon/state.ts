@@ -11,6 +11,7 @@ export type Preferences = {
   workspaceActivityWindowBeforeLiveOnly: NonLiveActivityWindow
   hideCompletedReviewWorkspaces: boolean
   hidePassingCheckWorkspaces: boolean
+  hideAutomationCreated: boolean
 }
 
 export type ActiveWorkspace = { worktreeId: string; instanceId: string }
@@ -31,6 +32,7 @@ export type SetPatch = {
   showSleepingWorkspaces?: boolean
   hideCompletedReviewWorkspaces?: boolean
   hidePassingCheckWorkspaces?: boolean
+  hideAutomationCreated?: boolean
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
@@ -39,7 +41,8 @@ export const DEFAULT_PREFERENCES: Preferences = {
   alwaysShowDefaultBranchWorkspace: true,
   workspaceActivityWindowBeforeLiveOnly: 'all',
   hideCompletedReviewWorkspaces: false,
-  hidePassingCheckWorkspaces: false
+  hidePassingCheckWorkspaces: false,
+  hideAutomationCreated: false
 }
 
 const nonLiveWindows: readonly NonLiveActivityWindow[] = ['all', 'today', 'week', 'month', 'custom']
@@ -52,7 +55,8 @@ const SET_KEYS: Readonly<Partial<Record<string, true>>> = {
   hideSleepingWorkspaces: true,
   showSleepingWorkspaces: true,
   hideCompletedReviewWorkspaces: true,
-  hidePassingCheckWorkspaces: true
+  hidePassingCheckWorkspaces: true,
+  hideAutomationCreated: true
 }
 const ACTIVATE_KEYS: Readonly<Partial<Record<string, true>>> = { client: true, worktree: true }
 const DIRTY_KEYS: Readonly<Partial<Record<string, true>>> = { worktree: true }
@@ -144,6 +148,10 @@ export function validateSetParams(
     }
     patch.hidePassingCheckWorkspaces = params.hidePassingCheckWorkspaces
   }
+  if (params.hideAutomationCreated !== undefined) {
+    if (typeof params.hideAutomationCreated !== 'boolean') invalid(context, 'hideAutomationCreated must be a boolean')
+    patch.hideAutomationCreated = params.hideAutomationCreated
+  }
   return { client, patch }
 }
 
@@ -193,7 +201,8 @@ function hydratePreferences(serialized: string | null): Preferences {
       ? value.workspaceActivityWindowBeforeLiveOnly
       : DEFAULT_PREFERENCES.workspaceActivityWindowBeforeLiveOnly,
     hideCompletedReviewWorkspaces: value.hideCompletedReviewWorkspaces === true,
-    hidePassingCheckWorkspaces: value.hidePassingCheckWorkspaces === true
+    hidePassingCheckWorkspaces: value.hidePassingCheckWorkspaces === true,
+    hideAutomationCreated: value.hideAutomationCreated === true
   }
 }
 
@@ -222,7 +231,9 @@ function mergePreferences(current: Preferences, patch: SetPatch): Preferences {
   if (patch.hidePassingCheckWorkspaces !== undefined) {
     next.hidePassingCheckWorkspaces = patch.hidePassingCheckWorkspaces
   }
-
+  if (patch.hideAutomationCreated !== undefined) {
+    next.hideAutomationCreated = patch.hideAutomationCreated
+  }
   if (explicitWindow === undefined) {
     if (patch.hideSleepingWorkspaces === true) {
       if (current.workspaceActivityWindow !== 'live-only') {
@@ -246,6 +257,7 @@ function samePreferences(left: Preferences, right: Preferences): boolean {
     left.alwaysShowDefaultBranchWorkspace === right.alwaysShowDefaultBranchWorkspace &&
     left.hideCompletedReviewWorkspaces === right.hideCompletedReviewWorkspaces &&
     left.hidePassingCheckWorkspaces === right.hidePassingCheckWorkspaces &&
+    left.hideAutomationCreated === right.hideAutomationCreated &&
     left.workspaceActivityWindowBeforeLiveOnly === right.workspaceActivityWindowBeforeLiveOnly
 }
 

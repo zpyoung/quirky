@@ -231,11 +231,11 @@ test('C5: CLI values stay literal and exec accepts only shipping page commands',
     expect(alias.code).toBe(0)
     expect((await call(h.client, 'tabShow', { page: page.browserPageId }) as { tab: { url: string } }).tab.url).toBe(`${h.fixtureUrl}first`)
 
-    for (const command of ['cookies get', 'full-screenshot', 'network har start', 'keyboard type hidden']) {
+    for (const command of ['close', 'launch', 'tab new', '--cdp 9222 snapshot', '--session other click "#text"']) {
       const rejected = call(h.client, 'exec', { page: page.browserPageId, command })
       await expect(rejected).rejects.toBeInstanceOf(Error)
     }
-    const unsupportedCli = await runBrowserCli(h, ['browser', 'exec', '--page', page.browserPageId, '--command', 'cookies get', '--json'])
+    const unsupportedCli = await runBrowserCli(h, ['browser', 'exec', '--page', page.browserPageId, '--command', 'launch', '--json'])
     expect(unsupportedCli.code).not.toBe(0)
 
   } finally { await h.cleanup() }

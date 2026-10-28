@@ -13,6 +13,7 @@ import type {
   EditorReadResult,
   EditorServices,
   EditorStateData,
+  ExplorerParams,
   EditorTransferBeginParams,
   EditorTransferChunkParams,
   EditorTransferKind,
@@ -206,7 +207,14 @@ export class EditorDaemon {
       canClose: (params) => this.canClose(params as unknown as CloseParams),
       reopen: (params, caller) => this.reopen(params as { worktree?: string; focus?: boolean }, caller),
       view: (params) => this.view(params as ViewParams),
-      explorer: (params, caller) => this.explorerService.call(params as Parameters<ExplorerService['call']>[0], caller),
+      explorer: async (params, caller) => {
+        const request = params as ExplorerParams
+        const result = await this.explorerService.call(request, caller)
+        if (request.action === 'navigate' || request.action === 'select' || request.action === 'reveal' || request.action === 'preferences') {
+          this.emit()
+        }
+        return result
+      },
       mutate: (params, caller) => this.mutate(params as MutateParams, caller),
       history: (params, caller) => this.fileHistory(params as { worktree?: string; action: 'state' | 'undo' | 'redo' }, caller),
       quickOpen: (params, caller) => this.quickOpen(params as { worktree?: string; action: 'search' | 'record' | 'history' | 'clearHistory'; query?: string; path?: string; limit?: number }, caller),

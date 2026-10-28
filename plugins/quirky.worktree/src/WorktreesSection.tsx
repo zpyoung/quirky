@@ -16,6 +16,7 @@ import { useNow } from './StatusDot'
 import { Tree } from './Tree'
 import { TrustDialog } from './TrustDialog'
 import { UpdateDialog } from './UpdateDialog'
+import { useAutomationAvailability } from './useAutomationAvailability'
 import { useSidebarActivity } from './useSidebarActivity'
 import { useTree } from './useTree'
 import { useLoopStatus } from './useLoopStatus'
@@ -53,6 +54,7 @@ export function WorktreesSection({ context, report, requests }: Props) {
   const [requested, setRequested] = useState<{ repoId?: string } | null>(null)
   const [deleting, setDeleting] = useState<ReadonlySet<string>>(new Set())
   const [kept, setKept] = useState<KeptBranch[]>([])
+  const [expandedAutomationId, setExpandedAutomationId] = useState<string | null>(null)
   const lastReport = useRef('')
 
   useEffect(() => {
@@ -63,7 +65,6 @@ export function WorktreesSection({ context, report, requests }: Props) {
   useEffect(() => requests?.attach(setRequested), [requests])
 
   const selectedId = selectedWorktree(layout)
-
   const activity = useSidebarActivity(context, selectedId, loaded)
   const loopStatus = useLoopStatus(context, worktrees, loaded)
   const selectedInstance = worktrees.find((worktree) => worktree.id === selectedId)?.instanceId
@@ -79,6 +80,25 @@ export function WorktreesSection({ context, report, requests }: Props) {
     () => currentProjection ? new Set(currentProjection.visibleIds) : null,
     [currentProjection]
   )
+  const automationDetailWorktreeId = expandedAutomationId !== null &&
+    (visibleIds === null || visibleIds.has(expandedAutomationId))
+      ? expandedAutomationId
+      : null
+  const expandedAutomationWorktree = automationDetailWorktreeId === null
+    ? null
+    : worktrees.find((worktree) => worktree.id === automationDetailWorktreeId) ?? null
+  const automationAvailability = useAutomationAvailability(context, expandedAutomationWorktree)
+  useEffect(() => {
+    if (!loaded || expandedAutomationId === null) return
+    const expanded = worktrees.find((worktree) => worktree.id === expandedAutomationId)
+    if (
+      expanded?.automationProvenance?.kind !== 'created-by-automation' ||
+      (visibleIds !== null && !visibleIds.has(expandedAutomationId))
+    ) setExpandedAutomationId(null)
+  }, [expandedAutomationId, loaded, worktrees, visibleIds])
+  const toggleAutomationDetails = useCallback((worktreeId: string) => {
+    setExpandedAutomationId((current) => current === worktreeId ? null : worktreeId)
+  }, [])
   const [dropPreview, setDropPreview] = useState<MembershipTarget | null>(null)
   const [separatorState, setSeparatorState] = useState<SeparatorReport>(() => ({
     enabled: readSeparatorSetting(context),
@@ -142,6 +162,7 @@ export function WorktreesSection({ context, report, requests }: Props) {
       pending,
       visibleIds,
       activity: currentProjection,
+      automationAvailability,
       activityStatus: activity.status,
       activityError: activity.error,
       separators: separatorState,
@@ -151,7 +172,7 @@ export function WorktreesSection({ context, report, requests }: Props) {
       loopStatus,
       notices: kept.map((item) => ({ kind: 'kept-branch', branch: item.branch, repoId: item.repoId }))
     })
-  }, [repos, groups, shown, sessions, selectedId, pending, visibleIds, currentProjection, activity.status, activity.error, separatorState, dropPreview, dialog, trust, fallbacks, kept, now, loopStatus])
+  }, [repos, groups, shown, sessions, selectedId, pending, visibleIds, currentProjection, automationAvailability, activity.status, activity.error, separatorState, dropPreview, dialog, trust, fallbacks, kept, now, loopStatus])
 
   useEffect(() => {
     if (!loaded) return
@@ -248,6 +269,9 @@ export function WorktreesSection({ context, report, requests }: Props) {
           groups={groups}
           sessions={sessions}
           selectedId={selectedId}
+          automationExpandedId={expandedAutomationId}
+          automationAvailability={automationAvailability}
+          onToggleAutomationDetails={toggleAutomationDetails}
           now={now}
           separatorEnabled={separatorEnabled}
           openDialog={setDialog}
