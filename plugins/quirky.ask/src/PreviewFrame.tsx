@@ -6,7 +6,7 @@ import rehypeRaw from 'rehype-raw'
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
 import remarkGfm from 'remark-gfm'
 import type { AskPreview } from '@quirky/protocol'
-import { ReadOnlyPreview } from '@quirky/ui'
+import { ReadOnlyPreview } from '@quirky/ui/read-only-preview'
 
 const PREVIEW_TAGS = [
   'a',

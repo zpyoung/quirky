@@ -27,9 +27,9 @@ const FIELDSET_STYLE: CSSProperties = {
   gap: 'var(--ui-space-8)',
   minWidth: 0,
   margin: 0,
-  padding: 'var(--ui-space-12)',
-  border: 'var(--ui-border-width) solid var(--ui-border)',
-  borderRadius: 'var(--ui-radius-control)'
+  padding: 0,
+  border: 0,
+  whiteSpace: 'pre-wrap'
 }
 
 const ACTIONS_STYLE: CSSProperties = {
@@ -163,21 +163,28 @@ export function AskCard({ ask, context, onResolved }: Props) {
         </>
       ) : (
         <>
-          {ask.spec.questions.map((question) => (
-            <fieldset key={question.id} data-question={question.id} style={FIELDSET_STYLE}>
-              <legend>
-                {question.header && <><strong>{question.header}</strong><br /></>}
-                <span data-question-text style={QUESTION_TEXT_STYLE}>{question.question}</span>
-              </legend>
-              {!question.required && <Badge>(optional)</Badge>}
-              <QuestionField question={question} draft={drafts[question.id]!} onChange={(draft) => change(question.id, draft)} />
-              {errors[question.id] && (
-                <div role="alert">
-                  <Badge tone="failing">{errors[question.id]}</Badge>
+          {ask.spec.questions.map((question) => {
+            const grouped = question.type === 'select' || question.type === 'multiselect' || question.type === 'confirm'
+            return (
+              <fieldset key={question.id} data-question={question.id} style={FIELDSET_STYLE}>
+                {(grouped || question.header) && (
+                  <legend>
+                    {question.header && <><strong>{question.header}</strong>{grouped && <br />}</>}
+                    {grouped && <span data-question-text style={QUESTION_TEXT_STYLE}>{question.question}</span>}
+                  </legend>
+                )}
+                {!question.required && <div style={{ alignSelf: 'flex-start' }}><Badge>(optional)</Badge></div>}
+                <div data-question-text={grouped ? undefined : true}>
+                  <QuestionField question={question} draft={drafts[question.id]!} onChange={(draft) => change(question.id, draft)} />
                 </div>
-              )}
-            </fieldset>
-          ))}
+                {errors[question.id] && (
+                  <div role="alert">
+                    <Badge tone="failing">{errors[question.id]}</Badge>
+                  </div>
+                )}
+              </fieldset>
+            )
+          })}
           <div style={ACTIONS_STYLE}>
             <Button disabled={busy} onClick={() => void dismiss()}>
               Dismiss

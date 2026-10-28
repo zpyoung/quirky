@@ -589,90 +589,6 @@ textarea {
   color: var(--muted);
 }
 
-.structured {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.transcript {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--compat-px-10) var(--compat-px-14);
-}
-
-.msg {
-  margin: 0 0 var(--compat-px-10);
-}
-
-.msg-role {
-  font-size: var(--compat-px-11);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--muted);
-}
-
-.msg-text {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.msg-user .msg-text {
-  background: var(--bg-raised);
-  border-radius: var(--compat-px-6);
-  padding: var(--compat-px-6) var(--compat-px-10);
-}
-
-.msg-tool {
-  color: var(--muted);
-  font-size: var(--compat-px-12);
-}
-
-.msg-tool summary {
-  cursor: pointer;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.msg-tool pre {
-  margin: var(--compat-px-4) 0 0;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  font: var(--compat-px-12) ui-monospace, Menlo, monospace;
-}
-
-.msg-result,
-.msg-system {
-  color: var(--muted);
-  font-size: var(--compat-px-12);
-  border-top: var(--compat-px-1) solid var(--border);
-  padding-top: var(--compat-px-4);
-  white-space: pre-wrap;
-}
-
-.transcript-bar {
-  display: flex;
-  justify-content: flex-end;
-  padding: var(--compat-px-4) var(--compat-px-14) 0;
-  color: var(--muted);
-  font-size: var(--compat-px-12);
-}
-
-.transcript-bar label {
-  display: flex;
-  align-items: center;
-  gap: var(--compat-px-6);
-}
-
-.session-ended {
-  padding: var(--compat-px-8) var(--compat-px-12);
-  border-top: var(--compat-px-1) solid var(--border);
-  background: var(--bg-raised);
-  color: var(--muted);
-}
-
 .check-row {
   flex-direction: row !important;
   align-items: center;
@@ -682,18 +598,6 @@ textarea {
   margin: 0;
   color: var(--danger);
 }
-
-.structured-input {
-  display: flex;
-  gap: var(--compat-px-8);
-  padding: var(--compat-px-8);
-  border-top: var(--compat-px-1) solid var(--border);
-}
-
-.structured-input button {
-  align-self: flex-end;
-}
-
 
 .diff-host,
 .diff-host .cm-mergeView {

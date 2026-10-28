@@ -66,5 +66,49 @@
 - **Revisit if:** Linux/Windows or native-host validation is explicitly scheduled
 - **Source:** deferred: platform
 
+## D7: Integrate audited disjoint deltas and preserve the incoming restyle contracts
+- **Question:** component attribution and the sole roadmap catch-up
+- **Options:** accept worker reports without checking scope; duplicate Structured changes; audit HEAD/scope and reuse committed incoming source
+- **Chose:** both component HEADs remained089808f1 with exact assigned tracked deltas; parent committed Ask3f6e7113 and Notifications4a5d2dfe, merged and removed both trees. Empty unused Structured tree removed. Catch-up85327495 retained agents/git changes and unioned the sole lint-list conflict
+- **Why:** avoids cross-worktree writes and competing implementations. Both incoming decision logs were read in full; agents D1–D15 and git D1–D18 preserve exact-window routing, existing authority and bounded proof. No behavioral contract conflict was found
+- **Evidence:** actual HEAD/status/diff barrier; AskIncomingConstraints result; source merge85327495; full Session and all three item plugin IDs present in canonical lint list
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** an actual controller merge/type failure requires recovery
+- **Source:** assumed — autonomous
+
+## D8: Isolate the preview CSS-text import from the host module graph
+- **Question:** actual renderer reload lost all shared token definitions even though typecheck and UI build exited0
+- **Options:** duplicate tokens in plugin CSS; tolerate unstyled controls; move the preview primitive to its own public subpath
+- **Chose:** clean cutover to `@quirky/ui/read-only-preview`, no root re-export. Ask remains its sole consumer. The helper still embeds canonical tokens for the opaque frame
+- **Why:** before the change, served main.css had zero --ui-* definitions and computed --ui-space-12 was empty; after isolating the CSS-text import and rebuilding, main.css defines --ui-space-12:12px and actual controls compute4px8px padding. The observed root module graph caused a CSS-text/stylesheet import collision; no bundler-wide guarantee is inferred
+- **Evidence:** known-red-token-omission.webp; actual fetch/computed-style observations; final build and browser token/padding proof; source consumer grep
+- **Reversibility:** medium (public presentation subpath)
+- **Confidence:** high
+- **Revisit if:** bundler import-mode isolation is explicitly fixed and verified
+- **Source:** supersedes ui-restyle-ask D4 (export location only)
+
+## D9: Repair visible composition and typography without changing input authority
+- **Question:** first actual Ask screenshot duplicated text/number/date labels and stretched optional badges; source inspection found missing selected-option styling and mono size used as a font family
+- **Options:** hide fields; add plugin CSS; use existing shared variant/layout/form semantics correctly
+- **Chose:** option primary/secondary variant plus wrapping; one visible label per basic question, grouped legends retained, optional badge stays compact, plain pre-wrap text without split/map arrays. Notification row IDs are per-instance. Structured code uses actual monospace family and shared mono size. Dead Ask/Notifications/Structured global rules removed after consumer search
+- **Why:** these are presentation composition fixes; original controlled values, handlers, draft timing, validation and canonical response shapes remain unchanged
+- **Evidence:** initial-duplicate-labels.webp versus ask-final-dark.webp; QuestionField/AskCard/NotificationsView/MessageRow source; actual Structured pre computes ui-monospace,Menlo,monospace at11.5px
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** end-phase behavior tests find a control/label regression
+- **Source:** assumed — autonomous
+
+## D10: Report exact compiler and real-renderer evidence, not full parity or golden approval
+- **Question:** what this build-first item has actually verified
+- **Options:** claim complete suite/native/provider/golden approval; run prohibited campaigns; retain bounded command and surface receipts
+- **Chose:** final canonical `bun run typecheck` passed UIlint/root/mobile/prepared-desktop in31.79s. Final UIbuild emitted11host files and25plugin modules. Actual owned renderer exercised six Ask input types and submission with canonical answered envelope, dark→light mounted preview (empty sandbox, inert a without href, zero scripts, actual dark/light body backgrounds), notification dependent/independent switches, relative-path refusal, native range keyboard commit saved5%, and test-feedback toast with intercepted native notifier
+- **Why:** genuine visible proof, without launching accounts/providers/native banners or claiming independent screenshot scores. Structured smoke uses explicitly seeded private exited-session/journal fixtures, then public view/messages APIs: assistant/tool/system rows, expanded tool details, Show all events filter, ended state, dark/light and1000x700 no horizontal overflow. This is not provider send/resume/approval-turn acceptance. Pageerrors remained[]
+- **Evidence:** .quirk/build-loop/ui-restyle-ask/receipts.json and13screenshots including known-red; bg3 first typecheck37.19s, bg5 final31.79s; actual supervisor/API/browser output
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** end-phase suites, native runs or independent golden review reveal a defect
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-Combined spec, unchanged feature contracts and additive shared ReadOnlyPreview contract prepared. Next commit contracts, dispatch disjoint Ask/Notifications/Structured presentation workers, integrate lint/dependencies and remove obsolete global styles, catch up once, typecheck/build/minimum actual renderer smoke, record exact evidence and land through authoritative queue. No tests, full dogfood, review or screenshot scoring under build-first.
+Ready to land after final source typecheck and actual renderer smoke. Both incoming logs read in full; sole roadmap catch-up85327495; no new feature-flow deferral. All implementers/check jobs/owned browser sessions and private daemon/Chromium service finished; supervisor exited0 after ProcessScope cleanup. Next commit final owned source/docs, detach, run authoritative queue land ui-restyle-ask and await receipt in this turn. No tests, full dogfood, review, native/provider-turn or screenshot scoring pass is claimed.
