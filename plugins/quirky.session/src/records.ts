@@ -157,6 +157,33 @@ function importV1Sessions(store: PluginStore, home: string): void {
   }
 }
 
+function ensureBadgeAndPointerSchema(store: PluginStore): void {
+  const columns = store.all<{ name: string }>('PRAGMA table_info(sessions)')
+  if (!columns.some(({ name }) => name === 'badges')) {
+    store.exec('ALTER TABLE sessions ADD COLUMN badges TEXT')
+  }
+  store.exec(`
+    CREATE TABLE IF NOT EXISTS session_pointer_operations (
+      operation_id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      expected_incarnation TEXT NOT NULL,
+      payload_hash TEXT NOT NULL,
+      phase TEXT NOT NULL CHECK (phase IN ('reserved', 'write_attempted', 'enter_attempted', 'settled')),
+      result_json TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS session_pointer_operations_updated_at ON session_pointer_operations(updated_at)
+  `)
+}
+
+function ensureBackgroundColumn(store: PluginStore): void {
+  const columns = store.all<{ name: string }>('PRAGMA table_info(sessions)')
+  if (!columns.some(({ name }) => name === 'background')) {
+    store.exec('ALTER TABLE sessions ADD COLUMN background INTEGER NOT NULL DEFAULT 0')
+  }
+}
+
 export function sessionMigrations(home: string): StoreMigration[] {
   return [
     (store) => {
@@ -208,27 +235,13 @@ export function sessionMigrations(home: string): StoreMigration[] {
       store.exec('ALTER TABLE sessions ADD COLUMN badges TEXT')
     },
     (store) => {
-      // Version 8 diverged between the two branches; finish both schema additions for either store.
-      const columns = store.all<{ name: string }>('PRAGMA table_info(sessions)')
-      if (!columns.some(({ name }) => name === 'badges')) {
-        store.exec('ALTER TABLE sessions ADD COLUMN badges TEXT')
-      }
-      store.exec(`
-        CREATE TABLE IF NOT EXISTS session_pointer_operations (
-          operation_id TEXT PRIMARY KEY,
-          session_id TEXT NOT NULL,
-          expected_incarnation TEXT NOT NULL,
-          payload_hash TEXT NOT NULL,
-          phase TEXT NOT NULL CHECK (phase IN ('reserved', 'write_attempted', 'enter_attempted', 'settled')),
-          result_json TEXT,
-          created_at INTEGER NOT NULL,
-          updated_at INTEGER NOT NULL
-        );
-        CREATE INDEX IF NOT EXISTS session_pointer_operations_updated_at ON session_pointer_operations(updated_at)
-      `)
+      // Version 8 diverged between badges and pointer operations.
+      ensureBadgeAndPointerSchema(store)
     },
     (store) => {
-      store.exec('ALTER TABLE sessions ADD COLUMN background INTEGER NOT NULL DEFAULT 0')
+      // Older version 9 stores already have background but may not have pointer operations.
+      ensureBadgeAndPointerSchema(store)
+      ensureBackgroundColumn(store)
     }
   ]
 }

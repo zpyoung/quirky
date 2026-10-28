@@ -513,3 +513,65 @@ earlier prompt. CLI/API callers can pin the same content with
 `--trust-issue-command --trust-issue-command-hash <hash-from-error>`, or
 `--trust-setup --trust-setup-hash <hash-from-error>` for setup.
 Trust flags without a hash authorize the current call's script.
+
+## Heimdall fleet and controls
+
+`quirky.heimdall` provides the Heimdall sidebar entry, fleet view and watcher controls.
+Kinds register their enrollment and execution hooks through the public plugin API.
+Enrollment refuses an unknown kind; kind-specific commands such as `objective` require
+that kind's public detail provider.
+
+```sh
+quirky heimdall list --json
+quirky heimdall show <watcher-id>
+quirky heimdall pause <watcher-id> --json
+quirky heimdall budget <watcher-id> --hours 2 --turns none --json
+quirky heimdall debug <watcher-id> --out /tmp/heimdall-debug.json
+```
+
+Controls use the last observed owner fence and command revision. A changed revision is
+refused, so refresh the detail before submitting another command. Results distinguish
+`applied`, `refused` and `indeterminate`; an uncertain reply is not permission to repeat
+an external effect.
+
+Pause drains the current tick before committing. Resume cannot undo Disarm and refuses
+an exhausted budget or pending worker question. A budget limit of zero is valid; `none`
+means unlimited. Objective concurrency is limited to one in folder workspaces.
+
+Deleting a watcher removes its saved history and requires confirmation unless `--yes`
+authorizes it. Worker sessions keep running. `stop-worker` instead uses the exact recorded
+session and process incarnation; missing or unverifiable identity is refused.
+
+The API exposes `quirky.heimdall/fleet`, `detail`, `command` and `debugReport`.
+`fleetChanged` pushes newer snapshots; a failed refresh retains the last confirmed view.
+The schema-2 debug JSON includes bounded journal and trace history. Approval-request and
+terminal transitions go through `quirky.notifications`, including its enabled, focus and
+cooldown policy. Disabling that plugin silences delivery.
+
+### Optional Claude owner
+
+An enrollment can set `owner: { agent: "claude", model?, effort? }` and
+`ownerInterventionCapability: "off" | "gated" | "on"` (default `"off"`).
+Without an owner, deterministic watcher behavior is unchanged. A configured owner receives
+typed deviations, including full rejected-plan and operator-edit details, in one resumable
+native conversation. Repeated evidence keys do not start duplicate turns.
+
+```sh
+quirky heimdall owner-inspect --watcher-id <watcher-id> --json
+quirky heimdall owner-ready --watcher-id <watcher-id> --report-key <issued-key> --json
+```
+
+`ownerInspect` exposes the current issued report path and key. Write the intervention JSON
+only to that private path, then submit the key through `ownerReady`; the API never accepts
+an arbitrary report path. Reports are limited to 64 KiB and reject malformed, stale or
+symlinked input. Kind-specific proposals use the registered kind's public `ownerAction`
+hook. Every proposal still requires both the owner-intervention grant and the native
+action's capability, exact approvals and current evidence.
+
+An owner that stays silent for 15 minutes receives one reminder; another 15 minutes parks
+the watcher with `owner-escalation`. Only answering that exact escalation resumes its owner
+flow. Deleting a watcher or disabling Heimdall releases its owner connection without
+stopping worker or independent sessions. Unconfirmed cleanup retains uncertainty rather
+than starting a replacement conversation.
+
+Use `quirky heimdall --help` and `quirky api --json` for the live commands and schemas.

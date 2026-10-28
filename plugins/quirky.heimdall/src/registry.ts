@@ -1,4 +1,5 @@
 import { checkSchemaDeclaration, isContributionName, isKind, isPluginId } from '@quirky/protocol'
+import { parseOwnerDeviation } from './owner/runtime'
 import type { PluginContext, Schema } from '@quirky/protocol'
 import type {
   AuthorizedEnrollment,
@@ -126,10 +127,13 @@ function isStringArray(value: unknown): boolean {
 }
 
 function isDeviation(value: unknown): boolean {
-  return value === undefined || (record(value) && isJsonValue(value) && typeof value.kind === 'string' &&
-    optionalString(value, 'naturalKey') && optionalString(value, 'detail') &&
-    optionalString(value, 'dispatchId') && optionalString(value, 'messageId') &&
-    (!Object.hasOwn(value, 'trigger') || value.trigger === 'idle' || value.trigger === 'silent'))
+  if (value === undefined) return true
+  try {
+    parseOwnerDeviation(value)
+    return true
+  } catch {
+    return false
+  }
 }
 function isGateVerdict(value: unknown): value is GateVerdict {
   return record(value) && isJsonValue(value) &&
@@ -143,7 +147,7 @@ function isStopResult(value: unknown): value is StopResult {
   if (value.kind === 'terminal') return typeof value.state === 'string' && typeof value.reason === 'string'
   return value.kind === 'park' && typeof value.reason === 'string' &&
     ['budget', 'stop-predicate', 'worker-question', 'worker-escalation', 'coordinator-seat-lost', 'configuration-error'].includes(value.reason) &&
-    typeof value.detail === 'string'
+    typeof value.detail === 'string' && isDeviation(value.deviation)
 }
 
 function isPacingTier(value: unknown): value is PacingTier {
@@ -153,7 +157,7 @@ function isPacingTier(value: unknown): value is PacingTier {
 const requiredHooks = ['authorize', 'read', 'decide', 'execute'] as const
 const optionalHooks = [
   'validate', 'undo', 'describeEnrollment', 'describeSnapshot', 'resolveOutcome',
-  'preflight', 'pace', 'stop', 'reconcile'
+  'preflight', 'pace', 'stop', 'reconcile', 'ownerAction'
 ] as const
 
 function isOwnedHookReference(value: unknown, pluginId: string): value is string {
@@ -356,6 +360,13 @@ function adaptDescriptor(context: PluginContext, registration: KindRegistration)
     kind.reconcile = async (enrollment, snapshot, journal) => {
       const result = await context.call(hooks.reconcile!, { enrollment, snapshot, journal })
       if (typeof result !== 'boolean') throw new Error('reconcile hook must return a boolean')
+      return result
+    }
+  }
+  if (hooks.ownerAction) {
+    kind.ownerAction = async (intervention, snapshot, journal, enrollment) => {
+      const result = await context.call(hooks.ownerAction!, { intervention, snapshot, journal, enrollment })
+      if (!isKernelAction(result)) throw new Error('ownerAction hook returned an invalid action')
       return result
     }
   }
