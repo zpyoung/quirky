@@ -86,8 +86,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isProfile(value: unknown): value is BrowserProfile {
-  if (!isRecord(value)) return false
-  return typeof value.id === 'string' && typeof value.label === 'string' && (value.scope === 'default' || value.scope === 'isolated')
+  if (!isRecord(value) || typeof value.id !== 'string' || typeof value.label !== 'string' ||
+    (value.scope !== 'default' && value.scope !== 'isolated' && value.scope !== 'imported')) return false
+  const source = value.source
+  return source === undefined || typeof source === 'string' ||
+    (isRecord(source) && typeof source.browserFamily === 'string' && source.browserFamily.length > 0 &&
+      (source.profileName === undefined || typeof source.profileName === 'string') &&
+      typeof source.importedAt === 'number' && Number.isFinite(source.importedAt))
 }
 
 function isProfileUsage(value: unknown): value is ProfileUsage {
@@ -236,6 +241,11 @@ export function ImportDetails({ context, imports, loadError, onHideHint, onError
 
 export function profileSourceLabel(profile: BrowserProfile): string | null {
   if ('sourceLabel' in profile && typeof profile.sourceLabel === 'string' && profile.sourceLabel.trim()) return profile.sourceLabel
-  if ('source' in profile && typeof profile.source === 'string' && profile.source.trim()) return `Imported from ${profile.source}`
-  return null
+  if (!('source' in profile)) return null
+  const source: unknown = profile.source
+  if (typeof source === 'string' && source.trim()) return `Imported from ${source}`
+  if (!isRecord(source) || typeof source.browserFamily !== 'string') return null
+  const family = source.browserFamily.charAt(0).toUpperCase() + source.browserFamily.slice(1)
+  const profileName = typeof source.profileName === 'string' && source.profileName.trim() ? ` (${source.profileName})` : ''
+  return `Imported from ${family}${profileName}`
 }
