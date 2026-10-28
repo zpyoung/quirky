@@ -200,7 +200,8 @@ export class FakeWorld {
   resolveWorktree(params: any, context: PluginCtx): Worktree {
     this.resolveCalls.push(params)
     const selector = params.selector
-    if (selector === 'current' || selector === this.worktree.id || selector === this.worktree.name) return this.worktree
+    if (selector === 'current' || selector === this.worktree.id || selector === this.worktree.name ||
+      selector === `id:${this.worktree.id}` || selector === `path:${this.worktree.path}`) return this.worktree
     throw context.error('not-found', `no worktree matches ${selector}`)
   }
 
