@@ -37,7 +37,6 @@ export const ACCOUNTS_CSS = `
 .accounts-ui .credential-entry{display:flex;flex:1;gap:8px;min-width:0}
 .accounts-ui .credential-entry input{flex:1}
 .accounts-ui.usage-status-bar{align-items:center;display:flex;flex:1 1 auto;gap:6px;max-width:100%;min-width:0;position:relative;white-space:nowrap}
-.accounts-ui .usage-status-cta{max-width:min(520px,calc(100vw - 48px));min-width:0;white-space:normal}
 .accounts-ui .usage-measure{contain:layout paint;display:flex;gap:5px;height:0;left:0;overflow:hidden;pointer-events:none;position:absolute;top:0;visibility:hidden;width:0}
 .accounts-ui .usage-measure>*{flex:0 0 auto}
 .accounts-ui .usage-trigger,.accounts-ui .usage-refresh{align-items:center;display:inline-flex;flex:0 0 auto;gap:5px;padding:4px 7px}

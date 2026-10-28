@@ -27,6 +27,8 @@ function statusBadge(account: AccountSummary, activeId: string | null): { text: 
 
 function LoginLinkNotice({ context, store, pending, provider }: { context: UiPluginContext; store: AccountsUiStore; pending: PendingLogin | null; provider: ManagedProvider }) {
   const loginCancelling = useStore(store).loginCancelling
+  const [opening, setOpening] = useState(false)
+  const [openError, setOpenError] = useState(false)
   if (!pending || pending.provider !== provider) return null
   const isCodex = provider === 'codex'
   const loginUrl = pending.url
@@ -43,14 +45,19 @@ function LoginLinkNotice({ context, store, pending, provider }: { context: UiPlu
           store.notify('Could not copy the link', 'Use the Open link to continue sign-in in your browser.')
         }
       }}>Copy link</button>
-      {isCodex && <button type="button" onClick={async () => {
+      {isCodex && <button type="button" disabled={opening} onClick={async () => {
+        setOpening(true)
+        setOpenError(false)
         try {
           await context.call('quirky.terminal/openExternal', { target: loginUrl })
         } catch {
-          context.toast('Could not open sign-in link', 'The browser could not open the sign-in link. Copy it to continue or cancel sign-in.')
+          setOpenError(true)
+        } finally {
+          setOpening(false)
         }
-      }}>Open</button>}
+      }}>{opening ? 'Opening…' : 'Open'}</button>}
     </div>}
+    {openError && <p className="status-error" role="alert">Could not open the sign-in link. Try again or use Copy link to open it in your browser.</p>}
     {pending.status === 'pending' && <button type="button" disabled={loginCancelling} onClick={() => void store.cancelLogin()}>{loginCancelling ? 'Cancelling…' : 'Cancel'}</button>}
   </div>
 }
@@ -122,7 +129,7 @@ function ManagedAccountsSection({ context, store, provider }: { context: UiPlugi
         <button type="button" disabled={Boolean(anyPending)} onClick={() => void store.beginLogin('claude')}>{anyPending ? 'Signing in…' : 'Add Account'}</button>
         <details><summary aria-label="More sign-in options">More sign-in options</summary><button type="button" disabled={Boolean(anyPending)} onClick={() => void store.beginLogin('claude', { copyLink: true })}>Copy sign-in link instead</button></details>
       </div> : <button type="button" disabled={Boolean(anyPending)} onClick={() => void store.beginLogin('codex')}>{anyPending ? 'Signing in…' : 'Add Account'}</button>}
-      {pending?.provider === provider && <LoginLinkNotice context={context} store={store} pending={pending} provider={provider} />}
+      {pending?.provider === provider && <LoginLinkNotice key={pending.id} context={context} store={store} pending={pending} provider={provider} />}
     </section>
     {provider === 'claude' && <section className="section-card">
       <h3>When you switch accounts while Claude is running</h3>

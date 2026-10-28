@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'bun:test'
-import { RpcErrorCode, type QuirkyEvent } from '@quirky/protocol'
+import { RpcErrorCode, type QuirkyEvent, type WindowRoute } from '@quirky/protocol'
 import { bootWindow, closeWindows, installUiPlugin } from './fixtures/window-env'
 
 afterEach(async () => {
@@ -81,23 +81,54 @@ test('SC-41: with no window open the command fails saying so', async () => {
   expect(error.code).toBe(RpcErrorCode.Conflict)
 })
 
-test('SC-41: with two windows the command runs once, in the one that last reported focus', async () => {
+test('SC-41: ambiguous commands refuse and exact routes ignore the latest focus', async () => {
   const env = await bootWindow(writeTools)
   const second = await env.harness.connectWithEvents('ui')
+  const firstRoute = (await env.win.connection.callAny('ui.window.self', {})) as WindowRoute
+  const secondRoute = (await second.client.call('ui.window.self', {})) as WindowRoute
+  const firstConnId = firstRoute.connId
+  const secondConnId = secondRoute.connId
+  const firstRequests: Extract<QuirkyEvent, { type: 'ui.command.request' }>[] = []
+  const unsubscribe = env.win.connection.onEvent((event) => {
+    if (event.type === 'ui.command.request') firstRequests.push(event)
+  })
   const requests = () => second.events.filter((event: QuirkyEvent) => event.type === 'ui.command.request')
 
   await second.client.call('ui.window.focused', { focused: true })
-  const toSecond = env.agent.callAny('ui.command.run', { id: GREET, args: { name: 'second' } })
-  await env.win.waitFor(() => requests().length === 1)
-  const request = requests()[0] as Extract<QuirkyEvent, { type: 'ui.command.request' }>
-  await second.client.call('ui.command.reply', { requestId: request.requestId, result: 'from second' })
-  expect(await toSecond).toEqual({ result: 'from second' })
-  expect(ran()).toEqual([])
+  await env.win.waitFor(async () => {
+    const state = (await env.agent.callAny('ui.state', {})) as { windows: { connId: number; focused: boolean }[] }
+    return (
+      state.windows.find((window) => window.connId === firstConnId)?.focused === false &&
+      state.windows.find((window) => window.connId === secondConnId)?.focused === true
+    )
+  })
 
-  env.win.setFocus(true)
-  expect(await env.agent.callAny('ui.command.run', { id: GREET, args: { name: 'first' } })).toEqual({ result: 'hello first' })
+  const ambiguous = await failure(env.agent.callAny('ui.command.run', { id: GREET, args: { name: 'ambiguous' } }))
+  expect(ambiguous.code).toBe(RpcErrorCode.Conflict)
+  expect(ran()).toEqual([])
+  expect(firstRequests).toEqual([])
+  expect(requests()).toEqual([])
+
+  expect(
+    await env.agent.callAny('ui.window.command.run', { connId: firstConnId, id: GREET, args: { name: 'first' } })
+  ).toEqual({ result: 'hello first' })
+  expect(firstRequests).toHaveLength(1)
+  expect(firstRequests[0]).toMatchObject({ requestId: expect.any(String), id: GREET, args: { name: 'first' } })
   expect(ran()).toEqual([{ name: 'first' }])
-  expect(requests()).toHaveLength(1)
+  expect(requests()).toEqual([])
+  unsubscribe()
+
+  second.client.close()
+  await env.win.waitFor(async () => {
+    const state = (await env.agent.callAny('ui.state', {})) as { windows: { connId: number }[] }
+    return !state.windows.some((window) => window.connId === secondConnId)
+  })
+  const stale = await failure(
+    env.agent.callAny('ui.window.command.run', { connId: secondConnId, id: GREET, args: { name: 'stale' } })
+  )
+  expect(stale.code).toBe(RpcErrorCode.Conflict)
+  expect(firstRequests).toHaveLength(1)
+  expect(ran()).toEqual([{ name: 'first' }])
 })
 
 test('the window reports focus when it gains and loses it', async () => {

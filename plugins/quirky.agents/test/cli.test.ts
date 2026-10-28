@@ -226,6 +226,61 @@ describe('agents configure', () => {
     expect(await client.callAny('quirky.agents/get', { agent: 'codex' })).toMatchObject({ envOverridden: false })
   })
 
+  test('runtime config changes execute on the saved owner target and phone-target rejection never falls back locally', async () => {
+    const source = await start()
+    const target = await start()
+    const targetIdentity = {
+      id: 'runtime-target-id',
+      name: 'Target owner',
+      endpoint: 'wss://target.invalid',
+      grantId: 'owner-grant-id'
+    }
+    const { ctx, lines } = testCliContext(source.client)
+    const localCall = ctx.call
+    const routed: { runtime: string; method: string; params: Record<string, unknown> }[] = []
+    ctx.call = async (method, params = {}) => {
+      if (method !== 'quirky.cli/runtimeCall') return localCall(method, params)
+      const runtime = params.runtime
+      const remoteMethod = params.method
+      const remoteParams = params.params
+      if (typeof runtime !== 'string' || typeof remoteMethod !== 'string' ||
+        typeof remoteParams !== 'object' || remoteParams === null || Array.isArray(remoteParams)) {
+        throw new Error('malformed runtime call')
+      }
+      routed.push({ runtime, method: remoteMethod, params: remoteParams as Record<string, unknown> })
+      if (runtime === 'phone-only') throw ctx.fail('phone credentials cannot administer owner runtimes')
+      return { runtime: targetIdentity, result: await target.client.callAny(remoteMethod, remoteParams as Record<string, unknown>) }
+    }
+
+    await run('configure', ctx, ['claude'], { host: 'runtime:target-owner', command: 'remote-claude' })
+    expect(routed).toEqual([{
+      runtime: 'target-owner',
+      method: 'quirky.agents/configure',
+      params: { agent: 'claude', command: 'remote-claude' }
+    }])
+    expect(lines[0]).toContain('Target owner')
+    expect(await target.client.callAny('quirky.agents/get', { agent: 'claude' }))
+      .toMatchObject({ command: 'remote-claude', commandOverridden: true })
+    expect(await source.client.callAny('quirky.agents/get', { agent: 'claude' }))
+      .toMatchObject({ command: 'claude', commandOverridden: false })
+    await run('discoverModels', ctx, ['claude'], { host: 'runtime:target-owner' })
+    expect(routed[1]).toEqual({
+      runtime: 'target-owner',
+      method: 'quirky.agents/discoverModels',
+      params: { agent: 'claude', host: 'local' }
+    })
+    expect(lines[1]).toContain('Runtime: Target owner')
+    expect(lines[1]).toContain('claude on local')
+
+
+    const phoneFailure = await failure(run('configure', ctx, ['claude'], { host: 'runtime:phone-only', command: 'must-not-run' }))
+    expect(phoneFailure.message).toBe('phone credentials cannot administer owner runtimes')
+    expect(await source.client.callAny('quirky.agents/get', { agent: 'claude' }))
+      .toMatchObject({ command: 'claude', commandOverridden: false })
+    expect(await target.client.callAny('quirky.agents/get', { agent: 'claude' }))
+      .toMatchObject({ command: 'remote-claude', commandOverridden: true })
+  })
+
   test('--json prints the updated agent', async () => {
     const { client } = await start()
     const json = testCliContext(client, { json: true })

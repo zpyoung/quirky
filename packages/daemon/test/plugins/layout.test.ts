@@ -4,12 +4,13 @@ import {
   RpcErrorCode,
   type ClientRole,
   type PluginInfo,
-  type QuirkyClient,
+  QuirkyClient,
   type QuirkyEvent,
   type UiLayout,
   type UiModel,
   type UiState
 } from '@quirky/protocol'
+import { rpcUrl } from '@quirky/protocol/node'
 import type { ClientConn } from '../../src/types'
 import { LayoutService } from '../../src/plugins/layout'
 import { makeTempHome, startHarness, waitFor, waitForAsync, type Harness } from '../helpers'
@@ -132,18 +133,30 @@ async function start() {
 }
 
 describe('layout state', () => {
-  test('SC-35: ui.state shows windows, layout and what each slot reports', async () => {
+  test('SC-35: ui.state exposes current tool bodies, opened views and connection reports', async () => {
     const { harness, caller } = await start()
-    expect(await caller.call('ui.state', {})).toEqual({
-      windows: [],
-      layout: { view: null, panel: null, sidebar: true, focus: null },
-      slots: expect.arrayContaining([
-        { id: LIST, kind: 'sidebar-section', plugin: NOTES, title: 'Notes', shown: true },
-        { id: OUTLINE, kind: 'panel', plugin: NOTES, title: 'Outline', shown: false },
-        { id: PAGE, kind: 'view', plugin: NOTES, title: 'Page', shown: false }
-      ]),
-      toasts: []
+    const initial = await caller.call('ui.state', {})
+    expect(initial.windows).toEqual([])
+    expect(initial.layout).toMatchObject({
+      view: null,
+      viewTabs: [],
+      panel: null,
+      sidebar: false,
+      focus: null,
+      tools: {
+        open: {
+          'left-top': null,
+          'left-bottom': null,
+          'right-top': null,
+          'right-bottom': null,
+          'bottom-left': null,
+          'bottom-right': null
+        }
+      }
     })
+    expect(slotOf(initial, LIST).shown).toBe(false)
+    expect(slotOf(initial, OUTLINE).shown).toBe(false)
+    expect(slotOf(initial, PAGE).shown).toBe(false)
 
     const window = await openWindow(harness, 'main window')
     await caller.call('ui.view.open', { id: PAGE, input: { note: 'n1' } })
@@ -154,10 +167,16 @@ describe('layout state', () => {
 
     const state = await caller.call('ui.state', {})
     expect(state.windows).toEqual([{ connId: expect.any(Number), name: 'main window', focused: true, inputAt: null, present: false }])
-    expect(state.layout).toEqual({ view: { id: PAGE, input: { note: 'n1' } }, panel: null, sidebar: true, focus: 'view' })
-    expect(slotOf(state, PAGE)).toEqual({ id: PAGE, kind: 'view', plugin: NOTES, title: 'Page', shown: true, report: { open: 'n1' } })
-    expect(slotOf(state, LIST).report).toEqual({ notes: ['n1', 'n2'] })
-    expect(slotOf(state, OUTLINE).report).toBeUndefined()
+    expect(state.layout).toMatchObject({
+      view: { id: PAGE, input: { note: 'n1' } },
+      viewTabs: [{ id: PAGE, input: { note: 'n1' } }],
+      panel: null,
+      sidebar: false,
+      focus: 'view'
+    })
+    expect(slotOf(state, PAGE)).toMatchObject({ kind: 'view', shown: true, report: { open: 'n1' } })
+    expect(slotOf(state, LIST)).toMatchObject({ shown: false, report: { notes: ['n1', 'n2'] } })
+    expect(slotOf(state, OUTLINE).shown).toBe(false)
   })
 
   test('only clients with role ui count as windows', async () => {
@@ -209,6 +228,44 @@ test('ui.window.self returns only the calling live UI connection ID', async () =
   expect(nonWindow.code).toBe(RpcErrorCode.InvalidParams)
 })
 
+test('authenticated UI desktop identity is stable through window self and PluginCaller', async () => {
+  const env = makeEnv()
+  writePlugin(join(env.home, 'plugins'), {
+    id: 'acme.identity',
+    name: 'acme.identity',
+    version: '1.0.0',
+    main: 'main.ts',
+    contributes: {
+      method: [{
+        id: 'desktopClientId',
+        description: 'returns the authenticated desktop client identity',
+        params: { type: 'object', properties: {}, additionalProperties: false },
+        result: {
+          type: 'object',
+          properties: { desktopClientId: { type: 'string' } },
+          required: ['desktopClientId'],
+          additionalProperties: false
+        }
+      }]
+    }
+  }, {
+    'main.ts': "import type { PluginCaller, PluginContext } from '@quirky/protocol'\nexport function activate(context: PluginContext) { context.provide('method:acme.identity/desktopClientId', (_params: Record<string, unknown>, caller: PluginCaller) => { if (!caller.desktopClientId) throw context.error('conflict', 'desktop client identity unavailable'); return { desktopClientId: caller.desktopClientId } }) }"
+  })
+  const harness = await env.start()
+  const desktopClientId = '123e4567-e89b-42d3-a456-426614174000'
+  const client = await QuirkyClient.connect(rpcUrl(harness.runtime), {
+    role: 'ui',
+    name: 'identity-test',
+    desktopClientId,
+    subscribe: true
+  })
+  try {
+    expect(await client.call('ui.window.self', {})).toMatchObject({ connId: expect.any(Number), desktopClientId })
+    expect(await client.callAny('acme.identity/desktopClientId', {})).toEqual({ desktopClientId })
+  } finally {
+    client.close()
+  }
+})
 describe('exact window routes', () => {
   test('view updates and shared layout events preserve independent per-window navigation', async () => {
     const { harness, caller } = await start()
@@ -223,18 +280,37 @@ describe('exact window routes', () => {
       input: { note: 'one' }
     })
     expect(opened.view).toEqual({ id: PAGE, input: { note: 'one' } })
-    expect(await caller.call('ui.window.view.open', { connId: secondConnId, id: OTHER_PAGE })).toMatchObject({
-      view: { id: OTHER_PAGE }
-    })
-    await waitFor(() => changes(first).length === 1 && changes(second).length === 1)
-    expect(changes(first).map((event) => event.layout.view)).toEqual([{ id: PAGE, input: { note: 'one' } }])
-    expect(changes(second).map((event) => event.layout.view)).toEqual([{ id: OTHER_PAGE }])
-
-    expect((await caller.call('ui.window.state', { connId: firstConnId })).layout.view).toEqual({
+    expect(opened.viewTabs).toEqual([{ id: PAGE, input: { note: 'one' } }])
+    await caller.call('ui.window.view.open', { connId: firstConnId, id: OTHER_PAGE, input: { note: 'second' } })
+    await caller.call('ui.window.view.open', { connId: firstConnId, id: OTHER_PAGE, input: { note: 'latest' } })
+    const secondOpened = await caller.call('ui.window.view.open', {
+      connId: secondConnId,
       id: PAGE,
-      input: { note: 'one' }
+      input: { note: 'other window' }
     })
-    expect((await caller.call('ui.window.state', { connId: secondConnId })).layout.view).toEqual({ id: OTHER_PAGE })
+    expect(secondOpened.viewTabs).toEqual([{ id: PAGE, input: { note: 'other window' } }])
+    await waitFor(() => changes(first).length === 3 && changes(second).length === 1)
+    expect(changes(first).map((event) => event.layout.view)).toEqual([
+      { id: PAGE, input: { note: 'one' } },
+      { id: OTHER_PAGE, input: { note: 'second' } },
+      { id: OTHER_PAGE, input: { note: 'latest' } }
+    ])
+    expect(changes(second).map((event) => event.layout.view)).toEqual([{ id: PAGE, input: { note: 'other window' } }])
+    expect((await caller.call('ui.window.state', { connId: firstConnId })).layout.viewTabs).toEqual([
+      { id: PAGE, input: { note: 'one' } },
+      { id: OTHER_PAGE, input: { note: 'latest' } }
+    ])
+    expect((await caller.call('ui.window.state', { connId: firstConnId })).layout.view).toEqual({
+      id: OTHER_PAGE,
+      input: { note: 'latest' }
+    })
+    expect((await caller.call('ui.window.state', { connId: secondConnId })).layout.viewTabs).toEqual([
+      { id: PAGE, input: { note: 'other window' } }
+    ])
+    expect((await caller.call('ui.window.state', { connId: secondConnId })).layout.view).toEqual({
+      id: PAGE,
+      input: { note: 'other window' }
+    })
 
     const firstToast = { key: 'first-toast', kind: 'info' as const, title: 'First', body: 'one', detail: null, persistent: false, actions: [] }
     const secondToast = { key: 'second-toast', kind: 'info' as const, title: 'Second', body: 'two', detail: null, persistent: false, actions: [] }
@@ -250,13 +326,15 @@ describe('exact window routes', () => {
     expect(secondState.toasts).toEqual([secondToast])
 
     await caller.call('ui.panel.open', { id: OUTLINE })
-    await waitFor(() => changes(first).length === 2 && changes(second).length === 2)
-    expect(changes(first)[1]!.layout).toMatchObject({ view: { id: PAGE, input: { note: 'one' } }, panel: OUTLINE })
-    expect(changes(second)[1]!.layout).toMatchObject({ view: { id: OTHER_PAGE }, panel: OUTLINE })
-    expect((await caller.call('ui.window.state', { connId: firstConnId })).layout.view).toEqual({
-      id: PAGE,
-      input: { note: 'one' }
-    })
+    await waitFor(() => changes(first).length === 4 && changes(second).length === 2)
+    expect(changes(first)[3]!.layout).toMatchObject({ view: { id: OTHER_PAGE, input: { note: 'latest' } }, panel: OUTLINE })
+    expect(changes(second)[1]!.layout).toMatchObject({ view: { id: PAGE, input: { note: 'other window' } }, panel: OUTLINE })
+    expect(changes(first)[3]!.layout.tools?.open['right-bottom']).toBe(OUTLINE)
+    expect(changes(second)[1]!.layout.tools?.open['right-bottom']).toBe(OUTLINE)
+    expect((await caller.call('ui.window.state', { connId: firstConnId })).layout.viewTabs).toEqual([
+      { id: PAGE, input: { note: 'one' } },
+      { id: OTHER_PAGE, input: { note: 'latest' } }
+    ])
   })
 
   test('view close is compare-and-close against the complete current view', async () => {
@@ -264,6 +342,7 @@ describe('exact window routes', () => {
     const window = await openWindow(harness, 'closable')
     const connId = await windowConnId(window.client)
     await caller.call('ui.window.view.open', { connId, id: PAGE, input: { note: 'current' } })
+    expect((await caller.call('ui.window.state', { connId })).layout.viewTabs).toEqual([{ id: PAGE, input: { note: 'current' } }])
 
     const omittedInput = await failure(caller.call('ui.window.view.close', { connId, expectedView: { id: PAGE } }))
     expect(omittedInput.code).toBe(RpcErrorCode.Conflict)
@@ -271,6 +350,8 @@ describe('exact window routes', () => {
       id: PAGE,
       input: { note: 'current' }
     })
+    await caller.call('ui.window.view.open', { connId, id: PAGE, input: { note: 'latest' } })
+    expect((await caller.call('ui.window.state', { connId })).layout.viewTabs).toEqual([{ id: PAGE, input: { note: 'latest' } }])
 
     await caller.call('ui.window.view.open', { connId, id: OTHER_PAGE })
     const stale = await failure(caller.call('ui.window.view.close', {
@@ -281,7 +362,8 @@ describe('exact window routes', () => {
     expect((await caller.call('ui.window.state', { connId })).layout.view).toEqual({ id: OTHER_PAGE })
 
     const closed = await caller.call('ui.window.view.close', { connId, expectedView: { id: OTHER_PAGE } })
-    expect(closed.view).toBeNull()
+    expect(closed.view).toEqual({ id: PAGE, input: { note: 'latest' } })
+    expect(closed.viewTabs).toEqual([{ id: PAGE, input: { note: 'latest' } }])
   })
 
   test('a targeted command receives its result from exactly the named window', async () => {
@@ -329,7 +411,13 @@ describe('layout changes', () => {
     const window = await openWindow(harness)
 
     const opened = await caller.call('ui.view.open', { id: PAGE, input: { note: 'n2' } })
-    expect(opened).toEqual({ view: { id: PAGE, input: { note: 'n2' } }, panel: null, sidebar: true, focus: null })
+    expect(opened).toMatchObject({
+      view: { id: PAGE, input: { note: 'n2' } },
+      viewTabs: [{ id: PAGE, input: { note: 'n2' } }],
+      panel: null,
+      sidebar: false,
+      focus: null
+    })
     await caller.call('ui.panel.open', { id: OUTLINE })
     await caller.call('ui.focus', { target: 'panel' })
     await caller.call('ui.sidebar.set', { visible: false })
@@ -337,15 +425,25 @@ describe('layout changes', () => {
     expect(slotOf(await caller.call('ui.state', {}), OUTLINE).shown).toBe(true)
 
     const closed = await caller.call('ui.panel.close', {})
-    expect(closed).toEqual({ view: { id: PAGE, input: { note: 'n2' } }, panel: null, sidebar: false, focus: null })
+    expect(closed).toMatchObject({
+      view: { id: PAGE, input: { note: 'n2' } },
+      viewTabs: [{ id: PAGE, input: { note: 'n2' } }],
+      panel: null,
+      sidebar: false,
+      focus: null,
+      tools: { open: { 'right-bottom': null } }
+    })
     await caller.call('ui.view.close', {})
 
     await waitFor(() => changes(window).length === 6)
     const layouts = changes(window).map((event) => event.layout)
     expect(layouts[0]!.view).toEqual({ id: PAGE, input: { note: 'n2' } })
     expect(layouts[2]!.focus).toBe('panel')
-    expect(layouts[5]).toEqual({ view: null, panel: null, sidebar: false, focus: null })
-    expect((await caller.call('ui.state', {})).layout).toEqual(layouts[5]!)
+    expect(layouts[5]).toMatchObject({ view: null, viewTabs: [], panel: null, sidebar: false, focus: null })
+    const final = (await caller.call('ui.state', {})).layout
+    expect(final.view).toBeNull()
+    expect(final.viewTabs).toEqual([])
+    expect(final.tools?.open['right-bottom']).toBeNull()
   })
   test('ui.palette.set toggles atomically, broadcasts and persists its canonical state', async () => {
     const env = makeEnv()
@@ -395,15 +493,16 @@ describe('layout changes', () => {
 
     const second = await env.restart()
     const again = await second.connect('cli')
-    expect((await again.call('ui.state', {})).layout).toEqual({
-      view: { id: PAGE, input: { note: 'n9' } },
-      panel: OUTLINE,
-      sidebar: true,
-      focus: 'view'
-    })
+    const layout = (await again.call('ui.state', {})).layout
+    expect(layout.view).toEqual({ id: PAGE, input: { note: 'n9' } })
+    expect(layout.viewTabs).toEqual([{ id: PAGE, input: { note: 'n9' } }])
+    expect(layout.panel).toBe(OUTLINE)
+    expect(layout.sidebar).toBe(false)
+    expect(layout.focus).toBe('view')
+    expect(layout.tools?.open['right-bottom']).toBe(OUTLINE)
   })
 
-  test('SC-38: a view or panel that is no longer effective is dropped on read and the other part stays', async () => {
+  test('drops disabled views and panels from persisted layout while preserving unrelated effective state', async () => {
     const env = makeEnv()
     const harness = await env.start()
     const caller = await harness.connect('cli')
@@ -413,7 +512,9 @@ describe('layout changes', () => {
     await caller.call('plugin.disable', { id: PAGE })
     expect((await caller.call('ui.state', {})).layout).toMatchObject({ view: null, panel: OUTLINE })
     await caller.call('plugin.enable', { id: PAGE })
-    expect((await caller.call('ui.state', {})).layout.view).toEqual({ id: PAGE })
+    const reenabled = (await caller.call('ui.state', {})).layout
+    expect(reenabled.view).toBeNull()
+    expect(reenabled.viewTabs).toEqual([])
 
     await caller.call('plugin.disable', { id: PAGE })
     await caller.call('plugin.disable', { id: OUTLINE })
@@ -439,7 +540,11 @@ describe('layout changes', () => {
     const huge = await failure(caller.call('ui.view.open', { id: PAGE, input: { text: 'x'.repeat(65 * 1024) } }))
     expect(huge.code).toBe(RpcErrorCode.InvalidParams)
 
-    expect((await caller.call('ui.state', {})).layout).toEqual(before)
+    const after = (await caller.call('ui.state', {})).layout
+    expect(after.view).toEqual(before.view)
+    expect(after.viewTabs).toEqual(before.viewTabs)
+    expect(after.tools?.open).toEqual(before.tools?.open)
+    expect(after.focus).toBe(before.focus)
   })
 })
 

@@ -7,7 +7,7 @@ import { writePlugin } from '../../../packages/daemon/test/plugins/fixtures'
 import { AUTO_PICK_ORDER } from '../src/core/catalog'
 
 const PLUGIN_DIR = join(import.meta.dir, '..')
-const ENV_NAMES = ['HOME', 'QUIRKY_AGENT_SEARCH_DIRS', 'QUIRKY_TEST_AGENT_TIME_SCALE'] as const
+const ENV_NAMES = ['HOME', 'QUIRKY_AGENT_SEARCH_DIRS', 'QUIRKY_TEST_AGENT_TIME_SCALE', 'GEMINI_API_KEY', 'GOOGLE_API_KEY'] as const
 const saved = Object.fromEntries(ENV_NAMES.map((name) => [name, process.env[name]]))
 
 const fixtures: Fixture[] = []
@@ -1051,6 +1051,256 @@ describe('provider-owned model discovery', () => {
     } finally {
       rmSync(modelPath, { force: true })
     }
+  }, 30_000)
+  test('Gemini discovery uses the paginated Models API with its explicit key and keeps the last complete selector on failures', async () => {
+    const t = await start({ installed: ['gemini'] })
+    const selectedKey = 'fixture-gemini-selected-api-key'
+    const geminiKey = 'fixture-gemini-configured-api-key'
+    const ambientKey = 'fixture-gemini-ambient-api-key'
+    const cursor = 'fixture-gemini-page-cursor'
+    process.env.GEMINI_API_KEY = ambientKey
+    process.env.GOOGLE_API_KEY = 'fixture-unselected-google-api-key'
+    await t.call(A('configure'), { agent: 'gemini', env: { GEMINI_API_KEY: geminiKey, GOOGLE_API_KEY: selectedKey } })
+
+    let mode: 'complete' | 'empty' | 'malformed' | 'failed-page' | 'repeated-cursor' = 'complete'
+    const requests: { url: URL; key: string | null }[] = []
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(input instanceof Request ? input.url : String(input))
+      requests.push({ url, key: new Headers(init?.headers).get('x-goog-api-key') })
+      if (mode === 'empty') return Response.json({ models: [] })
+      if (mode === 'malformed') {
+        return Response.json({
+          models: [{
+            name: 'models/gemini-invalid',
+            baseModelId: 'gemini-invalid',
+            supportedGenerationMethods: 'generateContent'
+          }]
+        })
+      }
+      if (mode === 'failed-page') {
+        if (url.searchParams.has('pageToken')) return new Response(`failure included ${selectedKey}`, { status: 503 })
+        return Response.json({
+          models: [{ name: 'models/would-replace', baseModelId: 'would-replace', supportedGenerationMethods: ['generateContent'] }],
+          nextPageToken: cursor
+        })
+      }
+      if (mode === 'repeated-cursor') {
+        const suffix = url.searchParams.get('pageToken') ?? 'first'
+        return Response.json({
+          models: [{
+            name: `models/gemini-loop-${suffix}`,
+            baseModelId: `gemini-loop-${suffix}`,
+            supportedGenerationMethods: ['generateContent']
+          }],
+          nextPageToken: 'fixture-gemini-repeated-cursor'
+        })
+      }
+      if (!url.searchParams.has('pageToken')) {
+        return Response.json({
+          models: [
+            {
+              name: 'models/gemini-public-1-preview',
+              baseModelId: 'gemini-public-1',
+              displayName: 'Gemini Public One',
+              description: 'First API-listed generation model',
+              supportedGenerationMethods: ['generateContent']
+            },
+            {
+              name: 'models/text-embedding-004',
+              baseModelId: 'text-embedding-004',
+              displayName: 'Embedding only',
+              supportedGenerationMethods: ['embedContent']
+            }
+          ],
+          nextPageToken: cursor
+        })
+      }
+      return Response.json({
+        models: [{
+          name: 'models/gemini-public-2-preview',
+          baseModelId: 'gemini-public-2',
+          displayName: 'Gemini Public Two',
+          supportedGenerationMethods: ['countTokens', 'generateContent']
+        }]
+      })
+    }) as typeof fetch
+
+    try {
+      const discovered = await t.call(A('discoverModels'), { agent: 'gemini', host: 'local' })
+      expect(discovered).toMatchObject({
+        status: 'available',
+        authoritative: true,
+        models: [
+          { id: 'gemini-public-1', label: 'Gemini Public One', description: 'First API-listed generation model', options: [] },
+          { id: 'gemini-public-2', label: 'Gemini Public Two', options: [] }
+        ]
+      })
+      expect(requests.map(({ url }) => [url.origin, url.pathname, url.searchParams.get('pageSize'), url.searchParams.get('pageToken')]))
+        .toEqual([
+          ['https://generativelanguage.googleapis.com', '/v1beta/models', '1000', null],
+          ['https://generativelanguage.googleapis.com', '/v1beta/models', '1000', cursor]
+        ])
+      expect(requests.map(({ key }) => key)).toEqual([selectedKey, selectedKey])
+      expect(requests.every(({ url }) => !url.searchParams.has('key'))).toBe(true)
+      expect((await t.call(A('options'), { agent: 'gemini' })).models.map((model: { id: string }) => model.id))
+        .toEqual(['gemini-public-1', 'gemini-public-2'])
+      expect(await t.call(A('resolveLaunch'), { agent: 'gemini', model: 'gemini-public-2' }))
+        .toMatchObject({ added: ['-m', 'gemini-public-2'] })
+
+      const retainedIds = ['gemini-public-1', 'gemini-public-2']
+      for (const [nextMode, expectedStatus] of [
+        ['empty', 'available'],
+        ['malformed', 'unavailable'],
+        ['failed-page', 'unavailable'],
+        ['repeated-cursor', 'unavailable']
+      ] as const) {
+        mode = nextMode
+        const failed = await t.call(A('discoverModels'), { agent: 'gemini', host: 'local' })
+        expect(failed).toMatchObject({ status: expectedStatus, authoritative: false, models: [] })
+        expect((await t.call(A('options'), { agent: 'gemini' })).models.map((model: { id: string }) => model.id)).toEqual(retainedIds)
+      }
+
+      const publicOutput = JSON.stringify({ discovered, events: t.events, logs: t.logs, options: await t.call(A('options'), { agent: 'gemini' }) })
+      for (const secret of [selectedKey, geminiKey, ambientKey, cursor, 'fixture-unselected-google-api-key', 'fixture-gemini-repeated-cursor']) {
+        expect(publicOutput).not.toContain(secret)
+      }
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  }, 30_000)
+
+  test('Gemini discovery never borrows an inherited API key without an explicit provider setting', async () => {
+    const t = await start({ installed: ['gemini'] })
+    const ambientKey = 'fixture-gemini-ambient-only-key'
+    process.env.GEMINI_API_KEY = ambientKey
+    process.env.GOOGLE_API_KEY = 'fixture-google-ambient-only-key'
+    const originalFetch = globalThis.fetch
+    let requests = 0
+    globalThis.fetch = Object.assign(async () => {
+      requests += 1
+      return Response.json({ models: [{ name: 'models/should-not-run', baseModelId: 'should-not-run', supportedGenerationMethods: ['generateContent'] }] })
+    }, { preconnect: originalFetch.preconnect })
+    try {
+      const result = await t.call(A('discoverModels'), { agent: 'gemini', host: 'local' })
+      expect(result).toMatchObject({ status: 'unavailable', authoritative: false, models: [] })
+      expect(result.reason).toContain('explicit Gemini API key')
+      expect(requests).toBe(0)
+      expect(JSON.stringify({ result, events: t.events, logs: t.logs })).not.toContain(ambientKey)
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  }, 30_000)
+
+  test('Pi RPC discovery preserves provider-qualified models and exact thinking levels from the child protocol', async () => {
+    const t = await start({ installed: ['pi'] })
+    const statePath = join(t.userHome, 'pi-model-state.json')
+    const recordPath = join(t.userHome, 'pi-rpc-record.json')
+    const models = [
+      { id: 'shared-model', provider: 'provider-one', name: 'Provider One Shared', reasoning: true, baseUrl: 'https://one.invalid?key=must-not-escape' },
+      { id: 'shared-model', provider: 'provider-two', name: 'Provider Two Shared', reasoning: true },
+      { id: 'plain-model', provider: 'provider-one', name: 'Provider One Plain', reasoning: false }
+    ]
+    const thinkingLevels = {
+      'provider-one/shared-model': ['off', 'low', 'high'],
+      'provider-two/shared-model': ['off', 'medium']
+    }
+    writeFileSync(statePath, JSON.stringify({ mode: 'complete', models, thinkingLevels }))
+    const executable = join(t.bin, 'pi')
+    writeFileSync(executable, `#!/usr/bin/env node
+const { readFileSync, writeFileSync } = require('node:fs')
+const statePath = ${JSON.stringify(statePath)}
+const recordPath = ${JSON.stringify(recordPath)}
+let selected = null
+let input = ''
+const requests = []
+const respond = (command, success, data, error) => {
+  const response = { id: command.id, type: 'response', command: command.type, success }
+  if (data !== undefined) response.data = data
+  if (error !== undefined) response.error = error
+  process.stdout.write(JSON.stringify(response) + '\\n')
+}
+const handle = (command) => {
+  requests.push(command)
+  const state = JSON.parse(readFileSync(statePath, 'utf8'))
+  if (command.type === 'get_available_models') {
+    if (state.mode === 'failure') return respond(command, false, undefined, 'fixture-pi-error-token')
+    return respond(command, true, { models: state.mode === 'empty' ? [] : state.models })
+  }
+  if (command.type === 'set_model') {
+    selected = state.models.find((model) => model.provider === command.provider && model.id === command.modelId)
+    return selected ? respond(command, true, selected) : respond(command, false, undefined, 'model not available')
+  }
+  if (command.type === 'get_available_thinking_levels') {
+    return respond(command, true, { levels: state.thinkingLevels[selected.provider + '/' + selected.id] || ['off'] })
+  }
+  return respond(command, false, undefined, 'unknown RPC command')
+}
+process.stdin.setEncoding('utf8')
+process.stdin.on('data', (chunk) => {
+  input += chunk
+  for (;;) {
+    const newline = input.indexOf('\\n')
+    if (newline < 0) break
+    const line = input.slice(0, newline)
+    input = input.slice(newline + 1)
+    if (line !== '') handle(JSON.parse(line))
+  }
+})
+process.stdin.on('end', () => writeFileSync(recordPath, JSON.stringify({ args: process.argv.slice(2), requests })))
+`)
+    chmodSync(executable, 0o755)
+
+    const discovered = await t.call(A('discoverModels'), { agent: 'pi', host: 'local' })
+    expect(discovered).toMatchObject({
+      status: 'available',
+      authoritative: true,
+      models: [
+        { id: 'provider-one/shared-model', label: 'Provider One Shared', options: [{ id: 'effort', choices: ['off', 'low', 'high'] }] },
+        { id: 'provider-two/shared-model', label: 'Provider Two Shared', options: [{ id: 'effort', choices: ['off', 'medium'] }] },
+        { id: 'provider-one/plain-model', label: 'Provider One Plain', options: [] }
+      ]
+    })
+    const options = await t.call(A('options'), { agent: 'pi' })
+    expect(options.models.map((model: { id: string }) => model.id)).toEqual([
+      'provider-one/shared-model',
+      'provider-two/shared-model',
+      'provider-one/plain-model'
+    ])
+    expect(options.models[0].options.find((option: { id: string; choices: { value: string }[] }) => option.id === 'effort')?.choices.map((choice: { value: string }) => choice.value))
+      .toEqual(['off', 'low', 'high'])
+    expect(await t.call(A('resolveLaunch'), {
+      agent: 'pi',
+      model: 'provider-two/shared-model',
+      options: { effort: 'medium' }
+    })).toMatchObject({
+      added: ['--model', 'provider-two/shared-model', '--thinking', 'medium']
+    })
+    const record: { args: string[]; requests: { type: string }[] } = JSON.parse(readFileSync(recordPath, 'utf8'))
+    expect(record.args).toEqual(['--mode', 'rpc', '--no-session'])
+    expect(record.requests.map((request) => request.type)).toEqual([
+      'get_available_models',
+      'set_model', 'get_available_thinking_levels',
+      'set_model', 'get_available_thinking_levels'
+    ])
+
+    for (const mode of ['empty', 'failure'] as const) {
+      writeFileSync(statePath, JSON.stringify({ mode, models, thinkingLevels }))
+      const incomplete = await t.call(A('discoverModels'), { agent: 'pi', host: 'local' })
+      expect(incomplete).toMatchObject({
+        status: mode === 'empty' ? 'available' : 'unavailable',
+        authoritative: false,
+        models: []
+      })
+      expect((await t.call(A('options'), { agent: 'pi' })).models.map((model: { id: string }) => model.id)).toEqual([
+        'provider-one/shared-model',
+        'provider-two/shared-model',
+        'provider-one/plain-model'
+      ])
+    }
+    const output = JSON.stringify({ discovered, options, events: t.events, logs: t.logs })
+    expect(output).not.toContain('must-not-escape')
+    expect(output).not.toContain('fixture-pi-error-token')
   }, 30_000)
   test('Codex discovery refuses to run under a raw inherited home when account preparation is unavailable', async () => {
     const previousCodexHome = process.env.CODEX_HOME

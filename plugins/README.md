@@ -882,6 +882,11 @@ supports nested/empty details sections, collapsible headings and `[[document lin
 unsupported forms still open in Source mode rather than silently losing content.
 Document-link completion is keyboard-accessible and does not run during IME composition.
 
+Explorer **Copy Path** copies the exact absolute path; **Copy Relative Path** is relative
+to the worktree even when Explorer displays a subfolder. Multi-selection copies one path
+per line without shell quoting. Row drags into a terminal retain worktree ownership and
+insert shell-escaped paths; **Open in Terminal** uses the selected directory directly.
+
 The buffer's optional `diskWritable` is advisory effective OS access, separate from the
 format's `readOnly` capability. A readable non-writable Markdown file can keep drafts and
 local review notes. The actual save is authoritative: denial retains the draft and dirty
@@ -912,4 +917,17 @@ preferences retain conservative corrupt-state recovery. Separator presentation e
 first, host-adjacent, sticky and nested boundaries without changing row geometry.
 
 [Completion contracts and acceptance scenarios](../docs/quirk/specs/2026-10-28-m7-editor-source-control-completion/logic.md).
+
+## Saved CLI runtimes
+
+`quirky cli runtime add --name <name> --code <pairing-offer>` saves a paired
+target in the private `QUIRKY_HOME` store (mode `0600`). Treat the offer as a
+credential even when its token is encoded in a pairing URL. Add, list, show and
+status return only credential-free summaries; using a saved target resolves its
+private offer for the encrypted connection. Malformed offers are rejected before
+the runtime store is created.
+
+Remove a saved target with `quirky cli runtime remove --selector <id> --yes`.
+Removal prevents new connections through that saved selector; it does not revoke
+the remote device grant or terminate an already established connection.
 

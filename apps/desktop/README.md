@@ -80,6 +80,18 @@ Supported shells expose public `desktop.folder.pick` and `desktop.window.open/li
 
 These bridges do not provide generic per-window workspace sleep/close routing. Notification permission, click and dismissal callbacks also remain unavailable in the pinned SDK; a void notification call is not delivery proof. Production signed helper/TCC/launchd/admission/upgrade integration still requires an authorized signing identity.
 
+## Terminal clipboard reads
+
+Terminal Paste, ⌘V and right-click paste read text through the trusted desktop window's native
+pasteboard bridge, not WKWebView's permission-gated Web Clipboard API. Plugins use the public
+`UiPluginContext.readClipboardText()` method; clipboard contents do not go through the daemon
+or guest browser webviews. A native read failure stays an error rather than opening a WebKit
+Paste permission callout. Browser shells continue to use the Web Clipboard API.
+
+Acquired text uses the existing terminal paste pipeline: brackets only when the terminal program
+enabled bracketed paste, with the same newline conversion, chunking, size limit and timeout.
+
+
 ## Development mode
 
 ```sh
@@ -130,6 +142,59 @@ kill "$(python3 -c 'import json;print(json.load(open("/tmp/qtest/runtime.json"))
 kill "$(cat /tmp/qtest/pty.pid)"
 rm -rf /tmp/qtest
 ```
+
+## Desktop screenshot review
+
+`bun run ui:review` starts the real daemon and desktop renderer against a fresh isolated
+home, registers a disposable local repository and two Git worktrees, and captures the live
+UI contribution inventory in dark and light. It does not open the foreground native window,
+load your profile, install hooks, or use provider accounts. Chromium and all app processes are
+owned by the run and stopped before it returns.
+
+Install the development dependencies, then either install a Playwright browser with
+`bunx playwright install chromium` or pass `--browser /absolute/path/to/chromium`.
+For model review, install `pi-watch`, authenticate its model provider with `pi /login`, and
+check availability with `pi-watch --check gemini`.
+
+```sh
+# Full inventory; output must be an absolute path that does not already exist.
+bun run ui:review -- --author-family openai --output /tmp/quirky-visual-review
+
+# An area's exact plugin or contribution IDs; --only is repeatable.
+bun run ui:review -- --author-family openai --only quirky.editor \
+  --output /tmp/quirky-editor-review
+
+# Capture without model cost. This reports not-reviewed, never a visual pass.
+bun run ui:review -- --author-family openai --only host:shell --capture-only \
+  --browser "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+  --output /tmp/quirky-shell-captures
+
+# Review existing immutable capture evidence without restarting the app.
+bun run ui:review -- --author-family openai \
+  --manifest /tmp/quirky-shell-captures/capture-manifest.json \
+  --output /tmp/quirky-shell-review
+```
+
+The default separate reviewer is `gemini`; `--reviewer` selects another available pi-watch
+alias. Its resolved model family must differ from `--author-family`. Each image is compared to
+the approved same-theme PNG in `docs/quirk/specs/2026-10-28-ui-redesign/img/`, with scores for
+palette, typography, spacing, component consistency and hierarchy. **Every image** must meet
+`--threshold` (default 85/100); a high average cannot hide a bad view.
+
+Evidence includes `capture-manifest.json`, incremental `capture-progress.json`, selected
+theme metadata, PNGs, per-image reviewer responses/logs, `review-report.json` and the final
+`ui-review-result.json`. Images and references are SHA-256 checked before and after review.
+Filtered runs identify their exact scope and do not certify the whole application. The command
+builds UI assets unless `--skip-build` is supplied; missing assets still fail.
+
+Exit 0 means a complete requested capture-only inventory (**not reviewed**) or all requested
+reviews passed; exit 1 means capture/coverage/mount or score failure; exit 2 means invalid
+arguments, missing prerequisites, invalid evidence or reviewer/runtime failure. Signals await
+cleanup before returning 130/143. Unmounted, hidden, persistently loading, missing-required-input
+and native-only surfaces fail explicitly rather than disappearing from coverage; legitimate empty
+states remain reviewable. Renderer screenshots do not certify OS chrome, native browser embedding,
+focus or notifications; those belong to native QA. The existing, not-yet-restyled UI is expected
+to fail against the new goldens.
 
 ## Why the build unpacks the installer
 

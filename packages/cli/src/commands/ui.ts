@@ -1,5 +1,5 @@
-import type { UiCommandEntry, UiKeybinding, UiLayout, UiModel, UiSlotEntry } from '@quirky/protocol'
-import { flagInt, flagString, UsageError, takePositionals } from '../args'
+import { UI_TOOL_SLOTS, type UiCommandEntry, type UiKeybinding, type UiLayout, type UiModel, type UiSlotEntry, type UiToolResize, type UiToolSlot } from '@quirky/protocol'
+import { flagInt, UsageError, takePositionals } from '../args'
 import { formatGeneric } from '../format'
 import { formatTable } from '../output'
 import type { Command } from './types'
@@ -20,6 +20,20 @@ function slotTable(items: UiSlotEntry[]): string {
   )
 }
 
+function toolTable(items: NonNullable<UiModel['tools']>): string {
+  return formatTable(
+    ['ID', 'TITLE', 'ICON', 'DEFAULT SLOT', 'CONTRIBUTION', 'ALIASES'],
+    items.map((item) => [
+      item.id,
+      item.title,
+      item.icon,
+      item.defaultSlot,
+      item.contributionId,
+      item.aliases.join(', ')
+    ].map(cell))
+  )
+}
+
 function commandTable(items: UiCommandEntry[]): string {
   return formatTable(
     ['ID', 'PLUGIN', 'TITLE', 'MODULE'],
@@ -34,6 +48,7 @@ function renderModel(model: UiModel): string {
     ['ACTIVITY ITEMS', model.activityItems, () => slotTable(model.activityItems)],
     ['STATUS BARS', model.statusBars, () => slotTable(model.statusBars)],
     ['PANELS', model.panels, () => slotTable(model.panels)],
+    ['TOOLS', model.tools ?? [], () => toolTable(model.tools ?? [])],
     ['VIEWS', model.views, () => slotTable(model.views)],
     ['OVERLAYS', model.overlays, () => slotTable(model.overlays)],
     ['COMMANDS', model.commands, () => commandTable(model.commands)],
@@ -72,7 +87,7 @@ function renderModel(model: UiModel): string {
 
 export const uiContributions: Command = {
   name: 'ui contributions',
-  summary: 'list the UI contributions in effect: slots, commands, keybindings, settings and themes',
+  summary: 'list plugin UI contributions and the effective host tool projection',
   positionals: [],
   flags: {},
   methods: ['ui.contributions'],
@@ -86,6 +101,13 @@ export const uiContributions: Command = {
 
 const FOCUS_TARGETS = ['sidebar', 'view', 'panel'] as const
 
+function slotArgument(value: string): UiToolSlot {
+  if (!(UI_TOOL_SLOTS as readonly string[]).includes(value)) {
+    throw new UsageError(`<slot> must be one of ${UI_TOOL_SLOTS.join(', ')}`)
+  }
+  return value as UiToolSlot
+}
+
 function layoutLines(layout: UiLayout): string[] {
   const view = layout.view
     ? [layout.view.id, layout.view.input === undefined ? '' : JSON.stringify(layout.view.input)].filter(Boolean).join(' ')
@@ -95,7 +117,13 @@ function layoutLines(layout: UiLayout): string[] {
     `panel: ${layout.panel ?? '-'}`,
     `sidebar: ${layout.sidebar ? 'shown' : 'hidden'}`,
     `focus: ${layout.focus ?? '-'}`,
-    `palette: ${layout.palette === true ? 'open' : 'closed'}`
+    `palette: ${layout.palette === true ? 'open' : 'closed'}`,
+    ...(layout.tools === undefined
+      ? []
+      : [
+          `tools: ${UI_TOOL_SLOTS.map((slot) => `${slot}=${layout.tools!.open[slot] ?? '-'}`).join(', ')}`,
+          `tool sizes: left=${layout.tools.sizes.left}, right=${layout.tools.sizes.right}, bottom=${layout.tools.sizes.bottom}`
+        ])
   ]
 }
 
@@ -166,31 +194,22 @@ export const uiOpenPanel: Command = {
 
 export const uiConfigurePanel: Command = {
   name: 'ui configure-panel',
-  summary: 'configure a panel width and/or the global activity bar position',
+  summary: 'configure a panel width',
   positionals: [{ name: 'id', description: 'the effective panel contribution ID', required: true }],
   flags: {
-    width: { type: 'integer', description: 'desired panel width in pixels (220–4096)' },
-    'activity-bar-position': { type: 'string', enum: ['top', 'side'], description: 'global panel activity-bar position' }
+    width: { type: 'integer', description: 'desired panel width in pixels (220–4096)' }
   },
   methods: ['ui.panel.configure'],
   plugin: null,
   async run(args, ctx) {
     const [id] = takePositionals(args, ['id'])
     const width = flagInt(args, 'width')
-    const activityBarPosition = flagString(args, 'activity-bar-position')
-    if (width === undefined && activityBarPosition === undefined) {
-      throw new UsageError('provide --width and/or --activity-bar-position')
-    }
-    const layout = await ctx.rpc.call('ui.panel.configure', {
-      id,
-      ...(width === undefined ? {} : { width }),
-      ...(activityBarPosition === undefined ? {} : { activityBarPosition: activityBarPosition as 'top' | 'side' })
-    })
+    if (width === undefined) throw new UsageError('provide --width')
+    const layout = await ctx.rpc.call('ui.panel.configure', { id, width })
     ctx.out.result(layout, () =>
       [
         ...layoutLines(layout),
-        `panel width ${id}: ${layout.panelWidths?.[id] ?? '-'}`,
-        `activity bar position: ${layout.activityBarPosition ?? '-'}`
+        `panel width ${id}: ${layout.panelWidths?.[id] ?? '-'}`
       ].join('\n')
     )
   }
@@ -206,6 +225,86 @@ export const uiClosePanel: Command = {
   async run(args, ctx) {
     takePositionals(args, [])
     const layout = await ctx.rpc.call('ui.panel.close', {})
+    ctx.out.result(layout, () => layoutLines(layout).join('\n'))
+  }
+}
+
+export const uiOpenTool: Command = {
+  name: 'ui open-tool',
+  summary: 'open or toggle a tool in its assigned slot',
+  positionals: [{ name: 'id', description: 'the effective UI tool ID', required: true }],
+  flags: {},
+  methods: ['ui.tool.open'],
+  plugin: null,
+  async run(args, ctx) {
+    const [id] = takePositionals(args, ['id'])
+    const layout = await ctx.rpc.call('ui.tool.open', { id })
+    ctx.out.result(layout, () => layoutLines(layout).join('\n'))
+  }
+}
+
+export const uiCloseTool: Command = {
+  name: 'ui close-tool',
+  summary: 'close the tool shown in a slot',
+  positionals: [{ name: 'slot', description: UI_TOOL_SLOTS.join(', '), required: true }],
+  flags: {},
+  methods: ['ui.tool.close'],
+  plugin: null,
+  async run(args, ctx) {
+    const [slot] = takePositionals(args, ['slot'])
+    const layout = await ctx.rpc.call('ui.tool.close', { slot: slotArgument(slot) })
+    ctx.out.result(layout, () => layoutLines(layout).join('\n'))
+  }
+}
+
+export const uiMoveTool: Command = {
+  name: 'ui move-tool',
+  summary: 'move a tool to another slot',
+  positionals: [
+    { name: 'id', description: 'the effective UI tool ID', required: true },
+    { name: 'slot', description: UI_TOOL_SLOTS.join(', '), required: true }
+  ],
+  flags: {},
+  methods: ['ui.tool.move'],
+  plugin: null,
+  async run(args, ctx) {
+    const [id, slot] = takePositionals(args, ['id', 'slot'])
+    const layout = await ctx.rpc.call('ui.tool.move', { id, slot: slotArgument(slot) })
+    ctx.out.result(layout, () => layoutLines(layout).join('\n'))
+  }
+}
+
+export const uiResizeTools: Command = {
+  name: 'ui resize-tools',
+  summary: 'resize tool sides, bottom or slot splits',
+  positionals: [],
+  flags: {
+    left: { type: 'number', description: 'left width (160–1200)' },
+    right: { type: 'number', description: 'right width (160–1200)' },
+    bottom: { type: 'number', description: 'bottom height (100–1000)' },
+    'left-split': { type: 'number', description: 'left split fraction (0.15–0.85)' },
+    'right-split': { type: 'number', description: 'right split fraction (0.15–0.85)' },
+    'bottom-split': { type: 'number', description: 'bottom split fraction (0.15–0.85)' }
+  },
+  methods: ['ui.tool.resize'],
+  plugin: null,
+  async run(args, ctx) {
+    takePositionals(args, [])
+    const sizes: UiToolResize = {}
+    const fields = [
+      ['left', 'left'],
+      ['right', 'right'],
+      ['bottom', 'bottom'],
+      ['left-split', 'leftSplit'],
+      ['right-split', 'rightSplit'],
+      ['bottom-split', 'bottomSplit']
+    ] as const
+    for (const [flag, key] of fields) {
+      const value = flagInt(args, flag)
+      if (value !== undefined) sizes[key] = value
+    }
+    if (Object.keys(sizes).length === 0) throw new UsageError('provide at least one tool size flag')
+    const layout = await ctx.rpc.call('ui.tool.resize', sizes)
     ctx.out.result(layout, () => layoutLines(layout).join('\n'))
   }
 }

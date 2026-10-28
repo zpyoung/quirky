@@ -10,6 +10,7 @@ import {
   TERMINAL_TAB_MENU,
   THEME_TOKENS,
   UI_KINDS,
+  UI_TOOL_SLOTS,
   type SettingDeclaration,
 } from '@quirky/protocol'
 
@@ -17,9 +18,9 @@ type Entry = Record<string, unknown>
 
 const ALLOWED_FIELDS: Record<string, readonly string[]> = {
   'status-bar': ['title', 'description', 'order'],
-  'sidebar-section': ['title', 'description', 'order'],
-  'activity-item': ['title', 'description', 'order'],
-  panel: ['title', 'description', 'order'],
+  'sidebar-section': ['title', 'description', 'order', 'defaultSlot', 'icon'],
+  'activity-item': ['title', 'description', 'order', 'defaultSlot', 'icon'],
+  panel: ['title', 'description', 'order', 'defaultSlot', 'icon'],
   'settings-section': ['title', 'description', 'order'],
   view: ['title', 'description', 'settings'],
   overlay: ['title', 'description', 'order'],
@@ -198,6 +199,13 @@ export function checkUiKindEntry(kind: string, label: string, entry: Entry, erro
     if (field !== 'id' && !allowed.includes(field)) errors.push(`${label}: unknown field \`${field}\``)
   }
   if (allowed.includes('title')) checkTitle(kind, label, entry, errors)
+  if (allowed.includes('defaultSlot') && entry.defaultSlot !== undefined &&
+    !(UI_TOOL_SLOTS as readonly unknown[]).includes(entry.defaultSlot)) {
+    errors.push(`${label}: defaultSlot must be one of ${UI_TOOL_SLOTS.join(', ')}`)
+  }
+  if (allowed.includes('icon') && entry.icon !== undefined && !isNonEmptyString(entry.icon)) {
+    errors.push(`${label}: icon must be a non-empty string`)
+  }
   if (entry.description !== undefined && typeof entry.description !== 'string') {
     errors.push(`${label}: description must be a string`)
   }

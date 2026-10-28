@@ -89,6 +89,7 @@ export type AccountIdentity = {
   id: string | null
   label: string
   source: 'managed' | 'default' | 'custom'
+  authKind: 'oauth' | 'api-key' | 'none' | 'unknown'
 }
 
 export type PrepareInput = {

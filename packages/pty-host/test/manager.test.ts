@@ -433,8 +433,17 @@ describe('attach', () => {
     await manager.create(params('w', sh(`stty -echo; printf 'RAW_READY\\n'; exec cat`)))
     await waitFor(async () => (await manager.read('w', 0)).lines.includes('RAW_READY'), 5000, 'echo disabled')
     const first = await tap(manager, 'w')
-    manager.write('w', enc(Array.from({ length: 40 }, (_, i) => `line-${i}\n`).join('')))
-    await waitFor(() => first.text().includes('line-39\r\n'), 5000, 'cat output')
+    const input = Array.from({ length: 40 }, (_, i) => `line-${i}\n`).join('')
+    const prefix = input.slice(0, input.lastIndexOf('line-39')).replaceAll('\n', '\r\n')
+    // Drain cat's completed lines while the final input line is still partial. With echo
+    // enabled, its partial token can be split by cat output even when every byte arrives.
+    manager.write('w', enc(input.slice(0, -2)))
+    await waitFor(() => first.text().length >= prefix.length, 5000, 'completed cat lines')
+    expect(first.text()).toBe(prefix)
+
+    // Complete the pending line before attaching: the replay/live split must not depend
+    // on whether the PTY delivers that output before or after subscribe resolves.
+    manager.write('w', enc(input.slice(-2)))
 
     const live: Uint8Array[] = []
     const sub = await manager.subscribe('w', (_id, bytes) => live.push(bytes), { mode: 'raw' })
@@ -448,6 +457,8 @@ describe('attach', () => {
 
     manager.write('w', enc('tail-end\n'))
     await waitFor(() => text(concat(live)).includes('tail-end\r\n'), 5000, 'more output')
+    expect(first.all()).toBe(`RAW_READY\r\n${input.replaceAll('\n', '\r\n')}tail-end\r\n`)
+    expect(sub.offset + concat(live).length).toBe(manager.list()[0]!.offset)
     expect(text(concat([replay, ...live]))).toBe(first.all().slice(sub.offset - replay.length))
   })
 

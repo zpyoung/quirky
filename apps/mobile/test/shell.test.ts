@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import type { MobileBundleManifest } from '../src/contracts'
 import { createGenerationStore, type BundleFileSystem } from '../src/shell/generation'
 import { resolveBundleRoute, resolvePageRequestPath } from '../src/shell/shell-security'
+import { bundleRoutesFixture } from './bundle-fixture'
 
 const html = new TextEncoder().encode('<!doctype html><main>ready</main>')
 const hash = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex')
@@ -25,10 +26,7 @@ const manifest: MobileBundleManifest = {
   buildId: buildIdFor([manifestAsset]),
   assets: [manifestAsset],
   totalBytes: html.byteLength,
-  routes: [
-    { kind: 'workspaces', path: '/', grants: ['rpc', 'storage', 'navigate', 'terminal', 'externalLink'] },
-    { kind: 'session', path: '/session', grants: ['rpc', 'storage', 'navigate', 'terminal', 'clipboard.read', 'clipboard.write', 'externalLink'] }
-  ]
+  routes: bundleRoutesFixture()
 }
 let root: string | undefined
 

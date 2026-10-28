@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from 'bun:test'
 import { bootTasks, type TasksTest } from './helpers'
 import type { UiLayout } from '@quirky/protocol'
-import type { TasksState } from '../src/contracts'
+import { TASKS_SETTINGS_VIEW, TASKS_VIEW, type TasksState } from '../src/contracts'
 
 const runs: TasksTest[] = []
 afterEach(async () => { for (const run of runs.splice(0).reverse()) await run.cleanup() })
@@ -18,11 +18,35 @@ test('Tasks open and navigation publish the exact daemon-owned view and close re
   expect(state.navigation.repoIds).toEqual([run.repoId])
   expect(state.navigation.page).toBe(3)
   const visible = await run.client.callAny('ui.state', {}) as { layout: UiLayout }
-  expect(visible.layout.view?.id).toBe('view:quirky.tasks/tasks')
+  expect(visible.layout.view?.id).toBe(TASKS_VIEW)
   expect(visible.layout.view?.input).toMatchObject({ navigation: { page: 3 } })
   await run.call('close')
   const after = await run.client.callAny('ui.state', {}) as { layout: UiLayout }
   expect(after.layout.view).toEqual(before.layout.view)
+}, 20_000)
+
+test('Tasks navigation and close stay in the open tool without changing the center view', async () => {
+  const run = await boot()
+  const toolId = 'sidebar-section:quirky.tasks/tasks'
+  const center = { id: TASKS_SETTINGS_VIEW, input: { source: 'keep' } }
+  await run.client.callAny('ui.view.open', center)
+  await run.client.callAny('ui.tool.open', { id: toolId })
+
+  const before = await run.client.callAny('ui.state', {}) as { layout: UiLayout }
+  const slot = before.layout.tools!.placements[toolId]!
+  expect(before.layout.tools!.open[slot]).toBe(toolId)
+
+  await run.call('navigate', { mode: 'prs', query: 'is:pr is:open' })
+  const navigated = await run.client.callAny('ui.state', {}) as { layout: UiLayout }
+  expect(navigated.layout.view).toEqual(center)
+  expect(navigated.layout.viewTabs).toEqual([center])
+  expect(navigated.layout.tools!.open[slot]).toBe(toolId)
+
+  await run.call('close')
+  const closed = await run.client.callAny('ui.state', {}) as { layout: UiLayout }
+  expect(closed.layout.tools!.open[slot]).toBeNull()
+  expect(closed.layout.view).toEqual(center)
+  expect(closed.layout.viewTabs).toEqual([center])
 }, 20_000)
 
 test('task preferences preserve sticky all and reject hiding the final provider without corrupting prior state', async () => {

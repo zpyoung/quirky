@@ -14,6 +14,7 @@ type DesktopRequestBridge = {
   closeWindow(params: NativeBrowserHostRPC['bun']['requests']['closeWindow']['params']): Promise<NativeBrowserHostRPC['bun']['requests']['closeWindow']['response']>
   revealItem(params: NativeBrowserHostRPC['bun']['requests']['revealItem']['params']): Promise<NativeBrowserHostRPC['bun']['requests']['revealItem']['response']>
   activateOwner(params: NativeBrowserHostRPC['bun']['requests']['activateOwner']['params']): Promise<NativeBrowserHostRPC['bun']['requests']['activateOwner']['response']>
+  readClipboardText(params: NativeBrowserHostRPC['bun']['requests']['readClipboardText']['params']): Promise<NativeBrowserHostRPC['bun']['requests']['readClipboardText']['response']>
 }
 
 const DESKTOP_CAPABILITIES: NativeDesktopCapabilities = {
@@ -44,6 +45,7 @@ const bridge: NativeBrowserPreloadBridge = {
 
 const desktopBridge: DesktopShellBridge = {
   capabilities: DESKTOP_CAPABILITIES,
+  readClipboardText: () => requests.readClipboardText({}),
   pickFolder: (params) => requests.pickFolder(params),
   openWindow: (request, ownerShell) => requests.openWindow({ request, ownerShell }),
   closeWindow: (windowId) => requests.closeWindow({ windowId }),

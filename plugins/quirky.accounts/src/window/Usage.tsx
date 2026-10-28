@@ -111,8 +111,8 @@ export function UsagePreferencesControls({ store, preferences }: { store: Accoun
 
 const PROVIDER_LABELS_LIST = Object.entries(PROVIDER_LABELS) as [ProviderId, string][]
 
-function EmptyUsage({ store, statusBar = false }: { store: AccountsUiStore; statusBar?: boolean }) {
-  return <div className={`usage-cta${statusBar ? ' usage-status-cta' : ''}`}>
+function EmptyUsage({ store }: { store: AccountsUiStore }) {
+  return <div className="usage-cta">
     <h2>Configure usage tracking</h2>
     <p>Connect your AI provider accounts to see their usage in real time and easily switch between accounts.</p>
     <div className="details-actions">
@@ -489,7 +489,7 @@ export function StatusBarUsage({ store, report }: { store: AccountsUiStore; repo
     visibleProviders: hidden ? [] : visibleChips.map((provider) => provider.provider),
     visibleProviderStatus: hidden ? [] : visibleChips.map((provider) => ({ provider: provider.provider, label: PROVIDER_LABELS[provider.provider], status: snapshotStatus(provider).label, usedPercent: maxUsed(provider) })),
     collapsedProviders: hidden ? [] : collapsed.map((provider) => provider.provider),
-    emptyCtaVisible: !hidden && showEmptyCta && !snapshot.ui.open,
+    emptyCtaVisible: !hidden && showEmptyCta && snapshot.ui.open,
     ui: { popoverOpen: snapshot.ui.open, provider: snapshot.ui.provider && isProvider(snapshot.ui.provider) ? snapshot.ui.provider : null, expanded: snapshot.ui.expanded }
   }
   useStableReport(report, reportState)
@@ -507,9 +507,7 @@ export function StatusBarUsage({ store, report }: { store: AccountsUiStore; repo
     <style>{ACCOUNTS_CSS}</style>
     {!hidden && <>
       <button ref={triggerRef} type="button" className="usage-trigger" aria-label="Open Usage" aria-expanded={snapshot.ui.open} onClick={() => void store.setUiState({ open: !snapshot.ui.open })}>Usage <small>{preferences?.direction === 'remaining' ? 'Remaining' : 'Used'}</small></button>
-      {showEmptyCta
-        ? !snapshot.ui.open && <EmptyUsage store={store} statusBar />
-        : <div ref={chipsRef} className="usage-chips" aria-label="Provider usage status bar">
+      {!showEmptyCta && <div ref={chipsRef} className="usage-chips" aria-label="Provider usage status bar">
             {visibleChips.map((provider) => <StatusChip key={provider.provider} snapshot={provider} preferences={preferences ?? DEFAULT_USAGE_PREFERENCES} />)}
             {collapsed.length > 0 && <button type="button" className="usage-chip" aria-label={`${collapsed.length} more providers`} title={tooltip} onClick={() => void store.setUiState({ open: true })}>+{collapsed.length}</button>}
           </div>}

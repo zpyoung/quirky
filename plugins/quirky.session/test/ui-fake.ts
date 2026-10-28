@@ -81,6 +81,7 @@ export function fakeContext(handlers: Record<string, Handler> = {}, settings: Re
   const context: UiPluginContext = {
     pluginId: 'quirky.session',
     nativeBrowser: createNativeBrowserCapability(),
+    readClipboardText: async () => '',
     log() {},
     provide(id, implementation) {
       provided.set(id, implementation as (...args: any[]) => any)

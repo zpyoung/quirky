@@ -100,7 +100,7 @@ export function createAskStore(context: UiPluginContext, clock: AskStoreClock = 
     if (disposed || resolvedIds.has(askId) || recovering.has(askId)) return
     recovering.add(askId)
     try {
-      const all = (await context.call('quirky.ask/list', { pendingOnly: false })) as Ask[]
+      const all = (await context.call('quirky.ask/list', { pendingOnly: false, askId })) as Ask[]
       const resolved = all.find((ask) => ask.id === askId)
       if (!resolved || disposed) return
       const flash = makeFlash(resolved, envelope)
@@ -133,7 +133,7 @@ export function createAskStore(context: UiPluginContext, clock: AskStoreClock = 
       appliedGeneration = mine
       watermark = Math.max(watermark, eventSeq)
       for (const ask of list) watermark = Math.max(watermark, ask.seq)
-      const live = list.filter((ask) => !removed.has(ask.id))
+      const live = list.filter((ask) => !removed.has(ask.id) && !resolvedIds.has(ask.id))
       publish(
         live.filter((ask) => !ask.queued).sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id)),
         live.filter((ask) => ask.queued).length

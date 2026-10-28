@@ -1,6 +1,7 @@
 import type { MethodName, QuirkyEvent } from './rpc'
 import type { PluginEvent } from './plugins'
 import type { Schema } from './schema'
+import { UI_TOOL_SLOTS } from './tool-slots'
 
 export type KernelEventType = Exclude<QuirkyEvent, PluginEvent>['type']
 
@@ -171,6 +172,48 @@ const uiMenuItem = object(
   },
   ['id', 'plugin', 'menu', 'title', 'command']
 )
+const toolSlot: Schema = { type: 'string', enum: [...UI_TOOL_SLOTS] }
+const uiTool = object(
+  {
+    id: string(),
+    title: string(),
+    icon: string(),
+    defaultSlot: toolSlot,
+    contributionId: { description: 'A contribution ID, or null for the host-owned Inbox.' },
+    aliases: strings
+  },
+  ['id', 'title', 'icon', 'defaultSlot', 'contributionId', 'aliases']
+)
+const uiToolLayout = object(
+  {
+    placements: { type: 'object', additionalProperties: true },
+    order: strings,
+    open: object(Object.fromEntries(UI_TOOL_SLOTS.map((slot) => [slot, { description: 'A tool ID, or null when the slot is closed.' }])), [...UI_TOOL_SLOTS]),
+    sizes: object(
+      {
+        left: { type: 'number', minimum: 160, maximum: 1200 },
+        right: { type: 'number', minimum: 160, maximum: 1200 },
+        bottom: { type: 'number', minimum: 100, maximum: 1000 },
+        leftSplit: { type: 'number', minimum: 0.15, maximum: 0.85 },
+        rightSplit: { type: 'number', minimum: 0.15, maximum: 0.85 },
+        bottomSplit: { type: 'number', minimum: 0.15, maximum: 0.85 }
+      },
+      ['left', 'right', 'bottom', 'leftSplit', 'rightSplit', 'bottomSplit']
+    )
+  },
+  ['placements', 'order', 'open', 'sizes']
+)
+const uiViewTab = object({ id: string(), input: { description: 'The latest input for this opened view.' } }, ['id'])
+const uiResize = object(
+  {
+    left: { type: 'number', minimum: 160, maximum: 1200 },
+    right: { type: 'number', minimum: 160, maximum: 1200 },
+    bottom: { type: 'number', minimum: 100, maximum: 1000 },
+    leftSplit: { type: 'number', minimum: 0.15, maximum: 0.85 },
+    rightSplit: { type: 'number', minimum: 0.15, maximum: 0.85 },
+    bottomSplit: { type: 'number', minimum: 0.15, maximum: 0.85 }
+  }
+)
 const uiModel = object(
   {
     sidebarSections: listOf({ type: 'object' }),
@@ -186,6 +229,7 @@ const uiModel = object(
     menuItems: listOf(uiMenuItem),
     themes: listOf({ type: 'object' }),
     theme: object({ chosen: string(), active: string() }, ['chosen', 'active']),
+    tools: listOf(uiTool),
     modules: { type: 'object', additionalProperties: true }
   },
   ['sidebarSections', 'statusBars', 'activityItems', 'panels', 'views', 'overlays', 'commands', 'keybindings', 'settings', 'settingsSections', 'menuItems', 'themes', 'theme', 'modules']
@@ -209,8 +253,9 @@ const uiLayout = object(
     sidebar: boolean(),
     focus: { description: "'sidebar', 'view', 'panel' or null." },
     panelWidths: { type: 'object', additionalProperties: true, description: 'Desired width by panel ID.' },
-    activityBarPosition: { type: 'string', enum: ['top', 'side'], description: 'Global panel activity-bar position.' },
-    palette: { type: 'boolean', description: 'Whether the command palette is open; absent means closed.' }
+    palette: { type: 'boolean', description: 'Whether the command palette is open; absent means closed.' },
+    viewTabs: listOf(uiViewTab, 'Open center view contributions, retaining each view’s latest input.'),
+    tools: uiToolLayout
   },
   ['view', 'panel', 'sidebar', 'focus']
 )
@@ -346,7 +391,8 @@ export const KERNEL_METHOD_SCHEMAS = {
         sessionToken: string('The launch-scoped session token; independent from sessionId.'),
         cwd: string(),
         sessionId: string(),
-        worktreeId: string()
+        worktreeId: string(),
+        desktopClientId: string('Stable first-party UI installation identity; accepted only for role ui.')
       },
       ['role', 'protocolVersion']
     ),
@@ -470,10 +516,10 @@ export const KERNEL_METHOD_SCHEMAS = {
     result: uiState
   },
   'ui.window.self': {
-    description: 'Returns the calling connection ID only for a live UI-role connection.',
+    description: 'Returns the calling connection ID and optional stable desktop identity only for a live UI-role connection.',
     readOnly: true,
     params: noParams,
-    result: object({ connId: integer(1) }, ['connId'])
+    result: object({ connId: integer(1), desktopClientId: string() }, ['connId'])
   },
   'ui.window.state': {
     description: 'The exact live UI connection’s effective layout, its slot reports and its toasts.',
@@ -530,6 +576,26 @@ export const KERNEL_METHOD_SCHEMAS = {
     params: object({ open: { type: 'boolean', description: 'True opens, false closes; omitted toggles.' } }),
     result: uiLayout
   },
+  'ui.tool.open': {
+    description: 'Opens tool `id` in its assigned slot, toggling that slot closed when the tool is already shown.',
+    params: object({ id: string() }, ['id']),
+    result: uiLayout
+  },
+  'ui.tool.close': {
+    description: 'Closes the tool currently shown in `slot` without changing its placement.',
+    params: object({ slot: toolSlot }, ['slot']),
+    result: uiLayout
+  },
+  'ui.tool.move': {
+    description: 'Moves tool `id` to `slot`, moving it there atomically when it is currently open.',
+    params: object({ id: string(), slot: toolSlot }, ['id', 'slot']),
+    result: uiLayout
+  },
+  'ui.tool.resize': {
+    description: 'Updates one or more bounded tool widths, bottom height or side splits; at least one size field is required.',
+    params: uiResize,
+    result: uiLayout
+  },
   'ui.view.open': {
     description: 'Opens view `id` with `input` (JSON up to 64 KiB); `id` must be an effective view.',
     params: object({ id: string(), input: { description: 'Passed to the view as its input.' } }, ['id']),
@@ -543,13 +609,11 @@ export const KERNEL_METHOD_SCHEMAS = {
   },
   'ui.panel.close': { description: 'Closes the open panel.', params: noParams, result: uiLayout },
   'ui.panel.configure': {
-    description:
-      'Configures an effective panel width (an integer from 220 through 4096) and/or the global activity bar position.',
+    description: 'Configures an effective panel width (an integer from 220 through 4096).',
     params: object(
       {
         id: string('An effective panel contribution ID.'),
-        width: { type: 'integer', minimum: 220, maximum: 4096 },
-        activityBarPosition: { type: 'string', enum: ['top', 'side'] }
+        width: { type: 'integer', minimum: 220, maximum: 4096 }
       },
       ['id']
     ),
