@@ -626,9 +626,8 @@
       "deps": [
         "m5-structured-runner"
       ],
-      "status": "in-progress",
-      "early": true,
-      "lane": 2
+      "status": "done",
+      "early": true
     },
     {
       "id": "sa-browser-design-mode",
@@ -1389,6 +1388,18 @@
       ],
       "deps": [
         "m6-orchestration-core"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m5-automations-dispatch-remote-and-args",
+      "milestone": "M5",
+      "title": "Complete automations SSH/runtime host registration-generation fencing, workspace pin/re-pin/re-adoption and remote execution once public host APIs exist; resolve raw extra-agent-args support against locked structured-runner D6 (native options only, no terminal fallback)",
+      "docs": [
+        "automations.md"
+      ],
+      "deps": [
+        "m5-automations-dispatch"
       ],
       "status": "todo"
     }
