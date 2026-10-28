@@ -325,6 +325,10 @@ const BASH_INTEGRATION = `if [ -z "\${__quirky_integrated-}" ]; then
     __quirky_hn=$1
   }
   __quirky_debug() {
+    # functrace inherits DEBUG inside our prompt helpers; those are not user commands
+    case "\${FUNCNAME[1]-}" in
+      __quirky_prompt|__quirky_arm|__quirky_histnum) return 0 ;;
+    esac
     [ "$BASH_COMMAND" = __quirky_prompt ] && return 0
     if [ "$__quirky_armed" = 1 ]; then
       __quirky_armed=0
