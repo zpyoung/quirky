@@ -83,12 +83,14 @@ function resolveStructured(input: ResolveInput, catalog: LaunchCatalog | null, p
   const options: LaunchSettings['options'] = Object.create(null)
   const structured: Record<string, Value> = Object.create(null)
   if (selection && catalog) {
-    if (!catalog.model.structured) throw unsupportedModel(entry)
+    if (selection.model !== null && !catalog.model.structured) throw unsupportedModel(entry)
     for (const { option } of picks) {
       if (!option.structured) throw new SelectionError(`Agent ${entry.id} option ${option.id} can't be applied to a structured launch.`)
     }
-    structured[catalog.model.structured] = selection.model
-    options.model = { value: selection.model, source: 'explicit' }
+    if (selection.model !== null && catalog.model.structured) {
+      structured[catalog.model.structured] = selection.model
+      options.model = { value: selection.model, source: 'explicit' }
+    }
     for (const { option, value } of picks) {
       structured[option.structured!] = value
       options[option.id] = { value, source: 'explicit' }
@@ -129,16 +131,16 @@ export function resolveLaunch(input: ResolveInput): Resolution {
     args = insertBeforeTerminator(args, extras.tokens, valueFlags)
   }
 
-  const modelShadowed = selection !== null && (extras?.kinds.has('model') ?? false)
+  const modelShadowed = selection?.model != null && (extras?.kinds.has('model') ?? false)
   const shadowedOption = (option: OptionDecl) => modelShadowed || (!option.composed && extrasSet(option.conflicts))
   const emitted = picks.filter(({ option }) => !shadowedOption(option))
   const flagged = emitted.filter(({ option }) => !option.composed)
 
-  if (selection && catalog && !modelShadowed) args = removeConflicts(args, modelConflicts, valueFlags)
+  if (selection?.model != null && catalog && !modelShadowed) args = removeConflicts(args, modelConflicts, valueFlags)
   for (const { option } of flagged) args = removeConflicts(args, option.conflicts, valueFlags)
 
   const added: string[] = []
-  if (selection && catalog && !modelShadowed) {
+  if (selection?.model != null && catalog && !modelShadowed) {
     const model = catalog.composeModel && selection.listed ? COMPOSE_RULES[catalog.composeModel](selection.model, selection.values) : selection.model
     added.push(...substitute(catalog.model.flag, model))
   }
@@ -146,7 +148,7 @@ export function resolveLaunch(input: ResolveInput): Resolution {
 
   if (commandTokens.length > 1) {
     const own = commandTokens.slice(1)
-    const setsModel = (selection !== null && !modelShadowed) || (extras?.kinds.has('model') ?? false) || extrasSet(modelConflicts)
+    const setsModel = (selection?.model != null && !modelShadowed) || (extras?.kinds.has('model') ?? false) || extrasSet(modelConflicts)
     const setsEffort = flagged.some(({ option }) => option.id === 'effort') || (extras?.kinds.has('effort') ?? false) || extrasSet(effortConflicts)
     const contradicts = (conflicts: Conflict[]) => conflicts.some((conflict) => hasOptionAnywhere(own, conflict, valueFlags))
     if ((setsModel && contradicts(modelConflicts)) || (setsEffort && contradicts(effortConflicts))) {
@@ -157,11 +159,13 @@ export function resolveLaunch(input: ResolveInput): Resolution {
   const options: LaunchSettings['options'] = Object.create(null)
   const structuredOptions: Record<string, Value> = Object.create(null)
   if (selection && catalog) {
-    if (modelShadowed) {
-      options.model = { source: 'extra-args' }
-    } else {
-      options.model = { value: selection.model, source: 'explicit' }
-      if (catalog.model.structured) structuredOptions[catalog.model.structured] = selection.model
+    if (selection.model !== null) {
+      if (modelShadowed) {
+        options.model = { source: 'extra-args' }
+      } else {
+        options.model = { value: selection.model, source: 'explicit' }
+        if (catalog.model.structured) structuredOptions[catalog.model.structured] = selection.model
+      }
     }
     for (const { option, value } of picks) {
       if (shadowedOption(option)) {

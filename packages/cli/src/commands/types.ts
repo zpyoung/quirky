@@ -5,17 +5,18 @@ import type { Printer } from '../output'
 
 export type OpenResult = { ok: true } | { ok: false; reason: string }
 
-/** Everything a command needs from its surroundings, injected so commands are testable. */
+/** Everything a command needs from its surroundings, injected so they are testable. */
 export type Context = {
   rpc: DaemonLink
   requestBase: string
   out: Printer
   env: Record<string, string | undefined>
   cwd: string
+  platform?: string
   readFile(path: string): string
   sleep(ms: number): Promise<void>
   now(): number
-  openDesktopApp(): Promise<OpenResult>
+  openDesktopApp(signal?: AbortSignal): Promise<OpenResult>
 }
 
 export type Command = {

@@ -6,6 +6,8 @@ import { worktreeOf } from '../scm'
 import { SESSIONS_VIEW_ID } from '../shared/view-input'
 import { generators, isUsable, useAgents, type AgentList } from './agents'
 import { useDraft } from './useDraft'
+import type { RecipeLaunchOptions } from '../daemon/recipe-options'
+import { LaunchOptionsEditor } from './LaunchOptionsEditor'
 import { CUSTOM_AGENT, DEFAULT_TEMPLATE, type AiAction, type Recipe } from './types'
 
 const ACTIONS: ReadonlyArray<{ action: AiAction; title: string }> = [
@@ -44,7 +46,7 @@ function useRecipes(context: UiPluginContext, worktree: string): [Recipes, (reci
     }
     void read()
     const unsubscribe = context.subscribe((event) => {
-      if (event.type === 'quirky.git/aiChanged') void read()
+      if (event.type === 'quirky.git/aiChanged' || event.type === 'quirky.agents/changed') void read()
     })
     return () => {
       alive = false
@@ -91,7 +93,9 @@ type SectionProps = {
 }
 
 function ActionSection({ context, worktree, action, title, recipe, agents, onRecipe }: SectionProps) {
-  const persist = async (fields: { agent?: string; args?: string; template?: string }) => {
+  const choices = agents === null ? [] : action === 'commitMessage' ? generators(agents) : agents.agents.filter(isUsable)
+  const fallback = agents === null ? '' : choices.find((choice) => choice.id === agents.defaultAgent)?.id ?? choices[0]?.id ?? ''
+  const persist = async (fields: { agent?: string; args?: string; template?: string; launchOptions?: RecipeLaunchOptions | null }) => {
     try {
       const result = (await context.call('quirky.git/setAiRecipe', { worktree, action, scope: 'global', ...fields })) as { recipe: Recipe }
       onRecipe(result.recipe)
@@ -99,11 +103,15 @@ function ActionSection({ context, worktree, action, title, recipe, agents, onRec
       context.toast('Could not save the AI recipe', messageOf(error))
     }
   }
-  const [agent, changeAgent] = useDraft(recipe?.agent ?? '', (next) => persist({ agent: next }))
+  const [agent, changeAgent] = useDraft(recipe?.agent ?? '', (next) => {
+    const oldProvider = (recipe?.agent ?? '') || fallback
+    const nextProvider = next || fallback
+    return persist({ agent: next, ...(oldProvider === nextProvider ? {} : { launchOptions: null }) })
+  })
   const [args, changeArgs] = useDraft(recipe?.args ?? '', (next) => persist({ args: next }))
   const [template, changeTemplate] = useDraft(recipe?.template ?? DEFAULT_TEMPLATE, (next) => persist({ template: next }))
-
-  const choices = agents === null ? [] : action === 'commitMessage' ? generators(agents) : agents.agents.filter(isUsable)
+  const provider = agent || fallback
+  const optionValue = agent === (recipe?.agent ?? '') ? recipe?.launchOptions ?? {} : {}
   const listed = choices.some((choice) => choice.id === agent) || agent === '' || (action === 'commitMessage' && agent === CUSTOM_AGENT)
   const overridden = recipe !== undefined && Object.values(recipe.sources).includes('repo')
 
@@ -128,6 +136,16 @@ function ActionSection({ context, worktree, action, title, recipe, agents, onRec
         CLI arguments
         <input type="text" aria-label={`${title} CLI arguments`} spellCheck={false} value={args} onChange={(event) => changeArgs(event.target.value)} />
       </label>
+      <LaunchOptionsEditor
+        key={`${action}:${provider}`}
+        context={context}
+        agent={provider}
+        value={optionValue}
+        args={args}
+        labelPrefix={title}
+        resetLabel="Use inherited launch choices"
+        onChange={(launchOptions) => void persist({ launchOptions })}
+      />
       <div className="scm-ai-field">
         <div className="scm-ai-field-head">
           <label>Command template</label>
