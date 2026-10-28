@@ -1,3 +1,4 @@
+import { nativeBrowserCapabilityForWindow } from '../native-browser'
 import {
   DEFAULT_THEME,
   THEME_TOKENS,
@@ -15,7 +16,8 @@ import {
   type UiPluginContext,
   type UiPluginModule,
   type UiSlotEntry,
-  type UiState
+  type UiState,
+  type NativeBrowserCapability
 } from '@quirky/protocol'
 
 /** What the host needs from its surroundings; the React shell wires these to `Connection` and the browser. */
@@ -33,6 +35,7 @@ export type HostDeps = {
   /** Dismisses the toast keyed `key` and runs its `onDismiss`, for the daemon's `ui.toast.dismiss`; nothing happens when none has it. */
   dismissToast?(key: string): void
   log(message: string): void
+  nativeBrowser?: NativeBrowserCapability
   /** Window focus, reported to the daemon so it can pick the window a routed command runs in. */
   windowFocus?: { hasFocus(): boolean; subscribe(listener: (focused: boolean) => void): () => void }
   /** User input in the window (pointer, key, wheel), reported to the daemon so it knows someone is at the machine. */
@@ -195,6 +198,7 @@ export class WindowPluginHost {
   private readonly unsubscribeActivity: (() => void) | undefined
   private lastInputAt: number | null = null
   private lastActivityReportAt: number | null = null
+  private readonly nativeBrowser: NativeBrowserCapability
 
   private refreshChain: Promise<unknown> = Promise.resolve()
   /** Events are newer than any `ui.state` snapshot whose request was already in flight. */
@@ -203,6 +207,7 @@ export class WindowPluginHost {
   private settingsSeenDuringFetch: Map<string, boolean | number | string> | null = null
   private stopped = false
   constructor(private readonly deps: HostDeps) {
+    this.nativeBrowser = deps.nativeBrowser ?? nativeBrowserCapabilityForWindow()
     this.unsubscribeEvents = deps.onEvent((event) => this.handleEvent(event))
     this.unsubscribeFocus = deps.windowFocus?.subscribe((focused) => this.reportFocus(focused))
     this.unsubscribeActivity = deps.windowActivity?.subscribe(() => this.noteInput())
@@ -770,6 +775,16 @@ export class WindowPluginHost {
       return once
     }
     return {
+      nativeBrowser: {
+        available: this.nativeBrowser.available,
+        clearPartitionAvailable: this.nativeBrowser.clearPartitionAvailable,
+        mount: live((element, options) => {
+          const handle = this.nativeBrowser.mount(element, options)
+          track(() => handle.dispose())
+          return handle
+        }),
+        clearPartition: live((partition) => this.nativeBrowser.clearPartition(partition))
+      },
       pluginId,
       log: (message) => this.deps.log(`${pluginId}: ${message}`),
       provide: live((contributionId: string, implementation: unknown) => {
