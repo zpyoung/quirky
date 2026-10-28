@@ -102,7 +102,7 @@ function checkTree(value: unknown, depth = 0): void {
     const keys = Object.keys(value)
     if (keys.length > MAX_OBJECT_KEYS) throw new MobileAuthorizationError('mobile parameter object is too large')
     for (const key of keys) {
-      if (Object.hasOwn(FORBIDDEN_KEYS, key)) throw new MobileAuthorizationError('mobile parameters cannot supply caller identity')
+      if (depth === 0 && Object.hasOwn(FORBIDDEN_KEYS, key)) throw new MobileAuthorizationError('mobile parameters cannot supply caller identity')
       checkTree(value[key], depth + 1)
     }
     return

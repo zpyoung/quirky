@@ -356,12 +356,14 @@ export class MobileService {
     const sanitized = this.guardEnvelopeIdentity(text, token)
     const envelope = parseJson(sanitized)
     const currentCount = this.inFlightByDevice.get(deviceId) ?? 0
-    if (currentCount >= MAX_REQUESTS_PER_DEVICE && isRecord(envelope) && typeof envelope.method === 'string' && isRecord(envelope.params)) {
+    if (currentCount >= MAX_REQUESTS_PER_DEVICE) {
+      const request = isRecord(envelope) ? envelope : null
+      const params = request?.params ?? {}
       try {
-        this.authorizeConnection(deviceId, token, envelope.method, envelope.params)
-        this.sendRpcError(state, envelope.id, -32002, 'runtime_busy', { code: 'runtime_busy' })
+        this.authorizeConnection(deviceId, token, typeof request?.method === 'string' ? request.method : '', isRecord(params) ? params : {})
+        this.sendRpcError(state, request?.id, -32002, 'runtime_busy', { code: 'runtime_busy' })
       } catch {
-        await this.receiveThroughKernel(admitted, sanitized, deviceId)
+        this.sendRpcError(state, request?.id, -32001, 'not authorized')
       }
       return
     }

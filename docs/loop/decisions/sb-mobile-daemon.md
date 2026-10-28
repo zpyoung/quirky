@@ -209,5 +209,49 @@
 - **Revisit if:** the phone fork needs a separately versioned descriptor contract.
 - **Source:** locked by mobile.md
 
+## D20: Complete one deep cross-family review and preserve its transport failures
+- **Question:** how to review the frozen branch when a large staged prompt crashed the wrapper.
+- **Options:** count silence as approval; change the artifact; repair transport while keeping the campaign fixed.
+- **Chose:** keep baseline13fc349, snapshot7f1b1925, criteria/lenses/profile/depth fixed. Original roughly903KiB prompts failed with Maximum call stack size exceeded on both attempts in all lenses; a bounded Gemini probe returned READY. Strip template-authoring preambles, substitute large blocks only at their actual standalone placeholders and have the reviewer read the unchanged full394KiB frozen source diff from scratch. Promotes received verbatim criteria in43KiB prompts. Actual independent promote/fresh-refute/claims/merge/gate/manifest completed: C PASS0, X PASS0, S NEEDS_FIXES for S1. No advisories, contested claims, suppressions or protocol limitations were reported.
+- **Why:** failed dispatch is not a clean review. Delivery size does not justify narrowing the artifact or inventing results.
+- **Evidence:** resolve/model/prepass and C/S/X raw prompts/results/gates/manifests under /tmp/quirky-mobile.gBnEmU; model google/gemini-3.1-pro-preview high, full cross-family independence, deep depth. Prepass reused the exact passing417411ms check record; no duplicate suite was run by the prepass.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** wrapper transport changes.
+- **Source:** assumed — autonomous
+
+## D21: Apply one fix batch for S1 and the independently reproduced answer-map edge
+- **Question:** which final findings merit correction under the one-round cap.
+- **Options:** accept S1's source-only claim blindly; reproduce and correct both confirmed consumer edges.
+- **Chose:** accept S1 HIGH: at capacity, omitted params and authorization failures bypassed admission accounting. Normalize omitted params and always finish the full-cap branch without kernel admission, retaining credential/method authorization. Accept parent PX1 MEDIUM: the valid ask question ID role was rejected inside answers; restrict identity-key rejection to outer RPC params while preserving nested JSON bounds and backend answer validation.
+- **Why:** both regressions failed before the fix. Actual encrypted phone/local contrast proved PX1; identical local answers committed answered state. Post-fix actual API regressions passed2tests4assertions; the isolated real daemon/E2EE probe now accepts the mobile answer. This is the single final fix batch; no second review round is claimed.
+- **Evidence:** artifact194; AskAnswerEdge source audit; /tmp/quirky-mobile.gBnEmU/ask-answer-edge.ts before reproduced:true/localStatus:answered and after reproduced:false/mobileAnswerAccepted:true; bg43.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** another direct or nested caller-identity consumer is introduced.
+- **Source:** assumed — autonomous
+
+## D22: Report UI observations and unresolved visibility without speculative restyling
+- **Question:** whether stable Refresh, headless reload shortcuts and a clipped Settings control prove app failures.
+- **Options:** fabricate passes; change UI feedback/layout merely to satisfy a probe; preserve evidence and queue a scoped investigation.
+- **Chose:** real web run20261028T005355-6182 ended with intro/settings/driving/devices PASS, pair/postbuild PARTIAL. Three UI-generated pairings authenticated through a real encrypted peer and were all revoked in the UI. Card/chip, Take back/all, retained fit and Restore/all were observed. Record the redacted value, Refresh and reload observational limits; do not claim reload happened. Settings revoke was below the viewport and guarded scrolling failed, but host overflow already exists, so retain the unresolved origin and queue sb-mobile-settings-visibility. No native-only scenarios were added.
+- **Why:** evidence does not establish a CSS root cause; the alternate Mobile revoke path fulfilled the action. Current source and screenshots, not a model's pass label alone, bound the claim.
+- **Evidence:** .quirk/using-apps-like-a-user/runs/20261028T005355-6182/report.json and obs81; MobileScrollCause audit; packages/ui/src/styles.css:1137-1144; append-only BLOCKERS entry.
+- **Reversibility:** easy
+- **Confidence:** medium
+- **Revisit if:** the scoped follow-up reproduces clipping with a correctly targeted scroller.
+- **Source:** deferred: Settings revoke visibility probe
+
+## D23: Audit unsandboxed review writes and terminate all owned UI runtimes
+- **Question:** whether read-only prompts actually prevented filesystem writes.
+- **Options:** claim tool-enforced readonly; inspect and attribute the final tree.
+- **Chose:** parent audit found only its three expected fix files plus reviewer-created bypass.ts and bypass.test.ts. The S promote trace proves those root writes; preserve them outside the repo, then remove only those attributed scaffolds. No tracked implementation/index mutation by a reviewer was observed. All actual daemon/PTY runtimes stopped; the phone helper retained stdin after its stop command and was explicitly terminated after every device was revoked.
+- **Why:** Pi Bash is not a sandbox. Range-gate PASS alone did not reveal the untracked probe files; the explicit tree audit did.
+- **Evidence:** S-promote.raw.txt.stderr lines33-167; archived reviewer-created-bypass files; parent scope audit; owned service lifecycle tool results.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** review runs gain enforced filesystem isolation.
+- **Source:** assumed — autonomous
+
 ## Progress
-All three audited components integrated; owned component worktrees removed. Catch-up merged13fc349 and all eight incoming decision logs were read; file-resource/worker-entrypoint contracts preserved. Real isolated daemon/PTY/CLI/E2EE smoke passed before and after integration. Terminal exit regressions were corrected and verified with four native scenarios plus shutdown/mobile tests. Full affected gate at35058932 accepted201 remote files and both macOS-only files, scripts68pass, typecheck/build0; search-ui required its runner-owned isolated retry. The safe host-info amendment now has failing-before/passing-after encrypted API proof and enters the final bound gate. Desktop dogfood run20261028T005355-6182 is in progress with an actual encrypted phone actor; keep all owned runtimes until its observations finish. Next: final bound checks, one cross-family C/S/X review/fix batch, record final evidence and queue-controlled landing. No overall queue completion or stuck state observed.
+Implementation and one deep C/S/X review are complete on snapshot7f1b1925; C/X had no findings, S1 plus parent PX1 were fixed in the single allowed batch with failing-before/passing-after real API regressions. UI report has four functional passes and two explicitly tool-limited partials; unresolved Settings visibility is recorded and queued, not silently restyled. All owned UI/phone/API runtimes are stopped and reviewer-created root probes were attributed/archived/removed. Run the post-fix affected-suite/scripts/typecheck/build gate, commit evidence, then detach and queue.ts land sb-mobile-daemon. No second review, new feature flow or second item is needed. Preserve the owner-only audit archive and actual UI reports; remove owned temporary material after successful landing.

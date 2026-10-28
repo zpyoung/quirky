@@ -204,6 +204,41 @@ describe('mobile daemon integration', () => {
     await reconnect.close()
     mobile = undefined
   }, 60_000)
+  test('the concurrent request budget also covers omitted params', async () => {
+    harness = await boot()
+    const api = await harness.connect('cli')
+    const pairing = await api.callAny('quirky.mobile/pair', { address: '127.0.0.1' }) as { pairingUrl: string; endpoint: string }
+    const offer = JSON.parse(Buffer.from(new URL(pairing.pairingUrl).searchParams.get('code')!, 'base64url').toString()) as { publicKeyB64: string; deviceToken: string }
+    const connected = MobileTestClient.connect(pairing.endpoint, offer.publicKeyB64, offer.deviceToken)
+    mobile = connected
+    await connected.authenticated
+    const { askId } = await api.callAny('quirky.ask/create', { spec: { questions: [{ id: 'ready', type: 'text', question: 'Ready?' }] } }) as { askId: string }
+    const waiting = Promise.allSettled(Array.from({ length: 16 }, () => connected.call('quirky.ask/wait', { askId, timeoutMs: 1000 })))
+    try {
+      await expect(connected.call('status.get', {}, { params: undefined })).rejects.toMatchObject({ code: -32002 })
+      await expect(connected.call('daemon.stop')).rejects.toMatchObject({ code: -32001 })
+    } finally {
+      await waiting
+    }
+  })
+
+  test('ordinary answer IDs do not masquerade as caller identity', async () => {
+    harness = await boot()
+    const api = await harness.connect('cli')
+    const pairing = await api.callAny('quirky.mobile/pair', { address: '127.0.0.1' }) as { pairingUrl: string; endpoint: string }
+    const offer = JSON.parse(Buffer.from(new URL(pairing.pairingUrl).searchParams.get('code')!, 'base64url').toString()) as { publicKeyB64: string; deviceToken: string }
+    const connected = MobileTestClient.connect(pairing.endpoint, offer.publicKeyB64, offer.deviceToken)
+    mobile = connected
+    await connected.authenticated
+    const { askId } = await api.callAny('quirky.ask/create', { spec: { questions: [{ id: 'role', type: 'text', question: 'Which role?' }] } }) as { askId: string }
+    const answer = { askId, answers: { role: { value: 'developer', source: 'input' } } }
+    await expect(connected.call('quirky.ask/answer', { ...answer, role: 'ui' })).rejects.toMatchObject({ code: -32001 })
+    await connected.call('quirky.ask/answer', answer)
+    await expect(api.callAny('quirky.ask/wait', { askId, timeoutMs: 0 })).resolves.toMatchObject({
+      status: 'answered', answers: { role: { value: 'developer', source: 'input' } }
+    })
+  })
+
   test('returns a request-scoped reply_too_large error and keeps the sealed session usable', async () => {
     const home = makeTempHome('quirky-mobile-reply-')
     const producer = join(home, 'plugins', 'acme.large-reply')
