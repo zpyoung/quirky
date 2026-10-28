@@ -1,6 +1,6 @@
 # Durable loops
 
-`quirky.loops` runs Claude or Codex work in daemon-owned background sessions and continues after the CLI exits. Loops use native structured sessions, not terminals or UI tabs.
+`quirky.loops` runs Claude or Codex work in daemon-owned background sessions and continues after the CLI exits or its view closes. Execution uses native structured sessions, not terminal panes; optional workspace tabs show the journal and loop controls without owning the agent process.
 
 ## Presets
 
@@ -14,11 +14,28 @@ Queue exhaustion is a completion condition when no check or evaluator is configu
 
 `--ask-before-next` pauses after a completed iteration when another task is available. Each explicit `resume` approves exactly one next iteration. Queue exhaustion takes precedence, so there is no approval pause after the final task.
 
+## Workspace UI
+
+Open the workspace tab-bar **+** menu and choose **Loop…** after Agent settings. The New loop dialog offers Until done, On an interval, and Queue. It starts with a ten-iteration cap and no-progress pausing enabled; the CLI defaults below remain uncapped with no-progress off. Advanced contains completion checks, evaluator conditions, budgets, protected paths and iteration safety options. Folder workspaces do not offer checkpoint commits.
+
+Starting a loop opens its view in a background tab without changing the active tab. Open that tab to read the structured journal beside the Loop rail, or below it in a narrow workspace. The rail shows state, pause reason, progress, check results and retained iteration evidence. Pause waits until the current iteration finishes; Resume can add iterations at a cap. Steer queues guidance for the next prompt. Edit changes subsequent iterations, and queue controls cannot alter an in-progress item.
+
+Closing a running or needs-you loop tab offers Cancel, Stop loop, or Keep running. Keep running removes only the view; Stop loop interrupts the loop before closing its tab. A failed close leaves the tab open. Closing a paused/ended view or bulk-closing tabs does not stop the background loop.
+
+All view actions have declared commands under `command:quirky.loops/`: `new`, `setup-action`, `open`, `action`, `close-tab`, and `close-choice`. `quirky ui state --json` reports setup drafts, validation, active rail forms, iteration details and the close choice alongside the workspace layout. The `quirky loop ui` CLI group exposes the same commands; use `--payload` for action parameters.
+
+For example, open a loop through the window bridge:
+
+```sh
+quirky ui run command:quirky.loops/open --args '{"loopId":"<loop-id>"}'
+```
+
+
 ## Defaults and safety
 
-- `until-done` uses `on-idle` pacing and `fresh` sessions by default. `queue` and `interval` use `continue` sessions by default. All presets accept an explicit `--session fresh` or `--session continue`.
-- There is no iteration, time, or cost cap unless one is set. Consider using `--max-iterations` while developing a loop.
-- No-progress pausing, checkpoint commits, ask-before-next, and resume-at-reset are off by default.
+- In the CLI, `until-done` uses `on-idle` pacing and `fresh` sessions by default; `queue` and `interval` use `continue`. All presets accept an explicit `--session fresh` or `--session continue`.
+- CLI loops have no iteration, time, or cost cap unless one is set. Consider using `--max-iterations` while developing a loop.
+- In the CLI, no-progress pausing, checkpoint commits, ask-before-next, and resume-at-reset are off by default.
 - Checks are bounded to 1–600 seconds. An evaluator is read-only, tool-disabled, and bounded; evaluator errors never count as completion.
 - `LOOP_BLOCKED: <reason>` and `LOOP_DECIDE: <question>` pause for attention. Approval asks are surfaced as `needs-you`; loops never approve tools on the user's behalf.
 - External messages to a bound structured session can make a guarded iteration send stale or busy. The loop waits and retains its steer notes.
