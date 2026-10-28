@@ -10,8 +10,7 @@ import type {
   MobileSecretStorage,
   MobileStorage
 } from '../contracts'
-import { createMobileRpc, MobileRpcError, type MobileRpcClientOptions, type MobileWebSocketConstructor } from '../transport/client'
-import { decodeBase64, sha256 } from '../transport/crypto'
+import { createMobileRpc, MobileRpcError, type MobileRpcClientOptions, type MobileWebSocketConstructor, decodeBase64, sha256 } from '@quirky/protocol/paired-client'
 import { normalizeEditedEndpoint, parseMobileOffer } from './pairing'
 import type { MobilePairOffer } from './pairing'
 

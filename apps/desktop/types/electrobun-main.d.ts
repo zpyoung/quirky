@@ -20,6 +20,7 @@ export class BrowserWindow {
   on(name: string, handler: (event: unknown) => void): void
   show(): void
   activate(): void
+  close(): void
   isVisible(): boolean
   isMinimized(): boolean
 }
@@ -58,6 +59,14 @@ export class Tray {
 
 export const Utils: {
   showNotification(options: { title: string; body?: string; subtitle?: string; silent?: boolean }): void
+  openFileDialog(options: {
+    startingFolder?: string
+    allowedFileTypes?: string
+    canChooseFiles?: boolean
+    canChooseDirectory?: boolean
+    allowsMultipleSelection?: boolean
+  }): Promise<string[]>
+  showItemInFolder(path: string): void
 }
 export const app: {
   quit(): void

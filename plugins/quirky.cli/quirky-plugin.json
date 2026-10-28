@@ -1,0 +1,121 @@
+{
+  "id": "quirky.cli",
+  "name": "CLI and Runtime Profiles",
+  "version": "0.1.0",
+  "description": "Owns external command launchers, profile-pinned commands, and saved paired runtime metadata.",
+  "main": "main.ts",
+  "ui": "ui.js",
+  "cli": "cli.ts",
+  "activation": "lazy",
+  "contributes": {
+    "method": [
+      {
+        "id": "commandStatus",
+        "description": "Reports whether the exact external Quirky command is missing, managed, or foreign.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": { "path": { "type": "string" }, "profileHome": { "type": "string" } }, "additionalProperties": false },
+        "result": { "type": "object", "properties": { "path": { "type": "string" }, "target": {}, "state": { "type": "string", "enum": ["missing", "managed", "foreign"] }, "profileHome": { "type": "string" } }, "required": ["path", "target", "state", "profileHome"], "additionalProperties": false }
+      },
+      {
+        "id": "commandTarget",
+        "description": "Returns an executable and entrypoint only when the current app or a managed launcher supplies a real target.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": { "path": { "type": "string" } }, "additionalProperties": false },
+        "result": { "type": "object", "properties": { "available": { "type": "boolean" }, "executablePath": {}, "entrypointPath": {} }, "required": ["available", "executablePath", "entrypointPath"], "additionalProperties": false }
+      },
+      {
+        "id": "commandInstall",
+        "description": "Installs a user-owned command launcher; a foreign target is replaced only when replaceForeign is explicitly true.",
+        "params": { "type": "object", "properties": { "path": { "type": "string" }, "executablePath": { "type": "string" }, "entrypointPath": { "type": "string" }, "profileHome": { "type": "string" }, "replaceForeign": { "type": "boolean" } }, "required": ["executablePath", "entrypointPath"], "additionalProperties": false },
+        "result": { "type": "object", "properties": { "path": { "type": "string" }, "target": {}, "state": { "type": "string", "enum": ["missing", "managed", "foreign"] }, "profileHome": { "type": "string" } }, "required": ["path", "target", "state", "profileHome"], "additionalProperties": false }
+      },
+      {
+        "id": "commandUninstall",
+        "description": "Removes the exact unchanged managed command launcher; preserves any missing or replaced foreign file.",
+        "destructive": true,
+        "confirm": "Remove the managed Quirky command launcher?",
+        "params": { "type": "object", "properties": { "path": { "type": "string" }, "yes": { "type": "boolean" }, "confirmation": { "type": "string" } }, "additionalProperties": false },
+        "result": { "type": "object", "properties": { "removed": { "type": "boolean" }, "state": { "type": "string", "enum": ["missing", "foreign"] } }, "required": ["removed", "state"], "additionalProperties": false }
+      },
+      {
+        "id": "commandReveal",
+        "description": "Asks the exact capable native desktop shell to reveal the command path.",
+        "params": { "type": "object", "properties": { "path": { "type": "string" } }, "additionalProperties": false },
+        "result": { "type": "object", "properties": { "path": { "type": "string" }, "requested": { "type": "boolean" } }, "required": ["path", "requested"], "additionalProperties": false }
+      },
+      {
+        "id": "profileLauncherList",
+        "description": "Lists managed profile launchers without exposing pairing credentials.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": {}, "additionalProperties": false },
+        "result": { "type": "object", "properties": { "launchers": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "path": { "type": "string" }, "target": {}, "state": { "type": "string", "enum": ["missing", "managed", "foreign"] }, "profileHome": { "type": "string" } }, "required": ["name", "path", "target", "state", "profileHome"], "additionalProperties": false } } }, "required": ["launchers"], "additionalProperties": false }
+      },
+      {
+        "id": "profileLauncherInstall",
+        "description": "Creates a shell-safe profile launcher pinned to an exact QUIRKY_HOME and real CLI target.",
+        "params": { "type": "object", "properties": { "name": { "type": "string" }, "path": { "type": "string" }, "profileHome": { "type": "string" }, "executablePath": { "type": "string" }, "entrypointPath": { "type": "string" }, "replaceForeign": { "type": "boolean" } }, "required": ["name", "profileHome", "executablePath", "entrypointPath"], "additionalProperties": false },
+        "result": { "type": "object", "properties": { "name": { "type": "string" }, "path": { "type": "string" }, "target": {}, "state": { "type": "string", "enum": ["missing", "managed", "foreign"] }, "profileHome": { "type": "string" } }, "required": ["name", "path", "target", "state", "profileHome"], "additionalProperties": false }
+      },
+      {
+        "id": "profileLauncherRemove",
+        "description": "Removes one unchanged managed profile launcher and never deletes a replaced foreign file.",
+        "destructive": true,
+        "confirm": "Remove this managed profile launcher?",
+        "params": { "type": "object", "properties": { "path": { "type": "string" }, "yes": { "type": "boolean" }, "confirmation": { "type": "string" } }, "required": ["path"], "additionalProperties": false },
+        "result": { "type": "object", "properties": { "removed": { "type": "boolean" }, "state": { "type": "string", "enum": ["missing", "foreign"] } }, "required": ["removed", "state"], "additionalProperties": false }
+      },
+      {
+        "id": "runtimeAdd",
+        "description": "Validates and privately saves a mobile-v2 paired runtime offer.",
+        "params": { "type": "object", "properties": { "name": { "type": "string" }, "pairingCode": { "type": "string" } }, "required": ["name", "pairingCode"], "additionalProperties": false },
+        "result": { "type": "object", "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "endpoint": { "type": "string" }, "pairedDeviceId": { "type": "string" }, "createdAt": { "type": "number" }, "lastUsedAt": {} }, "required": ["id", "name", "endpoint", "pairedDeviceId", "createdAt", "lastUsedAt"], "additionalProperties": false }
+      },
+      {
+        "id": "runtimeList",
+        "description": "Lists saved paired runtimes with secret-free summaries.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": {}, "additionalProperties": false },
+        "result": { "type": "object", "properties": { "runtimes": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "endpoint": { "type": "string" }, "pairedDeviceId": { "type": "string" }, "createdAt": { "type": "number" }, "lastUsedAt": {} }, "required": ["id", "name", "endpoint", "pairedDeviceId", "createdAt", "lastUsedAt"], "additionalProperties": false } } }, "required": ["runtimes"], "additionalProperties": false }
+      },
+      {
+        "id": "runtimeShow",
+        "description": "Shows one saved paired runtime without returning its offer or device token.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": { "selector": { "type": "string" } }, "required": ["selector"], "additionalProperties": false },
+        "result": { "type": "object", "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "endpoint": { "type": "string" }, "pairedDeviceId": { "type": "string" }, "createdAt": { "type": "number" }, "lastUsedAt": {} }, "required": ["id", "name", "endpoint", "pairedDeviceId", "createdAt", "lastUsedAt"], "additionalProperties": false }
+      },
+      {
+        "id": "runtimeRemove",
+        "description": "Removes one saved paired runtime and its private offer.",
+        "destructive": true,
+        "confirm": "Remove this saved paired runtime?",
+        "params": { "type": "object", "properties": { "selector": { "type": "string" }, "yes": { "type": "boolean" }, "confirmation": { "type": "string" } }, "required": ["selector"], "additionalProperties": false },
+        "result": { "type": "object", "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "endpoint": { "type": "string" }, "pairedDeviceId": { "type": "string" }, "createdAt": { "type": "number" }, "lastUsedAt": {} }, "required": ["id", "name", "endpoint", "pairedDeviceId", "createdAt", "lastUsedAt"], "additionalProperties": false }
+      },
+      {
+        "id": "runtimeStatus",
+        "description": "Reports saved paired runtime targets without returning credentials.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": {}, "additionalProperties": false },
+        "result": { "type": "object", "properties": { "runtimes": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "endpoint": { "type": "string" }, "pairedDeviceId": { "type": "string" }, "createdAt": { "type": "number" }, "lastUsedAt": {} }, "required": ["id", "name", "endpoint", "pairedDeviceId", "createdAt", "lastUsedAt"], "additionalProperties": false } } }, "required": ["runtimes"], "additionalProperties": false }
+      }
+    ],
+    "view": [
+      { "id": "settings", "title": "CLI and Runtime Profiles", "settings": true }
+    ],
+    "cli-command": [
+      { "id": "commandStatus", "words": "cli status", "summary": "show external CLI installation status", "methods": ["quirky.cli/commandStatus"] },
+      { "id": "commandInstall", "words": "cli install", "summary": "install the current CLI command", "flags": { "path": { "type": "string", "description": "External command path." }, "replace-foreign": { "type": "boolean", "description": "Explicitly replace a foreign file." } }, "methods": ["quirky.cli/commandInstall"] },
+      { "id": "commandUninstall", "words": "cli uninstall", "summary": "remove the unchanged managed CLI command", "flags": { "path": { "type": "string", "description": "External command path." } }, "methods": ["quirky.cli/commandUninstall"] },
+      { "id": "commandReveal", "words": "cli reveal", "summary": "reveal the external CLI command in Finder", "methods": ["quirky.cli/commandReveal"] },
+      { "id": "profileLauncherList", "words": "cli profile list", "summary": "list profile-pinned launchers", "methods": ["quirky.cli/profileLauncherList"] },
+      { "id": "profileLauncherInstall", "words": "cli profile install", "summary": "install a profile-pinned launcher", "flags": { "name": { "type": "string", "description": "Profile launcher name.", "required": true }, "home": { "type": "string", "description": "Exact QUIRKY_HOME for this profile.", "required": true }, "path": { "type": "string", "description": "Launcher path." }, "replace-foreign": { "type": "boolean", "description": "Explicitly replace a foreign file." } }, "methods": ["quirky.cli/profileLauncherInstall", "quirky.cli/commandTarget"] },
+      { "id": "profileLauncherRemove", "words": "cli profile uninstall", "summary": "remove an unchanged managed profile launcher", "flags": { "path": { "type": "string", "description": "Profile launcher path.", "required": true } }, "methods": ["quirky.cli/profileLauncherRemove"] },
+      { "id": "runtimeAdd", "words": "runtime add", "summary": "save a paired runtime offer", "flags": { "name": { "type": "string", "description": "Saved runtime name.", "required": true }, "code": { "type": "string", "description": "Mobile-v2 pairing offer.", "required": true } }, "methods": ["quirky.cli/runtimeAdd"] },
+      { "id": "runtimeList", "words": "runtime list", "summary": "list saved paired runtimes", "methods": ["quirky.cli/runtimeList"] },
+      { "id": "runtimeShow", "words": "runtime show", "summary": "show one saved paired runtime", "flags": { "selector": { "type": "string", "description": "Saved runtime ID or name.", "required": true } }, "methods": ["quirky.cli/runtimeShow"] },
+      { "id": "runtimeRemove", "words": "runtime remove", "summary": "remove one saved paired runtime", "flags": { "selector": { "type": "string", "description": "Saved runtime ID or name.", "required": true } }, "methods": ["quirky.cli/runtimeRemove"] },
+      { "id": "runtimeStatus", "words": "runtime status", "summary": "show saved paired runtime status", "methods": ["quirky.cli/runtimeStatus"] }
+    ]
+  }
+}

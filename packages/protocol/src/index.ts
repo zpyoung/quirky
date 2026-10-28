@@ -13,3 +13,5 @@ export * from './cli'
 export * from './distro'
 export * from './mobile'
 export * from './terminal-artifacts'
+
+export * from './desktop-capabilities'

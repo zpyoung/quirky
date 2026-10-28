@@ -1,8 +1,8 @@
+import { randomUUID } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { QuirkyClient } from '@quirky/protocol'
 import { ensureDaemon, quirkyHome, rpcUrl, type RuntimeInfo } from '@quirky/protocol/node'
-import { ApplicationMenu, BrowserView, BrowserWindow, Tray, Utils, app, type ApplicationMenuItemConfig } from 'electrobun/main'
 import { maintainConnection } from './connection'
 import { setDockBadge } from './dock'
 import {
@@ -67,6 +67,32 @@ let currentUrl: string | null = null
 let shownError: string | null = null
 let window: BrowserWindow | null = null
 
+type WindowLifecycle =
+  | { kind: 'main' }
+  | { kind: 'auxiliary'; windowId: string; ownerWindowId: number; ownerShellConnId: number; title: string }
+
+const auxiliaryWindows = new Map<string, { ownerWindowId: number; ownerShellConnId: number; window: BrowserWindow }>()
+const pendingAuxiliaryCloses = new Map<string, { windowId: string; ownerShellConnId: number }>()
+
+function notifyAuxiliaryWindowClosed(windowId: string, ownerShellConnId: number): void {
+  pendingAuxiliaryCloses.set(windowId, { windowId, ownerShellConnId })
+  void flushAuxiliaryWindowCloses()
+}
+
+async function flushAuxiliaryWindowCloses(connected = client): Promise<void> {
+  if (!connected) return
+  for (const [windowId, notice] of pendingAuxiliaryCloses) {
+    if (client !== connected) return
+    try {
+      await connected.callAny('desktop.window.closed', notice)
+      pendingAuxiliaryCloses.delete(windowId)
+    } catch (error) {
+      console.warn('reporting auxiliary window close failed:', error)
+      return
+    }
+  }
+}
+
 function showError(error: unknown): void {
   const message = error instanceof Error ? error.message : String(error)
   if (message === shownError && window) return
@@ -93,33 +119,103 @@ function showDaemon(info: RuntimeInfo): void {
   window.webview.loadURL(url)
 }
 
-function createWindow(content: { html: string | null; url: string | null }): BrowserWindow {
+function createWindow(
+  content: { html: string | null; url: string | null },
+  lifecycle: WindowLifecycle = { kind: 'main' }
+): BrowserWindow {
   let created: BrowserWindow | null = null
   const nativeBrowserHandlers = createNativeBrowserHandlers({
     getWindow: () => created ? { id: created.id, webview: created.webview } : null,
     getView: (id) => BrowserView.getById(id)
   })
+  const pickFolder = async (request: NativeBrowserHostRPC['bun']['requests']['pickFolder']['params']) => {
+    if (process.platform !== 'darwin') throw new Error('native directory selection is unavailable on this platform')
+    const paths = await Utils.openFileDialog({
+      ...(request.startingFolder === undefined ? {} : { startingFolder: request.startingFolder }),
+      canChooseFiles: false,
+      canChooseDirectory: true,
+      allowsMultipleSelection: request.multiple ?? false
+    })
+    return folderPickerResult(paths)
+  }
+  const openWindow = (input: NativeBrowserHostRPC['bun']['requests']['openWindow']['params']) => {
+    if (process.platform !== 'darwin') throw new Error('native auxiliary windows are unavailable on this platform')
+    if (!created || !currentUrl) throw new Error('the native desktop view is not ready')
+    const { request, ownerShell } = input
+    const windowId = randomUUID()
+    const routeUrl = desktopWindowRouteUrl(currentUrl, request, windowId, ownerShell)
+    const child = createWindow(
+      { html: null, url: routeUrl },
+      { kind: 'auxiliary', windowId, ownerWindowId: created.id, ownerShellConnId: ownerShell.connId, title: request.title ?? WINDOW_TITLE }
+    )
+    child.show()
+    child.activate()
+    return { windowId }
+  }
+  const closeWindow = (request: NativeBrowserHostRPC['bun']['requests']['closeWindow']['params']) => {
+    const owned = auxiliaryWindows.get(request.windowId)
+    if (!owned || owned.ownerWindowId !== created?.id) return { closed: false }
+    owned.window.close()
+    return { closed: true }
+  }
+  const activateOwner = (request: NativeBrowserHostRPC['bun']['requests']['activateOwner']['params']) => {
+    if (lifecycle.kind !== 'auxiliary' || lifecycle.windowId !== request.windowId) return { activated: false }
+    const child = auxiliaryWindows.get(request.windowId)
+    if (!child || child.window.id !== created?.id || child.ownerWindowId !== lifecycle.ownerWindowId) return { activated: false }
+    const ownerWindow = window?.id === child.ownerWindowId
+      ? window
+      : [...auxiliaryWindows.values()].find((entry) => entry.window.id === child.ownerWindowId)?.window ?? null
+    if (!ownerWindow) return { activated: false }
+    ownerWindow.show()
+    ownerWindow.activate()
+    return { activated: true }
+  }
+  const revealItem = (request: NativeBrowserHostRPC['bun']['requests']['revealItem']['params']) => {
+    if (process.platform !== 'darwin') throw new Error('native item reveal is unavailable on this platform')
+    Utils.showItemInFolder(request.path)
+    return { requested: true as const }
+  }
   const rpc = BrowserView.defineRPC<NativeBrowserHostRPC>({
     handlers: {
       requests: {
         claimNativeBrowserView: nativeBrowserHandlers.claim,
         setNativeBrowserZoom: nativeBrowserHandlers.setZoom,
-        releaseNativeBrowserView: nativeBrowserHandlers.release
+        releaseNativeBrowserView: nativeBrowserHandlers.release,
+        pickFolder,
+        openWindow,
+        closeWindow,
+        revealItem,
+        activateOwner
       }
     }
   })
   const nativeBrowserWindowOptions = process.platform === 'darwin' ? { preload: nativeBrowserPreload, rpc } : {}
   created = new BrowserWindow({
-    title: WINDOW_TITLE,
+    title: lifecycle.kind === 'auxiliary' ? lifecycle.title : WINDOW_TITLE,
     frame: { width: 1400, height: 900, x: 80, y: 80 },
     ...content,
     ...nativeBrowserWindowOptions
   })
   const ownedWindow = created
+  if (lifecycle.kind === 'auxiliary') {
+    auxiliaryWindows.set(lifecycle.windowId, {
+      ownerWindowId: lifecycle.ownerWindowId,
+      ownerShellConnId: lifecycle.ownerShellConnId,
+      window: ownedWindow
+    })
+  }
   ownedWindow.on('close', () => {
     nativeBrowserHandlers.dispose()
-    stopping = true
-    window = null
+    if (lifecycle.kind === 'main') {
+      for (const child of auxiliaryWindows.values()) {
+        if (child.ownerWindowId === ownedWindow.id) child.window.close()
+      }
+      stopping = true
+      window = null
+    } else {
+      auxiliaryWindows.delete(lifecycle.windowId)
+      notifyAuxiliaryWindowClosed(lifecycle.windowId, lifecycle.ownerShellConnId)
+    }
   })
   ownedWindow.on('focus', () => applyTray({ type: 'focus' }))
   return ownedWindow
@@ -258,6 +354,7 @@ void maintainConnection({
     }),
   onConnected: (connected) => {
     client = connected
+    void flushAuxiliaryWindowCloses(connected)
     connected.onEvent((event) => {
       const notification = notificationFor(event)
       if (notification) {

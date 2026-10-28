@@ -10,7 +10,9 @@ import {
   type KernelMethodSchema,
   type MethodName,
   type ResultOf,
-  type Schema
+  type Schema,
+  type NativeDesktopCapabilities,
+  type DesktopShellReply
 } from '@quirky/protocol'
 import { conflict, invalidParams } from './errors'
 import { describeCli } from './plugins/cli-catalog'
@@ -66,6 +68,41 @@ function focusTarget(params: Params): 'sidebar' | 'view' | 'panel' {
   }
   return value
 }
+
+function nativeDesktopCapabilities(params: Params): NativeDesktopCapabilities {
+  const directoryPicker = optBool(params, 'directoryPicker')
+  const auxiliaryWindows = optBool(params, 'auxiliaryWindows')
+  const revealItem = optBool(params, 'revealItem')
+  const rawNotifications = params.notifications
+  if (typeof rawNotifications !== 'object' || rawNotifications === null || Array.isArray(rawNotifications)) {
+    throw invalidParams('notifications must declare permission, click, and dismiss capabilities')
+  }
+  const notifications = rawNotifications as Params
+  const permission = optBool(notifications, 'permission')
+  const click = optBool(notifications, 'click')
+  const dismiss = optBool(notifications, 'dismiss')
+  if (directoryPicker === undefined || auxiliaryWindows === undefined || revealItem === undefined ||
+    permission === undefined || click === undefined || dismiss === undefined) {
+    throw invalidParams('native desktop capabilities must include every supported operation')
+  }
+  if (permission || click || dismiss) throw invalidParams('native notification callbacks are unavailable in this SDK')
+  return {
+    directoryPicker,
+    auxiliaryWindows,
+    revealItem,
+    notifications: { permission: false, click: false, dismiss: false }
+  }
+}
+
+function desktopReplyError(params: Params): { message: string } | undefined {
+  const value = params.error
+  if (value === undefined) return undefined
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) throw invalidParams('error must contain a message')
+  const message = (value as Params).message
+  if (typeof message !== 'string' || message.length === 0) throw invalidParams('error.message must be a non-empty string')
+  return { message }
+}
+
 
 function byName<T>(key: (entry: T) => string): (a: T, b: T) => number {
   return (a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0)
@@ -287,6 +324,76 @@ export function createHandlers(
       return OK
     },
 
+    'desktop.shell.capabilities': (params, conn) => {
+      layout.setDesktopCapabilities(conn, nativeDesktopCapabilities(params))
+      return OK
+    },
+    'desktop.shell.reply': (params, conn) => {
+      const error = desktopReplyError(params)
+      if ((params.result === undefined) === (error === undefined)) {
+        throw invalidParams('provide exactly one of result or error')
+      }
+      layout.desktopShellReply(conn, {
+        requestId: str(params, 'requestId'),
+        ...(params.result === undefined ? {} : { result: params.result as DesktopShellReply['result'] }),
+        ...(error === undefined ? {} : { error })
+      })
+      return OK
+    },
+    'desktop.capabilities': (_params, conn) => layout.desktopCapabilities(conn),
+    'desktop.folder.pick': (params, conn) => {
+      const title = optStr(params, 'title')
+      const startingFolder = optStr(params, 'startingFolder')
+      const multiple = optBool(params, 'multiple')
+      return layout.pickFolder(conn, {
+        ...(title === undefined ? {} : { title }),
+        ...(startingFolder === undefined ? {} : { startingFolder }),
+        ...(multiple === undefined ? {} : { multiple })
+      })
+    },
+    'desktop.window.open': (params, conn) => {
+      const title = optStr(params, 'title')
+      return layout.openDesktopWindow(conn, {
+        view: str(params, 'view'),
+        ...(params.input === undefined ? {} : { input: params.input }),
+        ...(title === undefined ? {} : { title })
+      })
+    },
+    'desktop.window.list': (_params, conn) => layout.listDesktopWindows(conn),
+    'desktop.window.attach': (params, conn) =>
+      layout.attachDesktopWindow(conn, {
+        windowId: str(params, 'windowId'),
+        ownerShellConnId: int(params, 'ownerShellConnId', 1)
+      }),
+    'desktop.window.update': (params, conn) => {
+      const view = params.view
+      if (view !== null && (typeof view !== 'string' || view.length === 0)) {
+        throw invalidParams('view must be a non-empty string or null')
+      }
+      const title = optStr(params, 'title')
+      return layout.updateDesktopWindow(conn, {
+        windowId: str(params, 'windowId'),
+        view,
+        ...(params.input === undefined ? {} : { input: params.input }),
+        ...(title === undefined ? {} : { title })
+      })
+    },
+    'desktop.window.runOwnerCommand': (params, conn) => layout.runOwnerCommand(conn, {
+      windowId: str(params, 'windowId'),
+      id: str(params, 'id'),
+      ...(params.args === undefined ? {} : { args: params.args })
+    }),
+    'desktop.window.closed': (params, conn) => {
+      if (conn.role !== 'desktop') throw invalidParams('only the native desktop shell can close an auxiliary window')
+      return layout.desktopWindowClosed(conn, {
+        windowId: str(params, 'windowId'),
+        ownerShellConnId: int(params, 'ownerShellConnId', 1)
+      })
+    },
+    'desktop.window.close': (params, conn) => layout.closeDesktopWindow(conn, str(params, 'windowId')),
+    'desktop.item.reveal': (params, conn) => layout.revealDesktopItem(conn, str(params, 'path')),
+
+
     'ui.contributions': () => ui.contributions(),
     'setting.list': (params) => ui.listSettings({ pluginId: optStr(params, 'pluginId') }),
     'setting.get': (params) => ui.getSetting(str(params, 'id')),
@@ -297,6 +404,13 @@ export function createHandlers(
     },
     'setting.reset': (params) => ui.resetSetting(str(params, 'id')),
     'theme.list': () => ui.listThemes(),
-    'theme.set': (params) => ui.setTheme(str(params, 'id'))
+    'theme.set': (params) => ui.setTheme(str(params, 'id')),
+    'keybinding.list': () => ui.listKeybindings(),
+    'keybinding.set': (params) => {
+      const key = params.key
+      if (key !== null && typeof key !== 'string') throw invalidParams('key must be a string or null')
+      return ui.setKeybinding(str(params, 'id'), key)
+    },
+    'keybinding.reset': (params) => ui.resetKeybinding(str(params, 'id'))
   }
 }

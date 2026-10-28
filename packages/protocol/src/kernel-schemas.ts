@@ -12,7 +12,13 @@ export const CONNECTION_METHODS = [
   'ui.shell.report',
   'ui.window.focused',
   'ui.window.activity',
-  'ui.command.reply'
+  'ui.command.reply',
+  'desktop.shell.capabilities',
+  'desktop.shell.reply',
+  'desktop.window.attach',
+  'desktop.window.update',
+  'desktop.window.runOwnerCommand',
+  'desktop.window.closed'
 ] as const
 
 const string = (description?: string): Schema => ({ type: 'string', ...(description ? { description } : {}) })
@@ -248,6 +254,33 @@ const uiState = object(
     toasts: listOf(toastState)
   },
   ['windows', 'layout', 'slots', 'toasts']
+)
+
+const nativeNotificationCapabilities = object(
+  { permission: boolean(), click: boolean(), dismiss: boolean() },
+  ['permission', 'click', 'dismiss']
+)
+const nativeDesktopCapabilities = object(
+  {
+    directoryPicker: boolean(),
+    auxiliaryWindows: boolean(),
+    revealItem: boolean(),
+    notifications: nativeNotificationCapabilities
+  },
+  ['directoryPicker', 'auxiliaryWindows', 'revealItem', 'notifications']
+)
+
+const desktopWindowOwner = object({ connId: integer(1), name: string() }, ['connId'])
+const desktopWindowSummary = object(
+  {
+    windowId: string(),
+    view: { description: 'The effective view ID, or null for an empty auxiliary window.' },
+    input: { description: 'The current view input, if any.' },
+    title: string(),
+    ownerShell: desktopWindowOwner,
+    attached: boolean('Whether the auxiliary UI connection has attached.')
+  },
+  ['windowId', 'view', 'ownerShell', 'attached']
 )
 const distroManifest: Schema = { type: 'object', additionalProperties: true }
 const pluginInspection = object(
@@ -507,6 +540,96 @@ export const KERNEL_METHOD_SCHEMAS = {
     ),
     result: ok
   },
+  'desktop.shell.capabilities': {
+    description: 'Reports the real native shell operations this exact UI window can fulfill. Notification permission and callbacks are unsupported by the pinned SDK. Role `ui` only.',
+    params: nativeDesktopCapabilities,
+    result: ok
+  },
+  'desktop.shell.reply': {
+    description: 'Completes a native shell request only for the UI window that received it. Role `ui` only.',
+    params: object(
+      {
+        requestId: string(),
+        result: { description: 'The actual native result for the matching request.' },
+        error: object({ message: string() }, ['message'])
+      },
+      ['requestId']
+    ),
+    result: ok
+  },
+  'desktop.capabilities': {
+    description: 'Reads the reported native capabilities of the selected shell; absent capabilities are false.',
+    readOnly: true,
+    params: noParams,
+    result: nativeDesktopCapabilities
+  },
+  'desktop.folder.pick': {
+    description: 'Opens the selected native shell directory chooser and returns its actual selected paths; an empty selection is cancellation.',
+    params: object(
+      { title: string(), startingFolder: string(), multiple: boolean() }
+    ),
+    result: object({ cancelled: boolean(), paths: strings }, ['cancelled', 'paths'])
+  },
+  'desktop.window.open': {
+    description: 'Opens effective view `view` with its exact `input` in a separately owned native window.',
+    params: object({ view: string(), input: { description: 'Passed to the view as its input.' }, title: string() }, ['view']),
+    result: object({ windowId: string() }, ['windowId'])
+  },
+  'desktop.window.close': {
+    description: 'Closes one auxiliary native window only when it is owned by the calling shell.',
+    params: object({ windowId: string() }, ['windowId']),
+    result: object({ closed: boolean() }, ['closed'])
+  },
+  'desktop.item.reveal': {
+    description: 'Asks the selected native shell to reveal an exact absolute path.',
+    params: object({ path: string() }, ['path']),
+    result: object({ requested: boolean() }, ['requested'])
+  },
+  'desktop.window.list': {
+    description: 'Reads daemon-owned auxiliary window routes and their exact owner shells.',
+    readOnly: true,
+    params: noParams,
+    result: listOf(desktopWindowSummary)
+  },
+  'desktop.window.attach': {
+    description: 'Attaches the calling UI connection to its exact daemon-owned auxiliary route. Role `ui` only.',
+    params: object({ windowId: string(), ownerShellConnId: integer(1) }, ['windowId', 'ownerShellConnId']),
+    result: desktopWindowSummary
+  },
+  'desktop.window.update': {
+    description: 'Updates view and input in the calling auxiliary window without changing the main layout. Role `ui` only.',
+    params: object(
+      { windowId: string(), view: { description: 'An effective view ID, or null to clear this window view.' }, input: { description: 'Passed to the view as its input.' }, title: string() },
+      ['windowId', 'view']
+    ),
+    result: desktopWindowSummary
+  },
+  'desktop.window.runOwnerCommand': {
+    description: 'Runs a command in the exact owner shell of an auxiliary window and activates that native window on success. Role `ui` only.',
+    params: object({ windowId: string(), id: string(), args: { description: 'Command arguments, validated against the UI command declaration.' } }, ['windowId', 'id']),
+    result: object({ result: { description: 'The owner window command result.' }, activated: boolean() }, ['result', 'activated'])
+  },
+  'desktop.window.closed': {
+    description: 'Removes an auxiliary route after its native window closes. The owner shell identity must match; role `desktop` only.',
+    params: object({ windowId: string(), ownerShellConnId: integer(1) }, ['windowId', 'ownerShellConnId']),
+    result: object({ closed: boolean() }, ['closed'])
+  },
+  'keybinding.list': {
+    description: 'Lists effective keybindings and their current override status.',
+    readOnly: true,
+    params: noParams,
+    result: listOf(uiKeybinding)
+  },
+  'keybinding.set': {
+    description: 'Overrides one keybinding with a canonical chord, or clears the override with null.',
+    params: object({ id: string(), key: { description: 'A canonical key chord, or null to clear the override.' } }, ['id', 'key']),
+    result: listOf(uiKeybinding)
+  },
+  'keybinding.reset': {
+    description: "Resets one keybinding to the contribution's declared default.",
+    params: object({ id: string() }, ['id']),
+    result: listOf(uiKeybinding)
+  },
 
   'ui.contributions': {
     description: "The window's view of plugin UI: slots, commands, keybindings, settings, themes and module URLs.",
@@ -589,12 +712,34 @@ export const KERNEL_EVENT_SCHEMAS = {
     data: object({ chosen: string(), active: string() }, ['chosen', 'active'])
   },
   'ui.state.changed': { description: 'The layout changed.', data: object({ layout: uiLayout }, ['layout']) },
+  'ui.keybindings.changed': { description: 'The effective keybinding overrides changed.', data: { type: 'object' } },
   'ui.command.request': {
     description: 'A routed UI command for this window to run; sent only to the target window.',
     data: object(
       { requestId: string(), id: string(), args: { description: 'The command arguments.' } },
       ['requestId', 'id']
     )
+  },
+  'desktop.shell.request': {
+    description: 'A native shell operation for this exact UI window to fulfill.',
+    data: object(
+      {
+        requestId: string(),
+        action: object(
+          {
+            kind: { type: 'string', enum: ['folder-picker', 'window-open', 'window-close', 'window-activate-owner', 'reveal-item'] },
+            request: { type: 'object', additionalProperties: true, description: 'The request matching `kind`.' }
+          },
+          ['kind', 'request']
+        ),
+        ownerShell: desktopWindowOwner
+      },
+      ['requestId', 'action', 'ownerShell']
+    )
+  },
+  'desktop.window.changed': {
+    description: 'Daemon-owned auxiliary window routes were opened, attached, updated or closed.',
+    data: object({ windows: listOf(desktopWindowSummary) }, ['windows'])
   },
   'ui.window.changed': {
     description: 'A window changed focus or presence, or a window connection dropped.',

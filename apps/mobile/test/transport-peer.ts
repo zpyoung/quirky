@@ -1,5 +1,5 @@
 import nacl from 'tweetnacl'
-import type { MobileSocket, MobileWebSocketConstructor } from '../src/transport/client'
+import type { MobileSocket, MobileWebSocketConstructor } from '@quirky/protocol/paired-client'
 import { DesktopMobileE2EEV2Session } from '../../../plugins/quirky.mobile/src/crypto/e2ee-v2'
 
 export type TestPeerSocket = MobileSocket & {
