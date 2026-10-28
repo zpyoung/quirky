@@ -149,6 +149,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@quirky/protocol": "workspace:*",
+        "@quirky/ui": "workspace:*",
         "react": "19.2.0",
         "react-dom": "19.2.0",
       },
@@ -163,6 +164,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@quirky/protocol": "workspace:*",
+        "@quirky/ui": "workspace:*",
         "react": "19.2.0",
         "react-dom": "19.2.0",
       },
@@ -493,6 +495,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@quirky/protocol": "workspace:*",
+        "@quirky/ui": "workspace:*",
         "react": "19.2.0",
         "react-dom": "19.2.0",
       },

@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useEffect, useState } from 'react'
 import type { AgentDisplayState, AgentStatusSummary, Session, SessionUnread } from '@quirky/protocol'
 import { Badge, StatusDot as SharedStatusDot, type UiStatus } from '@quirky/ui'
 import { ringPercent, windowDisplay, displayStatus, type DisplayStatus } from './status'

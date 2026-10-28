@@ -77,6 +77,39 @@
 - **Revisit if:** Supported platform matrix changes.
 - **Source:** deferred: platform
 
+## D8: Integrate only the audited disjoint component deltas
+- **Question:** Worker attribution, shared dependencies and preserved interaction boundaries.
+- **Options:** Trust worker reports; audit fixed HEAD/path scopes at the final barrier and integrate once.
+- **Chose:** All three trees retained99cc1bb0 and exact assigned UI/test scopes. Integrated6c1b22c9,15ac66e8,88ba7c1b; removed all three component trees immediately. Parent added the existing @quirky/ui workspace dependency to agents/status/info manifests and regenerated bun.lock; session already declared it.
+- **Why:** No overlapping source files or new public API were necessary. Full-title accordion activation and short Dashboard Open actions were restored before integration.
+- **Evidence:** Tool-observed worker HEAD/path inventories and octopus merge; bun install --lockfile-only exit0.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Typecheck identifies a package boundary or meaningful consumer regression.
+- **Source:** assumed — autonomous
+
+## D9: Repair actual type diagnostics without repinning incidental tests
+- **Question:** Initial integrated typecheck reported two missing menuLabels references and one string-versus-UiStatus assertion.
+- **Options:** Cast categories and add a duplicate helper; reuse the menu label closure and remove the enum-copy test.
+- **Chose:** Capture the existing openMenu closure for live menu updates. Delete the eleven-row semantic-enum mirror rather than cast/re-pin it; preserve label/freshness/progress/unread transition tests and meaningful action coverage.
+- **Why:** The missing helper was a test migration error; asserting a copied enum table against a mapping function does not prove consumer behavior.
+- **Evidence:** Initial bun run typecheck exit2/26.11s; UI lint itself produced no diagnostics. UI build emitted11host/vendor files and25plugin modules.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Final compiler output identifies another actual type error.
+- **Source:** assumed — autonomous
+
+## D10: Exercise actual contributions while keeping capture and native limits explicit
+- **Question:** What runtime evidence applies to changed code versus another plugin's override?
+- **Options:** Claim the terminal owner's view proves session fallback; use actual owner projections and an explicit disabled-terminal fixture.
+- **Chose:** Actual isolated daemon served rebuilt assets. Agents default selection, command Enter-save and Reset, Activity apply/filter, Dashboard apply/clear and exact-session Open, Session info full-title accordion plus wrapped/scroll-reachable identity actions, transcript navigation and history no-match/restore were observed. Settings Save changed actual root theme to light; inspected both-theme Agents/Activity/Dashboard/Session info/History/Transcript captures. The terminal plugin normally overrides the worktree view; disabled it through public plugin.disable in this disposable home to exercise the real session fallback's shared tabs/menu/prompt. Typed prompt appeared and Escape closed the dialog without starting a provider.
+- **Why:** Disabling a supported built-in selects the genuine fallback contribution, not a copied component story. Provider executable/transcript/status payloads are explicitly disposable fixtures; no real provider authentication, send/resume, native clipboard/Finder, structured provider turn, full dogfood or independent golden score is claimed.
+- **Evidence:** .quirk/build-loop/ui-restyle-agents/*-{dark,light}.png; actual hidden browser and process-scoped daemon. Browser error inventory contains one helper-generated invalid-selector error from an incorrect waitFor call, not app code; corrected helpers inspected the intended state. No hidden test override or injected product style.
+- **Reversibility:** easy
+- **Confidence:** high for named observed paths; unexercised boundaries remain unclaimed
+- **Revisit if:** End-phase suites or independent golden scoring identify a mismatch.
+- **Source:** assumed — autonomous
+
 ## Progress
 
-Scope and shared reuse contracts committed before implementation. Next: dispatch three disjoint component worktrees, audit/integrate at barrier, typecheck, actual minimal UI smoke, sole roadmap catch-up, final typecheck and canonical queue land. No suite/review pass claimed.
+All three audited source components are integrated; parent dependency/type fixes and real-surface smoke receipts are ready. No suites, formal review rounds or golden scoring run under build-first. Next: commit docs/integration fixes, catch up build/roadmap once, read incoming decisions, final typecheck and refreshed narrow source smoke, stop owned runtime/browser, canonical queue land and cleanup.

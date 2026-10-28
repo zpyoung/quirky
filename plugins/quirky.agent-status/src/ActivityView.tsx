@@ -364,7 +364,7 @@ export function ActivityView({ context, input }: { context: UiPluginContext; inp
                       <InlineAgentCard
                         title={thread.sessionName}
                         status={status}
-                        action={{ label: `Open Activity thread ${thread.sessionId}`, onAction: () => openThread(thread) }}
+                        action={{ label: 'Open', onAction: () => openThread(thread) }}
                         description={
                           <div className="ui-stack">
                             <div className="ui-cluster">

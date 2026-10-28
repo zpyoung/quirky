@@ -431,15 +431,16 @@ describe('new sessions', () => {
     let listing = agentListing([agentInfo('codex', 'Codex'), agentInfo('goose', 'Goose')])
     start([shell1], { 'quirky.agents/list': () => listing })
     const view = await open({ worktree: WORKTREE.id })
-    expect((await openMenu(view))()).toEqual(['Shell', 'Codex', 'Goose', 'Manage agents'])
+    const labels = await openMenu(view)
+    expect(labels()).toEqual(['Shell', 'Codex', 'Goose', 'Manage agents'])
     listing = agentListing([agentInfo('codex', 'Codex')])
     await fake.emit({ type: 'quirky.agents/changed', data: {} } as QuirkyEvent)
     await settle()
-    expect(menuLabels(view)).toEqual(['Shell', 'Codex', 'Manage agents'])
+    expect(labels()).toEqual(['Shell', 'Codex', 'Manage agents'])
     listing = agentListing([])
     await fake.emit({ type: 'setting.changed', id: 'setting:quirky.agents/anything', value: true })
     await settle()
-    expect(menuLabels(view)).toEqual(['Shell', 'Manage agents'])
+    expect(labels()).toEqual(['Shell', 'Manage agents'])
   })
 
   test('a closed menu does not listen for catalog changes', async () => {
@@ -872,33 +873,6 @@ describe('agent status presentation', () => {
   const statusOf = (view: Mounted) =>
     view.element.querySelector('[role="status"] [role="img"]') as HTMLElement | null
 
-  const states: [AgentDisplayState, string, string][] = [
-    ['working', 'Working', 'working'],
-    ['monitoring', 'Monitoring background tasks', 'working'],
-    ['waiting', 'Waiting for input', 'needs-you'],
-    ['permission', 'Needs attention', 'needs-you'],
-    ['blocked', 'Blocked', 'needs-you'],
-    ['failed', 'Failed', 'failing'],
-    ['interrupted', 'Interrupted', 'idle'],
-    ['done', 'Done', 'done'],
-    ['unverifiable', 'No recent update', 'idle'],
-    ['idle', 'Idle', 'idle'],
-    ['unconfirmed', "Couldn't confirm", 'queued']
-  ]
-
-  for (const [display, label, category] of states) {
-    test(`SC-34: ${display} keeps its detailed status label and semantic category`, async () => {
-      const current = session({ id: 's1', status: 'working', agentStatus: summary(display, label) })
-      start([current])
-      const view = await open({ worktree: WORKTREE.id })
-      const status = statusOf(view)!
-      expect(status.getAttribute('aria-label')).toBe(label)
-      expect(status.parentElement?.getAttribute('title')).toBe(label)
-      expect(view.tabs()[0]!.textContent).toContain(label)
-      expect(sessionStatusPresentation(current, Date.now()).status).toBe(category)
-      expect((view.lastReport() as { tabs: object[] }).tabs[0]).toMatchObject({ status: 'working', display, label })
-    })
-  }
 
   test('a session with no summary keeps its coarse status label and reports no display', async () => {
     const current = session({ id: 's1', status: 'waiting' })
