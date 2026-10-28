@@ -239,8 +239,36 @@
         }
       },
       {
+        "id": "availableHosts",
+        "description": "List only authenticated remote peers from quirky.orchestration and recheck each exact pairing revision and fingerprint. Local execution is not represented as a fabricated host row.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": {}, "additionalProperties": false },
+        "result": {
+          "type": "object",
+          "properties": {
+            "hosts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "label": { "type": "string" },
+                  "fingerprint": { "type": "string" },
+                  "pairingRevision": { "type": "integer" },
+                  "available": { "type": "boolean" },
+                  "capabilities": { "type": "array", "items": { "type": "string" } }
+                },
+                "required": ["id", "label", "fingerprint", "pairingRevision", "available", "capabilities"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": ["hosts"],
+          "additionalProperties": false
+        }
+      },
+      {
         "id": "create",
-        "description": "Creates a worktree from a name, existing branch, GitHub PR or issue, runs configured setup and issue commands, and can start an agent with selected model options. Sparse checkout and a safe primary-branch fast-forward are supported. Folder and group workspaces do not accept GitHub sources.",
         "params": {
           "type": "object",
           "properties": {
@@ -251,6 +279,10 @@
             "group": {
               "type": "string",
               "description": "A group ID or exact name: creates a folder workspace on its parent folder."
+            },
+            "host": {
+              "type": "string",
+              "description": "Exact authenticated peer ID, never a label. The selected peer is revalidated; remote worktree create currently refuses before any local fallback."
             },
             "name": {
               "type": "string",
@@ -350,12 +382,12 @@
             },
             "environmentRecipe": {
               "type": "string",
-              "description": "Recognized but currently refused before mutation: quirky.repo/hooks reports environmentRecipes unsupported and no public recipe owner exists."
+              "description": "Selected environmentRecipes.id. Invalid IDs fail before mutation; valid VM lifecycle recipes currently require an unavailable runtime/attachment owner and are refused rather than run as local shell commands."
             },
             "defaultTabs": {
               "type": "array",
               "items": { "type": "string" },
-              "description": "Recognized but currently refused before mutation: quirky.repo/hooks reports defaultTabs unsupported and no public tab-composition owner exists."
+              "description": "One-based indexes into the selected commit's defaultTabs list; omitted selects every configured tab. Invalid indexes fail before worktree creation."
             },
             "allowLocalBaseFallback": {
               "type": "boolean",
@@ -365,6 +397,7 @@
               "type": "boolean",
               "description": "Open the new worktree in the window."
             },
+            "window": { "type": "integer", "minimum": 1, "description": "Exact live UI connection to activate when activate is true." },
             "createdBy": {
               "type": "string",
               "description": "The surface creating the workspace; defaults to api.",
@@ -627,6 +660,16 @@
               "properties": {
                 "sparsePaths": { "type": "array", "items": { "type": "string" } },
                 "sharedDirectories": { "type": "array", "items": { "type": "string" }, "description": "Paths successfully linked into the created worktree by the existing carry owner." },
+                "preparedCheckout": { "type": "boolean", "description": "True only when canonical create claimed the exact prepared repo/base checkout." },
+                "defaultTabs": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": { "title": { "type": "string" }, "tab": { "type": "string" }, "session": { "type": "string" } },
+                    "required": ["title", "tab", "session"],
+                    "additionalProperties": false
+                  }
+                },
                 "main": {
                   "type": "object",
                   "properties": {
@@ -646,7 +689,7 @@
                   "required": ["sessionId", "launchSettings"]
                 }
               },
-              "required": ["sparsePaths", "sharedDirectories", "main"]
+              "required": ["sparsePaths", "sharedDirectories", "preparedCheckout", "main"]
               }
           },
           "required": [
@@ -655,6 +698,31 @@
             "setup",
             "creationReceipt"
           ]
+        }
+      },
+      {
+        "id": "prefetchCreate",
+        "description": "Prepare one exact repo/base checkout for the canonical create path; the bounded local pool is cleaned on expiry and plugin restart.",
+        "params": {
+          "type": "object",
+          "properties": { "repo": { "type": "string" }, "base": { "type": "string" } },
+          "required": ["repo"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "prepared": { "type": "boolean" },
+            "reason": { "type": "string" },
+            "id": { "type": "string" },
+            "base": { "type": "string" },
+            "baseRef": { "type": "string" },
+            "baseOid": { "type": "string" },
+            "expiresAt": { "type": "number" },
+            "repoId": { "type": "string" }
+          },
+          "required": ["prepared", "base", "repoId"],
+          "additionalProperties": false
         }
       },
       {
@@ -1775,7 +1843,7 @@
         "readOnly": true,
         "params": {
           "type": "object",
-          "properties": { "worktree": { "type": "string" }, "withDescendants": { "type": "boolean" } },
+          "properties": { "worktree": { "type": "string" }, "withDescendants": { "type": "boolean" }, "window": { "type": "integer", "minimum": 1 } },
           "required": ["worktree"],
           "additionalProperties": false
         },
@@ -1805,7 +1873,7 @@
         "description": "Close only an exact, unambiguous active workspace view and persist reversible sleeping metadata; never closes sessions or kills processes.",
         "params": {
           "type": "object",
-          "properties": { "worktree": { "type": "string" }, "withDescendants": { "type": "boolean" } },
+          "properties": { "worktree": { "type": "string" }, "withDescendants": { "type": "boolean" }, "window": { "type": "integer", "minimum": 1 } },
           "required": ["worktree"],
           "additionalProperties": false
         },
@@ -1964,13 +2032,13 @@
         "description": "Read the built-in and custom workspace status definitions.",
         "readOnly": true,
         "params": { "type": "object", "properties": {}, "additionalProperties": false },
-        "result": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "label": { "type": "string" }, "color": { "type": "string" } }, "required": ["id", "label", "color"] } }
+        "result": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "label": { "type": "string" }, "color": { "type": "string" }, "icon": { "type": "string", "description": "Safe plain-text emoji or symbol; never a URL or markup." } }, "required": ["id", "label", "color"] } }
       },
       {
         "id": "setStatusDefinitions",
         "description": "Persist status definitions while retaining the built-in statuses and every currently used status.",
-        "params": { "type": "object", "properties": { "statuses": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "label": { "type": "string" }, "color": { "type": "string" } }, "required": ["id", "label", "color"], "additionalProperties": false } } }, "required": ["statuses"], "additionalProperties": false },
-        "result": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "label": { "type": "string" }, "color": { "type": "string" } }, "required": ["id", "label", "color"] } }
+        "params": { "type": "object", "properties": { "statuses": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "label": { "type": "string" }, "color": { "type": "string" }, "icon": { "type": "string", "description": "Safe plain-text emoji or symbol; never a URL or markup." } }, "required": ["id", "label", "color"], "additionalProperties": false } } }, "required": ["statuses"], "additionalProperties": false },
+        "result": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "label": { "type": "string" }, "color": { "type": "string" }, "icon": { "type": "string" } }, "required": ["id", "label", "color"] } }
       },
       {
         "id": "archive",
@@ -2000,44 +2068,44 @@
       {
         "id": "navigate",
         "description": "Open one exact worktree in the terminal workspace or Git changes view and record it in navigation history.",
-        "params": { "type": "object", "properties": { "worktree": { "type": "string" }, "target": { "type": "string", "enum": ["terminal", "changes"] } }, "required": ["worktree"], "additionalProperties": false },
+        "params": { "type": "object", "properties": { "worktree": { "type": "string" }, "target": { "type": "string", "enum": ["terminal", "changes"] }, "window": { "type": "integer", "minimum": 1 } }, "required": ["worktree"], "additionalProperties": false },
         "result": { "type": "object", "properties": { "worktreeId": { "type": "string" }, "target": { "type": "string", "enum": ["terminal", "changes"] } }, "required": ["worktreeId", "target"] }
       },
       {
         "id": "openIn",
         "description": "Open a worktree in a supported public view without creating a duplicate session.",
-        "params": { "type": "object", "properties": { "worktree": { "type": "string" }, "target": { "type": "string", "enum": ["terminal", "changes"] } }, "required": ["worktree", "target"], "additionalProperties": false },
+        "params": { "type": "object", "properties": { "worktree": { "type": "string" }, "target": { "type": "string", "enum": ["terminal", "changes"] }, "window": { "type": "integer", "minimum": 1 } }, "required": ["worktree", "target"], "additionalProperties": false },
         "result": { "type": "object", "properties": { "worktreeId": { "type": "string" }, "target": { "type": "string", "enum": ["terminal", "changes"] } }, "required": ["worktreeId", "target"] }
       },
       {
         "id": "navigationState",
         "description": "Read persisted workspace navigation history.",
         "readOnly": true,
-        "params": { "type": "object", "properties": {}, "additionalProperties": false },
+        "params": { "type": "object", "properties": { "window": { "type": "integer", "minimum": 1 } }, "additionalProperties": false },
         "result": { "type": "object", "properties": { "worktrees": { "type": "array", "items": { "type": "string" } }, "index": { "type": "integer" } }, "required": ["worktrees", "index"] }
       },
       {
         "id": "navigationBack",
         "description": "Navigate to the prior available workspace, skipping stale history entries.",
-        "params": { "type": "object", "properties": {}, "additionalProperties": false },
+        "params": { "type": "object", "properties": { "window": { "type": "integer", "minimum": 1 } }, "additionalProperties": false },
         "result": { "type": "object", "properties": { "worktreeId": { "type": "string" }, "target": { "type": "string", "enum": ["terminal"] } }, "required": ["worktreeId", "target"] }
       },
       {
         "id": "navigationForward",
         "description": "Navigate forward in workspace history, skipping stale entries.",
-        "params": { "type": "object", "properties": {}, "additionalProperties": false },
+        "params": { "type": "object", "properties": { "window": { "type": "integer", "minimum": 1 } }, "additionalProperties": false },
         "result": { "type": "object", "properties": { "worktreeId": { "type": "string" }, "target": { "type": "string", "enum": ["terminal"] } }, "required": ["worktreeId", "target"] }
       },
       {
         "id": "navigationMove",
         "description": "Open the previous or next worktree in the current sorted navigation order.",
-        "params": { "type": "object", "properties": { "direction": { "type": "string", "enum": ["previous", "next"] } }, "required": ["direction"], "additionalProperties": false },
+        "params": { "type": "object", "properties": { "direction": { "type": "string", "enum": ["previous", "next"] }, "window": { "type": "integer", "minimum": 1 } }, "required": ["direction"], "additionalProperties": false },
         "result": { "type": "object", "properties": { "worktreeId": { "type": "string" }, "target": { "type": "string", "enum": ["terminal"] } }, "required": ["worktreeId", "target"] }
       },
       {
         "id": "navigationIndex",
         "description": "Select a worktree by its visible one-based index from 1 through 9.",
-        "params": { "type": "object", "properties": { "index": { "type": "integer", "minimum": 1, "maximum": 9 } }, "required": ["index"], "additionalProperties": false },
+        "params": { "type": "object", "properties": { "index": { "type": "integer", "minimum": 1, "maximum": 9 }, "window": { "type": "integer", "minimum": 1 } }, "required": ["index"], "additionalProperties": false },
         "result": { "type": "object", "properties": { "worktreeId": { "type": "string" }, "target": { "type": "string", "enum": ["terminal"] } }, "required": ["worktreeId", "target"] }
       }
     ],
@@ -2096,7 +2164,7 @@
       {
         "id": "statusDefinitionsChanged",
         "description": "Workspace status definitions changed.",
-        "data": { "type": "object", "properties": { "statuses": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "label": { "type": "string" }, "color": { "type": "string" } } } } }, "required": ["statuses"] }
+        "data": { "type": "object", "properties": { "statuses": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "label": { "type": "string" }, "color": { "type": "string" }, "icon": { "type": "string" } } } } }, "required": ["statuses"] }
       },
       {
         "id": "projectMetadataChanged",
@@ -2198,6 +2266,18 @@
         "methods": [
           "quirky.worktree/origins"
         ]
+      },
+      {
+        "id": "host-list",
+        "summary": "show authenticated remote peer IDs and current pairing/connectivity evidence",
+        "methods": ["quirky.worktree/availableHosts"]
+      },
+      {
+        "id": "prefetch",
+        "summary": "prepare a bounded detached checkout for a later canonical worktree create",
+        "positionals": [{ "name": "repo", "description": "project selector", "required": true }],
+        "flags": { "base": { "type": "string", "description": "exact base ref; defaults to the project's configured base" } },
+        "methods": ["quirky.worktree/prefetchCreate"]
       },
       {
         "id": "create",
@@ -2324,8 +2404,10 @@
           "option": { "type": "string", "description": "agent option as KEY=VALUE; repeat for each pick, with true/false parsed as booleans" },
           "sparse-paths": { "type": "json", "description": "JSON array of tracked repository-relative files/directories to materialize" },
           "keep-main": { "type": "boolean", "description": "fast-forward the clean primary checkout only when it exactly matches the selected remote base and is strictly behind" },
-          "environment-recipe": { "type": "string", "description": "recognized but refused: no public environment-recipe owner exists" },
-          "default-tabs": { "type": "json", "description": "recognized but refused: no public default-tab composition owner exists" }
+          "environment-recipe": { "type": "string", "description": "recipe ID from quirky.yaml; VM lifecycle execution requires a separate authoritative runtime owner and is explicitly refused when unavailable" },
+          "default-tabs": { "type": "json", "description": "JSON array of one-based defaultTabs template indexes; omitted selects all configured tabs" },
+          "host": { "type": "string", "description": "exact authenticated peer ID; remote worktree creation currently refuses before local fallback" },
+          "window": { "type": "integer", "description": "exact UI connection ID used only with --activate" }
         },
         "methods": [
           "quirky.worktree/create"
@@ -2522,14 +2604,20 @@
         "id": "sleep-preview",
         "summary": "preview whether a worktree subtree can safely sleep",
         "positionals": [{ "name": "worktree", "description": "the worktree to inspect", "required": true }],
-        "flags": { "with-descendants": { "type": "boolean", "description": "include the selected worktree's descendants" } },
+        "flags": {
+          "with-descendants": { "type": "boolean", "description": "include the selected worktree's descendants" },
+          "window": { "type": "integer", "description": "exact kernel UI connection ID" }
+        },
         "methods": ["quirky.worktree/sleepPreview"]
       },
       {
         "id": "sleep",
         "summary": "sleep a worktree without stopping sessions or deleting history",
         "positionals": [{ "name": "worktree", "description": "the worktree to sleep", "required": true }],
-        "flags": { "with-descendants": { "type": "boolean", "description": "also sleep the selected worktree's descendants" } },
+        "flags": {
+          "with-descendants": { "type": "boolean", "description": "also sleep the selected worktree's descendants" },
+          "window": { "type": "integer", "description": "exact kernel UI connection ID" }
+        },
         "methods": ["quirky.worktree/sleep"]
       },
       {
@@ -2598,7 +2686,7 @@
       {
         "id": "status-set",
         "summary": "set custom workspace status definitions",
-        "flags": { "statuses": { "type": "json", "description": "JSON array of status objects with id, label and color" } },
+        "flags": { "statuses": { "type": "json", "description": "JSON array of status objects with id, label, color, and optional safe plain-text icon." } },
         "methods": ["quirky.worktree/setStatusDefinitions"]
       },
       {
@@ -2627,21 +2715,45 @@
         "flags": { "off": { "type": "boolean", "description": "clear the archived timestamp" } },
         "methods": ["quirky.worktree/archive"]
       },
-      { "id": "back", "summary": "navigate to the prior workspace", "methods": ["quirky.worktree/navigationBack"] },
-      { "id": "forward", "summary": "navigate forward in workspace history", "methods": ["quirky.worktree/navigationForward"] },
-      { "id": "previous", "summary": "open the previous workspace", "methods": ["quirky.worktree/navigationMove"] },
-      { "id": "next", "summary": "open the next workspace", "methods": ["quirky.worktree/navigationMove"] },
+      {
+        "id": "back",
+        "summary": "navigate to the prior workspace",
+        "flags": { "window": { "type": "integer", "description": "exact kernel UI connection ID" } },
+        "methods": ["quirky.worktree/navigationBack"]
+      },
+      {
+        "id": "forward",
+        "summary": "navigate forward in workspace history",
+        "flags": { "window": { "type": "integer", "description": "exact kernel UI connection ID" } },
+        "methods": ["quirky.worktree/navigationForward"]
+      },
+      {
+        "id": "previous",
+        "summary": "open the previous workspace",
+        "flags": { "window": { "type": "integer", "description": "exact kernel UI connection ID" } },
+        "methods": ["quirky.worktree/navigationMove"]
+      },
+      {
+        "id": "next",
+        "summary": "open the next workspace",
+        "flags": { "window": { "type": "integer", "description": "exact kernel UI connection ID" } },
+        "methods": ["quirky.worktree/navigationMove"]
+      },
       {
         "id": "index",
         "summary": "open workspace index 1 through 9",
         "positionals": [{ "name": "index", "description": "one-based index", "required": true }],
+        "flags": { "window": { "type": "integer", "description": "exact kernel UI connection ID" } },
         "methods": ["quirky.worktree/navigationIndex"]
       },
       {
         "id": "open-in",
         "summary": "open a worktree in a supported public view",
         "positionals": [{ "name": "worktree", "description": "worktree selector", "required": true }],
-        "flags": { "target": { "type": "string", "description": "terminal or changes", "enum": ["terminal", "changes"] } },
+        "flags": {
+          "target": { "type": "string", "description": "terminal or changes", "enum": ["terminal", "changes"] },
+          "window": { "type": "integer", "description": "exact kernel UI connection ID" }
+        },
         "methods": ["quirky.worktree/openIn"]
       }
     ]

@@ -170,7 +170,7 @@ export function workspaceMenu(
     {
       label: 'Move to Status',
       submenu: statuses.map((status) => ({
-        label: status.label,
+        label: `${status.icon ? `${status.icon} ` : ''}${status.label}`,
         current: worktree.status === status.id,
         onSelect: () => on.setStatus(worktree, status.id)
       }))

@@ -8,6 +8,7 @@ import { instanceIdFor, filesystemIdentitySource, type DirectoryIdentitySource }
 import { readStockOptions } from './options'
 import { projectPreference } from './project'
 import { forgetWorktreeOrigins, insertRow, metadataOf, rowOf, type WorktreeRow } from './store'
+import { isOwnedPreparedRegistration } from './prepared'
 
 /** What the join needs from the plugin: the store, group lookup, identity source and in-flight removes. */
 export type ListEnv = {
@@ -112,11 +113,18 @@ function rowForFolder(env: ListEnv, repoId: string, kind: 'git' | 'folder', path
 async function listGitProject(env: ListEnv, repo: Repo, prune: boolean): Promise<WorktreeControl[]> {
   const registrations = await gitApi().listRegistrations(repo.path)
   const registered = new Set(registrations.map((registration) => worktreeIdForPath(registration.path)))
+  const preparations = new Set<string>()
+  for (const registration of registrations) {
+    if (await isOwnedPreparedRegistration(env.store, repo, registration)) {
+      preparations.add(worktreeIdForPath(registration.path))
+    }
+  }
   return env.store.transaction(() => {
     const result: WorktreeControl[] = []
     for (const registration of registrations) {
       if (registration.prunable || !registration.exists) continue
       const id = worktreeIdForPath(registration.path)
+      if (preparations.has(id)) continue
       const path = resolveRealPath(registration.path)
       const row = rowForFolder(env, repo.id, 'git', path, id, Date.now())
       const facts: Facts = {

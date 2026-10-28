@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Repo, Session, UiLayout, UiPluginContext, Worktree } from '@quirky/protocol'
-import { confirmsDelete, deleteWorkspace, setWorktree, type CreateRequests, type KeptBranch, type TrustChoice, type TrustRequest } from './actions'
+import { confirmsDelete, currentWindowId, deleteWorkspace, setWorktree, type CreateRequests, type KeptBranch, type TrustChoice, type TrustRequest } from './actions'
 import { AddProjectDialog } from './AddProjectDialog'
 import { BaseFallbackDialog } from './BaseFallbackDialog'
 import { CreateDialog } from './CreateDialog'
@@ -25,6 +25,7 @@ import { StockOptions } from './StockOptions'
 import { ExternalInbox } from './ExternalInbox'
 import { WorktreeBoard } from './WorktreeBoard'
 import { DEFAULT_STOCK_OPTIONS, isStockWorktreeOptions, type StockWorktreeOptions, type WorktreeControl } from './control-types'
+import { StatusSettingsDialog } from './StatusSettingsDialog'
 import { DEFAULT_WORKTREE_STATUSES } from './daemon/statuses'
 import type { WorktreeProjectIdentity, WorktreeStatusDefinition } from './parity-types'
 
@@ -140,6 +141,7 @@ export function WorktreesSection({ context, report, requests }: Props) {
   const [revealFiltered, setRevealFiltered] = useState(false)
   const [cleanupOpen, setCleanupOpen] = useState(false)
   const [boardOpen, setBoardOpen] = useState(false)
+  const [statusEditorOpen, setStatusEditorOpen] = useState(false)
 
   useEffect(() => {
     setLayout(context.getLayout())
@@ -212,7 +214,8 @@ export function WorktreesSection({ context, report, requests }: Props) {
       }
       if (!method) return
       event.preventDefault()
-      void context.call(method, params).catch((error: unknown) =>
+      const navigationMethod = method
+      void currentWindowId(context).then((window) => context.call(navigationMethod, { ...params, window })).catch((error: unknown) =>
         context.toast('Could not navigate workspaces', error instanceof Error ? error.message : String(error))
       )
     }
@@ -519,12 +522,15 @@ export function WorktreesSection({ context, report, requests }: Props) {
       />
       <ExternalInbox context={context} repos={repos} worktrees={worktrees} />
       <button type="button" aria-expanded={boardOpen} onClick={() => setBoardOpen((open) => !open)}>Workspace board</button>
+      <button type="button" aria-expanded={statusEditorOpen} onClick={() => setStatusEditorOpen(true)}>Edit workspace statuses</button>
       {boardOpen && (
         <WorktreeBoard
           worktrees={ordered.filter((worktree) => treeVisibleIds.has(worktree.id))}
           statuses={statusDefinitions}
           open={(worktree) => {
-            void context.call('quirky.worktree/navigate', { worktree: worktree.id }).catch((error: unknown) =>
+            void currentWindowId(context).then((window) =>
+              context.call('quirky.worktree/navigate', { worktree: worktree.id, window })
+            ).catch((error: unknown) =>
               context.toast('Could not open workspace', error instanceof Error ? error.message : String(error))
             )
           }}
@@ -615,6 +621,15 @@ export function WorktreesSection({ context, report, requests }: Props) {
       {trust && <TrustDialog request={trust.request} project={trustRepo ? repoLabel(trustRepo) : trust.request.repoId} onChoose={answerTrust} />}
       {fallbacks[0] && <BaseFallbackDialog message={fallbacks[0].message} onClose={() => setFallbacks((prev) => prev.slice(1))} />}
       {cleanupOpen && <CleanupDialog context={context} onClose={closeCleanup} />}
+      {statusEditorOpen && <StatusSettingsDialog
+        context={context}
+        statuses={statusDefinitions}
+        onClose={() => setStatusEditorOpen(false)}
+        onSaved={(statuses) => {
+          setStatusDefinitions(statuses)
+          setStatusEditorOpen(false)
+        }}
+      />}
     </>
   )
 }

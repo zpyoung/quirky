@@ -252,6 +252,32 @@ describe('reversible sleep and wake', () => {
     expect((await list(w)).find((row) => row.id === worktree.id)?.sleeping).toBe(true)
   })
 })
+test('remote host discovery never fabricates local hosts or falls back on unavailable authority', async () => {
+  const w = await start()
+  world = w
+  await expect(call(w.t.client, 'quirky.worktree/availableHosts')).rejects.toThrow(/authenticated peer roster is unavailable/i)
+  await expect(call(w.t.client, 'quirky.worktree/create', {
+    repo: w.repo.id,
+    name: 'no-local-fallback',
+    host: 'peer-does-not-exist'
+  })).rejects.toThrow(/authenticated peer roster is unavailable/i)
+  expect(git(w.repoDir, 'worktree', 'list', '--porcelain').split('\n').filter((line) => line.startsWith('worktree '))).toHaveLength(1)
+  const result = await cli(w, ['worktree', 'host-list', '--json'])
+  expect(result.code).not.toBe(0)
+  expect(`${result.stdout}${result.stderr}`).toMatch(/authenticated peer roster is unavailable/i)
+})
+test('missing terminal, session, or editor owners remain unknown cleanup blockers', async () => {
+  const w = await start({ plugins: ['quirky.repo', 'quirky.worktree'], fakeSession: false })
+  world = w
+  const worktree = await create(w, 'unknown-runtime-context')
+  ageRows(w, [worktree])
+  const preview = await call(w.t.client, 'quirky.worktree/cleanupPreview') as { candidates: CleanupCandidate[] }
+  const blockers = codes(candidateFor(preview.candidates, worktree))
+  expect(blockers).toContain('terminal-liveness-unknown')
+  expect(blockers).toContain('volatile-local-context')
+  expect(blockers).toContain('dirty-editor-unknown')
+})
+
 
 describe('safe cleanup preview and removal', () => {
   test('preview exposes the supported blockers and still identifies a genuinely unused clean workspace', async () => {
@@ -288,6 +314,9 @@ describe('safe cleanup preview and removal', () => {
     commitFiles(unpushed.path, { 'unpublished.txt': 'not pushed\n' })
     const ui = await w.t.h.connect('ui')
     await ui.callAny('ui.view.open', { id: 'view:quirky.session/worktree', input: { worktree: active.id } })
+    const secondUi = await w.t.h.connect('ui')
+    const otherWindowView = await create(w, 'other-window-view')
+    await secondUi.callAny('ui.view.open', { id: 'view:quirky.session/worktree', input: { worktree: otherWindowView.id } })
     const opened = await call(w.t.client, 'quirky.editor/open', { worktree: editor.id, path: 'a.txt' }) as { id: string; contentRevision: number }
     await call(w.t.client, 'quirky.editor/draft', { bufferId: opened.id, content: 'unsaved draft\n', expectedRevision: opened.contentRevision })
     await call(w.t.client, 'quirky.sidebar-extras/activate', { worktree: visible.id })
@@ -308,8 +337,29 @@ describe('safe cleanup preview and removal', () => {
     expect(codes(candidateFor(preview.candidates, editor))).toContain('dirty-editor-buffer')
     expect(codes(candidateFor(preview.candidates, visible))).toContain('recent-visible-context')
     expect(codes(candidateFor(preview.candidates, running))).toContain('running-terminal')
+    expect(codes(candidateFor(preview.candidates, running))).toContain('volatile-local-context')
     expect(codes(candidateFor(preview.candidates, unknownBase))).toContain('unknown-base')
   })
+  test('cleanup revalidates exact window visibility before canonical removal', async () => {
+    const w = await start()
+    world = w
+    const worktree = await create(w, 'window-changed-after-preview')
+    ageRows(w, [worktree])
+    const preview = await call(w.t.client, 'quirky.worktree/cleanupPreview') as { candidates: CleanupCandidate[] }
+    const candidate = candidateFor(preview.candidates, worktree)
+    expect(candidate.eligible).toBe(true)
+
+    const ui = await w.t.h.connect('ui')
+    await ui.callAny('ui.view.open', { id: 'view:quirky.session/worktree', input: { worktree: worktree.id } })
+    const result = await call(w.t.client, 'quirky.worktree/cleanupRemove', {
+      selection: [{ worktreeId: worktree.id, fingerprint: candidate.fingerprint }],
+      confirmed: true
+    }) as { results: CleanupRemovalResult[] }
+    expect(result.results[0]).toMatchObject({ worktreeId: worktree.id, removed: false })
+    expect(result.results[0]?.error).toMatch(/active workspace|stale/i)
+    expect(realpathSync(worktree.path)).toBe(worktree.path)
+  })
+
 
   test('ignore and restore survive restart, while a stale clean preview refuses a dirty checkout', async () => {
     const w = await start()

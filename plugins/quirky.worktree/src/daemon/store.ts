@@ -154,6 +154,22 @@ export function openWorktreeStore(context: PluginContext): PluginStore {
     },
     (store) => {
       store.exec("ALTER TABLE project_preferences ADD COLUMN shared_directories TEXT NOT NULL DEFAULT '[]'")
+    },
+    (store) => {
+      store.exec(`
+        CREATE TABLE prepared_worktrees (
+          id TEXT PRIMARY KEY,
+          repo_id TEXT NOT NULL,
+          repo_path TEXT NOT NULL,
+          root_path TEXT NOT NULL,
+          base_ref TEXT NOT NULL,
+          base_oid TEXT NOT NULL,
+          path TEXT NOT NULL UNIQUE,
+          owner_id TEXT NOT NULL,
+          created_at INTEGER NOT NULL
+        );
+        CREATE INDEX prepared_worktrees_by_expiry ON prepared_worktrees(created_at);
+      `)
     }
   ])
 }

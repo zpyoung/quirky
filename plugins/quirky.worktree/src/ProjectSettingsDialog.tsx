@@ -5,6 +5,7 @@ import { Dialog } from './Dialog'
 import { repoLabel } from './report'
 import type { ExternalVisibility, WorktreeProjectIdentity } from './parity-types'
 import { parseSharedDirectoriesText } from './shared-paths'
+import { isSafeIcon } from './safe-icon'
 
 type Props = { context: UiPluginContext; repo: Repo; onClose(): void }
 
@@ -43,6 +44,30 @@ type ProjectMetadata = {
   identity: WorktreeProjectIdentity
   externalVisibility: ExternalVisibility
   sharedDirectories: string[]
+}
+type TrackerProjectOption = { id: string; title: string; url: string }
+
+function recordOf(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : null
+}
+
+function trackerProjectOptionsOf(value: unknown): TrackerProjectOption[] | null {
+  const response = recordOf(value)
+  if (!Array.isArray(response?.projects)) return null
+  const projects: TrackerProjectOption[] = []
+  for (const raw of response.projects) {
+    const project = recordOf(raw)
+    if (!project || typeof project.id !== 'string' || typeof project.title !== 'string' || typeof project.url !== 'string') continue
+    let url: URL
+    try {
+      url = new URL(project.url)
+    } catch {
+      continue
+    }
+    if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) continue
+    projects.push({ id: project.id, title: project.title, url: url.href })
+  }
+  return projects
 }
 
 function toForm(details: RepoDetails, project: ProjectMetadata): Form {
@@ -108,6 +133,8 @@ export function ProjectSettingsDialog({ context, repo, onClose }: Props) {
   const ledgerSettingsMount = useRef<HTMLDivElement>(null)
   const [ledgerMountError, setLedgerMountError] = useState('')
   const formReady = form !== null
+  const [trackerProjects, setTrackerProjects] = useState<TrackerProjectOption[]>([])
+  const [trackerProjectError, setTrackerProjectError] = useState('')
 
   useEffect(() => {
     let live = true
@@ -130,6 +157,18 @@ export function ProjectSettingsDialog({ context, repo, onClose }: Props) {
       live = false
     }
   }, [context, repo.id])
+  useEffect(() => {
+    let live = true
+    void context.call('quirky.hosting/projects', { worktree: repo.path }).then((value: unknown) => {
+      if (!live) return
+      const projects = trackerProjectOptionsOf(value)
+      if (projects === null) setTrackerProjectError('The provider returned an invalid project catalog.')
+      else setTrackerProjects(projects)
+    }).catch((error: unknown) => {
+      if (live) setTrackerProjectError(`Provider-backed tracker projects are unavailable: ${messageOf(error)}`)
+    })
+    return () => { live = false }
+  }, [context, repo.id, repo.path])
   useEffect(() => {
     const element = ledgerSettingsMount.current
     if (repo.kind !== 'git' || !formReady || !element) return
@@ -169,6 +208,10 @@ export function ProjectSettingsDialog({ context, repo, onClose }: Props) {
       return
     }
     const patch = changes(initial, form)
+    if (!isSafeIcon(form.icon)) {
+      context.toast('Invalid project icon', 'Use a plain-text emoji or symbol; URLs, SVG and HTML are not allowed.')
+      return
+    }
     const identityChanged = form.icon !== initial.icon || form.color !== initial.color || form.trackerProject !== initial.trackerProject ||
       form.externalVisibility !== initial.externalVisibility
     const sharedDirectoriesChanged = JSON.stringify(sharedDirectories) !== JSON.stringify(parseSharedDirectoriesText(initial.sharedDirectories))
@@ -208,6 +251,7 @@ export function ProjectSettingsDialog({ context, repo, onClose }: Props) {
           <label>
             <span>Project icon</span>
             <input value={form.icon} onChange={(event) => set('icon', event.target.value)} maxLength={32} placeholder="Emoji or symbol" />
+            <small className="muted">Plain-text emoji or symbols only; URLs, SVG and HTML are rejected.</small>
           </label>
           <label>
             <span>Project color</span>
@@ -215,7 +259,13 @@ export function ProjectSettingsDialog({ context, repo, onClose }: Props) {
           </label>
           <label>
             <span>Tracker project</span>
-            <input value={form.trackerProject} onChange={(event) => set('trackerProject', event.target.value)} maxLength={200} placeholder="APP" />
+            <select value={form.trackerProject} onChange={(event) => set('trackerProject', event.target.value)}>
+              <option value="">No default tracker project</option>
+              {form.trackerProject && !trackerProjects.some((project) => project.url === form.trackerProject) &&
+                <option value={form.trackerProject}>Saved project unavailable from provider</option>}
+              {trackerProjects.map((project) => <option key={project.id} value={project.url}>{project.title}</option>)}
+            </select>
+            <small className="muted">{trackerProjectError || 'Choose an accessible provider project; the provider verifies the saved identity.'}</small>
           </label>
           <label>
             <span>External worktrees</span>

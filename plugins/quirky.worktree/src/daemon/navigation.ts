@@ -1,17 +1,17 @@
 import type { PluginStore, Worktree } from '@quirky/protocol'
 import type { CallerIdentity } from '../../selector'
 import type { StockWorktreeOptions, WorktreeControl } from '../control-types'
+import { openWindowView, selectWindow, type SelectedWindow, type WindowEnv } from './window'
 
 const HISTORY_KEY = 'worktree-navigation-history'
+const WINDOW_HISTORY_KEY = 'worktree-navigation-history-by-window'
 const SESSION_VIEW = 'view:quirky.session/worktree'
 const DIFF_VIEW = 'view:quirky.git/diff'
 
 type NavigationHistory = { worktrees: string[]; index: number }
 type NavigationTarget = 'terminal' | 'changes'
-type NavigationEnv = {
+type NavigationEnv = WindowEnv & {
   store: PluginStore
-  fail(kind: 'invalid-params' | 'not-found' | 'conflict', message: string): Error
-  call(method: string, params?: Record<string, unknown>): Promise<unknown>
   list(): Promise<WorktreeControl[]>
   find(selector: string, identity: CallerIdentity): Promise<{ worktree: WorktreeControl; all: WorktreeControl[] }>
   options(): StockWorktreeOptions
@@ -22,47 +22,74 @@ function recordOf(value: unknown): Record<string, unknown> | null {
   return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : null
 }
 
-function readHistory(store: PluginStore): NavigationHistory {
+function emptyHistory(): NavigationHistory {
+  return { worktrees: [], index: -1 }
+}
+
+function historyOf(value: unknown): NavigationHistory | null {
+  const record = recordOf(value)
+  if (!Array.isArray(record?.worktrees) || !record.worktrees.every((id) => typeof id === 'string') ||
+    typeof record.index !== 'number' || !Number.isSafeInteger(record.index)) return null
+  const worktrees = record.worktrees as string[]
+  return { worktrees, index: Math.min(worktrees.length - 1, Math.max(-1, record.index)) }
+}
+
+function readLegacyHistory(store: PluginStore): NavigationHistory {
   const row = store.get<{ value: string }>('SELECT value FROM meta WHERE key = ?', HISTORY_KEY)
-  if (!row) return { worktrees: [], index: -1 }
+  if (!row) return emptyHistory()
   try {
-    const value = recordOf(JSON.parse(row.value) as unknown)
-    if (!Array.isArray(value?.worktrees) || !value.worktrees.every((id) => typeof id === 'string') ||
-      typeof value.index !== 'number' || !Number.isSafeInteger(value.index)) return { worktrees: [], index: -1 }
-    const worktrees = value.worktrees as string[]
-    return { worktrees, index: Math.min(worktrees.length - 1, Math.max(-1, value.index)) }
+    return historyOf(JSON.parse(row.value)) ?? emptyHistory()
   } catch {
-    return { worktrees: [], index: -1 }
+    return emptyHistory()
   }
 }
 
-function writeHistory(store: PluginStore, history: NavigationHistory): void {
+function readWindowHistories(store: PluginStore): Record<string, NavigationHistory> {
+  const row = store.get<{ value: string }>('SELECT value FROM meta WHERE key = ?', WINDOW_HISTORY_KEY)
+  if (!row) return {}
+  try {
+    const raw = recordOf(JSON.parse(row.value))
+    if (!raw) return {}
+    const histories: Record<string, NavigationHistory> = {}
+    for (const [connId, value] of Object.entries(raw)) {
+      if (!/^[1-9]\d*$/.test(connId)) continue
+      const history = historyOf(value)
+      if (history) histories[connId] = history
+    }
+    return histories
+  } catch {
+    return {}
+  }
+}
+
+function readHistory(store: PluginStore, selected: SelectedWindow): NavigationHistory {
+  const histories = readWindowHistories(store)
+  const key = String(selected.connId)
+  if (histories[key]) return histories[key]!
+  return selected.windowCount === 1 ? readLegacyHistory(store) : emptyHistory()
+}
+
+function writeHistory(store: PluginStore, selected: SelectedWindow, history: NavigationHistory): void {
+  const histories = readWindowHistories(store)
+  histories[String(selected.connId)] = history
+  const value = JSON.stringify(histories)
   store.run(
     'INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
-    HISTORY_KEY,
-    JSON.stringify(history)
+    WINDOW_HISTORY_KEY,
+    value
   )
+  if (selected.windowCount === 1) {
+    store.run(
+      'INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+      HISTORY_KEY,
+      JSON.stringify(history)
+    )
+  }
 }
 
-async function activeLayout(env: NavigationEnv): Promise<Record<string, unknown>> {
-  let state: unknown
-  try {
-    state = await env.call('ui.state')
-  } catch (error) {
-    throw env.fail('conflict', `Workspace navigation is unavailable: ${error instanceof Error ? error.message : String(error)}`)
-  }
-  const value = recordOf(state)
-  if (!value || !Array.isArray(value.windows) || !recordOf(value.layout)) {
-    throw env.fail('conflict', 'Workspace navigation requires public window and layout state.')
-  }
-  if (value.windows.length !== 1) {
-    throw env.fail('conflict', 'Workspace navigation is ambiguous because the public API cannot target one window when multiple windows are connected.')
-  }
-  return value.layout as Record<string, unknown>
-}
-
-function activeWorktree(layout: Record<string, unknown>): string | null {
-  const view = recordOf(layout.view)
+function activeWorktree(value: unknown): string | null {
+  const layout = recordOf(value)
+  const view = recordOf(layout?.view)
   const input = recordOf(view?.input)
   return typeof input?.worktree === 'string' ? input.worktree : null
 }
@@ -96,58 +123,60 @@ function targetOf(value: unknown, fail: NavigationEnv['fail']): NavigationTarget
   throw fail('invalid-params', 'target must be terminal or changes')
 }
 
-async function openView(env: NavigationEnv, worktree: Worktree, target: NavigationTarget): Promise<void> {
-  await env.call('ui.view.open', target === 'terminal'
-    ? { id: SESSION_VIEW, input: { worktree: worktree.id } }
-    : { id: DIFF_VIEW, input: { worktree: worktree.id, mode: 'combined', area: 'all' } })
+async function openView(env: NavigationEnv, selected: SelectedWindow, worktree: Worktree, target: NavigationTarget): Promise<void> {
+  await openWindowView(env, selected.connId, target === 'terminal' ? SESSION_VIEW : DIFF_VIEW,
+    target === 'terminal'
+      ? { worktree: worktree.id }
+      : { worktree: worktree.id, mode: 'combined', area: 'all' })
   if ('sleeping' in worktree && worktree.sleeping) {
     env.store.run('UPDATE worktrees SET sleeping = 0, sleep_changed_at = ? WHERE id = ?', Date.now(), worktree.id)
     env.changed({ repoId: worktree.repoId, worktreeId: worktree.id })
   }
 }
 
-function pushHistory(store: PluginStore, id: string): void {
-  const history = readHistory(store)
+function pushHistory(store: PluginStore, selected: SelectedWindow, id: string): void {
+  const history = readHistory(store, selected)
   const worktrees = history.worktrees.slice(0, history.index + 1)
   if (worktrees[worktrees.length - 1] !== id) worktrees.push(id)
-  writeHistory(store, { worktrees, index: worktrees.length - 1 })
+  writeHistory(store, selected, { worktrees, index: worktrees.length - 1 })
 }
 
 export async function navigate(
   env: NavigationEnv,
-  params: { worktree: string; target?: unknown },
+  params: { worktree: string; target?: unknown; window?: unknown },
   identity: CallerIdentity
 ): Promise<{ worktreeId: string; target: NavigationTarget }> {
   if (typeof params.worktree !== 'string' || params.worktree.trim() === '') throw env.fail('invalid-params', 'worktree must be a selector')
   const target = targetOf(params.target, env.fail)
-  await activeLayout(env)
+  const selected = await selectWindow(env, params.window)
   const { worktree } = await env.find(params.worktree, identity)
-  await openView(env, worktree, target)
-  pushHistory(env.store, worktree.id)
+  await openView(env, selected, worktree, target)
+  pushHistory(env.store, selected, worktree.id)
   return { worktreeId: worktree.id, target }
 }
 
 export async function openIn(
   env: NavigationEnv,
-  params: { worktree: string; target: unknown },
+  params: { worktree: string; target: unknown; window?: unknown },
   identity: CallerIdentity
 ): Promise<{ worktreeId: string; target: NavigationTarget }> {
   return navigate(env, params, identity)
 }
 
-export function navigationState(store: PluginStore): NavigationHistory {
-  return readHistory(store)
+export async function navigationState(env: NavigationEnv, window?: unknown): Promise<NavigationHistory> {
+  return readHistory(env.store, await selectWindow(env, window))
 }
 
 export async function navigationHistoryMove(
   env: NavigationEnv,
-  direction: 'back' | 'forward'
+  direction: 'back' | 'forward',
+  window?: unknown
 ): Promise<{ worktreeId: string; target: 'terminal' }> {
-  const layout = await activeLayout(env)
-  const current = activeWorktree(layout)
+  const selected = await selectWindow(env, window)
+  const current = activeWorktree(selected.layout)
   const listed = await env.list()
   const available = new Set(listed.map((worktree) => worktree.id))
-  const history = readHistory(env.store)
+  const history = readHistory(env.store, selected)
   let worktrees = history.worktrees.filter((id) => available.has(id))
   let index = current === null ? -1 : worktrees.lastIndexOf(current)
   if (current !== null && index < 0) {
@@ -162,40 +191,42 @@ export async function navigationHistoryMove(
   const id = worktrees[nextIndex]!
   const target = listed.find((worktree) => worktree.id === id)
   if (!target) throw env.fail('not-found', `Workspace ${id} no longer exists.`)
-  await openView(env, target, 'terminal')
-  writeHistory(env.store, { worktrees, index: nextIndex })
+  await openView(env, selected, target, 'terminal')
+  writeHistory(env.store, selected, { worktrees, index: nextIndex })
   return { worktreeId: id, target: 'terminal' }
 }
 
 export async function navigationStep(
   env: NavigationEnv,
-  direction: 'previous' | 'next'
+  direction: 'previous' | 'next',
+  window?: unknown
 ): Promise<{ worktreeId: string; target: 'terminal' }> {
-  const layout = await activeLayout(env)
-  const current = activeWorktree(layout)
+  const selected = await selectWindow(env, window)
+  const current = activeWorktree(selected.layout)
   const worktrees = navigationOrder(await env.list(), env.options())
   const index = worktrees.findIndex((worktree) => worktree.id === current)
   if (index < 0) throw env.fail('not-found', 'The current view is not a listed worktree.')
   const next = index + (direction === 'previous' ? -1 : 1)
   const target = worktrees[next]
   if (!target) throw env.fail('not-found', `There is no ${direction} worktree.`)
-  await openView(env, target, 'terminal')
-  pushHistory(env.store, target.id)
+  await openView(env, selected, target, 'terminal')
+  pushHistory(env.store, selected, target.id)
   return { worktreeId: target.id, target: 'terminal' }
 }
 
 export async function navigationIndex(
   env: NavigationEnv,
-  value: unknown
+  value: unknown,
+  window?: unknown
 ): Promise<{ worktreeId: string; target: 'terminal' }> {
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1 || value > 9) {
     throw env.fail('invalid-params', 'index must be an integer from 1 through 9')
   }
+  const selected = await selectWindow(env, window)
   const worktrees = navigationOrder(await env.list(), env.options())
   const target = worktrees[value - 1]
   if (!target) throw env.fail('not-found', `Workspace index ${value} is not available.`)
-  await activeLayout(env)
-  await openView(env, target, 'terminal')
-  pushHistory(env.store, target.id)
+  await openView(env, selected, target, 'terminal')
+  pushHistory(env.store, selected, target.id)
   return { worktreeId: target.id, target: 'terminal' }
 }

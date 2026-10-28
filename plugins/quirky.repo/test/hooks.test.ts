@@ -58,16 +58,50 @@ describe('effectiveHooks: reading the shared file', () => {
     expect(effectiveHooks(file, settings(), {}).agentStartup).toBe('wait-for-setup')
   })
 
-  test('recognises issueCommand; other unsupported and unknown keys stay warned', () => {
-    const hooks = effectiveHooks(orca('scripts:\n  setup: ls\nissueCommand: gh issue\ndefaultTabs: []\nenvironmentRecipes: {}\ncolour: red\n'), settings(), {})
+  test('parses safe default terminal tabs and environment recipe metadata without unsupported warnings', () => {
+    const hooks = effectiveHooks(orca([
+      'scripts:',
+      '  setup: ls',
+      'issueCommand: gh issue',
+      'defaultTabs:',
+      '  - title: API',
+      '    color: "#aabbcc"',
+      '    command: pnpm dev',
+      'environmentRecipes:',
+      '  - id: devbox',
+      '    name: Devbox',
+      '    create: vm create',
+      '    checkoutMode: provisioned-root',
+      '    destroy: none',
+      'colour: red'
+    ].join('\n')), settings(), {})
     expect(hooks.file).toBe('orca.yaml')
     expect(hooks.setup?.text).toBe('ls')
     expect(hooks.issueCommand?.text).toBe('gh issue')
-    expect(hooks.warnings).toEqual([
-      'defaultTabs is recognised but not supported yet',
-      'environmentRecipes is recognised but not supported yet',
-      'unrecognised key colour'
-    ])
+    expect(hooks.defaultTabs).toEqual([{ title: 'API', color: '#aabbcc', command: 'pnpm dev' }])
+    expect(hooks.environmentRecipes).toEqual([{
+      id: 'devbox',
+      name: 'Devbox',
+      create: 'vm create',
+      checkoutMode: 'provisioned-root',
+      destroyDisabled: true
+    }])
+    expect(hooks.environmentRecipeDiagnostics).toEqual([])
+    expect(hooks.warnings).toEqual(['unrecognised key colour'])
+  })
+
+  test('trusts shared default-tab commands with the same setup approval hash', () => {
+    const file = orca([
+      'scripts:',
+      '  setup: pnpm install',
+      'defaultTabs:',
+      '  - title: Dev',
+      '    command: pnpm dev'
+    ].join('\n'))
+    const trustText = 'pnpm install\n\n# defaultTabs[1] Dev\npnpm dev'
+    const hooks = effectiveHooks(file, settings(), { setup: hashScript(trustText) })
+    expect(hooks.setup?.shared).toMatchObject({ trusted: true, hash: hashScript(trustText), text: trustText })
+    expect(hooks.defaultTabsTrust).toMatchObject({ trusted: true, hash: hashScript(trustText), text: trustText })
   })
 
   test('a file that fails to parse warns and yields no shared hooks', () => {

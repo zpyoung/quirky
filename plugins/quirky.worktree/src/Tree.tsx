@@ -3,7 +3,7 @@ import type { ProjectGroup, Repo, Session, UiPluginContext, Worktree } from '@qu
 import { DEFAULT_STOCK_OPTIONS, type StockWorktreeOptions, type WorktreeControl } from './control-types'
 import type { HeimdallWorktreeStatus } from './useTree'
 import { resolveMembershipTarget, type MembershipTarget } from './membership'
-import { changeGroup, copyText, setWorkspaceSleeping, setWorktree } from './actions'
+import { changeGroup, copyText, currentWindowId, setWorkspaceSleeping, setWorktree } from './actions'
 import { ContextMenu, groupMenu, projectMenu, workspaceMenu, type MenuItem } from './Menu'
 import { projectSeparatorBoundaries, repoLabel, type AutomationAvailabilitySnapshot, type DialogState, type GroupNode, type ProjectNode, type TreeModel, type TreeRow } from './report'
 import type { WorktreeProjectIdentity, WorktreeStatusDefinition } from './parity-types'
@@ -452,7 +452,9 @@ export function Tree({
         moveProject,
         setSleeping: (item, sleeping, withDescendants) => void setWorkspaceSleeping(context, item.id, sleeping, withDescendants),
         openIn: (item, target) => {
-          void context.call('quirky.worktree/openIn', { worktree: item.id, target }).catch((error: unknown) =>
+          void currentWindowId(context).then((window) =>
+            context.call('quirky.worktree/openIn', { worktree: item.id, target, window })
+          ).catch((error: unknown) =>
             context.toast(`Could not open ${target}`, error instanceof Error ? error.message : String(error))
           )
         },
@@ -543,18 +545,20 @@ export function Tree({
       }
       rootById.set(row.worktree.id, current.id)
     }
-    const lanes = new Map<string, { label: string; color?: string; roots: Set<string> }>()
+    const lanes = new Map<string, { label: string; color?: string; icon?: string; roots: Set<string> }>()
     for (const row of list) {
       const rootId = rootById.get(row.worktree.id)!
       if (rootId !== row.worktree.id) continue
       let key: string
       let label: string
       let color: string | undefined
+      let icon: string | undefined
       if (options.groupBy === 'status') {
         key = `status:${row.worktree.status}`
         const definition = statusDefinitions.find((status) => status.id === row.worktree.status)
         label = definition?.label ?? row.worktree.status
         color = definition?.color
+        icon = definition?.icon
       } else if (row.worktree.linkedPR) {
         key = `pr:${row.worktree.linkedPR.number}:${row.worktree.linkedPR.url}`
         label = `PR #${row.worktree.linkedPR.number} · ${row.worktree.linkedPR.title}`
@@ -562,7 +566,7 @@ export function Tree({
         key = 'pr:none'
         label = 'No pull request'
       }
-      const lane = lanes.get(key) ?? { label, ...(color ? { color } : {}), roots: new Set<string>() }
+      const lane = lanes.get(key) ?? { label, ...(color ? { color } : {}), ...(icon ? { icon } : {}), roots: new Set<string>() }
       lane.roots.add(rootId)
       lanes.set(key, lane)
     }
@@ -570,7 +574,7 @@ export function Tree({
       const laneRows = list.filter((row) => lane.roots.has(rootById.get(row.worktree.id)!))
       return (
         <li className="worktree-status-lane" key={key} style={lane.color ? { borderColor: lane.color } : undefined}>
-          <h3>{lane.label}</h3>
+          <h3>{lane.icon && <span className="status-icon" aria-label={`${lane.label} icon`}>{lane.icon}</span>} {lane.label}</h3>
           <ul className="worktree-list">{rows(laneRows)}</ul>
         </li>
       )
