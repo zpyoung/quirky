@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { UiPluginContext } from '@quirky/protocol'
+import { Badge, Button, FormRow, ListRow, SectionHeader } from '@quirky/ui'
 import type { HostOutcome, SearchStatus } from '../types'
 import { HISTORY_PANEL_ID } from './model'
-import { injectVaultStyles } from './styles'
 
 type RemoteSearchStatus = { status: SearchStatus | null; error: string | null }
 
@@ -48,6 +48,7 @@ function mergeHostOutcomes(current: HostOutcome[], incoming: HostOutcome[], repl
 }
 
 function SearchSettings({ context, report, embedded = false }: SearchSettingsProps) {
+  const idPrefix = useId()
   const [state, setState] = useState<SettingsState>({ status: null, hosts: [], remoteStatuses: {}, loading: true, busy: false, error: null, scopeStatusError: null })
   const localIndexing = state.status?.enabled === true && (state.status.phase === 'indexing' || (state.status.phase === 'degraded' && state.status.filesDue > 0))
   const indexing = localIndexing || Object.values(state.remoteStatuses).some(({ status }) => status?.enabled === true && (status.phase === 'indexing' || (status.phase === 'degraded' && status.filesDue > 0)))
@@ -276,29 +277,33 @@ function SearchSettings({ context, report, embedded = false }: SearchSettingsPro
 
   return (
     <section className={`qvh-root qvh-settings${embedded ? ' qvh-embedded' : ''}`} data-vault-settings data-vault-search-status={status?.phase ?? 'unavailable'} data-vault-poll-ms={pollIntervalMs} data-vault-search-generation={status?.generation ?? 0} data-vault-last-reconcile-at={status?.lastReconcileAt ?? ''}>
-      {!embedded ? <>
-        <h2 className="qvh-settings-heading">Agent Session Search</h2>
+      {!embedded ? <div className="qvh-settings-heading">
+        <SectionHeader title="Agent Session Search" />
         <p className="qvh-settings-description">Search everything your agents have said and done on this computer and other available hosts.</p>
-      </> : null}
-      <div className="qvh-settings-card">
-        <h3>Search inside sessions</h3>
+      </div> : null}
+      <section className="qvh-settings-card">
+        <SectionHeader title="Search inside sessions" actions={<Badge tone={!status ? (state.loading ? 'neutral' : 'failing') : status.phase === 'degraded' ? 'needs-you' : status.enabled ? 'working' : 'neutral'}>{!status ? (state.loading ? 'Checking status' : 'Unavailable') : status.enabled ? (localIndexing ? 'Indexing' : 'Enabled') : 'Disabled'}</Badge>} />
         <p className="qvh-settings-description">{disclosure}</p>
-        <div className="qvh-settings-row" data-vault-host-row data-vault-host-id="local" data-vault-host-status={status?.phase ?? 'checking'}>
-          <div className="qvh-settings-copy">
-            <strong>Local Mac</strong>
-            <p data-vault-status-summary>{status?.enabled ? (localIndexing ? `${status.filesIndexed.toLocaleString()} files indexed · ${status.filesDue.toLocaleString()} files owed · ${status.messagesIndexed.toLocaleString()} messages searchable` : `${sessions.toLocaleString()} sessions · ${status.messagesIndexed.toLocaleString()} messages searchable`) : state.loading ? 'Checking search status…' : 'Transcript search is off. Only titles are filtered until enabled.'}</p>
-          </div>
-          <input
-            type="checkbox"
-            role="switch"
-            aria-label="Enable local Agent Session Search"
-            data-vault-search-enabled
-            checked={status?.enabled ?? false}
-            disabled={state.busy || !status}
-            onChange={(event) => void setEnabled(event.currentTarget.checked)}
+        <div className="qvh-settings-host-row" data-vault-host-row data-vault-host-id="local" data-vault-host-status={status?.phase ?? 'checking'}>
+          <ListRow
+            title="Local Mac"
+            description={<span data-vault-status-summary>{status?.enabled ? (localIndexing ? `${status.filesIndexed.toLocaleString()} files indexed · ${status.filesDue.toLocaleString()} files owed · ${status.messagesIndexed.toLocaleString()} messages searchable` : `${sessions.toLocaleString()} sessions · ${status.messagesIndexed.toLocaleString()} messages searchable`) : state.loading ? 'Checking search status…' : 'Transcript search is off. Only titles are filtered until enabled.'}</span>}
+            trailing={<Badge tone={!status ? (state.loading ? 'neutral' : 'failing') : status.phase === 'degraded' ? 'needs-you' : status.enabled ? 'working' : 'neutral'}>{!status ? (state.loading ? 'Checking' : 'Unavailable') : status.enabled ? (localIndexing ? 'Indexing' : 'Enabled') : 'Disabled'}</Badge>}
           />
+          <FormRow label="Enable local Agent Session Search" htmlFor={`${idPrefix}-local-search`}>
+            <input
+              id={`${idPrefix}-local-search`}
+              type="checkbox"
+              role="switch"
+              aria-label="Enable local Agent Session Search"
+              data-vault-search-enabled
+              checked={status?.enabled ?? false}
+              disabled={state.busy || !status}
+              onChange={(event) => void setEnabled(event.currentTarget.checked)}
+            />
+          </FormRow>
         </div>
-        {state.hosts.filter((host) => host.hostId !== 'local' && host.hostId !== 'all').map((host) => {
+        {state.hosts.filter((host) => host.hostId !== 'local' && host.hostId !== 'all').map((host, index) => {
           const remote = state.remoteStatuses[host.hostId]
           const remoteStatus = remote?.status ?? null
           const hostFailure = host.kind !== 'ok' || Boolean(remote?.error)
@@ -313,11 +318,16 @@ function SearchSettings({ context, report, embedded = false }: SearchSettingsPro
                     ? `${remoteStatus.filesIndexed.toLocaleString()} files indexed · ${remoteStatus.filesDue.toLocaleString()} files owed · ${remoteStatus.messagesIndexed.toLocaleString()} messages searchable`
                     : `${countSessions(remoteStatus).toLocaleString()} sessions · ${remoteStatus.messagesIndexed.toLocaleString()} messages searchable`
                   : 'Transcript search is off on this host.'
-          return <div className="qvh-settings-row" data-vault-host-row data-vault-host-id={host.hostId} data-vault-host-status={host.kind !== 'ok' ? host.kind : remoteStatus?.phase ?? (remote?.error ? 'error' : 'checking')} data-vault-host-outcome={host.kind} key={host.hostId}>
-            <div className="qvh-settings-copy"><strong>{host.label}</strong><p>{description}</p></div>
+          const switchId = `${idPrefix}-host-${index}`
+          return <div className="qvh-settings-host-row" data-vault-host-row data-vault-host-id={host.hostId} data-vault-host-status={host.kind !== 'ok' ? host.kind : remoteStatus?.phase ?? (remote?.error ? 'error' : 'checking')} data-vault-host-outcome={host.kind} key={host.hostId}>
+            <ListRow
+              title={host.label}
+              description={description}
+              trailing={<Badge tone={hostFailure ? 'failing' : remoteStatus?.phase === 'degraded' ? 'needs-you' : remoteStatus?.enabled ? 'working' : 'neutral'}>{hostFailure ? 'Unavailable' : !remoteStatus ? 'Checking' : remoteStatus.enabled ? (remoteStatus.phase === 'indexing' || (remoteStatus.phase === 'degraded' && remoteStatus.filesDue > 0) ? 'Indexing' : 'Enabled') : 'Disabled'}</Badge>}
+            />
             {host.kind === 'ok' && remoteStatus
-              ? <input type="checkbox" role="switch" aria-label={`Enable Agent Session Search on ${host.label}`} data-vault-host-switch checked={remoteStatus.enabled} disabled={state.busy} onChange={(event) => void setRemoteEnabled(host, event.currentTarget.checked)} />
-              : <button type="button" className="qvh-button" data-vault-retry-host disabled={state.busy} onClick={() => void refresh()}>Retry</button>}
+              ? <FormRow label={`Enable Agent Session Search on ${host.label}`} htmlFor={switchId}><input id={switchId} type="checkbox" role="switch" aria-label={`Enable Agent Session Search on ${host.label}`} data-vault-host-switch checked={remoteStatus.enabled} disabled={state.busy} onChange={(event) => void setRemoteEnabled(host, event.currentTarget.checked)} /></FormRow>
+              : <Button data-vault-retry-host disabled={state.busy} onClick={() => void refresh()}>Retry</Button>}
             {hostFailure && host.kind === 'ok' ? <span className="qvh-error-inline" role="status">Unavailable</span> : null}
           </div>
         })}
@@ -325,27 +335,21 @@ function SearchSettings({ context, report, embedded = false }: SearchSettingsPro
         {state.scopeStatusError ? <div className="qvh-tip" role="status">{state.scopeStatusError}</div> : null}
 
         {status && (status.filesFailed > 0 || status.degradedRoots.length > 0) ? (
-          <div className="qvh-degraded" role="status">
+          <div className="qvh-degraded" role="status"><Badge tone="needs-you">Attention</Badge>
             {status.filesFailed > 0 ? `${status.filesFailed} session files could not be read and will be retried. ` : ''}
             {status.degradedRoots.length > 0 ? `${status.degradedRoots.length} session roots could not be checked.` : ''}
           </div>
         ) : null}
         {localIndexing ? <div className="qvh-progress" aria-label="Indexing local sessions"><span /></div> : null}
-        {enableableHostCount > 0 ? <div className="qvh-settings-row"><div className="qvh-settings-copy"><strong>Enable on all available hosts</strong><p>Enables the local index first, then enables each available host separately.</p></div><button type="button" className="qvh-button" data-vault-enable-all disabled={state.busy} onClick={() => void enableAll()}>Enable all</button></div> : null}
-      </div>
-      <div className="qvh-settings-card">
-        <h3>Open in the sidebar</h3>
-        <div className="qvh-settings-row">
-          <div className="qvh-settings-copy"><strong>Agent Session History</strong><p>Type what you remember, or inspect a previous session and continue it.</p></div>
-          <button type="button" className="qvh-button" data-vault-open-sidebar disabled={state.busy} onClick={() => void openSidebar()}>Open</button>
-        </div>
-      </div>
+        {enableableHostCount > 0 ? <ListRow title="Enable on all available hosts" description="Enables the local index first, then enables each available host separately." trailing={<Button data-vault-enable-all disabled={state.busy} onClick={() => void enableAll()}>Enable all</Button>} /> : null}
+      </section>
+      <section className="qvh-settings-card">
+        <SectionHeader title="Open in the sidebar" />
+        <ListRow title="Agent Session History" description="Type what you remember, or inspect a previous session and continue it." trailing={<Button data-vault-open-sidebar disabled={state.busy} onClick={() => void openSidebar()}>Open</Button>} />
+      </section>
       <details className="qvh-settings-card qvh-settings-advanced">
-        <summary>Advanced</summary>
-        <div className="qvh-settings-row">
-          <div className="qvh-settings-copy"><strong>Clear search data</strong><p>Turns off search first, then removes only the searchable copy from this computer. Agent transcripts are not affected.</p></div>
-          <button type="button" className="qvh-button qvh-danger" data-vault-clear-search disabled={state.busy || !status} onClick={() => void clear()}>Clear</button>
-        </div>
+        <summary><SectionHeader title="Advanced" /></summary>
+        <ListRow title="Clear search data" description="Turns off search first, then removes only the searchable copy from this computer. Agent transcripts are not affected." trailing={<Button variant="destructive" data-vault-clear-search disabled={state.busy || !status} onClick={() => void clear()}>Clear</Button>} />
       </details>
       {status ? <div className="qvh-status-grid" aria-label="Search index counts">
         <div className="qvh-status-cell" data-vault-status-sessions><strong>{sessions.toLocaleString()}</strong><span>searchable sessions</span></div>
@@ -359,7 +363,6 @@ function SearchSettings({ context, report, embedded = false }: SearchSettingsPro
 }
 
 export function mountSearchSettings(context: UiPluginContext, element: HTMLElement, props: { report?(state: unknown): void }): () => void {
-  injectVaultStyles(element.ownerDocument)
   Object.assign(element.style, { display: 'flex', flexDirection: 'column', flex: '1', minHeight: '0', minWidth: '0' })
   const root = createRoot(element)
   root.render(<SearchSettings context={context} report={props.report} embedded />)
@@ -367,7 +370,6 @@ export function mountSearchSettings(context: UiPluginContext, element: HTMLEleme
 }
 
 export function mountSearchSettingsView(context: UiPluginContext, element: HTMLElement, props: { report?(state: unknown): void }): () => void {
-  injectVaultStyles(element.ownerDocument)
   Object.assign(element.style, { display: 'flex', flexDirection: 'column', flex: '1', minHeight: '0', minWidth: '0' })
   const root = createRoot(element)
   root.render(<SearchSettings context={context} report={props.report} />)
