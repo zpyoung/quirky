@@ -1797,7 +1797,7 @@
         "browser.md",
         "mobile.md"
       ],
-      "status": "todo",
+      "status": "in-progress",
       "title": "Parity sweep for browser.md, mobile.md: every remaining flow in these feature docs, except the GitLab, Bitbucket, Gitea/Forgejo and Azure DevOps flows, the Objective runner and the PR sitter, which the user deferred. Find what earlier items left out or deferred, build or fix it, and record anything too large as a follow-up item",
       "deps": [
         "sa-browser-agent",
@@ -1807,7 +1807,8 @@
         "sb-mobile-daemon",
         "sb-mobile-app",
         "sb-mobile-app-panels"
-      ]
+      ],
+      "lane": 7
     },
     {
       "id": "fix-flaky-pty-host-manager",
