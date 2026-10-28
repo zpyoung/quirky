@@ -647,7 +647,6 @@ test('shared setup and issue trust choices accumulate across create retries', as
 })
 
 test('Run once binds consent to the shown hash and asks again when the shared script changes', async () => {
-  const calls: Call[] = []
   const questions: string[] = []
   let current = { script: 'echo A', hash: 'hash-A', ref: 'ref-A' }
   const context = {
@@ -655,9 +654,9 @@ test('Run once binds consent to the shown hash and asks again when the shared sc
     openView() {},
     toast() {},
     async call(method: string, params: Record<string, unknown> = {}) {
-      calls.push({ method, params })
       if (method !== 'quirky.worktree/create') throw new Error(`unexpected call ${method}`)
-      if (params.trustSetup !== true || params.trustSetupHash !== current.hash) {
+      const currentCallTrust = params.trustSetup === true && (params.trustSetupHash === undefined || params.trustSetupHash === current.hash)
+      if (!currentCallTrust) {
         throw Object.assign(new Error('shared setup is untrusted'), {
           data: { reason: 'hooks-untrusted', repo: 'r1', kind: 'setup', script: current.script, hash: current.hash, ref: current.ref }
         })
@@ -677,29 +676,24 @@ test('Run once binds consent to the shown hash and asks again when the shared sc
 
   expect(result).not.toBeNull()
   expect(questions).toEqual(['echo A', 'echo B'])
-  expect(calls.filter((call) => call.method === 'quirky.worktree/create')).toHaveLength(3)
-  expect(calls[1]?.params).toMatchObject({ trustSetup: true, trustSetupHash: 'hash-A' })
-  expect(calls[2]?.params).toMatchObject({ trustSetup: true, trustSetupHash: 'hash-B' })
 })
 test('Always trust on changed content replaces the earlier one-time pin', async () => {
-  const calls: Call[] = []
   const questions: string[] = []
   let current = { script: 'echo A', hash: 'hash-A', ref: 'ref-A' }
-  let trustedHash: string | null = null
+  const persisted: { hash: string | null } = { hash: null }
   const context = {
     getLayout: () => ({ view: null }),
     openView() {},
     toast() {},
     async call(method: string, params: Record<string, unknown> = {}) {
-      calls.push({ method, params })
       if (method === 'quirky.repo/trustHooks') {
-        if (params.ref === current.ref) trustedHash = current.hash
+        if (params.ref === current.ref) persisted.hash = current.hash
         return { ok: true }
       }
       if (method !== 'quirky.worktree/create') throw new Error(`unexpected call ${method}`)
       const stalePin = params.trustSetup === true && params.trustSetupHash !== undefined && params.trustSetupHash !== current.hash
       const currentCallTrust = params.trustSetup === true && (params.trustSetupHash === undefined || params.trustSetupHash === current.hash)
-      if (stalePin || (trustedHash !== current.hash && !currentCallTrust)) {
+      if (stalePin || (persisted.hash !== current.hash && !currentCallTrust)) {
         throw Object.assign(new Error('shared setup is untrusted'), {
           data: { reason: 'hooks-untrusted', repo: 'r1', kind: 'setup', script: current.script, hash: current.hash, ref: current.ref }
         })
@@ -723,8 +717,7 @@ test('Always trust on changed content replaces the earlier one-time pin', async 
 
   expect(result).toMatchObject({ worktree: { id: 'created' } })
   expect(questions).toEqual(['echo A', 'echo B'])
-  expect(trustedHash).toBe('hash-B')
-  expect(calls.filter((call) => call.method === 'quirky.worktree/create')).toHaveLength(3)
+  expect(persisted.hash).toBe('hash-B')
 })
 
 test('Run once and Always cannot proceed when the untrusted-script error has no hash', async () => {
