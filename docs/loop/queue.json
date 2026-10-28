@@ -1402,6 +1402,14 @@
         "m5-automations-dispatch"
       ],
       "status": "todo"
+    },
+    {
+      "id": "fix-native-m1-term-ui-1028",
+      "milestone": "M1",
+      "title": "Fix the native-only failures in m1-term-ui from the 2026-10-28 run: SC-37",
+      "docs": [],
+      "deps": [],
+      "status": "todo"
     }
   ]
 }
