@@ -1461,8 +1461,7 @@
       "deps": [
         "sb-mobile-app-prerequisites"
       ],
-      "status": "in-progress",
-      "lane": 3
+      "status": "blocked"
     },
     {
       "id": "m7-test-triage",
