@@ -59,9 +59,27 @@ The pinned Electrobun SDK has no public JavaScript-dialog, basic-auth, or certif
 
 The `defaultHomePage`, `defaultSearchEngine`, and `defaultZoom` settings apply to new panes only. Default home page is blank; the search engine defaults to Google and the zoom level to 0.
 
+## Design mode
+
+Grab and Annotate run on the exact ready, nonblank Native or Watch pane. Mod+C starts Grab only when the browser page has no editable focus or selected text; Mod+Shift+C starts Annotate. While Grab is armed, plain C copies the hovered element in either mode; S requests a crop on Watch, while Native reports cropped screenshots unavailable. Esc cancels. Clicking an element in Grab copies bounded text; right-click opens Copy and Copy Screenshot actions without copying automatically. Clipboard errors remain visible and keep the selected data available. Copy success toasts appear only after the text or PNG is actually written to the clipboard.
+
+Annotate opens a Change/Question editor (up to 2,000 characters). Notes stay in this window's memory, retain the URL and element context captured when selected, and are not reassigned when the page navigates. They survive hosted-view unmounts while the browser page remains open. Each page keeps at most 20 notes; the oldest is dropped. Closing a page removes its notes, and restarting the application loses all notes. Copy uses the browser's Markdown formatter. Send lists same-worktree agent sessions and available new agents; it removes only notes confirmed delivered and unchanged since the send snapshot.
+
+Draw freezes a real Watch screenshot and opens the markup editor. Copy Markup reports success only after the composed PNG is actually written to the clipboard. Native cropped screenshots and Draw are disabled: the pinned public SDK exposes no page snapshot capability. Native never falls back to Watch or an approximate image.
+
+```sh
+quirky browser design arm --pane <pane-id> --mode grab
+quirky browser design read --pane <pane-id> --op-id <operation-id>
+quirky browser design targets --pane <pane-id>
+quirky browser design format --payload '<payload-json>'
+quirky browser design send --pane <pane-id> --annotations '<annotations-json>' --session <session-id>
+```
+
+The public UI command `quirky.browser/design` accepts `grab`, `annotate`, `draw`, or `cancel` for the focused Native pane. Native Draw returns the documented SDK capability limit.
+
 ## API and command surface
 
-The existing agent methods are `profileList`, `profileCreate`, `tabList`, `tabShow`, `tabCurrent`, `tabCreate`, `tabSwitch`, `tabClose`, `goto`, `eval`, `snapshot`, `fill`, `click`, `screenshot`, and `exec`. Browser pane methods are `paneOpen`, `paneState`, `paneNavigate`, `paneControl`, `paneReport`, `paneClose`, `paneSuggestions`, `paneWatch`, `paneWatchStop`, `paneFrameAck`, `paneInput`, `paneRespond`, and `paneDownload`.
+The existing agent methods are `profileList`, `profileCreate`, `tabList`, `tabShow`, `tabCurrent`, `tabCreate`, `tabSwitch`, `tabClose`, `goto`, `eval`, `snapshot`, `fill`, `click`, `screenshot`, and `exec`. Browser pane methods are `paneOpen`, `paneState`, `paneNavigate`, `paneControl`, `paneReport`, `paneClose`, `paneSuggestions`, `paneWatch`, `paneWatchStop`, `paneFrameAck`, `paneInput`, `paneRespond`, and `paneDownload`. Design methods are `designArm`, `designRead`, `designHover`, `designCancel`, `designCapture`, `designFormat`, `designTargets`, and `designSend`.
 
 Page commands support navigation, serializable JavaScript evaluation, accessibility snapshots, input fill, selector or current snapshot-reference click, and viewport PNG/JPEG screenshots. Snapshot references are page- and generation-bound; navigation, actual helper-tab switches, closure, and browser epoch loss invalidate them. `exec` is shell-free and accepts only `goto`, `eval`, `snapshot`, `fill`, `click`, and viewport `screenshot`; the documented `open` and `navigate` aliases normalize to `goto`. It cannot access arbitrary helper commands.
 
