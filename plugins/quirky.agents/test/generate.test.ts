@@ -204,6 +204,40 @@ describe('quirky.agents/generate', () => {
     ])
   })
 
+  test('structured selections override one-shot defaults, raw arguments override picks, and unsupported picks start nothing', async () => {
+    const t = await start()
+    await t.fake('claude', `echo run >> "$REC.runs"\n${RECORD}\nprintf ok`)
+
+    await t.call(A('generate'), { agent: 'claude', prompt: 'p', cwd: t.work, model: 'opus', optionValues: { effort: 'high' } })
+    expect(t.argvOf('claude')).toEqual([
+      '-p', '--output-format', 'text', '--model', 'opus', '--permission-mode', 'plan', '--effort', 'high', '--strict-mcp-config', '--settings', SETTINGS
+    ])
+
+    await t.call(A('generate'), {
+      agent: 'claude',
+      prompt: 'p',
+      cwd: t.work,
+      model: 'opus',
+      optionValues: { effort: 'high' },
+      args: '--model fable --effort max --model sonnet --effort low'
+    })
+    expect(t.argvOf('claude')).toEqual([
+      '-p', '--output-format', 'text', '--model', 'fable', '--permission-mode', 'plan', '--effort', 'max', '--strict-mcp-config', '--settings', SETTINGS
+    ])
+
+    await t.call(A('generate'), { agent: 'claude', prompt: 'p', cwd: t.work, optionValues: { effort: 'xhigh' } })
+    expect(t.argvOf('claude')).toEqual([
+      '-p', '--output-format', 'text', '--model', 'sonnet', '--permission-mode', 'plan', '--effort', 'xhigh', '--strict-mcp-config', '--settings', SETTINGS
+    ])
+
+    const invalid = await failure(
+      t.call(A('generate'), { agent: 'claude', prompt: 'p', cwd: t.work, model: 'haiku', optionValues: { effort: 'high' } })
+    )
+    expect(invalid.code).toBe(RpcErrorCode.InvalidParams)
+    expect(invalid.message).toContain('effort')
+    expect(t.recorded('claude', 'runs').trim().split('\n').filter(Boolean)).toHaveLength(3)
+  })
+
   test('a command override from configure is what runs', async () => {
     const t = await start()
     await t.fake('claude', 'printf stock')
