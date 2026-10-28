@@ -77,5 +77,16 @@
 - **Revisit if:** platform scope expands
 - **Source:** deferred: platform
 
+## D8: Relocate and attribute a misplaced worker test before resuming
+- **Question:** runtime worker used a relative file-tool path, writing its new queue test in the parent instead of its component
+- **Options:** commit outside-scope write; discard both copies; stop worker and reconcile exact tool payloads
+- **Chose:** stop worker, move only the newly authored misplaced test, inspect raw worker transcript and compare both writes. Payloads7865/7864bytes differ only one trailing blank line; component retains the second payload exactly. Parent has no source diff; component HEAD625ca116 unchanged, declared test only. Re-baseline and require absolute component paths before authorizing production code.
+- **Why:** a prompt is not isolation. No outside-scope source was committed, and no user changes were discarded. The initial missing-filter command was not a red; subsequent correct component command failed for absent queue module0pass/1fail/1error.
+- **Evidence:** worker transcript PresetRuntime writes; /tmp/quirky-presets-lane5-7uwItkNC/queue-attribution.json; parent/component scope audit; actual Bun red output
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** another cross-worktree write occurs
+- **Source:** assumed — autonomous
+
 ## Progress
-Claimed exactly m5-loops-presets. Merged committed core95383d97 contracts; core code still in-flight on lane2 and must not be copied from worker trees. Combined logic and additive types ready to commit. Next: independent pacing boundary tests/module, then merge lane2 audited source and implement runtime/surface extensions in disjoint components, own gates and actual daemon/CLI smoke, dependency readiness, one roadmap catchup/read incoming decisions, review/land. No second item; no whole-queue completion claim.
+Claimed exactly m5-loops-presets; parent checkpoint625ca116. Merged committed core95383d97 contracts; core code still in-flight on lane2 and must not be copied from worker trees. Combined spec/types committed1915c799. Independent pacing module verified10pass/0fail/11assertions and merged625ca116; own component removed after inherited metadata preservation. Runtime worker implements pure queue policy in isolated component after D8 replan; core-dependent runtime/surface integration remains pending audited source. Native executable daemon/CLI smoke prepared but UNRUN in scratch. Then own gates, dependency readiness, one roadmap catchup/read incoming decisions, review/land. No second item; no whole-queue completion claim.
