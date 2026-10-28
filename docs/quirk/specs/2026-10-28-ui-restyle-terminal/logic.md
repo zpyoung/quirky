@@ -63,11 +63,14 @@ None: no product flow is intentionally deferred. Automated screenshot scoring is
 
 - Public UI controls/tokens remain `@quirky/ui`; styles are loaded through the existing host stylesheet. No plugin CSS injection/import helper remains after cutover.
 - If needed, add shared advanced variants with behavior matching the existing terminal controls; commit their prop/type contracts before implementation. No production protocol, contribution IDs, settings schemas or API signatures change.
-- Component A owns terminal workspace/floating renderers and shared terminal layout/context-menu/tab variants. Component B owns sessions, quick commands, terminal pane accessory UI and shortcut/emulator presentation. Component C owns dock composer/settings and the central dock stylesheet range. Parent owns lint allowlist, shared contract declarations, host stylesheet imports and integration evidence.
+- Component A owns terminal workspace/floating renderers and shared terminal layout/context-menu variants. Component B owns sessions, quick commands, terminal pane accessory UI and shortcut/emulator presentation. Component C owns dock composer/settings, the central dock stylesheet removal and all three shared stylesheet imports. Parent owns lint allowlist, shared contract declarations, integration repairs and evidence.
 - Shared stylesheet files are disjoint: terminal workspace/floating, terminal tools/accessories, and dock. New CSS uses only canonical semantic color/font/spacing/radius/dimension tokens (derived calc/clamp accepted), zero and runtime measurements.
 - No worker runs build/lint/typecheck/tests/formatters or commits. Parent accepts only after the all-writer scope barrier, then runs `bun scripts/ui-lint.ts`, `bun run typecheck`, `bun packages/ui/build.ts` and focused actual-surface smoke. Any tests later executed use `bun scripts/suite.ts <file-or-dir>` remotely per the lane's operator rule.
 - Mac-only verification. Portable browser/CSS APIs preferred; Linux/Windows/native host validation is unexercised, not implied by web smoke.
+- Shared ContextMenu portals to the renderer document body to escape plugin slot stacking/scroll boundaries; its test consumers query the owning document. The shared token set includes --ui-transparent for layered editor/overlay presentation. Search decoration colors come from the existing fully resolved TerminalPalette, never independent raw colors.
 
 ## Status & amendments
 
 2026-10-28: self-reviewed against parent scope and all nine scenarios; no open human decisions or placeholders. Combined technical section follows LOOP.md build-first override; no separate tech.md or spec review round.
+
+2026-10-28: integration amendments clarify exclusive stylesheet-import ownership, the shared context-menu portal boundary and canonical transparency/resolved-palette use. No product flow, shortcut, runtime authority or default slot changed. Decisions D7–D11 record observed compiler/browser evidence and verification limits.

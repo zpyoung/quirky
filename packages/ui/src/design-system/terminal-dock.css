@@ -263,7 +263,7 @@
   padding: var(--ui-space-6) var(--ui-space-12);
   border: 0;
   border-radius: 0;
-  background: transparent;
+  background: var(--ui-transparent);
   color: var(--ui-text);
   text-align: left;
 }
@@ -324,10 +324,10 @@
   resize: none;
   overflow: auto;
   outline: none;
-  background: transparent;
-  color: transparent;
+  background: var(--ui-transparent);
+  color: var(--ui-transparent);
   caret-color: var(--ui-text);
-  -webkit-text-fill-color: transparent;
+  -webkit-text-fill-color: var(--ui-transparent);
 }
 
 .qtd-editor::placeholder {
@@ -337,7 +337,7 @@
 }
 
 .qtd-editor::selection {
-  background: color-mix(in srgb, var(--ui-accent) 35%, transparent);
+  background: color-mix(in srgb, var(--ui-accent) 35%, var(--ui-transparent));
 }
 
 .qtd-markdown-marker,

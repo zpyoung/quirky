@@ -50,11 +50,11 @@ describe('shared context menu', () => {
       { label: 'Run directly', onSelect: () => actions.push('direct') },
     ]} onClose={() => closes.push('close')} />)
 
-    const parent = container.querySelector<HTMLElement>('[role="menu"][aria-label="Actions"]')!
+    const parent = document.querySelector<HTMLElement>('[role="menu"][aria-label="Actions"]')!
     expect(document.activeElement).toBe(parent)
     expect(parent.querySelector('[role="menuitem"][data-highlighted]')?.textContent).toContain('More')
     await key(parent, 'ArrowRight')
-    const submenu = container.querySelector<HTMLElement>('[role="menu"][aria-label="More"]')!
+    const submenu = document.querySelector<HTMLElement>('[role="menu"][aria-label="More"]')!
     expect(document.activeElement).toBe(submenu)
     expect(submenu.querySelector<HTMLButtonElement>('[aria-disabled="true"], button:disabled')?.disabled).toBe(true)
 
@@ -70,7 +70,7 @@ describe('shared context menu', () => {
     expect(parent.querySelector('[role="menuitem"][data-highlighted]')?.textContent).toContain('More')
 
     await key(parent, 'ArrowRight')
-    const reopened = container.querySelector<HTMLElement>('[role="menu"][aria-label="More"]')!
+    const reopened = document.querySelector<HTMLElement>('[role="menu"][aria-label="More"]')!
     await key(reopened, 'ArrowDown')
     await key(reopened, 'Enter')
     expect(actions).toEqual(['nested'])
@@ -90,7 +90,7 @@ describe('shared context menu', () => {
       onClose={() => closes.push('close')}
     />)
 
-    const input = container.querySelector<HTMLInputElement>('input[aria-label="Search actions"]')!
+    const input = document.querySelector<HTMLInputElement>('input[aria-label="Search actions"]')!
     expect(document.activeElement).toBe(input)
     await act(async () => {
       const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
@@ -99,7 +99,7 @@ describe('shared context menu', () => {
     })
     expect(actions).toEqual([])
     expect(closes).toEqual([])
-    expect(container.querySelector('[role="menu"]')).not.toBeNull()
+    expect(document.querySelector('[role="menu"]')).not.toBeNull()
 
     await key(input, 'Enter')
     expect(actions).toEqual(['run'])

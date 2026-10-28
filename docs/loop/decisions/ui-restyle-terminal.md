@@ -66,5 +66,60 @@
 - **Revisit if:** supported build/test platforms expand
 - **Source:** deferred: platform
 
+## D7: Fix integration at the shared token and resolved-palette owners
+- **Question:** what did canonical lint/typecheck reveal after the source barrier?
+- **Options:** exempt transparent literals or retain raw search colors; supply one shared transparent token and use the existing resolved terminal palette
+- **Chose:** add canonical --ui-transparent in the shared primitive token file/public token map; use it for transparent editor/overlay chrome. Search decorations read the already-resolved full TerminalPalette rather than old raw Orca colors, preserving custom/Tango overrides. Restore missing React hooks import in EmulatorView and declare the dock's @quirky/ui workspace dependency with generated lockfile
+- **Why:** first lint reported13 raw transparent literals; scanner exemptions would weaken the contract. First compiler reported14 missing-hook/cascading diagnostics in EmulatorView. Reading optional xterm ITheme fields then produced2 undefined-string diagnostics; the existing complete resolved palette is the correct typed authority, with no extra computed-style read on each search
+- **Evidence:** canonical lint output; initial compiler outputs; successful full typecheck32.71s; actual UI build11host files/25plugin modules
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** an appearance override produces unreadable search decoration contrast
+- **Source:** assumed — autonomous
+
+## D8: Render shared context menus at the document overlay boundary
+- **Question:** the first real New-tab menu's right edge was painted behind the adjacent Changes tool
+- **Options:** hide/clip the menu, change host overflow/z-index globally, or portal the shared viewport-positioned menu to the owning renderer document body
+- **Chose:** shared ContextMenu portals to document.body; nested menus remain one keyboard scope and caller state still owns closure/actions. Migrate old root-scoped menu tests to their owning documents, not query fallbacks
+- **Why:** the actual first menu rectangle extended past the center boundary while its right edge was hidden under the host tool. A viewport overlay belongs outside plugin slot stacking/scroll boundaries. No global shell override or second plugin menu implementation is needed
+- **Evidence:** initial dark menu screenshot and ancestor DOM rectangles; final private-browser actual pane context menu atx670..862.390625 over Changes startingx694 had rightEdgeHitInside=true, parent BODY; nested Quick Commands keyboard submenu opened, Escape left1menu then0
+- **Reversibility:** medium (shared overlay placement)
+- **Confidence:** high for the observed browser path
+- **Revisit if:** exact native-window portal/focus behavior differs from the renderer
+- **Source:** assumed — autonomous
+
+## D9: Report minimum actual surface proof without a screenshot-score or suite claim
+- **Question:** which required verification was actually exercised under explicit build-first?
+- **Options:** infer full acceptance from typing; run prohibited campaigns; execute narrowly scoped real renderer/daemon/PTY paths and report their limits
+- **Chose:** actual isolated daemon and shell output, terminal search1/2+Escape, real Sessions tool, Quick Command add/save with retained Project scope/body, nested context-menu keyboard ownership, floating maximize/restore/minimize with exact restored rectangle, and composer draft/highlight-overlay preservation through dark/light. Private browser errors were empty; document had no horizontal overflow. The composer fixture was a shell emitting a catalog-recognized title; no actual agent send/provider acceptance is claimed
+- **Why:** this proves the changed presentation seam without pretending to exhaust all nine spec scenarios. Existing behavioral tests retained; promoted-menu regressions authored but not run. Full suites, formal review, independent85-floor visual scoring, full dogfood and native scenarios remain unrun under this item's explicit build-first gate
+- **Evidence:** lane notes terminal-restyle-evidence/proof.json and dark.png/light.png; daemon scope success and TERMINAL_RESTYLE_SMOKE_CLEANED followed by service exit0; dedicated Chrome service stopped and private tab released
+- **Reversibility:** easy
+- **Confidence:** high for exercised paths, not a full visual approval
+- **Revisit if:** end-phase suites or automated visual review identify a regression
+- **Source:** locked by docs/loop/LOOP.md
+
+## D10: Isolate browser targeting and honor exact-window fixture routing
+- **Question:** the default app.path browser handle began reporting another lane's editor runtime, and a second own renderer refused ambiguous worktree navigation
+- **Options:** continue acting on the shared target, weaken window routing, or use an explicitly owned CDP process/profile and exact public window API
+- **Chose:** stop acting on the changed shared target; launch dedicated headless Chrome/profile, attach exact CDP, and route the fixture with ui.window.view.open to its authenticated live connId. All final captures guard the owned daemon origin. Stop only the dedicated owned Chrome; leave the shared browser/other lane pages untouched
+- **Why:** driver target reuse is not product evidence. ui.state truthfully reported two connected windows and the ambiguity toast; explicit target routing is the existing supported contract. Later shared endpoint inventory had only another origin, no remaining own page to close
+- **Evidence:** browser URL observations, dedicated service startup/stop, ui.state windows3/4 and ambiguity toast, exact-window API result, private CDP surface observations and origin guards
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the browser driver supplies process-isolated default targets
+- **Source:** assumed — autonomous
+
+## D11: Remove incidental presentation copies instead of repinning them
+- **Question:** how should existing tests follow the presentation cutover?
+- **Options:** re-pin new classes/colors/injected source, or retain consumer-visible assertions and delete obsolete implementation copies
+- **Chose:** remove manifest/command forwarding copies, all-sessions-done classname and header wording pins, the floating injected-CSS text case, and the xterm search color-options spy/copy. Keep real search navigation/highlight presence/clearing, session identity/actions and other behavioral coverage; migrate only document-owned menu queries. New shared menu regressions cover nested/disabled/IME/focus behavior
+- **Why:** a restyle should not substitute a new implementation snapshot for an old one. The retained scenarios still drive state and behavior; no tests were run or reported passing
+- **Evidence:** terminal test/ui.test.ts, window/floating-overlay.test.ts, window/pane-search.test.ts, e2e-ui/features-search.test.ts, five window menu consumers and shared context-menu.test.tsx
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a consumer-visible boundary lacks behavioral coverage in the end phase
+- **Source:** assumed — autonomous
+
 ## Progress
-Design/spec and public advanced-menu types ready for contracts commit. Three disjoint source slices follow: workspace/floating plus shared context-menu/layout; sessions/quick commands/pane accessories/shortcut/emulator plus shared tool CSS; dock composer/settings plus shared dock CSS. Parent owns shared stylesheet cutover/imports, lint opt-in, typecheck and minimal real browser proof. No tests, scoring review, full dogfood or native acceptance has run.
+All source components returned, were audited against disjoint scopes and integrated: b4e49d0d workspace, dbbbcae8 tools, 9f892f89 composer, plus 3eb6d51f explicit menu test consumers using the same workspace implementer. All4external worktrees removed; inherited parent .serena untouched. Parent integration repairs and user README update complete. Pre-catch-up full typecheck/UI lint passed32.71s; actual UI build and minimum isolated browser/daemon/PTY proof completed (D7–D10). No tests/suites/scoring review/full dogfood/native acceptance run. Both owned runtime services finished, dedicated browser released/stopped. Next commit integration, merge build/roadmap once, read incoming decisions, rerun final typecheck and land through canonical queue.

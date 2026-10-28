@@ -7,6 +7,7 @@ import { WebLinksAddon } from '@xterm/addon-web-links'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { ClipboardAddon, type IBase64, type IClipboardProvider } from '@xterm/addon-clipboard'
 import { RpcError, RpcErrorCode, base64ToBytes, type UiPluginContext } from '@quirky/protocol'
+import type { TerminalPalette } from '@quirky/protocol'
 import { shellEscapePaths } from '../../shell-escape'
 import { pathsFromDrop, readWorktreePathsDrop, resolveWorktreeDropPaths, WORKTREE_PATHS_MIME } from './drop'
 import { trackKittyFlags } from './kitty'
@@ -34,14 +35,6 @@ import { createKittyGraphics } from './kittyGraphics'
 export const MAX_SEARCH_QUERY = 1000
 const LINK_CLICK_SETTING_KEYS = ['link-click', 'link-middle-click'] as const
 
-const SEARCH_DECORATIONS = {
-  matchBackground: '#5c4a00',
-  matchBorder: '#5c4a00',
-  matchOverviewRuler: '#ffcc00',
-  activeMatchBackground: '#c4580e',
-  activeMatchBorder: '#ffcf6b',
-  activeMatchColorOverviewRuler: '#ff9900'
-}
 
 /** xterm highlights at most this many matches; a count at the limit means there may be more. */
 const HIGHLIGHT_LIMIT = 1000
@@ -116,6 +109,7 @@ type Runtime = {
   syncOsc52(): void
   syncExtras(settings: PaneSettings): void
   syncTheme(): void
+  palette(): TerminalPalette
 }
 
 const EMPTY_RESULTS: Results = { index: -1, count: 0 }
@@ -207,7 +201,20 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       clearHighlights()
       return false
     }
-    const options = { regex: state.regex, caseSensitive: state.caseSensitive, incremental, decorations: SEARCH_DECORATIONS }
+    const palette = rt.palette()
+    const options = {
+      regex: state.regex,
+      caseSensitive: state.caseSensitive,
+      incremental,
+      decorations: {
+        matchBackground: palette.selectionBackground,
+        matchBorder: palette.yellow,
+        matchOverviewRuler: palette.yellow,
+        activeMatchBackground: palette.selectionBackground,
+        activeMatchBorder: palette.blue,
+        activeMatchColorOverviewRuler: palette.blue
+      }
+    }
     const found = guarded(() => (direction === 'next' ? rt.search.findNext(state.query, options) : rt.search.findPrevious(state.query, options)), null)
     if (found === null) setResults(EMPTY_RESULTS)
     return found === true
@@ -739,6 +746,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       syncOsc52,
       syncExtras(settingsNow) { graphics.sync(settingsNow['inline-images']); void extras.sync(settingsNow) },
       syncTheme() { applyTheme(true) },
+      palette() { return appliedColors },
       setFont() {
         term.options.fontSize = effectiveFontSize()
         setView((now) => ({ ...now, fontSize: effectiveFontSize() }))

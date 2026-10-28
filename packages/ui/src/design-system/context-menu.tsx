@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { createPortal } from 'react-dom'
 import type { ContextMenuItem, ContextMenuListProps, ContextMenuProps } from './context-menu-contracts'
 
 /** A shared menu separator for callers assembling dynamic command lists. */
@@ -160,7 +161,7 @@ export function ContextMenu({ items, label, x, y, onClose, header, highlightFirs
     item.onSelect?.()
   }
 
-  return (
+  return createPortal(
     <div ref={anchor} className="qt-menu-anchor" style={{ left: x, top: y }}>
       <ContextMenuList
         items={items}
@@ -170,6 +171,7 @@ export function ContextMenu({ items, label, x, y, onClose, header, highlightFirs
         onClose={onClose}
         onChoose={onChoose}
       />
-    </div>
+    </div>,
+    document.body
   )
 }
