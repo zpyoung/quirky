@@ -77,5 +77,27 @@
 - **Revisit if:** other platforms or excluded flows are explicitly authorized.
 - **Source:** deferred: platform
 
+## D8: Use exact remote output routes in every existing task navigation consumer
+- **Question:** Existing terminal task links and sidebar rows assumed taskTerminal always returned a local session/workspace.
+- **Options:** return foreign IDs as local sessions; add an exact remote-output variant and migrate both consumers.
+- **Chose:** Remote result is `{kind:'remote_output',taskId,dispatchId,viewId:'view:quirky.orchestration/remote-worker-output',input:{dispatchId}}`; local result remains its actual existing variant. Both public consumers validate the fixed view/dispatch route. Sidebar groups remote rows under the actual home coordinator workspace and never deduplicates or renders a remote process as a same-ID local session. Remote output keeps host sourceIdentity/cursor pinning and explicit peer/binding/host provenance.
+- **Why:** A metadata-only response cannot navigate to an actual viewer, and foreign session IDs cannot grant local focus or liveness.
+- **Evidence:** src/navigation.ts; quirky.terminal/src/window/pane/task-links.ts81-110; quirky.worktree/src/OrchestrationRows.tsx; Surface contract publication.
+- **Reversibility:** medium
+- **Confidence:** high for the source contract; runtime surface proof pending.
+- **Revisit if:** real public navigation cannot open the registered viewer.
+- **Source:** assumed — autonomous
+
+## D9: Attribute misplaced mutations before restoring the parent and integrating components
+- **Question:** The all-worker barrier found three Engine edits in the parent and a new boundary-guard module outside Surface's initial path list.
+- **Options:** trust reports/overwrite unknown bytes; preserve raw calls and prove exact attribution before restoring.
+- **Chose:** Preserve the three raw successful relative-header edit payloads and parent diff in external scratch. Reconstruct their effects against ad46e443 and compare Git blob hashes; all three match, with core's repeated unchanged import normalized exactly as the edit tool did. Restore only those three fully attributed parent files to their original bytes; complete intended source remains in the Engine tree. Explicit parent integration scope now owns the small canonical federation/guards.ts boundary module rather than silently accepting undeclared worker scope. Preserve inherited .serena metadata.
+- **Why:** Agent relative headers reached parent despite assigned worktrees; no user work may be discarded. All component HEADs remained ad46e443. Returned main inserted new migrations before existing policyMigration; parent corrected to append after the entire established migration prefix, protecting existing stores.
+- **Evidence:** component-audit.json, misplaced-tool-payloads.json, parent-attribution.json and misplaced-parent.patch in owned scratch; three exact matching hashes from actual Git; main.ts62-64 parent correction.
+- **Reversibility:** easy
+- **Confidence:** high for exact attribution/restoration and scope; runtime/type evidence pending.
+- **Revisit if:** merged typecheck or smoke exposes a remaining integration seam.
+- **Source:** assumed — autonomous
+
 ## Progress
 Claimed exactly this item after canonical waits returned busy14 times including the final wait that claimed it. Combined spec self-reviewed; shared federation ports and on/remote-host worker types ready for contracts commit. Next: dispatch three isolated implementers, integrate, typecheck and narrow real paired-daemon smoke, catch up once/read new decisions, commit/detach/canonical land and await receipt. No suites/reviews/full UI/native passes claimed; inherited .serena/ untouched.

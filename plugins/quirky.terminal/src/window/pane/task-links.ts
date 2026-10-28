@@ -78,12 +78,21 @@ export function createTaskLinkProvider(
   }
 }
 
-/** Resolves the public exact-target proof and opens only its current terminal session. */
+/** Opens the public exact local terminal or host-bound read-only output target. */
 export async function openTaskTerminal(context: TaskTerminalContext, taskId: string): Promise<void> {
   try {
     const target = recordOf(await context.call('quirky.orchestration/taskTerminal', { taskId }))
     const resolvedTaskId = target ? textOf(target, 'taskId') : null
     const dispatchId = target ? textOf(target, 'dispatchId') : null
+    if (target?.kind === 'remote_output') {
+      const input = recordOf(target.input)
+      if (resolvedTaskId !== taskId || !dispatchId ||
+        target.viewId !== 'view:quirky.orchestration/remote-worker-output' || input?.dispatchId !== dispatchId) {
+        throw new Error('The orchestration service did not prove an exact remote output target.')
+      }
+      context.openView('view:quirky.orchestration/remote-worker-output', { dispatchId })
+      return
+    }
     const sessionId = target ? textOf(target, 'sessionId') : null
     const worktreeId = target ? textOf(target, 'worktreeId') : null
     if (!target || resolvedTaskId !== taskId || !dispatchId || !sessionId || !worktreeId) {
