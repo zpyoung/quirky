@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import * as taskLinks from '../../src/window/pane/task-links'
+import * as provider from '../../src/window/pane/link-provider'
+import type { ILink } from '@xterm/xterm'
 
 let Terminal: typeof import('@xterm/xterm').Terminal
 
@@ -166,7 +168,7 @@ describe('createTaskLinkProvider', () => {
   })
 
   test('maps a token across wrapped rows', async () => {
-    const term = await terminalWith(`${'x'.repeat(35)}task_wrap!`, 40)
+    const term = await terminalWith(`${'x'.repeat(34)} task_wrap!`, 40)
     const found = await linksAt(taskLinks.createTaskLinkProvider(term, handlers().value), 2)
     expect(found?.[0]?.text).toBe('task_wrap')
     expect(found?.[0]?.range).toEqual({ start: { x: 36, y: 1 }, end: { x: 4, y: 2 } })

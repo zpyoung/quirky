@@ -1,4 +1,4 @@
-import type { StoreMigration } from '@quirky/protocol'
+import type { PluginStore, StoreMigration } from '@quirky/protocol'
 
 /** The core's private database. Worker-owned migrations append after this v1 step. */
 export const migrations: StoreMigration[] = [

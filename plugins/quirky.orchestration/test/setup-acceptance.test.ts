@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
-import { join, resolve, sep } from 'node:path'
+import { dirname, join, resolve, sep } from 'node:path'
 import type { DispatchRow, RunRow, TaskRow } from '../src/contracts'
 import type { SessionIdentity } from '../src/runtime-contracts'
 import { buildWorkerPreamble } from '../src/workers/preamble'
@@ -134,13 +134,13 @@ async function rejected(promise: Promise<unknown>): Promise<unknown> {
 
 describe('orchestration setup acceptance', () => {
   test('AC1–2: public skill API and CLI install/update/recheck actual private skill files and preserve siblings', async () => {
-    const claudePath = join(fixture.userHome, '.claude', 'skills', 'orchestration', 'SKILL.md')
-    const unrelated = join(fixture.userHome, '.claude', 'skills', 'another-skill', 'SKILL.md')
-    mkdirSync(join(unrelated, '..'), { recursive: true })
-    writeFileSync(unrelated, 'unrelated content\n')
-
     const initial = await api<{ state: string; agents: { id: string; state: string; path: string | null }[]; installCommand: string }>('quirky.orchestration/skillStatus')
     assertPrivateTargets(initial)
+    const claudePath = agentState(initial, 'claude').path
+    if (claudePath === null) throw new Error('Claude has no supported skill target')
+    const unrelated = join(dirname(dirname(claudePath)), 'another-skill', 'SKILL.md')
+    mkdirSync(dirname(unrelated), { recursive: true })
+    writeFileSync(unrelated, 'unrelated content\n')
     expect(initial.installCommand).toBe('quirky orchestration skill-install')
     expect(agentState(initial, 'claude').state).toBe('missing')
     expect(existsSync(claudePath)).toBe(false)
@@ -155,7 +155,7 @@ describe('orchestration setup acceptance', () => {
     expect(agentState(installed, 'claude').state).toBe('ready')
     expect(readFileSync(claudePath, 'utf8')).toBe(shown.skill)
     expect(readFileSync(unrelated, 'utf8')).toBe('unrelated content\n')
-    expect(readdirSync(join(fixture.userHome, '.claude', 'skills', 'orchestration'))).toEqual(['SKILL.md'])
+    expect(readdirSync(dirname(claudePath))).toEqual(['SKILL.md'])
 
     const cliStatus = cliJson<{ agents: { id: string; state: string }[] }>(await unboundCli(['orchestration', 'skill-status', '--json']))
     expect(agentState(cliStatus, 'claude').state).toBe('ready')
@@ -163,30 +163,30 @@ describe('orchestration setup acceptance', () => {
 
     const fakeBin = process.env.PATH?.split(':')[0]
     if (!fakeBin) throw new Error('private test PATH is missing its fake executable directory')
-    const fakeCodex = join(fakeBin, 'codex')
-    writeFileSync(fakeCodex, `#!${process.execPath}\nprocess.exit(0)\n`, { mode: 0o700 })
-    chmodSync(fakeCodex, 0o700)
+    const fakeCursor = join(fakeBin, 'cursor-agent')
+    writeFileSync(fakeCursor, `#!${process.execPath}\nprocess.exit(0)\n`, { mode: 0o700 })
+    chmodSync(fakeCursor, 0o700)
     await api('quirky.agents/refresh')
-    const codexPath = join(fixture.userHome, '.agents', 'skills', 'orchestration', 'SKILL.md')
-    mkdirSync(join(codexPath, '..'), { recursive: true })
-    mkdirSync(codexPath)
+    const cursorPath = join(fixture.userHome, '.cursor', 'skills', 'orchestration', 'SKILL.md')
+    mkdirSync(dirname(cursorPath), { recursive: true })
+    mkdirSync(cursorPath)
     writeFileSync(claudePath, 'previous generated version\n')
 
     const stale = await api<{ state: string; agents: { id: string; state: string; path: string | null }[] }>('quirky.orchestration/skillStatus')
     assertPrivateTargets(stale)
     expect(agentState(stale, 'claude').state).toBe('stale')
-    expect(agentState(stale, 'codex').state).toBe('error')
+    expect(agentState(stale, 'cursor').state).toBe('error')
     const partial = await api<{ state: string; agents: { id: string; state: string }[] }>('quirky.orchestration/skillInstall')
     expect(partial.state).toBe('partial')
     expect(agentState(partial, 'claude').state).toBe('ready')
-    expect(agentState(partial, 'codex').state).toBe('error')
+    expect(agentState(partial, 'cursor').state).toBe('error')
     expect(readFileSync(claudePath, 'utf8')).toBe(shown.skill)
 
-    rmSync(codexPath, { recursive: true, force: true })
-    const retried = await api<{ state: string; agents: { id: string; state: string }[] }>('quirky.orchestration/skillInstall', { agents: ['codex'] })
+    rmSync(cursorPath, { recursive: true, force: true })
+    const retried = await api<{ state: string; agents: { id: string; state: string }[] }>('quirky.orchestration/skillInstall', { agents: ['cursor'] })
     expect(agentState(retried, 'claude').state).toBe('ready')
-    expect(agentState(retried, 'codex').state).toBe('ready')
-    expect(readFileSync(codexPath, 'utf8')).toBe(shown.skill)
+    expect(agentState(retried, 'cursor').state).toBe('ready')
+    expect(readFileSync(cursorPath, 'utf8')).toBe(shown.skill)
     expect(readFileSync(unrelated, 'utf8')).toBe('unrelated content\n')
   }, 60_000)
 
@@ -214,7 +214,7 @@ describe('orchestration setup acceptance', () => {
     const changed = await api<{ nestedWorkerMaxDepth: number; canChange: boolean }>('quirky.orchestration/policySet', { nestedWorkerMaxDepth: 2 })
     expect(changed).toEqual({ nestedWorkerMaxDepth: 2, canChange: true })
     await fixture.restart()
-    expect(await api('quirky.orchestration/policyShow')).toEqual({ nestedWorkerMaxDepth: 2, canChange: true })
+    expect(await api<{ nestedWorkerMaxDepth: number; canChange: boolean }>('quirky.orchestration/policyShow')).toEqual({ nestedWorkerMaxDepth: 2, canChange: true })
 
     await api('quirky.orchestration/policySet', { nestedWorkerMaxDepth: 1 })
     const coordinator = await fixture.createParty('coordinator')

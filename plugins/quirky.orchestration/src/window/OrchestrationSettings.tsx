@@ -94,6 +94,8 @@ export function OrchestrationSettings({ context }: { context: UiPluginContext })
   const [error, setError] = useState('')
   const [feedback, setFeedback] = useState('')
 
+  const busy = checking || installing || savingPolicy
+
   const refresh = useCallback(async () => {
     const token = guard.next()
     setChecking(true)
@@ -121,12 +123,13 @@ export function OrchestrationSettings({ context }: { context: UiPluginContext })
   }, [guard, refresh])
 
   const recheck = async () => {
+    if (busy) return
     await refresh()
     announceSetupStatusChanged()
   }
 
   const install = async () => {
-    const token = guard.next()
+    if (busy) return
     const agentIds = status?.agents
       .filter((agent) => agent.state === 'missing' || agent.state === 'stale' || agent.state === 'error')
       .map((agent) => agent.id)
@@ -147,7 +150,7 @@ export function OrchestrationSettings({ context }: { context: UiPluginContext })
   }
 
   const savePolicy = async () => {
-    if (policy?.canChange !== true) return
+    if (busy || policy?.canChange !== true) return
     const value = Number(depth)
     if (!Number.isSafeInteger(value) || value < 1) {
       setError('Nested worker depth must be an integer greater than or equal to 1.')
@@ -200,8 +203,8 @@ export function OrchestrationSettings({ context }: { context: UiPluginContext })
           <p style={mutedStyle}>Enables agents to coordinate supervised work through Quirky's durable Runs, Tasks, Dispatches, and mailbox.</p>
         </div>
         <div style={rowStyle}>
-          <button type="button" style={buttonStyle} disabled={action.disabled || checking} onClick={() => void install()}>{action.label}</button>
-          <button type="button" style={buttonStyle} disabled={checking || installing} onClick={() => void recheck()}>{checking ? 'Checking…' : 'Re-check'}</button>
+          <button type="button" style={buttonStyle} disabled={action.disabled || busy} onClick={() => void install()}>{action.label}</button>
+          <button type="button" style={buttonStyle} disabled={busy} onClick={() => void recheck()}>{checking ? 'Checking…' : 'Re-check'}</button>
         </div>
         <p style={mutedStyle} aria-live="polite">{checking && status === null ? 'Checking skill coverage…' : status?.text ?? 'Skill coverage is unavailable.'}</p>
         <div>
@@ -246,10 +249,11 @@ export function OrchestrationSettings({ context }: { context: UiPluginContext })
               min={1}
               step={1}
               value={depth}
+              disabled={busy}
               onChange={(event) => setDepth(event.currentTarget.value)}
               style={{ width: 96, padding: 6, color: 'var(--text, #d7dae0)', background: 'var(--bg, #16181d)', border: '1px solid var(--border, #2b2f3a)', borderRadius: 5 }}
             />
-            <button type="button" style={buttonStyle} disabled={savingPolicy} onClick={() => void savePolicy()}>{savingPolicy ? 'Saving…' : 'Save depth'}</button>
+            <button type="button" style={buttonStyle} disabled={busy} onClick={() => void savePolicy()}>{savingPolicy ? 'Saving…' : 'Save depth'}</button>
           </div>
         ) : (
           <p style={mutedStyle}>Current depth: {policy?.nestedWorkerMaxDepth ?? 'Checking…'}. This session or paired window is read-only.</p>

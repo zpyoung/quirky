@@ -136,6 +136,7 @@ export function Tree({
   const [menu, setMenu] = useState<OpenMenu | null>(null)
   const [dropPreview, setDropPreview] = useState<MembershipTarget | null>(null)
   const [stickySections, setStickySections] = useState<ReadonlySet<string>>(new Set())
+  const [folded, setFolded] = useState<Set<string>>(() => new Set())
   const treeRoot = useRef<HTMLDivElement>(null)
   const draggedWorktree = useRef<Worktree | null>(null)
   const previewRef = useRef<MembershipTarget | null>(null)

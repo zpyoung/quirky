@@ -8,7 +8,6 @@ import { useOrchestrationRows } from '../src/useOrchestrationRows'
 
 const SESSION_VIEW = 'view:quirky.session/worktree'
 const RESOURCE = {
-  id: 'resource-1',
   ownerDispatchId: 'dispatch-1',
   ownershipState: 'owned',
   releaseState: 'not_requested',
@@ -42,7 +41,6 @@ function workerRow(overrides: RowOverrides = {}): OrchestrationWorkerRow {
     agentTerminalHandle: 'worker-session-1',
     terminalState: 'active',
     resource: { ...RESOURCE },
-    projection: { ...PROJECTION },
     ...fields,
     projection: { ...PROJECTION, ...projection }
   }
@@ -96,10 +94,10 @@ beforeEach(() => {
   intervals = []
   realSetInterval = globalThis.setInterval
   realClearInterval = globalThis.clearInterval
-  globalThis.setInterval = ((callback: TimerHandler, delay = 0) => {
-    const item = { id: intervals.length + 1, callback: callback as () => void, delay, cleared: false }
+  globalThis.setInterval = ((callback: () => void, delay = 0) => {
+    const item = { id: intervals.length + 1, callback, delay, cleared: false }
     intervals.push(item)
-    return item.id as unknown as ReturnType<typeof setInterval>
+    return item.id
   }) as typeof globalThis.setInterval
   globalThis.clearInterval = ((id: ReturnType<typeof setInterval>) => {
     const item = intervals.find((entry) => entry.id === (id as unknown as number))
@@ -200,7 +198,7 @@ test('nests descendants under their creator, preserves fleet order, and caps vis
     dispatchId: 'dispatch-child', taskId: 'task-child', taskTitle: 'Child task', displayName: 'Child agent',
     coordinatorSessionId: 'worker-session-1', parentSessionId: 'worker-session-1',
     agentTerminalHandle: 'worker-session-2',
-    resource: { ...RESOURCE, id: 'resource-child', ownerDispatchId: 'dispatch-child', sessionId: 'worker-session-2' },
+    resource: { ...RESOURCE, ownerDispatchId: 'dispatch-child', sessionId: 'worker-session-2' },
     projection: { workspace: { id: 'wt-main' }, stage: { activity: 'waiting' } }
   })
   Object.assign(child.projection.stage, { detail: 'Internal stage detail' })
@@ -291,8 +289,11 @@ test('retains settled human-owned terminals with explicit custody and stale live
 test('shows unverified workers with the actual terminal label, never their stale task label', async () => {
   const uncertain = workerRow({
     currentAssignment: false,
+    workerState: null,
     displayName: 'Old task display name',
-    taskTitle: 'Old task title'
+    taskTitle: 'Old task title',
+    agentTerminalHandle: 'missing-session',
+    resource: { ...RESOURCE, sessionId: 'missing-session' }
   })
   const replacement = session('worker-session-1', 'wt-main', { title: 'Replacement terminal', agent: 'shell' })
   await renderRows([uncertain], [replacement])
@@ -380,7 +381,6 @@ test('loads every page from one bounded snapshot with one shared consumer', asyn
       displayName: `Page ${index + 1}`,
       resource: {
         ...RESOURCE,
-        id: `resource-page-${index + 1}`,
         ownerDispatchId: dispatchId,
         sessionId: `worker-session-${index + 1}`
       }
@@ -390,7 +390,7 @@ test('loads every page from one bounded snapshot with one shared consumer', asyn
     dispatchId: 'dispatch-page-101',
     taskId: 'task-page-101',
     displayName: 'Page 101',
-    resource: { ...RESOURCE, id: 'resource-page-101', ownerDispatchId: 'dispatch-page-101', sessionId: 'worker-session-101' }
+    resource: { ...RESOURCE, ownerDispatchId: 'dispatch-page-101', sessionId: 'worker-session-101' }
   })
   api.pages.push(
     { workers: firstPageWorkers, page: { nextCursor: 'cursor-1', snapshotId: 'snapshot-1', total: 101 }, partialHostErrors: [] },
