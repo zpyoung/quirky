@@ -316,6 +316,9 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
   const paneRef = useRef<PaneTab | null>(null)
   const addressRef = useRef<HTMLInputElement>(null)
   const findRef = useRef<HTMLInputElement>(null)
+  const editingFindRef = useRef(false)
+  const findTextRef = useRef('')
+  const findPaneIdRef = useRef<string | null>(null)
   const nativeHostRef = useRef<HTMLDivElement>(null)
   const frameHostRef = useRef<HTMLDivElement>(null)
   const watchImageRef = useRef<HTMLImageElement | null>(null)
@@ -379,7 +382,11 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
     setPane(selected)
     if (selected) {
       if (!editingAddress) setAddress(selected.url)
-      setFindText(selected.find.text)
+      if (selected.id !== findPaneIdRef.current || !editingFindRef.current) {
+        findPaneIdRef.current = selected.id
+        findTextRef.current = selected.find.text
+        setFindText(selected.find.text)
+      }
     }
   }, [editingAddress, requestedPaneId])
 
@@ -445,7 +452,11 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
   useEffect(() => {
     if (pane) {
       if (!editingAddress) setAddress(pane.url)
-      setFindText(pane.find.text)
+      if (pane.id !== findPaneIdRef.current || !editingFindRef.current) {
+        findPaneIdRef.current = pane.id
+        findTextRef.current = pane.find.text
+        setFindText(pane.find.text)
+      }
     }
   }, [pane?.id, pane?.url, pane?.find.text, editingAddress])
   useEffect(() => {
@@ -1084,7 +1095,6 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
         <Button aria-label="Find in page" title="Find in page (Mod+F)" onClick={() => { setFindOpen(true); requestAnimationFrame(() => findRef.current?.focus()) }} style={paneStyles.toolbarControl}>Find</Button>
         <span className="qbp-mode" data-mode={pane?.mode ?? 'native'} style={paneStyles.mode}>
           <Badge tone={pane?.mode === 'watch' ? 'accent' : 'neutral'}>
-            <StatusDot status={pane?.mode === 'watch' ? 'working' : 'idle'} label={`Browser mode: ${pane?.mode === 'watch' ? 'Watch' : 'Native'}`} />
             {pane?.mode === 'watch' ? 'Watch' : 'Native'}
           </Badge>
         </span>
@@ -1171,23 +1181,26 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
               placeholder="Find in page"
               value={findText}
               style={paneStyles.findInput}
+              onFocus={() => { editingFindRef.current = true }}
+              onBlur={() => { editingFindRef.current = false }}
               onChange={(event) => {
                 const value = event.target.value
+                findTextRef.current = value
                 setFindText(value)
                 void control('find', { text: value, forward: true })
               }}
               onKeyDown={(event) => {
-                if (event.key === 'Enter') { event.preventDefault(); void control('find', { text: findText, forward: !event.shiftKey }) }
-                if (event.key === 'Escape') { event.preventDefault(); setFindOpen(false); void control('find', { text: '' }) }
+                if (event.key === 'Enter') { event.preventDefault(); void control('find', { text: findTextRef.current, forward: !event.shiftKey }) }
+                if (event.key === 'Escape') { event.preventDefault(); editingFindRef.current = false; setFindOpen(false); void control('find', { text: '' }) }
               }}
             />
           </div>
           <span className="qbp-find-count" aria-live="polite" style={paneStyles.findCount}>
             <Badge>{pane?.find.total ? `${pane.find.current} of ${pane.find.total}` : 'No matches'}</Badge>
           </span>
-          <IconButton label="Previous match" title="Previous match" onClick={() => void control('find', { text: findText, forward: false })}>↑</IconButton>
-          <IconButton label="Next match" title="Next match" onClick={() => void control('find', { text: findText, forward: true })}>↓</IconButton>
-          <Button aria-label="Close find" onClick={() => { setFindOpen(false); setFindText(''); void control('find', { text: '' }) }}>Close</Button>
+          <IconButton label="Previous match" title="Previous match" onClick={() => void control('find', { text: findTextRef.current, forward: false })}>↑</IconButton>
+          <IconButton label="Next match" title="Next match" onClick={() => void control('find', { text: findTextRef.current, forward: true })}>↓</IconButton>
+          <Button aria-label="Close find" onClick={() => { editingFindRef.current = false; findTextRef.current = ''; setFindOpen(false); setFindText(''); void control('find', { text: '' }) }}>Close</Button>
         </div>
       ) : null}
 
