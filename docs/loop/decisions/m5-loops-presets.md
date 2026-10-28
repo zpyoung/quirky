@@ -187,5 +187,27 @@
 - **Revisit if:** another fixture selects a process without owner evidence
 - **Source:** assumed — autonomous
 
+## D18: Separate EDIT pacing policy from strict CREATE preset combinations
+- **Question:** lane1's U08 public API integration reported that the documented Edit Pacing selector was blocked by main/service reapplying creation-only preset constraints
+- **Options:** silently omit the UI flow; weaken all preset validation; change EDIT policy only
+- **Chose:** main edit keeps strict patch validation but no longer calls creation preset validation; service edit normalizes configuration and rejects prompt-source kind changes. Preset remains immutable. Strict create combinations and CLI every/anchor preset restrictions stay unchanged. Amend logic first with P13 and document the public edit behavior.
+- **Why:** fork-loops.md117 explicitly offers on-idle/interval editing independently of the immutable preset. Queue operation types/snapshot fields and all UI ownership stay unchanged.
+- **Evidence:** both requested inbox messages05b23b45961d/791a677a1567 read; new lifecycle regressions red0/2 with the exact -32602 creation-policy errors, then API/CLI gate8/0/101assertions in50.26seconds. Typecheck passed56.88seconds. Actual CLI/daemon/native Codex smoke passed4turns in28.78seconds, including API interval-to-on-idle wake and restored interval, homeRemoved:true. Checkpoint596b6151 published to lane1 via durable replymsg_560d49824b36.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a pacing edit changes preset/source kind, bypasses CLI rules or overlaps a turn
+- **Source:** locked by research/orca-features/fork-loops.md
+
+## D19: Catch up once after authoritative dependency completion
+- **Question:** early implementation was complete while the core dependency's final controller was still running
+- **Options:** land before dependency completion; merge live work; wait for ready and merge canonical roadmap once
+- **Chose:** wait until deps returned ready:true/pending:[], then perform the one build/roadmap catch-up. Mergef434b6c1 brought only queue/index metadata; no source or new decision logs changed. Core's actual landing is authoritative, not its earlier source checkpoints. Preserve all previously read core D1-D27 and orchestration D1-D42 bindings.
+- **Why:** the early-item contract requires readiness before landing. Source was already the verified core candidate; metadata-only catch-up does not invent additional implementation scope.
+- **Evidence:** bg22 readiness; git merge build/roadmap output two shared metadata files, no changed decision logs; caught-up typecheck passed62.61seconds with595/609unchanged installs. Core controller landing reported625remote+4mac accepted, scripts68/0 and typecheck; no whole-suite run was started by this lane.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** this item's controller exposes a new integration failure
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-Own25new API/CLI/runtime tests pass/199assertions; pure55/0; post-lease typecheck passed48.38seconds and repeated actual native CLI/daemon/Codex smoke passed27.50seconds with exactly3turns and verified home removal. Required affected remote suite passed13/13files,0fail/0flaky retries in166.84seconds; required scripts passed68/0/568assertions in197.50seconds. D16/D17 close the two actual gate failures without weakening production safety. Core evidence29223563 and safe candidatee4b9cd1d merged; core D26/D27 read. All agents/implementation worktrees are finished/removed; only bg_20 deps waiter is active. Await core queue ready, perform the single roadmap catch-up/read any new decision deltas, final compatibility typecheck, commit/detach and authoritative land. D15 skips unstarted review; no feature flow was deferred, no second item claimed, no whole-queue completion claim.
+Ready for authoritative land. Dependency ready:true and the single metadata-only roadmap catch-upf434b6c1 are complete. Final affected suite passed14/14files,0fail/0flaky retries in235.90seconds after P13; scripts68/0/568assertions passed, caught-up typecheck passed62.61seconds, and the final native CLI/daemon/Codex smoke passed4turns with API pacing-edit wake/restoration and verified home removal. Changed-path API/CLI gate8/0/101assertions passed; checkpoint596b6151 was published to lane1. All agents/services/provider processes returned and implementation worktrees were removed with metadata preserved. Commit this observed evidence, detach and run the absolute queue.ts land m5-loops-presets without a deadline; its full merged-tree gate must succeed before the item is marked done. D15 records the unstarted-review waiver. End after this item only, then remove owned scratch and update loop notes; no second item or whole-queue completion claim.
