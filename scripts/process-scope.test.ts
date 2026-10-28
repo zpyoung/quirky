@@ -82,13 +82,36 @@ function scopeGuardians(): ProcessIdentity[] {
   )
 }
 
-async function waitForNewScopeGuardian(existingPids: Set<number>): Promise<ProcessIdentity> {
+type ScopeGuardianConfig = { home: string; owner: { pid: number } }
+
+const isConfig = (candidate: unknown): candidate is ScopeGuardianConfig =>
+  typeof candidate === 'object' && candidate !== null &&
+  'home' in candidate && typeof candidate.home === 'string' &&
+  'owner' in candidate && typeof candidate.owner === 'object' && candidate.owner !== null &&
+  'pid' in candidate.owner && typeof candidate.owner.pid === 'number'
+
+function scopeGuardianConfig(guardian: ProcessIdentity): ScopeGuardianConfig {
+  const match = guardian.command.match(/(?:^|\s)--guardian(?:\s+|=)(?:"([^"]+)"|'([^']+)'|(\S+))\s*$/)
+  const configPath = match?.[1] ?? match?.[2] ?? match?.[3]
+  if (!configPath) throw new Error(`could not find guardian config path in command: ${guardian.command}`)
+  const value: unknown = JSON.parse(readFileSync(configPath, 'utf8'))
+  if (!isConfig(value)) throw new Error('guardian config does not identify a home and owner')
+  return value
+}
+
+async function waitForOwnedScopeGuardian(home: string): Promise<ProcessIdentity> {
   for (let attempt = 0; attempt < 100; attempt++) {
-    const guardian = scopeGuardians().find((row) => !existingPids.has(row.pid))
-    if (guardian) return guardian
+    for (const guardian of scopeGuardians()) {
+      try {
+        const config = scopeGuardianConfig(guardian)
+        if (config.home === home && config.owner.pid === process.pid) return guardian
+      } catch {
+        // The candidate may disappear or have an incomplete config while enumerating.
+      }
+    }
     await Bun.sleep(20)
   }
-  throw new Error('process scope guardian did not appear in ps')
+  throw new Error(`process scope guardian for home ${home} did not appear in ps`)
 }
 
 
@@ -234,10 +257,16 @@ afterEach(async () => {
 test('cleanup stops the full process tree and guardian after caller-home removal', async () => {
   const home = mkdtempSync(join(tmpdir(), 'process-scope-home-removal-'))
   homes.add(home)
-  const existingGuardians = new Set(scopeGuardians().map((identity) => identity.pid))
+  const decoyHome = mkdtempSync(join(tmpdir(), 'process-scope-decoy-'))
+  homes.add(decoyHome)
+  const decoyScope = createProcessScope(decoyHome)
+  scopes.push(decoyScope)
   const scope = createProcessScope(home)
   scopes.push(scope)
-  const guardian = await waitForNewScopeGuardian(existingGuardians)
+  const guardian = await waitForOwnedScopeGuardian(home)
+  const config = scopeGuardianConfig(guardian)
+  expect(config.home).toBe(home)
+  expect(config.owner.pid).toBe(process.pid)
   scopeTestProcesses.push(guardian)
   const descendantProgram = `setInterval(() => {}, 60_000)`
   const rootProgram = `
@@ -266,6 +295,17 @@ test('cleanup stops the full process tree and guardian after caller-home removal
   expect([rootIdentity, descendantIdentity, guardian].every((identity) =>
     !sameProcess(identity, rows.get(identity.pid))
   )).toBe(true)
+  const decoyGuardian = scopeGuardians().find((identity) => {
+    try {
+      const config = scopeGuardianConfig(identity)
+      return config.home === decoyHome && config.owner.pid === process.pid
+    } catch {
+      return false
+    }
+  })
+  expect(decoyGuardian).toBeDefined()
+  if (!decoyGuardian) throw new Error('decoy process scope guardian disappeared before its own cleanup')
+  expect(sameProcess(decoyGuardian, processTable().get(decoyGuardian.pid))).toBe(true)
 }, 15_000)
 
 test('scope.spawn keeps the real Bun process, owns nested detached trees, and cleanup is idempotent', async () => {
