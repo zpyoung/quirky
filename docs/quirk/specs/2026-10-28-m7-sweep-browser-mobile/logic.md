@@ -5,6 +5,8 @@ Approved autonomously 2026-10-28 under LOOP.md; no person is watching. End phase
 
 **Amendments:** 2026-10-28: actual production bridge/daemon/encrypted-phone/Chrome reproduction confirmed page teardown retains Watch and terminal input leases while the native RPC stays connected. S6 makes page resource reclamation explicit; no product boundary or public RPC is widened.
 
+**Amendments:** 2026-10-28: caught-up production UI proved link routing and retained shell state, but exposed a session-record count mislabeled as tabs and flex-growing feedback wrappers. S7 adds a narrow layout-owned count snapshot; S8 preserves intrinsic feedback height. No raw layout payload, new control grant, Editor/Browser activation or Native substitution is authorized.
+
 ## Purpose and conceptual model
 A paired phone and the desktop use the existing public plugin APIs. A terminal link belongs to its current workspace; its destination is an explicit phone preference. Choosing desktop means a newly created managed Chrome Watch page, not a replacement Native page. The daemon remains authoritative for tabs, consent, session ownership and filesystem revisions. This sweep inventories every feature-doc category, completes reachable gaps, repairs observed regressions, and preserves real external prerequisites rather than manufacturing parity.
 
@@ -61,8 +63,22 @@ Run encrypted pairing/revoke/allowlist/bundle/session/Markdown/Watch and panels 
 - Walkthrough: the old page closes while one acquisition is pending; the original producer finishes.
 - Data after: **Old page** has no input/streaming authority; its unshared resources are released; **Phone connection** P and **New page** resources remain live.
 
+### S7 Workspace cards count actual layout-owned tabs
+- Given a workspace containing terminal, Native Browser and Markdown tabs, its primary Open action reports all actual tabs rather than session records. A split adds a pane, not another tab; background sessions and closed-tab history are not counted. Group/window focus does not alter the total.
+- The Terminal layout owner supplies one read-only batch snapshot with only workspace IDs, nonnegative counts and IDs whose stored layouts are unreadable. It reads its already-owned cold/hot models through the existing serial queue, without creating layouts, terminals or per-workspace Editor/Browser state. No raw titles, URLs, view arguments, paths or session launch data reach the phone.
+- A complete successful snapshot means an absent workspace with no unreadable marker has zero stored tabs. Unreadable or unavailable/malformed snapshots must not be replaced by session-count guesses: keep the workspace openable, omit an unsupported number and show existing stale/error affordances. The optional session property remains explicitly a session count.
+- Data before: **Workspace** W has one terminal tab with two split panes, one Native tab and one Markdown tab; **Background session** B has no tab.
+- Walkthrough: the user returns to Workspaces; the page reads one batch count snapshot. Closing the Markdown tab changes the next count from three to two. Restarting the daemon preserves the same stored total.
+- Data after: **Open workspace** shows three, then two actual tabs; no additional Chrome, Editor or PTY process starts just to count. Existing terminal grant and exact route admission remain; CLI exposes the same snapshot.
+
+### S8 Feedback cannot become a second scrolling body
+- Successful creation, save notices and errors occupy only their intrinsic content height above the tab strip. They retain the existing responsive/safe-area gutters but do not flex-grow or consume the main pane's available height.
+- Data before: **Session** has an opened Watch page at a390×720 viewport; **Feedback** confirms explicit Chrome Watch.
+- Walkthrough: the user follows a terminal link or creates/saves a note and observes the tab strip, controls and content.
+- Data after: **Feedback** remains visible without the large empty band observed in screenshot9; the main content keeps its available height and scroll behavior. Error/notice semantics and route/lease logic are unchanged.
+
 ## Verification and retained limits
-Use fresh disposable HOME/QUIRKY_HOME for every process and clean it; no real credentials, external posting or home configuration. Run bun run build, bun run typecheck, bun test scripts, affected suite.ts groups and actual web dogfood via --surface web --owner yours --unattended. Native-only OS behavior is not established by web screenshots. Existing blocked owner items are retained, not duplicated as a new testing follow-up. Any genuinely new unbuilt flow may be captured in at most one implementation-only successor before land.
+Use fresh disposable HOME/QUIRKY_HOME for every process and clean it; no real credentials, external posting or home configuration. Run bun run build, bun run typecheck, bun scripts/suite.ts scripts and affected suite.ts groups, then actual web dogfood via --surface web --owner yours --unattended. Every test, including one file, goes through suite.ts; only list-marked macOS cases execute locally. Native-only OS behavior is not established by web screenshots. Existing blocked owner items are retained, not duplicated as a new testing follow-up. Any genuinely new unbuilt flow may be captured in at most one implementation-only successor before land.
 
 ## Industry insights
 No external research swarm: controlling LOOP uses feature docs, roadmap and earlier decisions. Source docs browser.md and mobile.md plus the BrowserMobileMap repository ledger establish the distinctions above. Baseline suite receipt: artifact53; 63 remote files (48 passed,15 failed),3 local macOS files passed. Many browser failures are absent Chrome on the remote host; no pass claimed for those.
