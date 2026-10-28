@@ -121,5 +121,27 @@
 - **Revisit if:** owning reruns or visible UI dogfood contradict the smoke
 - **Source:** assumed — autonomous
 
+## D12: Fix evidence boundaries rather than accepting repeat failures as flaky
+- **Question:** What caused the remaining OpenClaw and rendered paging failures?
+- **Options:** loosen the tests or retry until green; trace executable lookup and cursor adoption
+- **Chose:** explicitly pass process.env.PATH as Bun.which's PATH option; adopt AutomationRunsPage.nextCursor into HistoryState.cursor on initial and older-page reads. Preserve the125-row/back-navigation/stale-response regressions. Remove the native list's unsupported100-row truncation instead of requiring users to search for hidden records.
+- **Why:** A fresh isolated Bun probe returned null from default lookup after PATH changed and found the executable with explicit PATH. The rendered diagnostic showed25 loaded runs with no older control because nextCursor had been spread under the wrong state key. A new native-list boundary test failed with125 expected/100 rendered before removing the clamp.
+- **Evidence:** minimal which probe default:null/explicit:fixturepath; rendered PAGING_DIAGNOSTIC and original failure; list-ui native-list red125/100, then bg6 28pass/0fail/107assertions across3owning files
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** process environment or public paging contracts change
+- **Source:** assumed — autonomous
+
+## D13: Verify typed source and packaged output before visible UI verification
+- **Question:** Which final verification is observed rather than inferred from isolated worker code?
+- **Options:** accept unit results only; owning reruns, scripts, complete typecheck, packaged build, actual runtime and visible UI
+- **Chose:** all nine initially failed files passed in owning reruns; paging/OpenClaw2remote files passed with no flaky reruns; scripts68pass/0fail/562assertions; final editor/model/renderedUI28pass/0fail/107assertions; complete typecheck and packaged macOS build exited0. Lane7 supplied semantic session repair bcdaea1b, which was merged without changing production behavior.
+- **Why:** Seven actual TypeScript diagnostics exposed missing narrowings/component return types and fixture optional values. Each was corrected directly, without casts, aliases, hidden fallbacks, or skipped files. The packaged UI built20plugin modules and desktop bundled26plugins.
+- **Evidence:** bg5 owning files/scripts; bg6 typecheck/build; source af88e69b. Build reported missing icon.iconset and no release.baseUrl as non-fatal packaging warnings; no icon or release publishing behavior is claimed.
+- **Reversibility:** easy
+- **Confidence:** high for exercised source/package paths; UI and native-menu proof are separate
+- **Revisit if:** visible UI verification finds a behavior those gates missed
+- **Source:** assumed — autonomous
+
 ## Progress
-Step6 active. All three isolated components audited/merged and worktrees removed. Final background/evidence runtime integrated; dispatcher-only run lifecycle retained, no obsolete result mutation API. Actual isolated daemon/CLI smoke passed; the first affected gate has nine owning failures under repair, not a green result. Next: consume repair results and lane7 session semantic repair, rerun only failed/affected files, run scripts/typecheck/build, one visible web dogfood and one cross-family review/fix batch, then catch up once and land.
+Step6: actual native-process/API smoke, all owning failure reruns, scripts, complete typecheck and packaged build passed; source af88e69b. Visible AutomationWebDogfood is active against the fresh owned daemon service lane6-automation-web-20261028. No browser or final cross-family review result claimed yet. Next: finish/end all web goals, stop/clean owned service, one final cross-family review and blocker-fix batch, record any constrained-flow follow-up, catch up once and normal queue land.
