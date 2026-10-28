@@ -226,7 +226,7 @@
           "type": "object",
           "properties": {
             "session": { "type": "string" },
-            "expectedIncarnation": { "type": "string", "minLength": 1 }
+            "expectedIncarnation": { "type": "string", "description": "The non-empty incarnation of the currently attached process; verified by the method." }
           },
           "required": ["session", "expectedIncarnation"]
         },
