@@ -33,5 +33,60 @@
 - **Revisit if:** the nightly native run reports further failure
 - **Source:** locked by docs/loop/LOOP.md
 
+## D4: Keep source changes narrow and preserve existing bridge operations
+- **Question:** How should implementer output be integrated and checked?
+- **Options:** trust worker completion reports; inspect each declared source/fixture scope and preserve existing members
+- **Chose:** one source implementer and one mechanical fixture updater, with parent-owned regression, contracts, documentation and verification; parent audits their returned diffs
+- **Why:** source audit caught `closeWindow` accidentally replaced by the new RPC registration; fixture audit caught existing members overwritten by new clipboard methods. All were restored before the complete keys test, build and typecheck. The shell adapter invokes the method on its owning bridge to preserve its receiver. No unrelated production behavior changed.
+- **Evidence:** returned source/fixture diffs in this iteration; `apps/desktop/src/bun/index.ts` request registrations; `packages/ui/src/shell.ts` clipboard adapter; seven context fixture additions
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** typed fixtures or existing native bridge operations regress
+- **Source:** assumed — autonomous
+
+## D5: Use controlled clipboard sources to prove the real terminal path without claiming native OS verification
+- **Question:** What does this lane's proof establish?
+- **Options:** infer native correctness from compilation; run the built renderer against a real private daemon and raw-mode PTY, injecting only the clipboard boundary
+- **Chose:** real CLI/daemon/window regression plus built Chromium surface and raw PTY byte capture; retain native nightly SC-37 as pending
+- **Why:** the regression failed before the repair with zero writes instead of `native-plain` (0 pass/1 fail, 4.84 s). It passed after acquisition moved to the host. The complete keys file passed 5 tests/178 assertions in 23.59 s, including browser clipboard fallback and native-read failure without Web Clipboard fallback. The built surface accepted actual Meta+V and the raw program printed exact unbracketed `native-surface-off` bytes and bracketed `ESC[200~native-surface-onESC[201~` bytes; native reads 2, web reads 0, no toasts or browser errors.
+- **Evidence:** `plugins/quirky.terminal/test/e2e-ui/features-keys.test.ts` SC-37 and SC-60; screenshot `/var/folders/x5/07kj5yld16l9wd5p_v01h20c0000gp/T/omp-sshots-15b863bbd78dad77.webp`; owned service `lane5-native-paste-surface` exited 0 with `homeRemoved:true`; initial typecheck exit 0/32.26 s and full desktop build exit 0/18.73 s
+- **Reversibility:** easy
+- **Confidence:** high for application routing/framing; native pasteboard/cross-app Cmd+V remains unverified until the nightly run
+- **Revisit if:** the real window's pending SC-37 fails
+- **Source:** assumed — autonomous
+
+## D6: Keep unsupported-platform native clipboard integration deferred
+- **Question:** Does macOS verification establish Linux/Windows native clipboard behavior?
+- **Options:** claim SDK portability; retain existing non-macOS browser clipboard behavior and defer native integration checks
+- **Chose:** retain the macOS-only trusted desktop preload installation and browser fallback on other platforms; Linux/Windows native host clipboard verification is deferred
+- **Why:** this item repairs macOS WKWebView, and the loop locks builds and tests to macOS. No foreign-platform native capability was introduced.
+- **Evidence:** `apps/desktop/src/bun/index.ts` darwin preload/RPC condition; authoritative LOOP.md Platforms
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** native shells ship on Linux or Windows
+- **Source:** deferred: platform
+
+## D7: Treat focused read-only review as additional evidence, not native verification
+- **Question:** What review and post-catch-up gates were completed?
+- **Options:** infer correctness from implementer reports; request a fresh scoped review and recheck integration types
+- **Chose:** a fresh read-only reviewer inspected the clipboard diff and reported no findings; post-catch-up `bun run typecheck` passed in 41.10 s
+- **Why:** independent context checked the native trust boundary, non-fallback errors, browser behavior, three consumer migrations and bracketed-paste regression. Reviewer and implementers use the omp/OpenAI family, so model-family independence is reduced; this is not the full cross-family SDD review protocol and is not a native OS PASS.
+- **Evidence:** ClipboardReview result: no findings, confidence 0.93, no checks run; post-catch-up typecheck exit 0 including UI lint and root/mobile/desktop projects
+- **Reversibility:** easy
+- **Confidence:** high for scoped source review, limited as stated
+- **Revisit if:** the pending SC-37 native run reports a failure or the suite finds a clipboard regression
+- **Source:** assumed — autonomous
+
+## D8: Preserve existing end-phase failure ownership instead of expanding this native repair
+- **Question:** How should the full-suite failure affect this item's native clipboard repair?
+- **Options:** call the suite green; duplicate triage work and modify unrelated features; record the failed gate and preserve its existing queued area owners while landing the scoped typechecked repair
+- **Chose:** disclose the failed broad suite in BLOCKERS.md, retain all existing `fix-test-*-1028` owners, and land only the specified SC-37 repair
+- **Why:** the completed suite ran 853 remote files (702 pass/151 fail) and 7 macOS files (6 pass/1 fail, also failing its configured retry), exit 1 after 2284.59 s. Programmatic comparison of all 152 unique failed paths against the canonical triage report's 153 failed paths found zero new failing files; the sole absent prior failure was `plugins/quirky.handoff/test/service.test.ts`. All failures already have queued area owners. This comparison is file-level, not an assertion-by-assertion equivalence claim. The complete log has no `readClipboardText` error, and keys/pane-input/paste files are not among its failures. No failing test was suppressed, repinned, retried manually or weakened.
+- **Evidence:** full suite raw `artifact://20`; canonical `docs/loop/reports/m7-test-triage.json`, baseline `97aaa12d9fdf91a966cbc78d5557e113fc9789b3`; canonical queue observed triage done and all area fix items present; `docs/loop/BLOCKERS.md` broad-suite verification receipt
+- **Reversibility:** easy
+- **Confidence:** high for exact failed-file ownership; individual unrelated defects remain with their repair owners
+- **Revisit if:** an area repair identifies a clipboard regression or SC-37 fails its native rerun
+- **Source:** assumed — autonomous
+
 ## Progress
-Root cause investigated from authoritative native evidence and current source. Public clipboard method signatures committed before implementation dispatch. Next: implement native RPC/public UI adapter and migrate readers, exercise real-daemon Cmd+V with Web Clipboard API denied and bracket modes on/off, typecheck and affected checks, catch up once, commit and land.
+Implementation and scoped verification complete. Contracts f3c329fd preceded implementation b48928eb. Native SC-37 is pending with historical report/date retained. New regression failed before and passed after; full keys file 5/0/178, scripts 81/0/820, built terminal/real-PTY smoke, packaged build and post-catch-up UI lint/root/mobile/desktop typing passed. Scoped read-only review returned no findings with reduced model-family independence. Broad suite failed with 152 unique files, all already in the canonical baseline/area repair queue; exact receipts and limitations are in D8 and BLOCKERS.md, not called passing. One catch-up completed and all incoming decisions were read. All agents returned, owned browser closed, private smoke daemon/PTY home removed. Ready to commit final receipts, detach and land this one item via the canonical absolute queue script; remove owned scratch after successful landing.
