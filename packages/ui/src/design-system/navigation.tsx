@@ -214,7 +214,8 @@ export function Menu({ label, items }: MenuProps) {
                 ref={(element) => { itemRefs.current[index] = element }}
                 type="button"
                 className={classNames('ui-menu__item', item.destructive && 'ui-menu__item--destructive')}
-                role="menuitem"
+                role={item.checked === undefined ? 'menuitem' : 'menuitemcheckbox'}
+                aria-checked={item.checked}
                 aria-disabled={item.disabled || undefined}
                 disabled={item.disabled}
                 tabIndex={!item.disabled && index === activeIndex ? 0 : -1}
@@ -225,7 +226,7 @@ export function Menu({ label, items }: MenuProps) {
                 }}
                 onKeyDown={(event) => onItemKeyDown(event, index)}
               >
-                {item.label}
+                {item.checked !== undefined && <span aria-hidden="true">{item.checked ? '✓ ' : '　'}</span>}{item.label}
               </button>
             </li>
           ))}

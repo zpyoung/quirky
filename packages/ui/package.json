@@ -5,7 +5,8 @@
   "exports": {
     ".": "./src/design-system/index.ts",
     "./styles.css": "./src/design-system/styles.css",
-    "./terminal-theme": "./src/terminal-theme.ts"
+    "./terminal-theme": "./src/terminal-theme.ts",
+    "./editor-theme": "./src/editor-theme.ts"
   },
   "type": "module",
   "scripts": {

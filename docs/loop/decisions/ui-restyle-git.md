@@ -66,5 +66,16 @@
 - **Revisit if:** platform scope expands
 - **Source:** deferred: platform
 
+## D7: Fill shared-system gaps rather than dropping existing behavior
+- **Question:** implementers found flat Menu cannot express context submenus/metadata or checkbox toggles, Dialog cannot express nonmodal note preview, and plugins lack a shared CodeMirror adapter
+- **Options:** remove interactions; keep local custom controls/CSS; extend shared Menu/dialog families and publish a generic editor adapter
+- **Chose:** ContextMenu/ContextMenuItem, optional MenuItem.checked, nonmodal anchored Popover and @quirky/ui/editor-theme editorTheme with generic conflict decorations. Remove local PopupMenu and shellTheme after callers migrate, no aliases. Persistent notices may use Toast duration0 with caller-owned action controls where auto-dismiss would change behavior
+- **Why:** approved design requires shared coverage when the fifteen component families cannot express existing flows; no plugin CSS exemption is needed
+- **Evidence:** plugins/quirky.git/src/panel/Menu.tsx; src/notes/NotesPreview.tsx; src/view/theme.ts; worker gap reports; packages/ui/src/design-system/contracts.ts
+- **Reversibility:** medium (additive public presentation APIs)
+- **Confidence:** high
+- **Revisit if:** actual smoke or acceptance tests find viewport/focus/engine-theme regressions
+- **Source:** assumed — autonomous
+
 ## Progress
 Design/source mapping complete. Combined scoped logic/technical contract ready to commit before implementer dispatch. Next: three disjoint source components, barrier audit/integration and lint enrollment; bounded actual UI smoke and typecheck; one roadmap catch-up with incoming decisions read; canonical land.

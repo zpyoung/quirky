@@ -72,3 +72,11 @@ Acceptance commands (parent only): `bun run ui:lint`; `bun run typecheck`. Focus
 ## Status & amendments
 
 2026-10-28: scoped combined logic/technical contract derived from approved parent; self-review found all three named plugins covered, with standalone runner intentionally unchanged except lint enrollment.
+
+### Shared-system gaps resolved during implementation
+
+The existing controls lacked required existing behaviors. Extend the shared Menu family with controlled `ContextMenu` and `ContextMenuItem`: viewport x/y, caller-owned items/onClose, nested hover/keyboard submenus, disabled explanations, current markers, headings, details and badges. Extend triggered `MenuItem` with optional `checked: boolean`, rendering `menuitemcheckbox` only when provided.
+
+Extend the shared dialog family with nonmodal `Popover`: open/label/anchor/onClose/children, portal placement bounded to the viewport, outside-pointer/Escape dismissal, no backdrop or focus trap. Feature contents/actions remain caller-owned.
+
+Publish `@quirky/ui/editor-theme` exporting `editorTheme: Extension` for tokenized CodeMirror chrome/merge/diff colors and generic `ui-editor-conflict-*` decorations. Language/syntax/document/conflict authority remains in the feature. This is an editor-engine adapter, not a plugin CSS exemption. Shared behavior tests cover submenu focus/selection boundaries, checkbox roles/state and nonmodal dismissal; authored but not run under build-first.
