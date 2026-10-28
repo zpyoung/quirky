@@ -598,6 +598,7 @@ export function activate(context: PluginContext): void {
       return registered
     }
     startRunner(registered, agent, prompt, launchOptions, token)
+    if (ownerPluginId !== null) await reconcileOwnedSessions()
     return registered
   }
 
@@ -740,6 +741,7 @@ export function activate(context: PluginContext): void {
     } catch (error) {
       startupFailed(registered.id, token, error)
     }
+    if (ownerPluginId !== null) await reconcileOwnedSessions()
     return registered
   }
 
@@ -770,6 +772,7 @@ export function activate(context: PluginContext): void {
     }
     const session = await requireStructured(params.session as string)
     if (!isStructuredAgent(session.agent)) throw context.error('conflict', `structured sessions cannot send to provider ${session.agent}`)
+    const agent = session.agent
     return enqueueSend(session.id, async () => {
       await startTasks.get(session.id)
       ensureActive()
@@ -791,7 +794,7 @@ export function activate(context: PluginContext): void {
         if (latestSeq !== expectedAfterSeq) rejectGuard('stale-evidence')
       }
       if (entry) entry.hasSent = true
-      const runner = runnerBySession.get(session.id) ?? runnerFor(session.agent)
+      const runner = runnerBySession.get(session.id) ?? runnerFor(agent)
       if (entry?.stopping) rejectGuard('agent-busy')
       await runner.send(session.id, params.text as string)
       return { ok: true }

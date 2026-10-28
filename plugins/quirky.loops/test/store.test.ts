@@ -22,7 +22,10 @@ function memoryStore(readOnly = false) {
     if (typeof migration === 'string') database.exec(migration)
     else migration({
       version: 0,
-      run: (sql, ...params) => database.query(sql).run(...params),
+      run: (sql, ...params) => {
+        const result = database.query(sql).run(...params)
+        return { changes: Number(result.changes), lastInsertRowid: Number(result.lastInsertRowid) }
+      },
       get: (sql, ...params) => database.query(sql).get(...params) as never,
       all: (sql, ...params) => database.query(sql).all(...params) as never,
       exec: (sql) => database.exec(sql),

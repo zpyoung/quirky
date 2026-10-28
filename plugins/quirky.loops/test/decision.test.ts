@@ -113,13 +113,13 @@ describe('decideNext precedence and completion', () => {
 
   test('protected paths pause before marker and cap decisions', () => {
     const current = loop({ config: config({ caps: { maxIterations: 1 } }), iterationsCompleted: 1 })
-    expect(decide({ loop: current, latest: attempt({ protectedPathHits: ['secret/key'], markers: { blocked: 'blocked' } }) })).toEqual({ kind: 'pause', reason: 'protected-path', detail: 'secret/key' })
+    expect(decide({ loop: current, latest: attempt({ protectedPathHits: ['secret/key'], markers: { done: false, blocked: 'blocked' } }) })).toEqual({ kind: 'pause', reason: 'protected-path', detail: 'secret/key' })
   })
 
   test('blocked and decide markers pause before caps', () => {
     const current = loop({ config: config({ caps: { maxIterations: 1 } }), iterationsCompleted: 1 })
-    expect(decide({ loop: current, latest: attempt({ markers: { blocked: 'need access' } }) })).toEqual({ kind: 'pause', reason: 'agent-blocked', detail: 'need access' })
-    expect(decide({ loop: current, latest: attempt({ markers: { decide: 'which one?' } }) })).toEqual({ kind: 'pause', reason: 'agent-decide', detail: 'which one?' })
+    expect(decide({ loop: current, latest: attempt({ markers: { done: false, blocked: 'need access' } }) })).toEqual({ kind: 'pause', reason: 'agent-blocked', detail: 'need access' })
+    expect(decide({ loop: current, latest: attempt({ markers: { done: false, decide: 'which one?' } }) })).toEqual({ kind: 'pause', reason: 'agent-decide', detail: 'which one?' })
   })
 })
 

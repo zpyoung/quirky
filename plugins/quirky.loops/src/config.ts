@@ -112,30 +112,11 @@ export function normalizeLoopConfig(value: unknown): LoopConfig {
   }
 }
 
-/** Merges supplied sections with their current values, then validates the complete config. */
+/** Replaces supplied sections and preserves omitted sections, then validates the complete config. */
 export function mergeLoopConfig(current: LoopConfig, patch: LoopConfigPatch): LoopConfig {
   const raw = patch as Record<string, unknown>
   onlyKeys(raw, ['promptSource', 'pacing', 'sessionPolicy', 'done', 'caps', 'noProgress', 'protectedPaths', 'checkpointCommits', 'askBeforeNext', 'resumeAtLimitReset'], 'patch')
-  const merged: Record<string, unknown> = { ...current, ...raw }
-  for (const key of ['promptSource', 'pacing', 'done', 'caps'] as const) {
-    const section = raw[key]
-    if (section === undefined) continue
-    if (section === null) {
-      if (key === 'done' || key === 'caps') merged[key] = {}
-      else throw new TypeError(`patch.${key} cannot be removed`)
-    } else {
-      const sectionValues: Record<string, unknown> = {}
-      Object.assign(sectionValues, current[key], objectOf(section, `patch.${key}`))
-      if (key === 'done' || key === 'caps') {
-        for (const [field, fieldValue] of Object.entries(sectionValues)) {
-          if (fieldValue === null) delete sectionValues[field]
-        }
-      }
-      merged[key] = sectionValues
-    }
-  }
-  if (raw.protectedPaths === null) delete merged.protectedPaths
-  return normalizeLoopConfig(merged)
+  return normalizeLoopConfig({ ...current, ...raw })
 }
 
 export function validateLoopAgent(agent: unknown): asserts agent is 'claude' | 'codex' {

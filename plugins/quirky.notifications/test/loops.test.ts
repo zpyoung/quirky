@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { Rig, type Decided, type NotifyEvent } from './support'
 import { waitFor, waitForAsync } from '../../../packages/daemon/test/helpers'
@@ -41,7 +42,7 @@ const globals = globalThis as typeof globalThis & {
   __QUIRKY_TEST_STRUCTURED_RUNNER__?: (context: RunnerContext) => unknown
 }
 let scriptedRunner: LoopProbeRunner | undefined
-const ENV_KEYS = ['QUIRKY_HOME', 'CLAUDE_CONFIG_DIR', 'CODEX_HOME'] as const
+const ENV_KEYS = ['QUIRKY_HOME', 'CLAUDE_CONFIG_DIR', 'CODEX_HOME', 'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM'] as const
 let rig: Rig | undefined
 let providerHome: string | undefined
 let priorEnv: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>> = {}
@@ -77,10 +78,21 @@ async function start(script: LoopScript, options: { cooldownMs?: number; onStop?
   process.env.QUIRKY_HOME = providerHome
   process.env.CLAUDE_CONFIG_DIR = claudeHome
   process.env.CODEX_HOME = codexHome
+  process.env.GIT_CONFIG_GLOBAL = '/dev/null'
+  process.env.GIT_CONFIG_NOSYSTEM = '1'
   hadFactory = Object.hasOwn(globals, '__QUIRKY_TEST_STRUCTURED_RUNNER__')
   previousFactory = globals.__QUIRKY_TEST_STRUCTURED_RUNNER__
   globals.__QUIRKY_TEST_STRUCTURED_RUNNER__ = (context) => (scriptedRunner = new LoopProbeRunner(context, script, options.onStop))
   rig = await Rig.start(options.cooldownMs === undefined ? {} : { cooldownMs: options.cooldownMs })
+  const cwd = rig.worktrees.main!.path
+  writeFileSync(join(cwd, 'loop-fixture.txt'), 'isolated git worktree\\n')
+  const git = (...args: string[]) => execFileSync('git', args, { cwd, env: process.env, stdio: 'ignore' })
+  git('init', '-q', '-b', 'main')
+  git('config', 'user.name', 'Loop Notification Test')
+  git('config', 'user.email', 'loop-notifications@example.invalid')
+  git('config', 'commit.gpgsign', 'false')
+  git('add', '.')
+  git('commit', '-q', '-m', 'initial')
   await rig.setting('agentTaskComplete', false)
   return rig
 }
@@ -119,6 +131,7 @@ function loopNotification(workspace: Rig, title: string): NotifyEvent {
   return workspace.notifies().find((event) => event.title === title)!
 }
 
+// Keep the 10-second per-condition watchdogs authoritative; outer budgets also cover daemon/Git setup and teardown.
 describe('loop notifications through the central policy', () => {
   test('completion uses the loop title, name body and stable event key', async () => {
     const workspace = await start(() => ({ text: 'LOOP_DONE', status: 'done' }))
@@ -134,7 +147,7 @@ describe('loop notifications through the central policy', () => {
       key: `loop:${loop.id}:completed`,
       worktreeId: workspace.worktrees.main!.id
     })
-  })
+  }, 15_000)
 
   test('safety pauses use a reason detail and loop-specific key', async () => {
     const workspace = await start(() => ({ text: 'LOOP_BLOCKED: waiting for a design decision', status: 'done' }))
@@ -146,7 +159,7 @@ describe('loop notifications through the central policy', () => {
       body: 'Blocked parser: agent-blocked: waiting for a design decision',
       key: `loop:${loop.id}:paused`
     })
-  })
+  }, 15_000)
 
   test('cap events retain the cap title and respect the worktree cooldown', async () => {
     const workspace = await start(() => ({ text: 'Iteration complete', status: 'done' }), { cooldownMs: 5000 })
@@ -163,7 +176,7 @@ describe('loop notifications through the central policy', () => {
     await waitForLoopDecisions(workspace, 2)
     expect(lastLoopDecision(workspace)).toMatchObject({ source: 'loop', result: 'cooldown' })
     expect(workspace.notifies().filter((event) => event.title === 'Loop reached its cap')).toHaveLength(1)
-  })
+  }, 30_000)
 
   test('disabled notifications suppress loop banners but still record attention', async () => {
     const disabled = await start(() => ({ text: 'Iteration complete', status: 'done' }))
@@ -174,7 +187,7 @@ describe('loop notifications through the central policy', () => {
     expect(disabled.notifies()).toHaveLength(0)
     expect(disabled.attentions()).toContainEqual(expect.objectContaining({ source: 'loop', worktreeId: disabled.worktrees.main!.id }))
     expect(typeof disabledLoop.id).toBe('string')
-  })
+  }, 15_000)
 
   test('focus suppression gates loop banners but still records attention', async () => {
     const focused = await start(() => ({ text: 'Iteration complete', status: 'done' }))
@@ -185,7 +198,7 @@ describe('loop notifications through the central policy', () => {
     expect(lastLoopDecision(focused)).toMatchObject({ source: 'loop', result: 'suppressed-focus' })
     expect(focused.notifies()).toHaveLength(0)
     expect(focused.attentions()).toContainEqual(expect.objectContaining({ source: 'loop', worktreeId: focused.worktrees.main!.id }))
-  })
+  }, 15_000)
 
   test('user pauses do not deliver loop banners or attention markers', async () => {
     const gate = Promise.withResolvers<void>()
@@ -205,7 +218,7 @@ describe('loop notifications through the central policy', () => {
     await workspace.settle()
     expect(workspace.notifies()).toHaveLength(0)
     expect(workspace.attentions().filter((event) => event.source === 'loop')).toHaveLength(0)
-  })
+  }, 15_000)
 
   test('needs-you events pass through the same policy and keep the loop-specific event key', async () => {
     const workspace = await start(async ({ sessionId, context }) => {
@@ -226,6 +239,6 @@ describe('loop notifications through the central policy', () => {
     const ask = asks.find((candidate) => candidate.sessionId === snapshot.sessionId)
     expect(ask).toBeDefined()
     if (ask) await workspace.client.callAny('quirky.ask/cancel', { askId: ask.id })
-  })
+  }, 15_000)
 })
 

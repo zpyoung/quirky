@@ -100,7 +100,7 @@ function makeContext(root: string, handlers: Record<string, (params: Record<stri
   return {
     pluginId: 'quirky.loops', dir: root, dataDir: join(root, 'plugin-data'), home,
     log() {}, emit() { return true }, subscribe() { return () => {} }, provide() {}, openStore() { throw new Error('unused') },
-    getSetting() { return undefined }, storedSettingValue() { return undefined }, error(_kind, text) { return new Error(text) },
+    getSetting() { return undefined }, storedSettingValue() { return undefined }, error(_kind: Parameters<PluginContext['error']>[0], text: string) { return new Error(text) },
     createFileResource() { throw new Error('unused') }, workerEntrypoint() { throw new Error('unused') },
     launch: {
       shell: '/bin/sh', binDir: bin, shellArgv: () => ['/bin/sh'], shellReady: () => false,
@@ -112,7 +112,7 @@ function makeContext(root: string, handlers: Record<string, (params: Record<stri
       }),
       async hooks() { return { env: {}, args: [] } }
     },
-    async call(method, params = {}) {
+    async call(method: string, params: Record<string, unknown> = {}) {
       const handler = handlers[method]
       if (handler) return await handler(params)
       if (method === 'quirky.agents/list') return { agents: [{ id: 'claude', installed: true }, { id: 'codex', installed: true }] }
@@ -460,17 +460,16 @@ wait
     writeFileSync(join(cwd, 'tracked.txt'), 'changed\n')
     const indexPath = join(cwd, '.git', 'index')
     const indexBefore = readFileSync(indexPath)
-    const ready = Promise.withResolvers<void>()
-    const watcher = watch(root, () => {
-      if (existsSync(readyPath)) ready.resolve()
-    })
     const controller = new AbortController()
     const gathering = engine.gather(input(loop(cwd, { workspaceKind: 'git' }), { treeBefore, signal: controller.signal }))
     try {
-      if (existsSync(readyPath)) ready.resolve()
-      await ready.promise
+      // The Git filter is an external OS process; fake timers cannot create its readiness file or reap its group.
+      const readyDeadline = Date.now() + 3000
+      while (!existsSync(readyPath) && Date.now() < readyDeadline) await Bun.sleep(10)
+      expect(existsSync(readyPath)).toBe(true)
       const childPid = Number(readFileSync(childPidPath, 'utf8'))
       ownedPids.add(childPid)
+      const abortedAt = Date.now()
       controller.abort()
       const evidence = await gathering
       expect(evidence.treeAfter).toBeNull()
@@ -479,11 +478,12 @@ wait
       let alive = true
       try { process.kill(childPid, 0) } catch { alive = false }
       expect(alive).toBe(false)
+      expect(Date.now() - abortedAt).toBeLessThan(5000)
       expect(readFileSync(indexPath)).toEqual(indexBefore)
     } finally {
-      watcher.close()
+      controller.abort()
     }
-  })
+  }, 15_000)
 
   test('Git operation deadline kills a filter child holding owned stdio', async () => {
     const root = tempRoot()

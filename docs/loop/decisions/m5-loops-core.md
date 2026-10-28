@@ -189,5 +189,49 @@
 - **Revisit if:** dependent lane needs a changed engine contract
 - **Source:** assumed — autonomous
 
+## D18: Apply the night-mode completion fast path after the repair gate
+- **Question:** the item passed ninety minutes before final discovery/dogfood started
+- **Options:** start a new cross-family review campaign; finish repairs and required checks, then land under the night-mode override
+- **Chose:** finish the assigned flows and safety regressions, run the affected suite, scripts, typecheck and actual CLI/native-protocol smoke, then land. Do not start the prepared but unstarted final-review campaign or a webview dogfood pass. No review PASS is claimed.
+- **Why:** authoritative LOOP night mode says to stop starting flows at ninety minutes and skip unstarted review/dogfood for overdue items once their own tests/typecheck pass. There is no new web UI surface; native-only focus/banner scenarios remain pending in the nightly handoff.
+- **Evidence:** last recorded clock22:48after approximately21:15–21:20claim; /tmp/quirky-m5-loops-run.0VUATs/review.py was staged but never executed
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a blocking defect remains after the required checks
+- **Source:** locked by docs/loop/LOOP.md
+
+## D19: Background structured sessions do not auto-adopt terminal panes
+- **Question:** the full built-in set logged terminal layout repair for loop-owned structured sessions, despite the background-only contract
+- **Options:** let reconciliation add/focus a terminal tab; keep structured sessions out of terminal auto-adoption
+- **Chose:** terminal reconciliation adopts only terminal sessions. Explicitly existing panes remain governed by their existing bindings; structured background sessions never add a pane or change the active tab.
+- **Why:** the failing regression showed activeTab changing from tab-3 to tab-102 on a background Codex session. That reproduces the observed Orca focus defect in the actual shared layout seam, not in the loop plugin's own calls.
+- **Evidence:** layout-reconcile.test.ts new background-session regression failed before source change (artifact63); after source change26tests/0fail/80assertions. Native focus appearance remains pending in the nightly scenario.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a future explicit structured-session viewer needs a separate opt-in view contract
+- **Source:** locked by docs/architecture.md
+
+## D20: Repair concrete integration races rather than slow or weaken the fixtures
+- **Question:** the first integrated implementation exposed real lifetime/state defects and several malformed fixtures
+- **Options:** extend waits/change synchronous runner scheduling; repair ownership, settlement and section semantics
+- **Chose:** retain the adversarial synchronous fast-turn provider fixture. Fix persisted own-prompt attribution, deferred settled-edge observation, resume-versus-driver-cleanup, waiting-before-ask approval holds, active-time flushing, initial measured USD totals and Codex reset evidence retention. Public history excludes open attempts. Supplied edit sections replace whole; CLI preserves omitted nested settings by reading current config. Shutdown escapes pending RPC waits without leaving unhandled promises; late-created sessions retain cleanup ownership.
+- **Why:** the same real daemon initially stayed working after its provider finished, then reached cap-iterations after the race repair. Native CLI smoke proved3iterations with distinct fresh sessions, claim-only non-completion, steer/edit/check/resume, unknown-cost pause, and actual app-server PID termination. These are runtime observations, not worker claims.
+- **Evidence:** observe.ts before/after bg13/bg15; native smoke bg19 NATIVE_LOOP_CLI_SMOKE_PASS; integrated target gate104pass8fail before final repairs. Fixture fixes include missing brackets/imports/directories, real Git notification workspace, correct steering regex, and removal-or-exit process postconditions. External Git-filter cancellation waits for its actual readiness file; its own post-abort bound remains5seconds, with a15second outer fixture watchdog.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** the final required gate or actual native smoke fails
+- **Source:** assumed — autonomous
+
+## D21: Keep condition deadlines intact and wait for actual cleanup barriers
+- **Question:** the final targeted gate had138passes and3failures: one assertion raced session cleanup and two notification tests hit the framework watchdog before their existing condition watchdog
+- **Options:** weaken consumer assertions; wait for the actual close event and make the outer fixture budget cover its condition deadline
+- **Chose:** the engine test waits on Runtime's session-removed event until every owned session closes, then retains the cleanup assertion. Notification per-condition watchdogs remain10seconds; outer fixture budgets include daemon/Git setup and teardown (15seconds,30for the two-loop case). No production timeout, polling, cooldown or notification assertion changes. Removed incidental preamble-wording assertions.
+- **Why:** paused state publication is intentionally before asynchronous cleanup, so the observed state is not a resource-release barrier. The isolated notification completion passed in3.49seconds, while the loaded five-second outer guard tore down a still-valid10second condition wait. The repaired two-file gate passed24tests/0fail/97assertions in30.32seconds without unhandled errors.
+- **Evidence:** bg21/artefact69; isolated completion bg24; repaired engine+notifications bg25/artefact73; native smoke bg23 passes3iterations and actual process termination; frozen tsc bg22 exit0
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a condition itself times out or a cleanup barrier is never reached
+- **Source:** assumed — autonomous
+
 ## Progress
-Contracts95383d97committed. Three isolated implementation components are running at /tmp/quirky-m5-loops-{engine,evidence,integration}, all HEAD95383d97and no commits allowed. Parent added read-only schema opt-in with failing-before/passing-after kernel regression (30tests pass) and native handoff. Next audit worker scopes/HEAD at wave barrier, integrate all, then catch up once and run affected suite/scripts/typecheck plus actual API/CLI smoke and final review. Private journal/review controller /tmp/quirky-m5-loops-run.0VUATs. Baseline isolated real daemon confirmed unknown quirky.loops/list; no real homes were touched.
+Audited source checkpoint e0582785 published to early presets lane. All implementation/fix workers are now frozen; original worktrees removed, tool-only metadata preserved in named stashes. Source repairs and public safety acceptance tests are ready to commit. Targeted gate138pass/3fail was followed by the repaired engine/notification gate24pass/0fail; native real CLI smoke passes and TypeScript is clean. Next: commit repair tip and notify lane5, catch up once with build/roadmap, read incoming decisions, run required affected suite/scripts/typecheck, then authoritative queue land. No final model review was started; D18 records the night-mode skip. Native-only checks remain pending, not falsely passed.
