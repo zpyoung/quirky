@@ -33,6 +33,8 @@ export interface WorkerSetup {
 }
 export interface WorkerStartParams extends MutationRequest, DeclaredCallerAliases {
   runId?: RunId; taskId?: TaskId; spec?: string; worktree: string
+  /** Exact paired execution host; absence preserves local placement. */
+  on?: string
   agent?: string; terminal?: string; mode?: WorkerMode
   taskTitle?: string; dependencyTaskIds?: readonly TaskId[]; parentTaskId?: TaskId
   model?: string; effort?: string; name?: string; repo?: string; baseBranch?: string
@@ -96,7 +98,7 @@ export type WorkerLiveness = { status: 'live' | 'exited' | 'unverifiable'; reaso
 export interface WorkerProjection {
   id: DispatchId; role: 'worker'; parent: { taskId: TaskId } | null
   provider: { id: string; model: string | null } | null
-  host: { kind: 'local'; id: string }; workspace: { id: string; kind: string } | null
+  host: { kind: 'local' | 'remote'; id: string }; workspace: { id: string; kind: string } | null
   stage: { worker: string | null; dispatch: string; detail: string; activity: 'working' | 'blocked' | 'waiting' | 'done' | 'unknown' }
   outcome: 'in_progress' | 'succeeded' | 'failed' | 'outcome_unknown' | 'finished_unverified'
   liveness: WorkerLiveness
