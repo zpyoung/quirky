@@ -77,5 +77,60 @@
 - **Revisit if:** The effective Session Info owner is overridden.
 - **Source:** assumed — autonomous
 
+## D8: Express project-only context through existing public view input
+- **Question:** How can Project be the default without an active worktree when the shell has no separate selected-project field?
+- **Options:** Fake a missing primary worktree; add a new caller/protocol identity; recognize an explicit repo in the already-public active view input.
+- **Chose:** `UiLayout.view.input.repo` is an explicit project selector when worktree is absent; resolve it through the public repo owner in service and window. Worktree takes precedence. Unknown identity remains bounded.
+- **Why:** Real projects synthesize a primary worktree, so a cwd fixture cannot represent project-only UI selection. Existing public view input accepts plugin JSON, avoiding a new project page or kernel protocol field. Real API opening of an installed view with registered repo input proves the context without mocked sources.
+- **Evidence:** plugins/quirky.vault/src/service.ts scopeIdentity/defaultScope; src/window/model.ts resolveScope; public UiLayout.view.input contract; actions implementer mapping.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** A future shell owner declares another canonical project-context representation.
+- **Source:** assumed — autonomous
+
+## D9: Preserve the handoff owner's last-prompt meaning
+- **Question:** Does archived `prompt` contain the first or last user prompt?
+- **Options:** Put first prompt under a misleading Last user prompt label; expand the owner schema; preserve last-user semantics and full transcript access.
+- **Chose:** Existing `prompt=lastUserPrompt`, `lastMessage=latestAssistant`, with validated transcriptPath retaining full source. Full first-prompt inspection/copy remains SC-18.
+- **Why:** The completion spec accidentally over-specified first prompt in the archived bridge. The owner's established brief labels this field Last user prompt. Original SC-21 requires the selected-source owner flow, not a second first-prompt field.
+- **Evidence:** docs/loop/decisions/m3-handoff.md:64-69,208-211; plugins/quirky.handoff/src/core/compose.ts:28-29; original Vault logic SC-18/21.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** A consumer requires a separately labelled first-prompt handoff hint.
+- **Source:** locked by docs/loop/decisions/m3-handoff.md
+
+## D10: Persist child ownership, not caller-supplied source paths
+- **Question:** How can an already selected Claude/OMP child resolve after Worker restart?
+- **Options:** Require re-listing the parent; encode arbitrary paths in the caller ID; persist a derived child-ID to parent-ID relation and rediscover both.
+- **Chose:** Parent ownership in the existing parse-cache database, re-enumerated through current validated roots/kinds before child access. Invalidation clears related mappings. Same opaque public IDs and envelopes.
+- **Why:** The baseline real API regression returned null immediately after plugin restart. Persisted ownership fixes that loss without turning a public ID into filesystem authority.
+- **Evidence:** baseline worker-parity.test.ts:298 failure, artifact18; corrected child test in the four-case API file passes as part of bg4.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** A stale or forged child mapping escapes parent/root validation.
+- **Source:** assumed — autonomous
+
+## D11: Reset failure holdout when the source signature changes
+- **Question:** Can a corrected source remain held out when its mtime is preserved?
+- **Options:** Use mtime alone; use the already-defined complete source/sidecar signature.
+- **Chose:** Persist failed_signature and reset the retry count on signature change. Rebuild only disposable search schema2 as schema3.
+- **Why:** mtime alone misses a changed source/sidecar signature. Reusing discovery's canonical signature avoids a separate freshness policy, while unchanged repeated failures remain held out.
+- **Evidence:** plugins/quirky.vault/src/search/index.ts; bg4 real same-mtime recovery, JSONL/JSON/sidecar/SQLite mutation and schema-replacement API tests pass.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Discovery's signature stops reflecting a supported source dependency.
+- **Source:** assumed — autonomous
+
+## D12: Correct source-aligned regression oracles and fixture bootstrapping
+- **Question:** Do the initial new-test failures justify changing query fallback, resume forms or production Worker startup?
+- **Options:** Special-case production for the tests; preserve existing contracts and repair the faulty fixture boundaries.
+- **Chose:** Use disjoint single-token source markers for mutation absence checks, retain Claude provider-ID versus OMP transcript-path resume, and buffer the fault fixture's messages during its dynamic production-handler import.
+- **Why:** Shared hyphenated fixture markers legitimately overlap under the documented OR/identifier ladder. The Claude command was correct. Recovery's five rejection assertions passed before the fixture dropped its initial applySearch during an asynchronous import; no production handshake or timeout increase was needed.
+- **Evidence:** bg3 1pass3fail; bg4 mutation/retention/SQLite/schema pass followed by recovery timeout; bg6 corrected recovery1pass8assertions. bg5 existing six-file chain29pass420assertions; total targeted Worker acceptance37pass477assertions.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** A real packaged Worker loses a request without the fault fixture wrapper.
+- **Source:** assumed — autonomous
+
 ## Progress
-Combined spec/contracts committed at b59ba608 before three disjoint implementers. All three component HEADs began there with empty dirty snapshots; no checks/commits allowed mid-flight. Parent prepared isolated packaged-browser fixture, verified web driver readiness, and wrote fresh pending native handoff while preserving historical failure evidence. No implementation acceptance claim yet. Next: barrier scope/HEAD audits, red/green consumer checks, build and full browser campaign, affected runner/scripts/typecheck, one catch-up/review and supported queue landing. Inherited untracked .serena/ is not item work.
+Spec/contracts committed before three disjoint implementers; actual Session Info owner and bounded project-context amendments recorded. Worker component scope/HEAD audit is clean at b59ba608 and targeted acceptance passes37tests477assertions, with baseline child failure retained. Window component returned and its acceptance is underway; action/integration component remains active. No branch-wide, packaged or browser completion claim yet. Next: full component barrier/audit, integrated acceptance/build, packaged lifecycle and complete browser campaign, required affected runner/scripts/typecheck, one catch-up/review and supported queue land. Inherited .serena/ remains excluded.
