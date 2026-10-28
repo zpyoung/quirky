@@ -18,3 +18,4 @@ export * from './mobile-browser'
 export * from './terminal-artifacts'
 
 export * from './desktop-capabilities'
+export * from './window-routes'
