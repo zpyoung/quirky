@@ -623,8 +623,8 @@ test('shared setup and issue trust choices accumulate across create retries', as
       calls.push({ method, params })
       if (method === 'quirky.worktree/create') {
         attempt += 1
-        if (attempt === 1) throw Object.assign(new Error('setup trust required'), { data: { reason: 'hooks-untrusted', repo: 'r1', kind: 'setup', script: 'echo setup', ref: 'main' } })
-        if (attempt === 2) throw Object.assign(new Error('issue trust required'), { data: { reason: 'hooks-untrusted', repo: 'r1', kind: 'issue', script: 'gh issue develop {{issue}}', ref: 'main' } })
+        if (attempt === 1) throw Object.assign(new Error('setup trust required'), { data: { reason: 'hooks-untrusted', repo: 'r1', kind: 'setup', script: 'echo setup', hash: 'setup-hash', ref: 'main' } })
+        if (attempt === 2) throw Object.assign(new Error('issue trust required'), { data: { reason: 'hooks-untrusted', repo: 'r1', kind: 'issue', script: 'gh issue develop {{issue}}', hash: 'issue-hash', ref: 'main' } })
         return { worktree: { id: 'created', name: 'created', path: '/created' }, warnings: [], setup: { ran: 'none' } }
       }
       if (method === 'quirky.repo/trustHooks') return { ok: true }
@@ -642,8 +642,120 @@ test('shared setup and issue trust choices accumulate across create retries', as
   expect(result).not.toBeNull()
   expect(questions).toEqual(['setup', 'issue'])
   const creates = calls.filter((call) => call.method === 'quirky.worktree/create')
-  expect(creates[1]?.params).toMatchObject({ trustSetup: true })
-  expect(creates[2]?.params).toMatchObject({ trustSetup: true, trustIssueCommand: true })
+  expect(creates[1]?.params).toMatchObject({ trustSetup: true, trustSetupHash: 'setup-hash' })
+  expect(creates[2]?.params).toMatchObject({ trustSetup: true, trustSetupHash: 'setup-hash', trustIssueCommand: true, trustIssueCommandHash: 'issue-hash' })
+})
+
+test('Run once binds consent to the shown hash and asks again when the shared script changes', async () => {
+  const calls: Call[] = []
+  const questions: string[] = []
+  let current = { script: 'echo A', hash: 'hash-A', ref: 'ref-A' }
+  const context = {
+    getLayout: () => ({ view: null }),
+    openView() {},
+    toast() {},
+    async call(method: string, params: Record<string, unknown> = {}) {
+      calls.push({ method, params })
+      if (method !== 'quirky.worktree/create') throw new Error(`unexpected call ${method}`)
+      if (params.trustSetup !== true || params.trustSetupHash !== current.hash) {
+        throw Object.assign(new Error('shared setup is untrusted'), {
+          data: { reason: 'hooks-untrusted', repo: 'r1', kind: 'setup', script: current.script, hash: current.hash, ref: current.ref }
+        })
+      }
+      return { worktree: { id: 'created', name: 'created', path: '/created' }, warnings: [], setup: { ran: 'none' } }
+    }
+  } as unknown as UiPluginContext
+
+  const result = await createWorkspace(context, { repo: 'r1' }, {
+    askTrust: async (request) => {
+      questions.push(request.script)
+      if (request.script === 'echo A') current = { script: 'echo B', hash: 'hash-B', ref: 'ref-B' }
+      return 'run'
+    },
+    showFallback() {}
+  })
+
+  expect(result).not.toBeNull()
+  expect(questions).toEqual(['echo A', 'echo B'])
+  expect(calls.filter((call) => call.method === 'quirky.worktree/create')).toHaveLength(3)
+  expect(calls[1]?.params).toMatchObject({ trustSetup: true, trustSetupHash: 'hash-A' })
+  expect(calls[2]?.params).toMatchObject({ trustSetup: true, trustSetupHash: 'hash-B' })
+})
+test('Always trust on changed content replaces the earlier one-time pin', async () => {
+  const calls: Call[] = []
+  const questions: string[] = []
+  let current = { script: 'echo A', hash: 'hash-A', ref: 'ref-A' }
+  let trustedHash: string | null = null
+  const context = {
+    getLayout: () => ({ view: null }),
+    openView() {},
+    toast() {},
+    async call(method: string, params: Record<string, unknown> = {}) {
+      calls.push({ method, params })
+      if (method === 'quirky.repo/trustHooks') {
+        if (params.ref === current.ref) trustedHash = current.hash
+        return { ok: true }
+      }
+      if (method !== 'quirky.worktree/create') throw new Error(`unexpected call ${method}`)
+      const stalePin = params.trustSetup === true && params.trustSetupHash !== undefined && params.trustSetupHash !== current.hash
+      const currentCallTrust = params.trustSetup === true && (params.trustSetupHash === undefined || params.trustSetupHash === current.hash)
+      if (stalePin || (trustedHash !== current.hash && !currentCallTrust)) {
+        throw Object.assign(new Error('shared setup is untrusted'), {
+          data: { reason: 'hooks-untrusted', repo: 'r1', kind: 'setup', script: current.script, hash: current.hash, ref: current.ref }
+        })
+      }
+      return { worktree: { id: 'created', name: 'created', path: '/created' }, warnings: [], setup: { ran: 'none' } }
+    }
+  } as unknown as UiPluginContext
+
+  const result = await createWorkspace(context, { repo: 'r1' }, {
+    askTrust: async (request) => {
+      questions.push(request.script)
+      if (request.script === 'echo A') {
+        current = { script: 'echo B', hash: 'hash-B', ref: 'ref-B' }
+        return 'run'
+      }
+      if (questions.length > 2) throw new Error('the changed script was asked about more than once')
+      return 'always'
+    },
+    showFallback() {}
+  })
+
+  expect(result).toMatchObject({ worktree: { id: 'created' } })
+  expect(questions).toEqual(['echo A', 'echo B'])
+  expect(trustedHash).toBe('hash-B')
+  expect(calls.filter((call) => call.method === 'quirky.worktree/create')).toHaveLength(3)
+})
+
+test('Run once and Always cannot proceed when the untrusted-script error has no hash', async () => {
+  for (const choice of ['run', 'always'] as const) {
+    const calls: Call[] = []
+    const toasts: string[] = []
+    const context = {
+      getLayout: () => ({ view: null }),
+      openView() {},
+      toast: (_title: string, message: string) => toasts.push(message),
+      async call(method: string, params: Record<string, unknown> = {}) {
+        calls.push({ method, params })
+        if (method === 'quirky.worktree/create') {
+          throw Object.assign(new Error('shared setup is untrusted'), {
+            data: { reason: 'hooks-untrusted', repo: 'r1', kind: 'setup', script: 'echo setup', ref: 'main' }
+          })
+        }
+        throw new Error(`unexpected call ${method}`)
+      }
+    } as unknown as UiPluginContext
+
+    const result = await createWorkspace(context, { repo: 'r1' }, {
+      askTrust: async () => choice,
+      showFallback() {}
+    })
+
+    expect(result).toBeNull()
+    expect(calls.filter((call) => call.method === 'quirky.worktree/create')).toHaveLength(1)
+    expect(calls.some((call) => call.method === 'quirky.repo/trustHooks')).toBe(false)
+    expect(toasts.some((message) => /hash/i.test(message))).toBe(true)
+  }
 })
 
 test('issue trust dialog identifies the issue command', async () => {
@@ -720,59 +832,4 @@ test('sidebar renders a durable linked PR as an external link beside the editabl
   expect(host.querySelector('.worktree-name')?.textContent).toBe('Reword the README')
   const issueAnchor = host.querySelector<HTMLAnchorElement>(`a[href="${ISSUE_URL}"]`)
   expect(issueAnchor?.textContent).toContain('Issue #4')
-})
-test('skipping an untrusted issue command retries with the issue-specific skip choice', async () => {
-  const calls: Call[] = []
-  let attempt = 0
-  const context = {
-    getLayout: () => ({ view: null }),
-    openView() {},
-    toast() {},
-    async call(method: string, params: Record<string, unknown> = {}) {
-      calls.push({ method, params })
-      if (method === 'quirky.worktree/create') {
-        attempt += 1
-        if (attempt === 1) throw Object.assign(new Error('issue trust required'), { data: { reason: 'hooks-untrusted', repo: 'r1', kind: 'issue', script: 'gh issue develop {{issue}}' } })
-        return { worktree: { id: 'created', name: 'created', path: '/created' }, warnings: [], setup: { ran: 'none' } }
-      }
-      throw new Error(`unexpected call ${method}`)
-    }
-  } as unknown as UiPluginContext
-  const result = await createWorkspace(context, { repo: 'r1', github: ISSUE_URL }, {
-    askTrust: async (request) => {
-      expect(request.kind).toBe('issue')
-      return 'skip'
-    },
-    showFallback() {}
-  })
-  expect(result).not.toBeNull()
-  expect(calls.filter((call) => call.method === 'quirky.worktree/create')[1]?.params).toMatchObject({ issueCommand: 'skip' })
-})
-test('always trusting an issue command uses the issue trust kind', async () => {
-  const calls: Call[] = []
-  let attempt = 0
-  const context = {
-    getLayout: () => ({ view: null }),
-    openView() {},
-    toast() {},
-    async call(method: string, params: Record<string, unknown> = {}) {
-      calls.push({ method, params })
-      if (method === 'quirky.worktree/create') {
-        attempt += 1
-        if (attempt === 1) throw Object.assign(new Error('issue trust required'), {
-          data: { reason: 'hooks-untrusted', repo: 'r1', kind: 'issue', script: 'gh issue develop {{issue}}', ref: 'main' }
-        })
-        return { worktree: { id: 'created', name: 'created', path: '/created' }, warnings: [], setup: { ran: 'none' } }
-      }
-      if (method === 'quirky.repo/trustHooks') return { ok: true }
-      throw new Error(`unexpected call ${method}`)
-    }
-  } as unknown as UiPluginContext
-  const result = await createWorkspace(context, { repo: 'r1', github: ISSUE_URL }, {
-    askTrust: async () => 'always',
-    showFallback() {}
-  })
-
-  expect(result).not.toBeNull()
-  expect(calls.find((call) => call.method === 'quirky.repo/trustHooks')?.params).toEqual({ repo: 'r1', kind: 'issue', ref: 'main' })
 })

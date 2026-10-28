@@ -1713,9 +1713,17 @@
             "type": "boolean",
             "description": "run an untrusted shared setup script this once"
           },
+          "trust-setup-hash": {
+            "type": "string",
+            "description": "shared setup hash shown by hooks-untrusted; use with --trust-setup to pin one-time consent"
+          },
           "trust-issue-command": {
             "type": "boolean",
             "description": "run the selected commit's untrusted shared issue command once, separate from --trust-setup"
+          },
+          "trust-issue-command-hash": {
+            "type": "string",
+            "description": "shared issue-command hash shown by hooks-untrusted; use with --trust-issue-command to pin one-time consent"
           },
           "agent": {
             "type": "string",
