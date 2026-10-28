@@ -621,6 +621,21 @@
   overflow-wrap: anywhere;
 }
 
+.ui-dialog--scroll-body {
+  overflow: hidden;
+}
+
+.ui-dialog--scroll-body > .ui-dialog__header,
+.ui-dialog--scroll-body > .ui-dialog__actions {
+  flex: 0 0 auto;
+}
+
+.ui-dialog--scroll-body > .ui-dialog__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
 .ui-dialog__actions {
   align-items: center;
   display: flex;

@@ -44,6 +44,7 @@ Tool: host-owned slot contribution. Page: existing Ledger center view. Snapshot:
 - Replace src/ui/styles.ts CSS string with static React CSSProperties layout objects using existing --ui-* tokens, percentages/flex/zero/unitless geometry only. No new stylesheet or CSS string.
 - Component A owns LedgerApp.tsx (including chooser/panel/page/sidebar/inline confirmations). Component B owns LedgerForm.tsx, LedgerDetail.tsx, LedgerTriage.tsx. Parent owns styles.ts, LedgerSettings.tsx, dependency/lock, lint enrollment and docs. Disjoint single-wave components; no worker commits or checks; absolute worktree paths required.
 - Shared components imported only from @quirky/ui. Native select/textarea may reuse ui-text-field__input within FormRow. Existing tests keep behavioral assertions; do not add appearance/source/wording inventory pins.
+- Add optional shared Dialog `scrollBody` (default false) so Ledger retains its existing scrollable body and pinned action footer without plugin CSS; unrelated dialogs retain their existing default presentation.
 - Gate: bun run typecheck. Minimum actual changed-surface proof: build UI, mount actual daemon-served Ledger in a fresh isolated HOME/QUIRKY_HOME, inspect dark/light and exercise a form/detail/confirmation/settings path without real state. This is not a full dogfood or golden review campaign.
 - One roadmap catch-up before land; read incoming decisions. Land only through authoritative queue executable.
 - Platform: macOS proof only; Linux/Windows/native-window acceptance remains unexercised.
