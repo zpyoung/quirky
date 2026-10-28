@@ -171,6 +171,7 @@ and its signed installation links are not distributed yet; the desktop does
 not redirect users to the incompatible Orca app or its hosted relay.
 
 ```sh
+quirky mobile info --json
 quirky mobile state --json
 quirky mobile interfaces --json
 quirky mobile pair --address 192.168.1.20 --json
@@ -185,6 +186,10 @@ Treat the pairing URL and QR as credentials. Regenerating replaces the unscanned
 offer, not already-paired phones. Revocation disconnects the device immediately
 and rejects its next encrypted authentication. Device lists and state reports
 never contain tokens.
+
+Paired phones read the configured machine name and platform through
+`quirky.mobile/info`. Pairing state, generation, configuration and revocation
+remain local administration methods.
 
 The mobile-only listener starts on loopback and widens when a network offer is
 issued or a previously paired phone is restored. Its default port and fallback

@@ -1,3 +1,10 @@
+/** Safe desktop identity readable by paired phones without exposing pairing administration. */
+export type MobileHostInfo = {
+  machineName: string
+  platform: string
+  deviceScope: 'mobile'
+}
+
 /** Public, non-secret projection of a durably paired phone. Pending offers are not listed. */
 export type MobileDevice = {
   deviceId: string

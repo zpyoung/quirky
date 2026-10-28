@@ -176,5 +176,38 @@
 - **Revisit if:** final review changes these exercised paths.
 - **Source:** assumed — autonomous
 
+## D17: Preserve incoming extension contracts and dependency locks during catch-up
+- **Question:** how to combine the mobile admission API with integration13fc349's file resources and worker entrypoints.
+- **Options:** select one extension branch; preserve both contracts and asynchronous cleanup.
+- **Chose:** revoke admitted connections first, then await activation-scoped file-resource revocation and retain existing cleanup. Preserve workerEntrypoint and clients defaults together. Read all eight incoming decision logs through a read-only scout. Restore the exact incoming lock and let Bun add only mobile dependencies after an incomplete generated-conflict choice caused a full-graph resolve; do not retain unrelated dependency drift.
+- **Why:** incoming public API growth is additive; neither transport admission nor resource revocation may disappear. Canonical dependency versions belong to integration.
+- **Evidence:** IncomingMobileLocks report, incoming commit13fc349924c1cee292edda9dcf47abd6edab549c; mergeefb57444, canonical-lock correctiond561b355.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** another incoming lifecycle capability conflicts with admission ownership.
+- **Source:** assumed — autonomous
+
+## D18: Preserve scripted-send exit behavior and desktop read-only streams
+- **Question:** why native exit scenarios lost sessions and a read-only attachment test threw during removal.
+- **Options:** repin tests or increase timeouts; remove the introduced behavioral changes.
+- **Chose:** scripted terminal.send no longer adds manual-input marks, preserving the existing lone-shell exit rule. PTY exit ends phone leases/streams, not desktop read-only attachments. Emit mobileChanged only when mobile state actually changed. Correct asynchronous test polling to use the existing async helper and narrow tagged unions instead of unsafe casts.
+- **Why:** the first full affected gate exposed four normal-exit regressions and an unconditional mobile event on a nonmobile path. These were introduced by this item, not load or timeout failures.
+- **Evidence:** artifact87; targeted shutdown/mobile13pass0fail and four real native exit scenarios4pass0fail33assertions (artifact107). The subsequent affected gate accepted201 remote files and both macOS-only files; scripts68pass0fail538assertions; typecheck/build exited0 (artifact123), with search-ui accepted only after its runner-owned isolated retry.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** the existing exit policy is explicitly changed by its owning feature.
+- **Source:** assumed — autonomous
+
+## D19: Expose only safe host identity to the paired phone
+- **Question:** how a paired phone reads the configured Machine name when pairing administration is correctly local-only.
+- **Options:** expose the whole administration state; add the minimal read-only host projection.
+- **Chose:** quirky.mobile/info and mobile info return MobileHostInfo {machineName, platform, deviceScope}; literal mobile allowlist permits only this read, while state/pair/devices/configure/revoke remain local. Amend the logic/API contract and test the configured name through an actual encrypted peer.
+- **Why:** mobile.md defines Machine name as the computer's name reported to phones; editable local state alone did not satisfy it. A safe projection avoids widening administration access.
+- **Evidence:** mobile.md desktop Settings control Machine name; failing-before encrypted info assertion artifact120; corrected actual daemon/CLI/E2EE scenario passed1test45assertions after implementation; public MobileHostInfo and info API/CLI.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the phone fork needs a separately versioned descriptor contract.
+- **Source:** locked by mobile.md
+
 ## Progress
-Claimed sb-mobile-daemon on lane 3. New build/sb-mobile-daemon branches from current integration. Read authoritative loop, full relevant feature doc, architecture and roadmap locks. Repository-seam scout running. Next: finish autonomous design/spec and shared contracts, commit, dispatch at most three isolated implementers.
+All three audited components integrated; owned component worktrees removed. Catch-up merged13fc349 and all eight incoming decision logs were read; file-resource/worker-entrypoint contracts preserved. Real isolated daemon/PTY/CLI/E2EE smoke passed before and after integration. Terminal exit regressions were corrected and verified with four native scenarios plus shutdown/mobile tests. Full affected gate at35058932 accepted201 remote files and both macOS-only files, scripts68pass, typecheck/build0; search-ui required its runner-owned isolated retry. The safe host-info amendment now has failing-before/passing-after encrypted API proof and enters the final bound gate. Desktop dogfood run20261028T005355-6182 is in progress with an actual encrypted phone actor; keep all owned runtimes until its observations finish. Next: final bound checks, one cross-family C/S/X review/fix batch, record final evidence and queue-controlled landing. No overall queue completion or stuck state observed.

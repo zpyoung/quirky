@@ -10,6 +10,22 @@
   "contributes": {
     "method": [
       {
+        "id": "info",
+        "description": "Read the configured desktop name and platform from a paired phone.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": {}, "additionalProperties": false },
+        "result": {
+          "type": "object",
+          "properties": {
+            "machineName": { "type": "string" },
+            "platform": { "type": "string" },
+            "deviceScope": { "type": "string", "enum": ["mobile"] }
+          },
+          "required": ["machineName", "platform", "deviceScope"],
+          "additionalProperties": false
+        }
+      },
+      {
         "id": "state",
         "description": "Read the non-secret mobile pairing and listener state.",
         "readOnly": true,
@@ -247,6 +263,7 @@
       { "id": "open-settings", "title": "Open Mobile Settings" }
     ],
     "cli-command": [
+      { "id": "info", "summary": "read this desktop's mobile identity", "methods": ["quirky.mobile/info"] },
       { "id": "state", "summary": "show mobile pairing and listener state", "methods": ["quirky.mobile/state"] },
       { "id": "interfaces", "summary": "list ranked mobile pairing addresses", "methods": ["quirky.mobile/interfaces"] },
       {

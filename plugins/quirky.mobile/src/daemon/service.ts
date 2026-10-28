@@ -1,4 +1,4 @@
-import type { MobileDevice, MobileNetworkInterface, MobilePairingResult, MobileState } from '@quirky/protocol'
+import type { MobileDevice, MobileHostInfo, MobileNetworkInterface, MobilePairingResult, MobileState } from '@quirky/protocol'
 import type { PluginCaller, PluginContext } from '@quirky/protocol'
 import { hostname } from 'node:os'
 import { assertMobileCallAllowed } from './authorization'
@@ -108,6 +108,10 @@ export class MobileService {
     for (const state of [...this.connections]) this.cleanupConnection(state, 1001, 'Mobile plugin deactivated', true)
     await this.transport?.stop()
     this.store.dispose()
+  }
+
+  info(): MobileHostInfo {
+    return { machineName: this.store.settings().machineName, platform: process.platform, deviceScope: 'mobile' }
   }
 
   async state(): Promise<MobileState> {
@@ -493,6 +497,7 @@ export function registerMobileMethods(context: PluginContext, service: MobileSer
     if (caller.role === 'mobile') throw new Error('Mobile clients cannot call pairing administration methods')
   }
   const methods: Record<string, (params: Record<string, unknown>, caller: PluginCaller) => unknown> = {
+    info: () => service.info(),
     state: (_params, caller) => { requireLocal(caller); return service.state() },
     interfaces: (_params, caller) => { requireLocal(caller); return service.interfaces() },
     pair: (params, caller) => { requireLocal(caller); return service.pair(params) },

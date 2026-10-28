@@ -112,6 +112,8 @@ describe('mobile daemon integration', () => {
     }, 5000)
     mobile = MobileTestClient.connect(`ws://127.0.0.1:${currentState.listener.port}`, offer.publicKeyB64, offer.deviceToken)
     await mobile.authenticated
+    await api.callAny('quirky.mobile/configure', { machineName: 'Encrypted desktop' })
+    await expect(mobile.call('quirky.mobile/info', {})).resolves.toEqual({ machineName: 'Encrypted desktop', platform: process.platform, deviceScope: 'mobile' })
     await expect(mobile.call('quirky.session/list', {})).resolves.toEqual([])
     await expect(mobile.call('daemon.stop', {})).rejects.toMatchObject({ code: -32001 })
     await mobile.call('status.get', {}, { requestId: 'cached-mobile-status' })

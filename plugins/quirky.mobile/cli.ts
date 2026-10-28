@@ -10,6 +10,11 @@ function noArgs(args: CliArgs, context: CliContext): void {
 }
 
 const named: CliModule['commands'] = {
+  async info(args, context) {
+    noArgs(args, context)
+    const value = await context.call('quirky.mobile/info', {})
+    context.out.result(value, () => JSON.stringify(value, null, 2))
+  },
   async state(args, context) {
     noArgs(args, context)
     const value = await context.call('quirky.mobile/state', {})

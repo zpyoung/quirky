@@ -3,7 +3,7 @@
 ## Status & amendments
 Approved autonomously under build/roadmap LOOP.md night mode, 2026-10-27. Technical contracts are included below; no separate tech.md or spec-review round.
 
-**Amendments:** None.
+**Amendments:** 2026-10-28: expose the configured machine name/platform to paired phones through read-only `quirky.mobile/info`; pairing administration stays local. This completes the Machine name flow rather than exposing the administration state.
 
 ## Purpose and conceptual model
 A phone is an authenticated, encrypted, limited client of the same Quirky daemon API as the desktop and CLI. The desktop creates a durable per-device bearer credential and shows a QR containing that credential, the desktop's pinned X25519 public key and a reachable direct endpoint. Only successful sealed authentication promotes the pending offer into a paired phone. Revocation durably removes its credential and disconnects all its sockets and terminal streams immediately.
@@ -73,6 +73,7 @@ Pending: durable token never successfully authenticated. Paired: first authentic
 ### Architecture and ownership
 - Generic kernel public API in `packages/protocol/src/plugins.ts`: `PluginContext.clients: PluginClients`. `accept` takes immutable mobile role/deviceId/name, live authorize callback, text/binary send callbacks and transport close callback; returns id, receive and disconnect. No raw daemon object imported by plugins. `PluginCaller.deviceId` is inherited from admitted connection, never client params. Core removes streams/subscriptions and revokes admitted clients on plugin disable/failure.
 - Mobile shared public DTOs in `packages/protocol/src/mobile.ts` (exported by index): MobileDevice, MobileNetworkInterface, MobilePairingOffer, MobilePairingResult, MobileState, MobileTerminalState.
+- `MobileHostInfo` is the safe paired-phone projection of desktop name, platform and mobile scope.
 - Mobile transport/state/crypto plugin implementation and manifests: `plugins/quirky.mobile/main.ts`, `src/daemon/**`, `src/crypto/**`, `quirky-plugin.json`. Depends only on public protocol API, tweetnacl/qrcode and platform libraries; no daemon-private imports. Separate loopback-first mobile server 6768; environment `QUIRKY_MOBILE_PORT` permits explicit0 for isolated tests, `QUIRKY_MOBILE_HOST` pins bind host. Default host follows paired history, not desktop port. `/rpc` is sole upgrade path. Full resource ownership/stop in deactivate.
 - Desktop UI: `plugins/quirky.mobile/src/ui.tsx`, `src/window/**`; existing build discovers src/ui.tsx. Contributed `sidebar-section:quirky.mobile/mobile`, `view:quirky.mobile/page`, `view:quirky.mobile/settings`, `command:quirky.mobile/open`, `command:quirky.mobile/open-settings`. Settings dialog adds a generic link to each plugin's declared open-settings command, reusing command dispatch, not mobile-private shell code.
 - Terminal daemon/client integration lives inside `quirky.terminal`, using authenticated caller.deviceId/connection. MobileTerminalState is public; lease events `quirky.terminal/mobileChanged` contain only nonsecret state.
@@ -80,6 +81,7 @@ Pending: durable token never successfully authenticated. Paired: first authentic
 ### Mobile API/CLI contract
 All names prefixed `quirky.mobile/`, manifest schemas strict object params and generated CLI group alias `mobile`:
 - `state {}` → MobileState (no secrets); `interfaces {}` → MobileNetworkInterface[].
+- `info {}` → MobileHostInfo; paired phones and local clients may read it, including subsequent machine-name changes.
 - `pair {address?:string, rotate?:boolean}` → MobilePairingResult. Direct-only; chosen address or best OS address. Local API only, mobile allowlist denies it.
 - `devices {}` → MobileDevice[]; `revoke {deviceId:string}` → `{revoked:boolean}`. Revocation is immediate without confirmation per feature source.
 - `configure {machineName?:string, showMobileButton?:boolean, onboardingSeen?:boolean, autoRestoreFitMs?:number|null, customAddresses?:string[]}` → MobileState. Bounded nonempty machineName (max128), addresses max50/max16384 each, finite auto-restore clamp5000..3600000 or null; UI choices null/60000/300000/1800000. Caller mobile cannot use unrestricted configure.

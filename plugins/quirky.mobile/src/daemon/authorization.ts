@@ -7,6 +7,7 @@ export class MobileAuthorizationError extends Error {
 
 const PARAMS: Readonly<Record<string, readonly string[]>> = {
   'status.get': [],
+  'quirky.mobile/info': [],
   'quirky.session/list': ['worktree'],
   'quirky.session/get': ['session'],
   'quirky.session/create': ['worktree', 'agent', 'prompt', 'submitPrompt', 'waitForPrompt', 'title', 'name', 'cols', 'rows'],
