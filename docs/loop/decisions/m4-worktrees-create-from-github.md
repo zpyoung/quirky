@@ -154,5 +154,38 @@
 - **Revisit if:** a provider's SSH clone hostname differs from its authenticated web hostname.
 - **Source:** locked by hosting-api.md (qualified web identity); assumed — autonomous (transport mapping)
 
+## D15: Preserve incoming sidebar identity and append GitHub metadata as migration four
+- **Question:** how to resolve the single catch-up merge's model, schema, store, removal and report conflicts?
+- **Options:** choose a side; combine independent fields and preserve the already-shipped migration order.
+- **Chose:** combine GitHub links/push targets with projectGroupId, lastActivityAt and instanceId everywhere. Keep integration migration three's sidebar fields unchanged, then append GitHub columns as migration four. Insert all 21 columns/values in matching order. Preserve report repoName/membership/activity behavior and add linked metadata. Read seven incoming decision logs through the scout and inspect the relevant binding sections; none requires blocking this item.
+- **Why:** presentation membership is not folder/repo ownership; filesystem-instance identity is not the path-derived ID. A version-three database must not skip the newly added GitHub fields or replay another feature's migration.
+- **Evidence:** merge 2e2d617e; incoming m2-sidebar-extras, m3-terminal-dock, m5-ledger, m5-structured-runner, sa-browser-agent, fix-test-cost and fix-flaky-pty-host-host logs; resolved store migration list and insertion row.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** an upgrade from a deployed store revision fails or loses existing identity.
+- **Source:** locked by incoming integration decisions; assumed — autonomous (additive resolution)
+
+## D16: Bind one-time UI approval to the shared script content that was shown
+- **Question:** can fresh source resolution on a trust retry execute a different script than the user approved?
+- **Options:** carry an unbound boolean; persist trust as if Run once meant Always; carry an optional explicit content pin with each one-time decision.
+- **Chose:** optional trustSetupHash/trustIssueCommandHash plus existing trust booleans. UI Run once sends the displayed hash and fails safely if it is unavailable. A supplied hash with its boolean is an operation precondition even if another policy trusts changed content; hash alone grants no authority. Changed content produces a fresh hooks-untrusted response before creation/execution. Explicit CLI booleans keep intentional current-call semantics and CLI/API callers can pin hashes; recovery text recommends pinned flags. Preserve independent setup/issue consent across retries and persistent hash trust behavior.
+- **Why:** a real isolated API probe displayed script A, updated the selected base to B, then executed UNSHOWN_B under the old boolean; the same probe with the newly declared stale hash was also accepted before the guard implementation. This is an execution-consent defect, not a cosmetic validation preference.
+- **Evidence:** /tmp/quirky-ghwt-consent-proof.ts observed shownHash d91aa027f1816ef46aa85281d421e0c397b2f32eb7fe397b3ea5e3d99d9aa793 and consentRaceConfirmed true in two controlled variants; contract/spec committed 102de2d1 before BindScriptConsent implementation.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** a changed script can execute with an earlier operation's displayed hash.
+- **Source:** assumed — autonomous; locked by m1-worktrees D22 (content-specific shared-script trust)
+
+## D17: Bound process-heavy test cases without changing production deadlines or assertions
+- **Question:** how to clear the observed scripts gate timeouts without weakening loop safety?
+- **Options:** suppress errors or rerun blindly; change production process guardians; match the existing native per-test 20-second bounds for the three process-heavy cases.
+- **Chose:** only scripts/suite.test.ts's two retry cases and multi-process failure-limit case receive finite native 20-second bounds, matching adjacent process tests. No global timeout, production guardian, suite behavior, negative observation or assertion changes. No protected scripts/build-loop path or LOOP.md edits.
+- **Why:** full scripts runs hit Bun's default five-second test deadline, which killed pending guarded children and caused teardown errors. The complete suite.test.ts passed alone without modification (33.9 seconds), confirming the behavior rather than a guessed flake. With the targeted native bounds, the exact required bun test scripts command passes.
+- **Evidence:** initial scripts 63 pass/3 fail; next full run 65 pass/1 default-deadline failure; isolated suite.test.ts exit0; final exact command 66 pass/0 fail, 517 assertions, 124.05 seconds. Scoped feature gate ran 157 remote and two macOS-only files: 155 remote passed; the only two failures were an obsolete exact manifest snapshot (deleted, not repinned) and an incoming sidebar-prop fixture mismatch (repaired); both repaired files then passed.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the same semantic cases fail within their finite bound or a real latency contract is introduced.
+- **Source:** assumed — autonomous
+
 ## Progress
-Initial components integrated and removed. Current disjoint workers: RepairGithubRuntime in /tmp/quirky-ghwt-runtime-fix; AtomicCommandSplit in /tmp/quirky-ghwt-terminal; QualifiedGithubTransport in /tmp/quirky-ghwt-host-fix. They own worktree/repo, terminal, and hosting scopes respectively. Runtime gate reached13/18 pass, then3/5 repaired edge cases passed; remaining alias environment and split-placement causes were diagnosed explicitly. Main b9abd461 commits public atomic split schema/spec and UI narrowing fix. Next: integrate all current fixes, remove their trees, catch up once, scoped suite/scripts/typecheck/build, packaged guarded web dogfood, final review/fix and queue land. No pre-land whole suite.
+All original and repair components integrated; their worktrees removed. Catch-up completed once at 2e2d617e with additive model/schema/store/report resolution. Typecheck and full packaged build passed (20 plugins); scoped failures were repaired and their two files passed; scripts now 66/0. Guarded packaged web run is active on the owned GhwtPackagedDogfood service. New confirmed consent race is being fixed by BindScriptConsent in /tmp/quirky-ghwt-consent-fix (base102de2d1). Next: merge/verify consent fix, finish UI evidence and any narrow closure, stop/clean owned service, update user docs, final cross-family review/fix, then queue land. No pre-land whole suite.

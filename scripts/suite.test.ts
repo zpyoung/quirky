@@ -59,13 +59,13 @@ test('a file that fails in the suite and passes alone is reported as flaky', asy
   passing('a.test.ts')
   flaky('b.test.ts')
   expect(await runSuite(dir, ['pkg'])).toEqual({ ok: true, flaky: ['pkg/b.test.ts'] })
-})
+}, 20_000)
 
 test('a file that fails again alone fails the run', async () => {
   flaky('a.test.ts')
   broken('b.test.ts')
   expect(await runSuite(dir, ['pkg'])).toEqual({ ok: false, flaky: [] })
-})
+}, 20_000)
 
 test('a file that fails to load fails the run, since the report cannot name it', async () => {
   flaky('a.test.ts')
@@ -96,7 +96,7 @@ test('runFiles with more failing files than the limit fails without a rerun', as
   flaky('a.test.ts')
   flaky('b.test.ts')
   expect(await runFiles(dir, ['pkg/a.test.ts', 'pkg/b.test.ts'], [], 2, 1)).toEqual({ ok: false, flaky: [] })
-})
+}, 20_000)
 
 test('runFiles profiles each file attempt only when enabled', async () => {
   write('profile-pass.test.ts', `test('does deterministic CPU work', () => {
