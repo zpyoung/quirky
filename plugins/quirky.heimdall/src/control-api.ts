@@ -498,11 +498,9 @@ export function registerControlApi(host: KernelControlHost, controls: ControlPla
     if (isRemote(request.target)) return remoteRefusal()
     const result = await controls.command(request)
     if (result.kind !== 'refused') {
-      try {
-        await fleet.publish(request.target.watcherId)
-      } catch (error) {
+      void fleet.publish(request.target.watcherId).catch(error => {
         host.context.log(`Heimdall command applied but fleet push failed: ${error instanceof Error ? error.message : String(error)}`)
-      }
+      })
     }
     return result
   })

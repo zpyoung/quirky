@@ -282,9 +282,8 @@
       "deps": [
         "m6-heimdall-core"
       ],
-      "status": "in-progress",
-      "early": true,
-      "lane": 10
+      "status": "done",
+      "early": true
     },
     {
       "id": "m6-heimdall-owner",
@@ -909,7 +908,7 @@
         "sidebar-extras.md",
         "source-control.md"
       ],
-      "status": "in-progress",
+      "status": "done",
       "title": "Parity sweep for editor.md, sidebar-extras.md, source-control.md: every remaining flow in these feature docs, except the GitLab, Bitbucket, Gitea/Forgejo and Azure DevOps flows, the Objective runner and the PR sitter, which the user deferred. Find what earlier items left out or deferred, build or fix it, and record anything too large as a follow-up item",
       "deps": [
         "m2-source-control-core",
@@ -918,8 +917,7 @@
         "m2-sidebar-extras",
         "m4-sidebar-review-filters",
         "fix-flaky-quirky-git-files-scenarios"
-      ],
-      "lane": 11
+      ]
     },
     {
       "id": "m7-sweep-sessions",
@@ -1006,7 +1004,7 @@
         "orchestration.md",
         "heimdall.md"
       ],
-      "status": "todo",
+      "status": "in-progress",
       "title": "Parity sweep for orchestration.md, heimdall.md: every remaining flow in these feature docs, except the GitLab, Bitbucket, Gitea/Forgejo and Azure DevOps flows, the Objective runner and the PR sitter, which the user deferred. Find what earlier items left out or deferred, build or fix it, and record anything too large as a follow-up item",
       "deps": [
         "m6-orchestration-core",
@@ -1015,7 +1013,8 @@
         "m6-heimdall-core",
         "m6-heimdall-control",
         "m6-heimdall-owner"
-      ]
+      ],
+      "lane": 7
     },
     {
       "id": "m7-api-freeze",
@@ -1044,8 +1043,7 @@
       "deps": [
         "m4-hosting-api-github"
       ],
-      "status": "in-progress",
-      "lane": 6
+      "status": "done"
     },
     {
       "id": "fix-terminal-dock-unfinished-flows-20261027",
@@ -1083,8 +1081,7 @@
         "term-daemon.md"
       ],
       "deps": [],
-      "status": "in-progress",
-      "lane": 7
+      "status": "done"
     },
     {
       "id": "m3-vault-consent-tip-completion",
@@ -1122,7 +1119,8 @@
       "deps": [
         "m3-session-info"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 10
     },
     {
       "id": "m2-editor-complete-remaining-flows",
@@ -1134,8 +1132,9 @@
       "deps": [
         "m2-editor"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 6
     },
     {
       "id": "m3-accounts-overflow-verification",
@@ -1147,7 +1146,8 @@
       "deps": [
         "m3-accounts"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 11
     },
     {
       "id": "fix-flaky-pty-host-manager",

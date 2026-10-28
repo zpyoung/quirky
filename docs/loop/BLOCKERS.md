@@ -423,6 +423,17 @@ Tried: current installed SDK and app drop/typed-RPC routes; latest published SDK
 
 Unblock when Electrobun publishes a supported dropped-source-path callback/extractor, or the user explicitly approves a native patch/fork. Then carry real paths through typed shell RPC/public events and prove same-worktree open-in-place versus external collision-safe import with actual Finder drops. Until then m2-editor D19's approved import-all policy remains in force. Decision log: `docs/loop/decisions/m4-editor-drop-open-in-place.md`; archived evidence: lane 9 ignored iteration folder, `editor-drop-feasibility-evidence.tar.gz`.
 
+## m7-sweep-editor-source-control: explicit completion follow-up
+
+The queue item authorizes larger remaining flows as a follow-up. Exactly one was added:
+`m7-editor-source-control-completion`, dependent on this sweep.
+
+- **Implementation:** lossless rich details/collapsible headings and document-link insertion/completion; integrated edit-tab Changes/Markdown diff preview and hosted preview/permanent/split diff tabs; permission-aware save/annotation UX.
+- **GitHub target boundary:** fork notices, validated PR-derived push destinations and target-specific push-before-PR. Current public hosting APIs do not return a validated destination; this sweep deliberately retains Git's configured push target rather than guessing.
+- **Remaining acceptance:** the exhaustive editor SC-3–22 GUI/setup/media/shortcut/remount variants listed in the original m2-editor completion matrix, and the all17 sidebar edge audit including quiet aging, fresh-agent-only liveness, corrupt preferences and separator boundaries/persistence. Existing implementation/test presence is not a new passing claim for those variants.
+- **Closed here:** real untitled/provenance/Save As, same-tab Preview return, own-draft acknowledgment correlation, canonical mixed Markdown/diff Notes shelf with owning-store reservations and exact settlement, current GitHub review status/composer handoff/unpublished guards, blur-only Custom-days regression, and empty headless Markdown initialization. Real daemon/CLI smoke and five guarded web goals passed. Corrected affected gate7/7 and final typecheck passed; prior broad coverage and the landing gate remain separately recorded in the decision log.
+- **Not duplicated:** `m4-editor-drop-open-in-place` remains independently blocked on supported native dropped-source paths. No native patch, basename guess or picker substitute was introduced.
+
 ## sa-browser-profiles-settings: final verification receipt
 
 - The latest Browser boundary after exact headless-target resume and Watch profile/orphan fixes passed9remote files and2macOS files without retries. Earlier helper/frame failures above remain historical evidence, not a claim that every intermittent cause was attributed.
@@ -430,6 +441,10 @@ Unblock when Electrobun publishes a supported dropped-source-path callback/extra
 - Actual compiled Watch UI selected fresh UUID Alpha→Beta→Alpha: visible stored data became Empty profile in Beta and returned in Alpha, one hosted Browser tab and unchanged address, pageerrors empty. Original API pages remain alive. The close-during-preparation regression initially caught unconfirmed swallowed orphan cleanup; internal tabClose now carries yes:true and propagates errors, and the complete Browser gate passes.
 - Current types,28-plugin/20UI-module desktop build and ownership-safe scripts68tests570assertions passed. Icon/release.baseUrl warnings persist. Native partitions/deletion completion, import engine, native identity/localhost capabilities and OS-only handoffs retain their exact existing limitations; no new queue item or full parity/review approval is claimed.
 
+## m4-hosting-api-github-parity: open review findings
+
+- **MEDIUM — Tasks loses incomplete numbered-search status** (`plugins/quirky.tasks/src/list/methods.ts:279-301`; producer `plugins/quirky.hosting/src/task-page.ts:91-103,171-180`). Static plugin validation found that `workItemPage` can return `partial:true`/`truncated:true` with a numeric count and no `errors`, while the Tasks list consumes only errors and count availability. [INFERENCE] an empty incomplete response can appear as “No matching GitHub work.” These two source paths are unchanged by this parity item, whose numbered REST-page contract is explicitly unchanged. Routed to the active m7-sweep-hosting owner through `/tmp/quirky-lane8-hosting-parity-reply.md`; no fix or runtime reproduction is claimed here.
+- **Tool-only UI verdict limit — U01** (`.quirk/using-apps-like-a-user/runs/20261028T100152-a007/report.json`). Guarded web/yours/unattended run visibly changed Task→Bug and preserved Bug through Board→Table with unloaded choices, then close/reopen. The final reopening action was `UNSETTLED`; later observation18 was stable, but the guard rejected `pass_without_effect`. Recorded `partial`, not pass; no trailing unrelated action fabricated an OBSERVED result. Refresh left unchanged Bug with `NO_EFFECT`, so no network-effect claim. Browser closed with no kept-open windows; restoring initial `com.apple.SecurityAgent` frontmost failed (`desktop_command_failed`). No native/foreground action or test override used.
 ## m7-sweep-terminal: remaining parity and verification limits
 
 - **Owner:** one dependent item, `m7-sweep-terminal-completion`, registered through the authoritative queue. The complete nine-document flow/defect inventory is `docs/quirk/specs/2026-10-28-m7-sweep-terminal/logic.md`; old M1/M2 non-goals remain obligations, not exemptions.

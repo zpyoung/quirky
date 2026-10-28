@@ -64,8 +64,11 @@ describe('session store migration from version 8', () => {
       })
       closeStore = legacy.close
       legacy.store.run(
-        `INSERT INTO sessions (id, kind, agent, worktree_id, cwd, title, status, created_at, last_activity_at, exit_code, repo_id, badges)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO sessions (
+          id, kind, agent, worktree_id, cwd, title, status, created_at, last_activity_at, exit_code, repo_id,
+          launch, provider_session, prompt_delivery, resumed_from, launch_settings, exit_signal, exit_cause,
+          restorable, agent_status, name, unread, badges
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         session.id,
         session.kind,
         session.agent,
@@ -77,6 +80,17 @@ describe('session store migration from version 8', () => {
         session.lastActivityAt,
         session.exitCode,
         'repo',
+        JSON.stringify(session.launch),
+        JSON.stringify(session.providerSession),
+        session.promptDelivery ?? null,
+        session.resumedFrom ?? null,
+        JSON.stringify(session.launchSettings),
+        session.exitSignal,
+        session.exitCause,
+        session.restorable ? 1 : 0,
+        session.agentStatus === null ? null : JSON.stringify(session.agentStatus),
+        session.name ?? null,
+        session.unread ?? null,
         JSON.stringify(badges)
       )
       legacy.close()

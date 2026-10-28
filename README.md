@@ -130,6 +130,25 @@ The root TypeScript configuration resolves both public `@quirky/protocol` entrie
 workspace source, so newly added plugins do not need generated per-plugin links for typechecking.
 Keep those mappings aligned with `packages/protocol/package.json` exports.
 
+## Editor documents and shared review notes
+
+New Markdown documents use collision-safe untitled placeholders. Save opens a relative-path
+Save As dialog; cancelling keeps the draft. The public `quirky.editor/saveAs` method accepts
+`bufferId`, `path` and `expectedRevision`, refuses existing destinations and preserves the
+buffer and tab identities. Closing an untouched blank placeholder removes only that owned file;
+template-created, edited and externally changed files are retained.
+
+Source Control's Notes shelf includes both diff notes and Markdown review notes, including notes
+whose editor tab has closed. `quirky git notes --worktree <id> --json` lists the same notes.
+Copy, scoped clear and send use the canonical owner stores; confirmed sends remove only unchanged
+snapshots, and concurrent edits survive. A shared delivery reservation prevents a Markdown note
+from being sent simultaneously from its editor rail and Source Control.
+
+Source Control resolves GitHub review state for the current branch and HEAD before offering
+review creation, then hands the guarded preparation result to the existing Reviews composer.
+The [parity sweep specification](docs/quirk/specs/2026-10-28-m7-sweep-editor-source-control/logic.md)
+records the implemented flows and the remaining editor/hosted-target completion work.
+
 ## Docs
 
 - [docs/v1.md](docs/v1.md): what v1 does and leaves out, and how the parts fit together.
