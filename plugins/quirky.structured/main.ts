@@ -531,6 +531,7 @@ export function activate(context: PluginContext): void {
     const previous = stopTasks.get(sessionId)
     if (previous) return previous
     const entry = live.get(sessionId)
+    releaseStructuredLease(sessionId)
     if (entry) {
       entry.stopping = true
     }
@@ -585,15 +586,9 @@ export function activate(context: PluginContext): void {
     )
     if (unsupported !== undefined) throw context.error('invalid-params', `structured create does not support ${unsupported}`)
     const deferStart = params.deferStart === true
-    if (params.deferStart !== undefined && typeof params.deferStart !== 'boolean') {
-      throw context.error('invalid-params', 'deferStart must be a boolean')
-    }
-    if (params.title !== undefined && (typeof params.title !== 'string' || params.title.trim() === '')) {
-      throw context.error('invalid-params', 'title must be a non-empty string')
-    }
-    if (deferStart && params.prompt !== undefined) {
-      throw context.error('invalid-params', 'prompt cannot be combined with deferStart')
-    }
+    if (params.deferStart !== undefined && typeof params.deferStart !== 'boolean') throw context.error('invalid-params', 'deferStart must be a boolean')
+    if (params.title !== undefined && (typeof params.title !== 'string' || params.title.trim() === '')) throw context.error('invalid-params', 'title must be a non-empty string')
+    if (deferStart && params.prompt !== undefined) throw context.error('invalid-params', 'prompt cannot be combined with deferStart')
     if (!deferStart && typeof params.prompt !== 'string') throw context.error('invalid-params', 'prompt must be a string')
     const lifetimeOwner = params.lifetime === undefined && params.lifetimeKey === undefined
       ? undefined
@@ -638,6 +633,7 @@ export function activate(context: PluginContext): void {
       lease: null
     }
     live.set(registered.id, entry)
+    if (lifetimeOwner) pluginLifetimes.set(registered.id, lifetimeOwner)
     ownersBySession.set(registered.id, token)
     let prepared: AccountPreparation | null = null
     if (accountPrepare) {
@@ -665,14 +661,13 @@ export function activate(context: PluginContext): void {
         throw error
       }
     }
-    if (!active || live.get(registered.id) !== entry) {
+    if (!active || live.get(registered.id) !== entry || entry.stopping) {
       releaseOwnerToken(token)
       return registered
     }
     const environment = prepared === null ? {} : structuredEnvironment(userEnv, prepared)
+    await reconcilePluginLifetimes()
     try {
-      if (lifetimeOwner) pluginLifetimes.set(registered.id, lifetimeOwner)
-      await reconcilePluginLifetimes()
       if (!active || live.get(registered.id) !== entry || entry.stopping) return registered
       const lease = context.launch.openStructuredLease({
         sessionId: registered.id,
@@ -774,6 +769,7 @@ export function activate(context: PluginContext): void {
         lease: null
       }
       live.set(registered.id, entry)
+      if (lifetimeOwner) pluginLifetimes.set(registered.id, lifetimeOwner)
     } catch (error) {
       releaseOwnerToken(token)
       throw error
@@ -815,8 +811,8 @@ export function activate(context: PluginContext): void {
       prepared?.resumeTranscriptPath === undefined
         ? providerSession
         : { ...providerSession, transcriptPath: prepared.resumeTranscriptPath }
+
     try {
-      if (lifetimeOwner) pluginLifetimes.set(registered.id, lifetimeOwner)
       await reconcilePluginLifetimes()
       if (!active || !entry || live.get(registered.id) !== entry || entry.stopping) return registered
       const lease = context.launch.openStructuredLease({

@@ -82,6 +82,13 @@ function parseJson<T>(text: string | null): T | null {
     return null
   }
 }
+/** Stored launch records are replay snapshots, never a place for transient process credentials. */
+const withoutSessionToken = (launch: SessionLaunch | null): SessionLaunch | null => {
+  if (launch === null || !Object.hasOwn(launch.env, 'QUIRKY_SESSION_TOKEN')) return launch
+  const env = { ...launch.env }
+  delete env.QUIRKY_SESSION_TOKEN
+  return { ...launch, env }
+}
 
 const badgesOf = (text: string | null): Pick<Session, 'badges'> => {
   const badges = parseJson<Record<string, SessionBadge>>(text)
@@ -102,7 +109,7 @@ const toSession = (row: Row): Session => ({
   exitSignal: row.exit_signal,
   exitCause: row.exit_cause,
   restorable: row.restorable === 1,
-  launch: parseJson<SessionLaunch>(row.launch),
+  launch: withoutSessionToken(parseJson<SessionLaunch>(row.launch)),
   providerSession: parseJson<SessionProviderSession>(row.provider_session),
   promptDelivery: row.prompt_delivery,
   launchSettings: parseJson<LaunchSettings>(row.launch_settings),
@@ -199,8 +206,13 @@ export function sessionMigrations(home: string): StoreMigration[] {
       store.exec('ALTER TABLE sessions ADD COLUMN badges TEXT')
     },
     (store) => {
+      // Version 8 diverged between the two branches; finish both schema additions for either store.
+      const columns = store.all<{ name: string }>('PRAGMA table_info(sessions)')
+      if (!columns.some(({ name }) => name === 'badges')) {
+        store.exec('ALTER TABLE sessions ADD COLUMN badges TEXT')
+      }
       store.exec(`
-        CREATE TABLE session_pointer_operations (
+        CREATE TABLE IF NOT EXISTS session_pointer_operations (
           operation_id TEXT PRIMARY KEY,
           session_id TEXT NOT NULL,
           expected_incarnation TEXT NOT NULL,
@@ -210,9 +222,9 @@ export function sessionMigrations(home: string): StoreMigration[] {
           created_at INTEGER NOT NULL,
           updated_at INTEGER NOT NULL
         );
-        CREATE INDEX session_pointer_operations_updated_at ON session_pointer_operations(updated_at)
+        CREATE INDEX IF NOT EXISTS session_pointer_operations_updated_at ON session_pointer_operations(updated_at)
       `)
-    },
+    }
   ]
 }
 
@@ -269,7 +281,7 @@ export class SessionRecords {
       session.lastActivityAt,
       session.exitCode,
       repoId,
-      jsonOrNull(session.launch),
+      jsonOrNull(withoutSessionToken(session.launch ?? null)),
       jsonOrNull(session.providerSession),
       session.promptDelivery ?? null,
       session.resumedFrom ?? null,
@@ -314,7 +326,7 @@ export class SessionRecords {
     if (fields.exitSignal !== undefined) columns.push(['exit_signal', fields.exitSignal])
     if (fields.exitCause !== undefined) columns.push(['exit_cause', fields.exitCause])
     if (fields.restorable !== undefined) columns.push(['restorable', fields.restorable ? 1 : 0])
-    if (fields.launch !== undefined) columns.push(['launch', jsonOrNull(fields.launch)])
+    if (fields.launch !== undefined) columns.push(['launch', jsonOrNull(withoutSessionToken(fields.launch))])
     if (fields.providerSession !== undefined) columns.push(['provider_session', jsonOrNull(fields.providerSession)])
     if (fields.promptDelivery !== undefined) columns.push(['prompt_delivery', fields.promptDelivery])
     if (fields.launchSettings !== undefined) columns.push(['launch_settings', jsonOrNull(fields.launchSettings)])

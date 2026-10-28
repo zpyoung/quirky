@@ -220,6 +220,23 @@
         }
       },
       {
+        "id": "userInput",
+        "description": "Reports explicit human input intent before terminal bytes, guarded by the attached process incarnation. Programmatic prompts and terminal query replies do not call this.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": { "type": "string" },
+            "expectedIncarnation": { "type": "string", "description": "The non-empty incarnation of the currently attached process; verified by the method." }
+          },
+          "required": ["session", "expectedIncarnation"]
+        },
+        "result": {
+          "type": "object",
+          "properties": { "ok": { "type": "boolean" } },
+          "required": ["ok"]
+        }
+      },
+      {
         "id": "resize",
         "description": "Resizes a terminal.",
         "params": {

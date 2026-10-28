@@ -158,6 +158,18 @@ describe('start', () => {
     })
   })
 
+  test('opens a native session without submitting an initial model turn', async () => {
+    await runner.start(session, undefined, { env: { QUIRKY_SESSION_ID: session.id, QUIRKY_SESSION_TOKEN: 'test-token' } })
+    expect(messages).toEqual([])
+    expect(statuses).toEqual(['running'])
+
+    await runner.send(session.id, 'first turn after opening')
+    await until(() => queries[0]?.written.length === 1)
+    expect(queries[0]?.written[0]).toMatchObject({
+      message: { content: 'first turn after opening' }
+    })
+  })
+
   test('passes the prepared account environment to Claude Code', async () => {
     await runner.start(session, 'hello', { env: { CLAUDE_CONFIG_DIR: '/managed/claude' } })
 

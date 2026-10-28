@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import type { PluginStore, StoreMigration, StructuredMessage, StructuredRole } from '@quirky/protocol'
 
 type Row = { session_id: string; seq: number; role: StructuredRole; text: string; data: string | null; at: number }
+
 export type StructuredSendReceipt = {
   operationId: string
   sessionId: string
@@ -165,8 +166,11 @@ export class Journal {
     })
   }
 
-  /** Drops the session's journal. */
+  /** Drops the session's messages and send receipts. */
   remove(sessionId: string): void {
-    this.store.run('DELETE FROM structured_messages WHERE session_id = ?', sessionId)
+    this.store.transaction(() => {
+      this.store.run('DELETE FROM structured_messages WHERE session_id = ?', sessionId)
+      this.store.run('DELETE FROM structured_send_receipts WHERE session_id = ?', sessionId)
+    })
   }
 }

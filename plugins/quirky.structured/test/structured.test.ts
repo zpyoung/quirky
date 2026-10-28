@@ -25,7 +25,7 @@ const FAKES_DIR = join(PLUGIN_DIR, 'test', 'fakes')
 const globals = globalThis as any
 
 class FakeRunner implements StructuredRunner {
-  started: { session: Session; prompt?: string; options?: unknown }[] = []
+  started: { session: Session; prompt: string | undefined; options?: unknown }[] = []
   sent: { sessionId: string; text: string }[] = []
   stopped: string[] = []
   startError: Error | null = null

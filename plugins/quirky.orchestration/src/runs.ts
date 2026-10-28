@@ -68,12 +68,30 @@ function buildDispatchPreamble(task: TaskRow, dispatchId: DispatchId, coordinato
     `Your task ID is: ${task.id}`,
     `Your Dispatch ID is: ${dispatchId}`,
     '',
-    'Use `quirky orchestration check` to read coordinator follow-ups.',
-    'Use `quirky orchestration ask` for questions and send exactly one `worker_done` report with both IDs.',
+    'The coordinator cannot see your terminal transcript. Use the durable orchestration mailbox for questions, progress, and your result; do not report through other channels.',
+    '',
+    '=== CLI COMMANDS ===',
+    '```sh',
+    '# Read coordinator follow-ups at natural checkpoints.',
+    'quirky orchestration check',
+    '# After handling a Delivery, acknowledge it with: quirky orchestration check --ack <deliveryId>',
+    '# Ask the coordinator instead of opening a local prompt. If it times out, resume the same message ID.',
+    'quirky orchestration ask --question "<question>" [--options "<option1,option2>"]',
+    'quirky orchestration ask --resume <messageId>',
+    '# Send a heartbeat every five minutes while working; skip it while blocked in check --wait or ask.',
+    `quirky orchestration send --type heartbeat --subject "Heartbeat" --task-id ${task.id} --dispatch-id ${dispatchId} --phase "implementing"`,
+    '# Escalations are mail only; they do not settle the Task.',
+    'quirky orchestration send --type escalation --subject "<short blocker>" --body "<context and help needed>"',
+    '# Report exactly once, with a three-sentence summary, and select the actual outcome.',
+    `quirky orchestration send --type worker_done --subject "<short summary>" --body "<what you did. What you found. What's left.>" --task-id ${task.id} --dispatch-id ${dispatchId} --outcome succeeded|failed`,
+    '# Add --files-modified or --report-path only when you have real values.',
+    '```',
+    '',
+    'After sending worker_done, stop work and remain at the session prompt. Do not keep checking or send lifecycle messages with these settled IDs.',
     '',
     '=== TASK ===',
     task.spec
-  ].join('\n')
+  ].join('\\n')
 }
 
 export function runTaskMethods(
@@ -167,7 +185,9 @@ export function runTaskMethods(
           })
         }
         core.requireCoordinator(verified.evidence, current.runId)
-        if (params.status === undefined && params.result === undefined) return { task: current, unchanged: true }
+        if (params.result === undefined && (params.status === undefined || params.status === current.status)) {
+          return { task: current, unchanged: true }
+        }
         const result = params.result === undefined ? current.result : coordinatorResult(params.result, verified.evidence)
         const task = core.transitionTask({
           taskId: current.id,
@@ -320,10 +340,12 @@ export function runTaskMethods(
         core.resetState(params.mode, new Date().toISOString())
         return { mode: params.mode }
       })
-      try {
-        afterReset?.(params.mode)
-      } catch {
-        // Mailbox resets are committed independently of best-effort in-memory wakeups.
+      if (!result.mutation.replayed) {
+        try {
+          afterReset?.(params.mode)
+        } catch {
+          // Mailbox resets are committed independently of best-effort in-memory wakeups.
+        }
       }
       return result
     },

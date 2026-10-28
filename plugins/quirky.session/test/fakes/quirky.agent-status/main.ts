@@ -22,8 +22,7 @@ export function setPointerQuiet(quiet: boolean): void {
   pointerQuiet = quiet
 }
 
-
-/** Supplies launch-hook arguments and script-state results for session tests. */
+/** Adds launch arguments and a script-state result for session pointer regressions. */
 export function activate(context: PluginContext): void {
   context.provide('launch-hook:quirky.agent-status/agent-hooks', (launch: LaunchHookInput) => {
     if (launch.agent === 'claude') return { jsonArgs: { '--settings': CLAUDE_SETTINGS } }

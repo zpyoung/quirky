@@ -29,6 +29,7 @@ type PointerRecord = {
 }
 
 const STARTUP_DELAY_MS = 2_000
+const QUIET_RECHECK_MS = 3_050
 const STARTUP_PAGE_SIZE = 64
 const MAX_SCHEDULED_MAILBOXES = 256
 const MAX_RETAINED_OPERATIONS = 10_000
@@ -54,6 +55,8 @@ export class OrchestrationPointers {
   private readonly inFlightSessions = new Set<string>()
   private readonly rescanSessions = new Set<string>()
   private readonly work = new Set<Promise<void>>()
+  private readonly quietTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  private readonly quietRetryArmed = new Set<string>()
   private unsubscribeArrival: (() => void) | null = null
   private unsubscribeMailboxAvailable: (() => void) | null = null
   private unsubscribeEvents: (() => void) | null = null
@@ -68,10 +71,10 @@ export class OrchestrationPointers {
     private readonly messages: OrchestrationMessages
   ) {
     this.unsubscribeArrival = messages.onArrival((arrival) => {
-      if (arrival.mailbox.kind !== 'session') this.scheduleMailbox(arrival.mailbox)
+      if (arrival.mailbox.kind !== 'session') this.wakeMailbox(arrival.mailbox)
     })
     this.unsubscribeMailboxAvailable = messages.onMailboxAvailable((mailbox) => {
-      if (mailbox.kind !== 'session') this.scheduleMailbox(mailbox)
+      if (mailbox.kind !== 'session') this.wakeMailbox(mailbox)
     })
     this.unsubscribeEvents = context.subscribe((event) => this.onEvent(event))
   }
@@ -100,6 +103,9 @@ export class OrchestrationPointers {
       this.scheduled.clear()
       this.rerun.clear()
       this.rescanSessions.clear()
+      for (const timer of this.quietTimers.values()) clearTimeout(timer)
+      this.quietTimers.clear()
+      this.quietRetryArmed.clear()
       return
     }
     for (const key of this.scheduled) {
@@ -107,6 +113,12 @@ export class OrchestrationPointers {
     }
     for (const key of this.rerun) {
       if (key.startsWith('dispatch:')) this.rerun.delete(key)
+    }
+    for (const [key, timer] of this.quietTimers) {
+      if (!key.startsWith('dispatch:')) continue
+      clearTimeout(timer)
+      this.quietTimers.delete(key)
+      this.quietRetryArmed.delete(key)
     }
   }
 
@@ -117,6 +129,9 @@ export class OrchestrationPointers {
     this.startupTimer = null
     this.scheduled.clear()
     this.rerun.clear()
+    for (const timer of this.quietTimers.values()) clearTimeout(timer)
+    this.quietTimers.clear()
+    this.quietRetryArmed.clear()
     this.rescanSessions.clear()
     this.unsubscribeArrival?.()
     this.unsubscribeMailboxAvailable?.()
@@ -180,7 +195,29 @@ export class OrchestrationPointers {
       const mailbox = mailboxFor(row.mailbox_kind, row.mailbox_id)
       if (mailbox) mailboxes.set(mailboxKey(mailbox), mailbox)
     }
-    for (const mailbox of mailboxes.values()) this.scheduleMailbox(mailbox)
+    for (const mailbox of mailboxes.values()) this.wakeMailbox(mailbox)
+  }
+
+  private wakeMailbox(mailbox: PointerMailbox): void {
+    const key = mailboxKey(mailbox)
+    const timer = this.quietTimers.get(key)
+    if (timer !== undefined) clearTimeout(timer)
+    this.quietTimers.delete(key)
+    this.quietRetryArmed.delete(key)
+    this.scheduleMailbox(mailbox)
+  }
+
+  private retryAfterQuiet(mailbox: PointerMailbox): void {
+    if (this.disposed) return
+    const key = mailboxKey(mailbox)
+    if (this.quietRetryArmed.has(key) || this.quietTimers.size >= MAX_SCHEDULED_MAILBOXES) return
+    this.quietRetryArmed.add(key)
+    const timer = setTimeout(() => {
+      this.quietTimers.delete(key)
+      if (!this.disposed) this.scheduleMailbox(mailbox)
+    }, QUIET_RECHECK_MS)
+    timer.unref()
+    this.quietTimers.set(key, timer)
   }
 
   scheduleMailbox(mailbox: PointerMailbox): void {
@@ -265,7 +302,7 @@ export class OrchestrationPointers {
       this.rescanSessions.add(identity.sessionId)
       return false
     }
-    if (!await this.isEligible(identity)) return false
+    if (!await this.isEligible(mailbox, identity)) return false
     if (this.disposed) return false
     if (this.inFlightSessions.has(identity.sessionId)) {
       this.rescanSessions.add(identity.sessionId)
@@ -312,7 +349,7 @@ export class OrchestrationPointers {
     return identity
   }
 
-  private async isEligible(identity: SessionIdentity): Promise<boolean> {
+  private async isEligible(mailbox: PointerMailbox, identity: SessionIdentity): Promise<boolean> {
     if (identity.kind === 'structured') {
       const value: unknown = await this.context.call('quirky.session/get', { session: identity.sessionId })
       if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
@@ -326,7 +363,12 @@ export class OrchestrationPointers {
     if (explained.state !== 'idle') return false
     if (typeof explained.screen !== 'object' || explained.screen === null || Array.isArray(explained.screen)) return false
     const screen = explained.screen as Record<string, unknown>
-    return screen.pendingQuiet === undefined && screen.unavailable === undefined
+    if (screen.unavailable !== undefined) return false
+    if (screen.pendingQuiet !== undefined) {
+      this.retryAfterQuiet(mailbox)
+      return false
+    }
+    return true
   }
 
   private reserveOperation(mailbox: PointerMailbox, identity: SessionIdentity): PointerRecord | null {
@@ -444,7 +486,8 @@ export class OrchestrationPointers {
         retryEnter: false
       }
     }
-    const delivered = result.status === 'submitted' || result.status === 'text_only' || result.status === 'outcome_unknown'
+    const markDelivered = result.status === 'submitted' || result.status === 'text_only' || result.status === 'outcome_unknown'
+    const shouldDrain = result.status === 'submitted' || result.status === 'text_only'
     const at = timestamp()
     return this.store.transaction(() => {
       const update = this.store.run(
@@ -455,7 +498,7 @@ export class OrchestrationPointers {
         record.operation_id
       )
       if (update.changes !== 1) return false
-      if (delivered && messageIds.length > 0) {
+      if (markDelivered && messageIds.length > 0) {
         this.store.run(
           `UPDATE messages SET delivered_at = COALESCE(delivered_at, ?)
            WHERE id IN (${messageIds.map(() => '?').join(',')}) AND read = 0`,
@@ -463,7 +506,7 @@ export class OrchestrationPointers {
           ...messageIds
         )
       }
-      return delivered
+      return shouldDrain
     })
   }
 

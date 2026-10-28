@@ -503,6 +503,25 @@ describe('Heimdall runner gate and budget behavior', () => {
     }
   })
 
+  test('retention does not erase already consumed active-work budget', async () => {
+    const stored = storage()
+    let nowMs = 1_000
+    let evidence = 0
+    const watcherKind = kind({
+      decide: () => ({ action:{ ...action,evidenceKey:`budget-${evidence++}` } }),
+      execute: async () => { nowMs += 10; return { effect:'landed' } }
+    })
+    const runner = createRunner(runnerOptions(stored, watcherKind, { now:() => nowMs }))
+    try {
+      await runner.pulse()
+      expect(budgetUsage(stored.store.journal('watcher-1'), nowMs).activeMs).toBe(320)
+      stored.store.retain('watcher-1')
+      expect(budgetUsage(stored.store.journal('watcher-1'), nowMs).activeMs).toBe(320)
+    } finally {
+      await runner.shutdown(0)
+    }
+  })
+
 
   test('zero budget parks on the first tick without executing an action', async () => {
     const stored = storage()
