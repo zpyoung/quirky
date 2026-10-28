@@ -1125,7 +1125,8 @@
         "sa-browser-pane",
         "sa-browser-profiles-settings"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 8
     },
     {
       "id": "sb-mobile-install-links",
