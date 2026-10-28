@@ -16,6 +16,7 @@ type Preferences = {
   workspaceActivityWindowBeforeLiveOnly: Exclude<WindowName, 'live-only'>
   hideCompletedReviewWorkspaces: boolean
   hidePassingCheckWorkspaces: boolean
+  hideAutomationCreated: boolean
 }
 type SidebarState = {
   client: string
@@ -44,6 +45,8 @@ type SidebarProjection = SidebarState & {
   hiddenIds: string[]
   hiddenCount: number
   filterCount: number
+  automationHiddenIds: string[]
+  automationHiddenCount: number
   reviewHiddenIds: string[]
   reviewHiddenCount: number
   workspaces: ProjectedWorkspace[]
@@ -58,6 +61,8 @@ type RendererReport = {
   appliedFilter: Preferences | null
   hiddenIds: string[]
   hiddenCount: number
+  automationHiddenIds: string[]
+  automationHiddenCount: number
   reviewHiddenIds: string[]
   reviewHiddenCount: number
   filterCount: number
@@ -241,7 +246,8 @@ function setup(
     alwaysShowDefaultBranchWorkspace: true,
     workspaceActivityWindowBeforeLiveOnly: 'all',
     hideCompletedReviewWorkspaces: false,
-    hidePassingCheckWorkspaces: false
+    hidePassingCheckWorkspaces: false,
+    hideAutomationCreated: false
   }
   const world: TestWorld = {
     ...data,
@@ -325,13 +331,16 @@ function setup(
       }
     })
     const activityHiddenIds = new Set(projected.filter((item) => item.reason === 'sleeping' || item.reason === 'old').map((item) => item.worktreeId))
+    const automationHiddenIds = snapshot.preferences.hideAutomationCreated
+      ? world.worktrees.filter((item) => item.automationProvenance?.kind === 'created-by-automation').map((item) => item.id)
+      : []
     const reviewHiddenIds = projected.filter((item) => {
       const review = world.reviews[item.worktreeId]
       if (!review || review.stale || review.error) return false
       return (snapshot.preferences.hideCompletedReviewWorkspaces && (review.state === 'merged' || review.state === 'closed')) ||
         (snapshot.preferences.hidePassingCheckWorkspaces && review.checksStatus === 'success')
     }).map((item) => item.worktreeId)
-    const hidden = new Set([...activityHiddenIds, ...reviewHiddenIds])
+    const hidden = new Set([...activityHiddenIds, ...automationHiddenIds, ...reviewHiddenIds])
     const visibleIds = projected.filter((item) => !hidden.has(item.worktreeId)).map((item) => item.worktreeId)
     const hiddenIds = projected.filter((item) => hidden.has(item.worktreeId)).map((item) => item.worktreeId)
     return {
@@ -341,7 +350,10 @@ function setup(
       hiddenCount: activityHiddenIds.size,
       filterCount: (window === 'all' ? 0 : 1) +
         Number(snapshot.preferences.hideCompletedReviewWorkspaces) +
-        Number(snapshot.preferences.hidePassingCheckWorkspaces),
+        Number(snapshot.preferences.hidePassingCheckWorkspaces) +
+        Number(snapshot.preferences.hideAutomationCreated),
+      automationHiddenIds,
+      automationHiddenCount: automationHiddenIds.length,
       reviewHiddenIds,
       reviewHiddenCount: reviewHiddenIds.length,
       workspaces: projected
@@ -408,6 +420,7 @@ function setup(
           if (params.alwaysShowDefaultBranchWorkspace !== undefined) world.preferences.alwaysShowDefaultBranchWorkspace = params.alwaysShowDefaultBranchWorkspace as boolean
           if (params.hideCompletedReviewWorkspaces !== undefined) world.preferences.hideCompletedReviewWorkspaces = params.hideCompletedReviewWorkspaces as boolean
           if (params.hidePassingCheckWorkspaces !== undefined) world.preferences.hidePassingCheckWorkspaces = params.hidePassingCheckWorkspaces as boolean
+          if (params.hideAutomationCreated !== undefined) world.preferences.hideAutomationCreated = params.hideAutomationCreated as boolean
           return state(typeof params.client === 'string' ? params.client : 'desktop')
         case 'quirky.sidebar-extras/activate': {
           if (world.extrasDisabled) throw new RpcLike('sidebar extras is disabled', RpcErrorCode.MethodNotFound)
@@ -1222,4 +1235,35 @@ test('hosting review events refresh only active filters and late projections can
   await h.flush()
   expect(card('feature')).toBeUndefined()
   expect(lastReport(h).reviewHiddenIds).toContain('w-feature')
+})
+
+test('automation filtering uses only durable attribution and appears in visible counts', async () => {
+  const h = setup()
+  const attributed = h.world.worktrees.find((item) => item.id === 'w-lost')!
+  attributed.name = 'auto-generated'
+  attributed.automationProvenance = {
+    kind: 'created-by-automation', automationId: 'auto-1', automationName: 'Audit',
+    runId: 'run-1', runTitle: 'Audit run', projectId: 'r-web', hostId: 'local'
+  }
+  const namePrefixApi = h.world.worktrees.find((item) => item.id === 'w-other')!
+  namePrefixApi.name = 'auto-manual'
+  namePrefixApi.createdBy = 'api'
+  await h.mount()
+  await openFilters(h)
+
+  expect(checkboxFor('Hide automation-created')?.checked).toBe(false)
+  expect(card('auto-generated')).toBeDefined()
+  expect(card('auto-manual')).toBeDefined()
+  await h.click(checkboxFor('Hide automation-created')!)
+
+  expect(h.world.preferences.hideAutomationCreated).toBe(true)
+  expect(card('auto-generated')).toBeUndefined()
+  expect(card('auto-manual')).toBeDefined()
+  expect(lastReport(h).automationHiddenIds).toEqual(['w-lost'])
+  expect(lastReport(h).automationHiddenCount).toBe(1)
+  expect(lastReport(h).hiddenIds).toContain('w-lost')
+  expect(lastReport(h).appliedFilter?.hideAutomationCreated).toBe(true)
+  expect(lastReport(h).filterCount).toBe(1)
+  expect(filterButton()?.textContent).toContain('1')
+  expect(h.calls.filter((call) => call.method === 'quirky.sidebar-extras/set').at(-1)?.params).toEqual({ hideAutomationCreated: true })
 })

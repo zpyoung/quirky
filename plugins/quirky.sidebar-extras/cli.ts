@@ -25,7 +25,8 @@ const commands: CliModule['commands'] = {
       'hide-sleeping-workspaces': 'hideSleepingWorkspaces',
       'show-sleeping-workspaces': 'showSleepingWorkspaces',
       'hide-completed-review-workspaces': 'hideCompletedReviewWorkspaces',
-      'hide-passing-check-workspaces': 'hidePassingCheckWorkspaces'
+      'hide-passing-check-workspaces': 'hidePassingCheckWorkspaces',
+      'hide-automation-created': 'hideAutomationCreated'
     }
     for (const [flag, property] of Object.entries(names)) {
       if (args.flags[flag] !== undefined) params[property] = args.flags[flag]
