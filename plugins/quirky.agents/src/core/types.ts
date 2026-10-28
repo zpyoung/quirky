@@ -90,7 +90,9 @@ export type AgentEntry = {
 }
 
 /** A provider-owned, read-only command that lists this agent's models. */
-export type ModelDiscoverySpec = { args: string[]; timeoutMs: number; format: 'json' }
+export type ModelDiscoverySpec =
+  | { protocol: 'codex-app-server'; timeoutMs: number }
+  | { protocol?: 'argv-json'; args: string[]; timeoutMs: number; format: 'json' }
 
 
 /**

@@ -3,9 +3,9 @@ import type { RecipeLaunchOptions } from '../daemon/recipe-options'
 
 export type { EffectiveRecipe as Recipe, RecipeAction as AiAction }
 
-/** The actions that start an agent tab with a prompt about a failure or the conflicts. */
-export type FixAction = Exclude<RecipeAction, 'commitMessage'>
-
+/** The actions that start a terminal agent to fix, review, or draft a response. */
+export type FixAction = Exclude<RecipeAction, 'commitMessage' | 'branchName' | 'conversationName'>
+export type NameAction = Extract<RecipeAction, 'branchName' | 'conversationName'>
 export const DEFAULT_TEMPLATE = '{basePrompt}'
 
 /** The agent choice that runs `ai-custom-command` instead of a catalog agent. */

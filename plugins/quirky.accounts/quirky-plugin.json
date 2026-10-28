@@ -147,6 +147,38 @@
         "result": { "type": "object", "properties": { "env": { "type": "object", "additionalProperties": true }, "shellInit": { "description": "Absolute private path to a generated shell init file, or null." }, "account": { "description": "Actual resolved account identity, or null." }, "resumeTranscriptPath": { "type": "string", "description": "Absolute verified target rollout path for Codex resume preparation, when present." } }, "required": ["env", "shellInit", "account"] }
       },
       {
+        "id": "prepareProviderEnv",
+        "description": "Resolves the effective Claude or Codex home for a short-lived provider-owned process using the current account selection. Unlike prepare, it accepts no session identity or resume and does not write account_sessions.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "agent": { "type": "string", "description": "Managed provider agent, currently claude or codex." },
+            "cwd": { "type": "string", "description": "Absolute working directory for the provider process." },
+            "homeOverrides": {
+              "type": "object",
+              "properties": {
+                "claude": { "type": "object", "properties": { "value": {}, "source": { "type": "string", "enum": ["explicit", "inherited", "injected", "absent"] } }, "required": ["value", "source"], "additionalProperties": false },
+                "codex": { "type": "object", "properties": { "value": {}, "source": { "type": "string", "enum": ["explicit", "inherited", "injected", "absent"] } }, "required": ["value", "source"], "additionalProperties": false }
+              },
+              "required": ["claude", "codex"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["agent", "cwd", "homeOverrides"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "env": { "type": "object", "additionalProperties": true },
+            "shellInit": { "description": "Always null; provider processes do not source a shell init file." },
+            "account": { "description": "Resolved actual account identity, or null." }
+          },
+          "required": ["env", "shellInit", "account"],
+          "additionalProperties": false
+        }
+      },
+      {
         "id": "restart",
         "description": "Restarts only stale recorded sessions at the given selection revision; busy Claude sessions queue against that exact target and revision.",
         "params": { "type": "object", "properties": { "sessions": { "type": "array", "items": { "type": "string" } }, "selectionRevision": { "type": "integer", "minimum": 0 }, "yes": { "type": "boolean" } }, "required": ["sessions", "selectionRevision"] },
@@ -263,6 +295,7 @@
       { "id": "ui-state-set", "words": "ui-state-set", "summary": "patch transient Usage popover and switcher state", "flags": { "patch": { "type": "json", "required": true, "description": "JSON object containing transient UI state fields to patch." } }, "methods": ["quirky.accounts/setUiState"] },
       { "id": "session-home", "words": "session-home", "summary": "read a session's recorded effective provider home", "flags": { "session": { "type": "string", "required": true, "description": "Existing session ID whose provider-home provenance to inspect." } }, "methods": ["quirky.accounts/sessionHome"] },
       { "id": "prepare", "words": "prepare", "summary": "resolve account identity and launch environment for a provider or shell", "flags": { "agent": { "type": "string", "required": true, "description": "Agent being launched, including claude, codex, or shell." }, "session-id": { "type": "string", "required": true, "description": "Session ID being prepared." }, "worktree-id": { "type": "string", "required": true, "description": "Worktree ID for the session." }, "cwd": { "type": "string", "required": true, "description": "Absolute working directory for the session." }, "home-overrides": { "type": "json", "required": true, "description": "Claude and Codex home values with explicit/inherited/injected/absent provenance." }, "resume": { "type": "json", "description": "Optional JSON object with sourceSessionId and providerSession (id plus transcriptPath or null) for a session resume." } }, "methods": ["quirky.accounts/prepare"] },
+      { "id": "prepareProviderEnv", "words": "prepare-provider-env", "summary": "resolve an effective account-backed provider home for a short-lived process", "flags": { "agent": { "type": "string", "required": true, "description": "Managed provider agent, currently claude or codex." }, "cwd": { "type": "string", "required": true, "description": "Absolute working directory." }, "home-overrides": { "type": "json", "required": true, "description": "Both claude and codex override values with explicit, inherited, injected, or absent source provenance." } }, "methods": ["quirky.accounts/prepareProviderEnv"] },
       { "id": "restart", "words": "restart", "summary": "restart stale sessions at an exact account selection revision", "flags": { "session": { "type": "string", "repeatable": true, "required": true, "description": "Stale session ID to restart; repeat for multiple sessions." }, "selection-revision": { "type": "integer", "required": true, "description": "AccountState revision shown with the stale-session choices." } }, "methods": ["quirky.accounts/restart"] },
       { "id": "keep", "words": "keep", "summary": "keep stale sessions on their original accounts", "flags": { "session": { "type": "string", "repeatable": true, "required": true, "description": "Stale session ID to keep; repeat for multiple sessions." }, "selection-revision": { "type": "integer", "required": true, "description": "AccountState revision shown with the stale-session choices." } }, "methods": ["quirky.accounts/keep"] },
       { "id": "ingest-claude", "words": "ingest-claude", "summary": "ingest a fixture or authenticated Claude statusline payload for a recorded session", "flags": { "session": { "type": "string", "required": true, "description": "Recorded Claude session ID." }, "config-dir": { "type": "string", "required": true, "description": "Claude config directory reported by the authenticated producer." }, "payload-file": { "type": "string", "required": true, "description": "Path to a JSON statusline payload fixture." } }, "methods": ["quirky.accounts/ingestClaude"] },

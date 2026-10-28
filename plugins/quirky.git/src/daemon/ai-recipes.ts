@@ -11,9 +11,10 @@ export const RECIPE_ACTIONS = [
   'branchSummary',
   'pullRequestDetails',
   'pullRequestReview',
-  'reviewConversation'
+  'reviewConversation',
+  'branchName',
+  'conversationName'
 ] as const
-export type RecipeAction = (typeof RECIPE_ACTIONS)[number]
 
 export const DEFAULT_TEMPLATE = '{basePrompt}'
 
@@ -149,7 +150,77 @@ export class AiRecipes {
   announce(repoId: string | null): void {
     this.context.emit('aiChanged', { repoId })
   }
+  /** Retires stale picks only for recipes owned by this exact local provider host. */
+  retireStaleModels(value: unknown): number {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) return 0
+    const snapshot = value as Record<string, unknown>
+    if (snapshot.host !== 'local' || snapshot.status !== 'available' || snapshot.authoritative !== true ||
+      typeof snapshot.agent !== 'string' || snapshot.agent === '' ||
+      !Array.isArray(snapshot.models) || snapshot.models.length === 0 || snapshot.unlisted !== 'refuse' ||
+      !Array.isArray(snapshot.unlistedOptions)) return 0
+    const models = new Set<string>()
+    for (const item of snapshot.models) {
+      if (typeof item !== 'object' || item === null || Array.isArray(item)) return 0
+      const id = (item as Record<string, unknown>).id
+      if (typeof id !== 'string' || id === '' || models.has(id)) return 0
+      models.add(id)
+    }
+    const supportedOptions = new Map<string, { type: 'select' | 'boolean'; choices: Set<string> }>()
+    for (const item of snapshot.unlistedOptions) {
+      if (typeof item !== 'object' || item === null || Array.isArray(item)) return 0
+      const option = item as Record<string, unknown>
+      if (typeof option.id !== 'string' || (option.type !== 'select' && option.type !== 'boolean')) return 0
+      if (option.type === 'boolean') {
+        if (option.choices !== null) return 0
+        supportedOptions.set(option.id, { type: 'boolean', choices: new Set() })
+      } else {
+        if (!Array.isArray(option.choices) || option.choices.length === 0) return 0
+        const choices = new Set<string>()
+        for (const choice of option.choices) {
+          if (typeof choice !== 'object' || choice === null || Array.isArray(choice)) return 0
+          const value = (choice as Record<string, unknown>).value
+          if (typeof value !== 'string') return 0
+          choices.add(value)
+        }
+        supportedOptions.set(option.id, { type: 'select', choices })
+      }
+    }
+
+    const rows = this.store.all<{
+      scope: string
+      action: string
+      launch_options: string | null
+      launch_options_agent: string | null
+    }>('SELECT scope, action, launch_options, launch_options_agent FROM recipes WHERE launch_options_agent = ? AND launch_options IS NOT NULL', snapshot.agent)
+    let retired = 0
+    for (const row of rows) {
+      if (!(RECIPE_ACTIONS as readonly string[]).includes(row.action) || row.launch_options === null) continue
+      let launchOptions: RecipeLaunchOptions
+      try {
+        const parsed: unknown = JSON.parse(row.launch_options)
+        if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) continue
+        launchOptions = parsed as RecipeLaunchOptions
+      } catch {
+        continue
+      }
+      if (typeof launchOptions.model !== 'string' || models.has(launchOptions.model)) continue
+      const options = launchOptions.optionValues ?? {}
+      const optionValues = Object.fromEntries(Object.entries(options).filter(([id, selected]) => {
+        const option = supportedOptions.get(id)
+        if (!option) return false
+        if (option.type === 'boolean') return typeof selected === 'boolean'
+        return typeof selected === 'string' && option.choices.has(selected)
+      })) as Record<string, string | boolean>
+      const next = Object.keys(optionValues).length === 0 ? null : { optionValues }
+      if (this.change(row.scope, row.action as RecipeAction, { launchOptions: next }, snapshot.agent)) {
+        this.announce(row.scope === GLOBAL_SCOPE ? null : row.scope)
+        retired += 1
+      }
+    }
+    return retired
+  }
 }
+
 
 /** The recipe action a call names; anything else is refused with reason `unknown-action`. */
 export function recipeAction(env: DaemonEnv, value: unknown, allowed: readonly RecipeAction[] = RECIPE_ACTIONS): RecipeAction {
@@ -198,17 +269,23 @@ export function parseLaunchOptions(env: DaemonEnv, value: unknown): RecipeLaunch
 }
 
 /** Validates provider-specific picks through the public catalog and resolver before persistence or launch. */
-export async function validateRecipeLaunchOptions(env: DaemonEnv, agent: string, value: unknown): Promise<RecipeLaunchOptions | null> {
+export async function validateRecipeLaunchOptions(
+  env: DaemonEnv,
+  agent: string,
+  value: unknown,
+  host = 'local'
+): Promise<RecipeLaunchOptions | null> {
   const options = parseLaunchOptions(env, value)
   if (options === null) return null
   if (options === undefined) return {}
   if (!hasLaunchChoices(options)) return options
   if (agent === 'custom') return invalidLaunchOptions(env, 'Custom commands do not support catalog model or option picks.')
 
-  const catalog = (await env.context.call('quirky.agents/options', { agent })) as AgentOptions
+  const catalog = (await env.context.call('quirky.agents/options', { agent, host })) as AgentOptions
   if (!catalog.supported) return invalidLaunchOptions(env, `${agent} does not support catalog model or option picks.`)
   await env.context.call('quirky.agents/resolveLaunch', {
     agent,
+    host,
     ...(options.model === undefined ? {} : { model: options.model }),
     options: options.optionValues ?? {}
   })

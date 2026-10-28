@@ -94,7 +94,7 @@ function parse(plugin: string, id: string, data: Record<string, unknown>): Agent
   if (fork && !resume) fail('fork needs resume')
   if (data.windows !== undefined && !isPlainObject(data.windows)) fail('windows must be an object')
   const launchCatalog = data.launchOptions === undefined ? null : launchOptions(data.launchOptions)
-  const discovery = data.modelDiscovery === undefined ? null : modelDiscovery(data.modelDiscovery)
+  const discovery = data.modelDiscovery === undefined ? null : modelDiscovery(id, data.modelDiscovery)
   if (discovery !== null && launchCatalog === null) fail('modelDiscovery requires launchOptions')
 
   return {
@@ -133,9 +133,27 @@ function parse(plugin: string, id: string, data: Record<string, unknown>): Agent
   }
 }
 
-function modelDiscovery(value: unknown): ModelDiscoverySpec {
+function modelDiscovery(id: string, value: unknown): ModelDiscoverySpec {
   const data = isPlainObject(value) ? value : fail('modelDiscovery must be an object')
-  for (const key of Object.keys(data)) if (key !== 'args' && key !== 'timeoutMs' && key !== 'format') fail(`modelDiscovery has an unknown field ${key}`)
+  for (const key of Object.keys(data)) {
+    if (key !== 'args' && key !== 'timeoutMs' && key !== 'format' && key !== 'protocol') {
+      fail(`modelDiscovery has an unknown field ${key}`)
+    }
+  }
+  const timeoutMs = typeof data.timeoutMs === 'number' ? data.timeoutMs : fail('modelDiscovery.timeoutMs must be an integer from 1 to 10000')
+  if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 10_000) {
+    fail('modelDiscovery.timeoutMs must be an integer from 1 to 10000')
+  }
+  if (data.protocol === 'codex-app-server') {
+    if (id !== 'codex') fail('modelDiscovery protocol codex-app-server is only valid for codex')
+    if (Object.hasOwn(data, 'args') || Object.hasOwn(data, 'format')) {
+      fail('modelDiscovery protocol codex-app-server does not accept args or format')
+    }
+    return { protocol: 'codex-app-server', timeoutMs }
+  }
+  if (data.protocol !== undefined && data.protocol !== 'argv-json') {
+    fail('modelDiscovery.protocol must be argv-json or codex-app-server')
+  }
   const args: unknown[] = Array.isArray(data.args) ? data.args : fail('modelDiscovery.args must be a list of 1 to 32 non-empty arguments of at most 512 characters')
   if (args.length === 0 || args.length > 32) fail('modelDiscovery.args must be a list of 1 to 32 non-empty arguments of at most 512 characters')
   const parsedArgs = args.map((item): string => {
@@ -145,12 +163,8 @@ function modelDiscovery(value: unknown): ModelDiscoverySpec {
     }
     return argument
   })
-  const timeoutMs = typeof data.timeoutMs === 'number' ? data.timeoutMs : fail('modelDiscovery.timeoutMs must be an integer from 1 to 10000')
-  if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 10_000) {
-    fail('modelDiscovery.timeoutMs must be an integer from 1 to 10000')
-  }
   const format = data.format === 'json' ? data.format : fail('modelDiscovery.format must be one of: json')
-  return { args: parsedArgs, timeoutMs, format }
+  return { args: parsedArgs, timeoutMs, format, ...(data.protocol === 'argv-json' ? { protocol: 'argv-json' as const } : {}) }
 }
 
 function oneShot(value: unknown): OneShotSpec {

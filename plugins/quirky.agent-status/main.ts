@@ -4,6 +4,7 @@ import { ActivityFeed } from './src/activity'
 import { DashboardService } from './src/dashboard'
 import { ClaudeVersionGate, claudeEventsFor, claudeSettings, commandProbe } from './src/claude-settings'
 import { HooksService } from './src/hooks'
+import { localStatusHost, readFromStatusPeer, type HostedStatusResult, type RemoteStatusReadMethod } from './src/peer-read'
 import type { ScriptState } from './src/script-state'
 import { AgentStatusService } from './src/service'
 import { drainSpool } from './src/spool'
@@ -40,6 +41,23 @@ async function claudeCommand(context: PluginContext): Promise<string> {
 function requireString(context: PluginContext, value: unknown, name: string): string {
   if (typeof value !== 'string' || value === '') throw context.error('invalid-params', `${name} must be a non-empty string`)
   return value
+}
+
+function requestedHost(context: PluginContext, value: unknown): string {
+  return value === undefined ? 'local' : requireString(context, value, 'host')
+}
+
+function readOnHost(
+  context: PluginContext,
+  hostValue: unknown,
+  method: RemoteStatusReadMethod,
+  params: Record<string, unknown>,
+  local: () => unknown | Promise<unknown>
+): Promise<HostedStatusResult> {
+  const host = requestedHost(context, hostValue)
+  return host === 'local'
+    ? Promise.resolve(local()).then((result) => ({ host: localStatusHost, result }))
+    : readFromStatusPeer(context, host, method, params)
 }
 
 function sendText(context: PluginContext, value: unknown): string {
@@ -79,6 +97,7 @@ function waitPattern(context: PluginContext, value: unknown): string {
   return value
 }
 
+
 let service: AgentStatusService | undefined
 let listenerStops: (() => void)[] = []
 
@@ -97,6 +116,18 @@ export async function activate(context: PluginContext): Promise<void> {
   )
   context.provide('method:quirky.agent-status/get', (params: Record<string, unknown>) =>
     active.get(params.session as string, typeof params.at === 'number' ? params.at : undefined)
+  )
+  context.provide('method:quirky.agent-status/getOnHost', (params: Record<string, unknown>) =>
+    readOnHost(
+      context,
+      params.host,
+      'quirky.agent-status/get',
+      {
+        session: requireString(context, params.session, 'session'),
+        ...(typeof params.at === 'number' ? { at: params.at } : {})
+      },
+      () => active.get(params.session as string, typeof params.at === 'number' ? params.at : undefined)
+    )
   )
   context.provide('method:quirky.agent-status/explain', (params: Record<string, unknown>) =>
     active.explain(requireString(context, params.session, 'session'), typeof params.at === 'number' ? params.at : undefined)
@@ -146,6 +177,9 @@ export async function activate(context: PluginContext): Promise<void> {
     active.ruleSet(requireString(context, params.agent, 'agent'))
   )
   context.provide('method:quirky.agent-status/hooksStatus', () => installer.status())
+  context.provide('method:quirky.agent-status/hooksStatusOnHost', (params: Record<string, unknown>) =>
+    readOnHost(context, params.host, 'quirky.agent-status/hooksStatus', {}, () => installer.status())
+  )
   context.provide('method:quirky.agent-status/hooksSetup', (params: Record<string, unknown>) =>
     installer.setup(typeof params.agent === 'string' ? params.agent : undefined)
   )

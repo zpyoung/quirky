@@ -1,6 +1,7 @@
 import { aiFix, aiFixPreview } from './ai-fix'
 import { cancelGenerate, generateCommitMessage } from './ai-generate'
 import { aiRecipe, setAiRecipe } from './ai-recipes'
+import { aiName } from './ai-name'
 import type { DaemonEnv, Handler } from './env'
 import { commit } from './commit'
 import { branches, compare, setBase } from './compare'
@@ -69,6 +70,7 @@ export function methodTable(env: DaemonEnv): Record<string, Handler> {
     cancelGenerate: cancelGenerate(env),
     aiFix: aiFix(env),
     aiFixPreview: aiFixPreview(env),
+    aiName: aiName(env),
     aiRecipe: aiRecipe(env),
     setAiRecipe: setAiRecipe(env)
   }

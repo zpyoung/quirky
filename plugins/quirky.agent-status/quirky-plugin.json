@@ -99,7 +99,8 @@
             "at": {
               "type": "number",
               "description": "The time to compute the display at, in ms since the epoch; defaults to now."
-            }
+            },
+            "expectedIncarnation": { "type": "string", "description": "Internal exact-peer process-incarnation fence, populated by the authenticated peer gateway." }
           },
           "required": [
             "session"
@@ -107,6 +108,41 @@
         },
         "result": {
           "description": "The whole row plus `display` and `label`, or null."
+        }
+      },
+      {
+        "id": "getOnHost",
+        "description": "Reads one status row from the exact local or paired status owner without copying it into this runtime.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "host": { "type": "string", "description": "local or an exact saved paired peer ID; omitted means local." },
+            "session": { "type": "string", "description": "The session ID on that host." },
+            "at": { "type": "number", "description": "The time to compute the display at, in ms since the epoch; defaults to now." }
+          },
+          "required": ["session"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "host": {
+              "type": "object",
+              "properties": {
+                "kind": { "type": "string", "enum": ["local", "paired"] },
+                "id": { "type": "string" },
+                "label": { "type": "string" },
+                "fingerprint": { "type": "string" },
+                "pairingRevision": { "type": "integer" },
+                "incarnation": { "type": "string" }
+              },
+              "required": ["kind", "id"]
+            },
+            "result": { "description": "The exact host's status row, or null." }
+          },
+          "required": ["host", "result"],
+          "additionalProperties": false
         }
       },
       {
@@ -863,7 +899,10 @@
         "readOnly": true,
         "params": {
           "type": "object",
-          "properties": {}
+          "properties": {
+            "expectedIncarnation": { "type": "string", "description": "Internal exact-peer process-incarnation fence, populated by the authenticated peer gateway." }
+          },
+          "additionalProperties": false
         },
         "result": {
           "type": "array",
@@ -901,6 +940,38 @@
               "files"
             ]
           }
+        }
+      },
+      {
+        "id": "hooksStatusOnHost",
+        "description": "Reads installed hook status from the exact local or paired host; remote rows remain owned and normalized by that host.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "host": { "type": "string", "description": "local or an exact saved paired peer ID; omitted means local." }
+          },
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "host": {
+              "type": "object",
+              "properties": {
+                "kind": { "type": "string", "enum": ["local", "paired"] },
+                "id": { "type": "string" },
+                "label": { "type": "string" },
+                "fingerprint": { "type": "string" },
+                "pairingRevision": { "type": "integer" },
+                "incarnation": { "type": "string" }
+              },
+              "required": ["kind", "id"]
+            },
+            "result": { "type": "array", "items": { "type": "object", "additionalProperties": true } }
+          },
+          "required": ["host", "result"],
+          "additionalProperties": false
         }
       },
       {
@@ -1243,13 +1314,15 @@
           }
         ],
         "flags": {
+          "host": { "type": "string", "description": "Exact saved paired peer ID; omitted means local." },
           "at": {
             "type": "number",
             "description": "compute the display state at this time, in ms since the epoch (default: now)"
           }
         },
         "methods": [
-          "quirky.agent-status/get"
+          "quirky.agent-status/get",
+          "quirky.agent-status/getOnHost"
         ]
       },
       {
@@ -1368,8 +1441,12 @@
         "id": "hooks-status",
         "words": "hooks status",
         "summary": "show whether agent status hooks are installed for each agent",
+        "flags": {
+          "host": { "type": "string", "description": "Exact saved paired peer ID; omitted means local." }
+        },
         "methods": [
-          "quirky.agent-status/hooksStatus"
+          "quirky.agent-status/hooksStatus",
+          "quirky.agent-status/hooksStatusOnHost"
         ]
       },
       {

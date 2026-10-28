@@ -867,6 +867,7 @@ export function createAutomationDispatcher(context: AutomationDispatchContext, h
       try {
         resolved = record(await context.call('quirky.agents/resolveLaunch', {
           agent: definition.agentId,
+          host: 'local',
           ...(overrides.model === undefined ? {} : { model: overrides.model }),
           ...(overrides.optionValues === undefined ? {} : { options: overrides.optionValues }),
           structured: true

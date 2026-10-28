@@ -13,6 +13,13 @@ const REMOTE_HEIMDALL_METHODS: Record<string, true> = {
   'quirky.heimdall/remoteDebugReport': true,
   'quirky.heimdall/remoteCommand': true,
 }
+const REMOTE_AGENT_METHODS: Record<string, true> = {
+  'quirky.agents/discoverModels': true,
+  'quirky.agents/options': true,
+  'quirky.agents/resolveLaunch': true,
+  'quirky.agent-status/get': true,
+  'quirky.agent-status/hooksStatus': true,
+}
 const FEDERATION_METHODS: Record<string, true> = {
   'quirky.orchestration/federationAttachStart': true,
   'quirky.orchestration/federationShow': true,
@@ -30,6 +37,7 @@ const REMOTE_PEER_METHODS: Record<string, true> = {
   peerList: true,
   peerStatus: true,
   ...FEDERATION_METHODS,
+  ...REMOTE_AGENT_METHODS,
 }
 const MUTATING_REMOTE_METHODS: Record<string, true> = {
   'quirky.heimdall/remoteCommand': true,
@@ -56,6 +64,7 @@ const CAPABILITIES = Object.freeze([
   'quirky.heimdall/remoteDetail',
   'quirky.heimdall/remoteDebugReport',
   'quirky.heimdall/remoteCommand',
+  ...Object.keys(REMOTE_AGENT_METHODS),
 ])
 type PeerRow = {
   peer_id: string
@@ -421,7 +430,8 @@ export class PeerManager {
         actualIncarnation: status.incarnation,
       })
     }
-    const requiredCapability = method.startsWith('quirky.heimdall/') || Object.hasOwn(FEDERATION_METHODS, method) ? method : null
+    const requiredCapability = method.startsWith('quirky.heimdall/') ||
+      Object.hasOwn(FEDERATION_METHODS, method) || Object.hasOwn(REMOTE_AGENT_METHODS, method) ? method : null
     if (requiredCapability !== null && !status.capabilities.includes(requiredCapability)) {
       return fail(this.context, 'peer_capability_missing', `Peer ${peer.peer_id} does not advertise ${requiredCapability}.`, {
         peerId: peer.peer_id,
@@ -784,9 +794,9 @@ export class PeerManager {
   private assertRemoteMethod(method: string, params: Record<string, unknown>, requestId?: string): void {
     const allowed = Object.hasOwn(REMOTE_PEER_METHODS, method) || Object.hasOwn(REMOTE_HEIMDALL_METHODS, method)
     if (!allowed) fail(this.context, 'peer_method_forbidden', `Remote method ${method} is outside the peer method ceiling.`, { method })
-    if (Object.hasOwn(FEDERATION_METHODS, method) &&
+    if ((Object.hasOwn(FEDERATION_METHODS, method) || Object.hasOwn(REMOTE_AGENT_METHODS, method)) &&
       (typeof params.expectedIncarnation !== 'string' || params.expectedIncarnation.length === 0)) {
-      fail(this.context, 'peer_invalid_call', `Federation method ${method} requires expectedIncarnation.`, { method })
+      fail(this.context, 'peer_invalid_call', `Remote method ${method} requires expectedIncarnation.`, { method })
     }
     if (Object.hasOwn(MUTATING_REMOTE_METHODS, method)) {
       if (typeof requestId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestId)) {

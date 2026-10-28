@@ -44,6 +44,7 @@ type OptionInfo = { id: string; type: string; choices: { value: string }[] | nul
 
 type OptionsInfo = {
   agent: string
+  host: string
   supported: boolean
   models: { id: string; label: string; description: string | null; options: OptionInfo[] }[]
   unlisted: 'accept' | 'refuse'
@@ -144,6 +145,7 @@ function formatCatalog(info: OptionsInfo, ctx: CliContext): string {
         : `unlisted models: accepted${info.unlistedOptions.length ? `, with ${formatOptions(info.unlistedOptions)}` : ''}`
     )
   }
+  if (info.host !== 'local') lines.push(`Host: ${info.host}`)
   const extra = info.extraArgs
   lines.push(
     `extra arguments: ${extra.supported ? `${extra.allowed} (for example ${extra.placeholder})` : extra.message}`
@@ -248,13 +250,31 @@ const named: CliModule['commands'] = {
   },
 
   async options(args, ctx) {
-    const info = (await ctx.call('quirky.agents/options', { agent: agentArg(args.positionals, ctx) })) as OptionsInfo
+    const host = typeof args.flags.host === 'string' ? args.flags.host : undefined
+    const info = (await ctx.call('quirky.agents/options', {
+      agent: agentArg(args.positionals, ctx),
+      ...(host === undefined ? {} : { host })
+    })) as OptionsInfo
     ctx.out.result(info, () => formatCatalog(info, ctx))
+  },
+
+  async discoverModels(args, ctx) {
+    const host = args.flags.host
+    if (typeof host !== 'string' || host.trim() === '') throw ctx.usage('missing --host')
+    const result = (await ctx.call('quirky.agents/discoverModels', {
+      agent: agentArg(args.positionals, ctx),
+      host
+    })) as { agent: string; host: string; status: string; authoritative: boolean; models: unknown[]; reason?: string }
+    ctx.out.result(result, () =>
+      `${result.agent} on ${result.host}: ${result.status}, ${result.authoritative ? 'authoritative' : 'non-authoritative'}, ${result.models.length} models${result.reason ? `; ${result.reason}` : ''}`
+    )
   },
 
   async resolve(args, ctx) {
     const agent = agentArg(args.positionals, ctx)
-    const result = (await ctx.call('quirky.agents/resolveLaunch', { agent, ...selectionParams(args.flags, ctx) })) as Resolved
+    const params: Record<string, unknown> = { agent, ...selectionParams(args.flags, ctx) }
+    if (typeof args.flags.host === 'string') params.host = args.flags.host
+    const result = (await ctx.call('quirky.agents/resolveLaunch', params)) as Resolved
     const structured = Object.entries(result.structured).map(([key, value]) => `${key}=${value}`)
     ctx.out.result(result, () =>
       ctx.format.record([

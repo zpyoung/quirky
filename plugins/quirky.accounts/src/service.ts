@@ -15,6 +15,7 @@ import type {
   PendingLogin,
   Preferences,
   PrepareInput,
+  ProviderPrepareInput,
   StaleSession,
   SystemAccount
 } from './types'
@@ -47,6 +48,7 @@ type ResetCreditScope = { accountId: string | null; accountRevision: number; off
 type ResetCreditInput = { idempotencyKey: string; expectedScope: ResetCreditScope; yes?: boolean }
 type CredentialInput = { provider: string; kind: string; value: string }
 type CredentialClearInput = { provider: string; kind: string }
+type ProviderPreparationInput = ProviderPrepareInput & Partial<Pick<PrepareInput, 'sessionId' | 'worktreeId' | 'resume'>>
 const MANAGED_PROVIDERS: readonly ManagedProvider[] = ['claude', 'codex']
 const USAGE_PROVIDERS = ['claude', 'codex', 'gemini', 'antigravity', 'opencode-go', 'kimi', 'minimax', 'grok', 'cursor', 'zcode'] as const
 const USAGE_LABELS: Record<(typeof USAGE_PROVIDERS)[number], string> = {
@@ -390,7 +392,14 @@ export class AccountService {
   }
 
   async prepare(params: Record<string, unknown>): Promise<AccountPrepareResult> {
-    const input = this.readPrepareInput(params)
+    return this.prepareWithInput(this.readPrepareInput(params))
+  }
+
+  async prepareProviderEnv(params: Record<string, unknown>): Promise<AccountPrepareResult> {
+    return this.prepareWithInput(this.readProviderPrepareInput(params))
+  }
+
+  private async prepareWithInput(input: ProviderPreparationInput): Promise<AccountPrepareResult> {
     if (input.agent === 'shell') {
       if (input.resume) this.fail('invalid-params', 'Resume metadata is only valid for Claude or Codex sessions.')
       const overrides = input.homeOverrides
@@ -413,7 +422,7 @@ export class AccountService {
         const resumeTranscriptPath = provider === 'codex' && input.resume
           ? await this.prepareCodexResume(input.resume, home, null)
           : undefined
-        this.saveSessionIdentity(input, account, home)
+        this.saveSessionIdentityIfPresent(input, account, home)
         return {
           env: { [this.homeVariable(provider)]: null },
           shellInit: null,
@@ -428,7 +437,7 @@ export class AccountService {
       const identity = this.readIdentitySafely(provider, home, false)
       const label = identity.email ?? `Custom ${provider === 'claude' ? 'Claude' : 'Codex'} home`
       const account = this.identityFor(provider, null, label, 'custom')
-      this.saveSessionIdentity(input, account, home)
+      this.saveSessionIdentityIfPresent(input, account, home)
       return { env: {}, shellInit: null, account }
     }
     const selectedId = getActiveAccountId(this.store, provider)
@@ -443,7 +452,7 @@ export class AccountService {
       const resumeTranscriptPath = provider === 'codex' && input.resume
         ? await this.prepareCodexResume(input.resume, home, null)
         : undefined
-      this.saveSessionIdentity(input, account, home)
+      this.saveSessionIdentityIfPresent(input, account, home)
       const env = override.source === 'injected' ? { [this.homeVariable(provider)]: null } : {}
       return {
         env,
@@ -471,7 +480,7 @@ export class AccountService {
       : undefined
     if (provider === 'codex') this.syncCodexConfigWarning(account.id)
     const accountIdentity = this.identityFor(provider, account.id, account.label, 'managed')
-    this.saveSessionIdentity(input, accountIdentity, home)
+    this.saveSessionIdentityIfPresent(input, accountIdentity, home)
     return {
       env: { [this.homeVariable(provider)]: home },
       shellInit: null,
@@ -985,7 +994,21 @@ export class AccountService {
     this.publishChanged()
   }
 
-  private saveSessionIdentity(input: PrepareInput, identity: AccountIdentity, home: string): void {
+  private saveSessionIdentityIfPresent(input: ProviderPreparationInput, identity: AccountIdentity, home: string): void {
+    if (input.sessionId === undefined || input.worktreeId === undefined) return
+    this.saveSessionIdentity({
+      sessionId: input.sessionId,
+      worktreeId: input.worktreeId,
+      agent: input.agent,
+      cwd: input.cwd
+    }, identity, home)
+  }
+
+  private saveSessionIdentity(
+    input: Pick<PrepareInput, 'sessionId' | 'worktreeId' | 'cwd' | 'agent'>,
+    identity: AccountIdentity,
+    home: string
+  ): void {
     const sessionId = input.sessionId
     if (!sessionId || sessionId.length > MAX_SESSION_ID || /[\u0000-\u001f\u007f]/.test(sessionId)) {
       this.fail('invalid-params', 'sessionId must be a valid session identifier.')
@@ -1034,6 +1057,26 @@ export class AccountService {
       return this.profiles.readIdentity(provider, home, includeEnvironmentApiKey)
     } catch {
       return { email: null, organization: null, authKind: 'unknown', hasAuth: false, identityKey: null }
+    }
+  }
+
+  private readProviderPrepareInput(params: Record<string, unknown>): ProviderPrepareInput {
+    const unexpected = Object.keys(params).find((key) => key !== 'agent' && key !== 'cwd' && key !== 'homeOverrides')
+    if (unexpected !== undefined) this.fail('invalid-params', `prepareProviderEnv does not accept ${unexpected}.`)
+    const agent = this.readNonempty(params.agent, 'agent')
+    if (this.providerForAgent(agent) === null) this.fail('invalid-params', 'agent must be claude or codex.')
+    const cwd = this.readNonempty(params.cwd, 'cwd')
+    const overrides = asRecord(params.homeOverrides)
+    if (!overrides || !hasExactKeys(overrides, ['claude', 'codex'])) {
+      this.fail('invalid-params', 'homeOverrides must contain only claude and codex.')
+    }
+    return {
+      agent,
+      cwd,
+      homeOverrides: {
+        claude: this.readHomeOverride(overrides.claude, 'claude'),
+        codex: this.readHomeOverride(overrides.codex, 'codex')
+      }
     }
   }
 
