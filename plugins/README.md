@@ -96,9 +96,34 @@ independently detached services.
 
 ## Orchestration
 
-`quirky.orchestration` provides durable Runs, Tasks, context-only Dispatches, mail, questions,
-decision gates and worker lifecycle operations. The manifest declares 29 API methods and 28
-generated CLI verbs under `quirky orchestration`.
+`quirky.orchestration` provides durable Runs, dependent Tasks, authoritative Dispatch attempts,
+mailboxes, resumable questions, decision gates and worker lifecycle operations. The manifest
+declares 29 API methods and 28 CLI verbs under `quirky orchestration`.
+Actor-sensitive commands run inside a live Quirky-managed terminal or structured session;
+the kernel verifies its launch credential and process or lease identity. `--from` and
+`--terminal` are equality assertions, not credentials.
+
+```sh
+quirky orchestration run-create --objective "Coordinate the change" --json
+quirky orchestration task-create --spec "Implement the first task" --json
+quirky orchestration check --wait --types worker_done,escalation,question --json
+```
+
+Process every message in a returned Delivery before passing its ID to `check --ack`.
+A lost response replays the same batch; type filters control wakeups, not batch contents.
+`--peek` and `--all` do not consume mail. An `ask` timeout leaves its question pending:
+use the printed `ask --resume` command rather than asking again.
+
+Reuse `--retry-request` for an uncertain mutation and inspect it with `request-show --request`.
+An absent receipt never proves no effect. Rejected worker reports remain auditable and exit
+nonzero; neither an idle pointer nor missing status proves that work finished.
+
+Public session helpers provide exact-incarnation identity, guarded close and idempotent prompt
+submission. Structured `create` accepts `deferStart: true` without a prompt, so authority can attach
+before the first turn. Automatic idle-mailbox nudging is deferred to
+`m6-orchestration-idle-pointer-shutdown`; explicit safe submission and durable mail remain available.
+Worker placement, custody and fleet use this same core. Headless service coordinators remain a
+separate orchestration slice; plugin metadata cannot impersonate a session.
 
 **Methods (29):** `runCreate`, `runUse`, `runCurrent`, `runList`, `runShow`, `taskCreate`,
 `taskList`, `taskUpdate`, `dispatch`, `dispatchShow`, `send`, `check`, `reply`, `inbox`, `ask`,
@@ -111,6 +136,11 @@ generated CLI verbs under `quirky orchestration`.
 `gate-create`, `gate-resolve`, `gate-list`, `request-show`, `reset`, `worker-start`, `worker-show`,
 `worker-read`, `worker-list`, `worker-stop`, `worker-abandon`, `worker-release`, `worker-retain`.
 Use `quirky api --json` for the current method and result schemas.
+
+See the [contracts](quirky.orchestration/src/contracts.ts),
+[runtime interfaces](quirky.orchestration/src/runtime-contracts.ts),
+[core behavior specification](../docs/quirk/specs/2026-10-27-m6-orchestration-core/logic.md) and
+[worker behavior specification](../docs/quirk/specs/2026-10-27-m6-orchestration-workers/logic.md).
 
 ## Shared checks
 

@@ -102,10 +102,6 @@ export class OrchestrationGates {
     if (record.status !== 'pending') {
       fail(this.core.context, 'lifecycle_conflict', `gate ${input.gateId} is already ${record.status}`, { gateId: input.gateId, status: record.status })
     }
-    const options = JSON.parse(record.options_json) as string[]
-    if (options.length > 0 && !options.includes(input.resolution)) {
-      fail(this.core.context, 'invalid_argument', `resolution must match one of the gate options`, { gateId: input.gateId })
-    }
     const at = now()
     const update = this.core.store.run(
       `UPDATE gates SET status = 'resolved', resolution = ?, resolved_at = ? WHERE id = ? AND status = 'pending'`,

@@ -12,6 +12,7 @@ import type {
   DispatchId,
   GroupAddress,
   HeartbeatResult,
+  InboxMessageRow,
   InboxParams,
   InboxResult,
   JsonValue,
@@ -273,6 +274,7 @@ function acceptedCheck(
 
 export class OrchestrationMessages {
   private readonly waiters = new Map<string, MailboxWaiter>()
+  private readonly waiterReservations = new Map<string, symbol>()
   private readonly askWaiters = new Map<string, Set<AskWaiter>>()
   private readonly arrivalListeners = new Set<(arrival: MessageArrival) => void | Promise<void>>()
   private readonly mailboxAvailableListeners = new Set<(mailbox: MailboxAddress) => void>()
@@ -440,6 +442,9 @@ export class OrchestrationMessages {
 
   async check(input: CheckParams, caller: PluginCaller): Promise<CheckResult> {
     if (input.types !== undefined) this.validateMessageTypes(input.types)
+    if (input.mode !== 'peek' && input.mode !== 'all' && input.limit !== undefined) {
+      fail(this.context, 'invalid_argument', 'limit is only supported by peek and all checks')
+    }
     if (input.mode === 'peek' || input.mode === 'all') {
       if (input.wait) fail(this.context, 'invalid_argument', `${input.mode} cannot be combined with --wait`)
       if (input.ackDeliveryId !== undefined) {
@@ -485,56 +490,85 @@ export class OrchestrationMessages {
     }
     const params = input as unknown as MutationRequest & Record<string, unknown>
     let resolvedSnapshot: ConsumerMailbox | null = null
+    let waiterReservation: { key: string; token: symbol } | null = null
+    let waiterExists = false
     const wait = input.wait === true
-    return this.core.mutate<CheckCoreResult>(
-      'check',
-      params,
-      verified.evidence,
-      () => {
-        const resolved = this.resolveConsumerMailbox(verified.evidence, input.runId, false)
-        resolvedSnapshot = resolved
-        const acknowledged = input.ackDeliveryId ? this.acknowledge(input.ackDeliveryId, resolved.mailbox, resolved.generation) : null
-        if (acknowledged !== null) this.notifyMailboxAvailable(resolved.mailbox)
-        const batch = this.nextDelivery(resolved.mailbox, resolved.generation, resolved.runId, wait ? input.types : undefined)
-        const messages = batch ? batch.messages : []
-        return {
-          mode: 'consume' as const,
-          runId: resolved.runId,
-          messages,
-          count: messages.length,
-          deliveryId: batch?.delivery.id ?? null,
-          replayed: batch?.replayed ?? false,
-          acknowledged,
-          timedOut: false,
-          cancelled: false,
-          connectionLost: false,
-          ...(input.format ? { formatted: messages.map(formatMessage).join('\\n\\n') } : {})
-        }
-      },
-      wait
-        ? {
-            acceptedCheckpoint: (accepted) => {
-              const resolved = resolvedSnapshot
-              if (!resolved) fail(this.context, 'lifecycle_conflict', 'check accepted before its mailbox was resolved')
-              return acceptedCheck(resolved.mailbox, resolved.runId, resolved.generation, accepted.acknowledged)
-            },
-            afterCommit: async (accepted) => {
-              const resolved = resolvedSnapshot
-              if (!resolved) fail(this.context, 'lifecycle_conflict', 'check lost its mailbox after acceptance')
-              if (accepted.deliveryId !== null) return accepted
-              return this.waitForMailbox(
-                accepted,
-                resolved,
-                input.types,
-                timeoutMs,
-                connection,
-                input.format,
-                verified.evidence.runtimeSessionId
-              )
-            }
+    try {
+      return await this.core.mutate<CheckCoreResult>(
+        'check',
+        params,
+        verified.evidence,
+        () => {
+          const resolved = resolvedSnapshot ?? this.resolveConsumerMailbox(verified.evidence, input.runId, false)
+          resolvedSnapshot = resolved
+          const acknowledged = input.ackDeliveryId ? this.acknowledge(input.ackDeliveryId, resolved.mailbox, resolved.generation) : null
+          if (acknowledged !== null) this.notifyMailboxAvailable(resolved.mailbox)
+          const batch = waiterExists
+            ? null
+            : this.nextDelivery(resolved.mailbox, resolved.generation, resolved.runId, wait ? input.types : undefined)
+          const messages = batch ? batch.messages : []
+          return {
+            mode: 'consume' as const,
+            runId: resolved.runId,
+            messages,
+            count: messages.length,
+            deliveryId: batch?.delivery.id ?? null,
+            replayed: batch?.replayed ?? false,
+            acknowledged,
+            timedOut: false,
+            cancelled: waiterExists,
+            connectionLost: false,
+            ...(waiterExists ? { waitInterrupted: 'waiter_exists' as const } : {}),
+            ...(input.format ? { formatted: messages.map(formatMessage).join('\\n\\n') } : {})
           }
-        : undefined
-    )
+        },
+        wait
+          ? {
+              beforeAccept: () => {
+                const resolved = this.resolveConsumerMailbox(verified.evidence, input.runId, false)
+                resolvedSnapshot = resolved
+                const key = mailboxKey(resolved.mailbox)
+                if (this.waiters.has(key) || this.waiterReservations.has(key)) {
+                  if (input.ackDeliveryId === undefined) {
+                    fail(this.context, 'waiter_exists', `mailbox ${key} already has an actionable waiter`)
+                  }
+                  waiterExists = true
+                  return
+                }
+                const token = Symbol()
+                waiterReservation = { key, token }
+                this.waiterReservations.set(key, token)
+              },
+              acceptedCheckpoint: (accepted) => {
+                const resolved = resolvedSnapshot
+                if (!resolved) fail(this.context, 'lifecycle_conflict', 'check accepted before its mailbox was resolved')
+                return acceptedCheck(resolved.mailbox, resolved.runId, resolved.generation, accepted.acknowledged)
+              },
+              afterCommit: async (accepted) => {
+                const resolved = resolvedSnapshot
+                if (!resolved) fail(this.context, 'lifecycle_conflict', 'check lost its mailbox after acceptance')
+                if (accepted.waitInterrupted === 'waiter_exists' || accepted.deliveryId !== null) return accepted
+                return this.waitForMailbox(
+                  accepted,
+                  resolved,
+                  input.types,
+                  timeoutMs,
+                  connection,
+                  input.format,
+                  verified.evidence.runtimeSessionId,
+                  waiterReservation?.token ?? null
+                )
+              }
+            }
+          : undefined
+      )
+    } finally {
+      // beforeAccept assigns this in-process reservation across an async callback boundary.
+      const reservation = waiterReservation as { key: string; token: symbol } | null
+      if (reservation && this.waiterReservations.get(reservation.key) === reservation.token) {
+        this.waiterReservations.delete(reservation.key)
+      }
+    }
   }
 
   async reply(input: ReplyParams, caller: PluginCaller): Promise<ReplyResult> {
@@ -782,12 +816,13 @@ export class OrchestrationMessages {
     }
     if (isGroup(input.to)) return this.resolveGroup(input, type, sender, caller, input.to)
     const target = await this.resolveDirectTarget(input.to, sender.sessionId)
-    this.assertAddressRun(input, target)
+    this.assertAddressRun(input, target, sender)
     return [target]
   }
 
   private async resolveDirectTarget(target: Exclude<SendParams['to'], GroupAddress | undefined>, senderSessionId: string): Promise<RoutedTarget> {
     if (target.kind === 'run') {
+      if (target.runId === unboundRunId) return { mailbox: target, runId: unboundRunId }
       const run = this.core.getRun(target.runId)
       return { mailbox: target, runId: run.id }
     }
@@ -1126,7 +1161,8 @@ export class OrchestrationMessages {
     timeoutMs: number | undefined,
     connection: CallerConnection,
     format: boolean | undefined,
-    sessionId: string
+    sessionId: string,
+    reservationToken: symbol | null
   ): Promise<CheckCoreResult> {
     if (accepted.deliveryId !== null) return accepted
     const duration = timeoutMs ?? DEFAULT_CHECK_WAIT_MS
@@ -1134,7 +1170,10 @@ export class OrchestrationMessages {
       fail(this.context, 'invalid_argument', 'check timeoutMs must be an integer between 0 and 1800000')
     }
     const key = mailboxKey(resolved.mailbox)
-    if (this.waiters.has(key)) return { ...accepted, waitInterrupted: 'waiter_exists', cancelled: true }
+    const reservation = this.waiterReservations.get(key)
+    if (this.waiters.has(key) || (reservation !== undefined && reservation !== reservationToken)) {
+      return { ...accepted, waitInterrupted: 'waiter_exists', cancelled: true }
+    }
 
     const deadline = Date.now() + duration
     let resolveWake: ((outcome: WaitOutcome) => void) | null = null
@@ -1330,6 +1369,7 @@ export class OrchestrationMessages {
       runId: sender.runId ?? unboundRunId,
       fromSessionId: caller.runtimeSessionId,
       sender: sender.sender,
+      mailbox: target.mailbox,
       subject: `Re: ${original.subject}`,
       body: input.body,
       type: 'status',
@@ -1610,6 +1650,7 @@ export class OrchestrationMessages {
 
   private assertResolvedTarget(target: RoutedTarget): void {
     if (target.mailbox.kind === 'run') {
+      if (target.mailbox.runId === unboundRunId) return
       this.core.getRun(target.mailbox.runId)
       return
     }
@@ -1629,11 +1670,12 @@ export class OrchestrationMessages {
     }
   }
 
-  private assertAddressRun(input: SendParams, target: RoutedTarget): void {
-    if (input.runId !== undefined && input.runId !== target.runId) {
-      fail(this.context, 'recipient_run_mismatch', `recipient belongs to Run ${target.runId}, not ${input.runId}`, {
+  private assertAddressRun(input: SendParams, target: RoutedTarget, sender: SenderContext): void {
+    const recipientRunId = target.runId === unboundRunId ? sender.runId : target.runId
+    if (input.runId !== undefined && input.runId !== recipientRunId) {
+      fail(this.context, 'recipient_run_mismatch', `recipient belongs to Run ${recipientRunId ?? 'an unbound mailbox'}, not ${input.runId}`, {
         runId: input.runId,
-        recipientRunId: target.runId
+        recipientRunId
       })
     }
   }

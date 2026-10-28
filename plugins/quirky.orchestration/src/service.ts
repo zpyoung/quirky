@@ -15,7 +15,6 @@ import { OrchestrationCore } from './core'
 import { OrchestrationGates } from './gates'
 import { verifyCaller } from './identity'
 import { OrchestrationMessages } from './messaging'
-import { OrchestrationPointers } from './pointers'
 import { runTaskMethods } from './runs'
 import type { OrchestrationService } from './surface-contracts'
 
@@ -23,18 +22,8 @@ import type { OrchestrationService } from './surface-contracts'
 export function createOrchestration(context: PluginContext, store: PluginStore): OrchestrationService {
   const core = new OrchestrationCore(context, store)
   const messages = new OrchestrationMessages(context, core)
-  const pointers = new OrchestrationPointers(context, store, core, messages)
   const gates = new OrchestrationGates(core)
-  const runMethods = runTaskMethods(
-    context,
-    core,
-    (mode: ResetMode) => {
-      messages.resetWaiters(mode)
-      pointers.reset(mode)
-    },
-    (run) => pointers.scheduleMailbox({ kind: 'run', runId: run.id })
-  )
-  pointers.start()
+  const runMethods = runTaskMethods(context, core, (mode: ResetMode) => messages.resetWaiters(mode))
 
   const methods = {
     runCreate: runMethods.runCreate,
@@ -79,7 +68,6 @@ export function createOrchestration(context: PluginContext, store: PluginStore):
     async dispose() {
       if (disposed) return
       disposed = true
-      await pointers.dispose()
       messages.dispose()
       await core.dispose()
     }
