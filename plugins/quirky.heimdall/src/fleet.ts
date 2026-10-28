@@ -322,7 +322,6 @@ function emitSafely(host: KernelControlHost, event: string, data: unknown): void
 export function createFleetService(host: KernelControlHost, controls: ControlPlane): FleetService {
   let generatedAtMs = -1
   let publicationRevision = 0
-  let readTail: Promise<void> = Promise.resolve()
   let disposed = false
   const observations = new Map<string, Observation>()
 
@@ -336,17 +335,12 @@ export function createFleetService(host: KernelControlHost, controls: ControlPla
   const inspect = async (watcherId: string): Promise<Inspection | null> => host.inspect(watcherId)
   const workersOf = async (enrollment: Enrollment): Promise<WatcherWorker[]> => host.workers(enrollment)
   const pendingOf = (watcherId: string): string[] => [...controls.pending(watcherId)]
-  const queueRead = <T>(read: () => Promise<T>): Promise<T> => {
-    const queued = readTail.then(read)
-    readTail = queued.then(() => undefined, () => undefined)
-    return queued
-  }
   const stableRead = async <T>(read: () => Promise<T>): Promise<{ revision: number; value: T }> => {
     while (true) {
       if (disposed) throw new Error('Heimdall fleet service is disposed')
       const revision = publicationRevision
       try {
-        const value = await queueRead(read)
+        const value = await read()
         if (revision === publicationRevision) return { revision, value }
       } catch (error) {
         if (revision === publicationRevision) throw error

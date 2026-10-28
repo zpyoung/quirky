@@ -440,6 +440,39 @@
 - **Revisit if:** the actual corrected remote resume path fails
 - **Source:** assumed — autonomous
 
+## D41: Reconcile divergent version-8/9 session stores without rewriting migration history
+- **Question:** final affected verification found an old version-8 database without background could not be seeded or upgraded through the current record writer
+- **Options:** add columns only in the fixture; renumber migrations; reconcile the actual historical schema variants idempotently
+- **Chose:** version9 ensures badges and pointer operations; version10 rechecks both and adds background only when absent. Keep migration numbers unchanged. Seed legacy fixtures with legacy-compatible SQL and exercise both version8 pointer/badge variants and the version9 background branch.
+- **Why:** the pointer branch and badges/background branch reused historical version numbers. Current writers cannot seed a schema before its columns exist, and an already-background version9 store must not add the same column twice or miss pointer operations.
+- **Evidence:** final441-file run's records failure; history7573a84b and92022b02; repaired records regressions pass in the corrective local batch. No compatibility alias, silent empty result or new deployment assumption added.
+- **Reversibility:** medium
+- **Confidence:** high for the tested historical variants
+- **Revisit if:** another deployed historical schema variant is demonstrated
+- **Source:** assumed — autonomous
+
+## D42: Replace fixture source-text rewriting with input-driven typed event production
+- **Question:** the usage-limit test pinned the textual spelling of a generated native thread declaration
+- **Options:** re-pin the new source string; remove rate-limit coverage; expose a bounded fixture event option and assert journal behavior
+- **Chose:** remove fixture-source rewriting and source-text assertions. The native fixture accepts optional rateLimitsUpdated data and emits account/rateLimits/updated only after actual turn/start input. The test verifies idle initial state and the exact raw event in the journal; remove redundant nested copies.
+- **Why:** provider event preservation is consumer-visible; the fixture's JavaScript spelling is not. Defaults and unique-thread/held-prefix behavior remain unchanged.
+- **Evidence:** final gate usage failure at original.includes(threadStart); corrected local usage cases pass with the native JSONL child, and types remain clean.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** raw rate-limit data is lost or emitted before a real input turn
+- **Source:** assumed — autonomous
+
+## D43: Prevent asynchronous read head-of-line blocking without bypassing command publication
+- **Question:** exact stop physically completed, but its CLI response and fleet detail stalled behind slow serialized projections
+- **Options:** raise deadlines or detach publication; skip only obsolete queued reads; remove the global queue from pure revision-checked reads
+- **Chose:** run fleet projections concurrently and retain publicationRevision/disposal validation before committing results. An older blocked read cannot prevent a newer terminal detail/publication; its later result must not publish stale state. Keep exact stop, persisted control result, reconciliation and awaited publication semantics.
+- **Why:** trace327 proves native stop returned in milliseconds and the command committed, while publication waited behind multiple five-second reads, including superseded revisions. Skipping stale work alone still left current readers queued and did not fix the regression.
+- **Evidence:** repeated real CLI30-second failures; bounded runtime markers and public target EXITED/PID-gone evidence; corrected fleet/control/owner-worker three files14pass75assertions53.70s, full typecheck exit0 in49.35s. Temporary markers/samplers are removed. Diagnostic cleanup briefly deleted an essential stop await; parent diff review caught and restored it before commit, and the transient failed snapshots are not passing evidence.
+- **Reversibility:** medium
+- **Confidence:** high for the reproduced publication boundary and regression
+- **Revisit if:** concurrent reads publish stale metadata or a confirmed command waits on another unrelated projection
+- **Source:** assumed — autonomous
+
 ## Progress
 - Source: complete owner checkpoints and all real M6 dependency fixes are composed through2c713ffb, including the broad roadmap ancestry merge815be88e, typed/SDK fixture repaira3694eef, canonical snapshot/receipt rules and unique native fixture identities. No unresolved merge markers or temporary runtime diagnostics remain.
 - Own latest composed gates:70tests326assertions across owner API, real worker, adapter, native and guarded admission files; full project typecheck exit0; scripts68tests570assertions. Final standalone owner API/CLI publication and native scoped cleanup pass3.20s. Earlier evidence and failures remain recorded separately.
