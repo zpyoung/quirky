@@ -88,5 +88,49 @@
 - **Revisit if:** the pinned helper version changes wire/result semantics
 - **Source:** assumed — autonomous
 
+## D9: Repair the cookie canonicalizer and dynamic CDP event schemas at their source
+- **Question:** Why did domain cookies fail sanitizing and actual HAR remain empty?
+- **Options:** skip cookies/capture assertions; change cookie URL policy; repair malformed boundary adapters
+- **Chose:** correct the double-escaped domain regex so `.example.test` serializes as `.example.test`, not `..example.test`. An attempted URL addition did not fix it and was reverted. Explicitly allow dynamic fields on console args/stackTrace, Network request/header maps and Fetch request maps while retaining their typed outer envelopes and consumed-field validation.
+- **Why:** the observed sanitizing failure came from malformed domains. Actual HAR request collection rejected all nonempty nested request objects under the public Schema subset's default additionalProperties:false. This is the same boundary rule as core D36, not a reason to drop real records or weaken results.
+- **Evidence:** actual source driver canonicalCookieDomain and EVENT_* schemas; runtime smoke initially reached cookie failure, then passed import/rollback/jobs and reached empty HAR; final actual daemon/CLI smoke EXIT0/2.23s, elapsed2151ms/homeRemoved:true.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** exact-identity or event-admission regression coverage fails during the designated end phase
+- **Source:** assumed — autonomous
+
+## D10: Separate changed-path proof from deferred suite and native assurance
+- **Question:** What did this build-first iteration actually exercise?
+- **Options:** infer whole-suite/native pass; omit failed receipts; record the bounded real paths and their limits
+- **Chose:** source-reader smoke passed synthetic Chrome schema24 AES/host-digest decryption and Firefox SQLite, two detected sources, one injected key read only on import, source bytes unchanged and traversal refused. Final real daemon/CLI/owned Chrome smoke passed scoped input/storage; literal and explicit multiline file data/conflict exits0/0/2; Google-excluding JSON import and exact rollback; tracked file import succeeded; full PNG2616px/PDF bytes; real HAR2entries and Back; pending prompt answered exact Unicode out of band. No permanent suite, formal review or full dogfood campaign ran.
+- **Why:** typecheck-only policy does not justify claims about unrun tests. Higher-priority changed-path/surface proof was a focused throwaway smoke, not the end-phase campaign.
+- **Evidence:** source-smoke stdout SOURCE_SMOKE ok:true/chromeCookies1/firefoxCookies1/keyReads1; final SMOKE_REPORT ok:true/homeRemoved:true/2151ms; full root+mobile typecheck after roadmap EXIT0/25.42s. bun run build EXIT0/16.87s with existing missing-icon/release-URL warnings.
+- **Reversibility:** easy
+- **Confidence:** high for exercised behavior only
+- **Revisit if:** the end phase finds a failing acceptance scenario
+- **Source:** locked by docs/loop/LOOP.md
+
+## D11: Verify imported metadata on the built Settings surface without claiming import-menu completion
+- **Question:** Do real imported profile records still render in the existing UI?
+- **Options:** inspect types only; start native Default; focused owned web surface
+- **Chose:** a fresh isolated daemon imported a JSON cookie through the real engine into a newly created profile, then the built Browser Settings rendered Imported smoke profile with Remove and Default with Clear. Clicking Import Cookies disclosed the separately owned integration/API availability and Google exclusion, with no fake sources/success. Browser closed; supervisor exited0/homeRemoved:true. No Native guest/real-home Keychain/source import or OS clipboard used.
+- **Why:** imported-scope/source records changed UI admission. Visible proof is separate from native storage and full application assurance.
+- **Evidence:** screenshots omp-sshots-15b7ee407a1e73ab.png and15b7ee60149e73ac.png personally observed. Allowlist fixture produced one missing quirky.sidebar-extras setting pageerror in the unrelated worktree view; Browser Settings rendered and no whole-app clean-console pass is claimed. Initial scratch route used view rather than required id, failed -32602 and cleaned home; corrected public id route succeeded.
+- **Reversibility:** easy
+- **Confidence:** high for listed profile/disclosure rendering, no badge-menu/native parity claim
+- **Revisit if:** the existing import-UI owner changes capability presentation
+- **Source:** assumed — autonomous
+
+## D12: Reconcile the single roadmap catchup without broadening Native or mobile authority
+- **Question:** Do decisions landed during implementation override the extras contracts?
+- **Options:** silently ignore incoming logs; restore archived Native/mobile behavior; read and preserve current owner boundaries
+- **Chose:** one catchup to roadmap0ed9aa3931b35e97b002cec1becdc2a0cea9b174, merge3efb712e. Resolve only bun.lock's obsolete per-workspace React resolution conflict using incoming removal, then normal bun install; retain declared tldts7.4.16 and its license asset. IncomingBrowserBindings read all21 incoming logs completely and found no binding conflict. No Browser source changes arrived. Preserve all Native refusal/completion/root-isolation boundaries, exact Watch page/epoch/lock ownership, canonical Reviews routing and mobile method ceiling.
+- **Why:** Native prerequisite items explicitly remain blocked absent supported host capabilities. Neither those logs nor mobile panels authorize importing native credentials or broadening remote phone authority.
+- **Evidence:** incoming complete-read logs: fix-bash53-shell-integration; fix-terminal-dock-unfinished-flows-20261027; followup-m3-session-info-parity-20261027; m2-editor-complete-remaining-flows; m3-accounts-overflow-verification; m3-vault-parity-completion; m4-hosting-ui-review-browser-routing; m5-automations-dispatch-remote-and-args; m5-loops-ui-visible-stop-close-review; m6-heimdall-host-power; m6-orchestration-idle-pointer-shutdown; m7-sweep-automation; m7-sweep-orchestration; sa-browser-localhost-label-routing; sa-browser-native-identity; sa-browser-native-profile-clear-completion; sa-browser-pane-native-events; sa-browser-pane-native-host-controls; sa-browser-pane-workspace-preview; sb-mobile-app-panels; sb-mobile-install-links. Own caught-up root+mobile typecheck EXIT0/25.42s.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** the canonical merge-result typecheck exposes another source integration requirement
+- **Source:** assumed — autonomous
+
 ## Progress
-All three components integrated and worktrees removed; source smoke passed synthetic Chrome schema24 decryption and Firefox parsing with unchanged source bytes/no discovery key read. Root+mobile typecheck passed before final getter mapping. Actual daemon/CLI smoke progressing through repaired catalog/getter and textarea fixture; permanent suites/review/dogfood remain unrun. Next: finish changed-path proof, one roadmap catchup/reconcile/typecheck, commit/detach/canonical land and cleanup. Exactly one item; inherited .serena untouched.
+Ready to land exactly sa-browser-agent-extras. All three implementation workers and the reconciliation scout returned; all component scopes/HEADs audited and worktrees removed. D10/D11 name passing real-path/build/UI evidence and its limits; every smoke home was removed, owned UI/browser closed and supervisor exited0. Single roadmap catchup/reconciliation complete; current root+mobile typecheck passed25.42s. Permanent suites/review/full dogfood intentionally unrun under build-first policy. Existing import-UI/native prerequisite items retain all their named flows; no new deferral/follow-up. Next: commit final receipts, detach, canonical absolute queue land and await outcome; after success remove owned /tmp/quirky-browser-extras-lane5-bvwnJ2 and record notes. Inherited parent .serena untouched.
