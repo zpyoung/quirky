@@ -34,7 +34,6 @@ function adoptedTitle(session: Session, existingTitles: readonly string[]): stri
   return generated ? nextTerminalTitle(existingTitles) : session.title
 }
 
-const isTabbed = (session: Session) => session.kind === 'terminal' || session.kind === 'structured'
 
 /**
  * Brings one workspace in line with the session list: panes whose session is gone are removed,
@@ -63,7 +62,7 @@ export function reconcileWorkspace(input: ReconcileInput): ReconcileOutput {
 
   const held = new Set([...boundSessions(ws), ...boundElsewhere])
   const unbound = sessions
-    .filter((session) => session.worktreeId === ws.id && isTabbed(session) && !held.has(session.id))
+    .filter((session) => session.worktreeId === ws.id && session.kind === 'terminal' && !held.has(session.id))
     .sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id))
   for (const session of unbound) {
     const titles = workspaceTabs(ws).filter(isTerminalTab).map((tab) => tab.defaultTitle)
