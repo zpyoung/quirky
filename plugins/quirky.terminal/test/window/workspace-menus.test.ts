@@ -53,8 +53,10 @@ async function mount(workspace = conceptualWorkspace(), options: Record<string, 
 }
 
 const labels = (view: MountedWorkspace) => view.last().menu.items.map((item: any) => (item.separator ? '---' : item.label))
+const overlayQuery = <T extends Element = HTMLElement>(view: MountedWorkspace, selector: string) => view.element.ownerDocument.querySelector<T>(selector)
+const overlayQueryAll = <T extends Element = HTMLElement>(view: MountedWorkspace, selector: string) => [...view.element.ownerDocument.querySelectorAll<T>(selector)]
 const row = (view: MountedWorkspace, label: string) =>
-  [...view.element.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((el) => el.querySelector('.qt-menu-label')!.textContent === label) ?? null
+  [...view.element.ownerDocument.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((el) => el.querySelector('.qt-menu-label')!.textContent === label) ?? null
 const contextMenu = (view: MountedWorkspace, selector: string, init: MouseEventInit = {}) => fire(view.q(selector), mouse('contextmenu', init))
 
 /** Tabs A, B (pinned), C in one group with C active, beside a second group when `split`. */
@@ -104,7 +106,7 @@ describe('SC-20: the tab menu', () => {
     const view = await mount(threeTabs(false))
     await contextMenu(view, '[data-tab="tab-c"]')
     await click(row(view, 'Move Tab to Split'))
-    expect([...view.element.querySelectorAll('.qt-submenu [role="menuitem"]')].map((el) => el.textContent)).toEqual(['Right▸'.replace('▸', ''), 'Left', 'Down', 'Up'])
+    expect(overlayQueryAll(view, '.qt-submenu [role="menuitem"]').map((el) => el.textContent)).toEqual(['Right▸'.replace('▸', ''), 'Left', 'Down', 'Up'])
     await click(row(view, 'Down'))
     expect(callsTo(view.fake, 'moveTab')).toEqual([{ tab: 'tab-c', split: 'down', of: 'grp-1' }])
     expect(view.last().menu).toBeNull()
@@ -172,7 +174,7 @@ describe('SC-20: the tab menu', () => {
     const view = await mount(ws)
     await contextMenu(view, '[data-tab="tab-c"]')
     await click(row(view, 'Tab Color'))
-    const swatches = [...view.element.querySelectorAll<HTMLElement>('.qt-submenu [role="menuitem"]')]
+    const swatches = overlayQueryAll<HTMLElement>(view, '.qt-submenu [role="menuitem"]')
     expect(swatches.map((el) => el.textContent!.replace('✓', '').toLowerCase())).toEqual(TAB_COLORS.map((color) => (color === 'none' ? 'none' : color)))
     expect(swatches.filter((el) => el.getAttribute('aria-checked') === 'true').map((el) => el.textContent!.replace('✓', ''))).toEqual(['Teal'])
     expect(swatches[1]!.querySelector('.qt-swatch')).not.toBeNull()
@@ -245,15 +247,15 @@ describe('SC-39: the pane menu', () => {
     })
     await contextMenu(mounted, '[data-pane="pane-3"]')
     await click(row(mounted, 'Quick Commands'))
-    expect([...mounted.element.querySelectorAll('.qt-submenu [role="menuitem"]')].map((el) => el.textContent)).toEqual(['Hello pane-3'])
+    expect(overlayQueryAll(mounted, '.qt-submenu [role="menuitem"]').map((el) => el.textContent)).toEqual(['Hello pane-3'])
   })
 
   test('without a host, the submenu says there are none', async () => {
     const view = await mount()
     await contextMenu(view, '[data-pane="pane-3"]')
     await click(row(view, 'Quick Commands'))
-    expect(view.q<HTMLButtonElement>('.qt-submenu [role="menuitem"]')!.disabled).toBe(true)
-    expect(view.q('.qt-submenu')!.textContent).toContain('No quick commands')
+    expect(overlayQuery<HTMLButtonElement>(view, '.qt-submenu [role="menuitem"]')!.disabled).toBe(true)
+    expect(overlayQuery(view, '.qt-submenu')!.textContent).toContain('No quick commands')
   })
 
   test('the rows call the daemon with the pane they were opened on', async () => {
@@ -350,11 +352,11 @@ describe('menu behaviour', () => {
   test('arrow keys move through the rows and Enter picks one', async () => {
     const view = await mount(threeTabs(false))
     await contextMenu(view, '[data-tab="tab-c"]')
-    const menu = view.q('[role="menu"]')!
+    const menu = overlayQuery(view, '[role="menu"]')!
     await key(menu, 'ArrowDown')
     await key(menu, 'ArrowDown')
     await key(menu, 'ArrowDown')
-    expect(view.q('.qt-highlight .qt-menu-label')!.textContent).toBe('Pin Tab')
+    expect(overlayQuery(view, '.qt-highlight .qt-menu-label')!.textContent).toBe('Pin Tab')
     await key(menu, 'Enter')
     expect(callsTo(view.fake, 'pinTab')).toEqual([{ tab: 'tab-c', pinned: true }])
   })
@@ -362,10 +364,10 @@ describe('menu behaviour', () => {
   test('ArrowRight opens a submenu, ArrowLeft closes it, ArrowUp skips disabled rows', async () => {
     const view = await mount(threeTabs(false))
     await contextMenu(view, '[data-tab="tab-c"]')
-    const menu = view.q('[role="menu"]')!
+    const menu = overlayQuery(view, '[role="menu"]')!
     await key(menu, 'ArrowDown')
     await key(menu, 'ArrowRight')
-    const submenu = view.q('.qt-submenu [role="menu"]')!
+    const submenu = overlayQuery(view, '.qt-submenu [role="menu"]')!
     expect(submenu).not.toBeNull()
     await key(submenu, 'ArrowDown')
     await key(submenu, 'Enter')
@@ -375,18 +377,18 @@ describe('menu behaviour', () => {
   test('Escape closes the menu', async () => {
     const view = await mount(threeTabs(false))
     await contextMenu(view, '[data-tab="tab-c"]')
-    await key(view.q('[role="menu"]')!, 'Escape')
+    await key(overlayQuery(view, '[role="menu"]')!, 'Escape')
     expect(view.last().menu).toBeNull()
   })
 
   test('Escape in a submenu hands focus back, so a second Escape closes the menu', async () => {
     const view = await mount(threeTabs(false))
     await contextMenu(view, '[data-tab="tab-c"]')
-    const menu = view.q('[role="menu"]')!
+    const menu = overlayQuery(view, '[role="menu"]')!
     await key(menu, 'ArrowDown')
     await key(menu, 'ArrowRight')
-    await key(view.q('.qt-submenu [role="menu"]')!, 'Escape')
-    expect(view.q('.qt-submenu')).toBeNull()
+    await key(overlayQuery(view, '.qt-submenu [role="menu"]')!, 'Escape')
+    expect(overlayQuery(view, '.qt-submenu')).toBeNull()
     expect(document.activeElement).toBe(menu)
     await key(document.activeElement!, 'Escape')
     expect(view.last().menu).toBeNull()

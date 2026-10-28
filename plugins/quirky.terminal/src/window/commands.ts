@@ -1,4 +1,5 @@
 import { TERMINAL_PANE_MENU, TERMINAL_TAB_MENU, type Session, type UiKeybinding, type UiMenuItemEntry, type UiModel, type UiPluginContext } from '@quirky/protocol'
+import { CONTEXT_MENU_SEPARATOR, type ContextMenuItem } from '@quirky/ui'
 import type { MenuContributionItem } from './workspace/controller'
 import { findGroup } from '../layout/tree'
 import type { FloatingState, Group, PaneLeaf, QuickCommand, Workspace } from '../layout/types'
@@ -6,7 +7,7 @@ import { FLOATING_WORKSPACE } from '../layout/types'
 import { isQuickCommandComplete } from '../quick-commands/normalize'
 import { paneQuickCommandItems } from './quick-commands'
 import { repoFirst } from './quick-commands/search'
-import { SEPARATOR, controllerFor, focusedController, type MenuItem, type WorkspaceController } from './workspace'
+import { controllerFor, focusedController, type WorkspaceController } from './workspace'
 import { locatePane, locateTab } from './workspace/model'
 import { waitForController } from './workspace/registry'
 
@@ -441,10 +442,10 @@ export function reportQuickCommandsMenu(source: QuickCommandSource, publish: (st
 }
 
 /** The pane menu's Quick Commands rows for `pane`, adapted to the workspace menu's row shape. */
-export function paneMenuQuickCommands(context: UiPluginContext, source: QuickCommandSource, pane: string): MenuItem[] {
+export function paneMenuQuickCommands(context: UiPluginContext, source: QuickCommandSource, pane: string): ContextMenuItem[] {
   return paneQuickCommandItems(context, source.commands(), pane, { repo: source.repo() }).flatMap((item) => {
-    const row: MenuItem = { label: item.label, key: item.hint ?? null, enabled: item.enabled, onSelect: () => void item.onSelect() }
-    return item.separatorBefore ? [SEPARATOR, row] : [row]
+    const row: ContextMenuItem = { label: item.label, key: item.hint ?? null, enabled: item.enabled, onSelect: () => void item.onSelect() }
+    return item.separatorBefore ? [CONTEXT_MENU_SEPARATOR, row] : [row]
   })
 }
 
@@ -509,7 +510,7 @@ export function watchMenuContributions(context: UiPluginContext): MenuContributi
  * The pane menu rows other plugins contribute for `pane`. An item conditioned on `agent: 'any'`
  * applies only when the pane's session runs an agent; choosing a row runs its command with the session.
  */
-export function paneMenuContributions(context: UiPluginContext, source: MenuContributionSource, pane: PaneLeaf, session: Session | undefined): MenuItem[] {
+export function paneMenuContributions(context: UiPluginContext, source: MenuContributionSource, pane: PaneLeaf, session: Session | undefined): ContextMenuItem[] {
   const runsAgent = session !== undefined && session.agent !== 'shell'
   return source
     .items()

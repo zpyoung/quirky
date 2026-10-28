@@ -1,3 +1,5 @@
 [
-  "quirky.editor"
+  "quirky.editor",
+  "quirky.terminal",
+  "quirky.terminal-dock"
 ]

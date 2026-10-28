@@ -132,5 +132,16 @@
 - **Revisit if:** The canonical merge-result gate demonstrates a concrete integration failure.
 - **Source:** locked by incoming decision logs
 
+## D13: Union lint opt-ins after canonical land rejects concurrent restyle composition
+- **Question:** What is the required response to the actual landing conflict?
+- **Options:** drop either plugin's enforcement; retry without merging; follow failed-land recovery and retain all opt-ins
+- **Chose:** Switch back to the item branch, merge current roadmap, and resolve only scripts/ui-lint-plugins.json as editor plus terminal plus terminal-dock. Read ui-restyle-terminal D1–D13 and Progress completely. Preserve its shared ContextMenu, transparent token, theme/geometry authorities, exact-window/browser-isolation policy, authored behavioral tests and headless-GPU evidence limit.
+- **Why:** The first canonical land exited1 before verification because both restyles edited the previously empty enforcement list. Both source sets must remain enforced. Their canonical transparent token changes are identical, not competing palettes. This merge is the explicit failed-land retry, not an unsolicited second catch-up.
+- **Evidence:** first queue land3.24s conflict receipt; scripts/ui-lint-plugins.json conflict; retry-incoming-decisions.json
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** The composed typecheck or canonical retry names another concrete failure.
+- **Source:** locked by docs/loop/LOOP.md failed-land retry procedure
+
 ## Progress
 Ready for canonical land. Three scoped components committed and merged after exact HEAD/path/metadata barrier; all owned component worktrees removed with inherited metadata preserved. Source integration79e1faab and one clean roadmap catch-up complete. All four incoming logs read without conflict. Full merged UI-lint/root/mobile/prepared-desktop typecheck passed exit0/32.73s; pre-catch-up actual renderer build passed11host/vendor files25plugin modules and minimum real UI/print interactions are recorded in D9. Two substantive interaction regression files authored, suites/reviews/full dogfood/native/golden scoring UNRUN under build-first. No editor flow intentionally left unbuilt and no successor added. Owned isolated Chrome stopped, daemon shutdown exception and exact no-owned-process inventory retained under D11; original drifted foreign browser target untouched under D10. Next: commit this receipt, detach and canonical queue land ui-restyle-editor, await actual verdict; preserve compact ignored evidence then remove only owned scratch after success. No second item or whole-queue completion claim.
