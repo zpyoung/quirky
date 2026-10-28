@@ -132,5 +132,16 @@
 - **Revisit if:** end-phase browser/native checks expose different behavior.
 - **Source:** assumed — autonomous
 
+## D13: Preserve incoming product exclusions and final caught-up gate evidence
+- **Question:** Did the single roadmap catch-up introduce an authority conflict?
+- **Options:** silently override incoming decisions; read and compose the binding log.
+- **Chose:** Read all sb-mobile-chat-voice-native-ruling D1–D6 and Progress. Preserve background-only structured workers, no native chat/dictation product, no Native-browser substitution or phone authority growth. The catch-up changed only queue/index/blocker/decision documentation, not this exercised source. No follow-up is needed because every claimed worker-federation flow has a real implementation and acceptance source.
+- **Why:** Worker federation reuses background workers and explicit paired-daemon authority; it does not authorize the independently blocked mobile products. The branch remains one claimed item, with no second queue claim.
+- **Evidence:** Actual git merge build/roadmap changed four documentation files without conflict; full incoming decision log read. Caught-up root/mobile typecheck passed24.44s. Prior focused real smoke exit0/14.15s, migration5→7 and actual shipped-view evidence retain their stated limits; no suite/review/native claim.
+- **Reversibility:** easy
+- **Confidence:** high for inspected binding compatibility and exercised checks.
+- **Revisit if:** the controller's merged-source typecheck names a concrete integration conflict.
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-All three source components integrated and removed with metadata preserved; disjoint type repairs and actual runtime producer fixes are complete. Root/mobile typecheck and focused real paired-daemon/CLI, migration-upgrade and shipped-view proofs passed within D10–D12 limits. No suites/reviews/full dogfood/native campaign run or passing claim. Next: commit own source/docs, catch up once with build/roadmap and read incoming decisions, rerun typecheck, detach/canonical land and await receipt. All owned runtimes/browser tabs are stopped; inherited .serena/ untouched.
+Implementation, acceptance sources, README/spec/decisions and focused proof are complete. Single roadmap catch-up and complete incoming binding review done; caught-up root/mobile typecheck passed. All implementers and owned UI/daemon/browser processes finished; component trees removed with inherited metadata preserved. Next: commit this evidence, detach and canonical queue.ts land m7-orchestration-worker-federation; await its receipt before ending this iteration. No second claim and no whole-queue completion marker unless the canonical queue later returns done/check succeeds.

@@ -1,7 +1,9 @@
 # Paired-daemon worker federation
 
 ## Status & amendments
-Status: Approved autonomously under LOOP build-first; combined logic and technical specification. 2026-10-28: initial contract. No human asks, external research, review campaign or suite execution is authorized in this item.
+Status: Implemented under LOOP build-first; combined logic/technical specification approved autonomously. Acceptance sources are authored; caught-up root/mobile typecheck and focused real paired-daemon/CLI, store-upgrade and shipped-view proofs passed within decisions D10–D13. Suites, full UI campaigns, reviews and native/network-platform campaigns were not run.
+
+**Amendments:** 2026-10-28 — preserve established migration order, exact accepted→attached authority, service entry-point routing, stable relay UUIDs, serialized imports and home settlement before host verdict. No human asks or external research swarm.
 
 ## Purpose, scope and conceptual model
 A coordinator keeps its authoritative Run, Tasks, Dispatches and questions on the home daemon. `worker-start --on <peer-id>` executes a real worker on the explicitly paired host. That host owns its local service Run, Task, Dispatch, process and terminal custody. A durable binding maps the two identities; a remote identity is never represented as a locally authenticated session. Both session coordinators and authenticated service coordinators use the same pipeline.
