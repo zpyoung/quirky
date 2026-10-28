@@ -11,6 +11,37 @@
   "contributes": {
     "method": [
       {
+        "id": "saveAs",
+        "description": "Save an untitled Markdown buffer to a new authorized relative path, preserving its buffer and tab identity. Never replaces an existing destination.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "bufferId": { "type": "string" },
+            "path": { "type": "string" },
+            "expectedRevision": { "type": "integer", "minimum": 0 }
+          },
+          "required": ["bufferId", "path", "expectedRevision"],
+          "additionalProperties": false
+        },
+        "result": { "type": "object", "description": "The saved and retargeted editor buffer info; untitled is false. A stale revision, existing destination or non-untitled buffer fails without losing either file." }
+      },
+      {
+        "id": "workspaceNotes",
+        "description": "Read Markdown review notes across a worktree, including closed buffers, or settle exact delivered/cleared snapshots. Canonical notes remain editor-owned.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": { "type": "string" },
+            "action": { "type": "string", "enum": ["list", "settle"] },
+            "path": { "type": "string", "description": "Optional worktree-relative path filter for list." },
+            "snapshots": { "type": "array", "items": { "type": "object", "description": "Exact note object returned by list; every persisted field must still match before deletion." } }
+          },
+          "required": ["action"],
+          "additionalProperties": false
+        },
+        "result": { "type": "object", "description": "list returns {notes: MarkdownReviewNote[]}; settle returns {deletedNoteIds:string[],retainedNoteIds:string[]}. Changed snapshots survive; another worktree is never modified." }
+      },
+      {
         "id": "open",
         "description": "Open an authorized worktree file in an editor tab.",
         "params": {
