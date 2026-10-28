@@ -117,6 +117,8 @@ export type Methods = {
 
   /** The layout, the connected windows and what each slot reports. */
   'ui.state': { params: Record<string, never>; result: UiState }
+  /** Returns this request's own connection identity only when its authenticated role is `ui`. */
+  'ui.window.self': { params: Record<string, never>; result: WindowRoute }
   /** Reads exactly one live window's effective layout and reports; stale connection IDs refuse. */
   'ui.window.state': { params: WindowRoute; result: WindowRouteState }
   /** Opens a view only in the exact live target window. */

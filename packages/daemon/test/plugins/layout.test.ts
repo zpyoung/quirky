@@ -106,6 +106,10 @@ async function openWindow(harness: Harness, name?: string, role: ClientRole = 'u
   await client.call('events.subscribe', {})
   return window
 }
+async function windowConnId(client: QuirkyClient): Promise<number> {
+  const state = await client.call('ui.window.self', {})
+  return state.connId
+}
 
 /** Makes the window answer every routed command with `reply(args)`. */
 function answerWith(window: Window, reply: (id: string, args: unknown) => { result?: unknown; error?: { message: string } }): void {
@@ -196,6 +200,128 @@ describe('layout state', () => {
     expect(focused.code).toBe(RpcErrorCode.InvalidParams)
   })
 })
+test('ui.window.self returns only the calling live UI connection ID', async () => {
+  const { harness, caller } = await start()
+  const window = await openWindow(harness, 'self')
+  expect((await window.client.call('ui.window.self', {})).connId).toBeGreaterThan(0)
+
+  const nonWindow = await failure(caller.call('ui.window.self', {}))
+  expect(nonWindow.code).toBe(RpcErrorCode.InvalidParams)
+})
+
+describe('exact window routes', () => {
+  test('view updates and shared layout events preserve independent per-window navigation', async () => {
+    const { harness, caller } = await start()
+    const first = await openWindow(harness, 'first')
+    const second = await openWindow(harness, 'second')
+    const firstConnId = await windowConnId(first.client)
+    const secondConnId = await windowConnId(second.client)
+
+    const opened = await caller.call('ui.window.view.open', {
+      connId: firstConnId,
+      id: PAGE,
+      input: { note: 'one' }
+    })
+    expect(opened.view).toEqual({ id: PAGE, input: { note: 'one' } })
+    expect(await caller.call('ui.window.view.open', { connId: secondConnId, id: OTHER_PAGE })).toMatchObject({
+      view: { id: OTHER_PAGE }
+    })
+    await waitFor(() => changes(first).length === 1 && changes(second).length === 1)
+    expect(changes(first).map((event) => event.layout.view)).toEqual([{ id: PAGE, input: { note: 'one' } }])
+    expect(changes(second).map((event) => event.layout.view)).toEqual([{ id: OTHER_PAGE }])
+
+    expect((await caller.call('ui.window.state', { connId: firstConnId })).layout.view).toEqual({
+      id: PAGE,
+      input: { note: 'one' }
+    })
+    expect((await caller.call('ui.window.state', { connId: secondConnId })).layout.view).toEqual({ id: OTHER_PAGE })
+
+    const firstToast = { key: 'first-toast', kind: 'info' as const, title: 'First', body: 'one', detail: null, persistent: false, actions: [] }
+    const secondToast = { key: 'second-toast', kind: 'info' as const, title: 'Second', body: 'two', detail: null, persistent: false, actions: [] }
+    await first.client.call('ui.report', { slot: PAGE, state: { from: 'first' } })
+    await second.client.call('ui.report', { slot: PAGE, state: { from: 'second' } })
+    await first.client.call('ui.shell.report', { toasts: [firstToast] })
+    await second.client.call('ui.shell.report', { toasts: [secondToast] })
+    const firstState = await caller.call('ui.window.state', { connId: firstConnId })
+    const secondState = await caller.call('ui.window.state', { connId: secondConnId })
+    expect(slotOf(firstState, PAGE).report).toEqual({ from: 'first' })
+    expect(slotOf(secondState, PAGE).report).toEqual({ from: 'second' })
+    expect(firstState.toasts).toEqual([firstToast])
+    expect(secondState.toasts).toEqual([secondToast])
+
+    await caller.call('ui.panel.open', { id: OUTLINE })
+    await waitFor(() => changes(first).length === 2 && changes(second).length === 2)
+    expect(changes(first)[1]!.layout).toMatchObject({ view: { id: PAGE, input: { note: 'one' } }, panel: OUTLINE })
+    expect(changes(second)[1]!.layout).toMatchObject({ view: { id: OTHER_PAGE }, panel: OUTLINE })
+    expect((await caller.call('ui.window.state', { connId: firstConnId })).layout.view).toEqual({
+      id: PAGE,
+      input: { note: 'one' }
+    })
+  })
+
+  test('view close is compare-and-close against the complete current view', async () => {
+    const { harness, caller } = await start()
+    const window = await openWindow(harness, 'closable')
+    const connId = await windowConnId(window.client)
+    await caller.call('ui.window.view.open', { connId, id: PAGE, input: { note: 'current' } })
+
+    const omittedInput = await failure(caller.call('ui.window.view.close', { connId, expectedView: { id: PAGE } }))
+    expect(omittedInput.code).toBe(RpcErrorCode.Conflict)
+    expect((await caller.call('ui.window.state', { connId })).layout.view).toEqual({
+      id: PAGE,
+      input: { note: 'current' }
+    })
+
+    await caller.call('ui.window.view.open', { connId, id: OTHER_PAGE })
+    const stale = await failure(caller.call('ui.window.view.close', {
+      connId,
+      expectedView: { id: PAGE, input: { note: 'current' } }
+    }))
+    expect(stale.code).toBe(RpcErrorCode.Conflict)
+    expect((await caller.call('ui.window.state', { connId })).layout.view).toEqual({ id: OTHER_PAGE })
+
+    const closed = await caller.call('ui.window.view.close', { connId, expectedView: { id: OTHER_PAGE } })
+    expect(closed.view).toBeNull()
+  })
+
+  test('a targeted command receives its result from exactly the named window', async () => {
+    const { harness, caller } = await start()
+    const first = await openWindow(harness, 'first')
+    const second = await openWindow(harness, 'second')
+    answerWith(first, () => ({ result: 'first-result' }))
+    answerWith(second, () => ({ result: 'second-result' }))
+
+    const result = await caller.call('ui.window.command.run', { connId: await windowConnId(first.client), id: BOOM })
+    expect(result).toEqual({ result: 'first-result' })
+    expect(first.requests).toHaveLength(1)
+    expect(second.requests).toEqual([])
+  })
+
+  test('stale window IDs and non-UI self lookups are refused', async () => {
+    const { harness, caller } = await start()
+    const window = await openWindow(harness, 'temporary')
+    const staleConnId = await windowConnId(window.client)
+    const nonWindow = await harness.connect('cli', 'not a window')
+    window.client.close()
+
+    expect((await failure(caller.call('ui.window.state', { connId: staleConnId }))).code).toBe(RpcErrorCode.Conflict)
+    expect((await failure(nonWindow.call('ui.window.self', {}))).code).toBe(RpcErrorCode.InvalidParams)
+  })
+
+  test('unselected view and command operations refuse when multiple windows are open', async () => {
+    const { harness, caller } = await start()
+    const first = await openWindow(harness, 'first')
+    const second = await openWindow(harness, 'second')
+    answerWith(first, () => ({ result: 'first' }))
+    answerWith(second, () => ({ result: 'second' }))
+
+    expect((await failure(caller.call('ui.view.open', { id: PAGE }))).code).toBe(RpcErrorCode.Conflict)
+    expect((await failure(caller.call('ui.view.close', {}))).code).toBe(RpcErrorCode.Conflict)
+    expect((await failure(caller.call('ui.command.run', { id: BOOM }))).code).toBe(RpcErrorCode.Conflict)
+    expect(first.requests).toEqual([])
+    expect(second.requests).toEqual([])
+  })
+})
 
 describe('layout changes', () => {
   test('SC-36: methods open and close the view and panel, move focus and the sidebar, and each persists a broadcast', async () => {
@@ -243,14 +369,20 @@ describe('layout changes', () => {
     expect((await afterRestart.call('ui.state', {})).layout.palette).toBe(true)
   })
 
-  test('SC-37: a window changing the layout broadcasts to every subscribed client', async () => {
+  test('targeted view changes reach only the selected window', async () => {
     const { harness } = await start()
     const clicker = await openWindow(harness, 'clicker')
     const watcher = await openWindow(harness, 'watcher')
-    await clicker.client.call('ui.view.open', { id: OTHER_PAGE, input: { note: 'n3' } })
-    await clicker.client.call('ui.view.open', { id: PAGE })
-    await waitFor(() => changes(watcher).length === 2)
-    expect(changes(watcher)[1]!.layout.view).toEqual({ id: PAGE })
+    const connId = await windowConnId(clicker.client)
+    await clicker.client.call('ui.window.view.open', { connId, id: OTHER_PAGE, input: { note: 'n3' } })
+    await clicker.client.call('ui.window.view.open', { connId, id: PAGE })
+
+    await waitFor(() => changes(clicker).length === 2)
+    expect(changes(clicker).map((event) => event.layout.view)).toEqual([
+      { id: OTHER_PAGE, input: { note: 'n3' } },
+      { id: PAGE }
+    ])
+    expect(changes(watcher)).toEqual([])
   })
 
   test('SC-38: the layout survives a restart on the same home', async () => {
@@ -359,20 +491,22 @@ describe('routed UI commands', () => {
     expect(error).toMatchObject({ code: RpcErrorCode.Conflict, message: 'no Quirky window is open' })
   })
 
-  test('SC-41: with two windows the one that last reported focus runs it, once', async () => {
+  test('untargeted commands refuse with two windows while explicit targets remain exact', async () => {
     const { harness, caller } = await start()
     const first = await openWindow(harness, 'first')
     const second = await openWindow(harness, 'second')
     answerWith(first, () => ({ result: 'first' }))
     answerWith(second, () => ({ result: 'second' }))
 
-    expect(await caller.call('ui.command.run', { id: BOOM })).toEqual({ result: 'second' })
-    await first.client.call('ui.window.focused', { focused: true })
-    expect(await caller.call('ui.command.run', { id: BOOM })).toEqual({ result: 'first' })
-    await second.client.call('ui.window.focused', { focused: true })
-    expect(await caller.call('ui.command.run', { id: BOOM })).toEqual({ result: 'second' })
+    const ambiguous = await failure(caller.call('ui.command.run', { id: BOOM }))
+    expect(ambiguous.code).toBe(RpcErrorCode.Conflict)
+    expect(first.requests).toEqual([])
+    expect(second.requests).toEqual([])
+
+    expect(await caller.call('ui.window.command.run', { connId: await windowConnId(second.client), id: BOOM })).toEqual({ result: 'second' })
+    expect(await caller.call('ui.window.command.run', { connId: await windowConnId(first.client), id: BOOM })).toEqual({ result: 'first' })
     expect(first.requests).toHaveLength(1)
-    expect(second.requests).toHaveLength(2)
+    expect(second.requests).toHaveLength(1)
   })
 
   test('the window disconnecting before it answers fails the command', async () => {
@@ -388,8 +522,7 @@ describe('routed UI commands', () => {
     const { harness, caller } = await start()
     const target = await openWindow(harness, 'target')
     const stranger = await openWindow(harness, 'stranger')
-    await target.client.call('ui.window.focused', { focused: true })
-    const running = caller.call('ui.command.run', { id: BOOM })
+    const running = caller.call('ui.window.command.run', { connId: await windowConnId(target.client), id: BOOM })
     await waitFor(() => target.requests.length === 1)
     const { requestId } = target.requests[0]!
 
@@ -544,6 +677,7 @@ describe('command routing timeout', () => {
       },
       clients: () => [conn],
       broadcast: () => {},
+      broadcastNonWindows: () => {},
       sendTo: () => {},
       commandTimeoutMs: 20
     })

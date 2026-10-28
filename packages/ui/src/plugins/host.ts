@@ -17,6 +17,7 @@ import {
   type UiPluginModule,
   type UiSlotEntry,
   type UiState,
+  type WindowRoute,
   type NativeBrowserCapability,
   type DesktopWindowSummary
 } from '@quirky/protocol'
@@ -214,6 +215,7 @@ export class WindowPluginHost {
   private readonly unsubscribeFocus: (() => void) | undefined
   private readonly unsubscribeActivity: (() => void) | undefined
   private lastInputAt: number | null = null
+  private windowConnId: number | null = null
   private lastActivityReportAt: number | null = null
   private readonly nativeBrowser: NativeBrowserCapability
 
@@ -255,6 +257,7 @@ export class WindowPluginHost {
    * mounted slots' reports again (the daemon drops them with the old connection), then refreshes.
    */
   async connected(): Promise<void> {
+    await this.resolveWindowConnId()
     if (this.deps.windowFocus?.hasFocus()) this.reportFocus(true)
     if (this.lastInputAt !== null && this.now() - this.lastInputAt < ACTIVITY_REPORT_INTERVAL_MS) this.reportActivity()
     for (const handle of this.mounts) {
@@ -371,20 +374,24 @@ export class WindowPluginHost {
     return (this.state.model?.commands ?? []).filter((command) => command.title.toLowerCase().includes(needle))
   }
 
-  /** Updates the view in this window without stealing the main shell's global view. */
+  /** Updates the view in this window without changing another window's navigation. */
   openView(id: string, input?: unknown): void {
     const route = this.state.windowRoute
     if (route) {
       this.layoutCall('desktop.window.update', { windowId: route.windowId, view: id, ...(input !== undefined ? { input } : {}) })
       return
     }
-    this.layoutCall('ui.view.open', { id, ...(input !== undefined ? { input } : {}) })
+    this.callWindowLayout('ui.window.view.open', { id, ...(input !== undefined ? { input } : {}) })
   }
 
   closeView(): void {
     const route = this.state.windowRoute
-    if (route) this.layoutCall('desktop.window.update', { windowId: route.windowId, view: null })
-    else if (this.state.layout.view) this.layoutCall('ui.view.close', {})
+    if (route) {
+      this.layoutCall('desktop.window.update', { windowId: route.windowId, view: null })
+      return
+    }
+    const current = this.state.layout.view
+    if (current) this.callWindowLayout('ui.window.view.close', { expectedView: current })
   }
 
   /** Asks the daemon to open panel `id` (closing any other); with no `open`, to toggle it. */
@@ -455,9 +462,10 @@ export class WindowPluginHost {
     let model: UiModel
     let snapshot: SettingInfo[]
     try {
-      // A daemon snapshot can arrive after a concurrent state event even when it captured older state.
+      // A layout snapshot and its reports are for this exact live UI connection.
+      const connId = this.windowConnId ?? await this.resolveWindowConnId()
       const layoutVersion = this.layoutEventVersion
-      const layout = (this.deps.call('ui.state', {}) as Promise<UiState>).then((state) => {
+      const layout = (this.deps.call('ui.window.state', { connId }) as Promise<UiState>).then((state) => {
         if (!this.stopped && layoutVersion === this.layoutEventVersion) this.setLayout(state.layout)
       })
       const [fetchedModel, fetchedSettings] = await Promise.all([
@@ -1014,6 +1022,25 @@ export class WindowPluginHost {
 
   private layoutCall(method: string, params: Record<string, unknown>): void {
     this.deps.call(method, params).catch((error) => this.deps.log(`${method} failed: ${messageOf(error)}`))
+  }
+  private async resolveWindowConnId(): Promise<number> {
+    const route = await this.deps.call('ui.window.self', {}) as WindowRoute
+    if (!Number.isSafeInteger(route.connId) || route.connId < 1) {
+      throw new Error('the daemon did not identify this UI connection')
+    }
+    this.windowConnId = route.connId
+    return route.connId
+  }
+
+  private callWindowLayout(method: string, params: Record<string, unknown>): void {
+    const call = (connId: number) => this.layoutCall(method, { connId, ...params })
+    if (this.windowConnId !== null) {
+      call(this.windowConnId)
+      return
+    }
+    void this.resolveWindowConnId().then(call, (error) => {
+      this.deps.log(`${method} failed: ${messageOf(error)}`)
+    })
   }
 
   /** Takes the daemon's layout; auxiliary window views stay local to their exact window route. */
