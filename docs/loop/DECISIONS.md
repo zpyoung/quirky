@@ -432,6 +432,8 @@ files, not this one.
 | medium | high | [m4-hosting-ui-tasks D19](decisions/m4-hosting-ui-tasks.md) | Share feature boundaries with the review and worktree lanes | locked by user lane coordination; assumed — autonomous (UI-library subpaths) |
 | medium | high for source causes; runtime closure pending | [m4-hosting-ui-tasks D21](decisions/m4-hosting-ui-tasks.md) | Retain behavioral tests and repair observed projection/lifecycle defects | assumed — autonomous (observed gate repairs) |
 | medium | high | [m1-agent-status D14](decisions/m1-agent-status.md) | The fold keeps a finished lead `working` while children or background work live | locked by research/orca-features/agent-status.md |
+| medium | high | [m7-diff-markdown-local-images D1](decisions/m7-diff-markdown-local-images.md) | Preserve canonical owners and add one source-authorized lease | supersedes m7-editor-source-control-completion D11 |
+| medium | high | [m7-diff-markdown-local-images D9](decisions/m7-diff-markdown-local-images.md) | Preserve the single incoming terminal completion's ownership | locked by docs/loop/decisions/m7-sweep-terminal-completion.md |
 | medium | high | [m5-loops-core D1](decisions/m5-loops-core.md) | Both engine and completion safety ship together | locked by docs/loop/queue.json |
 | medium | high | [m5-loops-core D4](decisions/m5-loops-core.md) | Plugin owns policy and durable state; public APIs own shared execution | locked by docs/roadmap.md |
 | medium | high | [m5-loops-core D5](decisions/m5-loops-core.md) | Preserve API/CLI observable defaults and reject unsupported combinations | locked by research/orca-features/fork-loops.md |
@@ -1665,6 +1667,13 @@ files, not this one.
 | easy | high | [m1-agent-status D59](decisions/m1-agent-status.md) | Final Round 1: accept all six findings, which collapse to four defects; none stays open | assumed — autonomous |
 | easy | high | [m1-agent-status D60](decisions/m1-agent-status.md) | The UI pass: SC-34 to SC-37 all pass | assumed — autonomous |
 | easy | high | [m1-agent-status D61](decisions/m1-agent-status.md) | No native-only scenarios | assumed — autonomous |
+| easy | high | [m7-diff-markdown-local-images D2](decisions/m7-diff-markdown-local-images.md) | Resolve standard gray areas without a human or research swarm | locked by docs/loop/LOOP.md |
+| easy | high | [m7-diff-markdown-local-images D3](decisions/m7-diff-markdown-local-images.md) | Stabilize contracts before disjoint implementers | assumed — autonomous |
+| easy | high | [m7-diff-markdown-local-images D4](decisions/m7-diff-markdown-local-images.md) | Author tests now and retain bounded runtime evidence separately | locked by docs/loop/LOOP.md |
+| easy | high | [m7-diff-markdown-local-images D5](decisions/m7-diff-markdown-local-images.md) | Keep platform evidence bounded to macOS | deferred: platform |
+| easy | high | [m7-diff-markdown-local-images D6](decisions/m7-diff-markdown-local-images.md) | Align the resource contract at the actual supported boundary | assumed — autonomous |
+| easy | high for observed roots; corrected runtime/typecheck evidence is recorded separately | [m7-diff-markdown-local-images D7](decisions/m7-diff-markdown-local-images.md) | Repair declaration rejection and fixture typing without weakening service guards | assumed — autonomous |
+| easy | high for exercised paths only | [m7-diff-markdown-local-images D8](decisions/m7-diff-markdown-local-images.md) | Keep exercised API and component evidence distinct from deferred acceptance | assumed — autonomous |
 | easy | high | [m5-loops-core D3](decisions/m5-loops-core.md) | Use one combined spec and self-review without research swarms or human questions | locked by docs/loop/LOOP.md |
 | easy | high | [m5-loops-core D9](decisions/m5-loops-core.md) | Unknown USD stays unknown and reset resume needs explicit provider evidence | assumed — autonomous |
 | easy | high | [m5-loops-core D10](decisions/m5-loops-core.md) | Notification producers use central delivery policy | locked by docs/loop/decisions/m1-notifications.md |
