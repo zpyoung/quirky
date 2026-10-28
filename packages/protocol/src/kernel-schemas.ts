@@ -115,6 +115,7 @@ const settingInfo = object(
     minimum: { type: 'number' },
     maximum: { type: 'number' },
     values: strings,
+    menu: { type: 'string', enum: ['view'], description: 'A boolean setting exposed in the native View menu.' },
     value: { description: 'The current value.' },
     stored: object({ value: {}, valid: boolean() }, ['value', 'valid'])
   },
@@ -297,6 +298,7 @@ export const KERNEL_METHOD_SCHEMAS = {
         name: string(),
         protocolVersion: integer(0),
         token: string('The runtime token; required on the unix socket.'),
+        sessionToken: string('The launch-scoped session token; independent from sessionId.'),
         cwd: string(),
         sessionId: string(),
         worktreeId: string()

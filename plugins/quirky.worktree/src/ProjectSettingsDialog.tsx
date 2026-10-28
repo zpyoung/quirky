@@ -28,6 +28,7 @@ type Form = {
   setupPolicy: ProjectSettings['setupPolicy']
   waitForSetup: boolean
   archiveScript: string
+  issueCommand: string
   commandSource: string
 }
 
@@ -41,18 +42,19 @@ function toForm(details: RepoDetails): Form {
     setupPolicy: settings.setupPolicy,
     waitForSetup: settings.agentStartup === 'wait-for-setup',
     archiveScript: settings.archiveScript,
+    issueCommand: settings.issueCommand ?? '',
     commandSource: settings.commandSource ?? ''
   }
 }
 
-const TEXT_FIELDS = ['displayName', 'defaultBase', 'worktreeLocation', 'setupScript', 'archiveScript', 'setupPolicy', 'commandSource'] as const
-const SCRIPT_FIELDS = new Set<string>(['setupScript', 'archiveScript'])
+const TEXT_FIELDS = ['displayName', 'defaultBase', 'worktreeLocation', 'setupScript', 'archiveScript', 'issueCommand', 'setupPolicy', 'commandSource'] as const
+const SCRIPT_FIELDS: Partial<Record<keyof Form, true>> = { setupScript: true, archiveScript: true, issueCommand: true }
 
 /** The `quirky.repo/set` params for what differs from `before`; an emptied field is sent as '' to clear it. */
 function changes(before: Form, after: Form): Record<string, string> {
   const out: Record<string, string> = {}
   for (const key of TEXT_FIELDS) {
-    const next = SCRIPT_FIELDS.has(key) ? after[key] : after[key].trim()
+    const next = SCRIPT_FIELDS[key] === true ? after[key] : after[key].trim()
     if (next !== before[key]) out[key] = next
   }
   if (after.waitForSetup !== before.waitForSetup) out.agentStartup = after.waitForSetup ? 'wait-for-setup' : 'start-immediately'
@@ -60,15 +62,18 @@ function changes(before: Form, after: Form): Record<string, string> {
 }
 
 function SharedScript({ label, script }: { label: string; script: HookScript | null }) {
-  const text = script?.shared?.text
-  if (!text) return null
+  const shared = script?.shared
+  if (!script || !shared?.text) return null
+  const source = script.source === 'both' ? 'Shared and local' : script.source === 'shared' ? 'Shared' : 'Local'
+  const trust = shared.changed ? 'Changed since last trust' : shared.trusted ? 'Trusted' : 'Not trusted'
   return (
     <div className="shared-script">
       <div className="setup-heading">
         <span>{label}</span>
-        <span className="setup-badge">{script!.badge}</span>
+        <span className="setup-badge">{script.badge}</span>
       </div>
-      <pre className="script-preview">{text}</pre>
+      <p className="muted">Source: {source} · shared version: {trust}</p>
+      <pre className="script-preview">{shared.text}</pre>
     </div>
   )
 }
@@ -177,6 +182,16 @@ export function ProjectSettingsDialog({ context, repo, onClose }: Props) {
             <textarea rows={3} value={form.archiveScript} onChange={(event) => set('archiveScript', event.target.value)} placeholder="Runs before a workspace is deleted (local)" />
           </label>
           <label>
+            <span>Custom GitHub issue command</span>
+            <textarea
+              rows={3}
+              value={form.issueCommand}
+              onChange={(event) => set('issueCommand', event.target.value)}
+              placeholder="Runs for GitHub issue worktrees only (local)"
+            />
+            <small className="muted">Use {'{{issue}}'} and {'{{artifact_url}}'}; shared commands require trust before running.</small>
+          </label>
+          <label>
             <span>Command Source</span>
             <select value={form.commandSource} onChange={(event) => set('commandSource', event.target.value)}>
               {SOURCES.map((s) => (
@@ -192,9 +207,10 @@ export function ProjectSettingsDialog({ context, repo, onClose }: Props) {
           </section>}
           <section className="form-group shared-hooks" aria-label="Shared hooks">
             <h3>{details.hooks.file ? `Shared hooks (${details.hooks.file})` : 'Shared hooks'}</h3>
-            {!details.hooks.setup?.shared && !details.hooks.archive?.shared && <p className="muted">No shared scripts.</p>}
+            {!details.hooks.setup?.shared && !details.hooks.archive?.shared && !details.hooks.issueCommand?.shared && <p className="muted">No shared scripts.</p>}
             <SharedScript label="Setup" script={details.hooks.setup} />
             <SharedScript label="Archive" script={details.hooks.archive} />
+            <SharedScript label="GitHub issue command" script={details.hooks.issueCommand ?? null} />
             {details.hooks.warnings.length > 0 && (
               <ul className="hook-warnings">
                 {details.hooks.warnings.map((warning) => (

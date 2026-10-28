@@ -1,6 +1,6 @@
 import type { ActivityPreferences } from './useSidebarActivity'
 import type { MembershipTarget } from './membership'
-import type { AgentDisplayState, ProjectGroup, Repo, Session, Worktree, WorktreeStatus } from '@quirky/protocol'
+import type { AgentDisplayState, GitHubWorktreeLink, ProjectGroup, Repo, Session, Worktree, WorktreePushTarget, WorktreeStatus } from '@quirky/protocol'
 import { worktreeGlyph, worktreeStatus, type DisplayStatus } from './status'
 
 /** A create the window has sent and not yet seen finish; shown as a pending row under its project. */
@@ -62,6 +62,8 @@ export type ActivityReport = {
   hiddenIds: string[]
   hiddenCount: number
   filterCount: number
+  reviewHiddenIds?: string[]
+  reviewHiddenCount?: number
 }
 export type FilterStatus = 'loading' | 'available' | 'missing' | 'error'
 export type DropPreviewReport = MembershipTarget
@@ -272,6 +274,9 @@ export type WorkspaceReport = {
   pending: boolean
   removing: boolean
   selected: boolean
+  linkedPR?: GitHubWorktreeLink
+  linkedIssue?: GitHubWorktreeLink
+  pushTarget?: WorktreePushTarget
 }
 
 export type ProjectReport = { id: string; name: string; kind: 'git' | 'folder'; worktrees: WorkspaceReport[] }
@@ -289,6 +294,8 @@ export type WorktreesReport = {
   visibleIds: string[] | null
   hiddenIds: string[]
   hiddenCount: number
+  reviewHiddenIds: string[]
+  reviewHiddenCount: number
   filterCount: number
   groupDepths: Record<string, number>
   groupParents: Record<string, string | null>
@@ -331,6 +338,9 @@ export function buildReport(input: ReportInput): WorktreesReport {
       primary: worktree.isMain,
       status: sessions === null ? null : worktreeStatus(sessions, worktree.id),
       ...(glyph?.kind === 'agent' ? { display: glyph.display, label: glyph.label } : {}),
+      ...(worktree.linkedPR ? { linkedPR: worktree.linkedPR } : {}),
+      ...(worktree.linkedIssue ? { linkedIssue: worktree.linkedIssue } : {}),
+      ...(worktree.pushTarget ? { pushTarget: worktree.pushTarget } : {}),
       ...(repoName ? { repoName } : {}),
       workspaceStatus: worktree.status,
       pinned: worktree.pinned,
@@ -386,6 +396,8 @@ export function buildReport(input: ReportInput): WorktreesReport {
     visibleIds: input.visibleIds ? [...input.visibleIds] : null,
     hiddenIds: activity?.hiddenIds ?? [],
     hiddenCount: activity?.hiddenCount ?? 0,
+    reviewHiddenIds: activity?.reviewHiddenIds ?? [],
+    reviewHiddenCount: activity?.reviewHiddenCount ?? 0,
     filterCount: activity?.filterCount ?? 0,
     groupDepths: Object.fromEntries(groups.map(({ group, depth }) => [group.id, depth])),
     groupParents: Object.fromEntries(groups.map(({ group, parentId }) => [group.id, parentId])),

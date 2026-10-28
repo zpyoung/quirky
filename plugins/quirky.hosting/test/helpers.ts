@@ -27,6 +27,8 @@ export type HostingTestOptions = {
   upstream?: string
   branch?: string
   tracked?: boolean
+  /** Additional real built-ins used by downstream feature integration tests. */
+  extraBuiltins?: string[]
 }
 
 const WORKSPACE_ROOT = resolve(import.meta.dir, '../../..')
@@ -37,6 +39,7 @@ const ENVIRONMENT_KEYS = [
   'GH_ENTERPRISE_TOKEN', 'GITHUB_ENTERPRISE_TOKEN', 'GH_HOST', 'GH_REPO', 'GH_PROMPT_DISABLED',
   'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_SYSTEM', 'GIT_CONFIG_NOSYSTEM', 'GIT_CONFIG_COUNT', 'GIT_CONFIG_PARAMETERS',
   'GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_TERMINAL_PROMPT',
+  'QUIRKY_AGENT_SEARCH_DIRS',
   'QUIRKY_TEST_FIXTURE_DIR', 'QUIRKY_TEST_GH_SOURCE', 'QUIRKY_TEST_GH_LOG', 'QUIRKY_TEST_GH_ACTIVITY',
   'QUIRKY_TEST_SSH_CONFIG'
 ] as const
@@ -176,6 +179,11 @@ export async function bootHosting(ghSource: string, options: HostingTestOptions 
   symlinkSync(join(PLUGINS_ROOT, 'quirky.hosting'), join(builtinPluginsDir, 'quirky.hosting'))
   symlinkSync(join(PLUGINS_ROOT, 'quirky.repo'), join(builtinPluginsDir, 'quirky.repo'))
   symlinkSync(join(PLUGINS_ROOT, 'quirky.worktree'), join(builtinPluginsDir, 'quirky.worktree'))
+  for (const id of options.extraBuiltins ?? []) {
+    if (!/^quirky\.[a-z][a-z0-9-]*$/.test(id)) throw new Error('invalid additional builtin fixture ID')
+    if (['quirky.hosting', 'quirky.repo', 'quirky.worktree'].includes(id)) continue
+    symlinkSync(join(PLUGINS_ROOT, id), join(builtinPluginsDir, id))
+  }
   const bridgeDirectory = join(builtinPluginsDir, 'quirky.hosting-test-bridge')
   mkdirSync(bridgeDirectory, { recursive: true })
   writeFileSync(join(bridgeDirectory, 'quirky-plugin.json'), JSON.stringify(BRIDGE_MANIFEST, null, 2))
@@ -195,6 +203,7 @@ export async function bootHosting(ghSource: string, options: HostingTestOptions 
   process.env.XDG_CONFIG_HOME = join(home, '.config')
   process.env.GH_CONFIG_DIR = join(home, '.config', 'gh')
   process.env.PATH = `${fakebin}${delimiter}${previousEnvironment.get('PATH') ?? ''}`
+  process.env.QUIRKY_AGENT_SEARCH_DIRS = previousEnvironment.get('QUIRKY_AGENT_SEARCH_DIRS') ?? fakebin
   process.env.QUIRKY_TEST_SSH_CONFIG = sshConfig
   process.env.GH_TOKEN = 'fixture-ambient-token'
   process.env.GITHUB_TOKEN = 'fixture-github-token'

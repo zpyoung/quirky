@@ -94,6 +94,21 @@ identity, so replacing a worktree does not inherit its predecessor's recency.
 The separator switch is under Appearance > Window & Sidebar. The original header panel toggles
 remain available alongside the Source Control activity item.
 
+Workspace options also includes **Hide merged/closed reviews** and **Hide passing checks**.
+Each enabled toggle adds one to the filter badge; Clear filters resets both and the activity window.
+The same client-local preferences are scriptable:
+
+```sh
+quirky sidebar-extras set --hide-completed-review-workspaces=true --hide-passing-check-workspaces=true
+quirky sidebar-extras set --hide-completed-review-workspaces=false --hide-passing-check-workspaces=false
+quirky hosting cached-reviews --worktrees <worktree-id> --json
+```
+
+Review filters consume normal hosting lookup results without fetching or probing authentication.
+Uncached, unavailable, expired, or identity/head-stale review data leaves a workspace visible to
+the review filters. `sidebar-extras projection --json` reports combined `visibleIds`/`hiddenIds`,
+activity-only `hiddenCount`, and separate `reviewHiddenIds`/`reviewHiddenCount`.
+
 The operator-directed core landing leaves exhaustive parity and browser verification to
 `m2-sidebar-extras-followup`; see [the sidebar specification](docs/quirk/specs/2026-10-27-m2-sidebar-extras/logic.md)
 for that remaining acceptance target.

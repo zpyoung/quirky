@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { ApiCatalog, Schema } from '@quirky/protocol'
+import { QuirkyClient, type ApiCatalog, type Schema } from '@quirky/protocol'
+import { createDaemonLink } from '../src/link'
+import { cliContextFor } from '../src/plugin-commands'
+import { Printer } from '../src/output'
+import type { Context } from '../src/commands/types'
 import { FakeDaemon, runCli } from './fixtures/fake-daemon'
 
 const NOTE_PARAMS: Schema = {
@@ -243,5 +247,38 @@ describe('declared commands beat generated ones, and help lists them', () => {
     const result = await run(['acme.solo'])
     expect(result.code).toBe(0)
     expect(result.stdout).toBe('3\n')
+  })
+})
+describe('plugin CLI runtime context', () => {
+  test('exposes the request base and forwards a per-call timeout through the daemon link', async () => {
+    const forwarded: { method: string; params: Record<string, unknown>; options?: { requestId?: string; timeoutMs?: number } }[] = []
+    const client = {
+      callAny(method: string, params: Record<string, unknown>, options?: { requestId?: string; timeoutMs?: number }) {
+        forwarded.push({ method, params, options })
+        return Promise.resolve({ ok: true })
+      }
+    } as unknown as QuirkyClient
+    const link = createDaemonLink(() => Promise.resolve(client), { requestBase: 'retry-base' })
+    const context = {
+      rpc: link,
+      requestBase: link.requestBase,
+      out: new Printer({ stdout() {}, stderr() {} }, false),
+      env: {},
+      cwd: '/work',
+      readFile: () => '',
+      sleep: async () => {},
+      now: () => 0,
+      openDesktopApp: async () => ({ ok: true as const })
+    } satisfies Context
+    const cli = cliContextFor(context)
+
+    expect(cli.requestBase).toBe('retry-base')
+    await cli.call('quirky.session/pointer', { session: 's_1' }, { timeoutMs: 60_000 })
+    expect(forwarded).toHaveLength(1)
+    expect(forwarded[0]).toMatchObject({
+      method: 'quirky.session/pointer',
+      params: { session: 's_1' },
+      options: { requestId: expect.stringMatching(/^retry-base:/), timeoutMs: 60_000 }
+    })
   })
 })

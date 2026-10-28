@@ -13,7 +13,9 @@ export function registerPreferencesUi(context: UiPluginContext): void {
   }
   context.provide('settings-section:quirky.browser/browser-preferences', mountSettings(true))
   context.provide('view:quirky.browser/browser-settings', mountSettings(false))
-  context.provide('command:quirky.browser/browserSettings', () => context.openView('view:quirky.browser/browser-settings'))
+  context.provide('command:quirky.browser/browserSettings', async () => {
+    await context.call('ui.view.open', { id: 'view:quirky.browser/browser-settings' })
+  })
   context.provide('command:quirky.browser/profileClearNative', async (args: unknown) => {
     if (args === null || typeof args !== 'object' || !('request' in args) || typeof args.request !== 'string') {
       throw new Error('A pending confirmed profile clear request is required.')

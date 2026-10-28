@@ -80,13 +80,13 @@
 ## D8: Bound Watch transport with renderer acknowledgment and daemon-owned tab lifecycle
 - **Question:** Can generic broadcast events bound slow-reader memory, and do CLI pane operations open/close the real hosted tab?
 - **Options:** unbounded event pushes/UI-only tab creation; generic stream rewrite; one outstanding frame with explicit ACK and daemon-owned hosted tabs
-- **Chose:** paneFrameAck validates pane/watchId/sequence; retain only outstanding plus latest frame, expire stalled leases. paneOpen owns public openViewTab; paneClose uses fromTab preclose flag to avoid reentrant terminal queue while ordinary API closes the actual tab.
+- **Chose:** paneFrameAck validates pane/watchId/sequence; retain only outstanding plus latest frame, expire stalled leases. paneOpen owns public openViewTab. `paneClose({pane,tabId?:string,fromTab?:boolean})` returns boolean `true` for every caller; the manifest result is boolean. `fromTab:true` is terminal-plugin-only and requires the matching hosted `tabId`; terminal `closeMethod` injects that tabId and requires exact `true`. Ordinary paneClose closes the actual hosted tab. No result union, compatibility shim, or terminal-contract weakening.
 - **Why:** public events do not persist but transport can buffer; renderer ACK supplies real backpressure. UI-only hosted creation would break API/CLI equivalence, and preclose callback queue reentry deadlocks.
-- **Evidence:** packages/daemon/src/plugins/events.ts:28-40; packages/daemon/src/service.ts:74-82; plugins/quirky.terminal/src/layout/service.ts:452-510; amended shared pane contract and logic spec.
+- **Evidence:** packages/daemon/src/plugins/events.ts:28-40; packages/daemon/src/service.ts:74-82; plugins/quirky.terminal/src/layout/service.ts:452-510; amended shared pane contract and logic spec. Parent-reported actual CLI smoke established the exact-true/injected-tabId closeMethod contract and failed manifest validation on 33 missing required CLI flag descriptions; metadata repair was reported in progress, not passed.
 - **Reversibility:** medium (public lease and lifecycle contracts)
 - **Confidence:** high
 - **Revisit if:** backpressure or close-race acceptance exposes stale/duplicate state
-- **Source:** assumed — autonomous
+- **Source:** pane lifecycle: assumed — autonomous; corrected close contract: parent-reported actual CLI smoke
 
 ## D9: Use supported native tag geometry with a narrow trusted zoom bridge
 - **Question:** The native BrowserView lacks public bounds/navigation controls, while its custom tag omits the optional views-loader creation flag; does the core require private FFI or an engine change?
@@ -242,5 +242,39 @@
 - **Revisit if:** actual verification exposes another blocking defect; fix it rather than hiding it behind the deadline
 - **Source:** locked by docs/loop/LOOP.md
 
+## D23: Narrow the overdue landing to API/CLI pane lifecycle and navigation
+- **Question:** Which acceptance remains current, and how are the other flows handed off without creating more queue items?
+- **Options:** retain the original full UI/native matrix; drop the unfinished flows; ship API/CLI pane lifecycle and navigation with precise ownership in existing follow-ups.
+- **Chose:** Current acceptance is pane lifecycle and navigation through the schema-declared API and generated CLI, using the committed `build/sa-browser-pane` and `/tmp/sa-browser-pane.fiGLjz` trees. Preserve implementation and tests; this scope cut does not authorize deleting them or weakening tests. No new queue records; existing follow-up titles remain unchanged, and this decision plus BLOCKERS.md extend their handoff scope. `sa-browser-pane-native-host-controls` owns Watch screencast transport/input/find/zoom/viewport acceptance plus remaining base-pane UI scenarios, hard-reload, and load-error. `sa-browser-pane-native-events` owns dialogs/auth/cert/download/popups/OAuth/external events. `sa-browser-pane-workspace-preview` owns grant document preview/UI. Lane8's `sa-browser-profiles-settings` owns profile integration and corresponding UI/settings scenarios; `sa-browser-profile-import-ui`, `sa-browser-native-profile-clear-completion`, `sa-browser-native-identity`, and `sa-browser-localhost-label-routing` retain their exact existing subflow handoffs. `m7-sweep-browser-mobile` remains the final parity audit, not a replacement for these mappings. Review was skipped by the operator; Native nightly remains pending; no broad UI acceptance is claimed.
+- **Why:** the latest operator ruling narrows this overdue landing while preserving every remaining flow with its existing owner; full UI/native parity is not silently implied.
+- **Evidence:** latest operator instruction; existing follow-up records in docs/loop/queue.json and pane blocker entries; preserved candidate paths named by the operator.
+- **Reversibility:** medium (residual acceptance remains with existing follow-ups)
+- **Confidence:** high for the approved scope and ownership; no acceptance result is inferred
+- **Revisit if:** the operator explicitly broadens this item's current acceptance
+- **Source:** latest operator ruling for sa-browser-pane
+
+
+## D24: Repair the actual API/CLI lifecycle boundary without relaxing contracts
+- **Question:** Why did a source CLI smoke report unknown browser pane, and why would terminal-origin close refuse the Browser result?
+- **Options:** force activation in the smoke; weaken manifest or terminal validation; repair Browser declarations and its close result.
+- **Chose:** supply all 33 missing required CLI flag descriptions. Make paneClose return boolean true for every caller, declare the boolean schema, accept the terminal-injected tabId, and validate terminal caller plus matching hosted tab for fromTab. Keep terminal's exact-true close contract. Restore host:port normalization before explicit-scheme parsing and import fileURLToPath from node:url.
+- **Why:** plugin.list showed Browser invalid because of missing flag descriptions, so no API or CLI declarations existed. Terminal's ensureViewsClosable expects true and injects tabId; the old object result/schema could not satisfy it. The fresh CLI smoke now executes open/state/navigate/report/reject/close/idempotence successfully, with zero Chrome starts.
+- **Evidence:** isolated smoke failure and plugin.list diagnostics (artifact21); production-source smoke PANE_LIFECYCLE_CLI_SMOKE_OK; plugins/quirky.terminal/src/layout/service.ts:317–322; new pane-lifecycle.test.ts.
+- **Reversibility:** medium (public unstable result contract; all current consumers migrated).
+- **Confidence:** high for daemon/CLI lifecycle; Native rendering not exercised.
+- **Revisit if:** controller verification exposes stale close ownership, deadlock or wrong-worktree state.
+- **Source:** assumed — autonomous within operator-authorized lifecycle scope.
+
+## D25: Preserve the unfinished repair snapshot rather than silently overwrite dependency seams
+- **Question:** Are wavecheck's uncommitted runtime acceptance repairs already part of the item branch?
+- **Options:** assume earlier merges included dirty work; merge the whole advanced candidate; preserve it intact and take only fixes required by current gates.
+- **Chose:** commit the full twelve-file dirty repair snapshot as 22d17dfd on build/sa-browser-pane-wavecheck. Keep main's profile seams for lane8, preserve all tests, and implement only concrete lifecycle/compiler/isolation repairs on the item branch. Downloads use an internal constructor destination override in tests; production retains OS Downloads.
+- **Why:** wavecheck HEAD was merged but its staged/unstaged runtime repairs were not. Blind copying would remove lane8's module seams and expand acceptance beyond the operator cut. The full source and strengthened advanced tests remain recoverable by the mapped follow-ups.
+- **Evidence:** twelve-file scope inventory; checkpoint22d17dfd; current BrowserDependencies.downloadDirectory and isolated harness destination.
+- **Reversibility:** easy (recover checkpoint from Git).
+- **Confidence:** high for preservation, not an advanced-flow passing claim.
+- **Revisit if:** a deferred owner needs the intact prompt-TTL/profile/screencast/page-event acceptance work.
+- **Source:** latest operator ruling for sa-browser-pane.
+
 ## Progress
-Real source checkpoint requested by lane8; candidate is /tmp/sa-browser-pane.fiGLjz/wavecheck, HEAD e084312b plus staged/unstaged implementation and parent safety fixes. Original3component barrier and six-path menu repair audit passed. Native capability7pass, DOM2pass, desktop/window models12pass, desktop types/preload build passed; root typecheck initially failed26diagnostics and runtime acceptance remains active. Publish UNVERIFIED checkpoint to build/sa-browser-pane, then integrate isolated Runtime repair and finish actual UI/affected/scripts/types/catchup/controller land. Overdue night mode skips the unstarted final review/full campaign (D22); no green acceptance/land claim.
+Current source is on build/sa-browser-pane, caught up through merge5cd99ee1. All iteration4 agents returned and type-repair scopes were audited. Real source CLI lifecycle smoke passed; scripts passed68 tests/564 assertions. First typecheck exposed10 actual diagnostics, repaired without suppressions; final typecheck and targeted lifecycle/menu/pane checks are running. The broad affected run captured the earlier invalid manifest/type state and is not claimed green. Native/full UI/review remain unverified and explicitly assigned under D23. Finish exact gate failures without weakening tests, commit, detach and invoke the canonical queue.ts land for this one item. Full deferred source/test checkpoint:22d17dfd.

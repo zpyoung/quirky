@@ -1,9 +1,10 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:https'
-import { basename, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { expect, test } from 'bun:test'
 import type { QuirkyEvent } from '@quirky/protocol'
 import { startBrowserHarness, type BrowserTestHarness } from './harness'
+import type { PaneState } from '../src/pane-contract'
 type CertificateServer = { port: number; stop(): Promise<void> }
 
 const call = (h: BrowserTestHarness, name: string, params: Record<string, unknown> = {}) =>
@@ -90,7 +91,7 @@ test('pane navigation normalizes safely, persists bounded recency history, and k
   const h = await startBrowserHarness()
   try {
     const worktree = await h.addFolderWorktree('pane-native')
-    const worktreePath = join(h.home, 'projects', 'pane-native')
+    const worktreePath = realpathSync(join(h.home, 'projects', 'pane-native'))
     writeFileSync(join(worktreePath, 'local-document.txt'), 'safe local page')
     writeFileSync(join(worktreePath, 'suggested-document.txt'), 'workspace suggestion')
     writeFileSync(join(worktreePath, 'local-page.html'), '<!doctype html><title>Local</title>')
@@ -187,6 +188,11 @@ test('Watch leases deliver acknowledged latest frames and typed input/find/zoom/
       expect(events.map(paneFrame).filter((frame) => frame?.watchId === watch.watchId)).toHaveLength(1)
 
       await call(h, 'paneFrameAck', { pane: pane.id, watchId: watch.watchId, sequence: firstFrame.sequence })
+      // CDP only captures damaged frames; a static page need not emit another image.
+      expect(await call(h, 'eval', {
+        page: first.browserPageId,
+        expression: "document.body.style.backgroundColor='rgb(230,20,20)';'repainted'"
+      })).toEqual({ value: 'repainted' })
       const nextFrame = await waitFor(() => events.map(paneFrame).find((frame) => frame?.watchId === watch.watchId && frame.sequence !== firstFrame.sequence))
       expect(nextFrame.sequence).toBeGreaterThan(firstFrame.sequence as number)
 
@@ -327,14 +333,28 @@ test('Watch JavaScript dialogs resolve pending eval outside the profile lock and
     await call(h, 'paneWatch', { pane: downloadPane.id })
     await call(h, 'click', { page: downloadPage.browserPageId, element: 'a' })
     const downloaded = await waitFor(async () => {
-      const state = await call(h, 'paneState', { worktree: `id:${worktree}` }) as { tabs: Array<{ id: string; downloads: Array<{ id: string; state: string; path?: string }> }> }
+      const state = await call(h, 'paneState', { worktree: `id:${worktree}` }) as PaneState
       return state.tabs.find((tab) => tab.id === downloadPane.id)?.downloads.find((download) => download.state === 'completed')
     })
-    expect(downloaded.path).toBeTruthy()
-    expect(basename(downloaded.path!)).toBe('safe (1).txt')
+    const firstPath = downloaded.path
+    if (typeof firstPath !== 'string') throw new Error('Completed download has no published path')
+    expect(dirname(realpathSync(firstPath))).toBe(realpathSync(downloads))
+    expect(readFileSync(firstPath, 'utf8')).toBe('owned download contents')
+    writeFileSync(firstPath, 'keep first publication')
+
+    await call(h, 'click', { page: downloadPage.browserPageId, element: 'a' })
+    const collision = await waitFor(async () => {
+      const state = await call(h, 'paneState', { worktree: `id:${worktree}` }) as PaneState
+      return state.tabs.find((tab) => tab.id === downloadPane.id)?.downloads.find((download) => download.state === 'completed' && download.id !== downloaded.id)
+    })
+    const collisionPath = collision.path
+    if (typeof collisionPath !== 'string') throw new Error('Completed collision download has no published path')
+    expect(collisionPath).not.toBe(firstPath)
+    expect(dirname(realpathSync(collisionPath))).toBe(realpathSync(downloads))
+    expect(collision.name).toBe(basename(collisionPath))
+    expect(readFileSync(firstPath, 'utf8')).toBe('keep first publication')
     expect(readFileSync(join(downloads, 'safe.txt'), 'utf8')).toBe('keep existing file')
-    expect(existsSync(downloaded.path!)).toBe(true)
-    expect(readFileSync(downloaded.path!, 'utf8')).toBe('owned download contents')
+    expect(readFileSync(collisionPath, 'utf8')).toBe('owned download contents')
   } finally {
     fixture.stop()
     try { await h.cleanup() } finally { await certificate?.stop() }

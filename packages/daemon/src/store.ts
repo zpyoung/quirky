@@ -38,10 +38,19 @@ export interface JobRun {
   error?: string
 }
 
+export interface RuntimeAuthorityRow {
+  sessionId: string
+  tokenHash: string
+  runtimeEpoch: string
+  processIncarnation: string
+  ptyHostPid: number | null
+  ptyPid: number | null
+  ptyCreatedAt: number | null
+}
+
 /**
- * SQLite persistence for plugin setting values, UI state, disabled IDs, job runs, the request log,
- * confirmations and the distro. The tables v1 wrote (repos, sessions, asks and the rest) are still
- * created so a plugin's first-run import can read them, but nothing here touches them.
+ * SQLite persistence for settings, UI state, requests, confirmations, distro data and hashed runtime authority.
+ * The tables v1 wrote (repos, sessions, asks and the rest) stay readable for the legacy importer.
  */
 export class Store {
   private readonly db: Database
@@ -123,6 +132,15 @@ export class Store {
         used INTEGER NOT NULL DEFAULT 0,
         created_at INTEGER NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS runtime_authorities (
+        session_id TEXT PRIMARY KEY,
+        token_hash TEXT NOT NULL,
+        runtime_epoch TEXT NOT NULL,
+        process_incarnation TEXT NOT NULL,
+        pty_host_pid INTEGER,
+        pty_pid INTEGER,
+        pty_created_at INTEGER
+      );
       CREATE TABLE IF NOT EXISTS distro (
         id TEXT PRIMARY KEY,
         manifest TEXT NOT NULL,
@@ -138,6 +156,44 @@ export class Store {
 
   close(): void {
     this.db.close()
+  }
+
+  getRuntimeAuthority(sessionId: string): RuntimeAuthorityRow | null {
+    const row = this.db.query('SELECT * FROM runtime_authorities WHERE session_id = ?').get(sessionId) as Row | null
+    return row ? runtimeAuthorityOf(row) : null
+  }
+
+  listRuntimeAuthorities(): RuntimeAuthorityRow[] {
+    return (this.db.query('SELECT * FROM runtime_authorities').all() as Row[]).map(runtimeAuthorityOf)
+  }
+
+  putRuntimeAuthority(authority: RuntimeAuthorityRow): void {
+    this.db
+      .query(
+        `INSERT INTO runtime_authorities (
+          session_id, token_hash, runtime_epoch, process_incarnation, pty_host_pid, pty_pid, pty_created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(session_id) DO UPDATE SET
+          token_hash = excluded.token_hash,
+          runtime_epoch = excluded.runtime_epoch,
+          process_incarnation = excluded.process_incarnation,
+          pty_host_pid = excluded.pty_host_pid,
+          pty_pid = excluded.pty_pid,
+          pty_created_at = excluded.pty_created_at`
+      )
+      .run(
+        authority.sessionId,
+        authority.tokenHash,
+        authority.runtimeEpoch,
+        authority.processIncarnation,
+        authority.ptyHostPid,
+        authority.ptyPid,
+        authority.ptyCreatedAt
+      )
+  }
+
+  deleteRuntimeAuthority(sessionId: string): void {
+    this.db.query('DELETE FROM runtime_authorities WHERE session_id = ?').run(sessionId)
   }
 
   /** The v1 `settings` table as stored: key to decoded value; empty once v1 never wrote any. */
@@ -312,4 +368,16 @@ export class Store {
 
 function toConfirmation(row: Row): ConfirmationRow {
   return { askId: row.ask_id, method: row.method, digest: row.digest, used: row.used === 1, createdAt: row.created_at }
+}
+
+function runtimeAuthorityOf(row: Row): RuntimeAuthorityRow {
+  return {
+    sessionId: row.session_id,
+    tokenHash: row.token_hash,
+    runtimeEpoch: row.runtime_epoch,
+    processIncarnation: row.process_incarnation,
+    ptyHostPid: row.pty_host_pid,
+    ptyPid: row.pty_pid,
+    ptyCreatedAt: row.pty_created_at
+  }
 }

@@ -235,6 +235,11 @@ Registration update: `bun scripts/build-loop/queue.ts add /tmp/quirky-session-in
 
 - **Protected script load sensitivity:** the next local scripts run had 59 pass/3 five-second timeouts in the Git-based lanes fixture. The unchanged affected file then passed alone: 23 tests/60 assertions; the self-contained current-tree typecheck also passed. No timeout cap/assertion or protected infrastructure file was changed. Preserve this as runner reliability evidence, not a hidden green full-scripts claim.
 
+## m4-hosting-ui-reviews: prerequisite-dependent flow deferrals
+
+- **Other providers:** currently blocked canonical GitLab and Bitbucket/Gitea/Azure API items do not provide usable review/create/settings methods. Follow-up `m4-hosting-ui-review-provider-parity` depends on both APIs and this item, and owns hosting-ui.md sections10–12 provider-specific MR/PR labels, actions, composer and cards. GitHub core is not blocked by those APIs; unavailable cards must never claim provider success.
+- **In-app review links:** the public human-browser view and Link Routing setting do not exist yet. Follow-up `m4-hosting-ui-review-browser-routing` depends on `sa-browser-pane`, `sa-browser-profiles-settings` and this item. Current review URLs use canonical system opening; requesting unavailable in-app routing explicitly refuses rather than silently substituting system destination. Native tests cover only the shipped system-delivery behavior.
+- Both follow-ups were registered through normal `queue.ts add`; no shared queue or index file was edited manually. These are explicit prerequisite deferrals under LOOP.md, not a blanket claim of full hosting-ui parity.
 ## m3-vault: remaining worktree gate timing
 
 - **LOW — background fetch/setup-gate test race** (`plugins/quirky.worktree/test/create.test.ts:367`, `:395`). A land run saw the background-refresh wait time out and a ref-lock conflict when the setup-gate test moved its remote base. The focused remote file first reproduced the ref-lock conflict, then its required isolated retry passed all40 cases140 assertions and returned ok with the file marked flaky. No worktree implementation, assertions, timeouts or retry policy were changed in the vault item.
@@ -250,13 +255,6 @@ Registration update: `bun scripts/build-loop/queue.ts add /tmp/quirky-session-in
 - **Isolated retry:** a different case, “a remote base that moves after the hooks were read does not change the commit checked out”, failed `git fetch -q origin` with `cannot lock ref refs/remotes/origin/main: is at 5549f0f4044fc0bd6207c2f67aa3ace59af0f97c but expected f85218387be054f4435ae642b09ba319f631971a`.
 - **Evidence:** `bun run test`, remote snapshot `runs/1793142204136-90736`, artifact://51. No worktree implementation or test was edited in the PTY item, and this failure was not suppressed. The corrected PTY package separately passed two complete 14-file remote runs with no flaky reruns.
 
-## m3-vault: terminal input timing during affected verification
-
-- **LOW — shell readiness can advance during CLI round trips** (`plugins/quirky.terminal/test/e2e.test.ts:144`). The macOS SC-2 case expected pending after two CLI sends but observed ready under load; its configured isolated retry passed all23 cases169 assertions. The256 remote files and both macOS files returned a passing runner result. No terminal state, test deadline, assertion or retry rule was changed in this item.
-
-## m3-vault: search input readiness during editor catch-up
-
-- **LOW — search input queried before its mount settled** (`plugins/quirky.terminal/test/e2e-ui/features-search.test.ts:179`). The affected editor/terminal/UI/Vault run passed131/132 remote files initially; SC-73 passed a null input to typeInto. Its configured isolated retry passed all5 cases52 assertions, and all3macOS files passed. No producer behavior, assertion, delay or retry rule was changed; this adds evidence to the already-recorded search readiness finding.
 ## sa-browser-pane: deferred native page-event interception
 
 - **Owner:** queued `sa-browser-pane-native-events`, dependent on `sa-browser-pane`; authoritative queue add confirmed on 2026-10-28.
@@ -277,3 +275,48 @@ Registration update: `bun scripts/build-loop/queue.ts add /tmp/quirky-session-in
 - **Native host controls:** the public tag provides normal reload and started/committed/finished events, not genuine cache-bypass reload or a load-failed callback. Native UI must not label normal reload as hard reload or invent a network/TLS error flag. Watch's CDP equivalents remain in this item.
 - **Workspace grant preview:** passive plugin file resources reject active HTML and use sandbox CSP. Source `doc-preview-protocol.ts:33-65,75-151` additionally needs isolated nonpersistent grant/asset serving and outbound network/permission/download policy. Do not weaken daemon-origin MIME security or call explicit `file://` browsing/editor new-tab an equivalent conversion. Canonical source actions and explicit local HTML browsing remain core.
 - **Latest operator ruling:** no further browser queue follow-ups; any additional unavoidable gap is recorded in decision log/BLOCKERS only. Lane8 owns its separate native profile-clear completion limitation; this item does not duplicate it.
+## m3-vault: terminal input timing during affected verification
+
+- **LOW — shell readiness can advance during CLI round trips** (`plugins/quirky.terminal/test/e2e.test.ts:144`). The macOS SC-2 case expected pending after two CLI sends but observed ready under load; its configured isolated retry passed all23 cases169 assertions. The256 remote files and both macOS files returned a passing runner result. No terminal state, test deadline, assertion or retry rule was changed in this item.
+
+## m3-vault: search input readiness during editor catch-up
+
+- **LOW — search input queried before its mount settled** (`plugins/quirky.terminal/test/e2e-ui/features-search.test.ts:179`). The affected editor/terminal/UI/Vault run passed131/132 remote files initially; SC-73 passed a null input to typeInto. Its configured isolated retry passed all5 cases52 assertions, and all3macOS files passed. No producer behavior, assertion, delay or retry rule was changed; this adds evidence to the already-recorded search readiness finding.
+
+## m6-orchestration-core: deferred automatic idle-mailbox scheduling
+
+- **Step:** final verification, operator-authorized scoped landing.
+- **Evidence:** core verification passed28 tests; the sole remaining AC9 automatic scheduler case
+  timed out in daemon teardown after25seconds. Routing/acknowledgement separately passed2 tests,
+  39 assertions at03:48:45Z, within the operator's03:52:14Z deadline.
+- **Preserved contract:** unchanged scheduler implementation and intact AC9 acceptance are in
+  `checkpoint/m6-core-idle-pointer` at69083459. No test was skipped or weakened: that whole
+  unshipped flow and its implementation were moved out of this landing scope.
+- **Follow-up:** `m6-orchestration-idle-pointer-shutdown`, dependent on the core landing.
+- **Unblock when:** restoring the scheduler passes the intact AC9 case with bounded shutdown
+  and no pending waiters/foreign process cleanup. No human decision is required.
+- **Still shipped:** durable Run/Dispatch mail, FIFO delivery/ack, exclusive waits, resumable
+  questions/replies, gates, and explicit exact-incarnation/idempotent session prompt submission.
+## m4-hosting-ui-tasks: deferred parity and cross-feature acceptance
+
+- **Owner:** registered follow-up `m4-hosting-ui-tasks-complete-remaining-flows`, dependent on Tasks, sourced worktree creation and Reviews. The operator's 4am sprint directive authorizes the exercised core landing, not a claim that all25 original scenarios passed.
+- **Unstarted built-web campaign:** the eight prepared goals cover Tasks source/repository/preset/search/filter/direct-page/restore; row status/assignee/reviewer/check/merge/auto-merge/queue; issue read/edit/Markdown/image-URL/comment/new-issue draft and creation; workspace Open/Resume/Start-new and Project default-agent readiness/delivery; Project discovery/trusted-host/pins/views/queries/table fields; board/roadmap; Task Sources/sidebar visibility recovery; failure/restricted/safe-link states. No goal or final cross-family review is claimed passed merely because it was prepared.
+- **Remaining boundary acceptance:** later-added Gamma under sticky-all, deep-link versus explicit selection, failed body-save retention, lagging comment/detail/search reads, overlapping source/view/rapid-write races and complete API/CLI/UI-state parity. Original `docs/quirk/specs/2026-10-27-m4-hosting-ui-tasks/logic.md` SC01–SC25 remains the completion contract.
+- **Canonical dependency:** source creation was initially blocked by absent `create.github`; authoritative worktree runtime ae72e378 is now integrated without a plain-create fallback. Its Tasks/Project creation-and-agent composition still needs the named full visible campaign. Existing native clipboard/system-browser/View-menu/focus scenarios remain pending in `docs/loop/native/m4-hosting-ui-tasks.json`.
+## sb-mobile-daemon: open review findings
+
+- **MEDIUM, LOW confidence — Settings paired-device revoke reachability remains unconfirmed** (`plugins/quirky.mobile/src/ui.tsx:70`, `packages/ui/src/styles.css:1137-1144`). At1280x720, the guarded UI run found the Settings revoke button mostly below the status bar; scroll/PageDown produced no observable change. The host slot already supplies `overflow: auto`, so an app layout cause was not established and no speculative CSS change was made. The shorter Mobile-page revoke route worked for all three run-created pairings. Follow-up `sb-mobile-settings-visibility` owns distinguishing scroll-driver targeting from actual clipping.
+- **Tool limitations, not claimed passes:** stable interface Refresh produced no visible change twice; IP redaction hid the custom-address value signal although save/persistence worked; Cmd+R/Cmd+Shift+R did not establish a browser reload. Functional intro/settings/driving/devices goals passed; pairing/post-build goals remain partial in `.quirk/using-apps-like-a-user/runs/20261028T005355-6182/report.md`. No test overrides or kept-open windows.
+
+
+## sa-browser-pane: operator-approved narrow landing and existing follow-up ownership
+
+- **Current acceptance:** API/CLI pane lifecycle and navigation only, using the committed `build/sa-browser-pane` and `/tmp/sa-browser-pane.fiGLjz` trees. This supersedes the previous full-scenario acceptance promise; implementation and tests remain preserved and must not be deleted or weakened.
+- **Existing handoffs:** queue titles remain unchanged; D23 and this entry extend their scope per the operator. No new queue item is added.
+  - `sa-browser-pane-native-host-controls` owns Watch screencast transport/input/find/zoom/viewport acceptance plus remaining base-pane UI scenarios, hard-reload, and load-error.
+  - `sa-browser-pane-native-events` owns dialogs/auth/cert/download/popups/OAuth/external events.
+  - `sa-browser-pane-workspace-preview` owns grant document preview/UI.
+  - Lane8's `sa-browser-profiles-settings` owns profile integration and corresponding UI/settings scenarios. Existing subflow handoffs remain unchanged: `sa-browser-profile-import-ui` retains its import-UI handoff to `sa-browser-profiles-settings` and `sa-browser-agent-extras`; `sa-browser-native-profile-clear-completion` retains native deletion-completion and isolated-storage-root proof; `sa-browser-native-identity` retains supported Native user-agent override and restart requirements; `sa-browser-localhost-label-routing` retains real per-worktree host/port routing, not display-only rewriting.
+  - `m7-sweep-browser-mobile` remains the final parity audit, not a replacement for these specific mappings.
+- **Acceptance limits:** the operator skipped review; Native nightly remains pending. No broad UI acceptance or Watch transport/input/find/zoom/viewport acceptance is claimed here, and none of the deferred flows is reported passing.
+- **Parent landing:** parent owns the final affected suite (`bun scripts/suite.ts plugins/quirky.browser packages/ui packages/protocol apps/desktop`), scripts (`bun test scripts`) and typecheck (`bun run typecheck`) gates, followed by controller `queue.ts land`.

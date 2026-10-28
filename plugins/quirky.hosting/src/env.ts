@@ -26,6 +26,7 @@ export type Scope = {
   issueRepository: Identity
   issueSourcePreference: IssueSourcePreference
   issueSourceFellBack: boolean
+  remotes?: { origin: string; upstream: string | null }
 }
 export type RunOptions = {
   idempotent?: boolean
@@ -43,13 +44,17 @@ export type HostingConfiguration = {
 export type HostingEnv = {
   context: PluginContext
   resolve(params: Record<string, unknown>, caller: PluginCaller): Promise<Scope>
+  resolveWorktree(selector: string, caller: PluginCaller): Promise<Worktree>
   run(scope: Scope, args: string[], options?: RunOptions): Promise<string>
   json(scope: Scope, args: string[], options?: RunOptions): Promise<unknown>
   rest(scope: Scope, path: string, method?: string, fields?: Record<string, unknown>, options?: RunOptions): Promise<unknown>
   graphql(scope: Scope, query: string, variables?: Record<string, unknown>, options?: RunOptions): Promise<unknown>
   git(scope: Scope, args: string[]): Promise<string>
+  gitWorktree(worktree: Worktree, args: string[]): Promise<string>
+  remoteUrls(worktree: Worktree): Promise<{ origin: string | null; upstream: string | null }>
   changed(scope: Scope, data?: Record<string, unknown>): void
   invalidate(scope: Scope): void
+  onInvalidate(callback: (scope: Scope) => void): void
   invalid(reason: string, message: string): Error
   cache<T>(key: string, ttlMs: number, load: () => Promise<T>): Promise<T>
   cacheKey(scope: Scope, key: string): string
@@ -78,6 +83,7 @@ export function createEnv(context: PluginContext): HostingEnv {
   const cacheInflight = new Map<string, PendingEntry>()
   const scopeGenerations = new Map<string, number>()
   const disposeCallbacks = new Set<() => void>()
+  const invalidateCallbacks = new Set<(scope: Scope) => void>()
   let generation = 0
   let eventSequence = 0
   let disposed = false
@@ -98,6 +104,13 @@ export function createEnv(context: PluginContext): HostingEnv {
     for (const key of cacheValues.keys()) {
       if (key.startsWith(prefix) || !key.startsWith('repo:')) cacheValues.delete(key)
     }
+    for (const callback of invalidateCallbacks) {
+      try {
+        callback(scope)
+      } catch {
+        continue
+      }
+    }
   }
 
   function changed(scope: Scope, data: Record<string, unknown> = {}): void {
@@ -117,13 +130,11 @@ export function createEnv(context: PluginContext): HostingEnv {
 
   const runtime: RuntimeRunner = createRuntimeRunner(context, invalidate)
 
-  async function resolve(params: Record<string, unknown>, caller: PluginCaller): Promise<Scope> {
+  async function resolveWorktree(selector: string, caller: PluginCaller): Promise<Worktree> {
     if (disposed) throw reasoned('conflict', 'plugin_inactive', 'The GitHub hosting plugin is shutting down.')
-    const requestedSelector = params.worktree
-    if (requestedSelector !== undefined && (typeof requestedSelector !== 'string' || requestedSelector.length === 0 || requestedSelector.length > 4096)) {
+    if (typeof selector !== 'string' || selector.length === 0 || selector.length > 4096) {
       throw invalid('invalid_worktree_selector', 'The worktree selector is invalid.')
     }
-    const selector = typeof requestedSelector === 'string' ? requestedSelector : 'current'
     const callerSelection = caller.role === 'plugin'
       ? {}
       : {
@@ -137,6 +148,17 @@ export function createEnv(context: PluginContext): HostingEnv {
       throw reasoned('not-found', 'worktree_unavailable', 'The selected worktree is not registered or is unavailable.')
     }
     if (!isWorktree(rawWorktree)) throw reasoned('not-found', 'worktree_unavailable', 'The selected worktree is not registered or is unavailable.')
+    return rawWorktree
+  }
+
+  async function resolve(params: Record<string, unknown>, caller: PluginCaller): Promise<Scope> {
+    if (disposed) throw reasoned('conflict', 'plugin_inactive', 'The GitHub hosting plugin is shutting down.')
+    const requestedSelector = params.worktree
+    if (requestedSelector !== undefined && (typeof requestedSelector !== 'string' || requestedSelector.length === 0 || requestedSelector.length > 4096)) {
+      throw invalid('invalid_worktree_selector', 'The worktree selector is invalid.')
+    }
+    const selector = typeof requestedSelector === 'string' ? requestedSelector : 'current'
+    const rawWorktree = await resolveWorktree(selector, caller)
     if (rawWorktree.kind !== 'git') throw invalid('folder_workspace', 'GitHub hosting requires a registered Git worktree.')
 
     const stored = configuration(rawWorktree)
@@ -179,17 +201,18 @@ export function createEnv(context: PluginContext): HostingEnv {
       issueRepository,
       issueSourcePreference: stored.issueSourcePreference,
       issueSourceFellBack,
+      remotes: { origin: originUrl, upstream: upstreamUrl },
       ...(stored.account ? { binding: stored.account } : {})
     }
   }
 
-  async function git(scope: Scope, args: string[]): Promise<string> {
+  async function gitWorktree(worktree: Worktree, args: string[]): Promise<string> {
     if (!Array.isArray(args) || args.length === 0 || args.length > 128 || args.some((arg) => typeof arg !== 'string' || arg.length > 8192 || arg.includes('\0'))) {
       throw invalid('invalid_git_args', 'The local Git request is invalid.')
     }
     try {
       const result = await execFileAsync('git', args, {
-        cwd: scope.worktree.path,
+        cwd: worktree.path,
         timeout: 30_000,
         maxBuffer: 2 * 1024 * 1024,
         encoding: 'utf8',
@@ -201,6 +224,15 @@ export function createEnv(context: PluginContext): HostingEnv {
     }
   }
 
+  async function git(scope: Scope, args: string[]): Promise<string> {
+    return gitWorktree(scope.worktree, args)
+  }
+
+  async function remoteUrls(worktree: Worktree): Promise<{ origin: string | null; upstream: string | null }> {
+    const [origin, upstream] = await Promise.all([remoteUrl(worktree, 'origin'), remoteUrl(worktree, 'upstream')])
+    return { origin, upstream }
+  }
+
   function cacheKey(scope: Scope, key: string): string {
     const environment = Object.entries(process.env)
       .filter((entry): entry is [string, string] => entry[1] !== undefined)
@@ -210,7 +242,7 @@ export function createEnv(context: PluginContext): HostingEnv {
     const auth = scope.binding ? `${scope.binding.host}:${scope.binding.user}` : 'ambient'
     const scopeGeneration = scopeGenerations.get(scope.worktree.repoId) ?? 0
     const fingerprint = createHash('sha256')
-      .update(`${scope.worktree.path}\0${environment}\0${JSON.stringify({ origin: scope.origin, repository: scope.repository, candidates: scope.candidates, issueRepository: scope.issueRepository, issueSourcePreference: scope.issueSourcePreference, issueSourceFellBack: scope.issueSourceFellBack, binding: scope.binding ?? null })}\0${auth}`)
+      .update(`${scope.worktree.path}\0${environment}\0${JSON.stringify({ instanceId: scope.worktree.instanceId, origin: scope.origin, repository: scope.repository, candidates: scope.candidates, issueRepository: scope.issueRepository, issueSourcePreference: scope.issueSourcePreference, issueSourceFellBack: scope.issueSourceFellBack, binding: scope.binding ?? null, remotes: scope.remotes ?? null })}\0${auth}`)
       .digest('hex')
     return `repo:${scope.worktree.repoId}|scope-generation:${scopeGeneration}|worktree:${scope.worktree.id}|${fingerprint}|${key}`
   }
@@ -264,6 +296,10 @@ export function createEnv(context: PluginContext): HostingEnv {
     disposeCallbacks.add(callback)
   }
 
+  function onInvalidate(callback: (scope: Scope) => void): void {
+    if (!disposed) invalidateCallbacks.add(callback)
+  }
+
   async function dispose(): Promise<void> {
     if (disposed) return
     disposed = true
@@ -274,6 +310,7 @@ export function createEnv(context: PluginContext): HostingEnv {
         continue
       }
     }
+    invalidateCallbacks.clear()
     disposeCallbacks.clear()
     await runtime.dispose()
     cacheValues.clear()
@@ -283,11 +320,14 @@ export function createEnv(context: PluginContext): HostingEnv {
 
   return {
     context,
+    resolveWorktree,
     resolve,
     run: runtime.run,
     json: runtime.json,
     rest: runtime.rest,
     graphql: runtime.graphql,
+    gitWorktree,
+    remoteUrls,
     git,
     changed,
     invalidate,
@@ -295,6 +335,7 @@ export function createEnv(context: PluginContext): HostingEnv {
     cache,
     cacheKey,
     authAccounts: runtime.authAccounts,
+    onInvalidate,
     validateBinding: runtime.validateBinding,
     rateLimit: runtime.rateLimit,
     configuration,
@@ -379,6 +420,7 @@ function isWorktree(value: unknown): value is Worktree {
   return typeof value.id === 'string' && /^wt_[a-f0-9]{12}$/.test(value.id)
     && typeof value.repoId === 'string' && /^repo_[a-f0-9]+$/.test(value.repoId)
     && typeof value.path === 'string' && isAbsolute(value.path)
+    && typeof value.instanceId === 'string'
     && (typeof value.branch === 'string' || value.branch === null)
     && typeof value.head === 'string'
     && typeof value.isMain === 'boolean'

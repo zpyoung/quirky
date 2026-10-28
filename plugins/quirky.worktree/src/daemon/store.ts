@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import type { PluginContext, PluginStore, Worktree, WorktreeCreatedBy, WorktreeStatus } from '@quirky/protocol'
+import type { GitHubWorktreeLink, PluginContext, PluginStore, ProjectGroup, Worktree, WorktreeCreatedBy, WorktreePushTarget, WorktreeStatus } from '@quirky/protocol'
 
 /** One `worktrees` row: Quirky's metadata for a workspace, keyed by the workspace ID. */
 export type WorktreeRow = {
@@ -26,6 +26,9 @@ export type WorktreeRow = {
   last_activity_at: number
   instance_id: string
   created_root: string | null
+  linked_pr: string | null
+  linked_issue: string | null
+  push_target: string | null
 }
 
 export const STATUSES: readonly WorktreeStatus[] = ['todo', 'in-progress', 'in-review', 'done']
@@ -96,6 +99,13 @@ export function openWorktreeStore(context: PluginContext): PluginStore {
         ALTER TABLE worktrees ADD COLUMN last_activity_at INTEGER NOT NULL DEFAULT 0;
         ALTER TABLE worktrees ADD COLUMN instance_id TEXT NOT NULL DEFAULT '';
       `)
+    },
+    (store) => {
+      store.exec(`
+        ALTER TABLE worktrees ADD COLUMN linked_pr TEXT;
+        ALTER TABLE worktrees ADD COLUMN linked_issue TEXT;
+        ALTER TABLE worktrees ADD COLUMN push_target TEXT;
+      `)
     }
   ])
 }
@@ -119,6 +129,9 @@ export type NewRow = {
   displayName?: string | null
   comment?: string
   parentId?: string | null
+  linkedPR?: GitHubWorktreeLink | null
+  linkedIssue?: GitHubWorktreeLink | null
+  pushTarget?: WorktreePushTarget | null
   projectGroupId?: string | null
   lastActivityAt?: number
   instanceId?: string
@@ -127,8 +140,8 @@ export type NewRow = {
 /** Inserts a row, or fills a v1 row (ID and repo only) with the given values; never overwrites a row that has them. */
 export function insertRow(store: PluginStore, row: NewRow): WorktreeRow {
   store.run(
-    `INSERT INTO worktrees (id, repo_id, kind, path, name, display_name, comment, parent_id, created_at, created_by, base_ref, keep_branch, birthtime, group_id, created_root, project_group_id, last_activity_at, instance_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO worktrees (id, repo_id, kind, path, name, display_name, comment, parent_id, created_at, created_by, base_ref, keep_branch, birthtime, group_id, created_root, project_group_id, last_activity_at, instance_id, linked_pr, linked_issue, push_target)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        repo_id = excluded.repo_id,
        kind = excluded.kind,
@@ -157,16 +170,64 @@ export function insertRow(store: PluginStore, row: NewRow): WorktreeRow {
     row.createdRoot ?? null,
     row.projectGroupId ?? null,
     row.lastActivityAt ?? 0,
-    row.instanceId ?? `unverified:${crypto.randomUUID()}`
+    row.instanceId ?? `unverified:${crypto.randomUUID()}`,
+    row.linkedPR == null ? null : JSON.stringify(row.linkedPR),
+    row.linkedIssue == null ? null : JSON.stringify(row.linkedIssue),
+    row.pushTarget == null ? null : JSON.stringify(row.pushTarget)
   )
   return rowOf(store, row.id)!
+}
+
+function recordOf(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : null
+}
+
+function storedJson(value: string | null): unknown {
+  if (value === null) return null
+  try {
+    return JSON.parse(value) as unknown
+  } catch {
+    return null
+  }
+}
+
+function storedLink(value: string | null): GitHubWorktreeLink | null {
+  const record = recordOf(storedJson(value))
+  const repository = recordOf(record?.repository)
+  if (
+    record?.provider !== 'github' ||
+    (record.kind !== 'issue' && record.kind !== 'pullRequest') ||
+    typeof record.number !== 'number' || !Number.isSafeInteger(record.number) || record.number < 1 ||
+    typeof record.title !== 'string' || typeof record.url !== 'string' ||
+    typeof repository?.host !== 'string' || typeof repository.owner !== 'string' || typeof repository.repo !== 'string'
+  ) return null
+  return {
+    provider: 'github',
+    kind: record.kind,
+    number: record.number,
+    title: record.title,
+    url: record.url,
+    repository: { host: repository.host, owner: repository.owner, repo: repository.repo }
+  }
+}
+
+function storedPushTarget(value: string | null): WorktreePushTarget | null {
+  const record = recordOf(storedJson(value))
+  if (
+    typeof record?.remoteName !== 'string' || typeof record.branchName !== 'string' ||
+    typeof record.maintainerCanModify !== 'boolean'
+  ) return null
+  return { remoteName: record.remoteName, branchName: record.branchName, maintainerCanModify: record.maintainerCanModify }
 }
 
 /** The metadata half of a `Worktree`, read from its row. */
 export function metadataOf(row: WorktreeRow): Pick<
   Worktree,
-  'displayName' | 'comment' | 'status' | 'pinned' | 'unread' | 'parentId' | 'createdAt' | 'createdBy' | 'baseRef' | 'keepBranch' | 'projectGroupId' | 'lastActivityAt' | 'instanceId'
+  'displayName' | 'comment' | 'status' | 'pinned' | 'unread' | 'parentId' | 'createdAt' | 'createdBy' | 'baseRef' | 'keepBranch' | 'projectGroupId' | 'lastActivityAt' | 'instanceId' | 'linkedPR' | 'linkedIssue' | 'pushTarget'
 > {
+  const linkedPR = storedLink(row.linked_pr)
+  const linkedIssue = storedLink(row.linked_issue)
+  const pushTarget = storedPushTarget(row.push_target)
   return {
     displayName: row.display_name,
     comment: row.comment,
@@ -180,6 +241,9 @@ export function metadataOf(row: WorktreeRow): Pick<
     keepBranch: row.keep_branch !== 0,
     projectGroupId: row.project_group_id,
     lastActivityAt: row.last_activity_at,
-    instanceId: row.instance_id || `unverified:${row.id}`
+    instanceId: row.instance_id || `unverified:${row.id}`,
+    ...(linkedPR === null ? {} : { linkedPR }),
+    ...(linkedIssue === null ? {} : { linkedIssue }),
+    ...(pushTarget === null ? {} : { pushTarget })
   }
 }

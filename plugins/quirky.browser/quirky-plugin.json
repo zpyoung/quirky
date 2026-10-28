@@ -82,7 +82,7 @@
     ],
     "settings-section": [{"id":"browser-preferences","title":"Browser: Session & Cookies","order":40}],
     "view": [
-      {"id":"browser-settings","title":"Browser Settings"},
+      {"id":"browser-settings","title":"Browser Settings","settings":true},
       {"id":"page","title":"Browser","description":"Native human browser or explicit Watch of a managed agent page."}
     ],
     "command": [

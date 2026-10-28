@@ -19,4 +19,6 @@ export type BrowserDependencies = {
   chromePath?: string | null
   onOperation?: (event: BrowserOperationEvent) => void
   onControl?: (control: BrowserTestControl) => void
+  /** Overrides the OS destination only for isolated runtime consumers/tests. */
+  downloadDirectory?: string
 }

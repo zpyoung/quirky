@@ -62,6 +62,7 @@ describe('QuirkyClient.connectSocket', () => {
       role: 'cli',
       name: 'quirky',
       token: 'tok',
+      sessionToken: 'session-secret',
       cwd: '/work',
       sessionId: 's_1',
       worktreeId: 'w_1'
@@ -69,7 +70,7 @@ describe('QuirkyClient.connectSocket', () => {
     expect(daemon.seen).toHaveLength(1)
     expect(daemon.seen[0]).toMatchObject({
       method: 'client.hello',
-      params: { role: 'cli', name: 'quirky', token: 'tok', cwd: '/work', sessionId: 's_1', worktreeId: 'w_1' }
+      params: { role: 'cli', name: 'quirky', token: 'tok', sessionToken: 'session-secret', cwd: '/work', sessionId: 's_1', worktreeId: 'w_1' }
     })
     client.close()
   })
@@ -173,6 +174,20 @@ describe('QuirkyClient.connectSocket', () => {
     expect(error).toBeInstanceOf(RpcError)
     expect(error.message).toBe('bad token')
   })
+  test('a timed-out call releases its pending slot and ignores the late reply', async () => {
+    // Real socket I/O cannot be driven by fake timers; this verifies deadline ordering against the platform clock.
+    const daemon = fakeDaemon((request, reply, socket) => {
+      helloOk(request, reply, socket)
+      if (request.method === 'slow') setTimeout(() => reply(ok(request.id, { late: true })), 30)
+      if (request.method === 'fast') reply(ok(request.id, { fast: true }))
+    })
+    const client = await QuirkyClient.connectSocket(daemon.path, { role: 'cli', token: 't' })
+    await expect(client.callAny('slow', {}, { timeoutMs: 5 })).rejects.toThrow('RPC call timed out after 5 ms')
+    await Bun.sleep(40)
+    expect(await client.callAny('fast', {})).toEqual({ fast: true })
+    client.close()
+  })
+
 
   test('connecting to a path with no listener fails with a message naming the path', async () => {
     const error = await QuirkyClient.connectSocket('/tmp/qsc-nonexistent.sock', { role: 'cli' }).catch((e) => e)

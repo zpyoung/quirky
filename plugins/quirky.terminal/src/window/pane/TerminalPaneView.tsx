@@ -23,6 +23,7 @@ import { trimGutter } from './selection'
 import { fontStack, zoomed, type PaneSettings } from './settings'
 import { readTerminalColors, withAlpha } from './terminalTheme'
 import { ContextLossGuard, loseWebglContext, webglBudget } from './webgl'
+import { MobileDriverOverlay } from './MobileDriverOverlay'
 
 /** The most characters a search query may have. */
 export const MAX_SEARCH_QUERY = 1000
@@ -897,6 +898,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
         ref={screenRef}
         style={{ ...style.screen, left: settings['padding-x'], right: settings['padding-x'], top: settings['padding-y'], bottom: settings['padding-y'] }}
       />
+      <MobileDriverOverlay context={context} sessionId={sessionId} />
       {search ? (
         <SearchBox
           query={search.query}
