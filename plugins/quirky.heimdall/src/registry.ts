@@ -1,6 +1,8 @@
 import { checkSchemaDeclaration, isContributionName, isKind, isPluginId } from '@quirky/protocol'
 import { parseOwnerDeviation } from './owner/runtime'
-import type { PluginContext, Schema } from '@quirky/protocol'
+import type { OrchestrationSubmissionVerdict, PluginContext, Schema } from '@quirky/protocol'
+import { isJsonValue, isRecord as record } from './json'
+import { normalizeJudgmentQuestions } from './judgment'
 import type {
   AuthorizedEnrollment,
   Decision,
@@ -20,24 +22,6 @@ import type {
   WorkerRequest
 } from './contracts'
 
-function record(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function isJsonValue(value: unknown, ancestors = new Set<object>()): value is Json {
-  if (value === null || typeof value === 'string' || typeof value === 'boolean') return true
-  if (typeof value === 'number') return Number.isFinite(value)
-  if (typeof value !== 'object') return false
-  if (ancestors.has(value)) return false
-  const prototype = Object.getPrototypeOf(value)
-  if (prototype !== Object.prototype && prototype !== null && !Array.isArray(value)) return false
-  ancestors.add(value)
-  const valid = Array.isArray(value)
-    ? value.every((item) => isJsonValue(item, ancestors))
-    : Object.keys(value).every((key) => isJsonValue((value as Record<string, unknown>)[key], ancestors))
-  ancestors.delete(value)
-  return valid
-}
 
 function freezeJson(value: Json): Json {
   if (value === null || typeof value !== 'object') return value
@@ -140,6 +124,13 @@ function isGateVerdict(value: unknown): value is GateVerdict {
     (value.verdict === 'allow' || ((value.verdict === 'hold' || value.verdict === 'escalate') &&
       typeof value.reason === 'string' && optionalString(value, 'detail')))
 }
+function isSubmissionVerdict(value: unknown): value is OrchestrationSubmissionVerdict {
+  if (!record(value) || !isJsonValue(value)) return false
+  if (value.kind === 'accepted') return Object.keys(value).length === 1
+  return value.kind === 'rejected' && typeof value.code === 'string' && value.code.length > 0 &&
+    typeof value.reason === 'string' && value.reason.length > 0 &&
+    Object.keys(value).every((key) => key === 'kind' || key === 'code' || key === 'reason')
+}
 
 function isStopResult(value: unknown): value is StopResult {
   if (value === null) return true
@@ -157,7 +148,7 @@ function isPacingTier(value: unknown): value is PacingTier {
 const requiredHooks = ['authorize', 'read', 'decide', 'execute'] as const
 const optionalHooks = [
   'validate', 'undo', 'describeEnrollment', 'describeSnapshot', 'resolveOutcome',
-  'preflight', 'pace', 'stop', 'reconcile', 'ownerAction'
+  'preflight', 'submission', 'judgmentQuestions', 'pace', 'stop', 'reconcile', 'ownerAction'
 ] as const
 
 function isOwnedHookReference(value: unknown, pluginId: string): value is string {
@@ -340,6 +331,21 @@ function adaptDescriptor(context: PluginContext, registration: KindRegistration)
       const result = await context.call(hooks.preflight!, { action, snapshot, journal, enrollment })
       if (!isGateVerdict(result)) throw new Error('preflight hook returned an invalid gate verdict')
       return result
+    }
+  }
+  if (hooks.submission) {
+    kind.submission = async (submission, enrollment) => {
+      const result = await context.call(hooks.submission!, { submission, enrollment })
+      if (!isSubmissionVerdict(result)) throw new Error('submission hook returned an invalid verdict')
+      return result
+    }
+  }
+  if (hooks.judgmentQuestions) {
+    kind.judgmentQuestions = async (enrollment, snapshot, journal) => {
+      const result = await context.call(hooks.judgmentQuestions!, { enrollment, snapshot, journal })
+      const questions = normalizeJudgmentQuestions(result)
+      if (questions === null) throw new Error('judgmentQuestions hook returned invalid requests')
+      return questions
     }
   }
   if (hooks.pace) {

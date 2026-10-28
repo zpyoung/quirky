@@ -370,6 +370,7 @@ describe('Heimdall operators through daemon API and real CLI', () => {
     await t.client.callAny('quirky.ask/answer', { askId: accepted, answers: { confirm: { value: true, source: 'input' } } })
     expect(await call('command', { ...request, confirmation: accepted })).toMatchObject({ kind: 'applied' })
     expect(await call('detail', { target: { watcherId: id } })).toBeNull()
+    expect(await call('debugReport', { target: { watcherId: id } })).toBeNull()
     await expect(call('command', { ...request, confirmation: accepted })).rejects.toMatchObject({ code: RpcErrorCode.Conflict })
   })
 

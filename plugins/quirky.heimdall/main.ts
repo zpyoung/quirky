@@ -13,6 +13,9 @@ export async function activate(context: PluginContext): Promise<void> {
   context.provide('method:quirky.heimdall/registerKind', (params: Record<string, unknown>, caller: PluginCaller) =>
     service.registerKind(params as unknown as KindRegistration, caller)
   )
+  context.provide('method:quirky.heimdall/submissionPreflight', (params: Record<string, unknown>, caller: PluginCaller) =>
+    service.submissionPreflight(params, caller)
+  )
   context.provide('method:quirky.heimdall/enroll', (params: Record<string, unknown>) =>
     service.enroll(params as unknown as EnrollmentInput)
   )

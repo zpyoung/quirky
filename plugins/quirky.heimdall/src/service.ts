@@ -1,4 +1,4 @@
-import { parseContributionId, validateValue, type PluginCaller, type PluginContext } from '@quirky/protocol'
+import { parseContributionId, validateValue, type OrchestrationSubmission, type OrchestrationSubmissionVerdict, type PluginCaller, type PluginContext } from '@quirky/protocol'
 import { join } from 'node:path'
 import type {
   Enrollment,
@@ -20,6 +20,8 @@ import { createOrchestrationAdapter } from './orchestration'
 import { createRunner } from './runner'
 import { createOwnerDriver } from './owner/driver'
 import type { OwnerController } from './owner/contracts'
+import { inspectWorkspaceRemoval, terminalizeRemovedEnrollment } from './workspace-lifecycle'
+import { isJsonValue, isRecord } from './json'
 
 const SHUTDOWN_DRAIN_MS = 1500
 
@@ -34,6 +36,7 @@ export interface KernelService {
   enroll(input: EnrollmentInput): Promise<EnrollmentResult>
   inspect(watcherId?: string): Inspection[]
   reconcile(watcherId: string): Promise<Inspection>
+  submissionPreflight(submission: unknown, caller: PluginCaller): Promise<OrchestrationSubmissionVerdict>
   runner(watcherId: string): Runner | undefined
   /** Drops only the map entry; the caller must fence/suspend the runner and remove its row first. */
   forgetRunner(watcherId: string): void
@@ -104,6 +107,51 @@ export function createKernelService(context: PluginContext, now: () => number = 
   const orchestration = createOrchestrationAdapter(context, store, wake)
   const owner = createOwnerDriver({ context, store, registry, reportDirectory: join(context.dataDir, 'owner-reports'), now, wake })
   const options: KernelOptions = { context, store, registry, orchestration, now, onChanged: changed, owner }
+  async function handleWorkspaceChange(event: { type: string; data?: unknown }): Promise<void> {
+    if (stopped || event.type !== 'quirky.worktree/changed') return
+    const candidates = store.list().filter((enrollment) =>
+      enrollment.terminalAtMs === null &&
+      enrollment.executionHostId === 'local' &&
+      enrollment.schedulerOwner === 'daemon' &&
+      typeof enrollment.repoId === 'string' &&
+      typeof enrollment.worktreeId === 'string'
+    )
+    for (const enrollment of candidates) {
+      if (stopped) return
+      const evidence = await inspectWorkspaceRemoval(context, enrollment, event)
+      if (stopped) return
+      if (evidence === 'unverifiable') {
+        context.log(`workspace removal inventory is unverifiable for watcher ${enrollment.watcherId}`)
+        continue
+      }
+      if (evidence !== 'confirmed-removed') continue
+      const current = store.get(enrollment.watcherId)
+      if (!current || current.terminalAtMs !== null || current.workspaceKey !== enrollment.workspaceKey ||
+        current.repoId !== enrollment.repoId || current.worktreeId !== enrollment.worktreeId) continue
+      const runner = runners.get(current.watcherId)
+      if (runner) {
+        await runner.terminateWorkspaceRemoved()
+      } else {
+        const summary = terminalizeRemovedEnrollment(store, current, now)
+        if (!summary) continue
+        try {
+          await owner.controller.release(current.watcherId)
+        } catch (error) {
+          context.log(`owner cleanup after workspace removal failed for watcher ${current.watcherId}: ${errorMessage(error)}`)
+        }
+      }
+      const terminal = store.get(current.watcherId)
+      if (terminal && terminal.terminalAtMs !== null) changed(current.watcherId)
+    }
+  }
+
+  const unsubscribeWorkspaceChanges = store.readOnly ? () => {} : context.subscribe((event) => {
+    if (event.type !== 'quirky.worktree/changed') return
+    const data = 'data' in event ? event.data : undefined
+    return handleWorkspaceChange({ type: event.type, data }).catch((error: unknown) => {
+      context.log(`workspace removal reconciliation failed: ${errorMessage(error)}`)
+    })
+  })
 
   function startRunner(enrollment: Enrollment): Runner | undefined {
     if (stopped || store.readOnly || enrollment.terminalAtMs !== null) return undefined
@@ -180,7 +228,18 @@ export function createKernelService(context: PluginContext, now: () => number = 
       }
       executableKinds.add(descriptor.id)
     }
-    for (const enrollment of store.list()) startRunner(enrollment)
+    for (const enrollment of store.list()) {
+      if (stopped) return
+      if (enrollment.terminalAtMs === null && enrollment.orchestrationRunId !== null) {
+        try {
+          await orchestration.restore(enrollment)
+        } catch (error) {
+          context.log(`could not restore submission preflight for watcher ${enrollment.watcherId}: ${errorMessage(error)}`)
+        }
+      }
+      if (stopped) return
+      startRunner(enrollment)
+    }
     started = true
   }
 
@@ -228,6 +287,103 @@ export function createKernelService(context: PluginContext, now: () => number = 
       if (enrollment.kind === owned.id) startRunner(enrollment)
     }
     return { registered: true, kind: owned.id }
+  }
+  async function submissionPreflight(
+    value: unknown,
+    caller: PluginCaller
+  ): Promise<OrchestrationSubmissionVerdict> {
+    if (caller.role !== 'plugin' || caller.pluginId !== 'quirky.orchestration') {
+      throw context.error('invalid-params', 'submission preflight requires an authenticated quirky.orchestration caller')
+    }
+    if (!isOrchestrationSubmission(value)) return rejectedSubmission('invalid-submission', 'The submission payload is invalid.')
+    if (stopped || !started || store.readOnly) return rejectedSubmission('kernel-unavailable', 'Heimdall cannot validate submissions right now.')
+
+    const ownedRun = (): Enrollment | null => {
+      const matching = store.list().filter((enrollment) => enrollment.orchestrationRunId === value.runId)
+      if (matching.length !== 1) return null
+      const current = store.get(matching[0]!.watcherId)
+      return current && current.terminalAtMs === null && current.orchestrationRunId === value.runId ? current : null
+    }
+    const journalAllowsDispatch = (enrollment: Enrollment): boolean => {
+      const latest = new Map<string, Record<string, unknown>>()
+      for (const entry of store.journal(enrollment.watcherId)) {
+        if (entry.kind === 'attempt' && typeof entry.attemptId === 'string') latest.set(entry.attemptId, entry)
+      }
+      const attempts = [...latest.values()].filter((attempt) => attempt.dispatchId === value.dispatchId)
+      return attempts.length === 0 || (attempts.length === 1 && attempts[0]!.state === 'running')
+    }
+    const activeDispatchEvidence = async (): Promise<'active' | 'inactive' | 'unverifiable'> => {
+      let detail: unknown
+      try {
+        detail = await context.call('quirky.orchestration/serviceRunShow', { runId: value.runId })
+      } catch {
+        return 'unverifiable'
+      }
+      if (!isRecord(detail) || !isRecord(detail.run) || detail.run.id !== value.runId ||
+        !Array.isArray(detail.workers)) return 'unverifiable'
+      const matches = detail.workers.filter((worker) =>
+        isRecord(worker) && worker.dispatchId === value.dispatchId
+      )
+      if (matches.length === 0) return 'inactive'
+      if (matches.length !== 1) return 'unverifiable'
+      const worker = matches[0]
+      if (!isRecord(worker)) return 'unverifiable'
+      if (worker.taskId !== value.taskId) return 'inactive'
+      if (typeof worker.assignmentActive !== 'boolean') return 'unverifiable'
+      return worker.assignmentActive ? 'active' : 'inactive'
+    }
+
+    let current = ownedRun()
+    if (!current) {
+      const hasRun = store.list().some((enrollment) => enrollment.orchestrationRunId === value.runId)
+      return hasRun
+        ? rejectedSubmission('stale-dispatch', 'The report no longer belongs to an active Dispatch.')
+        : rejectedSubmission('run-not-owned', 'This Run is not owned by an active Heimdall watcher.')
+    }
+    const dispatchEvidence = await activeDispatchEvidence()
+    if (dispatchEvidence === 'unverifiable') {
+      return rejectedSubmission('dispatch-unverifiable', 'The active Dispatch could not be verified; the report was not accepted.')
+    }
+    if (dispatchEvidence !== 'active' || !journalAllowsDispatch(current)) {
+      return rejectedSubmission('stale-dispatch', 'The report no longer belongs to an active Dispatch.')
+    }
+
+    const kindId = current.kind
+    const descriptor = registry.descriptors().find((registration) => registration.id === kindId) ??
+      store.registrations().find((registration) => registration.id === kindId)
+    const method = descriptor?.hooks.submission
+    if (method === undefined) return { kind: 'accepted' }
+    if (!descriptor || typeof descriptor.pluginId !== 'string') {
+      return rejectedSubmission('hook-unavailable', 'The registered submission hook is unavailable; the report was not accepted.')
+    }
+    const prefix = `${descriptor.pluginId}/`
+    if (!method.startsWith(prefix) || method.slice(prefix.length).includes('/')) {
+      return rejectedSubmission('hook-unavailable', 'The registered submission hook is unavailable; the report was not accepted.')
+    }
+    const kind = registry.get(current.kind)
+    if (!kind?.submission) {
+      return rejectedSubmission('hook-unavailable', 'The registered submission hook is unavailable; the report was not accepted.')
+    }
+
+    let verdict: unknown
+    try {
+      verdict = await kind.submission(value, current)
+    } catch {
+      return rejectedSubmission('hook-unavailable', 'The registered submission hook could not be reached; the report was not accepted.')
+    }
+    if (!isOrchestrationSubmissionVerdict(verdict)) {
+      return rejectedSubmission('hook-invalid-result', 'The registered submission hook returned an invalid verdict.')
+    }
+    current = ownedRun()
+    if (!current) return rejectedSubmission('stale-dispatch', 'The report no longer belongs to an active Dispatch.')
+    const finalEvidence = await activeDispatchEvidence()
+    if (finalEvidence === 'unverifiable') {
+      return rejectedSubmission('dispatch-unverifiable', 'The active Dispatch could not be verified; the report was not accepted.')
+    }
+    if (finalEvidence !== 'active' || !journalAllowsDispatch(current)) {
+      return rejectedSubmission('stale-dispatch', 'The report no longer belongs to an active Dispatch.')
+    }
+    return verdict
   }
 
   async function enroll(input: EnrollmentInput): Promise<EnrollmentResult> {
@@ -282,6 +438,7 @@ export function createKernelService(context: PluginContext, now: () => number = 
   function shutdown(): Promise<void> {
     if (shutdownPromise) return shutdownPromise
     stopped = true
+    unsubscribeWorkspaceChanges()
     disposeHostPower()
     const ownerShutdown = owner.shutdown()
     orchestration.dispose()
@@ -308,6 +465,7 @@ export function createKernelService(context: PluginContext, now: () => number = 
     owner: owner.controller,
     start,
     registerKind,
+    submissionPreflight,
     enroll,
     inspect,
     reconcile,
@@ -324,6 +482,29 @@ export function createKernelService(context: PluginContext, now: () => number = 
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+function isOrchestrationSubmission(value: unknown): value is OrchestrationSubmission {
+  if (!isRecord(value) || !isJsonValue(value) ||
+    Object.keys(value).some((key) => !['runId', 'taskId', 'dispatchId', 'type', 'subject', 'body', 'payload'].includes(key))) return false
+  return typeof value.runId === 'string' && value.runId.length > 0 &&
+    typeof value.taskId === 'string' && value.taskId.length > 0 &&
+    typeof value.dispatchId === 'string' && value.dispatchId.length > 0 &&
+    (value.type === 'worker_done' || value.type === 'status') &&
+    typeof value.subject === 'string' && typeof value.body === 'string' &&
+    (value.payload === null || (isRecord(value.payload) && isJsonValue(value.payload)))
+}
+
+function isOrchestrationSubmissionVerdict(value: unknown): value is OrchestrationSubmissionVerdict {
+  if (!isRecord(value) || !isJsonValue(value)) return false
+  if (value.kind === 'accepted') return Object.keys(value).length === 1
+  return value.kind === 'rejected' && typeof value.code === 'string' && value.code.length > 0 &&
+    typeof value.reason === 'string' && value.reason.length > 0 &&
+    Object.keys(value).every((key) => key === 'kind' || key === 'code' || key === 'reason')
+}
+
+function rejectedSubmission(code: string, reason: string): OrchestrationSubmissionVerdict {
+  return { kind: 'rejected', code, reason }
 }
 function hooksBelongToOwner(descriptor: KindRegistration, pluginId: string): boolean {
   const hooks = descriptor.hooks as unknown

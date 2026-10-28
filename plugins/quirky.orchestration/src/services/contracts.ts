@@ -1,6 +1,6 @@
 import type { PluginCaller } from '@quirky/protocol'
 import type {
-  CheckResult, DeliveryId, DispatchId, MessageId, MessageType, MutationRequest, MutationResult,
+  CheckResult, DeliveryId, DispatchId, MessageId, MessageType, MutationRequest, MutationResult, TaskId,
   QuestionThreadRow, ReplyResult, RunId, SendResult, ServiceRunRow,
 } from '../contracts'
 import type { WorkerControlResult, WorkerStartParams, WorkerStartReceipt } from '../worker-contracts'
@@ -12,6 +12,7 @@ export type ServiceRun = ServiceRunRow & { coordinatorSessionId: null }
 export interface ServiceWorkerView {
   assignmentActive: boolean
   dispatchId: DispatchId
+  taskId: TaskId
   sessionId: string | null
   processIncarnation: string | null
   state: 'live' | 'exited' | 'unverifiable'
@@ -40,6 +41,10 @@ export interface ServiceWorkerStopParams extends ServiceWorkerReleaseParams {
 }
 export interface ServiceReplyParams extends MutationRequest { runId: RunId; messageId: MessageId; body: string }
 export interface ServiceSendParams extends MutationRequest { runId: RunId; dispatchId: DispatchId; body: string }
+export interface ServiceRegisterSubmissionPreflightParams extends MutationRequest {
+  runId: RunId
+  method: string
+}
 export interface ServiceMethodInputs {
   serviceRunCreate: ServiceRunCreateParams
   serviceRunShow: ServiceRunShowParams
@@ -49,6 +54,7 @@ export interface ServiceMethodInputs {
   serviceWorkerStop: ServiceWorkerStopParams
   serviceReply: ServiceReplyParams
   serviceSend: ServiceSendParams
+  serviceRegisterSubmissionPreflight: ServiceRegisterSubmissionPreflightParams
 }
 export interface ServiceMethodResults {
   serviceRunCreate: MutationResult<{ run: ServiceRun }>
@@ -59,6 +65,7 @@ export interface ServiceMethodResults {
   serviceWorkerStop: MutationResult<WorkerControlResult>
   serviceReply: ReplyResult
   serviceSend: Extract<SendResult, { kind: 'message' }>
+  serviceRegisterSubmissionPreflight: MutationResult<{ runId: RunId; method: string; registered: true }>
 }
 export type ServiceMethod = keyof ServiceMethodInputs
 export type ServiceHandler<M extends ServiceMethod> = (

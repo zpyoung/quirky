@@ -20,6 +20,7 @@ import type {
   WorkerRow,
 } from './src/contracts'
 import { workerCommands } from './src/workers/cli'
+import { peerCommands } from './src/peers-cli'
 import type { OrchestrationPolicy, OrchestrationSkillStatus } from './src/ui-contracts'
 
 type ObjectValue = Record<string, unknown>
@@ -220,9 +221,16 @@ function isDispatchShowResult(value: unknown): value is OrchestrationMethodResul
     (value.preamble === undefined || isString(value.preamble))
 }
 
+function isSubmissionLifecycleRejection(value: unknown): boolean {
+  return isObject(value) && value.action === 'rejected' && hasString(value, 'code') && hasString(value, 'reason')
+}
+
 function isWorkerReport(value: unknown): boolean {
   if (!isObject(value)) return false
-  if (value.status === 'rejected') return hasString(value, 'reason') && value.audited === true
+  if (value.status === 'rejected') {
+    return hasString(value, 'reason') && value.audited === true &&
+      (value.lifecycle === undefined || isSubmissionLifecycleRejection(value.lifecycle))
+  }
   return (value.status === 'accepted' || value.status === 'duplicate') && isTaskRow(value.task) &&
     isDispatchRow(value.dispatch) && (value.worker === null || isWorkerRow(value.worker))
 }
@@ -235,7 +243,10 @@ function isHeartbeat(value: unknown): boolean {
 
 function isSendResult(value: unknown): value is SendResult {
   if (!isObject(value) || !hasMutation(value) || !Array.isArray(value.messages) || !value.messages.every(isMessageRow)) return false
-  if (value.kind === 'message') return isStringOrNull(value.threadId)
+  if (value.kind === 'message') {
+    return isStringOrNull(value.threadId) &&
+      (value.lifecycle === undefined || isSubmissionLifecycleRejection(value.lifecycle))
+  }
   if (value.kind === 'worker_report') return isWorkerReport(value.report)
   return value.kind === 'heartbeat' && isHeartbeat(value.heartbeat)
 }
@@ -567,6 +578,7 @@ function keepalive<T>(context: CliContext, timeoutMs: number, operation: () => P
 
 export const commands: CliModule['commands'] = {
   ...workerCommands,
+  ...peerCommands,
   'run-create': async (args, context) => {
     const params: ObjectValue = { objective: stringFlag(args, context, 'objective') }
     addCallerAliases(params, args, context)
@@ -713,13 +725,21 @@ export const commands: CliModule['commands'] = {
     addMutationReceipt(params, context)
     const result = await call(context, args, 'send', 'send', params, isSendResult)
     const text = result.kind === 'message'
-      ? `${result.messages.length === 1 ? 'Sent' : `Sent ${result.messages.length} messages`}${result.messages.length === 0 ? '' : ` ${result.messages.map((message) => message.id).join(', ')}`}`
+      ? result.lifecycle
+        ? `Status rejected (${result.lifecycle.code}): ${result.lifecycle.reason}`
+        : `${result.messages.length === 1 ? 'Sent' : `Sent ${result.messages.length} messages`}${result.messages.length === 0 ? '' : ` ${result.messages.map((message) => message.id).join(', ')}`}`
       : result.kind === 'worker_report'
         ? `Worker report ${result.report.status}${result.messages.length === 0 ? '' : `: ${result.messages.map((message) => message.id).join(', ')}`}`
         : `Heartbeat ${result.heartbeat.status}${result.messages.length === 0 ? '' : `: ${result.messages.map((message) => message.id).join(', ')}`}`
     output(context, result, text)
+    if (result.kind === 'message' && result.lifecycle) {
+      throw context.fail(`Status rejected (${result.lifecycle.code}): ${result.lifecycle.reason}`)
+    }
     if (result.kind === 'worker_report' && result.report.status === 'rejected') {
-      throw context.fail(`Worker report rejected: ${result.report.reason}`)
+      const verdict = result.report.lifecycle
+      throw context.fail(verdict
+        ? `Worker report rejected (${verdict.code}): ${verdict.reason}`
+        : `Worker report rejected: ${result.report.reason}`)
     }
     if (result.kind === 'heartbeat' && result.heartbeat.status === 'rejected') {
       throw context.fail(`Heartbeat rejected: ${result.heartbeat.reason}`)

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { PluginContext } from '@quirky/protocol'
@@ -24,7 +24,8 @@ import type {
   Snapshot,
   WatcherKind,
   WorkerMessage,
-  WorkerRequest
+  WorkerRequest,
+  JudgmentQuestionRequest
 } from '../src/contracts'
 
 const roots: string[] = []
@@ -87,6 +88,7 @@ function journalEntry(seq: number, kind: string, atMs: number, extra: Record<str
 interface TestStorage {
   context: PluginContext
   readonly store: KernelStore
+  readonly workspacePath: string
   restart(): void
 }
 
@@ -94,6 +96,8 @@ function storage(): TestStorage {
   const root = mkdtempSync(join(tmpdir(), 'heimdall-runner-'))
   roots.push(root)
   const home = join(root, 'home')
+  const workspacePath = join(root, 'workspace')
+  mkdirSync(workspacePath, { recursive: true })
   const handles: Array<() => void> = []
   const context = {
     pluginId: 'quirky.heimdall',
@@ -110,6 +114,7 @@ function storage(): TestStorage {
   let store = createKernelStore(context)
   return {
     context,
+    workspacePath,
     get store() { return store },
     restart() {
       store.close()
@@ -152,6 +157,7 @@ function registry(watcherKind: WatcherKind<World>): KindRegistry {
 
 function orchestration(overrides: Partial<OrchestrationPort> = {}): OrchestrationPort {
   return {
+    restore: async () => undefined,
     dispatch: async () => ({ kind: 'indeterminate', requestId: 'request-1' }),
     recover: async () => null,
     observeWorkers: async () => [],
@@ -168,16 +174,21 @@ function runnerOptions(
   watcherKind: WatcherKind<World>,
   overrides: Partial<RunnerOptions> = {}
 ): RunnerOptions {
-  const current = enrollment()
+  const { enrollment: requested, ...otherOverrides } = overrides
+  const current = enrollment({
+    ...(requested ?? {}),
+    workspacePath: stored.workspacePath,
+    workspaceKey: `local::${stored.workspacePath}`
+  })
   stored.store.save(current)
   return {
     context: stored.context,
     store: stored.store,
     registry: registry(watcherKind),
     orchestration: orchestration(),
-    enrollment: current,
     now: () => 1_000,
-    ...overrides
+    ...otherOverrides,
+    enrollment: current
   }
 }
 
@@ -704,7 +715,11 @@ describe('Heimdall runner gate and budget behavior', () => {
     const workerRequest: WorkerRequest = { spec: 'worker task', worktree: '/workspace' }
     const fingerprint = 'fingerprint-adapter-live-identity'
     const requestId = orchestrationRequestIdForAttemptFingerprint(fingerprint)
-    const current = enrollment({ orchestrationRunId: 'run-adapter-identity' })
+    const current = enrollment({
+      workspacePath: stored.workspacePath,
+      workspaceKey: `local::${stored.workspacePath}`,
+      orchestrationRunId: 'run-adapter-identity'
+    })
     stored.store.save(current)
     stored.store.append('watcher-1', {
       kind: 'attempt',
@@ -1195,7 +1210,7 @@ describe('Heimdall runner gate and budget behavior', () => {
         return null
       }
     })
-    const second = createRunner({ ...runnerOptions(stored, secondKind), enrollment: enrollment() })
+    const second = createRunner(runnerOptions(stored, secondKind))
     try {
       await second.pulse()
       expect(resolutions).toBe(1)
@@ -1529,5 +1544,113 @@ describe('Heimdall runner gate and budget behavior', () => {
     await Promise.resolve()
     expect(stored.store.journal('watcher-1')).toHaveLength(journalLength)
     expect(currentAttempt(stored.store.journal('watcher-1'))?.state).toBe('attempted')
+  })
+  test('confirmed workspace removal terminalizes without releasing a live worker', async () => {
+    const stored = storage()
+    let nowMs = 1_000
+    let releases = 0
+    const workerRequest: WorkerRequest = { spec: 'worker task', worktree: stored.workspacePath }
+    const port = orchestration({
+      dispatch: async () => ({ kind: 'dispatched', dispatchId: 'dispatch-live' }),
+      observeWorkers: async () => [{
+        dispatchId: 'dispatch-live',
+        sessionId: 'session-live',
+        processIncarnation: 'process-live',
+        state: 'live',
+        assignmentActive: true,
+        lastContactAtMs: nowMs
+      }],
+      release: async () => { releases++ }
+    })
+    const watcherKind = kind({
+      decide: () => ({ action }),
+      execute: async (_action, context) => {
+        const dispatched = await context.dispatchWorker(workerRequest)
+        return dispatched.kind === 'dispatched' ? { effect: 'landed' } : { effect: 'indeterminate' }
+      }
+    })
+    const runner = createRunner(runnerOptions(stored, watcherKind, { orchestration: port, now: () => nowMs }))
+    try {
+      await runner.pulse()
+      await runner.pulse()
+      expect(currentAttempt(stored.store.journal('watcher-1'))).toMatchObject({ state: 'running', dispatchId: 'dispatch-live' })
+      stored.store.append('watcher-1', {
+        eventId: 'workspace-removal-worker-interval',
+        atMs: nowMs,
+        class: 'fact',
+        origin: 'owner',
+        kind: 'interval-open',
+        resolved: true,
+        intervalId: 'workspace-removal-interval',
+        cause: 'worker-dispatched',
+        generation: 'initial:watcher-1'
+      })
+      stored.store.append('watcher-1', {
+        eventId: 'workspace-removal-worker-checkpoint',
+        atMs: 1_500,
+        class: 'fact',
+        origin: 'owner',
+        kind: 'interval-checkpoint',
+        resolved: true,
+        intervalId: 'workspace-removal-interval',
+        generation: 'initial:watcher-1',
+        checkpointAtMs: 1_500
+      })
+      nowMs = 9_000
+      await runner.terminateWorkspaceRemoved()
+      expect(stored.store.get('watcher-1')).toMatchObject({ enabled: false, terminalAtMs: 9_000, haltReason: 'workspace-removed' })
+      expect(currentAttempt(stored.store.journal('watcher-1'))).toMatchObject({ state: 'running', dispatchId: 'dispatch-live' })
+      expect(stored.store.summary('watcher-1')).toMatchObject({ state: 'removed', reason: 'workspace-removed' })
+      expect(stored.store.summary('watcher-1')?.budget.activeMs).toBe(500)
+      expect(releases).toBe(0)
+      expect(runner.status()).toMatchObject({ state: 'terminal', reason: 'workspace-removed' })
+    } finally {
+      await runner.shutdown(0)
+    }
+  })
+  test('journals provider answers as shadow observations without changing action authority', async () => {
+    const stored = storage()
+    const accessPath = join(stored.context.dataDir, 'judgment-access.json')
+    writeFileSync(accessPath, JSON.stringify({ enabled: true, provider: 'typesafe', apiKey: 'shadow-secret' }), { mode: 0o600 })
+    chmodSync(accessPath, 0o600)
+    const originalFetch = globalThis.fetch
+    let fetchCalls = 0
+    let executions = 0
+    const question: JudgmentQuestionRequest = {
+      id: 'q-stall',
+      questionId: 'heimdall.stall-cause',
+      subjectId: 'dispatch-shadow',
+      question: { type: 'noul', instructions: 'Is the worker stalled?' }
+    }
+    globalThis.fetch = Object.assign(async (url: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+      fetchCalls++
+      expect(String(url)).toBe('https://api.typesafe.ai/v1/systemone')
+      expect(JSON.parse(String(init?.body))).toMatchObject({ model: 'jev-latest', questions: { 'q-stall': question.question } })
+      return new Response(JSON.stringify({
+        model: 'jev-1.13',
+        answers: { 'q-stall': { type: 'noul', noul: 0.25 } },
+        usage: { input_tokens: 10, output_tokens: 2 }
+      }))
+    }, { preconnect: originalFetch.preconnect })
+    const watcherKind = kind({
+      decide: () => ({ action }),
+      judgmentQuestions: async () => [question],
+      execute: async () => { executions++; return { effect: 'landed' } },
+      pace: () => 'stopped'
+    })
+    const runner = createRunner(runnerOptions(stored, watcherKind))
+    try {
+      await runner.pulse()
+      const journal = stored.store.journal('watcher-1')
+      expect(fetchCalls).toBe(1)
+      expect(executions).toBe(1)
+      expect(journal.find((entry) => entry.kind === 'judgment-shadow')).toMatchObject({
+        class: 'observation', status: 'observed', result: { answers: { 'q-stall': { type: 'noul', noul: 0.25 } } }
+      })
+      expect(JSON.stringify(journal)).not.toContain('shadow-secret')
+    } finally {
+      globalThis.fetch = originalFetch
+      await runner.shutdown(0)
+    }
   })
 })

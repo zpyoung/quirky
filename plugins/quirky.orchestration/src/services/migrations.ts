@@ -84,5 +84,36 @@ export const serviceMigrations: StoreMigration[] = [
   CREATE INDEX messages_mailbox_fifo ON messages(mailbox_kind, mailbox_id, sequence) WHERE read = 0;
   CREATE INDEX messages_run_history ON messages(run_id, sequence DESC);
   CREATE INDEX messages_thread ON messages(thread_id) WHERE thread_id IS NOT NULL;
-  CREATE INDEX messages_dispatch_reports ON messages(run_id, type, sequence) WHERE type IN ('worker_done', 'heartbeat');`
+  CREATE INDEX messages_dispatch_reports ON messages(run_id, type, sequence) WHERE type IN ('worker_done', 'heartbeat');`,
+  `CREATE TABLE service_submission_preflights (
+     run_id TEXT PRIMARY KEY NOT NULL,
+     owner_plugin_id TEXT NOT NULL,
+     method TEXT NOT NULL,
+     created_at TEXT NOT NULL
+   );
+
+   CREATE TABLE orchestration_peers (
+     peer_id TEXT PRIMARY KEY NOT NULL,
+     label TEXT NOT NULL,
+     endpoint TEXT NOT NULL,
+     fingerprint TEXT NOT NULL,
+     pairing_revision INTEGER NOT NULL CHECK (pairing_revision > 0),
+     auth_token TEXT NOT NULL UNIQUE,
+     last_incarnation TEXT,
+     last_capabilities_json TEXT NOT NULL DEFAULT '[]'
+   );
+
+   CREATE TABLE orchestration_peer_listener (
+     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+     host TEXT NOT NULL,
+     port INTEGER NOT NULL CHECK (port >= 0 AND port <= 65535),
+     auth_token TEXT NOT NULL,
+     certificate_file TEXT,
+     private_key_file TEXT,
+     fingerprint TEXT NOT NULL,
+     identity_secret TEXT NOT NULL,
+     active INTEGER NOT NULL CHECK (active IN (0, 1))
+   );
+
+  `
 ]
