@@ -39,6 +39,18 @@ describe('automations CLI input errors', () => {
     await expectUsage('create', [], { ...required, trigger: 'daily', host: 'local' })
     await expectUsage('create', [], { ...required, trigger: 'daily', 'extra-agent-args': '--model opus' })
   })
+  test('accepts blank extra-agent-args as a no-op', async () => {
+    const fixture = context()
+    await expect(commands.create!({
+      positionals: [],
+      flags: {
+        name: 'x', prompt: 'p', provider: 'claude', project: 'repo-1', trigger: 'daily',
+        'extra-agent-args': '   '
+      }
+    }, fixture.ctx)).resolves.toBeUndefined()
+    expect(fixture.callCount()).toBe(1)
+  })
+
 
   test('rejects preset-only flag misuse', async () => {
     const required = { name: 'x', prompt: 'p', provider: 'claude', project: 'repo-1' }

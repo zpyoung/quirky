@@ -110,5 +110,49 @@
 - **Revisit if:** platform-specific support is requested
 - **Source:** deferred: platform
 
+## D11: Checks owns cancellation after its caller context is revoked
+- **Question:** Can automation dispose cancel an active precheck through a revoked context?
+- **Options:** rely on best-effort caller cleanup; let the checks service cancel checks whose registered creator becomes inactive
+- **Chose:** record the registered creating-plugin identity, reconcile on plugin.changed, and abort only that owner's checks; direct client checks remain independent
+- **Why:** The kernel revokes context.call before deactivate. A real-process API regression left the owned check alive until its three-second observation failed. After service-owned cancellation the same regression passes and the unrelated client check remains alive. Check-ID reservation stays after the asynchronous owner lookup to retain uniqueness.
+- **Evidence:** plugins/quirky.checks/test/owner.test.ts; initial0pass1fail waitFor timeout, then1pass0fail; quirky.ask/main.ts existing ownership precedent
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** kernel introduces an explicit caller-lifetime cancellation signal
+- **Source:** assumed — autonomous
+
+## D12: Coordinate UI through additive public contracts, not shared edits
+- **Question:** Lane6 started the automation UI concurrently from the landed core
+- **Options:** duplicate runtime policy in UI; share committed types and public target/dispatch methods
+- **Chose:** send contract commit cb9e08b01a41d5e5d0bbe5a14c1804e944aa6786 and exact API/owner shapes; lane6 merged it into parent and three UI component trees. Preserve additive UI registration/main and manifest contributions on integration.
+- **Why:** Lane6 owns UI/editor/list/details/runs/OpenClaw and accepts structured-only execution, raw-argument refusal, owner snapshots and setup skip/no auto-consent. This lane owns runtime service/types/store policy. Executable integration hash will be sent after the source barrier.
+- **Evidence:** lane6 interjections; accepted terminal-send request6ae237bf-0445-4de5-9ed0-44a6840847be; lane6 contract331fc251
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** either API contract changes
+- **Source:** assumed — autonomous
+
+## D13: Fix integration failures at their actual contract boundaries
+- **Question:** Why did integration expose no automation methods and later misclassify deleted targets?
+- **Options:** disable dispatch in tests; change kernel schema; fix the plugin declaration and authoritative-path checks
+- **Chose:** use the kernel's documented flat schema subset instead of unsupported anyOf; lowercase CLI positional names; confirm local authoritative paths are directories after captured identity checks; retain normalized registry IDs from capture
+- **Why:** plugin.list reported state invalid with ten unsupported-keyword errors and one positional-name error. After declaration repair the API ran; deleted registry paths then reached workspace creation and failed at spawn instead of target refusal. Existing API regressions now pass and target drift still reports owner-change before filesystem absence.
+- **Evidence:** scratch activation.js plugin.list diagnostic; integrated API17cases, later combined93pass/1target-orderfailure; focused target6pass after ordering correction
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** remote registry paths become supported
+- **Source:** assumed — autonomous
+
+## D14: Preserve catalog opaque-model policy and immutable dispatched-provider identity
+- **Question:** What should happen for an unlisted model or a provider edit after launch?
+- **Options:** duplicate a closed model allowlist; trust current definition during observation; preserve the catalog and actual session snapshot
+- **Chose:** accept opaque IDs when declared by the catalog; reject invalid effort/options. Fresh run snapshots always record the actual provider even without explicit picks; completion/usage use that snapshot, not a later edited definition.
+- **Why:** m1-launch-settings D10 explicitly allows opaque Claude/Codex IDs. A new dispatcher regression timed out before the snapshot fix when the definition changed from Claude to Codex after launch; it passed in the93-test integration result after the correction.
+- **Evidence:** docs/loop/decisions/m1-launch-settings.md D9-D10; test/dispatch.test.ts provider-edit regression red0pass1timeout then green among93passing tests
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** provider discovery introduces an authoritative closed list
+- **Source:** locked by docs/loop/decisions/m1-launch-settings.md
+
 ## Progress
 Design and self-reviewed combined spec written. Shared dispatch-contract.ts committed before implementers. Next: implement three disjoint components, own-file behavioral tests, actual isolated daemon/CLI/native-process smoke, one affected gate and review, catch-up and queue land. Only this item this iteration. No human asks. Follow-up for the two explicitly constrained flows must be added once immediately before land.

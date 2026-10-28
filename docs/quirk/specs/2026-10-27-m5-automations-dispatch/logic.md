@@ -3,7 +3,7 @@
 ## Status & amendments
 Status: Approved autonomously under LOOP.md night mode; combined logic and technical spec.
 
-**Amendments:** None.
+**Amendments:** 2026-10-27: creator-lifetime cancellation belongs to checks because a revoked automation context cannot cancel during deactivate (D11). Catalog-declared opaque model IDs remain accepted under m1-launch-settings D10; invalid option values still refuse. A dispatched run retains its original provider identity even if the definition changes.
 
 ## Purpose and conceptual model
 A persisted automation run is the evidence of one attempt, not evidence that an agent succeeded. The daemon claims a pending run durably before any precheck, workspace creation or agent launch. The automations built-in owns dispatch policy; public repo/worktree/checks/structured/session APIs own execution. Closing the window cannot stop scheduling or execution.
@@ -62,8 +62,8 @@ After: unique workspaces are retained and identified on runs. Default/skip does 
 
 ### AC6: Fresh launch overrides and immutable snapshot
 Before: Claude/Codex automation with selected model and effort.
-Walkthrough: save valid picks, reject unsupported model/effort, launch; edit definition picks after dispatch.
-After: native provider receives valid structured fields; run launchSettings stays the actual session's snapshot. Agent change clears old picks unless replacements provided. Any raw extra arguments are rejected explicitly before mutation (binding decision, not a shell fallback).
+Walkthrough: save valid picks, reject catalog-disallowed picks, launch; edit the definition's provider and picks after dispatch. Opaque model IDs are accepted when the catalog explicitly allows them.
+After: native provider receives valid structured fields; run launchSettings and completion identity stay those of the actual session. The definition's agent change clears old picks unless replacements are provided and affects only future launches. Raw extra arguments are rejected before mutation (binding decision, not a shell fallback).
 
 ### AC7: Reuse one live completed structured conversation
 Before: same automation/workspace/agent has completed live session S with original settings.
@@ -104,7 +104,8 @@ Owner: authority-local captured target identity, not a client-supplied execution
 - New dispatch-contract.ts contains the exact shared interfaces used by all three implementers; commit it before dispatch. New target.ts implements createAutomationTargetResolver(context). New dispatch.ts implements createAutomationDispatcher(context, hooks). Runtime policy is wired in main.ts; service.ts passes its store/lane/mutation event hooks and dispatches after core run creation.
 - Target resolver captures authoritative local repo/worktree IDs, normalized paths and workspace instance identity; resolution compares these on every launch. Unsupported remote contexts are refused before any local command. Capture on explicit selector change only. expectedOwner must compare to saved capture before mutating/removing/running.
 - Dispatcher uses public calls only: quirky.repo/resolve/show, quirky.worktree/resolve/create, quirky.checks/run/cancel, quirky.agents/resolveLaunch, quirky.structured/create/send/messages/stop, quirky.session/get/list. No imports from another plugin's implementation or daemon internals. Tests may use existing test seams.
-- Shared helpers return concrete target/refusal unions and receive store hooks, not generic workflow graphs. Dispatcher holds the service's per-id lane through precheck/launch; direct store writes emit committed changes synchronously. Disposal clears timers/subscriptions and cancels owned checks; stopped contexts cannot start new work.
+- Shared helpers return concrete target/refusal unions and receive store hooks, not generic workflow graphs. Dispatcher holds the service's per-id lane through precheck/launch; direct store writes emit committed changes synchronously. Disposal clears timers/subscriptions and requests check cancellation; checks additionally owns creator-lifetime cancellation on plugin.changed so context revocation cannot strand its processes. Stopped contexts cannot start new work.
 - Integration owns service/main/CLI/manifest/core API fixture migration. Target owns target.ts and target API tests. Execution owns dispatch.ts and dispatch API tests; if Codex needs tokenUsage journal evidence, execution also owns the specific structured runner source and regression.
-- Verification commands: implementers run only owned files. Parent runs `bun scripts/suite.ts plugins/quirky.automations plugins/quirky.structured`, `bun test scripts`, `bun run typecheck` once before land; include any additional changed plugin/consumer in affected dirs. Actual daemon + CLI + scripted native provider smoke under isolated homes. No new visible UI so no browser/native campaign.
+- Parent owns the shared lifecycle seam in quirky.checks/main.ts, its method documentation, and test/owner.test.ts. Registered plugin creators are distinguished from clients; disabling one cancels only its checks. Check-ID uniqueness is checked after awaited owner resolution.
+- Verification commands: implementers run only owned files. Parent runs `bun scripts/suite.ts plugins/quirky.automations plugins/quirky.structured plugins/quirky.checks`, `bun test scripts`, `bun run typecheck` once before land; include any additional changed consumer in affected dirs. Actual daemon + CLI + scripted native provider smoke under isolated homes. No new visible UI so no browser/native campaign.
 - Reviewer binding: omp-task/OpenAI implementers; Gemini high via pi-watch after actual opus/sonnet probes fail. One final C/S/X promote/refute round, one blocking-fix batch, then verification; no separate spec review per night mode.

@@ -12,7 +12,7 @@
     "method": [
       {
         "id": "run",
-        "description": "Run a shell command in a worktree or explicit directory and return bounded output evidence.",
+        "description": "Run a shell command in a worktree or explicit directory and return bounded output evidence. Checks started by a plugin are cancelled when that plugin becomes inactive.",
         "params": {
           "type": "object",
           "additionalProperties": false,
