@@ -1,0 +1,333 @@
+{
+  "id": "quirky.automations",
+  "name": "Automations",
+  "version": "0.1.0",
+  "description": "Durable scheduled and manual structured agent runs.",
+  "main": "main.ts",
+  "cli": "cli.ts",
+  "activation": "startup",
+  "contributes": {
+    "method": [
+      {
+        "id": "list",
+        "description": "Lists automation definitions in name order.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": {}, "additionalProperties": false },
+        "result": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" }, "creationKey": { "type": "string" }, "name": { "type": "string" }, "prompt": { "type": "string" },
+              "agentId": { "type": "string", "enum": ["claude", "codex"] }, "projectId": { "type": "string" },
+              "workspaceMode": { "type": "string", "enum": ["existing", "new_per_run"] }, "workspaceId": {}, "baseBranch": {},
+              "setupDecision": { "type": "string", "enum": ["run", "skip"] }, "reuseSession": { "type": "boolean" },
+              "runContext": {}, "sourceContext": {}, "launchOverrides": {}, "precheck": {}, "timezone": { "type": "string" },
+              "rrule": { "type": "string" }, "dtstart": { "type": "integer" }, "enabled": { "type": "boolean" },
+              "nextRunAt": { "type": "integer" }, "lastRunAt": { "type": "integer" },
+              "missedRunPolicy": { "type": "string", "enum": ["run_once_within_grace"] }, "missedRunGraceMinutes": { "type": "integer" },
+              "createdAt": { "type": "integer" }, "updatedAt": { "type": "integer" }
+            },
+            "required": ["id", "name", "prompt", "agentId", "projectId", "workspaceMode", "workspaceId", "baseBranch", "reuseSession", "runContext", "sourceContext", "launchOverrides", "precheck", "timezone", "rrule", "dtstart", "enabled", "nextRunAt", "missedRunPolicy", "missedRunGraceMinutes", "createdAt", "updatedAt"],
+            "additionalProperties": false
+          }
+        }
+      },
+      {
+        "id": "show",
+        "description": "Returns one automation definition by ID.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": { "id": { "type": "string" } }, "required": ["id"], "additionalProperties": false },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" }, "creationKey": { "type": "string" }, "name": { "type": "string" }, "prompt": { "type": "string" },
+            "agentId": { "type": "string", "enum": ["claude", "codex"] }, "projectId": { "type": "string" },
+            "workspaceMode": { "type": "string", "enum": ["existing", "new_per_run"] }, "workspaceId": {}, "baseBranch": {},
+            "setupDecision": { "type": "string", "enum": ["run", "skip"] }, "reuseSession": { "type": "boolean" },
+            "runContext": {}, "sourceContext": {}, "launchOverrides": {}, "precheck": {}, "timezone": { "type": "string" },
+            "rrule": { "type": "string" }, "dtstart": { "type": "integer" }, "enabled": { "type": "boolean" },
+            "nextRunAt": { "type": "integer" }, "lastRunAt": { "type": "integer" },
+            "missedRunPolicy": { "type": "string", "enum": ["run_once_within_grace"] }, "missedRunGraceMinutes": { "type": "integer" },
+            "createdAt": { "type": "integer" }, "updatedAt": { "type": "integer" }
+          },
+          "required": ["id", "name", "prompt", "agentId", "projectId", "workspaceMode", "workspaceId", "baseBranch", "reuseSession", "runContext", "sourceContext", "launchOverrides", "precheck", "timezone", "rrule", "dtstart", "enabled", "nextRunAt", "missedRunPolicy", "missedRunGraceMinutes", "createdAt", "updatedAt"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "create",
+        "description": "Creates a validated scheduled automation; project and workspace values are stored as identifiers only.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "creationKey": { "type": "string" }, "name": { "type": "string" }, "prompt": { "type": "string" },
+            "agentId": { "type": "string", "enum": ["claude", "codex"] }, "projectId": { "type": "string" },
+            "workspaceMode": { "type": "string", "enum": ["existing", "new_per_run"] }, "workspaceId": {}, "baseBranch": {}, "setupDecision": {},
+            "reuseSession": { "type": "boolean" }, "runContext": {}, "sourceContext": {}, "launchOverrides": {}, "precheck": {},
+            "timezone": { "type": "string" }, "rrule": { "type": "string" }, "dtstart": { "type": "integer", "minimum": 0 },
+            "enabled": { "type": "boolean" }, "missedRunGraceMinutes": { "type": "integer", "minimum": 0 }
+          },
+          "required": ["prompt", "agentId", "projectId", "rrule"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" }, "creationKey": { "type": "string" }, "name": { "type": "string" }, "prompt": { "type": "string" },
+            "agentId": { "type": "string", "enum": ["claude", "codex"] }, "projectId": { "type": "string" },
+            "workspaceMode": { "type": "string", "enum": ["existing", "new_per_run"] }, "workspaceId": {}, "baseBranch": {},
+            "setupDecision": { "type": "string", "enum": ["run", "skip"] }, "reuseSession": { "type": "boolean" },
+            "runContext": {}, "sourceContext": {}, "launchOverrides": {}, "precheck": {}, "timezone": { "type": "string" },
+            "rrule": { "type": "string" }, "dtstart": { "type": "integer" }, "enabled": { "type": "boolean" },
+            "nextRunAt": { "type": "integer" }, "lastRunAt": { "type": "integer" },
+            "missedRunPolicy": { "type": "string", "enum": ["run_once_within_grace"] }, "missedRunGraceMinutes": { "type": "integer" },
+            "createdAt": { "type": "integer" }, "updatedAt": { "type": "integer" }
+          },
+          "required": ["id", "name", "prompt", "agentId", "projectId", "workspaceMode", "workspaceId", "baseBranch", "reuseSession", "runContext", "sourceContext", "launchOverrides", "precheck", "timezone", "rrule", "dtstart", "enabled", "nextRunAt", "missedRunPolicy", "missedRunGraceMinutes", "createdAt", "updatedAt"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "edit",
+        "description": "Partially edits an automation; omitted fields are preserved and explicit null clears nullable fields.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" }, "name": { "type": "string" }, "prompt": { "type": "string" },
+            "agentId": { "type": "string", "enum": ["claude", "codex"] }, "projectId": { "type": "string" },
+            "workspaceMode": { "type": "string", "enum": ["existing", "new_per_run"] }, "workspaceId": {}, "baseBranch": {}, "setupDecision": {},
+            "reuseSession": { "type": "boolean" }, "runContext": {}, "sourceContext": {}, "launchOverrides": {}, "precheck": {},
+            "timezone": { "type": "string" }, "rrule": { "type": "string" }, "dtstart": { "type": "integer", "minimum": 0 },
+            "enabled": { "type": "boolean" }, "missedRunGraceMinutes": { "type": "integer", "minimum": 0 }
+          },
+          "required": ["id"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" }, "creationKey": { "type": "string" }, "name": { "type": "string" }, "prompt": { "type": "string" },
+            "agentId": { "type": "string", "enum": ["claude", "codex"] }, "projectId": { "type": "string" },
+            "workspaceMode": { "type": "string", "enum": ["existing", "new_per_run"] }, "workspaceId": {}, "baseBranch": {},
+            "setupDecision": { "type": "string", "enum": ["run", "skip"] }, "reuseSession": { "type": "boolean" },
+            "runContext": {}, "sourceContext": {}, "launchOverrides": {}, "precheck": {}, "timezone": { "type": "string" },
+            "rrule": { "type": "string" }, "dtstart": { "type": "integer" }, "enabled": { "type": "boolean" },
+            "nextRunAt": { "type": "integer" }, "lastRunAt": { "type": "integer" },
+            "missedRunPolicy": { "type": "string", "enum": ["run_once_within_grace"] }, "missedRunGraceMinutes": { "type": "integer" },
+            "createdAt": { "type": "integer" }, "updatedAt": { "type": "integer" }
+          },
+          "required": ["id", "name", "prompt", "agentId", "projectId", "workspaceMode", "workspaceId", "baseBranch", "reuseSession", "runContext", "sourceContext", "launchOverrides", "precheck", "timezone", "rrule", "dtstart", "enabled", "nextRunAt", "missedRunPolicy", "missedRunGraceMinutes", "createdAt", "updatedAt"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "remove",
+        "description": "Deletes a definition and all its run history without removing workspaces.",
+        "destructive": true,
+        "confirm": "Delete this automation and its run history? Existing workspaces are not removed.",
+        "params": { "type": "object", "properties": { "id": { "type": "string" }, "yes": { "type": "boolean" } }, "required": ["id"], "additionalProperties": false },
+        "result": { "type": "object", "properties": { "id": { "type": "string" }, "removed": { "type": "boolean" } }, "required": ["id", "removed"], "additionalProperties": false }
+      },
+      {
+        "id": "run",
+        "description": "Queues a manual pending run, including when the definition is paused.",
+        "params": { "type": "object", "properties": { "id": { "type": "string" } }, "required": ["id"], "additionalProperties": false },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" }, "automationId": { "type": "string" }, "title": { "type": "string" }, "runNumber": { "type": "integer" },
+            "scheduledFor": { "type": "integer" }, "trigger": { "type": "string", "enum": ["scheduled", "manual"] },
+            "status": { "type": "string", "enum": ["pending", "dispatching", "dispatched", "completed", "skipped_precheck", "skipped_missed", "skipped_unavailable", "skipped_needs_interactive_auth", "dispatch_failed"] },
+            "createdAt": { "type": "integer" }, "startedAt": { "type": "integer" }, "dispatchedAt": { "type": "integer" }, "completedAt": { "type": "integer" },
+            "occurrenceCount": { "type": "integer" }, "lastOccurrenceAt": { "type": "integer" }, "runContext": {}, "sourceContext": {},
+            "workspaceId": {}, "workspaceDisplayName": {}, "sessionKind": { "type": "string", "enum": ["structured"] }, "sessionId": {},
+            "launchSettings": {}, "outputSnapshot": {}, "precheckResult": {}, "usage": {}, "error": {}
+          },
+          "required": ["id", "automationId", "title", "runNumber", "scheduledFor", "trigger", "status", "createdAt", "occurrenceCount", "runContext", "sourceContext", "workspaceId", "sessionKind", "sessionId", "launchSettings", "error"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "runs",
+        "description": "Reads retained run history with a stable cursor.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": { "automationId": { "type": "string" }, "limit": { "type": "integer" }, "cursor": { "type": "string" } },
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "runs": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" }, "automationId": { "type": "string" }, "title": { "type": "string" }, "runNumber": { "type": "integer" },
+                  "scheduledFor": { "type": "integer" }, "trigger": { "type": "string", "enum": ["scheduled", "manual"] },
+                  "status": { "type": "string", "enum": ["pending", "dispatching", "dispatched", "completed", "skipped_precheck", "skipped_missed", "skipped_unavailable", "skipped_needs_interactive_auth", "dispatch_failed"] },
+                  "createdAt": { "type": "integer" }, "startedAt": { "type": "integer" }, "dispatchedAt": { "type": "integer" }, "completedAt": { "type": "integer" },
+                  "occurrenceCount": { "type": "integer" }, "lastOccurrenceAt": { "type": "integer" }, "runContext": {}, "sourceContext": {},
+                  "workspaceId": {}, "workspaceDisplayName": {}, "sessionKind": { "type": "string", "enum": ["structured"] }, "sessionId": {},
+                  "launchSettings": {}, "outputSnapshot": {}, "precheckResult": {}, "usage": {}, "error": {}
+                },
+                "required": ["id", "automationId", "title", "runNumber", "scheduledFor", "trigger", "status", "createdAt", "occurrenceCount", "runContext", "sourceContext", "workspaceId", "sessionKind", "sessionId", "launchSettings", "error"],
+                "additionalProperties": false
+              }
+            },
+            "nextCursor": {}
+          },
+          "required": ["runs", "nextCursor"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "schedule",
+        "description": "Inspects schedule validity, label, next occurrence and latest occurrence in an explicit timezone.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "rrule": { "type": "string" }, "timezone": { "type": "string" }, "dtstart": { "type": "integer", "minimum": 0 },
+            "after": { "type": "integer", "minimum": 0 }, "now": { "type": "integer", "minimum": 0 }
+          },
+          "required": ["rrule", "timezone", "dtstart", "after"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "valid": { "type": "boolean" }, "runnable": { "type": "boolean" },
+            "description": {
+              "type": "object",
+              "properties": {
+                "kind": { "type": "string", "enum": ["hourly", "daily", "weekdays", "weekly", "custom", "invalid"] },
+                "label": { "type": "string" }, "hour": { "type": "integer" }, "minute": { "type": "integer" }, "day": { "type": "integer" }
+              },
+              "required": ["kind", "label"], "additionalProperties": false
+            },
+            "next": {}, "latest": {}
+          },
+          "required": ["valid", "runnable", "description", "next", "latest"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "tick",
+        "description": "Evaluates due schedules using the daemon's current time.",
+        "params": { "type": "object", "properties": {}, "additionalProperties": false },
+        "result": { "type": "object", "properties": { "now": { "type": "integer" }, "evaluated": { "type": "integer" } }, "required": ["now", "evaluated"], "additionalProperties": false }
+      },
+      {
+        "id": "claim",
+        "description": "Atomically claims a pending run for dispatch ownership without launching it.",
+        "params": { "type": "object", "properties": { "runId": { "type": "string" } }, "required": ["runId"], "additionalProperties": false },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" }, "automationId": { "type": "string" }, "title": { "type": "string" }, "runNumber": { "type": "integer" },
+            "scheduledFor": { "type": "integer" }, "trigger": { "type": "string", "enum": ["scheduled", "manual"] },
+            "status": { "type": "string", "enum": ["pending", "dispatching", "dispatched", "completed", "skipped_precheck", "skipped_missed", "skipped_unavailable", "skipped_needs_interactive_auth", "dispatch_failed"] },
+            "createdAt": { "type": "integer" }, "startedAt": { "type": "integer" }, "dispatchedAt": { "type": "integer" }, "completedAt": { "type": "integer" },
+            "occurrenceCount": { "type": "integer" }, "lastOccurrenceAt": { "type": "integer" }, "runContext": {}, "sourceContext": {},
+            "workspaceId": {}, "workspaceDisplayName": {}, "sessionKind": { "type": "string", "enum": ["structured"] }, "sessionId": {},
+            "launchSettings": {}, "outputSnapshot": {}, "precheckResult": {}, "usage": {}, "error": {}
+          },
+          "required": ["id", "automationId", "title", "runNumber", "scheduledFor", "trigger", "status", "createdAt", "occurrenceCount", "runContext", "sourceContext", "workspaceId", "sessionKind", "sessionId", "launchSettings", "error"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "updateRun",
+        "description": "Records structured dispatch evidence and an allowed run status transition.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "runId": { "type": "string" },
+            "patch": {
+              "type": "object",
+              "properties": {
+                "status": { "type": "string", "enum": ["pending", "dispatching", "dispatched", "completed", "skipped_precheck", "skipped_missed", "skipped_unavailable", "skipped_needs_interactive_auth", "dispatch_failed"] },
+                "workspaceId": {}, "workspaceDisplayName": {}, "sessionId": {}, "launchSettings": {}, "outputSnapshot": {},
+                "precheckResult": {}, "usage": {}, "error": {}
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": ["runId", "patch"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" }, "automationId": { "type": "string" }, "title": { "type": "string" }, "runNumber": { "type": "integer" },
+            "scheduledFor": { "type": "integer" }, "trigger": { "type": "string", "enum": ["scheduled", "manual"] },
+            "status": { "type": "string", "enum": ["pending", "dispatching", "dispatched", "completed", "skipped_precheck", "skipped_missed", "skipped_unavailable", "skipped_needs_interactive_auth", "dispatch_failed"] },
+            "createdAt": { "type": "integer" }, "startedAt": { "type": "integer" }, "dispatchedAt": { "type": "integer" }, "completedAt": { "type": "integer" },
+            "occurrenceCount": { "type": "integer" }, "lastOccurrenceAt": { "type": "integer" }, "runContext": {}, "sourceContext": {},
+            "workspaceId": {}, "workspaceDisplayName": {}, "sessionKind": { "type": "string", "enum": ["structured"] }, "sessionId": {},
+            "launchSettings": {}, "outputSnapshot": {}, "precheckResult": {}, "usage": {}, "error": {}
+          },
+          "required": ["id", "automationId", "title", "runNumber", "scheduledFor", "trigger", "status", "createdAt", "occurrenceCount", "runContext", "sourceContext", "workspaceId", "sessionKind", "sessionId", "launchSettings", "error"],
+          "additionalProperties": false
+        }
+      }
+    ],
+    "event": [
+      { "id": "changed", "description": "An automation definition or run changed after its durable write completed." }
+    ],
+    "cli-command": [
+      { "id": "list", "words": "list", "summary": "list scheduled automations", "methods": ["quirky.automations/list"] },
+      { "id": "show", "words": "show", "summary": "show an automation", "positionals": [{ "name": "id", "description": "automation ID", "required": false }], "flags": { "id": { "type": "string", "description": "automation ID as an alternative to the positional ID" } }, "methods": ["quirky.automations/show"] },
+      {
+        "id": "create",
+        "words": "create",
+        "summary": "create a scheduled automation",
+        "flags": {
+          "name": { "type": "string", "description": "automation name", "required": true }, "prompt": { "type": "string", "description": "structured agent prompt", "required": true },
+          "provider": { "type": "string", "description": "claude or codex", "required": true, "enum": ["claude", "codex"] },
+          "project": { "type": "string", "description": "project identity; no target resolution is performed" }, "repo": { "type": "string", "description": "project identity alias for --project" },
+          "workspace": { "type": "string", "description": "existing workspace identity" }, "workspace-mode": { "type": "string", "description": "existing or new-per-run", "enum": ["existing", "new-per-run", "new_per_run"] },
+          "base-branch": { "type": "string", "description": "base branch for new-per-run workspaces" }, "setup-decision": { "type": "string", "description": "run or skip setup for new workspaces", "enum": ["run", "skip"] },
+          "trigger": { "type": "string", "description": "hourly, daily, weekdays, weekly, or a raw schedule" }, "schedule": { "type": "string", "description": "alias for --trigger" },
+          "time": { "type": "string", "description": "H:MM/HH:MM 24-hour time for daily, weekdays or weekly" }, "day": { "type": "string", "description": "weekly day 0-6, Sunday is 0" },
+          "timezone": { "type": "string", "description": "saved IANA timezone" }, "enabled": { "type": "boolean", "description": "enable the schedule" },
+          "disabled": { "type": "boolean", "description": "create paused" }, "missed-run-grace-minutes": { "type": "integer", "description": "missed-run grace in minutes; zero is allowed" },
+          "reuse-session": { "type": "boolean", "description": "reuse the prior live session for an existing workspace" }, "fresh-session": { "type": "boolean", "description": "use a fresh structured session" },
+          "precheck": { "type": "string", "description": "stored precheck command; not run by core" }, "precheck-timeout": { "type": "integer", "description": "precheck timeout from 1 to 600 seconds" },
+          "source-context": { "type": "string", "description": "JSON source context object" }, "creation-key": { "type": "string", "description": "idempotency key" },
+          "model": { "type": "string", "description": "structured provider model override" }, "effort": { "type": "string", "description": "structured effort option override" },
+          "extra-agent-args": { "type": "string", "description": "refused: raw arguments are unsupported for structured sessions" }
+        },
+        "methods": ["quirky.automations/create"]
+      },
+      {
+        "id": "edit",
+        "words": "edit",
+        "summary": "edit an automation",
+        "positionals": [{ "name": "id", "description": "automation ID", "required": false }],
+        "flags": {
+          "id": { "type": "string", "description": "automation ID as an alternative to the positional ID" }, "name": { "type": "string", "description": "automation name" },
+          "prompt": { "type": "string", "description": "structured agent prompt" }, "provider": { "type": "string", "description": "claude or codex", "enum": ["claude", "codex"] },
+          "project": { "type": "string", "description": "project identity; no target resolution is performed" }, "repo": { "type": "string", "description": "project identity alias for --project" },
+          "workspace": { "type": "string", "description": "existing workspace identity" }, "workspace-mode": { "type": "string", "description": "existing or new-per-run", "enum": ["existing", "new-per-run", "new_per_run"] },
+          "base-branch": { "type": "string", "description": "base branch for new-per-run workspaces" }, "setup-decision": { "type": "string", "description": "run or skip setup for new workspaces", "enum": ["run", "skip"] },
+          "trigger": { "type": "string", "description": "hourly, daily, weekdays, weekly, or a raw schedule" }, "schedule": { "type": "string", "description": "alias for --trigger" },
+          "time": { "type": "string", "description": "H:MM/HH:MM 24-hour time for daily, weekdays or weekly" }, "day": { "type": "string", "description": "weekly day 0-6, Sunday is 0" },
+          "timezone": { "type": "string", "description": "saved IANA timezone" }, "enabled": { "type": "boolean", "description": "enable the schedule" },
+          "disabled": { "type": "boolean", "description": "pause the schedule" }, "missed-run-grace-minutes": { "type": "integer", "description": "missed-run grace in minutes; zero is allowed" },
+          "reuse-session": { "type": "boolean", "description": "reuse the prior live session for an existing workspace" }, "fresh-session": { "type": "boolean", "description": "use a fresh structured session" },
+          "precheck": { "type": "string", "description": "stored precheck command; empty clears it" }, "precheck-timeout": { "type": "integer", "description": "precheck timeout from 1 to 600 seconds" },
+          "source-context": { "type": "string", "description": "JSON source context object or null" }, "model": { "type": "string", "description": "structured model override or inherit" },
+          "effort": { "type": "string", "description": "structured effort override or inherit" }, "extra-agent-args": { "type": "string", "description": "refused: raw arguments are unsupported for structured sessions" }
+        },
+        "methods": ["quirky.automations/show", "quirky.automations/edit"]
+      },
+      { "id": "remove", "words": "remove", "summary": "remove an automation and its run history", "positionals": [{ "name": "id", "description": "automation ID", "required": false }], "flags": { "id": { "type": "string", "description": "automation ID as an alternative to the positional ID" } }, "methods": ["quirky.automations/remove"] },
+      { "id": "run", "words": "run", "summary": "queue a manual run", "positionals": [{ "name": "id", "description": "automation ID", "required": false }], "flags": { "id": { "type": "string", "description": "automation ID as an alternative to the positional ID" } }, "methods": ["quirky.automations/run"] },
+      { "id": "runs", "words": "runs", "summary": "read run history", "positionals": [{ "name": "id", "description": "automation ID filter", "required": false }], "flags": { "id": { "type": "string", "description": "automation ID filter" }, "limit": { "type": "integer", "description": "one-page limit from 1 to 100" }, "cursor": { "type": "string", "description": "one-page cursor" } }, "methods": ["quirky.automations/runs"] }
+    ]
+  }
+}
