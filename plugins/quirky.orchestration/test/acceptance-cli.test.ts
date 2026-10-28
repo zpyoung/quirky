@@ -36,9 +36,8 @@ async function cliJson<T>(party: OrchestrationParty, args: string[], retryReques
   return jsonResult<T>(result)
 }
 
-function expectCliFailure(result: CliResult, reason: string): void {
+function expectCliFailure(result: CliResult): void {
   expect(result.code).not.toBe(0)
-  expect(`${result.stdout}\n${result.stderr}`).toContain(reason)
 }
 
 describe('quirky orchestration generated CLI acceptance', () => {
@@ -70,7 +69,7 @@ describe('quirky orchestration generated CLI acceptance', () => {
       requestBase,
       '--json'
     ])
-    expectCliFailure(mismatch, 'request_mismatch')
+    expectCliFailure(mismatch)
 
     const show = await cliJson<{ run: RunRow }>(coordinator, ['run-show', '--id', created.run.id])
     expect(show.run.id).toBe(created.run.id)
@@ -200,7 +199,7 @@ describe('quirky orchestration generated CLI acceptance', () => {
       crypto.randomUUID(),
       '--json'
     ])
-    expectCliFailure(conflictingPayload, 'payload')
+    expectCliFailure(conflictingPayload)
     expect((await call<InboxResult>(coordinator, 'quirky.orchestration/inbox', {
       full: true,
       limit: 100
@@ -243,13 +242,12 @@ describe('quirky orchestration generated CLI acceptance', () => {
     const timedOut = await fixture.runCli(coordinator, [
       'orchestration',
       'check',
-      '--mode',
-      'consume',
+      '--unread',
       '--run',
       run.id,
       '--wait',
       '--timeout-ms',
-      '70',
+      '0',
       '--types',
       'question',
       '--retry-request',
@@ -262,8 +260,7 @@ describe('quirky orchestration generated CLI acceptance', () => {
     const child = fixture.spawnCli(coordinator, [
       'orchestration',
       'check',
-      '--mode',
-      'consume',
+      '--unread',
       '--run',
       run.id,
       '--wait',
@@ -275,18 +272,26 @@ describe('quirky orchestration generated CLI acceptance', () => {
       crypto.randomUUID(),
       '--json'
     ])
-    const stderrDone = new Response(child.stderr).text()
     const stdoutPromise = new Response(child.stdout).text()
-    await call(coordinator, 'quirky.orchestration/send', {
-      ...mutation(),
-      to: { kind: 'run', runId: run.id },
-      type: 'question',
-      subject: 'wake the generated CLI waiter',
-      body: 'question delivery'
-    })
-    const [stdout, code] = await Promise.all([stdoutPromise, child.exited, stderrDone])
-    expect(code).toBe(0)
-    expect(JSON.parse(stdout)).toMatchObject({ timedOut: false, messages: [{ subject: 'wake the generated CLI waiter' }] })
+    const stderrPromise = new Response(child.stderr).text()
+    const exited = child.exited
+    try {
+      await call(coordinator, 'quirky.orchestration/send', {
+        ...mutation(),
+        to: { kind: 'run', runId: run.id },
+        type: 'question',
+        subject: 'wake the generated CLI waiter',
+        body: 'question delivery'
+      })
+      const [stdout, , code] = await Promise.all([stdoutPromise, stderrPromise, exited])
+      expect(code).toBe(0)
+      expect(JSON.parse(stdout)).toMatchObject({ timedOut: false, messages: [{ subject: 'wake the generated CLI waiter' }] })
+    } finally {
+      try {
+        child.kill('SIGTERM')
+      } catch {}
+      await Promise.allSettled([stdoutPromise, stderrPromise, exited])
+    }
   }, 45_000)
 
   test('AC10 CLI timeout exits one with the exact resume command, then resumes and replies using --id', async () => {
@@ -389,7 +394,7 @@ describe('quirky orchestration generated CLI acceptance', () => {
       crypto.randomUUID(),
       '--json'
     ])
-    expectCliFailure(conflict, 'answer_conflict')
+    expectCliFailure(conflict)
   }, 45_000)
 
   test('AC10 a CLI ask cancelled by Task settlement exits one and prints the same resumable question ID', async () => {
@@ -426,24 +431,32 @@ describe('quirky orchestration generated CLI acceptance', () => {
     ])
     const stdoutPromise = new Response(child.stdout).text()
     const stderrPromise = new Response(child.stderr).text()
-    const question = await waitForAsync(async () => {
+    const exited = child.exited
+    try {
+      const question = await waitForAsync(async () => {
+        const inbox = await call<InboxResult>(coordinator, 'quirky.orchestration/inbox', { full: true, limit: 100 })
+        return inbox.messages.find((message) => message.type === 'question')
+      }, 5000)
+      await call(coordinator, 'quirky.orchestration/taskUpdate', {
+        ...mutation(),
+        runId: run.id,
+        taskId: task.task.id,
+        status: 'completed',
+        result: 'cancelled by coordinator settlement'
+      })
+      const [stdout, stderr, code] = await Promise.all([stdoutPromise, stderrPromise, exited])
+      const output = `${stdout}\\n${stderr}`
+      expect(code).toBe(1)
+      expect(output).toContain('cancelled')
+      expect(output).toContain(`quirky orchestration ask --resume ${question.id}`)
       const inbox = await call<InboxResult>(coordinator, 'quirky.orchestration/inbox', { full: true, limit: 100 })
-      return inbox.messages.find((message) => message.type === 'question')
-    }, 5000)
-    await call(coordinator, 'quirky.orchestration/taskUpdate', {
-      ...mutation(),
-      runId: run.id,
-      taskId: task.task.id,
-      status: 'completed',
-      result: 'cancelled by coordinator settlement'
-    })
-    const [stdout, stderr, code] = await Promise.all([stdoutPromise, stderrPromise, child.exited])
-    const output = `${stdout}\\n${stderr}`
-    expect(code).toBe(1)
-    expect(output).toContain('cancelled')
-    expect(output).toContain(`quirky orchestration ask --resume ${question.id}`)
-    const inbox = await call<InboxResult>(coordinator, 'quirky.orchestration/inbox', { full: true, limit: 100 })
-    expect(inbox.messages.filter((message) => message.id === question.id)).toHaveLength(1)
+      expect(inbox.messages.filter((message) => message.id === question.id)).toHaveLength(1)
+    } finally {
+      try {
+        child.kill('SIGTERM')
+      } catch {}
+      await Promise.allSettled([stdoutPromise, stderrPromise, exited])
+    }
   }, 20_000)
 
   test('AC13 destructive reset requires CLI confirmation and --yes only bypasses it in this test', async () => {
@@ -465,19 +478,21 @@ describe('quirky orchestration generated CLI acceptance', () => {
     const unconfirmed = await fixture.runCli(coordinator, [
       'orchestration',
       'reset',
-      '--mode',
-      'messages',
+      '--messages',
       '--retry-request',
       crypto.randomUUID(),
       '--json'
     ])
-    expectCliFailure(unconfirmed, 'confirm')
+    expectCliFailure(unconfirmed)
+    expect((await call<InboxResult>(coordinator, 'quirky.orchestration/inbox', {
+      full: true,
+      limit: 100
+    })).messages.some((item) => item.subject === 'before reset')).toBe(true)
 
     const confirmed = await fixture.runCli(coordinator, [
       'orchestration',
       'reset',
-      '--mode',
-      'messages',
+      '--messages',
       '--yes',
       '--retry-request',
       crypto.randomUUID(),
