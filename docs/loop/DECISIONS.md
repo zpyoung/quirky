@@ -76,6 +76,7 @@ files, not this one.
 | hard | high | [sb-mobile-daemon D6](decisions/sb-mobile-daemon.md) | Strict v2 and bounded authorization/failures | locked by mobile.md |
 | hard | high | [m4-hosting-api-github D6](decisions/m4-hosting-api-github.md) | Keep gh as auth boundary with fail-closed per-repo binding | locked by hosting-api.md |
 | hard | high | [m4-hosting-api-github D9](decisions/m4-hosting-api-github.md) | Share one head-guarded destructive merge seam before the sitter exists | locked by docs/roadmap.md |
+| hard | high | [sa-browser-agent-extras D2](decisions/sa-browser-agent-extras.md) | Resolve API, CLI, data and integration gray areas explicitly | locked by docs/architecture.md |
 | hard | high | [m0-daemon-api D7](decisions/m0-daemon-api.md) | The four kinds are `method`, `event`, `job` and `launch-hook` | assumed — autonomous |
 | hard | high | [m0-daemon-api D13](decisions/m0-daemon-api.md) | Choose declared contributions with provided implementations | supersedes nothing; extends m0-registry D23 |
 | hard (architecture) | high | [sa-browser-native-identity D4](decisions/sa-browser-native-identity.md) | Preserve the native engine and truthful capability state | locked by docs/architecture.md |
@@ -483,6 +484,9 @@ files, not this one.
 | medium | high | [m4-hosting-api-github D19](decisions/m4-hosting-api-github.md) | Authorize Projects routes explicitly without weakening ordinary remote checks | locked by hosting-api.md; supersedes m4-hosting-api-github D5 (Projects transport only) |
 | medium | high | [m4-hosting-api-github D21](decisions/m4-hosting-api-github.md) | Preserve provider lifecycle semantics instead of fixture mistakes | locked by hosting-api.md |
 | medium | high | [m4-hosting-api-github D29](decisions/m4-hosting-api-github.md) | Honor actual provider wire shapes and supported branch routes | locked by hosting-api.md |
+| medium | high | [sa-browser-agent-extras D1](decisions/sa-browser-agent-extras.md) | Recover extras onto the current core, not over it | assumed — autonomous |
+| medium | high | [sa-browser-agent-extras D3](decisions/sa-browser-agent-extras.md) | Preserve later profile and identity ownership | locked by docs/loop/decisions/sa-browser-profiles-settings.md |
+| medium | high | [sa-browser-agent-extras D12](decisions/sa-browser-agent-extras.md) | Reconcile the single roadmap catchup without broadening Native or mobile authority | assumed — autonomous |
 | medium | high | [m0-daemon-api D8](decisions/m0-daemon-api.md) | Method results and errors | assumed — autonomous |
 | medium | high | [m0-daemon-api D10](decisions/m0-daemon-api.md) | Stores migrate forward only, by an ordered list, and refuse a downgrade | assumed — autonomous |
 | medium | high | [m0-daemon-api D24](decisions/m0-daemon-api.md) | Plugin methods use the daemon's token, and any client may call any method | locked by docs/roadmap.md |
@@ -1779,6 +1783,14 @@ files, not this one.
 | easy | high | [fix-sc31-first-shell-race D7](decisions/fix-sc31-first-shell-race.md) | Resume the preserved correction after integration repairs | locked by docs/loop/decisions/fix-test-process-leaks.md |
 | easy | high for the exercised cli/api path; the guarded visual limitation remains d5. | [fix-sc31-first-shell-race D9](decisions/fix-sc31-first-shell-race.md) | Prove the skip/ordinary-shell contract with real CLI and PTY processes | assumed — autonomous |
 | easy | high for the observed result; no claim that the independent load sensitivity is fixed. | [fix-sc31-first-shell-race D10](decisions/fix-sc31-first-shell-race.md) | Retain the suite's existing isolated-rerun policy | locked by scripts/suite.ts |
+| easy | high | [sa-browser-agent-extras D4](decisions/sa-browser-agent-extras.md) | Apply unattended build-first gates without inventing test evidence | locked by docs/loop/LOOP.md |
+| easy | high | [sa-browser-agent-extras D5](decisions/sa-browser-agent-extras.md) | Keep platform and sensitive-state verification bounded | deferred: platform |
+| easy | high | [sa-browser-agent-extras D6](decisions/sa-browser-agent-extras.md) | Preserve the existing dependent import-UI item | locked by docs/loop/queue.json |
+| easy | high | [sa-browser-agent-extras D7](decisions/sa-browser-agent-extras.md) | Integrate only audited component scopes and repair concrete assembly faults | assumed — autonomous |
+| easy | high | [sa-browser-agent-extras D8](decisions/sa-browser-agent-extras.md) | Map public property queries onto the pinned helper's actual wire protocol | assumed — autonomous |
+| easy | high | [sa-browser-agent-extras D9](decisions/sa-browser-agent-extras.md) | Repair the cookie canonicalizer and dynamic CDP event schemas at their source | assumed — autonomous |
+| easy | high for exercised behavior only | [sa-browser-agent-extras D10](decisions/sa-browser-agent-extras.md) | Separate changed-path proof from deferred suite and native assurance | locked by docs/loop/LOOP.md |
+| easy | high for listed profile/disclosure rendering, no badge-menu/native parity claim | [sa-browser-agent-extras D11](decisions/sa-browser-agent-extras.md) | Verify imported metadata on the built Settings surface without claiming import-menu completion | assumed — autonomous |
 | easy | high | [m0-daemon-api D1](decisions/m0-daemon-api.md) | Classify the item as an API design, and run both research phases | assumed — autonomous |
 | easy | high | [m0-daemon-api D2](decisions/m0-daemon-api.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m0-daemon-api D3](decisions/m0-daemon-api.md) | Select every gray area that matters for the daemon plugin API | assumed — autonomous |
