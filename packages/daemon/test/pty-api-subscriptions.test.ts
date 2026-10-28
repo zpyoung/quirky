@@ -1,6 +1,13 @@
 import { describe, expect, test } from 'bun:test'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import type { PtySessionInfo } from '@quirky/protocol'
+import { RuntimeSessionAuthority } from '../src/session-authority'
+import { Store } from '../src/store'
 import { createPtyApi } from '../src/plugins/pty-api'
 import type { PtyClient } from '../src/pty-client'
+import type { ClientConn } from '../src/types'
 
 function stubClient(options: { failUnsubscribe?: boolean } = {}) {
   const requests: Array<{ type: string; sessionId: string }> = []
@@ -23,6 +30,60 @@ function stubClient(options: { failUnsubscribe?: boolean } = {}) {
   const count = (type: string, sessionId?: string) =>
     requests.filter((request) => request.type === type && (sessionId === undefined || request.sessionId === sessionId)).length
   return { client, count, sent }
+}
+
+function rejectingAuthorityClient() {
+  const sessions = new Map<string, PtySessionInfo>()
+  const rejected = new Set<string>()
+  let nextPid = 2000
+  const client = {
+    connected: true,
+    hostPid: 4242,
+    sendData() {},
+    onData() {},
+    onExit() {},
+    onFact() {},
+    onReconnect() {},
+    async request(type: string, params: Record<string, unknown>) {
+      const sessionId = typeof params.sessionId === 'string' ? params.sessionId : ''
+      if (type === 'create') {
+        const pid = nextPid++
+        sessions.set(sessionId, {
+          sessionId,
+          state: 'running',
+          pid,
+          alive: true,
+          exitCode: null,
+          exitSignal: null,
+          exitCause: null,
+          cols: 80,
+          rows: 24,
+          argv: ['/bin/sh'],
+          cwd: '/isolated',
+          title: null,
+          shellState: 'unsupported',
+          createdAt: pid * 10,
+          offset: 0
+        })
+        return { pid, restored: false, cwd: '/isolated', cols: 80, rows: 24 }
+      }
+      if (type === 'list') return [...sessions.values()]
+      if (type === 'kill' || type === 'forget') {
+        if (rejected.delete(type)) throw new Error(`PTY ${type} rejected`)
+        if (type === 'forget') sessions.delete(sessionId)
+        else {
+          const session = sessions.get(sessionId)
+          if (session) {
+            session.state = 'exited'
+            session.alive = false
+            session.exitCause = 'killed'
+          }
+        }
+      }
+      return {}
+    }
+  } as unknown as PtyClient
+  return { client, sessions, rejectNext: (type: 'kill' | 'forget') => rejected.add(type) }
 }
 
 describe('PTY subscription holds', () => {
@@ -210,5 +271,67 @@ describe('PTY input fan-out', () => {
     expect(() => b.write('s1', 'x')).not.toThrow()
     expect(heard).toEqual(['x'])
     expect(logs.some((line) => line.includes('boom'))).toBe(true)
+  })
+})
+
+describe('PTY runtime authority revocation', () => {
+  test('keeps exact live authority when kill or forget fails and revokes after success', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'pty-authority-'))
+    const store = new Store(join(home, 'runtime.db'))
+    const fake = rejectingAuthorityClient()
+    const authority = new RuntimeSessionAuthority(store, fake.client)
+    const { api, revoke } = createPtyApi(fake.client, 'quirky.session', () => {}, authority)
+    const connectionFor = (sessionId: string, sessionToken: string): ClientConn => ({
+      id: 1,
+      role: 'cli',
+      subscribed: false,
+      closed: false,
+      transport: 'socket',
+      sessionId,
+      sessionToken,
+      streams: new Map(),
+      nextStreamId: 1,
+      sendText() {},
+      streamClosers: new Map(),
+      sendBinary() {}
+    })
+    const spawn = async (sessionId: string) => {
+      const sessionToken = authority.issueTerminalToken(sessionId)
+      await api.spawn(sessionId, {
+        argv: ['/bin/sh'],
+        cwd: '/isolated',
+        env: { QUIRKY_SESSION_TOKEN: sessionToken },
+        cols: 80,
+        rows: 24
+      })
+      const connection = connectionFor(sessionId, sessionToken)
+      const identity = await authority.resolveForConnection(connection)
+      if (!identity) throw new Error(`session ${sessionId} did not bind runtime authority`)
+      return { connection, identity }
+    }
+
+    try {
+      const kill = await spawn('s_kill')
+      const killRow = store.getRuntimeAuthority('s_kill')
+      fake.rejectNext('kill')
+      await expect(api.kill('s_kill')).rejects.toThrow('PTY kill rejected')
+      expect(store.getRuntimeAuthority('s_kill')).toEqual(killRow)
+      expect(await authority.resolveForConnection(kill.connection)).toEqual(kill.identity)
+      await api.kill('s_kill')
+      expect(store.getRuntimeAuthority('s_kill')).toBeNull()
+
+      const forget = await spawn('s_forget')
+      const forgetRow = store.getRuntimeAuthority('s_forget')
+      fake.rejectNext('forget')
+      await expect(api.forget('s_forget')).rejects.toThrow('PTY forget rejected')
+      expect(store.getRuntimeAuthority('s_forget')).toEqual(forgetRow)
+      expect(await authority.resolveForConnection(forget.connection)).toEqual(forget.identity)
+      await api.forget('s_forget')
+      expect(store.getRuntimeAuthority('s_forget')).toBeNull()
+    } finally {
+      revoke()
+      store.close()
+      rmSync(home, { recursive: true, force: true })
+    }
   })
 })
