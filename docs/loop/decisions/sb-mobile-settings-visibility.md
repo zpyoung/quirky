@@ -71,7 +71,7 @@
 - **Options:** treat an empty model findings list as a pass; retain the deterministic gate and adjudicate its failures.
 - **Chose:** Gemini promote/refute each returned an empty array; the actual standard spec-design gate was NEEDS_FIXES with three prepass findings. F1 accepted: add Purpose headings. F2 corrected the scanner-hostile comma-range reference into a single-range reference plus cleanup prose; the referenced source was already observed. F3 dismissed: the quoted command `bun scripts/suite.ts` is a command, not a filename, and scripts/suite.ts exists and documents the same invocation at lines 19–21.
 - **Why:** deterministic parser limitations must not be misreported as model findings or an overall PASS.
-- **Evidence:** /tmp/quirky-settings-spec-review-lane2/gate.json and manifest.json; packages/daemon/src/daemon.ts:117-129; scripts/suite.ts:19-21.
+- **Evidence:** .quirk/build-loop/sb-mobile-settings-visibility/spec-review/gate.json and manifest.json; packages/daemon/src/daemon.ts:117-129; scripts/suite.ts:19-21.
 - **Reversibility:** easy
 - **Confidence:** high
 - **Revisit if:** an actual referenced source path fails to resolve.
@@ -82,7 +82,7 @@
 - **Options:** omit the breach; treat worker test activity as acceptance; preserve and bound the evidence.
 - **Chose:** preserve raw promote.stderr: Gemini ran `bun test scripts` twice despite explicit prohibition. Those runs are not acceptance. Parent independently observed its own scripts check pass (81 tests, 0 failures) and root/mobile/desktop typecheck pass. Reviewer post-status showed no tracked mutations; attribution of ignored/untracked artifacts is unavailable because parent and reviewer checks overlapped.
 - **Why:** read-only prose prompts are not a sandbox; the breach cannot establish either clean acceptance or provenance of all artifacts.
-- **Evidence:** /tmp/quirky-settings-spec-review-lane2/promote.stderr and repository-status.txt; parent bg_54 output artifact://79.
+- **Evidence:** .quirk/build-loop/sb-mobile-settings-visibility/spec-review/promote.stderr and repository-status.txt; parent bg_54 output artifact://79.
 - **Reversibility:** easy
 - **Confidence:** high
 - **Revisit if:** evidence identifies a reviewer-authored tracked mutation.
@@ -132,5 +132,38 @@
 - **Revisit if:** UI redesign does not address the recorded label contrast or a source change becomes necessary.
 - **Source:** assumed — autonomous
 
+## D13: Preserve incoming authorities and repeat the actual flow after catch-up
+- **Question:** do the four incoming decision logs change the diagnosis or verification surface?
+- **Options:** ignore incoming contracts; broaden this item; preserve owners and rerun the actual Settings path.
+- **Chose:** sole roadmap merge aba063568c2df13e8e2d89c71cf5a50d6f5ff752. Read exact incoming logs through Progress: fix-flaky-pty-host-manager D1–D4, fix-flaky-terminal-features-pane D1–D4, m7-terminal-owner-provisioning-and-selector-flows D1–D17, ui-screenshot-review D1–D15. Preserve their separate ownership/provenance, exact view routing, isolated QA and bounded platform/runtime claims. New owner-cli authentication and UI connection identity are not phone-grant widening or a Mobile layout fix.
+- **Why:** the incoming changes touch daemon/mobile admission and UI connection, so compilation alone does not establish that the existing Settings peer path still works.
+- **Evidence:** parent git show exact build/roadmap references and omitted Progress lines; post-catch-up build exit0/24.42s; typecheck exit0/32.68s including frozen install, UI lint and root/mobile/prepared desktop checks.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** an incoming authority later changes the actual Settings view or scroll owner.
+- **Source:** locked by the four incoming decision logs
+
+## D14: Keep the caught-up UI success and shared scripts failure distinct
+- **Question:** how should the completed narrow flow be delivered when newly merged shared scripts tests fail?
+- **Options:** hide the failure; change unrelated reviewer tests inside the clipping item; preserve failure evidence and route one end-phase repair.
+- **Chose:** final guarded run 20261028T212437-4d9e passed all three goals after the merge/rebuild: targeted wheel, expanded-QR PageDown/four-Tab access, and actual visible Settings revoke. Third peer disconnected4001, final public devices empty, guarded browser kept nothing open, real daemon exited0 with all cleanup receipts and outer scope cleaned. No clipping fix or permanent test/source mutation. Root scripts are NOT green: the settled-dependency check exited1 with113pass/13fail/945assertions across12files. Twelve failures are in scripts/ui-review/review.test.ts (fake reviewer missing log path, repeated captures mkdir and dependent verdict assertions); one is cli.test.ts:219's malformed-input diagnostic assertion. Initial post-merge attempt also lacked the newly added Playwright dependency; frozen install corrected only that prerequisite, not the remaining failures.
+- **Why:** this exact queue title allows fixes only for reproduced app clipping. The unrelated incoming developer-QA failures belong to the active end-phase triage. Canonical add registered fix-test-scripts-1028, depending on m7-test-triage, with exact failing files/cases and raw evidence; no second item was claimed. The typecheck-only integration landing gate is separate from a claim that all scripts tests pass.
+- **Evidence:** final guarded report .quirk/using-apps-like-a-user/runs/20261028T212437-4d9e/report.md; obs5,7,9,13,15; lane2-settings-caughtup exit0/final-devices/cleanup receipts; .quirk/build-loop/sb-mobile-settings-visibility/post-merge-scripts.log; canonical repair-item readback status todo.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the script repair identifies any defect in the actual Settings path rather than its separate developer-QA harness.
+- **Source:** assumed — autonomous
+
+## D15: Bound the final independent evidence review
+- **Question:** does the final report overstate the actual viewport evidence?
+- **Options:** no review; full product re-audit; one narrow quick claim review.
+- **Chose:** actual pi-watch Gemini read the report and all seven requested screenshots with only its read tool granted. QUICK prose-claim gate PASS, findings empty,0blocking,0advisory,4suppressed candidates; manifest reduced independence because self-refutation is not an independent second stage. No tests or source writes ran in this final review. Its initial directory hint typo was corrected by actual successful reads of the right report/screenshots, not silently treated as proof.
+- **Why:** this is a current UI evidence review, not confirmation of sandbox/process/provider behavior or reconstruction of the historical driver trace. Two suppressed candidates expressly leave cleanup/sandbox claims outside the review's mandate; parent independently observed their process receipts and OS denial probes in D10–D14. The high suppression ratio does not establish overall product cleanliness.
+- **Evidence:** .quirk/build-loop/sb-mobile-settings-visibility/final-review/{gate,manifest}.json and preserved raw dispatch; actual final reviewer output. No accepted blocker remains within this narrow review.
+- **Reversibility:** easy
+- **Confidence:** high for review occurrence and bounded observed outcomes; no exhaustive assurance
+- **Revisit if:** the underlying screenshots/reports no longer support a stated UI outcome.
+- **Source:** assumed — autonomous
+
 ## Progress
-Actual two-topology UI investigation complete; no production changes. Both real peers revoked via Settings, both guarded runs ended, both daemon services exited0 with home/builtin cleanup; sandbox outer scope also cleaned. Specs reviewed with real Gemini promote/refute and deterministic findings adjudicated in D7; raw artifacts preserved under .quirk/build-loop/sb-mobile-settings-visibility/spec-review. Parent next commits evidence, performs the required roadmap catch-up, reads incoming decisions, checks the merge and lands this single item.
+Investigation complete, no production/test source changes. Three real run-owned peers revoked through Settings, all three guarded runs ended, all owned daemon/browser/process scopes stopped and temporary runtime homes removed. Sole roadmap catch-up is integrated and incoming decisions read. Caught-up actual UI scenarios, build and typecheck pass; caught-up scripts check fails in separately routed fix-test-scripts-1028 and is not relabeled passing. Final quick cross-family evidence review returned PASS within the explicit D15 scope. Next: commit final receipt, detach, canonical queue land sb-mobile-settings-visibility, await result, preserve notes and delete only owned scratch directories. Do not claim another item or whole-loop completion.
