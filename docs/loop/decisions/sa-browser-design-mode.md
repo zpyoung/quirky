@@ -110,5 +110,49 @@
 - **Revisit if:** dependency blocks or changes a binding contract
 - **Source:** locked by docs/loop/LOOP.md
 
+## D11: Honor the inherited browser follow-up freeze
+- **Question:** Should the Native snapshot boundary create another queued follow-up under the older loop rule?
+- **Options:** add another item; hide the gap; preserve the gap in decisions/BLOCKERS without growing the queue
+- **Chose:** no browser queue addition; keep Native cropped screenshots and Draw explicitly unavailable and record both flows together in BLOCKERS. This supersedes only D7's planned queue-add sentence, not its capture safety boundary.
+- **Why:** dependency D18 and inherited BLOCKERS contain the latest operator browser-follow-up freeze; earlier item decisions bind dependent work.
+- **Evidence:** sa-browser-pane D18; docs/loop/BLOCKERS.md:274–279; current LOOP What is already decided.
+- **Reversibility:** easy (operator can requeue the prerequisite)
+- **Confidence:** high for the recorded freeze
+- **Revisit if:** operator changes the freeze or supported SDK snapshot becomes available
+- **Source:** supersedes sa-browser-design-mode D7 (queue-add portion), locked by sa-browser-pane D18
+
+## D12: Close source integration defects before claiming acceptance
+- **Question:** Which source-inspection findings block assembled verification?
+- **Options:** trust worker completion; defer introduced defects; fix exact consumer-facing seams
+- **Chose:** retain annotations/held snapshots across tab remount in window memory; install a bounded Native guest chord listener; let markup own Escape/clipboard commit and enable its pointer hit testing; guard current session permission/readiness at delivery; correct scrolled DPR crop offsets; preserve authored feedback. No claim that these source fixes pass until exercised.
+- **Why:** source inspection identified note loss, dead canvas input, clipboard-cancel bypass, permission transitions and viewport/page coordinate mismatch. They affect the named feature flows.
+- **Evidence:** parent source findings to BrowserDesignUi/Runtime/NativeMarkup; actual protocol model.ts:207–243,256–282; component source reports; regression files.
+- **Reversibility:** medium (lifecycle and safety)
+- **Confidence:** source-backed, runtime proof pending at recording
+- **Revisit if:** actual tests/smoke expose remaining failure
+- **Source:** assumed — autonomous
+
+## D13: Assemble audited source checkpoints, then accept the combined contract
+- **Question:** Can component acceptance run before the runtime, UI manifest and Native capability are assembled?
+- **Options:** test each against missing peer implementation; copy source through a fourth tree; audited unverified source checkpoints plus combined acceptance
+- **Chose:** authoritative barrier required unchanged HEADs, disjoint declared scopes and zero parent diff; passed. Committed source checkpoints69ea95bd/946e99c1/28d0deaf, merged them, removed owned component worktrees. These commits were explicitly unverified; no passing worker checks invented.
+- **Why:** actual runtime API tests require the UI-owned schemas and UI tests require runtime/markup outputs. Combined acceptance is meaningful; component success reports were not evidence.
+- **Evidence:** /tmp/quirky-browser-design.hjsqFr/wave-audit.json; component commits and actual merge tool output.
+- **Reversibility:** easy (acceptance still gates land)
+- **Confidence:** high for attribution, no behavioral claim
+- **Revisit if:** combined gate fails
+- **Source:** assumed — autonomous
+
+## D14: Repair actual parse and registry failures without weakening validators
+- **Question:** The first assembled compiler/validator gate rejected source; what is the root fix?
+- **Options:** suppress validation; extend deadlines; correct payload syntax and required manifest fields
+- **Chose:** restore the omitted annotation revision declaration/return brace; add meaningful CLI flag descriptions. The actual parser reported45missing descriptions:12new design flags plus33inherited pane flags in the unverified dependency checkpoint. These prerequisite metadata fixes stay in this item's manifest; shared validator remains unchanged.
+- **Why:** malformed source cannot compile and invalid manifest disables the entire Browser plugin. The validator agent's source finding was reproduced through actual parseManifest.
+- **Evidence:** bg6 TS1005 at payload.ts382; BrowserPluginValidation; actual parseManifest errors through JS Eval. Focused bg5 was canceled after evidenced native evaluation failures/known parse error, not declared passing.
+- **Reversibility:** easy
+- **Confidence:** high for observed failures; corrected behavior awaits gate
+- **Revisit if:** parser/compiler finds another contract error
+- **Source:** assumed — autonomous
+
 ## Progress
-Scope/spec and shared contracts established. Commit contracts, create3isolated components, snapshot/audit before and after; workers implement without checks/commits, then parent runs owned checks, real UI/API/CLI and affected suite. Dependency source is still in progress; merge repairs and wait canonical deps before catch-up/land. No completion, acceptance or review pass claimed yet.
+Source assembled with clean scope barrier; first compiler failed payload syntax (parent restored omitted revision/brace), actual manifest parser reported45missing required flag descriptions (parent corrected metadata). Focused regression run was explicitly canceled after real native evaluate readiness/navigation timeouts, not a pass. NativeEvalRepair owns only native adapter/test root cause while parent repairs browser/docs. Dependency repair merge brought one BrowserPaneWindow line; final gates must bind the resulting tree. Canonical deps remains pending; no review, UI, acceptance or land claimed yet.

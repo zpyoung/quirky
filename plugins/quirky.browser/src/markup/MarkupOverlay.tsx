@@ -194,11 +194,18 @@ type ActivePointer = {
 }
 
 function makeShape(active: ActivePointer, copyStroke: boolean): MarkupShape | null {
-  if (active.tool === 'pen' || active.tool === 'highlighter') {
-    return { kind: active.tool, points: copyStroke ? [...active.points] : active.points, color: active.color, size: active.size }
+  const style = { color: active.color, size: active.size }
+  if (active.tool === 'pen') {
+    return { kind: 'pen', points: copyStroke ? [...active.points] : active.points, ...style }
+  }
+  if (active.tool === 'highlighter') {
+    return { kind: 'highlighter', points: copyStroke ? [...active.points] : active.points, ...style }
   }
   if (active.tool === 'eraser') return null
-  return { kind: active.tool, start: active.start, end: active.current, color: active.color, size: active.size }
+  const shape = { start: active.start, end: active.current, ...style }
+  if (active.tool === 'arrow') return { kind: 'arrow', ...shape }
+  if (active.tool === 'rectangle') return { kind: 'rectangle', ...shape }
+  return { kind: 'ellipse', ...shape }
 }
 
 export function MarkupOverlay({ screenshot, onClose, onCopied, onError }: MarkupOverlayProps) {

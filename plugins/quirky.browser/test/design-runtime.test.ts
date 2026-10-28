@@ -111,7 +111,7 @@ async function watchPage(h: BrowserTestHarness, worktree: string, url: string) {
   await h.client.call('events.subscribe', {})
   const firstFrame = Promise.withResolvers<void>()
   const unsubscribe = h.client.onEvent((event) => {
-    if (event.type === 'event:quirky.browser/paneFrame') firstFrame.resolve()
+    if (event.type === 'quirky.browser/paneFrame') firstFrame.resolve()
   })
   try {
     const page = await call(h, 'tabCreate', { worktree: `id:${worktree}`, url }) as { browserPageId: string }

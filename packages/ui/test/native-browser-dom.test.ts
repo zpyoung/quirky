@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, test, vi } from 'bun:test'
+import { afterAll, beforeAll, expect, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { act, createElement, useState } from 'react'
 import type { Root } from 'react-dom/client'
@@ -165,11 +165,10 @@ test('native evaluation matches guest and request identity and rejects on naviga
     const nextDispatch = Promise.withResolvers<string>()
     guest.guest.onExecute = nextDispatch.resolve
     const navigating = guest.handle.evaluate('new Promise(() => {})')
-    const navigationRejection = expect(navigating).rejects.toThrow(/navigation/i)
     const nextInvocation = await nextDispatch.promise
     const nextRequestId = nextInvocation.match(/__quirkyNativeBrowserEvaluate\?\.\("([^"]+)"/)?.[1]
     guest.guest.emitEvent('will-navigate', { url: 'https://example.test/next' })
-    await navigationRejection
+    await expect(navigating).rejects.toThrow(/navigation/i)
 
     guest.guest.emitEvent('did-navigate', { url: 'https://example.test/next' })
     const freshDispatch = Promise.withResolvers<string>()
@@ -187,10 +186,9 @@ test('native evaluation matches guest and request identity and rejects on naviga
     const samePageDispatch = Promise.withResolvers<string>()
     guest.guest.onExecute = samePageDispatch.resolve
     const samePageEvaluation = guest.handle.evaluate('new Promise(() => {})')
-    const samePageRejection = expect(samePageEvaluation).rejects.toThrow(/navigation/i)
     await samePageDispatch.promise
     guest.guest.emitEvent('did-navigate', { url: 'https://example.test/next' })
-    await samePageRejection
+    await expect(samePageEvaluation).rejects.toThrow(/navigation/i)
   } finally {
     await guest.cleanup()
   }
@@ -200,7 +198,6 @@ test('guest loading state does not cancel evaluation while the adapter is becomi
   const guest = await mountGuest(claim.promise)
   try {
     const pending = guest.handle.evaluate('({ safe: true })')
-    const result = expect(pending).resolves.toEqual({ safe: true })
     guest.guest.emitState({
       type: 'quirky-native-browser-state',
       url: 'about:blank',
@@ -210,7 +207,7 @@ test('guest loading state does not cancel evaluation while the adapter is becomi
       findTotal: 0
     })
     claim.resolve()
-    await result
+    await expect(pending).resolves.toEqual({ safe: true })
   } finally {
     claim.resolve()
     await guest.cleanup()
@@ -223,10 +220,8 @@ test('native navigation while the adapter is becoming ready cannot dispatch a st
   let executed = false
   guest.guest.onExecute = () => { executed = true }
   const pending = guest.handle.evaluate('({ stale: true })')
-  const rejection = expect(pending).rejects.toThrow(/navigation/i)
-
   guest.guest.emitEvent('will-navigate', { url: 'https://example.test/next' })
-  await rejection
+  await expect(pending).rejects.toThrow(/navigation/i)
   guest.guest.emitState({
     type: 'quirky-native-browser-state',
     url: 'about:blank',
@@ -245,17 +240,13 @@ test('native evaluation deadline includes guest readiness', async () => {
   const claim = Promise.withResolvers<void>()
   const guest = await mountGuest(claim.promise)
   try {
-    vi.useFakeTimers()
     const pending = guest.handle.evaluate('({ ready: true })')
-    const rejection = expect(pending).rejects.toThrow(/timed out/i)
-    await vi.advanceTimersByTimeAsync(5000)
-    await rejection
+    await expect(pending).rejects.toThrow(/timed out/i)
   } finally {
-    vi.useRealTimers()
     claim.resolve()
     await guest.cleanup()
   }
-})
+}, 8000)
 
 
 test('native evaluation rejects pending work when its browser view is disposed', async () => {
@@ -263,25 +254,22 @@ test('native evaluation rejects pending work when its browser view is disposed',
   const dispatched = Promise.withResolvers<string>()
   guest.guest.onExecute = dispatched.resolve
   const pending = guest.handle.evaluate('new Promise(() => {})')
-  const rejection = expect(pending).rejects.toThrow(/disposed/i)
+  const settled = pending.catch(() => undefined)
   await dispatched.promise
   await guest.cleanup()
-  await rejection
+  await expect(pending).rejects.toThrow(/disposed/i)
+  await settled
 })
 
 test('native evaluation times out when guest work never settles', async () => {
   const guest = await mountGuest()
   try {
-    vi.useFakeTimers()
     const dispatched = Promise.withResolvers<string>()
     guest.guest.onExecute = dispatched.resolve
     const pending = guest.handle.evaluate('new Promise(() => {})')
-    const rejection = expect(pending).rejects.toThrow(/timed out/i)
     await dispatched.promise
-    await vi.advanceTimersByTimeAsync(5000)
-    await rejection
+    await expect(pending).rejects.toThrow(/timed out/i)
   } finally {
-    vi.useRealTimers()
     await guest.cleanup()
   }
-})
+}, 8000)

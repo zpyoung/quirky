@@ -51,7 +51,7 @@ test('clampPayload strips credentials, redacts hostile HTML and enforces every f
   expect(result.target.reactComponents?.length).toBeLessThanOrEqual(500)
   expect(result.target.sourceFile?.length).toBeLessThanOrEqual(500)
   expect(result.target.nearbyElements).toHaveLength(6)
-  expect(result.nearbyElements).toHaveLength(10)
+  expect(result.nearbyText).toHaveLength(10)
   expect(result.nearbyText.every((entry) => entry.length <= 200)).toBe(true)
   expect(result.ancestorPath).toHaveLength(10)
   expect(result.target.attributes).not.toHaveProperty('onclick')

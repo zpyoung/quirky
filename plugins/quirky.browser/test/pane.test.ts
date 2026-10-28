@@ -77,7 +77,7 @@ async function waitFor<T>(read: () => T | null | undefined | Promise<T | null | 
 }
 
 function paneFrame(event: QuirkyEvent): Record<string, unknown> | undefined {
-  if (event.type !== 'event:quirky.browser/paneFrame' || !('data' in event)) return undefined
+  if (event.type !== 'quirky.browser/paneFrame' || !('data' in event)) return undefined
   const data = event.data
   return typeof data === 'object' && data !== null && !Array.isArray(data) ? data as Record<string, unknown> : undefined
 }

@@ -354,6 +354,7 @@ export function clampAnnotation(raw: unknown): DesignAnnotation {
   }
   if (source.intent !== 'change' && source.intent !== 'question') throw new TypeError('browser design annotation has an invalid intent')
   if (typeof source.comment !== 'string') throw new TypeError('browser design annotation comment must be a string')
+  const revision = typeof source.revision === 'number' && Number.isSafeInteger(source.revision) && source.revision > 0 ? source.revision : 1
   const payload = clampPayload(source.payload)
   payload.screenshot = null
   return {
@@ -363,6 +364,7 @@ export function clampAnnotation(raw: unknown): DesignAnnotation {
     payload,
     intent: source.intent,
     comment: truncate(source.comment, LIMIT.comment)
+  }
 }
 
 export function clampAnnotations(raw: unknown): DesignAnnotation[] {

@@ -460,9 +460,10 @@ export function DesignWindow({ context, pane, nativeHandle, pageHost, nativePage
           }
           let image = screenshotOf(read.selection.payload.screenshot)
           if (!image && identityOf(currentPaneRef.current, currentWatchRef.current, currentFrameSizeRef.current) === candidate.identity) {
+            const rect = read.selection.payload.target.rectViewport
             try {
               image = screenshotFromCapture(await serializeGuest(() => context.call('quirky.browser/designCapture', {
-                pane: candidate.pane.id, rect: read.selection.payload.target.rectViewport
+                pane: candidate.pane.id, rect
               })))
             } catch (error) {
               if (identityOf(currentPaneRef.current, currentWatchRef.current, currentFrameSizeRef.current) === candidate.identity) onMessage(errorText(error), 'error')

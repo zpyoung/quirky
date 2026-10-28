@@ -84,6 +84,7 @@ async function mountWithMenuItems(menuItems: UiMenuItemEntry[]) {
     'quirky.worktree/resolve': () => ({ repoId: 'repo-1' }),
     'ui.contributions': () => ({ menuItems })
   })
+  const reports: unknown[] = []
   const executed: { id: string; args: unknown }[] = []
   fake.context.executeCommand = async (id, args) => {
     executed.push({ id, args })
@@ -97,6 +98,7 @@ async function mountWithMenuItems(menuItems: UiMenuItemEntry[]) {
   await act(async () => {
     cleanup = fake.provided.get(WORKTREE_VIEW)!(element, {
       input: { worktree: 'wt-main' },
+      report: (state: unknown) => { reports.push(state) }
     }) as () => void
   })
   await settle()

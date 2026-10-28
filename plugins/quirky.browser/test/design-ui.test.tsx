@@ -116,8 +116,10 @@ test('an annotation keeps the selected page URL when the browser navigates', asy
   await settleUntil(() => ui.host.querySelector('textarea[aria-label="Feedback"]') !== null)
   const textarea = ui.host.querySelector('textarea[aria-label="Feedback"]') as HTMLTextAreaElement
   await act(async () => {
-    textarea.value = 'Keep this note on its original page'
+    textarea.focus()
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(textarea, 'Keep this note on its original page')
     textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    textarea.dispatchEvent(new Event('keyup', { bubbles: true }))
   })
   await act(async () => { button(ui.host, 'Add').click() })
   await settleUntil(() => ui.host.textContent?.includes('Keep this note on its original page') === true)
@@ -134,8 +136,10 @@ test('annotations survive a hosted pane unmount and remount for the same live pa
   await settleUntil(() => first.host.querySelector('textarea[aria-label="Feedback"]') !== null)
   const textarea = first.host.querySelector('textarea[aria-label="Feedback"]') as HTMLTextAreaElement
   await act(async () => {
-    textarea.value = 'Keep this note while the hosted pane remounts'
+    textarea.focus()
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(textarea, 'Keep this note while the hosted pane remounts')
     textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    textarea.dispatchEvent(new Event('keyup', { bubbles: true }))
   })
   await act(async () => { button(first.host, 'Add').click() })
   await settleUntil(() => first.host.textContent?.includes('Keep this note while the hosted pane remounts') === true)
@@ -158,8 +162,10 @@ test('the annotation tray keeps the newest 20 notes and drops the oldest', async
     await settleUntil(() => ui.host.querySelector('textarea[aria-label="Feedback"]') !== null)
     const textarea = ui.host.querySelector('textarea[aria-label="Feedback"]') as HTMLTextAreaElement
     await act(async () => {
-      textarea.value = `Note ${index + 1}`
+      textarea.focus()
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(textarea, `Note ${index + 1}`)
       textarea.dispatchEvent(new Event('input', { bubbles: true }))
+      textarea.dispatchEvent(new Event('keyup', { bubbles: true }))
     })
     await act(async () => { button(ui.host, 'Add').click() })
   }

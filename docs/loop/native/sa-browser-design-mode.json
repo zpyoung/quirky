@@ -1,0 +1,9 @@
+{
+  "item": "sa-browser-design-mode",
+  "spec": "docs/quirk/specs/2026-10-28-sa-browser-design-mode/logic.md",
+  "scenarios": [
+    {"id":"N-G1","title":"Using only a fresh UUID browser profile partition, open run-owned local HTML in Native, Grab a paragraph without preceding hover then a second element; highlight/Copied/payload real clipboard; page button not activated; Change then Question annotations rearm, two pins and tray; Escape cancels. Never use or clear shared Default native storage.","status":"pending","lastRun":null,"report":null,"summary":null},
+    {"id":"N-COPY","title":"In run-owned Native page, ordinary Mod+C copies selected text and editable input text without arming picker; with no selection/editable focus Mod+C arms Grab, Mod+Shift+C Annotate. C copies hovered context while armed. Native S/Draw explicitly explains unavailable public snapshot capability, with no OS screen capture or engine switch.","status":"pending","lastRun":null,"report":null,"summary":null},
+    {"id":"N-LIFETIME","title":"Native guest evaluation/armed picker navigation, pane close, hidden tab and replaced handle cancel outstanding requests/listeners; late messages cannot update another same-URL pane or produce clipboard writes; host annotation dialogs/trays mask the native layer and remain keyboard reachable. Fresh UUID partition only.","status":"pending","lastRun":null,"report":null,"summary":null}
+  ]
+}

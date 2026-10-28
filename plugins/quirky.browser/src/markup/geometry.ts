@@ -3,8 +3,11 @@ export type PointerBounds = { left: number; top: number; width: number; height: 
 export type MarkupBounds = { left: number; top: number; right: number; bottom: number }
 
 export type MarkupShape = (
-  | { kind: 'pen' | 'highlighter'; points: Point[]; color: string; size: number }
-  | { kind: 'arrow' | 'rectangle' | 'ellipse'; start: Point; end: Point; color: string; size: number }
+  | { kind: 'pen'; points: Point[]; color: string; size: number }
+  | { kind: 'highlighter'; points: Point[]; color: string; size: number }
+  | { kind: 'arrow'; start: Point; end: Point; color: string; size: number }
+  | { kind: 'rectangle'; start: Point; end: Point; color: string; size: number }
+  | { kind: 'ellipse'; start: Point; end: Point; color: string; size: number }
   | { kind: 'text'; point: Point; text: string; color: string; fontSize: number }
 ) & { bounds?: MarkupBounds }
 

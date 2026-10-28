@@ -4,3 +4,5 @@ plugins/quirky.terminal/test/e2e.test.ts  expects zsh's macOS default prompt, wh
 plugins/quirky.terminal/test/e2e-ui/features-pane.test.ts  SC-37 pastes more than Linux's 128 KB limit on one argument
 plugins/quirky.editor/test/markdown.test.ts  SC-14 exports a real PDF with the installed macOS Chrome; the remote Linux host has no Chrome/Chromium
 plugins/quirky.browser/test/automation.test.ts  exercises the owned headless browser on macOS Chrome
+plugins/quirky.browser/test/pane.test.ts  Watch flows exercise installed macOS Chrome; the remote Linux host has no Chrome/Chromium
+plugins/quirky.browser/test/design-runtime.test.ts  real picker and PNG crop regressions require the installed macOS Chrome used by the owned browser runtime
