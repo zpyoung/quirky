@@ -263,6 +263,20 @@ Registration update: `bun scripts/build-loop/queue.ts add /tmp/quirky-session-in
 
 - **LOW — search input queried before its mount settled** (`plugins/quirky.terminal/test/e2e-ui/features-search.test.ts:179`). The affected editor/terminal/UI/Vault run passed131/132 remote files initially; SC-73 passed a null input to typeInto. Its configured isolated retry passed all5 cases52 assertions, and all3macOS files passed. No producer behavior, assertion, delay or retry rule was changed; this adds evidence to the already-recorded search readiness finding.
 
+## m6-orchestration-core: deferred automatic idle-mailbox scheduling
+
+- **Step:** final verification, operator-authorized scoped landing.
+- **Evidence:** core verification passed28 tests; the sole remaining AC9 automatic scheduler case
+  timed out in daemon teardown after25seconds. Routing/acknowledgement separately passed2 tests,
+  39 assertions at03:48:45Z, within the operator's03:52:14Z deadline.
+- **Preserved contract:** unchanged scheduler implementation and intact AC9 acceptance are in
+  `checkpoint/m6-core-idle-pointer` at69083459. No test was skipped or weakened: that whole
+  unshipped flow and its implementation were moved out of this landing scope.
+- **Follow-up:** `m6-orchestration-idle-pointer-shutdown`, dependent on the core landing.
+- **Unblock when:** restoring the scheduler passes the intact AC9 case with bounded shutdown
+  and no pending waiters/foreign process cleanup. No human decision is required.
+- **Still shipped:** durable Run/Dispatch mail, FIFO delivery/ack, exclusive waits, resumable
+  questions/replies, gates, and explicit exact-incarnation/idempotent session prompt submission.
 ## m4-hosting-ui-tasks: deferred parity and cross-feature acceptance
 
 - **Owner:** registered follow-up `m4-hosting-ui-tasks-complete-remaining-flows`, dependent on Tasks, sourced worktree creation and Reviews. The operator's 4am sprint directive authorizes the exercised core landing, not a claim that all25 original scenarios passed.

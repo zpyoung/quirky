@@ -298,6 +298,7 @@ export const KERNEL_METHOD_SCHEMAS = {
         name: string(),
         protocolVersion: integer(0),
         token: string('The runtime token; required on the unix socket.'),
+        sessionToken: string('The launch-scoped session token; independent from sessionId.'),
         cwd: string(),
         sessionId: string(),
         worktreeId: string()

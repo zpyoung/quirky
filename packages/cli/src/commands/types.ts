@@ -8,6 +8,7 @@ export type OpenResult = { ok: true } | { ok: false; reason: string }
 /** Everything a command needs from its surroundings, injected so commands are testable. */
 export type Context = {
   rpc: DaemonLink
+  requestBase: string
   out: Printer
   env: Record<string, string | undefined>
   cwd: string

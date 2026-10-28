@@ -96,6 +96,7 @@ export function testCli(
   let client = initial
   const cli: TestCli = { ctx: null as never, lines: [], reconnects: 0 }
   cli.ctx = {
+    requestBase: crypto.randomUUID(),
     call: (method, params = {}) => client.callAny(method, params),
     out: {
       json: false,

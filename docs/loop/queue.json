@@ -243,9 +243,8 @@
         "m1-worktrees",
         "m1-agent-status"
       ],
-      "status": "in-progress",
-      "early": true,
-      "lane": 1
+      "status": "done",
+      "early": true
     },
     {
       "id": "m6-orchestration-workers",
@@ -698,8 +697,9 @@
         "m5-loops-core",
         "m5-loops-presets"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 1
     },
     {
       "id": "m5-ledger",
@@ -1377,6 +1377,30 @@
       ],
       "deps": [
         "m6-heimdall-core"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m6-orchestration-idle-pointer-shutdown",
+      "milestone": "M6",
+      "title": "Restore automatic idle mailbox nudges with bounded shutdown: preserve the intact AC9 scheduler acceptance from checkpoint/m6-core-idle-pointer; current source hangs in daemon teardown. Explicit safe session/pointer and all durable mail/check/ask/gate flows remain shipped.",
+      "docs": [
+        "orchestration.md"
+      ],
+      "deps": [
+        "m6-orchestration-core"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m5-automations-dispatch-remote-and-args",
+      "milestone": "M5",
+      "title": "Complete automations SSH/runtime host registration-generation fencing, workspace pin/re-pin/re-adoption and remote execution once public host APIs exist; resolve raw extra-agent-args support against locked structured-runner D6 (native options only, no terminal fallback)",
+      "docs": [
+        "automations.md"
+      ],
+      "deps": [
+        "m5-automations-dispatch"
       ],
       "status": "todo"
     }

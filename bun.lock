@@ -332,6 +332,13 @@
         "@quirky/protocol": "workspace:*",
       },
     },
+    "plugins/quirky.orchestration": {
+      "name": "@quirky/plugin-orchestration",
+      "version": "0.1.0",
+      "dependencies": {
+        "@quirky/protocol": "workspace:*",
+      },
+    },
     "plugins/quirky.repo": {
       "name": "@quirky/plugin-repo",
       "version": "0.1.0",
@@ -696,6 +703,7 @@
 
     "@quirky/plugin-notifications": ["@quirky/plugin-notifications@workspace:plugins/quirky.notifications"],
 
+    "@quirky/plugin-orchestration": ["@quirky/plugin-orchestration@workspace:plugins/quirky.orchestration"],
     "@quirky/plugin-palette": ["@quirky/plugin-palette@workspace:plugins/quirky.palette"],
 
     "@quirky/plugin-repo": ["@quirky/plugin-repo@workspace:plugins/quirky.repo"],
