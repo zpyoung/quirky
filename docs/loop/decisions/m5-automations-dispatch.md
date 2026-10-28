@@ -187,5 +187,38 @@
 - **Revisit if:** incoming API changes contradict a captured dispatch contract
 - **Source:** locked by docs/loop/decisions/m4-hosting-ui-reviews.md
 
+## D18: Subtract Claude's cumulative cost baseline, but not its per-turn tokens
+- **Question:** Does each result in a reused SDK streaming query carry per-turn cost?
+- **Options:** assume every result is per-turn; mark all reuse usage unavailable; inspect the primary SDK accounting contract and persist the needed baseline
+- **Chose:** result usage is per-turn main-agent-loop tokens; total_cost_usd is cumulative across the streaming query and includes subagents. Persist the preceding result's nonnegative cost before submitting a reused prompt, then subtract it. Missing baseline or decreasing total yields unavailable cost. Estimates are not billing data.
+- **Why:** Local runner code proved one query handles multiple prompts but did not define accounting scope. The official documentation explicitly distinguishes these fields. A focused regression reported0.102 instead of0.012 after a prior0.09 result before the fix; all23dispatcher tests then passed with103assertions.
+- **Evidence:** https://code.claude.com/docs/en/agent-sdk/cost-tracking#track-costs-in-streaming-input-mode ; test/dispatch.test.ts reused-query cost case
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** the installed SDK changes streaming accounting semantics or native conversation-reset support changes
+- **Source:** assumed — autonomous
+
+## D19: Remove the obsolete manual-result handoff instead of retaining aliases or no-op APIs
+- **Question:** Should the core-only claim/updateRun methods remain after the dispatcher owns every production run?
+- **Options:** alias claim to dispatch and reject all updateRun calls; clean cutover to dispatch/runs
+- **Chose:** remove both production method declarations/registrations and service closures, result parsers and their dead bounds helpers. Keep private store claim/update primitives used by the dispatcher. The sole public forged-result caller now observes method-not-found.
+- **Why:** No production caller used either old handoff method. Aliasing one and exposing a permanently rejected second method is misleading. Existing store regressions retain transitions/retention/output coverage; native dispatcher regressions cover final evidence; definition metadata bounds remain in service/API tests.
+- **Evidence:** repository-wide caller search; main.ts/service.ts/manifest removal; test/store.test.ts and test/dispatch.test.ts
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** a separately owned external dispatcher contract is explicitly introduced
+- **Source:** assumed — autonomous
+
+## D20: Prove native dispatch and no-auto-tab behavior through isolated real clients
+- **Question:** What runtime evidence establishes the integrated behavior rather than worker mock claims?
+- **Options:** unit tests alone; actual daemon/CLI with the scripted native Codex app-server
+- **Chose:** real daemon main and CLI children under a fresh HOME and QUIRKY_HOME, with the scripted native protocol process and ProcessScope cleanup. The final smoke passed in64.18seconds: paused manual launch bypassed precheck, native model/effort arrived, completion and live reuse worked, terminal root/UI layout stayed identical, failed provider became failed, new-per-run workspace completed, the real60-second scheduler produced skipped_precheck with exit7/output, history stayed readable, deleting the definition retained its workspace.
+- **Why:** The first smoke stopped at an incidental error-word assertion, which was deleted. The second correctly hit the fixture's deliberately reused provider ID while an older connection still owned it; stopping that completed fixture connection after reuse proof released it before fresh-conversation cases. No production ownership fence was weakened. Final daemon stderr had no tab-repair messages; the temporary home was confirmed removed.
+- **Evidence:** AUTOMATION_DISPATCH_NATIVE_CLI_SMOKE_PASS; manual29fa5eee-e3b4-4c83-87c0-dc8ae9902d63, reusedcec1712a-78b2-4be6-b7de-2972ed2218d2, session s_14062c73a0a7, new workspace wt_a09dc668168f, scheduled5fc25bd9-e341-4254-b32a-311897f6f489; background API regression1pass26assertions
+- **Reversibility:** easy
+- **Confidence:** high for exercised native-protocol/CLI/API paths; no live model billing or browser/native-window verification claimed
+- **Revisit if:** a real provider diverges from its native protocol fixture
+- **Source:** assumed — autonomous
+
 ## Progress
-Design and self-reviewed combined spec written. Shared dispatch-contract.ts committed before implementers. Next: implement three disjoint components, own-file behavioral tests, actual isolated daemon/CLI/native-process smoke, one affected gate and review, catch-up and queue land. Only this item this iteration. No human asks. Follow-up for the two explicitly constrained flows must be added once immediately before land.
+All original components and the background blocker-fix component are integrated and their owned worktrees removed. Source runtime hash959f4eb8 sent to lane6; optional false-background output now omitted and its incidental default assertion removed. Final native CLI smoke passed and all processes/home were cleaned. One integration catch-up is done. Next: commit final docs/wire cleanup, run the prepared affected prepass once, fix concrete diagnostics, run exactly one final C/S/X review and blocker-fix batch, add the single constrained-flow follow-up, then detach and authoritative queue land. No human asks or second item.
