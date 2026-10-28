@@ -6,6 +6,9 @@ const fixtureDir = process.env.QUIRKY_TEST_FIXTURE_DIR
 if (!fixtureDir) throw new Error('missing isolated GitHub fixture directory')
 const state = JSON.parse(readFileSync(join(fixtureDir, 'state.json'), 'utf8'))
 const args = process.argv.slice(2)
+const host = state.host ?? 'github.com'
+const apiBase = host === 'github.com' ? 'https://api.github.com' : `https://${host}/api/v3`
+const authFailure = 'You are not logged into any GitHub hosts. Run gh auth login.'
 appendFileSync(join(fixtureDir, 'gh.jsonl'), `${JSON.stringify(args)}\n`)
 const out = (value) => process.stdout.write(typeof value === 'string' ? value : JSON.stringify(value))
 const fail = (message) => {
@@ -14,11 +17,13 @@ const fail = (message) => {
 }
 
 if (args[0] === 'auth' && args[1] === 'status') {
-  if (state.authenticated === false) fail('You are not logged into any GitHub hosts. Run gh auth login.')
-  out('Logged in to github.com account fixture-user (keyring)\nActive account: true\nToken scopes: repo, read:org\n')
+  if (state.authenticated === false) fail(authFailure)
+  out(`Logged in to ${host} account fixture-user (keyring)\nActive account: true\nToken scopes: repo, read:org\n`)
 } else if (args[0] === 'auth' && args[1] === 'token') {
   if (args.includes('--help')) out('gh auth token [--hostname HOST]')
   else out('isolated-fixture-token\n')
+} else if (state.authenticated === false && (args[0] === 'api' || args[0] === 'pr')) {
+  fail(authFailure)
 } else if (args[0] === 'api') {
   if (args.includes('rate_limit')) {
     out({ resources: { core: { limit: 5000, remaining: 4500, reset: 1999999999 }, graphql: { limit: 5000, remaining: 4500, reset: 1999999999 }, search: { limit: 30, remaining: 30, reset: 1999999999 } } })
@@ -35,7 +40,7 @@ if (args[0] === 'auth' && args[1] === 'status') {
       const pullItem = state.pulls?.[number]
       if (!item && !pullItem) fail('HTTP 404: Not Found')
       out(pullItem
-        ? { number: Number(number), title: pullItem.title, body: pullItem.body, html_url: pullItem.html_url, state: pullItem.state, pull_request: { url: `https://api.github.com/repos/${pullItem.base.repo.owner.login}/${pullItem.base.repo.name}/pulls/${number}` } }
+        ? { number: Number(number), title: pullItem.title, body: pullItem.body, html_url: pullItem.html_url, state: pullItem.state, pull_request: { url: `${apiBase}/repos/${pullItem.base.repo.owner.login}/${pullItem.base.repo.name}/pulls/${number}` } }
         : item)
     } else if (pull) {
       const item = state.pulls?.[pull[1]]

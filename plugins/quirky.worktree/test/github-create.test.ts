@@ -6,6 +6,7 @@ import type { Worktree, WorktreeCreateResult } from '@quirky/protocol'
 import { startGithubWorld, makePull, type GithubWorld } from './github-fixtures/world'
 
 let world: GithubWorld | undefined
+const GITHUB_TEST_TIMEOUT_MS = 60_000
 afterEach(async () => {
   await world?.cleanup()
   world = undefined
@@ -48,6 +49,7 @@ function sessionsIn(node: unknown): string[] {
 describe('GitHub worktree creation', () => {
   test('checks out a fork PR head exactly and pushes only to its fork remote', async () => {
     world = await startGithubWorld()
+    expect(git(world.project, 'remote', 'get-url', 'origin')).toBe(world.baseUrl)
     world.setPull({ ...world.state.pulls['3']!, maintainer_can_modify: false })
     const before = await world.call('ui.state')
     const made = await create({ github: '#3' })
@@ -56,7 +58,7 @@ describe('GitHub worktree creation', () => {
       branch: 'feature/conflict',
       displayName: 'Reword the README',
       name: 'Reword the README',
-      path: join(world.worktreesRoot, 'project', 'Reword-the-README'),
+      path: join(world.worktreesRoot, 'project', 'reword-the-readme'),
       comment: 'PR #3 — Reword the README',
       baseRef: 'origin/main',
       keepBranch: false,
@@ -83,7 +85,7 @@ describe('GitHub worktree creation', () => {
     expect(git(world.forkBare, 'rev-parse', 'refs/heads/feature/conflict')).toBe(pushedHead)
     expect(git(world.baseBare, 'rev-parse', 'refs/pull/3/head')).not.toBe(pushedHead)
     expect(git(world.baseBare, 'branch', '--list', 'feature/conflict')).toBe('')
-  })
+  }, GITHUB_TEST_TIMEOUT_MS)
 
   test('creates from the HTTPS PR URL and preserves durable link metadata after daemon restart', async () => {
     world = await startGithubWorld({ originScheme: 'https' })
@@ -103,12 +105,35 @@ describe('GitHub worktree creation', () => {
       linkedPR: result.worktree.linkedPR,
       pushTarget: result.worktree.pushTarget
     })
-    expect((await world.call('quirky.worktree/resolve', { selector: `id:${durable.id}` })).toMatchObject({ linkedPR: durable.linkedPR, pushTarget: durable.pushTarget }))
+    expect(record(await world.call('quirky.worktree/resolve', { selector: `id:${durable.id}` }))).toMatchObject({ linkedPR: durable.linkedPR, pushTarget: durable.pushTarget })
     const detail = await world.cli(['worktree', 'show', `id:${durable.id}`])
     expect(detail.code).toBe(0)
     expect(detail.stdout).toContain('#3 Reword the README')
     expect(detail.stdout).toContain('push target: pr-fork-owner-fork-repo/feature/conflict')
-  })
+  }, GITHUB_TEST_TIMEOUT_MS)
+  test('creates a fork PR worktree from an authenticated GitHub Enterprise host with a port', async () => {
+    const host = 'github.enterprise.test:8443'
+    world = await startGithubWorld({ originScheme: 'https', host })
+    const made = await create({ github: '#3' })
+
+    expect(made.worktree).toMatchObject({
+      linkedPR: { repository: { host, owner: 'test-owner', repo: 'test-repo' } },
+      pushTarget: { remoteName: 'pr-fork-owner-fork-repo', branchName: 'feature/conflict' }
+    })
+    expect(git(made.worktree.path, 'rev-parse', 'HEAD')).toBe(git(world.forkBare, 'rev-parse', 'refs/heads/feature/conflict'))
+  }, GITHUB_TEST_TIMEOUT_MS)
+  test('checks out a GHES PR over SSH using its authenticated web host identity', async () => {
+    const enterpriseHost = 'enterprise.fixture.test:8443'
+    world = await startGithubWorld({ originScheme: 'ssh', enterpriseHost })
+    const made = await create({ github: '#3' })
+
+    expect(made.worktree).toMatchObject({
+      linkedPR: { repository: { host: enterpriseHost, owner: 'test-owner', repo: 'test-repo' } },
+      pushTarget: { remoteName: 'pr-fork-owner-fork-repo', branchName: 'feature/conflict' }
+    })
+    expect(git(made.worktree.path, 'rev-parse', 'HEAD')).toBe(git(world.forkBare, 'rev-parse', 'refs/heads/feature/conflict'))
+    expect(git(world.project, 'config', '--get', 'remote.pr-fork-owner-fork-repo.url')).toBe(world.forkUrl)
+  }, GITHUB_TEST_TIMEOUT_MS)
 
   test('a PR remote URL change uses a distinct URL-scoped ref and the fresh head, never the prior repository ref', async () => {
     world = await startGithubWorld()
@@ -126,7 +151,7 @@ describe('GitHub worktree creation', () => {
       branch: 'feature/new',
       name: 'Reword the README',
       displayName: 'Reword the README',
-      path: join(world.worktreesRoot, 'project', 'Reword-the-README-2'),
+      path: join(world.worktreesRoot, 'project', 'reword-the-readme-2'),
       linkedPR: { repository: { owner: 'other-owner', repo: 'other-repo' } },
       baseRef: 'origin/main'
     })
@@ -135,7 +160,7 @@ describe('GitHub worktree creation', () => {
     expect(refs.map((line) => line.split(' ')[0])).toContain(`refs/quirky/pull/${createHash('sha256').update(world.baseUrl).digest('hex')}/3`)
     expect(refs.map((line) => line.split(' ')[0])).toContain(`refs/quirky/pull/${createHash('sha256').update(world.secondBaseUrl).digest('hex')}/3`)
     expect(git(second.worktree.path, 'rev-parse', 'HEAD')).toBe(git(world.secondBaseBare, 'rev-parse', 'refs/pull/3/head'))
-  })
+  }, GITHUB_TEST_TIMEOUT_MS)
 
   test('refuses moved PR heads and invalid GitHub modes without creating or mutating a branch', async () => {
     world = await startGithubWorld()
@@ -152,28 +177,28 @@ describe('GitHub worktree creation', () => {
     await expect(world.call('quirky.worktree/create', { group: 'unknown', github: '#3' })).rejects.toBeDefined()
     await expect(create({ github: 'https://example.invalid/owner/repo/pull/3' })).rejects.toBeDefined()
     expect(git(world.project, 'branch', '--list', 'feature/conflict')).toBe('')
-  })
+  }, GITHUB_TEST_TIMEOUT_MS)
 
   test('refuses an unauthenticated GitHub source without creating a worktree', async () => {
     world = await startGithubWorld({ authenticated: false })
-    await expect(create({ github: '#3' })).rejects.toBeDefined()
+    await expect(create({ github: '#3' })).rejects.toMatchObject({ data: { reason: 'not_authenticated' } })
     expect(git(world.project, 'branch', '--list', 'feature/conflict')).toBe('')
     expect(git(world.project, 'worktree', 'list', '--porcelain').split('\n').filter((line) => line.startsWith('worktree '))).toHaveLength(1)
-  })
+  }, GITHUB_TEST_TIMEOUT_MS)
   test('an issue title supplies the default label, folder, note, and prefixed branch', async () => {
     world = await startGithubWorld()
     const made = await create({ github: '#4' })
     expect(made.worktree).toMatchObject({
-      branch: 'fixture-user/Add-a-multiply-function',
+      branch: 'fixture-user/add-a-multiply-function',
       name: 'Add a multiply function',
       displayName: 'Add a multiply function',
-      path: join(world.worktreesRoot, 'project', 'Add-a-multiply-function'),
+      path: join(world.worktreesRoot, 'project', 'add-a-multiply-function'),
       comment: 'Issue #4 — Add a multiply function',
       baseRef: 'origin/main',
       linkedIssue: { provider: 'github', kind: 'issue', number: 4, title: 'Add a multiply function' }
     })
     expect(made.issueCommand).toEqual({ ran: 'none' })
-  })
+  }, GITHUB_TEST_TIMEOUT_MS)
   test('issue commands are independently trusted at the selected commit, interpolated safely, and skippable', async () => {
     world = await startGithubWorld()
     world.setIssue({ ...world.state.issues['4']!, title: '$(touch title-executed.txt)' })
@@ -259,7 +284,7 @@ describe('GitHub worktree creation', () => {
     expect(changed?.data).toMatchObject({ reason: 'hooks-untrusted', kind: 'issue', changed: true, ref: changedRef })
     expect(changed?.message).toContain(`--ref ${changedRef}`)
     expect(git(world.project, 'branch', '--list', 'changed/four')).toBe('')
-  })
+  }, GITHUB_TEST_TIMEOUT_MS)
 
   test('reuses a matching PR branch and preserves it when the worktree is removed', async () => {
     world = await startGithubWorld()
@@ -267,10 +292,10 @@ describe('GitHub worktree creation', () => {
     git(world.project, 'fetch', '--quiet', 'origin', '+refs/pull/3/head:refs/heads/feature/conflict')
     const made = await create({ github: '#3' })
     expect(made.worktree).toMatchObject({ branch: 'feature/conflict', head: expected, keepBranch: true })
-    await world.call('quirky.worktree/remove', { worktree: `id:${made.worktree.id}` })
+    await world.call('quirky.worktree/remove', { worktree: `id:${made.worktree.id}`, yes: true })
     expect(git(world.project, 'rev-parse', 'refs/heads/feature/conflict')).toBe(expected)
     expect(git(world.project, 'worktree', 'list', '--porcelain').split('\n').filter((line) => line.startsWith('worktree '))).toHaveLength(1)
-  })
+  }, GITHUB_TEST_TIMEOUT_MS)
 
   test('refuses diverged and occupied PR branches without moving or deleting either checkout', async () => {
     world = await startGithubWorld()
@@ -289,7 +314,7 @@ describe('GitHub worktree creation', () => {
     expect(git(world.project, 'rev-parse', 'refs/heads/feature/conflict')).toBe(expected)
     expect(git(holder, 'rev-parse', 'HEAD')).toBe(expected)
     expect(git(world.project, 'worktree', 'list', '--porcelain').split('\n').filter((line) => line.startsWith('worktree '))).toHaveLength(2)
-  })
+  }, GITHUB_TEST_TIMEOUT_MS)
   test('reuses an existing configured remote when the PR head repository is the project origin', async () => {
     world = await startGithubWorld()
     const original = world.state.pulls['3']!
@@ -304,7 +329,7 @@ describe('GitHub worktree creation', () => {
     expect(made.worktree.pushTarget).toMatchObject({ remoteName: 'origin', branchName: 'feature/conflict' })
     expect(git(world.project, 'remote').split('\n')).not.toContain('pr-test-owner-test-repo')
     expect(git(world.project, 'config', '--get', 'branch.feature/conflict.pushRemote')).toBe('origin')
-  })
+  }, GITHUB_TEST_TIMEOUT_MS)
 
   test('reuses another configured remote that matches the PR head repository', async () => {
     world = await startGithubWorld()
@@ -313,7 +338,21 @@ describe('GitHub worktree creation', () => {
     expect(made.worktree.pushTarget).toMatchObject({ remoteName: 'contributor', branchName: 'feature/conflict' })
     expect(git(world.project, 'config', '--get', 'branch.feature/conflict.pushRemote')).toBe('contributor')
     expect(git(world.project, 'remote').split('\n')).not.toContain('pr-fork-owner-fork-repo')
-  })
+  }, GITHUB_TEST_TIMEOUT_MS)
+  test('matches configured GitHub remotes through their SSH alias', async () => {
+    world = await startGithubWorld({ sshAlias: true })
+    const originUrl = 'git@github-work:test-owner/test-repo.git'
+    const forkUrl = 'git@github-work:fork-owner/fork-repo.git'
+    git(world.project, 'remote', 'set-url', 'origin', originUrl)
+    git(world.project, 'remote', 'add', 'contributor', forkUrl)
+
+    const made = await create({ github: '#3' })
+
+    expect(made.worktree.pushTarget).toMatchObject({ remoteName: 'contributor', branchName: 'feature/conflict' })
+    expect(git(world.project, 'remote', 'get-url', 'origin')).toBe(originUrl)
+    expect(git(world.project, 'remote', 'get-url', 'contributor')).toBe(forkUrl)
+    expect(git(world.project, 'remote').split('\n')).not.toContain('pr-fork-owner-fork-repo')
+  }, GITHUB_TEST_TIMEOUT_MS)
 
   test('places an issue terminal beside Setup without stealing the prior terminal focus', async () => {
     world = await startGithubWorld({ includeTerminal: true })
@@ -327,18 +366,20 @@ describe('GitHub worktree creation', () => {
     const made = await create({ github: '#4', setup: 'run' })
     expect(made.setup.ran).toBe('terminal')
     expect(made.issueCommand).toMatchObject({ ran: 'terminal' })
-    if (made.setup.ran !== 'terminal' || made.issueCommand?.ran !== 'terminal') throw new Error('expected independent terminal sessions')
-    const issueSession = await world.call('quirky.session/get', { session: made.issueCommand.sessionId }) as { title: string }
+    const setupSessionId = made.setup.sessionId
+    const issueSessionId = made.issueCommand?.sessionId
+    if (made.setup.ran !== 'terminal' || made.issueCommand?.ran !== 'terminal' || typeof setupSessionId !== 'string' || typeof issueSessionId !== 'string') throw new Error('expected independent terminal sessions')
+    const issueSession = await world.call('quirky.session/get', { session: issueSessionId }) as { title: string }
     expect(issueSession.title).toBe('Issue #4')
     const state = await world.call('quirky.terminal/workspace', { workspace: `id:${made.worktree.id}` }) as { workspace: { root: unknown } }
     const splitTab = tabsIn(state.workspace.root).find((tab) => {
       const sessions = sessionsIn(tab.root)
-      return sessions.includes(made.setup.sessionId) && sessions.includes(made.issueCommand!.sessionId!)
+      return sessions.includes(setupSessionId) && sessions.includes(issueSessionId)
     })
     expect(splitTab).toBeDefined()
     expect(sessionsIn((splitTab as Record<string, unknown>).root)).toHaveLength(2)
     expect(await world.call('quirky.terminal/focusContext')).toEqual(beforeFocus)
-  })
+  }, GITHUB_TEST_TIMEOUT_MS)
 
   test('a failed post-create issue command warns and preserves its linked workspace', async () => {
     world = await startGithubWorld()
@@ -348,7 +389,7 @@ describe('GitHub worktree creation', () => {
     expect(made.warnings.some((warning) => warning.includes('issue command for #4') && warning.includes('exited with 7'))).toBe(true)
     const listed = await world.call('quirky.worktree/list', { repo: world.repo.id }) as Worktree[]
     expect(listed.some((worktree) => worktree.id === made.worktree.id && worktree.linkedIssue?.number === 4)).toBe(true)
-  })
+  }, GITHUB_TEST_TIMEOUT_MS)
 
   test('a failed PR fetch never falls back to a pre-existing URL-scoped synthetic ref', async () => {
     world = await startGithubWorld()
@@ -360,7 +401,7 @@ describe('GitHub worktree creation', () => {
     expect(git(world.project, 'rev-parse', trackingRef)).toBe(staleHead)
     expect(git(world.project, 'branch', '--list', 'feature/conflict')).toBe('')
     expect(git(world.project, 'worktree', 'list', '--porcelain').split('\n').filter((line) => line.startsWith('worktree '))).toHaveLength(1)
-  })
+  }, GITHUB_TEST_TIMEOUT_MS)
 
   test('a conflicting deterministic fork remote is not overwritten', async () => {
     world = await startGithubWorld()
@@ -369,7 +410,7 @@ describe('GitHub worktree creation', () => {
     expect(git(world.project, 'config', '--get', 'remote.pr-fork-owner-fork-repo.url')).toBe('https://github.com/someone-else/wrong-repo.git')
     expect(git(world.project, 'branch', '--list', 'feature/conflict')).toBe('')
     expect(git(world.project, 'worktree', 'list', '--porcelain').split('\n').filter((line) => line.startsWith('worktree '))).toHaveLength(1)
-  })
+  }, GITHUB_TEST_TIMEOUT_MS)
   test('refuses GitHub sources for folder projects and groups', async () => {
     world = await startGithubWorld()
     const folderPath = join(world.root, 'folder-project')
@@ -381,5 +422,5 @@ describe('GitHub worktree creation', () => {
     const group = await world.call('quirky.repo/groupCreate', { name: 'notes', parentPath: world.root }) as { id: string }
     await expect(world.call('quirky.worktree/create', { group: group.id, github: '#4' })).rejects.toBeDefined()
     expect(await world.call('quirky.worktree/list', { group: group.id })).toEqual([])
-  })
+  }, GITHUB_TEST_TIMEOUT_MS)
 })

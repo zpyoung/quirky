@@ -415,7 +415,7 @@ async function createGit(env: CreateEnv, repo: Repo, params: CreateParams, creat
     const parentDir = env.getSetting('nestWorkspaces') === false ? root : join(root, await env.worktreeDirName(repo))
     let name: string
     if (typed !== '') name = sanitize(env, typed)
-    else if (source !== null) name = sanitize(env, source.item.title)
+    else if (source !== null) name = sanitize(env, source.item.title.toLowerCase())
     else if (existing !== null) name = sanitize(env, existing.branch)
     else {
       unavailable = await unavailableNames(env, repo)
@@ -671,108 +671,7 @@ function objectRecord(value: unknown): ObjectRecord | null {
   return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as ObjectRecord : null
 }
 
-function activePaneOf(value: unknown): string | null {
-  const workspace = objectRecord(objectRecord(value)?.workspace)
-  if (!workspace || typeof workspace.activeGroup !== 'string') return null
-  const findGroup = (node: unknown): ObjectRecord | null => {
-    const current = objectRecord(node)
-    if (!current) return null
-    if (current.kind === 'group' && current.id === workspace.activeGroup) return current
-    if (current.kind !== 'split') return null
-    return findGroup(current.first) ?? findGroup(current.second)
-  }
-  const group = findGroup(workspace.root)
-  const tabs = group?.tabs
-  if (!Array.isArray(tabs)) return null
-  const tab = tabs.map(objectRecord).find((candidate) => candidate?.id === group?.activeTab)
-  return typeof tab?.activePane === 'string' ? tab.activePane : null
-}
 
-async function paneForSession(env: CreateEnv, session: string): Promise<{ workspace: string; pane: string } | null> {
-  try {
-    const location = objectRecord(await env.call('quirky.terminal/paneOf', { session }))
-    if (typeof location?.workspace !== 'string' || typeof location.pane !== 'string') return null
-    return { workspace: location.workspace, pane: location.pane }
-  } catch {
-    return null
-  }
-}
-
-/** Adds the issue terminal to the worktree layout and restores the caller's prior terminal focus. */
-async function placeIssueTerminal(
-  env: CreateEnv,
-  worktree: Worktree,
-  issueSession: string,
-  setupSession: string | undefined,
-  number: number,
-  warnings: string[]
-): Promise<void> {
-  let priorFocus: string | null = null
-  let havePriorFocus = false
-  try {
-    const focus = objectRecord(await env.call('quirky.terminal/focusContext'))
-    if (focus && (typeof focus.workspace === 'string' || focus.workspace === null)) {
-      priorFocus = focus.workspace
-      havePriorFocus = true
-    }
-  } catch {
-    // The terminal plugin may be unavailable even when sessions are supported.
-  }
-
-  let priorPane: string | null = null
-  try {
-    priorPane = activePaneOf(await env.call('quirky.terminal/workspace', { workspace: `id:${worktree.id}` }))
-  } catch {
-    // The worktree may not have a terminal workspace yet.
-  }
-
-  let changedFocus = false
-  try {
-    await env.call('quirky.terminal/workspace', { workspace: `id:${worktree.id}`, ensure: true })
-    let setupLocation = setupSession ? await paneForSession(env, setupSession) : null
-    if (setupSession && setupLocation === null) {
-      try {
-        await env.call('quirky.terminal/openSession', { session: setupSession })
-        changedFocus = true
-        setupLocation = await paneForSession(env, setupSession)
-      } catch {
-        setupLocation = null
-      }
-    }
-
-    let issueLocation = await paneForSession(env, issueSession)
-    if (issueLocation === null) {
-      await env.call('quirky.terminal/openSession', { session: issueSession })
-      changedFocus = true
-      issueLocation = await paneForSession(env, issueSession)
-    }
-    if (issueLocation === null) throw new Error(`Issue #${number} terminal has no pane in its worktree`)
-    if (setupSession && setupLocation === null) warnings.push(`could not split Issue #${number} beside Setup because its session is no longer available`)
-    if (setupLocation && issueLocation && setupLocation.workspace === issueLocation.workspace && setupLocation.pane !== issueLocation.pane) {
-      await env.call('quirky.terminal/movePane', { session: issueSession, toPane: setupLocation.pane, edge: 'right' })
-      changedFocus = true
-    } else if (setupLocation && issueLocation && setupLocation.workspace !== issueLocation.workspace) {
-      throw new Error('the issue and setup sessions are in different terminal workspaces')
-    }
-  } catch (error) {
-    warnings.push(`could not place the Issue #${number} terminal beside Setup: ${messageOf(error)}`)
-  } finally {
-    if (changedFocus && priorPane !== null) {
-      try {
-        await env.call('quirky.terminal/focusPane', { pane: priorPane })
-      } catch (error) {
-        warnings.push(`could not restore the terminal pane focus after starting Issue #${number}: ${messageOf(error)}`)
-      }
-    }
-    if (havePriorFocus) {
-      try {
-        await env.call('quirky.terminal/focusContext', { workspace: priorFocus })
-      } catch (error) {
-        warnings.push(`could not restore terminal focus after starting Issue #${number}: ${messageOf(error)}`)
-      }
-    }
-  }
-}
 
 async function runIssueCommand(
   env: CreateEnv,
@@ -795,6 +694,27 @@ async function runIssueCommand(
     warnings.push(`could not prepare the issue command for ${worktree.path}: ${messageOf(error)}`)
     return { ran: 'none' }
   }
+  if (setupSession !== undefined) {
+    try {
+      const split = objectRecord(await env.call('quirky.terminal/splitPane', {
+        session: setupSession,
+        direction: 'right',
+        title: `Issue #${source.item.number}`,
+        command: runnerCommand(runner),
+        activate: false
+      }))
+      const sessionId = split?.session
+      if (typeof sessionId !== 'string' || sessionId.length === 0) throw new Error('terminal splitPane returned no session id')
+      return { ran: 'terminal', sessionId }
+    } catch (error) {
+      if (codeOf(error) === RpcErrorCode.MethodNotFound) {
+        // Older or unavailable terminal plugins retain the independent-session fallback below.
+      } else {
+        warnings.push(`could not split Issue #${source.item.number} beside Setup for ${worktree.path}: ${messageOf(error)}`)
+        return { ran: 'none' }
+      }
+    }
+  }
   try {
     const session = (await env.call('quirky.session/create', {
       worktree: worktree.id,
@@ -802,7 +722,6 @@ async function runIssueCommand(
       title: `Issue #${source.item.number}`,
       command: runnerCommand(runner)
     })) as SessionLike
-    await placeIssueTerminal(env, worktree, session.id, setupSession, source.item.number, warnings)
     return { ran: 'terminal', sessionId: session.id }
   } catch (error) {
     if (codeOf(error) !== RpcErrorCode.MethodNotFound) {
