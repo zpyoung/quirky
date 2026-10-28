@@ -296,3 +296,11 @@ Registration update: `bun scripts/build-loop/queue.ts add /tmp/quirky-session-in
 - **Follow-up:** `m5-automations-dispatch-remote-and-args`, dependent on local dispatch, covers both constrained flows.
 
 - **Verification limit:** no final cross-family review was started. LOOP's expired-item fast path was used after owned checks and typecheck passed (dispatch D26); this is not model-review clearance.
+
+## m5-automations-ui: deferred remote authority surfaces
+
+- **Source decision:** `docs/loop/decisions/m5-automations-ui.md` D15. Local create/edit/list/details/runs and local OpenClaw controls ship; no remote action is redirected to the local machine.
+- **Remaining flow:** remote Host selection, owner-preserving authority moves, remote list/history availability, and remote OpenClaw controls need public host registration-generation, execution, ownership and capability APIs. The editor currently explains local-only authority; raw arguments remain visibly unsupported under the structured-runner contract.
+- **Owner:** the single follow-up `m5-automations-ui-remote-authorities`, dependent on this UI item and `m5-automations-dispatch-remote-and-args`, retains these UI flows until the public prerequisite exists.
+- **Verification limit:** final independent model review was not started under LOOP's expired-item rule (UI D16). Availability probes and criteria preparation are not review clearance. Native View-menu visibility remains pending in `docs/loop/native/m5-automations-ui.json`.
+

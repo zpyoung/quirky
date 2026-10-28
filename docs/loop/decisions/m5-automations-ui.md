@@ -143,5 +143,49 @@
 - **Revisit if:** visible UI verification finds a behavior those gates missed
 - **Source:** assumed — autonomous
 
+## D14: Preserve canonical pointer migration9 and append background as migration10
+- **Question:** The one final roadmap catch-up conflicted in session records and structured creation; which contract owns each migration index and launch field?
+- **Options:** put background first; preserve the already-landed pointer migration before the unlanded background column
+- **Chose:** keep badges8 and session_pointer_operations9 unchanged, append background ALTER as10, and accept background, title and deferStart together in structured/create. Preserve all other auto-merged orchestration runtime identity, lease and idempotent-send contracts.
+- **Why:** Existing canonical profiles already mark migration9 applied. Repurposing it as background would leave the column absent and attempt the pointer table twice. Both feature contracts are additive; neither may erase the other's inputs.
+- **Evidence:** catch-up conflict blocks in records.ts/main.ts; incoming m6-orchestration-core D39, all D1-D42 read; authoritative lane7 recovery instruction; merge2191c8fc
+- **Reversibility:** hard for deployed migration order
+- **Confidence:** high
+- **Revisit if:** a later migration changes schema without an append-only step
+- **Source:** locked by docs/loop/decisions/m6-orchestration-core.md
+
+## D15: Keep unavailable remote UI flows in one dependent follow-up
+- **Question:** Can the UI safely offer remote Host selection/moves or remote OpenClaw management before public authority registration and execution exist?
+- **Options:** invent SSH paths or redirect to local; show explicit local-only capability and defer remote UI wiring
+- **Chose:** local Host and native/external actions ship; unsupported remote authorities remain unavailable with no local fallback. One UI follow-up depends on this item and m5-automations-dispatch-remote-and-args, covering remote Host selection, owner-preserving moves/read errors and remote external-manager controls once those public APIs exist.
+- **Why:** Lane7's registered follow-up owns the missing registration-generation/execution and raw-argument policy prerequisites, not this feature's future UI integration. The current kernel has no such public host authority; direct SSH/private imports would violate plugin ownership and host fencing.
+- **Evidence:** dispatch D2-D3; canonical queue item m5-automations-dispatch-remote-and-args; editorData local authority projection and externalList remote refusal
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** the prerequisite follow-up supplies the public host/capability/owner API
+- **Source:** deferred: remote automation UI authorities
+
+## D16: Apply the two-hour rule without inventing independent review
+- **Question:** Should an unstarted cross-family review begin after the item's explicit two-hour window?
+- **Options:** start another review phase; finish the already-started web campaign and use the mandated expired-item landing path
+- **Chose:** no model-review dispatch. Finish the started visible campaign, required integration checks and cleanup, then normal queue land. Gemini availability and staged criteria are not review clearance.
+- **Why:** Canonical claim commit1b815f655fb92a8a89dccb05aeef0155e8a654d7 records2026-10-27T22:06:31-05:00, so the window expired05:06:31Z; the observed clock was05:14:28Z. LOOP explicitly skips unstarted review/dogfood on expired items, but never allows ending while a started agent/service is running.
+- **Evidence:** canonical claim timestamp; observed date command; no promote/refute/findings/gate artifact exists and review journal reviewStarted remainsfalse
+- **Reversibility:** easy
+- **Confidence:** high for process compliance; no independent-review assurance
+- **Revisit if:** the operator requests a later independent review or a concrete defect appears
+- **Source:** locked by docs/loop/LOOP.md
+
+## D17: Verify the composed runtime with real clients, not only merge text
+- **Question:** Does the final orchestration/background/check-owner composition still execute the UI's actual API path?
+- **Options:** trust conflict resolution alone; focused merged regressions, complete typecheck, actual daemon/CLI and packaged build
+- **Chose:** merge c49562d9 without dropping UI methods or canonical migrations. Four migration/background/ownership/native-CLI files passed on the merged tree, no flaky acceptance; full typecheck passed; a fresh actual daemon/CLI smoke passed with native run47407208-8e70-456f-be5b-567249e9c260 and session s_54bb10675d8c; packaged macOS build passed with27plugins and20UI modules.
+- **Why:** Activating plugins are live startup-check owners; disabled/failed owners still cancel. The merged native smoke again exercised editor save, schedule-anchor preservation, paused manual completion/output, OpenClaw readback/ID refusal, CLI navigation and workspace-preserving delete through public clients.
+- **Evidence:** bg17 exit0/160.38seconds; four-file suite-result ok:true,flaky:[]; frozen-install/typecheck0; actual smoke ok:true; desktop packaged app build0
+- **Reversibility:** easy
+- **Confidence:** high for exercised client and integration paths; visible UI outcome remains separately recorded
+- **Revisit if:** a later integration merge changes the runtime contract
+- **Source:** assumed — autonomous
+
 ## Progress
-Step6: actual native-process/API smoke, all owning failure reruns, scripts, complete typecheck and packaged build passed; source af88e69b. Visible AutomationWebDogfood is active against the fresh owned daemon service lane6-automation-web-20261028. No browser or final cross-family review result claimed yet. Next: finish/end all web goals, stop/clean owned service, one final cross-family review and blocker-fix batch, record any constrained-flow follow-up, catch up once and normal queue land.
+Step7 preparation: one catch-up and mandatory runtime composition are verified by focused merged tests, complete typecheck, real daemon/CLI smoke and packaged build. Started AutomationWebDogfood is still running; finish/end every goal and clean its owned browser/service before landing. Unstarted cross-family review is skipped under D16 with no clearance claimed. Register only the single remote UI follow-up, commit final evidence, detach and run canonical queue land; handle only its concrete conflict/failure recovery.
