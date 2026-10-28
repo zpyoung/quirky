@@ -48,3 +48,9 @@
   --ui-needs-you: #c98a0b;
   --ui-failing: #d6455d;
 }
+
+:root,
+[data-theme='dark'],
+[data-theme='light'] {
+  color: var(--ui-text);
+}

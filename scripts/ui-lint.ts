@@ -294,7 +294,7 @@ function checkCssDeclaration(emitter: Emitter, start: number, end: number, primi
   reportStyleValue(emitter, rawValue.slice(leading), valueOffset, property, true)
 }
 
-function scanCssRange(emitter: Emitter, start: number, end: number, plugin: boolean): void {
+function scanCssRange(emitter: Emitter, start: number, end: number, plugin: boolean): number {
   const primitive = isPrimitiveFile(emitter.file)
   let cursor = start
   while (cursor < end) {
@@ -307,9 +307,10 @@ function scanCssRange(emitter: Emitter, start: number, end: number, plugin: bool
       continue
     }
     checkCssDeclaration(emitter, segmentStart, delimiter.index, primitive)
-    if (delimiter.character === '}') return
+    if (delimiter.character === '}') return delimiter.index + 1
     cursor = delimiter.index + 1
   }
+  return end
 }
 
 function scanInlineCss(emitter: Emitter, start: number, end: number, plugin: boolean): void {

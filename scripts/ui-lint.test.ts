@@ -19,6 +19,17 @@ test('CSS scanner finds raw style colors and pixel dimensions but ignores commen
   expect(rules('.x { color/**/: red; }', 'src/comment.css')).toEqual(['ui/no-raw-color'])
 })
 
+test('CSS scanner resumes after sibling rules and nested groups', () => {
+  const source = '.safe { color: var(--ui-text); }\n.bad { color: red; }\n@media (width > 30em) { .nested { padding: 13px; } .later { color: blue; } }\n.last { margin: 7px; }'
+  const diagnostics = scanSourceContent('src/siblings.css', source)
+  expect(diagnostics.map(({ rule, line }) => [rule, line])).toEqual([
+    ['ui/no-raw-color', 2],
+    ['ui/no-raw-pixel', 3],
+    ['ui/no-raw-color', 3],
+    ['ui/no-raw-pixel', 4]
+  ])
+})
+
 test('only canonical primitive custom-property values may define raw colors and pixels', () => {
   const source = ':root { --surface: #101010; --rail-width: 13px; color: red; padding: 4px; }'
   expect(rules(source, 'packages/ui/src/design-system/tokens.css')).toEqual([

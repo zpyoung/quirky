@@ -165,6 +165,28 @@ Empty, whitespace and comment input must not produce command completions, includ
 `functrace` inherits DEBUG into the prompt helpers. Real commands still report their status
 when history ignores duplicates, ignores leading spaces, or is disabled.
 
+### Shared desktop UI components
+
+`@quirky/ui` exports the shared graphite controls: Button, IconButton, TextField, ListRow,
+SectionHeader, Tabs, Badge, StatusDot, Menu, Toast, Dialog (including sheets), EmptyState,
+FormRow, ToolPanelFrame and InlineAgentCard. Import their styles from `@quirky/ui/styles.css`;
+the desktop host already loads them. Components are controlled presentations: callers own
+feature state and callbacks. Theme scopes use `data-theme="dark"` or `data-theme="light"`.
+
+After `bun run --filter './packages/ui' build`, open `/gallery.html` on the daemon's UI origin
+to try every component in both themes. The gallery needs no RPC token and does not connect
+to the daemon.
+
+`bun run ui:lint` checks UI source for raw colors and pixel dimensions. Root
+`bun run typecheck` runs the same gate. Plugin enforcement is staged:
+`scripts/ui-lint-plugins.json` starts empty, and each `ui-restyle-*` item adds its plugin IDs.
+Unlisted legacy plugins are not checked. Listed plugins must also remove their own CSS files,
+CSS imports, style elements and stylesheet injection; use the shared controls and tokens instead.
+Only custom-property values in the two central design-system token files may define raw
+primitives. Existing host geometry remains in `compatibility-tokens.css` until its area restyle;
+new shared controls use the approved semantic tokens and size scale. Static source analysis
+does not evaluate arbitrary runtime style computations or trace imported style objects.
+
 ### Public plugin UI and grouping APIs
 
 UI plugins can declare an `activity-item` contribution beside the right sidebar. It mounts even

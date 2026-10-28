@@ -66,5 +66,38 @@
 - **Revisit if:** typecheck or actual surface smoke shows a contract error
 - **Source:** locked by docs/loop/LOOP.md
 
+## D7: Accept only the audited three-component source at the all-worker barrier
+- **Question:** execution attribution and shared-file integration
+- **Options:** trust worker summaries; audit all returned trees and the integration parent before committing
+- **Chose:** all three returned at c4961ba565f6a51eab5e995a2144b9979f521486; exact changed paths matched their packet scopes, parent had no tracked delta and only inherited .serena. Committed components b5214151, gallery c2bffb42 and lint4793197f, then merged together. All three worktrees removed after path-only stashes preserved their inherited .serena copies; original parent metadata untouched
+- **Why:** absolute assigned prefixes and a real barrier avoided the cross-worktree contamination seen in earlier iterations
+- **Evidence:** tool-observed four HEAD values and four status inventories; component commit/merge output; worktree remove commands exited0
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** source attribution evidence contradicts a packet scope
+- **Source:** assumed — autonomous
+
+## D8: Fix scanner sibling traversal and theme-scope text inheritance from observed evidence
+- **Question:** which integration defects require source changes
+- **Options:** weaken lint/typecheck or ignore the visual; repair the underlying cursor and theme inheritance
+- **Chose:** recursive CSS scanning returns the cursor after its closing brace and resumes through sibling/nested rules; retain a regression case with four exact downstream diagnostics. Every theme scope declares its text color from its own --ui-text so a light scope does not inherit resolved dark text. Toast expiration also keeps its original deadline across changing callback identities, with latest callback semantics, and the gallery preserves action versus dismissal outcomes
+- **Why:** first typecheck reported void-to-number at scanner lines306/322, exposing the lost recursive cursor. Initial actual gallery screenshot showed near-white unstyled heading/prose on white despite correct token values. Callback-identity timer resets and action-output overwrites were direct integration invariants, not extra feature scope
+- **Evidence:** first typecheck exit2; repaired typecheck exit0/28.87s root+mobile+desktop+UI lint; focused nested/sibling scanner output four exact rules/lines; screenshots15b85a92eff3712f before and15b85acd59737130 after, actual heading rgb236/238/242 dark and27/29/34 light
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** end-phase behavioral tests find an uncovered style context or focus/timer transition
+- **Source:** assumed — autonomous
+
+## D9: Record focused runtime proof without claiming suites or automated visual review
+- **Question:** what verification actually ran under build-first
+- **Options:** report only typecheck; run prohibited campaigns; focused production-path smoke and exact limits
+- **Chose:** UI build emitted11 host/vendor files and25 plugin modules; actual gallery served through production serveStatic and driven in an isolated owned browser tab. Both themes rendered all15 categories with all10 exact semantic palette values. Real button, input, keyboard tabs/disabled skip, menu activation, toast action+dismissal, dialog focus/trap/Escape/restoration, sheet, empty-state, panel and agent-card transitions passed. Browser error list empty. Final fresh screenshot15b85afdbd337131 shows both live toasts/all categories, correct light prose and no horizontal overflow. Production lint fixture smoke proved empty-list exclusion, opted-in raw color/pixels, CSS file/import denial, canonical primitive-only exemption, exact diagnostics, invalid config, and restored shared-component acceptance; fixture directory removed
+- **Why:** genuine changed-path runtime proof satisfies the coding contract while suites/review/full dogfood remain the end phase's work. Static linter intentionally does not evaluate arbitrary runtime computations or trace imported style maps; no security-sandbox claim
+- **Evidence:** production UI build exit0 twice; lint-smoke.ts exit0/scenarios11 and fixtureRemoved:true; nested CSS smoke exit0; browser smoke final both-theme passed:true, error entries[], final visual screenshot metadata
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** end-phase tests or screenshot-review owner find a regression
+- **Source:** assumed — autonomous
+
 ## Progress
-Claimed lane5; approved upstream spec and source seams read, combined slice spec self-reviewed, prop contracts written before implementers. Next: commit contracts/spec, dispatch components/tokens, gallery and lint+legacy-tokenization as disjoint source owners; integrate, typecheck, focused runtime proof, catch up once/read incoming decisions and land.
+Integrated all three audited components and removed their worktrees; focused lint/gallery proof passed as D8–D9 record. Permanent tests authored but UNRUN; no review/suite/dogfood claim. Next: commit final fixes/docs, catch up once with build/roadmap, preserve lane4 terminal export/theme runtime, read incoming decision bindings, rerun typecheck and land through canonical absolute queue.ts.
