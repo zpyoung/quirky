@@ -451,6 +451,17 @@
 - **Revisit if:** the intact AC9 case passes with bounded daemon shutdown
 - **Source:** deferred: automatic idle-mailbox scheduling
 
+## D42: Reconcile the queue-reported integration conflict without weakening identity
+- **Question:** the first queue landing refused a new build/roadmap merge conflict before running its gate
+- **Options:** discard one hello path; preserve both admitted-device immutability and asynchronous hosted-session attestation
+- **Chose:** retain the paired-device protocol check and early return inside the async client.hello handler. Preserve the actual settled-event wait. Supply the newly landed automations CLI fixture with the required requestBase.
+- **Why:** paired-device identity is server-established and must not be overwritten by hello; ordinary launched clients still require async lease proof. The settled event is the consumer-visible condition, not earlier producer status.
+- **Evidence:** merge e4362c51. LandCatchupDecisions read all five new logs: m4-hosting-ui-reviews, m4-hosting-ui-tasks, m4-worktrees-create-from-github, m5-automations-core and sb-mobile-daemon. No binding conflict; preserve worktrees D23 and mobile D5/D6/D12. Initial post-merge typecheck found only the new automations fixture's missing requestBase. After correction, typecheck passed and the focused runtime-authority, paired-client, structured, automations-CLI and core suite passed70 tests/515 assertions (artifact125).
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** focused or queue-controlled verification reveals a concrete regression
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Early preparation verification
 - `bun run typecheck`: exit0 on the final contracts, no diagnostics.
 - Actual Bun import of contracts.ts: `CONTRACT_MODULE_INERT_OK`; the module exports no runtime values. No daemon, model, process, real user state or placeholder contribution was started/installed.
