@@ -137,6 +137,7 @@ files, not this one.
 | medium | medium | [m1-notifications D9](decisions/m1-notifications.md) | Unread is a marker on the session and on its worktree, written before delivery and whatever the switches say | locked by research/orca-features/notifications.md |
 | medium | medium | [m1-notifications D10](decisions/m1-notifications.md) | Viewing means a focused window whose person is present and whose view shows the session | locked by research/orca-features/notifications.md |
 | medium | medium | [m1-notifications D35](decisions/m1-notifications.md) | The session record carries its unread reason; the worktree keeps its `unread` flag | assumed — autonomous |
+| medium | medium | [m6-heimdall-host-power D2](decisions/m6-heimdall-host-power.md) | Drive the native runloop source on the Bun JS thread | assumed — autonomous |
 | medium | medium | [m1-agent-status-scripting D2](decisions/m1-agent-status-scripting.md) | Screen rules decide what scripts see, never the dot (approach A) | supersedes m1-agent-status D23 (the rules engine is now built, for scripts) |
 | medium | medium | [m1-agent-status-scripting D4](decisions/m1-agent-status-scripting.md) | A fresh hook row decides working and idle; the screen may only add blocked, and decides alone without one | assumed — autonomous |
 | medium | medium | [m1-agent-status-scripting D6](decisions/m1-agent-status-scripting.md) | A user file replaces the whole rule set; then a plugin's contribution; then the built-in file | assumed — autonomous |
@@ -430,6 +431,8 @@ files, not this one.
 | medium | high | [m1-notifications D7](decisions/m1-notifications.md) | The old "Notify when agents finish" switch becomes Agent Task Complete, and its value carries over | supersedes m0-core D13 |
 | medium | high | [m1-notifications D11](decisions/m1-notifications.md) | The window reports input activity, and focus and presence changes reach plugins as an event | assumed — autonomous |
 | medium | high | [m1-notifications D28](decisions/m1-notifications.md) | The PTY host recognises OSC 9, OSC 99 and OSC 777 notifications | assumed — autonomous |
+| medium | high | [m6-heimdall-host-power D1](decisions/m6-heimdall-host-power.md) | Implement a daemon-owned synchronous lifecycle capability | locked by docs/loop/decisions/m6-heimdall-core.md |
+| medium | high for implementation ordering; native-cycle proof pending | [m6-heimdall-host-power D6](decisions/m6-heimdall-host-power.md) | Keep native callback lifetime and activation lifetime explicit | assumed — autonomous |
 | medium | high | [m1-agent-status-scripting D10](decisions/m1-agent-status-scripting.md) | Rows record the evidence that decided them, and explain reads it | assumed — autonomous |
 | medium | high | [m1-agent-status-scripting D19](decisions/m1-agent-status-scripting.md) | Distinct failures are plugin errors with a machine-readable reason | assumed — autonomous |
 | medium | high | [m1-agent-status-scripting D38](decisions/m1-agent-status-scripting.md) | Catching up with build/roadmap brought m1-notifications, m2-source-control-core and m3-terminal-dock; no decision conflicts | assumed — autonomous |
@@ -1647,6 +1650,10 @@ files, not this one.
 | easy | high | [m1-notifications D60](decisions/m1-notifications.md) | The descriptor fix lives in `startHarness`, shared by every symlink-only built-in directory | supersedes m1-term-ui D51 |
 | easy | high | [m1-notifications D61](decisions/m1-notifications.md) | The final gate passes; nothing goes to BLOCKERS.md | locked by docs/loop/LOOP.md |
 | easy | high | [m1-notifications D62](decisions/m1-notifications.md) | The first land failed on the integration tree's missing package links for the new plugin; they were copied in, as m1-term-daemon D49 did | assumed — autonomous |
+| easy | high | [m6-heimdall-host-power D3](decisions/m6-heimdall-host-power.md) | Apply unattended build-first execution | locked by docs/loop/LOOP.md |
+| easy | high | [m6-heimdall-host-power D4](decisions/m6-heimdall-host-power.md) | Hand off disruptive native verification and non-macOS support | deferred: platform |
+| easy | high for exercised paths; real os sleep/wake cycle remains unverified | [m6-heimdall-host-power D5](decisions/m6-heimdall-host-power.md) | Verify registration separately from a real system sleep cycle | assumed — autonomous |
+| easy | high for exercised evidence and inspected decision scopes | [m6-heimdall-host-power D7](decisions/m6-heimdall-host-power.md) | Preserve all incoming decisions at the one roadmap catch-up | assumed — autonomous |
 | easy | high | [m1-agent-status-scripting D1](decisions/m1-agent-status-scripting.md) | The item covers the roadmap's five bullets for scripts; the dot, the Activity view and `quirky terminal` stay as they are | locked by docs/roadmap.md |
 | easy | high | [m1-agent-status-scripting D7](decisions/m1-agent-status-scripting.md) | Rules are never downloaded | locked by docs/roadmap.md |
 | easy | high | [m1-agent-status-scripting D11](decisions/m1-agent-status-scripting.md) | Explain answers for any session, with or without a row | assumed — autonomous |
