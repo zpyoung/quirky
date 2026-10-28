@@ -1910,7 +1910,8 @@
       "title": "Fix the native-only failures in m3-vault from the 2026-10-28 run: SC-18-native-clipboard",
       "docs": [],
       "deps": [],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 1
     },
     {
       "id": "fix-native-sa-browser-agent-1028",
