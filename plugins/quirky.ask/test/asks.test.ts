@@ -62,6 +62,21 @@ describe('asks', () => {
     expect(h.notifications).toEqual([])
   })
 
+  test('an exact snapshot selects only its Ask and composes with pending-only filtering', async () => {
+    const first = await client.callAny('quirky.ask/create', { spec: confirmSpec }) as { askId: string }
+    const second = await client.callAny('quirky.ask/create', { spec: confirmSpec }) as { askId: string }
+    await client.callAny('quirky.ask/answer', { askId: first.askId, answers: { go: { value: true, source: 'input' } } })
+
+    const terminal = await client.callAny('quirky.ask/list', { askId: first.askId }) as Ask[]
+    expect(terminal.map((ask) => [ask.id, ask.envelope.status])).toEqual([[first.askId, 'answered']])
+    expect(await client.callAny('quirky.ask/list', { askId: first.askId, pendingOnly: true })).toEqual([])
+    const pending = await client.callAny('quirky.ask/list', { askId: second.askId, pendingOnly: true }) as Ask[]
+    expect(pending.map((ask) => [ask.id, ask.envelope.status])).toEqual([[second.askId, 'pending']])
+    expect(await client.callAny('quirky.ask/list', { askId: 'ask_missing' })).toEqual([])
+    const all = await client.callAny('quirky.ask/list', {}) as Ask[]
+    expect(all.map((ask) => ask.id)).toEqual([first.askId, second.askId])
+  })
+
   test('session and worktree default from the caller and params override them', async () => {
     const asker = await connectAs(h, { sessionId: 'sess_7', worktreeId: 'wt_7' })
     const first = await asker.callAny('quirky.ask/create', { spec })

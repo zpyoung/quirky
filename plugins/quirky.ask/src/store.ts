@@ -100,7 +100,7 @@ export function createAskStore(context: UiPluginContext, clock: AskStoreClock = 
     if (disposed || resolvedIds.has(askId) || recovering.has(askId)) return
     recovering.add(askId)
     try {
-      const all = (await context.call('quirky.ask/list', { pendingOnly: false })) as Ask[]
+      const all = (await context.call('quirky.ask/list', { pendingOnly: false, askId })) as Ask[]
       const resolved = all.find((ask) => ask.id === askId)
       if (!resolved || disposed) return
       const flash = makeFlash(resolved, envelope)

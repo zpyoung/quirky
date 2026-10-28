@@ -33,15 +33,17 @@ export function activate(context: PluginContext) {
     asks.set(askId, { spec: params.spec, status: 'pending', value: null })
     return { askId }
   })
-  context.provide('method:quirky.ask/list', () => [...asks].map(([askId, ask]) => ({
-    id: askId,
-    envelope: {
-      status: ask.status,
-      askId,
-      answers: ask.status === 'answered' ? { confirm: { value: ask.value, source: 'input' } } : {},
-      skipped: []
-    }
-  })))
+  context.provide('method:quirky.ask/list', (params: Record<string, unknown>) => [...asks]
+    .filter(([askId]) => params.askId === undefined || params.askId === askId)
+    .map(([askId, ask]) => ({
+      id: askId,
+      envelope: {
+        status: ask.status,
+        askId,
+        answers: ask.status === 'answered' ? { confirm: { value: ask.value, source: 'input' } } : {},
+        skipped: []
+      }
+    })))
   context.provide('method:quirky.ask/answer', (params: Record<string, unknown>) => {
     const ask = asks.get(String(params.askId))
     if (!ask) throw context.error('not-found', 'no such ask')
@@ -105,7 +107,7 @@ function builtinPlugins(marker: string): string {
           {
             id: 'list',
             readOnly: true,
-            params: { type: 'object', properties: {} }
+            params: { type: 'object', properties: { askId: { type: 'string' } } }
           },
           {
             id: 'answer',

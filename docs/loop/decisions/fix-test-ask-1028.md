@@ -88,5 +88,49 @@
 - **Revisit if:** Actual browser behavior permits untrusted styles or external requests.
 - **Source:** assumed — autonomous
 
+## D9: Retain actual browser diagnostics and limit platform claims to exercised surfaces
+- **Question:** What does the runtime/UI smoke prove, and is a console diagnostic a successful empty report?
+- **Options:** Suppress the diagnostic; infer native or foreign-platform clearance; retain observed application behavior with its exact limitation.
+- **Chose:** Actual standalone daemon/PTY and real client: destructive call refused before consent, count0; answer yes permitted count1; replay refused and count stayed1. Guarded web preview and resolution goals both passed. Preserve F1, Chromium's unrecognized `navigate-to` CSP directive; no claim that this unsupported directive itself enforces navigation. Sanitized inert links and the remaining sandbox/CSP fences stay unchanged. No native/Linux/Windows certification.
+- **Why:** The screenshots show the rich heading/bold/inert hostile-link text, Show/Hide transitions, an Answered/Safe summary with no pending badge, then No pending questions after expiry. No attacker-resource request failure was observed. The warning is not an observed unsafe-navigation path and is not suppressed as a symptom fix.
+- **Evidence:** `.quirk/using-apps-like-a-user/runs/20261028T220432-b789/report.json`, preview/resolution pass, F1; screenshots obs3/4/6/7/8; actual smoke READY count1/replayRefused:true; scope home `/var/folders/x5/07kj5yld16l9wd5p_v01h20c0000gp/T/quirky-test-home-9iyTbD` verified removed after service exited0. Guarded report kept_open:[], cleanup_errors:[], test_overrides:[]; omp browser tab released.
+- **Reversibility:** easy
+- **Confidence:** high for exercised browser/API paths; no universal sanitizer or native-platform proof
+- **Revisit if:** A browser exposes an actual navigation/resource path despite inert markup and empty sandbox.
+- **Source:** assumed — autonomous
+
+## D10: Preserve both incoming decision sets and use remote-only tests after the operator correction
+- **Question:** What changed during the required catch-up, and where should the final checks run?
+- **Options:** Re-audit or change other lanes' repairs; retain incoming clipboard/history contracts and use the canonical remote runner.
+- **Chose:** One clean roadmap merge after b7cc0f8b. Read both incoming logs in full: fix-native-m1-term-ui-1028 D1–D11/Progress and fix-test-packages-pty-host-1028 D1–D6/Progress. Preserve window-local clipboard acquisition, no guest/daemon authority, unchanged paste framing, real history-versus-screen lifecycle, and their pending-native/failed-broad-suite disclosures. After operator instruction, all tests run via `bun scripts/suite.ts`, including scripts.
+- **Why:** Neither incoming decision changes Ask ownership, snapshots, FIFO or summary state. The operator explicitly reported Mac overload and required remote execution, including single files.
+- **Evidence:** Single merge output; complete incoming logs; postmerge `bun scripts/suite.ts plugins/quirky.ask packages/daemon scripts && bun run typecheck`:108 remote files passed/0 failed/flaky:[],149.23s combined. Separate deterministic review prepass `bun run typecheck` passed36.273s. Earlier pre-instruction scripts126pass/0fail/1103assertions and complete UI+desktop build exited0; full desktop build disclosed missing macOS icon source and absent release.baseUrl rather than release-package certification.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** The canonical merge gate identifies a concrete interaction.
+- **Source:** locked by operator remote-test instruction
+
+## D11: Narrow snapshot reads at the SQL boundary after the final review
+- **Question:** Does the unfiltered snapshot cutover introduce a lifetime-history dependency?
+- **Options:** Accept all-history deserialization; add a new get/read method; extend the existing list method with an optional exact-ID filter.
+- **Chose:** Accept C1 and add optional `list.askId`, bound in the SQL query before deserialization. Kernel confirmations and presentation recovery request their exact Ask. Preserve pendingOnly, handoff visibility, expiry, connection-bound wait, digest and one-use checks. Migrate both daemon mocks to the same optional filter.
+- **Why:** Independent Gemini promote and fresh-context refute both upheld all-history growth. The deterministic standard gate returned NEEDS_FIXES,1 HIGH blocker,0 advisory/suppressed; it capped confidence LOW because the reviewer supplied no command reproduction. Parent then reproduced a concrete introduced consumer failure: corrupt unrelated historical spec makes a valid answered confirmation fail JSON parsing. This is a real boundary failure, not a speculative benchmark.
+- **Evidence:** review run3619b17d28874e40, artifact hash ed4e4c4d415f995a3e2a26a0ec309d1542e10e794563ac9129f4bc7de89ed439, Gemini google/gemini-3.1-pro-preview:high/full-family independence, standard promote/refute/evidence gate; remote exact-list RED run1793225601046-79240 failed params.askId not allowed; remote corrupt-history RED run1793225642738-83050 failed the added confirmation case twice with JSON Parse error in Confirmations.consume (five other cases passed). One omp fix batch owns the contract/source/mock cutover; parent owns the consumer regressions.
+- **Reversibility:** easy (optional API filter, no new method)
+- **Confidence:** high for independently reproduced history isolation defect; no measured performance threshold claimed
+- **Revisit if:** Filtered reads still deserialize unrelated history or alter unfiltered/pending/handoff behavior.
+- **Source:** supersedes fix-test-ask-1028 D3 unfiltered-snapshot choice only
+
+## D12: Close the accepted finding with real remote regression and application evidence
+- **Question:** Did the single allowed fix batch close C1 without weakening admission or hiding failures?
+- **Options:** Claim a second review PASS; leave the finding unresolved; retain the historical review result and prove the bounded source fix.
+- **Chose:** Close C1 by scoped source audit and failing-before/passing-after consumer regressions. Keep the original review NEEDS_FIXES receipt as historical evidence; no invented second review verdict. Follow LOOP's one final review plus one fix batch, then rerun the gates.
+- **Why:** The bound `id = ?` query precedes row deserialization; both production exact-ID callers and both owned mocks migrated. Final `bun scripts/suite.ts plugins/quirky.ask packages/daemon scripts && bun run typecheck && bun run build` exited0:108 remote files passed,0failed,flaky:[],148.39s combined. The new exact-list and corrupt-history confirmation regressions are in that passing gate. A separate throwaway real-daemon executable/real-host smoke passed remotely1/1file in11.42s, checking exact snapshot despite corrupt historical data, count0 before consent/count1 after, replay refusal and temporary-home cleanup. Its source was removed rather than committed.
+- **Evidence:** final fix-batch bg17 result; separate `bun scripts/suite.ts plugins/quirky.ask/test/exact-runtime-smoke.test.ts` bg18 result (success stdout is suppressed by the canonical runner, so no claim its marker text was observed); current AskService.list SQL and caller/mocks; original RED receipts under D11. Build retained the disclosed missing-icon/no-release-baseUrl messages. No accepted review finding remains open.
+- **Reversibility:** easy
+- **Confidence:** high for exercised contract, history-isolation and cleanup paths; no lifetime-volume benchmark or second review claimed
+- **Revisit if:** Canonical integration fails or another consumer proves an exact-query ownership mismatch.
+- **Source:** locked by docs/loop/LOOP.md final-round cap
+
 ## Progress
-Both scoped implementers returned and scope audit passed; no production API/schema/manifest changes. Canonical Ask + daemon confirmation suite, scripts, typecheck and build are running. Current root fixes and fixture migrations are recorded above. Next: observe gates, actual isolated daemon/UI smoke, catch up roadmap, one cross-family final review and canonical land.
+Implementation, one roadmap catch-up, independent final review and its single fix batch are complete. Final canonical remote Ask/daemon/scripts108files, typecheck/UIlint/root/mobile/prepared-desktop and full UI/desktop build passed; both added C1 regressions passed after recorded RED failures. Separate real-daemon smoke passed1/1 remotely and was removed; guarded web preview/summary goals passed with retained console F1, all owned browser/runtime resources closed. Wider consumer failures remain honestly routed under D7. All workers/reviewers/finite checks returned; no accepted review findings remain open. Ready to commit the bounded fix/receipts, detach and canonical queue land fix-test-ask-1028, await its actual result, then remove owned scratch. This is not a whole-queue completion claim.

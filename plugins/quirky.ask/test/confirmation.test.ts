@@ -138,4 +138,22 @@ describe('quirky.ask as the confirmation backend', () => {
     })
     expect(await caller.callAny('quirky.fake/wipeCount', {})).toBe(0)
   })
+
+  test('an unrelated corrupt historical Ask cannot block an exact valid confirmation', async () => {
+    const h = await startWithDestructivePlugin()
+    const caller = await connectAs(h)
+    const history = await caller.callAny('quirky.ask/create', { spec: { questions: [{ id: 'old', type: 'confirm', question: 'Old question?' }] } }) as { askId: string }
+    await caller.callAny('quirky.ask/cancel', { askId: history.askId })
+    const refused = await errorOf(caller.callAny('quirky.fake/wipe', {}))
+    const { askId } = confirmationOf(refused)
+    await caller.callAny('quirky.ask/answer', { askId, answers: { confirm: { value: true, source: 'input' } } })
+    const database = new Database(join(h.home, 'plugin-data', 'quirky.ask', 'store.db'))
+    try {
+      database.query('UPDATE asks SET spec = ? WHERE id = ?').run('{invalid-history', history.askId)
+    } finally {
+      database.close()
+    }
+    expect(await caller.callAny('quirky.fake/wipe', { confirmation: askId })).toEqual({ wiped: true })
+    expect(await caller.callAny('quirky.fake/wipeCount', {})).toBe(1)
+  })
 })

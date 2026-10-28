@@ -270,6 +270,9 @@
           "properties": {
             "pendingOnly": {
               "type": "boolean"
+            },
+            "askId": {
+              "type": "string"
             }
           }
         },

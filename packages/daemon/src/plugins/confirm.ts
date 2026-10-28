@@ -127,7 +127,7 @@ export class Confirmations {
 
     let asks: Ask[]
     try {
-      asks = (await this.call(ASK_LIST, {}, { kernel: true })) as Ask[]
+      asks = (await this.call(ASK_LIST, { askId }, { kernel: true })) as Ask[]
     } catch (error) {
       throw isMethodNotFound(error) ? conflict(ASKS_OFF) : error
     }

@@ -96,15 +96,17 @@ function setup(options: { asks?: boolean; kernelDescribers?: Record<string, Kern
     }
     methods['quirky.ask/list'] = {
       data: { params: { type: 'object', additionalProperties: true }, readOnly: true },
-      run: () => [...asks].map(([askId, ask]) => ({
-        id: askId,
-        envelope: {
-          status: ask.status,
-          askId,
-          answers: ask.status === 'answered' ? { confirm: { value: ask.value, source: 'input' } } : {},
-          skipped: []
-        }
-      }))
+      run: (params) => [...asks]
+        .filter(([askId]) => params.askId === undefined || params.askId === askId)
+        .map(([askId, ask]) => ({
+          id: askId,
+          envelope: {
+            status: ask.status,
+            askId,
+            answers: ask.status === 'answered' ? { confirm: { value: ask.value, source: 'input' } } : {},
+            skipped: []
+          }
+        }))
     }
   }
   const handlers = {

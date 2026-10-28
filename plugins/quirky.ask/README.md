@@ -11,13 +11,13 @@
 | `quirky.ask/wait` | `{askId, timeoutMs?}` | Connection-bound client wait. Returns a terminal envelope, or `pending` after a chunk. Each call is capped at 60,000 ms; `timeoutMs: 0` reads immediately. Handoff waits preserve the authenticated caller and revalidate the same Dispatch. |
 | `quirky.ask/answer` | `{askId, answers, skipped?}` | Validates and commits the submitted answer envelope. Handoff questions must be answered by the exact coordinator question. |
 | `quirky.ask/cancel` | `{askId}` | Declines a still-pending local ask; a finished ask is returned unchanged. Handoff questions are controlled by their coordinator. |
-| `quirky.ask/list` | `{pendingOnly?}` | Lists local asks in creation order; pending rows identify whether they are queued. Mobile can inspect handoff status. |
+| `quirky.ask/list` | `{pendingOnly?, askId?}` | Lists local asks in creation order; `askId` selects only that row before deserialization and composes with `pendingOnly`. Unknown IDs return `[]`. Pending rows identify whether they are queued. Mobile can inspect handoff status. |
 | `quirky.ask/updatePartial` | `{askId, partial}` | Replaces the saved draft while the ask remains pending. |
 | `quirky.ask/expire` | `{askId}` | Applies the stored timeout defaults/drafts and resolves the ask as timed out. |
 
 At most **four** `wait` calls may park concurrently in one AskService. Overflow is shed without changing the ask and returns RPC `Conflict` (`-32009`) with `data.reason: "runtime_busy"`. The CLI recognizes that typed reason and retries with a bounded delay while preserving `--chunk-ms` and `--timeout-ms`; it does not treat capacity pressure as a dropped connection. Closing the caller connection aborts only that wait and releases its slot; the durable ask remains pending.
 
-Kernel confirmations inspect the exact Ask's durable envelope through `quirky.ask/list`, not the connection-bound wait API. Only an answered `confirm: true` authorizes the bound action; pending, declined, timed-out, unavailable, or expired/missing asks refuse it. The action digest and one-time consumption checks still apply to both client-originated and plugin-originated destructive calls.
+Kernel confirmations inspect the exact Ask's durable envelope through `quirky.ask/list {askId}`, not the connection-bound wait API or the full historical list. Unrelated historical rows cannot block the read. Only an answered `confirm: true` authorizes the bound action; pending, declined, timed-out, unavailable, or expired/missing asks refuse it. The action digest and one-time consumption checks still apply to both client-originated and plugin-originated destructive calls.
 
 CLI forms are `quirky ask --spec <json|@file> [--timeout-ms N] [--chunk-ms N]`, `quirky ask wait --id <askId> [--timeout-ms N] [--chunk-ms N]`, and `quirky ask cancel --id <askId>`. The spec permits up to 10 questions and 12 options per select/multiselect, with types `select`, `multiselect`, `text`, `number`, `date`, and `confirm`.
 
