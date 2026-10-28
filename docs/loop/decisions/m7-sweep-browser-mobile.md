@@ -77,5 +77,82 @@
 - **Revisit if:** An authorized native run supplies real device/OS evidence.
 - **Source:** deferred: platform
 
+## D8: Surface and repair cross-worktree contamination before accepting the wave
+- **Question:** Can worker-reported completion override a relative-path write into the integration tree?
+- **Options:** Ignore the location mistake; discard the work; pause, relocate exact owned hunks and restore the clean integration baseline.
+- **Chose:** Pause PhoneLinks after its relative edits hit root SettingsScreen, TerminalView and SessionPage. Give it narrow temporary recovery authority over only those self-authored hunks: transplant into its component and restore root to a9ceffd6, then recapture before resuming. BrowserAcceptance separately reported two early root test edits (extras-automation and design-runtime), restored to exact prior contents, and now uses absolute paths. MobileContracts confirmed no root edits. All future writes require absolute component paths; parent performs authoritative HEAD/path audit after every writer stops.
+- **Why:** Tool cwd did not follow the worker's intended worktree. Correct content in the wrong tree still violates isolation and must not be silently integrated. The three root phone files were clean before the worker wrote; no user changes are removed.
+- **Evidence:** PhoneLinks and BrowserAcceptance incident messages; parent exact root diff; root baseline a9ceffd6; recovery receipt and final wave scope audit remain required. Parent Eval transfer calls aborted before execution, so no transfer success is claimed from them.
+- **Reversibility:** easy
+- **Confidence:** high for reported/diff-observed incident; restoration is not accepted until the receipt/audit
+- **Revisit if:** Any additional root or cross-component path appears at the barrier; stop and replan that scope.
+- **Source:** assumed — autonomous
+
+## D9: Reclaim page-owned resources without closing the persistent phone RPC
+- **Question:** Does page/route teardown release terminal input and Watch leases when the native client keeps its connection?
+- **Options:** Close the shared connection; reorder React unmount only; reclaim exact page-owned results in the native bridge host, including late completions.
+- **Chose:** Preserve close():void and immediate delivery shutdown; track/release exact stream and Watch identities through the captured original RPC. Handle late create/attach and connection replacement. A newer host adopting the same connection-owned Watch lease must not be stopped by older cleanup. No generic authority, shared-RPC close, guessed IDs or automatic mutation replay. MobileContracts owns only shell/resource tests, disjoint from PhoneLinks.
+- **Why:** Reordering unmount cannot recover an in-flight acquisition whose reply is dropped. Closing the shared native RPC would disrupt unrelated consumers. Source inspection plus actual public runtime state confirms the leak.
+- **Evidence:** web-entry/main.ts68-74; page-bridge.ts91-110,237-246; bridge-host.ts114-118,178-184,291-299; HostPageShell158-164; runtime754-759; broker connection.onClose. Actual /tmp/quirky-l7-bridge-lifecycle.ts output: realDaemon,realEncryptedPhone,realChrome true; fixturePty true; leakedWatch,leakedTerminal,phoneStillConnected true; cleanup homeRemoved true; exit0 in2.79s.
+- **Reversibility:** medium
+- **Confidence:** high for reproduced leak; repair remains to verify
+- **Revisit if:** Native RPC ownership or the producer's lease identity semantics change.
+- **Source:** assumed — autonomous
+
+## D10: Record the short-viewport Tasks outcome without claiming a real phone keyboard
+- **Question:** Does the current Tasks layout reproduce the documented clipped/shifted composer defect in the web surface?
+- **Options:** Change CSS on inference; exercise the shipped page at short phone dimensions; infer native success.
+- **Chose:** Run real daemon/encrypted bridge/shipped Tasks page against the stateful GitHub fixture at390x350. Issue22, Create Workspace, edited field, Cancel, return to list, Open filter and Cancel all produced the intended visible outcome with bounded fields/footer and restored header. No Tasks CSS change justified. Keep real keyboard native handoff pending.
+- **Why:** All visible outcomes were observed; headless short viewport is not iOS/Android keyboard behavior. Initial issue-card refs returned STALE twice; the observed visible-card coordinate succeeded rather than relabeling those attempts as passes.
+- **Evidence:** likeuser web run20261028T212606-3c08 report.md, tasks-short pass with obs5/6/8/9/10; missing favicon404 console finding retained. Fixture uses fake upstream GitHub and fixture PTY, not real hosting credentials. lane7.sweep.tasks exited0; TASKS_SMOKE_CLEANUP fixtureRootRemoved/fixtureHomeRemoved true,failures[].
+- **Reversibility:** easy
+- **Confidence:** high for exercised web layout only
+- **Revisit if:** Real native keyboard run reproduces layout movement.
+- **Source:** deferred: platform
+
+## D11: Yield overlapping app fixtures to lane8 and consume its committed patch
+- **Question:** How should the newly claimed fix-test-apps-mobile-1028 overlap be resolved?
+- **Options:** Land competing fixture repairs; make lane8 wait for this whole sweep; retain one owner per file and consume its isolated test commit.
+- **Chose:** Per lane8's explicit coordination, it owns bundle/shell/pages/terminal-artifacts and panels/files-tasks test fixtures plus the single app session-tabs macOS runner marker. MobileContracts restores its own duplicate five-file diffs without discarding its production plugin and new lifecycle tests. Parent removes only its duplicate app marker; retains five Browser/mobile-plugin Chrome markers. Consume lane8's published test patch before acceptance; no dependence on its full item. PhoneLinks additions inside session-tabs test source remain lane7-owned because lane8 owns only that file's runner marker.
+- **Why:** Newly assigned work must not duplicate repairs or auto-combine independently authored versions. The confirmed page-resource leak and PhoneLinks production remain distinct work.
+- **Evidence:** User coordination interjection after triage; /tmp/quirky-lane7-mobile-repair-coordination.md reply; MobileContracts/BrowserAcceptance steering and parent marker removal.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** The published patch names different paths or a shared production defect requires coordination.
+- **Source:** locked by user lane8 coordination
+
+## D12: Consume committed owner patches and route all further tests through the suite
+- **Question:** How do simultaneous end-phase repairs and the overloaded Mac change verification?
+- **Options:** Duplicate fixtures; copy foreign uncommitted files; consume published commits with explicit path ownership.
+- **Chose:** Lane8's 3bd03d81/714795ea/6a9f9030/b54e70e5/e1a4f78b/0c266a03 are consumed as de6285af/4b03f2d0/d4ff7451/c6343b2d/5e08700f/bd5ef5f7. Keep both additive runner lists and imported author decision log. Existing app Watch uses preserved real Bun transport/HTTP/abort/timers, real JPEG load and faithful WheelEvent coordinates; inner deadline unchanged. Parent priority publications61f3f9de (five markers) and d34de2be (harness dependency) were made before overlapping owner messages; retain user-authoritative harness order at integration. Lane5 owns UI-copy/Settings/import fixtures; restore our duplicates and consume its committed repairs. Every later test, including one file, uses suite.ts, with only listed macOS cases local.
+- **Why:** User coordination and operator routing override competing edits and direct local test commands. No production auth, sandbox or dependency bypass is justified by a simulated DOM fixture.
+- **Evidence:** User receipts and /tmp/quirky-lane7-mobile-repair-coordination.md; lane5 checkpoint ebec3ad5/af5fa2fc/04b0d49d/1f60a947; root scoped marker proof18pass0fail before operator note; user fixture acceptance is not our final combined acceptance.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** A published patch changes another owner's production contract.
+- **Source:** locked by user lane8/lane5 coordination and operator test-routing note
+
+## D13: Repair the pinned helper dialect, not Browser authority or production deadlines
+- **Question:** What caused actual select-all/pointer failures and the network/emulation assertions?
+- **Options:** Repin expected failures; widen generic helper access; align the existing typed adapter with the pinned dispatcher and correct observable fixture semantics.
+- **Chose:** macOS selectAll uses the existing CDP editing-command table. Mouse names/fields match agent-browser0.27.0; drag uses source/target selectors. Native helper calls are audited against pinned dispatch/handler source. Tests wait for actual wheel delivery, distinguish GET200 from OPTIONS204, and serve responsive metadata from the actual fixture source across profile reload. Parent published5e57ad16 only for the proven scoped checkpoint; the later drag patch remains under acceptance. No production viewport, timeout, transport classifier or permission workaround.
+- **Why:** Successive runs reached deeper actual operations rather than proving the entire case green. Missing viewport metadata legitimately produces a980px layout; an action ACK does not guarantee the compositor has delivered a wheel event.
+- **Evidence:** Mac baseline artifact59; repaired mixed-DOM design fixture and8pass2fail artifact131; later suite4pass1fail54asserts at drag; checkpoint /tmp/quirky-lane5-automation-checkpoint.json. After source/target repair SC5 progressed to a33s CDP-transport-loss label while SC6/SC7 passed; causal stage tracing is required before another fix.
+- **Reversibility:** medium
+- **Confidence:** high for observed helper/fixture mismatches; remaining transport-loss cause unproven
+- **Revisit if:** The pinned helper version changes or traced failure contradicts the adapter contract.
+- **Source:** assumed — autonomous
+
+## D14: Verify page-resource reclamation through actual encrypted producer state
+- **Question:** What does the S6 repair prove beyond mock forwarding?
+- **Options:** Keep only RPC-call assertions; close the shared connection; retain race/security tests plus real daemon/Chrome ownership evidence.
+- **Chose:** Keep the actual encrypted page lifecycle regression, route it to installed macOS Chrome, and remove a redundant mock-only close/forwarding test. Portable race/error tests cover pending close/rebind, same-lease adoption, foreign IDs, failed acknowledgements and reply delivery. Parent repaired the missing pendingStreamAttachments declaration reported by the first real portable run; it retains existing32-stream admission.
+- **Why:** A closed page cannot rely on its own cleanup call reaching a now-closed bridge. Resource identity must be retained by the native host before late-response rejection without disconnecting unrelated consumers.
+- **Evidence:** first portable run7pass6fail due undeclared counter; after counter fix suite bridge-resources1filePASS remotely18.44s; real page-bridge-lifecycle suite1macOSfilePASS11.53s, using actual daemon+encrypted phone+Chrome, fixture PTY, and shared RPC still connected. No default-keychain or native phone claim.
+- **Reversibility:** medium
+- **Confidence:** high for exercised release/state paths; full combined suite and final security review remain
+- **Revisit if:** A final race regression or real page navigation retains or steals a lease.
+- **Source:** assumed — autonomous
+
 ## Progress
-Oriented, read source docs and locked rules, mapped every feature category with one read-only scout. Baseline production build passed; baseline suite failures captured. Logic/technical contracts self-reviewed; next commit specs/contracts, dispatch3disjoint implementers in /tmp worktrees, integrate, run final tests/runtime/UI, catch up once, review and land. No completion pass yet.
+Owner patches for app fixtures consumed. PhoneLinks and MobileContracts passed their focused suite-routed checks; real encrypted terminal/Watch teardown now passes. Parent scope audit found and removed three residual duplicate app-fixture hunks; inherited metadata remains untouched. Browser runtime acceptance is4pass1fail with the remaining SC5 transport-loss stage under disposable tracing. Root deliberate published/intake HEAD isbd5ef5f7; component HEADs are recorded separately. No final completion claim. Next: finish Browser cause/fix, consume lane5 UI/import checkpoints, commit/merge audited components, catch up once, run combined gates and actual web smoke, final cross-family review/fix batch, then land.

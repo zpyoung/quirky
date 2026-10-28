@@ -13,3 +13,4 @@ plugins/quirky.browser/test/extras-api.test.ts  public profile/cookie API integr
 plugins/quirky.browser/test/extras-cli.test.ts  CLI fill and import acceptance launches installed macOS Chrome; remote host has no Chrome/Chromium
 plugins/quirky.mobile/test/browser-watch.test.ts  owned phone Watch frames/input require installed macOS Chrome; remote host has no Chrome/Chromium
 apps/mobile/test/session-tabs.test.tsx  Browser Watch scrolls a real page through the owned macOS Chrome harness; the remote Linux host has no Chrome/Chromium
+plugins/quirky.mobile/test/page-bridge-lifecycle.test.ts  real encrypted phone page teardown exercises installed macOS Chrome; remote host has no Chrome/Chromium

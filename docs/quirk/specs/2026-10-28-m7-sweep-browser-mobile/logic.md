@@ -3,6 +3,8 @@
 ## Status & amendments
 Approved autonomously 2026-10-28 under LOOP.md; no person is watching. End phase is active: canonical queue shows m7-test-triage claimed by lane 8. Logic and technical sibling specify the sweep; no behavior pass is inferred from compilation.
 
+**Amendments:** 2026-10-28: actual production bridge/daemon/encrypted-phone/Chrome reproduction confirmed page teardown retains Watch and terminal input leases while the native RPC stays connected. S6 makes page resource reclamation explicit; no product boundary or public RPC is widened.
+
 ## Purpose and conceptual model
 A paired phone and the desktop use the existing public plugin APIs. A terminal link belongs to its current workspace; its destination is an explicit phone preference. Choosing desktop means a newly created managed Chrome Watch page, not a replacement Native page. The daemon remains authoritative for tabs, consent, session ownership and filesystem revisions. This sweep inventories every feature-doc category, completes reachable gaps, repairs observed regressions, and preserves real external prerequisites rather than manufacturing parity.
 
@@ -51,6 +53,13 @@ Run scoped browser automation, profile/import replacement and rollback, pane/des
 
 ### S5 Existing mobile behavior and source defects
 Run encrypted pairing/revoke/allowlist/bundle/session/Markdown/Watch and panels acceptance. Migrate real producer contract changes without removing consent or provenance. Actual setup and issue-command pins are independently displayed and passed; stale consent cannot execute changed scripts. Verified bundle generations support their declared routes, reject unknown capabilities/grants, preserve prior valid generation on failed update, and do not weaken admission for a fixture. Phone Tasks create/cancel and filters remain bounded at narrow and short keyboard-like viewports without persistent layout shift. Dirty drafts remain after conflicts/cancel and disconnected pages cannot mutate. Test actual daemon/UI outcomes rather than mock echo/wiring.
+
+### S6 Closing a page releases its resources, not the shared phone connection
+- Given a phone page with terminal stream T and Watch lease B, closing or replacing that page immediately stops page delivery and releases exactly T/B. The shared authenticated phone connection remains usable. If create/attach finishes after close or connection replacement, its result is reclaimed through the original owning connection rather than lost with the pending reply.
+- A later page adopting the same actual Watch lease must retain it when an older page closes or receives a late result. Cleanup cannot stop another page's new stream/lease, guess IDs, retry a mutation or close the shared RPC.
+- Data before: **Phone connection** P is live; **Old page** owns T/B; **New page** may independently own T2 or adopt B.
+- Walkthrough: the old page closes while one acquisition is pending; the original producer finishes.
+- Data after: **Old page** has no input/streaming authority; its unshared resources are released; **Phone connection** P and **New page** resources remain live.
 
 ## Verification and retained limits
 Use fresh disposable HOME/QUIRKY_HOME for every process and clean it; no real credentials, external posting or home configuration. Run bun run build, bun run typecheck, bun test scripts, affected suite.ts groups and actual web dogfood via --surface web --owner yours --unattended. Native-only OS behavior is not established by web screenshots. Existing blocked owner items are retained, not duplicated as a new testing follow-up. Any genuinely new unbuilt flow may be captured in at most one implementation-only successor before land.
