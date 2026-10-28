@@ -297,5 +297,27 @@
 - **Revisit if:** canonical land or native handoff exposes a failure.
 - **Source:** assumed — autonomous
 
+## D28: Follow canonical landing retry rules after a concurrent dependency conflict
+- **Question:** first land refused the feature's merge with the newer roadmap before running its tests.
+- **Options:** bypass the queue; discard another feature's dependencies; merge the canonical branch and reverify.
+- **Chose:** required retry merge. Preserve Expo plist/transitive entries and incoming Browser design pngjs7 plus qrcode's nested pngjs5; do not edit protected loop code or weaken verification. MobileRetryBindings read all five newly incoming logs fully: fix-flaky-daemon-pty-client D1–D9, hosting-api-github-parity D1–D21, structured-runner D1–D53, heimdall-control D1–D16 and browser-design-mode D1–D37. No mobile binding conflict. Re-run affected directories and root/mobile typing on the resolved merge before retrying land.
+- **Why:** other lanes landed while this item verified. The new PTY retirement fix does not satisfy reversible mobile Sleep, and Browser design does not supply mobile-safe Browser tabs.
+- **Evidence:** first canonical land bg25 refused after261.41s; feature checkpoint32cd60fa; bun.lock conflict blocks; MobileRetryBindings full report. The merged queue confirms sb-mobile-app-prerequisites status todo with this item's dependency.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** the merged gate fails.
+- **Source:** locked by docs/loop/LOOP.md
+
+## D29: Land now under the operator's build-first, end-phase testing directive
+- **Question:** the operator moved all suites, debugging, dogfood and review work to the end phase while this item was retrying landing.
+- **Options:** continue investigating the shell-path gate; obey the new typecheck-only landing rule.
+- **Chose:** stop testing and debugging immediately. Latest merged source5a3ddce3 already passed bun run typecheck, including mobile, in75.99s. Commit this receipt and retry canonical land, which now checks typecheck only. Keep the one existing follow-up solely for unbuilt flows; add no test/debug/review item.
+- **Why:** new authoritative LOOP.md Build first, test at the end and the direct operator instruction override earlier gate requirements. Historical failed tests remain failed, not waived passes.
+- **Evidence:** retry affected run235/236remote plus2/2mac passed; shell-path.test.ts guardian bootstrap hooks failed after15passing cases and repeated in its isolated retry. GuardianStartupDiagnosis found no proven cause; read-only remote inventory showed4zombies, not evidence of exhaustion. One attempted diagnostic preload exited127 because remote noninteractive PATH lacked bun, so it ran no tests and changed no source. No shell-path/process-scope repair was applied. This evidence belongs to m7-test-triage, not a new follow-up.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the typecheck-only canonical land fails.
+- **Source:** locked by docs/loop/LOOP.md Build first, test at the end; supersedes D28's test-gate requirement
+
 ## Progress
-All own gates are closed cumulatively as D26–D27 record; source, docs, decision and native handoff updates are ready. One grouped follow-up sb-mobile-app-prerequisites is being registered through the canonical queue before landing. Guarded/browser proof and owned surface cleanup are complete. Commit only the named feature paths, detach, run absolute queue land sb-mobile-app and await the whole merged gate. No active workers or app services remain; N1–N6 remain native pending. No wholequeue completion marker.
+Operator build-first override applied: tests/debugging stopped, no additional test/review follow-up. Resolved concurrent merge5a3ddce3 passes root/mobile typecheck75.99s; shell-path guardian failure retained for the end phase without a source fix or passing claim. One unbuilt-flow follow-up is registered. Commit this receipt, detach and retry absolute queue land sb-mobile-app under its typecheck-only gate, then clean owned scratch and end this one-item iteration. No active agents/services remain; native N1–N6 pending.
