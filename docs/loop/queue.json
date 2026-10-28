@@ -1902,8 +1902,7 @@
       "title": "Fix the native-only failures in m3-accounts from the 2026-10-28 run: AC6-AC7-native-link",
       "docs": [],
       "deps": [],
-      "status": "in-progress",
-      "lane": 12
+      "status": "done"
     },
     {
       "id": "fix-native-m3-vault-1028",
