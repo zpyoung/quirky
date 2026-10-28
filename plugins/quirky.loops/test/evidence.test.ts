@@ -79,6 +79,7 @@ const loop = (cwd: string, patch: Partial<LoopSnapshot> = {}): LoopSnapshot => (
   agent: 'claude', preset: 'until-done', config: config(), state: 'running', pauseReason: null, pauseDetail: null,
   sessionId: 'session-1', iterationsCompleted: 0, activeMs: 0, costUsd: 0, phase: null, nextIterationAt: null,
   createdAt: 1, updatedAt: 1, endedAt: null, notesPath: join(cwd, '.quirky', 'loops', 'evidence-test', 'notes.md'), warnings: [], recentIterations: [],
+  queueItems: [], skippedTicks: 0,
   ...patch
 })
 

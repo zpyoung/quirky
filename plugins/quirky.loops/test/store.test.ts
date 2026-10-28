@@ -76,7 +76,9 @@ function snapshot(): LoopSnapshot {
     endedAt: null,
     notesPath: '/tmp/workspace/.quirky/loops/feature-loop-a/notes.md',
     warnings: [],
-    recentIterations: []
+    recentIterations: [],
+    queueItems: [],
+    skippedTicks: 0
   }
 }
 
