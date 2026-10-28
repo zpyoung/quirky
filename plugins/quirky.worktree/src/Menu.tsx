@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { Menu as SharedMenu, type MenuItem as SharedMenuItem } from '@quirky/ui'
 import type { ProjectGroup, Repo, Worktree, WorktreeStatus } from '@quirky/protocol'
 import type { WorktreeStatusDefinition } from './parity-types'
 import type { DialogState } from './report'
@@ -24,91 +24,33 @@ export type MenuItem = {
   current?: boolean
 }
 
-type Props = {
-  /** Viewport position of the menu's top-left corner. */
+function sharedMenuItems(items: readonly MenuItem[], prefix = ''): SharedMenuItem[] {
+  return items.map((item, index) => ({
+    id: `${prefix}${index}`,
+    label: item.label,
+    onAction: item.onSelect,
+    disabled: item.disabled,
+    title: item.title,
+    current: item.current,
+    submenu: item.submenu ? sharedMenuItems(item.submenu, `${prefix}${index}.`) : undefined
+  }))
+}
+
+/** A menu opened at a screen position; shared Menu owns focus, dismissal and placement. */
+export function ContextMenu({ x, y, label, items, onClose }: {
   x: number
   y: number
   label: string
   items: MenuItem[]
   onClose(): void
-}
-
-const MENU_WIDTH = 220
-
-function Items({ items, onPick }: { items: MenuItem[]; onPick(item: MenuItem): void }) {
-  const [open, setOpen] = useState<number | null>(null)
+}) {
   return (
-    <>
-      {items.map((item, index) => (
-        <li key={item.label} role="none" title={item.title}>
-          <button
-            role="menuitem"
-            disabled={item.disabled}
-            title={item.title}
-            data-current={item.current ? '' : undefined}
-            aria-haspopup={item.submenu ? 'menu' : undefined}
-            aria-expanded={item.submenu ? open === index : undefined}
-            onClick={() => (item.submenu ? setOpen(open === index ? null : index) : onPick(item))}
-          >
-            {item.label}
-            {item.submenu && (
-              <span className="menu-arrow" aria-hidden>
-                ▸
-              </span>
-            )}
-          </button>
-          {item.submenu && open === index && (
-            <ul className="menu-sub" role="menu" aria-label={item.label}>
-              <Items items={item.submenu} onPick={onPick} />
-            </ul>
-          )}
-        </li>
-      ))}
-    </>
-  )
-}
-
-/** A menu opened at a screen position; Escape, a click outside or picking an item closes it. */
-export function ContextMenu({ x, y, label, items, onClose }: Props) {
-  const root = useRef<HTMLUListElement>(null)
-  const close = useRef(onClose)
-  close.current = onClose
-
-  useEffect(() => {
-    const enabled = () => [...(root.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? [])]
-    enabled()[0]?.focus()
-    const onDown = (event: MouseEvent) => {
-      if (!root.current?.contains(event.target as Node)) close.current()
-    }
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') return close.current()
-      if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
-      const buttons = enabled()
-      if (buttons.length === 0) return
-      event.preventDefault()
-      const at = buttons.indexOf(document.activeElement as HTMLButtonElement)
-      const step = event.key === 'ArrowDown' ? 1 : -1
-      buttons[(at + step + buttons.length) % buttons.length]!.focus()
-    }
-    window.addEventListener('mousedown', onDown)
-    window.addEventListener('keydown', onKey)
-    return () => {
-      window.removeEventListener('mousedown', onDown)
-      window.removeEventListener('keydown', onKey)
-    }
-  }, [])
-
-  const left = Math.max(0, Math.min(x, window.innerWidth - MENU_WIDTH))
-  return (
-    <ul ref={root} className="menu menu-context" role="menu" aria-label={label} style={{ left, top: y }}>
-      <Items
-        items={items}
-        onPick={(item) => {
-          onClose()
-          item.onSelect?.()
-        }}
-      />
-    </ul>
+    <SharedMenu
+      label={label}
+      items={sharedMenuItems(items)}
+      position={{ x, y }}
+      onClose={onClose}
+    />
   )
 }
 
@@ -135,11 +77,7 @@ export function workspaceMenu(
   groups: ProjectGroup[],
   repo: Repo | undefined,
   on: WorkspaceMenuHandlers,
-  statuses: readonly WorktreeStatusDefinition[] = Object.entries(STATUS_LABELS).map(([id, label]) => ({
-    id,
-    label,
-    color: '#777777'
-  }))
+  statuses: readonly WorktreeStatusDefinition[] = Object.entries(STATUS_LABELS).map(([id, label]) => ({ id, label, color: 'var(--ui-muted)' }))
 ): MenuItem[] {
   const del: MenuItem = worktree.isMain
     ? { label: 'Delete', disabled: true, title: PRIMARY_DELETE_TIP }

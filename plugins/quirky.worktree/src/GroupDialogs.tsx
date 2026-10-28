@@ -1,8 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import type { ProjectGroup, Repo, UiPluginContext } from '@quirky/protocol'
+import { Button, Dialog, TextField } from '@quirky/ui'
 import { changeGroup } from './actions'
 import { expectedLedgerSnapshots, ledgerRetentionNotice, previewLedgerRemoval, type LedgerRemovalPreview } from './ledger'
-import { Dialog } from './Dialog'
 import { repoLabel } from './report'
 
 type NameFormProps = {
@@ -29,26 +29,25 @@ function NameForm({ title, submitLabel, initial, hint, onSubmit, onClose }: Name
   }
 
   return (
-    <Dialog title={title} onClose={onClose}>
-      {hint && <p className="muted">{hint}</p>}
-      <form className="form" onSubmit={submit}>
-        <label>
-          <span>Group name</span>
-          <input
-            type="text"
-            autoFocus
-            value={name}
-            onFocus={(event) => event.currentTarget.select()}
-            onChange={(event) => setName(event.target.value)}
-          />
-        </label>
-        <div className="dialog-actions">
-          <button type="button" onClick={onClose}>
+    <Dialog open title={title} onClose={onClose}>
+      {hint && <p className="ui-text-muted">{hint}</p>}
+      <form className="ui-stack" onSubmit={submit}>
+        <TextField
+          type="text"
+          label="Group name"
+          id="project-group-name"
+          autoFocus
+          value={name}
+          onFocus={(event) => event.currentTarget.select()}
+          onChange={(event) => setName(event.target.value)}
+        />
+        <div className="ui-actions">
+          <Button type="button" onClick={onClose}>
             Cancel
-          </button>
-          <button type="submit" className="primary" disabled={busy || !trimmed}>
+          </Button>
+          <Button type="submit" variant="primary" disabled={busy || !trimmed}>
             {submitLabel}
-          </button>
+          </Button>
         </div>
       </form>
     </Dialog>
@@ -181,16 +180,16 @@ export function DeleteGroupDialog({ context, group, onClose }: { context: UiPlug
   }
   const retention = ledgerRetentionNotice(preview ?? null)
   return (
-    <Dialog title="Delete Project Group" onClose={onClose}>
-      <p className="dialog-message">{`Delete the group ${group.name}? Projects in this group stay in Quirky.`}</p>
-      {retention && <p className="dialog-message">{retention}</p>}
-      {preview === undefined && !previewError && <p className="muted">Checking retained ledger records…</p>}
-      {previewError && <p className="error" role="alert">Could not check retained ledger records: {previewError} <button type="button" onClick={() => setRetry((value) => value + 1)}>Retry</button></p>}
-      <div className="dialog-actions">
-        <button type="button" onClick={onClose}>Cancel</button>
-        <button type="button" className="primary" autoFocus disabled={busy || preview === undefined || Boolean(previewError)} onClick={() => void remove()}>
+    <Dialog open title="Delete Project Group" onClose={onClose}>
+      <p className="ui-text-muted">{`Delete the group ${group.name}? Projects in this group stay in Quirky.`}</p>
+      {retention && <p className="ui-text-muted">{retention}</p>}
+      {preview === undefined && !previewError && <p className="ui-text-muted" role="status">Checking retained ledger records…</p>}
+      {previewError && <p className="ui-error-text" role="alert">Could not check retained ledger records: {previewError} <Button type="button" onClick={() => setRetry((value) => value + 1)}>Retry</Button></p>}
+      <div className="ui-actions">
+        <Button type="button" onClick={onClose}>Cancel</Button>
+        <Button type="button" variant="destructive" autoFocus disabled={busy || preview === undefined || Boolean(previewError)} onClick={() => void remove()}>
           Delete Group
-        </button>
+        </Button>
       </div>
     </Dialog>
   )

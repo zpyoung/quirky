@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
-import { Dialog } from './Dialog'
+import { Button, Dialog, TextField } from '@quirky/ui'
 import { isSafeIcon } from './safe-icon'
 import { DEFAULT_WORKTREE_STATUSES } from './daemon/statuses'
 import type { WorktreeStatusDefinition } from './parity-types'
@@ -39,39 +39,59 @@ export function StatusSettingsDialog({ context, statuses, onClose, onSaved }: Pr
   }
 
   return (
-    <Dialog title="Workspace statuses" onClose={onClose}>
-      <div className="form">
+    <Dialog open title="Workspace statuses" onClose={onClose}>
+      <div className="ui-stack">
         {draft.map((status, index) => (
-          <fieldset key={`${status.id}-${index}`} className="form-group">
+          <fieldset key={`${status.id}-${index}`} className="ui-stack">
             <legend>{status.label || status.id || `Status ${index + 1}`}</legend>
-            <label>
-              <span>Status ID</span>
-              <input aria-label={`Status ID ${index + 1}`} value={status.id} disabled={BUILTIN_IDS[status.id] === true} onChange={(event) => update(index, 'id', event.target.value)} />
-            </label>
-            <label>
-              <span>Status label</span>
-              <input aria-label={`Status label ${index + 1}`} value={status.label} onChange={(event) => update(index, 'label', event.target.value)} />
-            </label>
-            <label>
-              <span>Status color</span>
-              <input aria-label={`Status color ${index + 1}`} value={status.color} onChange={(event) => update(index, 'color', event.target.value)} />
-            </label>
-            <label>
-              <span>Status icon/avatar</span>
-              <input aria-label={`Status icon ${index + 1}`} value={status.icon ?? ''} maxLength={32} onChange={(event) => update(index, 'icon', event.target.value)} placeholder="Emoji or symbol" />
-              <small className="muted">Plain-text emoji or symbols only; URLs, SVG and HTML are rejected.</small>
-            </label>
-            {BUILTIN_IDS[status.id] !== true && <button type="button" disabled={busy} onClick={() => setDraft((current) => current.filter((_, row) => row !== index))}>Remove status</button>}
+            <TextField
+              label="Status ID"
+              id={`status-${index}-id`}
+              aria-label={`Status ID ${index + 1}`}
+              value={status.id}
+              disabled={BUILTIN_IDS[status.id] === true}
+              onChange={(event) => update(index, 'id', event.target.value)}
+            />
+            <TextField
+              label="Status label"
+              id={`status-${index}-label`}
+              aria-label={`Status label ${index + 1}`}
+              value={status.label}
+              onChange={(event) => update(index, 'label', event.target.value)}
+            />
+            <TextField
+              label="Status color"
+              id={`status-${index}-color`}
+              aria-label={`Status color ${index + 1}`}
+              value={status.color}
+              onChange={(event) => update(index, 'color', event.target.value)}
+              help="Stored color data remains editable; the interface uses shared semantic colors."
+            />
+            <TextField
+              label="Status icon/avatar"
+              id={`status-${index}-icon`}
+              aria-label={`Status icon ${index + 1}`}
+              value={status.icon ?? ''}
+              maxLength={32}
+              onChange={(event) => update(index, 'icon', event.target.value)}
+              placeholder="Emoji or symbol"
+              help="Plain-text emoji or symbols only; URLs, SVG and HTML are rejected."
+            />
+            {BUILTIN_IDS[status.id] !== true && (
+              <Button type="button" variant="destructive" disabled={busy} onClick={() => setDraft((current) => current.filter((_, row) => row !== index))}>
+                Remove status
+              </Button>
+            )}
           </fieldset>
         ))}
-        <button type="button" disabled={busy} onClick={() => setDraft((current) => {
+        <Button type="button" disabled={busy} onClick={() => setDraft((current) => {
           let suffix = current.length + 1
           while (current.some((status) => status.id === `custom-${suffix}`)) suffix += 1
-          return [...current, { id: `custom-${suffix}`, label: 'Custom status', color: '#777777' }]
-        })}>Add status</button>
-        <div className="dialog-actions">
-          <button type="button" disabled={busy} onClick={onClose}>Cancel</button>
-          <button type="button" className="primary" disabled={busy} onClick={() => void save()}>Save statuses</button>
+          return [...current, { id: `custom-${suffix}`, label: 'Custom status', color: DEFAULT_WORKTREE_STATUSES[0]!.color }]
+        })}>Add status</Button>
+        <div className="ui-actions">
+          <Button type="button" disabled={busy} onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="primary" disabled={busy} onClick={() => void save()}>Save statuses</Button>
         </div>
       </div>
     </Dialog>
