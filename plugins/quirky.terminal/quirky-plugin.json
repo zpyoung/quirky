@@ -948,6 +948,10 @@
               "type": "string",
               "description": "The first prompt of an agent."
             },
+            "command": {
+              "type": "string",
+              "description": "For shell tabs only: run a shell command under the login shell and retain its exact exit status. Use activate:false for background setup/default tabs."
+            },
             "extraArgs": {
               "type": "string",
               "description": "Extra arguments for the agent, checked against its allowlist."
@@ -1174,19 +1178,7 @@
             },
             "color": {
               "type": "string",
-              "description": "A colour name.",
-              "enum": [
-                "none",
-                "blue",
-                "purple",
-                "pink",
-                "red",
-                "orange",
-                "yellow",
-                "green",
-                "teal",
-                "gray"
-              ]
+              "description": "A preset colour name, #rgb or #rrggbb; validated by the owning terminal layout service."
             },
             "revision": {
               "type": "integer",
@@ -2694,6 +2686,11 @@
     ],
     "view": [{"id":"emulator","title":"Mobile Emulator","description":"Read-only preview of an explicitly selected Xcode iOS simulator."}],
     "setting": [
+      {"id":"theme-mode","type":"enum","title":"Terminal theme mode","description":"Independent of the application: inherit its terminal colors, follow system light/dark, or force dark/light.","default":"inherit","values":["inherit","system","dark","light"]},
+      {"id":"theme-dark","type":"enum","title":"Dark terminal palette","default":"default","values":["default","tango","custom"]},
+      {"id":"theme-light","type":"enum","title":"Light terminal palette","default":"default","values":["default","tango","custom"]},
+      {"id":"theme-custom-dark","type":"string","title":"Custom dark terminal palette","description":"JSON object of xterm color names and #rgb/#rrggbb colors (background, foreground, cursor and ANSI names). Invalid palettes show a warning and use the dark default.","default":"{}"},
+      {"id":"theme-custom-light","type":"string","title":"Custom light terminal palette","description":"JSON object of xterm color names and #rgb/#rrggbb colors. Invalid palettes show a warning and use the light default.","default":"{}"},
       {
         "id": "scrollback",
         "type": "number",
@@ -2837,7 +2834,7 @@
         "id": "inline-images",
         "type": "boolean",
         "title": "Inline Images",
-        "description": "Render SIXEL and iTerm inline images in visible panes with an 8 MB image cache. Kitty graphics is not supported by this renderer version.",
+        "description": "Bounded SIXEL/iTerm and direct Kitty PNG/RGB/RGBA images in visible panes. Kitty animation, Unicode virtual placement, file/shared-memory transport and advanced delete selectors refuse; no filesystem access.",
         "default": true
       },
       {
@@ -3180,6 +3177,7 @@
         "words": "tab new",
         "summary": "open a new tab",
         "flags": {
+          "command": {"type":"string","description":"for shell tabs: run a login-shell command and retain its exit status"},
           "worktree": {
             "type": "string",
             "description": "the worktree (a selector, or `floating`); default the caller's"
@@ -3301,7 +3299,7 @@
           },
           {
             "name": "color",
-            "description": "none, blue, purple, pink, red, orange, yellow, green, teal or gray",
+            "description": "a preset name (none, blue, purple, pink, red, orange, yellow, green, teal, gray), #rgb or #rrggbb",
             "required": true
           }
         ],

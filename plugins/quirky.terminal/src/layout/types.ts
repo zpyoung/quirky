@@ -1,9 +1,14 @@
 /** The ten tab colours, drawn as a dot before a tab's close control. */
 export const TAB_COLORS = ['none', 'blue', 'purple', 'pink', 'red', 'orange', 'yellow', 'green', 'teal', 'gray'] as const
-export type TabColor = (typeof TAB_COLORS)[number]
+export type PresetTabColor = (typeof TAB_COLORS)[number]
+export type TabColor = PresetTabColor | `#${string}`
+
+export function isTabColor(value: unknown): value is TabColor {
+  return typeof value === 'string' && ((TAB_COLORS as readonly string[]).includes(value) || /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(value))
+}
 
 /** Hex values for each colour except `none`. */
-export const TAB_COLOR_HEX: Record<Exclude<TabColor, 'none'>, string> = {
+export const TAB_COLOR_HEX: Record<Exclude<PresetTabColor, 'none'>, string> = {
   blue: '#3b82f6',
   purple: '#a855f7',
   pink: '#ec4899',

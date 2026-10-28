@@ -1,0 +1,14 @@
+{
+  "item": "m7-terminal-provider-host-and-worktree-remainder",
+  "spec": "docs/quirk/specs/2026-10-28-m7-terminal-provider-host-and-worktree-remainder/logic.md",
+  "scenarios": [
+    {
+      "id": "T2-N1",
+      "title": "In a fresh private profile, open the floating workspace and its New Browser Tab in an explicitly captured floating tab group; Native must use the existing sole system-webview owner, keep the main worktree and editor tab leases unchanged, destroy the Native view while floating is hidden, and restore only the owned Browser view when shown. Verify actual native focus and frame placement without launching Watch/Chrome as a substitute.",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    }
+  ]
+}

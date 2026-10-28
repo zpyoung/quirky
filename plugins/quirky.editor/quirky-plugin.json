@@ -520,6 +520,7 @@
           "additionalProperties": true
         }
       },
+      {"id":"documentRoot","description":"Resolve an authorized document root. Explicit floating selects only the editor-owned profile notes directory, never HOME or another workspace.","readOnly":true,"params":{"type":"object","properties":{"worktree":{"type":"string"}},"additionalProperties":false},"result":{"type":"object","properties":{"id":{"type":"string"},"path":{"type":"string"}},"required":["id","path"],"additionalProperties":false}},
       {
         "id": "markdown",
         "description": "Source-preserving Markdown capabilities, edits, links, templates, search, TOC, safe detached rendering and export.",
@@ -830,6 +831,7 @@
       {"id":"open-markdown","key":"mod+shift+o","command":"open-markdown","description":"Open a Markdown document.","when":"editorWorkspaceFocus"}
     ],
     "cli-command": [
+      {"id":"document-root","words":"document-root","summary":"resolve an authorized document root, including the editor-owned floating notes directory","method":"documentRoot"},
       { "id": "open", "words": "open", "summary": "open an authorized worktree file", "positionals": [{ "name": "path", "description": "worktree-relative or authorized absolute file path", "required": true }], "method": "open" },
       { "id": "state", "words": "state", "summary": "read editor buffers and tab state", "method": "state" },
       { "id": "draft", "words": "draft", "summary": "CAS-update a buffer draft", "method": "draft" },

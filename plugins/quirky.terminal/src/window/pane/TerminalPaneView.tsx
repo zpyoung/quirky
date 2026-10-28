@@ -23,9 +23,11 @@ import { SearchBox } from './SearchBox'
 import { trimGutter } from './selection'
 import { fontStack, zoomed, type PaneSettings } from './settings'
 import { readTerminalColors, withAlpha } from './terminalTheme'
+import { resolveTerminalAppearance } from './appearance'
 import { ContextLossGuard, loseWebglContext, webglBudget } from './webgl'
 import { MobileDriverOverlay } from './MobileDriverOverlay'
 import { createPaneExtras } from './extras'
+import { createKittyGraphics } from './kittyGraphics'
 
 /** The most characters a search query may have. */
 export const MAX_SEARCH_QUERY = 1000
@@ -112,6 +114,7 @@ type Runtime = {
   refreshWebgl(): void
   syncOsc52(): void
   syncExtras(settings: PaneSettings): void
+  syncTheme(): void
 }
 
 const EMPTY_RESULTS: Results = { index: -1, count: 0 }
@@ -299,12 +302,19 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       'link-middle-click': initial['link-middle-click']
     }
     const colorSource = themeSource ?? host.ownerDocument.documentElement
-    const colors = readTerminalColors(colorSource)
+    const systemTheme = host.ownerDocument.defaultView?.matchMedia?.('(prefers-color-scheme: light)')
+    let warnedPalette: string | undefined
+    const readColors = (settingsNow: PaneSettings) => {
+      const appearance = resolveTerminalAppearance(settingsNow, readTerminalColors(colorSource), systemTheme?.matches ?? false)
+      if (appearance.warning && appearance.warning !== warnedPalette) context.toast('Invalid custom terminal palette', appearance.warning)
+      warnedPalette = appearance.warning
+      return appearance.colors
+    }
+    const colors = readColors(initial)
     const alpha = (settingsNow: PaneSettings) => settingsNow['background-opacity']
-    const theme = (settingsNow: PaneSettings, base = readTerminalColors(colorSource)) => ({
-      background: withAlpha(base.background, alpha(settingsNow)),
-      foreground: base.foreground,
-      cursor: base.cursor
+    const theme = (settingsNow: PaneSettings, base = readColors(settingsNow)) => ({
+      ...base,
+      background: withAlpha(base.background, alpha(settingsNow))
     })
 
     const term = new Terminal({
@@ -567,6 +577,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
     term.onKey(onInputIntent)
 
     term.onData((data) => sendInput(latest.current.settings['jis-yen-backslash'] && data === '¥' ? '\\' : data))
+    const graphics = createKittyGraphics(term, sendInput, initial['inline-images'])
 
     let pasteQueue: Promise<void> = Promise.resolve()
     const pasteNow = async (text: string) => {
@@ -746,7 +757,8 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       copy,
       scheduleFit,
       syncOsc52,
-      syncExtras: extras.sync,
+      syncExtras(settingsNow) { graphics.sync(settingsNow['inline-images']); void extras.sync(settingsNow) },
+      syncTheme() { applyTheme(true) },
       setFont() {
         term.options.fontSize = effectiveFontSize()
         setView((now) => ({ ...now, fontSize: effectiveFontSize() }))
@@ -805,29 +817,32 @@ export function TerminalPaneView(props: TerminalPaneProps) {
           return
         }
         streamId = result.streamId
-        writeReplay(term, base64ToBytes(result.replay), gate)
+        writeReplay({ write: (bytes, done) => graphics.write(bytes, true, done) }, base64ToBytes(result.replay), gate)
         if (result.live === false) {
           readOnly = true
           return
         }
-        unsubscribe = context.onStream(result.streamId, (bytes) => term.write(bytes))
+        unsubscribe = context.onStream(result.streamId, (bytes) => graphics.write(bytes))
       })
       .catch((error: Error) => {
         if (!disposed) term.write(`\r\n\x1b[31mCould not attach: ${error.message}\x1b[0m\r\n`)
       })
 
     let appliedColors = colors
-    const applyTheme = () => {
+    const applyTheme = (force = false) => {
       if (disposed) return
-      const next = readTerminalColors(colorSource)
-      if (next.background === appliedColors.background && next.foreground === appliedColors.foreground && next.cursor === appliedColors.cursor) return
+      const next = readColors(latest.current.settings)
+      if (!force && JSON.stringify(next) === JSON.stringify(appliedColors)) return
       appliedColors = next
+      if (alpha(latest.current.settings) < 1) term.options.allowTransparency = true
       term.options.theme = theme(latest.current.settings, next)
       host.style.background = withAlpha(next.background, alpha(latest.current.settings))
     }
+    const systemChanged = () => applyTheme()
+    systemTheme?.addEventListener('change', systemChanged)
     host.style.background = withAlpha(colors.background, alpha(initial))
     // the shell writes the new theme's variables after its own async refresh, later than theme.changed arrives
-    const themeObserver = new MutationObserver(applyTheme)
+    const themeObserver = new MutationObserver(() => applyTheme())
     themeObserver.observe(host.ownerDocument.documentElement, { attributes: true })
     themeObserver.observe(colorSource, { attributes: true })
     const unsubscribeEvents = context.subscribe((event) => {
@@ -841,6 +856,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       runtime.current = null
       if (fitFrame) cancelAnimationFrame(fitFrame)
       themeObserver.disconnect()
+      systemTheme?.removeEventListener('change', systemChanged)
       observer.disconnect()
       unsubscribeEvents()
       unsubscribe?.()
@@ -860,6 +876,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       host.removeEventListener('drop', onDrop)
       linkProvider.dispose()
       taskLinkProvider.dispose()
+      graphics.dispose()
       kitty.dispose()
       disableWebgl()
       extras.dispose()
@@ -909,15 +926,9 @@ export function TerminalPaneView(props: TerminalPaneProps) {
   ])
 
   useEffect(() => {
-    const rt = runtime.current
-    const host = hostRef.current
-    if (!rt || !host) return
-    const colors = readTerminalColors(themeSource ?? host.ownerDocument.documentElement)
-    const opacity = settings['background-opacity']
-    if (opacity < 1) rt.term.options.allowTransparency = true
-    rt.term.options.theme = { background: withAlpha(colors.background, opacity), foreground: colors.foreground, cursor: colors.cursor }
-    host.style.background = withAlpha(colors.background, opacity)
-  }, [settings['background-opacity'], themeSource])
+    runtime.current?.syncTheme()
+  }, [settings['background-opacity'], settings['theme-mode'], settings['theme-dark'], settings['theme-light'],
+    settings['theme-custom-dark'], settings['theme-custom-light'], themeSource])
 
   useEffect(() => {
     runtime.current?.scheduleFit()

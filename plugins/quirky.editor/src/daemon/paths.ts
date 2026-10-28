@@ -1,4 +1,4 @@
-import { lstat, realpath, stat } from 'node:fs/promises'
+import { lstat, mkdir, realpath, stat } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative, resolve as resolvePath, sep } from 'node:path'
 import type { PluginCaller, PluginContext } from '@quirky/protocol'
 
@@ -17,6 +17,17 @@ export class WorktreePaths {
       ...(caller.worktreeId === undefined ? {} : { worktreeId: caller.worktreeId })
     }
     const selector = worktree ?? (identity.worktreeId === undefined ? 'current' : `id:${identity.worktreeId}`)
+    if (selector === 'floating' || selector === 'id:floating') {
+      // The editor owns this one data directory; the synthetic workspace never grants HOME access.
+      const base = await realpath(this.context.dataDir)
+      const directory = join(base, 'floating-workspace')
+      await mkdir(directory, { recursive: true, mode: 0o700 })
+      const info = await lstat(directory)
+      if (!info.isDirectory() || info.isSymbolicLink()) throw this.context.error('conflict', 'floating document root must be an editor-owned directory, not a symbolic link')
+      const root = await realpath(directory)
+      if (root !== directory) throw this.context.error('conflict', 'floating document root identity changed')
+      return { id: 'floating', path: root }
+    }
     const resolved = await this.context.call('quirky.worktree/resolve', { selector, ...identity }) as ResolveResult
     const root = await realpath(resolved.path)
     const rootInfo = await stat(root)

@@ -39,6 +39,7 @@ export type NewTabSpec = {
   model?: string
   options?: Record<string, string | boolean>
   quickCommand?: string
+  command?: string
   activate?: boolean
   revision?: number
 }
@@ -189,7 +190,7 @@ export class LayoutService {
     const given = typeof selector === 'string' && selector !== '' ? selector : undefined
     const identity = caller.role === 'plugin' ? {} : { cwd: caller.cwd, worktreeId: caller.worktreeId }
     const wantsCurrent = given === undefined || given === 'current'
-    if (given === FLOATING_WORKSPACE || (wantsCurrent && identity.worktreeId === FLOATING_WORKSPACE)) return FLOATING_WORKSPACE
+    if (given?.replace(/^id:/, '') === FLOATING_WORKSPACE || (wantsCurrent && identity.worktreeId === FLOATING_WORKSPACE)) return FLOATING_WORKSPACE
     if (given === undefined && identity.worktreeId) return identity.worktreeId
     const bare = given?.replace(/^id:/, '')
     if (bare !== undefined && this.workspaces.has(bare)) return bare
@@ -738,6 +739,7 @@ export class LayoutService {
       ...(params.model === undefined ? {} : { model: params.model as string }),
       ...(params.options === undefined ? {} : { options: params.options as Record<string, string | boolean> }),
       ...(params.quickCommand === undefined ? {} : { quickCommand: params.quickCommand as string }),
+      ...(params.command === undefined ? {} : { command: params.command as string }),
       ...(params.activate === undefined ? {} : { activate: params.activate as boolean }),
       ...(params.revision === undefined ? {} : { revision: params.revision as number })
     })
@@ -814,6 +816,7 @@ export class LayoutService {
       ...(title === undefined || title === '' ? {} : { title }),
       ...(spec.model === undefined ? {} : { model: spec.model }),
       ...(spec.options === undefined ? {} : { options: spec.options }),
+      ...(spec.command === undefined ? {} : { command: spec.command }),
       ...(spec.cwd === undefined ? {} : { cwd: { path: spec.cwd, soft: false } })
     })
     try {

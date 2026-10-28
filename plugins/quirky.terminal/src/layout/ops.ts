@@ -18,7 +18,7 @@ import {
   splitPane as splitPaneInTree
 } from './tree'
 import type { GroupSide, IdSource, TreeError, TreeResult } from './tree'
-import { isTerminalTab, isViewTab, MAX_CLOSED_TABS, TAB_COLORS, TITLE_MAX } from './types'
+import { isTabColor, isTerminalTab, isViewTab, MAX_CLOSED_TABS, TAB_COLORS, TITLE_MAX } from './types'
 import type { ClosedTab, Edge, Group, GroupNode, PaneExit, PaneLeaf, PaneNode, SplitDirection, Tab, TabColor, TerminalTab, ViewTab, Workspace } from './types'
 
 export type OpResult<T = Workspace> = TreeResult<T>
@@ -194,8 +194,8 @@ export function renameTab(ws: Workspace, tabId: string, title: string): OpResult
 
 export function setTabColor(ws: Workspace, tabId: string, color: string): OpResult {
   if (!locateTab(ws, tabId)) return fail('not-found', `no tab ${tabId}`)
-  if (!(TAB_COLORS as readonly string[]).includes(color)) return fail('invalid-params', `color must be one of ${TAB_COLORS.join(', ')}`)
-  return ok(updateTab(ws, tabId, (tab) => ({ ...tab, color: color as TabColor })))
+  if (!isTabColor(color)) return fail('invalid-params', `color must be #rgb/#rrggbb or one of ${TAB_COLORS.join(', ')}`)
+  return ok(updateTab(ws, tabId, (tab) => ({ ...tab, color })))
 }
 
 /** Updates the content fields of a hosted view while preserving its stable tab identity and strip state. */
