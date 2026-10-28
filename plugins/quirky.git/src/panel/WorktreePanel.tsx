@@ -7,7 +7,7 @@ import type { FixAction } from '../ai/types'
 import { useAiFix } from '../ai/useAiFix'
 import { NotesShelf } from '../notes/NotesShelf'
 import { noteViewInput } from '../notes/open-note'
-import { noteCounts, useNotes } from '../notes/useNotes'
+import { noteCounts, useNotes, type Note } from '../notes/useNotes'
 import { DIFF_VIEW_ID, PANEL_ID, type DiffViewInput } from '../shared/view-input'
 import { discardText } from '../shared/discard-text'
 import type { ScmReport } from '../scm'
@@ -824,7 +824,19 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
     return buttons
   }
 
-  const openNote = (note: { id: string; path: string }) => open(noteViewInput(note.path, note.id, entries, compare))
+  const openNote = (note: Note) => {
+    if (note.source === 'markdown') {
+      void context.call('quirky.editor/open', {
+        worktree: `id:${note.worktreeId}`,
+        path: note.path,
+        mode: 'source',
+        line: note.startLine,
+        focus: true
+      }).catch((error: unknown) => context.toast('Failed to open Markdown note', messageOf(error)))
+      return
+    }
+    open(noteViewInput(note.path, note.id, entries, compare))
+  }
 
   const openCommit = (commit: GitCommit) => open({ mode: 'combined', commit: commit.oid, title: commitTitle(commit.oid, commit.subject) })
   const openCommitFile = (commit: GitCommit, change: GitChange) =>

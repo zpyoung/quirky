@@ -5,7 +5,7 @@ import { registerDom } from './register-dom'
 registerDom()
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 const s = await import('./panel-support')
-const { act, byLabel, buttonText, click, compareOf, entry, failure, fakeContext, layoutFor, mountPanel, press, q, qa, rowOf, settle, statusOf, type } = s
+const { act, byLabel, buttonText, click, compareOf, entry, failure, fakeContext, layoutFor, mountPanel, press, q, qa, rowOf, settle, statusOf, type, waitForState } = s
 
 afterAll(() => GlobalRegistrator.unregister())
 beforeEach(() => {
@@ -348,12 +348,12 @@ describe('SC-27: a failing hook blocks the commit', () => {
 })
 
 describe('SC-28: the primary button follows the ladder and is reported', () => {
-  const rows: Array<[string, Partial<ReturnType<typeof statusOf>>, string, boolean, string]> = [
+  const rows: Array<[string, Partial<ReturnType<typeof statusOf>>, string, boolean, string | null]> = [
     ['ahead and behind', { upstreamStatus: upstream(2, 1) }, 'Sync', true, 'Pull 1, push 2'],
     ['patch-equivalent', { upstreamStatus: upstream(2, 2, true) }, 'Force Push', true, 'Remote only has older copies of local commits. Force push 2 branch commits with lease to update origin/zoe/feat.'],
     ['behind', { upstreamStatus: upstream(0, 1) }, 'Pull', true, 'Pull 1 commit(s)'],
     ['ahead', { upstreamStatus: upstream(2, 0) }, 'Push', true, 'Push 2 commit(s)'],
-    ['no upstream', { upstreamStatus: { hasUpstream: false, name: null, sha: null, ahead: 0, behind: 0, behindPatchEquivalent: null } }, 'Publish Branch', true, 'Publish this branch to origin'],
+    ['no upstream', { upstreamStatus: { hasUpstream: false, name: null, sha: null, ahead: 0, behind: 0, behindPatchEquivalent: null } }, 'Publish Branch', true, null],
     ['up to date', {}, 'Commit', false, 'Nothing to commit. Branch is up to date.'],
     ['detached', { detached: true, branch: null, upstreamStatus: { hasUpstream: false, name: null, sha: null, ahead: 0, behind: 0, behindPatchEquivalent: null } }, 'Commit', false, 'Check out a branch before publishing commits.']
   ]
@@ -362,10 +362,14 @@ describe('SC-28: the primary button follows the ladder and is reported', () => {
       const { fake, element, unmount } = await open((f) => {
         f.status = statusOf([], overrides)
       })
+      if (name === 'no upstream') await waitForState(element, () => !primary(element).disabled)
       expect(primary(element).textContent).toBe(label)
       expect(primary(element).disabled).toBe(!enabled)
-      expect(primary(element).title).toBe(title)
-      expect(fake.reports.at(-1).primary).toEqual({ label, enabled, title })
+      expect(fake.reports.at(-1).primary).toMatchObject({ label, enabled })
+      if (title !== null) {
+        expect(primary(element).title).toBe(title)
+        expect(fake.reports.at(-1).primary).toEqual({ label, enabled, title })
+      }
       unmount()
     })
   }

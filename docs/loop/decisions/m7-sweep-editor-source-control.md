@@ -88,5 +88,71 @@
 - **Revisit if:** cross-process plugin hosting is introduced.
 - **Source:** assumed — autonomous
 
+## D9: Prove missing handlers through an actual isolated daemon
+- **Question:** Are the mapped untitled and workspace-note gaps observable at the consumer boundary?
+- **Options:** trust source absence; exercise the real daemon before implementation.
+- **Chose:** an owned real quirkyd subprocess with private HOME/QUIRKY_HOME, hooks predisabled and a fresh Git worktree. Markdown new returned untitled:false; saveAs and workspaceNotes returned -32009 because their committed schema had no handler. Probe then stopped the daemon (exit0) and removed owned process/home/root state.
+- **Why:** a schema without a handler is not implemented behavior. This establishes the missing baseline without touching real user configuration.
+- **Evidence:** `/tmp/quirky-l11-parity-before.ts` actual output: MISSING_IMPLEMENTATION_CONFIRMED for both APIs; REAL_DAEMON_NAMED_PLACEHOLDER_BASELINE_CONFIRMED; DAEMON_EXIT0; OWNED_TEMP_STATE_CLEANED.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** another source owner publishes an implementation before integration.
+- **Source:** assumed — autonomous
+
+## D10: Queue one explicit completion item for larger remaining flows
+- **Question:** Which mapped gaps are too large for this landing, and how are they kept actionable?
+- **Options:** claim presence from adjacent code; block all useful parity fixes; use the queue item's explicit follow-up allowance.
+- **Chose:** one dependent item, `m7-editor-source-control-completion`, added with the authoritative queue tool. It names lossless details/collapsible headings and document-link insertion/completion; edit-tab Changes/Markdown diff preview and hosted preview/permanent/split diff tabs; GitHub fork notices, validated PR-derived push targets and target-specific push-before-PR; permission-aware save/annotation UX; the remaining editor SC-3–22 GUI/setup/media/remount variants and exhaustive sidebar edge audit.
+- **Why:** these are concrete implementation/acceptance gaps, not completed flows. The current hosting APIs expose candidates/upstream checks but no validated PR-derived push destination; guessing one risks pushing the wrong repository. Existing Finder-source-path work remains in its separately blocked item, not duplicated here.
+- **Evidence:** combined spec coverage table; m2-editor BLOCKERS SC-3–22; m2-sidebar-extras D30; hosting repository/creationEligibility and Git remote owner contracts; `/tmp/quirky-l11-parity-followup.json`; queue add exited0.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** the completion item establishes a supported target/capability or finishes a named acceptance variant.
+- **Source:** deferred: remaining editor, sidebar and hosted-target flows
+
+## D11: Fix observed integration failures without weakening authority or validation
+- **Question:** What caused the required affected gate and typecheck failures?
+- **Options:** waive failures; relax schemas/catch owner errors; repair exact contracts and fixtures.
+- **Chose:** restore the missing draft-conflict latch and React hook imports; declare every canonical note snapshot field in the strict editor input schema; retain the existing SQLite/BINARY path ordering when aggregating mixed notes; model empty notes and absent optional hosting in generic UI fixtures and wait on enabled publishing rather than implementation wording. Only actual MethodNotFound/unsupported-provider means optional hosting is absent; other errors remain visible/unavailable.
+- **Why:** the initial affected gate passed131/138 remote files plus its Mac file; its seven failures identified schema/default-fixture/ordering defects. The corrective gate then exposed an import accidentally removed in the fixture fix. No production deadline, authority check or required assertion was disabled.
+- **Evidence:** affected gate artifacts69/82; full typecheck diagnostics14 in DocumentSurface then4 missing React hooks; corrected strict schemas and fixture branches.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the final affected gates expose a further concrete failure.
+- **Source:** assumed — autonomous
+
+## D12: Initialize empty rich Markdown as a real document rather than invoking the HTML parser
+- **Question:** Why did a newly created blank Markdown show a safe-parse fallback in the real UI?
+- **Options:** special-case the eligibility banner; provide the actual empty ProseMirror document to Tiptap.
+- **Chose:** headless editor initialization uses an empty doc/paragraph JSON value for empty Markdown; non-empty Markdown keeps its existing parser path.
+- **Why:** the diagnostic threw Tiptap's missing-window error from elementFromString/createDoc for empty content. This repairs initialization, not the error message or a fake successful capability.
+- **Evidence:** actual UI obs17; pre-fix headless diagnostic stack; post-fix `EMPTY_HEADLESS_MARKDOWN_ROUND_TRIP_PASS`; public lifecycle regression richEligible/canonical empty round-trip. Removed an incidental trailing-newline pin instead of repinning canonical serialization.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** an empty or frontmatter-only document fails its real public capability/render path.
+- **Source:** assumed — autonomous
+
+## D13: Preserve truthful review and user-flow evidence under the aged-item rule
+- **Question:** What remains mandatory after the item reaches LOOP's aged-item landing rule?
+- **Options:** begin a new review campaign; finish required gates and land the verified implementation.
+- **Chose:** skip the unstarted final cross-family review campaign under the night/aged-item rule selected at claim. Do not claim review clearance. Complete concrete gate fixes, actual process smoke and the changed UI campaign, then catch up once and use queue-controlled landing.
+- **Why:** LOOP explicitly prioritizes an aged item's own tests/typecheck and landing over a review or dogfood pass that has not started; the runtime and UI verification required by engineering policy still ran.
+- **Evidence:** claim-time night policy D2; local timestamp2026-10-28 04:38:47CDT during final gate; real daemon smoke success; guarded web run20261028T094037-5992.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** queue landing finds a concrete failure; repair it rather than waiving it.
+- **Source:** locked by docs/loop/LOOP.md
+
+## D14: Keep cross-owner settlement limits explicit
+- **Question:** Can canonical notes in two plugin stores settle in one SQLite transaction?
+- **Options:** duplicate the stores or add a distributed transaction protocol; keep public owning-store settlements and report errors truthfully.
+- **Chose:** separate exact-snapshot settlements after confirmed delivery, with shared owner reservations and finally-release. A failure after one owner has settled can leave a partial result; no cross-store atomicity or automatic resend is claimed.
+- **Why:** each store remains owned by its feature plugin. This preserves the locked public boundary without an unrequested transaction/retry subsystem; failed or unconfirmed delivery before settlement still deletes nothing.
+- **Evidence:** git daemon/targets.ts mixed settlement order; editor workspaceNotes transaction; notes component handoff and actual owner-reservation/settlement smoke.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** a durable cross-owner transaction requirement is approved.
+- **Source:** assumed — autonomous
+
 ## Progress
-Step4: source mapping complete, combined spec self-reviewed and shared saveAs/workspaceNotes schemas authored. Commit contracts/spec before <=3 implementation components. Parent owns sidebar edge verification and final integration/gates. No current passing implementation claim; original baseline source/test presence is only mapping evidence. Existing native Finder item remains blocked independently.
+Implementation components are committed/merged, all workers returned and their temporary worktrees removed. Parent integrated workspaceNotes composition and Markdown shelf navigation. Final actual quirkyd/CLI smoke passed Save As, cleanup, mixed note read/format, closed-buffer persistence, owner reserve/release and Markdown settlement through Git clear, with owned teardown. Guarded built-web campaign20261028T094037-5992 reports all five goals pass, no test overrides or cleanup errors; F1's initial shortcut/discoverability claim was resolved by the existing Rich toolbar, and the unnecessary duplicate Explorer control was removed. Final full build passed; scripts68tests/572assertions passed; full typecheck passed. Broad affected gate passed131/138 remote files plus1Mac; corrected21-file scope passed14 with7 concrete failures, and final repaired7/7 passed with no flaky rerun. The source fixes therefore cover every originally failing file; no whole-suite pass is claimed before land. One completion follow-up is queued; native Finder remains independently blocked. Next: commit owned source/docs, one roadmap catch-up/read incoming decisions and queue land. Do not start a second item.

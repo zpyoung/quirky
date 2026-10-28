@@ -2,7 +2,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs'
 import { isAbsolute, posix } from 'node:path'
 import type { PluginCaller } from '@quirky/protocol'
 import type { EditorBuffer, EditorServices, FeatureMethods } from '../types'
-import { createMarkdownNotesMethod } from './notes'
+import { createMarkdownNotesMethod, createWorkspaceNotesMethod } from './notes'
 import { extractSelectedCode, formatMarkdownSelection, insertMarkdown, isSafeMarkdownLink, type MarkdownFormat, type MarkdownSelection } from './operations'
 import { choosePdfDestination, exportPdfWithChrome } from './pdf'
 import { confirmNativeReplacement, chooseMarkdownImage } from './native'
@@ -765,8 +765,9 @@ export function createMarkdownMethods(host: EditorServices): FeatureMethods {
   })
   const markdown = (params: Record<string, unknown>, caller: PluginCaller) => markdownAction(host, params, caller, resources)
   const notes = createMarkdownNotesMethod(host)
+  const workspaceNotes = createWorkspaceNotesMethod(host)
   return {
-    methods: { markdown, notes },
+    methods: { markdown, notes, workspaceNotes },
     dispose() {
       removeCloseListener()
       releaseMarkdownImages(resources)

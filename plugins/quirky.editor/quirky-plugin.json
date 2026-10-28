@@ -34,7 +34,27 @@
             "worktree": { "type": "string" },
             "action": { "type": "string", "enum": ["list", "reserve", "release", "settle"] },
             "path": { "type": "string", "description": "Optional worktree-relative path filter for list." },
-            "snapshots": { "type": "array", "items": { "type": "object", "description": "Exact note object returned by list; every persisted field must still match before reservation or deletion." } },
+            "snapshots": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "description": "Exact note returned by list; every persisted field must still match before reservation or deletion.",
+                "properties": {
+                  "id": { "type": "string" }, "bufferId": { "type": "string" },
+                  "worktreeId": { "type": "string" }, "filePath": { "type": "string" },
+                  "source": { "type": "string", "enum": ["markdown"] },
+                  "selectedText": { "type": "string" },
+                  "startLine": { "type": "integer", "minimum": 1 },
+                  "endLine": { "type": "integer", "minimum": 1 },
+                  "lineNumber": { "type": "integer", "minimum": 1 },
+                  "body": { "type": "string" }, "createdAt": { "type": "number" },
+                  "updatedAt": { "type": "number" }, "sentAt": { "type": "number" },
+                  "side": { "type": "string", "enum": ["modified"] }
+                },
+                "required": ["id", "bufferId", "worktreeId", "filePath", "source", "lineNumber", "body", "createdAt", "side"],
+                "additionalProperties": false
+              }
+            },
             "holdId": { "type": "string", "description": "Required unique delivery identifier for reserve/release. When supplied to settle, only snapshots reserved by this identifier can be deleted." }
           },
           "required": ["action"],

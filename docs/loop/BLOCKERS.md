@@ -373,3 +373,15 @@ Evidence:
 Tried: current installed SDK and app drop/typed-RPC routes; latest published SDK/native/preload/browser sources; complete 2.0.4-to-2.0.5 changes; independent read-only scout; executable public-module/source audit. Rejected basename/content matching, clipboard polling, picker substitution, URI-only partial routing and an empty event scaffold because none supplies genuine Finder identity. No production code, dependency pin or existing drop policy was changed.
 
 Unblock when Electrobun publishes a supported dropped-source-path callback/extractor, or the user explicitly approves a native patch/fork. Then carry real paths through typed shell RPC/public events and prove same-worktree open-in-place versus external collision-safe import with actual Finder drops. Until then m2-editor D19's approved import-all policy remains in force. Decision log: `docs/loop/decisions/m4-editor-drop-open-in-place.md`; archived evidence: lane 9 ignored iteration folder, `editor-drop-feasibility-evidence.tar.gz`.
+
+## m7-sweep-editor-source-control: explicit completion follow-up
+
+The queue item authorizes larger remaining flows as a follow-up. Exactly one was added:
+`m7-editor-source-control-completion`, dependent on this sweep.
+
+- **Implementation:** lossless rich details/collapsible headings and document-link insertion/completion; integrated edit-tab Changes/Markdown diff preview and hosted preview/permanent/split diff tabs; permission-aware save/annotation UX.
+- **GitHub target boundary:** fork notices, validated PR-derived push destinations and target-specific push-before-PR. Current public hosting APIs do not return a validated destination; this sweep deliberately retains Git's configured push target rather than guessing.
+- **Remaining acceptance:** the exhaustive editor SC-3–22 GUI/setup/media/shortcut/remount variants listed in the original m2-editor completion matrix, and the all17 sidebar edge audit including quiet aging, fresh-agent-only liveness, corrupt preferences and separator boundaries/persistence. Existing implementation/test presence is not a new passing claim for those variants.
+- **Closed here:** real untitled/provenance/Save As, same-tab Preview return, own-draft acknowledgment correlation, canonical mixed Markdown/diff Notes shelf with owning-store reservations and exact settlement, current GitHub review status/composer handoff/unpublished guards, blur-only Custom-days regression, and empty headless Markdown initialization. Real daemon/CLI smoke and five guarded web goals passed. Corrected affected gate7/7 and final typecheck passed; prior broad coverage and the landing gate remain separately recorded in the decision log.
+- **Not duplicated:** `m4-editor-drop-open-in-place` remains independently blocked on supported native dropped-source paths. No native patch, basename guess or picker substitute was introduced.
+

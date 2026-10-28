@@ -173,11 +173,11 @@ async function scoped(env: DaemonEnv, params: Record<string, any>, caller: Param
 export async function listMixedNotes(env: DaemonEnv, worktree: Worktree, path?: string): Promise<Note[]> {
   const markdownNotes = await listMarkdownNotes(env, worktree, path)
   return [...env.notes.list(worktree.id, path), ...markdownNotes].sort((left, right) =>
-    left.path.localeCompare(right.path) ||
+    (left.path < right.path ? -1 : left.path > right.path ? 1 : 0) ||
     left.line - right.line ||
     left.startLine - right.startLine ||
     left.createdAt - right.createdAt ||
-    left.id.localeCompare(right.id)
+    (left.id < right.id ? -1 : left.id > right.id ? 1 : 0)
   )
 }
 function markdownNoteResult(note: MarkdownShelfNote): Note {

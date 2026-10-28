@@ -1027,6 +1027,31 @@ test('SC-08/11/12: filters use exact windows, validate custom days on Enter and 
   await selectWindow(h, 'All')
   expect(h.world.preferences.workspaceActivityWindow).toBe('all')
 })
+
+test('Custom days commits on blur without Enter and rejects an invalid blur without changing the window', async () => {
+  const h = setup()
+  await h.mount()
+  await selectWindow(h, 'Custom')
+  const days = host.querySelector<HTMLInputElement>('input[aria-label="Custom days"]')!
+  await act(async () => { days.focus() })
+  await inputValue(days, '3')
+  await act(async () => { days.blur() })
+  await h.flush()
+  expect(h.world.preferences.workspaceActivityCustomDays).toBe(3)
+  expect(h.world.preferences.workspaceActivityWindow).toBe('custom')
+  expect(card('other')).toBeDefined()
+  expect(card('feature')).toBeUndefined()
+
+  await act(async () => { days.focus() })
+  await inputValue(days, '0')
+  await act(async () => { days.blur() })
+  await h.flush()
+  expect(h.world.preferences.workspaceActivityCustomDays).toBe(3)
+  expect(h.world.preferences.workspaceActivityWindow).toBe('custom')
+  expect(host.querySelector('[role="alert"]')).not.toBeNull()
+  expect(card('other')).toBeDefined()
+  expect(card('feature')).toBeUndefined()
+})
  
 test('SC-10/13: Live preserves selected, unknown, folder and default rows; visits are identity-keyed and idempotent', async () => {
   const h = setup({ view: { id: 'view:quirky.session/worktree', input: { worktree: 'w-main' } }, panel: null, sidebar: true, focus: 'view' })

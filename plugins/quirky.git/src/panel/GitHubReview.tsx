@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { GitStatus, UiPluginContext } from '@quirky/protocol'
+import { RpcErrorCode, type GitStatus, type UiPluginContext } from '@quirky/protocol'
 
 export type GitHubReviewTarget = { worktree: string; branch: string; head: string }
 type ReviewSummary = { number: number; url: string; state: 'open' | 'draft' | 'closed' | 'merged' }
@@ -22,6 +22,11 @@ function errorReason(error: unknown): string | null {
   if ('data' in error && typeof error.data === 'object' && error.data !== null && !Array.isArray(error.data) &&
     'reason' in error.data && typeof error.data.reason === 'string') return error.data.reason
   return 'reason' in error && typeof error.reason === 'string' ? error.reason : null
+}
+
+function errorCode(error: unknown): number | null {
+  if (typeof error !== 'object' || error === null || Array.isArray(error)) return null
+  return 'code' in error && typeof error.code === 'number' ? error.code : null
 }
 
 function errorMessage(error: unknown): string {
@@ -103,7 +108,8 @@ export async function readGitHubReview(context: UiPluginContext, target: GitHubR
     })
     return parseLookup(result, target)
   } catch (error) {
-    if (errorReason(error) === 'unsupported_provider') return { kind: 'unsupported', target }
+    if (errorCode(error) === RpcErrorCode.MethodNotFound || errorReason(error) === 'unsupported_provider')
+      return { kind: 'unsupported', target }
     return { kind: 'unavailable', target, message: errorMessage(error) }
   }
 }

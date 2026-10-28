@@ -259,6 +259,7 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
   const ownDraftAcknowledgements = useRef(new Map<number, string | null>())
   const pendingSaveAcknowledgement = useRef<DraftAcknowledgement | null>(null)
   const draftWriteId = useRef(0)
+  const blockedDraft = useRef(false)
   const undoReloadTimer = useRef<number | undefined>(undefined)
   const activeActions = useRef<ActiveActions>({
     flush: async () => {},

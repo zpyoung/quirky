@@ -72,6 +72,16 @@ async function readBuffer(bufferId: string): Promise<EditorBufferInfo> {
 }
 
 describe('Markdown untitled lifecycle through public APIs', () => {
+  test('a blank untitled document remains rich-eligible without a browser DOM in the daemon', async () => {
+    const blank = await markdown<MarkdownNewResult>('new')
+    const capabilities = await markdown<{ richEligible: boolean; canonicalText: string }>('capabilities', {
+      bufferId: blank.buffer.id,
+      includeCanonical: true
+    })
+    expect(capabilities.richEligible).toBe(true)
+    expect(capabilities.canonicalText).toBe('')
+  })
+
   test('blank clean placeholders are removed while template and ever-edited placeholders are retained', async () => {
     const occupied = put('untitled.md', 'unrelated text\n')
     put('.orca/templates/review.md', '# {{title}}\n')
