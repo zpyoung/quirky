@@ -159,11 +159,28 @@
 - **Options:** widen the backend projection and invent lifecycle state; create a real blocking Ask through the attested child CLI
 - **Chose:** actual child orchestration ask, atomically record its started identity before it exits, answer through Heimdall, then require the child CLI's exact answered message ID and body. Keep serviceRunShow's non-consuming question-thread projection unchanged. Pending-only UI rows may disappear after answer; positive service-backed journal evidence and the worker's received answer prove closure.
 - **Why:** source orchestration.md explicitly defines ask as the only worker question path. send --type question creates a one-way message but no question_threads row; changing the projection alone would not create answer authority. The apparent missing projection was our fixture error, not consumption deleting a pending Ask.
-- **Evidence:** source orchestration.md:477–488; messaging.ts send/beginAsk/serviceQuestions/answerQuestion. Corrected real-child test reached the final stop call after exact Ask reply, unpark and duplicate-refusal assertions; final stop was refused by core's task_not_startable live-worker guard (artifact267). No backend projection workaround applied.
+- **Evidence:** source orchestration.md:477–488; messaging.ts send/beginAsk/serviceQuestions/answerQuestion. Corrected real-child flow passes1test19assertions14.25s after core582a427f: exact Ask reply, unpark, duplicate refusal, exact stop and positive target-session exit. No backend projection workaround applied.
 - **Reversibility:** easy
-- **Confidence:** high for exercised blocking Ask/answer/unpark/replay; overall native test remains failing at exact stop
+- **Confidence:** high for the exercised complete native worker-control flow
 - **Revisit if:** a real pending Ask disappears from the owned read projection
 - **Source:** locked by docs/roadmap.md
 
+## D16: Verify observable settlement rather than incidental exit metadata or callback timing
+- **Question:** an explicit structured stop confirmed exited with no numeric OS exit code, and a native test checked a public event before asynchronous delivery
+- **Options:** pin null or widen timing; require the actual public state/event
+- **Chose:** keep exact stop receipt and public session/get exited proof; remove the numeric exit-code and unchanged PID-file assertions. Await the actual settled event, not an internal fake-world status log, before checking its consumer-visible native output. Remove an exact protocol-method sequence assertion rather than re-pin wiring.
+- **Why:** an explicit SDK stop need not expose an OS exit status. A remembered PID file does not prove termination. Internal status persistence does not imply the subscribed public event has arrived.
+- **Evidence:** real native control flow1pass19assertions14.25s; focused native settlement1pass10assertions899ms; full composed typecheck0diagnostics25.01s
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a public positive settlement can be observed without the corresponding exact resource transition
+- **Source:** assumed — autonomous
+
 ## Progress
-Actual df799424/e410 service facade, owner4bb85a56 and native startup correction42791478 are integrated. Production build passes and packages Quirky.app39.23s; minimal actual web smoke completed and owned resources stopped. Latest public controls12pass98assertions4.33s; notifications3pass4assertions; shared consumer fixtures166pass737assertions; own operator42pass192assertions; scripts66pass517assertions. Required scoped run:297/309remote files passed,12failed; Mac terminal passed runner-owned isolated retry after load failures. Shared migration/resume/auth/schema fixture failures repaired without weakening consumer invariants. Latest full types138diagnostics28files; own remaining three fixture diagnostics corrected, core owns the remaining core/orchestration fixes. Real child blocking Ask receives the exact Heimdall answer, un-parks and rejects replay; final exact worker stop fails core's task_not_startable guard. Next: integrate core type/runtime corrections, prove exact native stop, rerun affected failures and final types, await deps-ready, single roadmap catch-up/read decisions, and queue land. No full dogfood/review/completion claim.
+- Integrated core582a427f as801779e1, preserving canonical journal1/receipts2 and transactional receipt cleanup. Later atomic CLI-reply publication fixes and isolated native fixture83e4c51b are included.
+- Complete real native worker control flow passes1test19assertions14.25s. Public controls pass12tests98assertions4.33s; notifications3tests4assertions. Minimal actual web smoke completed; owned resources stopped. Native banners remain pending.
+- Full composed typecheck passed with0diagnostics25.01s. Production build packaged Quirky.app55.91s. Scripts passed66tests517assertions.
+- Initial broad scope had297/309remote files pass and12 failures; the runner's Mac terminal retry passed. Corrected native/operator/session/structured/auth/schema scope now passes49/49files with no flaky reruns. Repaired ordinary orchestration callers are being checked separately.
+- Aged-item policy skips the unstarted full review and seven-goal dogfood campaign; no such pass is claimed.
+- Next: finish remaining affected orchestration verification after core's report/release correction, await dependency-ready, merge build/roadmap once, read incoming decisions, and land through queue.ts.
+
