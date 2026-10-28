@@ -1,9 +1,10 @@
-import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test'
+import { describe, expect, setDefaultTimeout, test } from 'bun:test'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { Buffer } from 'node:buffer'
 import { join } from 'node:path'
 import type { QuirkyClient } from '@quirky/protocol'
 import { builtinsDir, makeHomeWithoutAutoHooks, startHarness, type Harness } from '../../../packages/daemon/test/helpers'
+import { registerIsolatedEditorFixtures } from './isolated-environment'
 
 setDefaultTimeout(60_000)
 
@@ -86,7 +87,7 @@ async function start(files: Record<string, FileData>): Promise<ViewerWorld> {
   return world
 }
 
-afterEach(async () => {
+registerIsolatedEditorFixtures(async () => {
   for (const world of worlds.splice(0)) await world.harness.cleanup()
 })
 

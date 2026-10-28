@@ -1,10 +1,11 @@
-import { afterEach, expect, test } from 'bun:test'
+import { expect, test } from 'bun:test'
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { RpcErrorCode, type QuirkyClient, type QuirkyEvent } from '@quirky/protocol'
 import { builtinsDir, makeHomeWithoutAutoHooks, startHarness, waitFor, type Harness } from '../../../packages/daemon/test/helpers'
+import { registerIsolatedEditorFixtures } from './isolated-environment'
 
 type Worktree = { id: string; path: string }
 type Interaction = { selectedPaths: string[]; focusedPath: string | null; selectionAnchor: string | null }
@@ -21,7 +22,7 @@ type EditorState = {
 type Fixture = { harness: Harness; client: QuirkyClient; home: string; root: string; worktree: Worktree; roots: Set<string>; events: QuirkyEvent[] }
 
 const fixtures = new Set<Fixture>()
-afterEach(async () => {
+registerIsolatedEditorFixtures(async () => {
   for (const fixture of fixtures) {
     fixtures.delete(fixture)
     try {

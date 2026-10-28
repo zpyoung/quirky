@@ -165,5 +165,27 @@
 - **Revisit if:** nightly native clipboard run fails
 - **Source:** assumed — autonomous
 
+## D16: Preserve all seven incoming owners and isolate physical Git fixture setup
+- **Question:** Does the one roadmap catch-up change this item's authority or fixture safety?
+- **Options:** reinterpret overlapping owners; preserve scoped contracts and apply the incoming isolation requirement
+- **Chose:** read every entry/Progress in m4-hosting-ui-review-browser-routing, m5-automations-dispatch-remote-and-args, m5-loops-ui-visible-stop-close-review, m6-heimdall-host-power, m6-orchestration-idle-pointer-shutdown, m7-sweep-automation-completion and sb-mobile-app-panels. No editor feature conflict; preserve public mobile ceilings, remote/native prerequisites, host-power/deactivation ordering and dispatch authority. Apply mobile D14's fresh HOME/provider homes and inherited-Git-pointer/config isolation to the three touched daemon acceptance fixtures through one editor-local environment helper, restoring only after owned teardown.
+- **Why:** a temporary Git cwd cannot defeat inherited GIT_DIR/GIT_INDEX_FILE. Hook-disable settings alone do not isolate unrelated in-process plugin activation from real provider homes. This is new acceptance-fixture safety, not a test-failure debugging campaign. The resource-lifetime fixture only serves its owned file in-process and spawns no daemon/Git/Python, so it needs no environment override.
+- **Evidence:** conflict-free single git merge build/roadmap after8f81d176; post-merge typecheck25.13s; new helper lifetime smoke passed with deliberately inherited scratch Git pointers, exact restoration and owned-home removal. Final complete root/mobile typecheck after fixture integration exited0 in23.30s.
+- **Reversibility:** easy
+- **Confidence:** high for inspected authority boundaries and exercised helper lifetime
+- **Revisit if:** end-phase execution shows another ambient fixture input
+- **Source:** locked by docs/loop/decisions/sb-mobile-app-panels.md D14
+
+## D17: Keep structural validation separate from runtime and semantic review
+- **Question:** Do the new manifest fields remain scriptable through the existing generated groups?
+- **Options:** add redundant aliases; rely on service-only fields; validate current declarations against shared contracts
+- **Chose:** scoped plugin-validator pass with zero blocking issues/warnings; existing explorer/viewer CLI contributions and main registrations match the additions. No new alias, semantic review or test/build run by the validator.
+- **Why:** flat schemas declare every new request field despite additionalProperties false. Action-specific/nullable/lease-length constraints are enforced by the service where the existing schema subset cannot express them; result fields remain structurally preserved.
+- **Evidence:** ValidateEditorDeclarations returned PASS read-only JSON/contract inspection; runtime and typecheck evidence remain independently attributed to parent D12–D16
+- **Reversibility:** easy
+- **Confidence:** high for structural scope only
+- **Revisit if:** generated CLI or end-phase consumer execution reports a declaration mismatch
+- **Source:** assumed — autonomous
+
 ## Progress
-All three components returned and passed the scope/unchanged-HEAD barrier; commits719265bb/5f066c86/fcf24d57 merged and their worktrees/worker branches removed. Root/mobile typecheck passed after compiler integration repairs. Four isolated API runtime checks and bounded actual browser surface checks passed with the D13–D15 limits; suites/review/full dogfood remain unrun. Browser/API client closed and runtime service stop requested; its finally cleanup owns daemon/fake PTY and scratch home. Next: commit current fixes/receipt, catch up build/roadmap exactly once and read incoming decision logs, run final typecheck, commit/detach/canonical queue land. Archive receipts, remove owned scratch after land; do not claim another item.
+Ready for authoritative land. Components719265bb/5f066c86/fcf24d57 integrated, all worktrees/worker branches removed, scoped validator returned, no live worker/browser/API client/service remains. Runtime service exited0 with SMOKE_STOPPED after exact owned cleanup. All four API smoke paths and bounded actual UI paths exercised before the conflict-free single roadmap catch-up; all seven incoming logs read and reconciled. Final root/mobile typecheck passed23.30s after fixture isolation; helper lifetime smoke passed. Permanent acceptance tests, formal review, full dogfood and native clipboard run remain deliberately unrun; new native scenario pending. No unbuilt in-scope flow or new follow-up. Commit this final evidence/fixture helper, detach and canonical queue land; archive receipts/remove owned scratch after the actual land receipt and end this one-item turn.
