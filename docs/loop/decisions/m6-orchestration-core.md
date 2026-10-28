@@ -457,5 +457,14 @@
 - All preparation subagents and the dependency query completed. No background work remains from this iteration.
 - No runtime acceptance claim: AC1–AC13, cross-family review, UI pointer dogfood and queue-controlled landing remain gated on implementation after dependency readiness.
 
+## Final scoped verification
+- `bun run typecheck`: exit0, no diagnostics.
+- `bun test plugins/quirky.orchestration/test`:28pass,0fail,309assertions across5files.
+- `bun test scripts`:68pass,0fail,554assertions across6files. Nested fixture failures exercise the verifier; the outer suite passed.
+- Real launched terminal and native structured-provider CLI smoke printed `M6_LAUNCHED_TERMINAL_STRUCTURED_CLI_SMOKE_PASS` and `M6_LAUNCHED_SMOKE_CLEANUP_OK`. It exercised Run replay, DAG promotion, exact-owner reports, delivery replay/ack, ask timeout/resume/reply, gates, deferred native startup with no initial turn, real child-CLI lease authentication, idempotent structured submission and mismatched-incarnation close refusal.
+- Earlier affected verification passed360 other remote files and both macOS files; the3 failing core files were corrected and are included in the final28 passing core tests. No claim that the earlier failed aggregate passed.
+- Automatic idle scheduling is not shipped; its unchanged contract/test and implementation remain in the single D41 follow-up. Review/dogfood was skipped by operator instruction. All test/smoke private homes and owned processes were cleaned up.
+- Final command chain exited0 in158.36seconds; full output is artifact118. Queue landing owns fresh full-merge verification.
+
 ## Progress
-Iteration16 implemented and published runtime, core, mailbox, questions/gates, pointer and CLI source. Integration is merged at69b8f12a; all13 incoming decision logs were reconciled. The operator directed immediate scoped landing with no unstarted review/dogfood and at most one follow-up. Final gate is running after concrete compile and fixture corrections. Next: observe the typecheck/affected-suite/scripts/real-launched-CLI verdict, record only exercised evidence, commit the passing scope, detach and queue.ts land. No source worktree or reviewer remains running; the current verifier must return before ending the turn.
+Iteration16 scoped implementation is verified and ready for queue landing. Current passing scope includes durable core/mail/questions/gates, runtime identity/lease/close safety and explicit idempotent submission. Only automatic idle scheduling is deferred through D41 with intact source/test checkpoint and the single queued follow-up. Integration merge and13 incoming decision logs are reconciled; all implementers/verifiers have returned. Next: commit this evidence, detach, invoke the canonical queue.ts land m6-orchestration-core and wait for its full-merge verdict before ending the turn.
