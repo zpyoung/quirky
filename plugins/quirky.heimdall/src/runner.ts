@@ -12,6 +12,7 @@ import type {
   JournalEntry,
   Json,
   KernelAction,
+  KernelWorkerObservation,
   OrchestrationPort,
   ParkReason,
   PacingTier,
@@ -26,9 +27,10 @@ import type {
   WorkerMessage,
   WorkerRequest
 } from './contracts'
-import { ACTIVE_TIME_CHECKPOINT_MS, ACTIVE_TIME_SAMPLE_MS, budgetGeneration, budgetUsage, openBudgetIntervals } from './budget'
+import { ACTIVE_TIME_CHECKPOINT_MS, ACTIVE_TIME_SAMPLE_MS, budgetGeneration, budgetUsage, openBudgetIntervals, type OpenBudgetInterval } from './budget'
 import { actionFingerprint, gateAction } from './gate'
 import { FULL_RESYNC_INTERVAL_MS, pacingDelay } from './pacing'
+import { isCoordinatorSeatLostError } from './worker-evidence'
 
 const MAX_ACTIONS_PER_TICK = 32
 const DEFAULT_SHUTDOWN_MS = 1_500
@@ -36,10 +38,22 @@ const DEFAULT_SHUTDOWN_MS = 1_500
 type Timer = ReturnType<typeof setTimeout>
 type IntervalTimer = ReturnType<typeof setInterval>
 type WorkerDispatchState = { result: DispatchResult; requestId: string; request: WorkerRequest }
+type LiveWorkerObservation = KernelWorkerObservation & {
+  state: 'live'
+  sessionId: string
+  processIncarnation: string
+}
 
 function errorText(error: unknown): string {
   if (error instanceof Error) return error.message
   return String(error)
+}
+function hasLiveWorkerIdentity(
+  observation: KernelWorkerObservation | null | undefined
+): observation is LiveWorkerObservation {
+  return observation?.state === 'live' &&
+    typeof observation.sessionId === 'string' && observation.sessionId.length > 0 &&
+    typeof observation.processIncarnation === 'string' && observation.processIncarnation.length > 0
 }
 
 function hash(value: string): string {
@@ -129,6 +143,7 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
   let consecutiveGateHolds = 0
   let activeAbort: AbortController | null = null
   let recoveringThisTick = false
+  const lastWorkerProofAtMs = new Map<string, number>()
 
   function changed(): void {
     try { options.onChanged?.(watcherId) } catch { /* Observers cannot change runner outcomes. */ }
@@ -236,13 +251,14 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
       requestId?: string
       dispatchId?: string
       clearEffect?: boolean
+      clearReason?: boolean
       [key: string]: unknown
     },
     version: number
   ): Attempt | null {
     const retained = previous ? {
       ...(previous.effect !== undefined && values.clearEffect !== true ? { effect: previous.effect } : {}),
-      ...(previous.reason !== undefined ? { reason: previous.reason } : {}),
+      ...(previous.reason !== undefined && values.clearReason !== true ? { reason: previous.reason } : {}),
       ...(previous.workerRequest !== undefined ? { workerRequest: previous.workerRequest } : {}),
       ...(previous.requestId !== undefined ? { requestId: previous.requestId } : {}),
       ...(previous.dispatchId !== undefined ? { dispatchId: previous.dispatchId } : {}),
@@ -298,7 +314,7 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
     const journal = store.journal(watcherId)
     const opened = openBudgetIntervals(journal).find((interval) => interval.intervalId === intervalId)
     if (!opened) return
-    appendEntry({
+    const saved = appendEntry({
       kind: 'interval-close',
       class: 'fact',
       origin: 'owner',
@@ -309,7 +325,7 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
       reason,
       checkpointAtMs: Math.max(opened.openedAtMs, checkpointAtMs)
     }, version, { allowFenced, idempotent: true })
-    if (openBudgetIntervals(store.journal(watcherId)).length === 0) clearBudgetTimer()
+    if (saved) lastWorkerProofAtMs.delete(intervalId)
   }
 
   function closeAttemptIntervals(attemptId: string, reason: string, atMs: number, version: number): void {
@@ -326,7 +342,26 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
     const journal = store.journal(watcherId)
     for (const interval of openBudgetIntervals(journal)) {
       if (closeReason) {
-        closeInterval(interval.intervalId, closeReason, closeReason === 'contact-lost' ? interval.checkpointAtMs : currentTime, version, allowFenced)
+        const checkpointAtMs = closeReason === 'contact-lost'
+          ? interval.cause === 'worker-dispatched'
+            ? Math.max(interval.checkpointAtMs, lastWorkerProofAtMs.get(interval.intervalId) ?? interval.checkpointAtMs)
+            : interval.checkpointAtMs
+          : currentTime
+        closeInterval(interval.intervalId, closeReason, checkpointAtMs, version, allowFenced)
+        continue
+      }
+      if (interval.cause === 'worker-dispatched') {
+        if (!force && currentTime - interval.checkpointAtMs < ACTIVE_TIME_CHECKPOINT_MS) continue
+        if (currentTime <= interval.checkpointAtMs) continue
+        const lastPositiveAtMs = lastWorkerProofAtMs.get(interval.intervalId) ?? interval.checkpointAtMs
+        checkpointWorkerInterval(
+          interval.intervalId,
+          interval.generation,
+          interval.checkpointAtMs,
+          Math.min(currentTime, lastPositiveAtMs),
+          version,
+          allowFenced
+        )
         continue
       }
       if (!force && currentTime - interval.checkpointAtMs < ACTIVE_TIME_CHECKPOINT_MS) continue
@@ -419,13 +454,146 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
     }, version)
   }
 
-  function ensureWorkerInterval(attempt: Attempt, version: number): void {
+
+  function noteWorkerIntervalProof(intervalId: string, observedAtMs: number): void {
+    const previous = lastWorkerProofAtMs.get(intervalId)
+    if (previous === undefined || observedAtMs > previous) lastWorkerProofAtMs.set(intervalId, observedAtMs)
+  }
+
+  function checkpointWorkerInterval(
+    intervalId: string,
+    generation: string,
+    previousCheckpointAtMs: number,
+    checkpointAtMs: number,
+    version: number,
+    allowFenced = false
+  ): void {
+    if (checkpointAtMs <= previousCheckpointAtMs) return
+    appendEntry({
+      kind: 'interval-checkpoint',
+      class: 'fact',
+      origin: 'owner',
+      resolved: true,
+      eventId: `interval-checkpoint:${intervalId}:${checkpointAtMs}`,
+      intervalId,
+      generation,
+      checkpointAtMs
+    }, version, { allowFenced, idempotent: true })
+  }
+
+  function reconcileWorkerObservations(observations: KernelWorkerObservation[], version: number): void {
+    if (!isCurrent(version) || store.readOnly) return
     const journal = store.journal(watcherId)
-    const open = openBudgetIntervals(journal).some((interval) => {
-      const event = journal.find((entry) => entry.kind === 'interval-open' && entry.intervalId === interval.intervalId)
-      return event?.attemptId === attempt.attemptId && event.cause === 'worker-dispatched'
-    })
-    if (!open) openInterval('worker-dispatched', version, attempt.attemptId)
+    const workerIntervalsByAttempt = new Map<string, OpenBudgetInterval[]>()
+    for (const interval of openBudgetIntervals(journal)) {
+      if (interval.cause !== 'worker-dispatched' || !interval.attemptId) continue
+      const intervals = workerIntervalsByAttempt.get(interval.attemptId)
+      if (intervals) intervals.push(interval)
+      else workerIntervalsByAttempt.set(interval.attemptId, [interval])
+    }
+    const byDispatchId = new Map<string, KernelWorkerObservation | null>()
+    for (const observation of observations) {
+      if (byDispatchId.has(observation.dispatchId)) {
+        byDispatchId.set(observation.dispatchId, null)
+      } else {
+        byDispatchId.set(observation.dispatchId, observation)
+      }
+    }
+    const generation = budgetGeneration(journal, watcherId)
+    const contactProblems: string[] = []
+    const inactiveAssignments: string[] = []
+    for (const attempt of latestAttempts(journal).filter((candidate) =>
+      candidate.state === 'running' && candidate.dispatchId && unresolvedAttempt(candidate)
+    )) {
+      if (!isCurrent(version)) return
+      const dispatchId = attempt.dispatchId
+      if (!dispatchId) continue
+      const observation = byDispatchId.get(dispatchId)
+      const intervals = workerIntervalsByAttempt.get(attempt.attemptId) ?? []
+      const liveObservation = hasLiveWorkerIdentity(observation) ? observation : null
+      if (liveObservation?.assignmentActive === true) {
+        const currentInterval = intervals.find((interval) => interval.generation === generation)
+        for (const interval of intervals) {
+          if (interval === currentInterval) continue
+          closeInterval(
+            interval.intervalId,
+            interval.generation === generation ? 'worker-interval-superseded' : 'generation-reset',
+            interval.checkpointAtMs,
+            version
+          )
+        }
+        const observedAtMs = now()
+        if (currentInterval) {
+          noteWorkerIntervalProof(currentInterval.intervalId, observedAtMs)
+        } else {
+          const intervalId = openInterval('worker-dispatched', version, attempt.attemptId)
+          if (intervalId) noteWorkerIntervalProof(intervalId, observedAtMs)
+        }
+        continue
+      }
+
+      const assignmentInactive = liveObservation?.assignmentActive === false
+      const state = assignmentInactive
+        ? 'assignment-inactive'
+        : observation === undefined ? 'missing' : observation === null ? 'duplicate' : observation.state
+      if (assignmentInactive) inactiveAssignments.push(dispatchId)
+      else contactProblems.push(dispatchId)
+      for (const interval of intervals) {
+        const lastPositiveAtMs = Math.max(
+          interval.checkpointAtMs,
+          lastWorkerProofAtMs.get(interval.intervalId) ?? interval.checkpointAtMs
+        )
+        closeInterval(
+          interval.intervalId,
+          assignmentInactive ? 'worker-assignment-inactive' : state === 'exited' ? 'worker-exited' : 'contact-lost',
+          lastPositiveAtMs,
+          version
+        )
+      }
+      const evidenceKind = assignmentInactive ? 'worker-assignment-inactive' : 'worker-contact-unverifiable'
+      appendEntry({
+        kind: 'evidence',
+        class: 'fact',
+        origin: 'owner',
+        resolved: true,
+        eventId: `${evidenceKind}:${attempt.attemptId}:${dispatchId}:${state}`,
+        evidenceKind,
+        payload: {
+          attemptId: attempt.attemptId,
+          dispatchId,
+          state: observation === undefined ? 'missing' : observation === null ? 'duplicate' : observation.state,
+          assignmentActive: observation?.assignmentActive ?? null,
+          observedAtMs: now()
+        }
+      }, version, { idempotent: true })
+
+
+    }
+    if (!isCurrent(version)) return
+    const current = store.get(watcherId)
+    if (contactProblems.length > 0) {
+      if (current?.enabled && !current.paused && current.parkReason === null) {
+        updateStatus(
+          'held',
+          'worker-contact-unverifiable',
+          `Current liveness is not verifiable for dispatches: ${contactProblems.join(', ')}.`
+        )
+      }
+    } else if (inactiveAssignments.length > 0) {
+      if (current?.enabled && !current.paused && current.parkReason === null) {
+        updateStatus(
+          'held',
+          'worker-assignment-inactive',
+          `Live workers are no longer active supervised assignments: ${inactiveAssignments.join(', ')}.`
+        )
+      }
+    } else if (
+      (statusValue.reason === 'worker-contact-unverifiable' || statusValue.reason === 'worker-assignment-inactive') &&
+      current
+    ) {
+      statusValue = latestStatusFromJournal(current, store.journal(watcherId))
+      changed()
+    }
   }
 
   function applyDispatchResult(attempt: Attempt, result: DispatchResult, version: number, recovery: boolean): Attempt | null {
@@ -444,7 +612,8 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
         requestId: latest.requestId,
         workerRequest: latest.workerRequest,
         dispatchId: result.dispatchId,
-        clearEffect: true
+        clearEffect: true,
+        clearReason: true
       }, version)
       if (!dispatched) return null
       if (!recovery) {
@@ -454,7 +623,6 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
         if (actionInterval) closeInterval(actionInterval.intervalId, 'settled', atMs, version)
       }
       recordTurn(dispatched, result.dispatchId, version)
-      ensureWorkerInterval(dispatched, version)
       return latestAttempts(store.journal(watcherId)).find((entry) => entry.attemptId === latest.attemptId) ?? dispatched
     }
     if (result.kind === 'refused') {
@@ -513,6 +681,28 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
     enrollment = next
     updateStatus('parked', reason, detail)
     return next
+  }
+
+  function parkCoordinatorSeatLost(detail: string, version: number): void {
+    if (!isCurrent(version) || store.readOnly) return
+    recoveryPending = true
+    try {
+      checkpointIntervals(true, version, 'contact-lost')
+    } catch (error) {
+      options.context.log(`active-time close failed during coordinator seat loss: ${errorText(error)}`)
+    }
+    const current = store.get(watcherId)
+    if (!current) return
+    for (const attempt of latestAttempts(store.journal(watcherId)).filter((candidate) =>
+      candidate.action.visibility === 'external' && unresolvedAttempt(candidate)
+    )) {
+      try {
+        appendResolution(attempt, { effect: 'indeterminate', reason: detail }, { source: 'orchestration-unknown' }, version)
+      } catch (error) {
+        options.context.log(`could not persist coordinator-fenced attempt uncertainty: ${errorText(error)}`)
+      }
+    }
+    park(current, 'coordinator-seat-lost', detail, version)
   }
 
   function approvalEscalation(action: KernelAction, detail: string | undefined, version: number): void {
@@ -600,7 +790,10 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
       updateStatus('escalated', verdict.reason, detail)
       trace.exitPath = 'gate-escalated'
     } else {
-      updateStatus('held', verdict.reason, detail)
+      const pendingAttemptGate = verdict.reason === 'attempt-in-flight' || verdict.reason === 'unresolved-attempt'
+      const workerEvidenceHold = statusValue.state === 'held' &&
+        (statusValue.reason === 'worker-contact-unverifiable' || statusValue.reason === 'worker-assignment-inactive')
+      if (!(pendingAttemptGate && workerEvidenceHold)) updateStatus('held', verdict.reason, detail)
       trace.exitPath = 'gate-held'
     }
   }
@@ -697,9 +890,7 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
     version: number
   ): Promise<void> {
     if (snapshot.freshness !== 'live' || !kind.resolveOutcome || !isCurrent(version)) return
-    const unresolved = latestAttempts(store.journal(watcherId)).filter((attempt) =>
-      unresolvedAttempt(attempt) && !(attempt.state === 'running' && attempt.dispatchId)
-    )
+    const unresolved = latestAttempts(store.journal(watcherId)).filter(unresolvedAttempt)
     for (const attempt of unresolved) {
       if (!isCurrent(version)) return
       const latest = store.get(watcherId)
@@ -714,24 +905,29 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
         contentIdentity: snapshot.contentIdentity,
         observedAtMs: snapshot.observedAtMs
       }, version)
-      if (currentAttempt.workerRequest === undefined) closeAttemptIntervals(currentAttempt.attemptId, 'settled', now(), version)
+      closeAttemptIntervals(currentAttempt.attemptId, 'settled', now(), version)
     }
   }
 
-  async function recoverDispatches(version: number): Promise<void> {
+  async function recoverDispatches(version: number): Promise<boolean> {
     const attempts = latestAttempts(store.journal(watcherId)).filter((attempt) =>
-      attempt.requestId && attempt.workerRequest && unresolvedAttempt(attempt)
+      attempt.requestId && attempt.workerRequest && !attempt.dispatchId && unresolvedAttempt(attempt)
     )
     for (const attempt of attempts) {
-      if (!isCurrent(version)) return
+      if (!isCurrent(version)) return false
       const latestEnrollment = store.get(watcherId)
-      if (!latestEnrollment || latestEnrollment.terminalAtMs !== null) return
+      if (!latestEnrollment || latestEnrollment.terminalAtMs !== null) return false
       const latestAttempt = latestAttempts(store.journal(watcherId)).find((candidate) => candidate.attemptId === attempt.attemptId)
       if (!latestAttempt || !unresolvedAttempt(latestAttempt)) continue
       const result = await orchestration.recover(latestEnrollment, latestAttempt)
       if (!isCurrent(version) || result === null) continue
+      if (result.kind === 'indeterminate' && result.reason === 'coordinator-seat-lost') {
+        parkCoordinatorSeatLost(result.detail ?? 'The coordinator no longer owns the requested orchestration Run.', version)
+        return true
+      }
       applyDispatchResult(latestAttempt, result, version, true)
     }
+    return false
   }
 
   function resumeAfterResolution(_current: Enrollment, reason: ParkReason, version: number): Enrollment | null {
@@ -835,6 +1031,26 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
       return true
     }
 
+    const correlated = message.dispatchId !== undefined &&
+      latestAttempts(journal).some((attempt) => attempt.dispatchId === message.dispatchId)
+    if (!correlated) {
+      appendEntry({
+        kind: 'evidence',
+        class: 'fact',
+        origin: 'owner',
+        resolved: true,
+        eventId: `mailbox-unmatched:${message.id}`,
+        evidenceKind: 'worker-message-unmatched',
+        payload: {
+          messageId: message.id,
+          messageType: message.type,
+          ...(message.dispatchId ? { dispatchId: message.dispatchId } : {}),
+          body: message.body
+        }
+      }, version, { idempotent: true })
+      return false
+    }
+
     const reason: ParkReason = message.type === 'question' ? 'worker-question' : 'worker-escalation'
     const escalationId = `${reason}:${message.id}`
     const existing = latestEscalation(journal, escalationId)
@@ -884,12 +1100,17 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
     if (!isCurrent(version)) return
     const messages = await orchestration.mailbox(current)
     if (!isCurrent(version) || messages.length === 0) return
+    const handledMessages: WorkerMessage[] = []
     for (const message of messages) {
       if (!isCurrent(version)) return
-      await resolveWorkerMessage(message, version)
+      const handled = await resolveWorkerMessage(message, version)
+      if (!isCurrent(version)) return
+      if (handled) handledMessages.push(message)
     }
     const latest = store.get(watcherId)
-    if (latest && isCurrent(version)) await orchestration.acknowledge(latest, messages)
+    if (latest && isCurrent(version) && handledMessages.length > 0) {
+      await orchestration.acknowledge(latest, handledMessages)
+    }
   }
 
   function latestStatusFromJournal(current: Enrollment, journal: JournalEntry[]): RunnerStatus {
@@ -982,10 +1203,20 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
       if (recoveryPending) {
         const open = openBudgetIntervals(store.journal(watcherId))
         for (const interval of open) closeInterval(interval.intervalId, 'contact-lost', interval.checkpointAtMs, version)
-        await recoverDispatches(version)
-        if (!isCurrent(version)) { trace.exitPath = 'suspended'; return }
-        recoveryPending = false
       }
+
+      const coordinatorFenced = await recoverDispatches(version)
+      if (!isCurrent(version)) { trace.exitPath = 'suspended'; return }
+      if (coordinatorFenced) {
+        trace.decision = {
+          action: null,
+          reason: 'coordinator-seat-lost',
+          detail: store.get(watcherId)?.haltReason ?? undefined
+        }
+        trace.exitPath = 'parked'
+        return
+      }
+      recoveryPending = false
 
       current = store.get(watcherId)
       if (!current || !isCurrent(version)) { trace.exitPath = 'not-current'; return }
@@ -1019,6 +1250,27 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
 
       current = store.get(watcherId)
       if (!current) { trace.exitPath = 'not-current'; return }
+      const workerObservations = current.orchestrationRunId === null
+        ? []
+        : await orchestration.observeWorkers(current)
+      if (!isCurrent(version)) { trace.exitPath = 'suspended'; return }
+      current = store.get(watcherId)
+      if (!current) { trace.exitPath = 'not-current'; return }
+      reconcileWorkerObservations(workerObservations, version)
+
+      current = store.get(watcherId)
+      if (!isCurrent(version)) { trace.exitPath = 'suspended'; return }
+      if (!current) { trace.exitPath = 'not-current'; return }
+      if (current.parkReason === 'coordinator-seat-lost') {
+        trace.decision = {
+          action: null,
+          reason: 'coordinator-seat-lost',
+          detail: current.haltReason ?? undefined
+        }
+        trace.exitPath = 'parked'
+        updateStatus('parked', 'coordinator-seat-lost', current.haltReason ?? undefined)
+        return
+      }
       let journal = store.journal(watcherId)
       let stopResult = await evaluateStop(kind, snapshot, current, version)
       if (!isCurrent(version)) { trace.exitPath = 'suspended'; return }
@@ -1272,7 +1524,12 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
             try {
               dispatchResult = await orchestration.dispatch(latestEnrollment, prepared, request)
             } catch (error) {
-              dispatchResult = { kind: 'indeterminate', requestId, detail: errorText(error) }
+              dispatchResult = {
+                kind: 'indeterminate',
+                requestId,
+                detail: errorText(error),
+                ...(isCoordinatorSeatLostError(error) ? { reason: 'coordinator-seat-lost' } : {})
+              }
             }
             workerState = { result: dispatchResult, requestId, request }
             if (!isCurrent(version)) return dispatchResult
@@ -1314,6 +1571,14 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
           }
         }
         if (!isCurrent(version)) { trace.exitPath = 'suspended'; break }
+
+        if (workerState?.result.kind === 'indeterminate' && workerState.result.reason === 'coordinator-seat-lost') {
+          const detail = workerState.result.detail ?? 'The coordinator no longer owns the requested orchestration Run.'
+          parkCoordinatorSeatLost(detail, version)
+          trace.decision = { action: null, reason: 'coordinator-seat-lost', detail }
+          trace.exitPath = 'parked'
+          return
+        }
 
         if (executeFailed) {
           if (workerState?.result.kind !== 'dispatched') {
@@ -1437,19 +1702,26 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
         trace.exitPath = 'suspended'
         return
       }
-      failed = true
-      recoveryPending = true
-      consecutiveErrors += 1
       trace.error = errorText(error)
-      try {
-        checkpointIntervals(true, version, 'contact-lost')
-      } catch (closeError) {
-        trace.error += `; active-time close failed: ${errorText(closeError)}`
-        options.context.log(trace.error)
+      if (isCoordinatorSeatLostError(error)) {
+        failed = true
+        parkCoordinatorSeatLost(trace.error, version)
+        trace.decision = { action: null, reason: 'coordinator-seat-lost', detail: trace.error }
+        trace.exitPath = 'parked'
+      } else {
+        failed = true
+        recoveryPending = true
+        consecutiveErrors += 1
+        try {
+          checkpointIntervals(true, version, 'contact-lost')
+        } catch (closeError) {
+          trace.error += `; active-time close failed: ${errorText(closeError)}`
+          options.context.log(trace.error)
+        }
+        trace.exitPath = 'error'
+        updateStatus('held', 'tick-error', trace.error)
+        statusValue = { ...statusValue, consecutiveErrors, consecutiveGateHolds }
       }
-      trace.exitPath = 'error'
-      updateStatus('held', 'tick-error', trace.error)
-      statusValue = { ...statusValue, consecutiveErrors, consecutiveGateHolds }
     } finally {
       if (!isCurrent(version)) {
         if (tickControlGeneration === controlVersion) tickControlGeneration = null

@@ -1,27 +1,17 @@
 import type { PluginCaller } from '@quirky/protocol'
 import type {
-  CheckResult, DeliveryId, MessageType, MutationRequest, MutationResult,
-  QuestionThreadRow, ReplyResult, RunId, RunRow, RuntimeCallerEvidence, SendResult,
+  CheckResult, DeliveryId, DispatchId, MessageId, MessageType, MutationRequest, MutationResult,
+  QuestionThreadRow, ReplyResult, RunId, SendResult, ServiceRunRow,
 } from '../contracts'
 import type { WorkerControlResult, WorkerStartParams, WorkerStartReceipt } from '../worker-contracts'
 
-/** Never a SessionAuthority. Construct only after authenticating the plugin and owned Run. */
-export interface ServiceCoordinatorPrincipal {
-  kind: 'service'
-  pluginId: string
-  runId: RunId
-  authority: 'kernel_plugin'
-}
-/** Session callers retain independently attested runtime evidence without a synthetic session. */
-export type CoordinatorAuthority = RuntimeCallerEvidence | ServiceCoordinatorPrincipal
-export interface ServiceOwner { pluginId: string; key: string }
-export interface ServiceRun extends RunRow {
-  coordinatorSessionId: null
-  serviceOwner: ServiceOwner
-}
+export type { ServiceCoordinatorPrincipal } from '../contracts'
+
+export type ServiceRun = ServiceRunRow & { coordinatorSessionId: null }
 /** Exact worker incarnation is exposed only after the service Run ownership check. */
 export interface ServiceWorkerView {
-  dispatchId: string
+  assignmentActive: boolean
+  dispatchId: DispatchId
   sessionId: string | null
   processIncarnation: string | null
   state: 'live' | 'exited' | 'unverifiable'
@@ -44,12 +34,12 @@ export interface ServiceCheckParams extends MutationRequest {
   timeoutMs?: number
   types?: readonly MessageType[]
 }
-export interface ServiceWorkerReleaseParams extends MutationRequest { runId: RunId; dispatchId: string }
+export interface ServiceWorkerReleaseParams extends MutationRequest { runId: RunId; dispatchId: DispatchId }
 export interface ServiceWorkerStopParams extends ServiceWorkerReleaseParams {
   expectedIdentity: { sessionId: string; processIncarnation: string }
 }
-export interface ServiceReplyParams extends MutationRequest { runId: RunId; messageId: string; body: string }
-export interface ServiceSendParams extends MutationRequest { runId: RunId; dispatchId: string; body: string }
+export interface ServiceReplyParams extends MutationRequest { runId: RunId; messageId: MessageId; body: string }
+export interface ServiceSendParams extends MutationRequest { runId: RunId; dispatchId: DispatchId; body: string }
 export interface ServiceMethodInputs {
   serviceRunCreate: ServiceRunCreateParams
   serviceRunShow: ServiceRunShowParams

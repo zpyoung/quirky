@@ -8,13 +8,13 @@ import type {
   WorkerStartReceipt, WorkerStarter,
 } from '../worker-contracts'
 import { buildWorkerPreamble } from './preamble'
+import { MAX_NESTED_DEPTH } from '../core'
 
 const DEFAULT_READY_TIMEOUT_MS = 60_000
 const TURN_OBSERVATION_TIMEOUT_MS = 30_000
 const CLIENT_TIMEOUT_GRACE_MS = 50_000
 const MAX_TIMER_DELAY_MS = 2_147_483_647
 const MAX_TASK_SPEC_BYTES = 1_214_464
-const DEFAULT_NESTED_WORKER_MAX_DEPTH = 1
 const LIVE_DISPATCH_STATES = new Set<DispatchStatus>(['pending', 'dispatched'])
 const LIVE_WORKER_STATES = new Set(['starting', 'ready', 'start_unknown', 'stopping', 'stop_unknown'])
 const SETTLED_WORKER_STATES = new Set(['succeeded', 'failed', 'stopped', 'abandoned'])
@@ -304,12 +304,6 @@ function coordinatorAddress(run: RunRow, caller: CoordinatorEvidence): string {
   return run.coordinatorSessionId ?? caller.callerSessionId
 }
 
-function maximumDepth(runtime: WorkerRuntime): number {
-  const configured = runtime.context.getSetting('nestedWorkerMaxDepth')
-  return typeof configured === 'number' && Number.isSafeInteger(configured) && configured >= 1
-    ? configured
-    : DEFAULT_NESTED_WORKER_MAX_DEPTH
-}
 
 function recoveryReceipt(receipt: WorkerStartReceipt, dispatchId: DispatchRow['id']): WorkerStartReceipt {
   const releaseCommand = ['orchestration', 'worker-release', '--dispatch', dispatchId]
@@ -555,7 +549,7 @@ async function launchAccepted(
       throw fail('worker_identity_changed', 'Core attached a different worker identity than the attested placement.')
     }
 
-    const prompt = buildWorkerPreamble(task, attached, placement.identity, coordinatorAddress(run, caller), maximumDepth(runtime))
+    const prompt = buildWorkerPreamble(task, attached, placement.identity, coordinatorAddress(run, caller), MAX_NESTED_DEPTH)
     const effectiveLaunch = {
       requested: initial.launch.requested,
       effective: {

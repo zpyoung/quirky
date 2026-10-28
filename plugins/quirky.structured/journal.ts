@@ -100,8 +100,8 @@ function createAndImportV1(home: string): StoreMigration {
 export function journalMigrations(home: string): StoreMigration[] {
   return [
     createAndImportV1(home),
-    (store) => store.exec(CREATE_LAUNCH_OPTIONS_TABLE),
-    (store) => store.exec(CREATE_SEND_RECEIPTS_TABLE)
+    (store) => store.exec(CREATE_SEND_RECEIPTS_TABLE),
+    (store) => store.exec(CREATE_LAUNCH_OPTIONS_TABLE)
   ]
 }
 
