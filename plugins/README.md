@@ -66,10 +66,11 @@ The model and effort use the agent catalog. Omit both to leave the provider defa
 Raw extra arguments are refused for structured sessions.
 
 With `quirky.accounts` enabled, creation and resume prepare the selected Claude or Codex account
-before starting the native process. Explicit provider-home configuration takes precedence;
-preparation failure refuses the launch. Prepared environment values are not saved in the launch
-snapshot. Codex resume retains the native conversation ID and records its relocated transcript
-path when account preparation moves the conversation.
+before starting the native process. Explicit provider-home configuration and trusted launch-hook
+home overrides take precedence over managed selection; the account record describes the effective
+home. Preparation failure refuses the launch. Prepared environment values are not saved in the
+launch snapshot. Codex resume retains the native conversation ID and records its relocated
+transcript path when account preparation moves the conversation.
 
 The plugin exposes `create`, `messages`, `send`, `stop`, and `resume`. Creation returns a session
 record before startup finishes; `send` waits for native startup before submitting input. Messages
@@ -522,6 +523,21 @@ earlier prompt. CLI/API callers can pin the same content with
 `--trust-issue-command --trust-issue-command-hash <hash-from-error>`, or
 `--trust-setup --trust-setup-hash <hash-from-error>` for setup.
 Trust flags without a hash authorize the current call's script.
+
+## Accounts and running sessions
+
+Account selection applies to future launches. Existing Claude and Codex processes keep their old
+account until restarted. The Codex pane's **Keep old account** and **Restart** controls use the same
+revision-checked actions as Usage. A restart preserves the native conversation and focuses its new
+terminal; removing an earlier Codex account does not invalidate the current transcript locator.
+
+Display preferences and “Don't ask again” choices do not advance account-selection authority.
+A later account selection still invalidates an earlier restart choice or unspent reset offer.
+Reset retries retain the displayed account/offer scope and request ID; missing credit, changed
+offers and unknown outcomes are shown separately from confirmed redemption.
+
+Full remaining UI acceptance and native-only clipboard, browser, Keychain and OS-focus checks are
+tracked in [the completion decisions](../docs/loop/decisions/m3-accounts-remaining-flows.md).
 
 ## Heimdall fleet and controls
 
