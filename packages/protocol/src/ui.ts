@@ -1,5 +1,6 @@
 import type { NativeBrowserCapability } from './native-browser'
 import type { QuirkyEvent } from './rpc'
+import type { UiToolEntry, UiToolLayout, UiToolSlot } from './tool-slots'
 
 /** The contribution kinds the UI plugin API adds. */
 export const UI_KINDS = ['status-bar', 'sidebar-section', 'activity-item', 'panel', 'view', 'overlay', 'command', 'keybinding', 'setting', 'settings-section', 'theme', 'menu-item'] as const
@@ -98,6 +99,9 @@ export type UiSlotEntry = {
   module: string | null
   /** Views opting into Settings navigation; ignored for every other slot kind. */
   settings?: boolean
+  /** Host-owned tool placement metadata for panel/sidebar/activity contributions. */
+  defaultSlot?: UiToolSlot
+  icon?: string
 }
 
 export type UiCommandEntry = {
@@ -200,6 +204,8 @@ export type UiModel = {
   theme: { chosen: string; active: string }
   /** Per plugin with a `ui` field and code-backed contributions in effect; `provides` lists the IDs its module may provide. */
   modules: Record<string, { url: string; provides: string[] }>
+  /** Resolved tool projection; omitted by older contribution producers. */
+  tools?: UiToolEntry[]
 }
 
 /** The daemon-owned layout: open view/panel, sidebar visibility and desired panel geometry; `palette` is absent when the command palette is closed. */
@@ -210,10 +216,12 @@ export type UiLayout = {
   focus: 'sidebar' | 'view' | 'panel' | null
   /** Desired width by effective panel ID; absent entries retain the shell's default width. */
   panelWidths?: Record<string, number>
-  /** Global activity-bar position; absence retains the shell's existing default geometry. */
-  activityBarPosition?: 'top' | 'side'
   /** Whether the command palette is open; absent means closed. */
   palette?: boolean
+  /** Host-owned six-slot placement, visibility and geometry, shared across projects. */
+  tools?: UiToolLayout
+  /** Open center view contributions, retaining each view's last input in this window. */
+  viewTabs?: { id: string; input?: unknown }[]
 }
 
 /** A connected window (a client with role `ui`). */
@@ -292,6 +300,8 @@ export type UiPluginContext = {
   readonly pluginId: string
   /** Writes to the window log, prefixed with the plugin ID. */
   log(message: string): void
+  /** Reads plain text from this window's clipboard: native desktop pasteboard, Web Clipboard API otherwise. */
+  readClipboardText(): Promise<string>
   /** Registers the implementation of a code-backed contribution this plugin declares; throws for any other ID. */
   provide(contributionId: string, implementation: unknown): void
   /** Invokes a daemon or plugin method. */

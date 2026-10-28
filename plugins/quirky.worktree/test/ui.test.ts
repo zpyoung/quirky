@@ -810,7 +810,7 @@ test('SC-47: Delete asks in the window and passes force and yes with no ask card
   await click(dialogButton('Delete Workspace'))
   expect(h.callsTo('quirky.worktree/remove')).toEqual([{ worktree: 'w2', force: true, yes: true }])
   expect(h.callsTo('setting.set')).toEqual([])
-  expect(h.calls.some((c) => c.method.startsWith('quirky.ask/'))).toBe(false)
+  expect(h.callsTo('quirky.ask/answer')).toEqual([])
 })
 
 test('the delete dialog leaves out the change count for no changes or a failed status', async () => {

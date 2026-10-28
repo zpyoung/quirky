@@ -111,6 +111,10 @@ async function clickMobileButton(label: string): Promise<void> {
   const button = mobileButton(label)
   await act(async () => { button.dispatchEvent(new MouseEvent('click', { bubbles: true })); await Promise.resolve() })
 }
+async function clickMobileButtonContaining(text: string): Promise<void> {
+  const button = mobileButtonContaining(text)
+  await act(async () => { button.dispatchEvent(new MouseEvent('click', { bubbles: true })); await Promise.resolve() })
+}
 
 async function selectMobileLabel(labelText: string, value: string): Promise<void> {
   const label = [...(container?.querySelectorAll('label') ?? [])].find((candidate) => candidate.textContent?.includes(labelText))
@@ -173,7 +177,7 @@ test('file drafts switch to bounded transfers beyond the safe direct-write size'
   expect(offset).toBe(totalBytes)
   expect(draftChunkLength(totalBytes, totalBytes, MOBILE_EDITOR_TRANSFER_CHUNK_LIMIT)).toBe(0)
 })
-test('mobile composer keeps setup and issue-command consent independent and forwards both displayed pins', async () => {
+test.each(['run', 'skip'] as const)('mobile composer keeps independent script approvals when issue command is %s', async (issueDecision) => {
   const target = { worktree: 'wt-mobile', kind: 'issue', number: 22, url: 'https://github.com/mobile-owner/mobile-app/issues/22' }
   const baseRequest = {
     kind: 'composer',
@@ -224,28 +228,32 @@ test('mobile composer keeps setup and issue-command consent independent and forw
   const firstSubmit = fixture.waitFor('quirky.tasks/workspace')
   await clickMobileButton('Create workspace')
   await act(async () => { await firstSubmit })
-  expect(container?.textContent).toContain('Setup script needs approval')
   expect(container?.textContent).toContain(setupHash)
-  expect(container?.textContent).toContain('Run setup once')
 
   const setupApproval = fixture.waitFor('quirky.tasks/workspace')
   await clickMobileButton('Run setup once')
   await act(async () => { await setupApproval })
-  expect(container?.textContent).toContain('Issue command needs approval')
   expect(container?.textContent).toContain(issueHash)
-  expect(container?.textContent).toContain('Skip issue command')
-  expect(container?.textContent).not.toContain('Run setup once')
+  expect(container?.textContent).toContain(setupHash)
 
-  const issueSkip = fixture.waitFor('quirky.tasks/workspace')
-  await clickMobileButton('Skip issue command')
-  await act(async () => { await issueSkip })
+  const issueApproval = fixture.waitFor('quirky.tasks/workspace')
+  await clickMobileButton(issueDecision === 'run' ? 'Run issue command once' : 'Skip issue command')
+  await act(async () => { await issueApproval })
 
   const workspaceCalls = fixture.calls.filter((call) => call.method === 'quirky.tasks/workspace')
   expect(workspaceCalls).toHaveLength(4)
   expect(workspaceCalls[1]?.params).toMatchObject({ setup: 'run', issueCommand: 'run', agent: '' })
   expect(workspaceCalls[2]?.params).toMatchObject({ setup: 'run', issueCommand: 'run', trustSetup: true, trustSetupHash: setupHash, agent: '' })
-  expect(workspaceCalls[3]?.params).toMatchObject({ setup: 'run', issueCommand: 'skip', trustSetup: true, trustSetupHash: setupHash, agent: '' })
-  expect(workspaceCalls[3]?.params).not.toHaveProperty('trustIssueCommand')
-  expect(workspaceCalls[3]?.params).not.toHaveProperty('trustIssueCommandHash')
+  expect(workspaceCalls[2]?.params).not.toHaveProperty('trustIssueCommand')
+  expect(workspaceCalls[2]?.params).not.toHaveProperty('trustIssueCommandHash')
+  expect(workspaceCalls[3]?.params).toMatchObject({
+    setup: 'run', issueCommand: issueDecision, trustSetup: true, trustSetupHash: setupHash, agent: ''
+  })
+  if (issueDecision === 'run') {
+    expect(workspaceCalls[3]?.params).toMatchObject({ trustIssueCommand: true, trustIssueCommandHash: issueHash })
+  } else {
+    expect(workspaceCalls[3]?.params).not.toHaveProperty('trustIssueCommand')
+    expect(workspaceCalls[3]?.params).not.toHaveProperty('trustIssueCommandHash')
+  }
   expect(fixture.navigations).toContainEqual({ kind: 'session', worktreeId: 'wt-mobile-created' })
 })

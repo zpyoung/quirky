@@ -33,6 +33,7 @@ import type {
   UiToastState,
   UiWindowInfo
 } from './ui'
+import type { UiToolResize, UiToolSlot } from './tool-slots'
 
 /** Bumped on any breaking change to `Methods`, `QuirkyEvent` or the frame layout. */
 export const PROTOCOL_VERSION = 2
@@ -129,12 +130,16 @@ export type Methods = {
   'ui.window.command.run': { params: WindowCommandRequest; result: { result: unknown } }
   /** Opens or closes the shared command palette; omitted `open` toggles its current state. */
   'ui.palette.set': { params: { open?: boolean }; result: UiLayout }
+  'ui.tool.open': { params: { id: string }; result: UiLayout }
+  'ui.tool.close': { params: { slot: UiToolSlot }; result: UiLayout }
+  'ui.tool.move': { params: { id: string; slot: UiToolSlot }; result: UiLayout }
+  'ui.tool.resize': { params: UiToolResize; result: UiLayout }
   'ui.view.open': { params: { id: string; input?: unknown }; result: UiLayout }
   'ui.view.close': { params: Record<string, never>; result: UiLayout }
   'ui.panel.open': { params: { id: string }; result: UiLayout }
-  /** Configures one effective panel's desired width and/or the global activity-bar position. */
+  /** Configures one effective panel's desired width in its current tool slot. */
   'ui.panel.configure': {
-    params: { id: string; width?: number; activityBarPosition?: 'top' | 'side' }
+    params: { id: string; width: number }
     result: UiLayout
   }
   'ui.panel.close': { params: Record<string, never>; result: UiLayout }

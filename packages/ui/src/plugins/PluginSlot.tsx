@@ -1,6 +1,6 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { Button } from '../design-system'
 import { usePluginHost, usePluginState } from '../context'
-
 type Props = { id: string; input?: unknown }
 
 /**
@@ -12,6 +12,7 @@ export function PluginSlot({ id, input }: Props) {
   const host = usePluginHost()
   const state = usePluginState()
   const anchor = useRef<HTMLDivElement>(null)
+  const [retry, setRetry] = useState(0)
   const entry = [
     ...(state.model?.sidebarSections ?? []),
     ...(state.model?.activityItems ?? []),
@@ -26,7 +27,7 @@ export function PluginSlot({ id, input }: Props) {
   const plugin = entry?.plugin
   const module = entry?.module
 
-  // the host drops a mount whose owner changed, so the owner and its module are part of the mount's identity
+  // The host drops a mount whose owner changed; retry intentionally re-enters its mount path.
   useEffect(() => {
     const parent = anchor.current
     if (!parent) return
@@ -38,7 +39,7 @@ export function PluginSlot({ id, input }: Props) {
       afterCleanup: () => element.remove()
     })
     return unmount
-  }, [host, id, input, plugin, module])
+  }, [host, id, input, plugin, module, retry])
 
   const statusBar = entry?.kind === 'status-bar'
   return (
@@ -55,7 +56,9 @@ export function PluginSlot({ id, input }: Props) {
       )}
       {slot.status === 'error' && (
         <div className="plugin-slot-error" role="alert">
-          {slot.message}
+          <strong>{plugin ?? 'Unknown plugin'}</strong>
+          <span>{slot.message}</span>
+          <Button variant="secondary" onClick={() => setRetry((attempt) => attempt + 1)}>Reload</Button>
         </div>
       )}
       <div ref={anchor} style={{ display: 'contents' }} />
