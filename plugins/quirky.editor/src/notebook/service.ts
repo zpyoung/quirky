@@ -134,7 +134,8 @@ async function withBufferMutation<T>(
   host: EditorServices,
   bufferId: string,
   locks: Map<string, Promise<void>>,
-  mutate: (document: NotebookDocument) => T
+  mutate: (document: NotebookDocument) => T,
+  shouldMutate?: () => boolean
 ): Promise<{ document: NotebookDocument; result: T }> {
   const previous = locks.get(bufferId) ?? Promise.resolve()
   const slot = Promise.withResolvers<void>()
@@ -145,6 +146,7 @@ async function withBufferMutation<T>(
     const buffer = host.get(bufferId)
     const revision = buffer.contentRevision
     const document = parsedOrThrow(host, currentText(buffer))
+    if (shouldMutate && !shouldMutate()) return { document, result: undefined as T }
     const result = mutate(document)
     await host.draft(bufferId, serializeNotebook(document), revision)
     return { document, result }
@@ -384,14 +386,28 @@ function publicNotebookParse(host: EditorServices, bufferId: string, params: Rec
 export function createNotebookMethods(host: EditorServices): FeatureMethods {
   const runtimes = new Map<string, RuntimeState>()
   const mutationLocks = new Map<string, Promise<void>>()
+  const closingBuffers = new Set<string>()
   let disposed = false
 
   const runtimeFor = (bufferId: string): RuntimeState => {
+    if (disposed || closingBuffers.has(bufferId)) error(host, 'not-found', 'Notebook buffer is closing or disposed.')
     const current = runtimes.get(bufferId)
     if (current) return current
+    const buffer = host.get(bufferId)
+    if (buffer.kind !== 'notebook') error(host, 'invalid-params', 'notebook actions require a notebook buffer')
     const created: RuntimeState = { trusted: false, selected: null, kernel: null, interruptStalled: false, lastSetupError: null }
     runtimes.set(bufferId, created)
     return created
+  }
+  const publishRuntimeState = (bufferId: string, state: RuntimeState): void => {
+    if (disposed || closingBuffers.has(bufferId) || runtimes.get(bufferId) !== state) return
+    let buffer: EditorBuffer
+    try {
+      buffer = host.get(bufferId)
+    } catch {
+      return
+    }
+    if (buffer.kind === 'notebook') host.emit()
   }
 
   const getDocument = (bufferId: string): { buffer: EditorBuffer; parsed: NotebookParse } => {
@@ -426,32 +442,62 @@ export function createNotebookMethods(host: EditorServices): FeatureMethods {
     caller: PluginCaller,
     requestedPython?: unknown
   ): Promise<{ state: RuntimeState; location: NotebookLocation; result: KernelStartResult }> => {
-    const state = runtimeFor(bufferId)
-    if (!state.trusted) error(host, 'conflict', 'Notebook trust is required before starting a Python kernel.')
     const { parsed } = getDocument(bufferId)
     requirePython(parsed)
+    const state = runtimeFor(bufferId)
+    if (!state.trusted) error(host, 'conflict', 'Notebook trust is required before starting a Python kernel.')
     const location = await localLocation(host, bufferId, caller)
+    if (disposed || closingBuffers.has(bufferId) || runtimes.get(bufferId) !== state || !state.trusted) {
+      error(host, 'conflict', 'The notebook was closed or its trust was revoked before the kernel could start.')
+    }
+
+    const startSession = async (kernel: KernelSession): Promise<{ state: RuntimeState; location: NotebookLocation; result: KernelStartResult }> => {
+      const result = await kernel.start()
+      if (disposed || closingBuffers.has(bufferId) || runtimes.get(bufferId) !== state || state.kernel !== kernel) {
+        await kernel.shutdown()
+        return { state, location, result: { status: 'failed', detail: 'The notebook kernel was stopped before startup completed.', session: kernel } }
+      }
+      if (result.status === 'failed') {
+        state.lastSetupError = result.detail
+        publishRuntimeState(bufferId, state)
+      }
+      return { state, location, result }
+    }
+
     if (state.kernel?.status === 'ready') return { state, location, result: { status: 'ready', session: state.kernel } }
+    if (state.kernel?.status === 'starting') return startSession(state.kernel)
     const python = await getEnvironment(state, location, requestedPython)
+    if (disposed || closingBuffers.has(bufferId) || runtimes.get(bufferId) !== state || !state.trusted) {
+      error(host, 'conflict', 'The notebook was closed or its trust was revoked before the kernel could start.')
+    }
+    if (state.kernel?.status === 'ready') return { state, location, result: { status: 'ready', session: state.kernel } }
+    if (state.kernel?.status === 'starting') return startSession(state.kernel)
     const bridgePath = join(host.context.dir, 'src/notebook/kernel-bridge.py')
     if (!python.hasIpykernel) {
       return { state, location, result: { status: 'missing-ipykernel', externallyManaged: python.externallyManaged, session: new KernelSession(python, location.directory, bridgePath, host.context.dataDir) } }
     }
-    const kernel = new KernelSession(python, location.directory, bridgePath, host.context.dataDir)
+    const kernel = new KernelSession(python, location.directory, bridgePath, host.context.dataDir, (session) => {
+      if (state.kernel === session) publishRuntimeState(bufferId, state)
+    }, host.context.home)
     state.kernel = kernel
     state.lastSetupError = null
-    const result = await kernel.start()
-    if (result.status === 'failed') state.lastSetupError = result.detail
-    return { state, location, result }
+    return startSession(kernel)
   }
 
   const disposeBuffer = async (bufferId: string): Promise<void> => {
     const state = runtimes.get(bufferId)
     if (!state) return
+    closingBuffers.add(bufferId)
     state.trusted = false
     state.selected = null
+    const kernel = state.kernel
+    state.kernel = null
     runtimes.delete(bufferId)
-    await state.kernel?.shutdown()
+    try {
+      await kernel?.shutdown()
+    } finally {
+      closingBuffers.delete(bufferId)
+    }
   }
 
   const unsubscribeClose = host.onClose((bufferId) => { void disposeBuffer(bufferId) })
@@ -552,7 +598,7 @@ export function createNotebookMethods(host: EditorServices): FeatureMethods {
   }
 
   const runGroup = async (bufferId: string, indices: number[], caller: PluginCaller, requestedPython?: unknown): Promise<ExecutionGroupResult> => {
-    const { result } = await ensureKernel(bufferId, caller, requestedPython)
+    const { state, result } = await ensureKernel(bufferId, caller, requestedPython)
     if (result.status === 'missing-ipykernel') {
       return { status: 'missing-ipykernel', completed: 0, cancelled: indices.length, executionCount: null, outputs: [], externallyManaged: result.externallyManaged }
     }
@@ -560,16 +606,24 @@ export function createNotebookMethods(host: EditorServices): FeatureMethods {
       return { status: 'failed', completed: 0, cancelled: indices.length, executionCount: null, outputs: [], stderr: result.detail }
     }
     const session = result.session
+    const isCurrentSession = () => !disposed && !closingBuffers.has(bufferId) && runtimes.get(bufferId) === state && state.kernel === session
     await withBufferMutation(host, bufferId, mutationLocks, (document) => {
       ensureExecutableCells(document)
       return undefined
-    })
+    }, isCurrentSession)
+    if (!isCurrentSession()) {
+      return { status: 'dead', completed: 0, cancelled: indices.length, executionCount: null, outputs: [] }
+    }
     let completed = 0
     let finalStatus: ExecutionGroupResult['status'] = 'ok'
     let executionCount: number | null = session.executionCount
     let outputs: JsonObject[] = []
     let stderr = ''
     for (const index of indices) {
+      if (!isCurrentSession()) {
+        finalStatus = 'dead'
+        break
+      }
       const { parsed } = getDocument(bufferId)
       if (!parsed.valid || !parsed.document) error(host, 'conflict', 'Notebook changed to an invalid document while execution was queued.')
       const cell = cellAt(host, parsed.document, index)
@@ -583,21 +637,32 @@ export function createNotebookMethods(host: EditorServices): FeatureMethods {
         current.outputs = []
         current.execution_count = null
         return undefined
-      })
+      }, isCurrentSession)
+      if (!isCurrentSession()) {
+        finalStatus = 'dead'
+        break
+      }
       const clearAfter = { value: false }
       const execution = await session.execute(code, async (frame: KernelFrame) => {
-        if (frame.type === 'done' || frame.type === 'ready') return
+        if (!isCurrentSession() || frame.type === 'done' || frame.type === 'ready') return
         if (!OUTPUT_TYPES.has(frame.type)) return
         await withBufferMutation(host, bufferId, mutationLocks, (document) => {
           updateOutput(document, index, frame, clearAfter)
           return undefined
-        })
+        }, isCurrentSession)
       })
+      if (!isCurrentSession()) {
+        completed++
+        executionCount = execution.executionCount
+        stderr = execution.stderr
+        finalStatus = 'dead'
+        break
+      }
       await withBufferMutation(host, bufferId, mutationLocks, (document) => {
         const current = cellAt(host, document, index)
         current.execution_count = execution.executionCount
         return undefined
-      })
+      }, isCurrentSession)
       completed++
       executionCount = execution.executionCount
       stderr = execution.stderr
@@ -626,6 +691,7 @@ export function createNotebookMethods(host: EditorServices): FeatureMethods {
     if (action === 'trust') {
       const state = runtimeFor(bufferId)
       state.trusted = params.granted !== false
+      publishRuntimeState(bufferId, state)
       return { trusted: state.trusted }
     }
     if (action === 'environments') {
@@ -647,43 +713,48 @@ export function createNotebookMethods(host: EditorServices): FeatureMethods {
     }
     if (action === 'select') {
       const location = await localLocation(host, bufferId, caller)
+      const state = runtimeFor(bufferId)
       let pythonPath = params.python ?? params.path
       if (params.browse === true && (typeof pythonPath !== 'string' || !pythonPath.trim())) {
         if (process.platform !== 'darwin') error(host, 'invalid-params', 'Browse for Python is supported on macOS; pass an explicit interpreter path on this host.')
         const chooser = spawn('osascript', ['-e', 'POSIX path of (choose file with prompt "Select Python interpreter")'], {
           cwd: location.directory, env: process.env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true
         })
-        const selected = await new Promise<{ code: number | null; stdout: string; stderr: string }>((resolveChoice, rejectChoice) => {
-          let stdout = ''
-          let stderr = ''
-          chooser.stdout?.setEncoding('utf8').on('data', (chunk: string) => { stdout += chunk.slice(0, 4096) })
-          chooser.stderr?.setEncoding('utf8').on('data', (chunk: string) => { stderr += chunk.slice(0, 4096) })
-          chooser.once('error', rejectChoice)
-          chooser.once('close', (code) => resolveChoice({ code, stdout, stderr }))
-        })
+        const choice = Promise.withResolvers<{ code: number | null; stdout: string; stderr: string }>()
+        let stdout = ''
+        let stderr = ''
+        chooser.stdout?.setEncoding('utf8').on('data', (chunk: string) => { stdout += chunk.slice(0, 4096) })
+        chooser.stderr?.setEncoding('utf8').on('data', (chunk: string) => { stderr += chunk.slice(0, 4096) })
+        chooser.once('error', choice.reject)
+        chooser.once('close', (code) => choice.resolve({ code, stdout, stderr }))
+        const selected = await choice.promise
         if (selected.code !== 0) {
-          if (/cancel/i.test(selected.stderr)) return { cancelled: true, selected: runtimeFor(bufferId).selected }
+          if (/cancel/i.test(selected.stderr)) return { cancelled: true, selected: state.selected }
           error(host, 'conflict', selected.stderr.trim() || 'The Python file chooser failed.')
         }
         pythonPath = selected.stdout.trim()
       }
       const selectedPath = requiredString(host, pythonPath, 'python')
+      let environment: PythonEnvironment
       try {
-        const environment = await describePython(selectedPath)
-        const state = runtimeFor(bufferId)
-        if (state.kernel && state.kernel.python.path !== environment.path) {
-          const kernel = state.kernel
-          state.kernel = null
-          state.trusted = false
-          await kernel.shutdown()
-        }
-        state.selected = environment
-        state.lastSetupError = null
-        return { selected: true, environment, trusted: state.trusted, language: notebookLanguage(parseNotebookRoot(currentText(host.get(bufferId)))) }
+        environment = await describePython(selectedPath)
       } catch (cause) {
         const detail = cause instanceof Error ? cause.message : String(cause)
         error(host, 'invalid-params', detail)
       }
+      if (disposed || closingBuffers.has(bufferId) || runtimes.get(bufferId) !== state) {
+        error(host, 'conflict', 'The notebook was closed while selecting a Python interpreter.')
+      }
+      if (state.kernel && state.kernel.python.path !== environment.path) {
+        const kernel = state.kernel
+        state.kernel = null
+        state.trusted = false
+        await kernel.shutdown()
+      }
+      state.selected = environment
+      state.lastSetupError = null
+      publishRuntimeState(bufferId, state)
+      return { selected: true, environment, trusted: state.trusted, language: notebookLanguage(parseNotebookRoot(currentText(host.get(bufferId)))) }
     }
     if (action === 'install') {
       const state = runtimeFor(bufferId)
@@ -745,7 +816,7 @@ export function createNotebookMethods(host: EditorServices): FeatureMethods {
     if (action === 'interrupt') {
       const state = runtimeFor(bufferId)
       const result = await state.kernel?.interrupt() ?? { interrupted: false, stalled: false }
-      state.interruptStalled = result.stalled
+      if (runtimes.get(bufferId) === state) state.interruptStalled = result.stalled
       return result
     }
     if (action === 'restart') {
@@ -756,6 +827,7 @@ export function createNotebookMethods(host: EditorServices): FeatureMethods {
       state.interruptStalled = false
       state.lastSetupError = null
       await kernel?.shutdown()
+      publishRuntimeState(bufferId, state)
       return { status: 'stopped', trusted: false, outputsKept: true, queueCancelled: true }
     }
     if (action === 'shutdown') {
@@ -764,6 +836,7 @@ export function createNotebookMethods(host: EditorServices): FeatureMethods {
       state.kernel = null
       state.interruptStalled = false
       await kernel?.shutdown()
+      publishRuntimeState(bufferId, state)
       return { status: 'stopped', trusted: state.trusted }
     }
     return undefined
@@ -780,7 +853,9 @@ export function createNotebookMethods(host: EditorServices): FeatureMethods {
       await Promise.all(states.map(async ([bufferId, state]) => {
         state.trusted = false
         state.selected = null
-        await state.kernel?.shutdown()
+        const kernel = state.kernel
+        state.kernel = null
+        await kernel?.shutdown()
         runtimes.delete(bufferId)
       }))
     }
