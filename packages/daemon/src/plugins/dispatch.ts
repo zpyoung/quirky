@@ -247,16 +247,18 @@ export class Dispatcher {
 function callerOf(from: DispatchSource, withConnection: boolean, sessionAuthority?: PluginSessionAuthority): PluginCaller {
   if ('pluginId' in from) return { role: 'plugin', pluginId: from.pluginId }
   if ('kernel' in from) return { role: 'plugin', pluginId: KERNEL_PLUGIN_ID }
-  const { role, name, deviceId, cwd, sessionId, worktreeId } = from.conn
+  const { role, name, deviceId, ownerGrantId, desktopClientId, cwd, sessionId, worktreeId } = from.conn
   return {
     role: role as ClientRole,
     ...(name !== undefined ? { name } : {}),
     ...(deviceId !== undefined ? { deviceId } : {}),
+    ...(ownerGrantId !== undefined ? { ownerGrantId } : {}),
+    ...(desktopClientId !== undefined ? { desktopClientId } : {}),
     ...(cwd !== undefined ? { cwd } : {}),
     ...(sessionId !== undefined ? { sessionId } : {}),
     ...(worktreeId !== undefined ? { worktreeId } : {}),
     ...(sessionAuthority !== undefined ? { sessionAuthority } : {}),
-    ...(withConnection || role === 'mobile'
+    ...(withConnection || role === 'mobile' || ownerGrantId !== undefined
       ? { connection: { id: from.conn.id, transport: from.conn.transport, onClose: (callback) => onConnectionClose(from.conn, callback), openStream: () => openStream(from.conn) } }
       : {})
   }

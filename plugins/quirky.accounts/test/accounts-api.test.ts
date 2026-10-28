@@ -135,7 +135,7 @@ describe('quirky.accounts lifecycle API and CLI', () => {
     expect(prepared).toEqual({
       env: { CODEX_HOME: h.managedHome('codex', selected.id) },
       shellInit: null,
-      account: { provider: 'codex', id: selected.id, label: selected.label, source: 'managed' }
+      account: { provider: 'codex', id: selected.id, label: selected.label, source: 'managed', authKind: 'oauth' }
     })
     const systemDefault = await call<AccountPrepareResult>(h.client, 'quirky.accounts/prepareProviderEnv', {
       agent: 'codex',
@@ -148,7 +148,7 @@ describe('quirky.accounts lifecycle API and CLI', () => {
     expect(systemDefault).toMatchObject({
       env: { CODEX_HOME: null },
       shellInit: null,
-      account: { provider: 'codex', id: null, source: 'default' }
+      account: { provider: 'codex', id: null, source: 'default', authKind: 'none' }
     })
     const customHome = await call<AccountPrepareResult>(h.client, 'quirky.accounts/prepareProviderEnv', {
       agent: 'codex',
@@ -161,7 +161,7 @@ describe('quirky.accounts lifecycle API and CLI', () => {
     expect(customHome).toMatchObject({
       env: {},
       shellInit: null,
-      account: { provider: 'codex', id: null, source: 'custom' }
+      account: { provider: 'codex', id: null, source: 'custom', authKind: 'none' }
     })
     expect(await call<SessionHomeResult>(h.client, 'quirky.accounts/sessionHome', { session: 'codex-model-probe' }))
       .toEqual({ provider: null, home: null })
@@ -261,6 +261,174 @@ process.stdin.on('data', chunk => {
     expect(await call<SessionHomeResult>(h.client, 'quirky.accounts/sessionHome', { session: 'codex-model-probe' }))
       .toEqual({ provider: null, home: null })
   }, 30_000)
+  test('Anthropic discovery does not use an ambient API key when the prepared account is OAuth', async () => {
+    const h = await startAccounts({ plugins: ['quirky.agents'] })
+    const claudeHome = defaultHome(h.home, 'claude')
+    mkdirSync(claudeHome, { recursive: true })
+    const oauthSecret = 'fixture-selected-oauth-token'
+    const ambientKey = 'fixture-unselected-api-key'
+    writeFileSync(join(claudeHome, '.credentials.json'), JSON.stringify({
+      claudeAiOauth: { accessToken: oauthSecret }
+    }))
+    process.env.ANTHROPIC_API_KEY = ambientKey
+
+    const originalFetch = globalThis.fetch
+    let modelRequests = 0
+    globalThis.fetch = (async (input, init) => {
+      const text = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+      const url = new URL(text)
+      if (url.pathname === '/v1/models' && url.hostname === 'api.anthropic.com') {
+        modelRequests += 1
+        return new Response('{}', { status: 401 })
+      }
+      return originalFetch(input, init)
+    }) as typeof fetch
+
+    try {
+      const prepared = await call<AccountPrepareResult>(h.client, 'quirky.accounts/prepareProviderEnv', {
+        agent: 'claude',
+        cwd: h.userHome,
+        homeOverrides: {
+          claude: { value: null, source: 'absent' },
+          codex: { value: null, source: 'absent' }
+        }
+      })
+      expect(prepared.account).toMatchObject({ source: 'default', authKind: 'oauth' })
+      const result = await call<any>(h.client, 'quirky.agents/discoverModels', { agent: 'claude', host: 'local' })
+      expect(result).toMatchObject({ status: 'unavailable', authoritative: false, models: [] })
+      expect(modelRequests).toBe(0)
+      expect(JSON.stringify({ prepared, result, events: h.events })).not.toContain(oauthSecret)
+      expect(JSON.stringify({ prepared, result, events: h.events })).not.toContain(ambientKey)
+    } finally {
+      globalThis.fetch = originalFetch
+      delete process.env.ANTHROPIC_API_KEY
+    }
+  }, 30_000)
+
+  test('Anthropic model discovery uses the prepared account key, follows every models page, and preserves choices on unusable responses', async () => {
+    const h = await startAccounts({ plugins: ['quirky.agents'] })
+    const claudeHome = defaultHome(h.home, 'claude')
+    mkdirSync(claudeHome, { recursive: true })
+    const selectedKey = 'sk-ant-selected-account-fixture'
+    const ambientKey = 'sk-ant-unselected-environment-fixture'
+    writeFileSync(join(claudeHome, '.claude.json'), JSON.stringify({ primaryApiKey: selectedKey }))
+    process.env.ANTHROPIC_API_KEY = ambientKey
+
+    const originalFetch = globalThis.fetch
+    let mode: 'pages' | 'empty' | 'malformed' | 'unauthorized' | 'incomplete' | 'oversized' = 'pages'
+    const requests: { url: URL; method: string; authorization: string | null; version: string | null }[] = []
+    globalThis.fetch = (async (input, init) => {
+      const text = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+      const url = new URL(text)
+      const headers = new Headers(init?.headers)
+      requests.push({
+        url,
+        method: init?.method ?? 'GET',
+        authorization: headers.get('authorization'),
+        version: headers.get('anthropic-version')
+      })
+      if (mode === 'unauthorized') {
+        return new Response(JSON.stringify({ type: 'error', error: { message: selectedKey } }), { status: 401 })
+      }
+      if (mode === 'malformed') return new Response('{malformed', { status: 200 })
+      if (mode === 'empty') {
+        return new Response(JSON.stringify({ data: [], first_id: null, last_id: null, has_more: false }), { status: 200 })
+      }
+      if (mode === 'incomplete') {
+        return new Response(JSON.stringify({
+          data: [{ type: 'model', id: 'partial-model', display_name: 'Partial model', lifecycle: 'active', capabilities: null }],
+          first_id: 'partial-model',
+          last_id: null,
+          has_more: true
+        }), { status: 200 })
+      }
+      if (mode === 'oversized') return new Response('x'.repeat(256 * 1024 + 1), { status: 200 })
+      const first = url.searchParams.get('after_id') === null
+      const id = first ? 'claude-api-model-a' : 'claude-api-model-b'
+      return new Response(JSON.stringify({
+        data: [{
+          type: 'model',
+          id,
+          display_name: first ? 'Claude API Model A' : 'Claude API Model B',
+          lifecycle: 'active',
+          capabilities: {
+            effort: {
+              supported: true,
+              low: { supported: true },
+              medium: { supported: true },
+              high: { supported: true },
+              xhigh: { supported: false },
+              max: { supported: false }
+            }
+          }
+        }],
+        first_id: first ? id : 'claude-api-model-b',
+        last_id: id,
+        has_more: first
+      }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }) as typeof fetch
+
+    try {
+      const prepared = await call<AccountPrepareResult>(h.client, 'quirky.accounts/prepareProviderEnv', {
+        agent: 'claude',
+        cwd: h.userHome,
+        homeOverrides: {
+          claude: { value: null, source: 'absent' },
+          codex: { value: null, source: 'absent' }
+        }
+      })
+      expect(prepared.account).toMatchObject({ source: 'default', authKind: 'api-key' })
+      const discover = () => call<any>(h.client, 'quirky.agents/discoverModels', { agent: 'claude', host: 'local' })
+      const listedModels = async () => (await call<any>(h.client, 'quirky.agents/options', { agent: 'claude', host: 'local' }))
+        .models.map((model: { id: string }) => model.id)
+
+      const discovered = await discover()
+      expect(discovered).toMatchObject({
+        agent: 'claude',
+        host: 'local',
+        status: 'available',
+        authoritative: true,
+        models: [
+          { id: 'claude-api-model-a', label: 'Claude API Model A', options: [{ id: 'effort', choices: ['low', 'medium', 'high'] }] },
+          { id: 'claude-api-model-b', label: 'Claude API Model B', options: [{ id: 'effort', choices: ['low', 'medium', 'high'] }] }
+        ]
+      })
+      expect(requests.map(({ url, method }) => [method, url.pathname, url.searchParams.get('limit'), url.searchParams.get('after_id')]))
+        .toEqual([
+          ['GET', '/v1/models', '1000', null],
+          ['GET', '/v1/models', '1000', 'claude-api-model-a']
+        ])
+      expect(requests.every((request) => request.authorization === `Bearer ${selectedKey}`)).toBe(true)
+      expect(requests.every((request) => request.version === '2026-10-21')).toBe(true)
+      expect(await listedModels()).toEqual(['claude-api-model-a', 'claude-api-model-b'])
+
+      mode = 'empty'
+      expect(await discover()).toMatchObject({ status: 'available', authoritative: false, models: [] })
+      expect(await listedModels()).toEqual(['claude-api-model-a', 'claude-api-model-b'])
+
+      mode = 'malformed'
+      expect(await discover()).toMatchObject({ status: 'unavailable', authoritative: false, models: [] })
+      expect(await listedModels()).toEqual(['claude-api-model-a', 'claude-api-model-b'])
+
+      mode = 'unauthorized'
+      const failed = await discover()
+      expect(failed).toMatchObject({ status: 'unavailable', authoritative: false, models: [] })
+      expect(await listedModels()).toEqual(['claude-api-model-a', 'claude-api-model-b'])
+      mode = 'incomplete'
+      expect(await discover()).toMatchObject({ status: 'unavailable', authoritative: false, models: [] })
+      expect(await listedModels()).toEqual(['claude-api-model-a', 'claude-api-model-b'])
+
+      mode = 'oversized'
+      expect(await discover()).toMatchObject({ status: 'unavailable', authoritative: false, models: [] })
+      expect(await listedModels()).toEqual(['claude-api-model-a', 'claude-api-model-b'])
+      expect(JSON.stringify({ prepared, discovered, failed, events: h.events })).not.toContain(selectedKey)
+      expect(JSON.stringify({ prepared, discovered, failed, events: h.events })).not.toContain(ambientKey)
+    } finally {
+      globalThis.fetch = originalFetch
+      delete process.env.ANTHROPIC_API_KEY
+    }
+  }, 30_000)
+
 
 
   test('Claude add remains unselected, duplicate identity is rejected, and default auth/config stay byte-identical', async () => {

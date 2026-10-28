@@ -95,19 +95,75 @@ describe('quirky.worktree/origins public API', () => {
     })).rejects.toMatchObject({ code: RpcErrorCode.InvalidParams })
     expect(JSON.stringify(origins)).not.toContain('paired-device-id')
   })
-  test('desktop identity remains unknown across client connections, windows and restart', async () => {
+  test('authenticated desktop installation origins persist across connections, restart and exact instance replacement', async () => {
     const { fixture, repoId } = await start()
-    const desktop = await fixture.connectAs({}, 'desktop')
-    const secondWindow = await fixture.connectAs({}, 'ui')
-    const created = await desktop.callAny('quirky.worktree/create', { repo: repoId, name: 'desktop-owner' }) as WorktreeCreateResult
-    const desktopView = await desktop.callAny('quirky.worktree/origins', {}) as WorkspaceOriginView[]
-    const otherWindowView = await secondWindow.callAny('quirky.worktree/origins', {}) as WorkspaceOriginView[]
-    expect(originFor(desktopView, created.worktree.id)?.otherClient).toBeNull()
-    expect(originFor(otherWindowView, created.worktree.id)?.otherClient).toBeNull()
+    const firstId = '00000000-0000-4000-8000-000000000001'
+    const secondId = '00000000-0000-4000-8000-000000000002'
+    const first = await fixture.connectAs({ desktopClientId: firstId }, 'ui')
+    const second = await fixture.connectAs({ desktopClientId: secondId }, 'ui')
+    expect(await first.callAny('ui.window.self', {})).toMatchObject({ desktopClientId: firstId })
+
+    const firstCreated = await first.callAny('quirky.worktree/create', {
+      repo: repoId, name: 'desktop-first'
+    }) as WorktreeCreateResult
+    const secondCreated = await second.callAny('quirky.worktree/create', {
+      repo: repoId, name: 'desktop-second'
+    }) as WorktreeCreateResult
+    const forgedCreated = await first.callAny('quirky.worktree/create', {
+      repo: repoId, name: 'forged-desktop', desktopClientId: secondId
+    }) as WorktreeCreateResult
+
+    const cliCreated = await fixture.client.callAny('quirky.worktree/create', {
+      repo: repoId, name: 'cli-origin'
+    }) as WorktreeCreateResult
+    const firstView = await first.callAny('quirky.worktree/origins', {}) as WorkspaceOriginView[]
+    const secondView = await second.callAny('quirky.worktree/origins', {}) as WorkspaceOriginView[]
+    await expect(first.callAny('quirky.worktree/origins', { desktopClientId: secondId }))
+      .rejects.toMatchObject({ code: RpcErrorCode.InvalidParams })
+    expect(originFor(firstView, firstCreated.worktree.id)?.otherClient).toBe(false)
+    expect(originFor(firstView, secondCreated.worktree.id)?.otherClient).toBe(true)
+    expect(originFor(secondView, firstCreated.worktree.id)?.otherClient).toBe(true)
+    expect(originFor(secondView, secondCreated.worktree.id)?.otherClient).toBe(false)
+    expect(originFor(firstView, forgedCreated.worktree.id)?.otherClient).toBe(false)
+    expect(originFor(secondView, forgedCreated.worktree.id)?.otherClient).toBe(true)
+    expect(originFor(firstView, cliCreated.worktree.id)?.otherClient).toBeNull()
+    const primary = (await fixture.client.callAny('quirky.worktree/list', { repo: repoId }) as Array<{ id: string; isMain: boolean }>).find((row) => row.isMain)!
+    expect(originFor(firstView, primary.id)).toEqual({ worktreeId: primary.id, automation: null, otherClient: null })
+    const identityless = await fixture.connectAs({}, 'ui')
+    const identitylessView = await identityless.callAny('quirky.worktree/origins', {}) as WorkspaceOriginView[]
+    expect(originFor(identitylessView, firstCreated.worktree.id)?.otherClient).toBeNull()
+    expect(originFor(identitylessView, secondCreated.worktree.id)?.otherClient).toBeNull()
+    expect(JSON.stringify([...firstView, ...secondView, ...identitylessView])).not.toContain(firstId)
+    expect(JSON.stringify([...firstView, ...secondView, ...identitylessView])).not.toContain(secondId)
+
+    const previousInstance = await first.callAny('quirky.worktree/create', {
+      repo: repoId, name: 'reused-instance-path'
+    }) as WorktreeCreateResult
+    await fixture.client.callAny('quirky.worktree/remove', {
+      worktree: `id:${previousInstance.worktree.id}`, yes: true
+    })
+    const replacement = await second.callAny('quirky.worktree/create', {
+      repo: repoId, name: 'reused-instance-path'
+    }) as WorktreeCreateResult
+    expect(replacement.worktree.id).toBe(previousInstance.worktree.id)
+    expect(replacement.worktree.instanceId).not.toBe(previousInstance.worktree.instanceId)
+    const firstAfterReplacement = await first.callAny('quirky.worktree/origins', {}) as WorkspaceOriginView[]
+    const secondAfterReplacement = await second.callAny('quirky.worktree/origins', {}) as WorkspaceOriginView[]
+    expect(originFor(firstAfterReplacement, replacement.worktree.id)?.otherClient).toBe(true)
+    expect(originFor(secondAfterReplacement, replacement.worktree.id)?.otherClient).toBe(false)
 
     await fixture.restart()
-    const restarted = await fixture.client.callAny('quirky.worktree/origins', {}) as WorkspaceOriginView[]
-    expect(originFor(restarted, created.worktree.id)?.otherClient).toBeNull()
+    const firstReconnect = await fixture.connectAs({ desktopClientId: firstId }, 'ui')
+    const secondReconnect = await fixture.connectAs({ desktopClientId: secondId }, 'ui')
+    expect(await firstReconnect.callAny('ui.window.self', {})).toMatchObject({ desktopClientId: firstId })
+    const firstAfterRestart = await firstReconnect.callAny('quirky.worktree/origins', {}) as WorkspaceOriginView[]
+    const secondAfterRestart = await secondReconnect.callAny('quirky.worktree/origins', {}) as WorkspaceOriginView[]
+    expect(originFor(firstAfterRestart, firstCreated.worktree.id)?.otherClient).toBe(false)
+    expect(originFor(firstAfterRestart, secondCreated.worktree.id)?.otherClient).toBe(true)
+    expect(originFor(secondAfterRestart, firstCreated.worktree.id)?.otherClient).toBe(true)
+    expect(originFor(secondAfterRestart, secondCreated.worktree.id)?.otherClient).toBe(false)
+    expect(originFor(firstAfterRestart, replacement.worktree.id)?.otherClient).toBe(true)
+    expect(originFor(secondAfterRestart, replacement.worktree.id)?.otherClient).toBe(false)
   })
 
   test('the actual automation producer is distinguished from generic API and its origin persists across restart', async () => {
@@ -140,6 +196,12 @@ describe('quirky.worktree/origins public API', () => {
     })
     expect(JSON.stringify(beforeRestart)).not.toContain('quirky.automations')
 
+    const desktop = await fixture.connectAs({
+      desktopClientId: '00000000-0000-4000-8000-000000000003'
+    }, 'ui')
+    const desktopView = await desktop.callAny('quirky.worktree/origins', {}) as WorkspaceOriginView[]
+    expect(originFor(desktopView, run.workspaceId!)?.automation).toBe(true)
+    expect(originFor(desktopView, run.workspaceId!)?.otherClient).toBeNull()
     await fixture.restart()
     const afterRestart = await fixture.client.callAny('quirky.worktree/origins', {}) as WorkspaceOriginView[]
     expect(afterRestart).toEqual(beforeRestart)
@@ -184,6 +246,12 @@ describe('quirky.worktree/origins public API', () => {
     expect(JSON.stringify([...firstView, ...secondView])).not.toContain(first.deviceId)
     expect(JSON.stringify([...firstView, ...secondView])).not.toContain(second.deviceId)
 
+    const desktop = await fixture.connectAs({
+      desktopClientId: '00000000-0000-4000-8000-000000000004'
+    }, 'ui')
+    const desktopView = await desktop.callAny('quirky.worktree/origins', {}) as WorkspaceOriginView[]
+    expect(originFor(desktopView, firstWorkspace.worktree.id)?.otherClient).toBeNull()
+    expect(originFor(desktopView, secondWorkspace.worktree.id)?.otherClient).toBeNull()
     await expect(first.client.call('quirky.worktree/create', {
       repo: repoId, name: 'forged-mobile', deviceId: second.deviceId
     })).rejects.toMatchObject({ code: RpcErrorCode.Unauthorized })

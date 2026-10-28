@@ -301,4 +301,127 @@ describe('mobile daemon integration', () => {
     expect(result).toMatchObject({ available: false, reason: 'device_registry_unavailable' })
     expect(readdirSync(dataDir).some((name) => name.includes('devices.json.corrupt'))).toBe(true)
   })
+  test('owner-cli grants authorize full encrypted callers without widening mobile credentials', async () => {
+    harness = await boot()
+    const api = await harness.connect('cli')
+    const paired = await api.callAny('quirky.mobile/ownerPair', {
+      name: 'Owner terminal',
+      confirm: true,
+      address: '127.0.0.1'
+    }) as {
+      available: true
+      endpoint: string
+      offer: string
+      grant: { grantId: string; name: string; scope: 'owner-cli' }
+    }
+    const ownerOffer = JSON.parse(Buffer.from(paired.offer, 'base64url').toString('utf8')) as {
+      v: number; endpoint: string; deviceToken: string; publicKeyB64: string; pairedDeviceId: string; scope: string
+    }
+    expect(ownerOffer).toMatchObject({ v: 2, scope: 'owner-cli', endpoint: paired.endpoint, pairedDeviceId: paired.grant.grantId })
+    expect(JSON.stringify(paired.grant)).not.toContain(ownerOffer.deviceToken)
+
+    mobile = MobileTestClient.connect(paired.endpoint, ownerOffer.publicKeyB64, ownerOffer.deviceToken)
+    await mobile.authenticated
+    const description = await mobile.call('api.describe', {}) as { methods: { name: string }[] }
+    expect(description.methods.some(({ name }) => name === 'quirky.mobile/ownerPair')).toBe(true)
+    expect(await mobile.call('quirky.mobile/ownerGrants', {})).toMatchObject([
+      { grantId: paired.grant.grantId, name: 'Owner terminal', scope: 'owner-cli' }
+    ])
+    const rolesBeforeHello = (await mobile.call('status.get', {}) as { clients: { role: string }[] }).clients.map(({ role }) => role)
+    await expect(mobile.call('client.hello', {
+      role: 'ui',
+      protocolVersion: 2,
+      desktopClientId: '123e4567-e89b-42d3-a456-426614174000'
+    })).rejects.toMatchObject({ code: RpcErrorCode.Unauthorized })
+    const rolesAfterHello = (await mobile.call('status.get', {}) as { clients: { role: string }[] }).clients.map(({ role }) => role)
+    expect(rolesAfterHello).toEqual(rolesBeforeHello)
+    await expect(mobile.call('status.get', { ownerGrantId: paired.grant.grantId })).rejects.toMatchObject({ code: -32001 })
+    await expect(mobile.call('status.get', {}, { ownerGrantId: paired.grant.grantId })).rejects.toMatchObject({ code: -32001 })
+
+    const phonePair = await api.callAny('quirky.mobile/pair', { address: '127.0.0.1' }) as { available: true; pairingUrl: string }
+    const phoneCode = new URL(phonePair.pairingUrl).searchParams.get('code')!
+    const phoneOffer = JSON.parse(Buffer.from(phoneCode, 'base64url').toString('utf8')) as {
+      endpoint: string; publicKeyB64: string; deviceToken: string; scope: string
+    }
+    expect(phoneOffer.scope).toBe('mobile')
+    const phone = MobileTestClient.connect(phoneOffer.endpoint, phoneOffer.publicKeyB64, phoneOffer.deviceToken)
+    try {
+      await phone.authenticated
+      await expect(phone.call('quirky.mobile/ownerGrants', {})).rejects.toMatchObject({ code: -32001 })
+      await expect(phone.call('status.get', {}, { role: 'cli', ownerGrantId: paired.grant.grantId }))
+        .rejects.toMatchObject({ code: -32001 })
+      await expect(phone.call('quirky.mobile/ownerPair', { name: 'Spoofed', confirm: true, role: 'cli' }))
+        .rejects.toMatchObject({ code: -32001 })
+    } finally {
+      await phone.close()
+    }
+
+    const closed = socketCloseCode(mobile)
+    await api.callAny('quirky.mobile/ownerRevoke', { grantId: paired.grant.grantId, confirm: true })
+    expect(await closed).toBe(4001)
+    const revokedReconnect = MobileTestClient.connect(paired.endpoint, ownerOffer.publicKeyB64, ownerOffer.deviceToken)
+    await expect(revokedReconnect.authenticated).rejects.toThrow()
+    await revokedReconnect.close()
+  })
+
+  test('owner-cli grants persist across restart and corrupt registries fail closed', async () => {
+    const home = makeTempHome('quirky-owner-grant-')
+    harness = await boot(home)
+    const api = await harness.connect('cli')
+    const paired = await api.callAny('quirky.mobile/ownerPair', {
+      name: 'Persistent owner',
+      confirm: true,
+      address: '127.0.0.1'
+    }) as { endpoint: string; offer: string; grant: { grantId: string } }
+    const offer = JSON.parse(Buffer.from(paired.offer, 'base64url').toString('utf8')) as {
+      publicKeyB64: string; deviceToken: string
+    }
+
+    const active = MobileTestClient.connect(paired.endpoint, offer.publicKeyB64, offer.deviceToken)
+    await active.authenticated
+    await active.close()
+    await cleanupHarness(harness)
+    harness = await boot(home)
+    const restartedApi = await harness.connect('cli')
+    const restartedState = await restartedApi.callAny('quirky.mobile/state', {}) as { listener: { port: number } }
+    const restartedEndpoint = `ws://127.0.0.1:${restartedState.listener.port}`
+    const afterRestart = MobileTestClient.connect(restartedEndpoint, offer.publicKeyB64, offer.deviceToken)
+    await afterRestart.authenticated
+    await expect(afterRestart.call('quirky.mobile/ownerGrants', {})).resolves.toMatchObject([
+      { grantId: paired.grant.grantId }
+    ])
+    await afterRestart.close()
+
+    writeFileSync(join(home, 'plugin-data', 'quirky.mobile', 'owner-grants.json'), '{broken', { mode: 0o600 })
+    await cleanupHarness(harness)
+    harness = await boot(home)
+    const corruptedApi = await harness.connect('cli')
+    await expect(corruptedApi.callAny('quirky.mobile/ownerGrants', {})).rejects.toMatchObject({ code: RpcErrorCode.Conflict })
+    const corruptedState = await corruptedApi.callAny('quirky.mobile/state', {}) as { listener: { port: number } }
+    const deniedAfterCorruption = MobileTestClient.connect(`ws://127.0.0.1:${corruptedState.listener.port}`, offer.publicKeyB64, offer.deviceToken)
+    await expect(deniedAfterCorruption.authenticated).rejects.toThrow()
+    await deniedAfterCorruption.close()
+  })
+  test('generated owner grant commands require explicit confirmation and keep list output secret-free', async () => {
+    harness = await boot()
+    const home = harness.home
+    const unconfirmed = await runCli(['mobile', 'owner-pair', '--name', 'No confirmation', '--address', '127.0.0.1', '--json'], { home })
+    expect(unconfirmed.code).toBe(2)
+    const paired = await runCli(['mobile', 'owner-pair', '--name', 'CLI owner', '--address', '127.0.0.1', '--confirm', '--json'], { home })
+    expect(paired.code).toBe(0)
+    const result = JSON.parse(paired.stdout) as {
+      offer: string
+      grant: { grantId: string; name: string; scope: string }
+    }
+    expect(result.grant).toMatchObject({ name: 'CLI owner', scope: 'owner-cli' })
+    const offer = JSON.parse(Buffer.from(result.offer, 'base64url').toString('utf8')) as { deviceToken: string }
+    const grants = await runCli(['mobile', 'owner-grants', '--json'], { home })
+    expect(grants.code).toBe(0)
+    expect(grants.stdout).not.toContain(result.offer)
+    expect(grants.stdout).not.toContain(offer.deviceToken)
+    expect(JSON.parse(grants.stdout)).toMatchObject([{ grantId: result.grant.grantId, scope: 'owner-cli' }])
+    const revoked = await runCli(['mobile', 'owner-revoke', result.grant.grantId, '--confirm', '--json'], { home })
+    expect(revoked.code).toBe(0)
+    expect(JSON.parse(revoked.stdout)).toEqual({ revoked: true })
+  })
 })
