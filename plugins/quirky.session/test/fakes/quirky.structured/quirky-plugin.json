@@ -24,8 +24,18 @@
           "type": "object",
           "properties": {
             "worktree": { "type": "string" },
-            "status": { "type": "string" }
+            "status": { "type": "string" },
+            "cwd": { "type": "string" }
           }
+        },
+        "result": { "type": "object", "additionalProperties": true }
+      },
+      {
+        "id": "resume",
+        "params": {
+          "type": "object",
+          "properties": { "session": { "type": "string" } },
+          "required": ["session"]
         },
         "result": { "type": "object", "additionalProperties": true }
       },

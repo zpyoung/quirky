@@ -209,8 +209,8 @@
       },
       {
         "id": "save",
-        "description": "Save a draft with a content-hash baseline; overwrite is the only unguarded write.",
-        "params": { "type": "object", "properties": { "bufferId": { "type": "string" }, "trigger": { "type": "string", "enum": ["user", "autosave", "overwrite"] } }, "required": ["bufferId"], "additionalProperties": false },
+        "description": "Save a draft with a content-hash baseline. Optional expectedRevision atomically rejects stale drafts before writing; overwrite is the only unguarded disk-baseline write.",
+        "params": { "type": "object", "properties": { "bufferId": { "type": "string" }, "trigger": { "type": "string", "enum": ["user", "autosave", "overwrite"] }, "expectedRevision": { "type": "integer", "minimum": 0, "description": "Optional contentRevision compare-and-swap checked before the disk write." } }, "required": ["bufferId"], "additionalProperties": false },
         "result": {
           "type": "object",
           "properties": {
@@ -832,7 +832,7 @@
       { "id": "open", "words": "open", "summary": "open an authorized worktree file", "positionals": [{ "name": "path", "description": "worktree-relative or authorized absolute file path", "required": true }], "method": "open" },
       { "id": "state", "words": "state", "summary": "read editor buffers and tab state", "method": "state" },
       { "id": "draft", "words": "draft", "summary": "CAS-update a buffer draft", "method": "draft" },
-      { "id": "save", "words": "save", "summary": "save a buffer with its content baseline", "method": "save" },
+      { "id": "save", "words": "save", "summary": "save a buffer with its content baseline and optional revision guard", "method": "save" },
       { "id": "close", "words": "close", "summary": "close one editor tab safely", "method": "close" },
       { "id": "can-close", "words": "can-close", "summary": "check whether an editor tab can close without a dirty prompt", "method": "canClose" },
       { "id": "reopen", "words": "reopen", "summary": "reopen the last eligible closed editor tab", "method": "reopen" },

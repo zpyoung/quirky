@@ -1,9 +1,9 @@
 import { join } from 'node:path'
 import { isCount, isRecord, readJsonFile, writeFileAtomic } from './checkpoint'
 
-export type ExitCause = 'exited' | 'killed' | 'host-restart' | 'host-lost'
+export type ExitCause = 'exited' | 'killed' | 'stopped' | 'host-restart' | 'host-lost'
 
-const EXIT_CAUSES: readonly string[] = ['exited', 'killed', 'host-restart', 'host-lost']
+const EXIT_CAUSES: readonly string[] = ['exited', 'killed', 'stopped', 'host-restart', 'host-lost']
 
 /** What survives of a session on disk: enough to list it, end it, or restore it after a host restart. */
 export type SessionMeta = {

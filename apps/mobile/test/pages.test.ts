@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { act, createElement } from 'react'
 import type { Root, createRoot as ReactCreateRoot } from 'react-dom/client'
-import type { Ask, Repo, Session, Worktree } from '@quirky/protocol'
+import type { Ask, MobileMarkdownDocument, MobileWorkspaceTab, Repo, Session, Worktree } from '@quirky/protocol'
 import type { MobilePageBridge } from '../src/contracts'
 import { validatePageReport, validatePageRpc, isPageMutation } from '../src/shell/bridge-policy'
 import { DEFAULT_WORKSPACE_PREFERENCES, workspacePreferencesKey } from '../src/pages/storage'
@@ -106,6 +106,7 @@ function fakeBridge(options: {
   worktrees?: Worktree[]
   sessions?: Session[]
   asks?: Ask[]
+  sessionTabs?: MobileWorkspaceTab[]
   answerError?: string
   loopSummaries?: unknown
   summaryError?: string
@@ -114,6 +115,8 @@ function fakeBridge(options: {
   let worktrees = options.worktrees ?? [makeWorktree('wt-api', 'api-payments'), makeWorktree('wt-web', 'web-shell', { repoId: 'repo-web' })]
   let sessions = options.sessions ?? [session]
   let asks = options.asks ?? []
+  let sessionTabs = options.sessionTabs ?? []
+  const documents = new Map<string, MobileMarkdownDocument>()
   let loopSummaries = options.loopSummaries ?? []
   let summaryError = options.summaryError
   const calls: Call[] = []
@@ -144,9 +147,68 @@ function fakeBridge(options: {
         case 'quirky.repo/list': result = [repo, { ...repo, id: 'repo-web', name: 'web', path: '/repos/web' }]; break
         case 'quirky.repo/groupList': result = []; break
         case 'quirky.worktree/list': result = worktrees; break
+        case 'quirky.worktree/origins': result = []; break
+        case 'quirky.session/workspaceSleepStates': result = []; break
         case 'quirky.worktree/show': result = { ...worktrees.find((item) => item.id === params.worktree), children: [] }; break
         case 'quirky.session/list': result = params.worktree === undefined ? sessions : sessions.filter((item) => item.worktreeId === params.worktree); break
         case 'quirky.ask/list': result = asks; break
+        case 'quirky.mobile/agentCatalog': result = { defaultAgent: 'codex', agents: [{ id: 'codex', label: 'Codex', installed: true, enabled: true, isDefault: true, resumable: false }] }; break
+        case 'quirky.mobile/sessionTabs': result = sessionTabs; break
+        case 'quirky.mobile/markdownCreate': {
+          const tabId = 'actual-markdown-tab'
+          const worktreeId = String(params.worktree)
+          const document: MobileMarkdownDocument = {
+            tabId, worktreeId, title: 'Phone note.md', relativePath: 'Phone note.md',
+            text: '', revision: 1, dirty: false, readOnly: false
+          }
+          documents.set(tabId, document)
+          sessionTabs = [...sessionTabs, { tabId, worktreeId, kind: 'markdown', title: document.title, dirty: false }]
+          result = document
+          break
+        }
+        case 'quirky.mobile/markdownRead': {
+          const document = documents.get(String(params.tabId))
+          if (!document) throw new Error('Markdown tab not found')
+          result = document
+          break
+        }
+        case 'quirky.mobile/markdownWrite': {
+          const document = documents.get(String(params.tabId))
+          if (!document || params.expectedRevision !== document.revision) throw new Error('stale Markdown revision')
+          const next = { ...document, text: String(params.text), revision: document.revision + 1, dirty: true }
+          documents.set(next.tabId, next)
+          sessionTabs = sessionTabs.map((tab) => tab.tabId === next.tabId ? { ...tab, dirty: true } : tab)
+          result = next
+          break
+        }
+        case 'quirky.mobile/markdownSave': {
+          const document = documents.get(String(params.tabId))
+          if (!document || params.expectedRevision !== document.revision) throw new Error('stale Markdown revision')
+          const next = { ...document, revision: document.revision + 1, dirty: false }
+          documents.set(next.tabId, next)
+          sessionTabs = sessionTabs.map((tab) => tab.tabId === next.tabId ? { ...tab, dirty: false } : tab)
+          result = next
+          break
+        }
+        case 'quirky.mobile/sessionTabAction': {
+          const document = documents.get(String(params.tabId))
+          if (params.action === 'rename' && document) {
+            const next = { ...document, title: String(params.name) }
+            documents.set(next.tabId, next)
+            sessionTabs = sessionTabs.map((tab) => tab.tabId === next.tabId ? { ...tab, title: next.title } : tab)
+            result = { tabId: params.tabId, closed: false }
+          } else if (params.action === 'close' && document) {
+            if (document.dirty && params.discard !== true) result = { tabId: params.tabId, closed: false }
+            else {
+              documents.delete(document.tabId)
+              sessionTabs = sessionTabs.filter((tab) => tab.tabId !== document.tabId)
+              result = { tabId: params.tabId, closed: true }
+            }
+          } else {
+            result = { tabId: params.tabId, closed: false }
+          }
+          break
+        }
         case 'quirky.loops/summaries':
           if (options.summaryProvider) result = await options.summaryProvider()
           else if (summaryError) throw new Error(summaryError)
@@ -339,6 +401,7 @@ test('new tab presents curated agent choices', async () => {
 
   expect(buttonNamed('Codex')).toBeInstanceOf(HTMLButtonElement)
 })
+
 
 test('agent asks submit every supported answer type using the protocol answer schema', async () => {
   const typedAsk: Ask = {

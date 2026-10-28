@@ -83,6 +83,7 @@ type Session = {
   exitCause: ExitCause | null
   endedAt: number | null
   killRequested: boolean
+  stopRequested: boolean
   forgotten: boolean
   /** Output and resizes waiting while a reader holds the screen still; null when nobody does. */
   held: Held[] | null
@@ -146,6 +147,8 @@ export class SessionManager {
   private readonly shellReadyTimeoutMs: number
   private readonly home: string
   private stopping = false
+  /** Descendants retained across a failed stop attempt so a retry can still verify teardown. */
+  private readonly stoppingDescendants = new Map<string, Set<number>>()
 
   constructor(options: SessionManagerOptions) {
     this.home = options.home
@@ -237,6 +240,58 @@ export class SessionManager {
     if (reason) live.killRequested = true
     if (reason) signalTree(live.proc, name)
     else signalGroup(live.proc, name)
+  }
+
+  /**
+   * Stops a session and its complete descendant tree while retaining its history for restore.
+   * Unlike `kill`, this is explicitly restorable and does not discard terminal state.
+   */
+  async stopWithHistory(sessionId: string): Promise<void> {
+    if (this.stopping) throw new Error(SHUTTING_DOWN)
+    const { live, stored } = this.locate(sessionId)
+    if (stored) {
+      if (stored.state === 'restorable') return
+      throw new Error(`session ${sessionId} has exited and cannot be stopped with history`)
+    }
+    if (!live.alive && live.exitCause !== 'stopped') {
+      throw new Error(`session ${sessionId} has exited and cannot be stopped with history`)
+    }
+
+    const descendants = this.stoppingDescendants.get(sessionId) ?? new Set<number>()
+    this.stoppingDescendants.set(sessionId, descendants)
+    const remember = () => {
+      for (const pid of descendantsOf(live.proc.pid, descendants)) descendants.add(pid)
+    }
+    if (live.alive) {
+      live.stopRequested = true
+      remember()
+      signalTree(live.proc, 'SIGTERM')
+      await waitForSessionExit(live, 1000, remember)
+      if (live.alive) {
+        remember()
+        signalTree(live.proc, 'SIGKILL')
+        signalKnownProcesses(descendants, 'SIGKILL')
+        await waitForSessionExit(live, 1000, remember)
+      }
+    }
+    if (live.alive) throw new Error(`session ${sessionId} process did not stop`)
+    await live.finished
+
+    signalKnownProcesses(descendants, 'SIGKILL')
+    const survivors = await waitForProcesses(descendants, 2000, remember)
+    if (survivors.length > 0) {
+      throw new Error(`session ${sessionId} descendants did not stop: ${survivors.join(', ')}`)
+    }
+
+    writeMeta(live.dir, this.metaOf(live))
+    this.stored.reload(sessionId)
+    const saved = this.stored.get(sessionId)
+    if (!saved || saved.state !== 'restorable') {
+      throw new Error(`session ${sessionId} history was not retained for restore`)
+    }
+    if (this.sessions.get(sessionId) === live) this.sessions.delete(sessionId)
+    this.teardown(live)
+    this.stoppingDescendants.delete(sessionId)
   }
 
   /** Drops a session's state and history, live or stored, killing its process first if it is running. */
@@ -652,6 +707,7 @@ export class SessionManager {
       holders: 0,
       onRelease: [],
       metaTimer: null,
+      stopRequested: false,
       metaFailed: false,
       finished,
       markFinished
@@ -860,7 +916,7 @@ export class SessionManager {
     session.exitSignal = signalCode ?? null
     session.exitCode =
       typeof exitCode === 'number' ? exitCode : signalCode ? 128 + (constants.signals[signalCode as keyof typeof constants.signals] ?? 0) : null
-    session.exitCause = session.killRequested ? 'killed' : this.stopping ? 'host-restart' : 'exited'
+    session.exitCause = session.killRequested ? 'killed' : session.stopRequested ? 'stopped' : this.stopping ? 'host-restart' : 'exited'
     session.endedAt = Date.now()
   }
 
@@ -903,7 +959,7 @@ export class SessionManager {
       exitCode: session.exitCode,
       exitSignal: session.exitSignal,
       exitCause: session.exitCause,
-      restorable: session.exitCause === 'host-restart'
+      restorable: session.exitCause === 'host-restart' || session.exitCause === 'stopped'
     }
   }
 
@@ -1037,6 +1093,44 @@ function signalTree(proc: PtyProcess, signal: string): void {
   }
 }
 
+
+async function waitForSessionExit(session: Session, timeoutMs: number, observeDescendants: () => void): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (session.alive && Date.now() < deadline) {
+    observeDescendants()
+    await Bun.sleep(50)
+  }
+}
+
+function signalKnownProcesses(processes: Set<number>, signal: string): void {
+  for (const pid of processes) {
+    try {
+      process.kill(pid, signal)
+    } catch {
+      // already gone
+    }
+  }
+}
+
+async function waitForProcesses(processes: Set<number>, timeoutMs: number, observe: () => void): Promise<number[]> {
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    observe()
+    signalKnownProcesses(processes, 'SIGKILL')
+    const survivors = [...processes].filter(processExists)
+    if (survivors.length === 0 || Date.now() >= deadline) return survivors
+    await Bun.sleep(50)
+  }
+}
+
+function processExists(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'EPERM'
+  }
+}
 async function settle(sessions: Session[], timeoutMs: number): Promise<void> {
   if (sessions.length === 0) return
   await Promise.race([Promise.all(sessions.map((s) => s.finished)), Bun.sleep(timeoutMs)])

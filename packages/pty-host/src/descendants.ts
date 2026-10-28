@@ -1,5 +1,5 @@
-/** Every live descendant pid of `rootPid`, found by walking the process table; empty when it cannot be read. */
-export function descendantsOf(rootPid: number): number[] {
+/** Every live descendant pid of `rootPid` or a tracked descendant, found from the process table. */
+export function descendantsOf(rootPid: number, trackedRoots: Iterable<number> = []): number[] {
   let table: string
   try {
     const result = Bun.spawnSync(['ps', '-A', '-o', 'pid=,ppid='], { stdout: 'pipe', stderr: 'ignore' })
@@ -16,14 +16,15 @@ export function descendantsOf(rootPid: number): number[] {
     if (siblings) siblings.push(pid!)
     else children.set(ppid!, [pid!])
   }
-  const found: number[] = []
-  const queue = [rootPid]
+  const roots = new Set([rootPid, ...trackedRoots])
+  const found = new Set<number>()
+  const queue = [...roots]
   for (let i = 0; i < queue.length; i++) {
     for (const child of children.get(queue[i]!) ?? []) {
-      if (child === rootPid || found.includes(child)) continue
-      found.push(child)
+      if (roots.has(child) || found.has(child)) continue
+      found.add(child)
       queue.push(child)
     }
   }
-  return found
+  return [...found]
 }

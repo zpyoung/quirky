@@ -16,10 +16,13 @@ type CreatePageResult = { browserPageId: string }
 type NormalizedInput = { url: string; historyUrl: string; localPath?: string; directFile?: boolean; sourcePath?: string; error?: string }
 type PromptState = { paneId: string; watchId: string; prompt: RuntimePanePrompt; timer: ReturnType<typeof setTimeout> }
 type DownloadOwner = { paneId: string; pageId: string; guid: string; profileId: string; stagingPath: string; entry: PaneDownload }
+type WatchOwner = { pluginId: string; consumer: string }
+type WatchStart = { owner: WatchOwner; promise: Promise<{ watchId: string }> }
 type WatchLease = {
   paneId: string
   watchId: string
   pageId: string
+  owner: WatchOwner
   latest: { data: string; width: number; height: number } | null
   sequence: number
   waitingForAck?: number
@@ -27,6 +30,18 @@ type WatchLease = {
   throttle?: ReturnType<typeof setTimeout>
   ackTimeout?: ReturnType<typeof setTimeout>
   startupTimeout?: ReturnType<typeof setTimeout>
+}
+
+const DEFAULT_WATCH_OWNER: WatchOwner = { pluginId: 'quirky.browser', consumer: 'default' }
+
+function sameWatchOwner(left: WatchOwner, right: WatchOwner): boolean {
+  return left.pluginId === right.pluginId && left.consumer === right.consumer
+}
+
+function withoutWatchConsumer<T extends { consumer?: string }>(request: T): Omit<T, 'consumer'> {
+  const { consumer: _consumer, ...safeRequest } = request
+  void _consumer
+  return safeRequest
 }
 
 const HISTORY_LIMIT = 200
@@ -231,6 +246,8 @@ export class PaneService {
   private readonly activeByWorktree = new Map<string, string>()
   private readonly updatedAt = new Map<string, number>()
   private readonly watches = new Map<string, WatchLease>()
+  private readonly watchReservations = new Map<string, WatchOwner>()
+  private readonly watchStarts = new Map<string, WatchStart>()
   private readonly prompts = new Map<string, PromptState>()
   private readonly downloads = new Map<string, DownloadOwner>()
   private readonly resources = new Map<string, { url: string; revoke(): void }>()
@@ -252,29 +269,54 @@ export class PaneService {
     this.restoreTabs()
   }
 
+  private watchOwner(consumer: string | undefined, caller: PluginCaller): WatchOwner {
+    if (consumer === undefined) return DEFAULT_WATCH_OWNER
+    if (caller.role !== 'plugin' || caller.pluginId !== 'quirky.mobile') {
+      throw fault('invalid_argument', 'consumer is reserved for the trusted mobile plugin')
+    }
+    const connectionId = Number(consumer)
+    if (!Number.isSafeInteger(connectionId) || connectionId < 1 || String(connectionId) !== consumer) {
+      throw fault('invalid_argument', 'mobile Watch consumer must be a canonical connection ID')
+    }
+    return { pluginId: caller.pluginId, consumer }
+  }
+
+  private assertWatchOwner(paneId: string, owner: WatchOwner): void {
+    const active = this.watches.get(paneId)?.owner
+    const reserved = this.watchReservations.get(paneId)
+    if ((active && !sameWatchOwner(active, owner)) || (reserved && !sameWatchOwner(reserved, owner))) {
+      throw fault('browser_error', 'This Watch pane is owned by another renderer.')
+    }
+  }
+
   async call(method: PaneMethod, params: Record<string, unknown>, caller: PluginCaller): Promise<unknown> {
     if (!this.active) throw fault('browser_error', 'browser pane service is shutting down')
     switch (method) {
       case 'paneOpen': return await this.paneOpen(params as PaneRequests['paneOpen'], caller)
       case 'paneState': return await this.paneState(params as PaneRequests['paneState'], caller)
-      case 'paneNavigate': return await this.paneNavigate(params as PaneRequests['paneNavigate'])
-      case 'paneControl': return await this.paneControl(params as PaneRequests['paneControl'])
-      case 'paneReport': return await this.paneReport(params as PaneRequests['paneReport'])
+      case 'paneNavigate': return await this.paneNavigate(params as PaneRequests['paneNavigate'], caller)
+      case 'paneControl': return await this.paneControl(params as PaneRequests['paneControl'], caller)
+      case 'paneReport': return await this.paneReport(params as PaneRequests['paneReport'], caller)
       case 'paneClose': return await this.paneClose(params as PaneRequests['paneClose'], caller)
       case 'paneSuggestions': return await this.paneSuggestions(params as PaneRequests['paneSuggestions'], caller)
-      case 'paneWatch': return await this.paneWatch(params as PaneRequests['paneWatch'])
-      case 'paneWatchStop': return await this.paneWatchStop(params as PaneRequests['paneWatchStop'])
-      case 'paneInput': return await this.paneInput(params as PaneRequests['paneInput'])
+      case 'paneWatch': return await this.paneWatch(params as PaneRequests['paneWatch'], caller)
+      case 'paneWatchStop': return await this.paneWatchStop(params as PaneRequests['paneWatchStop'], caller)
+      case 'paneInput': return await this.paneInput(params as PaneRequests['paneInput'], caller)
       case 'paneRespond': return await this.paneRespond(params as PaneRequests['paneRespond'], caller)
       case 'paneDownload': return await this.paneDownload(params as PaneRequests['paneDownload'], caller)
-      case 'paneFrameAck': return this.paneFrameAck(params)
+      case 'paneFrameAck': return this.paneFrameAck(params as PaneRequests['paneFrameAck'], caller)
     }
+  }
+
+  assertDefaultWatchOwner(paneId: string): void {
+    this.assertWatchOwner(paneId, DEFAULT_WATCH_OWNER)
   }
 
   async setPaneProfile(paneId: string, profileId: string): Promise<PaneTab> {
     const tab = this.requirePane(paneId)
     this.store.getProfile(profileId)
     if (tab.profileId === profileId) return structuredClone(tab)
+    this.assertWatchOwner(paneId, DEFAULT_WATCH_OWNER)
     if (tab.mode === 'watch') {
       const previous = {
         profileId: tab.profileId,
@@ -346,11 +388,11 @@ export class PaneService {
     const pendingPrompts = [...this.prompts.values()]
     this.prompts.clear()
     for (const prompt of pendingPrompts) clearTimeout(prompt.timer)
-    await Promise.all(pendingPrompts.map(async (prompt) => {
-      await prompt.prompt.respond({ accept: false }).catch(() => {})
-    }))
     for (const tab of this.tabs.values()) tab.prompts = []
+    await Promise.all([...this.watchStarts.values()].map((start) => start.promise.then(() => undefined, () => undefined)))
     for (const watch of this.watches.values()) await this.stopWatch(watch)
+    this.watchStarts.clear()
+    this.watchReservations.clear()
     for (const resource of this.resources.values()) resource.revoke()
     this.resources.clear()
   }
@@ -549,6 +591,8 @@ export class PaneService {
     const mode = request.mode ?? (requestedPage ? 'watch' : 'native')
     if (mode !== 'native' && mode !== 'watch') throw fault('invalid_argument', 'mode must be native or watch')
     if (requestedPage && mode !== 'watch') throw fault('invalid_argument', 'managed pages can only be opened in Watch mode')
+    const reservedOwner = request.consumer === undefined ? undefined : this.watchOwner(request.consumer, caller)
+    if (reservedOwner && mode !== 'watch') throw fault('invalid_argument', 'a mobile Watch consumer can only own a Watch pane')
     let profileId = request.profile ?? 'default'
     this.store.getProfile(profileId)
     let page: BrowserPage | undefined
@@ -591,6 +635,7 @@ export class PaneService {
       ...(normalizedInput?.sourcePath ? { sourcePath: normalizedInput.sourcePath } : {}),
       ...(localPath && !normalizedInput?.directFile ? { preview: { path: localPath, url } } : {})
     }
+    if (reservedOwner) this.watchReservations.set(tab.id, reservedOwner)
     this.setActive(tab)
     this.saveTab(tab)
     let createdPageId: string | undefined
@@ -713,8 +758,9 @@ export class PaneService {
     this.saveTab(tab)
   }
 
-  private async paneNavigate(request: PaneRequests['paneNavigate']): Promise<PaneTab> {
+  private async paneNavigate(request: PaneRequests['paneNavigate'], caller: PluginCaller): Promise<PaneTab> {
     const tab = this.requirePane(request.pane)
+    this.assertWatchOwner(tab.id, this.watchOwner(request.consumer, caller))
     const worktree = await this.worktreeInfo(tab.worktreeId)
     const normalized = await this.normalized(request.input, worktree)
     this.releaseResourceWhenLeaving(tab, normalized.directFile ? undefined : normalized.localPath)
@@ -764,8 +810,9 @@ export class PaneService {
     }
   }
 
-  private async paneControl(request: PaneRequests['paneControl']): Promise<PaneTab> {
+  private async paneControl(request: PaneRequests['paneControl'], caller: PluginCaller): Promise<PaneTab> {
     const tab = this.requirePane(request.pane)
+    this.assertWatchOwner(tab.id, this.watchOwner(request.consumer, caller))
     if (request.action === 'viewport') {
       if (!request.preset) throw fault('invalid_argument', 'viewport control requires a preset')
       tab.viewport = request.preset
@@ -808,7 +855,7 @@ export class PaneService {
       }
     } else {
       if (tab.mode === 'watch') {
-        const result = await this.runtime.paneControl(this.pageFor(tab), request as PaneControl)
+        const result = await this.runtime.paneControl(this.pageFor(tab), withoutWatchConsumer(request) as PaneControl)
         if (result.url) tab.url = safeHistoryAddress(result.url) || tab.url
         if (result.title !== undefined) tab.title = result.title
         tab.canGoBack = result.canGoBack ?? tab.canGoBack
@@ -825,8 +872,9 @@ export class PaneService {
     return this.copyTab(tab)
   }
 
-  private async paneReport(params: PaneRequests['paneReport']): Promise<PaneTab> {
+  private async paneReport(params: PaneRequests['paneReport'], _caller: PluginCaller): Promise<PaneTab> {
     const tab = this.requirePane(params.pane)
+    this.assertWatchOwner(tab.id, DEFAULT_WATCH_OWNER)
     if (typeof params.tabId !== 'string' || params.tabId !== tab.tabId) throw fault('browser_tab_changed', 'pane report came from a stale hosted tab')
     if (params.command !== undefined) {
       if (!tab.command || tab.command.id !== params.command) throw fault('browser_tab_changed', 'pane report command identity is stale')
@@ -882,8 +930,15 @@ export class PaneService {
     }
     const tab = this.tabs.get(request.pane)
     if (!tab) return true
+    const owner = this.watchOwner(request.consumer, caller)
+    this.assertWatchOwner(tab.id, owner)
     if (request.fromTab && request.tabId !== tab.tabId) {
       throw fault('browser_tab_changed', 'pane close came from a stale hosted tab')
+    }
+    if (owner.pluginId === 'quirky.mobile') {
+      const watch = this.watches.get(tab.id)
+      if (watch) await this.stopWatch(watch)
+      this.watchReservations.delete(tab.id)
     }
     if (!request.fromTab && tab.tabId) {
       await this.context.call('quirky.terminal/closeTab', { tab: tab.tabId })
@@ -896,6 +951,8 @@ export class PaneService {
   private async removePaneState(tab: PaneTab): Promise<void> {
     const watch = this.watches.get(tab.id)
     if (watch) await this.stopWatch(watch)
+    this.watchReservations.delete(tab.id)
+    this.watchStarts.delete(tab.id)
     this.clearPromptsForPane(tab.id)
     this.releaseResource(tab.id)
     this.tabs.delete(tab.id)
@@ -957,10 +1014,39 @@ export class PaneService {
     return { suggestions }
   }
 
-  private async paneWatch(request: PaneRequests['paneWatch']): Promise<{ watchId: string }> {
+  private async paneWatch(request: PaneRequests['paneWatch'], caller: PluginCaller): Promise<{ watchId: string }> {
     const tab = this.requirePane(request.pane)
+    const owner = this.watchOwner(request.consumer, caller)
     const active = this.watches.get(tab.id)
-    if (active) return { watchId: active.watchId }
+    if (active) {
+      if (!sameWatchOwner(active.owner, owner)) throw fault('browser_error', 'This Watch pane is owned by another renderer.')
+      return { watchId: active.watchId }
+    }
+    const starting = this.watchStarts.get(tab.id)
+    if (starting) {
+      if (!sameWatchOwner(starting.owner, owner)) throw fault('browser_error', 'This Watch pane is being claimed by another renderer.')
+      return await starting.promise
+    }
+    const reserved = this.watchReservations.get(tab.id)
+    if (reserved && !sameWatchOwner(reserved, owner)) throw fault('browser_error', 'This Watch pane is owned by another renderer.')
+    if (owner.pluginId === 'quirky.mobile' && tab.mode !== 'watch') {
+      throw fault('invalid_argument', 'The phone can start only an existing Watch pane; Native tabs must be switched explicitly.')
+    }
+    this.watchReservations.set(tab.id, owner)
+    const start = { owner, promise: this.startWatchLease(tab, owner) }
+    this.watchStarts.set(tab.id, start)
+    try {
+      return await start.promise
+    } catch (error) {
+      const reservation = this.watchReservations.get(tab.id)
+      if (reservation && sameWatchOwner(reservation, owner)) this.watchReservations.delete(tab.id)
+      throw error
+    } finally {
+      if (this.watchStarts.get(tab.id) === start) this.watchStarts.delete(tab.id)
+    }
+  }
+
+  private async startWatchLease(tab: PaneTab, owner: WatchOwner): Promise<{ watchId: string }> {
     if (tab.preview) await this.ensureRestoredResource(tab)
     if (tab.mode === 'native') {
       const page = await this.createPage(tab.worktreeId, tab.profileId, safeUrl(tab.url))
@@ -987,6 +1073,7 @@ export class PaneService {
       paneId: tab.id,
       watchId,
       pageId: page.browserPageId,
+      owner,
       latest: null,
       sequence: 0,
       lastSentAt: 0
@@ -1007,42 +1094,50 @@ export class PaneService {
         onStale: (reason) => this.watchEnded(watch, reason)
       })
       if (tab.zoom !== 0) await this.runtime.paneControl(page, { action: 'zoom', level: tab.zoom })
+      if (!this.active || this.watches.get(tab.id) !== watch) throw fault('browser_error', 'Browser Watch stopped while the lease was starting.')
       tab.error = null
       this.saveTab(tab)
       this.emitChanged()
       return { watchId }
     } catch (error) {
-      if (this.watches.get(tab.id) === watch) this.watches.delete(tab.id)
-      clearTimeout(watch.startupTimeout)
-      tab.error = error instanceof Error ? error.message : String(error)
-      this.saveTab(tab)
-      this.emitChanged()
+      await this.stopWatch(watch)
+      this.watchReservations.delete(tab.id)
+      if (this.active) {
+        tab.error = error instanceof Error ? error.message : String(error)
+        this.saveTab(tab)
+        this.emitChanged()
+      }
       throw error
     }
   }
 
-  private async paneWatchStop(request: PaneRequests['paneWatchStop']): Promise<{ closed: true }> {
+  private async paneWatchStop(request: PaneRequests['paneWatchStop'], caller: PluginCaller): Promise<{ closed: true }> {
+    const owner = this.watchOwner(request.consumer, caller)
     const watch = this.watches.get(request.pane)
     if (!watch || watch.watchId !== request.watchId) throw fault('browser_tab_changed', 'the Watch lease ID is stale')
+    if (!sameWatchOwner(watch.owner, owner)) throw fault('browser_error', 'This Watch lease is owned by another renderer.')
     await this.stopWatch(watch)
     return { closed: true }
   }
 
-  private async paneInput(request: PaneRequests['paneInput']): Promise<{ sent: true }> {
+  private async paneInput(request: PaneRequests['paneInput'], caller: PluginCaller): Promise<{ sent: true }> {
     const tab = this.requirePane(request.pane)
+    this.assertWatchOwner(tab.id, this.watchOwner(request.consumer, caller))
     const watch = this.watches.get(tab.id)
     if (tab.mode !== 'watch' || !tab.page || !watch) throw fault('browser_error', 'typed input is available only for an active Watch page')
-    const input = request as PaneRequests['paneInput'] & PaneInput
+    const input = withoutWatchConsumer(request) as PaneInput
     await this.runtime.paneInput(this.pageFor(tab), input, watch.watchId)
     return { sent: true }
   }
 
-  private paneFrameAck(params: Record<string, unknown>): { acknowledged: true } {
-    const paneId = typeof params.pane === 'string' ? params.pane : ''
+  private paneFrameAck(params: PaneRequests['paneFrameAck'], caller: PluginCaller): { acknowledged: true } {
+    const paneId = params.pane
     this.requirePane(paneId)
+    const owner = this.watchOwner(params.consumer, caller)
+    this.assertWatchOwner(paneId, owner)
     const watch = this.watches.get(paneId)
-    if (!watch || params.watchId !== watch.watchId || typeof params.sequence !== 'number' ||
-        !Number.isInteger(params.sequence) || watch.waitingForAck !== params.sequence) {
+    if (!watch || params.watchId !== watch.watchId || !Number.isSafeInteger(params.sequence) ||
+      watch.waitingForAck !== params.sequence) {
       throw fault('browser_tab_changed', 'frame acknowledgement belongs to a stale or unacknowledged Watch frame')
     }
     clearTimeout(watch.ackTimeout)
@@ -1087,6 +1182,8 @@ export class PaneService {
   private async stopWatch(watch: WatchLease, reason?: string): Promise<void> {
     if (this.watches.get(watch.paneId) !== watch) return
     this.watches.delete(watch.paneId)
+    const reserved = this.watchReservations.get(watch.paneId)
+    if (reserved && sameWatchOwner(reserved, watch.owner)) this.watchReservations.delete(watch.paneId)
     clearTimeout(watch.startupTimeout)
     clearTimeout(watch.ackTimeout)
     clearTimeout(watch.throttle)
@@ -1102,6 +1199,8 @@ export class PaneService {
       clearTimeout(watch.ackTimeout)
       clearTimeout(watch.throttle)
     }
+    const reserved = this.watchReservations.get(watch.paneId)
+    if (reserved && sameWatchOwner(reserved, watch.owner)) this.watchReservations.delete(watch.paneId)
     const tab = this.tabs.get(watch.paneId)
     if (tab) {
       tab.error = reason
@@ -1231,6 +1330,7 @@ export class PaneService {
   }
 
   private async paneRespond(request: PaneRequests['paneRespond'], caller: PluginCaller): Promise<{ responded: true }> {
+    this.assertWatchOwner(request.pane, DEFAULT_WATCH_OWNER)
     const prompt = this.prompts.get(request.prompt)
     if (!prompt || prompt.paneId !== request.pane) throw fault('browser_tab_changed', 'prompt ID is stale or belongs to another pane')
     if (prompt.prompt.kind === 'external' && caller.role !== 'ui') throw fault('invalid_argument', 'external-app prompts can only be accepted by the browser UI')
@@ -1364,6 +1464,7 @@ export class PaneService {
 
   private async paneDownload(request: PaneRequests['paneDownload'], caller: PluginCaller): Promise<{ action: string; completed: true; download?: PaneDownload }> {
     const tab = this.requirePane(request.pane)
+    this.assertWatchOwner(tab.id, DEFAULT_WATCH_OWNER)
     const entry = tab.downloads.find((item) => item.id === request.download)
     if (!entry) throw fault('browser_tab_not_found', 'download does not exist in this pane')
     if (request.action === 'dismiss') {

@@ -138,6 +138,28 @@ test('draft compare-and-swap preserves the acknowledged draft and save writes it
   expect(saved).toMatchObject({ content: 'const value = 2\n', draft: null, dirty: false })
   expect(readFileSync(join(root, 'a.ts'), 'utf8')).toBe('const value = 2\n')
 })
+test('revision-guarded save cannot persist a newer draft with a stale acknowledgement', async () => {
+  const { client, worktree, root } = await fixture({ 'a.ts': 'original\n' })
+  const opened = await call<EditorBuffer>(client, 'quirky.editor/open', { worktree: worktree.id, path: 'a.ts' })
+  const newerDraft = await call<EditorBuffer>(client, 'quirky.editor/draft', {
+    bufferId: opened.id,
+    content: 'newer draft\n',
+    expectedRevision: opened.contentRevision
+  })
+
+  await expect(call(client, 'quirky.editor/save', {
+    bufferId: opened.id, trigger: 'user', expectedRevision: opened.contentRevision
+  })).rejects.toThrow()
+  expect(readFileSync(join(root, 'a.ts'), 'utf8')).toBe('original\n')
+  expect(await bufferOf(client, opened.id)).toMatchObject({ draft: 'newer draft\n', dirty: true })
+
+  const saved = await call<EditorBuffer>(client, 'quirky.editor/save', {
+    bufferId: opened.id, trigger: 'user', expectedRevision: newerDraft.contentRevision
+  })
+  expect(saved).toMatchObject({ content: 'newer draft\n', draft: null, dirty: false })
+  expect(readFileSync(join(root, 'a.ts'), 'utf8')).toBe('newer draft\n')
+})
+
 
 test('a save race reports the external version and never overwrites it implicitly', async () => {
   const { client, worktree, root } = await fixture({ 'a.ts': 'original\n' })
