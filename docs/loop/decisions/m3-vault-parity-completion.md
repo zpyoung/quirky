@@ -154,5 +154,16 @@
 - **Revisit if:** The land-owned merged typecheck reports a new conflict.
 - **Source:** locked by docs/loop/LOOP.md
 
+## D15: Preserve the incoming consent tip and parity controls during land retry
+- **Question:** How should the two conflicts reported by authoritative queue land be resolved?
+- **Options:** Drop incoming tip state; drop parity search/retry controls; combine the independent changes.
+- **Chose:** Keep SearchTipState and HISTORY_AGENTS imports; pass the incoming searchTip to the same disclosure while retaining per-limit/error/retry rendering. Preserve the incoming raw local status-event boundary and fail-closed consent rollback. Keep Session Info's additive narrow-text wrapping.
+- **Why:** The consent-tip completion is a separately landed owner flow, not canceled by this parity item. The retry was explicitly requested by queue land; no extra test/debug/review campaign was started.
+- **Evidence:** failed land bg26; resolved two recorded conflict blocks; merge52d4900d; all eight incoming decision logs read; root/mobile `bun run typecheck` passes22.41s.
+- **Reversibility:** easy
+- **Confidence:** high for compilation and additive contract preservation; end-phase behavior remains unverified.
+- **Revisit if:** The land-owned merged typecheck reports another conflict.
+- **Source:** locked by docs/loop/decisions/m3-vault-consent-tip-completion.md
+
 ## Progress
-All three frozen components are committed and merged; their temporary worktrees are removed. One build/roadmap catch-up merged cleanly and all incoming decision deltas were read. Corrected root and mobile typecheck passes. Baseline and corrected symlink-deletion smoke started before the operator interjection; their observed outcomes are retained, without starting another test. Existing Window/Actions failures remain end-phase evidence in BLOCKERS.md; no built-browser, packaged long-idle, affected-suite or final review claim. Native scenarios remain pending. Next: commit this typecheck-only receipt, detach and run supported queue land for this single item. No unbuilt product flow or verification/debugging follow-up item identified.
+Frozen parity components and compiler fixes are committed. Initial land reported two additive conflicts with the separately landed consent-tip item; the supported retry catch-up52d4900d preserves both tip ownership and parity controls. All incoming decisions were read; root/mobile typecheck passes22.41s. No suite/dogfood/review or test-failure fixing resumed. Existing failures and pending native scenarios remain end-phase work. Next: commit this receipt, detach and retry authoritative queue land for this item only. No unbuilt-flow follow-up identified.
