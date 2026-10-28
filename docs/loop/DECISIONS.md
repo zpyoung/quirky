@@ -44,6 +44,7 @@ files, not this one.
 | hard (engine/lifetime model) | high | [sa-browser-pane D2](decisions/sa-browser-pane.md) | Preserve native human browsing and Chrome Watch as separate modes | locked by docs/architecture.md |
 | hard | high | [m2-source-control-core D5](decisions/m2-source-control-core.md) | Extend `quirky.git` in place, with every composite (sync, discard-all, stage-all) in the daemon | assumed — autonomous |
 | hard | high | [m3-handoff D5](decisions/m3-handoff.md) | A new built-in plugin, `quirky.handoff`, owns composition, launch and lineage in the daemon; the window is a thin view | assumed — autonomous |
+| hard for privacy, easy for bookkeeping | high | [m3-vault-consent-tip-completion D2](decisions/m3-vault-consent-tip-completion.md) | Seen is a consequence of successful local opt-in, never authorization to index | locked by docs/quirk/specs/2026-10-27-m3-vault/logic.md |
 | hard | high | [m0-core D6](decisions/m0-core.md) | v1's methods are renamed to their plugin's namespace, with no aliases, and the protocol version goes to 2 | supersedes m0-daemon-api D5 |
 | hard | high | [m0-core D7](decisions/m0-core.md) | v1's events become the plugins' events | assumed — autonomous |
 | hard | high | [m0-core D31](decisions/m0-core.md) | Port v1 for real, growing the public plugin API, rather than facades or raw RPC primitives | locked by docs/roadmap.md (built-ins use only the public API); assumed — autonomous (the approach) |
@@ -283,6 +284,7 @@ files, not this one.
 | medium | high | [m3-handoff D48](decisions/m3-handoff.md) | The scripting surface is the `quirky.handoff` methods and the `quirky handoff` command group | locked by docs/roadmap.md |
 | medium | high | [m3-handoff D72](decisions/m3-handoff.md) | Remove a transient landing candidate captured by catch-up | locked by docs/loop/LOOP.md |
 | medium | high | [m3-handoff D74](decisions/m3-handoff.md) | Preserve the shipped name migration and append handoff badges after it | locked by docs/loop/decisions/m1-agent-status-scripting.md |
+| medium (a future global tip owner would migrate this state, not duplicate it) | high | [m3-vault-consent-tip-completion D1](decisions/m3-vault-consent-tip-completion.md) | Vault owns its one documented search tip, with a real UI consumer | assumed — autonomous |
 | medium | high | [m0-core D8](decisions/m0-core.md) | v1's CLI words stay, with `wt` and `term` as group aliases | assumed — autonomous |
 | medium | high | [m0-core D12](decisions/m0-core.md) | Notifications are a kernel service, and each plugin decides when to notify | locked by docs/architecture.md |
 | medium | high | [m0-core D13](decisions/m0-core.md) | v1's settings become plugin settings | supersedes m0-ui-api D18 |
@@ -1191,6 +1193,15 @@ files, not this one.
 | easy | high | [m3-handoff D82](decisions/m3-handoff.md) | Preserve the probe's safe candidate recovery and finish the runtime proof | locked by docs/quirk/specs/2026-10-27-m3-handoff/tech.md |
 | easy | high | [m3-handoff D83](decisions/m3-handoff.md) | Retain Session Info's existing-session opener and handoff's tab identifiers | locked by docs/loop/decisions/m3-session-info.md |
 | easy | high | [m3-handoff D84](decisions/m3-handoff.md) | Verify the named Session Info merge paths without restarting feature verification | locked by docs/loop/LOOP.md |
+| easy | high | [m3-vault-consent-tip-completion D3](decisions/m3-vault-consent-tip-completion.md) | Use one disclosure surface; seen never removes future consent controls | assumed — autonomous |
+| easy | high | [m3-vault-consent-tip-completion D4](decisions/m3-vault-consent-tip-completion.md) | Use current standard loop steps after the night-mode cutoff | assumed — autonomous |
+| easy | high | [m3-vault-consent-tip-completion D5](decisions/m3-vault-consent-tip-completion.md) | Keep model response and raw local event contracts distinct | assumed — autonomous |
+| easy | high | [m3-vault-consent-tip-completion D6](decisions/m3-vault-consent-tip-completion.md) | Verify real failures without corrective mutations or production test hooks | assumed — autonomous |
+| easy | high | [m3-vault-consent-tip-completion D7](decisions/m3-vault-consent-tip-completion.md) | Preserve explicit implementation-attribution and review limits | assumed — autonomous |
+| easy | high | [m3-vault-consent-tip-completion D8](decisions/m3-vault-consent-tip-completion.md) | Preserve the actual packaged consent proof and Native boundary | assumed — autonomous |
+| easy | high | [m3-vault-consent-tip-completion D9](decisions/m3-vault-consent-tip-completion.md) | Retention rollback cannot prevent turning search off | assumed — autonomous |
+| easy | high | [m3-vault-consent-tip-completion D10](decisions/m3-vault-consent-tip-completion.md) | Qualify the final review rather than claim independent clearance | assumed — autonomous |
+| easy | high | [m3-vault-consent-tip-completion D11](decisions/m3-vault-consent-tip-completion.md) | Land now under the operator's build-first policy | locked by docs/loop/LOOP.md |
 | easy | high | [m0-core D1](decisions/m0-core.md) | Classify the item as an API, CLI, Organization and Visual design, and run every research phase | assumed — autonomous |
 | easy | high | [m0-core D2](decisions/m0-core.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m0-core D3](decisions/m0-core.md) | Keep m0-core as one item with one pair of specs, built in waves | locked by docs/loop/queue.json |

@@ -1034,9 +1034,8 @@
       "deps": [
         "m3-vault"
       ],
-      "status": "in-progress",
-      "early": true,
-      "lane": 8
+      "status": "done",
+      "early": true
     },
     {
       "id": "fix-bash53-shell-integration",
