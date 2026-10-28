@@ -1887,7 +1887,8 @@
       "title": "Fix the native-only failures in m1-term-ui from the 2026-10-28 run: SC-37",
       "docs": [],
       "deps": [],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 5
     },
     {
       "id": "fix-native-m2-editor-1028",
