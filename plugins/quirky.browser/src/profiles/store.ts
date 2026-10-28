@@ -130,6 +130,7 @@ export class BrowserStore {
     return path
   }
 
+
   listProfiles(): BrowserProfile[] {
     return [...this.state.profiles].sort((a, b) => a.id === 'default' ? -1 : b.id === 'default' ? 1 : a.label.localeCompare(b.label))
   }
