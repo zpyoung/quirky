@@ -23,7 +23,9 @@ const commands: CliModule['commands'] = {
       'workspace-activity-custom-days': 'workspaceActivityCustomDays',
       'always-show-default-branch-workspace': 'alwaysShowDefaultBranchWorkspace',
       'hide-sleeping-workspaces': 'hideSleepingWorkspaces',
-      'show-sleeping-workspaces': 'showSleepingWorkspaces'
+      'show-sleeping-workspaces': 'showSleepingWorkspaces',
+      'hide-completed-review-workspaces': 'hideCompletedReviewWorkspaces',
+      'hide-passing-check-workspaces': 'hidePassingCheckWorkspaces'
     }
     for (const [flag, property] of Object.entries(names)) {
       if (args.flags[flag] !== undefined) params[property] = args.flags[flag]
