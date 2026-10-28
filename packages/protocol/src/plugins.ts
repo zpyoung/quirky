@@ -51,6 +51,8 @@ export type ContributionInfo = {
 export type PluginContext = {
   readonly pluginId: string
   readonly dir: string
+  /** Absolute file URL for a worker entrypoint declared by name in `workers`; throws for undeclared names. */
+  workerEntrypoint(name: string): string
   /** The plugin's private data directory, `<home>/plugin-data/<pluginId>`; it exists (mode 0700). */
   readonly dataDir: string
   /** Writes to the daemon log, prefixed with the plugin ID. */
@@ -373,6 +375,8 @@ export type PluginManifest = {
   ui?: string
   /** Relative path of the CLI module. */
   cli?: string
+  /** Worker name to root-relative entrypoint, bundled and rewritten to its packaged path by the desktop bundler. */
+  workers?: Record<string, string>
   /** Extra words that reach this plugin's CLI group. */
   cliAliases?: string[]
   /** Defaults to `lazy`. */

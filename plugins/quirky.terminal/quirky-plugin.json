@@ -1495,6 +1495,63 @@
         }
       },
       {
+        "id": "groupInfo",
+        "description": "The workspace owning a tab group; fails for an unknown group.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "group": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "group"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "workspace": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "workspace"
+          ]
+        }
+      },
+      {
+        "id": "adoptSession",
+        "description": "Places an existing session in an explicit group through the serialized layout queue. The group must belong to the session's worktree; an already-adopted tab is moved rather than duplicated.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string"
+            },
+            "group": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "session",
+            "group"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "workspace": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "workspace"
+          ]
+        }
+      },
+      {
         "id": "setPaneTitle",
         "description": "Sets a pane's title; the empty string clears it.",
         "params": {

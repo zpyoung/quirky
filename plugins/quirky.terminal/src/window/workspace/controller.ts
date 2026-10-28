@@ -128,6 +128,13 @@ function isEditableControl(element: Element): boolean {
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (element as HTMLElement).isContentEditable === true
 }
 
+/** The MIME type identifies a host-minted one-use token; dragover checks only its presence. */
+export const COMMAND_DROP_MIME = 'application/x-quirky-command'
+
+export function hasCommandDrop(transfer: DataTransfer | null | undefined): transfer is DataTransfer {
+  return transfer !== null && transfer !== undefined && Array.from(transfer.types).includes(COMMAND_DROP_MIME)
+}
+
 /** Writes to the clipboard; the failure case is the caller's to report. */
 async function writeClipboard(text: string): Promise<void> {
   if (!navigator.clipboard) throw new Error('the clipboard is not available')
@@ -1250,6 +1257,26 @@ export class WorkspaceController {
     if (drop.kind === 'strip') await this.moveTabToGroup(drag.tab, drop.group, drop.index)
     else if (drop.zone === 'center') await this.moveTabToGroup(drag.tab, drop.group)
     else await this.moveTabToSplit(drag.tab, drop.zone, drop.group)
+  }
+
+  /** Executes a trusted command after the daemon validates its explicit group target. */
+  async dropCommand(transfer: DataTransfer | null, groupId: string): Promise<void> {
+    const token = hasCommandDrop(transfer) ? transfer.getData(COMMAND_DROP_MIME) : ''
+    const descriptor = token === '' ? null : this.context.consumeCommandDrag(token)
+    const workspace = this.ws
+    if (!descriptor || !workspace || workspace.id === FLOATING_WORKSPACE || !findGroup(workspace.root, groupId)) return
+    try {
+      const info = await this.context.call('quirky.terminal/groupInfo', { group: groupId })
+      const target = info && typeof info === 'object' && 'workspace' in info && typeof info.workspace === 'string' ? info.workspace : null
+      const current = this.ws
+      if (target === null || target !== workspace.id || current !== workspace || current === null || !findGroup(current.root, groupId)) {
+        this.context.toast('Could not run dropped command', 'The target group is no longer available in this worktree.')
+        return
+      }
+      await this.context.executeCommand(descriptor.command, { ...descriptor.args, group: groupId, worktree: target })
+    } catch (error) {
+      this.context.toast('Could not run dropped command', messageOf(error))
+    }
   }
 
   // ---- report

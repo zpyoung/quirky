@@ -325,8 +325,8 @@
         "@types/react-dom": "^19.3.0"
       }
     },
-    "plugins/quirky.sidebar-extras": {
-      "name": "@quirky/plugin-sidebar-extras",
+    "plugins/quirky.session-info": {
+      "name": "@quirky/plugin-session-info",
       "version": "0.1.0",
       "dependencies": {
         "@quirky/protocol": "workspace:*",
@@ -339,8 +339,8 @@
         "@types/react-dom": "^19.3.0",
       },
     },
-    "plugins/quirky.session-info": {
-      "name": "@quirky/plugin-session-info",
+    "plugins/quirky.sidebar-extras": {
+      "name": "@quirky/plugin-sidebar-extras",
       "version": "0.1.0",
       "dependencies": {
         "@quirky/protocol": "workspace:*",
@@ -393,6 +393,19 @@
       "devDependencies": {
         "@happy-dom/global-registrator": "20.14.6",
         "@quirky/git": "workspace:*",
+        "@types/react": "^19.3.0",
+        "@types/react-dom": "^19.3.0",
+      },
+    },
+    "plugins/quirky.vault": {
+      "name": "@quirky/plugin-vault",
+      "version": "0.1.0",
+      "dependencies": {
+        "@quirky/protocol": "workspace:*",
+        "react": "19.2.0",
+        "react-dom": "19.2.0",
+      },
+      "devDependencies": {
         "@types/react": "^19.3.0",
         "@types/react-dom": "^19.3.0",
       },
@@ -606,9 +619,9 @@
 
     "@quirky/plugin-ask": ["@quirky/plugin-ask@workspace:plugins/quirky.ask"],
 
-    "@quirky/plugin-checks": ["@quirky/plugin-checks@workspace:plugins/quirky.checks"],
     "@quirky/plugin-browser": ["@quirky/plugin-browser@workspace:plugins/quirky.browser"],
 
+    "@quirky/plugin-checks": ["@quirky/plugin-checks@workspace:plugins/quirky.checks"],
     "@quirky/plugin-editor": ["@quirky/plugin-editor@workspace:plugins/quirky.editor"],
 
     "@quirky/plugin-git": ["@quirky/plugin-git@workspace:plugins/quirky.git"],
@@ -629,11 +642,15 @@
 
     "@quirky/plugin-session-info": ["@quirky/plugin-session-info@workspace:plugins/quirky.session-info"],
 
+    "@quirky/plugin-sidebar-extras": ["@quirky/plugin-sidebar-extras@workspace:plugins/quirky.sidebar-extras"],
+
     "@quirky/plugin-structured": ["@quirky/plugin-structured@workspace:plugins/quirky.structured"],
 
     "@quirky/plugin-terminal": ["@quirky/plugin-terminal@workspace:plugins/quirky.terminal"],
 
     "@quirky/plugin-terminal-dock": ["@quirky/plugin-terminal-dock@workspace:plugins/quirky.terminal-dock"],
+
+    "@quirky/plugin-vault": ["@quirky/plugin-vault@workspace:plugins/quirky.vault"],
 
     "@quirky/plugin-worktree": ["@quirky/plugin-worktree@workspace:plugins/quirky.worktree"],
 

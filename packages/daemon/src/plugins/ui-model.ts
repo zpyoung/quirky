@@ -300,6 +300,9 @@ export function buildUiModel(input: {
       kind,
       plugin: declaration.plugin,
       title: stringField(declaration.data, 'title') ?? declaration.name,
+      ...(kind === 'settings-section' && stringField(declaration.data, 'description') !== undefined
+        ? { description: stringField(declaration.data, 'description') }
+        : {}),
       order: typeof declaration.data.order === 'number' ? declaration.data.order : DEFAULT_ORDER,
       module: moduleOf(declaration.plugin),
     }))
@@ -340,6 +343,7 @@ export function buildUiModel(input: {
     statusBars: slot('status-bar').sort(byOrder),
     activityItems: slot('activity-item').sort(byOrder),
     panels: slot('panel').sort(byOrder),
+    settingsSections: slot('settings-section').sort(byOrder),
     views: slot('view').sort((a, b) => compare(a.id, b.id)),
     overlays: slot('overlay').sort(byOrder),
     commands,

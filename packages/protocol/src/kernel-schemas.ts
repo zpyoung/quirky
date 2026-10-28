@@ -174,12 +174,13 @@ const uiModel = object(
     commands: listOf({ type: 'object' }),
     keybindings: listOf(uiKeybinding, 'Registry precedence order: distro bindings first, then plugin bindings.'),
     settings: listOf({ type: 'object' }),
+    settingsSections: listOf({ type: 'object' }),
     menuItems: listOf(uiMenuItem),
     themes: listOf({ type: 'object' }),
     theme: object({ chosen: string(), active: string() }, ['chosen', 'active']),
     modules: { type: 'object', additionalProperties: true }
   },
-  ['sidebarSections', 'statusBars', 'activityItems', 'panels', 'views', 'overlays', 'commands', 'keybindings', 'settings', 'menuItems', 'themes', 'theme', 'modules']
+  ['sidebarSections', 'statusBars', 'activityItems', 'panels', 'views', 'overlays', 'commands', 'keybindings', 'settings', 'settingsSections', 'menuItems', 'themes', 'theme', 'modules']
 )
 const apiDescription = object(
   {

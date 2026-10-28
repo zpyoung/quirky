@@ -5,6 +5,7 @@ import type { DropZone } from '../../layout/tree'
 import { GROUP_RATIO_MAX, GROUP_RATIO_MIN, isViewTab, TAB_COLOR_HEX } from '../../layout/types'
 import type { Group, GroupNode, Tab } from '../../layout/types'
 import { CollapseIcon, CloseIcon, PinIcon } from './icons'
+import { hasCommandDrop } from './controller'
 import type { ControllerState, WorkspaceController } from './controller'
 import { activeTabOf, byPaneId, groupRects, px } from './model'
 import type { GroupDividerRect } from './model'
@@ -203,12 +204,26 @@ function GroupView({ controller, state, group }: Common & { group: Group }) {
       <div
         className={`qt-strip${stripEnd ? ' qt-drop-end' : ''}`}
         onDragOver={(event) => {
-          if (!drag) return
+          if (!drag) {
+            const transfer = event.dataTransfer
+            if (hasCommandDrop(transfer)) {
+              event.preventDefault()
+              transfer.dropEffect = 'copy'
+            }
+            return
+          }
           event.preventDefault()
           controller.overTabDrag({ kind: 'strip', group: group.id, index: others.length })
         }}
         onDrop={(event) => {
-          if (!drag) return
+          if (!drag) {
+            const transfer = event.dataTransfer
+            if (!hasCommandDrop(transfer)) return
+            event.preventDefault()
+            event.stopPropagation()
+            void controller.dropCommand(transfer, group.id)
+            return
+          }
           event.preventDefault()
           void controller.dropTab({ kind: 'strip', group: group.id, index: others.length })
         }}
@@ -231,12 +246,26 @@ function GroupView({ controller, state, group }: Common & { group: Group }) {
         className="qt-body"
         data-group-body={group.id}
         onDragOver={(event) => {
-          if (!drag) return
+          if (!drag) {
+            const transfer = event.dataTransfer
+            if (hasCommandDrop(transfer)) {
+              event.preventDefault()
+              transfer.dropEffect = 'copy'
+            }
+            return
+          }
           event.preventDefault()
           controller.overTabDrag({ kind: 'zone', group: group.id, zone: zoneAt(event) })
         }}
         onDrop={(event) => {
-          if (!drag) return
+          if (!drag) {
+            const transfer = event.dataTransfer
+            if (!hasCommandDrop(transfer)) return
+            event.preventDefault()
+            event.stopPropagation()
+            void controller.dropCommand(transfer, group.id)
+            return
+          }
           event.preventDefault()
           void controller.dropTab({ kind: 'zone', group: group.id, zone: zoneAt(event) })
         }}

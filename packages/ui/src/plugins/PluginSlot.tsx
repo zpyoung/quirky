@@ -17,6 +17,7 @@ export function PluginSlot({ id, input }: Props) {
     ...(state.model?.activityItems ?? []),
     ...(state.model?.statusBars ?? []),
     ...(state.model?.panels ?? []),
+    ...(state.model?.settingsSections ?? []),
     ...(state.model?.views ?? []),
     ...(state.model?.overlays ?? [])
   ].find((candidate) => candidate.id === id)

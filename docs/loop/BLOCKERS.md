@@ -235,6 +235,13 @@ Registration update: `bun scripts/build-loop/queue.ts add /tmp/quirky-session-in
 
 - **Protected script load sensitivity:** the next local scripts run had 59 pass/3 five-second timeouts in the Git-based lanes fixture. The unchanged affected file then passed alone: 23 tests/60 assertions; the self-contained current-tree typecheck also passed. No timeout cap/assertion or protected infrastructure file was changed. Preserve this as runner reliability evidence, not a hidden green full-scripts claim.
 
+## m3-vault: remaining worktree gate timing
+
+- **LOW — background fetch/setup-gate test race** (`plugins/quirky.worktree/test/create.test.ts:367`, `:395`). A land run saw the background-refresh wait time out and a ref-lock conflict when the setup-gate test moved its remote base. The focused remote file first reproduced the ref-lock conflict, then its required isolated retry passed all40 cases140 assertions and returned ok with the file marked flaky. No worktree implementation, assertions, timeouts or retry policy were changed in the vault item.
+
+## m3-vault: SC-21 archived handoff bridge detail
+
+- **LOW — archived Vault handoff capability is not declared by the installed owner** (`plugins/quirky.vault/src/actions.ts:204-220`, `plugins/quirky.handoff/quirky-plugin.json:19-153`, `plugins/quirky.handoff/src/ui.tsx:68-77`). Vault looks for an effective handoff contribution; the current owner declares archived-source prepare plus a live-session-only open command, but no matching handoff contribution. The existing m3-vault-parity-completion item already names the unfinished enabled SC-21 flow; its implementation must reconcile that public archived-source contract, not substitute a live Quirky session ID or fake availability. Core scope retains the honest unavailable result.
 ## fix-flaky-quirky-worktree-create: additional remote gate evidence
 
 - **Severity:** medium; existing queued item `fix-flaky-quirky-worktree-create` owns this file.
@@ -242,3 +249,11 @@ Registration update: `bun scripts/build-loop/queue.ts add /tmp/quirky-session-in
 - **First failure:** SC-20's existing remote-tracking base refresh timed out at the wait in `create.test.ts:367`; quirkyd logged that it could not refresh origin/main in the background.
 - **Isolated retry:** a different case, “a remote base that moves after the hooks were read does not change the commit checked out”, failed `git fetch -q origin` with `cannot lock ref refs/remotes/origin/main: is at 5549f0f4044fc0bd6207c2f67aa3ace59af0f97c but expected f85218387be054f4435ae642b09ba319f631971a`.
 - **Evidence:** `bun run test`, remote snapshot `runs/1793142204136-90736`, artifact://51. No worktree implementation or test was edited in the PTY item, and this failure was not suppressed. The corrected PTY package separately passed two complete 14-file remote runs with no flaky reruns.
+
+## m3-vault: terminal input timing during affected verification
+
+- **LOW — shell readiness can advance during CLI round trips** (`plugins/quirky.terminal/test/e2e.test.ts:144`). The macOS SC-2 case expected pending after two CLI sends but observed ready under load; its configured isolated retry passed all23 cases169 assertions. The256 remote files and both macOS files returned a passing runner result. No terminal state, test deadline, assertion or retry rule was changed in this item.
+
+## m3-vault: search input readiness during editor catch-up
+
+- **LOW — search input queried before its mount settled** (`plugins/quirky.terminal/test/e2e-ui/features-search.test.ts:179`). The affected editor/terminal/UI/Vault run passed131/132 remote files initially; SC-73 passed a null input to typeInto. Its configured isolated retry passed all5 cases52 assertions, and all3macOS files passed. No producer behavior, assertion, delay or retry rule was changed; this adds evidence to the already-recorded search readiness finding.

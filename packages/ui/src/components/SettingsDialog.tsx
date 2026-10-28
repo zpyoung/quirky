@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { usePluginHost, usePluginState } from '../context'
 import { settingsGroups, themePicker, type SettingField } from '../plugins/settingsGroups'
 import { changedSettings, draftOf, type DraftValue } from '../plugins/settingsDraft'
+import { PluginSlot } from '../plugins/PluginSlot'
 import { Dialog } from './Dialog'
 
 function PluginField({
@@ -67,6 +68,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const host = usePluginHost()
   const plugin = usePluginState()
   const groups = settingsGroups(plugin.settings)
+  const settingsSections = plugin.model?.settingsSections ?? []
   const themes = themePicker(plugin.model?.themes ?? [], plugin.model?.theme.chosen ?? 'default')
   const [edits, setEdits] = useState<Record<string, DraftValue>>({})
   const [themeEdit, setThemeEdit] = useState<string | null>(null)
@@ -102,7 +104,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   return (
     <Dialog title="Settings" onClose={onClose}>
       <form className="form" onSubmit={submit}>
-        {groups.length === 0 && themes.options.length <= 1 && <p className="muted pad">No settings to change.</p>}
+        {groups.length === 0 && settingsSections.length === 0 && themes.options.length <= 1 && <p className="muted pad">No settings to change.</p>}
         {groups.map((group) =>
           group.kind === 'plugin' ? (
             <fieldset key={`plugin:${group.plugin}`} className="settings-group">
@@ -128,6 +130,13 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
             ))
           )
         )}
+        {settingsSections.map((section) => (
+          <fieldset key={section.id} className="settings-group">
+            <legend>{section.title}</legend>
+            {section.description && <p className="muted">{section.description}</p>}
+            <PluginSlot id={section.id} />
+          </fieldset>
+        ))}
         {themes.options.length > 1 && (
           <>
             <label>
