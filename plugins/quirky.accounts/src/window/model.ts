@@ -38,7 +38,9 @@ export type ProviderSnapshot = {
   usageMetadata?: UsageFailure
 }
 export type UsageState = { providers: ProviderSnapshot[]; inactive: Record<string, ProviderSnapshot>; updatedAt: number }
-export type AccountUiSnapshot = { accounts: AccountState | null; usage: UsageState | null; ui: AccountUiState; credentials: CredentialStatus[]; login: PendingLogin | null; agentDetection: AgentDetectionState; loading: boolean; refreshing: boolean; error: string | null }
+export type AccountUiSnapshot = { accounts: AccountState | null; usage: UsageState | null; ui: AccountUiState; credentials: CredentialStatus[]; login: PendingLogin | null; loginStarting: boolean; loginCancelling: boolean; agentDetection: AgentDetectionState; loading: boolean; refreshing: boolean; error: string | null }
+export type SessionActionResult = 'applied' | 'selection-changed' | 'failed'
+export type ResetCreditResult = 'reset' | 'alreadyRedeemed' | 'nothingToReset' | 'noCredit' | 'scope-changed' | 'failed'
 
 export const PROVIDER_LABELS: Record<ProviderId, string> = {
   claude: 'Claude', codex: 'Codex', gemini: 'Gemini', antigravity: 'Antigravity', 'opencode-go': 'OpenCode Go',
@@ -294,7 +296,7 @@ const INITIAL_UI: AccountUiState = { open: false, provider: null, expanded: null
 const INITIAL_AGENT_DETECTION: AgentDetectionState = { status: 'loading', installedProviders: [] }
 
 export class AccountsUiStore {
-  private snapshot: AccountUiSnapshot = { accounts: null, usage: null, ui: INITIAL_UI, credentials: [], login: null, agentDetection: INITIAL_AGENT_DETECTION, loading: true, refreshing: false, error: null }
+  private snapshot: AccountUiSnapshot = { accounts: null, usage: null, ui: INITIAL_UI, credentials: [], login: null, loginStarting: false, loginCancelling: false, agentDetection: INITIAL_AGENT_DETECTION, loading: true, refreshing: false, error: null }
   private readonly listeners = new Set<() => void>()
   private unsubscribe: (() => void) | null = null
   private stopped = false
@@ -306,8 +308,11 @@ export class AccountsUiStore {
   private minimumRevision = 0
   private revisionRetryUsed = false
   private reloadTimer: ReturnType<typeof setTimeout> | null = null
+  private fullReloadRequested = false
   private loginTimer: ReturnType<typeof setTimeout> | null = null
   private loginGeneration = 0
+  private loginStarting = false
+  private loginCancelling = false
   private uiQueue: Promise<void> = Promise.resolve()
   private preferencesQueue: Promise<void> = Promise.resolve()
   private readonly resetRequestIds = new Map<string, string>()
@@ -409,19 +414,20 @@ export class AccountsUiStore {
   }
 
   private scheduleReload(): void {
-    if (this.reloadTimer || this.stopped) return
-    this.reloadTimer = setTimeout(() => {
-      this.reloadTimer = null
-      void this.loadAccounts()
-      void this.loadUsage()
-      void this.loadCredentials()
-    }, 25)
+    this.fullReloadRequested = true
+    this.scheduleUsageReload()
   }
 
   private scheduleUsageReload(): void {
     if (this.reloadTimer || this.stopped) return
     this.reloadTimer = setTimeout(() => {
       this.reloadTimer = null
+      const fullReload = this.fullReloadRequested
+      this.fullReloadRequested = false
+      if (fullReload) {
+        void this.loadAccounts()
+        void this.loadCredentials()
+      }
       void this.loadUsage()
     }, 25)
   }
@@ -499,11 +505,11 @@ export class AccountsUiStore {
     this.context.toast(title, body)
   }
 
-  private async act(title: string, method: string, params: Record<string, unknown>): Promise<unknown | null> {
+  private async act(title: string, method: string, params: Record<string, unknown>, errorCopy?: (error: unknown) => string | null): Promise<unknown | null> {
     try {
       return await this.context.call(method, params)
-    } catch {
-      this.context.toast(title, 'The request could not be completed. Please try again.')
+    } catch (error) {
+      this.context.toast(title, errorCopy?.(error) ?? 'The request could not be completed. Please try again.')
       return null
     }
   }
@@ -596,21 +602,28 @@ export class AccountsUiStore {
   }
 
   async beginLogin(provider: ManagedProvider, options: { label?: string; accountId?: string; copyLink?: boolean } = {}): Promise<void> {
-    if (this.snapshot.login?.status === 'pending') return
-    this.loginGeneration += 1
-    const generation = this.loginGeneration
-    const params = { provider, ...options }
-    const result = await this.act(`Could not start ${provider === 'claude' ? 'Claude' : 'Codex'} sign-in`, 'quirky.accounts/beginLogin', params)
-    if (result === null || generation !== this.loginGeneration) return
-    const id = isRecord(result) && typeof result.id === 'string' ? result.id : typeof result === 'string' ? result : null
-    if (!id) {
-      this.context.toast('Could not start sign-in', 'The sign-in request did not return a session ID.')
-      return
+    if (this.loginStarting || this.snapshot.login?.status === 'pending') return
+    this.loginStarting = true
+    this.commit({ loginStarting: true })
+    try {
+      this.loginGeneration += 1
+      const generation = this.loginGeneration
+      const params = { provider, ...options }
+      const result = await this.act(`Could not start ${provider === 'claude' ? 'Claude' : 'Codex'} sign-in`, 'quirky.accounts/beginLogin', params)
+      if (result === null || generation !== this.loginGeneration) return
+      const id = isRecord(result) && typeof result.id === 'string' ? result.id : typeof result === 'string' ? result : null
+      if (!id) {
+        this.context.toast('Could not start sign-in', 'The sign-in request did not return a session ID.')
+        return
+      }
+      const accountId = options.accountId ?? null
+      const pending: PendingLogin = { id, provider, accountId, status: 'pending', url: null, error: null, result: null }
+      this.commit({ login: pending })
+      void this.pollLogin(pending, generation)
+    } finally {
+      this.loginStarting = false
+      this.commit({ loginStarting: false })
     }
-    const accountId = options.accountId ?? null
-    const pending: PendingLogin = { id, provider, accountId, status: 'pending', url: null, error: null, result: null }
-    this.commit({ login: pending })
-    void this.pollLogin(pending, generation)
   }
 
   private async pollLogin(previous: PendingLogin, generation: number): Promise<void> {
@@ -638,14 +651,21 @@ export class AccountsUiStore {
 
   async cancelLogin(): Promise<void> {
     const pending = this.snapshot.login
-    if (!pending) return
+    if (!pending || this.loginCancelling) return
+    this.loginCancelling = true
+    this.commit({ loginCancelling: true })
     this.loginGeneration += 1
-    if (this.loginTimer) clearTimeout(this.loginTimer)
+    clearTimeout(this.loginTimer ?? undefined)
     this.loginTimer = null
-    const result = await this.act('Could not cancel sign-in', 'quirky.accounts/cancelLogin', { id: pending.id })
-    if (result !== null) {
-      this.commit({ login: null })
-      void this.loadAccounts()
+    try {
+      const result = await this.act('Could not cancel sign-in', 'quirky.accounts/cancelLogin', { id: pending.id })
+      if (result !== null) {
+        this.commit({ login: null })
+        void this.loadAccounts()
+      }
+    } finally {
+      this.loginCancelling = false
+      this.commit({ loginCancelling: false })
     }
   }
 
@@ -697,16 +717,36 @@ export class AccountsUiStore {
     } else if (usage) this.scheduleUsageReload()
   }
 
-  async restart(sessions: string[], selectionRevision: number, yes = false): Promise<void> {
+  async restart(sessions: string[], selectionRevision: number, yes = false): Promise<SessionActionResult> {
     const generation = ++this.accountGeneration
-    const result = await this.act('Could not restart sessions', 'quirky.accounts/restart', { sessions, selectionRevision, ...(yes ? { yes: true } : {}) })
-    if (result !== null) this.applyAccountResult(result, generation)
+    let selectionChanged = false
+    const result = await this.act('Could not restart sessions', 'quirky.accounts/restart', { sessions, selectionRevision, ...(yes ? { yes: true } : {}) }, (error) => {
+      const message = isRecord(error) && typeof error.message === 'string' ? error.message : ''
+      if (message !== 'The selected account changed. Refresh the account state and choose again.' && message !== 'A requested session is no longer stale at this account revision.') return null
+      selectionChanged = true
+      return message
+    })
+    if (result === null) {
+      if (selectionChanged) void this.loadAccounts()
+      return selectionChanged ? 'selection-changed' : 'failed'
+    }
+    return this.applyAccountResult(result, generation) ? 'applied' : 'failed'
   }
 
-  async keep(sessions: string[], selectionRevision: number): Promise<void> {
+  async keep(sessions: string[], selectionRevision: number): Promise<SessionActionResult> {
     const generation = ++this.accountGeneration
-    const result = await this.act('Could not keep the current account', 'quirky.accounts/keep', { sessions, selectionRevision })
-    if (result !== null) this.applyAccountResult(result, generation)
+    let selectionChanged = false
+    const result = await this.act('Could not keep the current account', 'quirky.accounts/keep', { sessions, selectionRevision }, (error) => {
+      const message = isRecord(error) && typeof error.message === 'string' ? error.message : ''
+      if (message !== 'The selected account changed. Refresh the account state and choose again.' && message !== 'A requested session is no longer stale at this account revision.') return null
+      selectionChanged = true
+      return message
+    })
+    if (result === null) {
+      if (selectionChanged) void this.loadAccounts()
+      return selectionChanged ? 'selection-changed' : 'failed'
+    }
+    return this.applyAccountResult(result, generation) ? 'applied' : 'failed'
   }
 
   private async restartGroups(sessions: StaleSession[], yes: boolean): Promise<void> {
@@ -729,13 +769,14 @@ export class AccountsUiStore {
     return true
   }
 
-  async clearCredential(provider: string, kind: string): Promise<void> {
+  async clearCredential(provider: string, kind: string): Promise<boolean> {
     const result = await this.act('Could not clear provider credential', 'quirky.accounts/clearCredential', { provider, kind })
-    if (result === null) return
+    if (result === null) return false
     const status = parseCredentialStatus(result)
     if (status) this.updateCredential(status)
     else void this.loadCredentials()
     await this.refresh(provider)
+    return true
   }
 
   private updateCredential(status: CredentialStatus): void {
@@ -752,11 +793,24 @@ export class AccountsUiStore {
     return id
   }
 
-  async consumeResetCredit(idempotencyKey: string, expectedScope: ResetExpectedScope): Promise<boolean> {
-    const result = await this.act('Could not reset Codex limits', 'quirky.accounts/consumeResetCredit', { idempotencyKey, expectedScope, yes: true })
-    if (result === null) return false
+  async consumeResetCredit(idempotencyKey: string, expectedScope: ResetExpectedScope): Promise<ResetCreditResult> {
+    let scopeChanged = false
+    const result = await this.act('Could not reset Codex limits', 'quirky.accounts/consumeResetCredit', { idempotencyKey, expectedScope, yes: true }, (error) => {
+      const message = isRecord(error) && typeof error.message === 'string' ? error.message : ''
+      if (message !== 'Codex reset offer is no longer current' && message !== 'Codex reset offer changed; refresh usage and confirm again') return null
+      scopeChanged = true
+      return message
+    })
+    if (result === null) {
+      if (scopeChanged) void this.loadUsage()
+      return scopeChanged ? 'scope-changed' : 'failed'
+    }
+    if (result !== 'reset' && result !== 'alreadyRedeemed' && result !== 'nothingToReset' && result !== 'noCredit') {
+      this.context.toast('Could not reset Codex limits', 'The accounts service returned an unrecognized reset outcome.')
+      return 'failed'
+    }
     void this.loadUsage()
-    return true
+    return result
   }
 }
 
