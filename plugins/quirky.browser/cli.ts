@@ -7,7 +7,11 @@ const COMMAND_METHODS: Readonly<Record<string, CliBrowserMethod>> = {
   preferencesState: 'preferencesState', profileSet: 'profileSet', profileClear: 'profileClear', profileDelete: 'profileDelete', openLink: 'openLink',
   profileList: 'profileList', profileCreate: 'profileCreate', tabList: 'tabList', tabShow: 'tabShow', tabCurrent: 'tabCurrent',
   tabCreate: 'tabCreate', tabSwitch: 'tabSwitch', tabClose: 'tabClose', goto: 'goto', eval: 'eval', snapshot: 'snapshot',
-  fill: 'fill', click: 'click', screenshot: 'screenshot', exec: 'exec'
+  fill: 'fill', click: 'click', screenshot: 'screenshot', exec: 'exec',
+  paneOpen: 'paneOpen', paneState: 'paneState', paneNavigate: 'paneNavigate', paneControl: 'paneControl',
+  paneReport: 'paneReport', paneClose: 'paneClose', paneSuggestions: 'paneSuggestions', paneWatch: 'paneWatch',
+  paneWatchStop: 'paneWatchStop', paneFrameAck: 'paneFrameAck', paneInput: 'paneInput', paneRespond: 'paneRespond',
+  paneDownload: 'paneDownload'
 }
 
 const PAGE_TARGET_COMMANDS: Readonly<Record<string, true>> = {

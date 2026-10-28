@@ -2650,6 +2650,8 @@
         "type": "enum",
         "title": "Terminal URL clicks",
         "description": "What clicking a link does.",
+        "category": "Browser",
+        "section": "Terminal URL clicks",
         "default": "actions",
         "values": [
           "actions",
@@ -2662,6 +2664,8 @@
         "type": "enum",
         "title": "Terminal URL middle click",
         "description": "What middle-clicking a link does.",
+        "category": "Browser",
+        "section": "Terminal URL clicks",
         "default": "open",
         "values": [
           "actions",
