@@ -187,5 +187,72 @@
 - **Revisit if:** browser dogfood or final merged runtime contradicts native evidence.
 - **Source:** assumed — autonomous
 
+## D18: Apply the operator's bounded landing scope
+- **Question:** operator interjection requires committing exercised code, one follow-up for the rest, one affected/typecheck gate and queue landing within30minutes.
+- **Options:** start another review/UI campaign; land the implemented and exercised surface with explicit remaining verification.
+- **Chose:** stop unstarted campaigns. Ship all implemented UI/API behavior with its intact acceptance tests; defer only unfinished visible Stop/Close and tool-limited setup completion plus the unstarted bounded cross-family review to one dependent item.
+- **Why:** explicit operator instruction supersedes the previous execution campaign. No API/CLI or native smoke result is relabelled as a complete visible UI pass.
+- **Evidence:** operator interjection; window starts2026-10-28T08:06:49Z, target08:36:49Z; UI reports listed in BLOCKERS.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** final affected tests or typecheck expose a blocking shipped-path failure.
+- **Source:** assumed — operator directed
+
+## D19: Preserve saved output without changing destructive session cleanup
+- **Question:** a normal fresh-session cap pause removed its native journal, making the primary Output region fail.
+- **Options:** retain live children or deleted journals; hide NotFound; use labelled durable iteration evidence for settled output.
+- **Chose:** settled fresh/ended views read the matching finished iteration's real output tail; live/needs-you/continued-paused views keep structured journal reads and their errors. Report the output source in UI state. No core cleanup or native ownership guard changes.
+- **Why:** structured session removal intentionally calls journal.remove, while loop evidence remains durable. The renderer was selecting a resource beyond its lifetime.
+- **Evidence:** visible run20261028T060845-277a obs30/F1; API regression red bg31 at output wait, then combined UI gate38pass/0fail/311assertions bg35; buildbg34 and typecheckbg33 exit0. Logic/tech amended before implementation.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** saved output masks an error for a live session or selects another loop/session's evidence.
+- **Source:** locked by docs/loop/decisions/m5-loops-core.md
+
+## D20: Honor an explicit Stop choice after the loop pauses
+- **Question:** a close dialog can be opened while running and its Stop choice arrive after a cap pause.
+- **Options:** treat paused as detach-only; stop every non-ended loop selected by the explicit choice.
+- **Chose:** re-read loop state after binding validation and stop it unless already completed/stopped; keep ordinary paused-tab closure non-stopping.
+- **Why:** the old live-only predicate closed the tab while leaving the loop resumable, contrary to the explicit Stop choice.
+- **Evidence:** real daemon/window regression bg36 expected stopped but received paused; after main.ts correction bg37 passed1test/37assertions in6.34seconds.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a close races another binding or fails to preserve the tab on a genuine backend refusal.
+- **Source:** assumed — autonomous
+
+## D21: Repair fixture lifetimes and readiness rather than weaken tests
+- **Question:** later gates exposed native scheduler lifetime, a missing FormEvent import, short outer watchdogs and premature menu readiness.
+- **Options:** skip assertions or extend production deadlines; correct test environment/types and wait on actual seeded agents.
+- **Chose:** preserve native scheduler globals across disposable DOM windows; keep both QueueItem and FormEvent types; use30second outer UI fixture budgets around existing8second conditions; wait for actual Claude/Codex rows instead of an incidental menu length. Delete obsolete menu wording/last-row pins without repinning them.
+- **Why:** adding Loop made the fallback menu exceed the old numeric threshold before agent detection. A5second fixture watchdog could not enclose its8second condition. No consumer assertion or production deadline was relaxed.
+- **Evidence:** initial affected290/292 then291/292; scripts68pass/0fail/570assertions; post-repair UI38/0/311, typecheckbg33 exit0; SC22 failed predicates preserved in gates-final/0.stdout.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the final affected runner fails a condition rather than its outer fixture.
+- **Source:** assumed — autonomous
+
+## D22: Keep native conversation ownership strict during UI verification
+- **Question:** visible Stop/Close attempts crashed while a continued queue loop remained connected.
+- **Options:** weaken native ownership; use a realistic unique new-thread identity in the isolated fixture.
+- **Chose:** preserve the production owner guard. The throwaway native fixture now returns a UUID for each new thread, while resume retains the requested identity.
+- **Why:** the fixture returned scripted-thread for every process; the queue still owned codex:scripted-thread. persistProviderSession correctly rejected the second owner.
+- **Evidence:** run20261028T071503-520f F5/F6; fixture request log, live queue providerSession.id, structured/main.ts365-367. Corrected preflight admitted two distinct native conversations concurrently and removed all owned preflight sessions; both PASS/CLEANUP markers printed.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the two remaining visible scenarios fail with distinct fixture conversation identities.
+- **Source:** assumed — autonomous
+
+## D23: Preserve explicit component attribution and current public API documentation
+- **Question:** two bounded repair workers again used relative edit headers and wrote seven parent paths instead of their isolated targets.
+- **Options:** commit unattributed writes; recover exact payloads and restore the parent first.
+- **Chose:** read raw transcripts and both versions; relocate all seven exact deltas via anchored edits, restore original parent hashes, then audit/commit/merge the correctly scoped components. Document plus target contexts and reserved close-context keys in the affected API specs.
+- **Why:** prompts are not filesystem isolation. No unknown user change was discarded, and no out-of-scope source delta was silently committed.
+- **Evidence:** root/target hash restoration and commits9e7ebccd/6354c77d; subsequent parent FormEvent correction; LoopApiDocs read-only coherence report.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** any future worker cannot retain its explicit target prefix.
+- **Source:** assumed — autonomous
+
 ## Progress
-All original source components HEAD/scope-audited and merged; their worktrees removed. Current parent9becd69b includes latest core dependency reconciliation, D22-D27 read. Initial integrated gate38/10 is not green. Rail fixture repair reports31/0/161 in its isolated branch and awaits parent audit/integration; WindowRepair still owns real daemon/window acceptance fixes. Corrected actual launched native CLI+window smoke passes (D17). Readiness command bg12 still running; no ready claim. Next: finish/audit/integrate repair writers, own combined acceptance+required affected/scripts/typecheck/build gates, dependency latest preset pacing policy+readiness, one roadmap catchup/read decisions, visible web dogfood and one final cross-family review+blocking fixes, docs/evidence and authoritative land. No second item and no end while jobs remain.
+Operator wrap is active. All UI functionality is implemented; native CLI/window smoke covers cap/focus/steer/edit/resume/history and Cancel/Keep/Stop close semantics. Real API/window tests cover setup presets, validation, folder eligibility, server refusal, queue editing, archived output and late paused Stop. Visible run20261028T071503-520f passed observe/adjust/queue; Stop/Close remain unverified after correcting fixture identity collision. Setup's earlier functional completion remains tool-partial due UNSETTLED pass-guard behavior. One follow-up and BLOCKERS entry own those remaining verifications and the unstarted final review. Next: commit this scope/evidence, merge current roadmap as operator requests, run only the required affected/typecheck gate once, detach and authoritative queue land. No test is skipped or weakened, no second item is claimed, and no complete visible-UI or code-review PASS is asserted.
+

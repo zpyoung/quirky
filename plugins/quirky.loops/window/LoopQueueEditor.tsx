@@ -1,3 +1,4 @@
+import type { FormEvent } from 'react'
 import type { QueueItem } from '../src/types'
 
 export type QueueEditorState = {

@@ -371,7 +371,10 @@ export async function activate(context: PluginContext): Promise<void> {
         throw context.error('not-found', `no hosted loop tab ${tabId} for ${id}`)
       }
       if (params.choice === 'cancel') return { closed: false }
-      if (params.choice === 'stop' && isLiveLoop(loop)) await active.stop(id, true)
+      if (params.choice === 'stop') {
+        const current = active.get(id)
+        if (current.state !== 'completed' && current.state !== 'stopped') await active.stop(id, true)
+      }
       const authorization = JSON.stringify([id, tabId])
       authorizedViewCloses.add(authorization)
       try {

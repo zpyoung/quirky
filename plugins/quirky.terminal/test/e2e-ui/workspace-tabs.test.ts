@@ -729,7 +729,12 @@ test(
     await waitFor('both tabs drawn', () => (ui.tabTitles().length === 2 ? true : undefined))
 
     ui.q(`[data-plus="${group}"]`)!.click()
-    const open = (await ui.waitView('the + menu', (view) => view.menu?.kind === 'plus' && view.menu.items.length > 2)).menu!
+    const open = (await ui.waitView('detected agents in the + menu', (view) => {
+      const menu = view.menu
+      return menu?.kind === 'plus' &&
+        menu.items.some((item) => /claude/i.test(item.label)) &&
+        menu.items.some((item) => /codex/i.test(item.label))
+    })).menu!
     const labels = open.items.map((item) => item.label)
     expect(labels[0]).toBe('New Terminal')
     expect(open.items[0]!.key).toBe('⌘T')

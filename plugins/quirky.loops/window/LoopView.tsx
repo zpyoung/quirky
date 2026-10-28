@@ -234,6 +234,19 @@ function stateEnded(loop: LoopSnapshot): boolean {
   return loop.state === 'completed' || loop.state === 'stopped'
 }
 
+function usesSavedOutput(loop: LoopSnapshot): boolean {
+  return stateEnded(loop) || (loop.state === 'paused' && loop.config.sessionPolicy === 'fresh')
+}
+
+function savedIterationOutput(loop: LoopSnapshot, records: readonly IterationDetail[]): IterationDetail | null {
+  for (let index = records.length - 1; index >= 0; index--) {
+    const detail = records[index]!
+    if (detail.loopId === loop.id && detail.endedAt !== null &&
+        (loop.sessionId === null || detail.sessionId === loop.sessionId)) return detail
+  }
+  return null
+}
+
 function timeLabel(value: number | null): string {
   if (value === null || !Number.isFinite(value)) return 'Unavailable'
   return new Date(value).toLocaleString()
@@ -316,7 +329,8 @@ export function LoopView({ context, loopId, onHandle, report }: LoopViewProps) {
 
   const loadMessages = useCallback(async (sessionId: string | null, generation: number) => {
     const sequence = ++messageSequence.current
-    if (sessionId === null) {
+    const current = loopRef.current
+    if (sessionId === null || (current !== null && usesSavedOutput(current))) {
       if (aliveRef.current && generation === viewGeneration.current) {
         setMessages([])
         setMessageError(null)
@@ -795,6 +809,7 @@ export function LoopView({ context, loopId, onHandle, report }: LoopViewProps) {
     queueEditVisible ? 'queue-edit' : queueState.addDraft.trim() ? 'queue-add' : null
   const surfaceState: Record<string, unknown> = {
     snapshot: loop,
+    outputSource: loop === null ? null : usesSavedOutput(loop) ? 'iteration' : 'structured',
     connectionStatus,
     activeForm,
     steerDraft,
@@ -858,6 +873,10 @@ export function LoopView({ context, loopId, onHandle, report }: LoopViewProps) {
   const latestDetail = currentHistory[currentHistory.length - 1] ?? null
   const evidenceDetail = currentLoop?.recentIterations[currentLoop.recentIterations.length - 1] ?? latestDetail
   const checkDetail = latestDetail ?? evidenceDetail
+  const showSavedOutput = currentLoop !== null && usesSavedOutput(currentLoop)
+  const savedOutput = currentLoop !== null && showSavedOutput
+    ? savedIterationOutput(currentLoop, currentLoop.recentIterations) ?? savedIterationOutput(currentLoop, currentHistory)
+    : null
   const iterationCap = currentLoop?.config.caps.maxIterations
   const costCap = currentLoop === null ? null : moneyCap(currentLoop)
   const configuredCaps = currentLoop === null ? [] : [
@@ -885,6 +904,16 @@ export function LoopView({ context, loopId, onHandle, report }: LoopViewProps) {
           <h2>Output</h2>
           {currentLoop === null ? (
             <p className="loop-muted">Loop output is unavailable until its state can be verified.</p>
+          ) : showSavedOutput ? (
+            <>
+              <p className="loop-loop-meta">
+                {savedOutput === null ? 'Saved iteration output' : `Saved iteration ${savedOutput.n}${savedOutput.attempt > 1 ? ` · attempt ${savedOutput.attempt}` : ''} output`}
+              </p>
+              {savedOutput?.error && <p className="loop-error" role="alert">{savedOutput.error}</p>}
+              <div className="loop-output-messages" role="log" aria-label="Saved iteration output">
+                {savedOutput?.outputTail ? <article className="loop-output-message"><pre>{savedOutput.outputTail}</pre></article> : <p className="loop-muted">No output recorded for this iteration.</p>}
+              </div>
+            </>
           ) : currentLoop.sessionId === null ? (
             <p className="loop-muted">No structured session is attached.</p>
           ) : (

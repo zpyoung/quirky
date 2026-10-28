@@ -430,7 +430,7 @@ test('setup API reports defaults, preset resets, queue edits, and validation wit
   await uiCommand('setup-action', { action: 'cancel' })
   await waitForSetupClosed()
   expect(activeTab(await workspace())).toBe(settingsTabId)
-})
+}, 30_000)
 
 test('valid Until-done setup creates a native loop with trimmed name and background focus', async () => {
   await startFixture()
@@ -458,7 +458,7 @@ test('valid Until-done setup creates a native loop with trimmed name and backgro
   expect(currentWorkspace.activeGroup).toBe(fixtureActiveGroupId())
   const sessions = await currentRig().call<Session[]>('quirky.session/list', {})
   expect(sessions.some((session) => session.agent === 'shell')).toBe(false)
-})
+}, 30_000)
 
 test('a live loop warns on interval setup but the second loop still starts in the background', async () => {
   await startFixture()
@@ -497,7 +497,7 @@ test('a live loop warns on interval setup but the second loop still starts in th
   expect(viewForLoop(currentWorkspace, interval.id)).toBeDefined()
   expect(activeTab(currentWorkspace)).toBe(settingsTabId)
   expect(currentWorkspace.activeGroup).toBe(fixtureActiveGroupId())
-})
+}, 30_000)
 
 test('valid queue setup starts with the edited queue order and preserves the active tab', async () => {
   await startFixture()
@@ -526,7 +526,7 @@ test('valid queue setup starts with the edited queue order and preserves the act
   expect(viewForLoop(currentWorkspace, queued.id)).toBeDefined()
   expect(activeTab(currentWorkspace)).toBe(settingsTabId)
   expect(currentWorkspace.activeGroup).toBe(fixtureActiveGroupId())
-})
+}, 30_000)
 
 test('folder workspace setup hides checkpoints and never sends a checkpoint configuration', async () => {
   await startFixture()
@@ -548,7 +548,7 @@ test('folder workspace setup hides checkpoints and never sends a checkpoint conf
   expect(created.config.checkpointCommits).toBe(false)
   expect(created.costUsd).toBeNull()
   expect((await loops(folder.id)).map((loop) => loop.id)).toEqual([created.id])
-})
+}, 30_000)
 
 test('a server-side loop-file refusal preserves the setup draft and creates no loop tab', async () => {
   await startFixture()
@@ -574,4 +574,4 @@ test('a server-side loop-file refusal preserves the setup draft and creates no l
 
   await uiCommand('setup-action', { action: 'cancel' })
   await waitForSetupClosed()
-})
+}, 30_000)

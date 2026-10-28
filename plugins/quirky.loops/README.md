@@ -20,7 +20,9 @@ Open the workspace tab-bar **+** menu and choose **Loop…** after Agent setting
 
 Starting a loop opens its view in a background tab without changing the active tab. Open that tab to read the structured journal beside the Loop rail, or below it in a narrow workspace. The rail shows state, pause reason, progress, check results and retained iteration evidence. Pause waits until the current iteration finishes; Resume can add iterations at a cap. Steer queues guidance for the next prompt. Edit changes subsequent iterations, and queue controls cannot alter an in-progress item.
 
-Closing a running or needs-you loop tab offers Cancel, Stop loop, or Keep running. Keep running removes only the view; Stop loop interrupts the loop before closing its tab. A failed close leaves the tab open. Closing a paused/ended view or bulk-closing tabs does not stop the background loop.
+Running conversations use the live structured journal. Settled fresh-session and ended loops show labelled saved iteration output from the loop's durable evidence, so normal session cleanup does not erase the visible result. Saved output is not a live connection.
+
+Closing a running or needs-you loop tab offers Cancel, Stop loop, or Keep running. Keep running removes only the view; Stop loop stops the loop before closing its tab, even if it paused after the dialog opened. A failed close leaves the tab open. Closing a paused/ended view without choosing Stop, or bulk-closing tabs, does not stop the background loop.
 
 All view actions have declared commands under `command:quirky.loops/`: `new`, `setup-action`, `open`, `action`, `close-tab`, and `close-choice`. `quirky ui state --json` reports setup drafts, validation, active rail forms, iteration details and the close choice alongside the workspace layout. The `quirky loop ui` CLI group exposes the same commands; use `--payload` for action parameters.
 

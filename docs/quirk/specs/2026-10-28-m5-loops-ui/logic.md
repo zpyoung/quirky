@@ -3,7 +3,7 @@
 ## Status & amendments
 Status: Approved autonomously under LOOP.md; technical spec requested by the execution complexity gate (UI/plugin/tab-host boundary and more than three files).
 
-**Amendments:** 2026-10-28: initial specification. No human decision requested.
+**Amendments:** 2026-10-28: initial specification. 2026-10-28: clarify settled output ownership after browser proof: fresh-session cleanup intentionally removes the live session and journal, so settled fresh/ended views show labelled saved iteration output from the loop's durable evidence. Live journal errors remain visible; no session-deletion or cleanup contract changes. No human decision requested.
 
 ## Purpose and conceptual model
 A person starts a daemon-owned background loop from the workspace tab strip, watches its native structured session and evidence, and adjusts its next iteration without owning the worker lifetime. The loop's durable API snapshot is authoritative. A hosted loop tab is a view, not a PTY or an interactive chat. Closing a view does not implicitly stop execution.
@@ -15,6 +15,8 @@ Both queue parts are included: New loop dialog and plus-menu entry; full rail/he
 
 ## Key decisions & rationale
 Use a quirky.loops UI module and the existing public hosted-view tab API. Grow the generic public tab-plus menu slot rather than hard-code a loops dependency into the terminal plugin. Render the bounded structured journal read-only beside the rail; do not mount the interactive structured input view. Alternatives rejected: a global panel disconnected from its workspace (loses tab/close parity); hidden PTY workers (violates architecture); direct shell DOM access (violates public plugin boundary).
+
+Output follows loop lifetime: running/needs-you and continued paused conversations use the public structured journal; a settled fresh or ended loop uses its published iteration output tail, labelled as saved output. This preserves actual output after normal native-session cleanup without retaining live children, altering destructive close semantics, or masking errors for a live conversation.
 
 ## Decisions locked
 - Layout/information density: setup has a name/prompt left pane and settings right pane, maximum width1080px, fits smaller windows. Loop journal and rail are side-by-side at host width720px or more, stacked below it when narrow.
@@ -41,6 +43,8 @@ Before: active tab A. With another running/needs-you loop in the same workspace 
 
 ### U05: Observe durable loop state
 Before: hosted loop tab selected. Header shows name, state pill Running/Needs you/Paused/Completed/Stopped, or Unverifiable for unreachable host; preset and agent; running phase text, status strip and n/max progress (uncapped count when no cap), last check and optional time/cost meters. All listed pause reasons map to feature-doc text, including cap/no-progress/protected-path/blocked/decision/crash/usage/restart/unverifiable/ask/queue exhausted. Details show pauseDetail, pending blocked/decision, next scheduled time, skipped ticks and warnings. No unknown cost is rendered as $0. Transcript shows the current session journal without a send composer. Event/reconnect refreshes cannot overwrite newer state or change tab focus.
+
+After the fresh loop pauses at its cap and its session is removed, reopening the loop still shows the genuine saved output of the matching finished iteration. It does not issue a journal read for a removed live session. This saved-output projection is distinct from a live journal and makes no claim about current child-process liveness.
 
 ### U06: Pause and resume cap
 Before: running loop. Pause requests after-iteration hold, not interruption. At cap pause show “+ [5] iterations” and accessible “Iterations to add”. Change to1 and Resume: cap rises by1 and next attempt runs. Invalid zero/fraction does not call API. Resume only paused; ended loops show history but no lifecycle controls. Request failures retain visible state and show reason.

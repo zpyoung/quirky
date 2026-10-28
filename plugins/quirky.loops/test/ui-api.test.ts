@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'bun:test'
-import type { CliArgs, UiState } from '@quirky/protocol'
+import type { CliArgs, Session, UiState } from '@quirky/protocol'
 import type { Group, GroupNode, Tab, ViewTab, Workspace } from '../../quirky.terminal/src/layout/types'
 import { isViewTab } from '../../quirky.terminal/src/layout/types'
 import { startHeadlessWindow, type HeadlessWindow } from '../../../packages/ui/test/fixtures/headless-window'
@@ -422,8 +422,15 @@ test('setup, lifecycle, queue, history, close and CLI actions use real daemon an
   expect(iterations.map(({ loopId, n, attempt, endReason }) => ({ loopId, n, attempt, endReason }))).toEqual([
     { loopId: historyLoop.id, n: 1, attempt: 1, endReason: 'settled' }
   ])
+  await headless.waitFor(async () => {
+    const sessions = await rig!.call<Session[]>('quirky.session/list', {})
+    return sessions.every((session) => session.id !== withHistory.sessionId) || undefined
+  })
   await cliUiCommand('ui-open', { positionals: [historyLoop.id], flags: {} })
   await waitForOverlay((report) => railIsReadyForLoop(report, historyLoop.id))
+  await headless.waitFor(() =>
+    headless!.document.querySelector('[aria-label="Loop output"]')?.textContent?.includes('History fixture completed') || undefined
+  )
   await uiCommand('action', { loopId: historyLoop.id, action: 'resume-update', params: { value: '2' } })
   await waitForOverlay((report) => railIsForLoop(report, historyLoop.id) && isRecord(report.rail) && report.rail.resumeAdd === '2')
   const detail = iterations[0]!
@@ -434,5 +441,10 @@ test('setup, lifecycle, queue, history, close and CLI actions use real daemon an
   await waitForOverlay((report) => isRecord(report.detail) && report.detail.n === detail.n && report.detail.attempt === detail.attempt)
   await uiCommand('action', { loopId: historyLoop.id, action: 'back' })
   await waitForOverlay((report) => report.detail === null)
+  const pausedTab = viewForLoop(await workspace(), historyLoop.id)
+  if (!pausedTab) throw new Error('the paused loop lost its hosted view')
+  await rig.call('quirky.loops/closeView', { loopId: historyLoop.id, tabId: pausedTab.id, choice: 'stop' })
+  expect((await rig.snapshot(historyLoop.id)).state).toBe('stopped')
+  expect(viewForLoop(await workspace(), historyLoop.id)).toBeUndefined()
   await hideWorktreeView()
 }, 30_000)
