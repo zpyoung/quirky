@@ -110,6 +110,16 @@ export type LoopSnapshot = {
   queueItems: QueueItem[]
   skippedTicks: number
 }
+export type LoopSummary = {
+  id: string
+  worktreeId: string
+  state: 'running' | 'needs-you' | 'paused'
+  pauseReason: PauseReason | null
+  iterationsCompleted: number
+  maxIterations: number | null
+  updatedAt: number
+}
+
 export type DecisionInput = {
   loop: LoopSnapshot
   latest: IterationDetail | null
@@ -146,6 +156,7 @@ export interface LoopServiceContract {
   start(): Promise<void>
   create(input: LoopCreateInput, caller?: PluginCaller): Promise<LoopSnapshot>
   list(params?: { worktreeId?: string; worktree?: string }): Promise<LoopSnapshot[]>
+  summaries(): Promise<LoopSummary[]>
   get(loopId: string): LoopSnapshot
   iterations(loopId: string, limit?: number): IterationDetail[]
   pause(loopId: string): Promise<LoopSnapshot>
