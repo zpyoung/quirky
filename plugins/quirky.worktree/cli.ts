@@ -164,6 +164,8 @@ const named: CliModule['commands'] = {
       ['parent', parent],
       ['setup', stringFlag(args, 'setup')],
       ['issueCommand', stringFlag(args, 'issue-command')],
+      ['trustSetupHash', stringFlag(args, 'trust-setup-hash')],
+      ['trustIssueCommandHash', stringFlag(args, 'trust-issue-command-hash')],
       ['agent', stringFlag(args, 'agent')],
       ['prompt', stringFlag(args, 'prompt')]
     ]

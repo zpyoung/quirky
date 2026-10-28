@@ -208,14 +208,15 @@ function decideSetup(env: CreateEnv, repo: Repo, settings: ProjectSettings, hook
   else throw reasoned(env, 'conflict', 'setup-decision-required', 'Setup decision required for this repository; pass --setup run or --setup skip', { repo: repo.id })
 
   const shared = setup.shared
-  if (decision === 'run' && shared && !shared.trusted && params.trustSetup !== true) {
+  const explicitPinMismatch = params.trustSetup === true && params.trustSetupHash !== undefined && params.trustSetupHash !== shared?.hash
+  if (decision === 'run' && shared && (explicitPinMismatch || (!shared.trusted && params.trustSetup !== true))) {
     const file = hooks.file ?? 'quirky.yaml'
-    const lead = shared.changed ? `The setup script in ${file} changed since you last trusted it` : `The setup script in ${file} has not been trusted`
+    const lead = explicitPinMismatch ? `The setup script in ${file} does not match the hash supplied for this create` : shared.changed ? `The setup script in ${file} changed since you last trusted it` : `The setup script in ${file} has not been trusted`
     throw reasoned(
       env,
       'conflict',
       'hooks-untrusted',
-      `${lead}:\n${shared.text}\nPass --trust-setup to run it once, or run: quirky repo trust-hooks ${labelOf(repo)}${hooksRef !== undefined ? ` --ref ${hooksRef}` : ''}`,
+      `${lead}:\n${shared.text}\nPass --trust-setup --trust-setup-hash ${shared.hash} to run this script once, or run: quirky repo trust-hooks ${labelOf(repo)}${hooksRef !== undefined ? ` --ref ${hooksRef}` : ''}`,
       { repo: repo.id, kind: 'setup', source: file, script: shared.text, hash: shared.hash, changed: shared.changed, ...(hooksRef !== undefined ? { ref: hooksRef } : {}) }
     )
   }
@@ -235,14 +236,15 @@ function decideIssueCommand(
   if (source?.item.kind !== 'issue' || !hooks.issueCommand) return 'none'
   if (params.issueCommand === 'skip') return 'skip'
   const shared = hooks.issueCommand.shared
-  if (shared && !shared.trusted && params.trustIssueCommand !== true) {
+  const explicitPinMismatch = params.trustIssueCommand === true && params.trustIssueCommandHash !== undefined && params.trustIssueCommandHash !== shared?.hash
+  if (shared && (explicitPinMismatch || (!shared.trusted && params.trustIssueCommand !== true))) {
     const file = hooks.file ?? 'quirky.yaml'
-    const lead = shared.changed ? `The issue command in ${file} changed since you last trusted it` : `The issue command in ${file} has not been trusted`
+    const lead = explicitPinMismatch ? `The issue command in ${file} does not match the hash supplied for this create` : shared.changed ? `The issue command in ${file} changed since you last trusted it` : `The issue command in ${file} has not been trusted`
     throw reasoned(
       env,
       'conflict',
       'hooks-untrusted',
-      `${lead}:\n${shared.text}\nPass --trust-issue-command to run it once, or run: quirky repo trust-hooks ${labelOf(repo)} --kind issue${hooksRef !== undefined ? ` --ref ${hooksRef}` : ''}`,
+      `${lead}:\n${shared.text}\nPass --trust-issue-command --trust-issue-command-hash ${shared.hash} to run it once, or run: quirky repo trust-hooks ${labelOf(repo)} --kind issue${hooksRef !== undefined ? ` --ref ${hooksRef}` : ''}`,
       { repo: repo.id, kind: 'issue', source: file, script: shared.text, hash: shared.hash, changed: shared.changed, ...(hooksRef !== undefined ? { ref: hooksRef } : {}) }
     )
   }

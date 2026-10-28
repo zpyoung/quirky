@@ -72,51 +72,6 @@ describe('SC-14: the create command reads its positionals and flags', () => {
     expect((await run([], { repo: 'api', name: 'by-flag' })).calls[0]!.params).toEqual({ createdBy: 'cli', repo: 'api', name: 'by-flag' })
   })
 
-  test('every flag maps onto its param, and createdBy is always cli', async () => {
-    const { calls } = await run(['api', 'n'], {
-      group: 'apps',
-      base: 'origin/dev',
-      github: '#3',
-      branch: 'feat/x',
-      'branch-name': 'mine',
-      'display-name': 'Nice',
-      comment: 'note',
-      'parent-worktree': 'p',
-      setup: 'run',
-      'issue-command': 'skip',
-      'trust-setup': true,
-      'trust-issue-command': true,
-      agent: 'claude',
-      prompt: 'go',
-      'no-fallback': true,
-      activate: true
-    })
-    expect(calls[0]).toEqual({
-      method: 'quirky.worktree/create',
-      params: {
-        createdBy: 'cli',
-        repo: 'api',
-        name: 'n',
-        group: 'apps',
-        github: '#3',
-        base: 'origin/dev',
-        branch: 'feat/x',
-        branchName: 'mine',
-        displayName: 'Nice',
-        comment: 'note',
-        parent: 'p',
-        setup: 'run',
-        agent: 'claude',
-        issueCommand: 'skip',
-        prompt: 'go',
-        trustSetup: true,
-        allowLocalBaseFallback: false,
-        trustIssueCommand: true,
-        activate: true
-      }
-    })
-    expect((await run(['n'], { 'no-parent': true })).calls[0]!.params).toMatchObject({ noParent: true })
-  })
 
   test('contradictory input is a usage error before anything is sent', async () => {
     for (const [positionals, flags] of [

@@ -138,7 +138,7 @@ export async function createWorkspace(
   hooks: CreateHooks
 ): Promise<WorktreeCreateResult | typeof SETUP_CHOICE_NEEDED | null> {
   const viewAtSubmit = JSON.stringify(context.getLayout().view)
-  const choices: { trustSetup?: true; trustIssueCommand?: true; setup?: 'skip'; issueCommand?: 'skip' } = {}
+  const choices: { trustSetup?: true; trustSetupHash?: string; trustIssueCommand?: true; trustIssueCommandHash?: string; setup?: 'skip'; issueCommand?: 'skip' } = {}
   let attempt = fields
   for (;;) {
     try {
@@ -153,7 +153,10 @@ export async function createWorkspace(
         context.toast('Could not create worktree', messageOf(error))
         return null
       }
-      const data = (error as { data?: { repo?: unknown; script?: unknown; changed?: unknown; ref?: unknown; kind?: unknown } }).data ?? {}
+      const rawData = error !== null && typeof error === 'object' && 'data' in error ? error.data : undefined
+      const data: Record<string, unknown> = rawData !== null && typeof rawData === 'object' && !Array.isArray(rawData)
+        ? rawData as Record<string, unknown> // RPC error data is a record; guard its object shape before indexing.
+        : {}
       const kind = data.kind === 'issue' ? 'issue' : 'setup'
       const kindLabel = kind === 'issue' ? 'issue command' : 'setup'
       const choice = await hooks.askTrust({
@@ -163,14 +166,42 @@ export async function createWorkspace(
         changed: data.changed === true
       })
       if (choice === 'cancel') return null
-      if (choice === 'run') choices[kind === 'issue' ? 'trustIssueCommand' : 'trustSetup'] = true
-      else if (choice === 'skip') choices[kind === 'issue' ? 'issueCommand' : 'setup'] = 'skip'
+      if (choice === 'run') {
+        if (typeof data.hash !== 'string' || data.hash.length === 0) {
+          context.toast(
+            `Could not run ${kindLabel} once`,
+            `The daemon did not include a content hash for the shared ${kindLabel}, so one-time consent cannot be pinned. Retry creation so the daemon can report the current script hash.`
+          )
+          return null
+        }
+        if (kind === 'issue') {
+          choices.trustIssueCommand = true
+          choices.trustIssueCommandHash = data.hash
+        } else {
+          choices.trustSetup = true
+          choices.trustSetupHash = data.hash
+        }
+      } else if (choice === 'skip') choices[kind === 'issue' ? 'issueCommand' : 'setup'] = 'skip'
       else {
+        if (typeof data.hash !== 'string' || data.hash.length === 0) {
+          context.toast(
+            `Could not trust ${kindLabel}`,
+            `The daemon did not include a content hash for the shared ${kindLabel}, so trust cannot be pinned to the displayed script. Retry creation so the daemon can report the current script hash.`
+          )
+          return null
+        }
         try {
           await context.call('quirky.repo/trustHooks', { repo: String(fields.repo), kind, ...(typeof data.ref === 'string' ? { ref: data.ref } : {}) })
         } catch (trustError) {
           context.toast(`Could not trust ${kindLabel}`, messageOf(trustError))
           return null
+        }
+        if (kind === 'issue') {
+          choices.trustIssueCommand = true
+          choices.trustIssueCommandHash = data.hash
+        } else {
+          choices.trustSetup = true
+          choices.trustSetupHash = data.hash
         }
       }
       attempt = { ...fields, ...choices }
