@@ -3,10 +3,7 @@ import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, renameSy
 import { dirname, extname, join } from 'node:path'
 import type { MobileBundleAsset, MobileBundleManifest } from '../src/contracts'
 import { MOBILE_SHELL_VERSION } from '../src/contracts'
-import { validateBundleManifest } from '../src/shell/generation'
-
-const WORKSPACE_GRANTS: MobileBundleManifest['routes'][number]['grants'] = ['rpc', 'storage', 'navigate', 'terminal', 'externalLink']
-const SESSION_GRANTS: MobileBundleManifest['routes'][number]['grants'] = ['rpc', 'storage', 'navigate', 'terminal', 'clipboard.read', 'clipboard.write', 'externalLink']
+import { PAGE_BUNDLE_ROUTES, validateBundleManifest } from '../src/shell/generation'
 
 const CONTENT_TYPES: Record<string, string> = {
   '.css': 'text/css; charset=utf-8',
@@ -125,10 +122,11 @@ export async function buildMobilePages(
       buildId: buildIdFor(assets),
       assets,
       totalBytes,
-      routes: [
-        { kind: 'workspaces', path: '/', grants: WORKSPACE_GRANTS },
-        { kind: 'session', path: '/session', grants: SESSION_GRANTS }
-      ]
+      routes: PAGE_BUNDLE_ROUTES.map((route) => ({
+        kind: route.kind,
+        path: route.path,
+        grants: [...route.grants]
+      }))
     })
     writeFileSync(join(staging, 'manifest.json'), `${JSON.stringify(manifest)}\n`)
     atomicReplace(staging, outputDirectory)

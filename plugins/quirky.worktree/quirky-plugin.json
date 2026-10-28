@@ -123,6 +123,20 @@
               "instanceId": {
                 "type": "string"
               },
+              "automationProvenance": {
+                "description": "Immutable automation and run snapshots; absent for ordinary and pre-migration workspaces.",
+                "properties": {
+                  "kind": { "type": "string", "enum": ["created-by-automation"] },
+                  "automationId": { "type": "string" },
+                  "automationName": { "type": "string" },
+                  "runId": { "type": "string" },
+                  "runTitle": { "type": "string" },
+                  "projectId": { "type": "string" },
+                  "hostId": { "type": "string", "enum": ["local"] }
+                },
+                "required": ["kind", "automationId", "automationName", "runId", "runTitle", "projectId", "hostId"],
+                "additionalProperties": false
+              },
               "linkedPR": {
                 "type": "object",
                 "description": "Linked GitHub pull request; absent when unlinked.",
@@ -296,6 +310,17 @@
                 "cli",
                 "api"
               ]
+            },
+            "automationProvenanceRequest": {
+              "type": "object",
+              "description": "A single-use capability from the live automation dispatcher; caller-supplied snapshots are not accepted.",
+              "properties": {
+                "automationId": { "type": "string" },
+                "runId": { "type": "string" },
+                "dispatchToken": { "type": "string" }
+              },
+              "required": ["automationId", "runId", "dispatchToken"],
+              "additionalProperties": false
             }
           }
         },
@@ -391,6 +416,20 @@
                 },
                 "instanceId": {
                   "type": "string"
+                },
+                "automationProvenance": {
+                  "description": "Immutable automation and run snapshots; absent for ordinary and pre-migration workspaces.",
+                  "properties": {
+                    "kind": { "type": "string", "enum": ["created-by-automation"] },
+                    "automationId": { "type": "string" },
+                    "automationName": { "type": "string" },
+                    "runId": { "type": "string" },
+                    "runTitle": { "type": "string" },
+                    "projectId": { "type": "string" },
+                    "hostId": { "type": "string", "enum": ["local"] }
+                  },
+                  "required": ["kind", "automationId", "automationName", "runId", "runTitle", "projectId", "hostId"],
+                  "additionalProperties": false
                 },
                 "linkedPR": {
                   "type": "object",
@@ -1091,6 +1130,20 @@
             },
             "instanceId": {
               "type": "string"
+            },
+            "automationProvenance": {
+              "description": "Immutable automation and run snapshots; absent for ordinary and pre-migration workspaces.",
+              "properties": {
+                "kind": { "type": "string", "enum": ["created-by-automation"] },
+                "automationId": { "type": "string" },
+                "automationName": { "type": "string" },
+                "runId": { "type": "string" },
+                "runTitle": { "type": "string" },
+                "projectId": { "type": "string" },
+                "hostId": { "type": "string", "enum": ["local"] }
+              },
+              "required": ["kind", "automationId", "automationName", "runId", "runTitle", "projectId", "hostId"],
+              "additionalProperties": false
             },
             "linkedPR": {
               "type": "object",

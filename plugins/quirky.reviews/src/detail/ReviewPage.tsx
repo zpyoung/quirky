@@ -6,6 +6,7 @@ import { ReviewActions } from './Actions'
 import { ChecksList } from './ChecksList'
 import { Comments } from './Comments'
 import { FilesChanged } from './FilesChanged'
+import { useReviewLinkRouting } from '../link-routing'
 
 const tabs = ['conversation', 'checks', 'files'] as const
 const reviewerPattern = /^[A-Za-z0-9-]{1,39}$/
@@ -238,6 +239,7 @@ function AssignmentPanels(props: { context: ReviewsSurfaceProps['context']; stat
 }
 
 export function ReviewPage(props: ReviewsSurfaceProps) {
+  const routing = useReviewLinkRouting(props.context)
   const owner = reviewContext(props.state, 'detail')
   const review = props.state.detail.review
   const detail = props.state.detail
@@ -442,7 +444,7 @@ export function ReviewPage(props: ReviewsSurfaceProps) {
         </nav>
         <div className="review-link-actions">
           <button type="button" disabled={url === null} onClick={() => void copyLink()}>Copy pull request link</button>
-          <button type="button" disabled={url === null} title="Open pull request" onClick={(event) => void openLink(event.shiftKey && (event.metaKey || event.ctrlKey))}>Open on host</button>
+          <button type="button" disabled={url === null} title={routing.title} onClick={(event) => void openLink(routing.invert(event))}>Open on host</button>
         </div>
       </div>
       {review === null ? <div className="review-page-loading">

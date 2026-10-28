@@ -74,7 +74,7 @@ Orchestration owns Runs, Tasks, Dispatches, worker process identity and resource
 | Worker start/placement/readiness/preamble, terminal/structured mode | `test/workers/acceptance.test.ts`, `acceptance-placement.test.ts`, `acceptance-recovery.test.ts`. |
 | Stop/abandon/retry/retain/release, takeover, archive, output/fleet, restart | `test/workers/acceptance*.test.ts`, `output-fleet.test.ts`, `acceptance-restart.test.ts`. |
 | Task terminal links and nested sidebar/dashboard labels | `test/navigation-acceptance.test.ts`, UI model coverage; exact assignment/custody proof. |
-| Automatic idle mailbox nudges and restart/shutdown behavior | Unshipped; already queued as `m6-orchestration-idle-pointer-shutdown`, intact checkpoint and contract preserved by core D41. |
+| Automatic idle mailbox nudges and restart/shutdown behavior | Restored by [m6-orchestration-idle-pointer-shutdown](../2026-10-28-m6-orchestration-idle-pointer-shutdown/logic.md), including AC9 safety behavior and executable command coverage; permanent regression execution belongs to the end phase. Core D41/checkpoint remain historical evidence. |
 | Remote worker placement, federation relay/ask/report/stop/release/fleet/navigation | Unshipped; local fleet explicitly reports unsupported remote capability. Completion item must add real transport/authority; no local fallback. |
 | Orca legacy adoption and retired scheduler compatibility | Not a fresh Quirky product flow: core D4/D12 and clean-cutover architecture use native Quirky identity/store, not copied Orca tombstones/retired commands. |
 | Heimdall kinds/enrollment/rearm/refusals, persistence/future schema/malformed state | `plugins/quirky.heimdall/test/acceptance.test.ts`, `enrollment-store.test.ts`. |

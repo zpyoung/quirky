@@ -25,6 +25,7 @@ export async function activate(context: PluginContext): Promise<void> {
     runs: service.runs,
     target: service.target,
     dispatch: service.dispatch,
+    claimWorkspaceProvenance: service.claimWorkspaceProvenance,
     schedule: service.schedule,
     tick: () => service.tick(),
     ...env.methods,

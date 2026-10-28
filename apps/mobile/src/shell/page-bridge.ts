@@ -89,7 +89,7 @@ export function createPageBridge(port: PageBridgePort, init: MobilePageInit): Mo
 
   function call<T>(method: string, params: Record<string, unknown> = {}, options?: MobileCallOptions): Promise<T> {
     try {
-      validatePageRpc(method, params, init.grants)
+      validatePageRpc(method, params, init.grants, init.route)
       if (isPageMutation(method) && connectionState.phase !== 'connected') throw new Error('terminal and workspace mutations require a connected desktop')
       if (closed) throw new Error('page bridge is closed')
       if (pending.size >= MAX_PENDING_REQUESTS) throw new Error('page bridge request limit reached')

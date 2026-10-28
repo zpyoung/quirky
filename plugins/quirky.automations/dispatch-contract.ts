@@ -1,4 +1,4 @@
-import type { PluginContext } from '@quirky/protocol'
+import type { PluginContext, WorktreeAutomationProvenanceRequest } from '@quirky/protocol'
 import type { AutomationDefinition, AutomationRun, AutomationRunStatus, AutomationStore } from './types'
 
 /** Persisted local registry identity. Remote registration incarnations are not inferred locally. */
@@ -33,6 +33,10 @@ export type AutomationTargetResolver = {
 }
 export type AutomationDispatchContext = Pick<PluginContext, 'call' | 'subscribe' | 'error' | 'log'>
 export type AutomationDispatchHooks = {
+  /** Issues a short-lived capability for one newly-created local workspace. */
+  issueWorkspaceProvenance(runId: string, repoId: string): WorktreeAutomationProvenanceRequest
+  /** Revokes an issued capability after its worktree/create call settles. */
+  revokeWorkspaceProvenance(dispatchToken: string): void
   store: AutomationStore
   targets: AutomationTargetResolver
   clock: () => number
