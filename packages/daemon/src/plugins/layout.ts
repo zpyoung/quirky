@@ -26,7 +26,8 @@ import {
   type UiSlotState,
   type UiState,
   type UiToastState,
-  type UiWindowInfo
+  type UiWindowInfo,
+  type WindowRouteState
 } from '@quirky/protocol'
 import { conflict, invalidParams, notFound } from '../errors'
 import type { Store } from '../store'
@@ -52,6 +53,8 @@ export type LayoutServiceOptions = {
   /** Every connected client; windows are the ones with role `ui`. */
   clients: () => Iterable<ClientConn>
   broadcast: (event: QuirkyEvent) => void
+  /** Sends shared layout updates to non-window clients while UI windows receive their own effective layout. */
+  broadcastNonWindows: (event: QuirkyEvent) => void
   sendTo: (conn: ClientConn, event: QuirkyEvent) => void
   /** How long a routed command waits for its window; defaults to 30 seconds. */
   commandTimeoutMs?: number
@@ -64,6 +67,7 @@ export type LayoutServiceOptions = {
 type Report = { state: unknown; order: number }
 
 type ToastReport = { toasts: UiToastState[]; order: number }
+type WindowLayoutOverride = { view: UiLayout['view']; focus?: UiLayout['focus'] }
 
 type PendingCommand = {
   conn: ClientConn
@@ -189,6 +193,7 @@ export class LayoutService {
   private readonly pendingDesktop = new Map<string, PendingDesktopRequest>()
   private readonly desktopCapabilitiesByWindow = new Map<number, NativeDesktopCapabilities>()
   private readonly auxiliaryWindows = new Map<string, AuxiliaryWindowRoute>()
+  private readonly windowViews = new Map<number, WindowLayoutOverride>()
   private reportCounter = 0
   private lastFocusedAt = 0
   private awayMs: number
@@ -209,13 +214,26 @@ export class LayoutService {
    * until it reports), else, with no window focused, the list reported last.
    */
   state(): UiState {
-    const layout = this.layout()
+    return this.stateFor(this.focusedConn()?.id, true)
+  }
+  /** Returns only this exact connection ID, and only for the calling live UI connection. */
+  windowSelf(conn: ClientConn): { connId: number } {
+    const target = this.requireWindowById(conn.id)
+    if (target !== conn) throw conflict('the calling UI connection is no longer live')
+    return { connId: target.id }
+  }
+
+  /** Reads the full effective state for one exact live UI connection. */
+  windowState(connId: number): WindowRouteState {
+    const target = this.requireWindowById(connId)
+    return { ...this.stateFor(target.id, false), connId: target.id }
+  }
+
+  private stateFor(connId: number | undefined, fallbackReports: boolean): UiState {
+    const layout = connId === undefined ? this.layout() : this.windowLayout(connId)
     const model = this.options.ui.contributions()
     const windows = this.windows()
-    const focusedConn = windows.find((window) => window.focused)?.connId
-    const routeViewId = focusedConn === undefined
-      ? undefined
-      : [...this.auxiliaryWindows.values()].find((route) => route.rendererConnId === focusedConn)?.view ?? undefined
+    const routeViewId = connId === undefined ? undefined : this.auxiliaryView(connId)?.view ?? undefined
     const slots: UiSlotState[] = [
       ...model.activityItems.map((entry) => ({ entry, shown: () => true })),
       ...model.sidebarSections.map((entry) => ({ entry, shown: () => layout.sidebar })),
@@ -224,7 +242,7 @@ export class LayoutService {
       ...model.views.map((entry) => ({ entry, shown: () => layout.view?.id === entry.id || routeViewId === entry.id })),
       ...model.overlays.map((entry) => ({ entry, shown: (report?: Report) => overlayShown(report) }))
     ].map(({ entry, shown }) => {
-      const report = this.reportFor(entry.id, focusedConn)
+      const report = this.reportFor(entry.id, connId, fallbackReports)
       return {
         id: entry.id,
         kind: entry.kind,
@@ -234,7 +252,7 @@ export class LayoutService {
         ...(report ? { report: report.state } : {})
       }
     })
-    return { windows, layout, slots, toasts: this.toastsOf(focusedConn)?.toasts ?? [] }
+    return { windows, layout, slots, toasts: this.toastsOf(connId)?.toasts ?? [] }
   }
 
   /**
@@ -242,13 +260,70 @@ export class LayoutService {
    * another kind of contribution or an input over 64 KiB of JSON.
    */
   openView(id: string, input?: unknown): UiLayout {
+    const windows = this.openWindows()
+    if (windows.length > 1) throw conflict('multiple Quirky windows are open; specify connId')
+    if (windows.length === 1) return this.openWindowView(windows[0]!.id, id, input)
     this.requireSlot(id, 'view')
     if (jsonLength(input) > MAX_JSON_LENGTH) throw invalidParams('input is over 64 KiB')
     return this.change((layout) => ({ ...layout, view: { id, ...(input !== undefined ? { input } : {}) } }))
   }
 
   closeView(): UiLayout {
+    const windows = this.openWindows()
+    if (windows.length > 1) throw conflict('multiple Quirky windows are open; specify connId')
+    if (windows.length === 1) return this.closeWindowView(windows[0]!.id)
     return this.change((layout) => ({ ...layout, view: null, focus: layout.focus === 'view' ? null : layout.focus }))
+  }
+
+  /** Opens a view only in the exact live UI connection. */
+  openWindowView(connId: number, id: string, input?: unknown): UiLayout {
+    const target = this.requireWindowById(connId)
+    this.requireSlot(id, 'view')
+    if (jsonLength(input) > MAX_JSON_LENGTH) throw invalidParams('input is over 64 KiB')
+    const view = { id, ...(input !== undefined ? { input } : {}) }
+    const auxiliary = this.auxiliaryView(target.id)
+    if (auxiliary) {
+      auxiliary.view = id
+      if (input === undefined) delete auxiliary.input
+      else auxiliary.input = input
+      this.options.sendTo(target, { type: 'desktop.window.changed', windows: [this.auxiliaryWindowSummary(auxiliary)] })
+      return this.windowLayout(target.id)
+    }
+    if (this.openWindows().length === 1) {
+      this.windowViews.delete(target.id)
+      return this.change((layout) => ({ ...layout, view }))
+    }
+    const previous = this.windowViews.get(target.id)
+    this.windowViews.set(target.id, { view, ...(previous?.focus === undefined ? {} : { focus: previous.focus }) })
+    const next = this.windowLayout(target.id)
+    this.options.sendTo(target, { type: 'ui.state.changed', layout: next })
+    return next
+  }
+
+  /** Closes the exact live window's current view only if `expectedView` still matches in full. */
+  closeWindowView(connId: number, expectedView?: NonNullable<UiLayout['view']>): UiLayout {
+    const target = this.requireWindowById(connId)
+    const current = this.windowLayout(target.id).view
+    if (expectedView !== undefined && !sameValue(current, expectedView)) {
+      throw conflict('the window view changed before it could be closed')
+    }
+    const auxiliary = this.auxiliaryView(target.id)
+    if (auxiliary) {
+      auxiliary.view = null
+      delete auxiliary.input
+      this.options.sendTo(target, { type: 'desktop.window.changed', windows: [this.auxiliaryWindowSummary(auxiliary)] })
+      return this.windowLayout(target.id)
+    }
+    if (this.openWindows().length === 1) {
+      this.windowViews.delete(target.id)
+      return this.change((layout) => ({ ...layout, view: null, focus: layout.focus === 'view' ? null : layout.focus }))
+    }
+    const previous = this.windowViews.get(target.id)
+    const focus = current !== null && this.windowLayout(target.id).focus === 'view' ? null : previous?.focus
+    this.windowViews.set(target.id, { view: null, ...(focus === undefined ? {} : { focus }) })
+    const next = this.windowLayout(target.id)
+    this.options.sendTo(target, { type: 'ui.state.changed', layout: next })
+    return next
   }
 
   /** Opens an effective panel. NotFound for an unknown ID, InvalidParams for another kind. */
@@ -303,6 +378,12 @@ export class LayoutService {
   /** Moves focus to the sidebar, the view or the panel. InvalidParams for any other target. */
   focus(target: 'sidebar' | 'view' | 'panel'): UiLayout {
     if (!FOCUS_TARGETS.includes(target)) throw invalidParams(`focus target must be one of ${FOCUS_TARGETS.join(', ')}`)
+    for (const [connId, override] of this.windowViews) {
+      if (override.focus !== undefined) {
+        const { focus: _focus, ...shared } = override
+        this.windowViews.set(connId, shared)
+      }
+    }
     return this.change((layout) => ({ ...layout, focus: target }))
   }
 
@@ -362,13 +443,21 @@ export class LayoutService {
    * disconnects or stays silent, or its code throws.
    */
   runCommand(id: string, args: unknown): Promise<{ result: unknown }> {
-    if (!this.options.ui.contributions().commands.some((command) => command.id === id)) {
-      return Promise.reject(notFound(`no UI command ${id}`))
+    try {
+      this.validateCommand(id, args)
+    } catch (error) {
+      return Promise.reject(error as Error)
     }
-    const problem = validateValue(this.argsSchema(id), args ?? {}, 'args')
-    if (problem !== null) return Promise.reject(invalidParams(problem))
-    const target = this.targetWindow()
-    if (!target) return Promise.reject(conflict('no Quirky window is open'))
+    const windows = this.openWindows()
+    if (windows.length === 0) return Promise.reject(conflict('no Quirky window is open'))
+    if (windows.length > 1) return Promise.reject(conflict('multiple Quirky windows are open; specify connId'))
+    return this.route(windows[0]!, id, args)
+  }
+
+  /** Routes a UI command to the exact live target connection and preserves that connection for its reply. */
+  runCommandOnWindow(connId: number, id: string, args: unknown): Promise<{ result: unknown }> {
+    const target = this.requireWindowById(connId)
+    this.validateCommand(id, args)
     return this.route(target, id, args)
   }
 
@@ -573,6 +662,7 @@ export class LayoutService {
       if (existed) this.options.broadcast({ type: 'ui.report.changed', slot, connId: conn.id })
     }
     this.toastReports.delete(conn.id)
+    this.windowViews.delete(conn.id)
     for (const [requestId, pending] of this.pending) {
       if (pending.conn === conn) this.settle(requestId, (settled) => settled.reject(unanswered()))
     }
@@ -705,6 +795,36 @@ export class LayoutService {
   private openWindows(): ClientConn[] {
     return [...this.options.clients()].filter((conn) => conn.role === 'ui' && !conn.closed)
   }
+  private requireWindowById(connId: number): ClientConn {
+    if (!Number.isInteger(connId) || connId < 1) throw invalidParams('connId must be a positive integer')
+    const target = [...this.options.clients()].find((conn) => conn.id === connId && !conn.closed)
+    if (!target) throw conflict(`UI window connection ${connId} is not open`)
+    if (target.role !== 'ui') throw invalidParams(`connection ${connId} is not a UI window`)
+    return target
+  }
+
+  private auxiliaryView(connId: number): AuxiliaryWindowRoute | undefined {
+    return [...this.auxiliaryWindows.values()].find((route) => route.rendererConnId === connId)
+  }
+
+  private windowLayout(connId: number): UiLayout {
+    const layout = this.layout()
+    const auxiliary = this.auxiliaryView(connId)
+    if (auxiliary) {
+      const view = auxiliary.view !== null && this.options.ui.contributions().views.some((entry) => entry.id === auxiliary.view)
+        ? { id: auxiliary.view, ...(auxiliary.input === undefined ? {} : { input: auxiliary.input }) }
+        : null
+      return { ...layout, view }
+    }
+    const override = this.windowViews.get(connId)
+    if (!override) return layout
+    const view =
+      override.view && this.options.ui.contributions().views.some((entry) => entry.id === override.view!.id)
+        ? override.view
+        : null
+    return { ...layout, view, ...(override.focus === undefined ? {} : { focus: override.focus }) }
+  }
+
 
   private focusedConn(): ClientConn | undefined {
     return this.openWindows().reduce<ClientConn | undefined>(
@@ -759,11 +879,11 @@ export class LayoutService {
     return latest
   }
 
-  private reportFor(slot: string, focusedConn: number | undefined): Report | undefined {
+  private reportFor(slot: string, connId: number | undefined, fallback: boolean): Report | undefined {
     const bySlot = this.reports.get(slot)
     if (!bySlot) return undefined
-    const own = focusedConn !== undefined ? bySlot.get(focusedConn) : undefined
-    if (own) return own
+    const own = connId !== undefined ? bySlot.get(connId) : undefined
+    if (own || !fallback) return own
     return [...bySlot.values()].reduce<Report | undefined>((best, report) => (!best || report.order > best.order ? report : best), undefined)
   }
 
@@ -772,6 +892,14 @@ export class LayoutService {
     const args = declaration?.data.args
     return typeof args === 'object' && args !== null && !Array.isArray(args) ? (args as Schema) : { type: 'object' }
   }
+  private validateCommand(id: string, args: unknown): void {
+    if (!this.options.ui.contributions().commands.some((command) => command.id === id)) {
+      throw notFound(`no UI command ${id}`)
+    }
+    const problem = validateValue(this.argsSchema(id), args ?? {}, 'args')
+    if (problem !== null) throw invalidParams(problem)
+  }
+
 
   /** The stored layout with a view or panel that is no longer effective dropped. */
   private layout(): UiLayout {
@@ -792,10 +920,18 @@ export class LayoutService {
     if (!effective.some((entry) => entry.id === id)) throw notFound(`no ${kind} ${id}`)
   }
 
+  private publishGlobalLayout(layout: UiLayout): void {
+    this.options.broadcastNonWindows({ type: 'ui.state.changed', layout })
+    for (const conn of this.openWindows()) {
+      if (!conn.subscribed) continue
+      this.options.sendTo(conn, { type: 'ui.state.changed', layout: this.windowLayout(conn.id) })
+    }
+  }
+
   private change(update: (layout: UiLayout) => UiLayout): UiLayout {
     const next = update(this.layout())
     this.options.store.setUiState(LAYOUT_KEY, next)
-    this.options.broadcast({ type: 'ui.state.changed', layout: next })
+    this.publishGlobalLayout(next)
     return next
   }
 }

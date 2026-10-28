@@ -110,6 +110,7 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
     ui,
     clients: () => core.clients(),
     broadcast: (event) => core.broadcast(event),
+    broadcastNonWindows: (event) => core.broadcast(event, 'ui'),
     sendTo: (conn, event) => core.sendTo(conn, event)
   })
   const handlers = createHandlers(core, plugins, scheduler, ui, {

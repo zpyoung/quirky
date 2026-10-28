@@ -35,7 +35,8 @@ describe('kernel method schemas', () => {
     expect(readOnly.sort()).toEqual(
       [
         'status.get', 'plugin.list', 'plugin.contributions', 'plugin.inspect', 'api.describe', 'job.list',
-        'ui.contributions', 'ui.state', 'setting.list', 'setting.get', 'theme.list', 'distro.list',
+        'ui.contributions', 'ui.state', 'ui.window.state', 'setting.list', 'setting.get', 'theme.list', 'distro.list',
+        'ui.window.self',
         'distro.inspect'
       ].sort()
     )
@@ -49,6 +50,7 @@ describe('kernel method schemas', () => {
 
   test('only the hello, subscribe and ui window methods are connection methods', () => {
     expect([...CONNECTION_METHODS].sort()).toEqual([
+      'ui.window.self',
       'client.hello',
       'events.subscribe',
       'ui.command.reply',

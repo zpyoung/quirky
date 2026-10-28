@@ -32,6 +32,7 @@ function makeLayout(options: { awayMs?: number } = {}) {
     ui: { contributions: () => ({ sidebarSections: [], statusBars: [], activityItems: [], panels: [], views: [], overlays: [], commands: [] }) as unknown as UiModel },
     clients: () => conns,
     broadcast: (event) => broadcasts.push(event),
+    broadcastNonWindows: () => {},
     sendTo: () => {},
     now: () => clock.now,
     ...options

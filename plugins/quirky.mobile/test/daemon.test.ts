@@ -301,4 +301,5 @@ describe('mobile daemon integration', () => {
     expect(result).toMatchObject({ available: false, reason: 'device_registry_unavailable' })
     expect(readdirSync(dataDir).some((name) => name.includes('devices.json.corrupt'))).toBe(true)
   })
+
 })

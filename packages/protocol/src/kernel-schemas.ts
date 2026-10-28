@@ -8,6 +8,7 @@ export type KernelEventType = Exclude<QuirkyEvent, PluginEvent>['type']
 export const CONNECTION_METHODS = [
   'client.hello',
   'events.subscribe',
+  'ui.window.self',
   'ui.report',
   'ui.shell.report',
   'ui.window.focused',
@@ -255,6 +256,17 @@ const uiState = object(
   },
   ['windows', 'layout', 'slots', 'toasts']
 )
+const uiWindowState = object(
+  {
+    connId: integer(1, 'The live kernel UI connection, not a native auxiliary window ID.'),
+    windows: listOf(windowInfo),
+    layout: uiLayout,
+    slots: listOf({ type: 'object' }),
+    toasts: listOf(toastState)
+  },
+  ['connId', 'windows', 'layout', 'slots', 'toasts']
+)
+
 
 const nativeNotificationCapabilities = object(
   { permission: boolean(), click: boolean(), dismiss: boolean() },
@@ -456,6 +468,62 @@ export const KERNEL_METHOD_SCHEMAS = {
     readOnly: true,
     params: noParams,
     result: uiState
+  },
+  'ui.window.self': {
+    description: 'Returns the calling connection ID only for a live UI-role connection.',
+    readOnly: true,
+    params: noParams,
+    result: object({ connId: integer(1) }, ['connId'])
+  },
+  'ui.window.state': {
+    description: 'The exact live UI connection’s effective layout, its slot reports and its toasts.',
+    readOnly: true,
+    params: object(
+      { connId: integer(1, 'A live kernel UI connection ID.') },
+      ['connId']
+    ),
+    result: uiWindowState
+  },
+  'ui.window.view.open': {
+    description: 'Opens view `id` with `input` only in the exact live target UI connection.',
+    params: object(
+      {
+        connId: integer(1, 'A live kernel UI connection ID.'),
+        id: string(),
+        input: { description: 'Passed to the view as its input.' }
+      },
+      ['connId', 'id']
+    ),
+    result: uiLayout
+  },
+  'ui.window.view.close': {
+    description: 'Closes the target UI connection’s view; `expectedView` compares the complete current view before mutation.',
+    params: object(
+      {
+        connId: integer(1, 'A live kernel UI connection ID.'),
+        expectedView: object(
+          {
+            id: string(),
+            input: { description: 'The exact input value currently shown by the view.' }
+          },
+          ['id']
+        )
+      },
+      ['connId']
+    ),
+    result: uiLayout
+  },
+  'ui.window.command.run': {
+    description: 'Runs a UI command only in the exact live target UI connection.',
+    params: object(
+      {
+        connId: integer(1, 'A live kernel UI connection ID.'),
+        id: string(),
+        args: { description: "Checked against the command's args schema." }
+      },
+      ['connId', 'id']
+    ),
+    result: object({ result: { description: "The command's return value." } }, ['result'])
   },
   'ui.palette.set': {
     description: 'Opens or closes the shared command palette; omitting `open` toggles its current state.',

@@ -1,4 +1,4 @@
-import type { PluginNotification, QuirkyEvent } from '@quirky/protocol'
+import type { ClientRole, PluginNotification, QuirkyEvent } from '@quirky/protocol'
 import { sendNotification, type Notifier } from './notify'
 import type { PtyClient } from './pty-client'
 import type { ClientConn } from './types'
@@ -72,11 +72,11 @@ export class Core {
   }
 
   /** Sends `event` to every subscribed client and to plugin listeners; `hook.received` and `ui.report.changed` go to plugins only. */
-  broadcast(event: QuirkyEvent): void {
+  broadcast(event: QuirkyEvent, excludeRole?: ClientRole): void {
     if (event.type !== 'hook.received' && event.type !== 'ui.report.changed') {
       const text = JSON.stringify({ jsonrpc: '2.0', method: 'event', params: event })
       for (const conn of this.connected) {
-        if (conn.subscribed) conn.sendText(text)
+        if (conn.subscribed && conn.role !== excludeRole) conn.sendText(text)
       }
     }
     this.options.onEvent?.(event)

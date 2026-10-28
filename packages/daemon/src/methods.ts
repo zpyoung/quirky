@@ -12,7 +12,8 @@ import {
   type ResultOf,
   type Schema,
   type NativeDesktopCapabilities,
-  type DesktopShellReply
+  type DesktopShellReply,
+  type UiLayout
 } from '@quirky/protocol'
 import { conflict, invalidParams } from './errors'
 import { describeCli } from './plugins/cli-catalog'
@@ -271,6 +272,14 @@ export function createHandlers(
     },
 
     'ui.state': () => layout.state(),
+    'ui.window.self': (_params, conn) => layout.windowSelf(conn),
+    'ui.window.state': (params) => layout.windowState(int(params, 'connId', 1)),
+    'ui.window.view.open': (params) =>
+      layout.openWindowView(int(params, 'connId', 1), str(params, 'id'), params.input),
+    'ui.window.view.close': (params) =>
+      layout.closeWindowView(int(params, 'connId', 1), params.expectedView as NonNullable<UiLayout['view']> | undefined),
+    'ui.window.command.run': (params) =>
+      layout.runCommandOnWindow(int(params, 'connId', 1), str(params, 'id'), params.args),
     'ui.palette.set': (params) => {
       const open = optBool(params, 'open')
       if (params.open !== undefined && open === undefined) throw invalidParams('open must be a boolean')

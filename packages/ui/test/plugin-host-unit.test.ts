@@ -133,15 +133,17 @@ function setup(
       switch (method) {
         case 'ui.contributions':
           return model
-        case 'ui.state': {
-          const snapshot = { windows: [], layout: effective(), slots: [] }
+        case 'ui.window.self':
+          return { connId: 1 }
+        case 'ui.window.state': {
+          const snapshot = { connId: Number(params.connId), windows: [], layout: effective(), slots: [], toasts: [] }
           await holds.get(method)
           return snapshot
         }
-        case 'ui.view.open':
+        case 'ui.window.view.open':
           if (!model.views.some((v) => v.id === params.id)) throw new Error(`no view ${params.id}`)
           return changeLayout({ view: { id: params.id as string, ...(params.input !== undefined ? { input: params.input } : {}) } })
-        case 'ui.view.close':
+        case 'ui.window.view.close':
           return changeLayout({ view: null })
         case 'desktop.window.update': {
           if (!windowRoute || params.windowId !== windowRoute.windowId) throw new Error('no owned auxiliary window route')
@@ -1274,7 +1276,7 @@ test('SC-9: opening a view or panel the daemon refuses changes nothing and is lo
   await tick()
   expect(state(t).openView).toBeNull()
   expect(state(t).openPanel).toBeNull()
-  expect(t.logs).toEqual([`ui.view.open failed: no view ${PAGE}`, 'ui.panel.open failed: no panel panel:acme.notes/side'])
+  expect(t.logs).toEqual([`ui.window.view.open failed: no view ${PAGE}`, 'ui.panel.open failed: no panel panel:acme.notes/side'])
 })
 
 test('SC-14: running a command passes the arguments to the module the window already loaded', async () => {
@@ -1880,7 +1882,9 @@ test('D21: refresh loads the daemon layout, and the host never changes it before
   t.host.openView(OTHER, { b: 2 })
   t.host.togglePanel(SIDE)
   await tick()
-  expect(t.methodCalls('ui.view.open')).toEqual([{ method: 'ui.view.open', params: { id: OTHER, input: { b: 2 } } }])
+  expect(t.methodCalls('ui.window.view.open')).toEqual([
+    { method: 'ui.window.view.open', params: { connId: 1, id: OTHER, input: { b: 2 } } }
+  ])
   expect(t.methodCalls('ui.panel.close')).toHaveLength(1)
   expect(state(t).openView?.id).toBe(PAGE)
   expect(state(t).openPanel).toBe(SIDE)
@@ -1894,7 +1898,7 @@ test('D21: view, panel and focus calls name the daemon methods and skip what is 
   const { t } = await booted()
   t.host.openView(PAGE)
   await tick()
-  expect(t.methodCalls('ui.view.open')[0]!.params).toEqual({ id: PAGE })
+  expect(t.methodCalls('ui.window.view.open')[0]!.params).toEqual({ connId: 1, id: PAGE })
 
   t.host.togglePanel(SIDE, true)
   t.host.togglePanel(OUTLINE, false)
@@ -1903,13 +1907,16 @@ test('D21: view, panel and focus calls name the daemon methods and skip what is 
   await tick()
   expect(t.methodCalls('ui.panel.open')).toHaveLength(1)
   expect(t.methodCalls('ui.panel.close')).toHaveLength(0)
-  expect(t.methodCalls('ui.view.close')).toHaveLength(1)
+  expect(t.methodCalls('ui.window.view.close')).toEqual([{
+    method: 'ui.window.view.close',
+    params: { connId: 1, expectedView: { id: PAGE } }
+  }])
   expect(t.methodCalls('ui.focus')).toEqual([{ method: 'ui.focus', params: { target: 'panel' } }])
 
   t.host.closeView()
   t.host.focus('panel')
   await tick()
-  expect(t.methodCalls('ui.view.close')).toHaveLength(1)
+  expect(t.methodCalls('ui.window.view.close')).toHaveLength(1)
   expect(t.methodCalls('ui.focus')).toHaveLength(1)
 })
 
@@ -1930,11 +1937,11 @@ test('D21: a broadcast layout equal to the current one changes nothing, and an e
   expect(state(t).openView).toBe(view)
 })
 
-test('D21: a layout event received during ui.state cannot be overwritten by its stale snapshot', async () => {
+test('D21: a layout event received during ui.window.state cannot be overwritten by its stale snapshot', async () => {
   const t = setup(makeModel({ views: [view(NOTES, 'page'), view(NOTES, 'other')] }))
   await t.host.refresh()
   const release = gate()
-  t.holds.set('ui.state', release.opened)
+  t.holds.set('ui.window.state', release.opened)
   const refreshing = t.host.refresh()
   await tick()
   t.changeLayout({ view: { id: OTHER } })
@@ -2734,7 +2741,7 @@ test('an auxiliary view context reads and updates its own daemon route without c
   expect(t.methodCalls('desktop.window.update')).toEqual([{
     method: 'desktop.window.update', params: { windowId: route.windowId, view: viewId, input: nextInput }
   }])
-  expect(t.methodCalls('ui.view.open')).toEqual([])
+  expect(t.methodCalls('ui.window.view.open')).toEqual([])
   expect(t.daemonLayout().view).toBeNull()
   expect(context!.getLayout().view).toEqual({ id: viewId, input: nextInput })
   expect(t.methodCalls('desktop.window.runOwnerCommand')).toEqual([{

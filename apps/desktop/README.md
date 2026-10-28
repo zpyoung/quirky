@@ -52,6 +52,27 @@ Saved credential metadata is private to the profile; list/status output omits of
 
 Paired calls reuse the mobile-v2 encrypted connection and its existing device grant, not local owner privileges. Methods outside that grant refuse; full-owner remote CLI administration is not implemented.
 
+## Per-window UI routing
+
+Use a live kernel UI connection ID to read or change one renderer without changing another
+window's navigation. `ui.window.self {}` returns `{ connId }` only to its own role-`ui` caller.
+For a CLI or other non-UI caller, `ui.state {}` lists the live UI connections and their `connId`
+values. This ID is not a native auxiliary-window `windowId`.
+
+- `ui.window.state { connId }` returns that window's effective layout, slot reports and toasts.
+- `ui.window.view.open { connId, id, input? }`, `ui.window.view.close { connId, expectedView? }`
+  and `ui.window.command.run { connId, id, args? }` target that exact connection. Command results
+  are completed by the same window that received the request.
+- `expectedView` is a compare-and-close guard over the complete view, including whether `input` is
+  absent or its current value. If the view changed, close refuses without mutation. Missing,
+  stale and non-UI connection IDs also refuse.
+- Unscoped `ui.view.open` and `ui.view.close` retain their no-window/default and singleton behavior;
+  with multiple live UI windows they refuse rather than choosing the focused or most recent window.
+  `ui.command.run` likewise refuses an ambiguous multiwindow target.
+
+Panels, sidebar settings and other shared layout changes remain global. Their renderer updates use
+each window's effective layout, so a shared change does not replace another window's selected view.
+
 ## Native folder and auxiliary-window bridges
 
 Supported shells expose public `desktop.folder.pick` and `desktop.window.open/list/close` routes. Folder cancellation returns no paths and does not overwrite the UI's typed draft; a missing native shell refuses rather than showing a browser prompt. Dashboard's open-as setting selects an in-window view or an owner-bound pop-out. Auxiliary route/filter updates retain that window identity, while workspace-card commands route to its owning main window.

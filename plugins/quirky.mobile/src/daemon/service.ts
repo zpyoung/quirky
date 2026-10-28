@@ -172,6 +172,7 @@ export class MobileService {
     })
   }
 
+
   async devices(): Promise<MobileDevice[]> {
     try { return this.store.devices() } catch (error) { throw this.context.error('conflict', error instanceof Error ? error.message : 'Mobile device registry unavailable') }
   }
@@ -246,8 +247,15 @@ export class MobileService {
 
   private onConnection(peer: MobilePeer): void {
     const state: ConnectionState = {
-      peer, channel: null, authenticated: false, authTimer: undefined, badFrames: 0,
-      deviceId: null, token: null, admitted: null, cleaned: false
+      peer,
+      channel: null,
+      authenticated: false,
+      authTimer: undefined,
+      badFrames: 0,
+      deviceId: null,
+      token: null,
+      admitted: null,
+      cleaned: false
     }
     this.connections.add(state)
     state.authTimer = setTimeout(() => {
@@ -314,7 +322,9 @@ export class MobileService {
   private async authenticate(state: ConnectionState, plaintext: string): Promise<void> {
     const message = parseJson(plaintext)
     const params = isRecord(message) ? message : null
-    if (!params || !exactKeys(params, ['type', 'v', 'transcriptHashB64', 'deviceToken']) || params.type !== 'e2ee_auth' || params.v !== 2 || typeof params.transcriptHashB64 !== 'string' || typeof params.deviceToken !== 'string') {
+    if (!params || !exactKeys(params, ['type', 'v', 'transcriptHashB64', 'deviceToken']) ||
+      params.type !== 'e2ee_auth' || params.v !== 2 || typeof params.transcriptHashB64 !== 'string' ||
+      typeof params.deviceToken !== 'string') {
       this.failAuthentication(state, 'bad_proof')
       return
     }
@@ -364,14 +374,14 @@ export class MobileService {
       const admittedConnections = this.deviceConnections.get(device.deviceId) ?? new Set<ConnectionState>()
       admittedConnections.add(state)
       this.deviceConnections.set(device.deviceId, admittedConnections)
-      if (!state.channel?.transcriptHashB64 || !this.sendEncryptedText(state, JSON.stringify({ type: 'e2ee_authenticated', v: 2, transcriptHashB64: state.channel.transcriptHashB64 }))) {
+      if (!state.channel?.transcriptHashB64 ||
+        !this.sendEncryptedText(state, JSON.stringify({ type: 'e2ee_authenticated', v: 2, transcriptHashB64: state.channel.transcriptHashB64 }))) {
         this.cleanupConnection(state, 1013, 'Outbound reply buffer overflow', false)
         return
       }
       this.emitChanged()
     })
   }
-
   private failAuthentication(state: ConnectionState, code: string): void {
     if (code === 'bad_proof') this.recordAuthFailure()
     if (state.cleaned) return
