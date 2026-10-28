@@ -121,5 +121,27 @@
 - **Revisit if:** dependency repair changes pane identity or admission paths
 - **Source:** assumed — autonomous
 
+## D12: Reveal routed panes and use the terminal's canonical boolean close contract
+- **Question:** Does an API-created hosted tab become visible, and what must a hosted-tab close method return?
+- **Options:** return a hidden pane as success; widen Terminal to accept arbitrary objects; add another close alias; reveal the resolved worktree and return one boolean close shape
+- **Chose:** openLink calls public ui.view.open for view:quirky.session/worktree using paneOpen's resolved worktreeId, not the caller selector. paneClose returns boolean true for both external API and terminal pre-close; fromTab/tabId are validated against the terminal plugin and actual pane tab. No object/boolean shim or weaker Terminal contract.
+- **Why:** the first actual web smoke remained in an empty global view; the CLI regression observed ui.state.layout.view=null despite route=app. After reveal, real UI displayed the pane. Terminal.ensureViewsClosable requires result===true, so an object result refused a real tab close even after the tabId schema was repaired.
+- **Evidence:** initial partial report .quirk/using-apps-like-a-user/runs/20261028T025907-2aed/report.md; route regression red then pass using name:BrowserLinks resolved ID; actual profile/hosted-close API5pass43asserts; terminal layout/service.ts:317-321; canonical method schema and README; repository refs enumerated before cutover.
+- **Reversibility:** medium (unstable public API before first pane land)
+- **Confidence:** high for exercised API/CLI/hosted-close behavior
+- **Revisit if:** a new caller needs a richer close result; add a separate explicit state read, not an ambiguous success union
+- **Source:** assumed — autonomous
+
+## D13: Report focused UI proof and native limits separately
+- **Question:** What did the overdue focused smoke actually prove?
+- **Options:** equate it with full parity/native proof; omit the first partial setup; retain both receipts and name the exercised surface
+- **Chose:** first run remained partial with no preference action; after real route/reveal repair, focused run20261028T030719-ce44 passed10guarded UI actions. Created/selected a fresh profile with retained tab/address, saw import/Google disclosure, hid hint, opened settings, saved Native identity with restart-required/Cleaned-active text, and visibly inspected active-profile removal/native-clear/localhost limits. Native Session operations were never run.
+- **Why:** source UI and daemon behavior must agree, but web screenshots cannot establish native storage deletion/isolation. Formal full parity campaign and final review remain skipped under D10, not called green.
+- **Evidence:** focused report .quirk/using-apps-like-a-user/runs/20261028T030719-ce44/report.md, screenshots2–11 personally read; report shows no test overrides, no gates, kept-open nothing and no cleanup errors. F1 is the explicit allowlist fixture's missing quirky.git Explorer status, not exercised Source Control. Owned runtime supervisor exited0 after scope cleanup; the first completed supervisor's stdin latch was separately reaped.
+- **Reversibility:** easy (further verification can add evidence)
+- **Confidence:** high for exercised controls, no native deletion assurance
+- **Revisit if:** actual surface or native nightly contradicts the recorded outcomes
+- **Source:** assumed — autonomous
+
 ## Progress
-2026-10-28T02:52Z: all three own components accepted/merged and temporary worktrees removed. Real dependency checkpoint789f50 integrated at9af3996e; e31b5dfe tablet UI correction merged afterwards. Parent preserved PaneService/native/new-tab contracts and added genuine Browser-menu profile rows, toolbar hint, settings registration, canonical terminal setting grouping, full-operation profile admissions and preference usage events. Own focused UI compiler check passes after three fixture type fixes; native clear preflight2pass6asserts. Actual Chrome clean/native smoke passed with both owned cleanups. Dependency remains explicitly UNVERIFIED: known runtime import/object helper/manifest flags/hosted-close repairs are still awaited, so own end-to-end and final build/type gates have not run. D10 skips unstarted review/full dogfood, not focused runtime proof. Next: merge real Runtime repair checkpoint before final tests, exercise API/CLI and actual UI surface in isolated runtime, required remote/scripts/type gates, deps ready, roadmap catchup/read decisions, commit/detach/controller land. No native isolation/deletion or full product pass is claimed.
+2026-10-28: real dependency789f50/e31 integrated, all preference contributions/API/CLI/native gates wired. Own actual daemon/CLI/profile/hosted-close/routing5tests43asserts pass; root typecheck EXIT0 after7 concrete diagnostics fixed; plus-menu14pass26asserts. Required scripts68pass532asserts, with intentional synthetic failure output preserved. Full build passed22plugins (missing icon/release URL warnings retained), then focused actual UI smoke passed as D13. Ready non-Browser affected dirs are running remotely as bg_13. Browser acceptance remains blocked by a real Watch occurrence-Find defect (DOM.performSearch returns1 matching node for3 occurrences); an isolated WatchOccurrenceFindFix worker owns that repair, no fake counter or private UI import. Next: accept/merge Find repair, merge lane4 acceptance deltas before final Browser gate, collect remote result, rebuild final artifact/types if changed, deps ready, one roadmap catchup/read decisions and controller land. No native deletion/isolation, full parity campaign or final-review pass is claimed.
