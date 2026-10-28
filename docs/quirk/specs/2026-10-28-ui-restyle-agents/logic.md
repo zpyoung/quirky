@@ -66,3 +66,5 @@ Tool: host-framed contribution in a persistent slot. View: registered center-tab
 ## Self-review and amendments
 
 2026-10-28: checked scope against the four plugins, parent rollout row, shared contracts and shell mount/focus invariant. Every named UI surface and error/empty/interaction state is assigned. No unresolved questions, invented API or changed feature semantics. LOOP autonomous approval replaces the human review gate; separate tech.md/spec review omitted under build-first.
+
+2026-10-28 amendment: Session Info uses the host's existing shared tool frame rather than nesting a second ToolPanelFrame/title; its content still composes shared rows, buttons and sections. Full accordion-title activation and short visible Activity/Dashboard Open actions preserve usable targets without exposing internal IDs. The terminal plugin normally overrides the session worktree contribution; the disposable disabled-terminal smoke explicitly exercises the genuine fallback. Current-source visual proof and its earlier-capture/native/provider/scoring limits are recorded in item decisions D10–D12.

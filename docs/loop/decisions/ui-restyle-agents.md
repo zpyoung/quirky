@@ -121,6 +121,28 @@
 - **Revisit if:** Canonical gate identifies a concrete integration failure.
 - **Source:** locked by incoming restyle decision logs
 
+## D12: Verify current source in an explicitly owned browser and preserve failed infrastructure evidence
+- **Question:** What passed after catch-up, and how is concurrent browser ownership fenced?
+- **Options:** Reuse earlier screenshots as final evidence; use an exclusively owned profile/CDP for current assets.
+- **Chose:** Full caught-up UIlint/root/mobile/prepared-desktop typecheck exit0/41.47s; current renderer build emitted11host/vendor files and25plugin modules. Final owned Chromium CDP58092/profile under item scratch showed short Activity Open, exact-session navigation, single host-owned Session info header, title-collapse false/expand true, wrapped action reachability and both-theme current captures. Final browser error entries empty; light document width/scrollWidth both1340.
+- **Why:** Fresh current-source proof verifies the final corrections without pretending all earlier captures came from the merged tree. The first dedicated installed Google Chrome stayed about:blank through navigation timeouts; stopped it and used existing Playwright Chromium with mock-keychain. Its logs show Chrome invoked ambient GoogleUpdater despite HOME override; no agent-authored edit or rollback of user configuration was attempted. The final Chromium used a separate explicit profile/endpoint and only the owned app origin.
+- **Evidence:** .quirk/build-loop/ui-restyle-agents/proof.json and final-{activity,session-info}-{dark,light}.png; actual typecheck/build output; dedicated browser service receipts and observed URL.
+- **Reversibility:** easy
+- **Confidence:** high for named current renderer paths; earlier broader smoke retains its pre-catch-up qualification
+- **Revisit if:** End-phase suite, native or independent visual acceptance identifies a concrete regression.
+- **Source:** assumed — autonomous
+
+## D13: Honor the late structured-surface ownership interjection without duplicate edits
+- **Question:** Lane8 announced ownership of StructuredView.tsx, MessageRow.tsx and their semantic test selectors after this lane had already committed them.
+- **Options:** Revert committed working migration; concurrently rewrite it; report the existing commit and stop further edits.
+- **Chose:** Report6c1b22c9 and the three exact files immediately, retain the completed migration and session enrollment/dependency, and make no further edit to those files. Sent the same coordination to the observed exact lane8 omp terminal; receipt accepted:true/input_accepted, not a claim of delivery/turn start. Lane8's announced /tmp artifact was absent when checked.
+- **Why:** The interjection explicitly allows reporting already changed files; reuse avoids two presentation migrations while preserving that lane's ask/notifications/structured ownership.
+- **Evidence:** User interjection;6c1b22c9; Orca exact worktree/agent terminal discovery and send requestc68576f8-83cd-411e-88ef-86e2c9f307b1.
+- **Reversibility:** easy
+- **Confidence:** high for local file/receipt facts
+- **Revisit if:** Canonical land reports an actual source conflict.
+- **Source:** locked by user ownership interjection
+
 ## Progress
 
-All three audited source components are integrated; parent dependency/type fixes and real-surface smoke receipts are ready. No suites, formal review rounds or golden scoring run under build-first. Next: commit docs/integration fixes, catch up build/roadmap once, read incoming decisions, final typecheck and refreshed narrow source smoke, stop owned runtime/browser, canonical queue land and cleanup.
+Ready for canonical land. Current source and all four plugin migrations complete; sole catch-up retained incoming shared-system contracts and eight-plugin lint enforcement. Final caught-up typecheck/build and isolated current-source proof passed within D12 limits; suites/review/full dogfood/golden scoring remain unrun under build-first. Every worker returned and component worktrees removed. All owned browser handles released; both exclusively owned browser services stopped. Scoped daemon/PTY cleanup printed AGENTS25_CLEANED; its lingering readline process was then explicitly stopped through the service owner. No product flow deferred or review-only follow-up added. Next: commit receipts, detach and canonical queue land; after success remove owned scratch/helper files and end exactly this item.
