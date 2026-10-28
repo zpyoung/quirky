@@ -99,5 +99,16 @@
 - **Revisit if:** The end-phase queue claims a verification/debugging item.
 - **Source:** locked by docs/loop/LOOP.md
 
+## D10: Retain Mobile's expanded typecheck when recovering the landing conflict
+- **Question:** How should the new package.json script conflict be resolved after the first landing was rejected?
+- **Options:** Keep only Bash's scripts; keep only Mobile's scripts; combine independent additions and use the expanded incoming typecheck.
+- **Chose:** Keep test:bash, build:mobile-pages and typecheck:mobile; root typecheck includes Mobile. Resolve on the item branch and resubmit, without any new tests or reviews.
+- **Why:** Mobile's typechecking is binding and independent of shell regression selection. The first land failed on merge conflict before verification, not on a test/type verdict. The shell-hook patch does not change Mobile launch restrictions, account home precedence or process scopes.
+- **Evidence:** Recovery merge2911b187; fresh expanded `bun run typecheck` exited0, including apps/mobile/tsconfig.json. MobileMergeLocks read both incoming logs: sb-mobile-app D9/D13/D18/D29 and m3-accounts-remaining-flows D3/D7. Mobile D29's prior shell-path guardian failure remains assigned to end-phase triage, not repaired by this hook change.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** The root typecheck command changes again during integration.
+- **Source:** locked by docs/loop/decisions/sb-mobile-app.md
+
 ## Progress
-Production fix and completed review-fix batch are ready. Earlier strict GNU5.2.0/5.3.20 matrix and live PTY smoke passed; original version-only trigger remains unproven. Operator priority D9 cancelled unfinished bg9; do not run further tests/reviews/dogfood or chase test failures. Fresh `bun run typecheck` passed. Catch-up and incoming-lock read already completed. Commit the remaining test/runner/docs corrections, detach, and run canonical queue.ts land fix-bash53-shell-integration (typecheck-only merge gate). No unbuilt flows/follow-up. Preserve untracked .serena metadata untouched.
+Recovery merge2911b187 is typecheck-clean including Mobile. First land rejected only a package.json merge conflict; D10 preserves both script additions. All workers returned; unfinished bg9 was cancelled per operator D9. No new tests/debugging/reviews, no follow-up. Commit this evidence-only update, detach, and resubmit canonical queue.ts land fix-bash53-shell-integration. Earlier matrix/smoke evidence remains D5–D6; original version-only trigger is not claimed proven. Preserve untracked .serena metadata untouched.
