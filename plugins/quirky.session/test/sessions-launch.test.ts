@@ -276,10 +276,10 @@ describe('SessionService.restore', () => {
     const session = {
       id: 's_early',
       kind: 'terminal',
-      agent: 'claude',
+      agent: 'shell',
       worktreeId: 'wt',
       cwd: '/work',
-      title: 'Claude',
+      title: 'Shell',
       status: 'exited',
       createdAt: 1,
       lastActivityAt: 1,

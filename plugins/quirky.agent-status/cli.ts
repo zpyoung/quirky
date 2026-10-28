@@ -1,6 +1,7 @@
 import { RpcError, type CliArgs, type CliContext, type CliModule } from '@quirky/protocol'
 import type { Explanation } from './src/explain'
 import type { ActivityThread } from './src/activity-types'
+import type { DashboardBucket, DashboardSnapshot } from './src/dashboard-types'
 import { unsafePatternReason } from './src/rules/safety'
 import type { Matcher, Origin, RuleFile, RuleListing } from './src/rules/types'
 import type { SendResult } from './src/send'
@@ -9,6 +10,31 @@ import type { OutputWaitResult, WaitResult } from './src/waits'
 type SetupEntry = { agent: string; status: string; changed: string[]; note?: string; message?: string }
 type RemoveEntry = { agent: string; changed: string[]; message?: string }
 type StatusEntry = { agent: string; status: string; files: string[]; message?: string }
+const DASHBOARD_COLUMNS: { bucket: DashboardBucket; label: string }[] = [
+  { bucket: 'attention', label: 'Needs you' },
+  { bucket: 'working', label: 'Working' },
+  { bucket: 'done', label: 'Done' },
+  { bucket: 'idle', label: 'Idle' }
+]
+
+function dashboardLines(snapshot: DashboardSnapshot): string[] {
+  const hidden = snapshot.hiddenIdle > 0 ? ` · ${snapshot.hiddenIdle} idle hidden` : ''
+  const lines = [`${snapshot.total} total${hidden}`]
+  for (const { bucket, label } of DASHBOARD_COLUMNS) {
+    const cards = snapshot.cards.filter((card) => card.bucket === bucket)
+    if (cards.length === 0 && (bucket === 'idle' || label === 'Idle')) continue
+    lines.push(`${label} (${cards.length})`)
+    for (const card of cards) {
+      const { thread } = card
+      const details = [thread.prompt, thread.detail].filter((value) => value !== '')
+      lines.push(`  ${thread.sessionName} (${thread.sessionId}) @ ${thread.worktreeName} [${thread.agent}]${details.length > 0 ? `: ${details.join(' — ')}` : ''}${thread.live ? '' : ' (session unavailable)'}`)
+    }
+  }
+  if (snapshot.cards.length === 0 && snapshot.total > 0) lines.push('Only hidden idle threads match.')
+  else if (snapshot.total === 0) lines.push('no Dashboard threads match')
+  for (const message of snapshot.unavailable) lines.push(`unavailable: ${message}`)
+  return lines
+}
 
 /** `path` with the CLI user's home shown as `~`. */
 function shown(path: string, ctx: CliContext): string {
@@ -269,6 +295,20 @@ export const commands: CliModule['commands'] = {
             )
             .join('\n')
     )
+  },
+  async dashboard(args, ctx) {
+    const text = args.flags.text
+    const project = args.flags.project
+    const workspaceStatus = args.flags['workspace-status']
+    const reviewStatus = args.flags['review-status']
+    const snapshot = (await ctx.call('quirky.agent-status/dashboard', {
+      ...(typeof text === 'string' ? { text } : {}),
+      ...(typeof project === 'string' ? { project } : {}),
+      ...(typeof workspaceStatus === 'string' ? { workspaceStatus } : {}),
+      ...(typeof reviewStatus === 'string' ? { reviewStatus } : {}),
+      ...(args.flags['show-idle'] === true ? { showIdle: true } : {})
+    })) as DashboardSnapshot
+    ctx.out.result(snapshot, () => dashboardLines(snapshot).join('\n'))
   },
 
   async acknowledge(args, ctx) {

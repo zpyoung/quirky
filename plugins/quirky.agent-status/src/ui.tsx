@@ -1,11 +1,16 @@
 import { createRoot } from 'react-dom/client'
-import type { MountFunction, Session, UiPluginContext } from '@quirky/protocol'
+import type { MountFunction, UiPluginContext } from '@quirky/protocol'
 import { ActivityNavigation, ActivityView } from './ActivityView'
+import { DashboardNavigation, DashboardView, dashboardViewInput } from './DashboardView'
+import { openActivityThread } from './activity-navigation'
 
 const PLUGIN_ID = 'quirky.agent-status'
 const ACTIVITY_VIEW_ID = `view:${PLUGIN_ID}/activity`
 const ACTIVITY_SIDEBAR_ID = `sidebar-section:${PLUGIN_ID}/activity`
-const SESSION_VIEW_ID = 'view:quirky.session/worktree'
+const DASHBOARD_VIEW_ID = `view:${PLUGIN_ID}/dashboard`
+const DASHBOARD_SIDEBAR_ID = `sidebar-section:${PLUGIN_ID}/dashboard`
+const OPEN_DASHBOARD_COMMAND = `command:${PLUGIN_ID}/openDashboard`
+const TOGGLE_DASHBOARD_COMMAND = `command:${PLUGIN_ID}/toggleDashboard`
 const GROUPS = ['status', 'worktree', 'provider', 'none'] as const
 
 type ActivityGroup = (typeof GROUPS)[number]
@@ -28,36 +33,8 @@ function activityInput(args: unknown): Record<string, unknown> {
   }
 }
 
-async function openActivityThread(context: UiPluginContext, args: unknown): Promise<void> {
-  const input = objectArgs(args)
-  const sessionId = input.sessionId
-  const worktreeId = input.worktreeId
-  const turn = input.turn
-  if (typeof sessionId !== 'string' || sessionId === '' || typeof worktreeId !== 'string' || worktreeId === '' || typeof turn !== 'string' || turn === '') {
-    throw new Error('Activity destination is unavailable: its exact session, worktree or turn is missing')
-  }
 
-  let session: Session
-  try {
-    session = (await context.call('quirky.session/get', { session: sessionId })) as Session
-    if (session.id !== sessionId || session.worktreeId !== worktreeId || session.kind !== 'terminal' || session.status === 'exited') {
-      throw new Error('the exact terminal session is no longer available')
-    }
-    const worktree = (await context.call('quirky.worktree/resolve', { selector: `id:${worktreeId}` })) as { id?: unknown }
-    if (worktree.id !== worktreeId) throw new Error('the exact worktree is no longer available')
-  } catch (cause) {
-    throw new Error(`Activity destination unavailable for ${sessionId}: ${cause instanceof Error ? cause.message : String(cause)}`)
-  }
-
-  context.openView(SESSION_VIEW_ID, { worktree: worktreeId, session: sessionId })
-  try {
-    await context.call('quirky.agent-status/acknowledge', { session: sessionId, turn })
-  } catch (cause) {
-    context.toast('Activity thread opened, but could not be marked read', cause instanceof Error ? cause.message : String(cause))
-  }
-}
-
-/** Registers Activity's sidebar entry, view, and public window commands. */
+/** Registers Activity and Dashboard views, sidebar entries, and scriptable window commands. */
 export function activate(context: UiPluginContext): void {
   const mountView: MountFunction = (element, { input }) => {
     Object.assign(element.style, { display: 'flex', flexDirection: 'column', flex: '1', minHeight: '0', minWidth: '0', overflow: 'hidden' })
@@ -70,9 +47,26 @@ export function activate(context: UiPluginContext): void {
     root.render(<ActivityNavigation context={context} />)
     return () => root.unmount()
   }
+  const mountDashboard: MountFunction = (element, { input }) => {
+    Object.assign(element.style, { display: 'flex', flexDirection: 'column', flex: '1', minHeight: '0', minWidth: '0', overflow: 'hidden' })
+    const root = createRoot(element)
+    root.render(<DashboardView context={context} input={input} />)
+    return () => root.unmount()
+  }
+  const mountDashboardSidebar: MountFunction = (element) => {
+    const root = createRoot(element)
+    root.render(<DashboardNavigation context={context} />)
+    return () => root.unmount()
+  }
 
   context.provide(ACTIVITY_VIEW_ID, mountView)
   context.provide(ACTIVITY_SIDEBAR_ID, mountSidebar)
+  context.provide(DASHBOARD_VIEW_ID, mountDashboard)
+  context.provide(DASHBOARD_SIDEBAR_ID, mountDashboardSidebar)
   context.provide(`command:${PLUGIN_ID}/openActivity`, (args?: unknown) => context.openView(ACTIVITY_VIEW_ID, activityInput(args)))
   context.provide(`command:${PLUGIN_ID}/openActivityThread`, (args?: unknown) => openActivityThread(context, args))
-}
+  context.provide(OPEN_DASHBOARD_COMMAND, (args?: unknown) => context.openView(DASHBOARD_VIEW_ID, dashboardViewInput(args)))
+  context.provide(TOGGLE_DASHBOARD_COMMAND, (args?: unknown) => {
+    if (context.getLayout().view?.id === DASHBOARD_VIEW_ID) context.closeView()
+    else context.openView(DASHBOARD_VIEW_ID, dashboardViewInput(args))
+  })

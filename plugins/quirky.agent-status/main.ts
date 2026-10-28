@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 import type { LaunchHookInput, LaunchPatch, PluginContext } from '@quirky/protocol'
 import { ActivityFeed } from './src/activity'
+import { DashboardService } from './src/dashboard'
 import { ClaudeVersionGate, claudeEventsFor, claudeSettings, commandProbe } from './src/claude-settings'
 import { HooksService } from './src/hooks'
 import type { ScriptState } from './src/script-state'
@@ -80,10 +81,12 @@ function waitPattern(context: PluginContext, value: unknown): string {
 
 let service: AgentStatusService | undefined
 
-/** Wires the status service, durable Activity feed, hook events and session summaries. */
+/** Wires status rows, the shared durable Activity feed, Dashboard queries, hooks and session summaries. */
 export async function activate(context: PluginContext): Promise<void> {
   const store = context.openStore(migrations)
-  const active = new AgentStatusService(context, new RowStore(store), new ActivityFeed(context, new ActivityStore(store)))
+  const activity = new ActivityFeed(context, new ActivityStore(store))
+  const active = new AgentStatusService(context, new RowStore(store), activity)
+  const dashboard = new DashboardService(context, activity)
   service = active
   const installer = new HooksService(context)
 
@@ -104,6 +107,7 @@ export async function activate(context: PluginContext): Promise<void> {
       ...(params.unreadOnly === true ? { unreadOnly: true } : {})
     })
   )
+  context.provide('method:quirky.agent-status/dashboard', (params: Record<string, unknown>) => dashboard.query(params))
   context.provide('method:quirky.agent-status/acknowledge', (params: Record<string, unknown>) => {
     const session = params.session
     const turn = params.turn
