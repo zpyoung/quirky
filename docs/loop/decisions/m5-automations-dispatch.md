@@ -297,5 +297,27 @@
 - **Revisit if:** later evidence supersedes a recorded result
 - **Source:** assumed — autonomous
 
+## D28: Compose the failed-land recovery with landed orchestration contracts
+- **Question:** The first authoritative land stopped before tests on Session store and structured-create conflicts
+- **Options:** overwrite either feature; combine the additive public contracts while preserving shipped migration history
+- **Chose:** retain landed badges migration8 and session_pointer_operations migration9, then append the unlanded background column as migration10. The create allowlist accepts background, title and deferStart with their existing validations. Preserve the incoming native execution leases, pointer-operation ownership and schemas.
+- **Why:** Putting background at9 would make already-landed orchestration profiles skip that column and later recreate the pointer table. The incoming m6 D39 explicitly preserves append-only migration order. The read-only incoming decision audit found no behavioral conflict with background sessions or per-turn usage.
+- **Evidence:** first queue land exit1 before tests; conflicts in session/src/records.ts and structured/main.ts; docs/loop/decisions/m6-orchestration-core.md D30-D31,D33-D34,D39; composed records/background API command20pass0fail66assertions
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** a future migration attempts to replace a landed slot
+- **Source:** locked by docs/loop/decisions/m6-orchestration-core.md
+
+## D29: A registered activating plugin is a live check owner
+- **Question:** Can startup/catch-up prechecks run while their creating plugin awaits activate?
+- **Options:** allow only active; allow active or activating and still cancel every inactive/failed/disabled owner
+- **Chose:** active and activating are live in both pre-spawn ownership validation and plugin.changed reconciliation. Keep unknown/kernel classification and check-ID reservation ordering unchanged.
+- **Why:** Automation startup awaits its immediate due tick inside activate. The new real API regression made its startup owner fail with “the check owner is no longer active” before the fix; both ownership tests passed after. Rejecting an activating owner would turn a valid catch-up precheck into a false refusal.
+- **Evidence:** protocol PluginState; checks/main.ts owner conditions; checks/test/owner.test.ts startup plugin command; red startup state failed, then2pass0fail2.99s
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the public plugin lifecycle replaces activating with another live state
+- **Source:** assumed — autonomous
+
 ## Progress
-Ready for authoritative queue landing. All workers and diagnostic runs returned; no processes remain from smoke/acceptance fixtures. Corrected permanent native acceptance passed1/0/29assertions; the six-file integration run passed201/0; dispatcher25/0; requested session repair169/0; scripts68/0; final frozen-install/typecheck0. The broad affected suite preceded the successful scripts through &&. The native runtime guard was a test-only type fix after its passing run. One catch-up is complete. Unstarted model review is skipped only under D26, not described as clearance. Register the single constrained-flow follow-up, commit/detach and queue land; on a land conflict use only the mandated recovery merge/check/retry path.
+First land stopped before tests; mandatory recovery now composes both additive conflicts and preserves orchestration's landed migration order. Incoming m6 decision log read; no binding product conflict. Startup check-owner regression fixed without changing inactive-owner cancellation. Before retry, run focused ownership/background/migration/native tests and typecheck on this merged source, then commit/detach and authoritative queue land immediately. The single constrained-flow follow-up is already registered; do not add it again. Night-mode skips the still-unstarted final model review, without claiming clearance.

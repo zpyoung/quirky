@@ -69,3 +69,55 @@ export function activate(context: PluginContext) {
     rmSync(home, { recursive: true, force: true })
   }
 }, 20_000)
+
+test('a startup plugin can run a check and expose its evidence during activation', async () => {
+  const home = makeTempHome('checks-startup-owner-')
+  const oldHome = process.env.HOME
+  const oldQuirkyHome = process.env.QUIRKY_HOME
+  process.env.HOME = home
+  process.env.QUIRKY_HOME = home
+  let harness: Harness | undefined
+  const ownerId = 'acme.startup-check-owner'
+  try {
+    const builtins = join(home, 'builtins')
+    mkdirSync(builtins)
+    for (const id of ['quirky.repo', 'quirky.worktree', 'quirky.checks']) {
+      symlinkSync(resolve(import.meta.dir, '../..', id), join(builtins, id))
+    }
+    writePlugin(join(home, 'plugins'), {
+      id: ownerId, name: 'Startup check owner', version: '1.0.0', main: 'main.ts',
+      activation: 'startup', dependencies: ['quirky.checks'],
+      contributes: { method: [{ id: 'evidence', params: { type: 'object', additionalProperties: false } }] }
+    }, {
+      'main.ts': `import type { PluginContext } from '@quirky/protocol'
+let evidence: unknown
+export async function activate(context: PluginContext): Promise<void> {
+  context.provide('method:${ownerId}/evidence', () => evidence)
+  evidence = await context.call('quirky.checks/run', {
+    checkId: 'startup-owned',
+    command: 'printf startup-check-ran',
+    cwd: ${JSON.stringify(home)},
+    timeoutSeconds: 5
+  })
+}
+`
+    })
+    harness = await startHarness({ home, builtinPluginsDir: builtins })
+    const client = await harness.connect()
+    const plugin = (await client.call('plugin.list', {})).find((item) => item.id === ownerId)
+    expect(plugin).toMatchObject({ state: 'active' })
+
+    const evidence = await client.callAny(`${ownerId}/evidence`, {})
+    expect(evidence).toMatchObject({ ran: true, pass: true, stdoutTail: 'startup-check-ran' })
+  } finally {
+    try {
+      await harness?.cleanup()
+    } finally {
+      if (oldHome === undefined) delete process.env.HOME
+      else process.env.HOME = oldHome
+      if (oldQuirkyHome === undefined) delete process.env.QUIRKY_HOME
+      else process.env.QUIRKY_HOME = oldQuirkyHome
+      rmSync(home, { recursive: true, force: true })
+    }
+  }
+}, 20_000)

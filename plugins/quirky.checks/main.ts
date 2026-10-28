@@ -51,7 +51,7 @@ export async function activate(context: PluginContext): Promise<void> {
     if (event.type !== 'plugin.changed' || shuttingDown) return
     try {
       const plugins = await context.call('plugin.list', {}) as PluginInfo[]
-      const activeIds = new Set(plugins.filter((plugin) => plugin.state === 'active').map((plugin) => plugin.id))
+      const activeIds = new Set(plugins.filter((plugin) => plugin.state === 'active' || plugin.state === 'activating').map((plugin) => plugin.id))
       for (const record of active.values()) {
         if (record.ownerPluginId !== undefined && !activeIds.has(record.ownerPluginId)) {
           record.cancelled = true
@@ -106,7 +106,7 @@ export async function activate(context: PluginContext): Promise<void> {
     if (caller.role === 'plugin') {
       const plugins = await context.call('plugin.list', {}) as PluginInfo[]
       const owner = plugins.find((plugin) => plugin.id === caller.pluginId)
-      if (owner && owner.state !== 'active') throw fail('conflict', 'the check owner is no longer active')
+      if (owner && owner.state !== 'active' && owner.state !== 'activating') throw fail('conflict', 'the check owner is no longer active')
       if (owner) ownerPluginId = owner.id
     }
     if (shuttingDown) throw fail('conflict', 'checks plugin is shutting down')

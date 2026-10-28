@@ -101,9 +101,6 @@ class CodexRunner implements StructuredRunner {
   async start(session: Session, prompt?: string, startOptions: StructuredStartOptions = {}): Promise<void> {
     if (session.agent !== 'codex') throw new Error('structured sessions support codex only')
     const providerSession = startOptions.providerSession
-    if (prompt === undefined && providerSession === undefined) {
-      throw new Error('a structured Codex session needs an initial prompt or provider session')
-    }
     if (this.running.has(session.id) || this.starting.has(session.id)) throw new Error('session is already connected')
 
     const startup: Starting = { stopped: false }

@@ -195,7 +195,7 @@ export async function connectDaemon(
     /** `socket` uses the unix socket named in `runtime.json`; the default is the WebSocket. */
     transport?: 'socket' | 'websocket'
     /** Forwarded in `client.hello`. */
-    identity?: { cwd?: string; sessionId?: string; worktreeId?: string }
+    identity?: { cwd?: string; sessionId?: string; sessionToken?: string; worktreeId?: string }
   }
 ): Promise<QuirkyClient> {
   const home = options.home ?? quirkyHome()

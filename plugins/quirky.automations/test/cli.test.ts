@@ -5,6 +5,7 @@ import { commands } from '../cli'
 function context() {
   let calls = 0
   const ctx: CliContext = {
+    requestBase: 'automation-cli-test',
     async call() { calls++; return undefined },
     out: {
       json: false,
