@@ -932,6 +932,37 @@ describe('quirky.orchestration daemon API acceptance', () => {
     expect(afterAck.messages.find((message) => message.id === messageId)?.read).toBe(true)
   }, 30_000)
 
+  test('AC9 scheduler hints only an idle assignee and leaves dispatched mail unread', async () => {
+    const coordinator = await fixture.createParty('coordinator')
+    const worker = await fixture.createParty('worker', 'claude')
+    const { run } = await createRun(coordinator, 'scheduled pointer')
+    const task = await createTask(coordinator, run.id, 'secret dispatch brief')
+    const dispatch = await createDispatch(coordinator, run.id, task.task.id, worker.id)
+    fixture.harness.pty.setReadResult({ lines: ['$'], cols: 80, rows: 24, alt: false })
+
+    const idle = await markIdle(worker)
+    expect(idle.state).toBe('idle')
+
+    const inputStart = fixture.harness.pty.inputs.length
+    const mail = await send(coordinator, {
+      to: { kind: 'dispatch', dispatchId: dispatch.dispatch.id },
+      runId: run.id,
+      type: 'dispatch',
+      subject: 'private worker brief',
+      body: 'private report body must not be typed'
+    })
+    if (mail.kind !== 'message') throw new Error('expected dispatched mail')
+    const pointerInputs = await waitFor(() => {
+      const inputs = fixture.harness.pty.inputs.slice(inputStart)
+      return inputs.length >= 2 ? inputs : undefined
+    }, 8000)
+    expect(pointerInputs.every((input) => input.sessionId === worker.id)).toBe(true)
+    expect(pointerInputs.map((input) => input.text).join('')).toContain(`quirky orchestration check --run ${run.id}`)
+    expect(pointerInputs.map((input) => input.text).join('')).not.toContain('private report body')
+    const inbox = await call<InboxResult>(coordinator, INBOX, { full: true, limit: 100 })
+    expect(inbox.messages.find((message) => message.id === mail.messages[0]?.id)?.read).toBe(false)
+  }, 20_000)
+
   test('AC10 timed-out questions resume by their original ID, answer once, and reject conflicts', async () => {
     const coordinator = await fixture.createParty('coordinator')
     const worker = await fixture.createParty('worker')
