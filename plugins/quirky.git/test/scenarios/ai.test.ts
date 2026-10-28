@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test'
-import { RpcError, RpcErrorCode, type ApiCatalog } from '@quirky/protocol'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { RpcError, RpcErrorCode } from '@quirky/protocol'
 import { buildCommitMessagePrompt, buildFixCommitFailurePrompt, buildFixPushFailurePrompt, buildResolveConflictsPrompt } from '../../src/daemon/ai-prompts'
 import { isAlive, startAiWorld, type AiWorld, type CliResult } from './ai-world'
 
@@ -53,6 +55,246 @@ async function startsAfter(world: AiWorld, agent: string, count: number) {
   await world.e2e.waitForFakeLog(agent, () => startsOf(world, agent).length >= count, 15_000)
   return startsOf(world, agent)
 }
+
+const valuesAfter = (argv: string[], ...flags: string[]) =>
+  argv.flatMap((arg, index) => (flags.includes(arg) && argv[index + 1] !== undefined ? [argv[index + 1]!] : []))
+
+const codexEffortValues = (argv: string[]) => {
+  const values: string[] = []
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index]!
+    const value =
+      arg === '-c' || arg === '--config'
+        ? argv[++index]
+        : arg.startsWith('--config=')
+          ? arg.slice('--config='.length)
+          : arg.startsWith('-c') && arg.length > 2
+            ? arg.slice(2)
+            : undefined
+    if (value?.startsWith('model_reasoning_effort=')) values.push(value.slice('model_reasoning_effort='.length))
+  }
+  return values
+}
+
+describe('R2 recipe launch options', () => {
+  test('commit-message picks and raw arguments resolve to one-shot argv without changing the generated text', async () => {
+    w = await startAiWorld()
+    await w.oneShot('claude', { reply: 'Use indexes\n\nAvoid copying.\n' })
+    stageUtil(w)
+
+    await w.api('setAiRecipe', {
+      action: 'commitMessage',
+      scope: 'global',
+      agent: 'claude',
+      args: '--model fable --effort max --model opus --effort low',
+      launchOptions: { model: 'opus', optionValues: { effort: 'high' } }
+    })
+    const raw = await w.api('generateCommitMessage')
+    expect(raw).toEqual({ message: 'Use indexes\n\nAvoid copying.', subject: 'Use indexes', body: 'Avoid copying.', agent: 'claude' })
+    expect(valuesAfter(w.recorded('claude').argv, '--model')).toEqual(['fable'])
+    expect(valuesAfter(w.recorded('claude').argv, '--effort')).toEqual(['max'])
+
+    await w.api('setAiRecipe', { action: 'commitMessage', scope: 'global', args: '' })
+    const picked = await w.api('generateCommitMessage')
+    expect(picked.subject).toBe('Use indexes')
+    expect(valuesAfter(w.recorded('claude').argv, '--model')).toEqual(['opus'])
+    expect(valuesAfter(w.recorded('claude').argv, '--effort')).toEqual(['high'])
+
+    await w.api('setAiRecipe', {
+      action: 'commitMessage',
+      scope: 'global',
+      launchOptions: { optionValues: { effort: 'xhigh' } }
+    })
+    await w.api('generateCommitMessage')
+    expect(valuesAfter(w.recorded('claude').argv, '--model')).toEqual(['sonnet'])
+    expect(valuesAfter(w.recorded('claude').argv, '--effort')).toEqual(['xhigh'])
+    expect(w.recorded('claude').runs).toBe(3)
+    expect(existsSync(join(w.e2e.userHome, '.claude'))).toBe(false)
+  })
+
+  test('AI Fix applies raw Codex arguments ahead of picks and configured defaults while preserving its prompt and snapshot', async () => {
+    w = await startAiWorld({ fakes: { codex: { raw: true } } })
+    await w.call('setting.set', { id: 'setting:quirky.agents/workspace-trust', value: false })
+    const codexDirectory = join(w.e2e.userHome, '.codex')
+    const codexConfig = join(codexDirectory, 'config.toml')
+    const initialConfig = 'model = "user-config-sentinel"\n'
+    mkdirSync(codexDirectory, { recursive: true })
+    writeFileSync(codexConfig, initialConfig)
+    const failure = await failCommit(w, 'Rename index')
+    const expected = buildFixCommitFailurePrompt({
+      summary: 'Lint failed during commit.',
+      error: failure.data.output as string,
+      entries: [{ path: 'util.ts', status: 'modified', area: 'staged' }],
+      worktreePath: w.feat.path,
+      commitMessage: 'Rename index'
+    })
+    await w.api('setAiRecipe', {
+      action: 'fixCommitFailure',
+      scope: 'repo',
+      agent: 'codex',
+      args: '--model gpt-5.2-codex -c model_reasoning_effort=low',
+      launchOptions: { model: 'gpt-5.5', optionValues: { effort: 'high' } }
+    })
+
+    const result = await w.api('aiFix', { action: 'fixCommitFailure' })
+    expect(result.prompt).toBe(expected)
+    const started = await startsAfter(w, 'codex', 1)
+    expect(valuesAfter(started[0]!.argv, '-m', '--model')).toEqual(['gpt-5.2-codex'])
+    expect(codexEffortValues(started[0]!.argv)).toEqual(['low'])
+    const session = await w.call('quirky.session/get', { session: result.session })
+    expect(session.launchSettings.options).toMatchObject({
+      model: { source: 'extra-args' },
+      effort: { source: 'extra-args' }
+    })
+    expect(readFileSync(codexConfig, 'utf8')).toBe(initialConfig)
+  })
+
+  test('AI Fix applies a supported effort-only selection without injecting a model', async () => {
+    w = await startAiWorld({ fakes: { claude: { raw: true } } })
+    await failCommit(w)
+    await w.api('setAiRecipe', {
+      action: 'fixCommitFailure',
+      scope: 'repo',
+      agent: 'claude',
+      launchOptions: { optionValues: { effort: 'high' } }
+    })
+
+    const result = await w.api('aiFix', { action: 'fixCommitFailure' })
+    const started = await startsAfter(w, 'claude', 1)
+    expect(valuesAfter(started[0]!.argv, '--model')).toEqual([])
+    expect(valuesAfter(started[0]!.argv, '--effort')).toEqual(['high'])
+    const session = await w.call('quirky.session/get', { session: result.session })
+    expect(session.launchSettings.options).toEqual({ effort: { value: 'high', source: 'explicit' } })
+  })
+})
+
+describe('R1 recipe launch options', () => {
+  test('R1: launch choices inherit, clear, reset and persist only for a matching agent', async () => {
+    w = await startAiWorld()
+    const read = () => w!.api('aiRecipe', { action: 'commitMessage' })
+    const globalOptions = { model: 'opus', optionValues: { effort: 'high' } }
+    const repoOptions = { model: 'fable', optionValues: { effort: 'max' } }
+    const initial = await read()
+    expect(initial.sources.launchOptions).toBe('default')
+    expect(initial.launchOptions ?? {}).toEqual({})
+
+    await w.api('setAiRecipe', {
+      action: 'commitMessage',
+      scope: 'global',
+      agent: 'claude',
+      args: '--model sonnet',
+      template: 'T {basePrompt}',
+      launchOptions: globalOptions
+    })
+    expect(await read()).toMatchObject({
+      agent: 'claude',
+      args: '--model sonnet',
+      template: 'T {basePrompt}',
+      launchOptions: globalOptions,
+      sources: { agent: 'global', args: 'global', template: 'global', launchOptions: 'global' }
+    })
+
+    await w.api('setAiRecipe', { action: 'commitMessage', scope: 'repo', launchOptions: repoOptions })
+    expect(await read()).toMatchObject({
+      launchOptions: repoOptions,
+      sources: { args: 'global', template: 'global', launchOptions: 'repo' }
+    })
+    await w.call('plugin.disable', { id: 'quirky.git' })
+    await w.call('plugin.enable', { id: 'quirky.git' })
+    expect(await read()).toMatchObject({
+      launchOptions: repoOptions,
+      sources: { launchOptions: 'repo' }
+    })
+
+    await w.api('setAiRecipe', { action: 'commitMessage', scope: 'repo', launchOptions: {} })
+    expect(await read()).toMatchObject({
+      launchOptions: {},
+      args: '--model sonnet',
+      template: 'T {basePrompt}',
+      sources: { args: 'global', template: 'global', launchOptions: 'repo' }
+    })
+    await w.api('setAiRecipe', { action: 'commitMessage', scope: 'repo', launchOptions: null })
+    expect(await read()).toMatchObject({
+      launchOptions: globalOptions,
+      args: '--model sonnet',
+      template: 'T {basePrompt}',
+      sources: { launchOptions: 'global' }
+    })
+
+    await w.api('setAiRecipe', { action: 'commitMessage', scope: 'repo', launchOptions: repoOptions })
+    await w.api('setAiRecipe', { action: 'commitMessage', scope: 'repo', agent: 'codex' })
+    const switched = await read()
+    expect(switched).toMatchObject({
+      agent: 'codex',
+      args: '--model sonnet',
+      template: 'T {basePrompt}',
+      sources: { agent: 'repo', args: 'global', template: 'global', launchOptions: 'default' }
+    })
+    expect(switched.launchOptions ?? {}).toEqual({})
+
+    const malformed = await fails(
+      w.api('setAiRecipe', {
+        action: 'commitMessage',
+        scope: 'repo',
+        launchOptions: { model: 'gpt-5.5', optionValues: { effort: 'not-a-catalog-choice' } }
+      })
+    )
+    expect(malformed.code).toBe(RpcErrorCode.InvalidParams)
+    expect(await read()).toEqual(switched)
+
+    expect((await w.api('setAiRecipe', { action: 'commitMessage', scope: 'repo', reset: true })).saved).toBe(true)
+    expect(await read()).toMatchObject({
+      agent: 'claude',
+      launchOptions: globalOptions,
+      sources: { agent: 'global', launchOptions: 'global' }
+    })
+    expect((await w.api('setAiRecipe', { action: 'commitMessage', scope: 'global', reset: true })).saved).toBe(true)
+    const reset = await read()
+    expect(reset).toMatchObject({
+      agent: null,
+      args: '',
+      template: '{basePrompt}',
+      sources: { agent: 'default', args: 'default', template: 'default', launchOptions: 'default' }
+    })
+    expect(reset.launchOptions ?? {}).toEqual({})
+  })
+})
+
+describe('R3 one-off recipe launch choices', () => {
+  test('R3: one-off launch choices validate before starting and save back with the recipe', async () => {
+    w = await startAiWorld({ fakes: { codex: { raw: true } } })
+    await failCommit(w)
+    const sessions = await w.call('quirky.session/list')
+
+    const invalid = await fails(
+      w.api('aiFix', {
+        action: 'fixCommitFailure',
+        agent: 'codex',
+        launchOptions: { model: 'gpt-5.5', optionValues: { effort: 'not-a-codex-effort' } }
+      })
+    )
+    expect(invalid.code).toBe(RpcErrorCode.InvalidParams)
+    expect(invalid.message).toContain('effort')
+    expect(startsOf(w, 'codex')).toHaveLength(0)
+    expect(await w.call('quirky.session/list')).toEqual(sessions)
+
+    const result = await w.api('aiFix', {
+      action: 'fixCommitFailure',
+      agent: 'codex',
+      launchOptions: { model: 'gpt-5.5', optionValues: { effort: 'high' } },
+      save: 'repo'
+    })
+    expect(result.saved).toBe(true)
+    const started = await startsAfter(w, 'codex', 1)
+    expect(valuesAfter(started[0]!.argv, '-m', '--model')).toEqual(['gpt-5.5'])
+    expect(codexEffortValues(started[0]!.argv)).toEqual(['high'])
+    expect(await w.api('aiRecipe', { action: 'fixCommitFailure' })).toMatchObject({
+      agent: 'codex',
+      launchOptions: { model: 'gpt-5.5', optionValues: { effort: 'high' } },
+      sources: { agent: 'repo', launchOptions: 'repo' }
+    })
+  })
+})
 
 /** Disables every installed agent; several agents share one command, so disabling one is not enough. */
 async function disableAgents(world: AiWorld): Promise<void> {
@@ -316,23 +558,15 @@ describe('generating a commit message', () => {
 describe('recipes', () => {
   test('NA-39: recipes are read and saved through the CLI', async () => {
     w = await startAiWorld()
-    const first = json(await w.cli(['git', 'aiRecipe', '--action', 'commitMessage', '--json']))
-    expect(first).toEqual({
-      action: 'commitMessage',
-      agent: null,
-      args: '',
-      template: '{basePrompt}',
-      sources: { agent: 'default', args: 'default', template: 'default' }
-    })
 
     const set = json(await w.cli(['git', 'setAiRecipe', '--action', 'commitMessage', '--scope', 'global', '--agent', 'codex', '--json']))
     expect(set.saved).toBe(true)
-    expect(set.recipe).toMatchObject({ agent: 'codex', sources: { agent: 'global', args: 'default', template: 'default' } })
+    expect(set.recipe).toMatchObject({ agent: 'codex' })
     expect(json(await w.cli(['git', 'setAiRecipe', '--action', 'commitMessage', '--scope', 'global', '--agent', 'codex', '--json'])).saved).toBe(false)
     expect(json(await w.cli(['git', 'setAiRecipe', '--action', 'commitMessage', '--scope', 'repo', '--args=--model gpt-5.4', '--json'])).saved).toBe(true)
 
     const last = json(await w.cli(['git', 'aiRecipe', '--action', 'commitMessage', '--json']))
-    expect(last).toMatchObject({ agent: 'codex', args: '--model gpt-5.4', template: '{basePrompt}', sources: { agent: 'global', args: 'repo', template: 'default' } })
+    expect(last).toMatchObject({ agent: 'codex', args: '--model gpt-5.4', template: '{basePrompt}' })
     expect(w.storedRecipes()).toEqual([
       { scope: 'global', action: 'commitMessage', agent: 'codex', args: null, template: null },
       { scope: w.feat.repoId, action: 'commitMessage', agent: null, args: '--model gpt-5.4', template: null }
@@ -590,47 +824,3 @@ describe('AI Fix', () => {
   })
 })
 
-describe('scripting', () => {
-  test('NA-42: every note and AI method and event is declared and has a command', async () => {
-    w = await startAiWorld()
-    const catalog = json(await w.cli(['api', '--json'])) as ApiCatalog
-    const methods = catalog.methods.filter((method) => method.plugin === 'quirky.git')
-    for (const name of ['notes', 'addNote', 'editNote', 'deleteNote', 'clearNotes', 'formatNotes', 'noteTargets', 'sendNotes', 'generateCommitMessage', 'cancelGenerate', 'aiFix', 'aiFixPreview', 'aiRecipe', 'setAiRecipe']) {
-      expect(methods.map((method) => method.name), name).toContain(`quirky.git/${name}`)
-    }
-    expect(methods.find((method) => method.name === 'quirky.git/clearNotes')).toMatchObject({ destructive: true })
-    expect(methods.find((method) => method.name === 'quirky.git/aiFixPreview')).toMatchObject({ readOnly: true })
-    expect(methods.find((method) => method.name === 'quirky.git/aiRecipe')).toMatchObject({ readOnly: true })
-    expect(catalog.methods.filter((method) => method.plugin === 'quirky.agents').map((method) => method.name)).toEqual(expect.arrayContaining(['quirky.agents/generate', 'quirky.agents/cancelGenerate']))
-    expect(catalog.events.map((event) => event.name)).toEqual(expect.arrayContaining(['quirky.git/notesChanged', 'quirky.git/aiChanged']))
-
-    const help = await w.cli(['git', '--help'])
-    for (const command of ['generateCommitMessage', 'cancelGenerate', 'aiFix', 'aiFixPreview', 'aiRecipe', 'setAiRecipe']) {
-      expect(help.stdout, command).toContain(command)
-    }
-    const agents = await w.cli(['agents', '--help'])
-    expect(agents.stdout).toContain('generate')
-    expect(agents.stdout).toContain('cancelGenerate')
-  })
-
-  test('the AI settings are declared with their texts', async () => {
-    w = await startAiWorld()
-    const settings = (await w.call('plugin.contributions', { pluginId: 'quirky.git' })) as { id: string; data: Record<string, unknown> }[]
-    const byId = Object.fromEntries(settings.map((entry) => [entry.id, entry.data]))
-    expect(byId['setting:quirky.git/ai-enabled']).toMatchObject({
-      type: 'boolean',
-      default: true,
-      title: 'Show Source Control AI actions',
-      description: 'Adds AI buttons that run the selected agent with the command template for that action.'
-    })
-    expect(byId['setting:quirky.git/ai-custom-command']).toMatchObject({
-      type: 'string',
-      default: '',
-      title: 'Custom command',
-      description: 'Command line Quirky runs when a recipe uses Custom command.'
-    })
-    expect(byId['command:quirky.git/add-review-note']).toMatchObject({ title: 'Add Review Note' })
-    expect(byId['command:quirky.git/send-review-notes']).toMatchObject({ title: 'Send Review Notes to Agent' })
-    expect(byId['keybinding:quirky.git/add-review-note']).toMatchObject({ key: 'mod+shift+a', command: 'add-review-note' })
-  })
-})

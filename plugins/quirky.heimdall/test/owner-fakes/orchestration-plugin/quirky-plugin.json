@@ -1,0 +1,7 @@
+{
+  "id": "quirky.orchestration",
+  "name": "Orchestration dependency for Heimdall acceptance",
+  "version": "1.0.0",
+  "main": "main.ts",
+  "activation": "startup"
+}

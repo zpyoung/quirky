@@ -237,8 +237,8 @@ export type LaunchCatalog = {
 /** A caller's pick before validation. */
 export type Selection = { model?: string; options?: Record<string, string | boolean> }
 
-/** A pick checked against the catalog; `listed` is false for a model the catalog doesn't name. */
-export type ValidSelection = { model: string; values: Record<string, string | boolean>; listed: boolean }
+/** A checked pick; null model means native model selection with catalog-declared generic options. */
+export type ValidSelection = { model: string | null; values: Record<string, string | boolean>; listed: boolean }
 
 /** Extra arguments that passed the allowlist. */
 export type ParsedExtras = { tokens: string[]; kinds: Set<ExtraArgKind> }

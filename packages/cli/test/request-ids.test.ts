@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { createHash } from 'node:crypto'
-import { ConnectionLost, type QuirkyClient } from '@quirky/protocol'
+import { ConnectionLost, RpcError, RpcErrorCode, type QuirkyClient } from '@quirky/protocol'
 import { ConnectionLostError, DaemonUnavailableError, createDaemonLink } from '../src/link'
 import { FakeDaemon, runCli } from './fixtures/fake-daemon'
 
@@ -120,6 +120,24 @@ describe('a lost reply followed by a failed reconnect', () => {
     expect(error).toBeInstanceOf(ConnectionLostError)
     expect((error as ConnectionLostError).base).toBe('recover-me')
     expect((error as Error).message).toBe('connection lost; rerun with --retry-request recover-me')
+  })
+
+  test('preserves RPC authorization failures from connection setup', async () => {
+    const authorization = new RpcError(RpcErrorCode.Unauthorized, 'unauthorized')
+    const link = createDaemonLink(async () => {
+      throw authorization
+    })
+    const error = await link.callAny('status.get', {}).catch((failure) => failure)
+    expect(error).toBe(authorization)
+  })
+
+  test('preserves permission failures from connection setup', async () => {
+    const permission = Object.assign(new Error('could not connect to quirkyd: Permission denied'), { code: 'EACCES' })
+    const link = createDaemonLink(async () => {
+      throw permission
+    })
+    const error = await link.callAny('status.get', {}).catch((failure) => failure)
+    expect(error).toBe(permission)
   })
 
   test('a call that never reached the daemon is still DaemonUnavailable', async () => {

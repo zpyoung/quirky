@@ -1,0 +1,22 @@
+{
+  "item": "m6-heimdall-control",
+  "spec": "docs/quirk/specs/2026-10-27-m6-heimdall-control/logic.md",
+  "scenarios": [
+    {
+      "id": "AC9-approval-banner",
+      "title": "With notifications enabled and two live owner observations, a newly gated watcher action shows one native Watcher approval requested banner; folded repeats do not show another. Clicking opens that watcher's Heimdall detail. Use an isolated fixture kind, never real provider work.",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    },
+    {
+      "id": "AC9-terminal-banner",
+      "title": "A watcher entering terminal from a previous live observation shows one native Watcher reached a terminal state banner with state and reason. Disabled notifications and startup-restored terminal watchers show none. Clicking opens its Heimdall detail. Use an isolated fixture kind.",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    }
+  ]
+}

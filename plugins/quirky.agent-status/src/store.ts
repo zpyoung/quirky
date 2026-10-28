@@ -10,7 +10,8 @@ const rowsMigration: StoreMigration = `
 /** The plugin's migrations in order; a store opened with them holds `RowStore`'s tables. */
 export const migrations: StoreMigration[] = [
   'CREATE TABLE hooks (session_id TEXT PRIMARY KEY, last_hook_at INTEGER NOT NULL)',
-  rowsMigration
+  rowsMigration,
+  'CREATE TABLE activity_threads (session_id TEXT PRIMARY KEY, snapshot TEXT NOT NULL)'
 ]
 
 export type StoredRow = { row: AgentRow; updatedAt: number }
@@ -18,6 +19,9 @@ export type StoredRow = { row: AgentRow; updatedAt: number }
 /** The agent rows, one JSON document per session, and each session's OSC 7501 records. */
 export class RowStore {
   constructor(private readonly store: PluginStore) {}
+  transaction<T>(work: () => T): T {
+    return this.store.transaction(work)
+  }
 
   get(sessionId: string): AgentRow | null {
     const found = this.store.get<{ row: string }>('SELECT row FROM rows WHERE session_id = ?', sessionId)
@@ -62,5 +66,42 @@ export class RowStore {
 
   recordSessions(): string[] {
     return this.store.all<{ session_id: string }>('SELECT session_id FROM program_status').map((found) => found.session_id)
+  }
+}
+
+export type StoredActivity = {
+  sessionId: string
+  worktreeId: string
+  worktreeName: string
+  sessionName: string
+  agent: string
+  turn: string
+  turnStartedAt: number
+  updatedAt: number
+  row: AgentRow
+  acknowledged: boolean
+  cleared: boolean
+  live: boolean
+}
+
+/** Durable Activity snapshots, separate from the transient status rows. */
+export class ActivityStore {
+  constructor(private readonly store: PluginStore) {}
+
+  get(sessionId: string): StoredActivity | null {
+    const found = this.store.get<{ snapshot: string }>('SELECT snapshot FROM activity_threads WHERE session_id = ?', sessionId)
+    return found ? (JSON.parse(found.snapshot) as StoredActivity) : null
+  }
+
+  put(snapshot: StoredActivity): void {
+    this.store.run(
+      'INSERT INTO activity_threads (session_id, snapshot) VALUES (?, ?) ON CONFLICT(session_id) DO UPDATE SET snapshot = excluded.snapshot',
+      snapshot.sessionId,
+      JSON.stringify(snapshot)
+    )
+  }
+
+  all(): StoredActivity[] {
+    return this.store.all<{ snapshot: string }>('SELECT snapshot FROM activity_threads').map((found) => JSON.parse(found.snapshot) as StoredActivity)
   }
 }

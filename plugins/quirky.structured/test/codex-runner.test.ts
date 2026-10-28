@@ -136,16 +136,21 @@ describe('Codex app-server runner', () => {
   })
 
 
-  test('initializes a thread, records its first turn, and persists its provider ID', async () => {
-    await setup.runner.start(setup.session, 'summarize')
+  test('initializes before starting a thread and turn, persisting its provider ID first', async () => {
+    await setup.runner.start(setup.session, 'summarize', { model: 'gpt-5.5', effort: 'high' })
     await until(() => setup.statuses.includes('done'))
 
     const calls = setup.fixture.requests()
     expect(calls.map((request) => request.method)).toEqual(['initialize', 'initialized', 'thread/start', 'turn/start'])
-    expect(calls[2].params).toMatchObject({ cwd: setup.home })
-    expect(calls[3].params).toMatchObject({
+    expect(calls[2].params).toMatchObject({
+      cwd: setup.home,
+      model: 'gpt-5.5'
+    })
+    expect(calls[3].params).toEqual({
       threadId: 'scripted-thread',
-      input: [{ type: 'text', text: 'summarize' }]
+      input: [{ type: 'text', text: 'summarize' }],
+      model: 'gpt-5.5',
+      effort: 'high'
     })
     expect(setup.storedProviderSessions).toEqual([{ sessionId: 's_codex', id: 'scripted-thread', transcriptPath: null }])
     expect(setup.messages.map((message) => [message.role, message.text])).toEqual([
@@ -156,6 +161,18 @@ describe('Codex app-server runner', () => {
     expect(setup.statuses).toEqual(['working', 'done'])
   })
 
+  test('starts later turns with the same model and effort after completion', async () => {
+    await setup.runner.start(setup.session, 'first', { model: 'gpt-5.5', effort: 'xhigh' })
+    await until(() => setup.statuses.includes('done'))
+    await setup.runner.send(setup.session.id, 'second')
+    await until(() => setup.messages.some((message) => message.role === 'assistant' && message.text === 'Codex: second'))
+
+    const turns = setup.fixture.requests().filter((request) => request.method === 'turn/start')
+    expect(turns.map((request) => request.params)).toEqual([
+      { threadId: 'scripted-thread', input: [{ type: 'text', text: 'first' }], model: 'gpt-5.5', effort: 'xhigh' },
+      { threadId: 'scripted-thread', input: [{ type: 'text', text: 'second' }], model: 'gpt-5.5', effort: 'xhigh' }
+    ])
+  })
   test('starts a native thread without an initial turn until the caller is attached', async () => {
     await setup.runner.start(setup.session, undefined)
     expect(setup.fixture.requests().map((request) => request.method)).toEqual([
@@ -165,7 +182,6 @@ describe('Codex app-server runner', () => {
     ])
     expect(setup.statuses).toEqual(['running'])
     expect(setup.messages).toEqual([])
-
 
     await setup.runner.send(setup.session.id, 'first custody-recorded turn')
     await until(() => setup.statuses.includes('done'))
@@ -275,7 +291,6 @@ describe('Codex app-server runner', () => {
     }
   })
 
-
   test('steers an active turn with its expected ID and records input only after acceptance', async () => {
     await setup.runner.start(setup.session, '[hold] first')
     await setup.runner.send(setup.session.id, 'focus on tests')
@@ -335,6 +350,7 @@ describe('Codex app-server runner', () => {
   })
 
 
+
   test('stopping an active turn terminates the owned process group', async () => {
     await setup.runner.start(setup.session, '[descendant] keep alive')
     const childPid = Number(readFileSync(setup.fixture.logPath + '.pid', 'utf8'))
@@ -351,5 +367,6 @@ describe('Codex app-server runner', () => {
     expect(setup.statuses.at(-1)).toBe('exited')
     expect(setup.statuses).not.toContain('done')
   })
+
 
 })
