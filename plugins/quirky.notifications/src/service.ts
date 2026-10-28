@@ -2,6 +2,7 @@ import {
   RpcErrorCode,
   type Ask,
   type PluginContext,
+  type PluginNotification,
   type QuirkyEvent,
   type Session,
   type UiState,
@@ -31,7 +32,7 @@ import {
   type Viewing
 } from './viewed'
 
-export type Source = 'agent' | 'bell' | 'program' | 'ask' | 'test'
+export type Source = 'agent' | 'bell' | 'program' | 'ask' | 'test' | 'heimdall'
 export type Reason = 'delivered' | 'disabled' | 'source-disabled' | 'suppressed-focus' | 'cooldown'
 export type Result = Reason | 'superseded' | 'dropped'
 export type UnreadReason = 'agent' | 'bell' | 'notification'
@@ -81,6 +82,7 @@ type Pending = {
   marker?: Marker
   occasion?: 'always' | 'unfocused' | 'invisible'
   hold?: BellHold
+  open?: PluginNotification['open']
   banner(): Promise<Banner>
 }
 
@@ -154,6 +156,9 @@ export class NotificationsService {
   onEvent(event: QuirkyEvent): void {
     if (this.stopped) return
     switch (event.type) {
+      case 'quirky.heimdall/notification':
+        this.fire(() => this.heimdallNotification(event.data))
+        return
       case 'quirky.agent-status/settled':
       case 'quirky.structured/settled':
         this.supersedeBells((event.data as SettledData).sessionId)
@@ -532,6 +537,24 @@ export class NotificationsService {
     await this.askSurfaced(ask)
   }
 
+  private async heimdallNotification(data: unknown): Promise<void> {
+    if (!isRecord(data) || typeof data.watcherId !== 'string' || data.watcherId.length === 0) return
+    if (data.kind !== 'approval-requested' && data.kind !== 'terminal') return
+    if (data.kind === 'approval-requested' && typeof data.actionKind !== 'string') return
+    if (data.kind === 'terminal' && (typeof data.state !== 'string' || typeof data.reason !== 'string')) return
+    const worktreeId = typeof data.worktreeId === 'string' ? data.worktreeId : null
+    const title = data.kind === 'approval-requested' ? 'Watcher approval requested' : 'Watcher reached a terminal state'
+    const body = data.kind === 'approval-requested' ? `${data.actionKind} is waiting for approval` : `${data.state}: ${data.reason}`
+    await this.handle({
+      source: 'heimdall',
+      sessionId: null,
+      worktreeId,
+      marker: 'notification',
+      open: { view: 'view:quirky.heimdall/fleet', input: { watcherId: data.watcherId } },
+      banner: async () => ({ title, body })
+    })
+  }
+
   private async askSurfaced(ask: Ask): Promise<void> {
     await this.handle({
       source: 'ask',
@@ -644,9 +667,11 @@ export class NotificationsService {
       body: banner.body,
       ...(pending.sessionId !== null ? { sessionId: pending.sessionId } : {}),
       ...(pending.worktreeId !== null ? { worktreeId: pending.worktreeId } : {}),
-      ...(pending.sessionId !== null && pending.worktreeId !== null
-        ? { open: { view: WORKTREE_VIEW_ID, input: { worktree: pending.worktreeId, session: pending.sessionId } } }
-        : {}),
+      ...(pending.open !== undefined
+        ? { open: pending.open }
+        : pending.sessionId !== null && pending.worktreeId !== null
+          ? { open: { view: WORKTREE_VIEW_ID, input: { worktree: pending.worktreeId, session: pending.sessionId } } }
+          : {}),
       ...(sound !== undefined ? { sound } : {}),
       ...(pending.source === 'test' ? { toast: false } : {})
     })

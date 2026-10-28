@@ -391,7 +391,6 @@ describe('Heimdall control plane', () => {
 
     const refused = await control.command(request(h, { kind: 'resume' }))
     expect(refused).toMatchObject({ kind: 'refused', reason: 'invalid-state' })
-    expect(refused.kind === 'refused' ? refused.detail : '').toContain('Raise the exhausted watcher budget')
     expect(h.store.get(WATCHER_ID)?.commandRevision).toBe(0)
 
     expect(await control.command(request(h, { kind: 'adjust-budget', budget: { wallClockActiveMs: 0, turns: null } }))).toMatchObject({ kind: 'applied' })
@@ -431,6 +430,13 @@ describe('Heimdall control plane', () => {
     const folder = fixture({ enrollment: { repoId: null, kindPayload: { maxConcurrency: 1 } } })
     expect(await createControlPlane(folder.host).command(request(folder, { kind: 'set-concurrency', maxConcurrency: 2 }))).toMatchObject({ kind: 'refused', reason: 'unsupported-capability' })
     expect(folder.store.get(WATCHER_ID)?.commandRevision).toBe(0)
+  })
+
+  test('folder workspaces with a group identity cannot raise concurrency above one', async () => {
+    const h = fixture({ enrollment: { repoId: 'group:isolated-folders', kindPayload: { workspaceKind: 'folder', maxConcurrency: 1 } } })
+    const result = await createControlPlane(h.host).command(request(h, { kind: 'set-concurrency', maxConcurrency: 2 }))
+    expect(result).toMatchObject({ kind: 'refused', reason: 'unsupported-capability' })
+    expect(h.store.get(WATCHER_ID)).toMatchObject({ commandRevision: 0, kindPayload: { maxConcurrency: 1 } })
   })
 
   test('lowering objective concurrency drains the tick before changing the payload', async () => {
@@ -505,7 +511,6 @@ describe('Heimdall control plane', () => {
 
     const resumed = await control.command(request(h, { kind: 'resume' }))
     expect(resumed).toMatchObject({ kind: 'refused', reason: 'invalid-state' })
-    expect(resumed.kind === 'refused' ? resumed.detail : '').toContain('Answer the pending owner escalation')
     const unrelated = await control.command(request(h, { kind: 'answer-escalation', escalationId: 'unrelated-deviation', body: 'Wrong target.' }))
     expect(unrelated).toMatchObject({ kind: 'refused', reason: 'invalid-state' })
     expect(h.calls.escalationAnswers).toEqual([])

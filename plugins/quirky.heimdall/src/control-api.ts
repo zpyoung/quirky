@@ -1,4 +1,4 @@
-import type { Schema } from '@quirky/protocol'
+import { flagNameOf, type Schema } from '@quirky/protocol'
 import type {
   CommandRequest,
   CommandResult,
@@ -34,11 +34,12 @@ const budgetPolicySchema = object({
   turns: any('A non-negative worker-turn limit, or null for unlimited.')
 }, ['wallClockActiveMs', 'turns'])
 
-const ownerConfigSchema = object({
-  agent: { type: 'string', enum: ['claude'] },
-  model: text(),
-  effort: text()
-}, ['agent'])
+const ownerConfigSchema: Schema = {
+  description: 'Claude owner configuration, or null for no owner.',
+  properties: { agent: { type: 'string', enum: ['claude'] }, model: text(), effort: text() },
+  required: ['agent'],
+  additionalProperties: false
+}
 
 const budgetUsageSchema = object({
   activeMs: integer(),
@@ -281,7 +282,7 @@ const targetParams = object({ target: targetSchema }, ['target'])
 
 type CliPosition = { name: string; description: string; required: true }
 const flag = (type: 'string' | 'integer' | 'boolean' | 'json', description: string, extra: Record<string, unknown> = {}) => ({ type, description, ...extra })
-const positional = (name: string, description: string): CliPosition => ({ name, description, required: true })
+const positional = (name: string, description: string): CliPosition => ({ name: flagNameOf(name), description, required: true })
 const command = (id: string, summary: string, methods: string[], positionals: CliPosition[] = [], flags: Record<string, unknown> = {}) => ({
   id,
   summary,
@@ -369,7 +370,7 @@ export const controlContributions = {
       worktree: flag('string', 'Filter by worktree ID, workspace name or path.')
     }),
     command('show', 'show a watcher and its live detail', ['quirky.heimdall/detail'], [watcherId]),
-    command('objective', 'show the objective kind enrollment payload', ['quirky.heimdall/detail'], [watcherId]),
+    command('objective', 'show the objective kind detail', ['quirky.heimdall/detail', 'quirky.heimdall/objectiveDetail'], [watcherId]),
     command('create', 'enroll a registered watcher kind', ['quirky.heimdall/enroll'], [positional('kind', 'A registered Heimdall kind.')], {
       worktree: flag('string', 'Worktree selector; defaults to active.'),
       spec: flag('string', 'JSON or @file with the supported create-spec root keys.'),
@@ -382,12 +383,12 @@ export const controlContributions = {
       'landing-bar': flag('string', 'Objective landing bar.'),
       'max-concurrency': flag('integer', 'Objective worker cap from 1 to 1,024.'),
       territory: flag('string', 'Repeatable write-territory glob.', { repeatable: true }),
-      'role-agent': flag('string', 'Repeatable role-agent selection.', { repeatable: true }),
-      gate: flag('string', 'Repeatable capability gate.', { repeatable: true }),
+      'role-agent': flag('string', 'Repeatable role=agent selection.', { repeatable: true }),
+      gate: flag('string', 'Repeatable objective check name=command; timeout 1,800 seconds.', { repeatable: true }),
       'no-lanes': flag('boolean', 'Disable objective lanes.'),
       cap: flag('string', 'Repeatable capability assignment key=off|gated|on.', { repeatable: true }),
-      'branch-update': flag('boolean', 'Use merge-base branch updates for hosted-review.'),
-      'merge-method': flag('string', 'Hosted-review merge method: merge, squash, rebase or none.'),
+      'branch-update': flag('string', 'Hosted-review branch update mode.', { enum: ['merge-base-update', 'rebase'] }),
+      'merge-method': flag('string', 'Hosted-review merge method.', { enum: ['default', 'merge', 'squash', 'rebase'] }),
       ...ownerFlags
     }),
     command('pause', 'pause one watcher after its current tick drains', commandMethods, [watcherId]),

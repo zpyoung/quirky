@@ -235,7 +235,7 @@
         "data": {
           "type": "object",
           "properties": {
-            "source": { "type": "string", "enum": ["agent", "bell", "program"] },
+            "source": { "type": "string", "enum": ["agent", "bell", "program", "heimdall"] },
             "sessionId": { "description": "The session, or null." },
             "worktreeId": { "description": "The worktree, or null." }
           },
@@ -248,7 +248,7 @@
         "data": {
           "type": "object",
           "properties": {
-            "source": { "type": "string", "enum": ["agent", "bell", "program", "ask", "test"] },
+            "source": { "type": "string", "enum": ["agent", "bell", "program", "ask", "test", "heimdall"] },
             "sessionId": { "description": "The session, or null." },
             "worktreeId": { "description": "The worktree, or null." },
             "result": {

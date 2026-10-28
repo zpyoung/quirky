@@ -302,7 +302,7 @@ function adjustBudget(host: KernelControlHost, enrollment: Enrollment, budget: B
 
 function setConcurrency(host: KernelControlHost, enrollment: Enrollment, maxConcurrency: number): Completion {
   if (enrollment.kind !== 'objective') return complete(refused('unsupported-capability', 'Concurrency can only be changed for objective watchers.'))
-  if (enrollment.repoId === null || enrollment.repoId === undefined) {
+  if (enrollment.repoId === null || enrollment.repoId === undefined || enrollment.repoId.startsWith('group:')) {
     if (maxConcurrency !== 1) return complete(refused('unsupported-capability', 'Folder workspaces support a concurrency cap of one.'))
   }
   const payload = enrollment.kindPayload

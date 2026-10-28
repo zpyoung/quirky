@@ -201,8 +201,8 @@ async function objective(args: CliArgs, ctx: CliContext): Promise<void> {
   requireNoExtraPositionals(args, 1, ctx)
   const detail = await detailFor(ctx, watcherId)
   if (detail.enrollment.kind !== 'objective') usage(ctx, `watcher ${watcherId} is ${detail.enrollment.kind}, not objective`)
-  const payload = detail.enrollment.kindPayload
-  ctx.out.result(payload, () => JSON.stringify(payload, null, 2))
+  const value = await ctx.call(`${PLUGIN_ID}/objectiveDetail`, { target: detail.target })
+  ctx.out.result(value, () => JSON.stringify(value, null, 2))
 }
 
 function jsonValue(value: unknown, ctx: CliContext, path: string): Json {
@@ -245,9 +245,9 @@ function ownerString(value: unknown, label: string, ctx: CliContext): string | u
   return value
 }
 
-function parseOwner(specValue: unknown, args: CliArgs, ctx: CliContext): OwnerConfig | undefined {
+function parseOwner(specValue: unknown, args: CliArgs, ctx: CliContext): OwnerConfig | null | undefined {
   let specOwner: OwnerConfig | undefined
-  if (specValue !== undefined) {
+  if (specValue !== undefined && specValue !== null) {
     const source = parseObject(specValue, ctx, '--spec.owner')
     for (const key of Object.keys(source)) {
       if (key !== 'agent' && key !== 'model' && key !== 'effort') usage(ctx, `unsupported --spec.owner key "${key}"`)
@@ -268,7 +268,7 @@ function parseOwner(specValue: unknown, args: CliArgs, ctx: CliContext): OwnerCo
   if ((model !== undefined || effort !== undefined) && agent === undefined && specOwner === undefined) {
     usage(ctx, '--owner-model and --owner-effort require --owner claude or --spec.owner')
   }
-  if (agent === undefined && specOwner === undefined) return undefined
+  if (agent === undefined && specOwner === undefined) return specValue === null ? null : undefined
   const resolvedModel = model ?? specOwner?.model
   const resolvedEffort = effort ?? specOwner?.effort
   return {
@@ -278,24 +278,43 @@ function parseOwner(specValue: unknown, args: CliArgs, ctx: CliContext): OwnerCo
   }
 }
 
-function ownerInterventionMode(value: unknown, ctx: CliContext): 'off' | 'gated' | 'on' {
+function ownerInterventionMode(value: unknown, label: string, ctx: CliContext): 'off' | 'gated' | 'on' {
   if (value === undefined) return 'off'
   if (value === 'off' || value === 'gated' || value === 'on') return value
-  return usage(ctx, '--spec.ownerInterventionCapability must be off, gated or on')
+  return usage(ctx, `${label} must be off, gated or on`)
 }
 
 function isCapabilityMode(value: unknown): value is 'off' | 'gated' | 'on' {
   return value === 'off' || value === 'gated' || value === 'on'
 }
 
-function parseCapabilities(specValue: unknown, args: CliArgs, ctx: CliContext): Record<string, 'off' | 'gated' | 'on'> {
-  const capabilities: Record<string, 'off' | 'gated' | 'on'> = {}
-  if (specValue !== undefined) {
-    const source = parseObject(specValue, ctx, '--spec.capabilities')
-    for (const [key, value] of Object.entries(source)) {
-      if (!isCapabilityMode(value)) usage(ctx, `--spec.capabilities.${key} must be off, gated or on`)
-      capabilities[key] = value
-    }
+function parseCapabilities(
+  spec: Record<string, unknown>,
+  kind: string,
+  landingBar: unknown,
+  args: CliArgs,
+  ctx: CliContext
+): { capabilities: Record<string, 'off' | 'gated' | 'on'>; ownerInterventionCapability: 'off' | 'gated' | 'on' } {
+  const capabilities: Record<string, 'off' | 'gated' | 'on'> = kind === 'objective'
+    ? { plan: 'gated', implement: 'on', review: 'on', check: 'on', land: landingBar === 'files-on-disk' ? 'on' : 'gated' }
+    : kind === 'hosted-review'
+      ? { updateBranch: 'off', resolveConflicts: 'off', fixChecks: 'off', merge: 'off' }
+      : {}
+  const source = spec.capabilities === undefined ? {} : parseObject(spec.capabilities, ctx, '--spec.capabilities')
+  const hasRootOwnerCapability = Object.hasOwn(spec, 'ownerInterventionCapability')
+  const hasCapabilityOwner = Object.hasOwn(source, 'owner-intervention')
+  if (hasRootOwnerCapability && hasCapabilityOwner) {
+    usage(ctx, 'spec.capabilities.owner-intervention and spec.ownerInterventionCapability cannot both be set')
+  }
+  let ownerInterventionCapability = hasRootOwnerCapability
+    ? ownerInterventionMode(spec.ownerInterventionCapability, '--spec.ownerInterventionCapability', ctx)
+    : hasCapabilityOwner
+      ? ownerInterventionMode(source['owner-intervention'], '--spec.capabilities.owner-intervention', ctx)
+      : 'off'
+  for (const [key, value] of Object.entries(source)) {
+    if (key === 'owner-intervention') continue
+    if (!isCapabilityMode(value)) usage(ctx, `--spec.capabilities.${key} must be off, gated or on`)
+    capabilities[key] = value
   }
   for (const raw of flagList(args, 'cap', ctx) ?? []) {
     const separator = raw.indexOf('=')
@@ -303,9 +322,10 @@ function parseCapabilities(specValue: unknown, args: CliArgs, ctx: CliContext): 
     const key = raw.slice(0, separator).trim()
     const mode = raw.slice(separator + 1)
     if (!key || !isCapabilityMode(mode)) usage(ctx, `--cap must be <key>=<off|gated|on>, got "${raw}"`)
-    capabilities[key] = mode
+    if (key === 'owner-intervention') ownerInterventionCapability = mode
+    else capabilities[key] = mode
   }
-  return capabilities
+  return { capabilities, ownerInterventionCapability }
 }
 
 function parseBudget(specValue: unknown, kind: string, args: CliArgs, ctx: CliContext): BudgetPolicy {
@@ -372,9 +392,9 @@ async function stringPayload(specValue: unknown, kind: string, args: CliArgs, ct
     const objectiveFile = flagString(args, 'objective-file', ctx)
     const planFile = flagString(args, 'plan-file', ctx)
     if (objective !== undefined && objectiveFile !== undefined) usage(ctx, 'choose either --objective or --objective-file')
-    if (objective !== undefined) result.objective = objective
-    if (objectiveFile !== undefined) result.objective = await ctx.readFile(objectiveFile)
-    if (planFile !== undefined) result.plan = await ctx.readFile(planFile)
+    if (objective !== undefined) result.objectiveText = objective
+    if (objectiveFile !== undefined) result.objectiveText = await ctx.readFile(objectiveFile)
+    if (planFile !== undefined) result.existingPlan = await ctx.readFile(planFile)
     const tier = flagString(args, 'tier', ctx)
     const landingBar = flagString(args, 'landing-bar', ctx)
     if (tier !== undefined) result.tier = tier
@@ -388,25 +408,50 @@ async function stringPayload(specValue: unknown, kind: string, args: CliArgs, ct
     const territory = flagList(args, 'territory', ctx)
     if (territory !== undefined) result.writeTerritory = territory
     const roleAgents = flagList(args, 'role-agent', ctx)
-    if (roleAgents !== undefined) result.roleAgents = roleAgents
+    if (roleAgents !== undefined) {
+      const specRoleAgents = payload.roleAgents
+      if (specRoleAgents !== undefined && !isRecord(specRoleAgents)) usage(ctx, '--spec.kindPayload.roleAgents must be an object')
+      const explicitRoleAgents: JsonObject = {}
+      for (const assignment of roleAgents) {
+        const separator = assignment.indexOf('=')
+        const role = separator < 0 ? '' : assignment.slice(0, separator)
+        const agent = separator < 0 ? '' : assignment.slice(separator + 1)
+        if (!role.trim() || !agent.trim()) usage(ctx, '--role-agent must be a non-empty <role>=<agent> assignment')
+        explicitRoleAgents[role] = agent
+      }
+      result.roleAgents = { ...(specRoleAgents as JsonObject | undefined), ...explicitRoleAgents }
+    }
     const gates = flagList(args, 'gate', ctx)
-    if (gates !== undefined) result.gates = gates
+    if (gates !== undefined) {
+      result.gates = gates.map((assignment) => {
+        const separator = assignment.indexOf('=')
+        const name = separator < 0 ? '' : assignment.slice(0, separator)
+        const command = separator < 0 ? '' : assignment.slice(separator + 1)
+        if (!name.trim() || !command.trim()) usage(ctx, '--gate must be a non-empty <name>=<command> assignment')
+        return { name, command, timeoutSeconds: 1800 }
+      })
+    }
     if (typeof args.flags['no-lanes'] === 'string') usage(ctx, '--no-lanes must be a boolean')
     if (args.flags['no-lanes'] !== undefined) result.lanesEnabled = args.flags['no-lanes'] !== true
-    const objectiveText = result.objective
-    if (typeof objectiveText !== 'string' || objectiveText.trim() === '') usage(ctx, 'create objective requires --objective, --objective-file or --spec.kindPayload.objective')
+    const objectiveText = result.objectiveText
+    if (typeof objectiveText !== 'string' || objectiveText.trim() === '') {
+      usage(ctx, 'create objective requires --objective, --objective-file or --spec.kindPayload.objectiveText')
+    }
   } else if (kind === 'hosted-review') {
     Object.assign(result, { branchUpdateMode: 'merge-base-update', mergeMethod: null }, payload)
-    const branchUpdate = args.flags['branch-update']
-    if (branchUpdate !== undefined && typeof branchUpdate !== 'boolean') usage(ctx, '--branch-update must be a boolean')
-    if (branchUpdate === false) result.branchUpdateMode = 'none'
-    if (branchUpdate === true) result.branchUpdateMode = 'merge-base-update'
+    const branchUpdate = flagString(args, 'branch-update', ctx)
+    if (branchUpdate !== undefined) {
+      if (branchUpdate !== 'merge-base-update' && branchUpdate !== 'rebase') {
+        usage(ctx, '--branch-update must be merge-base-update or rebase')
+      }
+      result.branchUpdateMode = branchUpdate
+    }
     const mergeMethod = flagString(args, 'merge-method', ctx)
     if (mergeMethod !== undefined) {
-      if (mergeMethod !== 'merge' && mergeMethod !== 'squash' && mergeMethod !== 'rebase' && mergeMethod !== 'none') {
-        usage(ctx, '--merge-method must be merge, squash, rebase or none')
+      if (mergeMethod !== 'default' && mergeMethod !== 'merge' && mergeMethod !== 'squash' && mergeMethod !== 'rebase') {
+        usage(ctx, '--merge-method must be default, merge, squash or rebase')
       }
-      result.mergeMethod = mergeMethod === 'none' ? null : mergeMethod
+      result.mergeMethod = mergeMethod === 'default' ? null : mergeMethod
     }
   } else if (Object.keys(args.flags).some((key) => Object.hasOwn(KIND_SPECIFIC_FLAGS, key))) {
     usage(ctx, `create ${kind} does not define kind-specific flags; pass its registered payload with --spec`)
@@ -430,9 +475,8 @@ async function create(args: CliArgs, ctx: CliContext): Promise<void> {
   const spec = await createSpec(args, ctx)
   const kindPayload = await stringPayload(spec.kindPayload, kind, args, ctx)
   const budget = parseBudget(spec.budget, kind, args, ctx)
-  const capabilities = parseCapabilities(spec.capabilities, args, ctx)
+  const { capabilities, ownerInterventionCapability } = parseCapabilities(spec, kind, kindPayload.landingBar, args, ctx)
   const owner = parseOwner(spec.owner, args, ctx)
-  const ownerInterventionCapability = ownerInterventionMode(spec.ownerInterventionCapability, ctx)
   const input: EnrollmentInput = {
     kind,
     kindPayload,

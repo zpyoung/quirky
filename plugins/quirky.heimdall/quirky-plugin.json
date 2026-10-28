@@ -4,6 +4,8 @@
   "version": "0.1.0",
   "description": "Durable, per-workspace watcher supervision.",
   "main": "main.ts",
+  "cli": "src/control-cli.ts",
+  "ui": "dist/ui.js",
   "activation": "startup",
   "dependencies": ["quirky.orchestration"],
   "contributes": {
@@ -108,6 +110,1922 @@
           "additionalProperties": false
         },
         "result": { "type": "object", "additionalProperties": true }
+      },
+      {
+        "id": "fleet",
+        "description": "Read the locally owned Heimdall watcher fleet.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "generatedAtMs": {
+              "type": "integer"
+            },
+            "rows": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "type": "object",
+                    "properties": {
+                      "watcherId": {
+                        "type": "string"
+                      },
+                      "connectionId": {
+                        "description": "Remote connection ID; omitted or null for this local kernel."
+                      },
+                      "pairingRevision": {
+                        "description": "Remote pairing revision; omitted or null for this local kernel."
+                      }
+                    },
+                    "required": [
+                      "watcherId"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "ownerFence": {
+                    "type": "object",
+                    "properties": {
+                      "executionHostId": {
+                        "type": "string"
+                      },
+                      "schedulerOwner": {
+                        "type": "string"
+                      },
+                      "workspaceKey": {
+                        "type": "string"
+                      },
+                      "revision": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "executionHostId",
+                      "schedulerOwner",
+                      "workspaceKey",
+                      "revision"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "enrollment": {
+                    "type": "object",
+                    "properties": {
+                      "watcherId": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string"
+                      },
+                      "workspaceKey": {
+                        "type": "string"
+                      },
+                      "workspacePath": {
+                        "type": "string"
+                      },
+                      "executionHostId": {
+                        "type": "string"
+                      },
+                      "schedulerOwner": {
+                        "type": "string"
+                      },
+                      "repoId": {
+                        "description": "Repository ID, when this workspace belongs to a repository."
+                      },
+                      "worktreeId": {
+                        "description": "Worktree ID, or null for a folder workspace."
+                      },
+                      "kindPayload": {
+                        "description": "Payload authorized by the registered watcher kind."
+                      },
+                      "owner": {
+                        "description": "Claude owner configuration, or null for no owner.",
+                        "properties": {
+                          "agent": {
+                            "type": "string",
+                            "enum": [
+                              "claude"
+                            ]
+                          },
+                          "model": {
+                            "type": "string"
+                          },
+                          "effort": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "agent"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "ownerInterventionCapability": {
+                        "type": "string",
+                        "enum": [
+                          "off",
+                          "gated",
+                          "on"
+                        ]
+                      },
+                      "undo": {
+                        "description": "Kind authorization rollback data, when present."
+                      },
+                      "enabled": {
+                        "type": "boolean"
+                      },
+                      "paused": {
+                        "type": "boolean"
+                      },
+                      "commandRevision": {
+                        "type": "integer"
+                      },
+                      "capabilities": {
+                        "type": "object",
+                        "properties": {},
+                        "additionalProperties": true
+                      },
+                      "budget": {
+                        "type": "object",
+                        "properties": {
+                          "wallClockActiveMs": {
+                            "description": "A non-negative active-time limit in milliseconds, or null for unlimited."
+                          },
+                          "turns": {
+                            "description": "A non-negative worker-turn limit, or null for unlimited."
+                          }
+                        },
+                        "required": [
+                          "wallClockActiveMs",
+                          "turns"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "coordinator": {
+                        "type": "object",
+                        "properties": {
+                          "handle": {
+                            "type": "string"
+                          },
+                          "paneKey": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "handle",
+                          "paneKey"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "orchestrationRunId": {
+                        "description": "Orchestration run ID, or null before a run exists."
+                      },
+                      "createdAtMs": {
+                        "type": "integer"
+                      },
+                      "terminalAtMs": {
+                        "description": "Terminal timestamp, or null while active."
+                      },
+                      "parkReason": {
+                        "description": "Automatic park reason, or null."
+                      },
+                      "haltReason": {
+                        "description": "Last halt reason, or null."
+                      },
+                      "malformed": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "watcherId",
+                      "kind",
+                      "workspaceKey",
+                      "workspacePath",
+                      "executionHostId",
+                      "schedulerOwner",
+                      "kindPayload",
+                      "enabled",
+                      "paused",
+                      "commandRevision",
+                      "capabilities",
+                      "budget",
+                      "coordinator",
+                      "orchestrationRunId",
+                      "createdAtMs",
+                      "terminalAtMs",
+                      "parkReason",
+                      "haltReason"
+                    ],
+                    "additionalProperties": true
+                  },
+                  "status": {
+                    "type": "object",
+                    "properties": {
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "watching",
+                          "acting",
+                          "held",
+                          "escalated",
+                          "parked",
+                          "terminal",
+                          "disabled",
+                          "unreachable",
+                          "malformed"
+                        ]
+                      },
+                      "reason": {
+                        "type": "string"
+                      },
+                      "detail": {
+                        "type": "string"
+                      },
+                      "nextPulseAtMs": {
+                        "description": "Next pulse time, or null when no timer is scheduled."
+                      },
+                      "consecutiveErrors": {
+                        "type": "integer"
+                      },
+                      "consecutiveGateHolds": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "state",
+                      "nextPulseAtMs",
+                      "consecutiveErrors",
+                      "consecutiveGateHolds"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "workspaceName": {
+                    "type": "string"
+                  },
+                  "branch": {
+                    "description": "Workspace branch, or null when the kind did not supply one."
+                  },
+                  "phase": {
+                    "description": "Current kind phase, or null when unavailable."
+                  },
+                  "ownerContact": {
+                    "type": "string",
+                    "enum": [
+                      "live",
+                      "unverifiable"
+                    ]
+                  },
+                  "observedAtMs": {
+                    "type": "integer"
+                  },
+                  "lastSuccessfulTickAtMs": {
+                    "description": "Last successful tick time, or null when none is retained."
+                  },
+                  "budget": {
+                    "type": "object",
+                    "properties": {
+                      "activeMs": {
+                        "type": "integer"
+                      },
+                      "turns": {
+                        "type": "integer"
+                      },
+                      "exhausted": {
+                        "description": "The exhausted limit, or null when the budget remains available."
+                      }
+                    },
+                    "required": [
+                      "activeMs",
+                      "turns",
+                      "exhausted"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "runningWorkers": {
+                    "type": "integer"
+                  },
+                  "maxConcurrency": {
+                    "description": "Objective concurrency cap, or null when unsupported."
+                  },
+                  "openEscalations": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "escalationId": {
+                          "type": "string"
+                        },
+                        "escalationKind": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "foldCount": {
+                          "type": "integer"
+                        },
+                        "reason": {
+                          "type": "string"
+                        },
+                        "detail": {
+                          "type": "string"
+                        },
+                        "approvalScope": {
+                          "type": "object",
+                          "properties": {
+                            "actionKind": {
+                              "type": "string"
+                            },
+                            "contentIdentity": {
+                              "type": "string"
+                            },
+                            "evidenceKey": {
+                              "type": "string"
+                            },
+                            "preparedCommitSha": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "actionKind",
+                            "contentIdentity",
+                            "evidenceKey"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "escalationId",
+                        "escalationKind",
+                        "status",
+                        "foldCount"
+                      ],
+                      "additionalProperties": true
+                    }
+                  },
+                  "pendingQuestion": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "target",
+                  "ownerFence",
+                  "enrollment",
+                  "status",
+                  "name",
+                  "workspaceName",
+                  "branch",
+                  "phase",
+                  "ownerContact",
+                  "observedAtMs",
+                  "lastSuccessfulTickAtMs",
+                  "budget",
+                  "runningWorkers",
+                  "maxConcurrency",
+                  "openEscalations",
+                  "pendingQuestion"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "actionHistory": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "watcherId": {
+                    "type": "string"
+                  },
+                  "watcherName": {
+                    "type": "string"
+                  },
+                  "attemptId": {
+                    "type": "string"
+                  },
+                  "atMs": {
+                    "type": "integer"
+                  },
+                  "actionKind": {
+                    "type": "string"
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "attempted",
+                      "running",
+                      "settled"
+                    ]
+                  },
+                  "effect": {
+                    "type": "string",
+                    "enum": [
+                      "landed",
+                      "not-landed",
+                      "indeterminate"
+                    ]
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "watcherId",
+                  "watcherName",
+                  "attemptId",
+                  "atMs",
+                  "actionKind",
+                  "state"
+                ],
+                "additionalProperties": false
+              },
+              "description": "The newest 30 persisted action attempts across the fleet."
+            },
+            "buckets": {
+              "type": "object",
+              "properties": {
+                "needsYou": {
+                  "type": "integer"
+                },
+                "lostContact": {
+                  "type": "integer"
+                },
+                "active": {
+                  "type": "integer"
+                },
+                "inactive": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "needsYou",
+                "lostContact",
+                "active",
+                "inactive"
+              ],
+              "additionalProperties": false
+            },
+            "activeCount": {
+              "type": "integer"
+            },
+            "attentionCount": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "generatedAtMs",
+            "rows",
+            "actionHistory",
+            "buckets",
+            "activeCount",
+            "attentionCount"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "detail",
+        "description": "Read one locally owned watcher and bounded operator projections.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "target": {
+              "type": "object",
+              "properties": {
+                "watcherId": {
+                  "type": "string"
+                },
+                "connectionId": {
+                  "description": "Remote connection ID; omitted or null for this local kernel."
+                },
+                "pairingRevision": {
+                  "description": "Remote pairing revision; omitted or null for this local kernel."
+                }
+              },
+              "required": [
+                "watcherId"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "target"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "readOnly": {
+              "type": "boolean"
+            },
+            "enrollment": {
+              "type": "object",
+              "properties": {
+                "watcherId": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string"
+                },
+                "workspaceKey": {
+                  "type": "string"
+                },
+                "workspacePath": {
+                  "type": "string"
+                },
+                "executionHostId": {
+                  "type": "string"
+                },
+                "schedulerOwner": {
+                  "type": "string"
+                },
+                "repoId": {
+                  "description": "Repository ID, when this workspace belongs to a repository."
+                },
+                "worktreeId": {
+                  "description": "Worktree ID, or null for a folder workspace."
+                },
+                "kindPayload": {
+                  "description": "Payload authorized by the registered watcher kind."
+                },
+                "owner": {
+                  "description": "Claude owner configuration, or null for no owner.",
+                  "properties": {
+                    "agent": {
+                      "type": "string",
+                      "enum": [
+                        "claude"
+                      ]
+                    },
+                    "model": {
+                      "type": "string"
+                    },
+                    "effort": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "agent"
+                  ],
+                  "additionalProperties": false
+                },
+                "ownerInterventionCapability": {
+                  "type": "string",
+                  "enum": [
+                    "off",
+                    "gated",
+                    "on"
+                  ]
+                },
+                "undo": {
+                  "description": "Kind authorization rollback data, when present."
+                },
+                "enabled": {
+                  "type": "boolean"
+                },
+                "paused": {
+                  "type": "boolean"
+                },
+                "commandRevision": {
+                  "type": "integer"
+                },
+                "capabilities": {
+                  "type": "object",
+                  "properties": {},
+                  "additionalProperties": true
+                },
+                "budget": {
+                  "type": "object",
+                  "properties": {
+                    "wallClockActiveMs": {
+                      "description": "A non-negative active-time limit in milliseconds, or null for unlimited."
+                    },
+                    "turns": {
+                      "description": "A non-negative worker-turn limit, or null for unlimited."
+                    }
+                  },
+                  "required": [
+                    "wallClockActiveMs",
+                    "turns"
+                  ],
+                  "additionalProperties": false
+                },
+                "coordinator": {
+                  "type": "object",
+                  "properties": {
+                    "handle": {
+                      "type": "string"
+                    },
+                    "paneKey": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "handle",
+                    "paneKey"
+                  ],
+                  "additionalProperties": false
+                },
+                "orchestrationRunId": {
+                  "description": "Orchestration run ID, or null before a run exists."
+                },
+                "createdAtMs": {
+                  "type": "integer"
+                },
+                "terminalAtMs": {
+                  "description": "Terminal timestamp, or null while active."
+                },
+                "parkReason": {
+                  "description": "Automatic park reason, or null."
+                },
+                "haltReason": {
+                  "description": "Last halt reason, or null."
+                },
+                "malformed": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "watcherId",
+                "kind",
+                "workspaceKey",
+                "workspacePath",
+                "executionHostId",
+                "schedulerOwner",
+                "kindPayload",
+                "enabled",
+                "paused",
+                "commandRevision",
+                "capabilities",
+                "budget",
+                "coordinator",
+                "orchestrationRunId",
+                "createdAtMs",
+                "terminalAtMs",
+                "parkReason",
+                "haltReason"
+              ],
+              "additionalProperties": true
+            },
+            "status": {
+              "description": "Live runner status, or null when no runner is present."
+            },
+            "journal": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "seq": {
+                    "type": "integer"
+                  },
+                  "eventId": {
+                    "type": "string"
+                  },
+                  "watcherId": {
+                    "type": "string"
+                  },
+                  "atMs": {
+                    "type": "integer"
+                  },
+                  "class": {
+                    "type": "string",
+                    "enum": [
+                      "fact",
+                      "observation"
+                    ]
+                  },
+                  "origin": {
+                    "type": "string",
+                    "enum": [
+                      "owner",
+                      "client"
+                    ]
+                  },
+                  "kind": {
+                    "type": "string"
+                  },
+                  "resolved": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "seq",
+                  "eventId",
+                  "watcherId",
+                  "atMs",
+                  "class",
+                  "origin",
+                  "kind",
+                  "resolved"
+                ],
+                "additionalProperties": true
+              },
+              "description": "At most the newest 200 entries."
+            },
+            "traces": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "seq": {
+                    "type": "integer"
+                  },
+                  "watcherId": {
+                    "type": "string"
+                  },
+                  "startedAtMs": {
+                    "type": "integer"
+                  },
+                  "durationMs": {
+                    "type": "integer"
+                  },
+                  "exitPath": {
+                    "type": "string"
+                  },
+                  "pinned": {
+                    "type": "boolean"
+                  },
+                  "fullResyncDue": {
+                    "type": "boolean"
+                  },
+                  "snapshotReadCount": {
+                    "type": "integer"
+                  },
+                  "snapshot": {},
+                  "contentIdentity": {
+                    "type": "string"
+                  },
+                  "decision": {},
+                  "declined": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "gate": {},
+                  "budget": {},
+                  "pacing": {},
+                  "error": {
+                    "type": "string"
+                  },
+                  "runner": {
+                    "type": "object",
+                    "properties": {
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "watching",
+                          "acting",
+                          "held",
+                          "escalated",
+                          "parked",
+                          "terminal",
+                          "disabled",
+                          "unreachable",
+                          "malformed"
+                        ]
+                      },
+                      "reason": {
+                        "type": "string"
+                      },
+                      "detail": {
+                        "type": "string"
+                      },
+                      "nextPulseAtMs": {
+                        "description": "Next pulse time, or null when no timer is scheduled."
+                      },
+                      "consecutiveErrors": {
+                        "type": "integer"
+                      },
+                      "consecutiveGateHolds": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "state",
+                      "nextPulseAtMs",
+                      "consecutiveErrors",
+                      "consecutiveGateHolds"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "seq",
+                  "watcherId",
+                  "startedAtMs",
+                  "durationMs",
+                  "exitPath",
+                  "pinned",
+                  "fullResyncDue",
+                  "snapshotReadCount",
+                  "declined"
+                ],
+                "additionalProperties": true
+              },
+              "description": "At most the newest 20 traces."
+            },
+            "summary": {
+              "description": "Terminal summary, or null while the watcher is active."
+            },
+            "budget": {
+              "type": "object",
+              "properties": {
+                "activeMs": {
+                  "type": "integer"
+                },
+                "turns": {
+                  "type": "integer"
+                },
+                "exhausted": {
+                  "description": "The exhausted limit, or null when the budget remains available."
+                }
+              },
+              "required": [
+                "activeMs",
+                "turns",
+                "exhausted"
+              ],
+              "additionalProperties": false
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "watcherId": {
+                  "type": "string"
+                },
+                "connectionId": {
+                  "description": "Remote connection ID; omitted or null for this local kernel."
+                },
+                "pairingRevision": {
+                  "description": "Remote pairing revision; omitted or null for this local kernel."
+                }
+              },
+              "required": [
+                "watcherId"
+              ],
+              "additionalProperties": false
+            },
+            "ownerFence": {
+              "type": "object",
+              "properties": {
+                "executionHostId": {
+                  "type": "string"
+                },
+                "schedulerOwner": {
+                  "type": "string"
+                },
+                "workspaceKey": {
+                  "type": "string"
+                },
+                "revision": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "executionHostId",
+                "schedulerOwner",
+                "workspaceKey",
+                "revision"
+              ],
+              "additionalProperties": false
+            },
+            "ownerContact": {
+              "type": "string",
+              "enum": [
+                "live",
+                "unverifiable"
+              ]
+            },
+            "observedAtMs": {
+              "type": "integer"
+            },
+            "name": {
+              "type": "string"
+            },
+            "workers": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "identity": {
+                    "type": "object",
+                    "properties": {
+                      "dispatchId": {
+                        "type": "string"
+                      },
+                      "sessionId": {
+                        "type": "string"
+                      },
+                      "processIncarnation": {
+                        "type": "string"
+                      },
+                      "pid": {
+                        "type": "integer"
+                      },
+                      "startTime": {
+                        "type": "string"
+                      },
+                      "terminalHandle": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "dispatchId"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "live",
+                      "exited",
+                      "unverifiable"
+                    ]
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "lastContactAtMs": {
+                    "type": "integer"
+                  },
+                  "question": {
+                    "type": "object",
+                    "properties": {
+                      "messageId": {
+                        "type": "string"
+                      },
+                      "body": {
+                        "type": "string"
+                      },
+                      "answered": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "messageId",
+                      "body"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "identity",
+                  "state"
+                ],
+                "additionalProperties": true
+              }
+            },
+            "openEscalations": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "escalationId": {
+                    "type": "string"
+                  },
+                  "escalationKind": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "foldCount": {
+                    "type": "integer"
+                  },
+                  "reason": {
+                    "type": "string"
+                  },
+                  "detail": {
+                    "type": "string"
+                  },
+                  "approvalScope": {
+                    "type": "object",
+                    "properties": {
+                      "actionKind": {
+                        "type": "string"
+                      },
+                      "contentIdentity": {
+                        "type": "string"
+                      },
+                      "evidenceKey": {
+                        "type": "string"
+                      },
+                      "preparedCommitSha": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "actionKind",
+                      "contentIdentity",
+                      "evidenceKey"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "escalationId",
+                  "escalationKind",
+                  "status",
+                  "foldCount"
+                ],
+                "additionalProperties": true
+              }
+            },
+            "pendingControls": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "readOnly",
+            "enrollment",
+            "status",
+            "journal",
+            "traces",
+            "summary",
+            "budget",
+            "target",
+            "ownerFence",
+            "ownerContact",
+            "observedAtMs",
+            "name",
+            "workers",
+            "openEscalations",
+            "pendingControls"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "command",
+        "description": "Run one owner-fenced Heimdall watcher control.",
+        "destructive": true,
+        "confirm": "Delete watcher {watcherId} and its saved history? Worker terminals will continue running.",
+        "describe": "describeCommand",
+        "params": {
+          "type": "object",
+          "properties": {
+            "target": {
+              "type": "object",
+              "properties": {
+                "watcherId": {
+                  "type": "string"
+                },
+                "connectionId": {
+                  "description": "Remote connection ID; omitted or null for this local kernel."
+                },
+                "pairingRevision": {
+                  "description": "Remote pairing revision; omitted or null for this local kernel."
+                }
+              },
+              "required": [
+                "watcherId"
+              ],
+              "additionalProperties": false
+            },
+            "expectedOwner": {
+              "type": "object",
+              "properties": {
+                "executionHostId": {
+                  "type": "string"
+                },
+                "schedulerOwner": {
+                  "type": "string"
+                },
+                "workspaceKey": {
+                  "type": "string"
+                },
+                "revision": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "executionHostId",
+                "schedulerOwner",
+                "workspaceKey",
+                "revision"
+              ],
+              "additionalProperties": false
+            },
+            "command": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "pause",
+                    "resume",
+                    "disarm",
+                    "delete",
+                    "approve",
+                    "adjust-budget",
+                    "set-concurrency",
+                    "answer-question",
+                    "answer-escalation",
+                    "stop-worker"
+                  ]
+                },
+                "escalationId": {
+                  "type": "string"
+                },
+                "scope": {
+                  "type": "object",
+                  "properties": {
+                    "actionKind": {
+                      "type": "string"
+                    },
+                    "contentIdentity": {
+                      "type": "string"
+                    },
+                    "evidenceKey": {
+                      "type": "string"
+                    },
+                    "preparedCommitSha": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "actionKind",
+                    "contentIdentity",
+                    "evidenceKey"
+                  ],
+                  "additionalProperties": false
+                },
+                "budget": {
+                  "type": "object",
+                  "properties": {
+                    "wallClockActiveMs": {
+                      "description": "A non-negative active-time limit in milliseconds, or null for unlimited."
+                    },
+                    "turns": {
+                      "description": "A non-negative worker-turn limit, or null for unlimited."
+                    }
+                  },
+                  "required": [
+                    "wallClockActiveMs",
+                    "turns"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxConcurrency": {
+                  "type": "integer"
+                },
+                "messageId": {
+                  "type": "string"
+                },
+                "body": {
+                  "type": "string"
+                },
+                "identity": {
+                  "type": "object",
+                  "properties": {
+                    "dispatchId": {
+                      "type": "string"
+                    },
+                    "sessionId": {
+                      "type": "string"
+                    },
+                    "processIncarnation": {
+                      "type": "string"
+                    },
+                    "pid": {
+                      "type": "integer"
+                    },
+                    "startTime": {
+                      "type": "string"
+                    },
+                    "terminalHandle": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "dispatchId"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "kind"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "target",
+            "expectedOwner",
+            "command"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "applied",
+                "refused",
+                "indeterminate"
+              ]
+            },
+            "appliedAtMs": {
+              "type": "integer"
+            },
+            "reason": {
+              "type": "string",
+              "enum": [
+                "owner-unreachable",
+                "unsupported-capability",
+                "owner-conflict",
+                "stale-revision",
+                "watcher-not-found",
+                "invalid-state",
+                "question-already-answered",
+                "worker-unverifiable",
+                "coordinator-seat-lost",
+                "invalid-command"
+              ]
+            },
+            "detail": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "describeCommand",
+        "description": "Describe an irreversible Heimdall command; null for reversible commands.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "target": {
+              "type": "object",
+              "properties": {
+                "watcherId": {
+                  "type": "string"
+                },
+                "connectionId": {
+                  "description": "Remote connection ID; omitted or null for this local kernel."
+                },
+                "pairingRevision": {
+                  "description": "Remote pairing revision; omitted or null for this local kernel."
+                }
+              },
+              "required": [
+                "watcherId"
+              ],
+              "additionalProperties": false
+            },
+            "expectedOwner": {
+              "type": "object",
+              "properties": {
+                "executionHostId": {
+                  "type": "string"
+                },
+                "schedulerOwner": {
+                  "type": "string"
+                },
+                "workspaceKey": {
+                  "type": "string"
+                },
+                "revision": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "executionHostId",
+                "schedulerOwner",
+                "workspaceKey",
+                "revision"
+              ],
+              "additionalProperties": false
+            },
+            "command": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "pause",
+                    "resume",
+                    "disarm",
+                    "delete",
+                    "approve",
+                    "adjust-budget",
+                    "set-concurrency",
+                    "answer-question",
+                    "answer-escalation",
+                    "stop-worker"
+                  ]
+                },
+                "escalationId": {
+                  "type": "string"
+                },
+                "scope": {
+                  "type": "object",
+                  "properties": {
+                    "actionKind": {
+                      "type": "string"
+                    },
+                    "contentIdentity": {
+                      "type": "string"
+                    },
+                    "evidenceKey": {
+                      "type": "string"
+                    },
+                    "preparedCommitSha": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "actionKind",
+                    "contentIdentity",
+                    "evidenceKey"
+                  ],
+                  "additionalProperties": false
+                },
+                "budget": {
+                  "type": "object",
+                  "properties": {
+                    "wallClockActiveMs": {
+                      "description": "A non-negative active-time limit in milliseconds, or null for unlimited."
+                    },
+                    "turns": {
+                      "description": "A non-negative worker-turn limit, or null for unlimited."
+                    }
+                  },
+                  "required": [
+                    "wallClockActiveMs",
+                    "turns"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxConcurrency": {
+                  "type": "integer"
+                },
+                "messageId": {
+                  "type": "string"
+                },
+                "body": {
+                  "type": "string"
+                },
+                "identity": {
+                  "type": "object",
+                  "properties": {
+                    "dispatchId": {
+                      "type": "string"
+                    },
+                    "sessionId": {
+                      "type": "string"
+                    },
+                    "processIncarnation": {
+                      "type": "string"
+                    },
+                    "pid": {
+                      "type": "integer"
+                    },
+                    "startTime": {
+                      "type": "string"
+                    },
+                    "terminalHandle": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "dispatchId"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "kind"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "target",
+            "expectedOwner",
+            "command"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "description": "Confirmation text for delete, or null when the command is reversible or cannot apply."
+        }
+      },
+      {
+        "id": "debugReport",
+        "description": "Read a bounded schema-two diagnostic report for one local watcher.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "target": {
+              "type": "object",
+              "properties": {
+                "watcherId": {
+                  "type": "string"
+                },
+                "connectionId": {
+                  "description": "Remote connection ID; omitted or null for this local kernel."
+                },
+                "pairingRevision": {
+                  "description": "Remote pairing revision; omitted or null for this local kernel."
+                }
+              },
+              "required": [
+                "watcherId"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "target"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "schemaVersion": {
+              "type": "integer",
+              "enum": [
+                2
+              ]
+            },
+            "generatedAtMs": {
+              "type": "integer"
+            },
+            "enrollment": {
+              "type": "object",
+              "properties": {
+                "watcherId": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string"
+                },
+                "workspaceKey": {
+                  "type": "string"
+                },
+                "workspacePath": {
+                  "type": "string"
+                },
+                "executionHostId": {
+                  "type": "string"
+                },
+                "schedulerOwner": {
+                  "type": "string"
+                },
+                "repoId": {
+                  "description": "Repository ID, when this workspace belongs to a repository."
+                },
+                "worktreeId": {
+                  "description": "Worktree ID, or null for a folder workspace."
+                },
+                "kindPayload": {
+                  "description": "Payload authorized by the registered watcher kind."
+                },
+                "owner": {
+                  "description": "Claude owner configuration, or null for no owner.",
+                  "properties": {
+                    "agent": {
+                      "type": "string",
+                      "enum": [
+                        "claude"
+                      ]
+                    },
+                    "model": {
+                      "type": "string"
+                    },
+                    "effort": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "agent"
+                  ],
+                  "additionalProperties": false
+                },
+                "ownerInterventionCapability": {
+                  "type": "string",
+                  "enum": [
+                    "off",
+                    "gated",
+                    "on"
+                  ]
+                },
+                "undo": {
+                  "description": "Kind authorization rollback data, when present."
+                },
+                "enabled": {
+                  "type": "boolean"
+                },
+                "paused": {
+                  "type": "boolean"
+                },
+                "commandRevision": {
+                  "type": "integer"
+                },
+                "capabilities": {
+                  "type": "object",
+                  "properties": {},
+                  "additionalProperties": true
+                },
+                "budget": {
+                  "type": "object",
+                  "properties": {
+                    "wallClockActiveMs": {
+                      "description": "A non-negative active-time limit in milliseconds, or null for unlimited."
+                    },
+                    "turns": {
+                      "description": "A non-negative worker-turn limit, or null for unlimited."
+                    }
+                  },
+                  "required": [
+                    "wallClockActiveMs",
+                    "turns"
+                  ],
+                  "additionalProperties": false
+                },
+                "coordinator": {
+                  "type": "object",
+                  "properties": {
+                    "handle": {
+                      "type": "string"
+                    },
+                    "paneKey": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "handle",
+                    "paneKey"
+                  ],
+                  "additionalProperties": false
+                },
+                "orchestrationRunId": {
+                  "description": "Orchestration run ID, or null before a run exists."
+                },
+                "createdAtMs": {
+                  "type": "integer"
+                },
+                "terminalAtMs": {
+                  "description": "Terminal timestamp, or null while active."
+                },
+                "parkReason": {
+                  "description": "Automatic park reason, or null."
+                },
+                "haltReason": {
+                  "description": "Last halt reason, or null."
+                },
+                "malformed": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "watcherId",
+                "kind",
+                "workspaceKey",
+                "workspacePath",
+                "executionHostId",
+                "schedulerOwner",
+                "kindPayload",
+                "enabled",
+                "paused",
+                "commandRevision",
+                "capabilities",
+                "budget",
+                "coordinator",
+                "orchestrationRunId",
+                "createdAtMs",
+                "terminalAtMs",
+                "parkReason",
+                "haltReason"
+              ],
+              "additionalProperties": true
+            },
+            "status": {
+              "description": "Live runner status, or null when no runner is present."
+            },
+            "budget": {
+              "type": "object",
+              "properties": {
+                "activeMs": {
+                  "type": "integer"
+                },
+                "turns": {
+                  "type": "integer"
+                },
+                "exhausted": {
+                  "description": "The exhausted limit, or null when the budget remains available."
+                }
+              },
+              "required": [
+                "activeMs",
+                "turns",
+                "exhausted"
+              ],
+              "additionalProperties": false
+            },
+            "openInterval": {
+              "description": "The active journal interval, or null when none is open."
+            },
+            "ledger": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "seq": {
+                    "type": "integer"
+                  },
+                  "eventId": {
+                    "type": "string"
+                  },
+                  "watcherId": {
+                    "type": "string"
+                  },
+                  "atMs": {
+                    "type": "integer"
+                  },
+                  "class": {
+                    "type": "string",
+                    "enum": [
+                      "fact",
+                      "observation"
+                    ]
+                  },
+                  "origin": {
+                    "type": "string",
+                    "enum": [
+                      "owner",
+                      "client"
+                    ]
+                  },
+                  "kind": {
+                    "type": "string"
+                  },
+                  "resolved": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "seq",
+                  "eventId",
+                  "watcherId",
+                  "atMs",
+                  "class",
+                  "origin",
+                  "kind",
+                  "resolved"
+                ],
+                "additionalProperties": true
+              },
+              "description": "At most the newest 200 entries."
+            },
+            "traces": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "seq": {
+                    "type": "integer"
+                  },
+                  "watcherId": {
+                    "type": "string"
+                  },
+                  "startedAtMs": {
+                    "type": "integer"
+                  },
+                  "durationMs": {
+                    "type": "integer"
+                  },
+                  "exitPath": {
+                    "type": "string"
+                  },
+                  "pinned": {
+                    "type": "boolean"
+                  },
+                  "fullResyncDue": {
+                    "type": "boolean"
+                  },
+                  "snapshotReadCount": {
+                    "type": "integer"
+                  },
+                  "snapshot": {},
+                  "contentIdentity": {
+                    "type": "string"
+                  },
+                  "decision": {},
+                  "declined": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "gate": {},
+                  "budget": {},
+                  "pacing": {},
+                  "error": {
+                    "type": "string"
+                  },
+                  "runner": {
+                    "type": "object",
+                    "properties": {
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "watching",
+                          "acting",
+                          "held",
+                          "escalated",
+                          "parked",
+                          "terminal",
+                          "disabled",
+                          "unreachable",
+                          "malformed"
+                        ]
+                      },
+                      "reason": {
+                        "type": "string"
+                      },
+                      "detail": {
+                        "type": "string"
+                      },
+                      "nextPulseAtMs": {
+                        "description": "Next pulse time, or null when no timer is scheduled."
+                      },
+                      "consecutiveErrors": {
+                        "type": "integer"
+                      },
+                      "consecutiveGateHolds": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "state",
+                      "nextPulseAtMs",
+                      "consecutiveErrors",
+                      "consecutiveGateHolds"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "seq",
+                  "watcherId",
+                  "startedAtMs",
+                  "durationMs",
+                  "exitPath",
+                  "pinned",
+                  "fullResyncDue",
+                  "snapshotReadCount",
+                  "declined"
+                ],
+                "additionalProperties": true
+              },
+              "description": "At most the newest 20 traces."
+            },
+            "pendingControls": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "malformed": {
+              "description": "Persisted malformed-state detail, or null."
+            },
+            "workers": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "identity": {
+                    "type": "object",
+                    "properties": {
+                      "dispatchId": {
+                        "type": "string"
+                      },
+                      "sessionId": {
+                        "type": "string"
+                      },
+                      "processIncarnation": {
+                        "type": "string"
+                      },
+                      "pid": {
+                        "type": "integer"
+                      },
+                      "startTime": {
+                        "type": "string"
+                      },
+                      "terminalHandle": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "dispatchId"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "live",
+                      "exited",
+                      "unverifiable"
+                    ]
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "lastContactAtMs": {
+                    "type": "integer"
+                  },
+                  "question": {
+                    "type": "object",
+                    "properties": {
+                      "messageId": {
+                        "type": "string"
+                      },
+                      "body": {
+                        "type": "string"
+                      },
+                      "answered": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "messageId",
+                      "body"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "identity",
+                  "state"
+                ],
+                "additionalProperties": true
+              }
+            },
+            "runner": {
+              "description": "Live runner status, or null when no runner is present."
+            },
+            "pointers": {
+              "type": "object",
+              "properties": {
+                "database": {
+                  "type": "string"
+                },
+                "workspace": {
+                  "type": "string"
+                },
+                "leaseHolder": {
+                  "description": "Verified lease holder, or null when unavailable."
+                }
+              },
+              "required": [
+                "database",
+                "workspace",
+                "leaseHolder"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "schemaVersion",
+            "generatedAtMs",
+            "enrollment",
+            "status",
+            "budget",
+            "openInterval",
+            "ledger",
+            "traces",
+            "pendingControls",
+            "malformed",
+            "workers",
+            "runner",
+            "pointers"
+          ],
+          "additionalProperties": false
+        }
       }
     ],
     "event": [
@@ -120,6 +2038,923 @@
           "required": ["watcherId"],
           "additionalProperties": false
         }
+      },
+      {
+        "id": "fleetChanged",
+        "description": "A newer locally observed Heimdall fleet snapshot is available.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "generatedAtMs": {
+              "type": "integer"
+            },
+            "rows": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "type": "object",
+                    "properties": {
+                      "watcherId": {
+                        "type": "string"
+                      },
+                      "connectionId": {
+                        "description": "Remote connection ID; omitted or null for this local kernel."
+                      },
+                      "pairingRevision": {
+                        "description": "Remote pairing revision; omitted or null for this local kernel."
+                      }
+                    },
+                    "required": [
+                      "watcherId"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "ownerFence": {
+                    "type": "object",
+                    "properties": {
+                      "executionHostId": {
+                        "type": "string"
+                      },
+                      "schedulerOwner": {
+                        "type": "string"
+                      },
+                      "workspaceKey": {
+                        "type": "string"
+                      },
+                      "revision": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "executionHostId",
+                      "schedulerOwner",
+                      "workspaceKey",
+                      "revision"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "enrollment": {
+                    "type": "object",
+                    "properties": {
+                      "watcherId": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string"
+                      },
+                      "workspaceKey": {
+                        "type": "string"
+                      },
+                      "workspacePath": {
+                        "type": "string"
+                      },
+                      "executionHostId": {
+                        "type": "string"
+                      },
+                      "schedulerOwner": {
+                        "type": "string"
+                      },
+                      "repoId": {
+                        "description": "Repository ID, when this workspace belongs to a repository."
+                      },
+                      "worktreeId": {
+                        "description": "Worktree ID, or null for a folder workspace."
+                      },
+                      "kindPayload": {
+                        "description": "Payload authorized by the registered watcher kind."
+                      },
+                      "owner": {
+                        "description": "Claude owner configuration, or null for no owner.",
+                        "properties": {
+                          "agent": {
+                            "type": "string",
+                            "enum": [
+                              "claude"
+                            ]
+                          },
+                          "model": {
+                            "type": "string"
+                          },
+                          "effort": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "agent"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "ownerInterventionCapability": {
+                        "type": "string",
+                        "enum": [
+                          "off",
+                          "gated",
+                          "on"
+                        ]
+                      },
+                      "undo": {
+                        "description": "Kind authorization rollback data, when present."
+                      },
+                      "enabled": {
+                        "type": "boolean"
+                      },
+                      "paused": {
+                        "type": "boolean"
+                      },
+                      "commandRevision": {
+                        "type": "integer"
+                      },
+                      "capabilities": {
+                        "type": "object",
+                        "properties": {},
+                        "additionalProperties": true
+                      },
+                      "budget": {
+                        "type": "object",
+                        "properties": {
+                          "wallClockActiveMs": {
+                            "description": "A non-negative active-time limit in milliseconds, or null for unlimited."
+                          },
+                          "turns": {
+                            "description": "A non-negative worker-turn limit, or null for unlimited."
+                          }
+                        },
+                        "required": [
+                          "wallClockActiveMs",
+                          "turns"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "coordinator": {
+                        "type": "object",
+                        "properties": {
+                          "handle": {
+                            "type": "string"
+                          },
+                          "paneKey": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "handle",
+                          "paneKey"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "orchestrationRunId": {
+                        "description": "Orchestration run ID, or null before a run exists."
+                      },
+                      "createdAtMs": {
+                        "type": "integer"
+                      },
+                      "terminalAtMs": {
+                        "description": "Terminal timestamp, or null while active."
+                      },
+                      "parkReason": {
+                        "description": "Automatic park reason, or null."
+                      },
+                      "haltReason": {
+                        "description": "Last halt reason, or null."
+                      },
+                      "malformed": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "watcherId",
+                      "kind",
+                      "workspaceKey",
+                      "workspacePath",
+                      "executionHostId",
+                      "schedulerOwner",
+                      "kindPayload",
+                      "enabled",
+                      "paused",
+                      "commandRevision",
+                      "capabilities",
+                      "budget",
+                      "coordinator",
+                      "orchestrationRunId",
+                      "createdAtMs",
+                      "terminalAtMs",
+                      "parkReason",
+                      "haltReason"
+                    ],
+                    "additionalProperties": true
+                  },
+                  "status": {
+                    "type": "object",
+                    "properties": {
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "watching",
+                          "acting",
+                          "held",
+                          "escalated",
+                          "parked",
+                          "terminal",
+                          "disabled",
+                          "unreachable",
+                          "malformed"
+                        ]
+                      },
+                      "reason": {
+                        "type": "string"
+                      },
+                      "detail": {
+                        "type": "string"
+                      },
+                      "nextPulseAtMs": {
+                        "description": "Next pulse time, or null when no timer is scheduled."
+                      },
+                      "consecutiveErrors": {
+                        "type": "integer"
+                      },
+                      "consecutiveGateHolds": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "state",
+                      "nextPulseAtMs",
+                      "consecutiveErrors",
+                      "consecutiveGateHolds"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "workspaceName": {
+                    "type": "string"
+                  },
+                  "branch": {
+                    "description": "Workspace branch, or null when the kind did not supply one."
+                  },
+                  "phase": {
+                    "description": "Current kind phase, or null when unavailable."
+                  },
+                  "ownerContact": {
+                    "type": "string",
+                    "enum": [
+                      "live",
+                      "unverifiable"
+                    ]
+                  },
+                  "observedAtMs": {
+                    "type": "integer"
+                  },
+                  "lastSuccessfulTickAtMs": {
+                    "description": "Last successful tick time, or null when none is retained."
+                  },
+                  "budget": {
+                    "type": "object",
+                    "properties": {
+                      "activeMs": {
+                        "type": "integer"
+                      },
+                      "turns": {
+                        "type": "integer"
+                      },
+                      "exhausted": {
+                        "description": "The exhausted limit, or null when the budget remains available."
+                      }
+                    },
+                    "required": [
+                      "activeMs",
+                      "turns",
+                      "exhausted"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "runningWorkers": {
+                    "type": "integer"
+                  },
+                  "maxConcurrency": {
+                    "description": "Objective concurrency cap, or null when unsupported."
+                  },
+                  "openEscalations": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "escalationId": {
+                          "type": "string"
+                        },
+                        "escalationKind": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "foldCount": {
+                          "type": "integer"
+                        },
+                        "reason": {
+                          "type": "string"
+                        },
+                        "detail": {
+                          "type": "string"
+                        },
+                        "approvalScope": {
+                          "type": "object",
+                          "properties": {
+                            "actionKind": {
+                              "type": "string"
+                            },
+                            "contentIdentity": {
+                              "type": "string"
+                            },
+                            "evidenceKey": {
+                              "type": "string"
+                            },
+                            "preparedCommitSha": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "actionKind",
+                            "contentIdentity",
+                            "evidenceKey"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "escalationId",
+                        "escalationKind",
+                        "status",
+                        "foldCount"
+                      ],
+                      "additionalProperties": true
+                    }
+                  },
+                  "pendingQuestion": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "target",
+                  "ownerFence",
+                  "enrollment",
+                  "status",
+                  "name",
+                  "workspaceName",
+                  "branch",
+                  "phase",
+                  "ownerContact",
+                  "observedAtMs",
+                  "lastSuccessfulTickAtMs",
+                  "budget",
+                  "runningWorkers",
+                  "maxConcurrency",
+                  "openEscalations",
+                  "pendingQuestion"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "actionHistory": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "watcherId": {
+                    "type": "string"
+                  },
+                  "watcherName": {
+                    "type": "string"
+                  },
+                  "attemptId": {
+                    "type": "string"
+                  },
+                  "atMs": {
+                    "type": "integer"
+                  },
+                  "actionKind": {
+                    "type": "string"
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "attempted",
+                      "running",
+                      "settled"
+                    ]
+                  },
+                  "effect": {
+                    "type": "string",
+                    "enum": [
+                      "landed",
+                      "not-landed",
+                      "indeterminate"
+                    ]
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "watcherId",
+                  "watcherName",
+                  "attemptId",
+                  "atMs",
+                  "actionKind",
+                  "state"
+                ],
+                "additionalProperties": false
+              },
+              "description": "The newest 30 persisted action attempts across the fleet."
+            },
+            "buckets": {
+              "type": "object",
+              "properties": {
+                "needsYou": {
+                  "type": "integer"
+                },
+                "lostContact": {
+                  "type": "integer"
+                },
+                "active": {
+                  "type": "integer"
+                },
+                "inactive": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "needsYou",
+                "lostContact",
+                "active",
+                "inactive"
+              ],
+              "additionalProperties": false
+            },
+            "activeCount": {
+              "type": "integer"
+            },
+            "attentionCount": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "generatedAtMs",
+            "rows",
+            "actionHistory",
+            "buckets",
+            "activeCount",
+            "attentionCount"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "notification",
+        "description": "A live Heimdall approval or terminal transition for the notifications policy plugin.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "watcherId": {
+              "type": "string"
+            },
+            "worktreeId": {
+              "description": "Worktree ID, or null when no worktree is attached."
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "approval-requested",
+                "terminal"
+              ]
+            },
+            "actionKind": {
+              "type": "string"
+            },
+            "state": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "watcherId",
+            "kind"
+          ],
+          "additionalProperties": false
+        }
+      }
+    ],
+    "setting": [],
+    "cli-command": [
+      {
+        "id": "list",
+        "summary": "list and filter local Heimdall watchers",
+        "methods": [
+          "quirky.heimdall/fleet",
+          "quirky.worktree/resolve"
+        ],
+        "positionals": [],
+        "flags": {
+          "kind": {
+            "type": "string",
+            "description": "Filter by watcher kind.",
+            "enum": [
+              "objective",
+              "hosted-review"
+            ]
+          },
+          "worktree": {
+            "type": "string",
+            "description": "Filter by worktree ID, workspace name or path."
+          }
+        }
+      },
+      {
+        "id": "show",
+        "summary": "show a watcher and its live detail",
+        "methods": [
+          "quirky.heimdall/detail"
+        ],
+        "positionals": [
+          {
+            "name": "watcher-id",
+            "description": "The exact local watcher ID.",
+            "required": true
+          }
+        ],
+        "flags": {}
+      },
+      {
+        "id": "objective",
+        "summary": "show the objective kind detail",
+        "methods": [
+          "quirky.heimdall/detail",
+          "quirky.heimdall/objectiveDetail"
+        ],
+        "positionals": [
+          {
+            "name": "watcher-id",
+            "description": "The exact local watcher ID.",
+            "required": true
+          }
+        ],
+        "flags": {}
+      },
+      {
+        "id": "create",
+        "summary": "enroll a registered watcher kind",
+        "methods": [
+          "quirky.heimdall/enroll"
+        ],
+        "positionals": [
+          {
+            "name": "kind",
+            "description": "A registered Heimdall kind.",
+            "required": true
+          }
+        ],
+        "flags": {
+          "worktree": {
+            "type": "string",
+            "description": "Worktree selector; defaults to active."
+          },
+          "spec": {
+            "type": "string",
+            "description": "JSON or @file with the supported create-spec root keys."
+          },
+          "hours": {
+            "type": "string",
+            "description": "Active-time budget in hours, or none."
+          },
+          "turns": {
+            "type": "string",
+            "description": "Worker-turn budget, or none."
+          },
+          "objective": {
+            "type": "string",
+            "description": "Objective text for objective watchers."
+          },
+          "objective-file": {
+            "type": "string",
+            "description": "Read objective text from a file."
+          },
+          "plan-file": {
+            "type": "string",
+            "description": "Read plan text from a file."
+          },
+          "tier": {
+            "type": "string",
+            "description": "Objective tier."
+          },
+          "landing-bar": {
+            "type": "string",
+            "description": "Objective landing bar."
+          },
+          "max-concurrency": {
+            "type": "integer",
+            "description": "Objective worker cap from 1 to 1,024."
+          },
+          "territory": {
+            "type": "string",
+            "description": "Repeatable write-territory glob.",
+            "repeatable": true
+          },
+          "role-agent": {
+            "type": "string",
+            "description": "Repeatable role=agent selection.",
+            "repeatable": true
+          },
+          "gate": {
+            "type": "string",
+            "description": "Repeatable objective check name=command; timeout 1,800 seconds.",
+            "repeatable": true
+          },
+          "no-lanes": {
+            "type": "boolean",
+            "description": "Disable objective lanes."
+          },
+          "cap": {
+            "type": "string",
+            "description": "Repeatable capability assignment key=off|gated|on.",
+            "repeatable": true
+          },
+          "branch-update": {
+            "type": "string",
+            "description": "Hosted-review branch update mode.",
+            "enum": [
+              "merge-base-update",
+              "rebase"
+            ]
+          },
+          "merge-method": {
+            "type": "string",
+            "description": "Hosted-review merge method.",
+            "enum": [
+              "default",
+              "merge",
+              "squash",
+              "rebase"
+            ]
+          },
+          "owner": {
+            "type": "string",
+            "description": "Owner agent.",
+            "enum": [
+              "claude"
+            ]
+          },
+          "owner-model": {
+            "type": "string",
+            "description": "Owner model."
+          },
+          "owner-effort": {
+            "type": "string",
+            "description": "Owner effort."
+          }
+        }
+      },
+      {
+        "id": "pause",
+        "summary": "pause one watcher after its current tick drains",
+        "methods": [
+          "quirky.heimdall/detail",
+          "quirky.heimdall/command"
+        ],
+        "positionals": [
+          {
+            "name": "watcher-id",
+            "description": "The exact local watcher ID.",
+            "required": true
+          }
+        ],
+        "flags": {}
+      },
+      {
+        "id": "resume",
+        "summary": "resume one eligible watcher",
+        "methods": [
+          "quirky.heimdall/detail",
+          "quirky.heimdall/command"
+        ],
+        "positionals": [
+          {
+            "name": "watcher-id",
+            "description": "The exact local watcher ID.",
+            "required": true
+          }
+        ],
+        "flags": {}
+      },
+      {
+        "id": "disarm",
+        "summary": "explicitly disable one watcher",
+        "methods": [
+          "quirky.heimdall/detail",
+          "quirky.heimdall/command"
+        ],
+        "positionals": [
+          {
+            "name": "watcher-id",
+            "description": "The exact local watcher ID.",
+            "required": true
+          }
+        ],
+        "flags": {}
+      },
+      {
+        "id": "rm",
+        "summary": "delete a watcher and its saved history; worker terminals continue running",
+        "methods": [
+          "quirky.heimdall/detail",
+          "quirky.heimdall/command"
+        ],
+        "positionals": [
+          {
+            "name": "watcher-id",
+            "description": "The exact local watcher ID.",
+            "required": true
+          }
+        ],
+        "flags": {}
+      },
+      {
+        "id": "approve",
+        "summary": "approve one exact open escalation scope",
+        "methods": [
+          "quirky.heimdall/detail",
+          "quirky.heimdall/command"
+        ],
+        "positionals": [
+          {
+            "name": "watcher-id",
+            "description": "The exact local watcher ID.",
+            "required": true
+          },
+          {
+            "name": "escalation-id",
+            "description": "The exact open escalation ID.",
+            "required": true
+          }
+        ],
+        "flags": {}
+      },
+      {
+        "id": "answer",
+        "summary": "answer one pending worker question",
+        "methods": [
+          "quirky.heimdall/detail",
+          "quirky.heimdall/command"
+        ],
+        "positionals": [
+          {
+            "name": "watcher-id",
+            "description": "The exact local watcher ID.",
+            "required": true
+          },
+          {
+            "name": "message-id",
+            "description": "The exact pending worker message ID.",
+            "required": true
+          }
+        ],
+        "flags": {
+          "body": {
+            "type": "string",
+            "description": "Answer text.",
+            "required": true
+          }
+        }
+      },
+      {
+        "id": "answer-escalation",
+        "summary": "answer one exact pending owner escalation",
+        "methods": [
+          "quirky.heimdall/detail",
+          "quirky.heimdall/command"
+        ],
+        "positionals": [
+          {
+            "name": "watcher-id",
+            "description": "The exact local watcher ID.",
+            "required": true
+          },
+          {
+            "name": "escalation-id",
+            "description": "The exact open owner escalation ID.",
+            "required": true
+          }
+        ],
+        "flags": {
+          "body": {
+            "type": "string",
+            "description": "Answer text.",
+            "required": true
+          }
+        }
+      },
+      {
+        "id": "budget",
+        "summary": "adjust a watcher active-time and turn budget",
+        "methods": [
+          "quirky.heimdall/detail",
+          "quirky.heimdall/command"
+        ],
+        "positionals": [
+          {
+            "name": "watcher-id",
+            "description": "The exact local watcher ID.",
+            "required": true
+          }
+        ],
+        "flags": {
+          "hours": {
+            "type": "string",
+            "description": "Active-time budget in hours, or none."
+          },
+          "turns": {
+            "type": "string",
+            "description": "Worker-turn budget, or none."
+          }
+        }
+      },
+      {
+        "id": "stop-worker",
+        "summary": "stop a worker by its exact recorded process identity",
+        "methods": [
+          "quirky.heimdall/detail",
+          "quirky.heimdall/command"
+        ],
+        "positionals": [
+          {
+            "name": "watcher-id",
+            "description": "The exact local watcher ID.",
+            "required": true
+          },
+          {
+            "name": "dispatch-id",
+            "description": "The exact recorded dispatch ID.",
+            "required": true
+          }
+        ],
+        "flags": {}
+      },
+      {
+        "id": "set-concurrency",
+        "summary": "set an objective watcher concurrency cap",
+        "methods": [
+          "quirky.heimdall/detail",
+          "quirky.heimdall/command"
+        ],
+        "positionals": [
+          {
+            "name": "watcher-id",
+            "description": "The exact local watcher ID.",
+            "required": true
+          },
+          {
+            "name": "max-concurrency",
+            "description": "An integer from 1 to 1,024.",
+            "required": true
+          }
+        ],
+        "flags": {}
+      },
+      {
+        "id": "debug",
+        "summary": "print a bounded schema-two debug report",
+        "methods": [
+          "quirky.heimdall/debugReport"
+        ],
+        "positionals": [
+          {
+            "name": "watcher-id",
+            "description": "The exact local watcher ID.",
+            "required": true
+          }
+        ],
+        "flags": {
+          "out": {
+            "type": "string",
+            "description": "Write the same JSON report to a path on this CLI machine."
+          }
+        }
+      }
+    ],
+    "view": [
+      {
+        "id": "fleet",
+        "title": "Heimdall Fleet"
+      }
+    ],
+    "sidebar-section": [
+      {
+        "id": "navigation",
+        "title": "Heimdall",
+        "order": 40
       }
     ]
   }

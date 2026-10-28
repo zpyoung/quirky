@@ -1,8 +1,10 @@
 import type { PluginCaller, PluginContext } from '@quirky/protocol'
 import type { EnrollmentInput, KindRegistration } from './src/contracts'
 import { createKernelService, type KernelService } from './src/service'
+import { installControls } from './src/control-main'
 
 let activeService: KernelService | undefined
+let activeControls: { dispose(): void } | undefined
 
 export async function activate(context: PluginContext): Promise<void> {
   const service = createKernelService(context)
@@ -21,7 +23,17 @@ export async function activate(context: PluginContext): Promise<void> {
   )
   try {
     await service.start()
+    activeControls = await installControls(context, {
+      store: service.store,
+      inspect: watcherId => service.inspect(watcherId)[0] ?? null,
+      runner: watcherId => service.runner(watcherId),
+      changed: watcherId => service.changed(watcherId),
+      reconcile: async watcherId => { await service.reconcile(watcherId) },
+      forgetRunner: watcherId => service.forgetRunner(watcherId)
+    })
   } catch (error) {
+    activeControls?.dispose()
+    activeControls = undefined
     activeService = undefined
     await service.shutdown()
     throw error
@@ -29,6 +41,8 @@ export async function activate(context: PluginContext): Promise<void> {
 }
 
 export async function deactivate(): Promise<void> {
+  activeControls?.dispose()
+  activeControls = undefined
   const service = activeService
   activeService = undefined
   await service?.shutdown()

@@ -71,7 +71,7 @@ function payloadString(enrollment: Enrollment, keys: string[]): string | null {
 }
 
 function nameOf(enrollment: Enrollment): string {
-  return payloadString(enrollment, ['name', 'objective', 'title']) ?? enrollment.kind
+  return payloadString(enrollment, ['name', 'objectiveText', 'title']) ?? enrollment.kind
 }
 
 function phaseOf(inspection: Inspection): string | null {
