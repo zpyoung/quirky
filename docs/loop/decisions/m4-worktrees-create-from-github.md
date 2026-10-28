@@ -132,5 +132,27 @@
 - **Revisit if:** title-derived Unicode case normalization conflicts with a supported filesystem.
 - **Source:** locked by worktrees.md (observed PR result); assumed — autonomous (limit change to automatic source names)
 
+## D13: Create the issue command directly in an atomic background split
+- **Question:** how to satisfy independent issue-command splits without violating m1-term-ui D31's last-pane move refusal?
+- **Options:** weaken the locked move guard; keep a separate tab and call it a split; create a fresh command pane through the existing serialized split API.
+- **Chose:** grow quirky.terminal/splitPane with optional title, command and activate:false, returning workspace plus new session and pane IDs. Create and bind that command session inside the terminal mutation queue. Existing interactive split calls and the ordinary last-pane move guard stay unchanged. The worktree runner uses this public call beside Setup, without temporary focus changes or a duplicate session; no-anchor sessions retain normal auto-adoption. Delete obsolete open/move/focus placement machinery.
+- **Why:** actual diagnostic returned two separate single-pane tabs and warning "the last pane of a tab can't be moved out". That guard is intentional and locked. A new command created inside the destination tab never moves a lone pane out of another tab, so it works within D31 rather than silently overturning it.
+- **Evidence:** docs/loop/decisions/m1-term-ui.md D10/D31; terminal layout service splitPane631-646; diagnostic artifact://59 lines2/5; amended logic spec and public schema committed b9abd461 before terminal implementation.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** the terminal owner provides a different atomic public command-pane creation method.
+- **Source:** locked by docs/loop/decisions/m1-term-ui.md D31; assumed — autonomous (additive API)
+
+## D14: Keep SSH transport ports separate from authenticated GitHub web ports
+- **Question:** how do GHES host identities, SSH aliases and clone URLs map to actual transport?
+- **Options:** use the web port for SSH; drop every port; preserve each transport's own addressing.
+- **Chose:** exact host and port for HTTPS; matching normalized hostnames for SSH identities resolved from trusted configured remotes, with bounded dotless-alias expansion and current child environment passed explicitly. A validated provider SSH clone URL keeps its actual SSH port; a missing SSH URL derives the default SSH hostname form, never the HTTPS web port. Fork owner/repo and hostname must still match; foreign clone hosts are refused.
+- **Why:** the diagnostic showed Bun spawning SSH without explicit env used the original executable/environment (hostname github-work), while explicit process.env used the isolated configuration and resolved github.com. Source inspection also found GHES webport8443 was incorrectly required on raw SSH clone URLs and used as a derived SSH port. Authenticated web identity and Git transport are distinct coordinates.
+- **Evidence:** hosting-api.md:177-180; diagnostic artifact://59; producer sshCloneUrlMatches/canonicalSshCloneUrl and runtime parseRemoteIdentity source; new GHES HTTPS/SSH consumer scenarios.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** a provider's SSH clone hostname differs from its authenticated web hostname.
+- **Source:** locked by hosting-api.md (qualified web identity); assumed — autonomous (transport mapping)
+
 ## Progress
-All three components integrated; original worktrees removed. RepairGithubRuntime owns /tmp/quirky-ghwt-runtime-fix for observed fixture/typing/qualified-host fixes and lowercase source slug correction; parent UI narrowing edit is uncommitted. Full new runtime integration file is running after canonical fixture and native per-test deadline repairs. Next: finish acceptance, merge/remove repair tree, catch up once, run scoped suite/scripts/typecheck/build, packaged web dogfood, one cross-family review/fix, then land. No whole-suite run before queue.ts land.
+Initial components integrated and removed. Current disjoint workers: RepairGithubRuntime in /tmp/quirky-ghwt-runtime-fix; AtomicCommandSplit in /tmp/quirky-ghwt-terminal; QualifiedGithubTransport in /tmp/quirky-ghwt-host-fix. They own worktree/repo, terminal, and hosting scopes respectively. Runtime gate reached13/18 pass, then3/5 repaired edge cases passed; remaining alias environment and split-placement causes were diagnosed explicitly. Main b9abd461 commits public atomic split schema/spec and UI narrowing fix. Next: integrate all current fixes, remove their trees, catch up once, scoped suite/scripts/typecheck/build, packaged guarded web dogfood, final review/fix and queue land. No pre-land whole suite.
