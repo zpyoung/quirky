@@ -132,5 +132,16 @@
 - **Revisit if:** A canonical owner publishes the missing authenticated grant, execution/provisioning lifecycle, stable identity or SDK/signing prerequisite.
 - **Source:** deferred: unbuilt owner, provisioning and selector-resolution flows
 
+## D13: Preserve the incoming desktop preparation gate and land the compiled merge
+- **Question:** Which new binding decision arrived in the one required roadmap catch-up?
+- **Options:** Keep the older root-only compiler command; preserve the incoming prepared desktop project gate.
+- **Chose:** Read fix-desktop-startup-imports D1-D4/Progress completely and retain its startup imports and root build/typecheck preparation chain. Fresh merged bun run typecheck passed root, mobile and prepared desktop projects in27.28s. No runtime/Chromium/suite/review was run after the operator cutover.
+- **Why:** Desktop preparation is now part of the canonical compiler gate, not another runtime campaign. It is compatible with the exact-window API and owner boundaries.
+- **Evidence:** Actual catch-up merge; docs/loop/decisions/fix-desktop-startup-imports.md:1-59; root/mobile/desktop compiler exit0.
+- **Reversibility:** easy
+- **Confidence:** high for the compiler result only
+- **Revisit if:** The canonical merged-source land gate names a concrete failure.
+- **Source:** locked by incoming fix-desktop-startup-imports decisions and operator cutover
+
 ## Progress
-Integrated source and authored tests are ready for the operator's immediate cutover. All helpers and owned browser/runtime resources stopped; private runtime data removed; three merged component trees removed after metadata/hash archive. Exactly one source successor is registered. Existing pre-cutover evidence and failures are recorded without full acceptance claims. Next: commit final integrated repairs/docs, merge build/roadmap once and read incoming decisions, run bun run typecheck only, detach and canonical queue land. No new daemon/Chromium/suite/review run.
+Final integrated source is committed and caught up once with build/roadmap. Incoming desktop startup decisions read; root/mobile/prepared-desktop typecheck passed27.28s. All workers and owned browser/runtime resources stopped; private runtime data removed; component metadata archived before merged trees were removed. Exactly one source-implementation successor is registered; unresolved flows and pre-cutover observations are in the spec. Next: commit this gate record, detach and canonical queue land immediately. No additional proof or suite run.
