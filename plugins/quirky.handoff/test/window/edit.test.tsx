@@ -175,12 +175,20 @@ describe('SC-36 and SC-37: editing detaches and regenerating reattaches', () => 
     const { overlay, fake } = await opened()
     const v = overlay.view
     const fresh = overlay.last().preview.text
-    expect(v.all('fieldset').map((fieldset) => (fieldset as HTMLFieldSetElement).disabled)).toEqual([false, false, false])
+    const mutableControls = () => [
+      v.q<HTMLButtonElement>('[role="combobox"][aria-label="Worktree"]')!,
+      v.q<HTMLSelectElement>('select[aria-label="Agent"]')!,
+      v.q<HTMLSelectElement>('select[aria-label="Relationship"]')!,
+      v.q<HTMLInputElement>('[role="group"][aria-label="Content"] input[type="checkbox"]')!,
+      v.q<HTMLSelectElement>('select[aria-label="Reusable template"]')!,
+      v.q<HTMLTextAreaElement>('textarea[aria-label="Steering note"]')!,
+    ]
+    expect(mutableControls().map((control) => control.disabled)).toEqual([false, false, false, false, false, false])
 
     await typeInPreview(v.q('.cm-editor')!.parentElement!, 0, 0, 'EDIT ')
     expect(overlay.last().preview.detached).toBe(true)
     expect(overlay.last().preview.text).toBe(`EDIT ${fresh}`)
-    expect(v.all('fieldset').map((fieldset) => (fieldset as HTMLFieldSetElement).disabled)).toEqual([true, true, true])
+    expect(mutableControls().map((control) => control.disabled)).toEqual([true, true, true, true, true, true])
     expect(v.text()).toContain('The preview is no longer auto-updating. Regenerating discards your edits.')
     expect(v.button('Regenerate from controls')).not.toBeNull()
     expect(overlay.last().disabled).toEqual(expect.arrayContaining(['control:destination', 'control:content', 'control:notes']))
@@ -188,7 +196,7 @@ describe('SC-36 and SC-37: editing detaches and regenerating reattaches', () => 
     await v.click(v.button('Regenerate from controls'))
     await settle()
     expect(overlay.last().preview).toMatchObject({ detached: false, stale: [], text: fresh })
-    expect(v.all('fieldset').map((fieldset) => (fieldset as HTMLFieldSetElement).disabled)).toEqual([false, false, false])
+    expect(mutableControls().map((control) => control.disabled)).toEqual([false, false, false, false, false, false])
     expect(v.text()).not.toContain('Regenerating discards your edits.')
     expect(v.q('.cm-content')!.textContent).toContain('Continue work from the prior Quirky session.')
     expect(v.q('.cm-content')!.textContent).not.toContain('EDIT')
@@ -290,7 +298,7 @@ describe('SC-39 and SC-40: secrets are marked in the editor', () => {
     await afterDebounce()
 
     expect(overlay.last().preview.secrets.map((hit: any) => hit.excerpt)).toEqual(['AKIA…', 'api_…'])
-    const marks = v.all('.hf-secret')
+    const marks = v.all('[title^="Potential secret:"]')
     expect(marks.map((mark) => mark.textContent)).toEqual([KEY, ASSIGNMENT])
     expect(marks.map((mark) => mark.getAttribute('title'))).toEqual(['Potential secret: AKIA…', 'Potential secret: api_…'])
     expect(v.text()).toContain('2 potential secret markers are highlighted in the preview.')
@@ -306,7 +314,7 @@ describe('SC-39 and SC-40: secrets are marked in the editor', () => {
     expect(overlay.last().preview.detached).toBe(true)
     expect(fake.callsTo('preview').at(-1)!.params.body).toContain('gone and api_key')
     expect(overlay.last().preview.secrets).toHaveLength(1)
-    expect(v.all('.hf-secret').map((mark) => mark.textContent)).toEqual([ASSIGNMENT])
+    expect(v.all('[title^="Potential secret:"]').map((mark) => mark.textContent)).toEqual([ASSIGNMENT])
     expect(v.text()).toContain('1 potential secret markers are highlighted in the preview.')
     expect(overlay.last().preview.characters).toBe((overlay.last().preview.text as string).length)
   })
