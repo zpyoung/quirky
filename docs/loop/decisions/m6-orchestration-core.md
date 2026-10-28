@@ -440,6 +440,17 @@
 - **Revisit if:** the final gate exposes a blocking safety defect
 - **Source:** supersedes m6-orchestration-core D32 (explicit operator landing instruction)
 
+## D41: Defer only automatic idle nudging, preserving its intact acceptance contract
+- **Question:** the final core gate had28 passing tests and one automatic-scheduler teardown failure
+- **Options:** weaken or skip the failing test; keep holding all stacked lanes; move the unshipped flow intact to the single authorized follow-up
+- **Chose:** preserve the full implementation and unchanged AC9 case at checkpoint/m6-core-idle-pointer69083459; remove that scheduler implementation and activation from this landing. Keep its types/schema/spec contract, explicit safe submission, and all durable mail/wait/question/gate behavior. Add only m6-orchestration-idle-pointer-shutdown.
+- **Why:** the operator authorized landing the passing scope. Routing/acknowledgement itself became green within the20-minute box:2 tests,39 assertions at03:48:45Z before03:52:14Z. The independent automatic idle nudge still hung in daemon teardown, so it is not advertised or wired as shipped.
+- **Evidence:** final core28pass/1fail; AC9 before/afterEach teardown exceeded25seconds; routing-timebox.json; BLOCKERS.md deferral; queue.ts add exited0 for the single follow-up. No test was skipped or weakened: the full deferred flow and case remain in the named checkpoint.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the intact AC9 case passes with bounded daemon shutdown
+- **Source:** deferred: automatic idle-mailbox scheduling
+
 ## Early preparation verification
 - `bun run typecheck`: exit0 on the final contracts, no diagnostics.
 - Actual Bun import of contracts.ts: `CONTRACT_MODULE_INERT_OK`; the module exports no runtime values. No daemon, model, process, real user state or placeholder contribution was started/installed.

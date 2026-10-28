@@ -117,10 +117,10 @@ An absent receipt never proves no effect. Rejected worker reports remain auditab
 nonzero; neither an idle pointer nor missing status proves that work finished.
 
 Public session helpers provide exact-incarnation identity, guarded close and idempotent prompt
-submission. Mailbox pointers do not contain message bodies or consume mail. Structured
-`create` accepts `deferStart: true` without a prompt, so authority can attach before the first turn.
-Worker placement/custody/fleet and headless service coordinators are separate orchestration slices,
-not an automatic scheduler in this core.
+submission. Structured `create` accepts `deferStart: true` without a prompt, so authority can attach
+before the first turn. Automatic idle-mailbox nudging is deferred to
+`m6-orchestration-idle-pointer-shutdown`; explicit safe submission and durable mail remain available.
+Worker placement/custody/fleet and headless service coordinators are separate orchestration slices.
 
 See the [contracts](quirky.orchestration/src/contracts.ts),
 [runtime interfaces](quirky.orchestration/src/runtime-contracts.ts) and
