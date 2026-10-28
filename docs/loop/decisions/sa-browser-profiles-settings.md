@@ -223,5 +223,15 @@
 - **Revisit if:** the native completion/storage-root follow-up or owned OS test environment supplies evidence
 - **Source:** assumed — autonomous, applying the accepted lane4 native safety ruling
 
+## D22: Reconcile the dependency's completed controller repairs
+- **Question:** Does dependency1b6153b7 change the integration after f4489799?
+- **Decision:** Merge its exact-session Page.bringToFront before helper tab_switch, typed management-footer insertion, deterministic real-PTY cancellation fixture and per-instance harness directory seam. Preserve our local Range Find and current/total result, superseding pane D30's window.find implementation while retaining its three-in-one-node occurrence regression. Keep the independent safe-filename collision and malicious-header path/content assertions; no caption/catalog mirrors.
+- **Why:** pane D28 reproduced helper Page.enable stalling on an existing background target; exact owned headless-session resume is not OS focus or retargeting. D27/D29 fix repaint/event/canonical-path prerequisites rather than lower assertions. The Range implementation already proves exact occurrence ordinal and original-node preservation.
+- **Evidence:** read pane D26–34 completely, plus all303lines of incoming m5-loops-core decisions. Its optional read-only store opt-in/default downgrade refusal, structured guards/lease cleanup and background non-adoption do not conflict with Browser preferences. Import the ownership-qualified guardian fixture (loops D27); never rerun its unsafe old global selector. Parent resolves driver conflicts; one test-conflict worker preserves actual consumer assertions.
+- **Reversibility:** medium (dependency integration)
+- **Confidence:** high for reconciliation; merged gates pending
+- **Revisit if:** the integrated Browser/Terminal/daemon or controller gate fails
+- **Source:** assumed — autonomous, preserving incoming public contracts
+
 ## Progress
 2026-10-28: implementation/Find and f4489799 integrated, source binding fix0713467c committed. All owned verification gates completed: Browser directory bg_34 EXIT0 via configured retries (D20/BLOCKERS retains initial failures), root types bg_35 EXIT0, rebuilt27-plugin artifact bg_36 EXIT0, scripts68pass532asserts and broader affected suite with disclosed Search retry. Focused/compiled UI and actual Chrome occurrence proof recorded; no owned agents/services/browser remain. Waiting for sa-browser-pane dependency controller verdict via bg_37; do not end this turn on pending. Then one roadmap catchup/read new decision logs, recheck changed integration, commit/detach controller land and notes. Native clear/isolation and full parity/final review are not claimed passing.

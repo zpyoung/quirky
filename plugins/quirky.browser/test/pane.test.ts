@@ -1,10 +1,10 @@
-import { mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:https'
 import { basename, dirname, join } from 'node:path'
 import { expect, test } from 'bun:test'
 import type { QuirkyEvent } from '@quirky/protocol'
 import { startBrowserHarness, type BrowserTestHarness } from './harness'
-import type { PaneState } from '../src/pane-contract'
+import type { PaneFrame, PaneState } from '../src/pane-contract'
 type CertificateServer = { port: number; stop(): Promise<void> }
 
 const call = (h: BrowserTestHarness, name: string, params: Record<string, unknown> = {}) =>
@@ -29,9 +29,12 @@ function startPageServer() {
       if (path === '/page') return new Response(`<!doctype html><title>Pane fixture</title><body style="margin:0"><input id="text" value=""><button id="button">Button</button><p>needle needle needle</p></body>`, { headers: { 'content-type': 'text/html; charset=utf-8' } })
       if (path === '/dialog') return new Response('<!doctype html><title>Dialog fixture</title><main>dialog</main>', { headers: { 'content-type': 'text/html; charset=utf-8' } })
       if (path === '/download') return new Response('owned download contents', {
-        headers: { 'content-type': 'application/octet-stream', 'content-disposition': 'attachment; filename="../../safe.txt"' }
+        headers: { 'content-type': 'application/octet-stream', 'content-disposition': 'attachment; filename="safe.txt"' }
       })
-      if (path === '/download-page') return new Response('<!doctype html><title>Download</title><a href="/download">Download fixture</a>', { headers: { 'content-type': 'text/html; charset=utf-8' } })
+      if (path === '/unsafe-download') return new Response('owned unsafe-name download', {
+        headers: { 'content-type': 'application/octet-stream', 'content-disposition': 'attachment; filename="../../unsafe.txt"' }
+      })
+      if (path === '/download-page') return new Response('<!doctype html><title>Download</title><a id="safe" href="/download">Download fixture</a><a id="unsafe" href="/unsafe-download">Unsafe name fixture</a>', { headers: { 'content-type': 'text/html; charset=utf-8' } })
       return new Response('not found', { status: 404 })
     }
   })
@@ -77,10 +80,10 @@ async function waitFor<T>(read: () => T | null | undefined | Promise<T | null | 
   throw new Error(`pane fixture condition did not become true within ${timeoutMs}ms`)
 }
 
-function paneFrame(event: QuirkyEvent): Record<string, unknown> | undefined {
+function paneFrame(event: QuirkyEvent): PaneFrame | undefined {
   if (event.type !== 'quirky.browser/paneFrame' || !('data' in event)) return undefined
   const data = event.data
-  return typeof data === 'object' && data !== null && !Array.isArray(data) ? data as Record<string, unknown> : undefined
+  return typeof data === 'object' && data !== null && !Array.isArray(data) ? data as PaneFrame : undefined
 }
 
 async function createAgentPage(h: BrowserTestHarness, worktree: string, url: string) {
@@ -179,7 +182,7 @@ test('Watch leases deliver acknowledged latest frames and typed input/find/zoom/
 
       const watch = await call(h, 'paneWatch', { pane: pane.id }) as { watchId: string }
       const firstFrame = await waitFor(() => events.map(paneFrame).find((frame) => frame?.watchId === watch.watchId))
-      const encodedFrame = Buffer.from(firstFrame.data as string, 'base64')
+      const encodedFrame = Buffer.from(firstFrame.data, 'base64')
       expect([...encodedFrame.subarray(0, 3)]).toEqual([0xff, 0xd8, 0xff])
       expect(firstFrame.width).toBeGreaterThan(0)
       expect(firstFrame.height).toBeGreaterThan(0)
@@ -191,10 +194,10 @@ test('Watch leases deliver acknowledged latest frames and typed input/find/zoom/
       // CDP only captures damaged frames; a static page need not emit another image.
       expect(await call(h, 'eval', {
         page: first.browserPageId,
-        expression: "document.body.style.backgroundColor='rgb(230,20,20)';'repainted'"
+        expression: "document.body.style.backgroundColor='rgb(230,20,20)'; (() => { const { promise, resolve } = Promise.withResolvers(); requestAnimationFrame(() => requestAnimationFrame(() => resolve('repainted'))); return promise })()"
       })).toEqual({ value: 'repainted' })
       const nextFrame = await waitFor(() => events.map(paneFrame).find((frame) => frame?.watchId === watch.watchId && frame.sequence !== firstFrame.sequence))
-      expect(nextFrame.sequence).toBeGreaterThan(firstFrame.sequence as number)
+      expect(nextFrame.sequence).toBeGreaterThan(firstFrame.sequence)
 
       await call(h, 'paneInput', { pane: pane.id, kind: 'mouse', type: 'mousePressed', x: 45, y: 16, button: 'left' })
       await call(h, 'paneInput', { pane: pane.id, kind: 'mouse', type: 'mouseReleased', x: 45, y: 16, button: 'left' })
@@ -250,10 +253,11 @@ test('Watch leases deliver acknowledged latest frames and typed input/find/zoom/
       const resumed = await call(h, 'paneWatch', { pane: pane.id }) as { watchId: string }
       expect(resumed.watchId).not.toBe(watch.watchId)
       await call(h, 'tabClose', { page: first.browserPageId, yes: true })
-      await waitFor(async () => {
+      const ended = await waitFor(async () => {
         const state = await call(h, 'paneState', { worktree: `id:${worktree}` }) as { tabs: Array<{ id: string; error: string | null }> }
         return state.tabs.find((tab) => tab.id === pane.id)?.error
       })
+      expect(ended).toContain('closed')
       await expect(call(h, 'paneFrameAck', { pane: pane.id, watchId: resumed.watchId, sequence: 1 })).rejects.toBeInstanceOf(Error)
     } finally {
       unsubscribe()
@@ -331,18 +335,21 @@ test('Watch JavaScript dialogs resolve pending eval outside the profile lock and
     const downloadPage = await createAgentPage(h, worktree, `${fixture.url}download-page`)
     const downloadPane = await call(h, 'paneOpen', { worktree: `id:${worktree}`, mode: 'watch', page: downloadPage.browserPageId }) as { id: string }
     await call(h, 'paneWatch', { pane: downloadPane.id })
-    await call(h, 'click', { page: downloadPage.browserPageId, element: 'a' })
+    await call(h, 'click', { page: downloadPage.browserPageId, element: '#safe' })
     const downloaded = await waitFor(async () => {
       const state = await call(h, 'paneState', { worktree: `id:${worktree}` }) as PaneState
       return state.tabs.find((tab) => tab.id === downloadPane.id)?.downloads.find((download) => download.state === 'completed')
     })
     const firstPath = downloaded.path
     if (typeof firstPath !== 'string') throw new Error('Completed download has no published path')
+    expect(downloaded.name).toBe('safe (1).txt')
+    expect(basename(firstPath)).toBe(downloaded.name)
+    expect(existsSync(firstPath)).toBe(true)
     expect(dirname(realpathSync(firstPath))).toBe(realpathSync(downloads))
     expect(readFileSync(firstPath, 'utf8')).toBe('owned download contents')
     writeFileSync(firstPath, 'keep first publication')
 
-    await call(h, 'click', { page: downloadPage.browserPageId, element: 'a' })
+    await call(h, 'click', { page: downloadPage.browserPageId, element: '#safe' })
     const collision = await waitFor(async () => {
       const state = await call(h, 'paneState', { worktree: `id:${worktree}` }) as PaneState
       return state.tabs.find((tab) => tab.id === downloadPane.id)?.downloads.find((download) => download.state === 'completed' && download.id !== downloaded.id)
@@ -355,6 +362,18 @@ test('Watch JavaScript dialogs resolve pending eval outside the profile lock and
     expect(readFileSync(firstPath, 'utf8')).toBe('keep first publication')
     expect(readFileSync(join(downloads, 'safe.txt'), 'utf8')).toBe('keep existing file')
     expect(readFileSync(collisionPath, 'utf8')).toBe('owned download contents')
+    await call(h, 'click', { page: downloadPage.browserPageId, element: '#unsafe' })
+    const unsafe = await waitFor(async () => {
+      const state = await call(h, 'paneState', { worktree: `id:${worktree}` }) as PaneState
+      return state.tabs.find((tab) => tab.id === downloadPane.id)?.downloads.find((download) =>
+        download.state === 'completed' && download.id !== downloaded.id && download.id !== collision.id)
+    })
+    const unsafePath = unsafe.path
+    if (typeof unsafePath !== 'string') throw new Error('Completed unsafe-name download has no published path')
+    expect(dirname(realpathSync(unsafePath))).toBe(realpathSync(downloads))
+    expect(unsafe.name).toBe(basename(unsafePath))
+    expect(readFileSync(unsafePath, 'utf8')).toBe('owned unsafe-name download')
+    expect(readFileSync(join(downloads, 'safe.txt'), 'utf8')).toBe('keep existing file')
   } finally {
     fixture.stop()
     try { await h.cleanup() } finally { await certificate?.stop() }

@@ -237,6 +237,7 @@ test('C5: CLI values stay literal and exec accepts only shipping page commands',
     }
     const unsupportedCli = await runBrowserCli(h, ['browser', 'exec', '--page', page.browserPageId, '--command', 'cookies get', '--json'])
     expect(unsupportedCli.code).not.toBe(0)
+
   } finally { await h.cleanup() }
 }, 90_000)
 

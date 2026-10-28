@@ -1091,14 +1091,14 @@ export class WorkspaceController {
           (item) => needle === '' || item.label.toLowerCase().includes(needle)
         )
       : []
-    const rows: MenuItem[] = [
-      ...filterEntries(this.state.agents, query).map((entry) => ({
-        label: entry.label,
-        key: entry.kind === 'terminal' ? '⌘T' : null,
-        onSelect: () => this.chooseEntry(entry, target)
-      })),
-      ...contributed
-    ]
+    const entries = filterEntries(this.state.agents, query)
+    const rows: MenuItem[] = entries.map((entry) => ({
+      label: entry.label,
+      key: entry.kind === 'terminal' ? '⌘T' : null,
+      onSelect: () => this.chooseEntry(entry, target)
+    }))
+    const footer = entries.findIndex((entry) => entry.kind === 'manage')
+    rows.splice(footer < 0 ? rows.length : footer, 0, ...contributed)
     if (needle !== '' && this.ws) {
       for (const candidate of groupsInOrder(this.ws.root)) {
         for (const tab of candidate.tabs) {
