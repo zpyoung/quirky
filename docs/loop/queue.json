@@ -2301,7 +2301,8 @@
         "fix-test-agents-1028",
         "fix-test-accounts-1028",
         "fix-test-packages-protocol-1028",
-        "fix-test-scripts-ui-review-1028"
+        "fix-test-scripts-ui-review-1028",
+        "fix-native-sa-browser-agent-1028"
       ],
       "status": "todo",
       "early": true
