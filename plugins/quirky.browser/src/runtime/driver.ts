@@ -226,6 +226,12 @@ function safeRecord(value: unknown, schema: Schema, description: string): Record
   return value as Record<string, unknown>
 }
 
+function objectValue(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined
+}
+
 function asString(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined
 }
@@ -555,9 +561,11 @@ export class BrowserRuntime {
           (candidate.kind === 'frame' || candidate.kind === 'same-document') &&
           candidate.frameId === tracker.frameId && candidate.url === url
         ), 30_000, `navigation to ${url} timed out`)
-        match = event.kind === 'frame'
-          ? { frameId: event.frameId, ...(event.loaderId ? { loaderId: event.loaderId } : {}) }
-          : { frameId: event.frameId, url: event.url }
+        if (event.kind === 'frame') {
+          match = { frameId: event.frameId, ...(event.loaderId ? { loaderId: event.loaderId } : {}) }
+        } else if (event.kind === 'same-document') {
+          match = { frameId: event.frameId, url: event.url }
+        }
       }
       await this.pageLocation(execution)
     } finally {
@@ -616,16 +624,19 @@ export class BrowserRuntime {
         }))
       }
       try {
+        subscribePage('Fetch.requestPaused', (event) => {
+          const requestId = asString(event.params.requestId)
+          if (!requestId) {
+            void this.endPaneWatch(state, 'Watch received an invalid intercepted request.')
+            return
+          }
+          // Authentication interception pauses ordinary requests too. Resume on this exact
+          // session outside the profile FIFO held by the pending navigation.
+          void epoch.cdp.send('Fetch.continueRequest', { requestId }, sessionId, 5_000)
+            .catch(() => this.endPaneWatch(state, 'Watch could not resume an intercepted request.'))
+        })
         const downloadDir = join(this.store.dataDir, 'pane-downloads', page.profileId)
         mkdirSync(downloadDir, { recursive: true, mode: 0o700 })
-        await epoch.cdp.send('Browser.setDownloadBehavior', {
-          behavior: 'allowAndName',
-          downloadPath: downloadDir,
-          eventsEnabled: true
-        })
-        await epoch.cdp.send('Fetch.enable', { handleAuthRequests: true }, sessionId)
-        await epoch.cdp.send('Security.enable', {}, sessionId)
-        await epoch.cdp.send('Security.setOverrideCertificateErrors', { override: true }, sessionId)
         subscribePage('Page.screencastFrame', (event) => {
           const frameId = event.params.sessionId
           const data = asString(event.params.data)
@@ -728,6 +739,14 @@ export class BrowserRuntime {
             if (!epoch.invalid) void epoch.cdp.send('Target.closeTarget', { targetId }, undefined, 5_000).catch(() => {})
           })
         }))
+        await epoch.cdp.send('Browser.setDownloadBehavior', {
+          behavior: 'allowAndName',
+          downloadPath: downloadDir,
+          eventsEnabled: true
+        })
+        await epoch.cdp.send('Fetch.enable', { handleAuthRequests: true }, sessionId)
+        await epoch.cdp.send('Security.enable', {}, sessionId)
+        await epoch.cdp.send('Security.setOverrideCertificateErrors', { override: true }, sessionId)
         await epoch.cdp.send('Target.setDiscoverTargets', { discover: true })
         await epoch.cdp.send('Page.startScreencast', {
           format: 'jpeg',
@@ -773,7 +792,12 @@ export class BrowserRuntime {
     for (const unsubscribe of watch.subscriptions) unsubscribe()
     if (watch.downloads.size === 0) this.clearDownloadSubscriptions(watch)
     if (!watch.epoch.invalid && !watch.epoch.stopping) {
-      await watch.epoch.cdp.send('Page.stopScreencast', {}, watch.binding.sessionId, 5_000).catch(() => {})
+      await Promise.allSettled([
+        watch.epoch.cdp.send('Page.stopScreencast', {}, watch.binding.sessionId, 5_000),
+        watch.epoch.cdp.send('Fetch.disable', {}, watch.binding.sessionId, 5_000),
+        watch.epoch.cdp.send('Security.setOverrideCertificateErrors', { override: false }, watch.binding.sessionId, 5_000),
+        watch.epoch.cdp.send('Security.disable', {}, watch.binding.sessionId, 5_000)
+      ])
     }
     if (reason) {
       try { watch.callbacks.onStale(reason) } catch { /* the pane was removed while the lease ended */ }

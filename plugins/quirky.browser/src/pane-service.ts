@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { copyFileSync, constants, lstatSync, linkSync, mkdirSync, realpathSync, unlinkSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { basename, extname, fileURLToPath, isAbsolute, join, parse, relative, resolve, sep } from 'node:path'
-import { pathToFileURL } from 'node:url'
+import { basename, extname, isAbsolute, join, parse, relative, resolve, sep } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { validateValue, type PluginCaller, type PluginContext, type Schema } from '@quirky/protocol'
 import { readRuntime } from '@quirky/protocol/node'
 import type { PaneDownload, PaneMethod, PanePrompt, PaneState, PaneTab, PaneRequests, PaneFrame } from './pane-contract'
@@ -135,6 +135,15 @@ function normalizeInput(input: string, engine: unknown): NormalizedInput {
     const url = pathToFileURL(value).href
     return { url, historyUrl: url, localPath: value }
   }
+  const hostPort = /^(\[[0-9a-f:]+\]|[^/\s:]+)(?::(\d{1,5}))?(\/[^\s]*)?$/i.exec(value)
+  if (hostPort && (hostPort[1]!.toLowerCase() === 'localhost' || hostPort[1]!.toLowerCase().endsWith('.localhost') ||
+      /^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostPort[1]!) || /^\[[0-9a-f:]+\]$/i.test(hostPort[1]!) || hostPort[1]!.includes('.'))) {
+    const candidate = new URL(`https://${value}`)
+    const protocol = isLocalHost(candidate.hostname) ? 'http:' : 'https:'
+    candidate.protocol = protocol
+    const url = safeUrl(candidate.href)
+    return { url, historyUrl: safeHistoryAddress(url) }
+  }
   if (/^[A-Za-z][A-Za-z\d+.-]*:/.test(value)) {
     let parsed: URL
     try { parsed = new URL(value) } catch { throw fault('invalid_argument', 'address is not a valid URL') }
@@ -153,15 +162,6 @@ function normalizeInput(input: string, engine: unknown): NormalizedInput {
   if (/\s/.test(value)) {
     const url = searchAddress(value, engine)
     return { url, historyUrl: url }
-  }
-  const hostPort = /^(\[[0-9a-f:]+\]|[^/\s:]+)(?::(\d{1,5}))?(\/[^\s]*)?$/i.exec(value)
-  if (hostPort && (hostPort[1]!.toLowerCase() === 'localhost' || hostPort[1]!.toLowerCase().endsWith('.localhost') ||
-      /^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostPort[1]!) || /^\[[0-9a-f:]+\]$/i.test(hostPort[1]!) || hostPort[1]!.includes('.'))) {
-    const candidate = new URL(`https://${value}`)
-    const protocol = isLocalHost(candidate.hostname) ? 'http:' : 'https:'
-    candidate.protocol = protocol
-    const url = safeUrl(candidate.href)
-    return { url, historyUrl: safeHistoryAddress(url) }
   }
   const scheme = /^[A-Za-z][A-Za-z\d+.-]*:/.exec(value)
   if (scheme) throw fault('invalid_argument', `unsupported browser URL scheme: ${scheme[0].slice(0, -1)}`)
@@ -241,7 +241,8 @@ export class PaneService {
     private readonly store: BrowserStore,
     private readonly runtime: BrowserRuntime,
     private readonly resolveWorktree: ResolveWorktree,
-    private readonly listWorktrees: () => Promise<Worktree[]>
+    private readonly listWorktrees: () => Promise<Worktree[]>,
+    private readonly downloadDirectory = join(homedir(), 'Downloads')
   ) {
     this.db = context.openStore([
       `CREATE TABLE IF NOT EXISTS browser_pane_tabs (id TEXT PRIMARY KEY, worktree_id TEXT NOT NULL, active INTEGER NOT NULL, updated_at INTEGER NOT NULL, data TEXT NOT NULL);
@@ -823,18 +824,19 @@ export class PaneService {
     return this.copyTab(tab)
   }
 
-  private async paneClose(request: PaneRequests['paneClose'], caller: PluginCaller): Promise<{ closed: true }> {
+  private async paneClose(request: PaneRequests['paneClose'], caller: PluginCaller): Promise<true> {
     if (request.fromTab && (caller.role !== 'plugin' || caller.pluginId !== 'quirky.terminal')) {
       throw fault('invalid_argument', 'fromTab is reserved for the terminal hosted-tab close hook')
     }
     const tab = this.tabs.get(request.pane)
-    if (!tab) return { closed: true }
+    if (!tab) return true
+    if (request.fromTab && request.tabId !== tab.tabId) throw fault('browser_tab_changed', 'pane close came from a stale hosted tab')
     if (!request.fromTab && tab.tabId) {
       await this.context.call('quirky.terminal/closeTab', { tab: tab.tabId })
-      if (!this.tabs.has(tab.id)) return { closed: true }
+      if (!this.tabs.has(tab.id)) return true
     }
     await this.removePaneState(tab)
-    return { closed: true }
+    return true
   }
 
   private async removePaneState(tab: PaneTab): Promise<void> {
@@ -1278,7 +1280,7 @@ export class PaneService {
     }
     const sourceInfo = lstatSync(source)
     if (!sourceInfo.isFile() || sourceInfo.isSymbolicLink()) throw fault('browser_error', 'Chrome produced a non-regular download artifact')
-    const downloads = join(homedir(), 'Downloads')
+    const downloads = this.downloadDirectory
     mkdirSync(downloads, { recursive: true, mode: 0o700 })
     const destinationRoot = realpathSync(downloads)
     const safeName = safeFileName(requestedName)
@@ -1336,7 +1338,7 @@ export class PaneService {
   }
 
   private safeDownloadPath(path: string): string {
-    const root = realpathSync(join(homedir(), 'Downloads'))
+    const root = realpathSync(this.downloadDirectory)
     const candidate = realpathSync(path)
     if (!within(root, candidate)) throw fault('invalid_argument', 'download path is outside the OS Downloads directory')
     const info = lstatSync(candidate)

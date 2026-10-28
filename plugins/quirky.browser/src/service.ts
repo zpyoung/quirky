@@ -94,7 +94,8 @@ export class BrowserService {
       this.store,
       this.runtime,
       (selector, caller, allowNoScope) => this.resolveWorktreeTarget(selector, undefined, caller, allowNoScope),
-      () => this.listWorktrees()
+      () => this.listWorktrees(),
+      dependencies.downloadDirectory
     )
   }
 
