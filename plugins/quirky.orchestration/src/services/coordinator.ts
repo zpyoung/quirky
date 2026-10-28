@@ -10,6 +10,7 @@ import type { WorkerServiceCoordinatorPort } from '../workers/core-adapter'
 import type { WorkerComponents } from '../workers/register'
 import type { ServiceCoordinatorPort } from './handlers'
 import type { ServiceMethodResults, ServiceRunDetail, ServiceWorkerView } from './contracts'
+import type { DurableMutationOptions } from '../worker-integration'
 import { fail } from '../errors'
 
 export interface OrchestrationServiceCoordinator extends ServiceCoordinatorPort, WorkerServiceCoordinatorPort {
@@ -143,7 +144,7 @@ export function createServiceCoordinator(
       params: MutationRequest & object,
       caller: CoordinatorAuthority,
       operation: (store: OrchestrationCore['store']) => T,
-      options
+      options?: DurableMutationOptions<T>
     ) {
       return core.mutateWorker(method, params, caller, operation, options)
     }

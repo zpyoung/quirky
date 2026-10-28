@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, writeFileSync, appendFileSync } from 'node:fs'
+import { chmodSync, existsSync, readFileSync, writeFileSync, appendFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { expect, test } from 'bun:test'
 import type { Session } from '@quirky/protocol'

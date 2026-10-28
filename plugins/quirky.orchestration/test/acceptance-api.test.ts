@@ -10,8 +10,10 @@ import type {
   GateRow,
   InboxResult,
   MessageRow,
+  ReplyResult,
   RunRow,
   SendResult,
+  RequestShowResult,
   TaskRow
 } from '../src/contracts'
 import {
@@ -455,9 +457,11 @@ describe('quirky.orchestration daemon API acceptance', () => {
     })
     expect(accepted.kind).toBe('worker_report')
     if (accepted.kind !== 'worker_report') throw new Error('expected a worker report result')
-    expect(accepted.report.status).toBe('accepted')
+    if (accepted.report.status !== 'accepted') throw new Error('expected an accepted worker report')
     expect(accepted.report.task.result).toMatchObject({ kind: 'worker_report', reportedBy: worker.id, outcome: 'succeeded' })
-    expect(accepted.report.task.result?.kind === 'worker_report' ? accepted.report.task.result.filesModified : []).toEqual(['src/a.ts'])
+    const acceptedResult = accepted.report.task.result
+    if (!acceptedResult || acceptedResult.kind !== 'worker_report') throw new Error('accepted report did not settle its Task')
+    expect(acceptedResult.filesModified).toEqual(['src/a.ts'])
 
     const duplicate = await send(worker, {
       to: { kind: 'run', runId: run.id },
@@ -501,6 +505,7 @@ describe('quirky.orchestration daemon API acceptance', () => {
     })
     expect(rejectedReport.kind).toBe('worker_report')
     if (rejectedReport.kind !== 'worker_report') throw new Error('expected an auditable worker report rejection')
+    if (rejectedReport.report.status !== 'rejected') throw new Error('expected a rejected worker report')
     expect(rejectedReport.report).toEqual({ status: 'rejected', reason: 'sender_not_assignee', audited: true })
     expect((await call<{ tasks: TaskRow[] }>(coordinator, TASK_LIST, { runId: run.id, status: 'dispatched' })).tasks.map((row) => row.id)).toContain(wrongOwner.task.id)
     const reportedFailureTask = await createTask(coordinator, run.id, 'worker-reported failure')
@@ -516,13 +521,42 @@ describe('quirky.orchestration daemon API acceptance', () => {
     })
     expect(workerFailure.kind).toBe('worker_report')
     if (workerFailure.kind !== 'worker_report') throw new Error('expected a worker report result')
-    expect(workerFailure.report.status).toBe('accepted')
+    if (workerFailure.report.status !== 'accepted') throw new Error('expected an accepted worker failure report')
     const failedAttempt = await call<{ dispatch: DispatchRow | null; worker: unknown }>(coordinator, DISPATCH_SHOW, {
       taskId: reportedFailureTask.task.id
     })
     expect(failedAttempt.dispatch).toMatchObject({ status: 'failed', failureCount: 0 })
     expect(failedAttempt.worker).toBeNull()
     expect(workerFailure.report.task.result).toMatchObject({ kind: 'worker_report', outcome: 'failed' })
+  }, 30_000)
+
+  test('AC6 a default worker message resolves through its exact active Dispatch Run', async () => {
+    const coordinator = await fixture.createParty('coordinator')
+    const worker = await fixture.createParty('worker')
+    const outsider = await fixture.createParty('outsider')
+    const { run } = await createRun(coordinator, 'default worker routing')
+    const task = await createTask(coordinator, run.id, 'message through active assignment')
+    const dispatch = await createDispatch(coordinator, run.id, task.task.id, worker.id)
+    const sent = await send(worker, { type: 'question', subject: 'Fixture', body: 'Continue?' })
+    if (sent.kind !== 'message') throw new Error('expected a normal message result')
+    expect(sent.messages).toHaveLength(1)
+    const message = sent.messages[0]!
+    expect(message.runId).toBe(run.id)
+    expect(message.fromSessionId).toBe(worker.id)
+    expect(message.sender.kind).toBe('dispatch')
+    if (message.sender.kind !== 'dispatch') throw new Error('the authenticated worker message lost its Dispatch sender')
+    expect(message.sender.dispatchId).toBe(dispatch.dispatch.id)
+    expect(message.mailbox.kind).toBe('run')
+    if (message.mailbox.kind !== 'run') throw new Error('the worker message did not route to a Run mailbox')
+    expect(message.mailbox.runId).toBe(run.id)
+    expect(message.subject).toBe('Fixture')
+    expect(message.body).toBe('Continue?')
+    await expectReason(
+      send(outsider, { type: 'question', subject: 'Fixture', body: 'Continue?' }),
+      'run_required'
+    )
+    const inbox = await call<InboxResult>(coordinator, INBOX, { full: true, limit: 100 })
+    expect(inbox.messages.filter((row) => row.body === 'Continue?')).toHaveLength(1)
   }, 30_000)
 
   test('AC6 routes direct, Run and Dispatch addresses and fans groups out once per eligible mailbox', async () => {
@@ -945,16 +979,17 @@ describe('quirky.orchestration daemon API acceptance', () => {
       timeoutMs: 800
     })
     await waitForAcceptedRequest(worker, resumedRequest.requestId)
-    const answer = await call<{ kind: 'question_answer'; duplicate: boolean; answerMessageId: string }>(coordinator, REPLY, {
+    const answer = await call<ReplyResult>(coordinator, REPLY, {
       ...mutation(),
       runId: run.id,
       messageId: questionId,
       body: 'right'
     })
-    expect(answer.kind).toBe('question_answer')
+    if (answer.kind !== 'question_answer') throw new Error('expected an exact question answer')
     expect(answer.duplicate).toBe(false)
     const answered = await resumed
     expect(answered).toMatchObject({ state: 'answered', answer: 'right', messageId: questionId })
+    if (answered.state !== 'answered') throw new Error('expected the resumed question to be answered')
     expect(answered.answerMessageId).toBe(answer.answerMessageId)
 
     const sameAnswer = await call<{ duplicate: boolean }>(coordinator, REPLY, {
@@ -1130,9 +1165,9 @@ describe('quirky.orchestration daemon API acceptance', () => {
     const expiredId = crypto.randomUUID()
     const expiredAt = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString()
     seedReceipts(databasePath, [{ requestId: expiredId, state: 'completed', createdAt: expiredAt }])
-    expect(await call(coordinator, REQUEST_SHOW, { requestId: expiredId })).toMatchObject({ state: 'completed' })
+    expect(await call<RequestShowResult>(coordinator, REQUEST_SHOW, { requestId: expiredId })).toMatchObject({ state: 'completed' })
     await createRun(coordinator, 'triggers expired receipt pruning')
-    expect(await call(coordinator, REQUEST_SHOW, { requestId: expiredId })).toEqual({
+    expect(await call<RequestShowResult>(coordinator, REQUEST_SHOW, { requestId: expiredId })).toEqual({
       requestId: expiredId,
       state: 'absent',
       interpretation: 'absence_does_not_prove_no_effect'
@@ -1145,10 +1180,10 @@ describe('quirky.orchestration daemon API acceptance', () => {
     }))
     seedReceipts(databasePath, completed)
     const afterBatch = await createRun(coordinator, 'prunes oldest completed receipt batch')
-    expect((await call(coordinator, REQUEST_SHOW, { requestId: completed[0]!.requestId })).state).toBe('absent')
-    expect((await call(coordinator, REQUEST_SHOW, { requestId: completed[63]!.requestId })).state).toBe('absent')
-    expect((await call(coordinator, REQUEST_SHOW, { requestId: completed[64]!.requestId })).state).toBe('completed')
-    expect((await call(coordinator, REQUEST_SHOW, { requestId: afterBatch.mutation.requestId })).state).toBe('completed')
+    expect((await call<RequestShowResult>(coordinator, REQUEST_SHOW, { requestId: completed[0]!.requestId })).state).toBe('absent')
+    expect((await call<RequestShowResult>(coordinator, REQUEST_SHOW, { requestId: completed[63]!.requestId })).state).toBe('absent')
+    expect((await call<RequestShowResult>(coordinator, REQUEST_SHOW, { requestId: completed[64]!.requestId })).state).toBe('completed')
+    expect((await call<RequestShowResult>(coordinator, REQUEST_SHOW, { requestId: afterBatch.mutation.requestId })).state).toBe('completed')
   }, 60_000)
 
   test('AC12 unresolved receipt saturation refuses effects with mutation_ledger_full', async () => {

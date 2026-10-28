@@ -22,7 +22,7 @@ const children = new Set<Bun.Subprocess>()
 let consumed = 0
 let running = false
 
-async function drainRequests(): Promise<void> {
+async function drainRequests(cli: string): Promise<void> {
   if (running || !existsSync(requests)) return
   const lines = readFileSync(requests, 'utf8').split('\n').filter(Boolean)
   if (consumed >= lines.length) return
@@ -60,7 +60,7 @@ async function drainRequests(): Promise<void> {
 }
 
 // The launched provider polls its per-session JSONL bridge so each real CLI child inherits that launch environment.
-const poll = setInterval(() => void drainRequests(), 20)
+const poll = setInterval(() => void drainRequests(cli), 20)
 async function stop(): Promise<void> {
   clearInterval(poll)
   const active = [...children]

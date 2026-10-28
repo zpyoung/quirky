@@ -4,7 +4,11 @@ import type { SessionIdentity } from '../runtime-contracts'
 import type { DurableMutationOptions, OrchestrationWorkerCore } from '../worker-integration'
 import type { CoordinatorEvidence, ServiceCoordinatorEvidence, WorkerCore } from '../worker-contracts'
 
-type InspectionCore = OrchestrationWorkerCore & Pick<WorkerCore, 'listDispatches' | 'boundRunId' | 'attentionFor'>
+function isServiceCoordinator(caller: CoordinatorEvidence): caller is ServiceCoordinatorEvidence {
+  return 'kind' in caller && caller.kind === 'service'
+}
+
+type InspectionCore = OrchestrationWorkerCore
 
 /** Lane11 supplies this after kernel admission; every method enforces pluginId and owned Run. */
 export interface WorkerServiceCoordinatorPort {
@@ -31,6 +35,7 @@ export function createWorkerCore(core: InspectionCore, service?: WorkerServiceCo
     createDispatch: core.createDispatch.bind(core),
     admitDispatch: core.admitDispatch.bind(core),
     transitionTask: core.transitionTask.bind(core),
+    blockTaskForWorkerStop: core.blockTaskForWorkerStop.bind(core),
     transitionDispatch: core.transitionDispatch.bind(core),
     transitionWorker: core.transitionWorker.bind(core),
     reportWorkerDone: core.reportWorkerDone.bind(core),
@@ -41,29 +46,28 @@ export function createWorkerCore(core: InspectionCore, service?: WorkerServiceCo
     boundRunId: core.boundRunId.bind(core),
     attentionFor: core.attentionFor.bind(core),
     requireCoordinator(caller: CoordinatorEvidence, runId?: RunId) {
-      if ('kind' in caller && caller.kind === 'service') return requireService().requireCoordinator(caller, runId)
+      if (isServiceCoordinator(caller)) return requireService().requireCoordinator(caller, runId)
       return core.requireCoordinator(caller, runId)
     },
     createTask(input, caller) {
-      if ('kind' in caller && caller.kind === 'service') return requireService().createTask(input, caller)
+      if (isServiceCoordinator(caller)) return requireService().createTask(input, caller)
       return core.createTask(input, caller)
     },
     reserveWorkerDispatch(input, caller) {
-      if ('kind' in caller && caller.kind === 'service') return requireService().reserveWorkerDispatch(input, caller)
+      if (isServiceCoordinator(caller)) return requireService().reserveWorkerDispatch(input, caller)
       return core.reserveWorkerDispatch(input, caller)
     },
     attachWorkerAuthority(dispatchId, identity, caller) {
-      if ('kind' in caller && caller.kind === 'service') return requireService().attachWorkerAuthority(dispatchId, identity, caller)
-      return core.attachDispatchAuthority(dispatchId, identity, caller)
+      if (isServiceCoordinator(caller)) return requireService().attachWorkerAuthority(dispatchId, identity, caller)
+      return core.attachWorkerAuthority(dispatchId, identity, caller)
     },
     async mutateWorker(method, params, caller, operation, options) {
-      if ('kind' in caller && caller.kind === 'service') return requireService().mutateWorker(method, params, caller, operation, options)
+      if (isServiceCoordinator(caller)) return requireService().mutateWorker(method, params, caller, operation, options)
       if (method !== 'workerStart' && method !== 'workerStop' && method !== 'workerAbandon' && method !== 'workerRelease' && method !== 'workerRetain') {
         throw core.context.error('invalid-params', `Unknown worker mutation: ${method}`)
       }
       return core.mutate(method, params as MutationRequest & Record<string, unknown>, caller, operation, options)
     },
     mutate: core.mutate.bind(core),
-    attachDispatchAuthority: core.attachDispatchAuthority.bind(core),
   }
 }

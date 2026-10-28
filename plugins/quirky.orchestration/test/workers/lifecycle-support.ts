@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { Database } from 'bun:sqlite'
 import type { PluginContext, PluginStore, StoreValue } from '@quirky/protocol'
 import type {
-  DispatchId, DispatchRow, DispatchTransitionInput, RunRow, RuntimeCallerEvidence,
+  DispatchId, DispatchRow, DispatchTransitionInput, MutationRequest, RunRow, RuntimeCallerEvidence,
   TaskId, TaskRow, TaskTransitionInput, UtcTimestamp, WorkerDoneReportInput,
   WorkerHeartbeatInput, WorkerReportResult, WorkerTransitionInput,
 } from '../../src/contracts'
@@ -13,6 +13,7 @@ import type {
   WorkerOutput, WorkerRecord, WorkerRepository, WorkerRuntime,
 } from '../../src/worker-contracts'
 import type { SessionIdentity } from '../../src/runtime-contracts'
+import type { DurableMutationOptions } from '../../src/worker-integration'
 import { createWorkerLifecycle } from '../../src/workers/lifecycle'
 import { createWorkerStore, workerMigrations } from '../../src/workers/store'
 
@@ -213,7 +214,7 @@ export function createLifecycleFixture(options: FixtureOptions = {}): LifecycleF
       processIncarnation: incarnation ?? 'incarnation-1'
     }
   }
-  const core = {
+  const core: WorkerCore = {
     context: {
       error: (_kind: string, message: string) => new Error(message)
     } as unknown as PluginContext,
@@ -249,6 +250,7 @@ export function createLifecycleFixture(options: FixtureOptions = {}): LifecycleF
     listDispatches() { return [...dispatches.values()] },
     boundRunId: () => runId,
     attentionFor: () => ({ guidance: false, input: false, approval: false, rootCompletion: false }),
+    admitDispatch: () => ({ admitted: true, depth: 0, failureCount: 0, retryOfDispatchId: null }),
     createDispatch: () => { throw new Error('not used by lifecycle tests') },
     createTask: () => { throw new Error('not used by lifecycle tests') },
     reserveWorkerDispatch: () => { throw new Error('not used by lifecycle tests') },
@@ -256,9 +258,38 @@ export function createLifecycleFixture(options: FixtureOptions = {}): LifecycleF
     transitionTask(input: TaskTransitionInput) {
       const current = tasks.get(input.taskId)
       if (!current || current.status !== input.expectedState) throw new Error('task state compare-and-set failed')
-      const next = { ...current, status: input.nextState, result: input.result ?? current.result, updatedAt: input.at } as TaskRow
+      if (current.status !== input.nextState && registeredPort?.hasLiveForTask(store, input.taskId)) {
+        throw Object.assign(new Error('Task has a live supervised worker'), { code: 'task_not_startable' })
+      }
+      const next: TaskRow = { ...current, status: input.nextState, result: input.result ?? current.result }
       tasks.set(input.taskId, next)
       return next
+    },
+    blockTaskForWorkerStop({ taskId, dispatchId, at }: { taskId: TaskId; dispatchId: DispatchId; at: UtcTimestamp }) {
+      const task = tasks.get(taskId)
+      const activeDispatch = dispatches.get(dispatchId)
+      const currentWorker = repo.get(dispatchId)
+      if (!task || !activeDispatch || task.runId !== activeDispatch.runId || activeDispatch.taskId !== taskId ||
+        (activeDispatch.status !== 'pending' && activeDispatch.status !== 'dispatched') ||
+        !currentWorker || (currentWorker.state !== 'stopping' &&
+          !(currentWorker.state === 'stop_unknown' && currentWorker.stage === 'stopping'))) {
+        throw new Error('task_not_startable: Task has no exact active worker stop fence')
+      }
+      const hasIdentity = currentWorker.sessionId !== null || currentWorker.processIncarnation !== null ||
+        currentWorker.processRuntimeEpoch !== null || activeDispatch.assigneeSessionId !== null
+      if (hasIdentity && (!currentWorker.sessionId || !currentWorker.processIncarnation || !currentWorker.processRuntimeEpoch ||
+        activeDispatch.assigneeSessionId !== currentWorker.sessionId)) {
+        throw new Error('task_not_startable: Worker identity is not exactly attached to the Dispatch')
+      }
+      if ([...dispatches.values()].some(candidate => candidate.id !== dispatchId && candidate.taskId === taskId &&
+        (candidate.status === 'pending' || candidate.status === 'dispatched'))) {
+        throw new Error('task_not_startable: Task has another active attempt')
+      }
+      if (task.status === 'blocked') return task
+      if (task.status !== 'dispatched') throw new Error('task_not_startable: Task is no longer dispatched')
+      const updated: TaskRow = { ...task, status: 'blocked' }
+      tasks.set(taskId, updated)
+      return updated
     },
     transitionDispatch(input: DispatchTransitionInput) {
       const current = dispatches.get(input.dispatchId)
@@ -269,7 +300,8 @@ export function createLifecycleFixture(options: FixtureOptions = {}): LifecycleF
         status: input.nextState,
         failureCount: failureClass === 'infrastructure' ? current.failureCount + 1 : current.failureCount,
         lastFailure: 'failureReason' in input ? input.failureReason ?? current.lastFailure : current.lastFailure,
-        completedAt: input.nextState === 'pending' || input.nextState === 'dispatched' ? null : input.at
+        dispatchedAt: input.nextState === 'dispatched' ? input.at : current.dispatchedAt,
+        completedAt: input.nextState === 'dispatched' ? null : input.at
       }
       dispatches.set(input.dispatchId, next)
       registeredPort?.settleDispatch(store, input.dispatchId, next.status, input.at)
@@ -285,20 +317,24 @@ export function createLifecycleFixture(options: FixtureOptions = {}): LifecycleF
       }
       return workerRow
     },
-    mutateWorker<T extends object>(
+    async mutateWorker<T extends object>(
       _method: string,
-      params: { requestId: string },
+      params: MutationRequest & object,
       _caller: CoordinatorEvidence,
       operation: (store: PluginStore) => T,
-      options?: { afterCommit?: (accepted: T) => T | Promise<T> }
+      options?: DurableMutationOptions<T>
     ) {
-      const accepted = store.transaction(() => operation(store))
-      const completed = options?.afterCommit ? options.afterCommit(accepted) : accepted
-      return Promise.resolve(completed).then((result) => ({
-        ...result,
-        mutation: { requestId: params.requestId, replayed: false }
-      }))
+      await options?.beforeAccept?.()
+      const accepted = store.transaction(() => {
+        const value = operation(store)
+        options?.acceptedCheckpoint?.(value)
+        return value
+      })
+      const result = options?.afterCommit ? await options.afterCommit(accepted) : accepted
+      return { ...result, mutation: { requestId: params.requestId, replayed: false } }
     },
+    mutate: (method, params, caller, operation, options) =>
+      core.mutateWorker(method, params, caller, operation, options),
     emitWorkerStatus(dispatchId: DispatchId, subject: string, body: string, high: boolean) {
       statusEmissions.push({ dispatchId, subject, body, high })
     },
@@ -329,23 +365,23 @@ export function createLifecycleFixture(options: FixtureOptions = {}): LifecycleF
         reportPath: input.reportPath ?? null,
         completedAt: now
       }
-      const nextStatus = input.outcome === 'succeeded' ? 'completed' : 'failed'
-      const transition = {
-        dispatchId: input.dispatchId,
-        expectedState: 'dispatched' as const,
-        nextState: nextStatus,
-        ...(input.outcome === 'failed' ? { failureClass: 'worker_report' as const } : {}),
-        at: now
-      } as DispatchTransitionInput
+      const transition: DispatchTransitionInput = input.outcome === 'succeeded'
+        ? { dispatchId: input.dispatchId, expectedState: 'dispatched', nextState: 'completed', at: now }
+        : { dispatchId: input.dispatchId, expectedState: 'dispatched', nextState: 'failed', failureClass: 'worker_report', at: now }
       this.transitionDispatch(transition)
-      const updatedTask = { ...currentTask, status: input.outcome === 'succeeded' ? 'completed' : 'failed', result: reportResult, completedAt: now }
+      const updatedTask: TaskRow = {
+        ...currentTask,
+        status: input.outcome === 'succeeded' ? 'completed' : 'failed',
+        result: reportResult,
+        completedAt: now
+      }
       tasks.set(input.taskId, updatedTask)
       return { status: 'accepted', task: updatedTask, dispatch: dispatches.get(input.dispatchId)!, worker: accepted }
     },
     recordHeartbeat(_input: WorkerHeartbeatInput, _heartbeatCaller: RuntimeCallerEvidence) {
       return { status: 'accepted', lastHeartbeatAt: now }
     }
-  } as unknown as WorkerCore
+  }
 
   let observationOverride: Partial<WorkerObservation> = {}
   let captureHandler: ((id: DispatchId) => Promise<WorkerArchive>) | null = null

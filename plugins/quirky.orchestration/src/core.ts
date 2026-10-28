@@ -653,6 +653,67 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
     if (input.nextState === 'completed') this.promoteReadyTasks(current.run_id)
     return this.getTask(input.taskId)
   }
+  /** The only path that may block a Task while its exact supervised worker is being stopped. */
+  blockTaskForWorkerStop(input: { taskId: TaskId; dispatchId: DispatchId; at: UtcTimestamp }): TaskRow {
+    const dispatch = this.getDispatchRecord(input.dispatchId)
+    if (dispatch.task_id !== input.taskId || !activeDispatch(dispatch.status) || dispatch.supervised !== 1) {
+      fail(this.context, 'lifecycle_conflict', `Dispatch ${input.dispatchId} cannot fence Task ${input.taskId} for stop`, {
+        taskId: input.taskId,
+        dispatchId: input.dispatchId
+      })
+    }
+    const worker = this.requireWorkerPort(input.dispatchId).workerForDispatch(this.store, input.dispatchId)
+    if (
+      worker === null ||
+      worker.dispatchId !== input.dispatchId ||
+      (worker.state !== 'stopping' && !(worker.state === 'stop_unknown' && worker.stage === 'stopping'))
+    ) {
+      fail(this.context, 'lifecycle_conflict', `Dispatch ${input.dispatchId} has no exact worker stop fence`, {
+        taskId: input.taskId,
+        dispatchId: input.dispatchId
+      })
+    }
+    const hasDispatchIdentity =
+      dispatch.assignee_session_id !== null ||
+      dispatch.runtime_epoch !== null ||
+      dispatch.process_incarnation !== null
+    const hasWorkerIdentity = worker.sessionId !== null
+    if (
+      hasDispatchIdentity !== hasWorkerIdentity ||
+      (hasDispatchIdentity && (
+        dispatch.assignee_session_id === null ||
+        dispatch.runtime_epoch === null ||
+        dispatch.process_incarnation === null ||
+        worker.sessionId !== dispatch.assignee_session_id
+      ))
+    ) {
+      fail(this.context, 'lifecycle_conflict', `Dispatch ${input.dispatchId} stop identity does not match its exact worker`, {
+        taskId: input.taskId,
+        dispatchId: input.dispatchId
+      })
+    }
+    const task = this.getTaskRecord(input.taskId)
+    if (task.run_id !== dispatch.run_id || task.status !== 'dispatched') {
+      fail(this.context, 'lifecycle_conflict', `Task ${input.taskId} is not the active Task for Dispatch ${input.dispatchId}`, {
+        taskId: input.taskId,
+        dispatchId: input.dispatchId
+      })
+    }
+    const update = this.store.run(
+      `UPDATE tasks SET status = 'blocked' WHERE id = ? AND run_id = ? AND status = 'dispatched'`,
+      input.taskId,
+      dispatch.run_id
+    )
+    if (update.changes !== 1) {
+      fail(this.context, 'lifecycle_conflict', `Task ${input.taskId} changed during its worker stop fence`, {
+        taskId: input.taskId,
+        dispatchId: input.dispatchId
+      })
+    }
+    return this.getTask(input.taskId)
+  }
+
+
 
   transitionDispatch(input: DispatchTransitionInput): DispatchRow {
     return this.transitionDispatchInternal(input, false, true)

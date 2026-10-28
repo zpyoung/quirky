@@ -114,7 +114,7 @@ function enrollmentSettings(value: unknown): EnrollmentSettings | null {
     typeof value.kind !== 'string' || value.kind.length === 0 || !Object.hasOwn(value, 'kindPayload')) return null
   const budget = normalizeBudget(Object.hasOwn(value, 'budget') ? value.budget : undefined)
   const capabilities = normalizeCapabilities(Object.hasOwn(value, 'capabilities') ? value.capabilities : undefined)
-  const requestedOwner = Object.hasOwn(value, 'owner') ? value.owner : null
+  const requestedOwner: unknown = Object.hasOwn(value, 'owner') ? value.owner : null
   const requestedIntervention = Object.hasOwn(value, 'ownerInterventionCapability')
     ? value.ownerInterventionCapability
     : undefined

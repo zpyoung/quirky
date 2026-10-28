@@ -18,6 +18,7 @@ import type {
   KernelAction,
   KernelStore,
   KernelWorkerObservation,
+  KindRegistry,
   OrchestrationPort,
   RunnerOptions,
   Snapshot,
@@ -142,7 +143,7 @@ function kind(overrides: Partial<WatcherKind<World>> = {}): WatcherKind<World> {
 
 function registry(watcherKind: WatcherKind<World>): KindRegistry {
   return {
-    get: (id) => id === watcherKind.id ? watcherKind : undefined,
+    get: (id: string) => id === watcherKind.id ? watcherKind : undefined,
     register: () => undefined,
     registerDescriptor: () => undefined,
     descriptors: () => []

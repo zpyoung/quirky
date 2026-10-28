@@ -12,6 +12,7 @@ const CLI_MAIN = join(REPO_ROOT, 'packages/cli/src/main.ts')
 const TESTED_BUILTINS = [
   'quirky.orchestration',
   'quirky.session',
+  'quirky.terminal',
   'quirky.agents',
   'quirky.worktree',
   'quirky.repo',
@@ -26,7 +27,7 @@ export type OrchestrationSession = { id: string; worktreeId: string; cwd: string
 type AuthenticatedHello = ClientHello & { sessionToken: string }
 export type OrchestrationParty = OrchestrationSession & { client: QuirkyClient; sessionToken: string }
 export type CliResult = { code: number; stdout: string; stderr: string }
-export type CliProcess = Bun.Subprocess
+export type CliProcess = Bun.Subprocess<'ignore', 'pipe', 'pipe'>
 
 export type OrchestrationFixture = {
   root: string
@@ -195,6 +196,7 @@ export async function startOrchestrationFixture(): Promise<OrchestrationFixture>
         QUIRKY_WORKTREE_ID: party.worktreeId,
         QUIRKY_SESSION_TOKEN: party.sessionToken
       },
+      stdin: 'ignore',
       stdout: 'pipe',
       stderr: 'pipe'
     })
@@ -292,7 +294,7 @@ export async function startOrchestrationFixture(): Promise<OrchestrationFixture>
   }
 }
 
-export function mutation(requestId = crypto.randomUUID()) {
+export function mutation(requestId: string = crypto.randomUUID()) {
   return { requestId, contractVersion: 1 as const }
 }
 

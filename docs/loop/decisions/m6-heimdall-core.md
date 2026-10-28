@@ -286,5 +286,38 @@
 - **Revisit if:** remaining actual worker flows or required final gates fail
 - **Source:** assumed — autonomous
 
+## D27: Use canonical Session launch settings, not a second private snapshot
+- **Question:** whether the dependency reconciliation should retain journal launch-options v3 after the public session snapshot was restored
+- **Options:** maintain two sources; prefer private options over the public snapshot; use the canonical Session.launchSettings only
+- **Chose:** remove the unlanded private launch-options table, migration, codec and methods; create uses resolved native values and resume uses launchOptionsFromSnapshot(old). Preserve journal v1 and send receipts v2 unchanged, account preparation, real provider identity and lease environment.
+- **Why:** the public session record already persists model/effort and provenance. A private preferred copy can diverge. All owned executions use disposable homes; the private third step was an unlanded item addition, not a deployed migration to preserve. This supersedes D25 only for the duplicate launch-options migration.
+- **Evidence:** NativeCanonicalAudit source report; structured journal/main references; identical real SQLite history smoke passed before and after removal, retaining messages, sequence and completed receipt identity; lane12 canonical-source correction
+- **Reversibility:** medium
+- **Confidence:** high for history preservation; final structured API gates remain required
+- **Revisit if:** evidence shows a non-disposable deployed home applied the private third migration
+- **Source:** supersedes m6-heimdall-core D25
+
+## D28: Persist an exact logical stop fence before asynchronous process control
+- **Question:** correct-identity worker stop hit the public live-worker Task guard, then exposed a missing durable post-commit checkpoint
+- **Options:** weaken manual Task guards; claim stopped before close; add a narrow internal fence and accepted checkpoint
+- **Chose:** blockTaskForWorkerStop validates the supervised Task/Dispatch and persisted stopping state inside acceptance. Keep manual transitions guarded and preserve exact identity. Stop and release persist accepted identity-only checkpoints before effects; pending replay remains operation_unknown, not stopped or released.
+- **Why:** revoking scheduling is a synchronous logical fence, distinct from positive process termination. An interrupted effect cannot be reported as success.
+- **Evidence:** actual service stop task_not_startable, then post-commit checkpoint rejection; worker/core coordinated seam and checkpoint source; final actual stop/release verification remains pending
+- **Reversibility:** medium
+- **Confidence:** high for the invariant; runtime confirmation remains gated
+- **Revisit if:** actual exact-stop or ambiguous-close proofs fail
+- **Source:** assumed — autonomous
+
+## D29: Keep structured accepted-work observation distinct from startup acknowledgement
+- **Question:** native fixtures reached initialize/thread/start/turn/start but no assistant, tool or result evidence
+- **Options:** treat optimistic working as ready; inflate deadlines; emit input-driven accepted-work evidence from the external fixture
+- **Chose:** preserve the production observer. Apply isolated session pointer fix42791478 so worker_start reaches structured/send's existing startup wait while mailbox_pointer retains busy refusal. Use existing input-driven native approval/output behavior, never timer-fake readiness.
+- **Why:** a valid native turn ID proves request acknowledgement, not accepted work. Liveness also does not imply an active assignment; the earlier run_required report had an already-failed Dispatch, so active status filters remain unchanged.
+- **Evidence:** actual attached child worker-show identity with failed Dispatch; native request/working/provider-ID diagnostics; peer14pointer checks58assertions; ordinary sender active filters and structured observer source
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a real output-producing native provider cannot reach ready through the unchanged observer
+- **Source:** assumed — autonomous
+
 ## Progress
-Iteration4: original source wave/replacement barrier audited; actual store/registry/enrollment/runner/plugin/adapter plus additive service handler/migration/test checkpoints are merged on the item branch. Integrated kernel/storage/adapter/migration unit regressions pass51/51 with172assertions; three concrete regressions have red-green proof. Runtime checkpoint794266f1 is published, final import/test safety correction follows. No owned implementer remains running. Full daemon API/worker proof and actual eight-service core facade/hubs still require the prerequisite's committed executable source; lane1 has supplied read-only component paths, not a runtime API claim. Continue real service integration, affected gates/typecheck, deps-ready/catch-up and queue-controlled landing. Lane10 controls then lane12 owner integrate their own serial hubs; their modules remain untouched.
+Iteration4: executable checkpoint df799424 (peer merge e410f69f) provides all eight real owner-scoped service APIs, shared worker lifecycle and plugin hubs; no stubs or forged session principal. Own kernel units63pass273assertions and real daemon API6pass35assertions. Latest service run4pass2fail exposed durable stop checkpoint and an invalid provider-exit/terminal-exit fixture assumption; both corrected in source, not yet claimed passing. Current own compiler improved136diagnostics27files to26diagnostics7files; the remaining source/test fixes are integrated but final compiler verification is pending. Native canonical history smoke passes before/after D27; isolated pointer fix is extracted without owner/control hubs. Core agent is completing actual ordinary Run-sender response schemas and pending worker-question persistence, based on peer public CLI evidence. Next: finish that barrier, exercise all8 real services and native kind-to-worker-to-terminal/archive smoke, affected remote suite/scripts/typecheck, docs/changelog, deps-ready and one final roadmap catchup, then queue land. D20 skips only the unstarted review campaign; D21 is the sole deferred native host-power flow. No human ask.
