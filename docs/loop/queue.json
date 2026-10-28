@@ -1455,6 +1455,18 @@
       "lane": 11
     },
     {
+      "id": "sb-mobile-chat-voice-native-ruling",
+      "milestone": "Side B",
+      "title": "Build only remaining unbuilt phone flows after their prerequisites: interactive native-chat transcripts/attachments/queued-chat/options/background-task UI and dictation/voice models/settings require an authorized architecture/roadmap ruling plus owned public APIs; existing Native browser tab mirroring requires a supported safe Native-frame/control producer and phone-scoped identity/data path. Keep shipped terminal/ask, reversible Sleep, origin filters, Markdown and explicit Chrome Watch unchanged; do not silently convert Native tabs or override sb-mobile-app D5 and architecture background-only/roadmap dictation exclusions. See sb-mobile-app-prerequisites D3,D7,D12.",
+      "docs": [
+        "mobile.md"
+      ],
+      "deps": [
+        "sb-mobile-app-prerequisites"
+      ],
+      "status": "todo"
+    },
+    {
       "id": "m7-test-triage",
       "milestone": "M7",
       "title": "End-phase test triage: run bun scripts/suite.ts packages apps plugins, bun test scripts and bun run typecheck on build/roadmap, and add one fix-test-<area>-<MMDD> item per failing package, app or plugin (naming its failing files and tests) so the lanes split the debugging; change no code",
@@ -1475,7 +1487,8 @@
         "m7-orchestration-heimdall-unbuilt-flows",
         "sb-mobile-app-panels-unbuilt-flows",
         "m7-diff-markdown-local-images",
-        "m7-terminal-runtime-native-and-worktree-parity"
+        "m7-terminal-runtime-native-and-worktree-parity",
+        "sb-mobile-chat-voice-native-ruling"
       ],
       "status": "todo"
     },
@@ -1675,18 +1688,6 @@
       ],
       "status": "todo",
       "early": true
-    },
-    {
-      "id": "sb-mobile-chat-voice-native-ruling",
-      "milestone": "Side B",
-      "title": "Build only remaining unbuilt phone flows after their prerequisites: interactive native-chat transcripts/attachments/queued-chat/options/background-task UI and dictation/voice models/settings require an authorized architecture/roadmap ruling plus owned public APIs; existing Native browser tab mirroring requires a supported safe Native-frame/control producer and phone-scoped identity/data path. Keep shipped terminal/ask, reversible Sleep, origin filters, Markdown and explicit Chrome Watch unchanged; do not silently convert Native tabs or override sb-mobile-app D5 and architecture background-only/roadmap dictation exclusions. See sb-mobile-app-prerequisites D3,D7,D12.",
-      "docs": [
-        "mobile.md"
-      ],
-      "deps": [
-        "sb-mobile-app-prerequisites"
-      ],
-      "status": "todo"
     }
   ]
 }
