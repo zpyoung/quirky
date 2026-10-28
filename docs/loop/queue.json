@@ -1353,6 +1353,20 @@
         "sb-mobile-daemon"
       ],
       "status": "todo"
+    },
+    {
+      "id": "m4-hosting-ui-tasks-complete-remaining-flows",
+      "milestone": "M4",
+      "title": "Complete Tasks remaining parity: canonical github-sourced workspace creation and Project default-agent readiness/delivery; full built-web Tasks, issue/composer/create, Projects table/board/roadmap/settings flows; sticky-all added-repo/deep-link variants, stale source/view/rapid-write/index/comment-lag rollback, complete API/CLI/UI parity and PR navigation/check/merge/auto-merge/queue acceptance. Unblocked by source-worktree and Reviews runtime landings; original25-scenario spec and pending native handoff remain authoritative, no prior exhaustive UI/review pass claimed.",
+      "docs": [
+        "hosting-ui.md"
+      ],
+      "deps": [
+        "m4-hosting-ui-tasks",
+        "m4-worktrees-create-from-github",
+        "m4-hosting-ui-reviews"
+      ],
+      "status": "todo"
     }
   ]
 }
