@@ -207,6 +207,8 @@ SectionHeader, Tabs, Badge, StatusDot, Menu, Toast, Dialog (including sheets), E
 FormRow, ToolPanelFrame and InlineAgentCard. Import their styles from `@quirky/ui/styles.css`;
 the desktop host already loads them. Components are controlled presentations: callers own
 feature state and callbacks. Theme scopes use `data-theme="dark"` or `data-theme="light"`.
+`Dialog` supports `scrollBody` when long content must scroll independently of its header and
+action footer; the default retains whole-dialog scrolling.
 
 After `bun run --filter './packages/ui' build`, open `/gallery.html` on the daemon's UI origin
 to try every component in both themes. The gallery needs no RPC token and does not connect
@@ -252,6 +254,12 @@ The existing panel/sidebar APIs update the same tool state. The obsolete editor 
 activity-bar setting is removed. ⌘K searches commands, tools, views and worktrees while
 preserving contributed shortcut priority. Off-worktree questions raise eight-second corner
 toasts and amber worktree/Inbox counts; dismissing a toast never answers its durable question.
+
+Ledger opens in bottom left by default; the project action menu opens its full Project Ledger
+page. Its chooser, scoped panel, entry forms, history, triage, guarded confirmations and
+staleness settings use the shared dark/light controls and tokens. Entry selection still captures
+immutable ID/revision snapshots; a presentation change never bypasses confirmation or revision
+checks. Ledger is included in the canonical UI lint plugin list.
 
 Setting declarations can provide optional `category` and `section` strings. The generic Settings
 dialog groups these declarations by category and section; uncategorized settings retain their
