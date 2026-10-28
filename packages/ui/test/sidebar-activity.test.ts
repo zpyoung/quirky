@@ -6,9 +6,8 @@ afterEach(closeWindows)
 const BASE = 'acme.sidebar-base'
 const OVERRIDE = 'acme.sidebar-override'
 const ACTIVITY_ITEM = `activity-item:${BASE}/source-control`
-const SOURCE_CONTROL_PANEL = `panel:${BASE}/source-control`
-const PROBLEMS_PANEL = `panel:${BASE}/problems`
 const activitySlot = `[data-plugin-slot="${ACTIVITY_ITEM}"]`
+const activityToolPanel = `[data-tool-panel="${ACTIVITY_ITEM}"]`
 
 type ActivitySlotState = {
   id: string
@@ -20,7 +19,7 @@ type ActivitySlotState = {
 }
 
 type WindowUiState = {
-  layout: { panel: string | null }
+  layout: { tools: { open: Record<string, string | null> } }
   slots: ActivitySlotState[]
 }
 
@@ -34,47 +33,19 @@ function reportOwner(slot: ActivitySlotState | undefined): string | undefined {
   return typeof report.owner === 'string' ? report.owner : undefined
 }
 
-test('activity items mount outside closed panels, swap owners, clean up on disable, and preserve D10 panels', async () => {
+test('activity tool contributions swap owners and unmount when disabled', async () => {
   const env = await bootWindow((installed) => {
     installUiPlugin(
       installed,
       BASE,
-      {
-        'activity-item': [{ id: 'source-control', title: 'Source Control', order: 10 }],
-        panel: [
-          { id: 'source-control', title: 'Source Control', order: 10 },
-          { id: 'problems', title: 'Problems', order: 20 }
-        ]
-      },
-      [
-        provide(
-          ACTIVITY_ITEM,
-          `const button = document.createElement('button');
-           button.id = 'base-source-control-activity';
-           button.setAttribute('aria-label', 'Open Source Control');
-           button.textContent = 'Source Control';
-           button.addEventListener('click', () => context.togglePanel(${JSON.stringify(SOURCE_CONTROL_PANEL)}));
-           element.append(button);
-           props.report({ owner: 'base', count: 0, available: true });`
-        ),
-        provide(SOURCE_CONTROL_PANEL, "element.textContent = 'Source Control panel'"),
-        provide(PROBLEMS_PANEL, "element.textContent = 'Problems panel'")
-      ].join('\n')
+      { 'activity-item': [{ id: 'source-control', title: 'Source Control', order: 10 }] },
+      provide(ACTIVITY_ITEM, "element.textContent = 'Source Control'; props.report({ owner: 'base', count: 0, available: true })")
     )
     installUiPlugin(
       installed,
       OVERRIDE,
       {},
-      provide(
-        ACTIVITY_ITEM,
-        `const button = document.createElement('button');
-         button.id = 'override-source-control-activity';
-         button.setAttribute('aria-label', 'Open Source Control');
-         button.textContent = 'Source Control';
-         button.addEventListener('click', () => context.togglePanel(${JSON.stringify(SOURCE_CONTROL_PANEL)}));
-         element.append(button);
-         props.report({ owner: 'override', count: 2, available: true });`
-      ),
+      provide(ACTIVITY_ITEM, "element.textContent = 'Team Source Control'; props.report({ owner: 'override', count: 2, available: true })"),
       { overrides: [{ id: ACTIVITY_ITEM, title: 'Team Source Control', order: 5 }] }
     )
   })
@@ -84,12 +55,11 @@ test('activity items mount outside closed panels, swap owners, clean up on disab
     activityItems: [{ id: ACTIVITY_ITEM, plugin: OVERRIDE, title: 'Team Source Control' }]
   })
 
-  await win.waitFor(() => win.document.querySelector('#override-source-control-activity'))
+  await agent.callAny('ui.tool.open', { id: ACTIVITY_ITEM })
+  await win.waitFor(() => win.document.querySelector(`${activityToolPanel} ${activitySlot}`))
   await win.waitFor(async () => (await readUiState(env)).slots.find((slot) => slot.id === ACTIVITY_ITEM)?.report !== undefined)
-  expect(win.document.querySelector(`${activitySlot} #base-source-control-activity`)).toBeNull()
-  expect(win.document.querySelector(activitySlot)?.closest('[data-region="panel"]')).toBeNull()
-  expect(win.document.querySelector('.plugin-panel')).toBeNull()
-  expect((await readUiState(env)).layout.panel).toBeNull()
+  await win.waitFor(async () => Object.values((await readUiState(env)).layout.tools.open).includes(ACTIVITY_ITEM))
+  expect(win.document.querySelector(`${activityToolPanel} ${activitySlot}`)).not.toBeNull()
   expect((await readUiState(env)).slots.find((slot) => slot.id === ACTIVITY_ITEM)).toMatchObject({
     kind: 'activity-item',
     plugin: OVERRIDE,
@@ -98,43 +68,8 @@ test('activity items mount outside closed panels, swap owners, clean up on disab
     report: { owner: 'override', count: 2, available: true }
   })
 
-  const headerButtons = () => Array.from(win.document.querySelectorAll('.main-header button')) as HTMLButtonElement[]
-  await win.waitFor(() => headerButtons().length === 2)
-  expect(headerButtons().map((button) => button.textContent?.trim())).toEqual(['Source Control', 'Problems'])
-  expect(headerButtons().map((button) => button.getAttribute('aria-pressed'))).toEqual(['false', 'false'])
-
-  await win.click('#override-source-control-activity')
-  await win.waitFor(async () => (await readUiState(env)).layout.panel === SOURCE_CONTROL_PANEL)
-  await win.waitFor(() => win.document.querySelector(`[data-region="panel"] [data-plugin-slot="${SOURCE_CONTROL_PANEL}"]`))
-  const firstPanel = win.document.querySelector('[data-region="panel"]')!
-  const layout = win.document.querySelector<HTMLElement>('.layout')!
-  expect(firstPanel.tagName).toBe('ASIDE')
-  expect(firstPanel.parentElement).toBe(layout)
-  expect(layout.lastElementChild).toBe(firstPanel)
-  expect(win.document.querySelectorAll('.plugin-panel')).toHaveLength(1)
-  expect(headerButtons().map((button) => button.getAttribute('aria-pressed'))).toEqual(['true', 'false'])
-
-  await win.click('.main-header button[aria-pressed="false"]')
-  await win.waitFor(async () => (await readUiState(env)).layout.panel === PROBLEMS_PANEL)
-  expect(win.document.querySelector(`[data-region="panel"] [data-plugin-slot="${PROBLEMS_PANEL}"]`)?.textContent).toContain('Problems panel')
-  expect(win.document.querySelector(`[data-region="panel"] [data-plugin-slot="${SOURCE_CONTROL_PANEL}"]`)).toBeNull()
-  expect(win.document.querySelectorAll('.plugin-panel')).toHaveLength(1)
-  expect(headerButtons().map((button) => [button.textContent?.trim(), button.getAttribute('aria-pressed')])).toEqual([
-    ['Source Control', 'false'],
-    ['Problems', 'true']
-  ])
-
-  await win.click('.main-header button[aria-pressed="true"]')
-  await win.waitFor(async () => (await readUiState(env)).layout.panel === null)
-  expect(win.document.querySelector('[data-region="panel"]')).toBeNull()
-  expect(headerButtons()).toHaveLength(2)
-  expect(win.document.querySelector(activitySlot)).not.toBeNull()
-
   await agent.callAny('plugin.disable', { id: OVERRIDE })
-  await win.waitFor(() =>
-    win.document.querySelector('#base-source-control-activity') !== null &&
-    win.document.querySelector('#override-source-control-activity') === null
-  )
+  await win.waitFor(() => win.document.querySelector(`${activityToolPanel} ${activitySlot}`)?.textContent?.trim() === 'Source Control')
   await win.waitFor(async () => reportOwner((await readUiState(env)).slots.find((slot) => slot.id === ACTIVITY_ITEM)) === 'base')
   expect((await readUiState(env)).slots.find((slot) => slot.id === ACTIVITY_ITEM)).toMatchObject({
     plugin: BASE,
@@ -144,7 +79,11 @@ test('activity items mount outside closed panels, swap owners, clean up on disab
 
   await agent.callAny('plugin.disable', { id: BASE })
   await win.waitFor(() => win.document.querySelector(activitySlot) === null)
-  await win.waitFor(async () => !(await readUiState(env)).slots.some((slot) => slot.id === ACTIVITY_ITEM))
+  const uiState = await win.waitFor(async () => {
+    const state = await readUiState(env)
+    return state.slots.some((slot) => slot.id === ACTIVITY_ITEM) ? undefined : state
+  })
+  expect(Object.values(uiState.layout.tools.open)).not.toContain(ACTIVITY_ITEM)
 })
 
 test('the Settings window renders generic category and section metadata and saves the declared setting', async () => {

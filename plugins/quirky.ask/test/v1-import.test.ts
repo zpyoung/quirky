@@ -183,20 +183,14 @@ describe('migration 4', () => {
     askOwnershipMigration(store)
     askHandoffMigration(store)
 
-    const columns = store.all<{ name: string }>('PRAGMA table_info(asks)').map((column) => column.name)
-    expect(columns).toEqual(expect.arrayContaining([
-      'reason',
-      'request_id',
-      'handoff_identity',
-      'handoff_question_id',
-      'owner_identity'
-    ]))
-    expect(store.get<{ request_id: string | null; owner_identity: string | null }>(
-      'SELECT request_id, owner_identity FROM asks WHERE id = ?',
-      'ask_pending'
-    )).toEqual({ request_id: null, owner_identity: null })
-    expect(store.all<{ name: string; unique: number; partial: number }>('PRAGMA index_list(asks)'))
-      .toContainEqual({ name: 'asks_request_id', unique: 1, partial: 1 })
+    expect(store.all<{ id: string; request_id: string | null; owner_identity: string | null }>(
+      'SELECT id, request_id, owner_identity FROM asks ORDER BY id'
+    )).toEqual([
+      { id: 'ask_done', request_id: null, owner_identity: null },
+      { id: 'ask_pending', request_id: null, owner_identity: null }
+    ])
+    store.run('UPDATE asks SET request_id = ? WHERE id = ?', 'request_1', 'ask_done')
+    expect(() => store.run('UPDATE asks SET request_id = ? WHERE id = ?', 'request_1', 'ask_pending')).toThrow()
   })
 })
 

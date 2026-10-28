@@ -19,10 +19,7 @@ export function MainArea() {
     seen.add(tab.id)
     return true
   })
-  const activeTab = tabs.find((tab) => tab.id === viewId)
-  const input = windowRoute
-    ? windowRoute.input
-    : activeTab && 'input' in activeTab ? activeTab.input : layout.view?.input
+  const input = windowRoute ? windowRoute.input : layout.view?.input
   const tabItems = tabs.map((tab) => ({
     id: tab.id,
     label: model?.views.find((candidate) => candidate.id === tab.id)?.title ?? tab.id

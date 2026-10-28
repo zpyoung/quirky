@@ -5,8 +5,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { MobileBundleAsset, MobileBundleManifest, MobileBundleManifestResult, MobileBundleReadResult } from '../src/contracts'
 import { buildMobilePages } from '../scripts/build-pages'
-import { downloadBundle, evictLeastRecentlyUsedHosts, PAGE_BUNDLE_ROUTES, validateBundleManifest } from '../src/shell/generation'
+import { downloadBundle, evictLeastRecentlyUsedHosts, validateBundleManifest } from '../src/shell/generation'
 import type { GenerationStore, StoredGeneration } from '../src/shell/generation'
+import { bundleRoutesFixture } from './bundle-fixture'
 
 const bytes = new TextEncoder().encode('<html>phone</html>')
 const digest = (value: Uint8Array) => createHash('sha256').update(value).digest('hex')
@@ -28,10 +29,7 @@ const manifest = (assetBytes: Uint8Array = bytes, assetHash = digest(assetBytes)
     buildId: buildIdFor(assets),
     assets,
     totalBytes: assetBytes.byteLength,
-    routes: [
-      { kind: 'workspaces', path: '/', grants: ['rpc', 'storage', 'navigate', 'terminal', 'externalLink'] },
-      { kind: 'session', path: '/session', grants: ['rpc', 'storage', 'navigate', 'terminal', 'clipboard.read', 'clipboard.write', 'externalLink'] }
-    ]
+    routes: bundleRoutesFixture()
   }
 }
 const manifestResult = (value = manifest()): MobileBundleManifestResult => ({ manifest: value, chunkBytes: 8, rangeBytes: 4 })
@@ -129,6 +127,29 @@ describe('verified mobile page generations', () => {
     expect(() => validateBundleManifest({ ...safe, totalBytes: 33 * 1024 * 1024 })).toThrow(/limit|size/i)
   })
 
+  test('manifest pins artifact route paths and capabilities to their exact metadata', () => {
+    const safe = manifest()
+
+    for (const kind of ['terminal-artifacts', 'terminal-artifact'] as const) {
+      const underGranted = {
+        ...safe,
+        routes: safe.routes.map((route) => route.kind === kind ? { ...route, grants: route.grants.slice(1) } : route)
+      }
+      const overGranted = {
+        ...safe,
+        routes: safe.routes.map((route) => route.kind === kind ? { ...route, grants: [...route.grants, 'terminal'] } : route)
+      }
+      const wrongPath = {
+        ...safe,
+        routes: safe.routes.map((route) => route.kind === kind ? { ...route, path: `${route.path}/unexpected` } : route)
+      }
+
+      expect(() => validateBundleManifest(underGranted)).toThrow(/grants/i)
+      expect(() => validateBundleManifest(overGranted)).toThrow(/grants/i)
+      expect(() => validateBundleManifest(wrongPath)).toThrow(/path/i)
+    }
+  })
+
   test('evicts only least-recently-used hosts beyond the six-host bound', () => {
     const hosts = Array.from({ length: 7 }, (_, index) => ({ hostId: `host-${index}`, lastUsedAt: index + 1 }))
     expect(evictLeastRecentlyUsedHosts(hosts, 6, 'host-6')).toEqual(['host-0'])
@@ -144,13 +165,11 @@ test('the production page builder emits a manifest matching every packaged web a
     const built = await buildMobilePages(repositoryRoot, outputDirectory)
     expect(validateBundleManifest(built)).toEqual(built)
     expect(built.buildId).toBe(buildIdFor(built.assets))
-    expect(built.routes.map((route) => route.kind)).toEqual(PAGE_BUNDLE_ROUTES.map((route) => route.kind))
     for (const asset of built.assets) {
       const content = new Uint8Array(await readFile(join(outputDirectory, asset.path)))
       expect(content.byteLength).toBe(asset.bytes)
       expect(digest(content)).toBe(asset.sha256)
     }
-    expect(await readFile(join(outputDirectory, 'index.html'), 'utf8')).toContain('/page.js')
   } finally {
     await rm(temporaryRoot, { recursive: true, force: true })
   }

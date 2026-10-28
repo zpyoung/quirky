@@ -452,7 +452,7 @@ export function activate(context: PluginContext): void {
     }
   })
   context.provide('method:quirky.ask/list', (params: Record<string, unknown>, caller: PluginCaller) =>
-    asks.list(params.pendingOnly === true, caller.role === 'mobile')
+    asks.list(params.pendingOnly === true, caller.role === 'mobile', str(params, 'askId'))
   )
   context.provide('method:quirky.ask/updatePartial', (params: Record<string, unknown>) =>
     asks.updatePartial(str(params, 'askId')!, params.partial)
