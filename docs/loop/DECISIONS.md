@@ -472,6 +472,12 @@ files, not this one.
 | medium | high | [m2-ask-parity D12](decisions/m2-ask-parity.md) | Drafts are Orca's per-question partial, saved by the window 500 ms after typing stops | locked by research/orca-features/ask.md |
 | medium | high | [m2-ask-parity D14](decisions/m2-ask-parity.md) | One persisted counter stamps every ask change, and a promotion gets the next value | locked by research/orca-features/ask.md |
 | medium | high | [m2-ask-parity D20](decisions/m2-ask-parity.md) | Approach: extend `quirky.ask` in place with Orca's pure modules ported beside it | assumed — autonomous |
+| medium | high | [m6-orchestration-ui D1](decisions/m6-orchestration-ui.md) | Build the complete skill and local orchestration UI slice | locked by docs/loop/queue.json |
+| medium | high | [m6-orchestration-ui D3](decisions/m6-orchestration-ui.md) | Extend existing plugin and renderer conventions | assumed — autonomous |
+| medium | high | [m6-orchestration-ui D4](decisions/m6-orchestration-ui.md) | Keep depth policy separate from ordinary worker-writable settings | assumed — autonomous |
+| medium | high | [m6-orchestration-ui D5](decisions/m6-orchestration-ui.md) | Preserve uncertainty, identity and terminal ownership | locked by research/orca-features/orchestration.md |
+| medium | high | [m6-orchestration-ui D8](decisions/m6-orchestration-ui.md) | Resolve navigation in one public daemon operation, including context-only Dispatches | locked by research/orca-features/orchestration.md |
+| medium | high | [m6-orchestration-ui D15](decisions/m6-orchestration-ui.md) | Compose canonical service migrations and routing before retrying the land | assumed — autonomous |
 | medium | high | [m5-automations-dispatch D2](decisions/m5-automations-dispatch.md) | Preserve raw-argument refusal and defer that incompatible flow | deferred: raw extra agent arguments |
 | medium | high | [m5-automations-dispatch D3](decisions/m5-automations-dispatch.md) | Capture local registry identity and fail closed for remote host flows | deferred: remote host generation and execution |
 | medium | high | [m5-automations-dispatch D5](decisions/m5-automations-dispatch.md) | Prefer public existing seams to duplicate runners | assumed — autonomous |
@@ -683,6 +689,7 @@ files, not this one.
 | easy | medium | [m2-ask-parity D22](decisions/m2-ask-parity.md) | A `deadlines` job wakes the plugin after a restart | assumed — autonomous |
 | easy | medium | [m2-ask-parity D26](decisions/m2-ask-parity.md) | The suppression hook reads the current configuration, even for a resume | assumed — autonomous |
 | easy | medium | [m2-ask-parity D32](decisions/m2-ask-parity.md) | Patterns are screened more strictly than Orca does | assumed — autonomous |
+| easy | medium | [m6-orchestration-ui D13](decisions/m6-orchestration-ui.md) | Accept the bounded three-lens review without overstating full-context coverage | assumed — autonomous |
 | easy | medium | [m1-launch-settings D10](decisions/m1-launch-settings.md) | A model ID the catalog doesn't list is accepted when the agent declares options for unknown models or lists no models at all | assumed — autonomous |
 | easy | medium | [m1-launch-settings D17](decisions/m1-launch-settings.md) | Model discovery and retirement wait for the first item that saves picks | assumed — autonomous |
 | easy | medium | [m1-launch-settings D19](decisions/m1-launch-settings.md) | The catalog yields structured options, and `quirky.structured/create` uses them | assumed — autonomous |
@@ -1623,6 +1630,14 @@ files, not this one.
 | easy | high | [m2-ask-parity D35](decisions/m2-ask-parity.md) | Catching up with build/roadmap (m1-term-daemon) needed no change here | assumed — autonomous |
 | easy | high | [m2-ask-parity D36](decisions/m2-ask-parity.md) | No native-only scenarios | assumed — autonomous |
 | easy | high | [m2-ask-parity D37](decisions/m2-ask-parity.md) | The first land was cut off by this iteration's own timeout, after its merge; land runs again once lane 2's land finishes | assumed — autonomous |
+| easy | high | [m6-orchestration-ui D2](decisions/m6-orchestration-ui.md) | Apply unattended night mode with one combined spec | locked by docs/loop/LOOP.md |
+| easy | high | [m6-orchestration-ui D6](decisions/m6-orchestration-ui.md) | Use OpenAI implementers and reachable Gemini review | assumed — autonomous |
+| easy | high | [m6-orchestration-ui D7](decisions/m6-orchestration-ui.md) | Verify macOS with private homes and no real agent configuration writes | deferred: platform |
+| easy | high | [m6-orchestration-ui D9](decisions/m6-orchestration-ui.md) | Separate current-assignment confidence from worker liveness | assumed — autonomous |
+| easy | high | [m6-orchestration-ui D10](decisions/m6-orchestration-ui.md) | Repair observed fixture boundaries without weakening product assertions | assumed — autonomous |
+| easy | high | [m6-orchestration-ui D11](decisions/m6-orchestration-ui.md) | Preserve sidebar workspace layout and isolate actual UI proof | assumed — autonomous |
+| easy | high | [m6-orchestration-ui D12](decisions/m6-orchestration-ui.md) | Keep catch-up and review provenance explicit | assumed — autonomous |
+| easy | high | [m6-orchestration-ui D14](decisions/m6-orchestration-ui.md) | Keep guarded dogfood limits separate from actual isolated-browser proof | assumed — autonomous |
 | easy | high | [m5-automations-dispatch D4](decisions/m5-automations-dispatch.md) | Resolve every relevant gray area autonomously | locked by docs/loop/LOOP.md |
 | easy | high | [m5-automations-dispatch D7](decisions/m5-automations-dispatch.md) | Explicit setup defaults to skip and never grants hook trust | assumed — autonomous |
 | easy | high | [m5-automations-dispatch D9](decisions/m5-automations-dispatch.md) | Use OpenAI implementers and reachable Gemini cross-family review | locked by docs/loop/LOOP.md |
