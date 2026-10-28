@@ -224,6 +224,23 @@
         }
       },
       {
+        "id": "userInput",
+        "description": "Reports explicit human input intent before terminal bytes, guarded by the attached process incarnation. Programmatic prompts and terminal query replies do not call this.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": { "type": "string" },
+            "expectedIncarnation": { "type": "string", "description": "The non-empty incarnation of the currently attached process; verified by the method." }
+          },
+          "required": ["session", "expectedIncarnation"]
+        },
+        "result": {
+          "type": "object",
+          "properties": { "ok": { "type": "boolean" } },
+          "required": ["ok"]
+        }
+      },
+      {
         "id": "resize",
         "description": "Resizes a terminal.",
         "params": {
@@ -854,7 +871,16 @@
             },
             "title": {
               "type": "string",
-              "description": "The default title; at most 200 characters."
+              "description": "The initial session title and tab's default title; at most 200 characters."
+            },
+            "model": {
+              "type": "string",
+              "description": "Model to launch the agent with (1 to 128 characters); checked against the agent's catalog."
+            },
+            "options": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Option picks for the model, such as {effort: \"high\"}: up to 16 entries whose values are strings or booleans. Needs `model`."
             },
             "quickCommand": {
               "type": "string",

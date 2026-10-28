@@ -256,9 +256,8 @@
       "deps": [
         "m6-orchestration-core"
       ],
-      "status": "in-progress",
-      "early": true,
-      "lane": 9
+      "status": "done",
+      "early": true
     },
     {
       "id": "m6-heimdall-core",
@@ -585,8 +584,7 @@
       "deps": [
         "sa-browser-agent"
       ],
-      "status": "in-progress",
-      "lane": 4
+      "status": "done"
     },
     {
       "id": "sa-browser-profiles-settings",
@@ -681,9 +679,8 @@
       "deps": [
         "m5-loops-core"
       ],
-      "status": "in-progress",
-      "early": true,
-      "lane": 5
+      "status": "done",
+      "early": true
     },
     {
       "id": "m5-loops-ui",
@@ -722,8 +719,9 @@
       "deps": [
         "m6-orchestration-workers"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 2
     },
     {
       "id": "m6-objective-plan",
@@ -830,8 +828,9 @@
       "deps": [
         "sb-mobile-daemon"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 5
     },
     {
       "id": "sb-mobile-app-panels",
@@ -843,8 +842,9 @@
       "deps": [
         "sb-mobile-app"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 4
     },
     {
       "id": "m4-editor-drop-open-in-place",
@@ -856,7 +856,7 @@
       "deps": [
         "m2-editor"
       ],
-      "status": "todo",
+      "status": "blocked",
       "early": true
     },
     {
@@ -869,7 +869,8 @@
       "deps": [
         "m3-accounts"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 9
     },
     {
       "id": "m7-sweep-terminal",
@@ -924,8 +925,7 @@
         "m2-editor",
         "m2-sidebar-extras",
         "m4-sidebar-review-filters",
-        "fix-flaky-quirky-git-files-scenarios",
-        "m4-editor-drop-open-in-place"
+        "fix-flaky-quirky-git-files-scenarios"
       ]
     },
     {

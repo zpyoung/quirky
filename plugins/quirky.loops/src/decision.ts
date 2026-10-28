@@ -104,8 +104,21 @@ export function decideNext(input: DecisionInput): LoopDecision {
     if (usageLimit) return usageLimit
   }
 
+  if (loop.preset === 'queue') {
+    const hasAvailableItem = loop.queueItems.some((item) => item.state !== 'done') ||
+      (loop.config.promptSource.kind === 'queue' && loop.config.promptSource.repeatQueue && loop.queueItems.length > 0)
+    if (!hasAvailableItem) {
+      return loop.config.done.check || loop.config.done.evaluator
+        ? { kind: 'pause', reason: 'queue-exhausted' }
+        : { kind: 'complete' }
+    }
+  }
+
   if (latest !== null && loop.config.askBeforeNext) {
     return { kind: 'pause', reason: 'ask-before-next' }
+  }
+  if (loop.nextIterationAt !== null && loop.nextIterationAt > input.now) {
+    return { kind: 'wait', reason: 'interval', until: loop.nextIterationAt }
   }
   if (input.userIdle === false) return { kind: 'wait', reason: 'user-idle' }
   if (input.agentIdle === false) return { kind: 'wait', reason: 'agent-idle' }

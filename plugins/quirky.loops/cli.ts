@@ -1,5 +1,5 @@
 import type { CliArgs, CliContext, CliModule } from '@quirky/protocol'
-import type { LoopConfig, LoopConfigPatch, LoopSnapshot, IterationDetail } from './src/types'
+import type { LoopConfig, LoopConfigPatch, LoopPreset, LoopSnapshot, IterationDetail, QueueOperation } from './src/types'
 
 type Flags = Record<string, unknown>
 type EditPatch = LoopConfigPatch & { name?: string }
@@ -27,6 +27,21 @@ function positiveInteger(flags: Flags, name: string, ctx: CliContext): number | 
   return value
 }
 
+function nonnegativeInteger(flags: Flags, name: string, ctx: CliContext): number | undefined {
+  const value = numericFlag(flags, name, ctx)
+  if (value !== undefined && (!Number.isInteger(value) || value < 0)) {
+    throw ctx.usage(`--${name} must be a nonnegative integer`)
+  }
+  return value
+}
+
+function positionalIndex(args: CliArgs, index: number, name: string, ctx: CliContext): number {
+  const raw = positional(args, index, name, ctx)
+  const value = Number(raw)
+  if (!/^\d+$/.test(raw) || !Number.isSafeInteger(value)) throw ctx.usage(`${name} must be a nonnegative integer`)
+  return value
+}
+
 function booleanFlag(flags: Flags, name: string, ctx: CliContext): boolean | undefined {
   const value = flags[name]
   if (value === undefined) return undefined
@@ -37,7 +52,7 @@ function booleanFlag(flags: Flags, name: string, ctx: CliContext): boolean | und
 function stringList(value: unknown, name: string, ctx: CliContext): string[] {
   if (typeof value === 'string') return [value]
   if (Array.isArray(value) && value.every((item) => typeof item === 'string')) return value as string[]
-  throw ctx.usage(`--${name} must be a string${name === 'protected-path' || name === 'option' ? ' or repeated strings' : ''}`)
+  throw ctx.usage(`--${name} must be a string${name === 'protected-path' || name === 'option' || name === 'queue-item' ? ' or repeated strings' : ''}`)
 }
 
 function nonEmpty(value: string | undefined, flag: string, ctx: CliContext): string | undefined {
@@ -81,9 +96,56 @@ function capsFrom(flags: Flags, ctx: CliContext): LoopConfig['caps'] {
   }
 }
 
-function createConfig(flags: Flags, ctx: CliContext): LoopConfig {
+function createConfig(
+  flags: Flags,
+  ctx: CliContext
+): { preset: LoopPreset; config: LoopConfig; queueItems?: { body: string }[] } {
+  const presetFlag = stringFlag(flags, 'preset', ctx)
+  const preset = presetFlag ?? 'until-done'
+  if (preset !== 'until-done' && preset !== 'queue' && preset !== 'interval') {
+    throw ctx.usage('--preset must be until-done, queue, or interval')
+  }
   const prompt = nonEmpty(stringFlag(flags, 'prompt', ctx), 'prompt', ctx)
-  if (prompt === undefined) throw ctx.usage('create requires --prompt')
+  const queueItemsFlag = flags['queue-item']
+  let repeatQueue = booleanFlag(flags, 'repeat-queue', ctx)
+  const every = positiveInteger(flags, 'every', ctx)
+  const anchor = stringFlag(flags, 'anchor', ctx)
+  if (anchor !== undefined && anchor !== 'from-end' && anchor !== 'wall-clock') {
+    throw ctx.usage('--anchor must be from-end or wall-clock')
+  }
+
+  let promptSource: LoopConfig['promptSource']
+  let pacing: LoopConfig['pacing']
+  let queueItems: { body: string }[] | undefined
+  if (preset === 'queue') {
+    if (prompt !== undefined) throw ctx.usage('--preset queue cannot be combined with --prompt')
+    if (every !== undefined || anchor !== undefined) throw ctx.usage('--every and --anchor require --preset interval')
+    if (queueItemsFlag === undefined) throw ctx.usage('--preset queue requires at least one --queue-item')
+    const bodies = stringList(queueItemsFlag, 'queue-item', ctx)
+    if (bodies.length === 0 || bodies.some((body) => body.trim() === '')) {
+      throw ctx.usage('--queue-item must be non-empty')
+    }
+    if (repeatQueue === undefined) repeatQueue = false
+    promptSource = { kind: 'queue', repeatQueue }
+    pacing = { kind: 'on-idle' }
+    queueItems = bodies.map((body) => ({ body }))
+  } else {
+    if (queueItemsFlag !== undefined || repeatQueue !== undefined) {
+      throw ctx.usage('--queue-item and --repeat-queue require --preset queue')
+    }
+    if (prompt === undefined) {
+      throw ctx.usage(preset === 'interval' ? '--preset interval requires --prompt' : 'create requires --prompt')
+    }
+    promptSource = { kind: 'repeat', body: prompt }
+    if (preset === 'interval') {
+      if (every === undefined) throw ctx.usage('--preset interval requires --every')
+      pacing = { kind: 'interval', minutes: every, anchor: anchor ?? 'from-end' }
+    } else {
+      if (every !== undefined || anchor !== undefined) throw ctx.usage('--every and --anchor require --preset interval')
+      pacing = { kind: 'on-idle' }
+    }
+  }
+
   const checkCommand = nonEmpty(stringFlag(flags, 'check', ctx), 'check', ctx)
   const timeout = positiveInteger(flags, 'check-timeout', ctx)
   if (timeout !== undefined && timeout > 600) throw ctx.usage('--check-timeout must be between 1 and 600')
@@ -96,10 +158,8 @@ function createConfig(flags: Flags, ctx: CliContext): LoopConfig {
   const evaluator = nonEmpty(stringFlag(flags, 'evaluator', ctx), 'evaluator', ctx)
   const protectedPaths = flags['protected-path'] === undefined ? undefined : stringList(flags['protected-path'], 'protected-path', ctx)
   if (protectedPaths?.some((path) => path.trim() === '')) throw ctx.usage('--protected-path must be non-empty')
-  const sessionPolicy = stringFlag(flags, 'session', ctx) ?? 'fresh'
+  const sessionPolicy = stringFlag(flags, 'session', ctx) ?? (preset === 'until-done' ? 'fresh' : 'continue')
   if (sessionPolicy !== 'fresh' && sessionPolicy !== 'continue') throw ctx.usage('--session must be fresh or continue')
-  const preset = stringFlag(flags, 'preset', ctx)
-  if (preset !== undefined && preset !== 'until-done') throw ctx.usage('only the until-done preset is supported')
 
   const done: LoopConfig['done'] = {
     ...(checkCommand === undefined ? {} : {
@@ -111,9 +171,9 @@ function createConfig(flags: Flags, ctx: CliContext): LoopConfig {
   const checkpointCommits = booleanFlag(flags, 'checkpoint-commits', ctx) ?? false
   const askBeforeNext = booleanFlag(flags, 'ask-before-next', ctx) ?? false
   const resumeAtLimitReset = booleanFlag(flags, 'resume-at-reset', ctx) ?? false
-  return {
-    promptSource: { kind: 'repeat', body: prompt },
-    pacing: { kind: 'on-idle' },
+  const config: LoopConfig = {
+    promptSource,
+    pacing,
     sessionPolicy,
     done,
     caps: capsFrom(flags, ctx),
@@ -123,6 +183,7 @@ function createConfig(flags: Flags, ctx: CliContext): LoopConfig {
     askBeforeNext,
     resumeAtLimitReset
   }
+  return { preset, config, ...(queueItems === undefined ? {} : { queueItems }) }
 }
 
 function positional(args: CliArgs, index: number, name: string, ctx: CliContext): string {
@@ -144,8 +205,32 @@ function capText(loop: LoopSnapshot): string {
   return `${loop.iterationsCompleted}${max === undefined ? '' : `/${max}`}`
 }
 
+function queueSummary(loop: LoopSnapshot): string | undefined {
+  if (loop.preset !== 'queue') return undefined
+  const pending = loop.queueItems.filter((item) => item.state === 'pending').length
+  const inFlight = loop.queueItems.filter((item) => item.state === 'in-flight').length
+  const done = loop.queueItems.filter((item) => item.state === 'done').length
+  return `queue ${done} done, ${pending} pending, ${inFlight} in flight`
+}
+
+function scheduleSummary(loop: LoopSnapshot): string[] {
+  return [
+    ...(loop.nextIterationAt === null ? [] : [`next ${new Date(loop.nextIterationAt).toISOString()}`]),
+    ...(loop.skippedTicks === 0 ? [] : [`skipped ticks ${loop.skippedTicks}`])
+  ]
+}
+
 function loopLine(loop: LoopSnapshot): string {
-  return `${loop.id}  ${loop.name}  ${loop.preset}  ${loop.agent}  ${statusText(loop)}  iterations ${capText(loop)}`
+  return [
+    loop.id,
+    loop.name,
+    loop.preset,
+    loop.agent,
+    statusText(loop),
+    `iterations ${capText(loop)}`,
+    queueSummary(loop),
+    ...scheduleSummary(loop)
+  ].filter((part): part is string => part !== undefined).join('  ')
 }
 
 function showText(loop: LoopSnapshot, ctx: CliContext): string {
@@ -159,6 +244,12 @@ function showText(loop: LoopSnapshot, ctx: CliContext): string {
     ['worktree', loop.worktreeId],
     ['workspace', loop.cwd],
     ['iterations', capText(loop)],
+    ...(loop.nextIterationAt === null ? [] : [['next iteration', new Date(loop.nextIterationAt).toISOString()] as [string, string]]),
+    ...(loop.skippedTicks === 0 ? [] : [['skipped ticks', String(loop.skippedTicks)] as [string, string]]),
+    ...loop.queueItems.map((item): [string, string] => [
+      `queue item ${item.position}`,
+      `${item.id} [${item.state}] ${item.body}`
+    ]),
     ['active time', `${Math.floor(loop.activeMs / 60_000)}m ${Math.floor(loop.activeMs / 1000) % 60}s`],
     ['cost', loop.costUsd === null ? 'n/a' : `$${loop.costUsd.toFixed(4)}`],
     ...(loop.phase === null ? [] : [['phase', loop.phase] as [string, string]]),
@@ -198,11 +289,14 @@ const named: CliModule['commands'] = {
     if (agent !== 'claude' && agent !== 'codex') throw ctx.usage('create requires --agent claude|codex')
     const name = nonEmpty(stringFlag(args.flags, 'name', ctx), 'name', ctx)
     const { model, options } = selectionOptions(args.flags, ctx)
+    const created = createConfig(args.flags, ctx)
     const snapshot = await ctx.call('quirky.loops/create', {
       worktree: stringFlag(args.flags, 'worktree', ctx) ?? 'current',
       agent,
-      config: createConfig(args.flags, ctx),
-      ...(name === undefined ? {} : { name }),
+      preset: created.preset,
+      config: created.config,
+      ...(created.queueItems === undefined ? {} : { queueItems: created.queueItems }),
+      name: name ?? `${agent} ${created.preset}`,
       ...(model === undefined ? {} : { model }),
       ...(options === undefined ? {} : { options })
     }) as LoopSnapshot
@@ -267,7 +361,8 @@ const named: CliModule['commands'] = {
       'name', 'prompt', 'session', 'check', 'check-timeout', 'check-when', 'evaluator',
       'max-iterations', 'max-minutes', 'max-cost', 'no-progress', 'checkpoint-commits',
       'ask-before-next', 'resume-at-reset', 'protected-path', 'no-check', 'no-evaluator',
-      'no-max-iterations', 'no-max-minutes', 'no-max-cost', 'no-protected-paths'
+      'no-max-iterations', 'no-max-minutes', 'no-max-cost', 'no-protected-paths',
+      'repeat-queue', 'every', 'anchor'
     ]
     const extra = Object.keys(flags).find((key) => !allowed.includes(key))
     if (extra !== undefined) throw ctx.usage(`edit does not support --${extra}`)
@@ -285,11 +380,35 @@ const named: CliModule['commands'] = {
     if (supplied.length === 0) throw ctx.usage('Nothing to edit; pass at least one setting flag')
 
     const current = await ctx.call('quirky.loops/get', { loopId }) as LoopSnapshot
+    const repeatQueue = booleanFlag(flags, 'repeat-queue', ctx)
+    const every = positiveInteger(flags, 'every', ctx)
+    const anchor = stringFlag(flags, 'anchor', ctx)
+    if (anchor !== undefined && anchor !== 'from-end' && anchor !== 'wall-clock') {
+      throw ctx.usage('--anchor must be from-end or wall-clock')
+    }
+    if (current.preset === 'queue' && flags.prompt !== undefined) {
+      throw ctx.usage('--prompt cannot be used with the queue preset')
+    }
+    if (repeatQueue !== undefined && current.preset !== 'queue') {
+      throw ctx.usage('--repeat-queue requires the queue preset')
+    }
+    if ((every !== undefined || anchor !== undefined) && current.preset !== 'interval') {
+      throw ctx.usage('--every and --anchor require the interval preset')
+    }
     const patch: EditPatch = {}
     const name = nonEmpty(stringFlag(flags, 'name', ctx), 'name', ctx)
     if (name !== undefined) patch.name = name
     const prompt = nonEmpty(stringFlag(flags, 'prompt', ctx), 'prompt', ctx)
     if (prompt !== undefined) patch.promptSource = { kind: 'repeat', body: prompt }
+    if (repeatQueue !== undefined) patch.promptSource = { kind: 'queue', repeatQueue }
+    if (every !== undefined || anchor !== undefined) {
+      if (current.config.pacing.kind !== 'interval') throw ctx.usage('interval pacing is required to edit --every or --anchor')
+      patch.pacing = {
+        kind: 'interval',
+        minutes: every ?? current.config.pacing.minutes,
+        anchor: anchor ?? current.config.pacing.anchor
+      }
+    }
     const session = stringFlag(flags, 'session', ctx)
     if (session !== undefined) {
       if (session !== 'fresh' && session !== 'continue') throw ctx.usage('--session must be fresh or continue')
@@ -355,6 +474,61 @@ const named: CliModule['commands'] = {
     if (Object.keys(patch).length === 0) throw ctx.usage('Nothing to edit; pass at least one setting flag')
     const loop = await ctx.call('quirky.loops/edit', { loopId, patch }) as LoopSnapshot
     ctx.out.result(loop, () => `Updated loop ${loop.id} (${loop.name}); changes apply to the next iteration.`)
+  },
+  async queue(args, ctx) {
+    const loopId = positional(args, 0, 'queue requires a loop ID', ctx)
+    const kind = positional(args, 1, 'queue requires an operation', ctx)
+    if (kind !== 'add' && kind !== 'edit' && kind !== 'move' && kind !== 'remove') {
+      throw ctx.usage('queue operation must be add, edit, move, or remove')
+    }
+    const allowedFlags = kind === 'add' ? ['position', 'json'] : ['json']
+    const extra = Object.keys(args.flags).find((key) => !allowedFlags.includes(key))
+    if (extra !== undefined) throw ctx.usage(`queue ${kind} does not support --${extra}`)
+
+    let operation: QueueOperation
+    if (kind === 'add') {
+      assertNoExtraPositionals(args, 3, ctx)
+      if (args.positionals.length < 3) throw ctx.usage('queue add requires a body')
+      const body = args.positionals.slice(2).join(' ').trim()
+      if (body === '') throw ctx.usage('queue add requires a non-empty body')
+      const position = nonnegativeInteger(args.flags, 'position', ctx)
+      const current = await ctx.call('quirky.loops/get', { loopId }) as LoopSnapshot
+      if (current.preset !== 'queue') throw ctx.usage('queue operations require a queue preset')
+      if (position !== undefined && position > current.queueItems.length) {
+        throw ctx.usage(`--position must be between 0 and ${current.queueItems.length}`)
+      }
+      operation = { kind: 'add', body, ...(position === undefined ? {} : { position }) }
+    } else if (kind === 'edit') {
+      assertNoExtraPositionals(args, 4, ctx)
+      if (args.positionals.length < 4) throw ctx.usage('queue edit requires an item ID and body')
+      const id = positional(args, 2, 'queue edit requires an item ID', ctx)
+      const body = args.positionals.slice(3).join(' ').trim()
+      if (body === '') throw ctx.usage('queue edit requires a non-empty body')
+      const current = await ctx.call('quirky.loops/get', { loopId }) as LoopSnapshot
+      if (current.preset !== 'queue') throw ctx.usage('queue operations require a queue preset')
+      operation = { kind: 'edit', id, body }
+    } else if (kind === 'move') {
+      assertNoExtraPositionals(args, 4, ctx)
+      if (args.positionals.length < 4) throw ctx.usage('queue move requires an item ID and position')
+      const id = positional(args, 2, 'queue move requires an item ID', ctx)
+      const position = positionalIndex(args, 3, 'queue move position', ctx)
+      const current = await ctx.call('quirky.loops/get', { loopId }) as LoopSnapshot
+      if (current.preset !== 'queue') throw ctx.usage('queue operations require a queue preset')
+      if (position >= current.queueItems.length) {
+        throw ctx.usage(`queue move position must be between 0 and ${current.queueItems.length - 1}`)
+      }
+      operation = { kind: 'move', id, position }
+    } else {
+      assertNoExtraPositionals(args, 3, ctx)
+      if (args.positionals.length < 3) throw ctx.usage('queue remove requires an item ID')
+      const id = positional(args, 2, 'queue remove requires an item ID', ctx)
+      const current = await ctx.call('quirky.loops/get', { loopId }) as LoopSnapshot
+      if (current.preset !== 'queue') throw ctx.usage('queue operations require a queue preset')
+      operation = { kind: 'remove', id }
+    }
+
+    const loop = await ctx.call('quirky.loops/queue', { loopId, op: operation }) as LoopSnapshot
+    ctx.out.result(loop, () => `Updated queue for loop ${loop.id} (${loop.name}).`)
   }
 }
 

@@ -2,10 +2,17 @@ import type { PluginCaller, PluginContext, StructuredMessage } from '@quirky/pro
 
 export type LoopAgent = 'claude' | 'codex'
 export type LoopState = 'running' | 'needs-you' | 'paused' | 'completed' | 'stopped'
-export type PauseReason = 'user' | 'cap-iterations' | 'cap-time' | 'cap-cost' | 'no-progress' | 'protected-path' | 'agent-blocked' | 'agent-decide' | 'crashed' | 'usage-limit' | 'interrupted-by-restart' | 'unverifiable' | 'ask-before-next'
+export type PauseReason = 'user' | 'cap-iterations' | 'cap-time' | 'cap-cost' | 'no-progress' | 'protected-path' | 'agent-blocked' | 'agent-decide' | 'crashed' | 'usage-limit' | 'interrupted-by-restart' | 'unverifiable' | 'ask-before-next' | 'queue-exhausted'
+export type LoopPreset = 'until-done' | 'interval' | 'queue'
+export type QueueItem = { id: string; position: number; body: string; state: 'pending' | 'in-flight' | 'done' }
+export type QueueOperation =
+  | { kind: 'add'; body: string; position?: number }
+  | { kind: 'edit'; id: string; body: string }
+  | { kind: 'move'; id: string; position: number }
+  | { kind: 'remove'; id: string }
 export type LoopConfig = {
-  promptSource: { kind: 'repeat'; body: string }
-  pacing: { kind: 'on-idle' }
+  promptSource: { kind: 'repeat'; body: string } | { kind: 'queue'; repeatQueue: boolean }
+  pacing: { kind: 'on-idle' } | { kind: 'interval'; minutes: number; anchor: 'from-end' | 'wall-clock' }
   sessionPolicy: 'fresh' | 'continue'
   done: {
     check?: { command: string; timeoutSeconds: number; runWhen: 'every-iteration' | 'on-claim' }
@@ -24,7 +31,8 @@ export type LoopCreateInput = {
   worktreeId?: string
   name?: string
   agent: LoopAgent
-  preset?: 'until-done'
+  preset?: LoopPreset
+  queueItems?: { body: string }[]
   config: LoopConfig
   model?: string
   options?: Record<string, string | boolean>
@@ -69,6 +77,8 @@ export type IterationDetail = IterationEvidence & {
   endedAt: number | null
   endReason: IterationEnd | null
   doneConfig: LoopConfig['done']
+  queueItemId?: string | null
+  pacingConfig?: LoopConfig['pacing']
 }
 export type LoopSnapshot = {
   id: string
@@ -78,7 +88,7 @@ export type LoopSnapshot = {
   cwd: string
   workspaceKind: 'git' | 'folder'
   agent: LoopAgent
-  preset: 'until-done'
+  preset: LoopPreset
   config: LoopConfig
   model?: string
   options?: Record<string, string | boolean>
@@ -97,6 +107,8 @@ export type LoopSnapshot = {
   notesPath: string
   warnings: string[]
   recentIterations: IterationDetail[]
+  queueItems: QueueItem[]
+  skippedTicks: number
 }
 export type DecisionInput = {
   loop: LoopSnapshot
@@ -141,6 +153,7 @@ export interface LoopServiceContract {
   stop(loopId: string, now?: boolean): Promise<LoopSnapshot>
   steer(loopId: string, text: string): Promise<LoopSnapshot>
   edit(loopId: string, patch: LoopConfigPatch & { name?: string }): Promise<LoopSnapshot>
+  queue(loopId: string, op: QueueOperation): Promise<LoopSnapshot>
   shutdown(): Promise<void>
 }
 
@@ -153,3 +166,11 @@ export interface EvidenceEngineContract {
   shutdown(): Promise<void>
 }
 export type LoopContext = PluginContext
+
+export type PacingInput = {
+  pacing: LoopConfig['pacing']
+  createdAt: number
+  iterationStartedAt: number | null
+  iterationEndedAt: number | null
+}
+export type PacingSchedule = { nextIterationAt: number | null; skippedTicks: number }

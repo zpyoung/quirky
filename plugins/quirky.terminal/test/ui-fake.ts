@@ -201,6 +201,8 @@ export function paneHandlers(options: { replay?: string; existing?: string[] } =
     'quirky.terminal/attach': () => attachResult({ streamId: ++nextStream, replay: options.replay ?? '' }),
     'quirky.terminal/detach': () => ({ ok: true }),
     'quirky.terminal/write': () => ({ ok: true }),
+    'quirky.session/identity': (params) => ({ sessionId: params.session, processIncarnation: `fixture-${params.session}`, live: true }),
+    'quirky.terminal/userInput': () => ({ ok: true }),
     'quirky.terminal/resize': () => ({ ok: true }),
     'quirky.terminal/pathsExist': (params) => ({ exists: (params.paths as string[]).map((path) => existing.has(path)) }),
     'quirky.terminal/openExternal': () => ({ ok: true }),

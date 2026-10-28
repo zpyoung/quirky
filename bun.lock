@@ -330,15 +330,15 @@
         "@types/react-dom": "^19.3.0",
       },
     },
-    "plugins/quirky.palette": {
-      "name": "@quirky/plugin-palette",
+    "plugins/quirky.orchestration": {
+      "name": "@quirky/plugin-orchestration",
       "version": "0.1.0",
       "dependencies": {
         "@quirky/protocol": "workspace:*",
       },
     },
-    "plugins/quirky.orchestration": {
-      "name": "@quirky/plugin-orchestration",
+    "plugins/quirky.palette": {
+      "name": "@quirky/plugin-palette",
       "version": "0.1.0",
       "dependencies": {
         "@quirky/protocol": "workspace:*",
