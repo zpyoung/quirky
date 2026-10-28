@@ -5,6 +5,10 @@ Status: Approved autonomously under LOOP.md night mode; one combined logic/techn
 
 **Amendments:** 2026-10-28 — Initial follow-up specification; inherits m3-session-info SC-5/7/9 and the explicit D32 follow-up. Existing native results are preserved, not represented as fresh passes.
 
+**Amendments:** 2026-10-28 — Source inspection establishes the shell's actual minimum panel width is 220 px, not the initially proposed 240 px stress width. Audit 280, 240 and 220 px; do not change shell geometry for this feature.
+
+**Amendments:** 2026-10-28 — Operator adopts authoritative LOOP.md “Build first, test at the end.” Acceptance behavior above remains the end-phase bar, but this in-progress item lands its current implementation after typecheck only. Stop unfinished suites, dogfood and review; no verification/debug follow-up item. Native handoff remains required.
+
 ## Conceptual model and data flow
 Session Info remains the built-in public-API consumer inspecting the focused terminal agent. This item verifies the remaining interaction boundaries, not a new inspection model. Browser clipboard permission failures must propagate through the real command to visible failure feedback; only a completed write can publish Copied. The panel's identity actions, accordion, inspection and recovery controls must remain reachable in the shell's supported narrow panel layout. Exact terminal activation and transcript provenance remain owned by public terminal APIs.
 
@@ -16,7 +20,7 @@ Choose focused boundary investigation and actual built-app web verification. Rej
 ## Decisions locked
 - No human asks, foreground/native automation, real provider/network calls, or global user-state changes.
 - Reuse existing commands, APIs, persisted accordion state and 1.5-second Copied feedback; no alternate native bridge or test-only production hook.
-- Audit 280 px supported sidebar content and an additional 240 px stress width where the shell permits it; long provider IDs and transcript paths must not force actions out of reach. Use normal vertical scrolling and visible shell overflow routes.
+- Audit 280, 240 and the shell's supported 220 px minimum panel width; long provider IDs and transcript paths must not force actions out of reach. Use normal vertical scrolling and visible shell overflow routes.
 - Test real browser clipboard denial through browser permission configuration, not a replacement clipboard implementation. Denial stays distinct from native permission evidence.
 - Preserve the two-second production SIGKILL grace, timeout classification and leader/descendant cleanup requirements. Investigate fixture readiness before any permanent repair.
 - Preserve existing native SC-5 pass and SC-7/9 blocked history; add separately identified pending transient-feedback, denial, activation/flash/scroll coverage as needed. A valid pending native handoff satisfies this lane's native-only delivery rule.
@@ -50,4 +54,4 @@ No exported contract changes are planned. Preserve `quirky.session-info/get`, se
 
 Before code, commit this specification and the decision log. At most three OpenAI omp implementers, Gemini cross-family review (Opus unavailable). Parent owns native scenario JSON and decision/evidence docs. Disjoint source slices may run concurrently; no build/tests/formatters mid-flight. Parent runs focused regression checks after the writer barrier.
 
-Required gates: actual production build and one unattended web dogfood pass using the real daemon with owned fake providers; `bun scripts/suite.ts plugins/quirky.session-info plugins/quirky.agents` plus any changed importing packages; `bun test scripts`; `bun run typecheck`. Catch up once with `git merge build/roadmap`, read incoming decisions, rerun affected checks as LOOP.md requires, one final review round, then authoritative queue land. No whole-suite pre-land run. Remove throwaway runtime probes after observed proof; update docs with exercised evidence and exact limits.
+Current landing gate: `bun run typecheck` only, then authoritative queue land. Catch up once with `git merge build/roadmap` and read incoming decisions. The prior build/suite/scripts/dogfood/review campaign is superseded by the operator's end-phase directive; retain exact already-exercised evidence and partial results, without claiming those goals complete. Remove owned runtime probes and await cleanup.
