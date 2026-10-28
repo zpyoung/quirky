@@ -1341,6 +1341,18 @@
         "sa-browser-pane"
       ],
       "status": "todo"
+    },
+    {
+      "id": "sb-mobile-settings-visibility",
+      "milestone": "Side B",
+      "title": "Recheck Settings > Mobile paired-device revoke visibility at 1280x720: guarded scroll/PageDown could not reach the clipped button; diagnose host overflow versus driver targeting and fix only reproduced app clipping (Mobile-page revoke path already works)",
+      "docs": [
+        "mobile.md"
+      ],
+      "deps": [
+        "sb-mobile-daemon"
+      ],
+      "status": "todo"
     }
   ]
 }
