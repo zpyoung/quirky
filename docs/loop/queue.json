@@ -189,16 +189,6 @@
       "status": "done"
     },
     {
-      "id": "fix-test-process-leaks",
-      "milestone": "M1",
-      "title": "Fix leaked test processes: test runs and UI passes leave quirkyd daemons and pty-host processes running after the test ends, timed out, or was killed (97 found on 2026-10-27, about 1.9 GB, under the lane worktrees, the integration worktree, agent worktrees and /tmp test folders; pty-hosts outlive their daemon with parent PID 1). Find which harnesses start them without a guaranteed stop (packages/daemon/test/helpers.ts, plugins/*/test support, the e2e harnesses, the like-a-user web pass), make every start paired with a kill of the whole process tree on any exit, make a pty-host exit when its daemon goes away, and add a test that fails if a run leaves one behind",
-      "docs": [
-        "term-daemon.md"
-      ],
-      "deps": [],
-      "status": "done"
-    },
-    {
       "id": "fix-ask-regex-budget-20261027",
       "milestone": "M2",
       "title": "Fix required remote suite: plugins/quirky.ask/test/core/spec.test.ts accepts unanchored a*a*a*b with a 200-character nonmatching default but validation takes 103-118 ms and violates its 100 ms budget even in isolated runs; investigate bounded regex validation without suppressing the assertion or changing matching semantics",
@@ -297,46 +287,6 @@
       ],
       "status": "done",
       "early": true
-    },
-    {
-      "id": "fix-flaky-quirky-worktree-window-projects",
-      "milestone": "M1",
-      "title": "Fix the flaky plugins/quirky.worktree/test/window-projects.test.ts: it failed under load in 3 full-suite runs on the test host and passed each time it was rerun alone (see <git common dir>/build-loop/flakes.log). Find the timing assumption or shared state with quirk:systematic-debugging, reproduce it under CPU load, and fix the test or the code it exposes",
-      "docs": [
-        "worktrees.md"
-      ],
-      "deps": [],
-      "status": "done"
-    },
-    {
-      "id": "fix-flaky-pty-host-host",
-      "milestone": "M1",
-      "title": "Fix the flaky packages/pty-host/test/host.test.ts: it failed under load in 3 full-suite runs on the test host and passed each time it was rerun alone (see <git common dir>/build-loop/flakes.log). Under load, many tests time out at 5 s, and startHost fails with 'could not start process scope guardian' when the guardian isn't ready within 4 s. Reproduce it under CPU load with quirk:systematic-debugging, and fix the timing assumptions in the test helpers or the code they expose",
-      "docs": [
-        "term-daemon.md"
-      ],
-      "deps": [],
-      "status": "done"
-    },
-    {
-      "id": "fix-flaky-quirky-git-files-scenarios",
-      "milestone": "M2",
-      "title": "Fix the flaky plugins/quirky.git/test/scenarios/files.test.ts: it failed under load in 3 full-suite runs on the test host and passed each time it was rerun alone (see <git common dir>/build-loop/flakes.log). Find the timing assumption or shared state with quirky.git:systematic-debugging, reproduce it under CPU load, and fix the test or the code it exposes",
-      "docs": [
-        "source-control.md"
-      ],
-      "deps": [],
-      "status": "done"
-    },
-    {
-      "id": "fix-test-cost",
-      "milestone": "M1",
-      "title": "Make the test suite cheaper to run. Today every test file starts a real daemon, a pty-host and a login zsh (`zsh -l`), and on the 8-vCPU test host that keeps the load near 21 while four files run. Measure per-file wall time and CPU with `bun run test`, then cut the cost without losing coverage: start non-login shells (`zsh -f`, `bash --noprofile --norc`) in tests that don't exercise shell integration or the login environment, share one daemon and pty-host per test file (beforeAll) where tests don't depend on a fresh one, and drop fixed sleeps in favour of waiting on the event. Keep every scenario test that checks shell integration on a real login shell. Report the before and after suite times in the decision log",
-      "docs": [
-        "term-daemon.md"
-      ],
-      "deps": [],
-      "status": "done"
     },
     {
       "id": "m1-agent-status-scripting",
@@ -1011,16 +961,6 @@
       "early": true
     },
     {
-      "id": "fix-flaky-daemon-pty-client",
-      "milestone": "M1",
-      "title": "Fix packages/daemon/test/pty-client.test.ts 'retiring an older host gives up within the wait so a current host can take over': on a loaded test host (load ~35) it fails even alone, with silent.shutdowns() 2 instead of 1. Under load the client sends shutdown to the silent old host twice. Find out with quirk:systematic-debugging whether the client retries the retire (a real race: reconnecting to the old socket before the new host binds) or the test's expectation is too strict, reproduce under CPU load, and fix the code or the test",
-      "docs": [
-        "term-daemon.md"
-      ],
-      "deps": [],
-      "status": "done"
-    },
-    {
       "id": "m3-vault-consent-tip-completion",
       "milestone": "M3",
       "title": "Complete the ancillary SC-07 enable-search marks-related-tip-seen flow after the operator-authorized vault core landing: explicit consent persistence/search work, but no related tip-seen bookkeeping or tip-owner integration exists in the vault source. Final review X2 was suppressed on the incorrect premise that this requirement was invented; the approved logic criterion explicitly names it. Establish the real tip owner/state and prove enabling marks it seen without indexing before consent. This is not a core privacy blocker; see docs/loop/BLOCKERS.md m3-vault open review findings. All other unfinished parity flows are named by m3-vault-parity-completion.",
@@ -1351,43 +1291,141 @@
       "lane": 7
     },
     {
+      "id": "m2-editor-build-unbuilt-flows",
+      "milestone": "M2",
+      "title": "Build the still-unimplemented editor flows retained by m2-editor-complete-remaining-flows: lossless rich details/toggle headings and custom document-link insertion/completion; owned untitled creation, Save As/retarget and safe placeholder lifetime; effective-filesystem-permission indicators and denied-save UX; Explorer Home/End/Page/Left/Right and range-selection interactions; notebook idle-death state and restart-from-dead controls; CSV row/column/range clipboard controls; mounted-view-scoped resource release preserving split viewers. Existing source, public API and design map: docs/quirk/specs/2026-10-28-m2-editor-complete-remaining-flows/logic.md and its decision log D16-D18. These flows remain unbuilt because the user directed the in-progress item to land its current design checkpoint immediately. This item builds feature behavior only: all testing, verification, review, known-bug debugging and test-failure fixes belong to the end phase. Excludes the operator-owned Finder open-in-place flow.",
+      "docs": [
+        "editor.md"
+      ],
+      "deps": [
+        "m2-editor-complete-remaining-flows"
+      ],
+      "status": "in-progress",
+      "lane": 6
+    },
+    {
+      "id": "m7-sweep-automation-completion",
+      "milestone": "M7",
+      "title": "Build the remaining unimplemented automation-domain flows inventoried in docs/quirk/specs/2026-10-28-m7-sweep-automation/logic.md: durable automation-created workspace provenance with automation/run IDs and name/title snapshots; sidebar Created by automation badge, Open automation/Open run navigation and explicit deleted/unavailable-history states; persisted Hide automation-created filtering; mobile worktree loop labels/counts/cap reasons using the actual client and compact loop summaries after sb-mobile-app lands; ledger SSH-host workspace ownership/routing/import/evidence and selected-runtime availability after public host registration-generation/execution/filesystem APIs exist, never dereference remote paths locally. Reconcile concurrently landed mobile/host/provenance implementations and existing remote automation owners before coding. Preserve structured-only background execution and explicit user exclusions. This item contains unbuilt functionality only, not a verification, review or debugging campaign.",
+      "docs": [
+        "automations.md",
+        "fork-loops.md",
+        "ledger.md"
+      ],
+      "deps": [
+        "m7-sweep-automation"
+      ],
+      "status": "in-progress",
+      "lane": 12
+    },
+    {
+      "id": "m7-orchestration-heimdall-unbuilt-flows",
+      "milestone": "M7",
+      "title": "Implement unbuilt orchestration/Heimdall flows inventoried by m7-sweep-orchestration: real remote worker placement and federation attachment/relay/mail/ask/report settlement/stop/release/output/fleet/task navigation with peer capability and incarnation fencing; generic Heimdall workspace-host epoch leases, paired-runtime fleet mirrors and owner-fenced remote controls, optional private-config shadow judgment with bounded provider calls, authoritative confirmed-workspace-removal termination without stopping workers, and public kind-owned report submission preflight before orchestration settlement. These flows lack real transport/lease/credential/lifecycle seams; do not simulate local success or infer absence/outcomes. Reuse existing m6-orchestration-idle-pointer-shutdown and m6-heimdall-host-power for their already-queued flows. Preserve core D9 gate policy and exclude user-deferred Objective runner, PR sitter and non-GitHub hosts. No verification-only work in this item; end-phase triage owns testing/debugging.",
+      "docs": [
+        "orchestration.md",
+        "heimdall.md"
+      ],
+      "deps": [
+        "m7-sweep-orchestration"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "sb-mobile-app-panels-unbuilt-flows",
+      "milestone": "Side B",
+      "title": "Implement remaining unbuilt mobile flows: native APNs/FCM token registration, leases, OS permission/sound and background tap delivery once an operator-controlled push service and entitlements exist; GitLab/Linear/Jira Tasks list/detail/mutations and linked workspace creation after provider-owned APIs land; terminal-artifact preview and conditional save with a real terminal path producer, opaque grants, grant refresh and source-aware routes.",
+      "docs": [
+        "mobile.md"
+      ],
+      "deps": [
+        "sb-mobile-app-panels"
+      ],
+      "status": "todo"
+    },
+    {
       "id": "m7-test-triage",
       "milestone": "M7",
       "title": "End-phase test triage: run bun scripts/suite.ts packages apps plugins, bun test scripts and bun run typecheck on build/roadmap, and add one fix-test-<area>-<MMDD> item per failing package, app or plugin (naming its failing files and tests) so the lanes split the debugging; change no code",
       "docs": [],
       "deps": [
-        "sb-mobile-app",
         "sb-mobile-app-panels",
-        "m7-sweep-automation",
-        "m7-sweep-orchestration",
-        "fix-terminal-dock-unfinished-flows-20261027",
-        "m3-vault-parity-completion",
-        "m3-vault-consent-tip-completion",
-        "fix-bash53-shell-integration",
-        "followup-m3-session-info-parity-20261027",
-        "m2-editor-complete-remaining-flows",
-        "m3-accounts-overflow-verification",
         "sa-browser-agent-extras",
         "m4-hosting-ui-review-browser-routing",
-        "sb-mobile-install-links",
-        "sa-browser-pane-native-events",
         "sa-browser-profile-import-ui",
-        "sa-browser-native-identity",
-        "sa-browser-localhost-label-routing",
-        "sa-browser-native-profile-clear-completion",
-        "sa-browser-pane-native-host-controls",
-        "sa-browser-pane-workspace-preview",
         "m4-hosting-ui-tasks-complete-remaining-flows",
         "m6-heimdall-host-power",
         "m6-orchestration-idle-pointer-shutdown",
-        "m5-automations-dispatch-remote-and-args",
-        "m5-automations-ui-remote-authorities",
         "m5-loops-ui-visible-stop-close-review",
         "m7-editor-source-control-completion",
         "m7-sweep-terminal-completion",
-        "sb-mobile-app-prerequisites"
+        "sb-mobile-app-prerequisites",
+        "m2-editor-build-unbuilt-flows",
+        "m7-sweep-automation-completion",
+        "m7-orchestration-heimdall-unbuilt-flows",
+        "sb-mobile-app-panels-unbuilt-flows"
       ],
       "status": "todo"
+    },
+    {
+      "id": "fix-test-process-leaks",
+      "milestone": "M1",
+      "title": "Fix leaked test processes: test runs and UI passes leave quirkyd daemons and pty-host processes running after the test ends, timed out, or was killed (97 found on 2026-10-27, about 1.9 GB, under the lane worktrees, the integration worktree, agent worktrees and /tmp test folders; pty-hosts outlive their daemon with parent PID 1). Find which harnesses start them without a guaranteed stop (packages/daemon/test/helpers.ts, plugins/*/test support, the e2e harnesses, the like-a-user web pass), make every start paired with a kill of the whole process tree on any exit, make a pty-host exit when its daemon goes away, and add a test that fails if a run leaves one behind",
+      "docs": [
+        "term-daemon.md"
+      ],
+      "deps": [],
+      "status": "done"
+    },
+    {
+      "id": "fix-flaky-quirky-worktree-window-projects",
+      "milestone": "M1",
+      "title": "Fix the flaky plugins/quirky.worktree/test/window-projects.test.ts: it failed under load in 3 full-suite runs on the test host and passed each time it was rerun alone (see <git common dir>/build-loop/flakes.log). Find the timing assumption or shared state with quirk:systematic-debugging, reproduce it under CPU load, and fix the test or the code it exposes",
+      "docs": [
+        "worktrees.md"
+      ],
+      "deps": [],
+      "status": "done"
+    },
+    {
+      "id": "fix-flaky-pty-host-host",
+      "milestone": "M1",
+      "title": "Fix the flaky packages/pty-host/test/host.test.ts: it failed under load in 3 full-suite runs on the test host and passed each time it was rerun alone (see <git common dir>/build-loop/flakes.log). Under load, many tests time out at 5 s, and startHost fails with 'could not start process scope guardian' when the guardian isn't ready within 4 s. Reproduce it under CPU load with quirk:systematic-debugging, and fix the timing assumptions in the test helpers or the code they expose",
+      "docs": [
+        "term-daemon.md"
+      ],
+      "deps": [],
+      "status": "done"
+    },
+    {
+      "id": "fix-flaky-quirky-git-files-scenarios",
+      "milestone": "M2",
+      "title": "Fix the flaky plugins/quirky.git/test/scenarios/files.test.ts: it failed under load in 3 full-suite runs on the test host and passed each time it was rerun alone (see <git common dir>/build-loop/flakes.log). Find the timing assumption or shared state with quirky.git:systematic-debugging, reproduce it under CPU load, and fix the test or the code it exposes",
+      "docs": [
+        "source-control.md"
+      ],
+      "deps": [],
+      "status": "done"
+    },
+    {
+      "id": "fix-test-cost",
+      "milestone": "M1",
+      "title": "Make the test suite cheaper to run. Today every test file starts a real daemon, a pty-host and a login zsh (`zsh -l`), and on the 8-vCPU test host that keeps the load near 21 while four files run. Measure per-file wall time and CPU with `bun run test`, then cut the cost without losing coverage: start non-login shells (`zsh -f`, `bash --noprofile --norc`) in tests that don't exercise shell integration or the login environment, share one daemon and pty-host per test file (beforeAll) where tests don't depend on a fresh one, and drop fixed sleeps in favour of waiting on the event. Keep every scenario test that checks shell integration on a real login shell. Report the before and after suite times in the decision log",
+      "docs": [
+        "term-daemon.md"
+      ],
+      "deps": [],
+      "status": "done"
+    },
+    {
+      "id": "fix-flaky-daemon-pty-client",
+      "milestone": "M1",
+      "title": "Fix packages/daemon/test/pty-client.test.ts 'retiring an older host gives up within the wait so a current host can take over': on a loaded test host (load ~35) it fails even alone, with silent.shutdowns() 2 instead of 1. Under load the client sends shutdown to the silent old host twice. Find out with quirk:systematic-debugging whether the client retries the retire (a real race: reconnecting to the old socket before the new host binds) or the test's expectation is too strict, reproduce under CPU load, and fix the code or the test",
+      "docs": [
+        "term-daemon.md"
+      ],
+      "deps": [],
+      "status": "done"
     },
     {
       "id": "m7-sweep-sessions",
@@ -1585,59 +1623,6 @@
       ],
       "status": "todo",
       "early": true
-    },
-    {
-      "id": "m2-editor-build-unbuilt-flows",
-      "milestone": "M2",
-      "title": "Build the still-unimplemented editor flows retained by m2-editor-complete-remaining-flows: lossless rich details/toggle headings and custom document-link insertion/completion; owned untitled creation, Save As/retarget and safe placeholder lifetime; effective-filesystem-permission indicators and denied-save UX; Explorer Home/End/Page/Left/Right and range-selection interactions; notebook idle-death state and restart-from-dead controls; CSV row/column/range clipboard controls; mounted-view-scoped resource release preserving split viewers. Existing source, public API and design map: docs/quirk/specs/2026-10-28-m2-editor-complete-remaining-flows/logic.md and its decision log D16-D18. These flows remain unbuilt because the user directed the in-progress item to land its current design checkpoint immediately. This item builds feature behavior only: all testing, verification, review, known-bug debugging and test-failure fixes belong to the end phase. Excludes the operator-owned Finder open-in-place flow.",
-      "docs": [
-        "editor.md"
-      ],
-      "deps": [
-        "m2-editor-complete-remaining-flows"
-      ],
-      "status": "in-progress",
-      "lane": 6
-    },
-    {
-      "id": "m7-sweep-automation-completion",
-      "milestone": "M7",
-      "title": "Build the remaining unimplemented automation-domain flows inventoried in docs/quirk/specs/2026-10-28-m7-sweep-automation/logic.md: durable automation-created workspace provenance with automation/run IDs and name/title snapshots; sidebar Created by automation badge, Open automation/Open run navigation and explicit deleted/unavailable-history states; persisted Hide automation-created filtering; mobile worktree loop labels/counts/cap reasons using the actual client and compact loop summaries after sb-mobile-app lands; ledger SSH-host workspace ownership/routing/import/evidence and selected-runtime availability after public host registration-generation/execution/filesystem APIs exist, never dereference remote paths locally. Reconcile concurrently landed mobile/host/provenance implementations and existing remote automation owners before coding. Preserve structured-only background execution and explicit user exclusions. This item contains unbuilt functionality only, not a verification, review or debugging campaign.",
-      "docs": [
-        "automations.md",
-        "fork-loops.md",
-        "ledger.md"
-      ],
-      "deps": [
-        "m7-sweep-automation"
-      ],
-      "status": "in-progress",
-      "lane": 12
-    },
-    {
-      "id": "m7-orchestration-heimdall-unbuilt-flows",
-      "milestone": "M7",
-      "title": "Implement unbuilt orchestration/Heimdall flows inventoried by m7-sweep-orchestration: real remote worker placement and federation attachment/relay/mail/ask/report settlement/stop/release/output/fleet/task navigation with peer capability and incarnation fencing; generic Heimdall workspace-host epoch leases, paired-runtime fleet mirrors and owner-fenced remote controls, optional private-config shadow judgment with bounded provider calls, authoritative confirmed-workspace-removal termination without stopping workers, and public kind-owned report submission preflight before orchestration settlement. These flows lack real transport/lease/credential/lifecycle seams; do not simulate local success or infer absence/outcomes. Reuse existing m6-orchestration-idle-pointer-shutdown and m6-heimdall-host-power for their already-queued flows. Preserve core D9 gate policy and exclude user-deferred Objective runner, PR sitter and non-GitHub hosts. No verification-only work in this item; end-phase triage owns testing/debugging.",
-      "docs": [
-        "orchestration.md",
-        "heimdall.md"
-      ],
-      "deps": [
-        "m7-sweep-orchestration"
-      ],
-      "status": "todo"
-    },
-    {
-      "id": "sb-mobile-app-panels-unbuilt-flows",
-      "milestone": "Side B",
-      "title": "Implement remaining unbuilt mobile flows: native APNs/FCM token registration, leases, OS permission/sound and background tap delivery once an operator-controlled push service and entitlements exist; GitLab/Linear/Jira Tasks list/detail/mutations and linked workspace creation after provider-owned APIs land; terminal-artifact preview and conditional save with a real terminal path producer, opaque grants, grant refresh and source-aware routes.",
-      "docs": [
-        "mobile.md"
-      ],
-      "deps": [
-        "sb-mobile-app-panels"
-      ],
-      "status": "todo"
     }
   ]
 }
