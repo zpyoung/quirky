@@ -22,6 +22,9 @@ export type OwnerHostIdentity = {
   generation: string
 }
 
+/** Saved credential identity checked before connecting, not after a remote side effect. */
+export type OwnerRuntimePin = Pick<OwnerRuntimeIdentity, 'id' | 'endpoint' | 'grantId'>
+
 /** Local owner resolves a saved owner grant; never accepts a phone/federation credential. */
 export type OwnerRuntimeCallParams = {
   runtime: string
@@ -29,6 +32,7 @@ export type OwnerRuntimeCallParams = {
   params?: Record<string, unknown>
   /** Checked on the same authenticated connection before dispatching the requested operation. */
   expectedHost?: OwnerHostIdentity
+  expectedRuntime?: OwnerRuntimePin
 }
 
 export type OwnerRuntimeCallResult = {
