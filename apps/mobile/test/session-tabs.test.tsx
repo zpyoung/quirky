@@ -16,7 +16,17 @@ let root: Root | null = null
 let createRoot: typeof ReactCreateRoot
 
 beforeAll(async () => {
+  const runtimeNames = [
+    'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'setImmediate', 'clearImmediate',
+    'queueMicrotask', 'MessageChannel', 'performance', 'fetch', 'WebSocket',
+    'Response', 'Request', 'Headers', 'AbortController', 'AbortSignal'
+  ] as const
+  const runtimeGlobals = runtimeNames.map((name) => [name, (globalThis as Record<string, unknown>)[name]] as const)
   GlobalRegistrator.register()
+  // This file mounts DOM UI and an in-process daemon; keep real network and timer primitives.
+  for (const [name, value] of runtimeGlobals) {
+    if (value !== undefined) Object.defineProperty(globalThis, name, { value, writable: true, configurable: true })
+  }
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   ;({ createRoot } = await import('react-dom/client'))
 })
@@ -180,10 +190,6 @@ test('Browser Watch scrolls the real page using coordinates in the displayed fra
     }
     const pane = panes.tabs.find((item) => item.tabId === watch.tab.tabId)
     if (!pane?.page) throw new Error('The real Browser Watch tab must own its Chrome page.')
-    const params = { worktree, tabId: watch.tab.tabId, watchId: watch.watchId }
-    const frame = await waitFor(async () => await client.callAny('quirky.mobile/browserWatchFrame', params) as {
-      width: number; height: number
-    } | null)
     const bridge = {
       call<T>(method: string, values?: Record<string, unknown>): Promise<T> {
         return client.callAny(method, values) as Promise<T>
@@ -192,17 +198,20 @@ test('Browser Watch scrolls the real page using coordinates in the displayed fra
     await mount(createElement(BrowserWatchView, {
       bridge, worktreeId: worktree, tab: { ...watch.tab, browserMode: 'watch' }, canMutate: true, onTabsChanged() {}, onClosed() {}
     }))
-    const image = await waitFor(async () => document.querySelector<HTMLImageElement>('.qp-browser-watch img'))
-    image.getBoundingClientRect = () => new DOMRect(0, 0, frame.width, frame.height)
-    Object.defineProperty(image, 'naturalWidth', { configurable: true, value: frame.width })
-    await act(async () => {
-      image.dispatchEvent(new Event('load', { bubbles: true }))
-      await Promise.resolve()
+    const image = await waitFor(async () => {
+      const candidate = document.querySelector<HTMLImageElement>('.qp-browser-watch img')
+      return candidate && candidate.naturalWidth > 0 && candidate.naturalHeight > 0 ? candidate : null
+    })
+    const display = new DOMRect(20, 30, image.naturalWidth / 2, image.naturalHeight / 2)
+    image.getBoundingClientRect = () => display
+    const wheel = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 150 })
+    // Happy DOM's WheelEvent extends UIEvent and omits the standard MouseEvent coordinates.
+    Object.defineProperties(wheel, {
+      clientX: { value: display.left + display.width / 2 },
+      clientY: { value: display.top + display.height / 2 }
     })
     await act(async () => {
-      image.dispatchEvent(new WheelEvent('wheel', {
-        bubbles: true, cancelable: true, clientX: frame.width / 2, clientY: frame.height / 2, deltaY: 300
-      }))
+      image.dispatchEvent(wheel)
       await Promise.resolve()
     })
     const scrollTop = await waitFor(async () => {
