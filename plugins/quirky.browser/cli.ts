@@ -1,6 +1,7 @@
 import { resolve } from 'node:path'
 import { validateValue, type CliArgs, type CliContext, type CliModule, type Schema } from '@quirky/protocol'
 import type { BrowserMethod } from './src/runtime/catalog'
+import type { BrowserPage } from './src/profiles/store'
 
 type CliBrowserMethod = BrowserMethod | 'preferencesState' | 'profileSet' | 'profileClear' | 'profileDelete' | 'openLink'
 type InputField = { inline: string; option: 'value' | 'expression' | 'text'; target: string; required?: boolean }
@@ -180,7 +181,7 @@ async function runGeneric(id: string, args: CliArgs, context: CliContext): Promi
   }
   if (id === 'download' && typeof params.path === 'string') params.path = resolve(context.cwd, params.path)
   if (id === 'tabList' && args.flags['show-profile'] === true) {
-    const result = await context.call(`quirky.browser/${method}`, params) as { tabs: Array<Record<string, unknown>> }
+    const result = await context.call(`quirky.browser/${method}`, params) as { tabs: BrowserPage[] }
     const profiles = await context.call('quirky.browser/profileList', {}) as { profiles: Array<{ id: string; label: string }> }
     const labels = new Map(profiles.profiles.map((profile) => [profile.id, profile.label]))
     const tabs = result.tabs.map((tab) => ({ ...tab, profileLabel: labels.get(String(tab.profileId)) ?? null }))

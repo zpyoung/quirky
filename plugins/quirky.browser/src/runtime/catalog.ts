@@ -4,10 +4,11 @@ import { PANE_METHODS } from '../pane-contract'
 
 export const BROWSER_METHODS = [
   'profileList', 'profileCreate', 'tabList', 'tabShow', 'tabCurrent', 'tabCreate', 'tabSwitch', 'tabClose',
+  'goto', 'eval', 'snapshot', 'fill', 'click', 'screenshot', 'exec',
   ...PANE_METHODS,
   ...DESIGN_METHODS,
   ...EXTRAS_METHODS
-]
+] as const
 
 export type BrowserMethod = (typeof BROWSER_METHODS)[number]
 

@@ -66,5 +66,27 @@
 - **Revisit if:** queue ownership is explicitly changed
 - **Source:** locked by docs/loop/queue.json
 
+## D7: Integrate only audited component scopes and repair concrete assembly faults
+- **Question:** What did the implementation barrier and first checks establish?
+- **Options:** trust worker completion; integrate only declared paths and exercise the real public route
+- **Chose:** all workers returned with HEAD c18fa91b unchanged; cookies6/runtime6/surface9 changed files were inside declared scopes, parent only its own6 paths. Committed 0ee442f2/ef24b4b5/11561664 and merged all three without conflicts; generated worktrees removed immediately. Parent original .serena untouched. Restore missing profileList service case and seven omitted core catalog registrations, retain as-const method typing, and preserve profile admission for openUrl.
+- **Why:** first actual daemon smoke failed -32009 at eval because the recovered catalog omitted the core page-command row. First typecheck found missing BrowserPage/CookieTransport type imports and imprecise CLI/test projection types; repaired those at their source. No checker suppression or suite exclusion.
+- **Evidence:** authoritative wave-boundary git outputs and worker reports; initial smoke homeRemoved:true; compiler31diagnostics4files; subsequent full root+mobile typecheck exit0/22.24s. Runtime smoke remains in progress, not called passing.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** final integrated smoke/typecheck exposes another concrete contract mismatch
+- **Source:** assumed — autonomous
+
+## D8: Map public property queries onto the pinned helper's actual wire protocol
+- **Question:** Why did real get-value fail after commands were registered?
+- **Options:** suppress helper failure or return page echo; use exact pinned native action/result fields
+- **Chose:** get text/html/value/count/box maps to gettext/innerhtml/inputvalue/count/boundingbox with the actual result field (box is the returned rectangle); is-state maps to isvisible/isenabled/ischecked. No generic get/is wire action exists. Keep validation and projected ref resolution.
+- **Why:** actual smoke returned native browser action get failed; pinned v0.27.0 commands.rs parse_get/parse_is and native/actions.rs handlers establish the vocabulary. Next smoke reached real CLI bulk data; its newline expectation exposed a single-line HTML-input fixture constraint, so use an actual textarea for multiline-byte proof rather than alter production data.
+- **Evidence:** https://raw.githubusercontent.com/vercel-labs/agent-browser/v0.27.0/cli/src/commands.rs parse_get/parse_is; native/actions.rs handle_inputvalue/gettext/innerhtml/count/boundingbox; actual CLI/error receipts in this run. No permanent suite run or passing review claimed.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the pinned helper version changes wire/result semantics
+- **Source:** assumed — autonomous
+
 ## Progress
-Claimed exactly sa-browser-agent-extras on lane5. Shared contracts committed c18fa91b; three disjoint workers active under /tmp/quirky-browser-extras-lane5-bvwnJ2/{cookies,runtime,surface}, each expected HEAD c18fa91b. Parent owns docs/package/lock and obsolete C5 command restrictions. Import UI scope corrected by D6 before worker UI edits; no suite/review/dogfood run. Next: await all workers in this turn, authoritative scope/HEAD audit, integrate, real-path smoke/typecheck, one roadmap catchup/reconcile and canonical land. Inherited .serena untouched.
+All three components integrated and worktrees removed; source smoke passed synthetic Chrome schema24 decryption and Firefox parsing with unchanged source bytes/no discovery key read. Root+mobile typecheck passed before final getter mapping. Actual daemon/CLI smoke progressing through repaired catalog/getter and textarea fixture; permanent suites/review/dogfood remain unrun. Next: finish changed-path proof, one roadmap catchup/reconcile/typecheck, commit/detach/canonical land and cleanup. Exactly one item; inherited .serena untouched.

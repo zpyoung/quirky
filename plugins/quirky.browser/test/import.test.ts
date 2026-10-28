@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { startBrowserHarness, type BrowserTestHarness } from './harness'
 import type { BrowserFamily, Cookie } from '../src/cookies/types'
+import type { CookieTransport } from '../src/runtime/dependencies'
 import { BrowserStore } from '../src/profiles/store'
 
 type SourceRoots = Partial<Record<BrowserFamily, string>>

@@ -11,7 +11,7 @@ import { NativeTransportError, nativeRequest, startNativeHelper, type NativeHelp
 import type { BrowserDependencies, BrowserTestControl, CookieTransport } from './dependencies'
 import type { Cookie } from '../cookies/types'
 import type { PaneViewport } from '../pane-contract'
-import { BrowserStore } from '../profiles/store'
+import { BrowserStore, type BrowserPage } from '../profiles/store'
 import type { BrowserIdentityMode } from '../preferences/contract'
 import { identityModeFromSetting, userAgentForIdentity } from '../preferences/identity'
 import { findWatchOccurrences } from './find'
@@ -285,13 +285,13 @@ const COOKIE_SET_SCHEMA: Schema = {
 }
 const EVENT_CONSOLE_SCHEMA: Schema = {
   type: 'object',
-  properties: { type: { type: 'string' }, timestamp: { type: 'number' }, args: { type: 'array', items: { type: 'object' } }, stackTrace: { type: 'object' } },
+  properties: { type: { type: 'string' }, timestamp: { type: 'number' }, args: { type: 'array', items: { type: 'object', additionalProperties: true } }, stackTrace: { type: 'object', additionalProperties: true } },
   required: ['type', 'timestamp', 'args'],
   additionalProperties: true
 }
 const EVENT_NETWORK_REQUEST_SCHEMA: Schema = {
   type: 'object',
-  properties: { requestId: { type: 'string' }, request: { type: 'object' }, timestamp: { type: 'number' }, wallTime: { type: 'number' }, type: { type: 'string' }, frameId: { type: 'string' }, loaderId: { type: 'string' } },
+  properties: { requestId: { type: 'string' }, request: { type: 'object', additionalProperties: true }, timestamp: { type: 'number' }, wallTime: { type: 'number' }, type: { type: 'string' }, frameId: { type: 'string' }, loaderId: { type: 'string' } },
   required: ['requestId', 'request'],
   additionalProperties: true
 }
@@ -312,7 +312,7 @@ function initialSettings(): PageSettings {
 }
 
 function canonicalCookieDomain(domain: string): string {
-  return domain.replace(/^\\.+/, '').toLowerCase()
+  return domain.replace(/^\.+/, '').toLowerCase()
 }
 
 function asFiniteNumber(value: unknown): number | undefined {
@@ -2468,7 +2468,7 @@ export class BrowserRuntime {
       const response = event.params.response
       if (!requestId || validateValue({
         type: 'object',
-        properties: { status: { type: 'number' }, mimeType: { type: 'string' }, statusText: { type: 'string' }, headers: { type: 'object' } },
+        properties: { status: { type: 'number' }, mimeType: { type: 'string' }, statusText: { type: 'string' }, headers: { type: 'object', additionalProperties: true } },
         required: ['status', 'mimeType'], additionalProperties: true
       }, response, 'network response')) return
       const typed = response as Record<string, unknown>
@@ -2507,7 +2507,7 @@ export class BrowserRuntime {
     })
     epoch.cdp.subscribe('Fetch.requestPaused', (event) => {
       if (event.sessionId !== binding.sessionId || this.paneWatchesByPage.has(binding.pageId) || validateValue({
-        type: 'object', properties: { requestId: { type: 'string' }, request: { type: 'object' }, resourceType: { type: 'string' } },
+        type: 'object', properties: { requestId: { type: 'string' }, request: { type: 'object', additionalProperties: true }, resourceType: { type: 'string' } },
         required: ['requestId', 'request', 'resourceType'], additionalProperties: true
       }, event.params, 'intercepted request')) return
       const params = event.params as Record<string, unknown>

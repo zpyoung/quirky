@@ -20,6 +20,9 @@ const ELEMENT_ACTIONS: Readonly<Record<string, true>> = {
   dblclick: true, select: true, check: true, uncheck: true, focus: true, hover: true,
   scrollIntoView: true, clear: true, selectAll: true, highlight: true
 }
+const GET_ACTIONS: Readonly<Record<string, string>> = {
+  text: 'gettext', html: 'innerhtml', value: 'inputvalue', count: 'count', box: 'boundingbox'
+}
 
 type FindParams = { locator: string; value: string; action: string; index?: number; text?: string }
 
@@ -349,8 +352,8 @@ export class BrowserExtraActions {
     }
     if (!['text', 'html', 'value', 'count', 'box'].includes(what)) throw fault('invalid_argument', 'get what must be url, title, text, html, value, count, or box')
     const selector = this.resolveElement(execution, stringParam(params, 'element'))
-    const data = await this.callHelperData(execution, 'get', { what, selector })
-    const value = Object.hasOwn(data, 'value') ? data.value : data.result
+    const data = await this.callHelperData(execution, GET_ACTIONS[what]!, { selector })
+    const value = what === 'box' ? data : data[what]
     if (what === 'count') {
       if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) throw fault('browser_error', 'helper returned an invalid element count')
       return { value }
@@ -367,8 +370,8 @@ export class BrowserExtraActions {
     const what = stringParam(params, 'what')
     if (!['visible', 'enabled', 'checked'].includes(what)) throw fault('invalid_argument', 'is what must be visible, enabled, or checked')
     const selector = this.resolveElement(execution, stringParam(params, 'element'))
-    const data = await this.callHelperData(execution, 'is', { what, selector })
-    const value = Object.hasOwn(data, 'value') ? data.value : data.result
+    const data = await this.callHelperData(execution, `is${what}`, { selector })
+    const value = data[what]
     if (typeof value !== 'boolean') throw fault('browser_error', 'helper returned a non-boolean element state')
     return { value }
   }

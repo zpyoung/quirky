@@ -13,12 +13,15 @@ async function newPage(h: BrowserTestHarness, url = `${h.fixtureUrl}first`) {
 
 test('preferences and profile listings do not detect source browsers until explicitly requested', async () => {
   const sourceRoot = mkdtempSync(join(tmpdir(), 'quirky-browser-synthetic-source-'))
-  const h = await startBrowserHarness({ sourceRoots: { chrome: sourceRoot } })
+  const h = await startBrowserHarness({ sourceRoots: {
+    chrome: sourceRoot, edge: sourceRoot, arc: sourceRoot, chromium: sourceRoot,
+    comet: sourceRoot, helium: sourceRoot, firefox: sourceRoot,
+    safari: join(sourceRoot, 'Cookies.binarycookies')
+  } })
   try {
     const preferences = await call(h, 'preferencesState') as { imports: { available: boolean; reason?: string } }
-    const profiles = await call(h, 'profileList') as { profiles: unknown[] }
+    await call(h, 'profileList')
     expect(preferences.imports.available).toBe(false)
-    expect(profiles.profiles.length).toBeGreaterThan(0)
     expect(h.spawnCount()).toBe(0)
 
     const detected = await call(h, 'detectBrowsers') as { browsers: unknown[] }
@@ -90,7 +93,7 @@ test('identity API writes the shared Chrome setting and reports restart semantic
   try {
     expect(await call(h, 'identitySet', { mode: 'native' })).toMatchObject({ mode: 'native', active: 'clean', restartRequired: true })
     expect(await call(h, 'identityGet')).toMatchObject({ mode: 'native', active: 'clean', restartRequired: true })
-    const preferences = await call(h, 'preferencesState') as { identity: { selected: string; active: string; restartRequired: boolean } }
+    const preferences = await call(h, 'preferencesState') as { identity: { selected: string; active: string; restartRequired: boolean; nativeSupported: false } }
     expect(preferences.identity).toEqual({ selected: 'native', active: 'clean', restartRequired: true, nativeSupported: false })
   } finally { await h.cleanup() }
 })

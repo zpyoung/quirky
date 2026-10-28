@@ -242,6 +242,7 @@ export class BrowserService {
       case 'tabCreate': return await this.profileLifecycle.withProfileAdmission(optionalString(params, 'profile') ?? 'default', () => this.createPage(params, caller))
       case 'tabSwitch': return await this.tabSwitch(params, caller)
       case 'tabClose': return await this.tabClose(params, caller)
+      case 'profileList': return { profiles: this.store.listProfiles() }
       case 'profileCreate': return { profile: this.store.createProfile(stringParam(params, 'name')) }
       case 'tabProfileShow': return await this.tabProfileShow(params, caller)
       case 'tabProfileSet': return await this.setPageProfile(params, caller, stringParam(params, 'profile'))
@@ -258,7 +259,7 @@ export class BrowserService {
         await this.context.call('setting.set', { id: IDENTITY_SETTING_ID, value: mode })
         return identityState(mode, this.activeIdentityMode)
       }
-      case 'openUrl': return await this.createPage({ ...params, profile: 'default' }, caller)
+      case 'openUrl': return await this.profileLifecycle.withProfileAdmission('default', () => this.createPage({ ...params, profile: 'default' }, caller))
       case 'dialogAccept': return await this.dialog(params, caller, true)
       case 'dialogDismiss': return await this.dialog(params, caller, false)
       case 'exec': return await this.exec(params, caller)
