@@ -734,7 +734,7 @@ export const KERNEL_METHOD_SCHEMAS = {
     result: themeList
   },
   'theme.set': {
-    description: 'Chooses theme `id` (`default` or a theme ID) and broadcasts `theme.changed`.',
+    description: 'Chooses `default` (follow system), the `dark` or `light` appearance pin, or a theme ID and broadcasts `theme.changed`.',
     params: object({ id: string() }, ['id']),
     result: themeList
   }
