@@ -1287,8 +1287,7 @@
       "deps": [
         "m5-loops-ui"
       ],
-      "status": "in-progress",
-      "lane": 2
+      "status": "done"
     },
     {
       "id": "m7-editor-source-control-completion",
