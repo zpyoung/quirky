@@ -72,15 +72,7 @@
               "comment": {
                 "type": "string"
               },
-              "status": {
-                "type": "string",
-                "enum": [
-                  "todo",
-                  "in-progress",
-                  "in-review",
-                  "done"
-                ]
-              },
+              "status": { "type": "string", "description": "Built-in or project-defined status ID." },
               "pinned": {
                 "type": "boolean"
               },
@@ -126,6 +118,12 @@
               "manualOrder": { "type": "integer", "description": "Persistent sibling order; higher values render first in Manual sort." },
               "sleeping": { "type": "boolean", "description": "Reversible visibility state; setting it never terminates a session." },
               "sleepChangedAt": { "description": "The last sleep or wake timestamp, or null before the first change." },
+              "references": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "url": { "type": "string" }, "label": { "type": "string" }, "createdAt": { "type": "number" } }, "required": ["id", "url", "label", "createdAt"], "additionalProperties": false } },
+              "archivedAt": { "description": "Archive timestamp, or null if the workspace is active." },
+              "cleanupContext": { "type": "object", "properties": { "archivedAt": { "description": "Archive timestamp or null." }, "volatile": { "description": "Actual volatile-context evidence, or null when unavailable." }, "remoteConnected": { "description": "Actual remote connectivity evidence, or null when unavailable." } }, "required": ["archivedAt", "volatile", "remoteConnected"] },
+              "externalVisible": { "type": "boolean" },
+              "externalVisibility": { "type": "string", "enum": ["show", "hide"] },
+              "externalInboxSuppressed": { "type": "boolean" },
               "automationProvenance": {
                 "description": "Immutable automation and run snapshots; absent for ordinary and pre-migration workspaces.",
                 "properties": {
@@ -207,7 +205,13 @@
               "instanceId",
               "manualOrder",
               "sleeping",
-              "sleepChangedAt"
+              "sleepChangedAt",
+              "references",
+              "archivedAt",
+              "cleanupContext",
+              "externalVisible",
+              "externalVisibility",
+              "externalInboxSuppressed"
             ]
           }
         }
@@ -236,7 +240,7 @@
       },
       {
         "id": "create",
-        "description": "Creates a worktree from a name, existing branch, GitHub PR or issue, runs configured setup and issue commands, and can start an agent. Folder and group workspaces do not accept GitHub sources.",
+        "description": "Creates a worktree from a name, existing branch, GitHub PR or issue, runs configured setup and issue commands, and can start an agent with selected model options. Sparse checkout and a safe primary-branch fast-forward are supported. Folder and group workspaces do not accept GitHub sources.",
         "params": {
           "type": "object",
           "properties": {
@@ -326,6 +330,33 @@
               "type": "boolean",
               "description": "Whether to press Enter after an initial prompt. An issue-derived prompt defaults to a reviewable draft; other prompts keep the session default."
             },
+            "model": {
+              "type": "string",
+              "description": "Model passed to the public quirky.session/create API; requires agent and public launch preflight."
+            },
+            "options": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "String or boolean agent option picks passed to quirky.session/create and validated by quirky.agents/resolveLaunch before the worktree is created."
+            },
+            "sparsePaths": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Tracked repository-relative files or directories to materialize with Git sparse checkout. Unsafe, missing or invalid paths fail before worktree creation."
+            },
+            "keepMain": {
+              "type": "boolean",
+              "description": "Fast-forward the primary checkout only when it is clean, on the exact selected remote-tracking branch, and strictly behind that base. Never resets or falls back to a local base."
+            },
+            "environmentRecipe": {
+              "type": "string",
+              "description": "Recognized but currently refused before mutation: quirky.repo/hooks reports environmentRecipes unsupported and no public recipe owner exists."
+            },
+            "defaultTabs": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Recognized but currently refused before mutation: quirky.repo/hooks reports defaultTabs unsupported and no public tab-composition owner exists."
+            },
             "allowLocalBaseFallback": {
               "type": "boolean",
               "description": "Use the local branch when a remote base cannot be fetched (default true)."
@@ -398,15 +429,7 @@
                 "comment": {
                   "type": "string"
                 },
-                "status": {
-                  "type": "string",
-                  "enum": [
-                    "todo",
-                    "in-progress",
-                    "in-review",
-                    "done"
-                  ]
-                },
+                "status": { "type": "string", "description": "Built-in or project-defined status ID." },
                 "pinned": {
                   "type": "boolean"
                 },
@@ -452,6 +475,12 @@
                 "manualOrder": { "type": "integer", "description": "Persistent sibling order; higher values render first in Manual sort." },
                 "sleeping": { "type": "boolean", "description": "Reversible visibility state; setting it never terminates a session." },
                 "sleepChangedAt": { "description": "The last sleep or wake timestamp, or null before the first change." },
+                "references": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "url": { "type": "string" }, "label": { "type": "string" }, "createdAt": { "type": "number" } } } },
+                "archivedAt": { "description": "Archive timestamp, or null." },
+                "cleanupContext": { "type": "object", "properties": { "archivedAt": {}, "volatile": {}, "remoteConnected": {} } },
+                "externalVisible": { "type": "boolean" },
+                "externalVisibility": { "type": "string", "enum": ["show", "hide"] },
+                "externalInboxSuppressed": { "type": "boolean" },
                 "automationProvenance": {
                   "description": "Immutable automation and run snapshots; absent for ordinary and pre-migration workspaces.",
                   "properties": {
@@ -591,12 +620,40 @@
             "agentPending": {
               "type": "boolean",
               "description": "The agent starts when the Setup terminal exits."
-            }
+            },
+            "creationReceipt": {
+              "type": "object",
+              "description": "Actual create outcomes, not requested-only choices.",
+              "properties": {
+                "sparsePaths": { "type": "array", "items": { "type": "string" } },
+                "sharedDirectories": { "type": "array", "items": { "type": "string" }, "description": "Paths successfully linked into the created worktree by the existing carry owner." },
+                "main": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string", "enum": ["not-requested", "fast-forwarded", "already-current", "not-updated"] },
+                    "reason": { "type": "string" },
+                    "from": { "type": "string" },
+                    "to": { "type": "string" }
+                  },
+                  "required": ["status"]
+                },
+                "agentLaunch": {
+                  "type": "object",
+                  "properties": {
+                    "sessionId": { "type": "string" },
+                    "launchSettings": { "description": "Actual public session launch-settings snapshot, or null when none was reported." }
+                  },
+                  "required": ["sessionId", "launchSettings"]
+                }
+              },
+              "required": ["sparsePaths", "sharedDirectories", "main"]
+              }
           },
           "required": [
             "worktree",
             "warnings",
-            "setup"
+            "setup",
+            "creationReceipt"
           ]
         }
       },
@@ -645,15 +702,7 @@
             "comment": {
               "type": "string"
             },
-            "status": {
-              "type": "string",
-              "enum": [
-                "todo",
-                "in-progress",
-                "in-review",
-                "done"
-              ]
-            },
+            "status": { "type": "string", "description": "Built-in or project-defined status ID." },
             "pinned": {
               "type": "boolean"
             },
@@ -725,15 +774,7 @@
             "comment": {
               "type": "string"
             },
-            "status": {
-              "type": "string",
-              "enum": [
-                "todo",
-                "in-progress",
-                "in-review",
-                "done"
-              ]
-            },
+            "status": { "type": "string", "description": "Built-in or project-defined status ID." },
             "pinned": {
               "type": "boolean"
             },
@@ -779,6 +820,12 @@
             "manualOrder": { "type": "integer", "description": "Persistent sibling order; higher values render first in Manual sort." },
             "sleeping": { "type": "boolean", "description": "Reversible visibility state; setting it never terminates a session." },
             "sleepChangedAt": { "description": "The last sleep or wake timestamp, or null before the first change." },
+            "references": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "url": { "type": "string" }, "label": { "type": "string" }, "createdAt": { "type": "number" } } } },
+            "archivedAt": { "description": "Archive timestamp, or null." },
+            "cleanupContext": { "type": "object", "properties": { "archivedAt": {}, "volatile": {}, "remoteConnected": {} } },
+            "externalVisible": { "type": "boolean" },
+            "externalVisibility": { "type": "string", "enum": ["show", "hide"] },
+            "externalInboxSuppressed": { "type": "boolean" },
             "linkedPR": {
               "type": "object",
               "description": "Linked GitHub pull request; absent when unlinked.",
@@ -1005,7 +1052,13 @@
                 },
                 "manualOrder": { "type": "integer", "description": "Persistent sibling order; higher values render first in Manual sort." },
                 "sleeping": { "type": "boolean", "description": "Reversible visibility state; setting it never terminates a session." },
-                "sleepChangedAt": { "description": "The last sleep or wake timestamp, or null before the first change." }
+                "sleepChangedAt": { "description": "The last sleep or wake timestamp, or null before the first change." },
+                "references": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "url": { "type": "string" }, "label": { "type": "string" }, "createdAt": { "type": "number" } } } },
+                "archivedAt": { "description": "Archive timestamp, or null." },
+                "cleanupContext": { "type": "object", "properties": { "archivedAt": {}, "volatile": {}, "remoteConnected": {} } },
+                "externalVisible": { "type": "boolean" },
+                "externalVisibility": { "type": "string", "enum": ["show", "hide"] },
+                "externalInboxSuppressed": { "type": "boolean" }
               },
               "required": [
                 "id",
@@ -1130,15 +1183,7 @@
             "comment": {
               "type": "string"
             },
-            "status": {
-              "type": "string",
-              "enum": [
-                "todo",
-                "in-progress",
-                "in-review",
-                "done"
-              ]
-            },
+            "status": { "type": "string", "description": "Built-in or project-defined status ID." },
             "pinned": {
               "type": "boolean"
             },
@@ -1184,6 +1229,12 @@
             "manualOrder": { "type": "integer", "description": "Persistent sibling order; higher values render first in Manual sort." },
             "sleeping": { "type": "boolean", "description": "Reversible visibility state; setting it never terminates a session." },
             "sleepChangedAt": { "description": "The last sleep or wake timestamp, or null before the first change." },
+            "references": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "url": { "type": "string" }, "label": { "type": "string" }, "createdAt": { "type": "number" } } } },
+            "archivedAt": { "description": "Archive timestamp, or null." },
+            "cleanupContext": { "type": "object", "properties": { "archivedAt": {}, "volatile": {}, "remoteConnected": {} } },
+            "externalVisible": { "type": "boolean" },
+            "externalVisibility": { "type": "string", "enum": ["show", "hide"] },
+            "externalInboxSuppressed": { "type": "boolean" },
             "automationProvenance": {
               "description": "Immutable automation and run snapshots; absent for ordinary and pre-migration workspaces.",
               "properties": {
@@ -1489,15 +1540,7 @@
             "comment": {
               "type": "string"
             },
-            "status": {
-              "type": "string",
-              "enum": [
-                "todo",
-                "in-progress",
-                "in-review",
-                "done"
-              ]
-            },
+            "status": { "type": "string", "description": "Built-in or project-defined status ID." },
             "pinned": {
               "type": "boolean"
             },
@@ -1543,6 +1586,12 @@
             "manualOrder": { "type": "integer", "description": "Persistent sibling order; higher values render first in Manual sort." },
             "sleeping": { "type": "boolean", "description": "Reversible visibility state; setting it never terminates a session." },
             "sleepChangedAt": { "description": "The last sleep or wake timestamp, or null before the first change." },
+            "references": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "url": { "type": "string" }, "label": { "type": "string" }, "createdAt": { "type": "number" } } } },
+            "archivedAt": { "description": "Archive timestamp, or null." },
+            "cleanupContext": { "type": "object", "properties": { "archivedAt": {}, "volatile": {}, "remoteConnected": {} } },
+            "externalVisible": { "type": "boolean" },
+            "externalVisibility": { "type": "string", "enum": ["show", "hide"] },
+            "externalInboxSuppressed": { "type": "boolean" },
             "linkedPR": {
               "type": "object",
               "description": "Linked GitHub pull request; absent when unlinked.",
@@ -1639,49 +1688,73 @@
       },
       {
         "id": "options",
-        "description": "Read the persisted stock worktree grouping, sort and card-property options.",
+        "description": "Read persisted worktree grouping, sorting, card properties, filters and external-worktree defaults.",
         "readOnly": true,
         "params": { "type": "object", "properties": {}, "additionalProperties": false },
         "result": {
           "type": "object",
           "properties": {
-            "groupBy": { "type": "string", "enum": ["project", "status", "none"] },
-            "sortBy": { "type": "string", "enum": ["recent", "name", "manual"] },
+            "groupBy": { "type": "string", "enum": ["project", "status", "none", "pr"] },
+            "sortBy": { "type": "string", "enum": ["recent", "name", "manual", "agent-activity", "project"] },
+            "projectOrderBy": { "type": "string", "enum": ["manual", "recent"] },
             "compact": { "type": "boolean" },
             "showBranch": { "type": "boolean" },
             "showComment": { "type": "boolean" },
-            "showSleeping": { "type": "boolean" }
+            "showSleeping": { "type": "boolean" },
+            "hideCliCreated": { "type": "boolean" },
+            "hideDefaultBranch": { "type": "boolean" },
+            "hideDetached": { "type": "boolean" },
+            "hideArchived": { "type": "boolean" },
+            "filterRepoIds": { "type": "array", "items": { "type": "string" } },
+            "showProperties": { "type": "array", "items": { "type": "string", "enum": ["branch", "notes", "pullRequest", "issue", "automation", "activity"] } },
+            "externalVisibilityDefault": { "type": "string", "enum": ["show", "hide"] }
           },
-          "required": ["groupBy", "sortBy", "compact", "showBranch", "showComment", "showSleeping"],
+          "required": ["groupBy", "sortBy", "projectOrderBy", "compact", "showBranch", "showComment", "showSleeping", "hideCliCreated", "hideDefaultBranch", "hideDetached", "hideArchived", "filterRepoIds", "showProperties", "externalVisibilityDefault"],
           "additionalProperties": false
         }
       },
       {
         "id": "setOptions",
-        "description": "Persist a patch to the stock worktree grouping, sort and card-property options.",
+        "description": "Persist a patch to worktree grouping, sorting, card properties, filters and external-worktree defaults.",
         "params": {
           "type": "object",
           "properties": {
-            "groupBy": { "type": "string", "enum": ["project", "status", "none"] },
-            "sortBy": { "type": "string", "enum": ["recent", "name", "manual"] },
+            "groupBy": { "type": "string", "enum": ["project", "status", "none", "pr"] },
+            "sortBy": { "type": "string", "enum": ["recent", "name", "manual", "agent-activity", "project"] },
+            "projectOrderBy": { "type": "string", "enum": ["manual", "recent"] },
             "compact": { "type": "boolean" },
             "showBranch": { "type": "boolean" },
             "showComment": { "type": "boolean" },
-            "showSleeping": { "type": "boolean" }
+            "showSleeping": { "type": "boolean" },
+            "hideCliCreated": { "type": "boolean" },
+            "hideDefaultBranch": { "type": "boolean" },
+            "hideDetached": { "type": "boolean" },
+            "hideArchived": { "type": "boolean" },
+            "filterRepoIds": { "type": "array", "items": { "type": "string" } },
+            "showProperties": { "type": "array", "items": { "type": "string", "enum": ["branch", "notes", "pullRequest", "issue", "automation", "activity"] } },
+            "externalVisibilityDefault": { "type": "string", "enum": ["show", "hide"] }
           },
           "additionalProperties": false
         },
         "result": {
           "type": "object",
           "properties": {
-            "groupBy": { "type": "string", "enum": ["project", "status", "none"] },
-            "sortBy": { "type": "string", "enum": ["recent", "name", "manual"] },
+            "groupBy": { "type": "string", "enum": ["project", "status", "none", "pr"] },
+            "sortBy": { "type": "string", "enum": ["recent", "name", "manual", "agent-activity", "project"] },
+            "projectOrderBy": { "type": "string", "enum": ["manual", "recent"] },
             "compact": { "type": "boolean" },
             "showBranch": { "type": "boolean" },
             "showComment": { "type": "boolean" },
-            "showSleeping": { "type": "boolean" }
+            "showSleeping": { "type": "boolean" },
+            "hideCliCreated": { "type": "boolean" },
+            "hideDefaultBranch": { "type": "boolean" },
+            "hideDetached": { "type": "boolean" },
+            "hideArchived": { "type": "boolean" },
+            "filterRepoIds": { "type": "array", "items": { "type": "string" } },
+            "showProperties": { "type": "array", "items": { "type": "string", "enum": ["branch", "notes", "pullRequest", "issue", "automation", "activity"] } },
+            "externalVisibilityDefault": { "type": "string", "enum": ["show", "hide"] }
           },
-          "required": ["groupBy", "sortBy", "compact", "showBranch", "showComment", "showSleeping"],
+          "required": ["groupBy", "sortBy", "projectOrderBy", "compact", "showBranch", "showComment", "showSleeping", "hideCliCreated", "hideDefaultBranch", "hideDetached", "hideArchived", "filterRepoIds", "showProperties", "externalVisibilityDefault"],
           "additionalProperties": false
         }
       },
@@ -1774,7 +1847,7 @@
                   "worktreeId": { "type": "string" },
                   "name": { "type": "string" },
                   "fingerprint": { "type": "string" },
-                  "reason": { "type": "string", "enum": ["idle-clean"] },
+                  "reason": { "type": "string", "enum": ["idle-clean", "archived-7day"] },
                   "ignored": { "type": "boolean" },
                   "eligible": { "type": "boolean" },
                   "blockers": { "type": "array", "items": { "type": "object", "properties": { "code": { "type": "string" }, "detail": { "type": "string" } }, "required": ["code", "detail"] } }
@@ -1839,6 +1912,133 @@
           },
           "required": ["results"]
         }
+      },
+      {
+        "id": "reorderProjects",
+        "description": "Persist the complete manual order of current projects.",
+        "params": { "type": "object", "properties": { "projects": { "type": "array", "items": { "type": "string" } } }, "required": ["projects"], "additionalProperties": false },
+        "result": { "type": "object", "properties": { "ok": { "type": "boolean" } }, "required": ["ok"] }
+      },
+      {
+        "id": "projectOrder",
+        "description": "Read the persisted order of projects.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": {}, "additionalProperties": false },
+        "result": { "type": "array", "items": { "type": "string" } }
+      },
+      {
+        "id": "projectMetadata",
+        "description": "Read identity and external-worktree policy for one project.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": { "repo": { "type": "string" } }, "required": ["repo"], "additionalProperties": false },
+        "result": { "type": "object", "properties": { "repoId": { "type": "string" }, "identity": { "type": "object", "properties": { "displayName": {}, "icon": {}, "color": {}, "trackerProject": {} }, "required": ["displayName", "icon", "color", "trackerProject"] }, "externalVisibility": { "type": "string", "enum": ["show", "hide", "inherit"] }, "effectiveExternalVisibility": { "type": "string", "enum": ["show", "hide"] }, "externalInboxSuppressed": { "type": "boolean" }, "sharedDirectories": { "type": "array", "items": { "type": "string" } } }, "required": ["repoId", "identity", "externalVisibility", "effectiveExternalVisibility", "externalInboxSuppressed", "sharedDirectories"] }
+      },
+      {
+        "id": "projectMetadataList",
+        "description": "Read project identity and external-worktree policy for every project.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": {}, "additionalProperties": false },
+        "result": { "type": "array", "items": { "type": "object", "properties": { "repoId": { "type": "string" }, "identity": { "type": "object", "properties": { "displayName": {}, "icon": {}, "color": {}, "trackerProject": {} } }, "externalVisibility": { "type": "string", "enum": ["show", "hide", "inherit"] }, "effectiveExternalVisibility": { "type": "string", "enum": ["show", "hide"] }, "externalInboxSuppressed": { "type": "boolean" }, "sharedDirectories": { "type": "array", "items": { "type": "string" } } } } }
+      },
+      {
+        "id": "setProjectMetadata",
+        "description": "Set project identity, project-level external-worktree visibility and ignored shared directories carried into new worktrees.",
+        "params": { "type": "object", "properties": { "repo": { "type": "string" }, "identity": { "type": "object", "properties": { "displayName": {}, "icon": {}, "color": {}, "trackerProject": {} }, "additionalProperties": false }, "externalVisibility": { "type": "string", "enum": ["show", "hide", "inherit"] }, "sharedDirectories": { "type": "array", "items": { "type": "string" }, "description": "Relative, non-.git directories to carry from the primary checkout; entries are validated before saving." } }, "required": ["repo"], "additionalProperties": false },
+        "result": { "type": "object", "properties": { "repoId": { "type": "string" }, "identity": { "type": "object" }, "externalVisibility": { "type": "string", "enum": ["show", "hide", "inherit"] }, "effectiveExternalVisibility": { "type": "string", "enum": ["show", "hide"] }, "externalInboxSuppressed": { "type": "boolean" }, "sharedDirectories": { "type": "array", "items": { "type": "string" } } } }
+      },
+      {
+        "id": "suppressExternalInbox",
+        "description": "Suppress or restore the review inbox for hidden external worktrees in one project.",
+        "params": { "type": "object", "properties": { "repo": { "type": "string" }, "suppressed": { "type": "boolean" } }, "required": ["repo", "suppressed"], "additionalProperties": false },
+        "result": { "type": "object", "properties": { "repoId": { "type": "string" }, "externalInboxSuppressed": { "type": "boolean" } } }
+      },
+      {
+        "id": "externalInbox",
+        "description": "Review hidden, externally created Git worktrees without deleting or modifying their checkouts.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": {}, "additionalProperties": false },
+        "result": { "type": "object", "properties": { "defaultVisibility": { "type": "string", "enum": ["show", "hide"] }, "projects": { "type": "array", "items": { "type": "object", "properties": { "repoId": { "type": "string" }, "projectName": { "type": "string" }, "externalVisibility": { "type": "string", "enum": ["show", "hide", "inherit"] }, "effectiveExternalVisibility": { "type": "string", "enum": ["show", "hide"] }, "suppressed": { "type": "boolean" }, "hiddenWorktreeIds": { "type": "array", "items": { "type": "string" } } } } } }, "required": ["defaultVisibility", "projects"] }
+      },
+      {
+        "id": "statusDefinitions",
+        "description": "Read the built-in and custom workspace status definitions.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": {}, "additionalProperties": false },
+        "result": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "label": { "type": "string" }, "color": { "type": "string" } }, "required": ["id", "label", "color"] } }
+      },
+      {
+        "id": "setStatusDefinitions",
+        "description": "Persist status definitions while retaining the built-in statuses and every currently used status.",
+        "params": { "type": "object", "properties": { "statuses": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "label": { "type": "string" }, "color": { "type": "string" } }, "required": ["id", "label", "color"], "additionalProperties": false } } }, "required": ["statuses"], "additionalProperties": false },
+        "result": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "label": { "type": "string" }, "color": { "type": "string" } }, "required": ["id", "label", "color"] } }
+      },
+      {
+        "id": "archive",
+        "description": "Archive a non-primary Git worktree or clear its archived timestamp.",
+        "params": { "type": "object", "properties": { "worktree": { "type": "string" }, "archivedAt": { "description": "Past timestamp to archive at, or null to unarchive; omitted archives now." } }, "required": ["worktree"], "additionalProperties": false },
+        "result": { "type": "object", "properties": { "id": { "type": "string" }, "archivedAt": { "description": "Archive timestamp or null." } }, "required": ["id", "archivedAt"] }
+      },
+      {
+        "id": "references",
+        "description": "List manual HTTP or HTTPS references linked to a worktree.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": { "worktree": { "type": "string" } }, "required": ["worktree"], "additionalProperties": false },
+        "result": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "url": { "type": "string" }, "label": { "type": "string" }, "createdAt": { "type": "number" } }, "required": ["id", "url", "label", "createdAt"] } }
+      },
+      {
+        "id": "linkReference",
+        "description": "Link a manual HTTP or HTTPS reference; the URL is stored as text and never executed.",
+        "params": { "type": "object", "properties": { "worktree": { "type": "string" }, "url": { "type": "string" }, "label": { "type": "string" } }, "required": ["worktree", "url"], "additionalProperties": false },
+        "result": { "type": "object", "properties": { "id": { "type": "string" }, "url": { "type": "string" }, "label": { "type": "string" }, "createdAt": { "type": "number" } }, "required": ["id", "url", "label", "createdAt"] }
+      },
+      {
+        "id": "unlinkReference",
+        "description": "Unlink one manual reference by its stable reference ID.",
+        "params": { "type": "object", "properties": { "worktree": { "type": "string" }, "reference": { "type": "string" } }, "required": ["worktree", "reference"], "additionalProperties": false },
+        "result": { "type": "object", "properties": { "ok": { "type": "boolean" } }, "required": ["ok"] }
+      },
+      {
+        "id": "navigate",
+        "description": "Open one exact worktree in the terminal workspace or Git changes view and record it in navigation history.",
+        "params": { "type": "object", "properties": { "worktree": { "type": "string" }, "target": { "type": "string", "enum": ["terminal", "changes"] } }, "required": ["worktree"], "additionalProperties": false },
+        "result": { "type": "object", "properties": { "worktreeId": { "type": "string" }, "target": { "type": "string", "enum": ["terminal", "changes"] } }, "required": ["worktreeId", "target"] }
+      },
+      {
+        "id": "openIn",
+        "description": "Open a worktree in a supported public view without creating a duplicate session.",
+        "params": { "type": "object", "properties": { "worktree": { "type": "string" }, "target": { "type": "string", "enum": ["terminal", "changes"] } }, "required": ["worktree", "target"], "additionalProperties": false },
+        "result": { "type": "object", "properties": { "worktreeId": { "type": "string" }, "target": { "type": "string", "enum": ["terminal", "changes"] } }, "required": ["worktreeId", "target"] }
+      },
+      {
+        "id": "navigationState",
+        "description": "Read persisted workspace navigation history.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": {}, "additionalProperties": false },
+        "result": { "type": "object", "properties": { "worktrees": { "type": "array", "items": { "type": "string" } }, "index": { "type": "integer" } }, "required": ["worktrees", "index"] }
+      },
+      {
+        "id": "navigationBack",
+        "description": "Navigate to the prior available workspace, skipping stale history entries.",
+        "params": { "type": "object", "properties": {}, "additionalProperties": false },
+        "result": { "type": "object", "properties": { "worktreeId": { "type": "string" }, "target": { "type": "string", "enum": ["terminal"] } }, "required": ["worktreeId", "target"] }
+      },
+      {
+        "id": "navigationForward",
+        "description": "Navigate forward in workspace history, skipping stale entries.",
+        "params": { "type": "object", "properties": {}, "additionalProperties": false },
+        "result": { "type": "object", "properties": { "worktreeId": { "type": "string" }, "target": { "type": "string", "enum": ["terminal"] } }, "required": ["worktreeId", "target"] }
+      },
+      {
+        "id": "navigationMove",
+        "description": "Open the previous or next worktree in the current sorted navigation order.",
+        "params": { "type": "object", "properties": { "direction": { "type": "string", "enum": ["previous", "next"] } }, "required": ["direction"], "additionalProperties": false },
+        "result": { "type": "object", "properties": { "worktreeId": { "type": "string" }, "target": { "type": "string", "enum": ["terminal"] } }, "required": ["worktreeId", "target"] }
+      },
+      {
+        "id": "navigationIndex",
+        "description": "Select a worktree by its visible one-based index from 1 through 9.",
+        "params": { "type": "object", "properties": { "index": { "type": "integer", "minimum": 1, "maximum": 9 } }, "required": ["index"], "additionalProperties": false },
+        "result": { "type": "object", "properties": { "worktreeId": { "type": "string" }, "target": { "type": "string", "enum": ["terminal"] } }, "required": ["worktreeId", "target"] }
       }
     ],
     "event": [
@@ -1873,18 +2073,35 @@
             "options": {
               "type": "object",
               "properties": {
-                "groupBy": { "type": "string", "enum": ["project", "status", "none"] },
-                "sortBy": { "type": "string", "enum": ["recent", "name", "manual"] },
+                "groupBy": { "type": "string", "enum": ["project", "status", "none", "pr"] },
+                "sortBy": { "type": "string", "enum": ["recent", "name", "manual", "agent-activity", "project"] },
+                "projectOrderBy": { "type": "string", "enum": ["manual", "recent"] },
                 "compact": { "type": "boolean" },
                 "showBranch": { "type": "boolean" },
                 "showComment": { "type": "boolean" },
-                "showSleeping": { "type": "boolean" }
-              },
-              "required": ["groupBy", "sortBy", "compact", "showBranch", "showComment", "showSleeping"]
+                "showSleeping": { "type": "boolean" },
+                "hideCliCreated": { "type": "boolean" },
+                "hideDefaultBranch": { "type": "boolean" },
+                "hideDetached": { "type": "boolean" },
+                "hideArchived": { "type": "boolean" },
+                "filterRepoIds": { "type": "array", "items": { "type": "string" } },
+                "showProperties": { "type": "array", "items": { "type": "string" } },
+                "externalVisibilityDefault": { "type": "string", "enum": ["show", "hide"] }
+            }
             }
           },
           "required": ["options"]
         }
+      },
+      {
+        "id": "statusDefinitionsChanged",
+        "description": "Workspace status definitions changed.",
+        "data": { "type": "object", "properties": { "statuses": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "label": { "type": "string" }, "color": { "type": "string" } } } } }, "required": ["statuses"] }
+      },
+      {
+        "id": "projectMetadataChanged",
+        "description": "Project identity or external-worktree visibility metadata changed.",
+        "data": { "type": "object", "properties": { "repoId": { "type": "string" } }, "required": ["repoId"] }
       }
     ],
     "setting": [
@@ -2101,7 +2318,14 @@
           "activate": {
             "type": "boolean",
             "description": "open the new worktree in the window"
-          }
+          },
+          "model": { "type": "string", "description": "agent model; requires --agent and public launch preflight" },
+          "effort": { "type": "string", "description": "set the agent effort option; requires --model" },
+          "option": { "type": "string", "description": "agent option as KEY=VALUE; repeat for each pick, with true/false parsed as booleans" },
+          "sparse-paths": { "type": "json", "description": "JSON array of tracked repository-relative files/directories to materialize" },
+          "keep-main": { "type": "boolean", "description": "fast-forward the clean primary checkout only when it exactly matches the selected remote base and is strictly behind" },
+          "environment-recipe": { "type": "string", "description": "recognized but refused: no public environment-recipe owner exists" },
+          "default-tabs": { "type": "json", "description": "recognized but refused: no public default-tab composition owner exists" }
         },
         "methods": [
           "quirky.worktree/create"
@@ -2128,13 +2352,7 @@
           },
           "workspace-status": {
             "type": "string",
-            "description": "where the worktree is in your flow",
-            "enum": [
-              "todo",
-              "in-progress",
-              "in-review",
-              "done"
-            ]
+            "description": "built-in or project-defined status ID"
           },
           "pin": {
             "type": "boolean",
@@ -2265,18 +2483,30 @@
       },
       {
         "id": "options",
-        "summary": "read or persist stock worktree presentation options",
+        "summary": "read or persist worktree grouping, sorting, properties and filters",
         "flags": {
-          "group-by": { "type": "string", "description": "project, status or none", "enum": ["project", "status", "none"] },
-          "sort-by": { "type": "string", "description": "recent, name or manual", "enum": ["recent", "name", "manual"] },
+          "group-by": { "type": "string", "description": "project, status, PR or none", "enum": ["project", "status", "pr", "none"] },
+          "sort-by": { "type": "string", "description": "recent, agent-activity, name, project or manual", "enum": ["recent", "agent-activity", "name", "project", "manual"] },
+          "project-order-by": { "type": "string", "description": "manual or recent", "enum": ["manual", "recent"] },
           "compact": { "type": "boolean", "description": "use compact worktree cards" },
           "detailed": { "type": "boolean", "description": "use detailed worktree cards" },
-          "show-branch": { "type": "boolean", "description": "show branch properties" },
-          "hide-branch": { "type": "boolean", "description": "hide branch properties" },
-          "show-comment": { "type": "boolean", "description": "show comment properties" },
-          "hide-comment": { "type": "boolean", "description": "hide comment properties" },
+          "show-branch": { "type": "boolean", "description": "show branch property" },
+          "hide-branch": { "type": "boolean", "description": "hide branch property" },
+          "show-comment": { "type": "boolean", "description": "show notes property" },
+          "hide-comment": { "type": "boolean", "description": "hide notes property" },
           "show-sleeping": { "type": "boolean", "description": "show sleeping worktrees" },
-          "hide-sleeping": { "type": "boolean", "description": "hide sleeping worktrees" }
+          "hide-sleeping": { "type": "boolean", "description": "hide sleeping worktrees" },
+          "hide-cli-created": { "type": "boolean", "description": "hide worktrees with CLI creation provenance" },
+          "show-cli-created": { "type": "boolean", "description": "show worktrees with CLI creation provenance" },
+          "hide-default-branch": { "type": "boolean", "description": "hide primary worktrees" },
+          "show-default-branch": { "type": "boolean", "description": "show primary worktrees" },
+          "hide-detached": { "type": "boolean", "description": "hide detached Git worktrees" },
+          "show-detached": { "type": "boolean", "description": "show detached Git worktrees" },
+          "hide-archived": { "type": "boolean", "description": "hide archived worktrees" },
+          "show-archived": { "type": "boolean", "description": "show archived worktrees" },
+          "external-visibility-default": { "type": "string", "description": "default external visibility: show or hide", "enum": ["show", "hide"] },
+          "filter-repo-ids": { "type": "json", "description": "JSON array of project IDs; [] shows all projects" },
+          "show-properties": { "type": "json", "description": "JSON array of branch, notes, pullRequest, issue, automation, activity" }
         },
         "methods": ["quirky.worktree/options", "quirky.worktree/setOptions"]
       },
@@ -2334,6 +2564,85 @@
           "confirm": { "type": "boolean", "description": "explicitly confirm this reviewed selection; global --yes or the normal ask still gates removal" }
         },
         "methods": ["quirky.worktree/cleanupRemove"]
+      },
+      {
+        "id": "reorder-projects",
+        "summary": "persist the complete manual project order",
+        "flags": { "projects": { "type": "json", "description": "JSON array of project IDs in display order" } },
+        "methods": ["quirky.worktree/reorderProjects"]
+      },
+      {
+        "id": "project-show",
+        "summary": "show project identity and external visibility settings",
+        "positionals": [{ "name": "repo", "description": "project selector", "required": true }],
+        "methods": ["quirky.worktree/projectMetadata"]
+      },
+      {
+        "id": "project-set",
+        "summary": "set project identity or external worktree visibility",
+        "positionals": [{ "name": "repo", "description": "project selector", "required": true }],
+        "flags": {
+          "display-name": { "type": "string", "description": "project display name" },
+          "project-icon": { "type": "string", "description": "project icon, emoji or symbol" },
+          "project-color": { "type": "string", "description": "project color in #RGB or #RRGGBB format" },
+          "tracker-project": { "type": "string", "description": "tracker project key" },
+          "external-worktree-visibility": { "type": "string", "enum": ["show", "hide", "inherit"], "description": "show or hide external worktrees, or inherit the global policy" },
+          "suppress-inbox": { "type": "boolean", "description": "suppress the external-worktree review inbox" },
+          "shared-directories": { "type": "json", "description": "JSON array of ignored, relative shared paths carried into new worktrees" },
+          "show-inbox": { "type": "boolean", "description": "restore the external-worktree review inbox" }
+        },
+        "methods": ["quirky.worktree/setProjectMetadata", "quirky.worktree/suppressExternalInbox"]
+      },
+      { "id": "external-inbox", "summary": "review hidden external worktree groups", "methods": ["quirky.worktree/externalInbox"] },
+      { "id": "status-list", "summary": "list built-in and custom workspace statuses", "methods": ["quirky.worktree/statusDefinitions"] },
+      {
+        "id": "status-set",
+        "summary": "set custom workspace status definitions",
+        "flags": { "statuses": { "type": "json", "description": "JSON array of status objects with id, label and color" } },
+        "methods": ["quirky.worktree/setStatusDefinitions"]
+      },
+      {
+        "id": "references",
+        "summary": "list references linked to a worktree",
+        "positionals": [{ "name": "worktree", "description": "worktree selector", "required": true }],
+        "methods": ["quirky.worktree/references"]
+      },
+      {
+        "id": "link-reference",
+        "summary": "link an HTTP or HTTPS reference without executing it",
+        "positionals": [{ "name": "worktree", "description": "worktree selector", "required": true }],
+        "flags": { "url": { "type": "string", "description": "absolute HTTP or HTTPS URL" }, "label": { "type": "string", "description": "short reference label" } },
+        "methods": ["quirky.worktree/linkReference"]
+      },
+      {
+        "id": "unlink-reference",
+        "summary": "unlink one manual reference",
+        "positionals": [{ "name": "worktree", "description": "worktree selector", "required": true }, { "name": "reference", "description": "reference ID", "required": true }],
+        "methods": ["quirky.worktree/unlinkReference"]
+      },
+      {
+        "id": "archive",
+        "summary": "archive or unarchive a non-primary Git worktree",
+        "positionals": [{ "name": "worktree", "description": "worktree selector", "required": true }],
+        "flags": { "off": { "type": "boolean", "description": "clear the archived timestamp" } },
+        "methods": ["quirky.worktree/archive"]
+      },
+      { "id": "back", "summary": "navigate to the prior workspace", "methods": ["quirky.worktree/navigationBack"] },
+      { "id": "forward", "summary": "navigate forward in workspace history", "methods": ["quirky.worktree/navigationForward"] },
+      { "id": "previous", "summary": "open the previous workspace", "methods": ["quirky.worktree/navigationMove"] },
+      { "id": "next", "summary": "open the next workspace", "methods": ["quirky.worktree/navigationMove"] },
+      {
+        "id": "index",
+        "summary": "open workspace index 1 through 9",
+        "positionals": [{ "name": "index", "description": "one-based index", "required": true }],
+        "methods": ["quirky.worktree/navigationIndex"]
+      },
+      {
+        "id": "open-in",
+        "summary": "open a worktree in a supported public view",
+        "positionals": [{ "name": "worktree", "description": "worktree selector", "required": true }],
+        "flags": { "target": { "type": "string", "description": "terminal or changes", "enum": ["terminal", "changes"] } },
+        "methods": ["quirky.worktree/openIn"]
       }
     ]
   }

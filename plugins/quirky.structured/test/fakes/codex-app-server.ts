@@ -28,7 +28,7 @@ export function createCodexAppServerFixture(home: string, options?: { heldPrefix
   const executable = join(home, 'codex-app-server-fixture')
   const logPath = join(home, 'codex-app-server.jsonl')
   const environmentLogPath = join(home, 'codex-app-server-environments.jsonl')
-  const script = `#!/usr/bin/env node
+  const script = `#!${process.execPath}
 const fs = require('node:fs')
 const { spawn } = require('node:child_process')
 const logPath = ${JSON.stringify(logPath)}
@@ -141,6 +141,19 @@ function startTurn(message, threadId, text) {
     const id = 'unknown-' + nextApproval++
     approvals.set(id, () => finish(threadId, turn))
     send({ id, method: 'fixture/unknownRequest', params: { threadId, turnId: turn.id } })
+    return
+  }
+  if (text.includes('[native question]') || text.includes('[native secret]')) {
+    const id = 'question-' + nextApproval++
+    approvals.set(id, () => finish(threadId, turn))
+    send({
+      id,
+      method: 'item/tool/requestUserInput',
+      params: {
+        threadId, turnId: turn.id,
+        questions: [{ id: 'destination', header: 'Target', question: 'Where next?', isSecret: text.includes('[native secret]'), options: [{ label: 'Local' }, { label: 'Remote' }] }]
+      }
+    })
     return
   }
   if (text.includes('[approve twice]')) return ask(threadId, state, 2)

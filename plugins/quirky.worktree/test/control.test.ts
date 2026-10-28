@@ -89,14 +89,21 @@ describe('stock worktree options', () => {
     const w = await start()
     world = w
     const defaults = (await call(w.t.client, 'quirky.worktree/options')) as StockWorktreeOptions
-    expect(defaults).toEqual({
+    expect(defaults).toMatchObject({
       groupBy: 'project',
       sortBy: 'recent',
+      projectOrderBy: 'manual',
       compact: false,
       showBranch: true,
       showComment: true,
-      showSleeping: true
+      showSleeping: true,
+      hideCliCreated: false,
+      hideDefaultBranch: false,
+      hideDetached: false,
+      hideArchived: true,
+      externalVisibilityDefault: 'hide'
     })
+    expect(defaults.showProperties).toContain('branch')
 
     const selected = (await call(w.t.client, 'quirky.worktree/setOptions', {
       groupBy: 'status',
@@ -106,7 +113,7 @@ describe('stock worktree options', () => {
       showComment: true,
       showSleeping: false
     })) as StockWorktreeOptions
-    expect(selected).toEqual({
+    expect(selected).toMatchObject({
       groupBy: 'status',
       sortBy: 'name',
       compact: true,
@@ -123,7 +130,7 @@ describe('stock worktree options', () => {
       '--show-branch', '--hide-comment', '--show-sleeping', '--json'
     ])
     expect(changed.code).toBe(0)
-    expect(JSON.parse(changed.stdout)).toEqual({
+    expect(JSON.parse(changed.stdout)).toMatchObject({
       groupBy: 'none',
       sortBy: 'manual',
       compact: true,

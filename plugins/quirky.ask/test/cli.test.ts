@@ -24,6 +24,7 @@ afterEach(async () => {
 const specJson = JSON.stringify(confirmSpec)
 
 async function cliFor(env: Record<string, string> = {}, options: Parameters<typeof testCli>[2] = {}) {
+  await openWindow(h, `ask-cli-${crypto.randomUUID()}`)
   const identity = { sessionId: env.QUIRKY_SESSION_ID, worktreeId: env.QUIRKY_WORKTREE_ID }
   const connect = () => connectAs(h, identity)
   return testCli(connect, await connect(), { env, cwd: dir, ...options })
@@ -57,7 +58,7 @@ describe('quirky ask command module', () => {
   test('SC-28: prints the registered line immediately, then the answered envelope', async () => {
     // a second's gap between creating and answering keeps the order check meaningful on a loaded machine
     await answerAsksAfter(1000)
-    const cli = await cliFor({ QUIRKY_SESSION_ID: 'sess_7', QUIRKY_WORKTREE_ID: 'wt_7' })
+    const cli = await cliFor()
     const running = run(cli, 'ask', { spec: specJson })
     await waitFor(() => cli.lines.length > 0)
     expect(cli.lines).toHaveLength(1)
@@ -69,8 +70,16 @@ describe('quirky ask command module', () => {
     const envelope = cli.lines[1] as AskEnvelope
     expect(envelope).toMatchObject({ status: 'answered', answers: { go: { value: true, source: 'input' } } })
     expect(envelope.askId).toBe(registered.askId)
-    const [ask] = (await (await connectAs(h)).callAny('quirky.ask/list', {})) as { sessionId: string; worktreeId: string }[]
-    expect(ask).toMatchObject({ sessionId: 'sess_7', worktreeId: 'wt_7' })
+  })
+
+  test('an unattached caller without an authenticated session gets a terminal unavailable registration, not a pending wait', async () => {
+    const client = await connectAs(h)
+    const cli = testCli(() => connectAs(h), client, { cwd: dir })
+    await run(cli, 'ask', { spec: specJson })
+    expect(cli.lines).toEqual([{
+      status: 'unavailable',
+      reason: expect.any(String)
+    }])
   })
 
   test('--spec @file is read through the context', async () => {
@@ -130,7 +139,7 @@ describe('quirky ask command module', () => {
     expect((cli.lines[1] as AskEnvelope).status).toBe('timed_out')
     expect(methods).not.toContain('quirky.ask/cancel')
     expect(methods).not.toContain('quirky.ask/expire')
-    expect(methods).toContain('quirky.ask/create')
+    expect(methods).toContain('quirky.ask/register')
   })
 
   test('SC-28: wait --id resumes an abandoned ask and cancel --id prints the envelope', async () => {

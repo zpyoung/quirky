@@ -1,4 +1,4 @@
-import { TERMINAL_PANE_MENU, TERMINAL_TAB_MENU, type Session, type UiMenuItemEntry, type UiModel, type UiPluginContext } from '@quirky/protocol'
+import { TERMINAL_PANE_MENU, TERMINAL_TAB_MENU, type Session, type UiKeybinding, type UiMenuItemEntry, type UiModel, type UiPluginContext } from '@quirky/protocol'
 import type { MenuContributionItem } from './workspace/controller'
 import { findGroup } from '../layout/tree'
 import type { FloatingState, Group, PaneLeaf, QuickCommand, Workspace } from '../layout/types'
@@ -208,6 +208,17 @@ async function forkAgentSessionCommand(context: UiPluginContext, raw: unknown): 
   return OK
 }
 
+/** Opens an owner-provided document picker without losing the plus menu's exact destination group. */
+function documentPicker(context: UiPluginContext, command: string): CommandHandler {
+  return on(context, 'group', (controller, args) => {
+    if (controller.workspaceId === FLOATING_WORKSPACE) {
+      throw new Error('Markdown and editor files require an authorized worktree; the floating workspace has no document root')
+    }
+    const group = textArg(args, 'group') ?? controller.getSnapshot().workspace?.activeGroup
+    return context.executeCommand(command, { worktree: `id:${controller.workspaceId}`, ...(group === undefined ? {} : { group }) })
+  })
+}
+
 
 /**
  * The handlers of `quirky.terminal`'s window commands, by command name. Most act on the focused
@@ -216,6 +227,18 @@ async function forkAgentSessionCommand(context: UiPluginContext, raw: unknown): 
  */
 export function terminalCommands(context: UiPluginContext): Record<string, CommandHandler> {
   return {
+    'new-markdown': documentPicker(context, 'command:quirky.editor/new-markdown'),
+    'open-markdown': documentPicker(context, 'command:quirky.editor/open-markdown'),
+    'open-file': documentPicker(context, 'command:quirky.editor/quick-open'),
+    'new-emulator': on(context, 'group', (controller, args) => context.call('quirky.terminal/openViewTab', {
+      workspace: controller.workspaceId,
+      group: textArg(args, 'group') ?? controller.getSnapshot().workspace?.activeGroup,
+      viewId: 'view:quirky.terminal/emulator',
+      key: textArg(args, 'device') ? `emulator:${textArg(args, 'device')}` : `emulator:${crypto.randomUUID()}`,
+      title: 'Mobile Emulator',
+      input: textArg(args, 'device') ? { device: textArg(args, 'device') } : {},
+      activate: true
+    })),
     copy: onPane(context, (controller, pane) => controller.copy(pane)),
     'select-all': onPane(context, (controller, pane) => controller.selectAll(pane)),
     paste: onPane(context, async (controller, pane, args) => {
@@ -431,12 +454,14 @@ export function paneMenuQuickCommands(context: UiPluginContext, source: QuickCom
 /** The effective public `menu-item` registry snapshot shared by the pane and tab menus. */
 export type MenuContributionSource = {
   items(): UiMenuItemEntry[]
+  key?(command: string): string | null
   subscribe(listener: () => void): () => void
   dispose(): void
 }
 
 export function watchMenuContributions(context: UiPluginContext): MenuContributionSource {
   let items: UiMenuItemEntry[] = []
+  let bindings: UiKeybinding[] = []
   let live = true
   let latest = 0
   const listeners = new Set<() => void>()
@@ -446,6 +471,7 @@ export function watchMenuContributions(context: UiPluginContext): MenuContributi
       const model = (await context.call('ui.contributions')) as UiModel
       if (live && mine === latest) {
         items = model.menuItems ?? []
+        bindings = model.keybindings ?? []
         for (const listener of [...listeners]) listener()
       }
     } catch {
@@ -454,13 +480,19 @@ export function watchMenuContributions(context: UiPluginContext): MenuContributi
   }
   void load()
   const unsubscribe = context.subscribe((event) => {
-    if (event.type === 'plugin.changed') void load()
+    if (event.type === 'plugin.changed' || event.type === 'ui.keybindings.changed') void load()
   })
   const stopConnection = context.onConnection((status) => {
     if (status === 'connected') void load()
   })
   return {
     items: () => items,
+    key(command) {
+      const binding = bindings.find((entry) => entry.command === command && entry.status === 'active')
+      if (!binding) return null
+      const labels: Record<string, string> = { mod: '⌘', ctrl: '⌃', alt: '⌥', shift: '⇧', enter: '↩', tab: '⇥', arrowup: '↑', arrowdown: '↓', arrowleft: '←', arrowright: '→' }
+      return binding.key.split('+').map((part) => labels[part] ?? part.toUpperCase()).join('')
+    },
     subscribe(listener) {
       listeners.add(listener)
       return () => {
@@ -487,6 +519,7 @@ export function paneMenuContributions(context: UiPluginContext, source: MenuCont
     .filter((item) => item.menu === TERMINAL_PANE_MENU && (item.when?.agent !== 'any' || runsAgent))
     .map((item) => ({
       label: item.title,
+      key: source.key?.(item.command) ?? null,
       onSelect: () =>
         void context.executeCommand(item.command, { session: pane.session }).catch((error: unknown) => {
           context.toast(item.title, error instanceof Error ? error.message : String(error))
@@ -510,6 +543,7 @@ export function tabMenuContributions(
       id: item.id,
       after: item.after,
       label: item.title,
+      key: source.key?.(item.command) ?? null,
       onSelect: () =>
         void context.executeCommand(item.command, { worktree, workspace, group: group.id }).catch((error: unknown) => {
           context.toast(item.title, error instanceof Error ? error.message : String(error))

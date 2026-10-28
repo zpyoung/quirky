@@ -5,6 +5,7 @@ import {
   RpcErrorCode,
   type AgentKind,
   type EffectiveHooks,
+  type LaunchSettings,
   type ProjectGroup,
   type ProjectSettings,
   type QuirkyEvent,
@@ -22,6 +23,7 @@ import type { CallerIdentity } from '../../selector'
 import { BaseError, resolveBase, type ResolvedBase } from './base'
 import { carryFiles } from './carry'
 import { createFolderWorkspace, type FolderEnv } from './folder'
+import { projectPreference } from './project'
 import { dataRunnerPath, gitRunnerPath, runHookInDaemon, runnerCommand, writeRunner, type HookTarget } from './hooks-run'
 import { birthtimeOf, groupRepoId, listProject } from './list'
 import { InvalidNameError, NoFreeNameError, branchName as joinBranch, normalizePrefix, sanitizeName, walkCandidates } from './naming'
@@ -64,6 +66,14 @@ export type CreateParams = {
   trustSetup?: boolean
   agent?: AgentKind
   prompt?: string
+  model?: string
+  options?: Record<string, string | boolean>
+  sparsePaths?: string[]
+  keepMain?: boolean
+  /** Recognized for an explicit unsupported response; no current public owner applies this choice. */
+  environmentRecipe?: string
+  /** Recognized for an explicit unsupported response; no current public owner applies this choice. */
+  defaultTabs?: string[]
   /** Overrides the default submit behavior for an initial agent prompt. */
   submitPrompt?: boolean
   allowLocalBaseFallback?: boolean
@@ -102,6 +112,219 @@ const labelOf = (repo: Repo): string => repo.displayName ?? repo.name
 
 const reasoned = (env: CreateEnv, kind: 'invalid-params' | 'not-found' | 'conflict', reason: string, message: string, data: Record<string, unknown> = {}) =>
   env.fail(kind, message, { reason, ...data })
+type MainUpdateReceipt = {
+  status: 'not-requested' | 'fast-forwarded' | 'already-current' | 'not-updated'
+  reason?: string
+  from?: string
+  to?: string
+}
+
+type CreateReceipt = {
+  sparsePaths: string[]
+  sharedDirectories: string[]
+  main: MainUpdateReceipt
+  agentLaunch?: { sessionId: string; launchSettings: LaunchSettings | null }
+}
+
+type CreateResult = WorktreeCreateResult & { creationReceipt: CreateReceipt }
+
+const MAIN_NOT_REQUESTED: MainUpdateReceipt = { status: 'not-requested' }
+const MAX_SPARSE_PATHS = 100
+const RESERVED_LAUNCH_OPTIONS = new Set(['model', '__proto__', 'constructor', 'prototype'])
+
+function normalizeSparsePaths(env: CreateEnv, value: unknown): string[] | undefined {
+  if (value === undefined) return undefined
+  if (!Array.isArray(value) || !value.every((path) => typeof path === 'string')) {
+    throw env.fail('invalid-params', 'sparsePaths must be an array of Git path strings')
+  }
+  if (value.length === 0 || value.length > MAX_SPARSE_PATHS) {
+    throw env.fail('invalid-params', `sparsePaths must contain 1 to ${MAX_SPARSE_PATHS} paths`)
+  }
+  const paths: string[] = []
+  const seen = new Set<string>()
+  for (const raw of value) {
+    const path = raw.trim()
+    const parts = path.split('/')
+    if (
+      path === '' || path !== raw || isAbsolute(path) || path.includes('\\') ||
+      /[\u0000-\u001f\u007f:*?\[\]!#]/.test(path) ||
+      parts.some((part) => part === '' || part === '.' || part === '..') ||
+      path === '.git' || path.startsWith('.git/')
+    ) {
+      throw env.fail('invalid-params', `sparse path "${raw}" is not a safe repository-relative Git path`)
+    }
+    if (!seen.has(path)) {
+      seen.add(path)
+      paths.push(path)
+    }
+  }
+  return paths
+}
+
+function normalizeCreateChoices(env: CreateEnv, params: CreateParams): CreateParams {
+  if (params.environmentRecipe !== undefined) {
+    throw env.fail('invalid-params', 'environment recipes are unsupported: quirky.repo/hooks reports them as unsupported and no public recipe owner is available')
+  }
+  if (params.defaultTabs !== undefined) {
+    throw env.fail('invalid-params', 'default tabs are unsupported: quirky.repo/hooks reports them as unsupported and no public tab-composition owner is available')
+  }
+  if (params.keepMain !== undefined && typeof params.keepMain !== 'boolean') {
+    throw env.fail('invalid-params', 'keepMain must be a boolean')
+  }
+  if (params.model !== undefined && (typeof params.model !== 'string' || params.model.trim() === '' || params.model.length > 128)) {
+    throw env.fail('invalid-params', 'model must contain 1 to 128 characters')
+  }
+  let options: Record<string, string | boolean> | undefined
+  if (params.options !== undefined) {
+    if (typeof params.options !== 'object' || params.options === null || Array.isArray(params.options)) {
+      throw env.fail('invalid-params', 'options must be an object of string or boolean agent option picks')
+    }
+    const entries = Object.entries(params.options)
+    if (entries.length > 16) throw env.fail('invalid-params', 'at most 16 agent options may be selected')
+    options = Object.create(null) as Record<string, string | boolean>
+    for (const [key, value] of entries) {
+      if (key.length === 0 || key.length > 64 || RESERVED_LAUNCH_OPTIONS.has(key)) {
+        throw env.fail('invalid-params', `agent option key "${key}" is invalid`)
+      }
+      if (typeof value !== 'string' && typeof value !== 'boolean') {
+        throw env.fail('invalid-params', `agent option "${key}" must be a string or boolean`)
+      }
+      options[key] = value
+    }
+    if (entries.length === 0) options = undefined
+  }
+  if ((params.model !== undefined || options !== undefined) && (params.agent === undefined || params.agent === 'shell')) {
+    throw env.fail('invalid-params', 'model and options require a non-shell agent')
+  }
+  const normalized = { ...params }
+  if (options === undefined) delete normalized.options
+  else normalized.options = options
+  if (params.sparsePaths !== undefined) normalized.sparsePaths = normalizeSparsePaths(env, params.sparsePaths)!
+  return normalized
+}
+
+async function preflightAgentSelection(env: CreateEnv, params: CreateParams): Promise<void> {
+  if (params.model === undefined && params.options === undefined) return
+  try {
+    await env.call('quirky.agents/resolveLaunch', {
+      agent: params.agent!,
+      structured: false,
+      ...(params.model === undefined ? {} : { model: params.model }),
+      ...(params.options === undefined ? {} : { options: params.options })
+    })
+  } catch (error) {
+    if (codeOf(error) === RpcErrorCode.MethodNotFound) {
+      throw reasoned(
+        env,
+        'conflict',
+        'launch-selection-unavailable',
+        'Model and option selections require the public quirky.agents/resolveLaunch method; refusing to create a worktree without launch preflight.'
+      )
+    }
+    throw error
+  }
+}
+
+async function gitForCreate(cwd: string, args: string[], input?: string): Promise<string> {
+  const child = Bun.spawn(['git', '-C', cwd, ...args], {
+    stdin: input === undefined ? 'ignore' : 'pipe',
+    stdout: 'pipe',
+    stderr: 'pipe',
+    env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_NO_LAZY_FETCH: '1' }
+  })
+  if (input !== undefined) {
+    const stdin = child.stdin
+    if (!stdin) throw new Error('git stdin pipe was not created')
+    stdin.write(input)
+    stdin.end()
+  }
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited
+  ])
+  if (exitCode !== 0) throw new Error(stderr.trim() || `git ${args[0]} failed (exit ${exitCode})`)
+  return stdout
+}
+
+async function validateSparseTreePaths(env: CreateEnv, repoPath: string, ref: string, paths: string[]): Promise<string[]> {
+  const patterns: string[] = []
+  for (const path of paths) {
+    const output = await gitForCreate(repoPath, ['ls-tree', '-z', ref, '--', path])
+    const entry = output.split('\0').find((line) => {
+      const tab = line.indexOf('\t')
+      return tab >= 0 && line.slice(tab + 1) === path
+    })
+    if (entry === undefined) {
+      throw env.fail('invalid-params', `sparse path "${path}" does not exist in the selected base`)
+    }
+    const metadata = entry.slice(0, entry.indexOf('\t')).split(' ')
+    if (metadata[1] !== 'tree' && metadata[1] !== 'blob') {
+      throw env.fail('invalid-params', `sparse path "${path}" is not a tracked file or directory`)
+    }
+    patterns.push(metadata[1] === 'tree' ? `/${path}/` : `/${path}`)
+  }
+  return patterns
+}
+
+async function setSparseCheckout(worktreePath: string, patterns: string[]): Promise<void> {
+  await gitForCreate(worktreePath, ['sparse-checkout', 'init', '--no-cone'])
+  await gitForCreate(worktreePath, ['sparse-checkout', 'set', '--no-cone', '--stdin'], `${patterns.join('\n')}\n`)
+}
+
+function mainNotUpdated(reason: string): MainUpdateReceipt {
+  return { status: 'not-updated', reason }
+}
+
+async function updatePrimaryMain(repo: Repo, base: ResolvedBase | null, log: (message: string) => void): Promise<MainUpdateReceipt> {
+  if (base === null) return mainNotUpdated('create-has-no-resolved-base')
+  const refPrefix = 'refs/remotes/'
+  if (!base.fullRef.startsWith(refPrefix)) return mainNotUpdated('selected-base-is-not-a-remote-tracking-ref')
+  const remoteAndBranch = base.fullRef.slice(refPrefix.length)
+  const git = gitApi()
+  let remote: string | null = null
+  for (const candidate of await git.listRemotes(repo.path)) {
+    if (remoteAndBranch.startsWith(`${candidate}/`) && (remote === null || candidate.length > remote.length)) remote = candidate
+  }
+  if (remote === null) return mainNotUpdated('selected-base-is-not-a-configured-remote-ref')
+  const branch = remoteAndBranch.slice(remote.length + 1)
+  const current = await git.status(repo.path)
+  if (current.branch !== branch) return mainNotUpdated('primary-branch-does-not-match-selected-base')
+  if (current.files.length > 0) return mainNotUpdated('primary-checkout-dirty')
+
+  const comparison = await git.compare(repo.path, base.fullRef)
+  if (comparison.status !== 'ready' || comparison.headOid === null || comparison.baseOid === null) {
+    return mainNotUpdated('selected-base-could-not-be-compared')
+  }
+  if (comparison.headOid === comparison.baseOid) {
+    return { status: 'already-current', from: comparison.headOid, to: comparison.baseOid }
+  }
+  if (
+    comparison.mergeBase !== comparison.headOid ||
+    comparison.ahead !== 0 ||
+    comparison.behind <= 0
+  ) {
+    return mainNotUpdated('primary-is-ahead-or-diverged-from-selected-base')
+  }
+
+  const latest = await git.status(repo.path)
+  const latestHead = await git.resolveCommit(repo.path, 'HEAD')
+  const latestBase = await git.resolveCommit(repo.path, base.fullRef)
+  if (latest.branch !== branch) return mainNotUpdated('primary-branch-changed-before-fast-forward')
+  if (latest.files.length > 0) return mainNotUpdated('primary-checkout-became-dirty')
+  if (latestHead !== comparison.headOid) return mainNotUpdated('primary-head-changed-before-fast-forward')
+  if (latestBase !== comparison.baseOid) return mainNotUpdated('selected-base-changed-before-fast-forward')
+
+  try {
+    await gitForCreate(repo.path, ['merge', '--ff-only', base.fullRef])
+  } catch (error) {
+    log(`could not fast-forward the primary checkout of ${repo.path}: ${messageOf(error)}`)
+    return mainNotUpdated('fast-forward-failed')
+  }
+  const updatedHead = await git.resolveCommit(repo.path, 'HEAD')
+  if (updatedHead !== comparison.baseOid) return mainNotUpdated('primary-head-changed-during-fast-forward')
+  return { status: 'fast-forwarded', from: comparison.headOid, to: comparison.baseOid }
+}
 
 const MAX_PROVENANCE_ID_LENGTH = 512
 const MAX_PROVENANCE_TOKEN_LENGTH = 128
@@ -340,11 +563,16 @@ type Created = {
   source: GitHubWorktreeSource | null
   issueCommandDecision: IssueCommandDecision
   warnings: string[]
+  sparsePaths: string[]
+  sharedDirectories: string[]
+  mainUpdate: MainUpdateReceipt
   baseFallback?: ResolvedBase['fallback']
 }
 
 /** Creates a workspace: a git worktree on a branch, or a folder workspace for a folder project or a group. */
-export async function createWorkspace(env: CreateEnv, params: CreateParams, identity: CallerIdentity, origin: WorktreeOriginCreator): Promise<WorktreeCreateResult> {
+export async function createWorkspace(env: CreateEnv, params: CreateParams, identity: CallerIdentity, origin: WorktreeOriginCreator): Promise<CreateResult> {
+  params = normalizeCreateChoices(env, params)
+  await preflightAgentSelection(env, params)
   if (Object.hasOwn(params, 'automationProvenance')) {
     throw env.fail('invalid-params', 'automationProvenance is assigned only by a live automation dispatch.')
   }
@@ -366,6 +594,11 @@ export async function createWorkspace(env: CreateEnv, params: CreateParams, iden
   }
   if (params.github !== undefined && ('group' in target || target.repo.kind !== 'git')) {
     throw reasoned(env, 'invalid-params', 'github-target', 'GitHub work-item creation requires a Git project, not a folder or group.')
+  }
+  if (params.sparsePaths !== undefined || params.keepMain === true) {
+    if (!('repo' in target) || target.repo.kind !== 'git') {
+      throw env.fail('invalid-params', 'sparse checkout and keepMain require a Git project')
+    }
   }
   const parentId = await resolveParent(env, params, identity, createdBy, 'repo' in target ? target.repo.id : groupRepoId(target.group.id))
 
@@ -396,7 +629,18 @@ async function createFolder(env: CreateEnv, target: Target, params: CreateParams
     parentId,
     generate: (unavailable) => generateName(env, repoId, unavailable)
   })
-  return { worktree, rootPath: worktree.path, hooks, decision, source: null, issueCommandDecision: 'none', warnings: [] }
+  return {
+    worktree,
+    rootPath: worktree.path,
+    hooks,
+    decision,
+    source: null,
+    issueCommandDecision: 'none',
+    warnings: [],
+    sparsePaths: [],
+    sharedDirectories: [],
+    mainUpdate: MAIN_NOT_REQUESTED
+  }
 }
 
 /** The generated name for `repoId`: the one last suggested if still free, else a fresh pick. */
@@ -449,7 +693,12 @@ async function createGit(
   let base: ResolvedBase | null = null
   const resolveRequestedBase = async () => {
     try {
-      return await resolveBase(repo.path, { requested: params.base, saved: settings.defaultBase, allowLocalFallback: params.allowLocalBaseFallback, log: env.log })
+      return await resolveBase(repo.path, {
+        requested: params.base,
+        saved: settings.defaultBase,
+        allowLocalFallback: params.keepMain === true ? false : params.allowLocalBaseFallback,
+        log: env.log
+      })
     } catch (error) {
       if (!(error instanceof BaseError)) throw error
       if (error.reason === 'not-found') throw env.fail('invalid-params', error.message)
@@ -483,7 +732,9 @@ async function createGit(
   let hooks: EffectiveHooks
   let decision: SetupDecision
   let issueCommandDecision: IssueCommandDecision
+  let sparsePatterns: string[] = []
   try {
+    if (params.sparsePaths !== undefined) sparsePatterns = await validateSparseTreePaths(env, repo.path, hooksRef, params.sparsePaths)
     hooks = (await env.call('quirky.repo/hooks', { repo: repo.id, ref: hooksRef })) as EffectiveHooks
     decision = decideSetup(env, repo, settings, hooks, params, hooksRef)
     issueCommandDecision = decideIssueCommand(env, repo, hooks, params, source, hooksRef)
@@ -509,12 +760,14 @@ async function createGit(
     for (const name of new Set([generated, placed ?? generated])) env.store.run('INSERT OR IGNORE INTO retired_names (repo_id, name) VALUES (?, ?)', repo.id, name)
   }
   const rollback = async () => {
-    if (!pullPlan || durable) return
-    if (worktreeAdded && folder !== '') await git.removeWorktree(repo.path, folder, true).catch((error) => env.log(`could not remove incomplete GitHub worktree ${folder}: ${messageOf(error)}`))
-    if (branchCreated) await git.deleteRefIfAt(repo.path, branch, hooksRef).catch((error) => env.log(`could not remove incomplete GitHub branch ${branch}: ${messageOf(error)}`))
-    if (branchConfig !== null) await restoreBranchConfig(repo.path, branchConfig).catch((error) => env.log(`could not restore GitHub branch config for ${branch}: ${messageOf(error)}`))
-    if (pushRemoteAdded) await removePushRemote(repo.path, pullPlan).catch((error) => env.log(`could not remove incomplete GitHub remote ${pullPlan!.pushTarget.remoteName}: ${messageOf(error)}`))
-    await restorePullRef(repo.path, pullPlan).catch((error) => env.log(`could not restore GitHub tracking ref ${pullPlan!.trackingRef}: ${messageOf(error)}`))
+    if (durable) return
+    if (worktreeAdded && folder !== '') await git.removeWorktree(repo.path, folder, true).catch((error) => env.log(`could not remove incomplete worktree ${folder}: ${messageOf(error)}`))
+    if (branchCreated) await git.deleteRefIfAt(repo.path, branch, hooksRef).catch((error) => env.log(`could not remove incomplete branch ${branch}: ${messageOf(error)}`))
+    if (branchConfig !== null) await restoreBranchConfig(repo.path, branchConfig).catch((error) => env.log(`could not restore branch config for ${branch}: ${messageOf(error)}`))
+    if (pullPlan) {
+      if (pushRemoteAdded) await removePushRemote(repo.path, pullPlan).catch((error) => env.log(`could not remove incomplete GitHub remote ${pullPlan.pushTarget.remoteName}: ${messageOf(error)}`))
+      await restorePullRef(repo.path, pullPlan).catch((error) => env.log(`could not restore GitHub tracking ref ${pullPlan.trackingRef}: ${messageOf(error)}`))
+    }
   }
 
   try {
@@ -597,13 +850,12 @@ async function createGit(
       if (holder) throw branchCheckedOut(env, branch, holder.path)
     }
 
-    if (pullPlan) {
-      branchConfig = await snapshotBranchConfig(repo.path, branch)
-      pushRemoteAdded = await addPushRemote(repo.path, pullPlan)
-    }
+    if (pullPlan || mode === 'new' || mode === 'tracking') branchConfig = await snapshotBranchConfig(repo.path, branch)
+    if (pullPlan) pushRemoteAdded = await addPushRemote(repo.path, pullPlan)
     await addWorktree(env, repo, { mode, branch, folder, start: hooksRef, existing })
     worktreeAdded = true
-    branchCreated = pullPlan !== null && mode === 'new'
+    branchCreated = mode === 'new' || mode === 'tracking'
+    if (sparsePatterns.length > 0) await setSparseCheckout(folder, sparsePatterns)
 
     if (pullPlan) await configurePullBranch(repo.path, pullPlan)
     else await configureBranch(env, repo, branch, mode === 'tracking' || existing !== null ? null : base!)
@@ -642,10 +894,22 @@ async function createGit(
     })
     durable = true
 
-    const warnings = await carryFiles(repo.path, folder, hooks.sharedDirectories)
+    const projectSharedDirectories = projectPreference(env.store, repo.id).sharedDirectories
+    const sharedDirectories = [...new Set([...hooks.sharedDirectories, ...projectSharedDirectories])]
+    const linkedSharedDirectories: string[] = []
+    const warnings = await carryFiles(repo.path, folder, sharedDirectories, (entry) => linkedSharedDirectories.push(entry))
     for (const warning of warnings) env.log(`carried files for ${folder}: ${warning}`)
     const worktree = (await listProject(env, repo)).find((listed) => listed.id === id)
     if (!worktree) throw new Error(`the new worktree ${folder} is not listed`)
+    let mainUpdate = MAIN_NOT_REQUESTED
+    if (params.keepMain === true) {
+      try {
+        mainUpdate = await updatePrimaryMain(repo, base, env.log)
+      } catch (error) {
+        env.log(`could not check the primary checkout of ${repo.path} for a safe fast-forward: ${messageOf(error)}`)
+        mainUpdate = mainNotUpdated('primary-check-failed')
+      }
+    }
     return {
       worktree,
       rootPath: repo.path,
@@ -654,6 +918,9 @@ async function createGit(
       source,
       issueCommandDecision,
       warnings,
+      sparsePaths: params.sparsePaths ?? [],
+      sharedDirectories: linkedSharedDirectories,
+      mainUpdate,
       ...(base?.fallback ? { baseFallback: base.fallback } : {})
     }
   } catch (error) {
@@ -720,7 +987,7 @@ async function configureBranch(env: CreateEnv, repo: Repo, branch: string, base:
   }
 }
 
-type SessionLike = { id: string; status?: string }
+type SessionLike = { id: string; status?: string; launchSettings?: LaunchSettings | null }
 
 /**
  * Waits for one session to exit or be removed, then runs `then` once. Events are watched from the
@@ -786,13 +1053,14 @@ export function agentPromptParameters(
 }
 
 /** Starts the agent session through the public session API; native provider readiness stays session-owned. */
-async function startAgent(env: CreateEnv, worktreeId: string, params: CreateParams, source: GitHubWorktreeSource | null): Promise<string> {
-  const session = (await env.call('quirky.session/create', {
+async function startAgent(env: CreateEnv, worktreeId: string, params: CreateParams, source: GitHubWorktreeSource | null): Promise<SessionLike> {
+  return (await env.call('quirky.session/create', {
     worktree: worktreeId,
     agent: params.agent!,
-    ...agentPromptParameters(params, source)
+    ...agentPromptParameters(params, source),
+    ...(params.model === undefined ? {} : { model: params.model }),
+    ...(params.options === undefined ? {} : { options: params.options })
   })) as SessionLike
-  return session.id
 }
 
 type ObjectRecord = Record<string, unknown>
@@ -873,12 +1141,17 @@ async function runIssueCommand(
 }
 
 /** Steps 12 to 14: setup, the agent, and opening the view. */
-async function finish(env: CreateEnv, created: Created, params: CreateParams): Promise<WorktreeCreateResult> {
+async function finish(env: CreateEnv, created: Created, params: CreateParams): Promise<CreateResult> {
   const { worktree, hooks, warnings } = created
-  const result: WorktreeCreateResult = {
+  const result: CreateResult = {
     worktree,
     warnings,
     setup: { ran: 'none' },
+    creationReceipt: {
+      sparsePaths: created.sparsePaths,
+      sharedDirectories: created.sharedDirectories,
+      main: created.mainUpdate
+    },
     ...(created.baseFallback ? { baseFallback: created.baseFallback } : {})
   }
   const script = hooks?.setup?.text
@@ -914,7 +1187,9 @@ async function finish(env: CreateEnv, created: Created, params: CreateParams): P
     else {
       gate?.dispose()
       try {
-        result.agentSessionId = await startAgent(env, worktree.id, params, created.source)
+        const session = await startAgent(env, worktree.id, params, created.source)
+        result.agentSessionId = session.id
+        result.creationReceipt.agentLaunch = { sessionId: session.id, launchSettings: session.launchSettings ?? null }
       } catch (error) {
         warnings.push(`could not start ${params.agent}: ${messageOf(error)}`)
       }

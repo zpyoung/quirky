@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path'
 import { QuirkyClient, type AskSpec, type ClientRole, type CliContext, type PluginStore, type QuirkyEvent } from '@quirky/protocol'
 import { rpcUrl } from '@quirky/protocol/node'
 import { makeTempHome, startHarness, type Harness } from '../../../packages/daemon/test/helpers'
-import { askOwnershipMigration, askQueueMigration } from '../store-migrations'
+import { askHandoffMigration, askOwnershipMigration, askQueueMigration } from '../store-migrations'
 import { v1AsksMigration } from '../v1-import'
 
 export const PLUGIN_DIR = resolve(import.meta.dir, '..')
@@ -152,6 +152,7 @@ export function migratedStore(home: string = makeTempHome('qa-')): PluginStore {
   v1AsksMigration(home)(store)
   askQueueMigration(store)
   askOwnershipMigration(store)
+  askHandoffMigration(store)
   return store
 }
 

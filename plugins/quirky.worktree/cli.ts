@@ -30,6 +30,99 @@ function jsonFlag(args: CliArgs, ctx: CliContext, flag: string): unknown {
     throw ctx.usage(`--${flag} must be valid JSON`)
   }
 }
+type MainUpdateReceipt = {
+  status: 'not-requested' | 'fast-forwarded' | 'already-current' | 'not-updated'
+  reason?: string
+  from?: string
+  to?: string
+}
+type WorktreeCreateReceipt = WorktreeCreateResult & {
+  creationReceipt?: {
+    sparsePaths: string[]
+    sharedDirectories?: string[]
+    main: MainUpdateReceipt
+    agentLaunch?: { sessionId: string; launchSettings: { summary: string } | null }
+  }
+}
+
+function launchOptions(args: CliArgs, ctx: CliContext): { model?: string; options?: Record<string, string | boolean> } {
+  const model = stringFlag(args, 'model')
+  const effort = stringFlag(args, 'effort')
+  const raw = args.flags.option
+  const entries = raw === undefined ? [] : Array.isArray(raw) ? raw : [raw]
+  const options: Record<string, string | boolean> = Object.create(null)
+  for (const entry of entries) {
+    if (typeof entry !== 'string') throw ctx.usage('--option expects KEY=VALUE')
+    const separator = entry.indexOf('=')
+    if (separator < 1) throw ctx.usage(`--option expects KEY=VALUE, got \"${entry}\"`)
+    const key = entry.slice(0, separator)
+    if (key.length > 64 || ['model', '__proto__', 'constructor', 'prototype'].includes(key)) {
+      throw ctx.usage(`--option has an invalid key \"${key}\"`)
+    }
+    if (Object.hasOwn(options, key)) throw ctx.usage(`--option ${key} given more than once`)
+    const value = entry.slice(separator + 1)
+    options[key] = value === 'true' ? true : value === 'false' ? false : value
+  }
+  if (effort !== undefined) {
+    if (Object.hasOwn(options, 'effort')) throw ctx.usage('effort is set by both --effort and --option effort=…')
+    options.effort = effort
+  }
+  if (model !== undefined && (model.trim() === '' || model.length > 128)) throw ctx.usage('--model must contain 1 to 128 characters')
+  if (model === undefined && effort !== undefined) throw ctx.usage('--effort requires --model')
+  if (model === undefined && entries.length > 0) throw ctx.usage('--option requires --model')
+  if (Object.keys(options).length > 16) throw ctx.usage('--option may be given at most 16 times')
+  return {
+    ...(model === undefined ? {} : { model }),
+    ...(Object.keys(options).length === 0 ? {} : { options })
+  }
+}
+
+function sparsePathsFlag(args: CliArgs, ctx: CliContext): string[] | undefined {
+  const value = jsonFlag(args, ctx, 'sparse-paths')
+  if (value === undefined) return undefined
+  if (!Array.isArray(value) || !value.every((path) => typeof path === 'string')) {
+    throw ctx.usage('--sparse-paths must be a JSON array of path strings')
+  }
+  return value
+}
+
+
+type ProjectMetadataResult = {
+  repoId: string
+  identity: { displayName: string | null; icon: string | null; color: string | null; trackerProject: string | null }
+  externalVisibility: string
+  effectiveExternalVisibility: string
+  sharedDirectories: string[]
+}
+
+function projectMetadataResult(value: unknown): ProjectMetadataResult | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
+  const record = value as Record<string, unknown>
+  const identity = record.identity
+  if (typeof record.repoId !== 'string' || typeof identity !== 'object' || identity === null || Array.isArray(identity)) return null
+  const fields = identity as Record<string, unknown>
+  if (
+    (fields.displayName !== null && typeof fields.displayName !== 'string') ||
+    (fields.icon !== null && typeof fields.icon !== 'string') ||
+    (fields.color !== null && typeof fields.color !== 'string') ||
+    (fields.trackerProject !== null && typeof fields.trackerProject !== 'string') ||
+    typeof record.externalVisibility !== 'string' || typeof record.effectiveExternalVisibility !== 'string' ||
+    !Array.isArray(record.sharedDirectories) || !record.sharedDirectories.every((entry) => typeof entry === 'string')
+  ) return null
+  return {
+    repoId: record.repoId,
+    identity: {
+      displayName: fields.displayName,
+      icon: fields.icon,
+      color: fields.color,
+      trackerProject: fields.trackerProject
+    },
+    externalVisibility: record.externalVisibility,
+    effectiveExternalVisibility: record.effectiveExternalVisibility,
+    sharedDirectories: record.sharedDirectories as string[]
+  }
+}
+
 
 const worktreeDetails = (ctx: CliContext, worktree: Worktree & { children: string[] }) => {
   const pairs: [string, string][] = [
@@ -55,8 +148,8 @@ const worktreeDetails = (ctx: CliContext, worktree: Worktree & { children: strin
   return ctx.format.record(pairs)
 }
 
-/** The lines after a create's record: warnings, fallback, setup and issue-command outcomes, then the agent. */
-function createNotes(result: WorktreeCreateResult, agent: string | undefined): string[] {
+/** The lines after a create's record: actual create selections and setup/issue/agent receipts. */
+function createNotes(result: WorktreeCreateReceipt, agent: string | undefined): string[] {
   const lines = [...result.warnings]
   if (result.baseFallback) lines.push(result.baseFallback.message)
   if (result.worktree.linkedPR) {
@@ -65,6 +158,12 @@ function createNotes(result: WorktreeCreateResult, agent: string | undefined): s
     lines.push(`issue: #${result.worktree.linkedIssue.number} ${result.worktree.linkedIssue.title} (${result.worktree.linkedIssue.url})`)
   }
   if (result.worktree.pushTarget) lines.push(`push target: ${result.worktree.pushTarget.remoteName}/${result.worktree.pushTarget.branchName}`)
+  const receipt = result.creationReceipt
+  if (receipt?.sparsePaths.length) lines.push(`sparse checkout: ${receipt.sparsePaths.join(', ')}`)
+  if (receipt?.sharedDirectories?.length) lines.push(`shared directories: ${receipt.sharedDirectories.join(', ')}`)
+  if (receipt?.main.status === 'fast-forwarded') lines.push(`main: fast-forwarded to ${receipt.main.to}`)
+  else if (receipt?.main.status === 'already-current') lines.push('main: already at the selected base')
+  else if (receipt?.main.status === 'not-updated') lines.push(`main: left unchanged (${receipt.main.reason ?? 'not safe to update'})`)
   const { setup } = result
   if (setup.ran === 'terminal') lines.push(`setup: running in the Setup terminal ${setup.sessionId}`)
   else if (setup.ran === 'daemon') {
@@ -75,8 +174,11 @@ function createNotes(result: WorktreeCreateResult, agent: string | undefined): s
   else if (issueCommand?.ran === 'daemon') {
     lines.push(issueCommand.timedOut ? 'issue command: timed out in the daemon' : issueCommand.exitCode === 0 ? 'issue command: ran in the daemon (exit 0)' : `issue command: failed in the daemon (exit ${issueCommand.exitCode ?? 'signal'})`)
   } else if (issueCommand?.ran === 'skipped') lines.push('issue command: skipped')
-  if (result.agentSessionId) lines.push(`agent: started ${agent ?? 'agent'} in session ${result.agentSessionId}`)
-  else if (result.agentPending) lines.push(`agent: ${agent ?? 'agent'} starts when setup finishes`)
+  if (result.agentSessionId) {
+    lines.push(`agent: started ${agent ?? 'agent'} in session ${result.agentSessionId}`)
+    const summary = receipt?.agentLaunch?.launchSettings?.summary
+    if (summary) lines.push(`agent launch: ${summary}`)
+  } else if (result.agentPending) lines.push(`agent: ${agent ?? 'agent'} starts when setup finishes`)
   return lines
 }
 
@@ -176,6 +278,9 @@ const named: CliModule['commands'] = {
     const noParent = args.flags['no-parent'] === true
     if (parent !== undefined && noParent) throw ctx.usage('--parent-worktree and --no-parent cannot be used together')
     const submitPrompt = toggle(args, ctx, 'submit-prompt', 'draft-prompt')
+    const selection = launchOptions(args, ctx)
+    const sparsePaths = sparsePathsFlag(args, ctx)
+    const defaultTabs = jsonFlag(args, ctx, 'default-tabs')
 
     const optional: [string, unknown][] = [
       ['repo', positionalRepo ?? flagRepo],
@@ -193,7 +298,12 @@ const named: CliModule['commands'] = {
       ['trustSetupHash', stringFlag(args, 'trust-setup-hash')],
       ['trustIssueCommandHash', stringFlag(args, 'trust-issue-command-hash')],
       ['agent', stringFlag(args, 'agent')],
-      ['prompt', stringFlag(args, 'prompt')]
+      ['prompt', stringFlag(args, 'prompt')],
+      ['model', selection.model],
+      ['options', selection.options],
+      ['sparsePaths', sparsePaths],
+      ['environmentRecipe', stringFlag(args, 'environment-recipe')],
+      ['defaultTabs', defaultTabs]
     ]
     const params: Record<string, unknown> = { createdBy: 'cli', ...Object.fromEntries(optional.filter(([, value]) => value !== undefined)) }
     if (noParent) params.noParent = true
@@ -201,9 +311,10 @@ const named: CliModule['commands'] = {
     if (args.flags['trust-setup'] === true) params.trustSetup = true
     if (args.flags['trust-issue-command'] === true) params.trustIssueCommand = true
     if (args.flags['no-fallback'] === true) params.allowLocalBaseFallback = false
+    if (args.flags['keep-main'] === true) params.keepMain = true
     if (args.flags.activate === true) params.activate = true
 
-    const result = (await ctx.call('quirky.worktree/create', params)) as WorktreeCreateResult
+    const result = (await ctx.call('quirky.worktree/create', params)) as WorktreeCreateReceipt
     ctx.out.result(result, () => [worktreeRecord(ctx, result.worktree), ...createNotes(result, stringFlag(args, 'agent'))].join('\n'))
   },
 
@@ -234,17 +345,33 @@ const named: CliModule['commands'] = {
   async options(args, ctx) {
     const groupBy = stringFlag(args, 'group-by')
     const sortBy = stringFlag(args, 'sort-by')
+    const projectOrderBy = stringFlag(args, 'project-order-by')
     const compact = toggle(args, ctx, 'compact', 'detailed')
     const showBranch = toggle(args, ctx, 'show-branch', 'hide-branch')
     const showComment = toggle(args, ctx, 'show-comment', 'hide-comment')
     const showSleeping = toggle(args, ctx, 'show-sleeping', 'hide-sleeping')
+    const hideCliCreated = toggle(args, ctx, 'hide-cli-created', 'show-cli-created')
+    const hideDefaultBranch = toggle(args, ctx, 'hide-default-branch', 'show-default-branch')
+    const hideDetached = toggle(args, ctx, 'hide-detached', 'show-detached')
+    const hideArchived = toggle(args, ctx, 'hide-archived', 'show-archived')
+    const externalVisibilityDefault = stringFlag(args, 'external-visibility-default')
+    const filterRepoIds = jsonFlag(args, ctx, 'filter-repo-ids')
+    const showProperties = jsonFlag(args, ctx, 'show-properties')
     const patch: Record<string, unknown> = {
       ...(groupBy === undefined ? {} : { groupBy }),
       ...(sortBy === undefined ? {} : { sortBy }),
+      ...(projectOrderBy === undefined ? {} : { projectOrderBy }),
       ...(compact === undefined ? {} : { compact }),
       ...(showBranch === undefined ? {} : { showBranch }),
       ...(showComment === undefined ? {} : { showComment }),
-      ...(showSleeping === undefined ? {} : { showSleeping })
+      ...(showSleeping === undefined ? {} : { showSleeping }),
+      ...(hideCliCreated === undefined ? {} : { hideCliCreated }),
+      ...(hideDefaultBranch === undefined ? {} : { hideDefaultBranch }),
+      ...(hideDetached === undefined ? {} : { hideDetached }),
+      ...(hideArchived === undefined ? {} : { hideArchived }),
+      ...(externalVisibilityDefault === undefined ? {} : { externalVisibilityDefault }),
+      ...(filterRepoIds === undefined ? {} : { filterRepoIds }),
+      ...(showProperties === undefined ? {} : { showProperties })
     }
     const options = (await ctx.call(
       Object.keys(patch).length > 0 ? 'quirky.worktree/setOptions' : 'quirky.worktree/options',
@@ -253,10 +380,16 @@ const named: CliModule['commands'] = {
     ctx.out.result(options, () => ctx.format.record([
       ['group by', options.groupBy],
       ['sort by', options.sortBy],
+      ['project order', options.projectOrderBy],
       ['compact', options.compact ? 'yes' : 'no'],
-      ['show branch', options.showBranch ? 'yes' : 'no'],
-      ['show comment', options.showComment ? 'yes' : 'no'],
-      ['show sleeping', options.showSleeping ? 'yes' : 'no']
+      ['show properties', options.showProperties.join(', ')],
+      ['show sleeping', options.showSleeping ? 'yes' : 'no'],
+      ['hide CLI-created', options.hideCliCreated ? 'yes' : 'no'],
+      ['hide default branch', options.hideDefaultBranch ? 'yes' : 'no'],
+      ['hide detached', options.hideDetached ? 'yes' : 'no'],
+      ['hide archived', options.hideArchived ? 'yes' : 'no'],
+      ['external default', options.externalVisibilityDefault],
+      ['project filter', options.filterRepoIds.join(', ') || 'all']
     ]))
   },
 
@@ -267,6 +400,147 @@ const named: CliModule['commands'] = {
     }
     const result = await ctx.call('quirky.worktree/reorder', { worktrees })
     ctx.out.result(result, () => `ordered ${worktrees.length} sibling worktrees`)
+  },
+  async 'reorder-projects'(args, ctx) {
+    const projects = jsonFlag(args, ctx, 'projects')
+    if (!Array.isArray(projects) || projects.length === 0 || !projects.every((id) => typeof id === 'string')) {
+      throw ctx.usage('--projects must be a non-empty JSON array of project IDs in the desired order')
+    }
+    const result = await ctx.call('quirky.worktree/reorderProjects', { projects })
+    ctx.out.result(result, () => `ordered ${projects.length} projects`)
+  },
+
+  async 'project-show'(args, ctx) {
+    const [repo] = args.positionals as [string]
+    const value = await ctx.call('quirky.worktree/projectMetadata', { repo })
+    const metadata = projectMetadataResult(value)
+    if (!metadata) throw ctx.fail('project metadata response was incomplete')
+    ctx.out.result(metadata, () => ctx.format.record([
+      ['project', metadata.repoId],
+      ['display name', metadata.identity.displayName ?? '-'],
+      ['icon', metadata.identity.icon ?? '-'],
+      ['color', metadata.identity.color ?? '-'],
+      ['tracker project', metadata.identity.trackerProject ?? '-'],
+      ['external visibility', metadata.externalVisibility],
+      ['effective visibility', metadata.effectiveExternalVisibility],
+      ['shared directories', metadata.sharedDirectories.join(', ') || '-']
+    ]))
+  },
+
+  async 'project-set'(args, ctx) {
+    const [repo] = args.positionals as [string]
+    const displayName = stringFlag(args, 'display-name')
+    const icon = stringFlag(args, 'project-icon')
+    const color = stringFlag(args, 'project-color')
+    const trackerProject = stringFlag(args, 'tracker-project')
+    const externalVisibility = stringFlag(args, 'external-worktree-visibility')
+    const sharedDirectories = jsonFlag(args, ctx, 'shared-directories')
+    const suppressInbox = toggle(args, ctx, 'suppress-inbox', 'show-inbox')
+    const identity: Record<string, string> = {
+      ...(displayName === undefined ? {} : { displayName }),
+      ...(icon === undefined ? {} : { icon }),
+      ...(color === undefined ? {} : { color }),
+      ...(trackerProject === undefined ? {} : { trackerProject })
+    }
+    const hasMetadata = Object.keys(identity).length > 0 || externalVisibility !== undefined || sharedDirectories !== undefined
+    if (!hasMetadata && suppressInbox === undefined) throw ctx.usage('pass a project identity field, visibility policy, shared-directory list, or inbox suppression flag')
+    let result: unknown
+    if (hasMetadata) {
+      result = await ctx.call('quirky.worktree/setProjectMetadata', {
+        repo,
+        ...(Object.keys(identity).length > 0 ? { identity } : {}),
+        ...(externalVisibility === undefined ? {} : { externalVisibility }),
+        ...(sharedDirectories === undefined ? {} : { sharedDirectories })
+      })
+    }
+    if (suppressInbox !== undefined) {
+      result = await ctx.call('quirky.worktree/suppressExternalInbox', { repo, suppressed: suppressInbox })
+    }
+    ctx.out.result(result, () => `updated project ${repo}`)
+  },
+
+  async 'external-inbox'(_args, ctx) {
+    const inbox = await ctx.call('quirky.worktree/externalInbox')
+    ctx.out.result(inbox, () => JSON.stringify(inbox, null, 2))
+  },
+
+  async 'status-list'(_args, ctx) {
+    const statuses = await ctx.call('quirky.worktree/statusDefinitions')
+    ctx.out.result(statuses, () => ctx.format.table(
+      ['ID', 'LABEL', 'COLOR'],
+      (statuses as Array<{ id: string; label: string; color: string }>).map((status) => [status.id, status.label, status.color])
+    ))
+  },
+
+  async 'status-set'(args, ctx) {
+    const statuses = jsonFlag(args, ctx, 'statuses')
+    if (!Array.isArray(statuses)) throw ctx.usage('--statuses must be a JSON array of {id,label,color} rows')
+    const updated = await ctx.call('quirky.worktree/setStatusDefinitions', { statuses })
+    ctx.out.result(updated, () => `saved ${(updated as unknown[]).length} workspace statuses`)
+  },
+
+  async references(args, ctx) {
+    const [worktree] = args.positionals as [string]
+    const references = await ctx.call('quirky.worktree/references', { worktree }) as Array<{ id: string; url: string; label: string }>
+    ctx.out.result(references, () => references.length
+      ? ctx.format.table(['ID', 'LABEL', 'URL'], references.map((reference) => [reference.id, reference.label, reference.url]))
+      : 'no linked references')
+  },
+
+  async 'link-reference'(args, ctx) {
+    const [worktree] = args.positionals as [string]
+    const url = stringFlag(args, 'url')
+    if (url === undefined) throw ctx.usage('--url is required')
+    const label = stringFlag(args, 'label')
+    const reference = await ctx.call('quirky.worktree/linkReference', { worktree, url, ...(label === undefined ? {} : { label }) })
+    ctx.out.result(reference, () => `linked ${label ?? url}`)
+  },
+
+  async 'unlink-reference'(args, ctx) {
+    const [worktree, reference] = args.positionals as [string, string]
+    const result = await ctx.call('quirky.worktree/unlinkReference', { worktree, reference })
+    ctx.out.result(result, () => `unlinked ${reference}`)
+  },
+
+  async archive(args, ctx) {
+    const [worktree] = args.positionals as [string]
+    const archivedAt = args.flags.off === true ? null : Date.now()
+    const result = await ctx.call('quirky.worktree/archive', { worktree, archivedAt })
+    ctx.out.result(result, () => archivedAt === null ? `unarchived ${worktree}` : `archived ${worktree}`)
+  },
+
+  async back(_args, ctx) {
+    const result = await ctx.call('quirky.worktree/navigationBack')
+    ctx.out.result(result, () => `navigated back to ${(result as { worktreeId: string }).worktreeId}`)
+  },
+
+  async forward(_args, ctx) {
+    const result = await ctx.call('quirky.worktree/navigationForward')
+    ctx.out.result(result, () => `navigated forward to ${(result as { worktreeId: string }).worktreeId}`)
+  },
+
+  async previous(_args, ctx) {
+    const result = await ctx.call('quirky.worktree/navigationMove', { direction: 'previous' })
+    ctx.out.result(result, () => `opened previous workspace ${(result as { worktreeId: string }).worktreeId}`)
+  },
+
+  async next(_args, ctx) {
+    const result = await ctx.call('quirky.worktree/navigationMove', { direction: 'next' })
+    ctx.out.result(result, () => `opened next workspace ${(result as { worktreeId: string }).worktreeId}`)
+  },
+
+  async index(args, ctx) {
+    const [raw] = args.positionals as [string]
+    const index = Number(raw)
+    const result = await ctx.call('quirky.worktree/navigationIndex', { index })
+    ctx.out.result(result, () => `opened workspace ${index}: ${(result as { worktreeId: string }).worktreeId}`)
+  },
+
+  async 'open-in'(args, ctx) {
+    const [worktree] = args.positionals as [string]
+    const target = stringFlag(args, 'target') ?? 'terminal'
+    const result = await ctx.call('quirky.worktree/openIn', { worktree, target })
+    ctx.out.result(result, () => `opened ${worktree} in ${target}`)
   },
 
   async 'sleep-preview'(args, ctx) {

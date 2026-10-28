@@ -857,6 +857,7 @@ export type InboxResult =
   | { full?: false; messages: readonly InboxMessageRow[]; count: number }
 
 /** `timeoutMs` is clamped to 0..1,800,000; question and resume modes are mutually exclusive. */
+export type AskHandoffIdentity = { runId: RunId; dispatchId: DispatchId; workerId: DispatchId; sessionId: SessionId }
 export type AskParams =
   | (MutationRequest & DeclaredCallerAliases & {
       mode: 'question'
@@ -865,6 +866,7 @@ export type AskParams =
       timeoutMs?: number
       runId?: RunId
       to?: Extract<MailboxAddress, { kind: 'run' }>
+      includeIdentity?: boolean
       messageId?: never
     })
   | (MutationRequest & DeclaredCallerAliases & {
@@ -873,6 +875,7 @@ export type AskParams =
       timeoutMs?: number
       runId?: RunId
       to?: Extract<MailboxAddress, { kind: 'run' }>
+      includeIdentity?: boolean
       question?: never
       options?: never
     })
@@ -885,6 +888,7 @@ export type AskResult = MutationResult<
       answerMessageId: MessageId
       threadId: ThreadId
       timeoutMs: number
+      handoffIdentity?: AskHandoffIdentity
     }
   | {
       state: 'timedOut' | 'cancelled' | 'connectionLost'
@@ -892,6 +896,7 @@ export type AskResult = MutationResult<
       messageId: QuestionId
       threadId: ThreadId
       timeoutMs: number
+      handoffIdentity?: AskHandoffIdentity
     }
 >
 

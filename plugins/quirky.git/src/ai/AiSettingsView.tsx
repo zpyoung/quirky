@@ -14,7 +14,11 @@ const ACTIONS: ReadonlyArray<{ action: AiAction; title: string }> = [
   { action: 'commitMessage', title: 'Commit message' },
   { action: 'fixCommitFailure', title: 'Commit failure fixes' },
   { action: 'fixPushFailure', title: 'Push failure fixes' },
-  { action: 'resolveConflicts', title: 'Conflict resolution' }
+  { action: 'resolveConflicts', title: 'Conflict resolution' },
+  { action: 'branchSummary', title: 'Branch summary' },
+  { action: 'pullRequestDetails', title: 'Pull request details' },
+  { action: 'pullRequestReview', title: 'Pull request review' },
+  { action: 'reviewConversation', title: 'Review conversation' }
 ]
 
 const SETTING = (name: string) => `setting:quirky.git/${name}`

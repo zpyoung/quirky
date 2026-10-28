@@ -89,6 +89,7 @@ export function statusLabel(status: string): string {
     case 'partial': return 'Partially answered'
     case 'declined': return 'Declined'
     case 'timed_out': return 'Expired'
+    case 'unavailable': return 'Unavailable'
     default: return status
   }
 }

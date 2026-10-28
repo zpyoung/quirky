@@ -3,6 +3,7 @@ import { paneCommands } from './src/cli/pane'
 import { quickFloatingCommands } from './src/cli/quick-floating'
 import { workspaceCommands } from './src/cli/workspace'
 import { artifactCommands } from './src/cli/artifacts'
+import type { EmulatorFrame, EmulatorListing } from './src/emulator'
 
 function singleSessionArg(args: CliArgs, ctx: CliContext): string {
   if (args.positionals.length > 1) throw ctx.usage(`unexpected argument "${args.positionals[1]}"`)
@@ -32,6 +33,19 @@ const named: CliModule['commands'] = {
   ...paneCommands,
   ...quickFloatingCommands,
   ...artifactCommands,
+
+  async emulators(args, ctx) {
+    noArgs(args, ctx)
+    const listing = await ctx.call('quirky.terminal/emulators', {}) as EmulatorListing
+    ctx.out.result(listing, () => listing.available
+      ? listing.devices.map((device) => `${device.id}  ${device.name}  ${device.state}`).join('\n') || 'No available iOS simulators.'
+      : listing.reason ?? 'iOS Simulator is unavailable.')
+  },
+  async 'emulator-frame'(args, ctx) {
+    if (args.positionals.length !== 1) throw ctx.usage('expected one exact simulator UDID')
+    const frame = await ctx.call('quirky.terminal/emulatorFrame', { device: args.positionals[0] }) as EmulatorFrame
+    ctx.out.result(frame, () => `${frame.device}  ${frame.mime}  ${new Date(frame.capturedAt).toISOString()}`)
+  },
 
   async read(args, ctx) {
     const session = singleSessionArg(args, ctx)

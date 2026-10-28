@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { readStagedContext } from './ai-context'
 import { cleanGeneratedMessage, splitCommitMessage } from './ai-output'
 import { buildCommitMessagePrompt, renderTemplate } from './ai-prompts'
-import { pickDefaultAgent, validateRecipeLaunchOptions } from './ai-recipes'
+import { parseLaunchOptions, pickDefaultAgent } from './ai-recipes'
 import type { DaemonEnv, Handler } from './env'
 
 const CUSTOM_AGENT = 'custom'
@@ -45,9 +45,8 @@ export function generateCommitMessage(env: DaemonEnv): Handler {
       const savedRecipe = env.recipes.effective('commitMessage', worktree.repoId)
       const agent = given(params.agent) ?? savedRecipe.agent ?? (await pickDefaultAgent(env))
       const recipe = env.recipes.effective('commitMessage', worktree.repoId, agent)
-      const launchOptions = await validateRecipeLaunchOptions(
+      const launchOptions = parseLaunchOptions(
         env,
-        agent,
         Object.hasOwn(params, 'launchOptions') ? params.launchOptions : recipe.launchOptions
       )
       let args = typeof params.args === 'string' ? params.args : recipe.args

@@ -213,3 +213,12 @@ export function parseLaunchOptions(value: unknown): LaunchCatalog {
     extraArgs: data.extraArgs === undefined ? null : extraArgs(data.extraArgs, `${ROOT}.extraArgs`)
   }
 }
+
+/** Parses a provider's model list against only the option declarations owned by its entry. */
+export function parseModelDeclarations(value: unknown, options: OptionDecl[]): ModelDecl[] {
+  const items = list(value, `${ROOT}.models`, true)
+  if (items.length > 500) fail(`${ROOT}.models`, 'must contain at most 500 models')
+  const declared = new Map(options.map((option) => [option.id, option]))
+  const seen = new Set<string>()
+  return items.map((item, index) => model(item, `${ROOT}.models[${index}]`, declared, seen))
+}

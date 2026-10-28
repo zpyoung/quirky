@@ -33,6 +33,7 @@ function entry(id: string): AgentEntry {
     trust: null,
     homepage: null,
     install: null,
+    modelDiscovery: null,
     launchOptions: null,
     oneShot: null
   }

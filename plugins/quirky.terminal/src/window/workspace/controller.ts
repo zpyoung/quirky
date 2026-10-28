@@ -97,6 +97,8 @@ export type WorkspaceOptions = {
   tabMenuContributions?: (group: Group, workspace: string) => MenuContributionItem[]
   /** The public menu contribution list changes, keeping an open + menu current. */
   subscribeMenuContributions?: (listener: () => void) => () => void
+  /** Effective user-remappable shortcut labels; null hides disabled or shadowed commands. */
+  shortcutKey?: (command: string) => string | null
   /** Menus beyond `tab`, `pane`, `plus` and `actions`, opened by `openMenu(kind, target)`. */
   extraMenus?: Record<string, (target: string | null) => MenuItem[]>
   /** The element carrying the theme's custom properties; defaults to the mount element. */
@@ -1068,6 +1070,12 @@ export class WorkspaceController {
       this.context.toast('Could not copy', messageOf(error))
     }
   }
+  private menuKey(command: string, fallback: string): string | null {
+    return this.options.shortcutKey
+      ? this.options.shortcutKey(command.startsWith('command:') ? command : `command:quirky.terminal/${command}`)
+      : fallback
+  }
+
 
   private tabMenuItems(tabId: string): MenuItem[] {
     const ws = this.ws
@@ -1091,11 +1099,11 @@ export class WorkspaceController {
       }] : []),
       { label: tab.pinned ? 'Unpin Tab' : 'Pin Tab', onSelect: () => void this.pinTab(tabId, !tab.pinned) },
       { label: 'Copy Tab ID', onSelect: () => void this.copyText(tabId) },
-      { label: 'Close', key: '⌘W', onSelect: () => void this.closeTab(tabId) },
+      { label: 'Close', key: this.menuKey('close-pane', '⌘W'), onSelect: () => void this.closeTab(tabId) },
       { label: 'Close Others', enabled: group.tabs.length > 1, onSelect: () => void this.closeTabs(tabId, 'others') },
       { label: 'Close All Tabs To The Right', enabled: index < group.tabs.length - 1, onSelect: () => void this.closeTabs(tabId, 'right') },
       { label: 'Close All Tabs To The Left', enabled: index > 0, onSelect: () => void this.closeTabs(tabId, 'left') },
-      { label: 'Change Title', key: '⌘R', onSelect: () => this.renameTab(tabId) },
+      { label: 'Change Title', key: this.menuKey('rename-tab', '⌘R'), onSelect: () => this.renameTab(tabId) },
       {
         label: 'Tab Color',
         submenu: TAB_COLORS.map((color) => ({
@@ -1119,20 +1127,20 @@ export class WorkspaceController {
     const quick = this.options.paneMenuExtras?.(leaf) ?? []
     const contributed = this.options.paneMenuContributions?.(leaf, this.state.sessions[leaf.session]) ?? []
     const items: MenuItem[] = [
-      { label: 'Copy', key: '⌘C', onSelect: () => this.copy(paneId) },
-      { label: 'Select All', key: '⌘A', onSelect: () => this.selectAll(paneId) },
-      { label: 'Paste', key: '⌘V', onSelect: () => void this.pasteFromClipboard(paneId) },
+      { label: 'Copy', key: this.menuKey('copy', '⌘C'), onSelect: () => this.copy(paneId) },
+      { label: 'Select All', key: this.menuKey('select-all', '⌘A'), onSelect: () => this.selectAll(paneId) },
+      { label: 'Paste', key: this.menuKey('paste', '⌘V'), onSelect: () => void this.pasteFromClipboard(paneId) },
       { label: 'Quick Commands', submenu: quick.length > 0 ? quick : [{ label: 'No quick commands', enabled: false }] },
       ...contributed,
       SEPARATOR,
-      { label: 'Split Terminal Right', key: '⌘D', onSelect: () => void this.splitRight(paneId) },
-      { label: 'Split Terminal Down', key: '⌘⇧D', onSelect: () => void this.splitDown(paneId) }
+      { label: 'Split Terminal Right', key: this.menuKey('split-right', '⌘D'), onSelect: () => void this.splitRight(paneId) },
+      { label: 'Split Terminal Down', key: this.menuKey('split-down', '⌘⇧D'), onSelect: () => void this.splitDown(paneId) }
     ]
     const dock = this.state.dockStates[paneId]
     if (this.state.sessions[leaf.session]?.kind === 'terminal' && dock?.enabled && dock.supported) {
       items.push(SEPARATOR, {
         label: dock.docked ? 'Hide agent composer' : 'Show agent composer',
-        key: '⌘⇧K',
+        key: this.menuKey('command:quirky.terminal-dock/toggle', '⌘⇧K'),
         onSelect: () => {
           void this.context
             .executeCommand('command:quirky.terminal-dock/toggle', { pane: paneId })
@@ -1143,7 +1151,7 @@ export class WorkspaceController {
     if (split) {
       items.push(
         { label: 'Equalize Pane Sizes', onSelect: () => void this.equalize(tab.id) },
-        { label: tab.expandedPane === null ? 'Expand Pane' : 'Collapse Pane', key: '⌘⇧Enter', onSelect: () => void this.toggleExpand(paneId) }
+        { label: tab.expandedPane === null ? 'Expand Pane' : 'Collapse Pane', key: this.menuKey('toggle-expand-pane', '⌘⇧Enter'), onSelect: () => void this.toggleExpand(paneId) }
       )
     }
     items.push(SEPARATOR, { label: 'Set Title…', onSelect: () => void this.setTitle(paneId) })
@@ -1152,10 +1160,10 @@ export class WorkspaceController {
       { label: 'Copy Terminal ID', onSelect: () => void this.copyText(leaf.session) },
       { label: 'Copy Pane ID', onSelect: () => void this.copyText(paneId) }
     )
-    if (split) items.push({ label: 'Close Pane', key: '⌘W', danger: true, onSelect: () => void this.closePane(paneId) })
+    if (split) items.push({ label: 'Close Pane', key: this.menuKey('close-pane', '⌘W'), danger: true, onSelect: () => void this.closePane(paneId) })
     items.push(
       SEPARATOR,
-      { label: 'Clear Screen', key: '⌘K', onSelect: () => void this.clearPane(paneId) },
+      { label: 'Clear Screen', key: this.menuKey('clear', '⌘K'), onSelect: () => void this.clearPane(paneId) },
       { label: 'Reset Terminal', onSelect: () => void this.resetPane(paneId) }
     )
     return items
@@ -1169,7 +1177,7 @@ export class WorkspaceController {
     const entries = filterEntries(this.state.agents, query)
     const rows: MenuItem[] = entries.map((entry) => ({
       label: entry.label,
-      key: entry.kind === 'terminal' ? '⌘T' : null,
+      key: entry.kind === 'terminal' ? this.menuKey('command:quirky.session/new-shell', '⌘T') : null,
       onSelect: () => this.chooseEntry(entry, target)
     }))
     const footer = entries.findIndex((entry) => entry.kind === 'manage')

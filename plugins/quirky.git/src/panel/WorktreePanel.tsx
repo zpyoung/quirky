@@ -402,7 +402,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   const operation = status?.operation ?? 'none'
   const aiEnabled = settings.aiEnabled
   const stagedCount = entries.filter((e) => e.area === 'staged').length
-  const fixFor = (action: FixAction): FixButtonProps | undefined =>
+  const fixFor = (action: FixButtonProps['action']): FixButtonProps | undefined =>
     aiEnabled ? { action, busy: aiFix.busy, onFix: () => void aiFix.start(action), onCustomize: () => setLaunch(action) } : undefined
 
   const open = (input: Omit<DiffViewInput, 'worktree'>) => {
@@ -1147,7 +1147,13 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
               />
             )}
             <div className="scm-create-review">
-              <GitHubReviewStatus context={context} lookup={githubReview} />
+              <GitHubReviewStatus
+                context={context}
+                lookup={githubReview}
+                aiEnabled={aiEnabled}
+                busy={aiFix.busy}
+                onLaunch={(action) => setLaunch(action)}
+              />
               {githubReview.kind === 'found' && reviewPushTarget?.key === reviewPushKey && (
                 reviewPushTarget.state === 'loading' ? (
                   <p className="scm-push-target" role="status">Checking the configured push destination for this pull request…</p>

@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
-import { addProject, importFolder, scanFolder } from './actions'
+import { addProject, FolderPickerUnavailableError, importFolder, messageOf, pickNativeFolder, scanFolder } from './actions'
 import { Dialog } from './Dialog'
 import type { DialogState } from './report'
 
@@ -27,6 +27,20 @@ export function AddProjectDialog({ context, onClose, onStep }: Props) {
   const [path, setPath] = useState('')
   const [group, setGroup] = useState('')
   const [busy, setBusy] = useState(false)
+  const browse = async () => {
+    setBusy(true)
+    try {
+      const selected = await pickNativeFolder(context, 'Choose project folder', path.trim() || undefined)
+      if (selected !== null) setPath(selected)
+    } catch (error) {
+      context.toast(
+        error instanceof FolderPickerUnavailableError ? 'Native folder picker unavailable' : 'Could not choose project folder',
+        messageOf(error)
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
 
   const next = (value: Step) => {
     setStep(value)
@@ -134,6 +148,9 @@ export function AddProjectDialog({ context, onClose, onStep }: Props) {
         <div className="dialog-actions">
           <button type="button" onClick={onClose}>
             Cancel
+          </button>
+          <button type="button" disabled={busy} onClick={() => void browse()}>
+            Browse
           </button>
           <button type="submit" className="primary" disabled={busy || !path.trim()}>
             Add

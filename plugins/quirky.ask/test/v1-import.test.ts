@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import type { AskEnvelope } from '@quirky/protocol'
 import { makeTempHome } from '../../../packages/daemon/test/helpers'
 import { v1AsksMigration } from '../v1-import'
-import { askOwnershipMigration, askQueueMigration } from '../store-migrations'
+import { askHandoffMigration, askOwnershipMigration, askQueueMigration } from '../store-migrations'
 import { cleanupAll, connectAs, memoryStore, spec, startAsk, stopKeepingHome } from './support'
 
 afterEach(cleanupAll)
@@ -170,6 +170,33 @@ describe('migration 3', () => {
     ])
     store.run('UPDATE asks SET owner_plugin_id = ? WHERE id = ?', 'quirky.ask-owner', 'ask_pending')
     expect(store.get<{ owner_plugin_id: string }>('SELECT owner_plugin_id FROM asks WHERE id = ?', 'ask_pending')).toEqual({ owner_plugin_id: 'quirky.ask-owner' })
+  })
+})
+
+describe('migration 4', () => {
+  test('adds nullable exact-owner and idempotency fields without changing imported Ask rows', () => {
+    const home = makeTempHome('qa-')
+    writeV1Home(home)
+    const store = memoryStore()
+    v1AsksMigration(home)(store)
+    askQueueMigration(store)
+    askOwnershipMigration(store)
+    askHandoffMigration(store)
+
+    const columns = store.all<{ name: string }>('PRAGMA table_info(asks)').map((column) => column.name)
+    expect(columns).toEqual(expect.arrayContaining([
+      'reason',
+      'request_id',
+      'handoff_identity',
+      'handoff_question_id',
+      'owner_identity'
+    ]))
+    expect(store.get<{ request_id: string | null; owner_identity: string | null }>(
+      'SELECT request_id, owner_identity FROM asks WHERE id = ?',
+      'ask_pending'
+    )).toEqual({ request_id: null, owner_identity: null })
+    expect(store.all<{ name: string; unique: number; partial: number }>('PRAGMA index_list(asks)'))
+      .toContainEqual({ name: 'asks_request_id', unique: 1, partial: 1 })
   })
 })
 

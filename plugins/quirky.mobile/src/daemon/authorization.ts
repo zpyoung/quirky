@@ -1,5 +1,5 @@
 import { MOBILE_BROWSER_METHOD_PARAMS, validMobileBrowserParams } from '@quirky/protocol'
-import { PANEL_METHOD_PARAMS } from '@quirky/protocol'
+import { PANEL_METHOD_PARAMS, type ApiDescription } from '@quirky/protocol'
 import { assertPanelParameters } from './panel-authorization'
 
 export class MobileAuthorizationError extends Error {
@@ -12,6 +12,7 @@ export class MobileAuthorizationError extends Error {
 const PARAMS: Readonly<Record<string, readonly string[]>> = {
   ...MOBILE_BROWSER_METHOD_PARAMS,
   'status.get': [],
+  'quirky.mobile/api': [],
   'quirky.mobile/info': [],
   'quirky.mobile/preferences': [],
   'quirky.mobile/updatePreferences': ['autoRestoreFitMs'],
@@ -285,4 +286,22 @@ export function assertMobileCallAllowed(method: string, params: unknown): assert
   checkTree(params)
   checkMethodSpecific(method, params)
   assertPanelParameters(method, params)
+}
+
+/** Discovery exposes only existing paired-device authority, never local plugin code or owner capabilities. */
+export function describePairedApi(description: ApiDescription): ApiDescription {
+  const methods = description.methods.flatMap((entry) => {
+    const allowed = PARAMS[entry.name]
+    if (!allowed || (entry.params.required ?? []).some((name) => !allowed.includes(name))) return []
+    return [{
+      ...entry,
+      params: {
+        ...entry.params,
+        properties: Object.fromEntries(Object.entries(entry.params.properties ?? {}).filter(([name]) => allowed.includes(name))),
+        additionalProperties: false
+      }
+    }]
+  })
+  const plugins = new Set(methods.map((entry) => entry.plugin))
+  return { ...description, methods, events: [], uiCommands: [], cli: { groups: description.cli.groups.filter((group) => plugins.has(group.plugin)), commands: [] } }
 }

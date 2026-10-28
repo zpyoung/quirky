@@ -1099,7 +1099,7 @@ function AskCard({ ask, canMutate, onSubmit }: {
   }
 
   const submit = async () => {
-    if (deadlinePassed) return
+    if (deadlinePassed || ask.handoff) return
     const submission = buildAskSubmission(ask, drafts)
     if (Object.keys(submission.errors).length > 0) {
       setErrors(submission.errors)
@@ -1116,7 +1116,9 @@ function AskCard({ ask, canMutate, onSubmit }: {
     <article className="qp-ask-card__question" data-ask-id={ask.id}>
       <h2>{askTitle(ask)}</h2>
       {!pending ? (
-        <p className="qp-dialog-copy">Question status: {statusLabel(ask.envelope.status)}{ask.envelope.summary ? ` · ${ask.envelope.summary}` : ''}</p>
+        <p className="qp-dialog-copy">Question status: {statusLabel(ask.envelope.status)}{ask.envelope.summary ? ` · ${ask.envelope.summary}` : ''}{ask.envelope.status === 'unavailable' ? ` · ${ask.envelope.reason}` : ''}</p>
+      ) : ask.handoff ? (
+        <p className="qp-dialog-copy">This question was handed to its exact orchestration coordinator. Answer it in the coordinator's question thread.</p>
       ) : (
         <>
           {ask.queued && <span className="qp-chip qp-chip--muted">Queued</span>}

@@ -11,6 +11,7 @@ import type {
   Worktree,
   WorktreeCreateResult
 } from '@quirky/protocol'
+import { DEFAULT_WORKTREE_STATUSES } from '../src/daemon/statuses'
 import type { act as ReactAct, createElement as ReactCreateElement } from 'react'
 import type { createRoot as ReactCreateRoot } from 'react-dom/client'
 import type { CreateDialog as CreateDialogComponent } from '../src/CreateDialog'
@@ -876,6 +877,8 @@ test('sidebar renders a durable linked PR as an external link beside the editabl
     onToggleAutomationDetails() {},
     now: 0,
     separatorEnabled: false,
+    statusDefinitions: DEFAULT_WORKTREE_STATUSES.map((status) => ({ ...status })),
+    projectIdentities: {},
     onDropPreviewChange() {},
     onSeparatorStateChange() {},
     openDialog() {},

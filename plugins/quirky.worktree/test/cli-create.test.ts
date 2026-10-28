@@ -37,7 +37,7 @@ function fakeContext(result: Partial<WorktreeCreateResult> = {}, json = false) {
     requestBase: crypto.randomUUID(),
     call: async (method, params = {}) => {
       calls.push({ method, params })
-      return { worktree, warnings: [], setup: { ran: 'none' }, ...result }
+      return { worktree, warnings: [], setup: { ran: 'none' }, creationReceipt: { sparsePaths: [], sharedDirectories: [], main: { status: 'not-requested' } }, ...result }
     },
     out: {
       json,
@@ -126,6 +126,6 @@ describe('SC-14: the create command reads its positionals and flags', () => {
 
   test('--json prints the whole result', async () => {
     const { lines } = await run(['x'], {}, { warnings: ['w'] }, true)
-    expect(JSON.parse(lines[0]!)).toEqual({ worktree, warnings: ['w'], setup: { ran: 'none' } })
+    expect(JSON.parse(lines[0]!)).toEqual({ worktree, warnings: ['w'], setup: { ran: 'none' }, creationReceipt: { sparsePaths: [], sharedDirectories: [], main: { status: 'not-requested' } } })
   })
 })

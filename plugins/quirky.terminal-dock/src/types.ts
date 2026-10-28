@@ -10,7 +10,7 @@ export type DockQuestion = {
   id: string
   kind: 'question' | 'permission'
   title: string
-  questions: { prompt: string; choices: { label: string; value: string }[]; multiple: boolean }[]
+  questions: { id: string; prompt: string; choices: { label: string; value: string }[]; multiple: boolean }[]
   collapsed: boolean
   dismissed: boolean
 }

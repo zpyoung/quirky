@@ -89,11 +89,14 @@ export const COMMANDS: Command[] = [
   help
 ]
 
-const GLOBAL_TOKENS = new Set(['--json', '--json=true', '--json=false', '--help', '-h', '--yes', '--version', '-v'])
+const GLOBAL_TOKENS: Record<string, true> = {
+  '--json': true, '--json=true': true, '--json=false': true, '--help': true, '-h': true, '--yes': true,
+  '--version': true, '-v': true, '--runtime': true, '--pairing-code': true
+}
 
-/** True for the switches every command accepts: `--json` (with or without a value), `--help`, `-h`, `--yes`, `--version` and `-v`. */
+/** True for global CLI switches and their attached-value forms. */
 export function isGlobalToken(token: string): boolean {
-  return GLOBAL_TOKENS.has(token)
+  return GLOBAL_TOKENS[token] === true || token.startsWith('--runtime=') || token.startsWith('--pairing-code=')
 }
 
 export type Route =
@@ -112,7 +115,7 @@ export function route(argv: readonly string[], commands: readonly Command[] = CO
   let i = 0
   for (; i < argv.length; i++) {
     const token = argv[i]
-    if (GLOBAL_TOKENS.has(token)) {
+    if (isGlobalToken(token)) {
       rest.push(token)
       continue
     }
@@ -123,7 +126,7 @@ export function route(argv: readonly string[], commands: readonly Command[] = CO
   }
   rest.push(...argv.slice(i))
   if (words.length === 0) {
-    const first = argv.find((token) => !GLOBAL_TOKENS.has(token))
+    const first = argv.find((token) => !isGlobalToken(token))
     return first === undefined ? { kind: 'top', rest } : { kind: 'unknown', word: first }
   }
   const command = commands.find((candidate) => candidate.name === words.join(' '))
@@ -148,7 +151,7 @@ export function helpText(topic: readonly string[] = [], commands: readonly Comma
   const width = Math.max(...usages.map((usage) => usage.length))
   const lines = listed.map((command, i) => `  ${usages[i].padEnd(width)}  ${command.summary}`)
   const footer =
-    'global: --json prints machine-readable JSON; --yes skips confirmations; --retry-request <id> reissues a call; --version prints the version; <command> --help shows one command'
+    'global: --json prints machine-readable JSON; --yes skips confirmations; --runtime <id> or --pairing-code <code> selects a paired runtime; --retry-request <id> reissues a call; --version prints the version; <command> --help shows one command'
   if (group.length) return [`usage: quirky ${name} <command>`, '', 'commands:', ...lines, '', footer].join('\n')
   return [USAGE_LINE, '', 'commands:', ...lines, '', footer, "run 'quirky api' to list every command, including plugins'"].join('\n')
 }

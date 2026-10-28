@@ -57,8 +57,9 @@ const allCards: DashboardCard[] = [
   { bucket: 'idle', thread: thread('s-idle', 'idle', 'No recent update', false) }
 ]
 
-function setup(enabled = true) {
+function setup(enabled = true, openAs: 'in-window' | 'pop-out' = 'in-window') {
   const calls: { method: string; params: Record<string, unknown> }[] = []
+  const windows: Record<string, unknown>[] = []
   const opened: { id: string; input?: unknown }[] = []
   const provided = new Map<string, unknown>()
   const listeners = new Set<(event: QuirkyEvent) => void | Promise<void>>()
@@ -82,6 +83,10 @@ function setup(enabled = true) {
     async call(method: string, params: Record<string, unknown> = {}) {
       calls.push({ method, params })
       if (method === 'quirky.agent-status/dashboard') return snapshotFor(params)
+      if (method === 'desktop.window.open') {
+        windows.push(params)
+        return { windowId: `window-${windows.length}` }
+      }
       if (method === 'quirky.session/get') {
         const target = allCards.find(({ thread: entry }) => entry.sessionId === params.session)?.thread
         if (!target) throw new Error('session unavailable')
@@ -115,7 +120,11 @@ function setup(enabled = true) {
     confirm: async () => true,
     toast() {},
     setPanelBadge() {},
-    getSetting: (name: string) => (name === 'dashboard-enabled' || name === 'setting:quirky.agent-status/dashboard-enabled' ? enabled : undefined),
+    getSetting: (name: string) => {
+      if (name === 'dashboard-enabled' || name === 'setting:quirky.agent-status/dashboard-enabled') return enabled
+      if (name === 'dashboard-open-as' || name === 'setting:quirky.agent-status/dashboard-open-as') return openAs
+      return undefined
+    },
     createCommandDrag: () => 'drag',
     consumeCommandDrag: () => null,
     cancelCommandDrag() {},
@@ -128,6 +137,7 @@ function setup(enabled = true) {
     calls,
     opened,
     provided,
+    windows,
     layout,
     async mount(id: string, input?: unknown) {
       let cleanup = () => {}

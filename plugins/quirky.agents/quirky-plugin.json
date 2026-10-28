@@ -372,6 +372,10 @@
               "type": "boolean",
               "description": "Whether the agent takes a model and options at launch."
             },
+            "discoverable": {
+              "type": "boolean",
+              "description": "Whether a provider-owned model probe can be run for this agent."
+            },
             "models": {
               "type": "array",
               "description": "The listed models in display order.",
@@ -497,6 +501,7 @@
             "agent",
             "label",
             "supported",
+            "discoverable",
             "models",
             "unlisted",
             "unlistedOptions",
@@ -505,6 +510,105 @@
           ]
         }
       },
+      {
+        "id": "discoverModels",
+        "description": "Runs the provider-owned bounded model probe for one exact host. Only nonempty valid local results are authoritative.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "agent": {
+              "type": "string",
+              "description": "The agent ID whose own model-list command is declared."
+            },
+            "host": {
+              "type": "string",
+              "description": "The exact target host identity; only local is probed."
+            }
+          },
+          "required": [
+            "agent",
+            "host"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "agent": {
+              "type": "string"
+            },
+            "host": {
+              "type": "string"
+            },
+            "observedAt": {
+              "type": "number"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "available",
+                "unavailable"
+              ]
+            },
+            "authoritative": {
+              "type": "boolean"
+            },
+            "models": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "description": "A sentence, or null."
+                  },
+                  "options": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "choices": {
+                          "description": "The provider model's option values, or null for all declared choices."
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "choices"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "id",
+                  "label",
+                  "description",
+                  "options"
+                ]
+              }
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "agent",
+            "host",
+            "observedAt",
+            "status",
+            "authoritative",
+            "models"
+          ]
+        }
+      },
+
       {
         "id": "refresh",
         "description": "Re-reads the login shell's PATH, detects installed agents again and announces the change.",

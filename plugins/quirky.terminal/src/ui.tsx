@@ -8,6 +8,8 @@ import { QuickCommandsStripButton, mountQuickCommandsPanel } from './window/quic
 import { mountWorkspace, type WorkspaceOptions } from './window/workspace'
 import { terminalSettingName } from './window/workspace/model'
 import { FLOATING_WORKSPACE, type Group } from './layout/types'
+import { ShortcutSettings } from './window/ShortcutSettings'
+import { EmulatorView } from './window/EmulatorView'
 
 const PANEL_ID = 'panel:quirky.terminal/sessions'
 const WORKTREE_VIEW = 'view:quirky.session/worktree'
@@ -41,6 +43,7 @@ function workspaceSlots(context: UiPluginContext, workspace: string, source: Qui
         }),
     paneMenuExtras: (pane) => paneMenuQuickCommands(context, source, pane.id),
     paneMenuContributions: (pane, session) => paneMenuContributions(context, contributions, pane, session),
+    ...(contributions.key ? { shortcutKey: contributions.key } : {}),
     tabMenuContributions: (group, workspaceId) => tabMenuContributions(context, contributions, workspace, workspaceId, group),
     subscribeMenuContributions: contributions.subscribe
   }
@@ -58,6 +61,16 @@ function worktreeOf(input: unknown): string | null {
  */
 export function activate(context: UiPluginContext): void {
   const menuContributions = watchMenuContributions(context)
+  context.provide('settings-section:quirky.terminal/shortcuts', (element: HTMLElement, props: MountProps) => {
+    const root = createRoot(element)
+    root.render(<ShortcutSettings context={context} report={props.report} />)
+    return () => root.unmount()
+  })
+  context.provide('view:quirky.terminal/emulator', (element: HTMLElement, props: MountProps) => {
+    const root = createRoot(element)
+    root.render(<EmulatorView context={context} input={props.input} report={props.report} />)
+    return () => root.unmount()
+  })
   context.provide(PANEL_ID, (element: HTMLElement, props: { report?(state: unknown): void }) => {
     const root = createRoot(element)
     const report = (state: SessionsReport) => props.report?.(state)

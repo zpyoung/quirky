@@ -2,10 +2,30 @@ import type { ApiDescription } from './catalog'
 import type { DistroInfo, DistroInspection, PluginInspection } from './distro'
 import type { ContributionInfo, JobInfo, JobRun, PluginEvent, PluginInfo } from './plugins'
 import type {
+  DesktopRevealRequest,
+  DesktopRevealResult,
+  DesktopShellAction,
+  DesktopShellReply,
+  DesktopWindowAttachRequest,
+  DesktopWindowCloseResult,
+  DesktopWindowClosedRequest,
+  DesktopWindowOwner,
+  DesktopWindowRequest,
+  DesktopWindowResult,
+  DesktopWindowRunOwnerCommandRequest,
+  DesktopWindowRunOwnerCommandResult,
+  DesktopWindowSummary,
+  DesktopWindowUpdateRequest,
+  FolderPickerRequest,
+  FolderPickerResult,
+  NativeDesktopCapabilities
+} from './desktop-capabilities'
+import type {
   SettingInfo,
   ThemeList,
   ToastAction,
   ToastKind,
+  UiKeybinding,
   UiLayout,
   UiModel,
   UiState,
@@ -127,6 +147,40 @@ export type Methods = {
     result: Ok
   }
 
+  /** Reports which supported native shell operations this exact UI window can fulfill; role `ui` only. */
+  'desktop.shell.capabilities': { params: NativeDesktopCapabilities; result: Ok }
+  /** Completes a native shell request only for the UI window that received it; role `ui` only. */
+  'desktop.shell.reply': { params: DesktopShellReply; result: Ok }
+  /** Reads the capabilities of the selected native window; unsupported callbacks remain false. */
+  'desktop.capabilities': { params: Record<string, never>; result: NativeDesktopCapabilities }
+  /** Opens the host directory chooser and returns its actual result; cancellation has no paths. */
+  'desktop.folder.pick': { params: FolderPickerRequest; result: FolderPickerResult }
+  /** Opens an effective UI view in a separately owned native window. */
+  'desktop.window.open': { params: DesktopWindowRequest; result: DesktopWindowResult }
+  /** Closes one auxiliary window owned by the calling native shell. */
+  'desktop.window.close': { params: { windowId: string }; result: DesktopWindowCloseResult }
+  /** Asks the native shell to reveal an exact path. */
+  'desktop.item.reveal': { params: DesktopRevealRequest; result: DesktopRevealResult }
+  /** Reads the daemon-owned auxiliary window routes and their exact owner shell. */
+  'desktop.window.list': { params: Record<string, never>; result: DesktopWindowSummary[] }
+  /** Attaches this UI connection to the exact window route created by its native owner. Role `ui` only. */
+  'desktop.window.attach': { params: DesktopWindowAttachRequest; result: DesktopWindowSummary }
+  /** Updates the view/input in this exact attached auxiliary window without changing the main layout. Role `ui` only. */
+  'desktop.window.update': { params: DesktopWindowUpdateRequest; result: DesktopWindowSummary }
+  /** Runs a command in the exact owning main shell and activates that native window on success. Role `ui` only. */
+  'desktop.window.runOwnerCommand': { params: DesktopWindowRunOwnerCommandRequest; result: DesktopWindowRunOwnerCommandResult }
+  /** Removes a window after its native owner confirms it closed. Role `desktop` only. */
+  'desktop.window.closed': { params: DesktopWindowClosedRequest; result: DesktopWindowCloseResult }
+
+
+  /** Every effective keybinding. */
+  'keybinding.list': { params: Record<string, never>; result: UiKeybinding[] }
+  /** Sets one binding override; `null` clears the override. */
+  'keybinding.set': { params: { id: string; key: string | null }; result: UiKeybinding[] }
+  /** Resets one binding to the contribution's declared default. */
+  'keybinding.reset': { params: { id: string }; result: UiKeybinding[] }
+
+
   /** The window's view of plugin UI: status bars, slots, commands, keybindings, settings, themes and module URLs. */
   'ui.contributions': { params: Record<string, never>; result: UiModel }
   /** Every plugin setting with its current value, or only those of plugin `pluginId`. */
@@ -173,6 +227,9 @@ export type QuirkyEvent =
   | { type: 'theme.changed'; chosen: string; active: string }
   | { type: 'ui.state.changed'; layout: UiLayout }
   | { type: 'ui.command.request'; requestId: string; id: string; args: unknown }
+  | { type: 'desktop.shell.request'; requestId: string; action: DesktopShellAction; ownerShell: DesktopWindowOwner }
+  | { type: 'desktop.window.changed'; windows: DesktopWindowSummary[] }
+  | { type: 'ui.keybindings.changed' }
   /** A window's focus or presence changed, or a window connection dropped. */
   | { type: 'ui.window.changed'; windows: UiWindowInfo[] }
   /** Delivered to plugin listeners only, never to clients: a window's report for `slot` changed. */

@@ -845,3 +845,21 @@ describe('distro keybindings', () => {
     expect(empty.model.keybindings).toEqual([])
   })
 })
+
+test('user-remapped distro collisions retain both bindings and expose the deterministic winner', () => {
+  const { model } = buildUiModel({
+    declarations: [decl('command', 'acme.keys', 'first'), decl('command', 'acme.keys', 'second')],
+    plugins: [withUi('acme.keys')],
+    chosenTheme: 'default',
+    distroId: 'night',
+    distroKeybindings: [
+      { key: 'mod+k', command: 'command:acme.keys/first' },
+      { key: 'mod+j', command: 'command:acme.keys/second' }
+    ],
+    keybindingOverrides: { 'keybinding:night/k1': 'mod+j' }
+  })
+  expect(model.keybindings.map(({ id, key, status, shadowedBy }) => ({ id, key, status, shadowedBy }))).toEqual([
+    { id: 'keybinding:night/k1', key: 'mod+j', status: 'active', shadowedBy: undefined },
+    { id: 'keybinding:night/k2', key: 'mod+j', status: 'shadowed', shadowedBy: 'keybinding:night/k1' }
+  ])
+})

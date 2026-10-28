@@ -16,3 +16,5 @@ export * from './runtime-peers'
 export * from './mobile-workspaces'
 export * from './mobile-browser'
 export * from './terminal-artifacts'
+
+export * from './desktop-capabilities'

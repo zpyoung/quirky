@@ -3,9 +3,10 @@ import type { ProjectGroup, Repo, Session, UiPluginContext, Worktree } from '@qu
 import { DEFAULT_STOCK_OPTIONS, type StockWorktreeOptions, type WorktreeControl } from './control-types'
 import type { HeimdallWorktreeStatus } from './useTree'
 import { resolveMembershipTarget, type MembershipTarget } from './membership'
-import { changeGroup, copyText, SESSION_VIEW, setWorkspaceSleeping, setWorktree } from './actions'
-import { ContextMenu, groupMenu, projectMenu, STATUS_LABELS, workspaceMenu, type MenuItem } from './Menu'
+import { changeGroup, copyText, setWorkspaceSleeping, setWorktree } from './actions'
+import { ContextMenu, groupMenu, projectMenu, workspaceMenu, type MenuItem } from './Menu'
 import { projectSeparatorBoundaries, repoLabel, type AutomationAvailabilitySnapshot, type DialogState, type GroupNode, type ProjectNode, type TreeModel, type TreeRow } from './report'
+import type { WorktreeProjectIdentity, WorktreeStatusDefinition } from './parity-types'
 import { StatusDot, UnreadBell } from './StatusDot'
 import { worktreeGlyph } from './status'
 import { OrchestrationRows, type OrchestrationWorkerRow } from './OrchestrationRows'
@@ -26,6 +27,8 @@ export type TreeProps = {
   now: number
   separatorEnabled: boolean
   options?: StockWorktreeOptions
+  statusDefinitions: WorktreeStatusDefinition[]
+  projectIdentities: Record<string, WorktreeProjectIdentity>
   allWorktrees?: WorktreeControl[]
   onReorder?(worktrees: string[]): void
   openDialog(dialog: DialogState): void
@@ -100,6 +103,7 @@ type CardProps = {
   selected: boolean
   repoName?: string
   options: StockWorktreeOptions
+  statusDefinitions: WorktreeStatusDefinition[]
   automationExpanded: boolean
   automationAvailability: AutomationAvailabilitySnapshot | null
   onToggle(): void
@@ -122,6 +126,7 @@ function WorktreeCard({
   selected,
   repoName,
   options,
+  statusDefinitions,
   automationExpanded,
   automationAvailability,
   onToggle,
@@ -132,11 +137,17 @@ function WorktreeCard({
 }: CardProps) {
   const sleeping = 'sleeping' in worktree && worktree.sleeping === true
   const open = async () => {
-    if (sleeping && !await setWorkspaceSleeping(context, worktree.id, false)) return
-    context.openView(SESSION_VIEW, { worktree: worktree.id })
-    if (worktree.unread) void setWorktree(context, worktree.id, { unread: false })
+    try {
+      await context.call('quirky.worktree/navigate', { worktree: worktree.id })
+      if (worktree.unread) void setWorktree(context, worktree.id, { unread: false })
+    } catch (error) {
+      context.toast('Could not open workspace', error instanceof Error ? error.message : String(error))
+    }
   }
-  const linkedWork = worktree.linkedPR ?? worktree.linkedIssue
+  const linkedPR = worktree.linkedPR
+  const linkedIssue = worktree.linkedIssue
+  const statusLabel = statusDefinitions.find((status) => status.id === worktree.status)?.label ?? worktree.status
+  const archivedAt = 'archivedAt' in worktree ? (worktree as Worktree & { archivedAt: number | null }).archivedAt : null
   const className = ['worktree', selected && 'selected', worktree.removing && 'removing', sleeping && 'sleeping', options.compact && 'compact'].filter(Boolean).join(' ')
   const heimdall = heimdallStatusOf(worktree)
   const provenance = worktree.automationProvenance?.kind === 'created-by-automation'
@@ -186,29 +197,29 @@ function WorktreeCard({
       }}
     >
       <button className="worktree-main" style={options.compact ? { paddingBlock: 2 } : undefined} onClick={() => void open()} title={worktree.path} aria-label={`${sleeping ? 'Wake and open' : 'Open'} ${worktree.name}`}>
-        {worktree.unread ? <UnreadBell /> : loop ? <LoopGlyph label={loop.label} /> : <StatusDot glyph={sessions === null ? null : worktreeGlyph(sessions, worktree.id, now)} />}
+        {worktree.unread ? <UnreadBell /> : loop ? <LoopGlyph label={loop.label} /> : options.showProperties.includes('activity') ? <StatusDot glyph={sessions === null ? null : worktreeGlyph(sessions, worktree.id, now)} /> : null}
         {heimdall && <HeimdallGlyph status={heimdall} now={now} />}
         <span className={worktree.unread ? 'worktree-name worktree-name-unread' : 'worktree-name'}>{worktree.name}</span>
         {repoName && <span className="tag tag-repo">{repoName}</span>}
         {worktree.isMain && <span className="tag tag-primary">primary</span>}
-        {worktree.status !== 'in-progress' && <span className="tag tag-status">{STATUS_LABELS[worktree.status]}</span>}
+        {worktree.status !== 'in-progress' && <span className="tag tag-status">{statusLabel}</span>}
         {sleeping && <span className="tag tag-state">Sleeping</span>}
+        {archivedAt !== null && <span className="tag tag-state">Archived</span>}
         {worktree.removing && <span className="tag tag-state">Deleting…</span>}
       </button>
-      {options.showBranch && worktree.branch && <span className="worktree-branch" style={{ color: 'var(--muted)', fontSize: '0.8em' }}>{worktree.branch}</span>}
-      {options.showComment && worktree.comment && <span className="worktree-comment" title={worktree.comment} style={{ color: 'var(--muted)', fontSize: '0.8em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{worktree.comment}</span>}
-      {linkedWork && (
-        <a
-          className="tag tag-github"
-          href={linkedWork.url}
-          target="_blank"
-          rel="noreferrer"
-          aria-label={`${linkedWork.kind === 'pullRequest' ? 'Pull request' : 'Issue'} #${linkedWork.number}: ${linkedWork.title}`}
-        >
-          {linkedWork.kind === 'pullRequest' ? 'PR' : 'Issue'} #{linkedWork.number}
+      {options.showBranch && options.showProperties.includes('branch') && worktree.branch && <span className="worktree-branch" style={{ color: 'var(--muted)', fontSize: '0.8em' }}>{worktree.branch}</span>}
+      {options.showComment && options.showProperties.includes('notes') && worktree.comment && <span className="worktree-comment" title={worktree.comment} style={{ color: 'var(--muted)', fontSize: '0.8em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{worktree.comment}</span>}
+      {options.showProperties.includes('pullRequest') && linkedPR && (
+        <a className="tag tag-github" href={linkedPR.url} target="_blank" rel="noreferrer" aria-label={`Pull request #${linkedPR.number}: ${linkedPR.title}`}>
+          PR #{linkedPR.number}
         </a>
       )}
-      {provenance && (
+      {options.showProperties.includes('issue') && linkedIssue && (
+        <a className="tag tag-github" href={linkedIssue.url} target="_blank" rel="noreferrer" aria-label={`Issue #${linkedIssue.number}: ${linkedIssue.title}`}>
+          Issue #{linkedIssue.number}
+        </a>
+      )}
+      {options.showProperties.includes('automation') && provenance && (
         <>
           <span className="tag tag-automation-created">Created by automation</span>
           <button
@@ -291,6 +302,8 @@ export function Tree({
   now,
   separatorEnabled,
   options = DEFAULT_STOCK_OPTIONS,
+  statusDefinitions,
+  projectIdentities,
   allWorktrees = [],
   onReorder = () => {},
   openDialog,
@@ -437,9 +450,19 @@ export function Tree({
         openDeleteDialog: requestDelete,
         setMembership: changeMembership,
         moveProject,
-        setSleeping: (item, sleeping, withDescendants) => void setWorkspaceSleeping(context, item.id, sleeping, withDescendants)
+        setSleeping: (item, sleeping, withDescendants) => void setWorkspaceSleeping(context, item.id, sleeping, withDescendants),
+        openIn: (item, target) => {
+          void context.call('quirky.worktree/openIn', { worktree: item.id, target }).catch((error: unknown) =>
+            context.toast(`Could not open ${target}`, error instanceof Error ? error.message : String(error))
+          )
+        },
+        archive: (item, archived) => {
+          void context.call('quirky.worktree/archive', { worktree: item.id, archivedAt: archived ? Date.now() : null }).catch((error: unknown) =>
+            context.toast(`Could not ${archived ? 'archive' : 'unarchive'} workspace`, error instanceof Error ? error.message : String(error))
+          )
+        }
+      }, statusDefinitions)
       })
-    })
   }
 
   const openProjectMenu = (repo: Repo, x: number, y: number) =>
@@ -471,7 +494,7 @@ export function Tree({
           ? repoById.get(worktree.repoId)
           : undefined
         const projectRepo = repoById.get(worktree.repoId)
-        const repoName = row.repoName ?? (looseRepo ? repoLabel(looseRepo) : options.groupBy === 'none' && projectRepo ? repoLabel(projectRepo) : undefined)
+        const repoName = row.repoName ?? (looseRepo ? repoLabel(looseRepo) : options.groupBy !== 'project' && projectRepo ? repoLabel(projectRepo) : undefined)
         return (
           <WorktreeCard
             key={worktree.id}
@@ -487,6 +510,7 @@ export function Tree({
             selected={worktree.id === selectedId}
             repoName={repoName}
             options={options}
+            statusDefinitions={statusDefinitions}
             automationExpanded={automationExpandedId === worktree.id}
             automationAvailability={automationAvailability?.worktreeId === worktree.id ? automationAvailability : null}
             onToggleAutomationDetails={() => onToggleAutomationDetails(worktree.id)}
@@ -506,8 +530,8 @@ export function Tree({
           />
         )
       })
-  const statusGroupedRows = (list: TreeRow[]) => {
-    if (options.groupBy !== 'status') return rows(list)
+  const groupedRows = (list: TreeRow[]) => {
+    if (options.groupBy !== 'status' && options.groupBy !== 'pr') return rows(list)
     const byId = new Map(list.map((row) => [row.worktree.id, row]))
     const rootById = new Map<string, string>()
     for (const row of list) {
@@ -519,19 +543,34 @@ export function Tree({
       }
       rootById.set(row.worktree.id, current.id)
     }
-    const rootStatus = new Map<string, Worktree['status']>()
+    const lanes = new Map<string, { label: string; color?: string; roots: Set<string> }>()
     for (const row of list) {
-      if (rootById.get(row.worktree.id) === row.worktree.id) rootStatus.set(row.worktree.id, row.worktree.status)
+      const rootId = rootById.get(row.worktree.id)!
+      if (rootId !== row.worktree.id) continue
+      let key: string
+      let label: string
+      let color: string | undefined
+      if (options.groupBy === 'status') {
+        key = `status:${row.worktree.status}`
+        const definition = statusDefinitions.find((status) => status.id === row.worktree.status)
+        label = definition?.label ?? row.worktree.status
+        color = definition?.color
+      } else if (row.worktree.linkedPR) {
+        key = `pr:${row.worktree.linkedPR.number}:${row.worktree.linkedPR.url}`
+        label = `PR #${row.worktree.linkedPR.number} · ${row.worktree.linkedPR.title}`
+      } else {
+        key = 'pr:none'
+        label = 'No pull request'
+      }
+      const lane = lanes.get(key) ?? { label, ...(color ? { color } : {}), roots: new Set<string>() }
+      lane.roots.add(rootId)
+      lanes.set(key, lane)
     }
-    const statuses = (Object.keys(STATUS_LABELS) as Worktree['status'][]).filter((status) =>
-      [...rootStatus.values()].includes(status)
-    )
-    return statuses.map((status) => {
-      const roots = new Set([...rootStatus].filter(([, value]) => value === status).map(([id]) => id))
-      const laneRows = list.filter((row) => roots.has(rootById.get(row.worktree.id)!))
+    return [...lanes].map(([key, lane]) => {
+      const laneRows = list.filter((row) => lane.roots.has(rootById.get(row.worktree.id)!))
       return (
-        <li className="worktree-status-lane" key={status}>
-          <h3>{STATUS_LABELS[status]}</h3>
+        <li className="worktree-status-lane" key={key} style={lane.color ? { borderColor: lane.color } : undefined}>
+          <h3>{lane.label}</h3>
           <ul className="worktree-list">{rows(laneRows)}</ul>
         </li>
       )
@@ -540,12 +579,13 @@ export function Tree({
 
   const project = (node: ProjectNode, topLevel = false) => {
     const { repo, rows: projectRows, pending: pendingCreates } = node
+    const identity = projectIdentities[repo.id]
     const sectionKey = `repo:${repo.id}`
     const className = ['repo', eligibleBoundaries.includes(sectionKey) && 'section-separator'].filter(Boolean).join(' ')
     return (
       <section className={className} key={repo.id} data-top-level-section={topLevel ? sectionKey : undefined}>
         <header
-          hidden={options.groupBy === 'none'}
+          hidden={options.groupBy !== 'project'}
           className={`repo-header${dropPreview?.kind === 'repo' && dropPreview.id === repo.id ? ' membership-drop-preview' : ''}`}
           data-repo-target={repo.id}
           onContextMenu={(event) => {
@@ -553,7 +593,9 @@ export function Tree({
             openProjectMenu(repo, event.clientX, event.clientY)
           }}
         >
-          <span className="repo-name" title={repo.path}>{repoLabel(repo)}</span>
+          {identity?.icon && <span className="project-icon" aria-label={`${repoLabel(repo)} icon`} style={{ color: identity.color ?? undefined }}>{identity.icon}</span>}
+          <span className="repo-name" title={repo.path} style={{ color: identity?.color ?? undefined }}>{repoLabel(repo)}</span>
+          {identity?.trackerProject && <span className="tag tag-tracker">{identity.trackerProject}</span>}
           <span className="repo-actions">
             <button
               className="icon-button"
@@ -577,7 +619,7 @@ export function Tree({
           </span>
         </header>
         <ul className="worktree-list">
-          {statusGroupedRows(projectRows)}
+          {groupedRows(projectRows)}
           {pendingCreates.map((create) => <PendingCard key={create.name} name={create.name} />)}
         </ul>
       </section>
@@ -621,9 +663,9 @@ export function Tree({
         </header>
         {!group.collapsed && (
           <>
-            {groupRows.length > 0 && <ul className="worktree-list">{statusGroupedRows(groupRows)}</ul>}
+            {groupRows.length > 0 && <ul className="worktree-list">{groupedRows(groupRows)}</ul>}
             {projects.filter((projectNode) => projectNode.repo.kind === 'folder').map((projectNode) => project(projectNode))}
-            {looseRows.length > 0 && <ul className="worktree-list">{statusGroupedRows(looseRows)}</ul>}
+            {looseRows.length > 0 && <ul className="worktree-list">{groupedRows(looseRows)}</ul>}
             {projects.filter((projectNode) => projectNode.repo.kind === 'git').map((projectNode) => project(projectNode))}
             {children.map((child) => groupSection(child))}
           </>
@@ -755,6 +797,7 @@ export function Tree({
                   selected={worktree.id === selectedId}
                   repoName={repoName}
                   options={options}
+                  statusDefinitions={statusDefinitions}
                   automationExpanded={automationExpandedId === worktree.id}
                   automationAvailability={automationAvailability?.worktreeId === worktree.id ? automationAvailability : null}
                   onToggleAutomationDetails={() => onToggleAutomationDetails(worktree.id)}

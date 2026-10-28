@@ -14,6 +14,8 @@ import type {
   StructuredMessage,
   Worktree
 } from '@quirky/protocol'
+import { QuirkyClient, RpcError, RpcErrorCode, type AskRegistration } from '@quirky/protocol'
+import { connectDaemon } from '@quirky/protocol/node'
 import { resolveClaudeThroughLoginShell } from './claude-path'
 import { createClaudeRunner } from './claude-runner'
 import { resolveCodexThroughLoginShell } from './codex-path'
@@ -189,6 +191,7 @@ export function activate(context: PluginContext): void {
   const journal = new Journal(context.openStore(journalMigrations(context.home)))
   const live = new Map<string, LiveSession>()
   const pendingAsks = new Map<string, Set<string>>()
+  const nativeQuestionClients = new Map<string, Set<QuirkyClient>>()
   const owners = new Map<string, OwnerToken>()
   const ownersBySession = new Map<string, OwnerToken>()
   const agentRunners = new Map<StructuredAgent, StructuredRunner>()
@@ -317,28 +320,63 @@ export function activate(context: PluginContext): void {
   }
 
   const cancelPendingAsks = async (sessionId: string): Promise<void> => {
+    for (const client of nativeQuestionClients.get(sessionId) ?? []) client.close()
+    nativeQuestionClients.delete(sessionId)
     await Promise.all([...(pendingAsks.get(sessionId) ?? [])].map(cancelAsk))
   }
 
-  const createAsk = async (spec: AskSpec, sessionId: string): Promise<AskEnvelope> => {
+  const createAsk = async (spec: AskSpec, sessionId: string, options?: { nativeQuestion?: boolean }): Promise<AskEnvelope> => {
     const entry = live.get(sessionId)
-    if (!active || !entry) throw new Error('structured session is not active')
-    const { askId } = (await context.call('quirky.ask/create', {
-      spec,
-      session: sessionId,
-      ...(entry.worktreeId ? { worktree: entry.worktreeId } : {})
-    })) as { askId: string }
+    if (!active || !entry || entry.stopping) throw new Error('structured session is not active')
+    let client: QuirkyClient | undefined
+    let askId: string | undefined
     const pending = pendingAsks.get(sessionId) ?? new Set<string>()
     pendingAsks.set(sessionId, pending)
-    pending.add(askId)
     try {
+      let registration: AskRegistration
+      if (options?.nativeQuestion) {
+        const lease = entry.lease
+        const sessionToken = lease?.env.QUIRKY_SESSION_TOKEN
+        if (!lease || !sessionToken) throw new Error('Native question has no kernel-issued live session lease')
+        client = await connectDaemon({
+          role: 'cli', name: 'Structured native question', home: context.home, autostart: false, transport: 'socket',
+          identity: { sessionId, sessionToken, worktreeId: entry.worktreeId }
+        })
+        if (!active || live.get(sessionId) !== entry || entry.stopping || entry.lease !== lease) throw new Error('Native question session lease changed before registration')
+        const clients = nativeQuestionClients.get(sessionId) ?? new Set<QuirkyClient>()
+        nativeQuestionClients.set(sessionId, clients)
+        clients.add(client)
+        registration = await client.callAny('quirky.ask/register', { spec, requestId: crypto.randomUUID(), timeoutMs: 600_000 }) as AskRegistration
+      } else {
+        registration = await context.call('quirky.ask/create', { spec, session: sessionId, worktree: entry.worktreeId }) as AskRegistration
+      }
+      if ('status' in registration) throw new Error(`Native question unavailable: ${registration.reason}`)
+      askId = registration.askId
+      pending.add(askId)
       for (;;) {
-        const envelope = (await context.call('quirky.ask/wait', { askId })) as AskEnvelope
-        if (envelope.status !== 'pending') return envelope
+        if (!active || live.get(sessionId) !== entry || entry.stopping) throw new Error('Native question owner is no longer available')
+        try {
+          const envelope = await (client
+            ? client.callAny('quirky.ask/wait', { askId, timeoutMs: 8000 }, { timeoutMs: 13_000 })
+            : context.call('quirky.ask/wait', { askId })) as AskEnvelope
+          if (envelope.status !== 'pending') return envelope
+        } catch (error) {
+          const data = error instanceof RpcError ? error.data : undefined
+          if (error instanceof RpcError && error.code === RpcErrorCode.Conflict && typeof data === 'object' && data !== null && 'reason' in data && data.reason === 'runtime_busy') {
+            await Bun.sleep(250)
+            continue
+          }
+          throw error
+        }
       }
     } finally {
-      pending.delete(askId)
+      if (askId !== undefined) pending.delete(askId)
       if (pending.size === 0) pendingAsks.delete(sessionId)
+      if (client) {
+        nativeQuestionClients.get(sessionId)?.delete(client)
+        if (nativeQuestionClients.get(sessionId)?.size === 0) nativeQuestionClients.delete(sessionId)
+        client.close()
+      }
     }
   }
 

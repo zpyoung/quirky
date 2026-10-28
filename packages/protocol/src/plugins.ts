@@ -65,6 +65,12 @@ export type PluginContext = {
   subscribe(listener: (event: QuirkyEvent) => void | Promise<void>): () => void
   /** Invokes a daemon or plugin method as this plugin. */
   call(method: string, params?: Record<string, unknown>): Promise<unknown>
+  /**
+   * Forwards a client-originated caller from this active method callback without changing its
+   * kernel-attested connection, role, session or authority. The caller is invalid after the
+   * handler returns and cannot be copied or supplied by client params.
+   */
+  forward(method: string, params: Record<string, unknown>, caller: PluginCaller): Promise<unknown>
   /** Creates a same-origin opaque capability URL for an authorized local file. */
   createFileResource(options: {
     path: string

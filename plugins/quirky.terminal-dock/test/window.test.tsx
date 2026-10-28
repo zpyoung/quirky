@@ -456,7 +456,7 @@ describe('terminal dock composer behavior', () => {
       id: 'request-1',
       kind: 'question' as const,
       title: 'Choose an approach',
-      questions: [{ prompt: 'Which option?', choices: [{ label: 'A', value: 'a' }, { label: 'B', value: 'b' }], multiple: false }],
+      questions: [{ id: 'q1', prompt: 'Which option?', choices: [{ label: 'A', value: 'a' }, { label: 'B', value: 'b' }], multiple: false }],
       collapsed: false,
       dismissed: false
     }
@@ -486,7 +486,7 @@ describe('terminal dock composer behavior', () => {
   test('a dismissed unresolved request stays hidden but continues to disable prompt sending', async () => {
     const question = {
       id: 'permission-1', kind: 'permission' as const, title: 'Allow file access?',
-      questions: [{ prompt: 'Read src/private.ts?', choices: [{ label: 'Allow', value: 'allow' }, { label: 'Deny', value: 'deny' }], multiple: false }],
+      questions: [{ id: 'permission', prompt: 'Read src/private.ts?', choices: [{ label: 'Allow', value: 'allow' }, { label: 'Deny', value: 'deny' }], multiple: false }],
       collapsed: false, dismissed: false
     }
     const fake = fakeContext({ state: baseState({ question }) })

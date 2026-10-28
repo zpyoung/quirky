@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
 import type { RecipeLaunchOptions } from '../daemon/recipe-options'
 
@@ -7,6 +7,7 @@ type Option = { id: string; label: string; type: 'select' | 'boolean'; choices: 
 type Model = { id: string; label: string; options: Option[] }
 type Catalog = {
   supported: boolean
+  discoverable?: boolean
   models: Model[]
   unlisted: 'accept' | 'refuse'
   unlistedOptions: Option[]
@@ -121,24 +122,31 @@ function fieldName(prefix: string, name: string): string {
 
 export function LaunchOptionsEditor({ context, agent, value, args, labelPrefix = '', resetLabel, onChange }: Props) {
   const [state, setState] = useState<CatalogState>({ agent: '', info: null, loading: false })
+  const [refreshing, setRefreshing] = useState(false)
+  const [refreshMessage, setRefreshMessage] = useState<string | null>(null)
+  const alive = useRef(true)
   const listId = useId()
   useEffect(() => {
+    alive.current = true
+    setRefreshing(false)
+    setRefreshMessage(null)
     if (agent === '' || agent === 'custom') {
       setState({ agent, info: null, loading: false })
-      return
+      return () => {
+        alive.current = false
+      }
     }
-    let alive = true
     setState({ agent, info: null, loading: true })
     void context
       .call('quirky.agents/options', { agent })
       .then((info) => {
-        if (alive) setState({ agent, info: info as Catalog, loading: false })
+        if (alive.current) setState({ agent, info: info as Catalog, loading: false })
       })
       .catch(() => {
-        if (alive) setState({ agent, info: null, loading: false })
+        if (alive.current) setState({ agent, info: null, loading: false })
       })
     return () => {
-      alive = false
+      alive.current = false
     }
   }, [context, agent])
 
@@ -151,6 +159,23 @@ export function LaunchOptionsEditor({ context, agent, value, args, labelPrefix =
     if (Object.keys(nextValues).length > 0) next.optionValues = nextValues
     onChange(next)
   }
+  const refreshModels = async () => {
+    if (!catalog?.discoverable || refreshing) return
+    setRefreshing(true)
+    setRefreshMessage(null)
+    try {
+      const result = (await context.call('quirky.agents/discoverModels', { agent, host: 'local' })) as { authoritative?: boolean; reason?: string }
+      if (!alive.current) return
+      const refreshed = (await context.call('quirky.agents/options', { agent })) as Catalog
+      if (!alive.current) return
+      setState({ agent, info: refreshed, loading: false })
+      if (!result.authoritative) setRefreshMessage(result.reason ?? 'No authoritative model list was returned; saved choices were kept.')
+    } catch (error) {
+      if (alive.current) setRefreshMessage(error instanceof Error ? error.message : String(error))
+    } finally {
+      if (alive.current) setRefreshing(false)
+    }
+  }
 
   if (agent === 'custom') return <p className="muted scm-ai-hint">Custom command does not support catalog model or option picks.</p>
   if (agent === '') return <p className="muted scm-ai-hint">Choose an agent to see its model and effort choices.</p>
@@ -159,6 +184,8 @@ export function LaunchOptionsEditor({ context, agent, value, args, labelPrefix =
 
   const options = optionsFor(catalog, model)
   const modelShadowed = rawSets(args, catalog, 'model')
+  const staleModel = model !== '' && catalog.unlisted === 'refuse' && !catalog.models.some((listed) => listed.id === model)
+
   return (
     <div className="scm-ai-launch-options">
       <label>
@@ -202,10 +229,18 @@ export function LaunchOptionsEditor({ context, agent, value, args, labelPrefix =
             }}
           >
             <option value="">Agent default</option>
+            {staleModel && <option value={model}>{model} (unavailable)</option>}
             {catalog.models.map((listed) => <option key={listed.id} value={listed.id}>{listed.label}</option>)}
           </select>
         )}
       </label>
+      {catalog.discoverable && (
+        <button type="button" disabled={refreshing} onClick={() => void refreshModels()}>
+          {refreshing ? 'Refreshing models…' : 'Refresh models'}
+        </button>
+      )}
+      {staleModel && <p className="muted scm-ai-hint">Saved model {model} is no longer available.</p>}
+      {refreshMessage && <p className="muted scm-ai-hint">{refreshMessage}</p>}
       {modelShadowed && <p className="muted scm-ai-hint">Set by CLI arguments</p>}
       {options.map((option) => {
         const shadowed = rawSets(args, catalog, 'effort') || (modelShadowed && value?.model !== undefined)

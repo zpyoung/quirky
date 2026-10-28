@@ -3,7 +3,16 @@ import type { DaemonEnv, Handler } from './env'
 import type { RecipeLaunchOptions } from './recipe-options'
 
 /** The AI actions that have a recipe, in the order the defaults view lists them. */
-export const RECIPE_ACTIONS = ['commitMessage', 'fixCommitFailure', 'fixPushFailure', 'resolveConflicts'] as const
+export const RECIPE_ACTIONS = [
+  'commitMessage',
+  'fixCommitFailure',
+  'fixPushFailure',
+  'resolveConflicts',
+  'branchSummary',
+  'pullRequestDetails',
+  'pullRequestReview',
+  'reviewConversation'
+] as const
 export type RecipeAction = (typeof RECIPE_ACTIONS)[number]
 
 export const DEFAULT_TEMPLATE = '{basePrompt}'
@@ -154,7 +163,7 @@ function invalidLaunchOptions(env: DaemonEnv, message: string): never {
   throw env.errors.reasoned('invalid-params', 'invalid-launch-options', message)
 }
 
-function parseLaunchOptions(env: DaemonEnv, value: unknown): RecipeLaunchOptions | null | undefined {
+export function parseLaunchOptions(env: DaemonEnv, value: unknown): RecipeLaunchOptions | null | undefined {
   if (value === undefined || value === null) return value
   if (typeof value !== 'object' || Array.isArray(value)) return invalidLaunchOptions(env, 'launchOptions must be an object or null.')
   const raw = value as Record<string, unknown>

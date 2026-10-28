@@ -8,7 +8,8 @@ const RESULT_LABELS: Record<AskEnvelope['status'], string> = {
   answered: 'Answered',
   partial: 'Partially answered',
   declined: 'Declined',
-  timed_out: 'Timed out'
+  timed_out: 'Timed out',
+  unavailable: 'Unavailable'
 }
 
 export function AskCards({ store, context }: { store: AskStore; context: UiPluginContext }) {
@@ -21,6 +22,7 @@ export function AskCards({ store, context }: { store: AskStore; context: UiPlugi
           <h3>{ask.spec.title ?? 'Question'}</h3>
           <p><strong>{RESULT_LABELS[ask.envelope.status]}</strong></p>
           {ask.envelope.summary && <p style={{ whiteSpace: 'pre-wrap' }}>{ask.envelope.summary}</p>}
+          {ask.envelope.status === 'unavailable' && <p>{ask.envelope.reason}</p>}
         </article>
       ))}
       {asks.length === 0 ? (

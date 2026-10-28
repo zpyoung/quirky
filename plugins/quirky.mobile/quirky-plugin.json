@@ -9,6 +9,7 @@
   "activation": "startup",
   "contributes": {
     "method": [
+      {"id":"api","description":"Discover schema-declared methods within the existing paired-device grant. Excludes local CLI modules and owner-only UI/kernel capabilities; normal parameter authorization still applies.","readOnly":true,"params":{"type":"object","properties":{},"additionalProperties":false},"result":{"type":"object","additionalProperties":true}},
       {
         "id": "notificationPoll",
         "description": "Read or long-poll the bounded notification-only replay for an authenticated phone; never exposes general daemon events.",

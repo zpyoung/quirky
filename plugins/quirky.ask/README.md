@@ -1,16 +1,17 @@
 # Questions (`quirky.ask`)
 
-`quirky.ask` stores answerable questions in its own durable FIFO and exposes them to the window, CLI, and other authenticated clients. A missing desktop window is not an unavailable outcome: session-null, CLI, mobile, and kernel-confirmation asks remain usable through their existing API surfaces.
+`quirky.ask` stores answerable questions in its own durable FIFO and exposes them to the window, CLI, mobile client, and other authenticated clients. A live exact session can keep an Ask pending without an attached desktop; a caller with neither a live authenticated session nor an attached question surface receives typed `unavailable`.
 
 ## Public API and CLI
 
 | Method | Request | Behavior |
 |---|---|---|
-| `quirky.ask/create` | `{spec, session?, worktree?, timeoutMs?}` | Validates and stores an ask; returns `{askId}`. Session/worktree default to the authenticated caller's attribution, else `null`. A positive `timeoutMs` sets a durable deadline. |
-| `quirky.ask/wait` | `{askId, timeoutMs?}` | Returns the terminal envelope, or `pending` after a chunk. Each call is capped at 60,000 ms; `timeoutMs: 0` reads immediately. |
-| `quirky.ask/answer` | `{askId, answers, skipped?}` | Validates and commits the submitted answer envelope. |
-| `quirky.ask/cancel` | `{askId}` | Declines a still-pending ask; a finished ask is returned unchanged. |
-| `quirky.ask/list` | `{pendingOnly?}` | Lists asks in creation order; pending rows identify whether they are queued. |
+| `quirky.ask/create` | `{spec, session?, worktree?, timeoutMs?}` | Creates a local/plugin-authored Ask; session/worktree default to caller attribution, else `null`. A positive `timeoutMs` sets a durable deadline. |
+| `quirky.ask/register` | `{spec, requestId, timeoutMs?}` | Idempotently registers a client Ask. An active exact orchestration Dispatch creates one durable coordinator question; otherwise a live exact session remains answerable when a UI reconnects. Returns `{askId}` or `{status:'unavailable', reason}`. |
+| `quirky.ask/wait` | `{askId, timeoutMs?}` | Returns a terminal envelope, or `pending` after a chunk. Each call is capped at 60,000 ms; `timeoutMs: 0` reads immediately. Handoff waits preserve the authenticated caller and revalidate the same Dispatch. |
+| `quirky.ask/answer` | `{askId, answers, skipped?}` | Validates and commits the submitted answer envelope. Handoff questions must be answered by the exact coordinator question. |
+| `quirky.ask/cancel` | `{askId}` | Declines a still-pending local ask; a finished ask is returned unchanged. Handoff questions are controlled by their coordinator. |
+| `quirky.ask/list` | `{pendingOnly?}` | Lists local asks in creation order; pending rows identify whether they are queued. Mobile can inspect handoff status. |
 | `quirky.ask/updatePartial` | `{askId, partial}` | Replaces the saved draft while the ask remains pending. |
 | `quirky.ask/expire` | `{askId}` | Applies the stored timeout defaults/drafts and resolves the ask as timed out. |
 
@@ -27,8 +28,8 @@ There are no Ask-specific user settings.
 - Questions auto-opens only when a surfaced ask's exact session is the active session in the focused worktree view and the view has focus. It opens only if no panel is selected; opening the panel preserves terminal focus. A later user panel choice is not replaced by refreshes. Unfocused and session-null asks are not used to steal focus; the Questions badge and manual panel remain available.
 - The notification policy escalates a still-pending, surfaced unattended head after three uninterrupted minutes. Queued asks do not arm timers or count as pending attention.
 
-## Deliberately unbuilt handoff and liveness seam
+## Exact owner and unavailable outcomes
 
-`session` on an Ask is attribution, not proof of process liveness. Public `quirky.session/get` can positively report a missing session or `status: "exited"`, but this Ask wire contract has no `unavailable` terminal status and `create` is required to return `{askId}`. This package therefore does not infer unavailability from a missing window, unknown status, reconnect, or a session attribution alone.
+`unavailable` is a terminal refusal with a reason, empty answers, and every question skipped. It is never consent. Registration returns the no-`askId` `{status:'unavailable', reason}` shape when there is no authenticated live asker and no attached question surface. Existing asks are reconciled only from exact kernel session identity: a missing session lookup or absent UI is unknown evidence and leaves a live background Ask pending; a proven-exited or replaced process resolves it unavailable.
 
-The orchestration API's `quirky.orchestration/ask` is a separate Run-owned question. `quirky.ask` calling it as a plugin cannot forward the original caller's authenticated session/Run authority; `from` and `terminal` are equality assertions, not delegated authority. Heimdall's `answer` control is bound to an exact local watcher and worker-message ID and does not expose a public attachment mapping from an Ask caller to that worker. Native provider-question bridges are likewise not a generic public Ask handoff. A safe composition needs a public authenticated caller-to-Run/worker attachment API; an `unavailable` result also needs an approved Ask wire/API contract and migration of callers outside this package. No no-window fallback or terminal-status substitution is used here.
+`quirky.ask/register` forwards the original client caller through the daemon's callback-lifetime `PluginContext.forward` only while the registration callback is active. `quirky.orchestration/ask` authenticates the exact caller and returns the current Run, Dispatch, worker key, and session identity. The Ask store persists that identity, question ID, and request ID before wait resumes, so retries and restarts cannot create a second coordinator question or retarget another worker. Coordinator free text maps back through the original question IDs, option values, and answer types. Native Claude/Codex question prompts preserve their provider question/option IDs; secret inputs are refused.

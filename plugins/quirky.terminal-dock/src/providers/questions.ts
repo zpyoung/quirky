@@ -57,6 +57,15 @@ function parsedObject(value: unknown): RecordValue | null {
   return asRecord(value)
 }
 
+const SECRET_FIELDS = ['isSecret', 'is_secret', 'sensitive', 'masked', 'secret'] as const
+
+function containsSecretInput(record: RecordValue): boolean {
+  return SECRET_FIELDS.some((field) =>
+    Object.hasOwn(record, field) && record[field] !== false && record[field] !== null
+  )
+}
+
+
 function toChoices(value: unknown): { label: string; value: string }[] | null {
   if (!Array.isArray(value) || value.length > 50) return null
   const choices: { label: string; value: string }[] = []
@@ -73,15 +82,20 @@ function toChoices(value: unknown): { label: string; value: string }[] | null {
   return choices
 }
 
-function questionGroup(value: unknown): DockQuestion['questions'][number] | null {
+function questionGroup(value: unknown, index: number): DockQuestion['questions'][number] | null {
   const item = asRecord(value)
-  if (!item) return null
+  if (!item || containsSecretInput(item)) return null
   const prompt = cleanText(item.question ?? item.prompt ?? item.text ?? item.message, 2_000)
   const choiceField = item.options ?? item.choices
+  if (Array.isArray(choiceField) && choiceField.some((choice) => {
+    const option = asRecord(choice)
+    return option !== null && containsSecretInput(option)
+  })) return null
   const choices = toChoices(choiceField)
   const allowsFreeText = Array.isArray(choiceField) || item.type === 'text' || item.freeform === true || item.allowFreeText === true
   if (!prompt || choices === null && !allowsFreeText) return null
   return {
+    id: cleanText(item.id ?? item.questionId ?? item.question_id, 300) ?? `q${index + 1}`,
     prompt,
     choices: choices ?? [],
     multiple: item.multiSelect === true || item.multiple === true
@@ -95,8 +109,8 @@ export function isQuestionTool(name: string): boolean {
 
 export function questionFromInput(input: unknown, identity: Identity): DockQuestion | null {
   const root = parsedObject(input)
-  if (!root || !Array.isArray(root.questions) || root.questions.length === 0 || root.questions.length > 20) return null
-  const questions = root.questions.map(questionGroup).filter((question): question is DockQuestion['questions'][number] => question !== null)
+  if (!root || containsSecretInput(root) || !Array.isArray(root.questions) || root.questions.length === 0 || root.questions.length > 20) return null
+  const questions = root.questions.map((question, index) => questionGroup(question, index)).filter((question): question is DockQuestion['questions'][number] => question !== null)
   if (questions.length !== root.questions.length) return null
   const first = asRecord(root.questions[0])
   const title = cleanText(root.title ?? root.header ?? first?.header ?? first?.question ?? first?.prompt, 300)
@@ -126,6 +140,7 @@ export function permissionFromHeld(
     kind: 'permission',
     title: `Allow ${toolName}?`,
     questions: [{
+      id: 'permission',
       prompt: input || toolName,
       choices: [
         { label: 'Allow', value: 'allow' },
@@ -151,6 +166,7 @@ export function permissionFromEnvelope(input: unknown, identity: Identity): Dock
     title: `Allow ${tool}?`,
     questions: [{
       prompt: summary ?? tool,
+      id: 'permission',
       choices: [
         { label: 'Allow', value: 'allow' },
         { label: 'Deny', value: 'deny' }

@@ -2,6 +2,7 @@ import { createRoot } from 'react-dom/client'
 import { App } from './App'
 import { AppContext } from './context'
 import { browserWindowActivity, browserWindowFocus, createShell } from './shell'
+import { desktopBridgeForWindow, parseDesktopWindowRoute } from './desktop-bridge'
 import './styles.css'
 
 const shell = createShell({
@@ -9,7 +10,9 @@ const shell = createShell({
   importModule: (url) => import(/* @vite-ignore */ url),
   log: (message) => console.warn(message),
   windowFocus: browserWindowFocus(),
-  windowActivity: browserWindowActivity()
+  windowActivity: browserWindowActivity(),
+  desktopBridge: desktopBridgeForWindow(),
+  windowRoute: parseDesktopWindowRoute(window.location.href)
 })
 shell.connection.start()
 

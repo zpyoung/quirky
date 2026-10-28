@@ -20,6 +20,7 @@ import {
   type DeliveryOutcome,
   type LaunchPlan,
   type LaunchRecord,
+  type ModelDecl,
   type OptionDecl,
   type OptionUse,
   type ParsedExtras,
@@ -28,6 +29,9 @@ import {
   type Resolution,
   type ValidSelection
 } from './core/types'
+import type { ModelDiscovery } from './discovery-types'
+import { parseDiscoveredModels } from './core/discovered-models'
+import { runModelProbe, type ModelProbeResult } from './model-probe'
 import { DeliveryRunner } from './delivery'
 import { detect, readLoginPath, searchDirs, type Detection, type SearchDirs } from './detect'
 import { Generator } from './generate'
@@ -45,13 +49,13 @@ type OptionsInfo = {
   agent: string
   label: string
   supported: boolean
+  discoverable: boolean
   models: { id: string; label: string; description: string | null; options: OptionInfo[] }[]
   unlisted: 'accept' | 'refuse'
   unlistedOptions: OptionInfo[]
   structured: boolean
   extraArgs: ReturnType<typeof extrasSummary>
 }
-
 /** What `quirky.agents/resolveLaunch` reports: the pick's effect on the launch, `args` shell-quoted. */
 type ResolvedLaunch = Omit<Resolution, 'args'> & { args: string }
 
@@ -82,6 +86,7 @@ function optionsInfo(entry: AgentEntry): OptionsInfo {
     agent: entry.id,
     label: entry.label,
     supported: catalog !== null,
+    discoverable: entry.modelDiscovery !== null,
     models: catalog ? catalog.models.map((model) => ({ id: model.id, label: model.label, description: model.description, options: info(model.options) })) : [],
     unlisted: catalog?.unlisted ?? 'refuse',
     unlistedOptions: catalog ? info(catalog.unlistedOptions) : [],
@@ -103,6 +108,8 @@ export class AgentsService {
   private readonly generator: Generator
   private readonly goneListeners = new Set<(sessionId: string) => void>()
   private readonly reportedProblems = new Set<string>()
+  private readonly discoveredModels = new Map<string, ModelDecl[]>()
+  private readonly discoveryJobs = new Map<string, Promise<ModelDiscovery>>()
   private known: { default: unknown; trust: unknown }
   private queue: Promise<void> = Promise.resolve()
 
@@ -121,7 +128,10 @@ export class AgentsService {
     })
     this.generator = new Generator({
       context,
-      entryOf: (id) => this.catalog.agents.find((entry) => entry.id === id),
+      entryOf: (id) => {
+        const entry = this.catalog.agents.find((candidate) => candidate.id === id)
+        return entry ? this.launchEntry(entry) : undefined
+      },
       configOf: (id) => this.configs.get(id),
       installed: (id) => this.detection.installed(id),
       resolveExecutable: (name) => this.detection.resolveExecutable(name)
@@ -214,7 +224,29 @@ export class AgentsService {
   }
 
   /** The models and options an agent offers at launch, and the extra arguments it accepts. */
-  options = (params: Params): OptionsInfo => optionsInfo(this.entryOf(params.agent as string))
+  options = (params: Params): OptionsInfo => optionsInfo(this.launchEntry(this.entryOf(params.agent as string)))
+
+  /** Runs only the provider command declared by its contribution; no caller model list is accepted. */
+  discoverModels = async (params: Params): Promise<ModelDiscovery> => {
+    for (const key of Object.keys(params)) {
+      if (key !== 'agent' && key !== 'host') throw this.context.error('invalid-params', `discoverModels does not accept ${key}`)
+    }
+    if (typeof params.agent !== 'string' || params.agent.trim() === '') throw this.context.error('invalid-params', 'agent must be a non-empty string')
+    if (typeof params.host !== 'string' || params.host.trim() === '') throw this.context.error('invalid-params', 'host must be a non-empty string')
+    const entry = this.entryOf(params.agent)
+    const host = params.host
+    const key = JSON.stringify([entry.id, host])
+    const running = this.discoveryJobs.get(key)
+    if (running) return running
+    const job = this.probeModels(entry, host)
+    this.discoveryJobs.set(key, job)
+    try {
+      return await job
+    } finally {
+      if (this.discoveryJobs.get(key) === job) this.discoveryJobs.delete(key)
+    }
+  }
+
 
   /**
    * Previews what a pick and extra arguments add to the agent's launch under its saved
@@ -222,7 +254,7 @@ export class AgentsService {
    * resolves for a disabled agent.
    */
   resolveLaunch = (params: Params): ResolvedLaunch => {
-    const entry = this.entryOf(params.agent as string)
+    const entry = this.launchEntry(this.entryOf(params.agent as string))
     const config = this.configs.get(entry.id)
     const structured = params.structured === true
     return this.guard(() => {
@@ -240,7 +272,7 @@ export class AgentsService {
   }
 
   plan = (params: Params): LaunchPlan => {
-    const entry = this.entryOf(params.agent as string)
+    const entry = this.launchEntry(this.entryOf(params.agent as string))
     return this.guard(() =>
       buildLaunchPlan({
         entry,
@@ -275,7 +307,7 @@ export class AgentsService {
 
   /** Projects user CLI settings from the current create arguments or a supplied replay record. */
   settingsOverlay = (params: Params): { settings: Record<string, unknown> } => {
-    const entry = this.entryOf(params.agent as string)
+    const entry = this.launchEntry(this.entryOf(params.agent as string))
     const cwd = params.cwd
     if (typeof cwd !== 'string') throw this.context.error('invalid-params', 'cwd must be a string')
 
@@ -303,7 +335,7 @@ export class AgentsService {
   }
 
   prepareLaunch = (params: Params): LaunchPlan => {
-    const entry = this.entryOf(params.agent as string)
+    const entry = this.launchEntry(this.entryOf(params.agent as string))
     const config = this.configs.get(entry.id)
     if (config.disabled) throw this.context.error('invalid-params', `agent ${entry.id} is disabled`)
     const plan = this.guard(() =>
@@ -403,6 +435,10 @@ export class AgentsService {
       }
     }
     const differs = JSON.stringify(next) !== JSON.stringify(this.catalog)
+    if (differs) {
+      this.discoveredModels.clear()
+      this.discoveryJobs.clear()
+    }
     this.catalog = next
     if (differs) this.detection = this.snapshot(next.agents)
     return differs
@@ -457,6 +493,62 @@ export class AgentsService {
     const entry = this.catalog.agents.find((candidate) => candidate.id === id)
     if (!entry) throw this.context.error(kind, `unknown agent: ${id}`)
     return entry
+  }
+
+  private launchEntry(entry: AgentEntry): AgentEntry {
+    const models = this.discoveredModels.get(entry.id)
+    if (!entry.launchOptions || !models) return entry
+    return { ...entry, launchOptions: { ...entry.launchOptions, models, unlisted: 'refuse', unlistedOptions: [] } }
+  }
+
+  private discoveryFailure(agent: string, host: string, reason: string, status: ModelDiscovery['status'] = 'unavailable'): ModelDiscovery {
+    return { agent, host, observedAt: Date.now(), status, authoritative: false, models: [], reason }
+  }
+
+  private async probeModels(entry: AgentEntry, host: string): Promise<ModelDiscovery> {
+    const catalog = entry.launchOptions
+    const declaration = entry.modelDiscovery
+    if (!catalog || !declaration) return this.discoveryFailure(entry.id, host, 'the provider does not declare model discovery')
+    if (!this.detection.installed(entry.id)) return this.discoveryFailure(entry.id, host, 'the provider executable is not installed')
+    const launch = tokenize(entry.launch)
+    if (!launch.ok || launch.tokens.length === 0) return this.discoveryFailure(entry.id, host, 'the provider launch command is invalid')
+    const executable = this.detection.resolveExecutable(launch.tokens[0]!)
+    if (!executable) return this.discoveryFailure(entry.id, host, 'the provider executable could not be resolved')
+
+    const fingerprint = JSON.stringify({ plugin: entry.plugin, launch: entry.launch, declaration, catalog })
+    let run: ModelProbeResult
+    try {
+      run = await runModelProbe([executable, ...launch.tokens.slice(1), ...declaration.args], declaration.timeoutMs)
+    } catch {
+      return this.discoveryFailure(entry.id, host, 'the provider model probe failed')
+    }
+    if (!run.ok) {
+      const reasons: Record<typeof run.reason, string> = {
+        timeout: 'the provider model probe timed out',
+        'too-much-output': 'the provider model probe exceeded its output limit',
+        'could-not-start': 'the provider model probe could not start',
+        'nonzero-exit': 'the provider model probe exited unsuccessfully',
+        'output-not-closed': 'the provider model probe output did not close'
+      }
+      return this.discoveryFailure(entry.id, host, reasons[run.reason])
+    }
+    let models: ModelDecl[]
+    try {
+      models = parseDiscoveredModels(run.stdout, catalog)
+    } catch {
+      return this.discoveryFailure(entry.id, host, 'the provider returned malformed model data')
+    }
+    const current = this.catalog.agents.find((candidate) => candidate.id === entry.id)
+    const currentFingerprint = current
+      ? JSON.stringify({ plugin: current.plugin, launch: current.launch, declaration: current.modelDiscovery, catalog: current.launchOptions })
+      : null
+    if (currentFingerprint !== fingerprint) return this.discoveryFailure(entry.id, host, 'the provider declaration changed during discovery')
+    if (models.length === 0) return this.discoveryFailure(entry.id, host, 'the provider returned no models', 'available')
+    if (JSON.stringify(this.discoveredModels.get(entry.id) ?? null) !== JSON.stringify(models)) {
+      this.discoveredModels.set(entry.id, models)
+      this.changed()
+    }
+    return { agent: entry.id, host, observedAt: Date.now(), status: 'available', authoritative: true, models }
   }
 
   private guard<T>(work: () => T): T {

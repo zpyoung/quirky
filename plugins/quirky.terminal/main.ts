@@ -6,10 +6,12 @@ import { QuickCommandService } from './src/quick-commands/service'
 import { importV1Scrollback } from './src/scrollback'
 import { factEvent, TerminalService } from './src/terminal'
 import { TerminalArtifactsService } from './src/artifacts'
+import { EmulatorService } from './src/emulator'
 
 let service: TerminalService | undefined
 let layout: LayoutService | undefined
 let artifacts: TerminalArtifactsService | undefined
+let emulator: EmulatorService | undefined
 
 export async function activate(context: PluginContext): Promise<void> {
   const store = context.openStore(migrations)
@@ -22,6 +24,8 @@ export async function activate(context: PluginContext): Promise<void> {
   const artifactService = new TerminalArtifactsService(context)
   artifacts = artifactService
   layout = layoutService
+  const emulatorService = new EmulatorService(context)
+  emulator = emulatorService
 
   const methods = {
     attach: terminal.attach,
@@ -44,6 +48,8 @@ export async function activate(context: PluginContext): Promise<void> {
     restoreFit: terminal.restoreFit,
     claim: terminal.claim,
     artifacts: artifactService.handle,
+    emulators: emulatorService.list,
+    emulatorFrame: emulatorService.frame,
     ...layoutService.methods,
     ...quickCommands.methods
   }
@@ -74,6 +80,8 @@ export async function activate(context: PluginContext): Promise<void> {
 }
 
 export function deactivate(): void {
+  emulator?.shutdown()
+  emulator = undefined
   artifacts?.shutdown()
   artifacts = undefined
   service?.shutdown()

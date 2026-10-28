@@ -17,8 +17,9 @@ export type ExitCause = 'exited' | 'killed' | 'stopped' | 'host-restart' | 'host
 
 /**
  * Something the terminal reported out of band: a bell, a finished command, a new title or cwd, a
- * prompt mark, the body of an OSC 7501 program-status report, or a program's own notification
- * (OSC 9, 99 or 777) with its text already cleaned.
+ * prompt mark, OSC 7501 program-status body, a bounded OSC 9999 status object, or a program's own
+ * notification (OSC 9, 99 or 777) with its text already cleaned. Facts are process output evidence,
+ * never approval, caller credentials, or proof that an orchestration dispatch remains active.
  */
 export type PtyFact =
   | { kind: 'bell' }
@@ -27,6 +28,7 @@ export type PtyFact =
   | { kind: 'cwd'; cwd: string }
   | { kind: 'prompt' }
   | { kind: 'program-status'; body: string }
+  | { kind: 'agent-status'; payload: Record<string, unknown> }
   | { kind: 'notification'; title: string | null; body: string; occasion: 'always' | 'unfocused' | 'invisible' }
 
 export type PtySessionInfo = {

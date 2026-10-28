@@ -1,7 +1,6 @@
 import { afterEach, expect, test } from 'bun:test'
 import { rmSync } from 'node:fs'
-import type { MobileRpc } from '../../../apps/mobile/src/contracts'
-import { createMobileRpc } from '../../../apps/mobile/src/transport/client'
+import { createMobileRpc, type MobileRpc } from '@quirky/protocol/paired-client'
 import { builtinsDir, makeHomeWithoutAutoHooks, startHarness, type Harness } from '../../../packages/daemon/test/helpers'
 
 let harness: Harness | undefined

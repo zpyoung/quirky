@@ -124,7 +124,8 @@ function resolveKeybindings(
   effectiveCommands: Set<string>,
   byId: Map<string, PluginInfo>,
   warnings: Map<string, PluginDiagnostic[]>,
-  distro: { id: string; bindings: { id: string; chord: string; command: string }[] }
+  distro: { id: string; bindings: { id: string; chord: string; command: string }[] },
+  overrides: Record<string, string | null> = {}
 ): UiKeybinding[] {
   const dependsOn = dependencyClosure(byId)
   const sourceOf = (pluginId: string) => byId.get(pluginId)?.source
@@ -132,13 +133,16 @@ function resolveKeybindings(
     if (a === b) return false
     return sourceOf(a) === sourceOf(b) ? dependsOn(a).has(b) : sourceOf(a) === 'installed'
   }
-  const beats = (a: ContributionInfo, b: ContributionInfo): boolean => beatsPlugin(a.plugin, b.plugin)
+  const customized = (id: string) => Object.hasOwn(overrides, id)
+  const beats = (a: ContributionInfo, b: ContributionInfo): boolean =>
+    customized(a.id) !== customized(b.id) ? customized(a.id) : beatsPlugin(a.plugin, b.plugin)
 
   const result: UiKeybinding[] = []
   const byGroup = new Map<string, Binding[]>()
   const owners: string[] = []
   for (const declaration of effective) {
-    const parsed = parseChord(stringField(declaration.data, 'key') ?? '')
+    const override = overrides[declaration.id]
+    const parsed = parseChord(typeof override === 'string' ? override : stringField(declaration.data, 'key') ?? '')
     if (!parsed.ok) continue
     const rawWhen = declaration.data.when
     const parsedWhen = rawWhen === undefined ? null : parseWhen(typeof rawWhen === 'string' ? rawWhen : '')
@@ -154,7 +158,7 @@ function resolveKeybindings(
       ...(when !== '' ? { when } : {}),
     }
     owners.push(declaration.plugin)
-    if (!effectiveCommands.has(command)) {
+    if (override === null || !effectiveCommands.has(command)) {
       result.push({ ...base, status: 'unbound' })
       continue
     }
@@ -165,15 +169,28 @@ function resolveKeybindings(
   const distroOrder = new Map<string, number>()
   distro.bindings.forEach((binding, index) => distroOrder.set(binding.id, index))
   const distroByChord = new Map<string, { id: string; command: string }>()
-  for (const binding of distro.bindings) {
+  const distroRows: { id: string; chord: string; command: string }[] = []
+  for (const original of distro.bindings) {
+    const override = overrides[original.id]
+    const parsed = typeof override === 'string' ? parseChord(override) : null
+    const binding = parsed?.ok ? { ...original, chord: parsed.chord } : original
     const base = { id: binding.id, plugin: distro.id, key: binding.chord, command: binding.command }
-    if (!effectiveCommands.has(binding.command)) result.push({ ...base, status: 'unbound' })
-    else distroByChord.set(binding.chord, binding)
+    if (override === null || !effectiveCommands.has(binding.command)) result.push({ ...base, status: 'unbound' })
+    else {
+      distroRows.push(binding)
+      const existing = distroByChord.get(binding.chord)
+      if (!existing ||
+        (customized(binding.id) && !customized(existing.id)) ||
+        (customized(binding.id) === customized(existing.id) && compare(binding.id, existing.id) < 0)) {
+        distroByChord.set(binding.chord, binding)
+      }
+    }
   }
+  const shadowedDistro = new Map<string, string>()
 
   for (const bindings of byGroup.values()) {
     const { chord, when } = bindings[0]
-    const distroBinding = when === '' ? distroByChord.get(chord) : undefined
+    const distroCandidate = when === '' ? distroByChord.get(chord) : undefined
     const maxima = bindings.filter(
       (candidate) => !bindings.some((other) => other !== candidate && beats(other.declaration, candidate.declaration))
     )
@@ -181,6 +198,11 @@ function resolveKeybindings(
       const byOwner = compare(candidate.declaration.plugin, best.declaration.plugin)
       return (byOwner !== 0 ? byOwner : compare(candidate.declaration.id, best.declaration.id)) < 0 ? candidate : best
     })
+    const distroBinding = distroCandidate && (
+      !customized(winner.declaration.id) ||
+      (customized(distroCandidate.id) && compare(distroCandidate.id, winner.declaration.id) < 0)
+    ) ? distroCandidate : undefined
+    if (distroCandidate && !distroBinding) shadowedDistro.set(distroCandidate.id, winner.declaration.id)
     for (const binding of bindings) {
       const { declaration } = binding
       const base = {
@@ -205,12 +227,19 @@ function resolveKeybindings(
       }
     }
   }
-  for (const [chord, binding] of distroByChord) {
-    result.push({ id: binding.id, plugin: distro.id, key: chord, command: binding.command, status: 'active' })
+  for (const binding of distroRows) {
+    const winner = distroByChord.get(binding.chord)!
+    const shadowedBy = shadowedDistro.get(winner.id) ?? (winner.id === binding.id ? undefined : winner.id)
+    result.push({
+      id: binding.id, plugin: distro.id, key: binding.chord, command: binding.command,
+      status: shadowedBy === undefined ? 'active' : 'shadowed',
+      ...(shadowedBy === undefined ? {} : { shadowedBy })
+    })
   }
 
   const rank = precedenceOrder(owners, beatsPlugin)
   return result.sort((a, b) => {
+    if (customized(a.id) !== customized(b.id)) return customized(a.id) ? -1 : 1
     const distroA = distroOrder.get(a.id)
     const distroB = distroOrder.get(b.id)
     if (distroA !== undefined || distroB !== undefined) {
@@ -267,6 +296,8 @@ export function buildUiModel(input: {
   distroKeybindings?: DistroKeybinding[]
   /** The active distro's ID, which names its bindings. */
   distroId?: string | null
+  /** User remaps by contribution ID; null disables without erasing the inherited declaration. */
+  keybindingOverrides?: Record<string, string | null>
 }): { model: UiModel; warnings: Map<string, PluginDiagnostic[]> } {
   const { declarations, chosenTheme } = input
   const byId = pluginsById(input.plugins)
@@ -332,7 +363,7 @@ export function buildUiModel(input: {
   const keybindings = resolveKeybindings(ofKind('keybinding'), effectiveCommands, byId, warnings, {
     id: input.distroId ?? '',
     bindings: input.distroId ? distroBindings(input.distroKeybindings ?? [], input.distroId) : []
-  })
+  }, input.keybindingOverrides)
 
   const menuItems = buildMenuItems(ofKind('menu-item'))
 

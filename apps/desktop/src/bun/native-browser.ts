@@ -1,4 +1,14 @@
-import { NATIVE_BROWSER_NAVIGATION_RULES, NATIVE_BROWSER_PARTITION_RE } from '@quirky/protocol'
+import {
+  NATIVE_BROWSER_NAVIGATION_RULES,
+  NATIVE_BROWSER_PARTITION_RE,
+  type DesktopRevealRequest,
+  type DesktopRevealResult,
+  type DesktopWindowCloseResult,
+  type DesktopWindowOpenRequest,
+  type DesktopWindowResult,
+  type FolderPickerRequest,
+  type FolderPickerResult
+} from '@quirky/protocol'
 
 export type NativeBrowserHostRPC = {
   bun: {
@@ -15,6 +25,11 @@ export type NativeBrowserHostRPC = {
         params: { viewId: number; owner: string }
         response: { released: true }
       }
+      pickFolder: { params: FolderPickerRequest; response: FolderPickerResult }
+      openWindow: { params: DesktopWindowOpenRequest; response: DesktopWindowResult }
+      closeWindow: { params: { windowId: string }; response: DesktopWindowCloseResult }
+      revealItem: { params: DesktopRevealRequest; response: DesktopRevealResult }
+      activateOwner: { params: { windowId: string }; response: { activated: boolean } }
     }
     messages: {}
   }

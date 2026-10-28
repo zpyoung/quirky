@@ -33,7 +33,7 @@ type ExtensionMembers = Pick<
   | 'launch'
   | 'createFileResource'
 > &
-  Partial<Pick<PluginContext, 'storedSettingValue' | 'clients' | 'hostPower'>>
+  Partial<Pick<PluginContext, 'storedSettingValue' | 'clients' | 'hostPower' | 'forward'>>
 
 /** The daemon-side half of a plugin's context, created and torn down per activation attempt. */
 export type ContextExtension = {
@@ -542,7 +542,7 @@ export class PluginHost {
           throw new Error(`${id}: context.${member} is not available`)
         }
       })
-    const defaults: Omit<ExtensionMembers, 'storedSettingValue' | 'clients' | 'hostPower'> & Pick<PluginContext, 'storedSettingValue' | 'workerEntrypoint' | 'clients' | 'hostPower'> = {
+    const defaults: Omit<ExtensionMembers, 'storedSettingValue' | 'clients' | 'hostPower' | 'forward'> & Pick<PluginContext, 'storedSettingValue' | 'workerEntrypoint' | 'clients' | 'hostPower' | 'forward'> = {
       dataDir: '',
       clients: unavailableObject<PluginContext['clients']>('clients'),
       hostPower: unavailableObject<PluginContext['hostPower']>('hostPower'),
@@ -559,6 +559,9 @@ export class PluginHost {
       },
       call: () => {
         throw new Error(`${id}: context.call is not available`)
+      },
+      forward: () => {
+        throw new Error(`${id}: authenticated caller forwarding is not available in this host`)
       },
       openStore: () => {
         throw new Error(`${id}: context.openStore is not available`)

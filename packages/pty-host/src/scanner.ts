@@ -8,6 +8,7 @@ export type ScanFact =
   | { kind: 'prompt' }
   | { kind: 'command-start' }
   | { kind: 'program-status'; body: string }
+  | { kind: 'agent-status'; payload: Record<string, unknown> }
   | { kind: 'notification'; title: string | null; body: string; occasion: NotificationOccasion }
 
 /** When a program asked for its notification to be shown (OSC 99's `o` key). */
@@ -235,6 +236,15 @@ export class OutputScanner {
       this.reportPromptMark(rest)
     } else if (code === '7501') {
       this.facts.push({ kind: 'program-status', body: rest })
+    } else if (code === '9999') {
+      try {
+        const payload: unknown = JSON.parse(rest)
+        if (typeof payload === 'object' && payload !== null && !Array.isArray(payload)) {
+          this.facts.push({ kind: 'agent-status', payload: payload as Record<string, unknown> })
+        }
+      } catch {
+        // Invalid/overflowed status data must not disrupt output or fabricate a lifecycle event.
+      }
     } else if (code === '9') {
       if (!/^\d+(;|$)/.test(rest)) this.pushNotification(null, rest, 'always')
     } else if (code === '777') {

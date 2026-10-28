@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { RpcError, RpcErrorCode, type ApiDescription } from '@quirky/protocol'
-import { connectDaemon } from '@quirky/protocol/node'
+import { connectDaemon, quirkyHome } from '@quirky/protocol/node'
 import pkg from '../package.json'
 import { CommandFailed, StderrFailure, UsageError, extractGlobals, wantsHelp } from './args'
 import { resolveCommands } from './catalog'
@@ -13,6 +13,8 @@ import { ConnectionLostError, DaemonUnavailableError, createDaemonLink, type Dae
 import { Printer, type Writer } from './output'
 import { declaredCommands } from './plugin-commands'
 import { suggestCommands } from './suggest'
+import { createPairedDaemonLink } from './paired-link'
+import { resolveRuntimeSelection } from './runtime-selection'
 
 export type Runtime = {
   argv: string[]
@@ -209,16 +211,36 @@ function report(error: unknown, out: Printer, writer: Writer): number {
 /** Runs one invocation and returns the process exit code: 0 ok, 1 runtime error, 2 usage error. */
 export async function run(runtime: Runtime): Promise<number> {
   const out = new Printer(runtime.writer, wantsJson(runtime.argv))
+  let selected = runtime
   try {
     if (wantsVersion(runtime.argv)) {
       out.result({ version: pkg.version }, () => `quirky ${pkg.version}`)
       return 0
     }
-    await dispatch(runtime, out, extractGlobals(runtime.argv).argv)
+    const parsed = extractGlobals(runtime.argv)
+    const target = resolveRuntimeSelection(parsed.options, runtime.env)
+    if (target.kind !== 'local') {
+      const command = route(parsed.argv, COMMANDS)
+      if (command.kind === 'command' && /^(?:plugin|distro|daemon|skill)(?: |$)/.test(command.command.name)) {
+        throw new UsageError(`${command.command.name} is local-only; select --runtime local explicitly`)
+      }
+      const env = { ...runtime.env }
+      for (const key of ['QUIRKY_SESSION_ID', 'QUIRKY_SESSION_TOKEN', 'QUIRKY_WORKTREE_ID', 'QUIRKY_PANE_ID', 'QUIRKY_TAB_ID']) delete env[key]
+      selected = {
+        ...runtime,
+        env,
+        link: createPairedDaemonLink(runtime.env.QUIRKY_HOME ?? quirkyHome(), target, {
+          requestBase: parsed.options.retryRequest, yes: parsed.options.yes, stderr: runtime.writer.stderr
+        }),
+        openDesktopApp: async () => ({ ok: false, reason: 'A paired-runtime command cannot open a local desktop as fallback. Open the desktop on the selected host.' })
+      }
+    }
+    await dispatch(selected, out, parsed.argv)
     return 0
   } catch (error) {
     return report(error, out, runtime.writer)
   } finally {
+    if (selected !== runtime) selected.link.close()
     runtime.link.close()
   }
 }

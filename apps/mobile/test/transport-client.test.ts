@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import type { MobileConnectionState, MobileRpc } from '../src/contracts'
-import { createMobileRpc } from '../src/transport/client'
+import { createMobileRpc } from '@quirky/protocol/paired-client'
 import { DEVICE_TOKEN, makeTestPeer, type TestPeer } from './transport-peer'
 
 const randomBytes = (() => {

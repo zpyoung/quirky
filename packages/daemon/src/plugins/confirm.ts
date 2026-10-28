@@ -132,6 +132,7 @@ export class Confirmations {
       throw isMethodNotFound(error) ? conflict(ASKS_OFF) : error
     }
     if (envelope.status === 'pending') throw conflict('confirmation not answered yet')
+    if (envelope.status === 'unavailable') throw conflict(`confirmation unavailable: ${envelope.reason}`)
     const answer = envelope.answers?.confirm
     if (envelope.status !== 'answered' || !answer || !('value' in answer) || answer.value !== true) throw conflict('declined')
     if (!this.store.markConfirmationUsed(askId)) throw conflict('confirmation already used')

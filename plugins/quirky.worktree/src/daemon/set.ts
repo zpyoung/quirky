@@ -1,8 +1,9 @@
-import { RpcErrorCode, type PluginStore, type ProjectGroup, type Repo, type Worktree, type WorktreeStatus } from '@quirky/protocol'
+import { RpcErrorCode, type PluginStore, type ProjectGroup, type Repo, type Worktree } from '@quirky/protocol'
 import type { CallerIdentity } from '../../selector'
 import { joinMetadata } from './list'
 import { filesystemIdentitySource, instanceIdFor, stillNamesHeldDirectory, type DirectoryHandle, type DirectoryIdentitySource } from './identity'
-import { insertRow, rowOf, STATUSES } from './store'
+import { insertRow, rowOf } from './store'
+import { readStatusDefinitions } from './statuses'
 
 /** What `set` and `show` need from the plugin: the store, error building and selector resolution. */
 export type SetEnv = {
@@ -22,7 +23,7 @@ export type SetParams = {
   worktree: string
   displayName?: string
   comment?: string
-  status?: WorktreeStatus
+  status?: string
   pinned?: boolean
   unread?: boolean
   parent?: string
@@ -82,8 +83,9 @@ export async function setWorktree(
   if (params.parent !== undefined && params.noParent === true) {
     throw env.fail('invalid-params', 'parent and noParent cannot be used together')
   }
-  if (params.status !== undefined && !STATUSES.includes(params.status)) {
-    throw env.fail('invalid-params', `status must be one of ${STATUSES.join(', ')}`)
+  const statuses = readStatusDefinitions(env.store)
+  if (params.status !== undefined && (typeof params.status !== 'string' || !statuses.some((status) => status.id === params.status))) {
+    throw env.fail('invalid-params', `status must be one of ${statuses.map((status) => status.id).join(', ')}`)
   }
   if (params.baseRef !== undefined && params.baseRef !== null && typeof params.baseRef !== 'string') {
     throw env.fail('invalid-params', 'baseRef must be a string or null')
@@ -192,7 +194,7 @@ export async function setWorktree(
     return rowOf(env.store, worktree.id)!
   })
   env.changed({ repoId: worktree.repoId, worktreeId: worktree.id, ...(params.unread === undefined ? {} : { unread: params.unread }) })
-  return joinMetadata(worktree, row, worktree.removing)
+  return joinMetadata(worktree, row, worktree.removing, env.store)
 }
 
 /** Creates a group through quirky.repo, then conditionally moves only the selected worktree. */

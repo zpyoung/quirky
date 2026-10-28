@@ -1454,12 +1454,13 @@
         "id": "dashboard-enabled",
         "type": "boolean",
         "title": "Agent Dashboard",
-        "description": "Show the in-window Agent Dashboard in the sidebar. A pop-out requires a public shell window API, which is not currently available.",
+        "description": "Show the Agent Dashboard in the sidebar; choose an in-window view or a native pop-out.",
         "category": "Experimental",
         "section": "Agents",
         "default": false,
         "menu": "view"
-      }
+      },
+      {"id":"dashboard-open-as","type":"enum","title":"Agent Dashboard: Open as","description":"Pop-out requires an attached native desktop shell; unavailable targets are never replaced with an in-window fallback.","category":"Experimental","section":"Agents","default":"in-window","values":["in-window","pop-out"]}
     ],
     "view": [
       { "id": "activity", "title": "Activity" },
@@ -1470,6 +1471,7 @@
       { "id": "dashboard", "title": "Agent Dashboard", "order": 6 }
     ],
     "command": [
+      {"id":"openDashboardWindow","title":"Pop Out Agent Dashboard","args":{"type":"object","properties":{"text":{"type":"string"},"project":{"type":"string"},"workspaceStatus":{"type":"string","enum":["todo","in-progress","in-review","done"]},"reviewStatus":{"type":"string","enum":["open","draft","merged","closed","no-review"]},"showIdle":{"type":"boolean"}},"additionalProperties":false}},
       {
         "id": "openActivity",
         "title": "Open Activity",

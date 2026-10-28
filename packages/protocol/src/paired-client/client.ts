@@ -1,5 +1,5 @@
 import nacl from 'tweetnacl'
-import type { MobileCallOptions, MobileConnectionState, MobileRpc } from '../contracts'
+import type { MobileCallOptions, MobileConnectionState, MobileRpc } from './types'
 import {
   createMobileE2EEV2Hello,
   decodeBase64,
@@ -30,7 +30,7 @@ export type MobileSocket = {
 export type MobileWebSocketConstructor = new (url: string) => MobileSocket
 export type MobileRpcErrorKind = 'connection' | 'timeout' | 'auth-failed' | 'protocol' | 'closed' | 'remote' | 'params'
 export class MobileRpcError extends Error {
-  constructor(readonly kind: MobileRpcErrorKind, message: string, readonly code?: unknown) {
+  constructor(readonly kind: MobileRpcErrorKind, message: string, readonly code?: unknown, readonly data?: unknown) {
     super(message)
     this.name = 'MobileRpcError'
   }
@@ -485,7 +485,9 @@ class MobileRpcClient implements MobileRpc {
     clearTimeout(pending.timer)
     if (remoteError) {
       const message = remoteError.message as string
-      pending.reject(new MobileRpcError('remote', message.includes(this.credentialToken) ? 'Desktop RPC failed' : message, remoteError.code))
+      const data = remoteError.data
+      const safeData = data !== undefined && JSON.stringify(data).includes(this.credentialToken) ? undefined : data
+      pending.reject(new MobileRpcError('remote', message.includes(this.credentialToken) ? 'Desktop RPC failed' : message, remoteError.code, safeData))
     } else {
       pending.resolve(value.result)
     }

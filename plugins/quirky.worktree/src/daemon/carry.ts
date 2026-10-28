@@ -1,25 +1,16 @@
 import { chmodSync, copyFileSync, constants, existsSync, lstatSync, mkdirSync, readlinkSync, statSync, symlinkSync } from 'node:fs'
-import { dirname, isAbsolute, join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { gitApi } from '@quirky/git'
+import { MAX_SHARED_DIRECTORIES, sharedEntryProblem, staysInside } from '../shared-paths'
+export { MAX_SHARED_DIRECTORIES, sharedEntryProblem } from '../shared-paths'
 
 export const INCLUDE_FILE = '.worktreeinclude'
 export const MAX_INCLUDE_BYTES = 256 * 1024
 export const MAX_CARRIED_FILES = 1000
 export const MAX_CARRIED_BYTES = 500 * 1024 * 1024
-export const MAX_SHARED_DIRECTORIES = 100
 
 const underGit = (path: string): boolean => path === '.git' || path.startsWith('.git/')
 
-/** True for a relative path that cannot leave the directory it is joined to. */
-const staysInside = (path: string): boolean => !isAbsolute(path) && !path.split(/[\\/]/).includes('..')
-
-/** Why a shared-directory entry cannot be linked, or null when it is a relative path inside the repository and outside `.git`. */
-export function sharedEntryProblem(entry: string): string | null {
-  if (entry.trim() === '' || isAbsolute(entry)) return 'it is not a relative path'
-  if (!staysInside(entry)) return 'it is outside the repository'
-  if (underGit(entry.replace(/\/+$/, ''))) return 'it is inside .git'
-  return null
-}
 
 /**
  * The first existing directory between `root` and `path` (exclusive of `root` and of `path`
@@ -100,7 +91,12 @@ async function copyIncluded(primary: string, worktree: string): Promise<string[]
  * checkout's copy. Only a directory that exists there and that git ignores is linked; every other
  * entry is skipped with a warning naming why.
  */
-async function linkShared(primary: string, worktree: string, entries: string[]): Promise<string[]> {
+async function linkShared(
+  primary: string,
+  worktree: string,
+  entries: string[],
+  onLinked?: (entry: string) => void
+): Promise<string[]> {
   const warnings: string[] = []
   if (entries.length > MAX_SHARED_DIRECTORIES) warnings.push(`worktree.sharedDirectories lists ${entries.length} entries; only the first ${MAX_SHARED_DIRECTORIES} were used`)
   for (const entry of entries.slice(0, MAX_SHARED_DIRECTORIES)) {
@@ -124,6 +120,7 @@ async function linkShared(primary: string, worktree: string, entries: string[]):
       else {
         mkdirSync(dirname(target), { recursive: true })
         symlinkSync(source, target)
+        onLinked?.(entry)
       }
     } catch (error) {
       skip(error instanceof Error ? error.message : String(error))
@@ -145,9 +142,17 @@ function lstatOrNull(path: string) {
  * `.worktreeinclude` selects are copied, and the hooks file's shared directories are linked.
  * Never throws; every problem is a returned warning.
  */
-export async function carryFiles(primary: string, worktree: string, sharedDirectories: string[]): Promise<string[]> {
+export async function carryFiles(
+  primary: string,
+  worktree: string,
+  sharedDirectories: string[],
+  onSharedDirectoryLinked?: (entry: string) => void
+): Promise<string[]> {
   const warnings: string[] = []
-  for (const step of [() => copyIncluded(primary, worktree), () => linkShared(primary, worktree, sharedDirectories)]) {
+  for (const step of [
+    () => copyIncluded(primary, worktree),
+    () => linkShared(primary, worktree, sharedDirectories, onSharedDirectoryLinked)
+  ]) {
     try {
       warnings.push(...(await step()))
     } catch (error) {
