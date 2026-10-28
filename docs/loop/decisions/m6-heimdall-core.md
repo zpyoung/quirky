@@ -110,5 +110,49 @@
 - **Revisit if:** lane10 KernelControlHost needs a narrower adapter
 - **Source:** assumed — autonomous
 
+## D11: Expose exact worker identity only through a non-consuming owner read
+- **Question:** lane10 fleet/detail needs worker identity and pending questions without consuming mail
+- **Options:** use serviceCheck for refresh; expose incarnation in generic DispatchRow; owned serviceRunShow projection
+- **Chose:** serviceRunShow returns owned Run, worker views with nullable session/incarnation and evidence-derived live/exited/unverifiable state, plus question rows joined to original body. Verify kernel caller plugin owns Run before disclosure. No check/ack, generation rotation, pointer delivery or mutation receipt on refresh. serviceReply supplies positive exact-question result; serviceWorkerStop takes expected session/incarnation and enters existing guarded lifecycle only after equality/owner checks.
+- **Why:** consuming mail to draw fleet changes supervision state; a generic dispatch read must not grant exact stop authority. Null or unverifiable identity is never guessed from PID/handle.
+- **Evidence:** lane10 user interjection; services/contracts.ts ServiceRunDetail/ServiceWorkerView/ServiceQuestionView; /tmp/quirky-lane10-core-control-reply.md Final signatures
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** prerequisite worker projection cannot provide verified owner-only identity
+- **Source:** assumed — autonomous
+
+## D12: Preserve owner configuration while reserving owner execution to lane12
+- **Question:** lane12 owner item requests configuration and an owner-step insertion seam
+- **Options:** duplicate owner behavior in core; publish inert configuration and explicit integration point
+- **Chose:** optional Claude owner config/model/effort and intervention capability persist through enrollment. Lane12 owns owner/*, typed deviation vocabulary and kind owner adapter. Runner has a documented insertion point after mailbox/recovery/stop/budget and before disabled/paused. No speculative owner runtime or nonexistent owner-module import in this item. Hub integration is serialized with lane10 after core merge.
+- **Why:** source owner is Claude-only and core item explicitly excludes owner execution. Keeping the step reachable before disabled/paused does not grant general kind actions a gate bypass.
+- **Evidence:** lane12 user interjection; contracts.ts OwnerConfig and enrollment fields; /tmp/quirky-lane12-owner-core-reply.md; runner implementer confirmation
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** lane12 publishes a different source-grounded hook contract
+- **Source:** assumed — autonomous
+
+## D13: Repair escaped adapter writes before accepting the wave
+- **Question:** completed component audit found no adapter source in its assigned worktree
+- **Options:** accept escaped main edits; discard code; pause and transfer exact declared-scope output
+- **Chose:** pause writers, obtain adapter's exact physical-path acknowledgement, preserve its six new scoped source/test/manifest files and move them losslessly into the assigned adapter worktree using specialized MV. Runner confirmed correct absolute source; no runner files moved. Preserve unrelated .serena metadata. Require absolute file-tool paths and retain final barrier audit/check gate.
+- **Why:** relative file-tool paths inherited the parent workspace, despite the task naming a separate worktree. Bash cwd does not retarget file tools. Accepting untracked main edits would bypass isolation and attribution; discarding would lose authored work.
+- **Evidence:** adapter HEAD6764039 scope audit returned only .serena/project.local.yml; agent actual pwd/path acknowledgement; move snapshot hashes DBF5/157C/898C/1FCE/8793/0521; /tmp/quirky-heimdall-l11-routing-repair.md
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** another component writes outside its absolute target
+- **Source:** assumed — autonomous
+
+## D14: Preserve Run sender authority for owner-to-worker messages
+- **Question:** lane12 owner message-worker cannot use raw session send without losing Run authority
+- **Options:** raw session input; generic unscoped service send; exact owned-Run dispatch mailbox method
+- **Chose:** serviceSend takes explicit owned runId, dispatchId, body and durable request identity; proves membership, emits a normal mailbox message with canonical Run sender, uses the same receipt store and post-commit arrival pipeline. It cannot spoof worker_done/heartbeat or answer a question implicitly. serviceReply remains exact question handling; generic workerShow/read follows owned-run membership proof.
+- **Why:** service identity is real coordinator authority, not a process/session credential. Message and question semantics must stay distinct.
+- **Evidence:** lane12 follow-up user interjection; services/contracts.ts ServiceSendParams/result; /tmp/quirky-lane12-owner-core-reply.md
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** existing core messaging cannot represent distinct service sender provenance
+- **Source:** assumed — autonomous
+
 ## Progress
 Iteration4: spec/contracts committed6764039; three disjoint implementation worktrees running, no checks/commits until their wave barrier. Worker dependency query returned ready:false pending m6-orchestration-workers after510s; independent implementation continues. Lanes1+9 approved service authority extension reserved to lane11, parent authored type contracts; actual core/worker runtime still pending. Missing feature/API smoke completed with isolated actual quirkyd and cleanup. Next: accept/audit components after all return, integrate dependency implementation and additive service APIs, exercise AC1-11 including real worker adapter, affected suite/scripts/typecheck, deps-ready/catch-up/final independent review/queue landing. No runtime feature acceptance claim.

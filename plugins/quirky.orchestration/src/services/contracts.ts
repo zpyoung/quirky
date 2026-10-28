@@ -1,7 +1,7 @@
 import type { PluginCaller } from '@quirky/protocol'
 import type {
   CheckResult, DeliveryId, MessageType, MutationRequest, MutationResult,
-  QuestionThreadRow, ReplyResult, RunId, RunRow, RuntimeCallerEvidence,
+  QuestionThreadRow, ReplyResult, RunId, RunRow, RuntimeCallerEvidence, SendResult,
 } from '../contracts'
 import type { WorkerControlResult, WorkerStartParams, WorkerStartReceipt } from '../worker-contracts'
 
@@ -10,6 +10,7 @@ export interface ServiceCoordinatorPrincipal {
   kind: 'service'
   pluginId: string
   runId: RunId
+  authority: 'kernel_plugin'
 }
 /** Session callers retain independently attested runtime evidence without a synthetic session. */
 export type CoordinatorAuthority = RuntimeCallerEvidence | ServiceCoordinatorPrincipal
@@ -17,6 +18,21 @@ export interface ServiceOwner { pluginId: string; key: string }
 export interface ServiceRun extends RunRow {
   coordinatorSessionId: null
   serviceOwner: ServiceOwner
+}
+/** Exact worker incarnation is exposed only after the service Run ownership check. */
+export interface ServiceWorkerView {
+  dispatchId: string
+  sessionId: string | null
+  processIncarnation: string | null
+  state: 'live' | 'exited' | 'unverifiable'
+  lastContactAtMs: number | null
+}
+export interface ServiceQuestionView extends QuestionThreadRow { body: string }
+/** Non-consuming projection: no delivery acknowledgement or consumer-generation mutation. */
+export interface ServiceRunDetail {
+  run: ServiceRun
+  workers: readonly ServiceWorkerView[]
+  questions: readonly ServiceQuestionView[]
 }
 export interface ServiceRunCreateParams extends MutationRequest { key: string; objective: string }
 export interface ServiceRunShowParams { runId: RunId }
@@ -33,6 +49,7 @@ export interface ServiceWorkerStopParams extends ServiceWorkerReleaseParams {
   expectedIdentity: { sessionId: string; processIncarnation: string }
 }
 export interface ServiceReplyParams extends MutationRequest { runId: RunId; messageId: string; body: string }
+export interface ServiceSendParams extends MutationRequest { runId: RunId; dispatchId: string; body: string }
 export interface ServiceMethodInputs {
   serviceRunCreate: ServiceRunCreateParams
   serviceRunShow: ServiceRunShowParams
@@ -41,15 +58,17 @@ export interface ServiceMethodInputs {
   serviceWorkerRelease: ServiceWorkerReleaseParams
   serviceWorkerStop: ServiceWorkerStopParams
   serviceReply: ServiceReplyParams
+  serviceSend: ServiceSendParams
 }
 export interface ServiceMethodResults {
   serviceRunCreate: MutationResult<{ run: ServiceRun }>
-  serviceRunShow: { run: ServiceRun }
+  serviceRunShow: ServiceRunDetail
   serviceWorkerStart: MutationResult<WorkerStartReceipt>
-  serviceCheck: CheckResult & { questions: readonly QuestionThreadRow[] }
+  serviceCheck: CheckResult & { questions: readonly ServiceQuestionView[] }
   serviceWorkerRelease: MutationResult<WorkerControlResult>
   serviceWorkerStop: MutationResult<WorkerControlResult>
   serviceReply: ReplyResult
+  serviceSend: Extract<SendResult, { kind: 'message' }>
 }
 export type ServiceMethod = keyof ServiceMethodInputs
 export type ServiceHandler<M extends ServiceMethod> = (
