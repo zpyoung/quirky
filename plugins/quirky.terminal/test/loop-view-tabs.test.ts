@@ -133,14 +133,17 @@ test('raw single closes are denied while a bulk close detaches without stopping 
   const { anchor, loop, opened } = await startLiveLoop()
 
   await expect(rig!.call('quirky.terminal/closeTab', { tab: opened.tab })).rejects.toThrow('refused to close')
-  expect(await rig!.call('quirky.loops/viewCloseGuard', {
-    loopId: loop.id,
-    tabId: opened.tab,
-    closeReason: 'bulk',
-    closeViewId: 'view:quirky.loops/loop',
-    closeViewKey: loop.id,
-    closeViewInput: { loopId: loop.id }
-  })).toBe(false)
+  const closeGuard = {
+    allowed: await rig!.call('quirky.loops/viewCloseGuard', {
+      loopId: loop.id,
+      tabId: opened.tab,
+      closeReason: 'bulk',
+      closeViewId: 'view:quirky.loops/loop',
+      closeViewKey: loop.id,
+      closeViewInput: { loopId: loop.id }
+    })
+  }
+  expect(closeGuard).toHaveProperty('allowed', false)
 
   await rig!.call('quirky.terminal/openViewTab', {
     workspace: rig!.worktree.id,

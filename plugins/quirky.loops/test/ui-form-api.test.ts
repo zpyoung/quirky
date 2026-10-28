@@ -34,6 +34,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+function isLoopAgent(value: unknown): value is LoopSnapshot['agent'] {
+  return value === 'claude' || value === 'codex'
+}
+
 function currentRig(): LoopRig {
   if (!rig) throw new Error('loop rig is not running')
   return rig
@@ -42,6 +46,11 @@ function currentRig(): LoopRig {
 function currentWindow(): HeadlessWindow {
   if (!headless) throw new Error('headless window is not running')
   return headless
+}
+
+function fixtureActiveGroupId(): string {
+  if (activeGroupId === null) throw new Error('terminal fixture did not capture its active group')
+  return activeGroupId
 }
 
 function releaseHeldTurns(): void {
@@ -314,7 +323,9 @@ test('setup API reports defaults, preset resets, queue edits, and validation wit
     ? setup.agents.flatMap((agent) => isRecord(agent) && typeof agent.id === 'string' ? [agent.id] : [])
     : []
   expect([...agentIds].sort()).toEqual(['claude', 'codex'])
-  expect(['claude', 'codex']).toContain(draft.agent)
+  const agent = draft.agent
+  if (!isLoopAgent(agent)) throw new Error('setup draft omitted a supported loop agent')
+  expect(['claude', 'codex']).toContain(agent)
   expect(errorsOf(setup).prompt).toBe('Enter a prompt to start the loop.')
   expect(setup.canStart).toBe(false)
   expect(currentWindow().document.body.textContent).toContain('Enter a prompt to start the loop.')
@@ -444,7 +455,7 @@ test('valid Until-done setup creates a native loop with trimmed name and backgro
   const currentWorkspace = await workspace()
   expect(viewForLoop(currentWorkspace, created.id)).toBeDefined()
   expect(activeTab(currentWorkspace)).toBe(settingsTabId)
-  expect(currentWorkspace.activeGroup).toBe(activeGroupId)
+  expect(currentWorkspace.activeGroup).toBe(fixtureActiveGroupId())
   const sessions = await currentRig().call<Session[]>('quirky.session/list', {})
   expect(sessions.some((session) => session.agent === 'shell')).toBe(false)
 })
@@ -485,7 +496,7 @@ test('a live loop warns on interval setup but the second loop still starts in th
   const currentWorkspace = await workspace()
   expect(viewForLoop(currentWorkspace, interval.id)).toBeDefined()
   expect(activeTab(currentWorkspace)).toBe(settingsTabId)
-  expect(currentWorkspace.activeGroup).toBe(activeGroupId)
+  expect(currentWorkspace.activeGroup).toBe(fixtureActiveGroupId())
 })
 
 test('valid queue setup starts with the edited queue order and preserves the active tab', async () => {
@@ -514,7 +525,7 @@ test('valid queue setup starts with the edited queue order and preserves the act
   const currentWorkspace = await workspace()
   expect(viewForLoop(currentWorkspace, queued.id)).toBeDefined()
   expect(activeTab(currentWorkspace)).toBe(settingsTabId)
-  expect(currentWorkspace.activeGroup).toBe(activeGroupId)
+  expect(currentWorkspace.activeGroup).toBe(fixtureActiveGroupId())
 })
 
 test('folder workspace setup hides checkpoints and never sends a checkpoint configuration', async () => {

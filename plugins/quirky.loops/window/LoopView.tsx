@@ -199,12 +199,15 @@ function editPatchFromDraft(base: LoopSnapshot, latest: LoopSnapshot, draft: Loo
 
   const done: LoopConfig['done'] = { ...latest.config.done }
   let doneChanged = false
-  for (const key of ['check', 'evaluator'] as const) {
-    if (sameValue(base.config.done[key], next.done[key])) continue
+  if (!sameValue(base.config.done.check, next.done.check)) {
     doneChanged = true
-    const value = next.done[key]
-    if (value === undefined) delete done[key]
-    else done[key] = value
+    if (next.done.check === undefined) delete done.check
+    else done.check = next.done.check
+  }
+  if (!sameValue(base.config.done.evaluator, next.done.evaluator)) {
+    doneChanged = true
+    if (next.done.evaluator === undefined) delete done.evaluator
+    else done.evaluator = next.done.evaluator
   }
   if (doneChanged) patch.done = done
 

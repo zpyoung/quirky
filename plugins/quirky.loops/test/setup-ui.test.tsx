@@ -7,10 +7,11 @@ import type { LoopSnapshot } from '../src/types'
 import type { SetupDialogProps, SurfaceHandle } from '../window/contracts'
 import type { LoopDraft } from '../window/contracts'
 import type { SetupDialog as SetupDialogType } from '../window/SetupDialog'
-import type { ConfigFields, initialDraft, validateDraft } from '../window/config-form'
+import type { ConfigFields, draftFromLoop, initialDraft, validateDraft } from '../window/config-form'
 
 type FormSurface = {
   initialDraft: typeof initialDraft
+  draftFromLoop: typeof draftFromLoop
   validateDraft: typeof validateDraft
   ConfigFields: typeof ConfigFields
 }
