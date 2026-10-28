@@ -77,5 +77,27 @@
 - **Revisit if:** end-phase process ownership checks expose a cleanup failure.
 - **Source:** assumed — autonomous
 
+## D8: Preserve incoming contracts and neutralize ambient Git state
+- **Question:** the single roadmap catch-up brought four decision logs and mobile/public API changes; do they change fixture safety or loop behavior?
+- **Options:** reinterpret native ownership; preserve contracts and apply the existing isolation pattern.
+- **Chose:** preserve automations remote refusal/native options, supported native browser ownership/enforcement, mobile scoped public APIs and explicit UI states. Clear/restore inherited Git repository/worktree/index/object pointers and injected config parameters/count before the fixture's physical Git setup.
+- **Why:** IncomingLoopBindings read all four logs in full and found no loop conflict. Mobile D14's physical Git isolation applies to this rig: an isolated cwd alone cannot defeat inherited GIT_DIR or GIT_INDEX_FILE. No product behavior or existing test assertion changes.
+- **Evidence:** catch-up merged cleanly after 279d3a9b; full logs m5-automations-dispatch-remote-and-args D1–D4, sa-browser-pane-native-host-controls D1–D8, sa-browser-pane-workspace-preview D1–D7, sb-mobile-app-panels D1–D21 and all Progress sections; mobile panels-git-editor.test.ts13,86.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** end-phase execution shows a remaining ambient fixture input.
+- **Source:** locked by docs/loop/decisions/sb-mobile-app-panels.md
+
+## D9: Typecheck and a focused fixture smoke are not visible acceptance
+- **Question:** what fresh evidence exists for the new fixture without running the postponed tests, browser campaign or review?
+- **Options:** infer runtime success from typecheck; exercise only the changed native fixture lifetime and keep the evidence boundary.
+- **Chose:** no suite, permanent test, browser dogfood or model review executed. Parent ran a disposable daemon/native-protocol fixture lifecycle smoke, not the rendered-control acceptance tests; retain its shutdown warnings without suppression.
+- **Why:** the changed test harness must actually start and clean its owned native processes. This does not certify rendered Stop/Close choices, setup or cross-family review.
+- **Evidence:** final `bun run typecheck` exit0 in23.23s, root and mobile, frozen install. Disposable smoke exit0 in1.68s: two simultaneous native conversations distinct, two actual turn/interrupt requests, stopped loops with zero completed iterations, owned home removed and HOME/QUIRKY_HOME/CODEX_HOME/CLAUDE_CONFIG_DIR restored. Teardown logged worktree/notifications callbacks against already-deactivated plugins; no cleanup failure or formal visual result inferred.
+- **Reversibility:** easy
+- **Confidence:** high for observed fixture lifetime only
+- **Revisit if:** the end phase executes native UI acceptance or observes a process leak.
+- **Source:** assumed — autonomous
+
 ## Progress
-Native fixture and three rendered-control acceptance tests implemented in component f12b67e8; HEAD/scope audit passed, component merged and isolated worktree removed. No product source or existing test assertions changed. No tests, dogfood or review were run. Append-only end-phase handoff recorded in BLOCKERS. Next: catch up once with build/roadmap, read incoming decisions, typecheck, commit evidence, detach and canonical land.
+Ready for authoritative land. Three native rendered-control tests and optional native rig implemented; default scripted callers and every shipped test/production guard retained. One catch-up completed, four incoming logs read in full, no binding conflict; ambient Git inputs now neutralized/restored. Final root+mobile typecheck passed23.23s. Focused disposable native fixture smoke passed1.68s with distinct conversations, actual interrupts and owned cleanup; shutdown callback warnings recorded in D9. Permanent tests, browser dogfood and cross-family review NOT RUN; setup remains tool-limited UNSETTLED. No verification-only follow-up. Component worktree removed; all agents/finite jobs returned. Commit this evidence, detach, canonical land, then remove the disposable smoke directory and save the receipt in loop notes.

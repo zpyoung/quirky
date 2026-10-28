@@ -21,7 +21,12 @@ const PLUGINS = [
   'quirky.notifications',
   'quirky.loops'
 ]
-const ENV_KEYS = ['HOME', 'PATH', 'QUIRKY_HOME', 'CLAUDE_CONFIG_DIR', 'CODEX_HOME', 'QUIRKY_AGENT_SEARCH_DIRS', 'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM'] as const
+const GIT_ENV_KEYS = [
+  'GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE',
+  'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES',
+  'GIT_CONFIG_PARAMETERS', 'GIT_CONFIG_COUNT'
+] as const
+const ENV_KEYS = ['HOME', 'PATH', 'QUIRKY_HOME', 'CLAUDE_CONFIG_DIR', 'CODEX_HOME', 'QUIRKY_AGENT_SEARCH_DIRS', 'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM', ...GIT_ENV_KEYS] as const
 
 type RunnerContext = {
   appendMessage(input: { sessionId: string; role: 'user' | 'assistant' | 'system' | 'tool' | 'result'; text: string; data?: unknown }): unknown
@@ -197,6 +202,7 @@ printf '%s\\n' 'VERDICT: not-met' 'REASON: isolated evaluator fixture'
     process.env.CODEX_HOME = providerHomes[1]
     process.env.GIT_CONFIG_GLOBAL = '/dev/null'
     process.env.GIT_CONFIG_NOSYSTEM = '1'
+    for (const key of GIT_ENV_KEYS) delete process.env[key]
 
     const controller: Controller = { starts: [], sends: [], script: options.script, onStop: options.onStop }
     if (options.nativeCodex) delete globals.__QUIRKY_TEST_STRUCTURED_RUNNER__
