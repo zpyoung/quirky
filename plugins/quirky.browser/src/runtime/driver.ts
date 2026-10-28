@@ -1450,17 +1450,34 @@ export class BrowserRuntime {
     if (existing && existing.generation === generation) return existing
     if (existing) await this.closeBinding(epoch, page.browserPageId, existing)
     this.invalidateHelperReferences(epoch)
+    const targetSnapshot = safeRecord(await epoch.cdp.send('Target.getTargets'), TARGET_LIST_SCHEMA, 'target list').targetInfos as unknown[]
+    const existingTargetIds = new Set<string>()
+    for (const targetValue of targetSnapshot) {
+      const target = safeRecord(targetValue, {
+        type: 'object',
+        properties: { targetId: { type: 'string' }, type: { type: 'string' } },
+        required: ['targetId', 'type'],
+        additionalProperties: true
+      }, 'target info') as TargetInfo
+      existingTargetIds.add(target.targetId)
+    }
     const created = await nativeRequest(epoch.helper.socketPath, 'tab_new', { url: 'about:blank' }, 10_000)
     const tab = nativeData<TabCreated>(created, TAB_CREATED_SCHEMA, 'new tab')
     epoch.activeTabId = tab.tabId
-    const binding = await this.bindFreshPage(epoch, page, generation, tab.tabId)
+    const binding = await this.bindFreshPage(epoch, page, generation, tab.tabId, existingTargetIds)
     epoch.pages.set(page.browserPageId, binding)
     await this.enablePageDomains(epoch, binding)
     await this.navigateRetainedPage(epoch, page, binding)
     return binding
   }
 
-  private async bindFreshPage(epoch: RuntimeEpoch, page: BrowserPage, generation: number, tabId: string): Promise<BoundPage> {
+  private async bindFreshPage(
+    epoch: RuntimeEpoch,
+    page: BrowserPage,
+    generation: number,
+    tabId: string,
+    existingTargetIds: ReadonlySet<string>
+  ): Promise<BoundPage> {
     const targetsResponse = await epoch.cdp.send('Target.getTargets')
     const targets = safeRecord(targetsResponse, TARGET_LIST_SCHEMA, 'target list').targetInfos as unknown[]
     const sessions = new Map<string, string>()
@@ -1476,7 +1493,7 @@ export class BrowserRuntime {
     try {
       for (const targetValue of targets) {
         const target = safeRecord(targetValue, { type: 'object', properties: { targetId: { type: 'string' }, type: { type: 'string' } }, required: ['targetId', 'type'], additionalProperties: true }, 'target info') as TargetInfo
-        if (target.type !== 'page') continue
+        if (target.type !== 'page' || existingTargetIds.has(target.targetId)) continue
         const attached = await epoch.cdp.send('Target.attachToTarget', { targetId: target.targetId, flatten: true })
         const sessionId = safeRecord(attached, ATTACHED_SCHEMA, 'target attachment').sessionId as string
         sessions.set(target.targetId, sessionId)
