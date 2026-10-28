@@ -34,7 +34,13 @@ function NameForm({ title, submitLabel, initial, hint, onSubmit, onClose }: Name
       <form className="form" onSubmit={submit}>
         <label>
           <span>Group name</span>
-          <input autoFocus value={name} onChange={(event) => setName(event.target.value)} />
+          <input
+            type="text"
+            autoFocus
+            value={name}
+            onFocus={(event) => event.currentTarget.select()}
+            onChange={(event) => setName(event.target.value)}
+          />
         </label>
         <div className="dialog-actions">
           <button type="button" onClick={onClose}>
@@ -68,6 +74,50 @@ export function NewGroupDialog({ context, repo, onClose }: { context: UiPluginCo
   )
 }
 
+/** Creates a group and conditionally assigns only the worktree identity captured when opened. */
+export function NewWorktreeGroupDialog({
+  context,
+  worktreeId,
+  initialName,
+  expectedInstanceId,
+  expectedProjectGroupId,
+  onClose
+}: {
+  context: UiPluginContext
+  worktreeId: string
+  initialName: string
+  expectedInstanceId: string
+  expectedProjectGroupId: string | null
+  onClose(): void
+}) {
+  return (
+    <NameForm
+      title="New Project Group"
+      submitLabel="Create"
+      initial={initialName}
+      hint="Only this worktree moves into the new group."
+      onClose={onClose}
+      onSubmit={async (name) => {
+        try {
+          const result = await context.call('quirky.worktree/createGroup', {
+            worktree: worktreeId,
+            name,
+            expectedInstanceId,
+            expectedProjectGroupId
+          }) as { assigned: boolean; reason?: string }
+          if (!result.assigned) {
+            context.toast('Could not create group', result.reason ?? 'The worktree changed before it could be assigned.')
+          }
+          return true
+        } catch (error) {
+          context.toast('Could not create group', error instanceof Error ? error.message : String(error))
+          return false
+        }
+      }}
+    />
+  )
+}
+
 export function RenameGroupDialog({ context, group, onClose }: { context: UiPluginContext; group: ProjectGroup; onClose(): void }) {
   return (
     <NameForm
@@ -82,6 +132,25 @@ export function RenameGroupDialog({ context, group, onClose }: { context: UiPlug
   )
 }
 
+function descendantGroupIds(groups: ProjectGroup[], rootId: string): string[] {
+  const groupIds = [rootId]
+  const included = new Set(groupIds)
+  for (let index = 0; index < groupIds.length; index++) {
+    const parentId = groupIds[index]!
+    for (const group of groups) {
+      if (group.parentId !== parentId || included.has(group.id)) continue
+      included.add(group.id)
+      groupIds.push(group.id)
+    }
+  }
+  return groupIds
+}
+
+async function previewGroupRemoval(context: UiPluginContext, groupId: string): Promise<LedgerRemovalPreview[] | null> {
+  const groups = (await context.call('quirky.repo/groupList')) as ProjectGroup[]
+  return previewLedgerRemoval(context, { groupIds: descendantGroupIds(groups, groupId) })
+}
+
 export function DeleteGroupDialog({ context, group, onClose }: { context: UiPluginContext; group: ProjectGroup; onClose(): void }) {
   const [busy, setBusy] = useState(false)
   const [preview, setPreview] = useState<LedgerRemovalPreview[] | null>()
@@ -92,7 +161,7 @@ export function DeleteGroupDialog({ context, group, onClose }: { context: UiPlug
     let live = true
     setPreview(undefined)
     setPreviewError('')
-    previewLedgerRemoval(context, { groupIds: [group.id] })
+    previewGroupRemoval(context, group.id)
       .then((result) => { if (live) setPreview(result) })
       .catch((error: unknown) => { if (live) setPreviewError(error instanceof Error ? error.message : String(error)) })
     return () => { live = false }
@@ -112,7 +181,7 @@ export function DeleteGroupDialog({ context, group, onClose }: { context: UiPlug
   }
   const retention = ledgerRetentionNotice(preview ?? null)
   return (
-    <Dialog title="Delete Group" onClose={onClose}>
+    <Dialog title="Delete Project Group" onClose={onClose}>
       <p className="dialog-message">{`Delete the group ${group.name}? Projects in this group stay in Quirky.`}</p>
       {retention && <p className="dialog-message">{retention}</p>}
       {preview === undefined && !previewError && <p className="muted">Checking retained ledger records…</p>}

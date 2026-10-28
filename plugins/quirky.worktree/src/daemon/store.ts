@@ -22,6 +22,9 @@ export type WorktreeRow = {
   keep_branch: number
   birthtime: number | null
   group_id: string | null
+  project_group_id: string | null
+  last_activity_at: number
+  instance_id: string
   created_root: string | null
 }
 
@@ -86,6 +89,13 @@ export function openWorktreeStore(context: PluginContext): PluginStore {
           PRIMARY KEY (repo_id, name)
         );
       `)
+    },
+    (store) => {
+      store.exec(`
+        ALTER TABLE worktrees ADD COLUMN project_group_id TEXT;
+        ALTER TABLE worktrees ADD COLUMN last_activity_at INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE worktrees ADD COLUMN instance_id TEXT NOT NULL DEFAULT '';
+      `)
     }
   ])
 }
@@ -109,19 +119,27 @@ export type NewRow = {
   displayName?: string | null
   comment?: string
   parentId?: string | null
+  projectGroupId?: string | null
+  lastActivityAt?: number
+  instanceId?: string
 }
 
 /** Inserts a row, or fills a v1 row (ID and repo only) with the given values; never overwrites a row that has them. */
 export function insertRow(store: PluginStore, row: NewRow): WorktreeRow {
   store.run(
-    `INSERT INTO worktrees (id, repo_id, kind, path, name, display_name, comment, parent_id, created_at, created_by, base_ref, keep_branch, birthtime, group_id, created_root)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO worktrees (id, repo_id, kind, path, name, display_name, comment, parent_id, created_at, created_by, base_ref, keep_branch, birthtime, group_id, created_root, project_group_id, last_activity_at, instance_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        repo_id = excluded.repo_id,
        kind = excluded.kind,
        path = excluded.path,
        created_at = COALESCE(worktrees.created_at, excluded.created_at),
-       birthtime = COALESCE(worktrees.birthtime, excluded.birthtime)`,
+       birthtime = COALESCE(worktrees.birthtime, excluded.birthtime),
+       last_activity_at = MAX(worktrees.last_activity_at, excluded.last_activity_at),
+       instance_id = CASE
+         WHEN worktrees.instance_id = '' OR worktrees.instance_id LIKE 'unverified:%' THEN excluded.instance_id
+         ELSE worktrees.instance_id
+       END`,
     row.id,
     row.repoId,
     row.kind,
@@ -136,7 +154,10 @@ export function insertRow(store: PluginStore, row: NewRow): WorktreeRow {
     row.keepBranch ? 1 : 0,
     row.birthtime ?? null,
     row.groupId ?? null,
-    row.createdRoot ?? null
+    row.createdRoot ?? null,
+    row.projectGroupId ?? null,
+    row.lastActivityAt ?? 0,
+    row.instanceId ?? `unverified:${crypto.randomUUID()}`
   )
   return rowOf(store, row.id)!
 }
@@ -144,7 +165,7 @@ export function insertRow(store: PluginStore, row: NewRow): WorktreeRow {
 /** The metadata half of a `Worktree`, read from its row. */
 export function metadataOf(row: WorktreeRow): Pick<
   Worktree,
-  'displayName' | 'comment' | 'status' | 'pinned' | 'unread' | 'parentId' | 'createdAt' | 'createdBy' | 'baseRef' | 'keepBranch'
+  'displayName' | 'comment' | 'status' | 'pinned' | 'unread' | 'parentId' | 'createdAt' | 'createdBy' | 'baseRef' | 'keepBranch' | 'projectGroupId' | 'lastActivityAt' | 'instanceId'
 > {
   return {
     displayName: row.display_name,
@@ -156,6 +177,9 @@ export function metadataOf(row: WorktreeRow): Pick<
     createdAt: row.created_at ?? 0,
     createdBy: (['window', 'cli', 'api'] as const).find((by) => by === row.created_by) ?? 'external',
     baseRef: row.base_ref,
-    keepBranch: row.keep_branch !== 0
+    keepBranch: row.keep_branch !== 0,
+    projectGroupId: row.project_group_id,
+    lastActivityAt: row.last_activity_at,
+    instanceId: row.instance_id || `unverified:${row.id}`
   }
 }

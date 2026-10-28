@@ -19,6 +19,7 @@ import { PanelToggles } from './plugins/PanelToggles'
 import { PluginSlot } from './plugins/PluginSlot'
 import { useRegion } from './plugins/useRegion'
 import { useThemeVariables } from './plugins/useThemeVariables'
+import { ActivityItems } from './plugins/ActivityItems'
 
 function NoToken() {
   return (
@@ -37,6 +38,7 @@ const PANEL_MAX_WIDTH = 4096
 const EDITOR_MIN_WIDTH = 320
 const DEFAULT_PANEL_WIDTH = 360
 const SIDE_ACTIVITY_WIDTH = 40
+const ACTIVITY_ITEMS_WIDTH = 44
 
 type ResizeDrag = { pointerId: number; startX: number; startWidth: number; width: number }
 
@@ -158,14 +160,17 @@ export function App() {
   }, [])
 
   const panel = layout.panel !== null && model?.panels.some((candidate) => candidate.id === layout.panel) ? layout.panel : null
+  const hasActivityItems = (model?.activityItems.length ?? 0) > 0
   const activityWidth = layout.activityBarPosition === 'side' ? Math.min(SIDE_ACTIVITY_WIDTH, viewportWidth) : 0
   const sidebarWidth = Math.min(layout.sidebar ? 240 : 44, Math.max(0, viewportWidth - activityWidth))
   const widthAfterSidebar = Math.max(0, viewportWidth - sidebarWidth - activityWidth)
+  const activityItemsWidth = hasActivityItems ? Math.min(ACTIVITY_ITEMS_WIDTH, widthAfterSidebar) : 0
+  const widthAfterActivityItems = Math.max(0, widthAfterSidebar - activityItemsWidth)
   // If the viewport cannot fit a 220px panel at all, contract the track instead of overflowing.
-  const panelMinWidth = Math.min(PANEL_MIN_WIDTH, widthAfterSidebar)
+  const panelMinWidth = Math.min(PANEL_MIN_WIDTH, widthAfterActivityItems)
   const panelMaxWidth = Math.max(
     panelMinWidth,
-    Math.min(PANEL_MAX_WIDTH, widthAfterSidebar - EDITOR_MIN_WIDTH)
+    Math.min(PANEL_MAX_WIDTH, widthAfterActivityItems - EDITOR_MIN_WIDTH)
   )
   // No saved width keeps the shell's former min-360px, half-viewport panel geometry.
   const desiredPanelWidth =
@@ -178,11 +183,35 @@ export function App() {
       ? clampPanelWidth(panelWidthOverride.width, panelMinWidth, panelMaxWidth)
       : persistedWidth
   const activityPosition = layout.activityBarPosition
+  const panelTrack = panel === null ? '' : ' minmax(var(--panel-min-width), var(--panel-width))'
+  const gridTemplateAreas =
+    activityPosition === 'top'
+      ? panel === null
+        ? '"activity activity activity" "sidebar main activity-items"'
+        : '"activity activity activity activity" "sidebar main activity-items panel"'
+      : activityPosition === 'side'
+        ? panel === null
+          ? '"activity sidebar main activity-items"'
+          : '"activity sidebar main activity-items panel"'
+        : panel === null
+          ? '"sidebar main activity-items"'
+          : '"sidebar main activity-items panel"'
   const layoutStyle = {
     '--activity-width': `${activityWidth}px`,
     '--sidebar-width': `${sidebarWidth}px`,
     '--panel-min-width': `${panelMinWidth}px`,
-    '--panel-width': `${panelWidth}px`
+    '--panel-width': `${panelWidth}px`,
+    // The contribution rail needs a track without replacing the configurable panel geometry.
+    ...(hasActivityItems
+      ? {
+          gridTemplateColumns:
+            activityPosition === 'side'
+              ? `${activityWidth}px ${sidebarWidth}px minmax(0, 1fr) ${activityItemsWidth}px${panelTrack}`
+              : `${sidebarWidth}px minmax(0, 1fr) ${activityItemsWidth}px${panelTrack}`,
+          gridTemplateAreas,
+          ...(activityPosition === 'top' ? { gridTemplateRows: '36px minmax(0, 1fr)' } : {})
+        }
+      : {})
   } as CSSProperties
 
   useEffect(() => {
@@ -193,13 +222,12 @@ export function App() {
   }, [layout.panelWidths, panel, panelWidthOverride])
 
   if (state.connection === 'no-token') return <NoToken />
-
   const statusBars = model?.statusBars ?? []
   return (
     <div className="app">
       <ConnectionBanner />
       <div
-        className={`layout${panel !== null ? ' with-panel' : ''}${activityPosition ? ` activity-${activityPosition}` : ''}`}
+        className={`layout${panel !== null ? ' with-panel' : ''}${layout.sidebar ? '' : ' no-sidebar'}${activityPosition ? ` activity-${activityPosition}` : ''}${hasActivityItems ? ' with-activity-items' : ''}`}
         style={layoutStyle}
       >
         {activityPosition === 'top' && (
@@ -214,6 +242,7 @@ export function App() {
         )}
         <Sidebar />
         <MainArea />
+        {hasActivityItems && <ActivityItems />}
         {panel !== null && (
           <PanelColumn
             id={panel}

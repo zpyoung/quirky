@@ -338,6 +338,7 @@ export function buildUiModel(input: {
   const model: UiModel = {
     sidebarSections: slot('sidebar-section').sort(byOrder),
     statusBars: slot('status-bar').sort(byOrder),
+    activityItems: slot('activity-item').sort(byOrder),
     panels: slot('panel').sort(byOrder),
     views: slot('view').sort((a, b) => compare(a.id, b.id)),
     overlays: slot('overlay').sort(byOrder),

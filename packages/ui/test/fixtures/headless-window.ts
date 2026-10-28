@@ -31,7 +31,8 @@ export type HeadlessWindowOptions = {
 }
 
 // happy-dom replaces these with versions tied to its window, which stop working once it closes;
-// React's scheduler keeps whichever it saw first, so every window must get the runtime's own
+// React's scheduler keeps whichever it saw first, so each window needs the runtime's versions.
+// Fetch classes must also stay in Bun's realm: Bun.serve cannot return a Happy DOM Response.
 const RUNTIME_GLOBALS = [
   'setTimeout',
   'clearTimeout',
@@ -42,6 +43,9 @@ const RUNTIME_GLOBALS = [
   'queueMicrotask',
   'MessageChannel',
   'performance',
+  'Request',
+  'Response',
+  'Headers',
   'fetch',
   'WebSocket'
 ] as const

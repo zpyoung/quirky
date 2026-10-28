@@ -473,7 +473,18 @@
 - **Revisit if:** the combined runner loses per-attempt measurements or a local path executes against stale dependencies
 - **Source:** locked by docs/loop/decisions/fix-test-cost.md and docs/loop/decisions/m5-structured-runner.md
 
+## D44: Retain the landed sidebar activity rail without losing editor geometry
+- **Question:** How should the reported sidebar-extras shell conflict combine its new contributions?
+- **Options:** lose activity items; overwrite the editor/dock shell; combine additive slots and geometry
+- **Chose:** repair the concrete bg_99 rejection against pinned 86006973211449a6503aaceb03837149b2ac77af. Read updated sidebar-extras D1–D37 and Progress completely. Mount ActivityItems between main content and the single resizable panel. Reserve its 44px rail only when items exist, including the rail in panel width limits and the unset/top/side activity-bar grids. Keep existing panel controls, status bars, dock/accessory contracts, daemon palette and slot composition.
+- **Why:** incoming D27/D30 supersede its historical block with approved core landing; D31 explicitly requires both activity-item and status-bar contributions. This does not add deferred review filters, execution ownership or another dogfood/review campaign.
+- **Evidence:** SidebarShellMerge; only App.tsx required manual conflict changes; no protected/foreign edits
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** activity rail placement or panel resizing regresses the editor minimum/main layout
+- **Source:** locked by docs/loop/decisions/m2-sidebar-extras.md
+
 ## Progress
-Step 7 resubmission ready: combine incoming test-cost profiling with isolated test children and candidate dependency bootstrap (D43). The only failing scripts case was the manifest-free profiling CLI fixture; its narrow runner fix passes all 18 suite-runner cases, and typecheck passes. The other 67 scripts cases passed in bg_95. All prior core, real handoff, packaged assets, syntax fence, affected-package and browser proofs remain recorded. Commit/detach and resubmit; no protected or foreign integration edits and no success claim before controller acceptance. Owned implementation worktrees are being removed; verification/review/UI evidence is archived in this lane's ignored `.orca/loops/omp-until-done-8f388de7/m2-editor-evidence.tar.gz`.
+Step 7 resubmission ready: D44 combines the incoming sidebar rail with editor/dock shell geometry. bg_100 passed frozen installation/typecheck on the 570-package graph and all 18 packages/ui files on the configured remote host, with no isolated retries. All previous core, real handoff, packaged assets, syntax fence, scripts, affected-package and browser proofs remain recorded. All 29 owned implementation worktrees have been removed; archived verification/review/UI evidence remains in this lane's ignored `.orca/loops/omp-until-done-8f388de7/m2-editor-evidence.tar.gz`. Commit/detach and resubmit; no protected or foreign integration edits and no success claim before controller acceptance.
 
 Last SC-9 point: Finder drops import copies under D19, including in-worktree sources. Native SC-9 stays pending for the nightly run. Open-in-place is owned by the operator's `m4-editor-drop-open-in-place`, not an m2-editor blocker.

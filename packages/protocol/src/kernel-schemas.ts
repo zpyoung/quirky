@@ -108,6 +108,8 @@ const settingInfo = object(
     plugin: string(),
     type: { type: 'string', enum: ['boolean', 'number', 'string', 'enum'] },
     title: string(),
+    category: string(),
+    section: string(),
     description: string(),
     default: {},
     minimum: { type: 'number' },
@@ -165,6 +167,7 @@ const uiModel = object(
   {
     sidebarSections: listOf({ type: 'object' }),
     statusBars: listOf({ type: 'object' }),
+    activityItems: listOf({ type: 'object' }),
     panels: listOf({ type: 'object' }),
     views: listOf({ type: 'object' }),
     overlays: listOf({ type: 'object' }),
@@ -176,7 +179,7 @@ const uiModel = object(
     theme: object({ chosen: string(), active: string() }, ['chosen', 'active']),
     modules: { type: 'object', additionalProperties: true }
   },
-  ['sidebarSections', 'statusBars', 'panels', 'views', 'overlays', 'commands', 'keybindings', 'settings', 'menuItems', 'themes', 'theme', 'modules']
+  ['sidebarSections', 'statusBars', 'activityItems', 'panels', 'views', 'overlays', 'commands', 'keybindings', 'settings', 'menuItems', 'themes', 'theme', 'modules']
 )
 const apiDescription = object(
   {

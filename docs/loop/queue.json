@@ -299,8 +299,9 @@
       "deps": [
         "m6-heimdall-core"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 12
     },
     {
       "id": "fix-flaky-quirky-worktree-window-projects",
@@ -380,8 +381,7 @@
         "m2-source-control-core",
         "m1-agent-status"
       ],
-      "status": "in-progress",
-      "lane": 7
+      "status": "done"
     },
     {
       "id": "m3-session-info",

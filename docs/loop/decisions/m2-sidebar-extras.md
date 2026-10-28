@@ -266,5 +266,148 @@ Reader: autonomous builders and later operator review — Decision: preserve the
 - **Revisit if:** the guarded driver gains ref-aware scrolling or W2 changes these surfaces
 - **Source:** assumed — autonomous
 
+## D25: Resume the preserved item after its independent repairs landed
+- **Question:** whether the returned existing branch should restart design or continue at the preserved gate
+- **Options:** discard accepted W1 work; resume the exact recorded checkpoint
+- **Chose:** resume W1 on lane 7; merge current integration, install frozen links, rerun required checks, then run the required three-lens Gemini checkpoint before W2. Preserve D17's OpenAI/Gemini binding; the resumed Gemini reachability probe passed. Incorporate the preserved exact W2 JSON seam into tech.md before dispatch.
+- **Why:** queue.ts returned the existing item and its branch; D22's regex/process prerequisites are landed. New notes/AI decisions preserve public ownership and add no sidebar scope conflict. The blocked browser item supplies no runtime browser liveness provider. ProcessScope remains the required owner for new process-starting verification.
+- **Evidence:** integration merge 0a186b8; docs/loop/decisions/fix-ask-regex-budget-20261027.md; fix-test-process-leaks.md; fix-sc31-first-shell-race.md; m2-source-control-notes-ai.md; sa-browser-agent.md; /tmp/quirky-sidebar-lane5-w2-api-contract.md; pi-watch --check gemini exit 0
+- **Reversibility:** easy (resume procedure and precise JSON contract)
+- **Confidence:** high
+- **Revisit if:** fresh gate or checkpoint reveals an integration defect
+- **Source:** locked by docs/loop/LOOP.md
+
+## D26: Migrate the caught-up window-presence fixture instead of weakening the UI contract
+- **Question:** why the resumed W1 full-suite gate failed and which scope owns the repair
+- **Options:** make activityItems optional at runtime; migrate the incomplete test fixture
+- **Chose:** a sequential scoped wave-gate fixer adds the missing `activityItems: []` to `window-presence.test.ts` and preserves every assertion. No production fallback or test exclusion. The orchestrator audited unchanged HEAD and the single-path diff, then ran the file and typecheck.
+- **Why:** all 427 other remote files passed. Both failures and their automatic isolated rerun reached `model.activityItems.map` with an incomplete test-only UiModel. The existing layout fixture already initializes that required array. The narrow repair passed 18 tests / 40 assertions and typecheck exited 0.
+- **Evidence:** artifact://15; packages/daemon/test/plugins/window-presence.test.ts:32; packages/daemon/test/plugins/layout.test.ts:520; FixWindowFactory scope audit; `bun test packages/daemon/test/plugins/window-presence.test.ts && bun run typecheck`
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the repaired required full-suite gate fails elsewhere
+- **Source:** assumed — autonomous
+
+## D27: Apply the operator's night-mode verification override
+- **Question:** how to proceed after the operator stopped the overloaded whole-suite run
+- **Options:** treat interruption as a test result; repeat the whole suite; use affected-directory checks as directed
+- **Chose:** the stopped bg_3 prepass is an interruption, not a failing test result; no reviewer dispatched. Use `bun scripts/suite.ts packages/protocol packages/daemon/test/plugins packages/ui packages/cli plugins/quirky.repo plugins/quirky.worktree`, plus `bun test scripts`, `bun run typecheck`, and the UI build. Add the new extras plugin directory to the affected set after W2. The queue landing gate runs the whole suite.
+- **Why:** the operator explicitly superseded unattended whole-suite requirements because the shared test host was overloaded. The chosen directories cover W1's production changes and current renderer/canonical consumers; typecheck covers required-field factory migrations elsewhere.
+- **Evidence:** operator interjection in iteration 4; bg_3 exit after 10619 seconds at the prepass guard, before reviewer selection or dispatch
+- **Reversibility:** easy (verification commands)
+- **Confidence:** high
+- **Revisit if:** the operator changes night mode or affected checks show a real regression
+- **Source:** locked by operator instruction in this conversation
+
+## D28: Accept the new-host affected gate and the bounded W1 checkpoint
+- **Question:** whether the preserved W1 can advance to its successor wave
+- **Options:** reuse the operator-stopped old-host run; rerun the same affected checks on the new host
+- **Chose:** rerun on the new host. The affected-directory suite, scripts, typecheck and build chain exited 0 in 300663 ms; scripts reported 49 pass / 223 assertions. Three concurrent standard Gemini promote/fresh-refute lenses C/S/X each returned PASS with no findings, advisories, suppressions, limitations or questions; no fix batch is needed. Continue the already specified two-component W2.
+- **Why:** the second operator note declared old-host load 35 and its stopped result meaningless. The new run provides fresh completed evidence; the bounded checkpoint covers W1 source changes, not the absent W2 or a whole-queue claim. Documentation rationale was withheld from reviewer prompts.
+- **Evidence:** /tmp/quirky-sidebar-lane7.APp4Co/checkpoint-newhost/{prepass,summary,C-gate,S-gate,X-gate,C-manifest,S-manifest,X-manifest}.json; actual six pi-watch dispatches completed; bg_5 exit 0 in 548.12 seconds
+- **Reversibility:** easy
+- **Confidence:** high for exercised checks, not a completeness guarantee
+- **Revisit if:** W2 or the landing gate exposes a missed W1 seam
+- **Source:** assumed — autonomous
+
+## D29: Accept audited W2 core components after real API, CLI and mounted-renderer checks
+- **Question:** which W2 changes and repair evidence are accepted
+- **Options:** trust worker reports; audit isolated trees and exercise the changed behavior
+- **Chose:** audit unchanged HEAD, disjoint scopes and unchanged inherited main-tree dirt before committing. T2 is 354a98f; T4 is 907d7fa. Extras acceptance passed 17 tests / 194 assertions; renderer/report acceptance passed 23 tests / 181 assertions; both component typechecks exited 0. The real plugin CLI exposes state/set/activate/projection/dirty, including clear/no-active semantics.
+- **Why:** parent checks caught an invalid custom-CLI manifest without a CLI module, missing renderer imports, test nullability, a replacement fixture reusing an automatically deleted branch, a regroup fixture changing membership before rather than after opening its dialog, and drag tests reusing detached DOM nodes. Fixes retain behavioral assertions. The drop handler also clears captured drag ownership immediately. API/activity fixture deadlines now match the existing 20-second integration convention; their isolated built-in closure excludes unrelated startup plugins and does not cache a directory across fixture lifetimes.
+- **Evidence:** /tmp/quirky-sidebar-lane7.APp4Co/w2-accepted-{T2,T4,main}.json; component acceptance outputs; artifact://78; renderer 23-pass run; testprep red artifacts and scoped worker transcripts
+- **Reversibility:** medium (public plugin API and presentation behavior)
+- **Confidence:** high for exercised core behavior; exhaustive parity is not claimed
+- **Revisit if:** caught-up tests or the follow-up expose a consumer-visible defect
+- **Source:** assumed — autonomous
+
+## D30: Defer exhaustive parity and unstarted review/dogfood under the operator's sprint override
+- **Question:** how to meet the operator's 4am target after the item exceeded its time box
+- **Options:** continue all seventeen scenario checks and deep review; land the passing core and queue the remaining verification
+- **Chose:** latest operator instruction wins: no unstarted final review or dogfood campaign, affected tests/scripts/typecheck, one catch-up, then queue.ts land. Added `m2-sidebar-extras-followup` through queue.ts add with dependency on this item. It owns all-seventeen-flow completion audit, guarded browser scenarios, quiet-aging/fresh-agent-only/corrupt-preference edge coverage, and any nonblocking parity findings. Preserve existing meaningful tests; do not ship test exclusions.
+- **Why:** the operator explicitly authorized this narrower landing to unblock m4-sidebar-review-filters. W1's completed standard three-lens checkpoint remains recorded; it is not represented as a W2 final review.
+- **Evidence:** operator interjections in iteration 4; docs/loop/LOOP.md Night mode and Blocking an item; docs/loop/queue.json item m2-sidebar-extras-followup; /tmp/quirky-sidebar-lane7.APp4Co/followup.json and queue.ts add exit 0
+- **Reversibility:** easy (follow-up verification and edge completion)
+- **Confidence:** high
+- **Revisit if:** the core cannot pass its affected gate; then fix the blocker rather than claiming it passed
+- **Source:** deferred: exhaustive sidebar parity — operator-directed 4am sprint
+
+## D31: Combine incoming public UI kinds without dropping either feature
+- **Question:** how to resolve the single catch-up merge's overlapping UI API additions
+- **Options:** keep only activity-item; keep only status-bar/menu-item; combine the additive contracts
+- **Chose:** combine all three kinds and retain both `activityItems` and `statusBars` through protocol schemas, daemon model/layout, CLI output, host slot lookup, app mounting and test factories. Preserve settings category/section metadata and incoming session/runtime fields. Read all nine imported decision logs through the read-only survey; none requires a conflicting sidebar ownership change.
+- **Why:** incoming account/status-bar, terminal menu-item, Session Info, hosting and ledger features are separate surfaces. Neither replaces the Source Control activity item or existing header controls. Frozen installation and caught-up typecheck passed after conflict resolution.
+- **Evidence:** ReadIncomingDecisions; MergeUiProtocol and MergeUiHost scope reports; packages/protocol/src/ui.ts; packages/ui/src/plugins/host.ts; caught-up typecheck exit 0
+- **Reversibility:** medium (public contribution vocabulary)
+- **Confidence:** high
+- **Revisit if:** affected tests reveal an integration contract missed by the merge
+- **Source:** assumed — autonomous
+
+## D32: Prove the core runtime without starting an exhaustive dogfood campaign
+- **Question:** what runtime proof covers the changed core before landing under the sprint override
+- **Options:** tests alone; a bounded real daemon/CLI launch and surface inspection; the deferred all-scenario campaign
+- **Chose:** real quirkyd and CLI in a ProcessScope-owned temporary HOME/QUIRKY_HOME created and grouped a Git workspace, set week preferences, activated it, read its visible projection and detected one untracked change. A built-page inspection showed the loose row/repo chip, options badge, original header toggles and a live accessible “Source Control — 1 uncommitted change” activity item. This was a smoke inspection, not the skipped dogfood campaign. Both owned browser tabs closed; both smoke scopes exited 0 and removed their homes.
+- **Why:** runtime output and the actual surface prove the core path without asserting all seventeen flows. The affected gate also exposed new e2e fixture defects: Happy DOM replaced native Fetch classes used by Bun.serve; a disabled-plugin test incorrectly expected an unrelated successful worktree mutation to fail; a menu helper required a repo section after intentionally moving the row; and two title assertions pinned the wrong wording. Preserve native Request/Response/Headers in the shared headless harness, correct the two stateful fixture sequences, and delete the incidental title assertions.
+- **Evidence:** /tmp/quirky-sidebar-lane7.APp4Co/smoke.json; actual CLI smoke exit 0; owned browser screenshots omp-sshots-15b735897fcf2371.webp and omp-sshots-15b7359965cf2372.webp; initial affected gate 132 passing files plus the new e2e failure; subsequent local e2e diagnosis
+- **Reversibility:** easy
+- **Confidence:** high for exercised core behavior; final affected gate and landing are still required
+- **Revisit if:** the queued parity audit finds a flow not covered by this bounded proof
+- **Source:** assumed — autonomous
+
+## D33: Preserve semantic tests and remove obsolete presentation pins
+- **Question:** how to close the remaining affected-file failures before the operator-directed core landing
+- **Options:** restore old UI ordering/wording; weaken production error handling; migrate fixtures while retaining business outcomes
+- **Chose:** model optional extras absence with MethodNotFound in the old UI fixture; retain report status/selection checks while allowing additive fields; delete exact menu-order, DOM-position and old folder-row ordering constraints. Wait for the group-delete dialog's semantic report rather than its former title, retaining cancel, membership, deletion and report-readiness checks.
+- **Why:** the broad affected run passed 131 files, including all four new integrated e2e tests; only ui.test.ts and window-projects.test.ts failed on those old constraints. The window file then passed remotely; after removing the last obsolete folder-row ordering assertion the UI file passed remotely without retry. Final feature typecheck exited 0. No production fallback, test exclusion, or assertion repinning was used.
+- **Evidence:** affected runner outputs bg_18, bg_19 and bg_20; plugins/quirky.worktree/test/ui.test.ts; plugins/quirky.worktree/test/window-projects.test.ts; final `bun run typecheck` exit 0
+- **Reversibility:** easy
+- **Confidence:** high for affected behavior; the queue landing still runs the full merged gate
+- **Revisit if:** the landing gate exposes an actual core regression
+- **Source:** assumed — autonomous
+
+## D34: Keep the passing checks distinct from earlier script fixture timeouts
+- **Question:** whether the script gate can pass without modifying protected loop tests or their deadlines
+- **Options:** alter protected tests; claim earlier timeouts passed; rerun with isolated Git configuration
+- **Chose:** no protected-code or timeout changes. `env GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 bun test scripts` passed 62 tests / 464 assertions; the following typecheck exited 0. This pass does not prove inherited Git configuration caused the prior timing failures. All 133 affected files have passing observations across the broad run and focused repairs, rather than one clean broad run.
+- **Why:** fake-Git-repository script fixtures should not depend on user/system Git configuration. The final actual output is green; earlier five-second timeouts remain recorded honestly.
+- **Evidence:** artifact://107; bg_23 exit 0 in 87.34 seconds; affected broad run and focused remote repairs
+- **Reversibility:** easy
+- **Confidence:** high for observed results; no causal claim about the timing variation
+- **Revisit if:** the queue's unmodified full merged gate fails
+- **Source:** assumed — autonomous
+
+## D35: Repair the landing conflict without dropping ledger retention safety
+- **Question:** what to do when queue.ts land rejected a newer integration conflict after the planned catch-up
+- **Options:** abandon the core; drop incoming ledger checks; perform the corrective merge required by LOOP.md step 7.3
+- **Chose:** corrective merge only. Group deletion remains subtree-aware and now awaits the incoming ledger-retention guard over all subtree IDs before mutation. UI and CLI previews derive matching subtree IDs and revision snapshots through public groupList; preview errors fail closed. Keep incoming Open Ledger actions, retention notices, terminal-dock styles and accessory behavior. The remaining old ledger-window readiness predicate now uses the enabled delete action rather than its former dialog title.
+- **Why:** choosing either side wholesale would discard either child membership cleanup or retention revision safety. The first landing attempt stopped on conflicts, not test failures. Updated ledger/dock/browser decision logs introduced no locked conflict. The corrective affected run passed 61 of 62 files; the remaining ledger-window failure was its old title predicate, now removed. Its focused verification is pending.
+- **Evidence:** bg_24 landing conflict; MergeLedgerGroups, MergeLedgerSidebar and ReadLandingDecisions; post-merge typecheck exit 0; bg_25 affected output; actual CLI smoke exit 0 with groupAssigned/groupReleased/childGroupDeleted true and temporary home removed
+- **Reversibility:** medium (retention guard and public deletion semantics)
+- **Confidence:** high for exercised core behavior; queue verification is still required
+- **Revisit if:** the focused consumer check or full merged landing gate fails
+- **Source:** locked by docs/loop/LOOP.md step 7.3; assumed — autonomous (additive merge)
+
+## D36: Verify the corrective merge and retry the normal landing gate
+- **Question:** whether the ledger-aware correction is ready for another landing attempt
+- **Options:** bypass retention coverage; keep correcting incidental title pins; verify the affected consumer and retry
+- **Chose:** the focused ledger window file passed remotely without retry; script tests passed 62/0 with 464 assertions under isolated Git configuration, and typecheck exited 0. Combined with the preceding 61 passing affected files, the corrective scope is verified. Retry the unmodified queue landing command with a private Git defaults file containing the same observed author identity, so temporary test repositories can still override their own identities locally.
+- **Why:** this preserves both retention behavior and fixture independence without modifying protected loop code, deadlines, verification commands or user Git configuration. The real CLI smoke additionally proved child-group deletion and membership release after the guard integration.
+- **Evidence:** artifact://118; bg_26 exit 0; actual `git var` identities; /tmp/quirky-sidebar-lane7.APp4Co/smoke.json; private landing.gitconfig
+- **Reversibility:** easy
+- **Confidence:** high for exercised correction; full merged landing verification is pending
+- **Revisit if:** the normal queue gate fails or integration advances with another conflict
+- **Source:** assumed — autonomous
+
+## D37: Resolve the documentation-only landing race and retry immediately
+- **Question:** how to proceed when the second queue attempt encountered another moving integration tip
+- **Options:** repeat long semantic verification; drop the feature documentation; combine the additive README edits and recheck types
+- **Chose:** combine the existing sidebar API guidance with incoming public-protocol path guidance, retain the automatically merged lockfile and structured fixture updates, and retry landing after typecheck exited 0. Read the incoming test-cost, PTY-host and updated structured-runner decisions; retain their ownership and public-source mapping contracts.
+- **Why:** the only conflict was README.md; no runtime conflict or new feature failure was reported. The queue remains responsible for fresh full merged verification. No new review, dogfood or semantic suite is started for this documentation resolution.
+- **Evidence:** bg_27 conflict before verification; additive README resolution; latest `bun run typecheck` exit 0 in 24.33 seconds
+- **Reversibility:** easy
+- **Confidence:** high for this conflict resolution; full landing remains pending
+- **Revisit if:** the queue names a real merged-source failure
+- **Source:** assumed — autonomous (operator-directed fast landing)
+
 ## Progress
-Blocked at LOOP.md step 5, W1 mandatory suite gate; do not land. Both reviewed specs and W1 canonical/public-UI implementation are preserved. W2 presentation plugin and worktree-renderer integration were not started, so the four-feature item is not complete. All agents and finite/background commands have returned; smoke processes and browsers were stopped and temporary homes removed. Required prerequisite: repair fix-ask-regex-budget-20261027 and lane-7 PTY gate, restore this preserved branch to build/m2-sidebar-extras, merge current integration/read new decisions, install links, run the required gate; only then run the W1 three-lens Gemini checkpoint and proceed with W2. The resumable journal/plan/audits are in /tmp/quirky-sidebar-lane5-*; an exact W2 JSON seam draft is /tmp/quirky-sidebar-lane5-w2-api-contract.md and must be incorporated into tech.md before worker dispatch. Inherited .serena/ remains untouched/uncommitted.
+Second landing conflict was documentation-only and is resolved additively; latest typecheck passes. Core semantic/script/runtime evidence remains D29–D36. Commit this correction, detach and retry queue.ts land immediately with the private Git defaults; do not restart review/dogfood or another semantic campaign. The queued follow-up owns exhaustive parity. All workers and runtime resources have returned; inherited .serena/ and test-migrated.test.ts remain untouched/uncommitted.
