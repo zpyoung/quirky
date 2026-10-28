@@ -154,5 +154,7 @@
 - **Revisit if:** the composed gate or canonical retry names another failure
 - **Source:** locked by docs/loop/LOOP.md failed-land retry procedure
 
+Recovery verification: merge541e682f passed fresh `bun run typecheck && bun packages/ui/build.ts` exit0/33.05s, including the combined UI lint registry, root/mobile/prepared-desktop typing and11host/vendor files/25plugin UI modules. This is current compiled-source evidence, not a new suite or browser/native acceptance claim.
+
 ## Progress
-First canonical landing refused concurrent contracts; required recovery D14 is resolved, pending fresh compiler/build before retry. Original sole catch-up c6a1c69a and tests fe5b6f95 remain intact. All four component worktrees and owned runtimes are already removed/stopped. Earlier source proof and limitations remain D9–D13; no suite/model/native clearance is inferred. Next: commit recovery, run typecheck/build, record its actual result, detach and retry canonical queue land. Preserve evidence and remove owned scratch only after authoritative success.
+Ready for authoritative landing retry: required recovery541e682f preserves TextField refs and StatusDot progress; fresh full typecheck/UIlint and actual UI build passed33.05s. Earlier source/browser evidence and its limits remain D9–D13; all workers, checks and owned runtimes are stopped, all four component worktrees removed. Commit this receipt, detach and retry canonical queue land; await actual success before removing owned scratch and ending this one-item iteration.
