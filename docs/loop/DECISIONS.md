@@ -769,6 +769,8 @@ files, not this one.
 | medium | high | [m1-term-daemon D24](decisions/m1-term-daemon.md) | History is rendered on read by replaying a bounded window of the log, not stored as rows | locked by docs/architecture.md |
 | medium | high | [m1-term-daemon D41](decisions/m1-term-daemon.md) | Catching up with build/roadmap (m1-providers) keeps both sides; the exit columns become migration 3 | assumed — autonomous |
 | medium | high | [m1-term-daemon D42](decisions/m1-term-daemon.md) | A second catch-up merged m1-launch-settings; the exit columns become migration 4 | assumed — autonomous |
+| medium | high | [ui-screenshot-review D2](decisions/ui-screenshot-review.md) | Capture the real daemon-served desktop renderer through Chromium | assumed — autonomous |
+| medium | high | [ui-screenshot-review D3](decisions/ui-screenshot-review.md) | Discover contribution coverage dynamically and fail closed | assumed — autonomous |
 | medium | high | [m6-heimdall-control D1](decisions/m6-heimdall-control.md) | Ship controls and fleet together on the core plugin | locked by docs/loop/queue.json |
 | medium | high | [m6-heimdall-control D4](decisions/m6-heimdall-control.md) | Keep remote and worker authority honest | locked by docs/loop/decisions/m6-heimdall-core.md |
 | medium | high | [m6-heimdall-control D6](decisions/m6-heimdall-control.md) | Preserve conditional confirmations and unified notification ownership | locked by docs/loop/decisions/m1-notifications.md |
@@ -1008,6 +1010,7 @@ files, not this one.
 | easy | medium | [m1-term-daemon D44](decisions/m1-term-daemon.md) | The fix batch closed every Final Round 1 finding; two fixer notes are accepted as limits | assumed — autonomous |
 | easy | medium | [m1-term-daemon D48](decisions/m1-term-daemon.md) | The e2e harness kills what it started even when a run dies; a daemon lock test leaks fake hosts | assumed — autonomous |
 | easy | medium | [m1-term-daemon D49](decisions/m1-term-daemon.md) | The first land failed in the integration tree; the new package links were copied in by hand, as m1-providers D51 did | assumed — autonomous |
+| easy | medium | [ui-screenshot-review D4](decisions/ui-screenshot-review.md) | Use a separate cross-family vision reviewer and a per-image 85/100 floor | assumed — autonomous |
 | easy (documentation and later amendments) | high | [sa-browser-agent D2](decisions/sa-browser-agent.md) | Answer workflow questions autonomously without a visual companion | locked by docs/loop/LOOP.md |
 | easy (additional platform implementations) | high | [sa-browser-agent D9](decisions/sa-browser-agent.md) | Build and exercise macOS only with portable primitives where cheap | deferred: platform |
 | easy (next execution run) | high | [sa-browser-agent D10](decisions/sa-browser-agent.md) | Pair omp implementation tasks with Gemini after Opus preflight failure | assumed — autonomous |
@@ -2498,6 +2501,18 @@ files, not this one.
 | easy | high | [m1-term-daemon D45](decisions/m1-term-daemon.md) | The UI pass found that a restored pane lost its old output; GROUND no longer moves the cursor | assumed — autonomous |
 | easy | high | [m1-term-daemon D46](decisions/m1-term-daemon.md) | All UI scenarios passed in the web window, across three passes | assumed — autonomous |
 | easy | high | [m1-term-daemon D47](decisions/m1-term-daemon.md) | No native-only scenarios | assumed — autonomous |
+| easy | high | [ui-screenshot-review D1](decisions/ui-screenshot-review.md) | Deliver the approved capture-and-review command, not a restyle | locked by docs/quirk/specs/2026-10-28-ui-redesign/logic.md |
+| easy | high | [ui-screenshot-review D5](decisions/ui-screenshot-review.md) | Isolate app state and own all launched processes | locked by docs/loop/LOOP.md |
+| easy | high | [ui-screenshot-review D6](decisions/ui-screenshot-review.md) | Build-first changes the execution gates, not the delivered command | locked by docs/loop/LOOP.md |
+| easy | high | [ui-screenshot-review D7](decisions/ui-screenshot-review.md) | Use portable browser/Git APIs; native platform coverage remains macOS | deferred: platform |
+| easy | high | [ui-screenshot-review D8](decisions/ui-screenshot-review.md) | Developer visual QA does not add an app screenshot API | locked by docs/roadmap.md |
+| easy | high | [ui-screenshot-review D9](decisions/ui-screenshot-review.md) | Supply an isolated public theme fixture only for a missing appearance | assumed — autonomous |
+| easy | high | [ui-screenshot-review D10](decisions/ui-screenshot-review.md) | Review genuine empty states instead of rejecting every empty-state component | locked by docs/quirk/specs/2026-10-28-ui-redesign/logic.md |
+| easy | high | [ui-screenshot-review D11](decisions/ui-screenshot-review.md) | Wait for settled visible content and honor browser shutdown ownership | assumed — autonomous |
+| easy | high | [ui-screenshot-review D12](decisions/ui-screenshot-review.md) | Parse the observed reviewer identity header including its alias suffix | assumed — autonomous |
+| easy | high | [ui-screenshot-review D13](decisions/ui-screenshot-review.md) | The CLI, not Playwright, owns interruption and final evidence | assumed — autonomous |
+| easy | high | [ui-screenshot-review D14](decisions/ui-screenshot-review.md) | Compose the landed UI gate and use genuine built-in appearance pins | supersedes ui-screenshot-review D9 |
+| easy | high for exercised shell/editor/git, score/identity and interrupt paths; full-inventory and native quality remain unclaimed | [ui-screenshot-review D15](decisions/ui-screenshot-review.md) | Final caught-up smoke and canonical gate passed without a full visual-approval claim | assumed — autonomous |
 | easy | high | [m6-heimdall-control D2](decisions/m6-heimdall-control.md) | Resolve observable gray areas with the source defaults | locked by docs/loop/LOOP.md |
 | easy | high | [m6-heimdall-control D3](decisions/m6-heimdall-control.md) | Night mode uses one combined specification and a three-component wave | assumed — autonomous |
 | easy | high | [m6-heimdall-control D5](decisions/m6-heimdall-control.md) | Verify only macOS and isolate process state | deferred: platform |
