@@ -110,5 +110,27 @@
 - **Revisit if:** end-phase suites, native runs or independent golden review reveal a defect
 - **Source:** locked by docs/loop/LOOP.md
 
+## D11: Recover the controller's real concurrent merge failure and re-exercise current composition
+- **Question:** first authoritative land refused the concurrent roadmap merge
+- **Options:** bypass the queue gate; drop incoming source; perform the required recovery merge and preserve both restyles
+- **Chose:** recovery61013dd6 brings Tasks/Worktrees; keep unioned lint enrollment and remove both obsolete Notification and workspace-activity-controls rules after no current source consumers. All incoming Tasks D1–D10 and Worktrees D1–D17 decisions read in full; shared contracts/menu ownership/exact routing remain composed
+- **Why:** the controller failure is the only reason for this second roadmap merge. Its two conflicts are overlapping dead-CSS removals and additive lint entries, not competing feature behavior. No suppressed diagnostics or product retries/deadlines
+- **Evidence:** bg6 exit1 concurrent merge refusal; merge61013dd6; AskRecoveryConstraints report; bg7 canonical typecheck exit0 in31.28s and rebuilt11host/25plugin modules
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a subsequent controller attempt reports another concrete merge or type failure
+- **Source:** assumed — autonomous
+
+## D12: Keep pre-recovery and current-source proof distinct
+- **Question:** shared styles changed in recovery, so earlier renderer proof cannot stand in for final composition
+- **Options:** relabel earlier screenshots as current; run a full campaign; repeat only affected current integration paths
+- **Chose:** a new private runtime/CDP exercised merged Ask option selection/submission, actual12px host token, sandboxed inert preview dark→light, notification off/dependent-disabled/menu-bar-independent state and no horizontal overflow. Pageerrors[]; both screenshots retained separately. No new provider/native action
+- **Why:** confirms rebuilt composition without duplicating full six-input/fixture-transcript work or claiming tests/scoring. Earlier six-input canonical envelope, Structured fixture/filter/mono proof and notification range/refusal/test receipts remain explicitly pre-recovery
+- **Evidence:** .quirk/build-loop/ui-restyle-ask/recovery-receipt.json; recovery-current-ask-dark.webp and recovery-current-notifications-light.webp; supervisorask-restyle-l8-recovery-ui
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** final source changes after these gates
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-Ready to land after final source typecheck and actual renderer smoke. Both incoming logs read in full; sole roadmap catch-up85327495; no new feature-flow deferral. All implementers/check jobs/owned browser sessions and private daemon/Chromium service finished; supervisor exited0 after ProcessScope cleanup. Next commit final owned source/docs, detach, run authoritative queue land ui-restyle-ask and await receipt in this turn. No tests, full dogfood, review, native/provider-turn or screenshot scoring pass is claimed.
+Ready for canonical retry. Candidate includes required recovery61013dd6, both incoming logs read in full, canonical types/UIlint/root/mobile/preparedDesktop passed31.28s, current rebuild and new isolated renderer proof passed. All owned browser/runtime resources stopped and component trees removed. Next commit these receipts/docs, detach and retry authoritative queue land ui-restyle-ask, awaiting its result in this turn. Earlier bounded receipts remain qualified; no suites, full dogfood, review, native/provider-turn or golden score claim.
