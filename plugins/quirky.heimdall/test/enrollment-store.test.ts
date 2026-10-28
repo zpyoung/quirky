@@ -9,6 +9,8 @@ import { openPluginStore } from '../../../packages/daemon/src/plugins/stores'
 import { createEnrollmentService } from '../src/enrollment'
 import { createKindRegistry } from '../src/registry'
 import { createKernelStore } from '../src/store'
+import { budgetUsage } from '../src/budget'
+import { createKernelService } from '../src/service'
 
 const tempHomes: string[] = []
 const openedHandles: Array<() => void> = []
@@ -233,40 +235,86 @@ describe('Heimdall persistence and enrollment', () => {
     expect(() => store.append(enrollment.watcherId, { ...terminal, eventId: 'terminal-2' })).toThrow()
   })
 
-  test('terminal compaction keeps terminal summary and unresolved attempts and pinned observations only', () => {
+  test('terminal compaction preserves the public final budget while active budgets remain live', () => {
     const fixture = makeContext()
-    const store = createKernelStore(fixture.context)
-    const enrollment = makeEnrollment()
-    store.save(enrollment)
-    store.append(enrollment.watcherId, {
+    const service = createKernelService(fixture.context, () => 500)
+    const store = service.store
+    const terminalEnrollment = makeEnrollment({ budget: { wallClockActiveMs: null, turns: 1 } })
+    const activeEnrollment = makeEnrollment({
+      watcherId: 'watcher-active',
+      workspaceKey: 'local::/workspace/active',
+      workspacePath: '/workspace/active',
+      budget: { wallClockActiveMs: null, turns: 2 }
+    })
+    store.save(terminalEnrollment)
+    store.save(activeEnrollment)
+    store.append(terminalEnrollment.watcherId, {
       eventId: 'fact', atMs: 1, class: 'fact', origin: 'owner', kind: 'evidence', resolved: true,
       evidenceKind: 'ordinary', payload: { keep: false }
     })
-    store.append(enrollment.watcherId, {
+    store.append(terminalEnrollment.watcherId, {
       eventId: 'attempt', atMs: 2, class: 'fact', origin: 'owner', kind: 'attempt', resolved: false,
       attemptId: 'pending', fingerprint: 'fingerprint', action: { kind: 'write' }, state: 'running'
     })
-    store.append(enrollment.watcherId, {
+    store.append(terminalEnrollment.watcherId, {
       eventId: 'unresolved-observation', atMs: 3, class: 'observation', origin: 'owner', kind: 'attempt-abandoned',
       resolved: false, attemptId: 'pending', reason: 'uncertain'
     })
+    const terminalGeneration = `initial:${terminalEnrollment.watcherId}`
+    store.append(terminalEnrollment.watcherId, {
+      eventId: 'terminal-interval-open', atMs: 100, class: 'fact', origin: 'owner',
+      kind: 'interval-open', resolved: true, intervalId: 'terminal-work', cause: 'worker',
+      generation: terminalGeneration
+    })
+    store.append(terminalEnrollment.watcherId, {
+      eventId: 'terminal-interval-close', atMs: 500, class: 'fact', origin: 'owner',
+      kind: 'interval-close', resolved: true, intervalId: 'terminal-work',
+      checkpointAtMs: 500, generation: terminalGeneration, reason: 'complete'
+    })
+    store.append(terminalEnrollment.watcherId, {
+      eventId: 'terminal-turn', atMs: 400, class: 'fact', origin: 'owner', kind: 'turn', resolved: true,
+      dispatchId: 'dispatch-terminal', generation: terminalGeneration
+    })
     const summary = {
-      watcherId: enrollment.watcherId,
-      kind: enrollment.kind,
+      watcherId: terminalEnrollment.watcherId,
+      kind: terminalEnrollment.kind,
       state: 'complete',
       reason: 'finished',
-      atMs: 4,
-      budget: { activeMs: 10, turns: 1, exhausted: null }
+      atMs: 500,
+      budget: budgetUsage(store.journal(terminalEnrollment.watcherId), 500, terminalEnrollment.budget)
     }
-    store.terminal({ ...enrollment, enabled: false, terminalAtMs: 4 }, summary)
+    expect(summary.budget).toEqual({ activeMs: 400, turns: 1, exhausted: 'budget-turns' })
+    store.terminal({ ...terminalEnrollment, enabled: false, terminalAtMs: 500 }, summary)
 
-    const journal = store.journal(enrollment.watcherId)
+    const journal = store.journal(terminalEnrollment.watcherId)
     expect(journal.map((entry) => entry.kind)).toContain('terminal')
     expect(journal.some((entry) => entry.eventId === 'attempt')).toBe(true)
     expect(journal.some((entry) => entry.eventId === 'unresolved-observation')).toBe(true)
     expect(journal.some((entry) => entry.eventId === 'fact')).toBe(false)
-    expect(store.summary(enrollment.watcherId)).toEqual(summary)
-    expect(store.get(enrollment.watcherId)?.terminalAtMs).toBe(4)
+    expect(store.summary(terminalEnrollment.watcherId)).toEqual(summary)
+    expect(store.get(terminalEnrollment.watcherId)?.terminalAtMs).toBe(500)
+    expect(journal.some((entry) => entry.kind === 'interval-close' || entry.kind === 'turn')).toBe(false)
+    expect(service.inspect(terminalEnrollment.watcherId)[0]?.budget).toEqual(summary.budget)
+
+    const activeGeneration = `initial:${activeEnrollment.watcherId}`
+    store.append(activeEnrollment.watcherId, {
+      eventId: 'active-interval-open', atMs: 200, class: 'fact', origin: 'owner',
+      kind: 'interval-open', resolved: true, intervalId: 'active-work', cause: 'worker',
+      generation: activeGeneration
+    })
+    store.append(activeEnrollment.watcherId, {
+      eventId: 'active-interval-close', atMs: 350, class: 'fact', origin: 'owner',
+      kind: 'interval-close', resolved: true, intervalId: 'active-work',
+      checkpointAtMs: 350, generation: activeGeneration, reason: 'checkpoint'
+    })
+    store.append(activeEnrollment.watcherId, {
+      eventId: 'active-turn', atMs: 300, class: 'fact', origin: 'owner', kind: 'turn', resolved: true,
+      dispatchId: 'dispatch-active', generation: activeGeneration
+    })
+    const activeBudget = budgetUsage(store.journal(activeEnrollment.watcherId), 500, activeEnrollment.budget)
+    expect(activeBudget).toEqual({ activeMs: 150, turns: 1, exhausted: null })
+    expect(service.inspect(activeEnrollment.watcherId)[0]?.budget).toEqual(activeBudget)
+    fixture.close()
   })
 
   test('future schema is inspected read-only without invoking openStore or altering the database', () => {

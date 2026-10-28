@@ -833,8 +833,7 @@ describe('quirky.orchestration daemon API acceptance', () => {
     }))
     try {
       await waitForAcceptedRequest(coordinator, waiterRequest.requestId)
-      const overlapping = await consume(coordinator, { wait: true, timeoutMs: 100, types: ['question'] })
-      expect(overlapping).toMatchObject({ cancelled: true, waitInterrupted: 'waiter_exists' })
+      await expectReason(consume(coordinator, { wait: true, timeoutMs: 100, types: ['question'] }), 'waiter_exists')
       await send(coordinator, { to: { kind: 'run', runId: run.id }, type: 'status', subject: 'status first', body: 'does not match filter' })
       const afterStatus = await call<{ state: string }>(coordinator, REQUEST_SHOW, { requestId: waiterRequest.requestId })
       expect(afterStatus.state).toBe('pending')

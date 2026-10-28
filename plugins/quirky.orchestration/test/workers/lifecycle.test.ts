@@ -28,6 +28,7 @@ describe('worker lifecycle', () => {
       f.close()
     }
   })
+
   test('a failed report received from start_unknown settles Worker before Dispatch and Task', () => {
     const f = createLifecycleFixture({ state: 'start_unknown' })
     try {
