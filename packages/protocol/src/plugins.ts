@@ -87,6 +87,29 @@ export type PluginContext = {
   notify(notification: PluginNotification): void
   /** The kernel's session launch environment and launch-hook pipeline. */
   readonly launch: PluginLaunch
+  /** Admits authenticated remote clients through the same RPC dispatcher and stream lifecycle. */
+  readonly clients: PluginClients
+}
+
+/** Trusted transports authenticate peers before admission; authorization is checked on every call. */
+export type PluginClients = {
+  accept(options: {
+    role: 'mobile'
+    deviceId: string
+    name: string
+    /** Must revalidate the live credential and throw when a method/params is forbidden. */
+    authorize(method: string, params: Record<string, unknown>): void | Promise<void>
+    sendText(text: string): void
+    sendBinary(bytes: Uint8Array): void
+    /** Called when the kernel or plugin revokes this admitted connection. */
+    close(): void
+  }): {
+    readonly id: number
+    /** Receives one decrypted JSON-RPC 2.0 request. */
+    receive(text: string): Promise<void>
+    /** Removes streams and subscriptions exactly once, without calling options.close again. */
+    disconnect(): void
+  }
 }
 
 /** The certainty metadata attached to a rejected `PluginPty.writeAccepted` call. */
@@ -238,6 +261,8 @@ export type PluginCaller =
   | {
       role: ClientRole
       name?: string
+      /** Authenticated remote identity; never taken from request params. */
+      deviceId?: string
       cwd?: string
       sessionId?: string
       worktreeId?: string

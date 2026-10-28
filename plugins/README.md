@@ -161,3 +161,105 @@ and review actions, file contents, issues, work-item searches, Projects v2, and
 connection-owned refreshes. Use `quirky api --json` for the live method, parameter,
 result, and event contracts. Fixed-cap reads report truncation, partial results, or a limit error;
 only work-item search exposes client `--page` and `--limit`.
+
+## Mobile pairing
+
+`quirky.mobile` adds the sidebar Mobile flow, **Settings > Mobile**, and the
+`quirky mobile` command group. It pairs direct LAN or tailnet clients with the
+same JSON-RPC API used by the desktop and CLI. The compatible Quirky phone app
+and its signed installation links are not distributed yet; the desktop does
+not redirect users to the incompatible Orca app or its hosted relay.
+
+```sh
+quirky mobile info --json
+quirky mobile state --json
+quirky mobile interfaces --json
+quirky mobile pair --address 192.168.1.20 --json
+quirky mobile devices --json
+quirky mobile revoke <device-uuid>
+quirky mobile configure --restore-fit-ms 60000
+quirky mobile configure --keep-phone-size
+quirky mobile open --settings
+```
+
+Treat the pairing URL and QR as credentials. Regenerating replaces the unscanned
+offer, not already-paired phones. Revocation disconnects the device immediately
+and rejects its next encrypted authentication. Device lists and state reports
+never contain tokens.
+
+Paired phones read the configured machine name and platform through
+`quirky.mobile/info`. Pairing state, generation, configuration and revocation
+remain local administration methods.
+
+The mobile-only listener starts on loopback and widens when a network offer is
+issued or a previously paired phone is restored. Its default port and fallback
+ladder are defined in
+[`transport.ts`](quirky.mobile/src/daemon/transport.ts). The desktop UI, plugin
+assets and agent hooks remain on their separate loopback listener.
+`QUIRKY_MOBILE_PORT` pins a nonzero port (`0` chooses a free test port);
+`QUIRKY_MOBILE_HOST` pins the bind address and prevents widening a pinned loopback
+listener.
+
+A phone's terminal attachment claims input and viewport ownership. Desktop output
+continues while typing is paused. Use **Take back** to restore desktop dimensions,
+or **Restore** after the phone leaves. The default retains phone dimensions until
+restored; Settings offers timed restoration. The corresponding APIs are
+`quirky.terminal/mobileState`, `/takeBack`, `/restoreFit` and `/claim`.
+
+Trusted transport plugins can use the public
+[`PluginContext.clients.accept`](../packages/protocol/src/plugins.ts) API after
+authenticating a peer. The admitted identity is immutable; authorization runs
+before each dispatch, including cached and confirmed calls. Disconnect and plugin
+revocation close its streams and subscriptions. Mobile's v2 channel seals text
+requests and binary terminal output; terminal input uses JSON-RPC, not inbound
+binary commands.
+
+Mobile views accept scriptable page input through `ui.view.open`: `stage`
+(`intro`, `install`, `pair`, `paired`), `platform`, `channel` and `address`.
+Their non-secret stage, choices, devices and error state are readable through
+`ui.state` slot reports. The live method schemas are in `quirky api --json`;
+[the behavior spec](../docs/quirk/specs/2026-10-27-sb-mobile-daemon/logic.md)
+defines the scope and limits.
+
+## Create a workspace from GitHub
+
+Use the new-workspace dialog's Smart field for `#123` or a GitHub PR/issue URL.
+The GitHub tab lists both kinds of work item and lets you select or clear a source.
+The same creation path is available from the CLI:
+
+```sh
+quirky wt create --repo demo --github '#3' --json
+quirky wt create --repo demo --github 'https://github.com/OWNER/REPO/issues/4' --issue-command skip --json
+```
+
+Replace `demo` and the URL with your registered project and work item. A URL must
+match a configured GitHub remote in that project. An unresolved source fails;
+it is never treated as a plain workspace name.
+
+API callers use `quirky.worktree/create` with `repo` and `github`. Pass the exact
+item URL when it is already known, including from a Tasks or Project row. To inspect
+the fresh source without creating anything, call `quirky.hosting/worktreeSource`
+with a registered `worktree` and `reference`.
+
+A PR checks out its verified head commit and head branch. Fork pushes target the
+contributor's repository, while the compare base remains the PR's base branch.
+Occupied or diverged local branches are refused without a reset. Issues use the
+ordinary base and branch-prefix rules. The source title supplies the default card
+label and lowercase folder slug; `--name` changes the folder, while
+`--display-name` changes the card label. Linked PR/issue identity survives note edits
+and daemon restarts.
+
+### Run a command for a linked issue
+
+Configure **Custom GitHub issue command** in Project Settings, or set `issueCommand`
+in `quirky.yaml` (`orca.yaml` is the fallback). Templates accept `{{issue}}` and
+`{{artifact_url}}`. The command runs in its own terminal, beside Setup when present.
+`--issue-command skip` suppresses it for one creation.
+
+Local configuration follows the project's command-source policy. Shared commands
+need content approval independently of setup. One-time approval pins the displayed
+script hash; changed content needs another decision and is not approved by an
+earlier prompt. CLI/API callers can pin the same content with
+`--trust-issue-command --trust-issue-command-hash <hash-from-error>`, or
+`--trust-setup --trust-setup-hash <hash-from-error>` for setup.
+Trust flags without a hash authorize the current call's script.
