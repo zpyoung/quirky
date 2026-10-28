@@ -29,5 +29,10 @@ export const editorTheme: Extension = EditorView.theme({
   '.ui-editor-conflict-current': { backgroundColor: 'color-mix(in srgb, var(--ui-working) 12%, transparent)' },
   '.ui-editor-conflict-base': { backgroundColor: 'color-mix(in srgb, var(--ui-muted) 14%, transparent)' },
   '.ui-editor-conflict-incoming': { backgroundColor: 'color-mix(in srgb, var(--ui-accent) 12%, transparent)' },
+  '.cm-line.ui-editor-line-accent': { backgroundColor: 'color-mix(in srgb, var(--ui-accent) 16%, transparent)' },
+  '.ui-editor-action-gutter': { width: 'var(--ui-space-24)', flex: 'none' },
+  '.ui-editor-action-gutter .cm-gutterElement': { display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  '.ui-editor-gutter-spacer': { display: 'inline-block', width: 'var(--ui-space-24)' },
+  '.ui-editor-inline-widget': { padding: 'var(--ui-space-4) var(--ui-space-8) var(--ui-space-4) var(--ui-space-24)', whiteSpace: 'normal', fontFamily: 'system-ui, sans-serif' },
   '.ui-editor-conflict-label': { marginLeft: 'var(--ui-space-12)', color: 'var(--ui-muted)', fontSize: 'var(--ui-font-label)', fontStyle: 'italic' },
 })
