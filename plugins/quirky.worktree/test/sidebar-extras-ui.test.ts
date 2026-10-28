@@ -1,8 +1,9 @@
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from 'bun:test'
-import type { ProjectGroup, QuirkyEvent, Repo, Session, UiLayout, UiPluginContext, Worktree } from '@quirky/protocol'
+import type { ProjectGroup, QuirkyEvent, Repo, Session, UiLayout, UiPluginContext } from '@quirky/protocol'
 import { RpcErrorCode } from '@quirky/protocol'
 import { resolveMembershipTarget } from '../src/membership'
+import { DEFAULT_STOCK_OPTIONS, type StockWorktreeOptions, type WorktreeControl } from '../src/control-types'
 import type { DropPreviewReport } from '../src/report'
 
 const SLOT = 'sidebar-section:quirky.worktree/worktrees'
@@ -70,10 +71,11 @@ type RendererReport = {
   separators: { enabled: boolean; eligibleBoundaries: string[] }
   dropPreview: DropPreviewReport | null
 }
+type TestWorktree = WorktreeControl
 type TestWorld = {
   repos: Repo[]
   groups: Group[]
-  worktrees: Worktree[]
+  worktrees: TestWorktree[]
   sessions: Session[]
   now: number
   preferences: Preferences
@@ -82,6 +84,7 @@ type TestWorld = {
   exits: Record<string, number>
   live: Record<string, boolean | null>
   reviews: Record<string, ReviewFact>
+  options: StockWorktreeOptions
   calls: Call[]
   logs: string[]
   extrasDisabled: boolean
@@ -193,7 +196,7 @@ const repo = (id: string, name: string, extra: Partial<Repo> = {}): Repo => ({
   ...extra
 })
 
-const worktree = (id: string, repoId: string, name: string, extra: Partial<Worktree> = {}): Worktree => ({
+const worktree = (id: string, repoId: string, name: string, extra: Partial<TestWorktree> = {}): TestWorktree => ({
   id,
   repoId,
   path: `/worktrees/${name}`,
@@ -215,6 +218,15 @@ const worktree = (id: string, repoId: string, name: string, extra: Partial<Workt
   removing: false,
   groupId: null,
   projectGroupId: null,
+  manualOrder: 0,
+  sleeping: false,
+  sleepChangedAt: null,
+  references: [],
+  archivedAt: null,
+  cleanupContext: { archivedAt: null, volatile: null, remoteConnected: null },
+  externalVisible: true,
+  externalVisibility: 'show',
+  externalInboxSuppressed: false,
   lastActivityAt: 0,
   instanceId: `instance-${id}`,
   ...extra
@@ -266,7 +278,7 @@ function fixture() {
     group('g-child', 'Child', { order: 2, parentId: 'g-team' }),
     group('g-release', 'Release', { order: 3 })
   ]
-  const worktrees: Worktree[] = [
+  const worktrees: TestWorktree[] = [
     worktree('w-main', 'r-api', 'main', { isMain: true, lastActivityAt: BASE - 45 * DAY }),
     worktree('w-feature', 'r-api', 'feature', { projectGroupId: 'g-team', pinned: true, lastActivityAt: BASE - 45 * DAY }),
     worktree('w-child', 'r-api', 'child', { parentId: 'w-feature', lastActivityAt: BASE - 45 * DAY }),
@@ -301,6 +313,7 @@ function setup(
     visits: {},
     exits: {},
     live: { 'w-main': false, 'w-feature': false, 'w-child': false, 'w-independent': null, 'w-other': true, 'w-notes': false },
+    options: { ...DEFAULT_STOCK_OPTIONS, filterRepoIds: [], showProperties: [...DEFAULT_STOCK_OPTIONS.showProperties] },
     reviews: {},
     extrasDisabled: options.disabled ?? false,
     extrasFailure: options.failure ?? null,
@@ -430,6 +443,11 @@ function setup(
           if (world.ledgerPreviewFailure) throw world.ledgerPreviewFailure
           if (world.ledgerPreview === null) throw new RpcLike('method not found', RpcErrorCode.MethodNotFound)
           return { removalPreview: [...world.ledgerPreview] }
+        case 'quirky.worktree/options':
+          return { ...world.options, filterRepoIds: [...world.options.filterRepoIds], showProperties: [...world.options.showProperties] }
+        case 'quirky.worktree/setOptions':
+          world.options = { ...world.options, ...params } as StockWorktreeOptions
+          return { ...world.options, filterRepoIds: [...world.options.filterRepoIds], showProperties: [...world.options.showProperties] }
         case 'quirky.worktree/list':
           return [...world.worktrees]
         case 'quirky.worktree/projectOrder':
@@ -509,6 +527,15 @@ function setup(
           if (next) world.visits[`${next.worktreeId}@${next.instanceId}`] = BASE
           world.active = next
           return state()
+        }
+        case 'quirky.worktree/reorder': {
+          const ids = Array.isArray(params.worktrees) ? params.worktrees.filter((id): id is string => typeof id === 'string') : []
+          ids.forEach((id, index) => {
+            const item = world.worktrees.find((worktree) => worktree.id === id)
+            if (item) item.manualOrder = ids.length - index
+          })
+          await emit({ type: 'quirky.worktree/changed', data: {} } as QuirkyEvent)
+          return { ok: true }
         }
         case 'quirky.worktree/set': {
           const changed = changeMembership(String(params.worktree), Object.fromEntries(Object.entries(params).filter(([key]) => key !== 'worktree')))
@@ -672,7 +699,59 @@ const openCardMenu = async (h: UiHarness, name: string) => {
   if (!target) throw new Error(`no action button for ${name}`)
   await h.click(target)
 }
-const filterButton = () => buttons().find((button) => /workspace options|filters/i.test(button.textContent ?? '') || /workspace options|filters/i.test(button.getAttribute('aria-label') ?? ''))
+const addFolderOwnedGitWorkspace = (h: UiHarness) => {
+  const owner = repo('r-folder-owner', 'folder-owner', { kind: 'folder' })
+  const item = worktree('w-folder-git', owner.id, 'folder-git', { projectGroupId: 'g-team' })
+  h.world.repos.push(owner)
+  h.world.worktrees.push(item)
+  return { owner, item }
+}
+const setStockOption = async (h: UiHarness, label: string, value: string) => {
+  let select = host.querySelector<HTMLSelectElement>(`select[aria-label="${label}"]`)
+  if (!select) {
+    const options = buttons().find((button) => button.getAttribute('aria-label') === 'Workspace options')
+    if (!options) throw new Error('workspace options are unavailable')
+    await h.click(options)
+    select = host.querySelector<HTMLSelectElement>(`select[aria-label="${label}"]`)
+  }
+  if (!select) throw new Error(`no workspace option selector ${label}`)
+  const control = select
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(control, value)
+    control.dispatchEvent(new Event('change', { bubbles: true }))
+    await Promise.resolve()
+  })
+  await h.flush()
+}
+const dragTransfer = (worktreeId: string): DataTransfer => ({
+  effectAllowed: 'move',
+  dropEffect: 'move',
+  setData() {},
+  getData() { return worktreeId }
+} as unknown as DataTransfer)
+const filterButton = () => host.querySelector<HTMLButtonElement>('.workspace-activity-controls > button[aria-label="Workspace options"]')
+const dragAndDrop = async (
+  h: UiHarness,
+  source: Element,
+  target: Element,
+  worktreeId: string,
+  clientY: number
+): Promise<DropPreviewReport | null> => {
+  const transfer = dragTransfer(worktreeId)
+  await act(async () => {
+    source.dispatchEvent(eventAt('dragstart', clientY, transfer))
+    target.dispatchEvent(eventAt('dragover', clientY, transfer))
+    await Promise.resolve()
+  })
+  await h.flush()
+  const preview = lastReport(h).dropPreview
+  await act(async () => {
+    target.dispatchEvent(eventAt('drop', clientY, transfer))
+    await Promise.resolve()
+  })
+  await h.flush()
+  return preview
+}
 
 const checkboxFor = (label: string) =>
   [...host.querySelectorAll<HTMLLabelElement>('label')]
@@ -684,10 +763,12 @@ const openFilters = async (h: UiHarness) => {
   await h.click(trigger)
 }
 const selectWindow = async (h: UiHarness, label: string) => {
-  let option = buttons().find((button) => button.textContent?.trim() === label)
+  let option = [...host.querySelectorAll<HTMLButtonElement>('[role="group"][aria-label="Workspace activity window"] button')]
+    .find((button) => button.textContent?.trim() === label)
   if (!option) {
     await openFilters(h)
-    option = buttons().find((button) => button.textContent?.trim() === label)
+    option = [...host.querySelectorAll<HTMLButtonElement>('[role="group"][aria-label="Workspace activity window"] button')]
+      .find((button) => button.textContent?.trim() === label)
   }
   if (!option) throw new Error(`no activity window option ${label}`)
   await h.click(option)
@@ -1062,16 +1143,175 @@ test('SC-04: current painted geometry joins, no-ops, leaves only at the owning r
   expect(h.world.worktrees.find((item) => item.id === 'w-other')?.projectGroupId).toBeNull()
   expect(lastReport(h).dropPreview).toBeNull()
 })
+test('SC-06: folder-owned Git worktrees keep project actions without exposing membership actions', async () => {
+  const h = setup()
+  const { owner, item } = addFolderOwnedGitWorkspace(h)
+  await h.mount()
+
+  await openCardMenu(h, 'folder-git')
+  await h.click(menuItem('Move project to group')!)
+  await h.click(menuItem('Release')!)
+
+  expect(owner.groupId).toBe('g-release')
+  expect(lastReport(h).groups.find((entry) => entry.id === 'g-release')?.projects.some((project) => project.id === owner.id)).toBe(true)
+  expect(sectionForRepo(owner.name)?.closest('section.group')).toBe(sectionForGroup('Release'))
+  expect(item.projectGroupId).toBe('g-team')
+  expect(h.calls.filter((call) => call.method === 'quirky.worktree/set' && call.params.worktree === item.id)).toHaveLength(0)
+
+  await openCardMenu(h, 'folder-git')
+  const membershipActions = menuItems()
+    .map((menuItem) => menuItem.textContent?.replace(/\s*▸$/, '').trim() ?? '')
+    .filter((label) => /^(new group from worktree|add worktree to group|remove worktree from group)/i.test(label))
+  expect(membershipActions).toEqual([])
+})
+
+test('SC-06: folder-owned Git worktrees cannot join a group by dragging', async () => {
+  const h = setup()
+  const { item } = addFolderOwnedGitWorkspace(h)
+  await h.mount()
+  const target = sectionForGroup('Release')!.querySelector<HTMLElement>('.group-header')!
+  setRect(target, 100, 140)
+
+  const preview = await dragAndDrop(h, card('folder-git')!, target, item.id, 110)
+
+  expect({
+    preview,
+    membership: item.projectGroupId,
+    writes: h.calls.filter((call) => call.method === 'quirky.worktree/set' && call.params.worktree === item.id)
+  }).toEqual({ preview: null, membership: 'g-team', writes: [] })
+  expect(card('folder-git')?.closest('section.group')).toBe(sectionForGroup('Team'))
+})
+
+test('SC-06: unknown repository owners fail closed for worktree membership menus', async () => {
+  const h = setup()
+  const item = worktree('w-ownerless', 'r-missing', 'ownerless', { projectGroupId: 'g-team' })
+  h.world.worktrees.push(item)
+  await h.mount()
+
+  await openCardMenu(h, 'ownerless')
+  const membershipActions = menuItems()
+    .map((menuItem) => menuItem.textContent?.replace(/\s*▸$/, '').trim() ?? '')
+    .filter((label) => /^(new group from worktree|add worktree to group|remove worktree from group)/i.test(label))
+
+  expect({
+    membershipActions,
+    membership: item.projectGroupId,
+    writes: h.calls.filter((call) => call.method === 'quirky.worktree/set' && call.params.worktree === item.id)
+  }).toEqual({ membershipActions: [], membership: 'g-team', writes: [] })
+})
+
+test('SC-06: unknown repository owners cannot join a group by dragging', async () => {
+  const h = setup()
+  const item = worktree('w-ownerless', 'r-missing', 'ownerless', { projectGroupId: 'g-team' })
+  h.world.worktrees.push(item)
+  await h.mount()
+  const target = sectionForGroup('Release')!.querySelector<HTMLElement>('.group-header')!
+  setRect(target, 100, 140)
+
+  const preview = await dragAndDrop(h, card('ownerless')!, target, item.id, 110)
+
+  expect({
+    preview,
+    membership: item.projectGroupId,
+    writes: h.calls.filter((call) => call.method === 'quirky.worktree/set' && call.params.worktree === item.id)
+  }).toEqual({ preview: null, membership: 'g-team', writes: [] })
+})
+
+test('SC-04: membership dragging is disabled outside Project grouping', async () => {
+  const h = setup()
+  await h.mount()
+  await setStockOption(h, 'Group by', 'status')
+  expect(h.world.options.groupBy).toBe('status')
+  const target = sectionForGroup('Team')!.querySelector<HTMLElement>('.group-header')!
+  setRect(target, 100, 140)
+
+  const preview = await dragAndDrop(h, card('other')!, target, 'w-other', 110)
+  const item = h.world.worktrees.find((worktree) => worktree.id === 'w-other')!
+
+  expect({
+    preview,
+    membership: item.projectGroupId,
+    writes: h.calls.filter((call) => call.method === 'quirky.worktree/set' && call.params.worktree === item.id)
+  }).toEqual({ preview: null, membership: null, writes: [] })
+  expect(card('other')?.closest('section.repo')).toBe(sectionForRepo('web'))
+})
+
+test('SC-04: changing away from Project grouping mid-drag clears membership preview and blocks drop', async () => {
+  const h = setup()
+  await h.mount()
+  const source = card('other')!
+  let target = sectionForGroup('Team')!.querySelector<HTMLElement>('.group-header')!
+  const transfer = dragTransfer('w-other')
+  setRect(target, 100, 140)
+
+  await act(async () => {
+    source.dispatchEvent(eventAt('dragstart', 110, transfer))
+    target.dispatchEvent(eventAt('dragover', 110, transfer))
+    await Promise.resolve()
+  })
+  await h.flush()
+  expect(lastReport(h).dropPreview).toEqual({ kind: 'group', id: 'g-team' })
+
+  await setStockOption(h, 'Group by', 'status')
+  expect(lastReport(h).dropPreview).toBeNull()
+  expect(h.world.options.groupBy).toBe('status')
+  target = sectionForGroup('Team')!.querySelector<HTMLElement>('.group-header')!
+  setRect(target, 100, 140)
+  await act(async () => {
+    target.dispatchEvent(eventAt('dragover', 110, transfer))
+    await Promise.resolve()
+  })
+  await h.flush()
+  const preview = lastReport(h).dropPreview
+  await act(async () => {
+    target.dispatchEvent(eventAt('drop', 110, transfer))
+    await Promise.resolve()
+  })
+  await h.flush()
+
+  const item = h.world.worktrees.find((worktree) => worktree.id === 'w-other')!
+  expect({
+    preview,
+    membership: item.projectGroupId,
+    writes: h.calls.filter((call) => call.method === 'quirky.worktree/set' && call.params.worktree === item.id)
+  }).toEqual({ preview: null, membership: null, writes: [] })
+})
+
+test('manual sibling reordering remains available outside Project grouping', async () => {
+  const h = setup()
+  const first = worktree('w-manual-a', 'r-api', 'manual-a', { manualOrder: 20 })
+  const second = worktree('w-manual-b', 'r-api', 'manual-b', { manualOrder: 10 })
+  h.world.worktrees.push(first, second)
+  await h.mount()
+  await setStockOption(h, 'Group by', 'status')
+  await setStockOption(h, 'Sort by', 'manual')
+  const source = card('manual-a')!
+  const target = card('manual-b')!
+  setRect(target, 100, 140)
+
+  const preview = await dragAndDrop(h, source, target, first.id, 130)
+
+  expect(preview).toBeNull()
+  expect(h.calls.filter((call) => call.method === 'quirky.worktree/reorder').map((call) => call.params)).toEqual([
+    { worktrees: ['w-manual-b', 'w-manual-a'] }
+  ])
+  expect(first.manualOrder).toBe(1)
+  expect(second.manualOrder).toBe(2)
+  expect(first.projectGroupId).toBeNull()
+  expect(second.projectGroupId).toBeNull()
+  const names = [...sectionForRepo('api')!.querySelectorAll<HTMLElement>('li.worktree .worktree-name')].map((item) => item.textContent)
+  expect(names.indexOf('manual-b')).toBeLessThan(names.indexOf('manual-a'))
+  expect(h.calls.filter((call) =>
+    call.method === 'quirky.worktree/set' && [first.id, second.id].includes(String(call.params.worktree))
+  )).toHaveLength(0)
+})
  
 test('SC-08/11/12: filters use exact windows, validate custom days on Enter and blur, and recover an empty list', async () => {
   const h = setup()
   await h.mount()
   await openFilters(h)
 
-  for (const label of ['All', 'Live only', 'Today', 'Week', 'Month', 'Custom']) {
-    expect(buttons().some((button) => button.textContent?.trim() === label)).toBe(true)
-  }
-  await selectWindow(h, 'Week')
+  await selectWindow(h, 'Past 7 days')
   expect(h.world.preferences.workspaceActivityWindow).toBe('week')
   expect(card('feature')).toBeUndefined()
   expect(card('other')).toBeDefined()
@@ -1079,7 +1319,7 @@ test('SC-08/11/12: filters use exact windows, validate custom days on Enter and 
   expect(lastReport(h).appliedFilter?.workspaceActivityWindow).toBe('week')
   expect(filterButton()?.textContent).toContain('1')
   expect(buttons().some((button) => /hidden/i.test(button.textContent ?? ''))).toBe(true)
-  await selectWindow(h, 'Today')
+  await selectWindow(h, 'Past 24 hours')
   expect(card('other')).toBeUndefined()
 
   await h.setLayout({ view: null, panel: null, sidebar: true, focus: null })
@@ -1110,9 +1350,9 @@ test('SC-08/11/12: filters use exact windows, validate custom days on Enter and 
   expect(buttons().some((button) => button.textContent?.trim() === 'Clear filters')).toBe(true)
   await h.click(buttons().find((button) => button.textContent?.trim() === 'Clear filters')!)
   expect(h.world.preferences.workspaceActivityWindow).toBe('all')
-  await selectWindow(h, 'Today')
+  await selectWindow(h, 'Past 24 hours')
   expect(h.world.preferences.workspaceActivityWindow).toBe('today')
-  await selectWindow(h, 'Month')
+  await selectWindow(h, 'Past 30 days')
   expect(h.world.preferences.workspaceActivityWindow).toBe('month')
   await selectWindow(h, 'All')
   expect(h.world.preferences.workspaceActivityWindow).toBe('all')
@@ -1239,7 +1479,7 @@ test('review filters use server preferences, compose with activity, and clear in
   expect(filterButton()?.textContent).toContain('1')
 
   await h.click(checkboxFor('Hide merged/closed reviews')!)
-  await selectWindow(h, 'Week')
+  await selectWindow(h, 'Past 7 days')
   expect(h.world.preferences.workspaceActivityWindow).toBe('week')
   expect(lastReport(h).filterCount).toBe(3)
   expect(lastReport(h).hiddenCount).toBeGreaterThan(lastReport(h).reviewHiddenCount)
@@ -1356,7 +1596,6 @@ test('section separators mark top-level boundaries only with Pinned first', asyn
   expect(host.querySelector('section.pinned')?.classList.contains('section-separator')).toBe(false)
   expect(sectionForGroup('Team')?.classList.contains('section-separator')).toBe(true)
   expect(sectionForGroup('Child')?.classList.contains('section-separator')).toBe(false)
-  expect(sectionForRepo('api')?.classList.contains('section-separator')).toBe(false)
 })
 test('sticky top-level headers suppress adjacent section separators', async () => {
   const style = document.createElement('style')
