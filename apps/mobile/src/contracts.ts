@@ -1,5 +1,6 @@
 /* Shared phone/shell/page contracts. Runtime secrets never cross the page bridge. */
 import type { MobilePageGrant } from '@quirky/protocol'
+import type { PanelRoute } from './panels/contracts'
 export type { MobileBundleAsset, MobileBundleRoute, MobileBundleManifest, MobileBundleManifestResult, MobileBundleReadResult } from '@quirky/protocol'
 export type MobileHost = {
   id: string
@@ -38,7 +39,7 @@ export type MobilePreferences = {
   terminalLinkMode: 'desktop' | 'phone'
   shortcuts: { id: string; label: string; text: string }[]
 }
-export type MobileRoute = { kind: 'workspaces' } | { kind: 'session'; worktreeId: string; sessionId?: string }
+export type MobileRoute = { kind: 'workspaces' } | { kind: 'session'; worktreeId: string; sessionId?: string } | PanelRoute
 export type MobilePermission = 'granted' | 'denied' | 'undetermined' | 'unavailable'
 export interface MobileStorage {
   get(key: string): Promise<string | null>

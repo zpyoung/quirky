@@ -4,7 +4,7 @@ import { SourceControlPanel } from './source-control'
 import type { MobileRoute } from '../contracts'
 import type { PanelProps, PanelRoute } from './contracts'
 
-export function isPanelRoute(route: MobileRoute | PanelRoute): route is PanelRoute {
+export function isPanelRoute(route: MobileRoute): route is PanelRoute {
   return route.kind !== 'workspaces' && route.kind !== 'session'
 }
 

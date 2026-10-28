@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import type { MobileConnectionState } from '../contracts'
+import type { MobileConnectionState } from '../../contracts'
 import type { PanelBridge, PanelProps, PanelRoute } from '../contracts'
 import {
   classifyWorkspaceResult,

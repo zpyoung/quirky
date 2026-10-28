@@ -1,4 +1,5 @@
-import { PANEL_METHOD_PARAMS, assertPanelParameters } from './panel-authorization'
+import { PANEL_METHOD_PARAMS } from '@quirky/protocol'
+import { assertPanelParameters } from './panel-authorization'
 
 export class MobileAuthorizationError extends Error {
   constructor(message: string) {

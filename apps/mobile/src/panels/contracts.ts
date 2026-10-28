@@ -1,4 +1,4 @@
-import type { MobilePageBridge, MobilePageInit, MobileRoute } from '../contracts'
+import type { MobilePageBridge, MobileRoute } from '../contracts'
 
 export type PanelRoute =
   | { kind: 'source-control'; worktreeId: string; tab?: 'changes' | 'pull-request' | 'commits' }
@@ -10,9 +10,6 @@ export type PanelRoute =
   | { kind: 'agent-history'; worktreeId: string }
   | { kind: 'notifications'; worktreeId?: string }
 
-export type PhoneRoute = MobileRoute | PanelRoute | { kind: 'home' }
-export type PanelBridge = Omit<MobilePageBridge, 'init' | 'navigate'> & {
-  readonly init: Omit<MobilePageInit, 'route'> & { route: MobileRoute | PanelRoute }
-  navigate(route: PhoneRoute): Promise<void>
-}
+export type PhoneRoute = MobileRoute | { kind: 'home' }
+export type PanelBridge = MobilePageBridge
 export type PanelProps = { bridge: PanelBridge; route: PanelRoute }
