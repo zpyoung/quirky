@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent, CSSProperties, SyntheticEvent } from 'react'
+import { Button, FormRow, TextField } from '@quirky/ui'
 import type { DesignScreenshot } from '../design-contract'
 import { DESIGN_FULL_SCREENSHOT_MAX_BYTES } from '../design-contract'
 import { cacheMarkupBounds, eraseShapes, mapClientPointToSource } from './geometry'
@@ -37,15 +38,53 @@ const TOOL_LABELS: Array<{ tool: MarkupTool; label: string }> = [
   { tool: 'eraser', label: 'Eraser' }
 ]
 
-const buttonBase: CSSProperties = {
-  border: '1px solid #59606d',
-  borderRadius: 6,
-  color: '#f7f8fa',
-  background: '#303640',
-  padding: '7px 10px',
-  font: 'inherit',
-  cursor: 'pointer'
+const overlayStyle: CSSProperties = {
+  position: 'fixed',
+  inset: 0,
+  zIndex: 2_147_483_647,
+  display: 'flex',
+  flexDirection: 'column',
+  pointerEvents: 'auto',
+  color: 'var(--ui-text)',
+  background: 'var(--ui-rail)',
+  fontSize: 'var(--ui-font-body)',
+  lineHeight: 1.4,
+  outline: 0
 }
+const toolbarStyle: CSSProperties = {
+  display: 'flex',
+  flexWrap: 'wrap',
+  alignItems: 'center',
+  gap: 'var(--ui-space-8)',
+  padding: 'var(--ui-space-12)',
+  borderBottom: 'var(--ui-border-width) solid var(--ui-border)',
+  background: 'var(--ui-surface)'
+}
+const toolbarTitleStyle: CSSProperties = { marginInlineEnd: 'var(--ui-space-8)' }
+const fieldGroupStyle: CSSProperties = { width: 'calc(var(--ui-row-double) * 4)' }
+const textFieldGroupStyle: CSSProperties = { width: 'calc(var(--ui-row-double) * 6)' }
+const rangeControlStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: 'var(--ui-space-4)' }
+const rangeStyle: CSSProperties = { flex: '1 1 auto', minWidth: 0 }
+const imageStageStyle: CSSProperties = {
+  flex: 1,
+  minHeight: 0,
+  overflow: 'auto',
+  display: 'grid',
+  placeItems: 'center',
+  padding: 'var(--ui-space-8)'
+}
+const screenshotFrameShadow = '0 var(--ui-space-8) var(--ui-space-24) color-mix(in srgb, var(--ui-rail) 55%, transparent)'
+const screenshotLayerStyle: CSSProperties = { position: 'absolute', inset: 0, width: '100%', height: '100%' }
+const footerStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'flex-end',
+  gap: 'var(--ui-space-8)',
+  padding: 'var(--ui-space-12)',
+  borderTop: 'var(--ui-border-width) solid var(--ui-border)',
+  background: 'var(--ui-surface)'
+}
+const footerMessageStyle: CSSProperties = { marginInlineEnd: 'auto', color: 'var(--ui-muted)' }
 
 function screenshotIsValid(screenshot: DesignScreenshot): boolean {
   return screenshot.mimeType === 'image/png' &&
@@ -210,6 +249,11 @@ function makeShape(active: ActivePointer, copyStroke: boolean): MarkupShape | nu
 }
 
 export function MarkupOverlay({ screenshot, onClose, onCopied, onError }: MarkupOverlayProps) {
+  const markupId = useId()
+  const titleId = `${markupId}-title`
+  const colorId = `${markupId}-color`
+  const strokeSizeId = `${markupId}-stroke-size`
+  const fontSizeId = `${markupId}-font-size`
   const isValid = screenshotIsValid(screenshot)
   const sourceWidth = isValid ? screenshot.width : 1
   const sourceHeight = isValid ? screenshot.height : 1
@@ -488,18 +532,12 @@ export function MarkupOverlay({ screenshot, onClose, onCopied, onError }: Markup
     }
   }
 
-  const toolbarButton = (selected = false): CSSProperties => ({
-    ...buttonBase,
-    background: selected ? '#245ec7' : buttonBase.background,
-    borderColor: selected ? '#80aaff' : buttonBase.borderColor
-  })
-
   return (
     <div
       ref={dialogRef}
       role="dialog"
       aria-modal="true"
-      aria-labelledby="markup-overlay-title"
+      aria-labelledby={titleId}
       tabIndex={-1}
       onPointerDown={stopOverlayPropagation}
       onPointerMove={stopOverlayPropagation}
@@ -525,56 +563,54 @@ export function MarkupOverlay({ screenshot, onClose, onCopied, onError }: Markup
       onChange={stopOverlayPropagation}
       onInput={stopOverlayPropagation}
       onScroll={stopOverlayPropagation}
-      style={{
-        position: 'fixed', inset: 0, zIndex: 2_147_483_647, display: 'flex', flexDirection: 'column',
-        pointerEvents: 'auto',
-        color: '#f7f8fa', background: 'rgba(17, 20, 26, 0.97)', font: '14px/1.4 system-ui, sans-serif', outline: 'none'
-      }}
+      style={overlayStyle}
     >
-      <div
-        role="toolbar"
-        aria-label="Screenshot markup tools"
-        style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, padding: 12, borderBottom: '1px solid #444b57' }}
-      >
-        <strong id="markup-overlay-title" style={{ marginRight: 8 }}>Draw on screenshot</strong>
+      <div role="toolbar" aria-label="Screenshot markup tools" style={toolbarStyle}>
+        <strong id={titleId} style={toolbarTitleStyle}>Draw on screenshot</strong>
         {TOOL_LABELS.map(({ tool: item, label }) => (
-          <button
+          <Button
             key={item}
             type="button"
+            variant={tool === item ? 'primary' : 'secondary'}
             aria-label={label}
             aria-pressed={tool === item}
             title={label}
-            style={toolbarButton(tool === item)}
             onClick={() => setTool(item)}
-          >{label}</button>
+          >{label}</Button>
         ))}
-        <label style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-          Color
-          <input aria-label="Markup color" type="color" value={color} onChange={(event) => setColor(event.currentTarget.value)} />
-        </label>
-        {tool !== 'text' && <label style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-          {tool === 'eraser' ? 'Eraser size' : 'Stroke size'}
-          <input aria-label={tool === 'eraser' ? 'Eraser size' : 'Stroke size'} type="range" min={1} max={50} value={strokeSize} onChange={(event) => setStrokeSize(Number(event.currentTarget.value))} />
-          <output>{strokeSize}</output>
-        </label>}
+        <div style={fieldGroupStyle}>
+          <FormRow htmlFor={colorId} label="Color">
+            <input className="ui-text-field__input" aria-label="Markup color" type="color" value={color} onChange={(event) => setColor(event.currentTarget.value)} />
+          </FormRow>
+        </div>
+        {tool !== 'text' && <div style={fieldGroupStyle}>
+          <FormRow htmlFor={strokeSizeId} label={tool === 'eraser' ? 'Eraser size' : 'Stroke size'}>
+            <div style={rangeControlStyle}>
+              <input className="ui-text-field__input" aria-label={tool === 'eraser' ? 'Eraser size' : 'Stroke size'} type="range" min={1} max={50} value={strokeSize} style={rangeStyle} onChange={(event) => setStrokeSize(Number(event.currentTarget.value))} />
+              <output>{strokeSize}</output>
+            </div>
+          </FormRow>
+        </div>}
         {tool === 'text' && <>
-          <label style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-            Font size
-            <input aria-label="Font size" type="range" min={8} max={96} value={fontSize} onChange={(event) => setFontSize(Number(event.currentTarget.value))} />
-            <output>{fontSize}</output>
-          </label>
-          <label style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-            Text
-            <input aria-label="Text to place" maxLength={200} value={textValue} onChange={(event) => setTextValue(event.currentTarget.value)} />
-          </label>
+          <div style={fieldGroupStyle}>
+            <FormRow htmlFor={fontSizeId} label="Font size">
+              <div style={rangeControlStyle}>
+                <input className="ui-text-field__input" aria-label="Font size" type="range" min={8} max={96} value={fontSize} style={rangeStyle} onChange={(event) => setFontSize(Number(event.currentTarget.value))} />
+                <output>{fontSize}</output>
+              </div>
+            </FormRow>
+          </div>
+          <div style={textFieldGroupStyle}>
+            <TextField label="Text" aria-label="Text to place" maxLength={200} value={textValue} onChange={(event) => setTextValue(event.currentTarget.value)} />
+          </div>
         </>}
-        <button type="button" aria-label="Undo" disabled={!history.undo.length || copying} style={toolbarButton()} onClick={() => updateHistory(undoMarkup(historyRef.current))}>Undo</button>
-        <button type="button" aria-label="Redo" disabled={!history.redo.length || copying} style={toolbarButton()} onClick={() => updateHistory(redoMarkup(historyRef.current))}>Redo</button>
-        <button type="button" aria-label="Clear all markup" disabled={!history.shapes.length || copying} style={toolbarButton()} onClick={() => updateHistory(clearMarkup(historyRef.current))}>Clear all</button>
+        <Button type="button" aria-label="Undo" disabled={!history.undo.length || copying} onClick={() => updateHistory(undoMarkup(historyRef.current))}>Undo</Button>
+        <Button type="button" aria-label="Redo" disabled={!history.redo.length || copying} onClick={() => updateHistory(redoMarkup(historyRef.current))}>Redo</Button>
+        <Button type="button" aria-label="Clear all markup" disabled={!history.shapes.length || copying} onClick={() => updateHistory(clearMarkup(historyRef.current))}>Clear all</Button>
       </div>
-      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', display: 'grid', placeItems: 'center', padding: 8 }}>
+      <div style={imageStageStyle}>
         {isValid ? <div
-          style={{ position: 'relative', flex: '0 0 auto', width: displayWidth, height: displayHeight, boxShadow: '0 8px 32px rgba(0,0,0,.45)' }}
+          style={{ position: 'relative', flex: '0 0 auto', width: displayWidth, height: displayHeight, boxShadow: screenshotFrameShadow }}
         >
           <img
             src={screenshot.dataUrl}
@@ -582,21 +618,21 @@ export function MarkupOverlay({ screenshot, onClose, onCopied, onError }: Markup
             draggable={false}
             width={sourceWidth}
             height={sourceHeight}
-            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', userSelect: 'none', pointerEvents: 'none' }}
+            style={{ ...screenshotLayerStyle, userSelect: 'none', pointerEvents: 'none' }}
           />
           <canvas
             ref={baseCanvasRef}
             width={sourceWidth}
             height={sourceHeight}
             aria-hidden="true"
-            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
+            style={{ ...screenshotLayerStyle, pointerEvents: 'none' }}
           />
           <canvas
             ref={previewCanvasRef}
             width={sourceWidth}
             height={sourceHeight}
             aria-label="Markup canvas"
-            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', touchAction: 'none', cursor: tool === 'text' ? 'text' : 'crosshair' }}
+            style={{ ...screenshotLayerStyle, touchAction: 'none', cursor: tool === 'text' ? 'text' : 'crosshair' }}
             onPointerDown={pointerDown}
             onPointerMove={pointerMove}
             onPointerUp={pointerUp}
@@ -605,12 +641,12 @@ export function MarkupOverlay({ screenshot, onClose, onCopied, onError }: Markup
           />
         </div> : <p role="alert">The frozen screenshot cannot be displayed.</p>}
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, padding: 12, borderTop: '1px solid #444b57' }}>
-        <span style={{ marginRight: 'auto' }}>Changes apply only to this frozen screenshot.</span>
-        <button type="button" disabled={committingCopy} style={toolbarButton()} onClick={closeOverlay}>Cancel</button>
-        <button type="button" style={toolbarButton(true)} disabled={!isValid || copying} onClick={() => void copyMarkup()}>
+      <div style={footerStyle}>
+        <span style={footerMessageStyle}>Changes apply only to this frozen screenshot.</span>
+        <Button type="button" disabled={committingCopy} onClick={closeOverlay}>Cancel</Button>
+        <Button type="button" variant="primary" disabled={!isValid || copying} onClick={() => void copyMarkup()}>
           {committingCopy ? 'Writing PNG…' : copying ? 'Preparing PNG…' : 'Copy Markup'}
-        </button>
+        </Button>
       </div>
     </div>
   )

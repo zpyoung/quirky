@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { Button, EmptyState, FormRow, SectionHeader, StatusDot } from '@quirky/ui'
 import { createPortal } from 'react-dom'
 import type { NativeBrowserHandle, UiPluginContext } from '@quirky/protocol'
 import { MarkupOverlay } from '../markup/MarkupOverlay'
@@ -77,38 +78,87 @@ const PICKER_TIMEOUT_MS = 120_000
 const POLL_DELAY_MS = 100
 const SCREENSHOT_MAX_BYTES = 2 * 1024 * 1024
 const WATCH_COPY_PROBE = `(() => { const active = document.activeElement; const selection = window.getSelection ? window.getSelection() : null; return { editable: !!active && (active.isContentEditable || active.tagName === 'IFRAME' || /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)), selected: !!selection && String(selection).length > 0 }; })()`
-const styles = `
-.qbp-design-toolbar { display:flex; align-items:center; gap:5px; }
-.qbp-design-toolbar [aria-pressed="true"] { border-color:var(--accent,#4f8ff7); color:var(--accent,#83b5ff); }
-.qbp-design-hint { color:var(--muted,#a4a9b4); font-size:11px; }
-.qbp-design-highlight-label { position:absolute; left:-2px; bottom:100%; max-width:min(360px,80vw); padding:3px 6px; border-radius:4px 4px 0 0; color:#fff; background:#222; font:11px/1.3 system-ui,sans-serif; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.qbp-design-overlay { position:absolute; z-index:12; inset:0; pointer-events:none; }
-.qbp-design-tray, .qbp-design-popover, .qbp-design-menu { position:absolute; pointer-events:auto; border:1px solid var(--border,#343945); border-radius:8px; background:var(--bg-raised,#1d2027); box-shadow:0 12px 32px #0009; color:var(--text,#d7dae0); font:13px/1.4 var(--ui-font-family,system-ui,sans-serif); }
-.qbp-design-tray { right:10px; bottom:10px; width:min(420px,calc(100% - 20px)); max-height:55%; display:flex; flex-direction:column; overflow:hidden; }
-.qbp-design-tray-head { display:flex; align-items:center; gap:6px; padding:7px; border-bottom:1px solid var(--border,#343945); }
-.qbp-design-tray-head strong { flex:1; }
-.qbp-design-tray-list { display:flex; flex-direction:column; gap:5px; padding:7px; overflow:auto; }
-.qbp-design-note { display:grid; grid-template-columns:1fr auto; gap:4px 8px; padding:7px; border:1px solid var(--border,#343945); border-radius:6px; }
-.qbp-design-note p { grid-column:1 / -1; margin:0; overflow-wrap:anywhere; white-space:pre-wrap; }
-.qbp-design-note small { grid-column:1 / -1; color:var(--muted,#a4a9b4); overflow-wrap:anywhere; }
-.qbp-design-note-actions { display:flex; flex-wrap:wrap; gap:4px; }
-.qbp-design-note-actions button, .qbp-design-tray button, .qbp-design-menu button, .qbp-design-popover button { min-height:25px; padding:3px 7px; }
-.qbp-design-popover, .qbp-design-menu { right:10px; top:10px; display:grid; gap:8px; width:min(380px,calc(100% - 20px)); max-height:calc(100% - 20px); padding:10px; overflow:auto; }
-.qbp-design-popover label { display:grid; gap:5px; }
-.qbp-design-popover textarea { min-height:95px; resize:vertical; padding:7px; color:inherit; font:inherit; border:1px solid var(--border,#343945); border-radius:5px; background:var(--bg,#16181d); }
-.qbp-design-popover-footer, .qbp-design-intents { display:flex; flex-wrap:wrap; align-items:center; gap:6px; }
-.qbp-design-intents button[aria-pressed="true"] { border-color:var(--accent,#4f8ff7); }
-.qbp-design-menu h3 { margin:0; font-size:14px; }
-.qbp-design-menu section { display:grid; gap:5px; }
-.qbp-design-target { display:grid; gap:2px; text-align:left; }
-.qbp-design-target:disabled { cursor:not-allowed; }
-.qbp-design-target-reason { color:var(--muted,#a4a9b4); font-size:11px; }
-.qbp-design-state { display:flex; align-items:center; gap:5px; }
-.qbp-design-state-dot { width:8px; height:8px; flex:0 0 8px; border-radius:50%; background:var(--muted,#8a909e); }
-.qbp-design-state-dot[data-sendable="true"] { background:var(--success,#55b985); }
-.qbp-design-pin { position:absolute; z-index:1; width:25px; height:25px; min-height:25px; padding:0; border:2px solid white; border-radius:50%; color:white; background:#b23d32; font-weight:700; transform:translate(-50%,-50%); pointer-events:auto; }
-.qbp-design-clipboard-error { color:var(--danger,#e5534b); }
-`
+const designOverlayStyle: CSSProperties = { position: 'absolute', zIndex: 12, inset: 0, pointerEvents: 'none' }
+const floatingPanelStyle: CSSProperties = {
+  position: 'absolute',
+  pointerEvents: 'auto',
+  border: 'var(--ui-border-width) solid var(--ui-border)',
+  borderRadius: 'var(--ui-radius-window)',
+  background: 'var(--ui-surface)',
+  boxShadow: '0 var(--ui-space-8) var(--ui-space-24) color-mix(in srgb, var(--ui-rail) 55%, transparent)',
+  color: 'var(--ui-text)',
+  fontSize: 'var(--ui-font-body)',
+  lineHeight: 1.4,
+  boxSizing: 'border-box'
+}
+const menuPanelStyle: CSSProperties = {
+  ...floatingPanelStyle,
+  right: 'var(--ui-space-12)',
+  top: 'var(--ui-space-12)',
+  display: 'grid',
+  gap: 'var(--ui-space-8)',
+  width: 'min(calc(var(--ui-row-double) * 11), calc(100% - var(--ui-space-24)))',
+  maxHeight: 'calc(100% - var(--ui-space-24))',
+  padding: 'var(--ui-space-12)',
+  overflow: 'auto'
+}
+const annotationTrayStyle: CSSProperties = {
+  ...floatingPanelStyle,
+  right: 'var(--ui-space-12)',
+  bottom: 'var(--ui-space-12)',
+  width: 'min(calc(var(--ui-row-double) * 12), calc(100% - var(--ui-space-24)))',
+  maxHeight: '55%',
+  display: 'flex',
+  flexDirection: 'column',
+  overflow: 'hidden'
+}
+const annotationTrayHeadStyle: CSSProperties = {
+  padding: 'var(--ui-space-8)',
+  borderBottom: 'var(--ui-border-width) solid var(--ui-border)'
+}
+const annotationListStyle: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 'var(--ui-space-6)',
+  padding: 'var(--ui-space-8)',
+  overflow: 'auto'
+}
+const annotationNoteStyle: CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'minmax(0, 1fr) auto',
+  gap: 'var(--ui-space-4) var(--ui-space-8)',
+  padding: 'var(--ui-space-8)',
+  border: 'var(--ui-border-width) solid var(--ui-border)',
+  borderRadius: 'var(--ui-radius-control)',
+  background: 'var(--ui-selected)'
+}
+const noteTextStyle: CSSProperties = { gridColumn: '1 / -1', margin: 0, overflowWrap: 'anywhere', whiteSpace: 'pre-wrap' }
+const noteDetailsStyle: CSSProperties = { gridColumn: '1 / -1', color: 'var(--ui-muted)', fontSize: 'var(--ui-font-label)', overflowWrap: 'anywhere' }
+const actionGroupStyle: CSSProperties = { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 'var(--ui-space-4)' }
+const targetGroupsStyle: CSSProperties = { display: 'grid', gap: 'var(--ui-space-8)' }
+const menuButtonStyle: CSSProperties = { width: '100%', justifyContent: 'flex-start' }
+const targetButtonStyle: CSSProperties = { ...menuButtonStyle, display: 'grid', gap: 'var(--ui-space-2)', justifyContent: 'stretch', textAlign: 'left' }
+const targetStatusStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: 'var(--ui-space-4)' }
+const targetReasonStyle: CSSProperties = { color: 'var(--ui-muted)', fontSize: 'var(--ui-font-label)' }
+const toolbarStyle: CSSProperties = { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 'var(--ui-space-6)' }
+const hintStyle: CSSProperties = { color: 'var(--ui-muted)', fontSize: 'var(--ui-font-label)' }
+const highlightLabelStyle: CSSProperties = {
+  position: 'absolute',
+  left: 'calc(-1 * var(--ui-space-2))',
+  bottom: '100%',
+  maxWidth: '80vw',
+  padding: 'var(--ui-space-2) var(--ui-space-6)',
+  borderRadius: 'var(--ui-radius-mark) var(--ui-radius-mark) 0 0',
+  color: 'var(--ui-text)',
+  background: 'var(--ui-selected)',
+  fontSize: 'var(--ui-font-label)',
+  lineHeight: 1.3,
+  whiteSpace: 'nowrap',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis'
+}
+const annotationFeedbackStyle: CSSProperties = { minHeight: 'calc(var(--ui-row-double) * 3)', resize: 'vertical' }
+const errorMessageStyle: CSSProperties = { color: 'var(--ui-failing)' }
 
 export type DesignAction = 'grab' | 'annotate' | 'draw' | 'cancel'
 export type DesignPane = { id: string; mode: 'native' | 'watch'; page: string | null; url: string; title: string; loading: boolean; error: string | null; worktreeId: string }
@@ -266,6 +316,7 @@ function displayBox(host: HTMLElement, width: number, height: number): { left: n
 }
 
 export function DesignWindow({ context, pane, nativeHandle, pageHost, nativePageHost, frameSize, watchId, watchReady, focused = false, onMessage, actionRef }: Props) {
+  const feedbackId = useId()
   const [operation, setOperation] = useState<Operation | null>(null)
   const [hoverPayload, setHoverPayload] = useState<DesignPayload | null>(null)
   const [selectionMenu, setSelectionMenu] = useState<SelectionMenu | null>(null)
@@ -989,33 +1040,40 @@ export function DesignWindow({ context, pane, nativeHandle, pageHost, nativePage
     ? pane?.mode === 'watch' ? 'Copied — press S to screenshot, or select another element. Esc cancels.' : 'Copied — select another element. Esc cancels.'
     : pane?.mode === 'watch' ? 'Click an element, or hover and press C to copy / S to screenshot. Esc cancels.' : 'Click an element, or hover and press C to copy. Esc cancels.'
 
-  const panel = pageHost ? createPortal(<div className="qbp-design-overlay" aria-label="Browser design mode">
+  const panel = pageHost ? createPortal(<div className="qbp-design-overlay" aria-label="Browser design mode" style={designOverlayStyle}>
     {hoverPayload && currentOperation?.mode === 'grab' && pageGeometry && pageGeometry.width > 0 ? <div aria-label={`${hoverPayload.target.tagName}${hoverPayload.target.accessibility.role ? ` role=${hoverPayload.target.accessibility.role}` : ''}${hoverPayload.target.accessibility.accessibleName ? ` “${hoverPayload.target.accessibility.accessibleName}”` : ''} ${Math.round(hoverPayload.target.rectViewport.width)}×${Math.round(hoverPayload.target.rectViewport.height)}`} style={{
       position: 'absolute', left: pageGeometry.left + hoverPayload.target.rectViewport.x * pageGeometry.width / hoverPayload.page.viewportWidth,
       top: pageGeometry.top + hoverPayload.target.rectViewport.y * pageGeometry.height / hoverPayload.page.viewportHeight,
       width: hoverPayload.target.rectViewport.width * pageGeometry.width / hoverPayload.page.viewportWidth,
       height: hoverPayload.target.rectViewport.height * pageGeometry.height / hoverPayload.page.viewportHeight,
-      border: '2px solid white', boxShadow: '0 0 0 9999px #0002', pointerEvents: 'none'
-    }}><span className="qbp-design-highlight-label">{hoverPayload.target.tagName}{hoverPayload.target.accessibility.role ? ` role=${hoverPayload.target.accessibility.role}` : ''}{hoverPayload.target.accessibility.accessibleName ? ` “${hoverPayload.target.accessibility.accessibleName}”` : ''} {Math.round(hoverPayload.target.rectViewport.width)}×{Math.round(hoverPayload.target.rectViewport.height)}</span></div> : null}
+      boxSizing: 'border-box', border: 'var(--ui-focus-width) solid var(--ui-accent)',
+      boxShadow: '0 0 0 100vmax color-mix(in srgb, var(--ui-rail) 55%, transparent)', pointerEvents: 'none'
+    }}><span style={highlightLabelStyle}>{hoverPayload.target.tagName}{hoverPayload.target.accessibility.role ? ` role=${hoverPayload.target.accessibility.role}` : ''}{hoverPayload.target.accessibility.accessibleName ? ` “${hoverPayload.target.accessibility.accessibleName}”` : ''} {Math.round(hoverPayload.target.rectViewport.width)}×{Math.round(hoverPayload.target.rectViewport.height)}</span></div> : null}
     {annotations.map((annotation, index) => {
       if (!pageHost || !pane || !frameCurrent(annotation, pane.url) || !pageGeometry || pageGeometry.width <= 0) return null
       const rect = annotation.payload.target.rectViewport
-      return <button
+      return <Button
         key={annotation.id}
-        type="button"
         className="qbp-design-pin"
         data-quirky-native-mask
-        style={{ left: pageGeometry.left + (rect.x + rect.width / 2) * pageGeometry.width / annotation.payload.page.viewportWidth, top: pageGeometry.top + (rect.y + rect.height / 2) * pageGeometry.height / annotation.payload.page.viewportHeight }}
+        style={{
+          position: 'absolute', zIndex: 1, width: 'var(--ui-row-single)', height: 'var(--ui-row-single)', minHeight: 'var(--ui-row-single)',
+          padding: 0, borderRadius: '50%', border: 'var(--ui-border-width) solid var(--ui-surface)',
+          color: 'var(--ui-surface)', background: 'var(--ui-failing)', fontWeight: 700,
+          transform: 'translate(-50%, -50%)', pointerEvents: 'auto',
+          left: pageGeometry.left + (rect.x + rect.width / 2) * pageGeometry.width / annotation.payload.page.viewportWidth,
+          top: pageGeometry.top + (rect.y + rect.height / 2) * pageGeometry.height / annotation.payload.page.viewportHeight
+        }}
         aria-label={`Edit annotation ${index + 1}: ${annotation.comment}`}
         title={annotation.comment}
         onClick={(event) => { event.stopPropagation(); editAnnotation(annotation) }}
-      >{index + 1}</button>
+      >{index + 1}</Button>
     })}
-    {selectionMenu ? <div className="qbp-design-menu" role="menu" aria-label="Selected element actions">
-      <h3>{elementLabel(selectionMenu.payload)}</h3>
-      {copyError ? <p className="qbp-design-clipboard-error" role="alert">{copyError}</p> : null}
-      <button type="button" role="menuitem" onClick={() => void writeText(selectionMenu.payload, 'Copied', true, selectionMenu.op.identity)}>Copy</button>
-      <button type="button" role="menuitem" disabled={selectionMenu.op.pane.mode === 'native'} title={selectionMenu.op.pane.mode === 'native' ? 'Native cropped screenshots are unavailable: the pinned public SDK has no supported page snapshot capability.' : 'Copy a PNG crop of this element'} onClick={() => {
+    {selectionMenu ? <div role="menu" aria-label="Selected element actions" style={menuPanelStyle}>
+      <SectionHeader title={elementLabel(selectionMenu.payload)} />
+      {copyError ? <p style={errorMessageStyle} role="alert">{copyError}</p> : null}
+      <Button style={menuButtonStyle} role="menuitem" onClick={() => void writeText(selectionMenu.payload, 'Copied', true, selectionMenu.op.identity)}>Copy</Button>
+      <Button style={menuButtonStyle} role="menuitem" disabled={selectionMenu.op.pane.mode === 'native'} title={selectionMenu.op.pane.mode === 'native' ? 'Native cropped screenshots are unavailable: the pinned public SDK has no supported page snapshot capability.' : 'Copy a PNG crop of this element'} onClick={() => {
         if (selectionMenu.op.pane.mode === 'native') return
         const identity = selectionMenu.op.identity
         void capture(null, selectionMenu.payload.target.rectViewport).then((image) => {
@@ -1025,62 +1083,67 @@ export function DesignWindow({ context, pane, nativeHandle, pageHost, nativePage
         }).catch((error: unknown) => {
           if (identityOf(currentPaneRef.current, currentWatchRef.current, currentFrameSizeRef.current) === identity) onMessage(errorText(error), 'error')
         })
-      }}>Copy Screenshot</button>
-      <button type="button" role="menuitem" onClick={() => { setSelectionMenu(null); void startOperation(selectionMenu.op.mode) }}>Select another element</button>
-      <button type="button" role="menuitem" onClick={() => { setSelectionMenu(null); void cancelOperation() }}>Cancel</button>
+      }}>Copy Screenshot</Button>
+      <Button style={menuButtonStyle} role="menuitem" onClick={() => { setSelectionMenu(null); void startOperation(selectionMenu.op.mode) }}>Select another element</Button>
+      <Button style={menuButtonStyle} role="menuitem" onClick={() => { setSelectionMenu(null); void cancelOperation() }}>Cancel</Button>
     </div> : null}
-    {draft ? <div className="qbp-design-popover" role="dialog" aria-modal="false" aria-label={draft.editingId ? 'Edit browser annotation' : 'Add browser annotation'}>
-      <strong>{draft.editingId ? 'Edit browser annotation' : 'Add browser annotation'}</strong>
-      <span>{elementLabel(draft.payload)}</span>
-      <div className="qbp-design-intents" role="group" aria-label="Annotation intent">
-        <button type="button" aria-pressed={draft.intent === 'change'} onClick={() => setDraft({ ...draft, intent: 'change' })}>Change</button>
-        <button type="button" aria-pressed={draft.intent === 'question'} onClick={() => setDraft({ ...draft, intent: 'question' })}>Question</button>
+    {draft ? <div role="dialog" aria-modal="false" aria-label={draft.editingId ? 'Edit browser annotation' : 'Add browser annotation'} style={menuPanelStyle}>
+      <SectionHeader title={draft.editingId ? 'Edit browser annotation' : 'Add browser annotation'} />
+      <span style={{ overflowWrap: 'anywhere' }}>{elementLabel(draft.payload)}</span>
+      <div style={actionGroupStyle} role="group" aria-label="Annotation intent">
+        <Button variant={draft.intent === 'change' ? 'primary' : 'secondary'} aria-pressed={draft.intent === 'change'} onClick={() => setDraft({ ...draft, intent: 'change' })}>Change</Button>
+        <Button variant={draft.intent === 'question' ? 'primary' : 'secondary'} aria-pressed={draft.intent === 'question'} onClick={() => setDraft({ ...draft, intent: 'question' })}>Question</Button>
       </div>
-      <label>Feedback<textarea aria-label="Feedback" maxLength={MAX_COMMENT} value={draft.comment} placeholder="Describe what the agent should change here..." onChange={(event) => setDraft({ ...draft, comment: event.target.value.slice(0, MAX_COMMENT) })} onKeyDown={(event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
-        if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); saveDraft() }
-        if (event.key === 'Escape') { event.preventDefault(); setDraft(null) }
-      }} /></label>
-      <small>{draft.comment.length}/{MAX_COMMENT} characters · {draft.payload.page.sanitizedUrl}</small>
-      <div className="qbp-design-popover-footer">
-        <button type="button" onClick={() => setDraft(null)}>Cancel</button>
-        <button type="button" disabled={!draft.comment.trim()} onClick={saveDraft}>{draft.editingId ? 'Save' : 'Add'}</button>
+      <FormRow htmlFor={feedbackId} label="Feedback">
+        <textarea id={feedbackId} className="ui-text-field__input" aria-label="Feedback" maxLength={MAX_COMMENT} value={draft.comment} placeholder="Describe what the agent should change here..." style={annotationFeedbackStyle} onChange={(event) => setDraft({ ...draft, comment: event.target.value.slice(0, MAX_COMMENT) })} onKeyDown={(event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+          if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); saveDraft() }
+          if (event.key === 'Escape') { event.preventDefault(); setDraft(null) }
+        }} />
+      </FormRow>
+      <small style={noteDetailsStyle}>{draft.comment.length}/{MAX_COMMENT} characters · {draft.payload.page.sanitizedUrl}</small>
+      <div style={{ ...actionGroupStyle, justifyContent: 'flex-end' }}>
+        <Button onClick={() => setDraft(null)}>Cancel</Button>
+        <Button variant="primary" disabled={!draft.comment.trim()} onClick={saveDraft}>{draft.editingId ? 'Save' : 'Add'}</Button>
       </div>
     </div> : null}
-    {targetsOpen ? <div className="qbp-design-menu" role="menu" aria-label="Send notes to">
-      <h3>Send notes to</h3>
+    {targetsOpen ? <div role="menu" aria-label="Send notes to" style={menuPanelStyle}>
+      <SectionHeader title="Send notes to" />
       {targetsLoading ? <span role="status">Loading targets…</span> : null}
       {!targetsLoading && targets ? <>
-        <section aria-label="Running agents">
-          {targets.sessions.map((target) => <button key={target.session} type="button" role="menuitem" className="qbp-design-target" disabled={!target.sendable || !notesAvailable.length} title={target.sendable ? undefined : target.reason ?? 'This agent cannot currently accept input.'} onClick={() => void sendTo({ kind: 'session', value: target })}>
-            <span className="qbp-design-state"><span className="qbp-design-state-dot" data-sendable={target.sendable} aria-hidden="true" />{target.label} · {target.state ?? target.status} · {formatAge(target.lastActivityAt)}</span>
+        <section aria-label="Running agents" style={targetGroupsStyle}>
+          <SectionHeader title="Running agents" />
+          {targets.sessions.map((target) => <Button key={target.session} style={targetButtonStyle} role="menuitem" disabled={!target.sendable || !notesAvailable.length} title={target.sendable ? undefined : target.reason ?? 'This agent cannot currently accept input.'} onClick={() => void sendTo({ kind: 'session', value: target })}>
+            <span style={targetStatusStyle}><StatusDot status={target.sendable ? 'working' : 'idle'} />{target.label} · {target.state ?? target.status} · {formatAge(target.lastActivityAt)}</span>
             <span>{target.title || 'Untitled agent session'}</span>
-            {!target.sendable ? <span className="qbp-design-target-reason">{target.reason ?? 'This agent cannot currently accept input.'}</span> : null}
-          </button>)}
-          {!targets.sessions.length ? <span>No running agents in this worktree.</span> : null}
+            {!target.sendable ? <span style={targetReasonStyle}>{target.reason ?? 'This agent cannot currently accept input.'}</span> : null}
+          </Button>)}
+          {!targets.sessions.length ? <EmptyState message="No running agents in this worktree." /> : null}
         </section>
-        <section aria-label="New agent">
-          <strong>New agent</strong>
-          {targets.agents.map((agent) => <button key={agent.id} type="button" role="menuitem" disabled={!notesAvailable.length} onClick={() => void sendTo({ kind: 'agent', id: agent.id, label: agent.label })}>{agent.label}</button>)}
-          {!targets.agents.length ? <span>No new-agent targets are available.</span> : null}
+        <section aria-label="New agent" style={targetGroupsStyle}>
+          <SectionHeader title="New agent" />
+          {targets.agents.map((agent) => <Button key={agent.id} style={menuButtonStyle} role="menuitem" disabled={!notesAvailable.length} onClick={() => void sendTo({ kind: 'agent', id: agent.id, label: agent.label })}>{agent.label}</Button>)}
+          {!targets.agents.length ? <EmptyState message="No new-agent targets are available." /> : null}
         </section>
       </> : null}
-      <button type="button" onClick={() => setTargetsOpen(false)}>Close</button>
+      <Button style={menuButtonStyle} onClick={() => setTargetsOpen(false)}>Close</Button>
     </div> : null}
-    {annotations.length ? <section className="qbp-design-tray" data-quirky-native-mask aria-label="Browser annotations">
-      <header className="qbp-design-tray-head">
-        <button type="button" aria-expanded={!collapsed} onClick={() => setCollapsed(!collapsed)}>{annotations.length} annotation{annotations.length === 1 ? '' : 's'}</button>
-        <button type="button" disabled={!notesAvailable.length} onClick={() => void openTargets()}>Send</button>
-        <button type="button" disabled={!annotations.length} onClick={() => void copyAnnotations(annotations)}>Copy All</button>
-        <button type="button" aria-label="Clear all annotations" onClick={() => annotationPageId && updateAnnotations(annotationPageId, () => [])}>Clear</button>
-      </header>
-      {!collapsed ? <div className="qbp-design-tray-list">{annotations.map((annotation, index) => <article className="qbp-design-note" key={annotation.id}>
-        <strong>{index + 1}. {elementLabel(annotation.payload)}</strong>
-        <p><span>{annotation.intent === 'change' ? 'Change' : 'Question'}: </span>{annotation.comment}</p>
-        <small>{annotation.payload.page.sanitizedUrl}</small>
-        <div className="qbp-design-note-actions">
-          <button type="button" onClick={() => editAnnotation(annotation)}>Edit</button>
-          <button type="button" onClick={() => removeAnnotation(annotation.id)}>Delete</button>
-          <button type="button" onClick={() => void copyAnnotations([annotation])}>Copy</button>
+    {annotations.length ? <section data-quirky-native-mask aria-label="Browser annotations" style={annotationTrayStyle}>
+      <div style={annotationTrayHeadStyle}>
+        <SectionHeader title="Browser annotations" actions={<>
+          <Button aria-expanded={!collapsed} onClick={() => setCollapsed(!collapsed)}>{annotations.length} annotation{annotations.length === 1 ? '' : 's'}</Button>
+          <Button disabled={!notesAvailable.length} onClick={() => void openTargets()}>Send</Button>
+          <Button disabled={!annotations.length} onClick={() => void copyAnnotations(annotations)}>Copy All</Button>
+          <Button variant="destructive" aria-label="Clear all annotations" onClick={() => annotationPageId && updateAnnotations(annotationPageId, () => [])}>Clear</Button>
+        </>} />
+      </div>
+      {!collapsed ? <div style={annotationListStyle}>{annotations.map((annotation, index) => <article style={annotationNoteStyle} key={annotation.id}>
+        <strong style={{ overflowWrap: 'anywhere' }}>{index + 1}. {elementLabel(annotation.payload)}</strong>
+        <p style={noteTextStyle}><span>{annotation.intent === 'change' ? 'Change' : 'Question'}: </span>{annotation.comment}</p>
+        <small style={noteDetailsStyle}>{annotation.payload.page.sanitizedUrl}</small>
+        <div style={actionGroupStyle}>
+          <Button onClick={() => editAnnotation(annotation)}>Edit</Button>
+          <Button variant="destructive" onClick={() => removeAnnotation(annotation.id)}>Delete</Button>
+          <Button onClick={() => void copyAnnotations([annotation])}>Copy</Button>
         </div>
       </article>)}</div> : null}
     </section> : null}
@@ -1088,10 +1151,10 @@ export function DesignWindow({ context, pane, nativeHandle, pageHost, nativePage
   </div>, pageHost) : null
 
   return <>
-    <style>{styles}</style>
-    <div className="qbp-design-toolbar" aria-label="Browser design tools">
-      <button
+    <div className="qbp-design-toolbar" aria-label="Browser design tools" style={toolbarStyle}>
+      <Button
         type="button"
+        variant={currentOperation?.mode === 'grab' ? 'primary' : 'secondary'}
         aria-pressed={currentOperation?.mode === 'grab'}
         aria-disabled={grabDisabled || operationPending}
         aria-busy={operationPending}
@@ -1102,9 +1165,10 @@ export function DesignWindow({ context, pane, nativeHandle, pageHost, nativePage
           if (currentOperation?.mode === 'grab') void cancelOperation()
           else void startOperation('grab')
         }}
-      >{operationPending ? 'Arming…' : 'Grab'}</button>
-      <button
+      >{operationPending ? 'Arming…' : 'Grab'}</Button>
+      <Button
         type="button"
+        variant={currentOperation?.mode === 'annotate' ? 'primary' : 'secondary'}
         aria-pressed={currentOperation?.mode === 'annotate'}
         aria-disabled={annotateDisabled || operationPending}
         aria-busy={operationPending}
@@ -1115,11 +1179,11 @@ export function DesignWindow({ context, pane, nativeHandle, pageHost, nativePage
           if (currentOperation?.mode === 'annotate') void cancelOperation()
           else void startOperation('annotate')
         }}
-      >{operationPending ? 'Arming…' : 'Annotate'}{annotations.length ? ` (${annotations.length})` : ''}</button>
-      <button type="button" aria-pressed={Boolean(markupScreenshot)} disabled={drawingDisabled} title={pane?.mode === 'native' ? 'Native Draw is unavailable: the pinned public SDK has no supported page snapshot capability.' : 'Draw on screenshot'} onClick={() => void beginDraw()}>Draw</button>
-      {pane?.mode === 'native' ? <span className="qbp-design-hint">Native cropped screenshots and Draw are unavailable: the pinned public SDK has no supported page snapshot capability.</span> : null}
-      {currentOperation ? <span className="qbp-design-hint" role="status">{currentOperation.mode === 'grab' ? grabHint : 'Click an element to annotate. Esc cancels.'}</span> : null}
-      {pane?.mode === 'native' && !nativeHandle ? <span className="qbp-design-hint">Native design tools are available when its sandboxed page is ready.</span> : null}
+      >{operationPending ? 'Arming…' : 'Annotate'}{annotations.length ? ` (${annotations.length})` : ''}</Button>
+      <Button type="button" variant={Boolean(markupScreenshot) ? 'primary' : 'secondary'} aria-pressed={Boolean(markupScreenshot)} disabled={drawingDisabled} title={pane?.mode === 'native' ? 'Native Draw is unavailable: the pinned public SDK has no supported page snapshot capability.' : 'Draw on screenshot'} onClick={() => void beginDraw()}>Draw</Button>
+      {pane?.mode === 'native' ? <span style={hintStyle}>Native cropped screenshots and Draw are unavailable: the pinned public SDK has no supported page snapshot capability.</span> : null}
+      {currentOperation ? <span style={hintStyle} role="status">{currentOperation.mode === 'grab' ? grabHint : 'Click an element to annotate. Esc cancels.'}</span> : null}
+      {pane?.mode === 'native' && !nativeHandle ? <span style={hintStyle}>Native design tools are available when its sandboxed page is ready.</span> : null}
     </div>
     {panel}
   </>
