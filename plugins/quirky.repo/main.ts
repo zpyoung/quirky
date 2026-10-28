@@ -27,7 +27,9 @@ export function activate(context: PluginContext): void {
   provide('trustHooks', (params) => settings.trustHooks(env, params as Parameters<typeof settings.trustHooks>[1]))
 
   provide('groupList', () => groups.groupList(env))
+  provide('groupDeletedIds', () => groups.groupDeletedIds(env))
   provide('groupCreate', (params) => groups.groupCreate(env, params as Parameters<typeof groups.groupCreate>[1]))
+  provide('groupSetParent', (params) => groups.groupSetParent(env, params as Parameters<typeof groups.groupSetParent>[1]))
   provide('groupRename', (params) => groups.groupRename(env, params as Parameters<typeof groups.groupRename>[1]))
   provide('groupDelete', (params) => groups.groupDelete(env, params as Parameters<typeof groups.groupDelete>[1]))
   provide('groupAdd', (params) => groups.groupAdd(env, params as Parameters<typeof groups.groupAdd>[1]))

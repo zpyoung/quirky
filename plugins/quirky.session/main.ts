@@ -13,6 +13,7 @@ export async function activate(context: PluginContext): Promise<void> {
     pointer: sessions.pointer,
     create: sessions.create,
     resume: sessions.resume,
+    resumeExternal: sessions.resumeExternal,
     setName: sessions.setName,
     setProviderSession: sessions.setProviderSession,
     register: sessions.register,

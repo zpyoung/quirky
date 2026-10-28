@@ -49,11 +49,15 @@ export interface DurableMutationOptions<T extends object> {
 export interface OrchestrationWorkerCore extends LifecycleCorePort {
   readonly context: PluginContext
   readonly store: PluginStore
+  readonly nestedWorkerMaxDepth: number
   registerWorkerPort(port: WorkerLifecyclePort): void
   requireCoordinator(caller: CoordinatorAuthority, runId?: RunId): RunRow
   getRun(runId: RunId): RunRow
   getTask(taskId: TaskId): TaskRow
   getDispatch(dispatchId: DispatchId): DispatchRow
+  listDispatches(runId?: RunId): DispatchRow[]
+  boundRunId(caller: RuntimeCallerEvidence): RunId | null
+  attentionFor(dispatchId: DispatchId): { guidance: boolean; input: boolean; approval: boolean; rootCompletion: boolean }
   createDispatch(input: DispatchAdmissionInput & { supervised?: boolean }, caller: RuntimeCallerEvidence, identity: SessionIdentity): DispatchRow
   /** Internal lifecycle fence; only exact supervised stops may block a live Task. */
   blockTaskForWorkerStop(input: { taskId: TaskId; dispatchId: DispatchId; at: UtcTimestamp }): TaskRow
@@ -69,9 +73,6 @@ export interface OrchestrationWorkerCore extends LifecycleCorePort {
     operation: (store: PluginStore) => T,
     options?: DurableMutationOptions<T>,
   ): Promise<MutationResult<T>>
-  listDispatches(): DispatchRow[]
-  boundRunId(caller: RuntimeCallerEvidence): RunId | null
-  attentionFor(dispatchId: DispatchId): { guidance: boolean; input: boolean; approval: boolean; rootCompletion: boolean }
   mutate<T extends object>(
     method: MutatingOrchestrationMethod,
     params: MutationRequest & Record<string, unknown>,

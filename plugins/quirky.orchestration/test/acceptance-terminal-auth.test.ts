@@ -1,9 +1,10 @@
-import { chmodSync, existsSync, readFileSync, writeFileSync, appendFileSync } from 'node:fs'
+import { chmodSync, existsSync, writeFileSync, appendFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { expect, test } from 'bun:test'
 import type { Session } from '@quirky/protocol'
-import { waitForAsync } from '../../../packages/daemon/test/helpers'
+import { waitFor } from '../../../packages/daemon/test/helpers'
 import { startAgentsE2E } from '../../quirky.agents/test/support/e2e'
+import { readCliResult } from './fixture'
 
 const REPO_ROOT = resolve(import.meta.dir, '../../..')
 const CLI_MAIN = join(REPO_ROOT, 'packages/cli/src/main.ts')
@@ -22,7 +23,7 @@ test('AC9 a real terminal launch passes its inherited kernel identity to the gen
     }) as Session
     const controlDir = join(e2e.home, 'orchestration-terminal')
     const ready = join(controlDir, `${session.id}.ready`)
-    await waitForAsync(() => existsSync(ready) ? true : undefined, 15_000)
+    await waitFor(() => existsSync(ready) ? true : undefined, 15_000)
 
     const requestId = crypto.randomUUID()
     const correlationId = crypto.randomUUID()
@@ -38,10 +39,10 @@ test('AC9 a real terminal launch passes its inherited kernel identity to the gen
         '--json'
       ]
     }) + '\n')
-    const reply = await waitForAsync(() => {
-      const path = join(controlDir, `${correlationId}.reply.json`)
-      return existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) as { code: number; stdout: string; stderr: string } : undefined
-    }, 30_000)
+    const reply = await waitFor(
+      () => readCliResult(join(controlDir, `${correlationId}.reply.json`)),
+      30_000
+    )
     expect(reply.code).toBe(0)
     expect(reply.stderr).toBe('')
     const result = JSON.parse(reply.stdout) as {

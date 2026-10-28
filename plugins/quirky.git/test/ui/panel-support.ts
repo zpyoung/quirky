@@ -6,6 +6,7 @@ import type {
   UiLayout,
   UiPluginContext
 } from '@quirky/protocol'
+import { createNativeBrowserCapability } from '../../../../packages/ui/src/native-browser'
 
 // the caller registers happy-dom first, then imports this module
 const { act } = await import('react')
@@ -121,6 +122,7 @@ export function fakeContext(initial: UiLayout): Fake {
     called: (method) => fake.calls.filter((c) => c.method === method),
     context: {
       pluginId: 'quirky.git',
+      nativeBrowser: createNativeBrowserCapability(),
       log() {},
       provide() {},
       async call(method, params = {}) {
@@ -174,6 +176,9 @@ export function fakeContext(initial: UiLayout): Fake {
         return fake.settings[key]
       },
       executeCommand: async () => {},
+      createCommandDrag() { throw new Error('command dragging is unavailable in this fake') },
+      consumeCommandDrag() { return null },
+      cancelCommandDrag() {},
       openView: (id, input) => void fake.views.push({ id, input }),
       closeView() {},
       togglePanel() {},

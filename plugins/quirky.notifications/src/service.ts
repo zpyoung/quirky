@@ -32,7 +32,7 @@ import {
   type Viewing
 } from './viewed'
 
-export type Source = 'agent' | 'bell' | 'program' | 'ask' | 'test' | 'heimdall'
+export type Source = 'agent' | 'bell' | 'program' | 'ask' | 'test' | 'heimdall' | 'loop'
 export type Reason = 'delivered' | 'disabled' | 'source-disabled' | 'suppressed-focus' | 'cooldown'
 export type Result = Reason | 'superseded' | 'dropped'
 export type UnreadReason = 'agent' | 'bell' | 'notification'
@@ -56,6 +56,15 @@ export type SettledData = {
   toolName?: string | null
   toolInput?: string | null
   lastAssistantMessage?: string | null
+}
+export type LoopNotificationData = {
+  loopId: string
+  name: string
+  event: 'completed' | 'paused' | 'cap' | 'needs-you'
+  reason?: string
+  detail?: string
+  sessionId?: string
+  worktreeId: string
 }
 
 export type ServiceOptions = {
@@ -83,6 +92,7 @@ type Pending = {
   occasion?: 'always' | 'unfocused' | 'invisible'
   hold?: BellHold
   open?: PluginNotification['open']
+  key?: string
   banner(): Promise<Banner>
 }
 
@@ -171,6 +181,9 @@ export class NotificationsService {
       }
       case 'quirky.terminal/notification':
         this.fire(() => this.terminalNotification(event.data as TerminalNotification))
+        return
+      case 'quirky.loops/notification':
+        this.fire(() => this.loopNotification(event.data as LoopNotificationData))
         return
       case 'quirky.ask/created':
         this.fire(() => this.askCreated(event.data as { ask: Ask }))
@@ -527,6 +540,27 @@ export class NotificationsService {
       }
     })
   }
+  private async loopNotification(data: LoopNotificationData): Promise<void> {
+    if (data.event === 'paused' && (data.reason === 'user' || data.reason === 'interrupted-by-restart')) return
+    const title = data.event === 'completed'
+      ? 'Loop completed'
+      : data.event === 'needs-you'
+        ? 'Loop needs you'
+        : data.event === 'cap' || data.reason?.startsWith('cap-')
+          ? 'Loop reached its cap'
+          : 'Loop paused'
+    const detail = [data.reason, data.detail].filter((part): part is string => typeof part === 'string' && part.trim() !== '').join(': ')
+    const body = cut(`${cut(data.name, PROGRAM_TEXT_MAX)}${detail ? `: ${cut(detail, PROGRAM_TEXT_MAX)}` : ''}`, PROGRAM_TEXT_MAX)
+    await this.handle({
+      source: 'loop',
+      sessionId: data.sessionId ?? null,
+      worktreeId: data.worktreeId,
+      marker: 'notification',
+      key: `loop:${data.loopId}:${data.event}`,
+      banner: async () => ({ title, body })
+    })
+  }
+
 
   private async askCreated(data: { ask: Ask }): Promise<void> {
     const { ask } = data
@@ -665,6 +699,7 @@ export class NotificationsService {
     this.context.notify({
       title: banner.title,
       body: banner.body,
+      ...(pending.key === undefined ? {} : { key: pending.key }),
       ...(pending.sessionId !== null ? { sessionId: pending.sessionId } : {}),
       ...(pending.worktreeId !== null ? { worktreeId: pending.worktreeId } : {}),
       ...(pending.open !== undefined

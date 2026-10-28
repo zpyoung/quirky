@@ -108,11 +108,14 @@ const settingInfo = object(
     plugin: string(),
     type: { type: 'string', enum: ['boolean', 'number', 'string', 'enum'] },
     title: string(),
+    category: string(),
+    section: string(),
     description: string(),
     default: {},
     minimum: { type: 'number' },
     maximum: { type: 'number' },
     values: strings,
+    menu: { type: 'string', enum: ['view'], description: 'A boolean setting exposed in the native View menu.' },
     value: { description: 'The current value.' },
     stored: object({ value: {}, valid: boolean() }, ['value', 'valid'])
   },
@@ -153,9 +156,9 @@ const uiMenuItem = object(
   {
     id: string(),
     plugin: string(),
-    menu: { type: 'string', enum: ['quirky.terminal/pane'] },
+    menu: { type: 'string', enum: ['quirky.terminal/pane', 'quirky.terminal/tab'] },
     title: string(),
-    command: string('A full command ID, run with `{ session }`.'),
+    command: string('A full command ID; receives pane session or new-tab worktree/workspace/group context.'),
     when: object({ agent: { type: 'string', enum: ['any'] } }),
     after: { type: 'string', enum: ['quick-commands'] }
   },
@@ -165,18 +168,20 @@ const uiModel = object(
   {
     sidebarSections: listOf({ type: 'object' }),
     statusBars: listOf({ type: 'object' }),
+    activityItems: listOf({ type: 'object' }),
     panels: listOf({ type: 'object' }),
     views: listOf({ type: 'object' }),
     overlays: listOf({ type: 'object' }),
     commands: listOf({ type: 'object' }),
     keybindings: listOf(uiKeybinding, 'Registry precedence order: distro bindings first, then plugin bindings.'),
     settings: listOf({ type: 'object' }),
+    settingsSections: listOf({ type: 'object' }),
     menuItems: listOf(uiMenuItem),
     themes: listOf({ type: 'object' }),
     theme: object({ chosen: string(), active: string() }, ['chosen', 'active']),
     modules: { type: 'object', additionalProperties: true }
   },
-  ['sidebarSections', 'statusBars', 'panels', 'views', 'overlays', 'commands', 'keybindings', 'settings', 'menuItems', 'themes', 'theme', 'modules']
+  ['sidebarSections', 'statusBars', 'activityItems', 'panels', 'views', 'overlays', 'commands', 'keybindings', 'settings', 'settingsSections', 'menuItems', 'themes', 'theme', 'modules']
 )
 const apiDescription = object(
   {
@@ -196,6 +201,8 @@ const uiLayout = object(
     panel: { description: 'The open panel ID, or null.' },
     sidebar: boolean(),
     focus: { description: "'sidebar', 'view', 'panel' or null." },
+    panelWidths: { type: 'object', additionalProperties: true, description: 'Desired width by panel ID.' },
+    activityBarPosition: { type: 'string', enum: ['top', 'side'], description: 'Global panel activity-bar position.' },
     palette: { type: 'boolean', description: 'Whether the command palette is open; absent means closed.' }
   },
   ['view', 'panel', 'sidebar', 'focus']
@@ -434,6 +441,19 @@ export const KERNEL_METHOD_SCHEMAS = {
     result: uiLayout
   },
   'ui.panel.close': { description: 'Closes the open panel.', params: noParams, result: uiLayout },
+  'ui.panel.configure': {
+    description:
+      'Configures an effective panel width (an integer from 220 through 4096) and/or the global activity bar position.',
+    params: object(
+      {
+        id: string('An effective panel contribution ID.'),
+        width: { type: 'integer', minimum: 220, maximum: 4096 },
+        activityBarPosition: { type: 'string', enum: ['top', 'side'] }
+      },
+      ['id']
+    ),
+    result: uiLayout
+  },
   'ui.sidebar.set': {
     description: 'Shows or hides the sidebar.',
     params: object({ visible: boolean() }, ['visible']),

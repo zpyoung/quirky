@@ -16,7 +16,11 @@ export type SettingField = {
   value: boolean | number | string
 }
 
-export type SettingGroup = { plugin: string; fields: SettingField[] }
+export type SettingSection = { section?: string; fields: SettingField[] }
+
+export type SettingGroup =
+  | { kind: 'plugin'; plugin: string; category?: never; sections?: never; fields: SettingField[] }
+  | { kind: 'category'; plugin?: never; category?: string; sections: SettingSection[]; fields: SettingField[] }
 
 export type ThemeOption = { id: string; title: string; appearance: ThemeInfo['appearance'] }
 
@@ -37,30 +41,69 @@ function byId(a: { id: string }, b: { id: string }): number {
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
 }
 
+function byOptionalName(a?: string, b?: string): number {
+  if (a === undefined) return b === undefined ? 0 : -1
+  if (b === undefined) return 1
+  return a < b ? -1 : a > b ? 1 : 0
+}
+
+function settingFields(settings: SettingInfo[]): SettingField[] {
+  return [...settings].sort(byId).map((setting) => ({
+    id: setting.id,
+    title: setting.title,
+    description: setting.description,
+    control: controlFor(setting),
+    value: setting.value
+  }))
+}
+
 /**
- * Groups settings by declaring plugin for the Settings dialog. Groups are sorted by plugin ID and
- * the fields within a group by setting ID, so the dialog reads the same whatever order the daemon
- * listed them in. Each field carries the control for its type and the current value.
+ * Groups categorized settings by their declared category and section. Settings without either
+ * field remain grouped by plugin ID; every group's fields are sorted by setting ID.
  */
 export function settingsGroups(settings: SettingInfo[]): SettingGroup[] {
-  const groups = new Map<string, SettingInfo[]>()
+  const plugins = new Map<string, SettingInfo[]>()
+  const categories = new Map<string | undefined, Map<string | undefined, SettingInfo[]>>()
+
   for (const setting of settings) {
-    const members = groups.get(setting.plugin)
+    if (setting.category === undefined && setting.section === undefined) {
+      const members = plugins.get(setting.plugin)
+      if (members) members.push(setting)
+      else plugins.set(setting.plugin, [setting])
+      continue
+    }
+
+    let sections = categories.get(setting.category)
+    if (!sections) {
+      sections = new Map()
+      categories.set(setting.category, sections)
+    }
+    const members = sections.get(setting.section)
     if (members) members.push(setting)
-    else groups.set(setting.plugin, [setting])
+    else sections.set(setting.section, [setting])
   }
-  return [...groups.entries()]
+
+  const categorized = [...categories.entries()]
+    .sort(([a], [b]) => byOptionalName(a, b))
+    .map(([category, bySection]): SettingGroup => {
+      const sections = [...bySection.entries()]
+        .sort(([a], [b]) => byOptionalName(a, b))
+        .map(([section, members]) => ({
+          ...(section !== undefined ? { section } : {}),
+          fields: settingFields(members)
+        }))
+      return {
+        kind: 'category',
+        ...(category !== undefined ? { category } : {}),
+        sections,
+        fields: sections.flatMap((section) => section.fields).sort(byId)
+      }
+    })
+  const uncategorized = [...plugins.entries()]
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-    .map(([plugin, members]) => ({
-      plugin,
-      fields: [...members].sort(byId).map((setting) => ({
-        id: setting.id,
-        title: setting.title,
-        description: setting.description,
-        control: controlFor(setting),
-        value: setting.value
-      }))
-    }))
+    .map(([plugin, members]): SettingGroup => ({ kind: 'plugin', plugin, fields: settingFields(members) }))
+
+  return [...categorized, ...uncategorized]
 }
 
 /**

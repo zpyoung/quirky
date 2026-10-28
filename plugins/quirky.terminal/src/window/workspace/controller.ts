@@ -3,8 +3,8 @@ import { RpcErrorCode, type QuirkyEvent, type Session, type UiPluginContext } fr
 import { displayTitle } from '../../layout/titles'
 import { findGroup, groupsInOrder, paneLeaves, setGroupRatio, setPaneRatio } from '../../layout/tree'
 import type { DropZone } from '../../layout/tree'
-import { FLOATING_WORKSPACE, TAB_COLOR_HEX, TAB_COLORS } from '../../layout/types'
-import type { Edge, Group, GroupNode, PaneLeaf, PaneNode, Workspace } from '../../layout/types'
+import { FLOATING_WORKSPACE, isTerminalTab, isViewTab, TAB_COLOR_HEX, TAB_COLORS } from '../../layout/types'
+import type { Edge, Group, GroupNode, PaneLeaf, PaneNode, Tab, Workspace } from '../../layout/types'
 import type { PaneReport, SearchOptions, TerminalPaneHandle, TerminalPaneProps } from '../pane/TerminalPaneView'
 import type { DockState } from '../dock/types'
 import { SEPARATOR, type MenuItem } from './Menu'
@@ -36,6 +36,7 @@ export const DOUBLE_REQUEST_GUARD_MS = 350
 
 const TERMINAL_PREFIX = 'quirky.terminal/'
 const SETTING_PREFIX = 'setting:quirky.terminal/'
+const EDITOR_VIEW_ID = 'view:quirky.editor/document'
 
 /** What the person closes: one tab, one pane, or the tabs on one side of a tab. */
 export type CloseTarget =
@@ -86,10 +87,14 @@ export type WorkspaceOptions = {
   workspace?: 'floating'
   /** Rendered after the `+` button of each group's strip. */
   stripExtras?: (group: Group) => ReactNode
-  /** The rows of the pane menu's Quick Commands submenu. */
+  /** Rows in the pane menu's Quick Commands submenu. */
   paneMenuExtras?: (pane: PaneLeaf) => MenuItem[]
   /** Rows other plugins contribute to the pane menu, shown right after the Quick Commands row. */
   paneMenuContributions?: (pane: PaneLeaf, session: Session | undefined) => MenuItem[]
+  /** Rows other plugins contribute to the + menu for its selected group and workspace. */
+  plusMenuContributions?: (group: Group, workspace: string) => MenuItem[]
+  /** The public menu contribution list changes, keeping an open + menu current. */
+  subscribeMenuContributions?: (listener: () => void) => () => void
   /** Menus beyond `tab`, `pane`, `plus` and `actions`, opened by `openMenu(kind, target)`. */
   extraMenus?: Record<string, (target: string | null) => MenuItem[]>
   /** The element carrying the theme's custom properties; defaults to the mount element. */
@@ -125,6 +130,13 @@ function isEditableControl(element: Element): boolean {
   if (element.classList.contains('xterm-helper-textarea')) return false
   const tag = element.tagName
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (element as HTMLElement).isContentEditable === true
+}
+
+/** The MIME type identifies a host-minted one-use token; dragover checks only its presence. */
+export const COMMAND_DROP_MIME = 'application/x-quirky-command'
+
+export function hasCommandDrop(transfer: DataTransfer | null | undefined): transfer is DataTransfer {
+  return transfer !== null && transfer !== undefined && Array.from(transfer.types).includes(COMMAND_DROP_MIME)
 }
 
 /** Writes to the clipboard; the failure case is the caller's to report. */
@@ -262,6 +274,10 @@ export class WorkspaceController {
         void this.load(false)
       })
     )
+    const unsubscribeMenuContributions = this.options.subscribeMenuContributions?.(() => {
+      if (this.state.menu?.kind === 'plus') this.set({})
+    })
+    if (unsubscribeMenuContributions) this.unsubscribes.push(unsubscribeMenuContributions)
     this.set({ settings: readWorkspaceSettings(this.context, this.settingOverrides) })
     void this.load(!this.floating)
   }
@@ -352,7 +368,7 @@ export class WorkspaceController {
       if (loc) void this.focusPane(loc.leaf.id)
     }
     const unknown = groupsInOrder(workspace.root).some((group) =>
-      group.tabs.some((tab) => paneLeaves(tab.root).some((leaf) => !this.state.sessions[leaf.session]))
+      group.tabs.some((tab) => isTerminalTab(tab) && paneLeaves(tab.root).some((leaf) => !this.state.sessions[leaf.session]))
     )
     if (unknown) void this.reloadSessions()
   }
@@ -573,6 +589,25 @@ export class WorkspaceController {
     await this.run('pinTab', { tab: tabId, pinned }, pinned ? 'pin the tab' : 'unpin the tab')
   }
 
+  async promoteViewTab(tabId: string): Promise<void> {
+    const loc = this.ws ? locateTab(this.ws, tabId) : null
+    if (!loc || !isViewTab(loc.tab) || !loc.tab.preview) return
+    const bufferId = loc.tab.viewId === EDITOR_VIEW_ID ? loc.tab.input?.bufferId : undefined
+    if (typeof bufferId === 'string') {
+      try {
+        await this.context.call('quirky.editor/view', { bufferId, tabId, action: 'promote' })
+      } catch (error) {
+        this.context.toast('Could not promote the preview', messageOf(error))
+      }
+      return
+    }
+    await this.run('rekeyViewTabs', {
+      workspace: this.workspaceId,
+      viewId: loc.tab.viewId,
+      changes: [{ tab: tabId, key: loc.tab.key, preview: false }]
+    }, 'promote the preview')
+  }
+
   /** Moves a tab to `index` of a group (the end when omitted); it becomes that group's active tab. */
   async moveTabToGroup(tabId: string, group: string, index?: number): Promise<void> {
     await this.run('moveTab', { tab: tabId, group, ...(index === undefined ? {} : { index }) }, 'move the tab')
@@ -631,7 +666,7 @@ export class WorkspaceController {
 
   private async cycleFocus(offset: 1 | -1): Promise<void> {
     const at = this.ws ? focusedTabOf(this.ws) : null
-    if (at) await this.run('focusPane', { tab: at.tab.id, offset }, 'focus the pane')
+    if (at && isTerminalTab(at.tab)) await this.run('focusPane', { tab: at.tab.id, offset }, 'focus the pane')
   }
 
   focusNext(): Promise<void> {
@@ -653,7 +688,9 @@ export class WorkspaceController {
     const at = this.ws ? focusedTabOf(this.ws) : null
     const tab = tabId ?? at?.tab.id
     const loc = tab && this.ws ? locateTab(this.ws, tab) : null
-    if (loc && paneLeaves(loc.tab.root).length > 1) await this.run('equalize', { tab: loc.tab.id }, 'equalize the panes')
+    if (loc && isTerminalTab(loc.tab) && paneLeaves(loc.tab.root).length > 1) {
+      await this.run('equalize', { tab: loc.tab.id }, 'equalize the panes')
+    }
   }
 
   async clearPane(paneId?: string): Promise<void> {
@@ -699,7 +736,7 @@ export class WorkspaceController {
     if (rename.kind === 'tab') {
       const loc = locateTab(ws, rename.id)
       if (!loc) return
-      const current = loc.tab.customTitle ?? displayTitle(loc.tab)
+      const current = isViewTab(loc.tab) ? loc.tab.title : loc.tab.customTitle ?? displayTitle(loc.tab)
       if (value.trim() === current) return
       await this.run('renameTab', { tab: rename.id, title: value }, 'rename the tab')
     } else {
@@ -777,8 +814,22 @@ export class WorkspaceController {
   }
 
   private async execClose(target: CloseTarget): Promise<void> {
-    const params = { ...this.closeParams(target), yes: true }
     const hadTabs = this.ws !== null && hasTabs(this.ws)
+    if (target.kind === 'tab') {
+      const loc = this.ws ? locateTab(this.ws, target.tab) : null
+      if (loc && isViewTab(loc.tab) && loc.tab.closeCommand) {
+        try {
+          await this.context.executeCommand(loc.tab.closeCommand, { ...(loc.tab.closeParams ?? {}), tabId: loc.tab.id })
+        } catch (error) {
+          this.context.toast('Could not close the tab', messageOf(error))
+          return
+        }
+        const after = await this.run('workspace', { workspace: this.workspaceId }, 'refresh the workspace')
+        if (hadTabs && after && !hasTabs(after)) await this.minimizeFloating()
+        return
+      }
+    }
+    const params = { ...this.closeParams(target), yes: true }
     let after: Workspace | null
     if (target.kind === 'tab') after = await this.run('closeTab', params, 'close the tab')
     else if (target.kind === 'pane') after = await this.run('closePane', params, 'close the pane')
@@ -826,8 +877,13 @@ export class WorkspaceController {
     return this.requestClose({ kind: 'tabs', tab: tabId, which })
   }
 
-  /** Closes the focused pane of a split tab, else the focused tab; with nothing open a floating workspace minimizes. */
+  /** Closes the active view tab or terminal pane; with nothing open a floating workspace minimizes. */
   async closeFocused(): Promise<void> {
+    const selected = this.ws ? focusedTabOf(this.ws) : null
+    if (selected && isViewTab(selected.tab)) {
+      await this.requestClose({ kind: 'tab', tab: selected.tab.id })
+      return
+    }
     const at = this.ws ? focusedPaneOf(this.ws) : null
     if (!at) {
       await this.minimizeFloating()
@@ -947,13 +1003,13 @@ export class WorkspaceController {
         enabled: group.tabs.length > 1,
         submenu: sides.map(([label, side]) => ({ label, onSelect: () => void this.moveTabToSplit(tabId, side, group.id) }))
       },
-      {
+      ...(isTerminalTab(tab) ? [{
         label: 'Split Terminal',
         submenu: [
           { label: 'Right', onSelect: () => void this.splitRight(tab.activePane) },
           { label: 'Down', onSelect: () => void this.splitDown(tab.activePane) }
         ]
-      },
+      }] : []),
       { label: tab.pinned ? 'Unpin Tab' : 'Pin Tab', onSelect: () => void this.pinTab(tabId, !tab.pinned) },
       { label: 'Copy Tab ID', onSelect: () => void this.copyText(tabId) },
       { label: 'Close', key: '⌘W', onSelect: () => void this.closeTab(tabId) },
@@ -1029,12 +1085,20 @@ export class WorkspaceController {
   private plusItems(groupId: string | null, query: string): MenuItem[] {
     const group = groupId && this.ws ? findGroup(this.ws.root, groupId) : null
     const target = group?.id
-    const rows: MenuItem[] = filterEntries(this.state.agents, query).map((entry) => ({
+    const needle = query.trim().toLowerCase()
+    const contributed = group
+      ? (this.options.plusMenuContributions?.(group, this.workspaceId) ?? []).filter(
+          (item) => needle === '' || item.label.toLowerCase().includes(needle)
+        )
+      : []
+    const entries = filterEntries(this.state.agents, query)
+    const rows: MenuItem[] = entries.map((entry) => ({
       label: entry.label,
       key: entry.kind === 'terminal' ? '⌘T' : null,
       onSelect: () => this.chooseEntry(entry, target)
     }))
-    const needle = query.trim().toLowerCase()
+    const footer = entries.findIndex((entry) => entry.kind === 'manage')
+    rows.splice(footer < 0 ? rows.length : footer, 0, ...contributed)
     if (needle !== '' && this.ws) {
       for (const candidate of groupsInOrder(this.ws.root)) {
         for (const tab of candidate.tabs) {
@@ -1209,6 +1273,26 @@ export class WorkspaceController {
     if (drop.kind === 'strip') await this.moveTabToGroup(drag.tab, drop.group, drop.index)
     else if (drop.zone === 'center') await this.moveTabToGroup(drag.tab, drop.group)
     else await this.moveTabToSplit(drag.tab, drop.zone, drop.group)
+  }
+
+  /** Executes a trusted command after the daemon validates its explicit group target. */
+  async dropCommand(transfer: DataTransfer | null, groupId: string): Promise<void> {
+    const token = hasCommandDrop(transfer) ? transfer.getData(COMMAND_DROP_MIME) : ''
+    const descriptor = token === '' ? null : this.context.consumeCommandDrag(token)
+    const workspace = this.ws
+    if (!descriptor || !workspace || workspace.id === FLOATING_WORKSPACE || !findGroup(workspace.root, groupId)) return
+    try {
+      const info = await this.context.call('quirky.terminal/groupInfo', { group: groupId })
+      const target = info && typeof info === 'object' && 'workspace' in info && typeof info.workspace === 'string' ? info.workspace : null
+      const current = this.ws
+      if (target === null || target !== workspace.id || current !== workspace || current === null || !findGroup(current.root, groupId)) {
+        this.context.toast('Could not run dropped command', 'The target group is no longer available in this worktree.')
+        return
+      }
+      await this.context.executeCommand(descriptor.command, { ...descriptor.args, group: groupId, worktree: target })
+    } catch (error) {
+      this.context.toast('Could not run dropped command', messageOf(error))
+    }
   }
 
   // ---- report

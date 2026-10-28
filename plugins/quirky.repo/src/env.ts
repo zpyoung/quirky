@@ -37,10 +37,42 @@ export function createEnv(context: PluginContext, store: PluginStore): Env {
   }
 
   function groups(): ProjectGroup[] {
+    const rows = store.all<GroupRow>('SELECT * FROM groups ORDER BY sort_order, id')
+    const byId = new Map(rows.map((row) => [row.id, row]))
+    const completed = new Set<string>()
+    const repairs = new Set<string>()
+    for (const start of rows) {
+      if (completed.has(start.id)) continue
+      const chain: GroupRow[] = []
+      const seen = new Set<string>()
+      let current: GroupRow | undefined = start
+      while (current && !completed.has(current.id)) {
+        if (seen.has(current.id)) {
+          const closing = chain[chain.length - 1]!
+          closing.parent_id = null
+          repairs.add(closing.id)
+          break
+        }
+        seen.add(current.id)
+        chain.push(current)
+        if (current.parent_id === null) break
+        const parent = byId.get(current.parent_id)
+        if (!parent || parent.id === current.id) {
+          current.parent_id = null
+          repairs.add(current.id)
+          break
+        }
+        current = parent
+      }
+      for (const row of chain) completed.add(row.id)
+    }
+    if (repairs.size > 0) {
+      store.transaction(() => {
+        for (const id of repairs) store.run('UPDATE groups SET parent_id = NULL WHERE id = ?', id)
+      })
+    }
     const members = store.all<{ id: string; group_id: string }>('SELECT id, group_id FROM repos WHERE group_id IS NOT NULL ORDER BY added_at, id')
-    return store
-      .all<GroupRow>('SELECT * FROM groups ORDER BY sort_order, id')
-      .map((row) => toGroup(row, members.filter((member) => member.group_id === row.id).map((member) => member.id)))
+    return rows.map((row) => toGroup(row, members.filter((member) => member.group_id === row.id).map((member) => member.id)))
   }
 
   function resolveGroup(selector: string): ProjectGroup {

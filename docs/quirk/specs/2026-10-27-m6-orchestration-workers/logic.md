@@ -2,7 +2,7 @@
 
 ## Status & amendments
 
-Status: Autonomous design approved under LOOP night-mode defaults; implementation pending. Technical specification is the final section of this document (night-mode exception to a separate tech.md). No runtime acceptance is claimed by this document.
+Status: Implemented and post-integration verified through API/CLI, kernel and real terminal-UI scenarios. The authoritative queue records the final merge verdict. Technical decisions are the final section of this document. UI proof used an explicit private profile with the optional editor disabled; the observed default-profile editor activation timeout is recorded in the decision log and BLOCKERS.md.
 
 **Amendments:** 2026-10-27 — initial combined specification for the complete two-part queue item.
 
@@ -202,6 +202,14 @@ Always persist acceptance before effects, bound waits/pages, archive before clos
 
 Plugin activation remains lazy; per-session work only for tracked attempts, no perpetual broad scans. Reconciliation acts only on requested releases and known active resources. Migration stays atomic and restart-idempotent. Rollback means disable the plugin without closing tracked sessions; existing records remain inspectable when re-enabled.
 
-Permanent API/CLI acceptance files: `test/workers/start.test.ts` AC1-9/15; `test/workers/lifecycle.test.ts` AC8/10-15/19; `test/workers/output-fleet.test.ts` AC16-18; `test/workers/acceptance.test.ts` real daemon/CLI AC2/5/7/9/14/19/20 with isolated provider process fixtures. Add tests only for consumer-visible invariants, not text snapshots or mock forwarding. Implementers skip suites/build/typecheck; parent runs owned files after all edits settle. Before landing run `bun scripts/suite.ts plugins/quirky.orchestration` plus each actually changed public seam and affected consumers, `bun test scripts`, `bun run typecheck` once; whole suite is queue lander's job except genuinely universal protocol changes. Smoke actual daemon/CLI start→report→read→release and retry/abandon in private homes; web dogfood terminal placement/no-focus-steal/takeover/custody with build and owned daemon. No native-only scenario is currently added.
+Actual daemon/CLI acceptance uses private homes and real launched provider processes:
+- `test/workers/acceptance.test.ts`: terminal/native start, report, archive/release, stop/retry/abandon, takeover, context dispatch, snapshot pagination and certified exit.
+- `test/workers/acceptance-placement.test.ts`: admission boundaries, Git child/top-level/setup policy, no focus theft, meaningful task title, terminal reuse/transfer and external custody.
+- `test/workers/acceptance-recovery.test.ts`: unobserved accepted input, exact replay/mismatch, authorized recovery, rejected-report fencing, heartbeat and source-pinned output.
+- `test/workers/acceptance-restart.test.ts`: actual daemon crash after acceptance, epoch reconciliation, blocked Task and no duplicate process/input on pending replay.
 
-Self-review: AC1-20 enumerate every local in-scope feature-doc flow, failure boundary and documented defect. No retired scheduler/remote/settings/mobile behavior is claimed. One shared store, public runtime seams, exact input-origin requirement and final integration ownership avoid dual conventions. Runtime evidence remains required before marking any AC passed.
+Component tests in `start.test.ts`, `lifecycle.test.ts` and `output-fleet.test.ts` cover additional boundaries and races. They are not substitutes for the daemon/CLI scenarios. Kernel runtime-authority and terminal pane-input tests cover the shared public seams.
+
+Verification runs the changed packages/plugins and consumers through the repository suite runner, scripts and typecheck. Real private runtime smoke exercised exact stop, replay without resubmission, programmatic-input custody, and a visible-screen sentinel readable after release. Real Chromium interaction exercised coordinator selection, pinned task title, physical takeover and retained release; D17/D29 state the review and profile limits. No native-only window/menu/tray scenario is added.
+
+Self-review: AC1-20 enumerate the local feature flows, failure boundaries and recorded Orca defects. One shared store and public runtime seams keep mutation authority, resource custody and UI input origin distinct. Verification evidence and its limits are recorded in the worker decision log; the authoritative queue owns the final merge verdict.

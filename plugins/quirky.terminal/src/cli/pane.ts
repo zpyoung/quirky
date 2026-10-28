@@ -1,5 +1,6 @@
 import type { CliArgs, CliContext } from '@quirky/protocol'
 import { findPane, groupsInOrder } from '../layout/tree'
+import { isTerminalTab } from '../layout/types'
 import type { Workspace } from '../layout/types'
 import { atMost, paneIdOf, positional, resolvePane, requiredNumber, showWorkspace, stringFlag, workspaceParam, type Handler } from './shared'
 
@@ -70,6 +71,7 @@ async function locatePane(ctx: CliContext, paneId: string, selectors: string[]) 
     const { workspace } = (await call(ctx, 'workspace', { workspace: selector })) as { workspace: Workspace }
     for (const group of groupsInOrder(workspace.root)) {
       for (const tab of group.tabs) {
+        if (!isTerminalTab(tab)) continue
         const pane = findPane(tab.root, paneId)
         if (pane) {
           const active = workspace.activeGroup === group.id && group.activeTab === tab.id && tab.activePane === pane.id
@@ -107,7 +109,16 @@ export const paneCommands: Record<string, Handler> = {
     atMost(args, ctx, 1)
     const direction = stringFlag(args, 'direction')
     if (direction === undefined) throw ctx.usage('missing required flag --direction')
-    showWorkspace(ctx, await call(ctx, 'splitPane', { pane: await paneIdOf(args.positionals[0], ctx), direction }))
+    const title = stringFlag(args, 'title')
+    const command = stringFlag(args, 'command')
+    const activate = args.flags.activate
+    showWorkspace(ctx, await call(ctx, 'splitPane', {
+      pane: await paneIdOf(args.positionals[0], ctx),
+      direction,
+      ...(title === undefined ? {} : { title }),
+      ...(command === undefined ? {} : { command }),
+      ...(typeof activate === 'boolean' ? { activate } : {})
+    }))
   },
   'pane-close': onPane('closePane'),
   'pane-restart': onPane('restartPane'),

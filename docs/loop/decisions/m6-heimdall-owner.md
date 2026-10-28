@@ -374,6 +374,28 @@
 - **Revisit if:** a logical replay duplicates an effect or changes another CLI method's existing transport behavior
 - **Source:** assumed — autonomous
 
+## D35: Compose roadmap ancestry without dropping either native admission contract
+- **Question:** corebd082884 brought broad landed roadmap ancestry rather than only its final two test files
+- **Options:** restore stale native/UI copies; discard landed additions; reconcile disjoint slices and read every incoming binding log
+- **Chose:** parent owns lock/guide/prior-item progress conflicts; NativeRoadmapMerge owns native production/test composition; SurfaceRoadmapMerge owns notifications/worktree conflicts; IncomingBindingRead reads the decision delta. Preserve Heimdall plus loop notification sources, public glyph/membership rows, additive automation/editor workspaces and all guide sections. Keep historical M5 progress evidence qualified, not authority for this item.
+- **Why:** landed loop D24 requires serialized startup/incarnation/idle/sequence admission, guard veto before new receipt reservation or prompt bytes, stable no-guard fingerprints and guarded payload identity. D25 requires cleanup from retained lease revokers after context revocation. These compose with owner keyed lifetimes, canonical native snapshots and durable receipts; neither side may be replaced wholesale.
+- **Evidence:** incoming core D34 and exact loops D24–D25 read; delegated binding inventory corrected to11 added and5 modified logs. Added: editor D1–47, vault D1–45, hosting reviews D1–27, hosting tasks D1–24, review filters D1–12, GitHub workspace D1–23, automations core D1–13, loops core D1–27, loop presets D1–19, browser pane D1–33, mobile daemon D1–23. Modified: sidebar extras D24–37, M5 structured Progress only, Heimdall core D34, orchestration core D36–42, workers D17–31. No unresolved authority contradiction identified.
+- **Reversibility:** medium
+- **Confidence:** high for binding inventory and partition; merged gates pending
+- **Revisit if:** merged runtime violates a retained admission, revocation, receipt or owner-resource invariant
+- **Source:** locked by incoming decision logs and docs/loop/LOOP.md
+
+## D36: Use structural validation as declaration evidence, not a substitute runtime verdict
+- **Question:** a JSON duplicate escaped a clean compiler during dependency composition
+- **Options:** infer declarations from TypeScript; run a new adversarial review campaign; validate the scoped public structure separately
+- **Chose:** plugin-validator reads the owner/structured/fake-session/kind manifests and provider/CLI registrations without edits or runtime checks. The pre-roadmap composition passes31 unique methods across four manifests, supported schema subset, exact namespaced hooks, explicit owner CLI handlers and optional-owner dependency boundaries. New roadmap composition still requires its own runtime and compiler gates.
+- **Why:** JSON contribution uniqueness is an activation invariant outside TypeScript. A static pass does not prove an attested child or an effect.
+- **Evidence:** FinalOwnerManifest read-only report:0 critical issues/0 warnings; source fake setter declared and wired once; full pre-roadmap owner/native53-test pass remains separate evidence. No unstarted final review/dogfood campaign was launched.
+- **Reversibility:** easy
+- **Confidence:** high for the checked snapshot only
+- **Revisit if:** roadmap composition changes a checked declaration or public handler
+- **Source:** assumed — autonomous
+
 ## Progress
 - Source: actual df799424/e410 facade, verified4bb owner boundaries, isolated427 startup-pointer/restart, d34 heldPrefix fixture,1b9 harness option, bd3 real worker acceptance and83e4 independent fixture identities. Core267 schemas,582 stop/control corrections and controlsab953 are merged; all temporary SQL/native probes removed.
 - Own checks: owner API17tests113assertions; earlier combined owner58tests354assertions; native69tests269assertions; driver/worker9tests25assertions; pointer14tests58assertions; semantic restart1test16assertions. Full project typecheck exits0; scripts66tests517assertions pass. Final post-dependency affected remote suite/catch-up remain.

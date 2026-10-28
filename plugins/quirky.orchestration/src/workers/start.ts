@@ -8,7 +8,6 @@ import type {
   WorkerStartReceipt, WorkerStarter,
 } from '../worker-contracts'
 import { buildWorkerPreamble } from './preamble'
-import { MAX_NESTED_DEPTH } from '../core'
 
 const DEFAULT_READY_TIMEOUT_MS = 60_000
 const TURN_OBSERVATION_TIMEOUT_MS = 30_000
@@ -217,9 +216,6 @@ function taskForRun(core: WorkerCore, taskId: TaskRow['id'], runId: RunRow['id']
   return task
 }
 
-function hasOtherLiveDispatch(core: WorkerCore, taskId: TaskRow['id'], currentId: DispatchRow['id']): boolean {
-  return core.listDispatches().some(dispatch => dispatch.id !== currentId && dispatch.taskId === taskId && isLiveDispatch(dispatch))
-}
 
 function receiptFromSettledWorker(
   receipt: WorkerStartReceipt,
@@ -367,12 +363,8 @@ function settleAfterCommitFailure(
     const currentWorker = repository.get(initial.dispatchId)
     const currentDispatch = core.getDispatch(initial.dispatchId)
     if (!currentWorker || currentWorker.state !== 'starting' || currentDispatch.status !== 'pending') return
-    const currentTask = core.getTask(initial.taskId)
     if (unknown) {
       core.transitionWorker({ dispatchId: initial.dispatchId, expectedState: 'starting', nextState: 'start_unknown' })
-      if (currentTask.status === 'dispatched' && !hasOtherLiveDispatch(core, currentTask.id, initial.dispatchId)) {
-        core.transitionTask({ taskId: currentTask.id, expectedState: 'dispatched', nextState: 'blocked', at: timestamp })
-      }
       repository.update(initial.dispatchId, {
         state: 'start_unknown', stage: finalReceipt.stage, lastError: errorMessage(cause),
         effects, residualResources, receipt: finalReceipt,
@@ -380,6 +372,11 @@ function settleAfterCommitFailure(
       return
     }
 
+    core.transitionWorker({
+      dispatchId: initial.dispatchId,
+      expectedState: 'starting',
+      nextState: 'failed',
+    })
     const nextDispatchState = dispatch.failureCount + 1 >= 3 ? 'circuit_broken' : 'failed'
     core.transitionDispatch({
       dispatchId: initial.dispatchId,
@@ -389,14 +386,6 @@ function settleAfterCommitFailure(
       failureReason: errorMessage(cause),
       at: timestamp,
     })
-    const afterDispatch = repository.get(initial.dispatchId)
-    if (afterDispatch?.state === 'starting') {
-      core.transitionWorker({ dispatchId: initial.dispatchId, expectedState: 'starting', nextState: 'failed' })
-    }
-    const taskAfterDispatch = core.getTask(initial.taskId)
-    if (taskAfterDispatch.status === 'dispatched' && !hasOtherLiveDispatch(core, taskAfterDispatch.id, initial.dispatchId)) {
-      core.transitionTask({ taskId: taskAfterDispatch.id, expectedState: 'dispatched', nextState: 'failed', at: timestamp })
-    }
     const afterWorker = repository.get(initial.dispatchId)
     if (afterWorker) {
       repository.update(initial.dispatchId, {
@@ -459,6 +448,7 @@ async function launchAccepted(
   let residualResources: JsonValue[] = []
   let inputMayHaveBeenAccepted = false
   let placement: WorkerPlacement | null = null
+  let placementForFailure: WorkerPlacement | undefined
   let custodyRecorded = false
 
   try {
@@ -477,11 +467,12 @@ async function launchAccepted(
         throw fail('worker_identity_changed', 'The placed session kind does not match the validated worker mode.')
       }
       if (params.terminal) refuseActiveTerminal(core, repository, params.terminal)
-      const resource = workerSessionResource(repository, dispatch, placed)
+      placementForFailure = placed
       core.store.transaction(() => {
         const current = repository.get(dispatch.id)
         if (!current || current.state !== 'starting') throw fail('lifecycle_conflict', `Worker ${dispatch.id} changed before custody was recorded.`)
         const runtimeEffects = [...placed.effects]
+        const resource = workerSessionResource(repository, dispatch, placed)
         repository.putResource(resource)
         repository.update(dispatch.id, {
           stage: 'custody_recorded',
@@ -550,7 +541,7 @@ async function launchAccepted(
       throw fail('worker_identity_changed', 'Core attached a different worker identity than the attested placement.')
     }
 
-    const prompt = buildWorkerPreamble(task, attached, placement.identity, coordinatorAddress(run, caller), MAX_NESTED_DEPTH)
+    const prompt = buildWorkerPreamble(task, attached, placement.identity, coordinatorAddress(run, caller), core.nestedWorkerMaxDepth)
     const effectiveLaunch = {
       requested: initial.launch.requested,
       effective: {
@@ -597,12 +588,8 @@ async function launchAccepted(
       core.store.transaction(() => {
         const worker = repository.get(initial.dispatchId)
         const activeDispatch = core.getDispatch(initial.dispatchId)
-        const activeTask = core.getTask(initial.taskId)
         if (!worker || worker.state !== 'starting' || activeDispatch.status !== 'pending') return
         core.transitionWorker({ dispatchId: initial.dispatchId, expectedState: 'starting', nextState: 'start_unknown' })
-        if (activeTask.status === 'dispatched' && !hasOtherLiveDispatch(core, activeTask.id, initial.dispatchId)) {
-          core.transitionTask({ taskId: activeTask.id, expectedState: 'dispatched', nextState: 'blocked', at: now() })
-        }
         repository.update(initial.dispatchId, {
           state: 'start_unknown', stage: 'turn_unobserved', setupState: finalSetup.state,
           effects: [...effects], lastError: 'Accepted worker input had no bounded proof that a turn started.', receipt: finalReceipt,
@@ -644,8 +631,8 @@ async function launchAccepted(
     const effectsFromFailure = effectsFromError(cause)
     for (const item of effectsFromFailure) if (!effects.some(existing => existing.kind === item.kind && existing.id === item.id && existing.action === item.action)) effects.push(item)
     residualResources = [...residualsFromError(cause)]
-    if (stage === 'submitting' && isAmbiguousStart(cause, stage, inputMayHaveBeenAccepted) && placement && !effects.some(item => item.kind === 'dispatch_input')) {
-      effects.push({ kind: 'dispatch_input', action: 'outcome_unknown', role: 'agent', id: placement.session.id })
+    if (stage === 'submitting' && isAmbiguousStart(cause, stage, inputMayHaveBeenAccepted) && placementForFailure && !effects.some(item => item.kind === 'dispatch_input')) {
+      effects.push({ kind: 'dispatch_input', action: 'outcome_unknown', role: 'agent', id: placementForFailure.session.id })
     }
     const receipt = settleAfterCommitFailure(core, repository, initial, cause, stage, turnStart, effects, residualResources, inputMayHaveBeenAccepted)
     return receipt

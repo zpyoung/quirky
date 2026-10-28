@@ -1,10 +1,11 @@
 import type { PluginContext, PluginStore, QuirkyEvent, Session } from '@quirky/protocol'
 import type {
-  DispatchId, DispatchRow, DispatchStatus, MutationRequest, RunId, RunRow,
-  RuntimeCallerEvidence, TaskId, TaskRow, TaskStatus, UtcTimestamp, WorkerOutcome,
+  DispatchAdmissionInput, DispatchId, DispatchRow, DispatchStatus, DispatchTransitionInput, ResetMode,
+  MutationRequest, MutatingOrchestrationMethod, RunId, RunRow, RuntimeCallerEvidence, TaskId, TaskRow,
+  TaskTransitionInput, UtcTimestamp, WorkerOutcome, WorkerTransitionInput,
 } from '../../src/contracts'
 import type {
-  CoordinatorEvidence, ServiceCoordinatorEvidence, TerminalResource, WorkerCore, WorkerLifecycle,
+  CoordinatorEvidence, ServiceCoordinatorEvidence, TerminalResource, WorkerArchive, WorkerCore, WorkerLifecycle,
   WorkerPlacement, WorkerRecord, WorkerRepository, WorkerRuntime, WorkerSetup, WorkerStartParams, WorkerStarter,
   WorkerStartReceipt, WorkerUserInputParams, TurnStart,
 } from '../../src/worker-contracts'
@@ -59,9 +60,9 @@ export interface WorkerStartHarness {
   setupStatuses: { dispatchId: DispatchId; subject: string; body: string; high: boolean }[]
   run: RunRow
   caller: RuntimeCallerEvidence
+  emitSetupExit(sessionId: string, exitCode: number | null): void
   reportFromWorker(dispatchId: DispatchId, outcome: WorkerOutcome): void
   simulateUserInput(sessionId: string, expectedIncarnation: string): void
-  emitSetupExit(sessionId: string, exitCode: number): void
 }
 
 export function workerStartParams(overrides: Partial<WorkerStartParams> = {}): WorkerStartParams {
@@ -83,8 +84,9 @@ export function makeWorkerStartHarness(): WorkerStartHarness {
   const setupSessions = new Map<string, Session>()
   const setupListeners = new Set<(event: QuirkyEvent) => void | Promise<void>>()
   const setupStatuses: WorkerStartHarness['setupStatuses'] = []
+  const closeQuestionCalls: DispatchId[] = []
   let latestPhysicalInput: { session: string; expectedIncarnation: string; at: number } | null = null
-  const archives = new Map<DispatchId, never>()
+  const archives = new Map<DispatchId, WorkerArchive>()
   const receipts = new Map<string, { fingerprint: string; state: 'pending' | 'completed'; result?: object; checkpoint?: unknown }>()
   let sequence = 0
   let workerPort: WorkerLifecyclePort | null = null
@@ -162,17 +164,10 @@ export function makeWorkerStartHarness(): WorkerStartHarness {
     resource: dispatchId => resources.get(dispatchId) ?? null,
     resourceBySession: sessionId => [...resources.values()].find(resource => resource.sessionId === sessionId) ?? null,
     putResource: resource => resources.set(resource.ownerDispatchId, structuredClone(resource)),
-    archive: dispatchId => (archives.get(dispatchId) ?? null) as never,
-    putArchive: () => undefined,
-    deleteArchive: () => undefined,
+    archive: dispatchId => archives.get(dispatchId) ?? null,
+    putArchive: archive => { archives.set(archive.dispatchId, structuredClone(archive)) },
+    deleteArchive: dispatchId => { archives.delete(dispatchId) },
     addObservation: () => undefined,
-    reconcile: runtimeEpoch => {
-      for (const record of records.values()) {
-        if (record.state === 'starting' && record.runtimeEpoch !== runtimeEpoch) {
-          repository.update(record.dispatchId, { state: 'start_unknown', stage: 'runtime_restarted', lastError: 'The runtime restarted before worker-start reached a terminal receipt.' }, 'starting')
-        }
-      }
-    },
   }
 
   const requireCoordinator = (evidence: CoordinatorEvidence, requestedRunId?: RunId): RunRow => {
@@ -186,20 +181,35 @@ export function makeWorkerStartHarness(): WorkerStartHarness {
     return run
   }
 
-  const transitionTask = (input: { taskId: TaskId; expectedState: TaskStatus; nextState: TaskStatus; at: UtcTimestamp; result?: TaskRow['result'] }): TaskRow => {
+  const transitionTask = (input: TaskTransitionInput): TaskRow => {
     const current = tasks.get(input.taskId)
     if (!current) throw error('lifecycle_not_found', `Task ${input.taskId} was not found`)
     if (current.status !== input.expectedState) throw error('lifecycle_conflict', `Task ${input.taskId} is ${current.status}`)
-    const updated: TaskRow = { ...current, status: input.nextState, result: input.result ?? current.result }
+    const updated: TaskRow = {
+      ...current,
+      status: input.nextState,
+      result: input.result === undefined ? current.result : input.result,
+      completedAt: input.nextState === 'completed' ? input.at : null,
+    }
     tasks.set(input.taskId, updated)
     return updated
   }
 
-  const transitionDispatch = (input: { dispatchId: DispatchId; expectedState: DispatchStatus; nextState: DispatchStatus; at: UtcTimestamp }): DispatchRow => {
+  const transitionDispatch = (input: DispatchTransitionInput): DispatchRow => {
     const current = dispatches.get(input.dispatchId)
     if (!current) throw error('lifecycle_not_found', `Dispatch ${input.dispatchId} was not found`)
     if (current.status !== input.expectedState) throw error('lifecycle_conflict', `Dispatch ${input.dispatchId} is ${current.status}`)
-    const updated = { ...current, status: input.nextState, dispatchedAt: input.nextState === 'dispatched' ? input.at : current.dispatchedAt, completedAt: input.nextState === 'completed' || input.nextState === 'failed' ? input.at : current.completedAt }
+    const updated: DispatchRow = {
+      ...current,
+      status: input.nextState,
+      dispatchedAt: input.nextState === 'dispatched' ? input.at : current.dispatchedAt,
+      completedAt: input.nextState === 'completed' || input.nextState === 'failed' || input.nextState === 'circuit_broken'
+        ? input.at
+        : current.completedAt,
+      failureCount: 'failureClass' in input && input.failureClass === 'infrastructure' ? current.failureCount + 1 : current.failureCount,
+      lastFailure: 'failureReason' in input && input.failureReason ? input.failureReason : current.lastFailure,
+      terminationReason: 'terminationReason' in input ? input.terminationReason ?? current.terminationReason : current.terminationReason,
+    }
     dispatches.set(input.dispatchId, updated)
     return updated
   }
@@ -234,21 +244,44 @@ export function makeWorkerStartHarness(): WorkerStartHarness {
   core = {
     context: pluginContext,
     store,
-    registerWorkerPort: port => { workerPort = port },
+    nestedWorkerMaxDepth: 1,
+    registerWorkerPort: (port: WorkerLifecyclePort) => { workerPort = port },
     requireCoordinator,
     getRun: runId => runId === run.id ? run : (() => { throw error('run_not_found', `Run ${runId} was not found`) })(),
     getTask: taskId => tasks.get(taskId) ?? (() => { throw error('task_not_found', `Task ${taskId} was not found`) })(),
     getDispatch: dispatchId => dispatches.get(dispatchId) ?? (() => { throw error('dispatch_not_found', `Dispatch ${dispatchId} was not found`) })(),
-    createDispatch: input => {
+    createDispatch: (input: DispatchAdmissionInput & { supervised?: boolean }, evidence: RuntimeCallerEvidence, identity: SessionIdentity) => {
+      requireCoordinator(evidence, input.runId)
+      if (!identity.live || identity.sessionId !== input.assigneeSessionId) {
+        throw error('terminal_not_found', `assignee ${input.assigneeSessionId} has no matching live identity`)
+      }
+      const admission = core.admitDispatch(input, evidence)
+      if (!admission.admitted) throw error(admission.reason, `Task ${input.taskId} is not startable`)
+      const task = tasks.get(input.taskId)
+      if (!task) throw error('task_not_found', `Task ${input.taskId} was not found`)
       const dispatchId = `ctx_test_${++sequence}` as DispatchId
       const dispatch: DispatchRow = {
-        id: dispatchId, runId: input.runId ?? run.id, taskId: input.taskId, contractVersion: 1,
-        status: 'pending', assigneeSessionId: input.assigneeSessionId, creatorSessionId: caller.callerSessionId,
-        creatorDispatchId: null, retryOfDispatchId: input.retryOfDispatchId ?? null, depth: 0, failureCount: 0,
-        lastFailure: null, terminationReason: null, consumerGeneration: 1, createdAt: NOW, dispatchedAt: null,
-        completedAt: null, lastHeartbeatAt: null,
+        id: dispatchId,
+        runId: task.runId,
+        taskId: task.id,
+        contractVersion: 1,
+        status: 'dispatched',
+        assigneeSessionId: identity.sessionId,
+        creatorSessionId: evidence.runtimeSessionId,
+        creatorDispatchId: null,
+        retryOfDispatchId: admission.retryOfDispatchId,
+        depth: admission.depth,
+        failureCount: admission.failureCount,
+        lastFailure: null,
+        terminationReason: null,
+        consumerGeneration: 1,
+        createdAt: NOW,
+        dispatchedAt: NOW,
+        completedAt: null,
+        lastHeartbeatAt: null,
       }
       dispatches.set(dispatchId, dispatch)
+      tasks.set(task.id, { ...task, status: 'dispatched' })
       return dispatch
     },
     createTask: (input, evidence) => {
@@ -272,7 +305,8 @@ export function makeWorkerStartHarness(): WorkerStartHarness {
       if (input.retryOfDispatchId) {
         const prior = lineage.at(-1)
         const priorWorker = prior ? records.get(prior.id) : null
-        if (!prior || prior.id !== input.retryOfDispatchId || prior.status !== 'failed' || !priorWorker || !['failed', 'stopped', 'abandoned'].includes(priorWorker.state) || !['failed', 'blocked'].includes(task.status)) {
+        if (!prior || prior.id !== input.retryOfDispatchId || prior.status !== 'failed' || !priorWorker ||
+          !['failed', 'stopped', 'abandoned'].includes(priorWorker.state) || !['failed', 'blocked'].includes(task.status)) {
           throw error('task_not_startable', `Task ${task.id} is not eligible for retry`)
         }
       } else if (task.status !== 'ready') {
@@ -295,7 +329,8 @@ export function makeWorkerStartHarness(): WorkerStartHarness {
       requireCoordinator(evidence)
       const current = dispatches.get(dispatchId)
       const worker = repository.get(dispatchId)
-      if (!worker || worker.processIncarnation !== identity.processIncarnation || worker.processRuntimeEpoch !== identity.runtimeEpoch) {
+      if (!identity.live || !worker || worker.sessionId !== identity.sessionId ||
+        worker.processIncarnation !== identity.processIncarnation || worker.processRuntimeEpoch !== identity.runtimeEpoch) {
         throw error('worker_identity_changed', `Dispatch ${dispatchId} identity does not match its custody record`)
       }
       if (!current || current.status !== 'pending') throw error('lifecycle_conflict', `Dispatch ${dispatchId} cannot attach`)
@@ -303,10 +338,18 @@ export function makeWorkerStartHarness(): WorkerStartHarness {
       dispatches.set(dispatchId, updated)
       return updated
     },
+    mutate: async <T extends object>(
+      method: MutatingOrchestrationMethod,
+      params: MutationRequest & Record<string, unknown>,
+      evidence: CoordinatorEvidence,
+      operation: (store: PluginStore) => T,
+      options?: DurableMutationOptions<T>,
+    ) =>
+      core.mutateWorker(method, params, evidence, operation, options),
     mutateWorker: async <T extends object>(
       _method: string,
       params: MutationRequest & object,
-      _evidence: CoordinatorEvidence,
+      evidence: CoordinatorEvidence,
       operation: (store: PluginStore) => T,
       options?: DurableMutationOptions<T>,
     ) => {
@@ -333,55 +376,191 @@ export function makeWorkerStartHarness(): WorkerStartHarness {
         throw cause
       }
     },
-    mutate: (method, params, evidence, operation, options) =>
-      core.mutateWorker(method, params, evidence, operation, options),
     emitWorkerStatus: (dispatchId, subject, body, high) => { setupStatuses.push({ dispatchId, subject, body, high }) },
-    closeWorkerQuestions: () => undefined,
-    listDispatches: () => [...dispatches.values()],
+    closeWorkerQuestions: (dispatchId, _at) => { closeQuestionCalls.push(dispatchId) },
+    listDispatches: runId => [...dispatches.values()].filter(dispatch => runId === undefined || dispatch.runId === runId),
     boundRunId: evidence => evidence.callerSessionId === run.coordinatorSessionId ? run.id : null,
     attentionFor: () => ({ guidance: false, input: false, approval: false, rootCompletion: false }),
-    admitDispatch: () => ({ admitted: true, depth: 0, failureCount: 0, retryOfDispatchId: null }),
+    admitDispatch: (input: DispatchAdmissionInput, evidence: RuntimeCallerEvidence) => {
+      requireCoordinator(evidence, input.runId)
+      const task = tasks.get(input.taskId)
+      if (!task || task.runId !== (input.runId ?? run.id)) return { admitted: false, reason: 'task_not_startable' }
+      const lineage = [...dispatches.values()].filter(dispatch => dispatch.taskId === task.id).sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      const prior = lineage.at(-1)
+      const priorWorker = prior ? records.get(prior.id) : null
+      if (input.retryOfDispatchId) {
+        if (!prior || prior.id !== input.retryOfDispatchId || prior.status !== 'failed' || !priorWorker ||
+          !['failed', 'stopped', 'abandoned'].includes(priorWorker.state) || !['failed', 'blocked'].includes(task.status)) {
+          return { admitted: false, reason: 'task_not_startable' }
+        }
+      } else if (task.status !== 'ready') {
+        return { admitted: false, reason: 'task_not_startable' }
+      }
+      if (lineage.some(dispatch => dispatch.status === 'pending' || dispatch.status === 'dispatched')) {
+        return { admitted: false, reason: 'task_not_startable' }
+      }
+      return {
+        admitted: true,
+        depth: 0,
+        failureCount: prior?.failureCount ?? 0,
+        retryOfDispatchId: input.retryOfDispatchId ?? null,
+      }
+    },
     transitionTask,
     blockTaskForWorkerStop,
     transitionDispatch,
     transitionWorker: input => {
       const record = repository.get(input.dispatchId)
       if (!record || record.state !== input.expectedState) throw error('lifecycle_conflict', `Worker ${input.dispatchId} changed`)
-      return repository.update(input.dispatchId, { state: input.nextState }, input.expectedState)
+      const updated = repository.update(input.dispatchId, { state: input.nextState }, input.expectedState)
+      return updated
     },
-    reportWorkerDone: (input, evidence) => {
+    reportWorkerDone: (input, evidence) => store.transaction(() => {
       const dispatch = dispatches.get(input.dispatchId)
-      if (!dispatch || dispatch.taskId !== input.taskId) throw error('task_dispatch_mismatch', 'Report does not match its Dispatch')
-      if (dispatch.assigneeSessionId !== evidence.runtimeSessionId) throw error('worker_identity_changed', 'Report identity changed')
-      const worker = repository.get(input.dispatchId)
-      if (!worker || worker.processIncarnation !== evidence.attestation.processIncarnation || worker.processRuntimeEpoch !== evidence.attestation.runtimeEpoch) {
-        throw error('worker_identity_changed', 'Report process or runtime epoch changed')
+      if (!dispatch) return { status: 'rejected', reason: 'unknown_dispatch', audited: true }
+      const task = tasks.get(input.taskId)
+      if (!task) return { status: 'rejected', reason: 'unknown_task', audited: true }
+      if (dispatch.taskId !== input.taskId) return { status: 'rejected', reason: 'task_dispatch_mismatch', audited: true }
+      if (dispatch.assigneeSessionId === null || evidence.callerSessionId !== dispatch.assigneeSessionId) {
+        return { status: 'rejected', reason: 'sender_not_assignee', audited: true }
       }
-      const task = tasks.get(dispatch.taskId)
-      if (!task || !['dispatched', 'blocked'].includes(task.status)) throw error('dispatch_inactive', 'Task is not active')
-      const accepted = workerPort?.acceptReport(store, { dispatchId: input.dispatchId, outcome: input.outcome, caller: evidence, at: NOW })
-      if (!accepted) throw error('dispatch_inactive', 'Worker report was not accepted')
-      if (dispatch.status === 'pending') transitionDispatch({ dispatchId: dispatch.id, expectedState: 'pending', nextState: input.outcome === 'succeeded' ? 'completed' : 'failed', at: NOW })
-      else if (dispatch.status === 'dispatched') transitionDispatch({ dispatchId: dispatch.id, expectedState: 'dispatched', nextState: input.outcome === 'succeeded' ? 'completed' : 'failed', at: NOW })
-      const reportedTask = transitionTask({ taskId: task.id, expectedState: task.status, nextState: input.outcome === 'succeeded' ? 'completed' : 'failed', at: NOW })
-      return { status: 'accepted', task: reportedTask, dispatch: dispatches.get(dispatch.id)!, worker: accepted }
+      const worker = repository.get(dispatch.id)
+      if (evidence.runtimeSessionId !== dispatch.assigneeSessionId || !worker ||
+        worker.processIncarnation !== evidence.attestation.processIncarnation ||
+        worker.processRuntimeEpoch !== evidence.attestation.runtimeEpoch) {
+        return { status: 'rejected', reason: 'worker_identity_changed', audited: true }
+      }
+      const latest = [...dispatches.values()]
+        .filter(candidate => candidate.taskId === dispatch.taskId)
+        .sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id))
+        .at(-1)
+      if (latest?.id !== dispatch.id) return { status: 'rejected', reason: 'stale_dispatch', audited: true }
+      if (dispatch.status === 'completed' || dispatch.status === 'failed' || dispatch.status === 'circuit_broken') {
+        const priorResult = task.result
+        if (priorResult?.kind === 'worker_report' && priorResult.dispatchId === dispatch.id && priorResult.outcome === input.outcome) {
+          return { status: 'duplicate', task, dispatch, worker: repository.get(dispatch.id) }
+        }
+        return { status: 'rejected', reason: 'inactive_dispatch', audited: true }
+      }
+      if (dispatch.status !== 'pending' && dispatch.status !== 'dispatched') {
+        return { status: 'rejected', reason: 'dispatch_inactive', audited: true }
+      }
+      if (task.status !== 'dispatched' && task.status !== 'blocked') {
+        return { status: 'rejected', reason: 'inactive_dispatch', audited: true }
+      }
+      if (!workerPort) throw error('worker_port_unavailable', `Dispatch ${dispatch.id} has no registered worker port`)
+      if (!workerPort.acceptReport(store, { dispatchId: dispatch.id, outcome: input.outcome, caller: evidence, at: NOW })) {
+        return { status: 'rejected', reason: 'dispatch_inactive', audited: true }
+      }
+      const result: NonNullable<TaskRow['result']> = {
+        kind: 'worker_report',
+        outcome: input.outcome,
+        messageId: input.messageId,
+        dispatchId: dispatch.id,
+        reportedBy: evidence.runtimeSessionId,
+        subject: input.subject,
+        body: input.body,
+        completedBy: evidence.runtimeSessionId,
+        filesModified: [...(input.filesModified ?? [])],
+        reportPath: input.reportPath ?? null,
+        completedAt: NOW,
+      }
+      const settledDispatch = dispatch.status === 'pending'
+        ? input.outcome === 'succeeded'
+          ? transitionDispatch({ dispatchId: dispatch.id, expectedState: 'pending', nextState: 'completed', at: NOW })
+          : transitionDispatch({ dispatchId: dispatch.id, expectedState: 'pending', nextState: 'failed', failureClass: 'worker_report', failureReason: 'worker_report', at: NOW })
+        : input.outcome === 'succeeded'
+          ? transitionDispatch({ dispatchId: dispatch.id, expectedState: 'dispatched', nextState: 'completed', at: NOW })
+          : transitionDispatch({ dispatchId: dispatch.id, expectedState: 'dispatched', nextState: 'failed', failureClass: 'worker_report', failureReason: 'worker_report', at: NOW })
+      const settledTask = transitionTask({
+        taskId: task.id,
+        expectedState: task.status,
+        nextState: input.outcome === 'succeeded' ? 'completed' : 'failed',
+        result,
+        at: NOW,
+      })
+      return { status: 'accepted', task: settledTask, dispatch: settledDispatch, worker: repository.get(dispatch.id) }
+    }),
+    recordHeartbeat: (input, evidence) => {
+      const dispatch = dispatches.get(input.dispatchId)
+      if (!dispatch) return { status: 'rejected', reason: 'unknown_dispatch', lastHeartbeatAt: null }
+      if (dispatch.taskId !== input.taskId) return { status: 'rejected', reason: 'task_dispatch_mismatch', lastHeartbeatAt: null }
+      if (dispatch.assigneeSessionId === null || evidence.callerSessionId !== dispatch.assigneeSessionId) {
+        return { status: 'rejected', reason: 'sender_not_assignee', lastHeartbeatAt: null }
+      }
+      const worker = repository.get(dispatch.id)
+      if (evidence.runtimeSessionId !== dispatch.assigneeSessionId || !worker ||
+        worker.processIncarnation !== evidence.attestation.processIncarnation ||
+        worker.processRuntimeEpoch !== evidence.attestation.runtimeEpoch) {
+        return { status: 'rejected', reason: 'worker_identity_changed', lastHeartbeatAt: null }
+      }
+      if (dispatch.status !== 'dispatched') return { status: 'rejected', reason: 'dispatch_inactive', lastHeartbeatAt: null }
+      const state = workerPort?.stateForDispatch(store, dispatch.id)
+      if (workerPort && (!state || state === 'stopping' || state === 'stop_unknown' || state === 'stopped' || state === 'abandoned')) {
+        return { status: 'rejected', reason: 'dispatch_inactive', lastHeartbeatAt: null }
+      }
+      workerPort?.recordHeartbeat(store, { dispatchId: dispatch.id, caller: evidence, at: NOW })
+      dispatches.set(dispatch.id, { ...dispatch, lastHeartbeatAt: NOW })
+      return { status: 'accepted', lastHeartbeatAt: NOW }
     },
-    recordHeartbeat: () => ({ status: 'accepted', lastHeartbeatAt: NOW }),
-  }
+  } satisfies WorkerCore
 
-  const lifecycle = {
+  const lifecycle: WorkerLifecycle = {
     hasLiveForTask: (_store: PluginStore, taskId: TaskId) => [...records.values()].some(record => dispatches.get(record.dispatchId)?.taskId === taskId && ['starting', 'ready', 'start_unknown', 'stopping', 'stop_unknown'].includes(record.state)),
     stateForDispatch: (_store: PluginStore, dispatchId: DispatchId) => records.get(dispatchId)?.state ?? null,
-    settleDispatch: (_store: PluginStore, dispatchId: DispatchId, status: DispatchStatus) => {
+    workerForDispatch: (_store: PluginStore, dispatchId: DispatchId) => records.get(dispatchId) ?? null,
+    settleDispatch: (_store: PluginStore, dispatchId: DispatchId, status: DispatchStatus, _at: UtcTimestamp) => {
       const record = records.get(dispatchId)
-      if (record && status !== 'pending' && status !== 'dispatched') repository.update(dispatchId, { state: status === 'completed' ? 'succeeded' : 'failed', stage: 'settled' })
+      if (!record || status === 'pending' || status === 'dispatched' || record.state === 'stopping') return
+      repository.update(dispatchId, { state: status === 'completed' ? 'succeeded' : 'failed', stage: 'settled' }, record.state)
     },
-    acceptReport: (_store: PluginStore, input: { dispatchId: DispatchId; outcome: WorkerOutcome }) => {
+    transitionWorker: (_store: PluginStore, input: WorkerTransitionInput) => {
       const record = records.get(input.dispatchId)
-      if (!record || !['starting', 'start_unknown', 'ready', 'failed'].includes(record.state)) return null
-      return repository.update(input.dispatchId, { state: input.outcome === 'succeeded' ? 'succeeded' : 'failed', stage: 'settled', receipt: record.receipt ? { ...record.receipt, state: 'ready', stage: 'settled', workerOutcome: input.outcome } : null }) as WorkerRecord
+      if (!record || record.state !== input.expectedState) throw error('lifecycle_conflict', `Worker ${input.dispatchId} changed`)
+      if (input.expectedState === 'failed' &&
+        (input.nextState !== 'succeeded' || input.correction !== 'unobserved_prompt_report')) {
+        throw error('lifecycle_conflict', `Worker ${input.dispatchId} cannot be corrected`)
+      }
+      return repository.update(input.dispatchId, { state: input.nextState }, input.expectedState)
     },
-    recordHeartbeat: () => undefined,
+    reset: (_store: PluginStore, mode: ResetMode, _at: UtcTimestamp) => {
+      if (mode === 'messages') return
+      records.clear()
+      resources.clear()
+      archives.clear()
+    },
+    acceptReport: (_store: PluginStore, input) => {
+      const record = records.get(input.dispatchId)
+      const dispatch = dispatches.get(input.dispatchId)
+      if (!record || !dispatch || dispatch.assigneeSessionId !== input.caller.runtimeSessionId ||
+        record.processIncarnation !== input.caller.attestation.processIncarnation ||
+        record.processRuntimeEpoch !== input.caller.attestation.runtimeEpoch ||
+        record.state === 'stopping' || (record.state === 'stop_unknown' && record.stage === 'stopping') ||
+        record.state === 'stopped' || record.state === 'abandoned') return null
+      let current = record
+      if (current.state === 'starting') {
+        core.transitionWorker({ dispatchId: input.dispatchId, expectedState: 'starting', nextState: 'ready' })
+      } else if (current.state === 'start_unknown') {
+        core.transitionWorker({ dispatchId: input.dispatchId, expectedState: 'start_unknown', nextState: 'ready' })
+      } else if (current.state === 'stop_unknown') {
+        core.transitionWorker({ dispatchId: input.dispatchId, expectedState: 'stop_unknown', nextState: 'ready' })
+      }
+      current = repository.get(input.dispatchId)!
+      if (current.state !== 'ready') return null
+      core.transitionWorker({ dispatchId: input.dispatchId, expectedState: 'ready', nextState: input.outcome })
+      return repository.update(input.dispatchId, {
+        stage: 'settled',
+        lastError: null,
+        receipt: current.receipt ? { ...current.receipt, state: 'ready', stage: 'settled', workerOutcome: input.outcome } : null,
+      }, input.outcome)
+    },
+    recordHeartbeat: (_store, input) => {
+      const record = records.get(input.dispatchId)
+      if (record) repository.addObservation(input.dispatchId, 'heartbeat', {
+        at: input.at,
+        processIncarnation: input.caller.attestation.processIncarnation,
+      })
+    },
     stop: async () => ({} as never),
     abandon: async () => ({} as never),
     release: async () => ({} as never),
@@ -395,7 +574,7 @@ export function makeWorkerStartHarness(): WorkerStartHarness {
     recoverReleases: async () => undefined,
     onExit: () => undefined,
     dispose: () => undefined,
-  } as unknown as WorkerLifecycle
+  }
   core.registerWorkerPort(lifecycle)
 
   const events: string[] = []

@@ -33,8 +33,8 @@ export class ConnectionLostError extends Error {
  */
 export interface DaemonLink {
   readonly requestBase: string
-  call<M extends MethodName>(method: M, params: ParamsOf<M>, options?: Pick<CallOptions, 'requestId' | 'timeoutMs'>): Promise<ResultOf<M>>
-  callAny(method: string, params: Record<string, unknown>, options?: Pick<CallOptions, 'requestId' | 'timeoutMs'>): Promise<unknown>
+  call<M extends MethodName>(method: M, params: ParamsOf<M>, options?: CallOptions): Promise<ResultOf<M>>
+  callAny(method: string, params: Record<string, unknown>, options?: CallOptions): Promise<unknown>
   reconnect(): Promise<void>
   close(): void
 }
@@ -93,7 +93,7 @@ export function createDaemonLink(connect: () => Promise<QuirkyClient>, options: 
   const attempt = async (
     method: string,
     params: Record<string, unknown>,
-    callOptions?: Pick<CallOptions, 'requestId' | 'timeoutMs'>
+    callOptions?: CallOptions
   ): Promise<unknown> => {
     const requestId = callOptions?.requestId ?? nextRequestId(method)
     for (let resends = 0; ; resends++) {
@@ -130,7 +130,7 @@ export function createDaemonLink(connect: () => Promise<QuirkyClient>, options: 
   const invoke = async (
     method: string,
     params: Record<string, unknown>,
-    callOptions?: Pick<CallOptions, 'requestId' | 'timeoutMs'>
+    callOptions?: CallOptions
   ): Promise<unknown> => {
     const sent = needsYes(method) ? { ...params, yes: true } : params
     let result: unknown

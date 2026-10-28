@@ -1,5 +1,6 @@
 import { resolve } from 'node:path'
-import type { CliArgs, CliContext, CliModule, HookScript, ProjectGroup, Repo, RepoDetails } from '@quirky/protocol'
+import { RpcErrorCode, type CliArgs, type CliContext, type CliModule, type HookScript, type ProjectGroup, type Repo, type RepoDetails } from '@quirky/protocol'
+import { groupSubtreeIds } from './src/groups'
 
 type ScanResult = { repos: { path: string; name: string }[]; truncated: boolean }
 type ImportResult = {
@@ -56,8 +57,10 @@ function detailsRecord(ctx: CliContext, { repo, settings, hooks }: RepoDetails):
     ['command source', settings.commandSource ?? '-'],
     ['setup script', settings.setupScript ? oneLine(settings.setupScript) : '-'],
     ['archive script', settings.archiveScript ? oneLine(settings.archiveScript) : '-'],
+    ['issue command script', settings.issueCommand ? oneLine(settings.issueCommand) : '-'],
     ['hooks file', hooks.file ?? '-'],
     ['setup', hookLine(hooks.setup)],
+    ['issue command', hookLine(hooks.issueCommand ?? null)],
     ['archive', hookLine(hooks.archive)],
     ['effective agent startup', hooks.agentStartup ?? '-'],
     ['shared directories', hooks.sharedDirectories.join(', ') || '-']
@@ -94,7 +97,8 @@ const SET_FLAGS = {
   'agent-startup': 'agentStartup',
   'command-source': 'commandSource',
   'setup-script': 'setupScript',
-  'archive-script': 'archiveScript'
+  'archive-script': 'archiveScript',
+  'issue-command': 'issueCommand'
 }
 
 const named: CliModule['commands'] = {
@@ -185,7 +189,14 @@ const named: CliModule['commands'] = {
     const ref = typeof args.flags.ref === 'string' ? args.flags.ref : undefined
     const details = (await ctx.call('quirky.repo/trustHooks', { repo, kind, ...(ref !== undefined ? { ref } : {}) })) as RepoDetails
     ctx.out.result(details, () => {
-      const trusted = (['setup', 'archive'] as const).filter((k) => (kind === 'all' || kind === k) && details.hooks[k]?.shared?.trusted)
+      const trusted: string[] = []
+      for (const [hookKind, hook] of [
+        ['setup', details.hooks.setup],
+        ['archive', details.hooks.archive],
+        ['issue', details.hooks.issueCommand]
+      ] as const) {
+        if ((kind === 'all' || kind === hookKind) && hook?.shared?.trusted) trusted.push(hookKind)
+      }
       return trusted.length ? `trusted ${trusted.join(', ')} hooks of ${repo}` : `no shared hooks to trust in ${repo}`
     })
   },
@@ -205,8 +216,24 @@ const named: CliModule['commands'] = {
 
   async 'group-create'(args, ctx) {
     const [name] = args.positionals as [string]
-    const group = (await ctx.call('quirky.repo/groupCreate', { name, ...flagParams(args, { 'parent-path': 'parentPath' }) })) as ProjectGroup
+    const group = (await ctx.call('quirky.repo/groupCreate', { name, ...flagParams(args, { 'parent-path': 'parentPath', parent: 'parent' }) })) as ProjectGroup
     ctx.out.result(group, () => groupRecord(ctx, group))
+  },
+  async 'group-set-parent'(args, ctx) {
+    const [group] = args.positionals as [string]
+    const parentFlag = args.flags.parent
+    const clear = args.flags['no-parent'] === true
+    let parent: string | null
+    if (clear) {
+      if (parentFlag !== undefined) throw ctx.usage('--parent and --no-parent cannot be used together')
+      parent = null
+    } else if (typeof parentFlag === 'string') {
+      parent = parentFlag
+    } else {
+      throw ctx.usage('pass exactly one of --parent or --no-parent')
+    }
+    const updated = (await ctx.call('quirky.repo/groupSetParent', { group, parent })) as ProjectGroup
+    ctx.out.result(updated, () => groupRecord(ctx, updated))
   },
 
   async 'group-rename'(args, ctx) {
@@ -217,7 +244,43 @@ const named: CliModule['commands'] = {
 
   async 'group-delete'(args, ctx) {
     const [group] = args.positionals as [string]
-    const result = await ctx.call('quirky.repo/groupDelete', { group, ...flagParams(args, { 'expected-ledgers': 'expectedLedgers' }) })
+    const groups = (await ctx.call('quirky.repo/groupList')) as ProjectGroup[]
+    const idMatch = groups.find((entry) => entry.id === group)
+    const nameMatches = idMatch ? [] : groups.filter((entry) => entry.name === group)
+    const root = idMatch ?? nameMatches[0]
+    if (!root) throw ctx.fail(`no group matches ${group}; use its ID or exact name`)
+    if (nameMatches.length > 1) throw ctx.fail(`${group} matches ${nameMatches.length} groups: ${nameMatches.map((entry) => entry.id).join(', ')}`)
+
+    const expectedLedgerParams = flagParams(args, { 'expected-ledgers': 'expectedLedgers' })
+    let expectedLedgers: { ledgerId: string; revision: number }[] | undefined
+    try {
+      const preview = await ctx.call('quirky.ledger/removal-preview', {
+        removal: {
+          groupIds: groupSubtreeIds(groups, root.id),
+          ...(expectedLedgerParams.expectedLedgers !== undefined ? { expectedLedgers: expectedLedgerParams.expectedLedgers } : {})
+        }
+      })
+      const previewObject = typeof preview === 'object' && preview !== null ? (preview as { removalPreview?: unknown }) : undefined
+      if (!previewObject || !Array.isArray(previewObject.removalPreview)) {
+        throw ctx.fail('ledger removal preview did not return snapshots')
+      }
+      const snapshots: { ledgerId: string; revision: number }[] = []
+      for (const snapshot of previewObject.removalPreview) {
+        if (typeof snapshot !== 'object' || snapshot === null) throw ctx.fail('ledger removal preview returned invalid snapshots')
+        const { ledgerId, revision } = snapshot as { ledgerId?: unknown; revision?: unknown }
+        if (typeof ledgerId !== 'string' || ledgerId.trim() === '' || typeof revision !== 'number' || !Number.isInteger(revision) || revision < 0) {
+          throw ctx.fail('ledger removal preview returned invalid snapshots')
+        }
+        snapshots.push({ ledgerId, revision })
+      }
+      expectedLedgers = snapshots
+    } catch (error) {
+      if ((error as { code?: unknown } | null)?.code !== RpcErrorCode.MethodNotFound) throw error
+    }
+    const result = await ctx.call('quirky.repo/groupDelete', {
+      group: root.id,
+      ...(expectedLedgers !== undefined ? { expectedLedgers } : {})
+    })
     ctx.out.result(result, () => `deleted group ${group}`)
   },
 

@@ -1,0 +1,5067 @@
+{
+  "id": "quirky.reviews",
+  "name": "Hosting reviews",
+  "version": "0.1.0",
+  "description": "Pull-request review, workspace Checks, creation and hosting settings over public hosting APIs.",
+  "main": "main.ts",
+  "ui": "dist/ui.js",
+  "activation": "lazy",
+  "dependencies": [
+    "quirky.hosting",
+    "quirky.git",
+    "quirky.worktree"
+  ],
+  "contributes": {
+    "method": [
+      {
+        "id": "state",
+        "description": "Read exact daemon-owned review navigation, drafts, settings and retained data.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string"
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      {
+        "id": "close",
+        "description": "Restore the view preceding the review feature.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string"
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      {
+        "id": "showChecks",
+        "description": "Open active-workspace Checks.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string"
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      {
+        "id": "openLink",
+        "description": "Open a safe HTTP(S) review URL with configured destination and modifier inversion.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string"
+            },
+            "url": {
+              "type": "string"
+            },
+            "invert": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "url"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      {
+        "id": "copyText",
+        "description": "Deliver text to the open window clipboard; fail explicitly when unavailable.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "text"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      {
+        "id": "open",
+        "description": "Open a pull request in the full review page.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string"
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "tab": {
+              "type": "string",
+              "enum": [
+                "conversation",
+                "checks",
+                "files"
+              ]
+            },
+            "prRepo": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "host",
+                "owner",
+                "repo"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "worktree",
+            "number"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string"
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "tab": {
+              "type": "string",
+              "enum": [
+                "conversation",
+                "checks",
+                "files"
+              ]
+            },
+            "prRepo": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "host",
+                "owner",
+                "repo"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "worktree",
+            "number",
+            "tab"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "detailRefresh",
+        "description": "Refresh a selected pull request and visible detail data.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "surface": {
+              "type": "string",
+              "enum": [
+                "detail",
+                "checks"
+              ]
+            },
+            "worktree": {
+              "type": "string"
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "prRepo": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "host",
+                "owner",
+                "repo"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "surface",
+            "worktree",
+            "number"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "surface": {
+              "type": "string",
+              "enum": [
+                "detail",
+                "checks"
+              ]
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "ok": {
+              "type": "boolean"
+            },
+            "errors": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "loaded": {
+              "type": "object",
+              "properties": {
+                "review": {
+                  "type": "boolean"
+                },
+                "details": {
+                  "type": "boolean"
+                },
+                "checks": {
+                  "type": "boolean"
+                },
+                "comments": {
+                  "type": "boolean"
+                },
+                "files": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "review",
+                "details",
+                "checks",
+                "comments",
+                "files"
+              ],
+              "additionalProperties": false
+            },
+            "fetchedAt": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "surface",
+            "number",
+            "ok",
+            "errors",
+            "loaded",
+            "fetchedAt"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "detailSetTab",
+        "description": "Select a conversation, checks, or files tab.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string"
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "prRepo": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "host",
+                "owner",
+                "repo"
+              ],
+              "additionalProperties": false
+            },
+            "tab": {
+              "type": "string",
+              "enum": [
+                "conversation",
+                "checks",
+                "files"
+              ]
+            }
+          },
+          "required": [
+            "tab",
+            "worktree",
+            "number"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "tab": {
+              "type": "string",
+              "enum": [
+                "conversation",
+                "checks",
+                "files"
+              ]
+            }
+          },
+          "required": [
+            "tab"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "detailSetAudience",
+        "description": "Set the comments audience filter.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string"
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "prRepo": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "host",
+                "owner",
+                "repo"
+              ],
+              "additionalProperties": false
+            },
+            "surface": {
+              "type": "string",
+              "enum": [
+                "detail",
+                "checks"
+              ]
+            },
+            "audience": {
+              "type": "string",
+              "enum": [
+                "all",
+                "humans",
+                "bots"
+              ]
+            }
+          },
+          "required": [
+            "surface",
+            "audience",
+            "worktree",
+            "number"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "surface": {
+              "type": "string",
+              "enum": [
+                "detail",
+                "checks"
+              ]
+            },
+            "audience": {
+              "type": "string",
+              "enum": [
+                "all",
+                "humans",
+                "bots"
+              ]
+            }
+          },
+          "required": [
+            "surface",
+            "audience"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "detailSetGrouping",
+        "description": "Set grouped or timeline comment ordering.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string"
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "prRepo": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "host",
+                "owner",
+                "repo"
+              ],
+              "additionalProperties": false
+            },
+            "surface": {
+              "type": "string",
+              "enum": [
+                "detail",
+                "checks"
+              ]
+            },
+            "grouping": {
+              "type": "string",
+              "enum": [
+                "grouped",
+                "timeline"
+              ]
+            }
+          },
+          "required": [
+            "surface",
+            "grouping",
+            "worktree",
+            "number"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "surface": {
+              "type": "string",
+              "enum": [
+                "detail",
+                "checks"
+              ]
+            },
+            "grouping": {
+              "type": "string",
+              "enum": [
+                "grouped",
+                "timeline"
+              ]
+            }
+          },
+          "required": [
+            "surface",
+            "grouping"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "detailSetCommentDraft",
+        "description": "Save a comment draft on a review surface.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string"
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "prRepo": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "host",
+                "owner",
+                "repo"
+              ],
+              "additionalProperties": false
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "surface": {
+              "type": "string",
+              "enum": [
+                "detail",
+                "checks"
+              ]
+            },
+            "body": {
+              "type": "string"
+            },
+            "draftVersion": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "surface",
+            "body",
+            "draftVersion",
+            "generation",
+            "worktree",
+            "number"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "surface": {
+              "type": "string",
+              "enum": [
+                "detail",
+                "checks"
+              ]
+            },
+            "body": {
+              "type": "string"
+            },
+            "draftVersion": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "applied": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "surface",
+            "body",
+            "draftVersion",
+            "applied"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "detailSetBodyDraft",
+        "description": "Save the pull request description draft.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string"
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "prRepo": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "host",
+                "owner",
+                "repo"
+              ],
+              "additionalProperties": false
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "body": {
+              "description": "String or null."
+            },
+            "draftVersion": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "body",
+            "draftVersion",
+            "generation",
+            "worktree",
+            "number"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "body": {
+              "description": "String or null."
+            },
+            "draftVersion": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "applied": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "body",
+            "draftVersion",
+            "applied"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "detailSetFilesView",
+        "description": "Set file selection, filtering, collapse, and diff mode.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string"
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "prRepo": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "host",
+                "owner",
+                "repo"
+              ],
+              "additionalProperties": false
+            },
+            "fileFilter": {
+              "type": "string"
+            },
+            "diffMode": {
+              "type": "string",
+              "enum": [
+                "inline",
+                "side-by-side"
+              ]
+            },
+            "selectedFile": {
+              "description": "String or null."
+            },
+            "collapsedFiles": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "treeVisible": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "fileFilter",
+            "diffMode",
+            "selectedFile",
+            "collapsedFiles",
+            "treeVisible",
+            "worktree",
+            "number"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "fileFilter": {
+              "type": "string"
+            },
+            "diffMode": {
+              "type": "string",
+              "enum": [
+                "inline",
+                "side-by-side"
+              ]
+            },
+            "selectedFile": {
+              "description": "String or null."
+            },
+            "collapsedFiles": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "treeVisible": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "fileFilter",
+            "diffMode",
+            "selectedFile",
+            "collapsedFiles",
+            "treeVisible"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "detailQueueComment",
+        "description": "Queue or unqueue a review comment for agent work.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string"
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "prRepo": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "host",
+                "owner",
+                "repo"
+              ],
+              "additionalProperties": false
+            },
+            "surface": {
+              "type": "string",
+              "enum": [
+                "detail",
+                "checks"
+              ]
+            },
+            "commentId": {
+              "type": "string"
+            },
+            "queued": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "surface",
+            "commentId",
+            "queued",
+            "worktree",
+            "number"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "surface": {
+              "type": "string",
+              "enum": [
+                "detail",
+                "checks"
+              ]
+            },
+            "commentId": {
+              "type": "string"
+            },
+            "queued": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "surface",
+            "commentId",
+            "queued"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "detailSetBotOverride",
+        "description": "Persist a manual bot-author override.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "author": {
+              "type": "string"
+            },
+            "bot": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "author",
+            "bot"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "author": {
+              "type": "string"
+            },
+            "bot": {
+              "type": "boolean"
+            },
+            "overrides": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "author",
+            "bot",
+            "overrides"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "detailPostComment",
+        "description": "Post a pull request conversation comment or review reply.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "surface": {
+              "type": "string",
+              "enum": [
+                "detail",
+                "checks"
+              ]
+            },
+            "worktree": {
+              "type": "string"
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "prRepo": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "host",
+                "owner",
+                "repo"
+              ],
+              "additionalProperties": false
+            },
+            "body": {
+              "type": "string"
+            },
+            "replyToId": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "surface",
+            "number",
+            "body",
+            "worktree"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "comment": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "issue_comment",
+                    "review_comment"
+                  ]
+                },
+                "body": {
+                  "type": "string"
+                },
+                "author": {
+                  "description": "String or null."
+                },
+                "createdAt": {
+                  "description": "String or null."
+                },
+                "url": {
+                  "description": "String or null."
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "body",
+                "author",
+                "createdAt",
+                "url"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "number",
+            "comment"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "detailEditComment",
+        "description": "Edit a top-level pull request conversation comment.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "surface": {
+              "type": "string",
+              "enum": [
+                "detail",
+                "checks"
+              ]
+            },
+            "worktree": {
+              "type": "string"
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "prRepo": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "host",
+                "owner",
+                "repo"
+              ],
+              "additionalProperties": false
+            },
+            "commentId": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "body": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "surface",
+            "number",
+            "commentId",
+            "body",
+            "worktree"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "commentId": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "body": {
+              "type": "string"
+            },
+            "updated": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "number",
+            "commentId",
+            "body",
+            "updated"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "detailDeleteComment",
+        "description": "Delete a top-level pull request comment after confirmation.",
+        "destructive": true,
+        "confirm": "Delete comment #{commentId} on pull request #{number}?",
+        "params": {
+          "type": "object",
+          "properties": {
+            "surface": {
+              "type": "string",
+              "enum": [
+                "detail",
+                "checks"
+              ]
+            },
+            "worktree": {
+              "type": "string"
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "prRepo": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "host",
+                "owner",
+                "repo"
+              ],
+              "additionalProperties": false
+            },
+            "commentId": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "surface",
+            "number",
+            "commentId",
+            "worktree"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "commentId": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "deleted": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "number",
+            "commentId",
+            "deleted"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "detailResolveThread",
+        "description": "Resolve or unresolve a review thread.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "surface": {
+              "type": "string",
+              "enum": [
+                "detail",
+                "checks"
+              ]
+            },
+            "worktree": {
+              "type": "string"
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "prRepo": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "host",
+                "owner",
+                "repo"
+              ],
+              "additionalProperties": false
+            },
+            "threadId": {
+              "type": "string"
+            },
+            "resolved": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "surface",
+            "number",
+            "threadId",
+            "resolved",
+            "worktree"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "threadId": {
+              "type": "string"
+            },
+            "resolved": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "number",
+            "threadId",
+            "resolved"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "detailReact",
+        "description": "Add or remove a reaction on a pull request comment.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "surface": {
+              "type": "string",
+              "enum": [
+                "detail",
+                "checks"
+              ]
+            },
+            "worktree": {
+              "type": "string"
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "prRepo": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "host",
+                "owner",
+                "repo"
+              ],
+              "additionalProperties": false
+            },
+            "subjectId": {
+              "type": "string"
+            },
+            "content": {
+              "type": "string",
+              "enum": [
+                "+1",
+                "-1",
+                "laugh",
+                "confused",
+                "heart",
+                "hooray",
+                "rocket",
+                "eyes"
+              ]
+            },
+            "add": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "surface",
+            "number",
+            "subjectId",
+            "content",
+            "add",
+            "worktree"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "subjectId": {
+              "type": "string"
+            },
+            "content": {
+              "type": "string",
+              "enum": [
+                "+1",
+                "-1",
+                "laugh",
+                "confused",
+                "heart",
+                "hooray",
+                "rocket",
+                "eyes"
+              ]
+            },
+            "add": {
+              "type": "boolean"
+            },
+            "changed": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "number",
+            "subjectId",
+            "content",
+            "add",
+            "changed"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "detailUpdateBody",
+        "description": "Update the pull request description.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "surface": {
+              "type": "string",
+              "enum": [
+                "detail",
+                "checks"
+              ]
+            },
+            "worktree": {
+              "type": "string"
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "prRepo": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "host",
+                "owner",
+                "repo"
+              ],
+              "additionalProperties": false
+            },
+            "body": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "surface",
+            "number",
+            "body",
+            "worktree"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "body": {
+              "type": "string"
+            },
+            "updated": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "number",
+            "body",
+            "updated"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "detailUpdateReviewers",
+        "description": "Add or remove requested reviewers.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "surface": {
+              "type": "string",
+              "enum": [
+                "detail",
+                "checks"
+              ]
+            },
+            "worktree": {
+              "type": "string"
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "prRepo": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "host",
+                "owner",
+                "repo"
+              ],
+              "additionalProperties": false
+            },
+            "action": {
+              "type": "string",
+              "enum": [
+                "add",
+                "remove"
+              ]
+            },
+            "logins": {
+              "type": "array",
+              "description": "1–15 reviewer logins; each login is 1–39 characters.",
+              "items": {
+                "type": "string",
+                "description": "Reviewer login of 1–39 characters."
+              }
+            }
+          },
+          "required": [
+            "surface",
+            "number",
+            "action",
+            "logins",
+            "worktree"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "reviewers": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "updated": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "number",
+            "reviewers",
+            "updated"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "detailUpdateAssignees",
+        "description": "Add, remove, or replace pull request assignees.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "surface": {
+              "type": "string",
+              "enum": [
+                "detail",
+                "checks"
+              ]
+            },
+            "worktree": {
+              "type": "string"
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "prRepo": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "host",
+                "owner",
+                "repo"
+              ],
+              "additionalProperties": false
+            },
+            "action": {
+              "type": "string",
+              "enum": [
+                "add",
+                "remove",
+                "set"
+              ]
+            },
+            "logins": {
+              "type": "array",
+              "description": "At most 100 assignees; each login is 1–256 characters.",
+              "items": {
+                "type": "string",
+                "description": "Assignee login of 1–256 characters."
+              }
+            }
+          },
+          "required": [
+            "surface",
+            "number",
+            "action",
+            "logins",
+            "worktree"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "assignees": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "number",
+            "assignees"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "detailMarkReady",
+        "description": "Mark a draft pull request ready for review.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "surface": {
+              "type": "string",
+              "enum": [
+                "detail",
+                "checks"
+              ]
+            },
+            "worktree": {
+              "type": "string"
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "prRepo": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "host",
+                "owner",
+                "repo"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "surface",
+            "number",
+            "worktree"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "open"
+              ]
+            },
+            "updated": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "number",
+            "state",
+            "updated"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "detailCloseReview",
+        "description": "Close an open pull request after confirmation.",
+        "destructive": true,
+        "confirm": "Close pull request #{number}?",
+        "params": {
+          "type": "object",
+          "properties": {
+            "surface": {
+              "type": "string",
+              "enum": [
+                "detail",
+                "checks"
+              ]
+            },
+            "worktree": {
+              "type": "string"
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "prRepo": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "host",
+                "owner",
+                "repo"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "surface",
+            "number",
+            "worktree"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "closed"
+              ]
+            },
+            "updated": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "number",
+            "state",
+            "updated"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "detailReopenReview",
+        "description": "Reopen a closed pull request after confirmation.",
+        "destructive": true,
+        "confirm": "Reopen pull request #{number}?",
+        "params": {
+          "type": "object",
+          "properties": {
+            "surface": {
+              "type": "string",
+              "enum": [
+                "detail",
+                "checks"
+              ]
+            },
+            "worktree": {
+              "type": "string"
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "prRepo": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "host",
+                "owner",
+                "repo"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "surface",
+            "number",
+            "worktree"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "open"
+              ]
+            },
+            "updated": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "number",
+            "state",
+            "updated"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "detailMerge",
+        "description": "Merge or queue a pull request after confirmation and an exact-head guard.",
+        "destructive": true,
+        "confirm": "Confirm {action} for pull request #{number} using {method}?",
+        "describe": "detailMergeConfirmation",
+        "params": {
+          "type": "object",
+          "properties": {
+            "surface": {
+              "type": "string",
+              "enum": [
+                "detail",
+                "checks"
+              ]
+            },
+            "worktree": {
+              "type": "string"
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "prRepo": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "host",
+                "owner",
+                "repo"
+              ],
+              "additionalProperties": false
+            },
+            "expectedHead": {
+              "type": "string",
+              "description": "A 40- or 64-character hexadecimal commit SHA."
+            },
+            "method": {
+              "type": "string",
+              "enum": [
+                "squash",
+                "merge",
+                "rebase"
+              ]
+            },
+            "action": {
+              "type": "string",
+              "enum": [
+                "direct",
+                "queue"
+              ]
+            }
+          },
+          "required": [
+            "surface",
+            "number",
+            "expectedHead",
+            "method",
+            "action",
+            "worktree"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "merged",
+                "enqueued",
+                "pending"
+              ]
+            },
+            "head": {
+              "type": "string"
+            },
+            "operationId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "number",
+            "state",
+            "head"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "detailMergeConfirmation",
+        "description": "Describe the exact pull request or stack membership before a merge confirmation.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "surface": {
+              "type": "string",
+              "enum": [
+                "detail",
+                "checks"
+              ]
+            },
+            "worktree": {
+              "type": "string"
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "prRepo": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "host",
+                "owner",
+                "repo"
+              ],
+              "additionalProperties": false
+            },
+            "expectedHead": {
+              "type": "string",
+              "description": "A 40- or 64-character hexadecimal commit SHA."
+            },
+            "method": {
+              "type": "string",
+              "enum": [
+                "squash",
+                "merge",
+                "rebase"
+              ]
+            },
+            "action": {
+              "type": "string",
+              "enum": [
+                "direct",
+                "queue"
+              ]
+            }
+          },
+          "required": [
+            "surface",
+            "number",
+            "expectedHead",
+            "method",
+            "action",
+            "worktree"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "string"
+        }
+      },
+      {
+        "id": "detailSetAutoMerge",
+        "description": "Enable or disable auto-merge with an expected-head guard.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "surface": {
+              "type": "string",
+              "enum": [
+                "detail",
+                "checks"
+              ]
+            },
+            "worktree": {
+              "type": "string"
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "prRepo": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "host",
+                "owner",
+                "repo"
+              ],
+              "additionalProperties": false
+            },
+            "expectedHead": {
+              "type": "string",
+              "description": "A 40- or 64-character hexadecimal commit SHA."
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "method": {
+              "type": "string",
+              "enum": [
+                "squash",
+                "merge",
+                "rebase"
+              ]
+            }
+          },
+          "required": [
+            "surface",
+            "number",
+            "expectedHead",
+            "enabled",
+            "worktree"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "state": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "number",
+            "enabled",
+            "state"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "detailSetChecksCollapsed",
+        "description": "Show or hide the Checks summary body on the exact selected review surface.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "surface": {
+              "type": "string",
+              "enum": [
+                "detail",
+                "checks"
+              ]
+            },
+            "worktree": {
+              "type": "string"
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "prRepo": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "host",
+                "owner",
+                "repo"
+              ],
+              "additionalProperties": false
+            },
+            "collapsed": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "surface",
+            "number",
+            "collapsed",
+            "worktree"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "surface": {
+              "type": "string",
+              "enum": [
+                "detail",
+                "checks"
+              ]
+            },
+            "collapsed": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "surface",
+            "collapsed"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "detailExpandCheck",
+        "description": "Expand or collapse a check.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string"
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "prRepo": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "host",
+                "owner",
+                "repo"
+              ],
+              "additionalProperties": false
+            },
+            "surface": {
+              "type": "string",
+              "enum": [
+                "detail",
+                "checks"
+              ]
+            },
+            "checkId": {
+              "type": "string"
+            },
+            "expanded": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "surface",
+            "checkId",
+            "expanded",
+            "worktree",
+            "number"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "surface": {
+              "type": "string",
+              "enum": [
+                "detail",
+                "checks"
+              ]
+            },
+            "checkId": {
+              "type": "string"
+            },
+            "expanded": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "surface",
+            "checkId",
+            "expanded"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "detailRefreshChecks",
+        "description": "Refresh checks for a pull request without cache.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "surface": {
+              "type": "string",
+              "enum": [
+                "detail",
+                "checks"
+              ]
+            },
+            "worktree": {
+              "type": "string"
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "prRepo": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "host",
+                "owner",
+                "repo"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "surface",
+            "number",
+            "worktree"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "surface": {
+              "type": "string",
+              "enum": [
+                "detail",
+                "checks"
+              ]
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "headSha": {
+              "description": "Commit SHA or null."
+            },
+            "checks": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "conclusion": {
+                    "description": "String or null."
+                  },
+                  "url": {
+                    "description": "String or null."
+                  },
+                  "checkRunId": {
+                    "description": "Positive integer or null."
+                  },
+                  "workflowRunId": {
+                    "description": "Positive integer or null."
+                  },
+                  "suiteId": {
+                    "description": "Positive integer or null."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "name",
+                  "status",
+                  "conclusion",
+                  "url",
+                  "checkRunId",
+                  "workflowRunId",
+                  "suiteId"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "surface",
+            "number",
+            "headSha",
+            "checks"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "detailLoadCheckDetails",
+        "description": "Load bounded details and logs for one current check run.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "surface": {
+              "type": "string",
+              "enum": [
+                "detail",
+                "checks"
+              ]
+            },
+            "worktree": {
+              "type": "string"
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "prRepo": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "host",
+                "owner",
+                "repo"
+              ],
+              "additionalProperties": false
+            },
+            "expectedHead": {
+              "type": "string",
+              "description": "A 40- or 64-character hexadecimal commit SHA."
+            },
+            "checkRunId": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "workflowRunId": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "jobName": {
+              "type": "string",
+              "description": "Job name, at most 200 characters."
+            }
+          },
+          "required": [
+            "surface",
+            "number",
+            "expectedHead",
+            "checkRunId",
+            "worktree"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "surface": {
+              "type": "string",
+              "enum": [
+                "detail",
+                "checks"
+              ]
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "checkRunId": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "details": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "required": [
+            "surface",
+            "number",
+            "checkRunId",
+            "details"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "detailRerunChecks",
+        "description": "Rerun actionable checks or failed checks.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "surface": {
+              "type": "string",
+              "enum": [
+                "detail",
+                "checks"
+              ]
+            },
+            "worktree": {
+              "type": "string"
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "prRepo": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "host",
+                "owner",
+                "repo"
+              ],
+              "additionalProperties": false
+            },
+            "failedOnly": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "surface",
+            "number",
+            "failedOnly",
+            "worktree"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "surface": {
+              "type": "string",
+              "enum": [
+                "detail",
+                "checks"
+              ]
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "started": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "targetCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "completedSteps": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "refreshed": {
+              "type": "boolean"
+            },
+            "refreshError": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "surface",
+            "number",
+            "started",
+            "targetCount",
+            "completedSteps",
+            "refreshed"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "detailSetFileViewed",
+        "description": "Mark a changed pull request file viewed or unviewed.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "surface": {
+              "type": "string",
+              "enum": [
+                "detail",
+                "checks"
+              ]
+            },
+            "worktree": {
+              "type": "string"
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "prRepo": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "host",
+                "owner",
+                "repo"
+              ],
+              "additionalProperties": false
+            },
+            "path": {
+              "type": "string"
+            },
+            "viewed": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "surface",
+            "number",
+            "path",
+            "viewed",
+            "worktree"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "path": {
+              "type": "string"
+            },
+            "viewed": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "number",
+            "path",
+            "viewed"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "detailInlineComment",
+        "description": "Add a current-head inline or range review comment.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "surface": {
+              "type": "string",
+              "enum": [
+                "detail",
+                "checks"
+              ]
+            },
+            "worktree": {
+              "type": "string"
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "prRepo": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "host",
+                "owner",
+                "repo"
+              ],
+              "additionalProperties": false
+            },
+            "expectedHead": {
+              "type": "string",
+              "description": "A 40- or 64-character hexadecimal commit SHA."
+            },
+            "path": {
+              "type": "string"
+            },
+            "line": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "startLine": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "body": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "surface",
+            "number",
+            "expectedHead",
+            "path",
+            "line",
+            "body",
+            "worktree"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "comment": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "path": {
+                  "type": "string"
+                },
+                "line": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "startLine": {
+                  "description": "An integer of at least 1, or null."
+                },
+                "body": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "path",
+                "line",
+                "startLine",
+                "body"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "number",
+            "comment"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "checksGet",
+        "readOnly": true,
+        "description": "Read the active-workspace checks state and its current review target.",
+        "params": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "checks": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "required": [
+            "checks"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "checksRefresh",
+        "description": "Refresh the exact workspace review, checks, comments and creation eligibility without accepting stale results.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (ID, name, branch, or path); omitted to resolve the caller workspace."
+            },
+            "force": {
+              "type": "boolean",
+              "description": "Bypass provider caches for a manual or visibility-entry refresh."
+            }
+          },
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean"
+            },
+            "worktree": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "number": {
+              "type": "integer"
+            },
+            "eligible": {
+              "type": "boolean"
+            },
+            "operation": {
+              "type": "string"
+            },
+            "error": {
+              "type": "string"
+            },
+            "stale": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "checksInvalidate",
+        "description": "Invalidate an in-flight Checks refresh when its panel is hidden or unmounted without making provider calls.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Exact workspace whose pending Checks refresh is no longer visible."
+            }
+          },
+          "required": [
+            "worktree"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "invalidated": {
+              "type": "boolean"
+            },
+            "worktree": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "invalidated",
+            "worktree"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "checksLink",
+        "description": "Link a canonical GitHub pull request to a registered workspace.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Workspace to link."
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "prRepo": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "host",
+                "owner",
+                "repo"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "worktree",
+            "number"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "linked": {
+              "type": "boolean"
+            },
+            "number": {
+              "type": "integer"
+            },
+            "url": {
+              "type": "string"
+            },
+            "refreshed": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "linked",
+            "number",
+            "url",
+            "refreshed"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "checksUnlink",
+        "description": "Hide a workspace review and suppress its automatic rediscovery until it is relinked.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Workspace whose current review will be suppressed."
+            }
+          },
+          "required": [
+            "worktree"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "unlinked": {
+              "type": "boolean"
+            },
+            "worktree": {
+              "type": "string"
+            },
+            "number": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "unlinked",
+            "worktree",
+            "number"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "checksRelink",
+        "description": "Restore the exact review previously suppressed for a workspace after canonical validation.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Workspace whose suppressed review will be restored."
+            }
+          },
+          "required": [
+            "worktree"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "linked": {
+              "type": "boolean"
+            },
+            "number": {
+              "type": "integer"
+            },
+            "url": {
+              "type": "string"
+            },
+            "refreshed": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "linked",
+            "number",
+            "url",
+            "refreshed"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "checksSetHeight",
+        "description": "Set the compact Checks panel height within the pane bounds.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "height": {
+              "type": "integer",
+              "description": "Clamped between 160 and 800 pixels."
+            }
+          },
+          "required": [
+            "height"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "height": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "height"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "checksSetTitleDraft",
+        "description": "Set the bounded inline pull request title draft for an exact review target.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (ID, name, branch, or path); omitted to resolve the caller workspace."
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "title": {
+              "type": "string",
+              "description": "At most 256 characters."
+            }
+          },
+          "required": [
+            "worktree",
+            "number",
+            "title"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "titleDraft": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "titleDraft"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "checksCancelTitle",
+        "description": "Discard the inline title draft for the exact review target without changing the hosted review.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (ID, name, branch, or path); omitted to resolve the caller workspace."
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "worktree",
+            "number"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "titleDraft": {
+              "type": "null"
+            }
+          },
+          "required": [
+            "titleDraft"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "checksSaveTitle",
+        "description": "Save and read back a review title for the exact current PR head.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Workspace containing the active review."
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "expectedHead": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string",
+              "description": "At most 256 characters."
+            }
+          },
+          "required": [
+            "worktree",
+            "number",
+            "expectedHead",
+            "title"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "updated": {
+              "type": "boolean"
+            },
+            "number": {
+              "type": "integer"
+            },
+            "title": {
+              "type": "string"
+            },
+            "stale": {
+              "type": "boolean"
+            },
+            "error": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "updated",
+            "number",
+            "title"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "checksSetAgentDialog",
+        "description": "Set or clear the editable Checks triage-agent dialog.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "fix",
+                "conflicts",
+                "comments",
+                "hide",
+                "clear"
+              ]
+            },
+            "surface": {
+              "type": "string",
+              "enum": [
+                "checks",
+                "detail"
+              ]
+            },
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (ID, name, branch, or path); omitted to resolve the caller workspace."
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "prRepo": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "host",
+                "owner",
+                "repo"
+              ],
+              "additionalProperties": false
+            },
+            "prompt": {
+              "type": "string",
+              "description": "At most 32000 characters."
+            },
+            "agent": {
+              "type": "string",
+              "description": "At most 128 characters."
+            },
+            "args": {
+              "type": "string",
+              "description": "At most 2000 characters."
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "agentDialog": {
+              "description": "An agent dialog object or null."
+            }
+          },
+          "required": [
+            "agentDialog"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "checksLaunchAgent",
+        "description": "Start the selected/default real agent, deliver the edited triage prompt once after readiness, and only then resolve selected supported threads.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Workspace containing the review."
+            },
+            "agent": {
+              "type": "string"
+            },
+            "args": {
+              "type": "string",
+              "description": "At most 2000 characters."
+            }
+          },
+          "required": [
+            "worktree"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "delivered": {
+              "type": "boolean"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "agent": {
+              "type": "string"
+            },
+            "resolved": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "replied": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "unresolved": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "error": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "delivered"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "checksGitAction",
+        "description": "Publish, push or sync the exact workspace through quirky.git and then refresh its hosting eligibility.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Workspace whose branch will be pushed or synchronized."
+            },
+            "action": {
+              "type": "string",
+              "enum": [
+                "publish",
+                "push",
+                "sync"
+              ]
+            }
+          },
+          "required": [
+            "worktree",
+            "action"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean"
+            },
+            "action": {
+              "type": "string"
+            },
+            "worktree": {
+              "type": "string"
+            },
+            "refreshed": {
+              "type": "boolean"
+            },
+            "error": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "ok",
+            "action",
+            "worktree"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "checksOpenReview",
+        "description": "Open the current canonical review in the conversation, checks or files tab.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Workspace containing the review."
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "tab": {
+              "type": "string",
+              "enum": [
+                "conversation",
+                "checks",
+                "files"
+              ]
+            }
+          },
+          "required": [
+            "worktree",
+            "number"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "opened": {
+              "type": "boolean"
+            },
+            "worktree": {
+              "type": "string"
+            },
+            "number": {
+              "type": "integer"
+            },
+            "tab": {
+              "type": "string"
+            },
+            "prRepo": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "host",
+                "owner",
+                "repo"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "opened",
+            "worktree",
+            "number",
+            "tab",
+            "prRepo"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "createOpen",
+        "description": "open the create-review view after refreshing eligibility for this exact worktree",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Exact registered worktree id; must not be empty."
+            }
+          },
+          "required": [
+            "worktree"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string"
+            },
+            "opened": {
+              "type": "boolean"
+            },
+            "stale": {
+              "type": "boolean"
+            },
+            "existingReview": {
+              "type": "object",
+              "properties": {
+                "number": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "url": {
+                  "type": "string",
+                  "description": "URI of the pull request."
+                },
+                "existing": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "number",
+                "url"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "worktree",
+            "opened"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "settingsOpen",
+        "description": "open hosting settings scoped to the caller worktree when available",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Exact registered worktree id; must not be empty."
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "opened": {
+              "type": "boolean"
+            },
+            "worktree": {
+              "type": "string"
+            },
+            "error": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "opened"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "createDraft",
+        "description": "update the session-owned create-review draft fields",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Exact registered worktree id; must not be empty."
+            },
+            "title": {
+              "type": "string"
+            },
+            "body": {
+              "type": "string"
+            },
+            "draft": {
+              "type": "boolean"
+            },
+            "useTemplate": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "worktree"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "updated": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "updated"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "createBases",
+        "readOnly": true,
+        "description": "list remote Git branches available as review bases",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Exact registered worktree id; must not be empty."
+            },
+            "query": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "worktree"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "bases": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "selected": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "bases",
+            "selected"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "createBase",
+        "description": "select a remote base and refresh exact-context eligibility and stack capability",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Exact registered worktree id; must not be empty."
+            },
+            "base": {
+              "type": "string"
+            },
+            "stack": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "worktree",
+            "base"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "base": {
+              "type": "string"
+            },
+            "eligible": {
+              "type": "boolean"
+            },
+            "stackSupported": {
+              "type": "boolean"
+            },
+            "stackParentNumber": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "stackEnabled": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "base",
+            "eligible",
+            "stackSupported",
+            "stackEnabled"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "createGenerate",
+        "description": "generate title and body from the selected worktree branch diff using a public agent",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Exact registered worktree id; must not be empty."
+            },
+            "agent": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "worktree"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "generated": {
+              "type": "boolean"
+            },
+            "title": {
+              "type": "string"
+            },
+            "body": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "generated",
+            "title",
+            "body"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "createCancelGenerate",
+        "description": "cancel only the active review-details generation request",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Exact registered worktree id; must not be empty."
+            }
+          },
+          "required": [
+            "worktree"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "cancelled": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "cancelled"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "createSubmit",
+        "description": "recheck eligibility, push if required, create once, and link confirmed results",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Exact registered worktree id; must not be empty."
+            }
+          },
+          "required": [
+            "worktree"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "created",
+                "already_exists",
+                "partial"
+              ]
+            },
+            "review": {
+              "type": "object",
+              "properties": {
+                "number": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "url": {
+                  "type": "string",
+                  "description": "URI of the pull request."
+                },
+                "existing": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "number",
+                "url"
+              ],
+              "additionalProperties": false
+            },
+            "error": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "status",
+            "review"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "creationDefaults",
+        "readOnly": true,
+        "description": "read global or repository creation defaults; scope explicitly selects global despite a caller worktree",
+        "params": {
+          "type": "object",
+          "properties": {
+            "scope": {
+              "type": "string",
+              "enum": [
+                "global",
+                "repository"
+              ]
+            },
+            "worktree": {
+              "type": "string",
+              "description": "Exact registered worktree id; must not be empty."
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "scope": {
+              "type": "string",
+              "enum": [
+                "global",
+                "repository"
+              ]
+            },
+            "repoId": {
+              "type": "string"
+            },
+            "defaults": {
+              "type": "object",
+              "properties": {
+                "draft": {
+                  "type": "boolean"
+                },
+                "useTemplate": {
+                  "type": "boolean"
+                },
+                "generateDetailsOnOpen": {
+                  "type": "boolean"
+                },
+                "openAfterCreate": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "draft",
+                "useTemplate",
+                "generateDetailsOnOpen",
+                "openAfterCreate"
+              ],
+              "additionalProperties": false
+            },
+            "overrides": {
+              "type": "object",
+              "properties": {
+                "draft": {
+                  "type": "boolean"
+                },
+                "useTemplate": {
+                  "type": "boolean"
+                },
+                "generateDetailsOnOpen": {
+                  "type": "boolean"
+                },
+                "openAfterCreate": {
+                  "type": "boolean"
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "scope",
+            "defaults"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "setCreationDefaults",
+        "description": "persist all four global or repository-scoped creation defaults",
+        "params": {
+          "type": "object",
+          "properties": {
+            "scope": {
+              "type": "string",
+              "enum": [
+                "global",
+                "repository"
+              ]
+            },
+            "worktree": {
+              "type": "string",
+              "description": "Exact registered worktree id; must not be empty."
+            },
+            "defaults": {
+              "type": "object",
+              "properties": {
+                "draft": {
+                  "type": "boolean"
+                },
+                "useTemplate": {
+                  "type": "boolean"
+                },
+                "generateDetailsOnOpen": {
+                  "type": "boolean"
+                },
+                "openAfterCreate": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "draft",
+                "useTemplate",
+                "generateDetailsOnOpen",
+                "openAfterCreate"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "defaults"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "scope": {
+              "type": "string",
+              "enum": [
+                "global",
+                "repository"
+              ]
+            },
+            "repoId": {
+              "type": "string"
+            },
+            "defaults": {
+              "type": "object",
+              "properties": {
+                "draft": {
+                  "type": "boolean"
+                },
+                "useTemplate": {
+                  "type": "boolean"
+                },
+                "generateDetailsOnOpen": {
+                  "type": "boolean"
+                },
+                "openAfterCreate": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "draft",
+                "useTemplate",
+                "generateDetailsOnOpen",
+                "openAfterCreate"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "scope",
+            "defaults"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "resetCreationDefaults",
+        "description": "reset global defaults to false or remove one repository override",
+        "params": {
+          "type": "object",
+          "properties": {
+            "scope": {
+              "type": "string",
+              "enum": [
+                "global",
+                "repository"
+              ]
+            },
+            "worktree": {
+              "type": "string",
+              "description": "Exact registered worktree id; must not be empty."
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "scope": {
+              "type": "string",
+              "enum": [
+                "global",
+                "repository"
+              ]
+            },
+            "repoId": {
+              "type": "string"
+            },
+            "defaults": {
+              "type": "object",
+              "properties": {
+                "draft": {
+                  "type": "boolean"
+                },
+                "useTemplate": {
+                  "type": "boolean"
+                },
+                "generateDetailsOnOpen": {
+                  "type": "boolean"
+                },
+                "openAfterCreate": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "draft",
+                "useTemplate",
+                "generateDetailsOnOpen",
+                "openAfterCreate"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "scope",
+            "defaults"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "hostingDiagnose",
+        "readOnly": true,
+        "description": "read canonical GitHub CLI readiness and required scopes",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Exact registered worktree id; must not be empty."
+            }
+          },
+          "required": [
+            "worktree"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ghAvailable": {
+              "type": "boolean"
+            },
+            "activeAccount": {
+              "description": "An account object or null."
+            },
+            "accounts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "host": {
+                    "type": "string"
+                  },
+                  "user": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string",
+                    "enum": [
+                      "keyring",
+                      "env"
+                    ]
+                  },
+                  "active": {
+                    "type": "boolean"
+                  },
+                  "bindable": {
+                    "type": "boolean"
+                  },
+                  "scopes": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "host",
+                  "user",
+                  "source",
+                  "active",
+                  "scopes"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "envTokenInProcess": {
+              "type": "boolean"
+            },
+            "missingScopes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "requiredScopes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "hasKeyringFallback": {
+              "type": "boolean"
+            },
+            "requiredHost": {
+              "type": "string"
+            },
+            "requiredHostAuthenticated": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ghAvailable",
+            "accounts",
+            "envTokenInProcess",
+            "missingScopes",
+            "requiredScopes",
+            "hasKeyringFallback",
+            "requiredHostAuthenticated"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "hostingAccounts",
+        "readOnly": true,
+        "description": "list canonical authenticated GitHub account identities and scopes",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Exact registered worktree id; must not be empty."
+            }
+          },
+          "required": [
+            "worktree"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "requiredHost": {
+              "type": "string"
+            },
+            "accounts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "host": {
+                    "type": "string"
+                  },
+                  "user": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string",
+                    "enum": [
+                      "keyring",
+                      "env"
+                    ]
+                  },
+                  "active": {
+                    "type": "boolean"
+                  },
+                  "bindable": {
+                    "type": "boolean"
+                  },
+                  "scopes": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "host",
+                  "user",
+                  "source",
+                  "active",
+                  "scopes"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "accounts"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "hostingConfiguration",
+        "readOnly": true,
+        "description": "read canonical repository account binding without exposing credentials",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Exact registered worktree id; must not be empty."
+            }
+          },
+          "required": [
+            "worktree"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "worktreeId": {
+              "type": "string"
+            },
+            "issueSourcePreference": {
+              "type": "string",
+              "enum": [
+                "auto",
+                "origin",
+                "upstream"
+              ]
+            },
+            "account": {
+              "description": "An object with host and user properties, or null.",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "user": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "host",
+                "user"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "worktreeId",
+            "issueSourcePreference",
+            "account"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "hostingBudget",
+        "readOnly": true,
+        "description": "read canonical host- and account-scoped GitHub API budget",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Exact registered worktree id; must not be empty."
+            },
+            "force": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "worktree"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "core": {
+              "type": "object",
+              "properties": {
+                "limit": {
+                  "type": "integer"
+                },
+                "remaining": {
+                  "type": "integer"
+                },
+                "resetAt": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "limit",
+                "remaining",
+                "resetAt"
+              ],
+              "additionalProperties": false
+            },
+            "search": {
+              "type": "object",
+              "properties": {
+                "limit": {
+                  "type": "integer"
+                },
+                "remaining": {
+                  "type": "integer"
+                },
+                "resetAt": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "limit",
+                "remaining",
+                "resetAt"
+              ],
+              "additionalProperties": false
+            },
+            "graphql": {
+              "type": "object",
+              "properties": {
+                "limit": {
+                  "type": "integer"
+                },
+                "remaining": {
+                  "type": "integer"
+                },
+                "resetAt": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "limit",
+                "remaining",
+                "resetAt"
+              ],
+              "additionalProperties": false
+            },
+            "fetchedAt": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "core",
+            "search",
+            "graphql",
+            "fetchedAt"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "hostingBindAccount",
+        "description": "bind this repository to an existing keyring GitHub account; the hosting API fails closed",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Exact registered worktree id; must not be empty."
+            },
+            "host": {
+              "type": "string"
+            },
+            "user": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "worktree",
+            "host",
+            "user"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "worktreeId": {
+              "type": "string"
+            },
+            "issueSourcePreference": {
+              "type": "string",
+              "enum": [
+                "auto",
+                "origin",
+                "upstream"
+              ]
+            },
+            "account": {
+              "description": "An object with host and user properties, or null.",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "user": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "host",
+                "user"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "worktreeId",
+            "issueSourcePreference",
+            "account"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "hostingUnbindAccount",
+        "description": "clear this repository GitHub account binding to explicitly use ambient authentication",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Exact registered worktree id; must not be empty."
+            }
+          },
+          "required": [
+            "worktree"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "worktreeId": {
+              "type": "string"
+            },
+            "issueSourcePreference": {
+              "type": "string",
+              "enum": [
+                "auto",
+                "origin",
+                "upstream"
+              ]
+            },
+            "account": {
+              "description": "An object with host and user properties, or null.",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "user": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "host",
+                "user"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "worktreeId",
+            "issueSourcePreference",
+            "account"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "hostingSettingsRefresh",
+        "readOnly": true,
+        "description": "refresh the daemon-owned hosting settings snapshot for an exact repository",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Exact registered worktree id; must not be empty."
+            },
+            "forceBudget": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "worktree"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string"
+            },
+            "refreshed": {
+              "type": "boolean"
+            },
+            "stale": {
+              "type": "boolean"
+            },
+            "fetchedAt": {
+              "type": "number"
+            },
+            "error": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "worktree",
+            "refreshed",
+            "fetchedAt"
+          ],
+          "additionalProperties": false
+        }
+      }
+    ],
+    "event": [
+      {
+        "id": "changed",
+        "data": {
+          "type": "object",
+          "properties": {
+            "revision": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "revision"
+          ]
+        }
+      }
+    ],
+    "view": [
+      {
+        "id": "review",
+        "title": "Pull request"
+      },
+      {
+        "id": "create",
+        "title": "Create pull request"
+      },
+      {
+        "id": "settings",
+        "title": "Hosting settings",
+        "settings": true
+      }
+    ],
+    "panel": [
+      {
+        "id": "checks",
+        "title": "Checks",
+        "order": 40
+      }
+    ],
+    "command": [
+      {
+        "id": "show-checks",
+        "title": "Show Checks"
+      },
+      {
+        "id": "open-review",
+        "title": "Open pull request",
+        "args": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string"
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "tab": {
+              "type": "string",
+              "enum": [
+                "conversation",
+                "checks",
+                "files"
+              ]
+            },
+            "prRepo": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "host",
+                "owner",
+                "repo"
+              ]
+            }
+          },
+          "required": [
+            "worktree",
+            "number"
+          ]
+        }
+      },
+      {
+        "id": "open-create",
+        "title": "Create pull request",
+        "args": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      {
+        "id": "open-settings",
+        "title": "Open hosting settings",
+        "args": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      {
+        "id": "open-link",
+        "title": "Open hosted review link",
+        "args": {
+          "type": "object",
+          "properties": {
+            "url": {
+              "type": "string"
+            },
+            "invert": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "url"
+          ]
+        }
+      },
+      {
+        "id": "copy-text",
+        "title": "Copy review text",
+        "args": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "text"
+          ]
+        }
+      }
+    ],
+    "cli-command": [
+      {
+        "id": "state",
+        "method": "state",
+        "summary": "Read exact daemon-owned review navigation, drafts, settings and retained data."
+      },
+      {
+        "id": "close",
+        "method": "close",
+        "summary": "Restore the view preceding the review feature."
+      },
+      {
+        "id": "show-checks",
+        "method": "showChecks",
+        "summary": "Open active-workspace Checks."
+      },
+      {
+        "id": "open-link",
+        "method": "openLink",
+        "summary": "Open a safe HTTP(S) review URL with configured destination and modifier inversion."
+      },
+      {
+        "id": "copy-text",
+        "method": "copyText",
+        "summary": "Deliver text to the open window clipboard; fail explicitly when unavailable."
+      },
+      {
+        "id": "open",
+        "method": "open",
+        "summary": "Open a pull request in the full review page."
+      },
+      {
+        "id": "detail-refresh",
+        "method": "detailRefresh",
+        "summary": "Refresh a selected pull request and visible detail data."
+      },
+      {
+        "id": "detail-set-tab",
+        "method": "detailSetTab",
+        "summary": "Select a conversation, checks, or files tab."
+      },
+      {
+        "id": "detail-set-audience",
+        "method": "detailSetAudience",
+        "summary": "Set the comments audience filter."
+      },
+      {
+        "id": "detail-set-grouping",
+        "method": "detailSetGrouping",
+        "summary": "Set grouped or timeline comment ordering."
+      },
+      {
+        "id": "detail-set-comment-draft",
+        "method": "detailSetCommentDraft",
+        "summary": "Save a comment draft on a review surface."
+      },
+      {
+        "id": "detail-set-body-draft",
+        "method": "detailSetBodyDraft",
+        "summary": "Save the pull request description draft."
+      },
+      {
+        "id": "detail-set-files-view",
+        "method": "detailSetFilesView",
+        "summary": "Set file selection, filtering, collapse, and diff mode."
+      },
+      {
+        "id": "detail-queue-comment",
+        "method": "detailQueueComment",
+        "summary": "Queue or unqueue a review comment for agent work."
+      },
+      {
+        "id": "detail-set-bot-override",
+        "method": "detailSetBotOverride",
+        "summary": "Persist a manual bot-author override."
+      },
+      {
+        "id": "detail-post-comment",
+        "method": "detailPostComment",
+        "summary": "Post a pull request conversation comment or review reply."
+      },
+      {
+        "id": "detail-edit-comment",
+        "method": "detailEditComment",
+        "summary": "Edit a top-level pull request conversation comment."
+      },
+      {
+        "id": "detail-delete-comment",
+        "method": "detailDeleteComment",
+        "summary": "Delete a top-level pull request comment after confirmation."
+      },
+      {
+        "id": "detail-resolve-thread",
+        "method": "detailResolveThread",
+        "summary": "Resolve or unresolve a review thread."
+      },
+      {
+        "id": "detail-react",
+        "method": "detailReact",
+        "summary": "Add or remove a reaction on a pull request comment."
+      },
+      {
+        "id": "detail-update-body",
+        "method": "detailUpdateBody",
+        "summary": "Update the pull request description."
+      },
+      {
+        "id": "detail-update-reviewers",
+        "method": "detailUpdateReviewers",
+        "summary": "Add or remove requested reviewers."
+      },
+      {
+        "id": "detail-update-assignees",
+        "method": "detailUpdateAssignees",
+        "summary": "Add, remove, or replace pull request assignees."
+      },
+      {
+        "id": "detail-mark-ready",
+        "method": "detailMarkReady",
+        "summary": "Mark a draft pull request ready for review."
+      },
+      {
+        "id": "detail-close-review",
+        "method": "detailCloseReview",
+        "summary": "Close an open pull request after confirmation."
+      },
+      {
+        "id": "detail-reopen-review",
+        "method": "detailReopenReview",
+        "summary": "Reopen a closed pull request after confirmation."
+      },
+      {
+        "id": "detail-merge",
+        "method": "detailMerge",
+        "summary": "Merge or queue a pull request after confirmation and an exact-head guard."
+      },
+      {
+        "id": "detail-merge-confirmation",
+        "method": "detailMergeConfirmation",
+        "summary": "Describe the exact pull request or stack membership before a merge confirmation."
+      },
+      {
+        "id": "detail-set-auto-merge",
+        "method": "detailSetAutoMerge",
+        "summary": "Enable or disable auto-merge with an expected-head guard."
+      },
+      {
+        "id": "detail-set-checks-collapsed",
+        "method": "detailSetChecksCollapsed",
+        "summary": "Show or hide the Checks summary body on the exact selected review surface."
+      },
+      {
+        "id": "detail-expand-check",
+        "method": "detailExpandCheck",
+        "summary": "Expand or collapse a check."
+      },
+      {
+        "id": "detail-refresh-checks",
+        "method": "detailRefreshChecks",
+        "summary": "Refresh checks for a pull request without cache."
+      },
+      {
+        "id": "detail-load-check-details",
+        "method": "detailLoadCheckDetails",
+        "summary": "Load bounded details and logs for one current check run."
+      },
+      {
+        "id": "detail-rerun-checks",
+        "method": "detailRerunChecks",
+        "summary": "Rerun actionable checks or failed checks."
+      },
+      {
+        "id": "detail-set-file-viewed",
+        "method": "detailSetFileViewed",
+        "summary": "Mark a changed pull request file viewed or unviewed."
+      },
+      {
+        "id": "detail-inline-comment",
+        "method": "detailInlineComment",
+        "summary": "Add a current-head inline or range review comment."
+      },
+      {
+        "id": "checks-get",
+        "method": "checksGet",
+        "summary": "Read the active-workspace checks state and its current review target."
+      },
+      {
+        "id": "checks-refresh",
+        "method": "checksRefresh",
+        "summary": "Refresh the exact workspace review, checks, comments and creation eligibility without accepting stale results."
+      },
+      {
+        "id": "checks-invalidate",
+        "method": "checksInvalidate",
+        "summary": "Invalidate an in-flight Checks refresh when its panel is hidden or unmounted without making provider calls."
+      },
+      {
+        "id": "checks-link",
+        "method": "checksLink",
+        "summary": "Link a canonical GitHub pull request to a registered workspace."
+      },
+      {
+        "id": "checks-unlink",
+        "method": "checksUnlink",
+        "summary": "Hide a workspace review and suppress its automatic rediscovery until it is relinked."
+      },
+      {
+        "id": "checks-relink",
+        "method": "checksRelink",
+        "summary": "Restore the exact review previously suppressed for a workspace after canonical validation."
+      },
+      {
+        "id": "checks-set-height",
+        "method": "checksSetHeight",
+        "summary": "Set the compact Checks panel height within the pane bounds."
+      },
+      {
+        "id": "checks-set-title-draft",
+        "method": "checksSetTitleDraft",
+        "summary": "Set the bounded inline pull request title draft for an exact review target."
+      },
+      {
+        "id": "checks-cancel-title",
+        "method": "checksCancelTitle",
+        "summary": "Discard the inline title draft for the exact review target without changing the hosted review."
+      },
+      {
+        "id": "checks-save-title",
+        "method": "checksSaveTitle",
+        "summary": "Save and read back a review title for the exact current PR head."
+      },
+      {
+        "id": "checks-set-agent-dialog",
+        "method": "checksSetAgentDialog",
+        "summary": "Set or clear the editable Checks triage-agent dialog."
+      },
+      {
+        "id": "checks-launch-agent",
+        "method": "checksLaunchAgent",
+        "summary": "Start the selected/default real agent, deliver the edited triage prompt once after readiness, and only then resolve selected supported threads."
+      },
+      {
+        "id": "checks-git-action",
+        "method": "checksGitAction",
+        "summary": "Publish, push or sync the exact workspace through quirky.git and then refresh its hosting eligibility."
+      },
+      {
+        "id": "checks-open-review",
+        "method": "checksOpenReview",
+        "summary": "Open the current canonical review in the conversation, checks or files tab."
+      },
+      {
+        "id": "create-open",
+        "method": "createOpen",
+        "summary": "open the create-review view after refreshing eligibility for this exact worktree"
+      },
+      {
+        "id": "settings-open",
+        "method": "settingsOpen",
+        "summary": "open hosting settings scoped to the caller worktree when available"
+      },
+      {
+        "id": "create-draft",
+        "method": "createDraft",
+        "summary": "update the session-owned create-review draft fields"
+      },
+      {
+        "id": "create-bases",
+        "method": "createBases",
+        "summary": "list remote Git branches available as review bases"
+      },
+      {
+        "id": "create-base",
+        "method": "createBase",
+        "summary": "select a remote base and refresh exact-context eligibility and stack capability"
+      },
+      {
+        "id": "create-generate",
+        "method": "createGenerate",
+        "summary": "generate title and body from the selected worktree branch diff using a public agent"
+      },
+      {
+        "id": "create-cancel-generate",
+        "method": "createCancelGenerate",
+        "summary": "cancel only the active review-details generation request"
+      },
+      {
+        "id": "create-submit",
+        "method": "createSubmit",
+        "summary": "recheck eligibility, push if required, create once, and link confirmed results"
+      },
+      {
+        "id": "creation-defaults",
+        "method": "creationDefaults",
+        "summary": "read global or repository creation defaults; scope explicitly selects global despite a caller worktree"
+      },
+      {
+        "id": "set-creation-defaults",
+        "method": "setCreationDefaults",
+        "summary": "persist all four global or repository-scoped creation defaults"
+      },
+      {
+        "id": "reset-creation-defaults",
+        "method": "resetCreationDefaults",
+        "summary": "reset global defaults to false or remove one repository override"
+      },
+      {
+        "id": "hosting-diagnose",
+        "method": "hostingDiagnose",
+        "summary": "read canonical GitHub CLI readiness and required scopes"
+      },
+      {
+        "id": "hosting-accounts",
+        "method": "hostingAccounts",
+        "summary": "list canonical authenticated GitHub account identities and scopes"
+      },
+      {
+        "id": "hosting-configuration",
+        "method": "hostingConfiguration",
+        "summary": "read canonical repository account binding without exposing credentials"
+      },
+      {
+        "id": "hosting-budget",
+        "method": "hostingBudget",
+        "summary": "read canonical host- and account-scoped GitHub API budget"
+      },
+      {
+        "id": "hosting-bind-account",
+        "method": "hostingBindAccount",
+        "summary": "bind this repository to an existing keyring GitHub account; the hosting API fails closed"
+      },
+      {
+        "id": "hosting-unbind-account",
+        "method": "hostingUnbindAccount",
+        "summary": "clear this repository GitHub account binding to explicitly use ambient authentication"
+      },
+      {
+        "id": "hosting-settings-refresh",
+        "method": "hostingSettingsRefresh",
+        "summary": "refresh the daemon-owned hosting settings snapshot for an exact repository"
+      }
+    ]
+  }
+}

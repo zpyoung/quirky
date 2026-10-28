@@ -1,3 +1,4 @@
+import { nativeBrowserCapabilityForWindow } from '../native-browser'
 import {
   DEFAULT_THEME,
   THEME_TOKENS,
@@ -15,7 +16,8 @@ import {
   type UiPluginContext,
   type UiPluginModule,
   type UiSlotEntry,
-  type UiState
+  type UiState,
+  type NativeBrowserCapability
 } from '@quirky/protocol'
 
 /** What the host needs from its surroundings; the React shell wires these to `Connection` and the browser. */
@@ -33,6 +35,7 @@ export type HostDeps = {
   /** Dismisses the toast keyed `key` and runs its `onDismiss`, for the daemon's `ui.toast.dismiss`; nothing happens when none has it. */
   dismissToast?(key: string): void
   log(message: string): void
+  nativeBrowser?: NativeBrowserCapability
   /** Window focus, reported to the daemon so it can pick the window a routed command runs in. */
   windowFocus?: { hasFocus(): boolean; subscribe(listener: (focused: boolean) => void): () => void }
   /** User input in the window (pointer, key, wheel), reported to the daemon so it knows someone is at the machine. */
@@ -82,6 +85,13 @@ type Session = {
   violation: string | null
   revoked: boolean
 }
+type CommandDragCapability = {
+  readonly token: string
+  readonly owner: Session
+  readonly command: string
+  readonly args: Record<string, unknown>
+  dispose(): void
+}
 
 type Runtime = {
   module?: UiPluginModule
@@ -97,7 +107,10 @@ type Runtime = {
 type MountHandle = {
   readonly id: string
   readonly plugin: string
+  readonly module: UiSlotEntry['module']
   cleanup?: () => void
+  afterCleanup?: () => void
+  finishRelease?: () => void
   released: boolean
   /** The last state the slot reported, sent again after a reconnect. */
   report?: { state: unknown }
@@ -134,7 +147,7 @@ function messageOf(error: unknown): string {
 }
 
 function findSlot(model: UiModel, id: string): UiSlotEntry | undefined {
-  return [...model.sidebarSections, ...model.statusBars, ...model.panels, ...model.views, ...model.overlays].find((entry) => entry.id === id)
+  return [...model.sidebarSections, ...model.activityItems, ...model.statusBars, ...model.panels, ...model.settingsSections, ...model.views, ...model.overlays].find((entry) => entry.id === id)
 }
 
 /** Context keys the kernel gives meaning to: with both true, terminal keys go to the terminal first. */
@@ -195,12 +208,17 @@ export class WindowPluginHost {
   private readonly unsubscribeActivity: (() => void) | undefined
   private lastInputAt: number | null = null
   private lastActivityReportAt: number | null = null
+  private readonly nativeBrowser: NativeBrowserCapability
+
   private refreshChain: Promise<unknown> = Promise.resolve()
+  /** Events are newer than any `ui.state` snapshot whose request was already in flight. */
+  private layoutEventVersion = 0
   /** `setting.changed` values seen while a refresh fetches; they are newer than that refresh's snapshot. */
   private settingsSeenDuringFetch: Map<string, boolean | number | string> | null = null
   private stopped = false
-
+  private commandDrag: CommandDragCapability | null = null
   constructor(private readonly deps: HostDeps) {
+    this.nativeBrowser = deps.nativeBrowser ?? nativeBrowserCapabilityForWindow()
     this.unsubscribeEvents = deps.onEvent((event) => this.handleEvent(event))
     this.unsubscribeFocus = deps.windowFocus?.subscribe((focused) => this.reportFocus(focused))
     this.unsubscribeActivity = deps.windowActivity?.subscribe(() => this.noteInput())
@@ -244,18 +262,40 @@ export class WindowPluginHost {
    * Mounts contribution `id` into `element`, loading its plugin's module first if needed. The
    * returned function cleans the mount up and is safe to call more than once. Failures end up in
    * `slots[id]`, never as a throw.
+   * React-owned mounts can defer disposal until their parent commit has completed.
    */
-  mount(id: string, element: HTMLElement, props?: { input?: unknown }): () => void {
+  mount(
+    id: string,
+    element: HTMLElement,
+    props?: { input?: unknown },
+    options?: { deferCleanup?: boolean; afterCleanup?: () => void }
+  ): () => void {
     const entry = this.state.model ? findSlot(this.state.model, id) : undefined
     if (!entry) {
       this.setSlot(id, { status: 'error', message: `no contribution ${id}` })
-      return () => this.setSlot(id, null)
+      let released = false
+      return () => {
+        if (released) return
+        released = true
+        const finish = () => {
+          options?.afterCleanup?.()
+          this.setSlot(id, null)
+        }
+        if (options?.deferCleanup) queueMicrotask(finish)
+        else finish()
+      }
     }
-    const handle: MountHandle = { id, plugin: entry.plugin, released: false }
+    const handle: MountHandle = {
+      id,
+      plugin: entry.plugin,
+      module: entry.module,
+      afterCleanup: options?.afterCleanup,
+      released: false
+    }
     this.mounts.add(handle)
     this.setSlot(id, { status: 'loading' })
     void this.runMount(handle, entry, element, props)
-    return () => this.release(handle)
+    return () => this.release(handle, options?.deferCleanup ?? false)
   }
 
   /**
@@ -330,6 +370,11 @@ export class WindowPluginHost {
     else if (this.state.layout.panel === id) this.layoutCall('ui.panel.close', {})
   }
 
+  /** Configures one panel's desired geometry through the daemon's public layout API. */
+  configurePanel(id: string, options: { width?: number; activityBarPosition?: 'top' | 'side' }): void {
+    this.layoutCall('ui.panel.configure', { id, ...options })
+  }
+
   /** Opens or closes the shared palette; omitted `open` toggles its daemon-owned state. */
   setPalette(open?: boolean): void {
     this.layoutCall('ui.palette.set', open === undefined ? {} : { open })
@@ -369,6 +414,7 @@ export class WindowPluginHost {
   /** Stops listening to the daemon, cleans up every mount and deactivates every active plugin. */
   stop(): void {
     this.stopped = true
+    this.commandDrag?.dispose()
     this.unsubscribeEvents()
     this.unsubscribeFocus?.()
     this.unsubscribeActivity?.()
@@ -385,9 +431,10 @@ export class WindowPluginHost {
     let model: UiModel
     let snapshot: SettingInfo[]
     try {
-      // applied as soon as it arrives, so a `ui.state.changed` that follows it on the wire is newer
+      // A daemon snapshot can arrive after a concurrent state event even when it captured older state.
+      const layoutVersion = this.layoutEventVersion
       const layout = (this.deps.call('ui.state', {}) as Promise<UiState>).then((state) => {
-        if (!this.stopped) this.setLayout(state.layout)
+        if (!this.stopped && layoutVersion === this.layoutEventVersion) this.setLayout(state.layout)
       })
       const [fetchedModel, fetchedSettings] = await Promise.all([
         this.deps.call('ui.contributions', {}) as Promise<UiModel>,
@@ -401,6 +448,8 @@ export class WindowPluginHost {
     }
     if (this.stopped) return
     const settings = snapshot.map((s) => (newer.has(s.id) ? { ...s, value: newer.get(s.id)! } : s))
+    // Tear down nested plugin roots before React sees slots whose containers are disappearing.
+    this.releaseStaleMounts(model)
     this.commit({ model, settings, themeVariables: themeVariablesOf(model) })
     await this.reconcile(model)
   }
@@ -410,10 +459,6 @@ export class WindowPluginHost {
     const badges = Object.entries(this.state.badges).filter(onPanel)
     if (badges.length !== Object.keys(this.state.badges).length) {
       this.commit({ badges: Object.fromEntries(badges), badgeTitles: Object.fromEntries(Object.entries(this.state.badgeTitles).filter(onPanel)) })
-    }
-    for (const handle of [...this.mounts]) {
-      const entry = findSlot(model, handle.id)
-      if (!entry || entry.plugin !== handle.plugin) this.release(handle)
     }
     for (const handle of [...this.embedded]) {
       const entry = model.views.find((view) => view.id === handle.id)
@@ -426,6 +471,13 @@ export class WindowPluginHost {
     }
     await Promise.all(departed.map((id) => this.deactivate(id)))
     this.startEnabled(model)
+  }
+
+  private releaseStaleMounts(model: UiModel): void {
+    for (const handle of [...this.mounts]) {
+      const entry = findSlot(model, handle.id)
+      if (!entry || entry.plugin !== handle.plugin || entry.module !== handle.module) this.release(handle)
+    }
   }
 
   /** Whether the daemon's model lists a UI module for the plugin, i.e. it is enabled and has code-backed UI. */
@@ -477,9 +529,10 @@ export class WindowPluginHost {
       return
     }
     const cleanupFn = typeof cleanup === 'function' ? (cleanup as () => void) : undefined
-    // a breach inside the mount function already released the handle and wrote the slot's error
+    // A breach or concurrent disposal may release the handle during the mount callback.
     if (handle.released || this.runtimes.get(entry.plugin)?.session !== session) {
-      this.runCleanup(handle.plugin, cleanupFn)
+      if (handle.released && handle.finishRelease) handle.cleanup = cleanupFn
+      else this.runCleanup(handle.plugin, cleanupFn)
       return
     }
     handle.cleanup = cleanupFn
@@ -537,22 +590,29 @@ export class WindowPluginHost {
     }
   }
 
-  private release(handle: MountHandle): void {
+  private release(handle: MountHandle, deferCleanup = false): void {
+    if (handle.released) {
+      if (!deferCleanup) handle.finishRelease?.()
+      return
+    }
     handle.released = true
-    this.mounts.delete(handle)
-    const cleanup = handle.cleanup
-    handle.cleanup = undefined
-    if (cleanup) {
-      try {
-        cleanup()
-      } catch (error) {
-        this.deps.log(`${handle.plugin}: cleanup failed: ${messageOf(error)}`)
+    const finish = () => {
+      if (handle.finishRelease !== finish) return
+      handle.finishRelease = undefined
+      this.mounts.delete(handle)
+      const cleanup = handle.cleanup
+      handle.cleanup = undefined
+      this.runCleanup(handle.plugin, cleanup)
+      this.runCleanup(handle.plugin, handle.afterCleanup)
+      handle.afterCleanup = undefined
+      if (![...this.mounts].some((other) => other.id === handle.id && !other.released)) {
+        this.setSlot(handle.id, null)
+        if (handle.report) this.callQuietly('ui.report', { slot: handle.id, state: null })
       }
     }
-    if (![...this.mounts].some((other) => other.id === handle.id)) {
-      this.setSlot(handle.id, null)
-      if (handle.report) this.callQuietly('ui.report', { slot: handle.id, state: null })
-    }
+    handle.finishRelease = finish
+    if (deferCleanup) queueMicrotask(finish)
+    else finish()
   }
 
   private requireCommand(id: string): UiCommandEntry {
@@ -725,6 +785,10 @@ export class WindowPluginHost {
     runtime.session = undefined
     for (const handle of [...this.mounts]) {
       if (handle.plugin !== session.pluginId) continue
+      if (handle.released) {
+        this.release(handle)
+        continue
+      }
       this.mounts.delete(handle)
       handle.released = true
       const cleanup = handle.cleanup
@@ -762,6 +826,16 @@ export class WindowPluginHost {
       return once
     }
     return {
+      nativeBrowser: {
+        available: this.nativeBrowser.available,
+        clearPartitionAvailable: this.nativeBrowser.clearPartitionAvailable,
+        mount: live((element, options) => {
+          const handle = this.nativeBrowser.mount(element, options)
+          track(() => handle.dispose())
+          return handle
+        }),
+        clearPartition: live((partition) => this.nativeBrowser.clearPartition(partition))
+      },
       pluginId,
       log: (message) => this.deps.log(`${pluginId}: ${message}`),
       provide: live((contributionId: string, implementation: unknown) => {
@@ -783,6 +857,28 @@ export class WindowPluginHost {
       getSetting: live((name: string) => this.getSetting(pluginId, name)),
       executeCommand: live(async (id: string, args?: unknown) => {
         await this.invokeCommand(this.requireCommand(id), args)
+      }),
+      createCommandDrag: live((command: string, args?: Record<string, unknown>) => {
+        const snapshot = structuredClone(args ?? {})
+        const token = crypto.randomUUID()
+        this.commandDrag?.dispose()
+        let entry!: CommandDragCapability
+        const dispose = track(() => {
+          if (this.commandDrag === entry) this.commandDrag = null
+        })
+        entry = { token, owner: session, command, args: snapshot, dispose }
+        this.commandDrag = entry
+        return token
+      }),
+      consumeCommandDrag: live((token: string) => {
+        const entry = this.commandDrag
+        if (!entry || entry.token !== token || entry.owner.revoked) return null
+        entry.dispose()
+        return { command: entry.command, args: entry.args }
+      }),
+      cancelCommandDrag: live((token: string) => {
+        const entry = this.commandDrag
+        if (entry?.token === token && entry.owner === session) entry.dispose()
       }),
       openView: live((id: string, input?: unknown) => this.openView(id, input)),
       closeView: live(() => this.closeView()),
@@ -867,7 +963,10 @@ export class WindowPluginHost {
   }
 
   private handleEvent(event: QuirkyEvent): void {
-    if (event.type === 'ui.state.changed') this.setLayout(event.layout)
+    if (event.type === 'ui.state.changed') {
+      this.layoutEventVersion++
+      this.setLayout(event.layout)
+    }
     if (event.type === 'ui.command.request') void this.answerCommand(event.requestId, event.id, event.args)
     if (event.type === 'setting.changed') this.applySetting(event.id, event.value)
     if (event.type === 'plugin.changed' || event.type === 'theme.changed') {

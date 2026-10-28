@@ -1,0 +1,750 @@
+{
+  "id": "quirky.editor",
+  "name": "Editor",
+  "version": "0.1.0",
+  "description": "Worktree-scoped file editing, recovery, search and explorer services.",
+  "main": "main.ts",
+  "ui": "dist/ui.js",
+  "cliAliases": ["file"],
+  "activation": "startup",
+  "dependencies": ["quirky.worktree", "quirky.terminal"],
+  "contributes": {
+    "method": [
+      {
+        "id": "open",
+        "description": "Open an authorized worktree file in an editor tab.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": { "type": "string" },
+            "path": { "type": "string", "description": "Required non-empty worktree-relative path; an authorized absolute path is also accepted." },
+            "preview": { "type": "boolean", "description": "Open as the replaceable Explorer preview tab." },
+            "pinned": { "type": "boolean" },
+            "focus": { "type": "boolean", "description": "Focus the new tab; defaults false for API callers." },
+            "mode": { "type": "string", "enum": ["source", "rich", "preview"] },
+            "group": { "type": "string", "description": "Non-empty terminal tab group when supplied." },
+            "line": { "type": "integer", "minimum": 1 },
+            "column": { "type": "integer", "minimum": 1 },
+            "matchLength": { "type": "integer", "minimum": 0, "maximum": 52428800, "description": "UTF-16 selection length, at most 52,428,800 code units; supplying it requires both line and column." }
+          },
+          "required": ["path"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" }, "worktreeId": { "type": "string" }, "root": { "type": "string" },
+            "openedTabId": { "type": "string", "description": "Stable terminal tab ID created or reused by this open call." },
+            "path": { "type": "string" }, "relativePath": { "type": "string" }, "name": { "type": "string" },
+            "kind": { "type": "string", "enum": ["text", "markdown", "notebook", "csv", "image", "pdf", "audio", "video", "mermaid", "binary"] },
+            "content": { "type": "string", "description": "Optional inline UTF-8 text within the aggregate 256 KiB content budget." },
+            "draft": { "description": "Draft text when present, or null when clean; a non-null draft may be omitted when it is lazy." },
+            "baseline": { "description": "Saved-content baseline hash, or null when no saved baseline is available." },
+            "size": { "type": "integer", "minimum": 0 },
+            "readOnly": { "type": "boolean" }, "dirty": { "type": "boolean" },
+            "external": { "description": "External disk state: 'changed', 'deleted', or null when there is no external change." },
+            "diskContent": { "description": "Optional inline disk comparison text within the aggregate 256 KiB content budget, or null when unavailable." },
+            "diskSignature": { "description": "Disk content signature, or null when no comparison signature is available." },
+            "diskContentLength": { "description": "Nonnegative disk-content length when present, or null when no disk comparison is available." },
+            "diskContentBytes": { "description": "Nonnegative disk-content byte count when present, or null when no disk comparison is available." },
+            "contentLength": { "type": "integer", "minimum": 0, "description": "UTF-16 code-unit length." },
+            "draftLength": { "description": "Nonnegative draft length when present, or null when there is no draft." },
+            "contentBytes": { "type": "integer", "minimum": 0, "description": "UTF-8 byte length." },
+            "draftBytes": { "description": "Nonnegative draft UTF-8 byte count when present, or null when there is no draft." },
+            "mode": { "type": "string", "enum": ["source", "rich", "preview"] },
+            "tabId": { "description": "Stable terminal tab ID, or null when no editor tab is mapped." }, "preview": { "type": "boolean" }, "pinned": { "type": "boolean" },
+            "untitled": { "type": "boolean" }, "revision": { "type": "integer", "minimum": 0 },
+            "contentRevision": { "type": "integer", "minimum": 0 },
+            "view": { "type": "object", "additionalProperties": true },
+            "error": { "description": "Error message, or null when this buffer has no error." }
+          },
+          "required": ["id", "worktreeId", "root", "path", "relativePath", "name", "kind", "baseline", "size", "readOnly", "dirty", "external", "diskSignature", "diskContentLength", "diskContentBytes", "contentLength", "draftLength", "contentBytes", "draftBytes", "mode", "tabId", "openedTabId", "preview", "pinned", "untitled", "revision", "contentRevision", "view", "error"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "state",
+        "description": "Read the editor's authoritative buffers, terminal tab mappings and per-worktree state.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": { "bufferId": { "type": "string" }, "worktree": { "type": "string" } }, "additionalProperties": false },
+        "result": {
+          "type": "object",
+          "properties": {
+            "buffers": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" }, "worktreeId": { "type": "string" }, "root": { "type": "string" },
+                  "path": { "type": "string" }, "relativePath": { "type": "string" }, "name": { "type": "string" },
+                  "kind": { "type": "string", "enum": ["text", "markdown", "notebook", "csv", "image", "pdf", "audio", "video", "mermaid", "binary"] },
+                  "baseline": { "description": "Saved-content baseline hash, or null when no saved baseline is available." }, "size": { "type": "integer", "minimum": 0 },
+                  "contentLength": { "type": "integer", "minimum": 0 }, "contentBytes": { "type": "integer", "minimum": 0 },
+                  "draftLength": { "description": "Nonnegative draft length when present, or null when there is no draft." }, "draftBytes": { "description": "Nonnegative draft UTF-8 byte count when present, or null when there is no draft." },
+                  "diskContentLength": { "description": "Nonnegative disk-content length when present, or null when no disk comparison is available." }, "diskContentBytes": { "description": "Nonnegative disk-content byte count when present, or null when no disk comparison is available." },
+                  "diskSignature": { "description": "Disk content signature, or null when no comparison signature is available." },
+                  "readOnly": { "type": "boolean" }, "dirty": { "type": "boolean" },
+                  "external": { "description": "External disk state: 'changed', 'deleted', or null when there is no external change." },
+                  "mode": { "type": "string", "enum": ["source", "rich", "preview"] },
+                  "tabId": { "description": "Stable terminal tab ID, or null when no editor tab is mapped." }, "preview": { "type": "boolean" }, "pinned": { "type": "boolean" },
+                  "untitled": { "type": "boolean" }, "revision": { "type": "integer", "minimum": 0 },
+                  "contentRevision": { "type": "integer", "minimum": 0 },
+                  "view": { "type": "object", "additionalProperties": true }, "error": { "description": "Error message, or null when this buffer has no error." }
+                },
+                "required": ["id", "worktreeId", "root", "path", "relativePath", "name", "kind", "baseline", "size", "contentLength", "contentBytes", "draftLength", "draftBytes", "diskContentLength", "diskContentBytes", "diskSignature", "readOnly", "dirty", "external", "mode", "tabId", "preview", "pinned", "untitled", "revision", "contentRevision", "view", "error"],
+                "additionalProperties": false
+              }
+            },
+            "tabs": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": { "tabId": { "type": "string" }, "bufferId": { "type": "string" }, "mode": { "type": "string", "enum": ["edit", "preview"] }, "group": { "type": "string" } },
+                "required": ["tabId", "bufferId", "mode"],
+                "additionalProperties": false
+              }
+            },
+            "explorer": {
+              "type": "object",
+              "properties": { "worktreeId": { "type": "string" }, "showDotfiles": { "type": "boolean" }, "expanded": { "type": "array", "items": { "type": "string" } } },
+              "required": ["worktreeId", "showDotfiles", "expanded"],
+              "additionalProperties": false
+            },
+            "search": {
+              "description": "Either null when no contents search state is active, or an object with worktreeId (string), query (string), loading (boolean), error (string or null), files (array of {path:string, relativePath:string, matches:array of {line:integer >= 1, column:integer >= 1, matchLength:integer >= 0, lineContent:string, and optional displayColumn:integer >= 1 and displayMatchLength:integer >= 0}, and optional matchCount:nonnegative integer}), totalMatches (nonnegative integer), truncated (boolean), and requestId (string or null)."
+            },
+            "quickOpenHistory": {
+              "type": "array",
+              "items": { "type": "object", "properties": { "worktreeId": { "type": "string" }, "paths": { "type": "array", "items": { "type": "string" } } }, "required": ["worktreeId", "paths"], "additionalProperties": false }
+            },
+            "closeRequests": {
+              "type": "array",
+              "items": { "type": "object", "properties": { "bufferId": { "type": "string" }, "tabId": { "type": "string" }, "dirty": { "type": "boolean" } }, "required": ["bufferId", "tabId", "dirty"], "additionalProperties": false }
+            }
+          },
+          "required": ["buffers", "tabs", "explorer", "search", "quickOpenHistory", "closeRequests"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "draft",
+        "description": "CAS-update a shared editable buffer draft using its content revision.",
+        "params": { "type": "object", "properties": { "bufferId": { "type": "string" }, "content": { "type": "string", "description": "Required UTF-8 draft text; the service rejects drafts larger than 50 MiB." }, "expectedRevision": { "type": "integer", "minimum": 0 } }, "required": ["bufferId", "content", "expectedRevision"], "additionalProperties": false },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" }, "worktreeId": { "type": "string" }, "root": { "type": "string" },
+            "path": { "type": "string" }, "relativePath": { "type": "string" }, "name": { "type": "string" },
+            "kind": { "type": "string", "enum": ["text", "markdown", "notebook", "csv", "image", "pdf", "audio", "video", "mermaid", "binary"] },
+            "content": { "type": "string", "description": "Optional inline text within the aggregate 256 KiB content budget." },
+            "draft": { "description": "Draft text when present, or null when clean; a non-null draft may be omitted when it is lazy." },
+            "baseline": { "description": "Saved-content baseline hash, or null when no saved baseline is available." }, "size": { "type": "integer", "minimum": 0 },
+            "readOnly": { "type": "boolean" }, "dirty": { "type": "boolean" },
+            "external": { "description": "External disk state: 'changed', 'deleted', or null when there is no external change." },
+            "diskContent": { "description": "Optional inline disk comparison text, or null when unavailable." },
+            "diskSignature": { "description": "Disk content signature, or null when no comparison signature is available." },
+            "diskContentLength": { "description": "Nonnegative disk-content length when present, or null when no disk comparison is available." }, "diskContentBytes": { "description": "Nonnegative disk-content byte count when present, or null when no disk comparison is available." },
+            "contentLength": { "type": "integer", "minimum": 0 }, "draftLength": { "description": "Nonnegative draft length when present, or null when there is no draft." },
+            "contentBytes": { "type": "integer", "minimum": 0 }, "draftBytes": { "description": "Nonnegative draft UTF-8 byte count when present, or null when there is no draft." },
+            "mode": { "type": "string", "enum": ["source", "rich", "preview"] }, "tabId": { "description": "Stable terminal tab ID, or null when no editor tab is mapped." },
+            "preview": { "type": "boolean" }, "pinned": { "type": "boolean" }, "untitled": { "type": "boolean" },
+            "revision": { "type": "integer", "minimum": 0 }, "contentRevision": { "type": "integer", "minimum": 0 },
+            "view": { "type": "object", "additionalProperties": true }, "error": { "description": "Error message, or null when this buffer has no error." }
+          },
+          "required": ["id", "worktreeId", "root", "path", "relativePath", "name", "kind", "baseline", "size", "readOnly", "dirty", "external", "diskSignature", "diskContentLength", "diskContentBytes", "contentLength", "draftLength", "contentBytes", "draftBytes", "mode", "tabId", "preview", "pinned", "untitled", "revision", "contentRevision", "view", "error"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "save",
+        "description": "Save a draft with a content-hash baseline; overwrite is the only unguarded write.",
+        "params": { "type": "object", "properties": { "bufferId": { "type": "string" }, "trigger": { "type": "string", "enum": ["user", "autosave", "overwrite"] } }, "required": ["bufferId"], "additionalProperties": false },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" }, "worktreeId": { "type": "string" }, "root": { "type": "string" },
+            "path": { "type": "string" }, "relativePath": { "type": "string" }, "name": { "type": "string" },
+            "kind": { "type": "string", "enum": ["text", "markdown", "notebook", "csv", "image", "pdf", "audio", "video", "mermaid", "binary"] },
+            "content": { "type": "string", "description": "Optional inline text within the aggregate 256 KiB content budget." },
+            "draft": { "description": "Draft text when present, or null when clean; a non-null draft may be omitted when it is lazy." },
+            "baseline": { "description": "Saved-content baseline hash, or null when no saved baseline is available." }, "size": { "type": "integer", "minimum": 0 },
+            "readOnly": { "type": "boolean" }, "dirty": { "type": "boolean" },
+            "external": { "description": "External disk state: 'changed', 'deleted', or null when there is no external change." },
+            "diskContent": { "description": "Optional inline disk comparison text, or null when unavailable." },
+            "diskSignature": { "description": "Disk content signature, or null when no comparison signature is available." },
+            "diskContentLength": { "description": "Nonnegative disk-content length when present, or null when no disk comparison is available." }, "diskContentBytes": { "description": "Nonnegative disk-content byte count when present, or null when no disk comparison is available." },
+            "contentLength": { "type": "integer", "minimum": 0 }, "draftLength": { "description": "Nonnegative draft length when present, or null when there is no draft." },
+            "contentBytes": { "type": "integer", "minimum": 0 }, "draftBytes": { "description": "Nonnegative draft UTF-8 byte count when present, or null when there is no draft." },
+            "mode": { "type": "string", "enum": ["source", "rich", "preview"] }, "tabId": { "description": "Stable terminal tab ID, or null when no editor tab is mapped." },
+            "preview": { "type": "boolean" }, "pinned": { "type": "boolean" }, "untitled": { "type": "boolean" },
+            "revision": { "type": "integer", "minimum": 0 }, "contentRevision": { "type": "integer", "minimum": 0 },
+            "view": { "type": "object", "additionalProperties": true }, "error": { "description": "Error message, or null when this buffer has no error." }
+          },
+          "required": ["id", "worktreeId", "root", "path", "relativePath", "name", "kind", "baseline", "size", "readOnly", "dirty", "external", "diskSignature", "diskContentLength", "diskContentBytes", "contentLength", "draftLength", "contentBytes", "draftBytes", "mode", "tabId", "preview", "pinned", "untitled", "revision", "contentRevision", "view", "error"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "close",
+        "description": "Close one actual editor tab, keeping previews draft-neutral and requiring a choice for dirty edits.",
+        "params": { "type": "object", "properties": { "bufferId": { "type": "string" }, "tabId": { "type": "string" }, "choice": { "type": "string", "enum": ["save", "discard", "cancel"] } }, "required": ["bufferId"], "additionalProperties": false },
+        "result": { "type": "object", "properties": { "closed": { "type": "boolean" }, "needsDecision": { "type": "boolean" } }, "required": ["closed"], "additionalProperties": false }
+      },
+      {
+        "id": "canClose",
+        "description": "Terminal close guard for the actual editor tab; returns true only when closing cannot lose a draft.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": { "bufferId": { "type": "string" }, "tabId": { "type": "string" } }, "required": ["bufferId"], "additionalProperties": false },
+        "result": { "type": "boolean" }
+      },
+      {
+        "id": "reopen",
+        "description": "Reopen the most recently closed eligible edit tab, or return null when the stack is empty.",
+        "params": { "type": "object", "properties": { "worktree": { "type": "string" }, "focus": { "type": "boolean" } }, "additionalProperties": false },
+        "result": {
+          "description": "Either null when no eligible recently closed edit tab exists, or an editor-buffer snapshot with id/worktreeId/root/path/relativePath/name, kind, content, nullable draft and baseline, size/contentLength/contentBytes, nullable draftLength/draftBytes, readOnly/dirty, nullable external/diskContent/diskSignature/diskContentLength/diskContentBytes, mode/tabId, preview/pinned/untitled, revision/contentRevision, view and nullable error. kind is text, markdown, notebook, csv, image, pdf, audio, video, mermaid or binary; mode is source, rich or preview."
+        }
+      },
+      {
+        "id": "view",
+        "description": "Update view state or resolve an external change while preserving guarded-save rules.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "bufferId": { "type": "string" },
+            "action": { "type": "string", "enum": ["update", "reload", "keep", "undoReload", "compare", "promote", "pin", "reveal"], "description": "Optional; defaults to update. update applies patch/preview state; promote, pin, reveal, compare, reload, keep and undoReload select their named operation and need no patch." },
+            "tabId": { "type": "string" },
+            "patch": {
+              "type": "object",
+              "properties": {
+                "selection": { "type": "object", "properties": { "from": { "type": "integer", "minimum": 0 }, "to": { "type": "integer", "minimum": 0 }, "anchor": { "type": "integer", "minimum": 0 }, "head": { "type": "integer", "minimum": 0 }, "empty": { "type": "boolean" } }, "additionalProperties": false },
+                "cursor": { "type": "object", "properties": { "line": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 }, "column": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 } }, "required": ["line", "column"], "additionalProperties": false },
+                "cursorLine": { "type": "integer", "minimum": 1 }, "cursorColumn": { "type": "integer", "minimum": 1 },
+                "scrollTop": { "type": "number", "minimum": 0 }, "scrollLeft": { "type": "number", "minimum": 0 },
+                "scroll": { "description": "Either a nonnegative numeric scroll position or a viewer-specific structured scroll-state object." },
+                "zoom": { "type": "number", "minimum": 0.25, "maximum": 8 }, "scale": { "type": "number", "minimum": 0.25, "maximum": 8 },
+                "page": { "type": "integer", "minimum": 1 }, "position": { "type": "object", "additionalProperties": true },
+                "wordWrap": { "type": "boolean" }, "showWhitespace": { "type": "boolean" },
+                "tocVisible": { "type": "boolean" }, "frontmatterVisible": { "type": "boolean" },
+                "markdownTocVisible": { "type": "boolean" }, "markdownFrontmatterVisible": { "type": "boolean" },
+                "collapsedFiles": { "type": "array", "items": { "type": "string" } },
+                "search": { "description": "Search state as a string or viewer-specific object." },
+                "find": { "description": "Find state as a string or viewer-specific object." },
+                "sort": { "description": "Sort state as a string or viewer-specific object." },
+                "filter": { "description": "Filter state as a string or viewer-specific object." },
+                "mode": { "type": "string", "enum": ["source", "rich"], "description": "Preview is a separate tab and cannot be set through a buffer mode patch." },
+                "delimiter": { "type": "string" }, "viewer": { "type": "object", "additionalProperties": true },
+                "focused": { "type": "boolean" }, "line": { "type": "integer", "minimum": 1 }, "column": { "type": "integer", "minimum": 1 },
+                "markdownAnchor": { "description": "Either a safe Markdown heading fragment of at most 512 UTF-8 bytes or null; empty string and null clear it." },
+                "matchLength": { "type": "integer", "minimum": 0, "maximum": 52428800, "description": "UTF-16 search-match selection length." }
+              },
+              "additionalProperties": false
+            },
+            "preview": { "type": "boolean" }
+          },
+          "required": ["bufferId"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" }, "worktreeId": { "type": "string" }, "root": { "type": "string" },
+            "path": { "type": "string" }, "relativePath": { "type": "string" }, "name": { "type": "string" },
+            "kind": { "type": "string", "enum": ["text", "markdown", "notebook", "csv", "image", "pdf", "audio", "video", "mermaid", "binary"] },
+            "content": { "type": "string", "description": "Optional inline text within the aggregate 256 KiB content budget." },
+            "draft": { "description": "Draft text when present, or null when clean; a non-null draft may be omitted when it is lazy." },
+            "baseline": { "description": "Saved-content baseline hash, or null when no saved baseline is available." }, "size": { "type": "integer", "minimum": 0 },
+            "readOnly": { "type": "boolean" }, "dirty": { "type": "boolean" },
+            "external": { "description": "External disk state: 'changed', 'deleted', or null when there is no external change." },
+            "diskContent": { "description": "Optional inline disk comparison text, or null when unavailable." },
+            "diskSignature": { "description": "Disk content signature, or null when no comparison signature is available." },
+            "diskContentLength": { "description": "Nonnegative disk-content length when present, or null when no disk comparison is available." }, "diskContentBytes": { "description": "Nonnegative disk-content byte count when present, or null when no disk comparison is available." },
+            "contentLength": { "type": "integer", "minimum": 0 }, "draftLength": { "description": "Nonnegative draft length when present, or null when there is no draft." },
+            "contentBytes": { "type": "integer", "minimum": 0 }, "draftBytes": { "description": "Nonnegative draft UTF-8 byte count when present, or null when there is no draft." },
+            "mode": { "type": "string", "enum": ["source", "rich", "preview"] }, "tabId": { "description": "Stable terminal tab ID, or null when no editor tab is mapped." },
+            "preview": { "type": "boolean" }, "pinned": { "type": "boolean" }, "untitled": { "type": "boolean" },
+            "revision": { "type": "integer", "minimum": 0 }, "contentRevision": { "type": "integer", "minimum": 0 },
+            "view": { "type": "object", "additionalProperties": true }, "error": { "description": "Error message, or null when this buffer has no error." }
+          },
+          "required": ["id", "worktreeId", "root", "path", "relativePath", "name", "kind", "baseline", "size", "readOnly", "dirty", "external", "diskSignature", "diskContentLength", "diskContentBytes", "contentLength", "draftLength", "contentBytes", "draftBytes", "mode", "tabId", "preview", "pinned", "untitled", "revision", "contentRevision", "view", "error"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "explorer",
+        "description": "List and refresh authorized directory entries, filter the inventory, reveal paths and update per-worktree preferences.",
+        "params": { "type": "object", "properties": { "worktree": { "type": "string" }, "action": { "type": "string", "enum": ["list", "refresh", "reveal", "filter", "preferences"], "description": "reveal uses path when supplied; filter uses query; preferences accepts showDotfiles, displayRoot and expanded. list/refresh accept an optional directory path." }, "path": { "type": "string", "description": "Directory to list/refresh or path to reveal; required to reveal a specific path." }, "query": { "type": "string", "description": "Filter query, limited by the service to 2,048 UTF-8 bytes." }, "showDotfiles": { "type": "boolean" }, "showIgnored": { "type": "boolean" }, "expanded": { "type": "array", "items": { "type": "string", "description": "Worktree path to expand; the service retains only authorized directories." } }, "displayRoot": { "type": "string" } }, "required": ["action"], "additionalProperties": false },
+        "result": { "type": "object", "properties": { "root": { "type": "string" }, "entries": { "type": "array", "items": { "type": "object", "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "isDirectory": { "type": "boolean" }, "isSymlink": { "type": "boolean" }, "ignored": { "type": "boolean" }, "error": { "type": "string" } }, "required": ["path", "name", "isDirectory", "isSymlink"] } }, "truncated": { "type": "boolean" }, "showDotfiles": { "type": "boolean" }, "showIgnored": { "type": "boolean" }, "followSymlinkedDirectories": { "type": "boolean" } }, "required": ["root", "entries", "showDotfiles", "showIgnored", "followSymlinkedDirectories"], "additionalProperties": false }
+      },
+      {
+        "id": "mutate",
+        "description": "Create, rename, move, duplicate, Trash-delete or import worktree files, rekeying open buffers atomically.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": { "type": "string" },
+            "action": { "type": "string", "enum": ["createFile", "createFolder", "rename", "move", "duplicate", "delete", "import"], "description": "rename/move require newPath. import requires at least one sourcePaths or files entry; every imported source is copied into the destination with a collision-safe name, even when it is already inside the worktree." },
+            "path": { "type": "string", "description": "Required destination/source worktree path; non-empty." }, "newPath": { "type": "string", "description": "Required non-empty destination for rename and move." },
+            "content": { "type": "string", "description": "Optional initial UTF-8 file content; createFile is limited to 50 MiB." },
+            "sourcePaths": { "type": "array", "description": "Import source paths; sourcePaths and files together accept at most 256 files, 256 KiB of path/name metadata, and 50 MiB of file data. Sources are copied, including same-worktree sources, using collision-safe destination names.", "items": { "type": "string", "description": "Non-empty source file or directory path to copy into the destination." } },
+            "files": {
+              "type": "array",
+              "description": "Inline import files; at most 256 entries across sourcePaths and files, 256 KiB of metadata and 50 MiB of total file data.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": { "type": "string", "description": "Required safe, non-empty filename without path separators." },
+                  "data": { "type": "string", "description": "Canonical Base64-encoded file bytes, at most 69,905,068 characters for a 50 MiB file; the service validates encoding and enforces the 50 MiB per-file and aggregate import byte limits." }
+                },
+                "required": ["name", "data"],
+                "additionalProperties": false
+              }
+            },
+            "yes": { "type": "boolean" }
+          },
+          "required": ["action", "path"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "path": { "type": "string", "description": "Created, moved, duplicated, deleted, or import destination worktree path." },
+            "buffer": { "type": "object", "description": "Optional complete editor buffer snapshot; its fields and nullable values match the buffer snapshot documented on open's result.", "additionalProperties": true },
+            "paths": { "type": "array", "description": "Paths created by an import; non-empty for import results.", "items": { "type": "string" } }
+          },
+          "required": ["path"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "history",
+        "description": "Inspect or apply owner- and destination-guarded undo/redo operations.",
+        "params": { "type": "object", "properties": { "worktree": { "type": "string" }, "action": { "type": "string", "enum": ["state", "undo", "redo"] } }, "required": ["action"], "additionalProperties": false },
+        "result": { "type": "object", "properties": { "undo": { "type": "integer", "minimum": 0 }, "redo": { "type": "integer", "minimum": 0 }, "canUndo": { "type": "boolean" }, "canRedo": { "type": "boolean" }, "operation": { "type": "object", "properties": { "kind": { "type": "string", "enum": ["create", "rename", "delete"] }, "path": { "type": "string" } }, "required": ["kind", "path"], "additionalProperties": false } }, "required": ["undo", "redo", "canUndo", "canRedo"], "additionalProperties": false }
+      },
+      {
+        "id": "quickOpen",
+        "description": "Search the bounded rg file inventory, rank fuzzy matches and manage worktree-scoped recents.",
+        "params": { "type": "object", "properties": { "worktree": { "type": "string" }, "action": { "type": "string", "enum": ["search", "record", "history", "clearHistory"], "description": "record requires path; search accepts query (empty is allowed); history and clearHistory need no further fields." }, "query": { "type": "string", "description": "Optional fuzzy path query, limited to 2,048 UTF-8 bytes by the service." }, "path": { "type": "string", "description": "Required for record; the path must resolve to a file, not a directory." }, "limit": { "type": "integer", "minimum": 1, "maximum": 50 } }, "required": ["action"], "additionalProperties": false },
+        "result": { "type": "object", "properties": { "results": { "type": "array", "items": { "type": "object", "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "score": { "type": "number" }, "line": { "type": "integer", "minimum": 1 }, "column": { "type": "integer", "minimum": 1 } }, "required": ["path", "name", "score"] } }, "truncated": { "type": "boolean" }, "history": { "type": "array", "items": { "type": "string" } } }, "required": ["results", "truncated", "history"], "additionalProperties": false }
+      },
+      {
+        "id": "search",
+        "description": "Run, cancel or inspect a bounded contents search in an authorized worktree.",
+        "params": { "type": "object", "properties": { "worktree": { "type": "string" }, "action": { "type": "string", "enum": ["run", "cancel", "state"], "description": "run starts or replaces the worktree search; cancel and state operate on that worktree's current search and need no query or requestId." }, "query": { "type": "string", "description": "Optional search query; empty query produces an empty result. Query, includePattern and excludePattern are each limited to 8,192 UTF-8 bytes." }, "caseSensitive": { "type": "boolean" }, "wholeWord": { "type": "boolean" }, "useRegex": { "type": "boolean" }, "includePattern": { "type": "string", "description": "Optional include glob, limited to 8,192 UTF-8 bytes." }, "excludePattern": { "type": "string", "description": "Optional exclude glob, limited to 8,192 UTF-8 bytes." }, "requestId": { "type": "string", "description": "Optional caller-chosen ID for a run; the service creates one when omitted." }, "maxResults": { "type": "integer", "minimum": 1, "maximum": 2000 } }, "required": ["action"], "additionalProperties": false },
+        "result": {
+          "type": "object",
+          "properties": {
+            "files": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "path": { "type": "string" }, "relativePath": { "type": "string" },
+                  "matches": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "line": { "type": "integer", "minimum": 1 }, "column": { "type": "integer", "minimum": 1 },
+                        "displayColumn": { "type": "integer", "minimum": 1 }, "matchLength": { "type": "integer", "minimum": 0 },
+                        "displayMatchLength": { "type": "integer", "minimum": 0 }, "lineContent": { "type": "string" }
+                      },
+                      "required": ["line", "column", "matchLength", "lineContent"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "matchCount": { "type": "integer", "minimum": 0 }
+                },
+                "required": ["path", "relativePath", "matches"],
+                "additionalProperties": false
+              }
+            },
+            "totalMatches": { "type": "integer", "minimum": 0 }, "truncated": { "type": "boolean" },
+            "loading": { "type": "boolean" }, "error": { "description": "Error message, or null when there is no search error." },
+            "requestId": { "description": "Active search request ID, or null when no request is active." }
+          },
+          "required": ["files", "totalMatches", "truncated", "loading", "error", "requestId"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "read",
+        "description": "Read a buffer, bounded bytes, or revisioned UTF-16 text chunks from an authorized open buffer.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "bufferId": { "type": "string" },
+            "action": { "type": "string", "enum": ["buffer", "bytes", "text"], "description": "buffer needs only bufferId/action. bytes accepts optional offset/length (defaults to 0/1 MiB). text requires kind, offset and contentRevision; kind=disk additionally requires the current diskSignature." },
+            "offset": { "type": "integer", "minimum": 0, "description": "Byte offset for bytes or UTF-16 code-unit offset for text; text requires this value and bytes defaults it to 0." },
+            "length": { "type": "integer", "minimum": 0, "maximum": 1048576, "description": "Bytes reads accept up to 1 MiB; text reads accept up to 65,536 UTF-16 code units. Omitted values default to the action's maximum." },
+            "kind": { "type": "string", "enum": ["content", "draft", "disk"], "description": "Required for text reads; disk reads also require diskSignature." },
+            "contentRevision": { "type": "integer", "minimum": 0, "description": "Required for text reads and must match the buffer's current content revision." },
+            "diskSignature": { "type": "string", "description": "Required for kind=disk text reads and must match the current disk comparison signature." }
+          },
+          "required": ["bufferId", "action"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "description": "Action-dependent result union: buffer returns a complete editor-buffer snapshot with eof=true and size; bytes returns Base64 data/eof/size; text returns a UTF-16 text chunk with offset/nextOffset/eof/contentRevision and diskSignature only for kind=disk. Text chunks are at most 65,536 code units and byte reads at most 1 MiB.",
+          "properties": {
+            "buffer": { "type": "object", "description": "Complete editor-buffer snapshot documented on open's result.", "additionalProperties": true },
+            "data": { "type": "string", "description": "Base64-encoded bytes for a bounded on-disk range." },
+            "text": { "type": "string" },
+            "offset": { "type": "integer", "minimum": 0, "description": "UTF-16 code-unit offset for text results." },
+            "nextOffset": { "type": "integer", "minimum": 0, "description": "Next UTF-16 code-unit offset for text results." },
+            "eof": { "type": "boolean", "description": "Always true for buffer results; otherwise indicates whether the selected range reached end-of-file/text." },
+            "size": { "type": "integer", "minimum": 0 },
+            "contentRevision": { "type": "integer", "minimum": 0, "description": "Present on text results." },
+            "diskSignature": { "type": "string", "description": "Present on kind=disk text results." }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "transfer",
+        "description": "Stage and commit bounded draft, create-file or import uploads. The service allows at most four active transfers and 100 MiB of total staging; idle transfers expire after five minutes.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "action": { "type": "string", "enum": ["begin", "chunk", "commit", "cancel", "state"], "description": "begin requires kind and totalBytes; kind=draft additionally requires bufferId and expectedRevision, kind=createFile requires path, and kind=import requires path and name. chunk requires transferId, offset and data. commit/cancel/state require transferId." },
+            "kind": { "type": "string", "enum": ["draft", "createFile", "import"], "description": "Required for begin; selects the draft, create-file or import transfer branch." },
+            "bufferId": { "type": "string" }, "expectedRevision": { "type": "integer", "minimum": 0 },
+            "worktree": { "type": "string" }, "path": { "type": "string", "description": "Required for createFile/import begin; import path must be a destination directory." },
+            "name": { "type": "string", "description": "Required non-empty safe filename for import begin." },
+            "totalBytes": { "type": "integer", "minimum": 0, "maximum": 52428800, "description": "Required on begin; total upload size, at most 50 MiB." },
+            "transferId": { "type": "string" },
+            "offset": { "type": "integer", "minimum": 0 },
+            "data": { "type": "string", "description": "Required for chunk; canonical Base64 encoding of 1–65,536 bytes (at most 87,384 Base64 characters), checked by the service." }
+          },
+          "required": ["action"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "description": "Action-dependent result union. begin returns transferId, offset:0 and maxChunkBytes:65,536; chunk returns transferId/offset/nextOffset; cancel returns transferId/cancelled; state returns transferId/kind/offset/totalBytes/expiresAt/progress. commit returns a complete editor-buffer snapshot for draft, {path} for createFile, or {path,paths} for import.",
+          "properties": {
+            "transferId": { "type": "string" },
+            "offset": { "type": "integer", "minimum": 0, "description": "Zero on begin; current staged-byte offset on other transfer results." },
+            "maxChunkBytes": { "type": "integer", "enum": [65536], "description": "Fixed maximum decoded chunk size in bytes." },
+            "nextOffset": { "type": "integer", "minimum": 0 },
+            "cancelled": { "type": "boolean", "description": "Whether the transfer was cancelled." },
+            "kind": { "type": "string", "enum": ["draft", "createFile", "import", "text", "markdown", "notebook", "csv", "image", "pdf", "audio", "video", "mermaid", "binary"], "description": "Transfer kind for state results; file kind when commit returns a buffer snapshot." },
+            "totalBytes": { "type": "integer", "minimum": 0, "maximum": 52428800 },
+            "expiresAt": { "type": "integer", "minimum": 0 },
+            "progress": { "type": "number", "minimum": 0, "maximum": 1 },
+            "path": { "type": "string", "description": "Created-file path, import destination, or buffer path for a draft commit." },
+            "paths": { "type": "array", "items": { "type": "string" }, "description": "Imported paths for an import commit." }
+          },
+          "additionalProperties": true
+        }
+      },
+      {
+        "id": "markdown",
+        "description": "Source-preserving Markdown capabilities, edits, links, templates, search, TOC and export.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "bufferId": { "type": "string", "description": "Required for every action except new and templates." },
+            "expectedRevision": { "type": "integer", "minimum": 0, "description": "Required for apply, format, insert, replace, link edit/remove and importImage operations that write content." },
+            "worktree": { "type": "string", "description": "Optional worktree selector for new and templates." },
+            "action": { "type": "string", "enum": ["capabilities", "format", "insert", "apply", "links", "documents", "toc", "frontmatter", "search", "replace", "templates", "new", "importImage", "exportPdf"], "description": "apply requires expectedRevision and text. format requires expectedRevision, format and selection; insert requires expectedRevision and format, with selection optional. links uses operation; edit/remove require selection and expectedRevision, and all link operations except remove require target. search requires query; replace requires expectedRevision, non-empty query (at most 2 KiB UTF-8) and text. importImage requires expectedRevision and either name+data, an authorized path, or the native chooser; exportPdf requires rich/preview mode and source at most 600 KiB UTF-8, with an optional destination path. new creates named files; untitled creation and Save As are not exposed in this release. new/templates use worktree and optional title/template/query; other buffer actions require bufferId." },
+            "query": { "type": "string", "description": "Search, template or document query. replace and documents queries are limited to 2 KiB UTF-8; replace also requires a non-empty query." },
+            "text": { "type": "string", "description": "Required by apply and replace; resulting rich apply/format/insert content is limited to 1 MiB UTF-8. Also supplies optional replacement text, code or image alt text for relevant formats." },
+            "format": { "type": "string", "enum": ["body", "heading1", "heading2", "heading3", "heading4", "heading5", "bold", "italic", "strike", "inlineCode", "bulletList", "orderedList", "taskList", "quote", "link", "image", "codeBlock", "divider", "table", "mermaid", "inlineMath", "blockMath", "emoji", "tableRowAbove", "tableRowBelow", "tableRowDelete", "tableColumnLeft", "tableColumnRight", "tableColumnDelete", "tableDelete", "codeLanguage", "indentCode", "outdentCode", "copyCode"], "description": "Required for format/insert; insert accepts insertion formats only. Details, collapsible headings and custom document-link insertion are not published until their rich round trips are supported; use Source for those constructs." },
+            "target": { "type": "string", "description": "Required for link operations other than remove and for link/image/document-link formats; interpreted as an authorized Markdown target." },
+            "path": { "type": "string", "description": "Optional authorized image source or PDF destination for importImage/exportPdf." },
+            "title": { "type": "string", "description": "Optional new-document title; the service uses at most 256 characters." },
+            "template": { "type": "string", "description": "Optional worktree-relative Markdown template for new; template paths are at most 64 KiB UTF-8 and expanded content is at most 256 KiB." },
+            "selection": { "type": "object", "description": "Markdown body offsets; required for format, link edit/remove and optional for insert/image insertion.", "properties": { "from": { "type": "integer", "minimum": 0 }, "to": { "type": "integer", "minimum": 0 } }, "required": ["from", "to"], "additionalProperties": false },
+            "matchCase": { "type": "boolean" },
+            "wholeWord": { "type": "boolean" },
+            "all": { "type": "boolean", "description": "For replace, replace all matches when true." },
+            "openAnyway": { "type": "boolean", "description": "For supported rich edits, allows source documents up to 1 MiB UTF-8 instead of the normal 600 KiB eligibility limit; committed rich text remains capped at 1 MiB." },
+            "includeCanonical": { "type": "boolean", "description": "Include canonical Markdown text in capabilities when available." },
+            "includePreview": { "type": "boolean", "description": "Include a sanitized preview when capabilities report one available." },
+            "visible": { "type": "boolean", "description": "Set TOC or frontmatter visibility for toc/frontmatter actions." },
+            "releaseImages": { "type": "boolean", "description": "For capabilities, release previously created Markdown image resources when true." },
+            "operation": { "type": "string", "enum": ["open", "copy", "edit", "remove", "resolve"], "description": "Optional links operation; edit/remove require selection and a current revision, while open/copy/resolve resolve the target." },
+            "language": { "type": "string", "description": "Optional code-block language label; when used it is limited to 32 letters, digits, underscore, plus or hyphen characters." },
+            "name": { "type": "string", "description": "Required safe single filename when importImage supplies inline data." },
+            "data": { "type": "string", "description": "Canonical Base64 image data for importImage, limited to 12 MiB of Base64 characters; larger images use transfer." }
+          },
+          "required": ["action"],
+          "additionalProperties": false
+        },
+        "result": {
+          "description": "Action-dependent object union. new returns {buffer: full editor-buffer snapshot, path, template:string|null, templateCreated}; expanded templates are limited to 256 KiB. templates returns up to 100 {relativePath,name,title} entries plus total/truncated. capabilities returns bufferId/mode, rich and preview eligibility/reasons/byte limits (600 KiB rich, 1 MiB openAnyway, 8 MiB preview), optional canonicalText and sanitized preview data, and frontMatter either null or {text,startLine,endLine,lineCount,visible}; releaseImages returns {bufferId,released:true}. apply/format/insert edits return a buffer snapshot with change/source-preservation fields; format=copyCode returns {text,contentRevision}. links resolution returns {target,href:string|null,safe,resolved:string|null,ambiguous,kind,anchor:string|null,missing?}; link edits return an edit result. documents returns up to 20,000 {relativePath,name,title} entries with an 8 MiB aggregate path budget, total and truncated. toc returns {headings,count,visible}; frontmatter returns {visible,text,startLine/endLine nullable,readOnly}. search returns {query,matches,total,truncated,activeIndex} with at most 10,000 matches; replace returns {replacements,changed,buffer} and source-preservation data when changed. importImage returns {buffer,relativePath,mimeType,size,inserted} or {cancelled:true}; exportPdf returns exported path/details with valid:true,cancelled:false or {cancelled:true}. Nested buffers are full editor-buffer snapshots documented on open's result."
+        }
+      },
+      {
+        "id": "notes",
+        "description": "Persist, format, copy and send Markdown review notes.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "bufferId": { "type": "string", "description": "Required Markdown buffer; review notes are limited to Markdown buffers whose source is at most 8 MiB." },
+            "action": { "type": "string", "enum": ["list", "add", "edit", "delete", "copy", "send"], "description": "add requires selection and text; edit requires noteId and text; delete requires noteId. copy/send optionally accept noteIds. send accepts target existing with sessionId or target new with agent; an omitted target or missing associated field returns delivery:not-delivered with an error." },
+            "noteId": { "type": "string", "description": "Required for edit/delete." },
+            "text": { "type": "string", "description": "Required for add/edit; non-empty after trimming and limited to 16 KiB UTF-8." },
+            "selection": { "type": "object", "description": "Required for add. Use non-empty from/to offsets; mode=source addresses the full source, while the default/rich mode addresses the Markdown body after frontmatter. Rich mode may instead supply text with startLine/endLine. The selected excerpt is limited to 32 KiB UTF-8.", "properties": { "from": { "type": "integer", "minimum": 0 }, "to": { "type": "integer", "minimum": 0 }, "text": { "type": "string" }, "startLine": { "type": "integer", "minimum": 1 }, "endLine": { "type": "integer", "minimum": 1 }, "mode": { "type": "string", "enum": ["source", "rich"] } }, "additionalProperties": false },
+            "noteIds": { "type": "array", "description": "Optional subset of note IDs for copy/send; omitted selects all available notes.", "items": { "type": "string" } },
+            "target": { "type": "string", "enum": ["existing", "new"], "description": "Optional for send; existing requires sessionId and new requires agent. Omission returns a not-delivered result." },
+            "sessionId": { "type": "string", "description": "Required when sending to target existing." },
+            "agent": { "type": "string", "description": "Required when sending to target new; optional when target existing to verify session ownership." }
+          },
+          "required": ["bufferId", "action"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "description": "Action-dependent result union. list returns notes/count; add/edit return note; delete returns deleted/noteId; copy returns text/count/noteIds; send returns delivery/deletedNoteIds/retainedNoteIds and optional sessionId/error.",
+          "properties": {
+            "notes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" }, "bufferId": { "type": "string" }, "worktreeId": { "type": "string" },
+                  "filePath": { "type": "string" }, "source": { "type": "string", "enum": ["markdown"] },
+                  "selectedText": { "type": "string" }, "startLine": { "type": "integer", "minimum": 1 },
+                  "endLine": { "type": "integer", "minimum": 1 }, "lineNumber": { "type": "integer", "minimum": 1 },
+                  "body": { "type": "string" }, "createdAt": { "type": "integer", "minimum": 0 },
+                  "updatedAt": { "type": "integer", "minimum": 0 }, "sentAt": { "type": "integer", "minimum": 0 },
+                  "side": { "type": "string", "enum": ["modified"] }
+                },
+                "required": ["id", "bufferId", "worktreeId", "filePath", "source", "lineNumber", "body", "createdAt", "side"],
+                "additionalProperties": false
+              }
+            },
+            "note": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "string" }, "bufferId": { "type": "string" }, "worktreeId": { "type": "string" },
+                "filePath": { "type": "string" }, "source": { "type": "string", "enum": ["markdown"] },
+                "selectedText": { "type": "string" }, "startLine": { "type": "integer", "minimum": 1 },
+                "endLine": { "type": "integer", "minimum": 1 }, "lineNumber": { "type": "integer", "minimum": 1 },
+                "body": { "type": "string" }, "createdAt": { "type": "integer", "minimum": 0 },
+                "updatedAt": { "type": "integer", "minimum": 0 }, "sentAt": { "type": "integer", "minimum": 0 },
+                "side": { "type": "string", "enum": ["modified"] }
+              },
+              "required": ["id", "bufferId", "worktreeId", "filePath", "source", "lineNumber", "body", "createdAt", "side"],
+              "additionalProperties": false
+            },
+            "count": { "type": "integer", "minimum": 0 },
+            "deleted": { "type": "boolean", "description": "Always true for a successful delete action." },
+            "noteId": { "type": "string" },
+            "text": { "type": "string" },
+            "noteIds": { "type": "array", "items": { "type": "string" } },
+            "delivery": { "type": "string", "enum": ["pasted", "unconfirmed", "not-delivered", "command-line"] },
+            "deletedNoteIds": { "type": "array", "items": { "type": "string" } },
+            "retainedNoteIds": { "type": "array", "items": { "type": "string" } },
+            "sessionId": { "type": "string" },
+            "error": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "notebook",
+        "description": "Parse and edit notebook cells, inspect environments, manage trust and run the local kernel. Install/venv actions use a conditional setup confirmation.",
+        "destructive": true,
+        "confirm": "Set up the requested local notebook environment?",
+        "describe": "setupConfirmation",
+        "params": {
+          "type": "object",
+          "properties": {
+            "bufferId": { "type": "string" },
+            "action": { "type": "string", "enum": ["parse", "edit", "insert", "move", "delete", "type", "clear", "save", "environments", "describe", "select", "trust", "install", "venv", "start", "run", "runAll", "interrupt", "restart", "shutdown", "state"], "description": "All actions require bufferId. parse uses paging fields. edit/delete/type/move/run require index; edit also requires source, insert requires index/position/cellType, move uses direction, and clear's index is optional. describe requires path or python; select accepts an interpreter path/python or browse; environments accepts runWorkspaceInterpreters; trust accepts granted. install/venv use conditional setup confirmation. run requires index; runAll does not; mode controls run advancement." },
+            "index": { "type": "integer", "minimum": 0, "description": "Required for edit/insert/move/delete/type/run; optional for clear." }, "position": { "type": "string", "enum": ["above", "below"], "description": "Required for insert." },
+            "direction": { "type": "string", "enum": ["up", "down"], "description": "Required for move." },
+            "cellType": { "type": "string", "enum": ["code", "markdown", "raw"] }, "source": { "type": "string" },
+            "offset": { "type": "integer", "minimum": 0 }, "limit": { "type": "integer", "minimum": 1, "maximum": 16 },
+            "sourceOffset": { "type": "integer", "minimum": 0 }, "sourceLength": { "type": "integer", "minimum": 0, "maximum": 65536 },
+            "outputOffset": { "type": "integer", "minimum": 0 }, "outputLimit": { "type": "integer", "minimum": 1, "maximum": 8, "description": "For parse, output page size; service requires at least 1 and caps at 8." },
+            "path": { "type": "string" }, "python": { "type": "string" }, "runWorkspaceInterpreters": { "type": "boolean" },
+            "yes": { "type": "boolean", "description": "Explicit CLI approval consumed by the dispatcher before this handler." },
+            "mode": { "type": "string", "enum": ["in-place", "advance"] },
+            "granted": { "type": "boolean" },
+            "browse": { "type": "boolean", "description": "Open the native Python chooser; cancellation leaves the current interpreter unchanged." }
+          },
+          "required": ["bufferId", "action"],
+          "additionalProperties": false
+        },
+        "result": {
+          "description": "Action-dependent object union. parse returns a paged notebook document {valid,error:string|null,language:string|null,nbformat:integer|null,nbformat_minor:integer|null,metadata,cellCount,contentRevision,offset,limit,cells,nextOffset:integer|null,eof}; invalid documents instead return {valid:false,error,language,cellCount,contentRevision,rawSource,rawSourceLength,rawSourceOffset,rawSourceNextOffset:integer|null,rawSourceTruncated}. Each parsed cell contains cell_type,id?,metadata,source,sourceOffset,sourceTotalLength,sourceNextOffset:integer|null,sourceTruncated,outputs,outputCount,outputOffset,outputNextOffset:integer|null,outputsTruncated and execution_count?; metadata and output entries are arbitrary objects or {truncated:true,byteLength}, and output text may be a string or string array. state returns {bufferId,valid,cellCount,language:string|null,error:string|null,contentRevision,trusted,selectedPython,busy,executionCount:integer|null,interruptStalled,kernel:{status,pid?,stderr,error:string|null,executionCount:integer|null,busy}}. Cell edits return the parse page; save returns a full editor-buffer snapshot. environments returns {environments:[interpreter descriptors],probed}; describe returns {environment}; select returns {selected:true,environment,trusted,language} or {cancelled:true,selected:interpreter|null}; trust returns {trusted}. install returns {status:installed,environment,command} or {status:venv-required,error}; venv returns {status:created,path,environment,command}; start returns {status:ready,python,pid}, {status:failed,error}, or {status:missing-ipykernel,externallyManaged}. run/runAll return {status:ok|error|dead|missing-ipykernel|failed,completed:nonnegative integer,cancelled:nonnegative integer,executionCount:integer|null}; run may also include outputCount and nextIndex (when mode=advance), and either action may include stderr/externallyManaged. interrupt returns {interrupted,stalled}; restart returns {status:stopped,trusted:false,outputsKept:true,queueCancelled:true}; shutdown returns {status:stopped,trusted:boolean}."
+        }
+      },
+      {
+        "id": "viewer",
+        "description": "Read and edit CSV data and control file-viewer state using ranged reads. File previews are limited to 50 MiB; CSVs at least 1 MiB use read-only paged mode.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "bufferId": { "type": "string" },
+            "action": { "type": "string", "enum": ["metadata", "page", "edit", "sort", "filter", "insertRow", "deleteRow", "insertColumn", "deleteColumn", "delimiter", "copy", "paste", "save", "zoom", "find", "position", "media"], "description": "edit requires row/column/value; insertRow accepts optional index/count; deleteRow requires row or index; insertColumn/deleteColumn require index; delimiter requires one non-quote, non-line-break character; paste requires row/column/text. sort requires column or index and order; filter/find accept query; zoom requires scale; position requires page or offset. page, metadata, save and media need no additional fields." },
+            "row": { "type": "integer", "minimum": 0 }, "column": { "type": "integer", "minimum": 0 },
+            "index": { "type": "integer", "minimum": 0 }, "count": { "type": "integer", "minimum": 0, "description": "Optional CSV page row count; service clamps it to 1–100 rows." },
+            "value": { "type": "string", "description": "CSV cell value or optional inserted header value." }, "text": { "type": "string", "description": "Paste text; UTF-8 payload must remain below 1 MiB." }, "query": { "type": "string", "description": "Filter/find query, limited to 8,192 characters by the service." },
+            "delimiter": { "type": "string", "description": "For delimiter action, exactly one character other than quote or a line break." }, "order": { "type": "string", "enum": ["asc", "desc"] },
+            "scale": { "type": "number", "minimum": 0.25, "maximum": 8, "description": "Required for zoom; service clamps PDF to 0.25–5 and other viewers to 0.25–8." },
+            "page": { "type": "integer", "minimum": 0, "description": "Optional page number; CSV pages are zero-based, PDF pages are one-based." }, "offset": { "type": "integer", "minimum": 0 }
+          },
+          "required": ["bufferId", "action"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "description": "Action-dependent result union. save returns a full editor-buffer snapshot. metadata returns kind-specific viewer metadata: CSV, image, PDF/audio/video, Mermaid, binary or unsupported-file shapes. CSV mutations return CSV metadata; sort returns viewer state; filter returns {filter,paged,readOnly,view}. page returns a CSV page {page,rows:[{index,cells}],offset,nextPage:integer|null,totalRows?,delimiter?,readOnly,changedOnDisk,limits?}, PDF page position/contentType/readOnly, or image metadata; a changed CSV page can include an empty rows array and message. media returns {url,contentType,size,acceptsRanges:true}, or {changedOnDisk:true,error,size}. copy returns {text,rows}; zoom returns {zoom,minimum,maximum,view}; find returns {query,matches,truncated?,view}; position returns {position}. PDF zoom may be a number or the string page-width.",
+          "properties": {
+            "acceptsRanges": { "type": "boolean", "description": "Always true for successful media resource results." },
+            "zoom": { "description": "Numeric zoom level or the PDF metadata string page-width." },
+            "nextPage": { "description": "Next CSV page number or null when there is no next page." }
+          },
+          "additionalProperties": true
+        }
+      }
+      ,
+      {
+        "id": "setupConfirmation",
+        "description": "Resolve whether a notebook action requires irreversible environment setup confirmation.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "description": "The dispatcher forwards the original notebook params; this side-effect-free planner uses action, bufferId, path, and python and ignores the remaining fields.",
+          "properties": {
+            "bufferId": { "type": "string", "description": "Required for install/venv confirmation; ignored for other actions." },
+            "action": { "type": "string", "enum": ["parse", "edit", "insert", "move", "delete", "type", "clear", "save", "environments", "describe", "select", "trust", "install", "venv", "start", "run", "runAll", "interrupt", "restart", "shutdown", "state"], "description": "install/venv require bufferId and return confirmation text; all other actions return null without resolving a buffer." },
+            "path": { "type": "string" }, "python": { "type": "string" }
+          },
+          "required": ["action"],
+          "additionalProperties": true
+        },
+        "result": { "description": "Confirmation text for install and venv; null for every other notebook action." }
+      },
+      {"id":"find","description":"Open Find on the focused editor surface.","params":{"type":"object","properties":{"query":{"type":"string"}},"additionalProperties":false},"result":{"type":"object","properties":{"result":{"description":"Surface-specific union: source {opened:true,query?}; rich Markdown {opened:true,replace:false,query?,total?}; notebook {opened:true} or {opened:true,query,matches,truncated}; CSV {opened:true} or {filtered:true,query}; PDF {opened:true} or {found,page,totalPages}."}},"required":["result"],"additionalProperties":false}},
+      {"id":"replace","description":"Open Replace on the focused editor surface.","params":{"type":"object","properties":{"query":{"type":"string"}},"additionalProperties":false},"result":{"type":"object","properties":{"result":{"description":"Surface-specific union: source {opened:true,query?}; rich/preview Markdown {opened:true,replace:true,query?,total?}."}},"required":["result"],"additionalProperties":false}},
+      {"id":"markdown-preview","description":"Open the focused Markdown document in Preview.","params":{"type":"object","properties":{},"additionalProperties":false},"result":{"type":"object","properties":{"result":{"description":"{opened:true,bufferId,tabId|null}."}},"required":["result"],"additionalProperties":false}},
+      {"id":"toggle-word-wrap","description":"Toggle word wrap in the focused source editor.","params":{"type":"object","properties":{},"additionalProperties":false},"result":{"type":"object","properties":{"result":{"description":"{wordWrap:boolean}."}},"required":["result"],"additionalProperties":false}},
+      {"id":"copy-context","description":"Copy the focused selection with its document path and line range.","params":{"type":"object","properties":{},"additionalProperties":false},"result":{"type":"object","properties":{"result":{"description":"{copied:true,path,lines}."}},"required":["result"],"additionalProperties":false}},
+      {"id":"add-review-note","description":"Open a review note for the focused Markdown selection.","params":{"type":"object","properties":{},"additionalProperties":false},"result":{"type":"object","properties":{"result":{"description":"{opened:true,startLine,endLine}."}},"required":["result"],"additionalProperties":false}},
+      {"id":"zoom-in","description":"Zoom in on the focused editor or viewer.","params":{"type":"object","properties":{},"additionalProperties":false},"result":{"type":"object","properties":{"result":{"description":"Image/PDF {zoom:number}; document text {fontZoomLevel:number,fontSize:number}."}},"required":["result"],"additionalProperties":false}},
+      {"id":"zoom-out","description":"Zoom out on the focused editor or viewer.","params":{"type":"object","properties":{},"additionalProperties":false},"result":{"type":"object","properties":{"result":{"description":"Image/PDF {zoom:number}; document text {fontZoomLevel:number,fontSize:number}."}},"required":["result"],"additionalProperties":false}},
+      {"id":"reset-zoom","description":"Reset zoom on the focused editor or viewer.","params":{"type":"object","properties":{},"additionalProperties":false},"result":{"type":"object","properties":{"result":{"description":"Image {zoom:number}; PDF {zoom:'page-width'}; document text {fontZoomLevel:0,fontSize:13}."}},"required":["result"],"additionalProperties":false}},
+      {"id":"toggle-right-sidebar","description":"Toggle the editor Explorer panel in the right-side panel area.","params":{"type":"object","properties":{},"additionalProperties":false},"result":{"type":"object","properties":{"result":{"description":"UiLayout object returned by ui.panel.open or ui.panel.close."}},"required":["result"],"additionalProperties":false}},
+      {"id":"new-markdown","description":"Open the template picker to create a Markdown document.","params":{"type":"object","properties":{"worktree":{"type":"string"}},"additionalProperties":false},"result":{"type":"object","properties":{"result":{"description":"{opened:true,dialog:'new-markdown'}."}},"required":["result"],"additionalProperties":false}},
+      {"id":"open-markdown","description":"Open a Markdown document from the active worktree.","params":{"type":"object","properties":{"worktree":{"type":"string"}},"additionalProperties":false},"result":{"type":"object","properties":{"result":{"description":"{opened:true,dialog:'open-markdown'}."}},"required":["result"],"additionalProperties":false}}
+    ],
+    "event": [
+      { "id": "changed", "description": "Editor state changed; clients should re-fetch authoritative state.", "data": { "type": "object", "properties": { "revision": { "type": "integer", "minimum": 0 } }, "required": ["revision"], "additionalProperties": false } }
+    ],
+    "view": [
+      { "id": "document", "title": "Editor Document", "description": "A worktree file rendered by the matching editor surface." }
+    ],
+    "sidebar-section": [
+      { "id": "explorer", "title": "Explorer", "description": "Worktree file tree and content search.", "order": 10 }
+    ],
+    "panel": [
+      { "id": "explorer", "title": "Explorer", "description": "Browse, create and manage worktree files.", "order": 10 }
+    ],
+    "overlay": [
+      { "id": "quick-open", "title": "Go to File", "description": "Search authorized worktree files." },
+      { "id": "close", "title": "Unsaved Changes", "description": "Choose whether to save, discard or keep a dirty editor tab open." }
+    ],
+    "setting": [
+      { "id": "editorAutoSave", "type": "boolean", "default": false, "title": "Auto Save Files", "description": "Save editor drafts after a quiet delay." },
+      { "id": "editorAutoSaveDelayMs", "type": "number", "default": 1000, "minimum": 250, "maximum": 10000, "title": "Auto Save Delay", "description": "Quiet delay in milliseconds before saving." },
+      { "id": "editorFontFamily", "type": "string", "default": "", "title": "Editor Font Family", "description": "Leave empty to follow the terminal font." },
+      { "id": "editorWordWrap", "type": "boolean", "default": true, "title": "Editor Word Wrap", "description": "Wrap long source lines." },
+      { "id": "editorMinimapEnabled", "type": "boolean", "default": false, "title": "Editor Minimap", "description": "Show the source editor minimap." },
+      { "id": "editorPreviewTabsEnabled", "type": "boolean", "default": true, "title": "Reuse Preview Tabs", "description": "Reuse a replaceable preview while browsing files." },
+      { "id": "richMarkdownSpellcheckEnabled", "type": "boolean", "default": true, "title": "Rich Markdown Spellcheck", "description": "Enable spellchecking in rich Markdown surfaces." },
+      { "id": "markdownReviewToolsEnabled", "type": "boolean", "default": true, "title": "Markdown Review Notes", "description": "Enable Markdown review-note controls." },
+      { "id": "showGitIgnoredFiles", "type": "boolean", "default": true, "title": "Show Git-Ignored Files", "description": "Include ignored paths in explorer inventory." },
+      { "id": "followSymlinkedDirectories", "type": "boolean", "default": false, "title": "Follow Symlinked Directories", "description": "Follow only linked directories whose targets remain inside the worktree." },
+      { "id": "editorFontZoomLevel", "type": "number", "default": 0, "minimum": -6, "maximum": 18, "title": "Editor Font Zoom", "description": "Editor-only font zoom level." },
+      { "id": "activityBarPosition", "type": "enum", "default": "top", "values": ["top", "side"], "title": "Activity Bar Position", "description": "Place the activity bar above or beside the sidebar." },
+      { "id": "editorSidebarWidth", "type": "number", "default": 350, "minimum": 220, "maximum": 900, "title": "Editor Sidebar Width", "description": "Preferred sidebar width in CSS pixels." }
+    ],
+    "command": [
+      { "id": "open", "title": "Open File", "description": "Open an authorized worktree-relative file.", "args": { "type": "object", "properties": { "worktree": { "type": "string" }, "path": { "type": "string" }, "focus": { "type": "boolean" }, "preview": { "type": "boolean" } }, "required": ["path"], "additionalProperties": false } },
+      { "id": "quick-open", "title": "Go to File", "description": "Open Quick Open." },
+      { "id": "search", "title": "Search Files", "description": "Search file contents." },
+      { "id": "save", "title": "Save File", "description": "Save the focused editor draft." },
+      { "id": "close", "title": "Close Editor Tab", "description": "Close the focused editor tab after its dirty-close decision." },
+      { "id": "close-all", "title": "Close All Editor Tabs", "description": "Close editor tabs with per-buffer dirty decisions." },
+      { "id": "reopen", "title": "Reopen Closed Editor Tab", "description": "Reopen the last eligible closed editor tab." },
+      { "id": "explorer", "title": "Show Explorer", "description": "Open the Explorer sidebar panel." },
+      { "id": "source-control", "title": "Show Source Control", "description": "Open the public Source Control contribution." },
+      {"id":"find","title":"Find","description":"Open Find on the focused editor surface.","args":{"type":"object","properties":{"query":{"type":"string"}},"additionalProperties":false}},
+      {"id":"replace","title":"Replace","description":"Open Replace on the focused editor surface.","args":{"type":"object","properties":{"query":{"type":"string"}},"additionalProperties":false}},
+      {"id":"markdown-preview","title":"Markdown Preview","description":"Open the focused Markdown document in Preview."},
+      {"id":"toggle-word-wrap","title":"Toggle Word Wrap","description":"Toggle word wrap in the focused source editor."},
+      {"id":"copy-context","title":"Copy Context","description":"Copy the focused selection with its document path and line range."},
+      {"id":"add-review-note","title":"Add Review Note","description":"Open a review note for the focused Markdown selection."},
+      {"id":"zoom-in","title":"Zoom In","description":"Zoom in on the focused editor or viewer."},
+      {"id":"zoom-out","title":"Zoom Out","description":"Zoom out on the focused editor or viewer."},
+      {"id":"reset-zoom","title":"Reset Zoom","description":"Reset zoom on the focused editor or viewer."},
+      {"id":"toggle-right-sidebar","title":"Toggle Right Sidebar","description":"Toggle the editor Explorer panel in the right-side panel area."},
+      {"id":"new-markdown","title":"New Markdown","description":"Open the template picker to create a Markdown document.","args":{"type":"object","properties":{"worktree":{"type":"string"}},"additionalProperties":false}},
+      {"id":"open-markdown","title":"Open Markdown","description":"Open a Markdown document from the active worktree.","args":{"type":"object","properties":{"worktree":{"type":"string"}},"additionalProperties":false}}
+    ],
+    "keybinding": [
+      { "id": "quick-open", "key": "mod+p", "command": "quick-open", "description": "Go to File", "when": "editorWorkspaceFocus" },
+      { "id": "explorer", "key": "mod+shift+e", "command": "explorer", "description": "Show Explorer", "when": "editorWorkspaceFocus" },
+      { "id": "search", "key": "mod+shift+f", "command": "search", "description": "Search Files", "when": "editorWorkspaceFocus" },
+      { "id": "save", "key": "mod+s", "command": "save", "description": "Save File", "when": "editorFocus" },
+      { "id": "close", "key": "mod+w", "command": "close", "description": "Close Editor Tab", "when": "editorFocus" },
+      { "id": "close-all", "key": "mod+alt+w", "command": "close-all", "description": "Close All Editor Tabs", "when": "editorFocus" },
+      { "id": "reopen", "key": "mod+shift+t", "command": "reopen", "description": "Reopen Closed Editor Tab", "when": "editorWorkspaceFocus" },
+      { "id": "source-control", "key": "mod+shift+g", "command": "source-control", "description": "Show Source Control", "when": "editorWorkspaceFocus" },
+      {"id":"find","key":"mod+f","command":"find","description":"Find in the focused editor surface.","when":"editorFocus"},
+      {"id":"replace","key":"mod+alt+f","command":"replace","description":"Replace in the focused editor surface.","when":"editorFocus"},
+      {"id":"markdown-preview","key":"mod+shift+v","command":"markdown-preview","description":"Open Markdown Preview.","when":"editorFocus"},
+      {"id":"toggle-word-wrap","key":"alt+z","command":"toggle-word-wrap","description":"Toggle Word Wrap.","when":"editorFocus"},
+      {"id":"copy-context","key":"mod+alt+c","command":"copy-context","description":"Copy Selection Context.","when":"editorFocus"},
+      {"id":"add-review-note","key":"mod+shift+a","command":"add-review-note","description":"Add Review Note.","when":"editorFocus"},
+      {"id":"zoom-in","key":"mod+shift+=","command":"zoom-in","description":"Zoom In.","when":"editorFocus"},
+      {"id":"zoom-out","key":"mod+-","command":"zoom-out","description":"Zoom Out.","when":"editorFocus"},
+      {"id":"reset-zoom","key":"mod+0","command":"reset-zoom","description":"Reset Zoom.","when":"editorFocus"},
+      {"id":"toggle-right-sidebar","key":"mod+l","command":"toggle-right-sidebar","description":"Toggle Right Sidebar.","when":"editorWorkspaceFocus"},
+      {"id":"new-markdown","key":"mod+shift+m","command":"new-markdown","description":"Create a Markdown document.","when":"editorWorkspaceFocus"},
+      {"id":"open-markdown","key":"mod+shift+o","command":"open-markdown","description":"Open a Markdown document.","when":"editorWorkspaceFocus"}
+    ],
+    "cli-command": [
+      { "id": "open", "words": "open", "summary": "open an authorized worktree file", "positionals": [{ "name": "path", "description": "worktree-relative or authorized absolute file path", "required": true }], "method": "open" },
+      { "id": "state", "words": "state", "summary": "read editor buffers and tab state", "method": "state" },
+      { "id": "draft", "words": "draft", "summary": "CAS-update a buffer draft", "method": "draft" },
+      { "id": "save", "words": "save", "summary": "save a buffer with its content baseline", "method": "save" },
+      { "id": "close", "words": "close", "summary": "close one editor tab safely", "method": "close" },
+      { "id": "can-close", "words": "can-close", "summary": "check whether an editor tab can close without a dirty prompt", "method": "canClose" },
+      { "id": "reopen", "words": "reopen", "summary": "reopen the last eligible closed editor tab", "method": "reopen" },
+      { "id": "view", "words": "view", "summary": "update editor view or conflict state", "method": "view" },
+      { "id": "explorer", "words": "explorer", "summary": "browse the worktree file inventory", "method": "explorer" },
+      { "id": "mutate", "words": "mutate", "summary": "create, move, rename, duplicate, delete or import files", "method": "mutate" },
+      { "id": "history", "words": "history", "summary": "undo or redo a guarded file operation", "method": "history" },
+      { "id": "quick-open", "words": "quick-open", "summary": "search and rank worktree file names", "method": "quickOpen" },
+      { "id": "search", "words": "search", "summary": "search bounded worktree file contents", "method": "search" },
+      { "id": "read", "words": "read", "summary": "read a buffer, bounded bytes or revisioned text chunks", "method": "read" },
+      { "id": "transfer", "words": "transfer", "summary": "stage and commit a bounded draft, create-file or import upload", "method": "transfer" },
+      { "id": "markdown", "words": "markdown", "summary": "run a source-preserving Markdown action", "method": "markdown" },
+      { "id": "notes", "words": "notes", "summary": "manage Markdown review notes", "method": "notes" },
+      { "id": "notebook", "words": "notebook", "summary": "inspect or operate a notebook", "method": "notebook" },
+      { "id": "viewer", "words": "viewer", "summary": "inspect or operate a file viewer", "method": "viewer" },
+      {"id":"find","words":"find","summary":"Open Find on the focused editor surface","method":"find"},
+      {"id":"replace","words":"replace","summary":"Open Replace on the focused editor surface","method":"replace"},
+      {"id":"markdown-preview","words":"markdown-preview","summary":"Open the focused Markdown document in Preview","method":"markdown-preview"},
+      {"id":"toggle-word-wrap","words":"toggle-word-wrap","summary":"Toggle word wrap in the focused source editor","method":"toggle-word-wrap"},
+      {"id":"copy-context","words":"copy-context","summary":"Copy the focused selection with its document path and line range","method":"copy-context"},
+      {"id":"add-review-note","words":"add-review-note","summary":"Open a review note for the focused Markdown selection","method":"add-review-note"},
+      {"id":"zoom-in","words":"zoom-in","summary":"Zoom in on the focused editor or viewer","method":"zoom-in"},
+      {"id":"zoom-out","words":"zoom-out","summary":"Zoom out on the focused editor or viewer","method":"zoom-out"},
+      {"id":"reset-zoom","words":"reset-zoom","summary":"Reset zoom on the focused editor or viewer","method":"reset-zoom"},
+      {"id":"toggle-right-sidebar","words":"toggle-right-sidebar","summary":"Toggle the editor Explorer panel","method":"toggle-right-sidebar"},
+      {"id":"new-markdown","words":"new-markdown","summary":"Open the template picker to create a Markdown document","method":"new-markdown"},
+      {"id":"open-markdown","words":"open-markdown","summary":"Open a Markdown document from the active worktree","method":"open-markdown"}
+    ]
+  }
+}

@@ -392,7 +392,7 @@ function snapshotCandidates(core: WorkerCore, repo: WorkerRepository, filter: Fl
   const records = new Map<DispatchId, WorkerRecord | null>()
   for (const record of repo.list()) records.set(record.dispatchId, cloneWorker(record))
   const candidates: FleetCandidate[] = []
-  for (const row of core.listDispatches()) {
+  for (const row of core.listDispatches(filter.runId ?? undefined)) {
     if (filter.runId !== null && row.runId !== filter.runId) continue
     const dispatch = cloneDispatch(row)
     const task = cloneTask(core.getTask(dispatch.taskId))

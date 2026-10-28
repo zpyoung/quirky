@@ -4,6 +4,7 @@ import type { OpResult } from './ops'
 import { nextTerminalTitle } from './titles'
 import { paneLeaves } from './tree'
 import type { IdSource } from './tree'
+import { isTerminalTab } from './types'
 import type { Workspace } from './types'
 
 export type ReconcileInput = {
@@ -33,7 +34,6 @@ function adoptedTitle(session: Session, existingTitles: readonly string[]): stri
   return generated ? nextTerminalTitle(existingTitles) : session.title
 }
 
-const isTabbed = (session: Session) => session.kind === 'terminal' || session.kind === 'structured'
 
 /**
  * Brings one workspace in line with the session list: panes whose session is gone are removed,
@@ -52,6 +52,7 @@ export function reconcileWorkspace(input: ReconcileInput): ReconcileOutput {
   }
 
   for (const tab of workspaceTabs(ws)) {
+    if (!isTerminalTab(tab)) continue
     for (const leaf of paneLeaves(tab.root)) {
       if (byId.has(leaf.session)) continue
       apply(closePaneOp(ws, leaf.id, null))
@@ -61,17 +62,18 @@ export function reconcileWorkspace(input: ReconcileInput): ReconcileOutput {
 
   const held = new Set([...boundSessions(ws), ...boundElsewhere])
   const unbound = sessions
-    .filter((session) => session.worktreeId === ws.id && isTabbed(session) && !held.has(session.id))
+    .filter((session) => session.worktreeId === ws.id && session.kind === 'terminal' && !held.has(session.id))
     .sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id))
   for (const session of unbound) {
-    const titles = workspaceTabs(ws).map((tab) => tab.defaultTitle)
+    const titles = workspaceTabs(ws).filter(isTerminalTab).map((tab) => tab.defaultTitle)
     const defaultTitle = adoptedTitle(session, titles)
     apply(appendTab(ws, ws.activeGroup, makeTab(ids, { defaultTitle, session: session.id, now })))
     notes.push(`added a tab for session ${session.id}`)
   }
 
-  const paneCounts = new Map(workspaceTabs(ws).map((tab) => [tab.id, paneLeaves(tab.root).length]))
-  for (const tab of workspaceTabs(ws)) {
+  const terminalTabs = workspaceTabs(ws).filter(isTerminalTab)
+  const paneCounts = new Map(terminalTabs.map((tab) => [tab.id, paneLeaves(tab.root).length]))
+  for (const tab of terminalTabs) {
     for (const leaf of paneLeaves(tab.root)) {
       const session = byId.get(leaf.session)
       if (!session || session.kind !== 'terminal') continue
