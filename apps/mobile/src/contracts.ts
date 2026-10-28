@@ -1,4 +1,6 @@
 /* Shared phone/shell/page contracts. Runtime secrets never cross the page bridge. */
+import type { MobilePageGrant } from '@quirky/protocol'
+export type { MobileBundleAsset, MobileBundleRoute, MobileBundleManifest, MobileBundleManifestResult, MobileBundleReadResult } from '@quirky/protocol'
 export type MobileHost = {
   id: string
   name: string
@@ -75,19 +77,7 @@ export interface MobileRuntime {
   setForeground(active: boolean): void
   dispose(): void
 }
-export type MobileGrant = 'rpc' | 'terminal' | 'storage' | 'navigate' | 'clipboard.read' | 'clipboard.write' | 'externalLink' | 'haptics'
-export type MobileBundleAsset = { path: string; bytes: number; sha256: string; contentType: string }
-export type MobileBundleRoute = { kind: MobileRoute['kind']; path: string; grants: MobileGrant[] }
-export type MobileBundleManifest = {
-  v: 1
-  shellVersion: 1
-  buildId: string
-  assets: MobileBundleAsset[]
-  totalBytes: number
-  routes: MobileBundleRoute[]
-}
-export type MobileBundleManifestResult = { manifest: MobileBundleManifest; chunkBytes: number; rangeBytes: number }
-export type MobileBundleReadResult = { buildId: string; path: string; offset: number; data: string; encoding: 'identity' | 'gzip'; eof: boolean; sha256: string }
+export type MobileGrant = MobilePageGrant
 export type MobilePageInit = {
   v: 1
   sessionId: string
@@ -95,13 +85,16 @@ export type MobilePageInit = {
   route: MobileRoute
   grants: MobileGrant[]
   preferences: MobilePreferences
+  connectionState: MobileConnectionState
   safeArea: { top: number; right: number; bottom: number; left: number }
 }
 export interface MobilePageBridge {
   readonly init: MobilePageInit
+  readonly state: MobileConnectionState
   call<T = unknown>(method: string, params?: Record<string, unknown>, options?: MobileCallOptions): Promise<T>
   onEvent(handler: (event: { event: string; data: unknown }) => void): () => void
   onStream(streamId: number, handler: (bytes: Uint8Array) => void): () => void
+  onState(handler: (state: MobileConnectionState) => void): () => void
   storage: MobileStorage
   native: Pick<MobileNativeActions, 'clipboardRead' | 'clipboardWrite' | 'openExternal' | 'haptic'>
   navigate(route: MobileRoute | { kind: 'home' }): Promise<void>

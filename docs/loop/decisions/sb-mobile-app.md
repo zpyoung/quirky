@@ -66,5 +66,38 @@
 - **Revisit if:** actual Expo/native compatibility evidence invalidates the split.
 - **Source:** assumed — autonomous
 
+## D7: Reserve the panel extension seam for lane4 after the base lands
+- **Question:** how independent sb-mobile-app-panels avoids shared-file conflicts with this base.
+- **Options:** concurrent shared route/auth/App edits; isolated panel registry followed by a dependency cutover.
+- **Chose:** lane4 owns apps/mobile/src/panels/** and exports PanelApp/route registry now. This item owns workspaces/session MobileRoute, PageApp, HostPageShell, bridge and base authorization. Lane4 extends route union, native grants/navigation/App and panel-specific authorization after this item lands. Base never waits on panels. Notification subscriptions remain lane4's scope, not a duplicate follow-up.
+- **Why:** priority interjection explicitly establishes this independent seam; shared-file writes would violate component attribution.
+- **Evidence:** priority lane4 coordination message; committed interface d0f213c5; shared implementation packet.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the base export contract changes incompatibly.
+- **Source:** assumed — autonomous
+
+## D8: Defer real workspace Sleep until reversible stop/resume exists
+- **Question:** whether the phone row can safely implement upstream Sleep using existing public APIs.
+- **Options:** close/kill/status shortcut; add a full PTY/session/worktree lifecycle; explicitly defer the isolated flow to its prerequisite.
+- **Chose:** no destructive substitute. Group Sleep/Hide sleeping with the single deferred-flow follow-up; require stop-with-history, persisted resume records, verified process teardown and worktree lifecycle before enabling it. Remaining core pages ship independently.
+- **Why:** upstream Sleep captures resumes before stopping and verifying every process. Quirky close forgets/deletes; killed sessions are explicitly nonrestorable. Treating either as sleep risks losing session history and agent resume identity.
+- **Evidence:** upstream mobile use-host-worktree-actions.ts:144–150; worktree-terminal-sleep.ts:130–305; Quirky sessions.ts:663–713,782–892; public PluginPty has kill/forget but no suspend operation.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** a reversible PTY/session contract lands.
+- **Source:** deferred: reversible workspace sleep prerequisite
+
+## D9: Keep shared delivery DTOs on the public plugin API
+- **Question:** where bundle server and Expo shell share typed delivery data.
+- **Options:** plugin imports private app source; duplicate DTOs; public protocol DTOs.
+- **Chose:** canonical MobileBundle DTOs and MobilePageGrant in packages/protocol/src/mobile.ts, re-exported under unchanged names by app contracts. No runtime implementation or existing signature changes. Existing protocol index already exports mobile. Root typecheck now also checks the Expo app; desktop bundle integration builds pages.
+- **Why:** plugins must use only public plugin API; a private app-type import would establish a second ownership convention.
+- **Evidence:** docs/roadmap.md:19–20,50–53; shared contract vocabulary search found only app definitions before cutover.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** plugin API freeze changes delivery schema ownership.
+- **Source:** locked by docs/roadmap.md
+
 ## Progress
 Design/spec self-review complete; shared native/page/bundle contracts authored before implementers. Next: commit contracts/spec/decisions, create three disjoint temporary component worktrees and dispatch native/transport, pages and bundle/bridge/server implementers. Dependency ready:true; inherited .serena untouched; no implementation code/tests run yet. LSP unavailable; reviewer preflight Gemini reachable.
