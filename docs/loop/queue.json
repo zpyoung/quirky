@@ -1524,6 +1524,40 @@
       "lane": 12
     },
     {
+      "id": "ui-tokens-and-components",
+      "milestone": "UI",
+      "title": "UI redesign: dark and light graphite tokens, the 15 shared components and a gallery page showing every component in both themes, plus a UI lint check wired into bun run typecheck that fails raw colors, raw pixel values and plugin CSS outside packages/ui. Follow docs/quirk/specs/2026-10-28-ui-redesign/logic.md (approved). Use only the shared components and tokens; the UI lint check must pass. Build-first mode applies: typecheck gates the land.",
+      "docs": [],
+      "deps": [],
+      "status": "todo"
+    },
+    {
+      "id": "ui-terminal-theme",
+      "milestone": "UI",
+      "title": "UI redesign: graphite terminal palette for dark and light that follows the app theme, with a Settings override. Follow docs/quirk/specs/2026-10-28-ui-redesign/logic.md (approved). Use only the shared components and tokens; the UI lint check must pass. Build-first mode applies: typecheck gates the land.",
+      "docs": [],
+      "deps": [],
+      "status": "todo"
+    },
+    {
+      "id": "ui-screenshot-review",
+      "milestone": "UI",
+      "title": "UI redesign: a command that launches Quirky on a temporary QUIRKY_HOME with fixture worktrees, captures every tool and view in dark and light, and has a separate reviewer model score each capture against the golden screens in the spec, failing below a set score. Follow docs/quirk/specs/2026-10-28-ui-redesign/logic.md (approved). Use only the shared components and tokens; the UI lint check must pass. Build-first mode applies: typecheck gates the land.",
+      "docs": [],
+      "deps": [],
+      "status": "todo"
+    },
+    {
+      "id": "ui-shell-slots",
+      "milestone": "UI",
+      "title": "UI redesign: the new shell. Title bar with breadcrumb and ⌘K, six PyCharm-style tool slots with stripes (click to open/close, drag to move, layout saved per user), center tabs, corner toasts with Inbox, status bar; map every plugin panel, sidebar-section, status-bar, command and overlay registration to tools, views, commands, status items and attention items; remove the top plugin tab row and sidebar button piles. Follow docs/quirk/specs/2026-10-28-ui-redesign/logic.md (approved). Use only the shared components and tokens; the UI lint check must pass. Build-first mode applies: typecheck gates the land.",
+      "docs": [],
+      "deps": [
+        "ui-tokens-and-components"
+      ],
+      "status": "todo"
+    },
+    {
       "id": "m7-test-triage",
       "milestone": "M7",
       "title": "End-phase test triage: run bun scripts/suite.ts packages apps plugins, bun test scripts and bun run typecheck on build/roadmap, and add one fix-test-<area>-<MMDD> item per failing package, app or plugin (naming its failing files and tests) so the lanes split the debugging; change no code",
@@ -1595,144 +1629,6 @@
       ]
     },
     {
-      "id": "fix-flaky-pty-host-manager",
-      "milestone": "M1",
-      "title": "Fix the flaky packages/pty-host/test/manager.test.ts: it failed under load in 4 full-suite runs, and on the new 16-core test host its 'attach > raw mode replays the hot tail and joins the live stream at the offset' test failed even alone ('timed out waiting for echo and cat output' after 5 s). Find out with quirk:systematic-debugging whether the wait is too short or the attach misses output written between the replay and the live subscription, reproduce it under CPU load, and fix the code or the test",
-      "docs": [
-        "term-daemon.md"
-      ],
-      "deps": [
-        "m7-test-triage"
-      ],
-      "status": "todo"
-    },
-    {
-      "id": "m2-sidebar-extras-followup",
-      "milestone": "M7",
-      "title": "Complete sidebar-extras deferred parity and verification: audit all 17 spec scenarios, guarded web flows, quiet aging/runtime freshness/corrupt-preference edges, and nonblocking findings recorded in m2-sidebar-extras decisions",
-      "docs": [
-        "sidebar-extras.md"
-      ],
-      "deps": [
-        "m2-sidebar-extras",
-        "m7-test-triage"
-      ],
-      "status": "todo",
-      "early": true
-    },
-    {
-      "id": "fix-flaky-quirky-worktree-create",
-      "milestone": "M1",
-      "title": "Fix the flaky plugins/quirky.worktree/test/create.test.ts: it failed under load in 5 full-suite runs and passed when rerun alone (see <git common dir>/build-loop/flakes.log). Find the timing assumption with quirk:systematic-debugging, reproducing on the test host with bun scripts/suite.ts plugins/quirky.worktree (never generate CPU load on the Mac), and fix the test or the code it exposes",
-      "docs": [
-        "worktrees.md"
-      ],
-      "deps": [
-        "m7-test-triage"
-      ],
-      "status": "todo"
-    },
-    {
-      "id": "fix-flaky-terminal-features-pane",
-      "milestone": "M1",
-      "title": "Fix the flaky plugins/quirky.terminal/test/e2e-ui/features-pane.test.ts, a macOS-only test (scripts/test-on-macos.txt) that failed in 4 runs and passed when rerun alone (see <git common dir>/build-loop/flakes.log). Find the timing assumption with quirk:systematic-debugging from the logged failures, without generating CPU load on the Mac, and fix the test or the code it exposes",
-      "docs": [
-        "term-ui.md"
-      ],
-      "deps": [
-        "m7-test-triage"
-      ],
-      "status": "todo"
-    },
-    {
-      "id": "fix-flaky-pty-host-clear",
-      "milestone": "M1",
-      "title": "Fix the flaky packages/pty-host/test/clear.test.ts: it failed 3 times in full-suite runs today (15:28, 22:47, 23:11 UTC). Find out with quirk:systematic-debugging whether a wait is too short under load or the clear races with output, reproduce it under CPU load on the test host, and fix the code or the test",
-      "docs": [
-        "term-daemon.md"
-      ],
-      "deps": [
-        "m7-test-triage"
-      ],
-      "status": "todo"
-    },
-    {
-      "id": "sb-mobile-settings-visibility",
-      "milestone": "Side B",
-      "title": "Recheck Settings > Mobile paired-device revoke visibility at 1280x720: guarded scroll/PageDown could not reach the clipped button; diagnose host overflow versus driver targeting and fix only reproduced app clipping (Mobile-page revoke path already works)",
-      "docs": [
-        "mobile.md"
-      ],
-      "deps": [
-        "sb-mobile-daemon",
-        "m7-test-triage"
-      ],
-      "status": "todo"
-    },
-    {
-      "id": "fix-native-m1-term-ui-1028",
-      "milestone": "M1",
-      "title": "Fix the native-only failures in m1-term-ui from the 2026-10-28 run: SC-37",
-      "docs": [],
-      "deps": [
-        "m7-test-triage"
-      ],
-      "status": "todo"
-    },
-    {
-      "id": "fix-native-m2-editor-1028",
-      "milestone": "M2",
-      "title": "Fix the native-only failures in m2-editor from the 2026-10-28 run: SC-9-native",
-      "docs": [],
-      "deps": [
-        "m7-test-triage"
-      ],
-      "status": "todo"
-    },
-    {
-      "id": "fix-native-m3-accounts-1028",
-      "milestone": "M3",
-      "title": "Fix the native-only failures in m3-accounts from the 2026-10-28 run: AC6-AC7-native-link",
-      "docs": [],
-      "deps": [
-        "m7-test-triage"
-      ],
-      "status": "todo"
-    },
-    {
-      "id": "fix-native-m3-vault-1028",
-      "milestone": "M3",
-      "title": "Fix the native-only failures in m3-vault from the 2026-10-28 run: SC-18-native-clipboard",
-      "docs": [],
-      "deps": [
-        "m7-test-triage"
-      ],
-      "status": "todo"
-    },
-    {
-      "id": "fix-native-sa-browser-agent-1028",
-      "milestone": "Side A",
-      "title": "Fix the native-only failures in sa-browser-agent from the 2026-10-28 run: C2-native-focus",
-      "docs": [],
-      "deps": [
-        "m7-test-triage"
-      ],
-      "status": "todo"
-    },
-    {
-      "id": "m3-accounts-complete-user-acceptance-20261028",
-      "milestone": "M3",
-      "title": "Finish Accounts user acceptance after the LOOP night cutoff: complete same-home daemon-restart Compact/Detailed Used/Remaining/provider-visibility UI persistence; all ten drill-ins and inactive refresh/debounce; native-login link/Cancel, Codex UI add, reauth/Needs-sign-in refusal; full Claude Ask Restart/Always/Never/busy-idle/supersession UI (ordinary Keep+opt-out Keep passed); Codex pane Keep old account and keyboard follow-through (pane Restart with prior rollout contents and public focus passed; driver refused opacity0 textarea); provider removal Cancel/confirm/System-default fallback; masked MiniMax/OpenCode Go/ZCode configure/clear and secret-free errors; reset stale-account/stale-offer/failure/retry matrix (opt-out redemption/replay and wrapped Cancel passed); retained Codex warning/recovery UI. Also resolve tracked MEDIUM existing cancellation-RPC failure stopping login polling and background/structured stale-account rows offering terminal-only Restart. Preserve actual daemon/PTY A→B→remove-A→C accumulated-content proof, authority/reload/C1 regressions, explicit review independence limits and pending native clipboard/browser/Keychain/OS-focus handoffs. Exact evidence and open findings: docs/loop/decisions/m3-accounts-remaining-flows.md and BLOCKERS.md; no full UI/native pass claimed.",
-      "docs": [
-        "accounts.md"
-      ],
-      "deps": [
-        "m3-accounts-remaining-flows",
-        "m7-test-triage"
-      ],
-      "status": "todo"
-    },
-    {
       "id": "m7-api-freeze",
       "milestone": "M7",
       "title": "Plugin API 1.0: freeze and version the API, manifests declare their API version, publish an example distro",
@@ -1748,40 +1644,6 @@
       ],
       "status": "todo",
       "early": true
-    },
-    {
-      "id": "ui-tokens-and-components",
-      "milestone": "UI",
-      "title": "UI redesign: dark and light graphite tokens, the 15 shared components and a gallery page showing every component in both themes, plus a UI lint check wired into bun run typecheck that fails raw colors, raw pixel values and plugin CSS outside packages/ui. Follow docs/quirk/specs/2026-10-28-ui-redesign/logic.md (approved). Use only the shared components and tokens; the UI lint check must pass. Build-first mode applies: typecheck gates the land.",
-      "docs": [],
-      "deps": [],
-      "status": "todo"
-    },
-    {
-      "id": "ui-terminal-theme",
-      "milestone": "UI",
-      "title": "UI redesign: graphite terminal palette for dark and light that follows the app theme, with a Settings override. Follow docs/quirk/specs/2026-10-28-ui-redesign/logic.md (approved). Use only the shared components and tokens; the UI lint check must pass. Build-first mode applies: typecheck gates the land.",
-      "docs": [],
-      "deps": [],
-      "status": "todo"
-    },
-    {
-      "id": "ui-screenshot-review",
-      "milestone": "UI",
-      "title": "UI redesign: a command that launches Quirky on a temporary QUIRKY_HOME with fixture worktrees, captures every tool and view in dark and light, and has a separate reviewer model score each capture against the golden screens in the spec, failing below a set score. Follow docs/quirk/specs/2026-10-28-ui-redesign/logic.md (approved). Use only the shared components and tokens; the UI lint check must pass. Build-first mode applies: typecheck gates the land.",
-      "docs": [],
-      "deps": [],
-      "status": "todo"
-    },
-    {
-      "id": "ui-shell-slots",
-      "milestone": "UI",
-      "title": "UI redesign: the new shell. Title bar with breadcrumb and ⌘K, six PyCharm-style tool slots with stripes (click to open/close, drag to move, layout saved per user), center tabs, corner toasts with Inbox, status bar; map every plugin panel, sidebar-section, status-bar, command and overlay registration to tools, views, commands, status items and attention items; remove the top plugin tab row and sidebar button piles. Follow docs/quirk/specs/2026-10-28-ui-redesign/logic.md (approved). Use only the shared components and tokens; the UI lint check must pass. Build-first mode applies: typecheck gates the land.",
-      "docs": [],
-      "deps": [
-        "ui-tokens-and-components"
-      ],
-      "status": "todo"
     },
     {
       "id": "ui-restyle-terminal",
@@ -1957,6 +1819,144 @@
         "ui-restyle-accounts",
         "ui-restyle-ask",
         "ui-restyle-settings"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "fix-flaky-pty-host-manager",
+      "milestone": "M1",
+      "title": "Fix the flaky packages/pty-host/test/manager.test.ts: it failed under load in 4 full-suite runs, and on the new 16-core test host its 'attach > raw mode replays the hot tail and joins the live stream at the offset' test failed even alone ('timed out waiting for echo and cat output' after 5 s). Find out with quirk:systematic-debugging whether the wait is too short or the attach misses output written between the replay and the live subscription, reproduce it under CPU load, and fix the code or the test",
+      "docs": [
+        "term-daemon.md"
+      ],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m2-sidebar-extras-followup",
+      "milestone": "M7",
+      "title": "Complete sidebar-extras deferred parity and verification: audit all 17 spec scenarios, guarded web flows, quiet aging/runtime freshness/corrupt-preference edges, and nonblocking findings recorded in m2-sidebar-extras decisions",
+      "docs": [
+        "sidebar-extras.md"
+      ],
+      "deps": [
+        "m2-sidebar-extras",
+        "m7-test-triage"
+      ],
+      "status": "todo",
+      "early": true
+    },
+    {
+      "id": "fix-flaky-quirky-worktree-create",
+      "milestone": "M1",
+      "title": "Fix the flaky plugins/quirky.worktree/test/create.test.ts: it failed under load in 5 full-suite runs and passed when rerun alone (see <git common dir>/build-loop/flakes.log). Find the timing assumption with quirk:systematic-debugging, reproducing on the test host with bun scripts/suite.ts plugins/quirky.worktree (never generate CPU load on the Mac), and fix the test or the code it exposes",
+      "docs": [
+        "worktrees.md"
+      ],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "fix-flaky-terminal-features-pane",
+      "milestone": "M1",
+      "title": "Fix the flaky plugins/quirky.terminal/test/e2e-ui/features-pane.test.ts, a macOS-only test (scripts/test-on-macos.txt) that failed in 4 runs and passed when rerun alone (see <git common dir>/build-loop/flakes.log). Find the timing assumption with quirk:systematic-debugging from the logged failures, without generating CPU load on the Mac, and fix the test or the code it exposes",
+      "docs": [
+        "term-ui.md"
+      ],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "fix-flaky-pty-host-clear",
+      "milestone": "M1",
+      "title": "Fix the flaky packages/pty-host/test/clear.test.ts: it failed 3 times in full-suite runs today (15:28, 22:47, 23:11 UTC). Find out with quirk:systematic-debugging whether a wait is too short under load or the clear races with output, reproduce it under CPU load on the test host, and fix the code or the test",
+      "docs": [
+        "term-daemon.md"
+      ],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "sb-mobile-settings-visibility",
+      "milestone": "Side B",
+      "title": "Recheck Settings > Mobile paired-device revoke visibility at 1280x720: guarded scroll/PageDown could not reach the clipped button; diagnose host overflow versus driver targeting and fix only reproduced app clipping (Mobile-page revoke path already works)",
+      "docs": [
+        "mobile.md"
+      ],
+      "deps": [
+        "sb-mobile-daemon",
+        "m7-test-triage"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "fix-native-m1-term-ui-1028",
+      "milestone": "M1",
+      "title": "Fix the native-only failures in m1-term-ui from the 2026-10-28 run: SC-37",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "fix-native-m2-editor-1028",
+      "milestone": "M2",
+      "title": "Fix the native-only failures in m2-editor from the 2026-10-28 run: SC-9-native",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "fix-native-m3-accounts-1028",
+      "milestone": "M3",
+      "title": "Fix the native-only failures in m3-accounts from the 2026-10-28 run: AC6-AC7-native-link",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "fix-native-m3-vault-1028",
+      "milestone": "M3",
+      "title": "Fix the native-only failures in m3-vault from the 2026-10-28 run: SC-18-native-clipboard",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "fix-native-sa-browser-agent-1028",
+      "milestone": "Side A",
+      "title": "Fix the native-only failures in sa-browser-agent from the 2026-10-28 run: C2-native-focus",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m3-accounts-complete-user-acceptance-20261028",
+      "milestone": "M3",
+      "title": "Finish Accounts user acceptance after the LOOP night cutoff: complete same-home daemon-restart Compact/Detailed Used/Remaining/provider-visibility UI persistence; all ten drill-ins and inactive refresh/debounce; native-login link/Cancel, Codex UI add, reauth/Needs-sign-in refusal; full Claude Ask Restart/Always/Never/busy-idle/supersession UI (ordinary Keep+opt-out Keep passed); Codex pane Keep old account and keyboard follow-through (pane Restart with prior rollout contents and public focus passed; driver refused opacity0 textarea); provider removal Cancel/confirm/System-default fallback; masked MiniMax/OpenCode Go/ZCode configure/clear and secret-free errors; reset stale-account/stale-offer/failure/retry matrix (opt-out redemption/replay and wrapped Cancel passed); retained Codex warning/recovery UI. Also resolve tracked MEDIUM existing cancellation-RPC failure stopping login polling and background/structured stale-account rows offering terminal-only Restart. Preserve actual daemon/PTY A→B→remove-A→C accumulated-content proof, authority/reload/C1 regressions, explicit review independence limits and pending native clipboard/browser/Keychain/OS-focus handoffs. Exact evidence and open findings: docs/loop/decisions/m3-accounts-remaining-flows.md and BLOCKERS.md; no full UI/native pass claimed.",
+      "docs": [
+        "accounts.md"
+      ],
+      "deps": [
+        "m3-accounts-remaining-flows",
+        "m7-test-triage"
       ],
       "status": "todo"
     }
