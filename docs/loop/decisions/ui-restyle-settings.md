@@ -99,5 +99,27 @@
 - **Revisit if:** a stable nonempty offered URL is ever present in a public report
 - **Source:** assumed — autonomous
 
+## D10: Union all concurrent restyles and retain the canonical shared interaction owner
+- **Question:** the sole roadmap catch-up conflicted in additive plugin lint enrollment
+- **Options:** keep one area's list; union every ID without duplicate entries and preserve incoming shared contracts
+- **Chose:** sole merge brings207files and four decision logs, all read fully including raw Worktrees D17: Agents D1–D15, Git D1–D18, Tasks D1–D10, Worktrees D1–D17 and each Progress. Union all24plugin lint IDs, removing duplicate prior orchestration IDs. Preserve top-stack/wide/scrollBody Dialog behavior, shared native fields/refs, canonical ContextMenu metadata/geometry, host CSS loading, existing menu/agent/worktree APIs and incoming browser/platform/acceptance limits
+- **Why:** independent opt-ins and additive presentation contracts are not competing behavior. No existing preference/pairing/launcher authority changes. No extra catch-up or review/suite campaign
+- **Evidence:** sole conflict scripts/ui-lint-plugins.json:21–32; merge receipts; full incoming decision-log reads
+- **Reversibility:** easy
+- **Confidence:** high for source composition; final gate/current surface proof next
+- **Revisit if:** composed typecheck or canonical land reports a concrete failure
+- **Source:** locked by incoming ui-restyle decisions
+
+## D11: Verify the caught-up source and close exclusively owned resources
+- **Question:** what evidence supports landing after the sole shared-system merge?
+- **Options:** reuse pre-merge proof; rerun broad campaigns; fresh composed compiler/build and narrow owned-surface proof
+- **Chose:** merge c189fbe7 passed full frozen-install/UIlint/root/mobile/prepared-desktop typecheck and actual UI build exit0 in30.60s (11host files/26plugin modules). Fresh isolated daemon and exclusively owned stable1148 CDP rendered current Settings, CLI and Mobile. Escape discarded separator edit with public value true; exact footer Save stayed843.25–867 inside900px viewport while11905px body scrolled; UI Theme Save pinned dark, no horizontal overflow. CLI password field mounted. Mobile generated no eager QR and retained typed machine-name draft across dark→light. Browser errors[]. All workers/static validator/check jobs returned; both managed browser attachments released and both owned daemon/browser scopes stopped
+- **Why:** current shared Dialog/focus/native-field contracts are exercised, not inferred. Initial fresh-smoke probe used an absent editor setting ID and a generic Save-text lookup found a contributed inner form, not the fixed footer; corrected driver selectors only. Prior D8 QR/rotation/CLI failure proof remains explicitly pre-catch-up. No suite, complete feature/native acceptance or independent golden score is claimed
+- **Evidence:** composed-proof.json, composed-settings-dark.png, composed-mobile-light.png beside lane notes; canonical bg5 output; both named service SETTINGS_SMOKE_CLEANED/exit0 receipts. Composed shutdown also logged `quirky.worktree: could not clean prepared worktrees during deactivation: quirky.worktree is no longer active`; cleanup still completed and no pristine daemon-output claim is made. No worktree deactivation repair is inferred or introduced by this presentation item
+- **Reversibility:** easy
+- **Confidence:** high for named exercised paths only
+- **Revisit if:** canonical merge-result compiler or end-phase/visual acceptance finds a regression
+- **Source:** locked by docs/loop/LOOP.md build-first verification boundary
+
 ## Progress
-Spec and public package dependency contracts ready to commit. Next create three isolated component worktrees, dispatch disjoint workers (Mobile; CLI; host/settings/palette/sidebar-extras), integrate after the barrier, typecheck/build and minimum owned surface proof, single roadmap catch-up/read decisions, final typecheck, commit/detach/canonical land. No tests/reviews run; exactly one item this iteration.
+Ready to land. Shared contracts33c68018, Mobile dc0193d8, CLI bd40fea8, host5ff06f7c and integration f4befdd7 committed; sole roadmap catch-up c189fbe7 resolved additive lint enrollment and all four incoming decision logs were read completely. Final composed canonical typecheck/build passed30.60s and current owned Settings/CLI/Mobile proof passed within D11 limits. Behavioral tests authored/migrated but unrun; no review/suite/full dogfood/golden/native acceptance claim. Three component trees removed, inherited .serena untouched; both owned browser attachments released and private scopes stopped. Next commit final receipt, detach, run canonical absolute queue.ts land ui-restyle-settings and await authoritative success; then remove only owned scratch/merged implementation branches and end this one-item iteration.
