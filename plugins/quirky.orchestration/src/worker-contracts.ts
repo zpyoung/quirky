@@ -134,7 +134,7 @@ export interface WorkerCore extends OrchestrationWorkerCore {
   mutateWorker<T extends object>(method: string, params: MutationRequest & object, caller: CoordinatorEvidence, operation: (store: PluginStore) => T, options?: DurableMutationOptions<T>): Promise<MutationResult<T>>
   emitWorkerStatus(dispatchId: DispatchId, subject: string, body: string, high: boolean, type?: 'status' | 'escalation', payload?: JsonValue): void
   closeWorkerQuestions(dispatchId: DispatchId, at: UtcTimestamp): void
-  listDispatches(): DispatchRow[]
+  listDispatches(runId?: RunId): DispatchRow[]
   boundRunId(caller: RuntimeCallerEvidence): RunId | null
   attentionFor(dispatchId: DispatchId): { guidance: boolean; input: boolean; approval: boolean; rootCompletion: boolean }
 }

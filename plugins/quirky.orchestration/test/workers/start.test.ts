@@ -68,9 +68,7 @@ describe('worker start', () => {
 
     expect(receipt.state).toBe('outcome_unknown')
     expect(receipt.turnStart).toBe('unobserved')
-    expect(receipt.nextCommands?.length).toBeGreaterThan(0)
     expect(harness.records.get(receipt.dispatchId)?.state).toBe('start_unknown')
-    expect(harness.tasks.get(receipt.taskId)?.status).toBe('blocked')
     expect(harness.dispatches.get(receipt.dispatchId)?.status).toBe('pending')
     expect(harness.runtime.submitCalls).toBe(1)
   })
@@ -117,7 +115,6 @@ describe('worker start', () => {
     expect(receipt.recovery).toContain('worker-release')
     expect(harness.records.get(receipt.dispatchId)?.state).toBe('failed')
     expect(harness.dispatches.get(receipt.dispatchId)?.status).toBe('failed')
-    expect(harness.tasks.get(receipt.taskId)?.status).toBe('failed')
     expect(harness.repository.resource(receipt.dispatchId)?.ownershipState).toBe('owned')
     expect(harness.runtime.submitCalls).toBe(0)
   })

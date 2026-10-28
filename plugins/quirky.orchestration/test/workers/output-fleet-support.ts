@@ -219,6 +219,7 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
   const core = {
     context,
     store: repository.store,
+    nestedWorkerMaxDepth: 1,
     getDispatch: (id: DispatchId) => dispatches.find((dispatch) => dispatch.id === id) ?? (() => { throw new Error(`missing dispatch ${id}`) })(),
     getTask: (id: TaskId) => tasks.get(id) ?? (() => { throw new Error(`missing task ${id}`) })(),
     getRun: (id: RunId) => ({ id, objective: 'fixture', coordinatorSessionId: null, coordinatorHistory: [], consumerGeneration: 1, createdAt: now(), updatedAt: now() }),

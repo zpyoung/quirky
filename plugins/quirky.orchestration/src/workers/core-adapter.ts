@@ -24,6 +24,7 @@ export function createWorkerCore(core: InspectionCore, service?: WorkerServiceCo
   return {
     context: core.context,
     store: core.store,
+    get nestedWorkerMaxDepth() { return core.nestedWorkerMaxDepth },
     registerWorkerPort: core.registerWorkerPort.bind(core),
     getRun: core.getRun.bind(core),
     getTask: core.getTask.bind(core),

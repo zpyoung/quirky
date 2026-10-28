@@ -218,6 +218,7 @@ export function createLifecycleFixture(options: FixtureOptions = {}): LifecycleF
       error: (_kind: string, message: string) => new Error(message)
     } as unknown as PluginContext,
     store,
+    nestedWorkerMaxDepth: 1,
     registerWorkerPort(port: Parameters<WorkerCore['registerWorkerPort']>[0]) {
       registrationCount += 1
       if (registrationCount > 1) throw new Error('worker port registered more than once')

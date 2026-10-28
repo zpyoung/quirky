@@ -14,7 +14,6 @@ const TURN_OBSERVATION_TIMEOUT_MS = 30_000
 const CLIENT_TIMEOUT_GRACE_MS = 50_000
 const MAX_TIMER_DELAY_MS = 2_147_483_647
 const MAX_TASK_SPEC_BYTES = 1_214_464
-const DEFAULT_NESTED_WORKER_MAX_DEPTH = 1
 const LIVE_DISPATCH_STATES = new Set<DispatchStatus>(['pending', 'dispatched'])
 const LIVE_WORKER_STATES = new Set(['starting', 'ready', 'start_unknown', 'stopping', 'stop_unknown'])
 const SETTLED_WORKER_STATES = new Set(['succeeded', 'failed', 'stopped', 'abandoned'])
@@ -217,9 +216,6 @@ function taskForRun(core: WorkerCore, taskId: TaskRow['id'], runId: RunRow['id']
   return task
 }
 
-function hasOtherLiveDispatch(core: WorkerCore, taskId: TaskRow['id'], currentId: DispatchRow['id']): boolean {
-  return core.listDispatches().some(dispatch => dispatch.id !== currentId && dispatch.taskId === taskId && isLiveDispatch(dispatch))
-}
 
 function receiptFromSettledWorker(
   receipt: WorkerStartReceipt,
@@ -304,12 +300,6 @@ function coordinatorAddress(run: RunRow, caller: CoordinatorEvidence): string {
   return run.coordinatorSessionId ?? caller.callerSessionId
 }
 
-function maximumDepth(runtime: WorkerRuntime): number {
-  const configured = runtime.context.getSetting('nestedWorkerMaxDepth')
-  return typeof configured === 'number' && Number.isSafeInteger(configured) && configured >= 1
-    ? configured
-    : DEFAULT_NESTED_WORKER_MAX_DEPTH
-}
 
 function recoveryReceipt(receipt: WorkerStartReceipt, dispatchId: DispatchRow['id']): WorkerStartReceipt {
   const releaseCommand = ['orchestration', 'worker-release', '--dispatch', dispatchId]
@@ -373,12 +363,8 @@ function settleAfterCommitFailure(
     const currentWorker = repository.get(initial.dispatchId)
     const currentDispatch = core.getDispatch(initial.dispatchId)
     if (!currentWorker || currentWorker.state !== 'starting' || currentDispatch.status !== 'pending') return
-    const currentTask = core.getTask(initial.taskId)
     if (unknown) {
       core.transitionWorker({ dispatchId: initial.dispatchId, expectedState: 'starting', nextState: 'start_unknown' })
-      if (currentTask.status === 'dispatched' && !hasOtherLiveDispatch(core, currentTask.id, initial.dispatchId)) {
-        core.transitionTask({ taskId: currentTask.id, expectedState: 'dispatched', nextState: 'blocked', at: timestamp })
-      }
       repository.update(initial.dispatchId, {
         state: 'start_unknown', stage: finalReceipt.stage, lastError: errorMessage(cause),
         effects, residualResources, receipt: finalReceipt,
@@ -386,6 +372,11 @@ function settleAfterCommitFailure(
       return
     }
 
+    core.transitionWorker({
+      dispatchId: initial.dispatchId,
+      expectedState: 'starting',
+      nextState: 'failed',
+    })
     const nextDispatchState = dispatch.failureCount + 1 >= 3 ? 'circuit_broken' : 'failed'
     core.transitionDispatch({
       dispatchId: initial.dispatchId,
@@ -395,14 +386,6 @@ function settleAfterCommitFailure(
       failureReason: errorMessage(cause),
       at: timestamp,
     })
-    const afterDispatch = repository.get(initial.dispatchId)
-    if (afterDispatch?.state === 'starting') {
-      core.transitionWorker({ dispatchId: initial.dispatchId, expectedState: 'starting', nextState: 'failed' })
-    }
-    const taskAfterDispatch = core.getTask(initial.taskId)
-    if (taskAfterDispatch.status === 'dispatched' && !hasOtherLiveDispatch(core, taskAfterDispatch.id, initial.dispatchId)) {
-      core.transitionTask({ taskId: taskAfterDispatch.id, expectedState: 'dispatched', nextState: 'failed', at: timestamp })
-    }
     const afterWorker = repository.get(initial.dispatchId)
     if (afterWorker) {
       repository.update(initial.dispatchId, {
@@ -555,7 +538,7 @@ async function launchAccepted(
       throw fail('worker_identity_changed', 'Core attached a different worker identity than the attested placement.')
     }
 
-    const prompt = buildWorkerPreamble(task, attached, placement.identity, coordinatorAddress(run, caller), maximumDepth(runtime))
+    const prompt = buildWorkerPreamble(task, attached, placement.identity, coordinatorAddress(run, caller), core.nestedWorkerMaxDepth)
     const effectiveLaunch = {
       requested: initial.launch.requested,
       effective: {
@@ -602,12 +585,8 @@ async function launchAccepted(
       core.store.transaction(() => {
         const worker = repository.get(initial.dispatchId)
         const activeDispatch = core.getDispatch(initial.dispatchId)
-        const activeTask = core.getTask(initial.taskId)
         if (!worker || worker.state !== 'starting' || activeDispatch.status !== 'pending') return
         core.transitionWorker({ dispatchId: initial.dispatchId, expectedState: 'starting', nextState: 'start_unknown' })
-        if (activeTask.status === 'dispatched' && !hasOtherLiveDispatch(core, activeTask.id, initial.dispatchId)) {
-          core.transitionTask({ taskId: activeTask.id, expectedState: 'dispatched', nextState: 'blocked', at: now() })
-        }
         repository.update(initial.dispatchId, {
           state: 'start_unknown', stage: 'turn_unobserved', setupState: finalSetup.state,
           effects: [...effects], lastError: 'Accepted worker input had no bounded proof that a turn started.', receipt: finalReceipt,

@@ -1,4 +1,4 @@
-import type { DispatchId, DispatchRow, DispatchStatus, DispatchTransitionInput, JsonValue, ResetMode, RuntimeCallerEvidence, TaskRow, UtcTimestamp, WorkerRow, WorkerState, WorkerTransitionInput } from '../contracts'
+import type { AcceptedWorkerCheckpoint, DispatchId, DispatchRow, DispatchStatus, DispatchTransitionInput, JsonValue, ResetMode, RuntimeCallerEvidence, TaskRow, UtcTimestamp, WorkerRow, WorkerState, WorkerTransitionInput } from '../contracts'
 import type { PluginStore } from '@quirky/protocol'
 import type {
   CoordinatorEvidence, TerminalResource, WorkerArchive, WorkerControlParams, WorkerControlResult, WorkerCore,
@@ -211,6 +211,11 @@ export function createWorkerLifecycle(
     processAction: WorkerControlResult['processAction'],
     extra: Partial<WorkerControlResult> = {}
   ): WorkerControlResult => ({ dispatchId, state, processAction, ...extra })
+
+  const controlCheckpoint = (accepted: WorkerControlResult): AcceptedWorkerCheckpoint => {
+    const dispatch = core.getDispatch(accepted.dispatchId)
+    return { state: 'accepted', accepted: true, runId: dispatch.runId, taskId: dispatch.taskId, dispatchId: dispatch.id }
+  }
 
   const markResourceRetained = (resource: TerminalResource, reason: string): TerminalResource => {
     if (resource.ownershipState !== 'owned' || resource.releaseState === 'releasing' || resource.releaseState === 'released') return resource
@@ -795,7 +800,7 @@ export function createWorkerLifecycle(
     const settled = repo.get(dispatchId)
     if (settled && settled.state === outcome) {
       updateStage(dispatchId, outcome, {
-        stage: outcome,
+        stage: 'settled',
         updatedAt: at,
         ...(status === 'completed' || dispatch.lastFailure === 'worker_report' ? { lastError: null } : {})
       })
@@ -970,6 +975,7 @@ export function createWorkerLifecycle(
         return prepared.result
       },
       {
+        acceptedCheckpoint: controlCheckpoint,
         afterCommit: (accepted) => attempt.shouldAttempt ? coalesceStopEffect(params.dispatchId) : accepted
       }
     ))
@@ -999,6 +1005,7 @@ export function createWorkerLifecycle(
           : controlResult(params.dispatchId, 'release_pending', 'none')
       },
       {
+        acceptedCheckpoint: controlCheckpoint,
         afterCommit: (accepted) => {
           const preparation = attempt.preparation
           if (!preparation) return accepted

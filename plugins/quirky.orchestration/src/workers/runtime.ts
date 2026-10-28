@@ -11,6 +11,7 @@ import type {
 const DEFAULT_READY_TIMEOUT_MS = 60_000
 const OBSERVATION_TIMEOUT_MS = 30_000
 const WAIT_SLICE_MS = 1_000
+const EXIT_IDENTITY_CONFIRM_TIMEOUT_MS = 5_000
 
 type PublicWorktree = { id: string; repoId: string; path: string; kind: 'git' | 'folder'; head?: string }
 type PublicRepo = { id: string; name: string; path: string; kind: 'git' | 'folder' }
@@ -32,7 +33,7 @@ type SetupResult = { ran: 'terminal' | 'daemon' | 'none' | 'skipped'; sessionId?
 type RepoHooks = { setup?: { text?: string; source?: string } | null; agentStartup?: 'start-immediately' | 'wait-for-setup' | null }
 type SessionStatusWait = { status: 'matched' | 'pending'; state: 'working' | 'blocked' | 'idle' | 'unknown' | 'exited'; kind?: string }
 type PointerResult = { operationId: string; result: { status: string; reason?: string; attemptedPhase?: string; retryEnter?: false } }
-type StructuredMessage = { sessionId: string; seq: number; role: string; text: string; at: number }
+type StructuredMessage = { sessionId: string; seq: number; role: string; text: string; at: number; data?: unknown }
 type SetupState = WorkerSetup['state']
 type CodedError = Error & { code?: string; data?: unknown }
 
@@ -287,7 +288,7 @@ async function resolveServicePlan(
   validateModelPicks(params, agentOptions)
   const preferred: WorkerMode = params.mode ?? 'terminal'
   const mode: WorkerMode = selectedSession ? 'terminal' : preferred
-  if (mode === 'structured' && (!agentOptions.structured || agentId !== 'claude')) {
+  if (mode === 'structured' && !agentOptions.structured) {
     throw failure('agent_unconfigured', `Agent ${agentId} does not support a structured background session.`)
   }
   const decision: WorkerModeDecision = {
@@ -393,7 +394,7 @@ async function resolvePlan(context: PluginContext, params: WorkerStartParams, ca
 
   const preferred: WorkerMode = params.mode ?? 'terminal'
   const mode: WorkerMode = selectedSession ? 'terminal' : preferred
-  if (mode === 'structured' && (!agentOptions.structured || agentId !== 'claude')) {
+  if (mode === 'structured' && !agentOptions.structured) {
     throw failure('agent_unconfigured', `Agent ${agentId} does not support a structured background session.`)
   }
   const decision: WorkerModeDecision = {
@@ -460,6 +461,51 @@ async function waitForReadyAgent(
   throw failure('worker_readiness_timeout', `${detail} Session ${sessionId} remains unready.`)
 }
 
+async function waitForStructuredReady(
+  context: PluginContext,
+  sessionId: string,
+  expectedIdentity: SessionIdentity,
+  deadline: number,
+  ensureActive: () => void,
+): Promise<void> {
+  while (Date.now() < deadline) {
+    ensureActive()
+    const session = (await listSessions(context)).find(candidate => candidate.id === sessionId)
+    if (!session) throw failure('terminal_not_found', `Structured worker session ${sessionId} is absent before startup completed.`)
+    if (session.kind !== 'structured') throw failure('worker_identity_changed', `Session ${sessionId} is no longer structured.`)
+    if (session.status === 'exited') {
+      const messages = await call<StructuredMessage[]>(context, 'quirky.structured/messages', { session: sessionId })
+      if (!Array.isArray(messages)) throw failure('invalid_runtime_response', 'quirky.structured/messages returned an invalid journal page.')
+      let startupFailure: string | null = null
+      for (const message of messages) {
+        if (message.sessionId === sessionId && message.role === 'system' && message.text.startsWith('could not start: ')) {
+          startupFailure = message.text.slice('could not start: '.length)
+        }
+      }
+      if (startupFailure) throw failure('agent_not_ready', `Structured worker ${sessionId} could not start: ${startupFailure}`)
+      throw failure('terminal_not_found', `Structured worker session ${sessionId} exited before it became ready.`)
+    }
+    const identity = await getIdentity(context, sessionId)
+    if (!identity.live || identity.sessionId !== expectedIdentity.sessionId
+      || identity.processIncarnation !== expectedIdentity.processIncarnation
+      || identity.runtimeEpoch !== expectedIdentity.runtimeEpoch
+      || identity.worktreeId !== expectedIdentity.worktreeId
+      || identity.kind !== 'structured' || identity.providerId !== expectedIdentity.providerId) {
+      throw failure('worker_identity_changed', `Structured worker session ${sessionId} changed identity before startup completed.`)
+    }
+    if (session.status === 'running') return
+    if (session.status !== 'starting') {
+      throw failure('agent_not_ready', `Structured worker session ${sessionId} entered ${session.status} before its initial turn was submitted.`)
+    }
+    const remaining = deadline - Date.now()
+    if (remaining <= 0) break
+    const delay = Promise.withResolvers<void>()
+    setTimeout(delay.resolve, Math.min(WAIT_SLICE_MS, remaining))
+    await delay.promise
+  }
+  throw failure('worker_readiness_timeout', `Structured worker session ${sessionId} did not finish provider startup before the worker start deadline.`)
+}
+
 async function waitForSetupExit(context: PluginContext, sessionId: string, deadline: number, ensureActive: () => void): Promise<number | null> {
   while (Date.now() < deadline) {
     ensureActive()
@@ -490,6 +536,22 @@ function buildSetupEffects(setup: SetupResult | null): WorkerEffect[] {
 function residualForWorktree(worktreeId: string, setup: SetupResult | null): JsonValue[] {
   const residual: JsonValue[] = [{ kind: 'worktree', id: worktreeId, state: 'created' }]
   if (setup?.sessionId) residual.push({ kind: 'setup', id: setup.sessionId, state: setup.ran === 'terminal' ? 'running' : 'created' })
+  return residual
+}
+function residualForTerminal(
+  worktreeId: string,
+  state: 'created' | 'identity_unverifiable' | 'outcome_unknown',
+  sessionId?: string,
+  tabId?: string,
+): JsonValue[] {
+  const residual = residualForWorktree(worktreeId, null)
+  residual.push({
+    kind: 'terminal',
+    state,
+    worktreeId,
+    ...(sessionId === undefined ? {} : { id: sessionId }),
+    ...(tabId === undefined ? {} : { tabId }),
+  })
   return residual
 }
 
@@ -550,6 +612,8 @@ export function createWorkerRuntime(context: PluginContext): WorkerRuntime {
       let worktreeId = plan.worktreeId
       let session: Session
       let created = false
+      let createdTerminalSessionId: string | null = null
+      let terminalTabId: string | null = null
 
       try {
         if (plan.selectedSession) {
@@ -608,34 +672,116 @@ export function createWorkerRuntime(context: PluginContext): WorkerRuntime {
           }
 
           const title = sessionTitle(task)
+          const options = sessionOptions(params)
           if (plan.decision.mode === 'structured') {
             session = await call<Session>(context, 'quirky.structured/create', {
               worktree: worktreeId,
               agent: plan.agent.id,
               title,
               ...(params.model !== undefined ? { model: params.model } : {}),
-              ...(sessionOptions(params) ? { options: sessionOptions(params) } : {}),
+              ...(options === undefined ? {} : { options }),
               deferStart: true,
             })
+            created = true
+            effects.push(effect('terminal', 'created', 'agent', session.id))
           } else {
-            session = await call<Session>(context, 'quirky.session/create', {
-              worktree: worktreeId,
-              agent: plan.agent.id,
-              title,
-              ...(params.model !== undefined ? { model: params.model } : {}),
-              ...(sessionOptions(params) ? { options: sessionOptions(params) } : {}),
-            })
+            if (!worktreeId) throw failure('invalid_runtime_response', 'The worker session has no resolved workspace.')
+            let createdTab: unknown
+            try {
+              createdTab = await call<unknown>(context, 'quirky.terminal/newTab', {
+                workspace: worktreeId,
+                agent: plan.agent.id,
+                title,
+                activate: false,
+                ...(params.model !== undefined ? { model: params.model } : {}),
+                ...(options === undefined ? {} : { options }),
+              })
+            } catch (cause) {
+              const code = codeOf(cause)
+              const causeData = asRecord(asRecord(cause).data)
+              const ambiguous =
+                causeData.accepted !== false
+                && (code === 'operation_unknown'
+                  || code === 'runtime_timeout'
+                  || code === 'runtime_unavailable'
+                  || code === 'connection_lost'
+                  || code === 'timeout'
+                  || (cause instanceof Error && cause.name === 'TimeoutError'))
+              if (!ambiguous) throw cause
+              const unknown = failure(
+                'operation_unknown',
+                `The terminal/newTab outcome for worker ${title} is unknown: ${messageOf(cause)}`,
+                causeData,
+              )
+              throw attachPlacementData(unknown, effects, residualForTerminal(worktreeId, 'outcome_unknown'))
+            }
+            const result = asRecord(createdTab)
+            const sessionId = nonEmptyString(result.session) ? result.session : null
+            const tabId = nonEmptyString(result.tab) ? result.tab : null
+            createdTerminalSessionId = sessionId
+            terminalTabId = tabId
+            if (sessionId !== null) {
+              created = true
+              effects.push(effect('terminal', 'created', 'agent', sessionId))
+            }
+            if (sessionId === null || tabId === null) {
+              throw attachPlacementData(
+                failure('operation_unknown', 'quirky.terminal/newTab returned an invalid creation response.'),
+                effects,
+                residualForTerminal(worktreeId, 'outcome_unknown', sessionId ?? undefined, tabId ?? undefined),
+              )
+            }
+
+            let sessionValue: unknown
+            try {
+              sessionValue = await call<unknown>(context, 'quirky.session/get', { session: sessionId })
+            } catch (cause) {
+              throw attachPlacementData(
+                failure('operation_unknown', `The created session ${sessionId} could not be read: ${messageOf(cause)}`),
+                effects,
+                residualForTerminal(worktreeId, 'identity_unverifiable', sessionId, tabId),
+              )
+            }
+            const sessionRecord = asRecord(sessionValue)
+            if (
+              sessionRecord.id !== sessionId
+              || sessionRecord.kind !== 'terminal'
+              || sessionRecord.agent !== plan.agent.id
+              || sessionRecord.worktreeId !== worktreeId
+              || typeof sessionRecord.cwd !== 'string'
+              || typeof sessionRecord.title !== 'string'
+              || (sessionRecord.status !== 'starting'
+                && sessionRecord.status !== 'running'
+                && sessionRecord.status !== 'working'
+                && sessionRecord.status !== 'waiting'
+                && sessionRecord.status !== 'done'
+                && sessionRecord.status !== 'exited')
+              || typeof sessionRecord.createdAt !== 'number'
+              || typeof sessionRecord.lastActivityAt !== 'number'
+              || (sessionRecord.exitCode !== null && typeof sessionRecord.exitCode !== 'number')
+            ) {
+              throw attachPlacementData(
+                failure('operation_unknown', `quirky.session/get returned an invalid record for created session ${sessionId}.`),
+                effects,
+                residualForTerminal(worktreeId, 'identity_unverifiable', sessionId, tabId),
+              )
+            }
+            session = sessionRecord as unknown as Session
           }
-          created = true
-          effects.push(effect(session.kind === 'structured' ? 'terminal' : 'terminal', 'created', 'agent', session.id))
-        }
 
         if (!worktreeId) throw failure('invalid_runtime_response', 'The worker session has no resolved workspace.')
         let identity: SessionIdentity
         try {
           identity = await getIdentity(context, session.id)
         } catch (cause) {
-          throw attachPlacementData(failure('operation_unknown', `The exact identity of created session ${session.id} could not be established: ${messageOf(cause)}`), effects, [{ kind: 'session', id: session.id, state: 'identity_unverifiable' }])
+          const identityResidual = terminalTabId === null
+            ? [{ kind: 'session', id: session.id, state: 'identity_unverifiable' }]
+            : residualForTerminal(worktreeId, 'identity_unverifiable', session.id, terminalTabId)
+          throw attachPlacementData(
+            failure('operation_unknown', `The exact identity of created session ${session.id} could not be established: ${messageOf(cause)}`),
+            effects,
+            identityResidual,
+          )
         }
         if (expectedIdentity && (
           !identity.live
@@ -649,10 +795,25 @@ export function createWorkerRuntime(context: PluginContext): WorkerRuntime {
         const placement: WorkerPlacement = { worktreeId, session, identity, created, effects, setup }
         validatePlacementIdentity(placement, plan.worktreeId, caller)
         onCustody(placement)
+        if (terminalTabId !== null) {
+          try {
+            await call(context, 'quirky.terminal/renameTab', { tab: terminalTabId, title: session.title })
+          } catch (cause) {
+            throw attachPlacementData(
+              failure('operation_unknown', `Worker session ${session.id} was created but its tab title could not be set: ${messageOf(cause)}`),
+              effects,
+              residualForTerminal(worktreeId, 'created', session.id, terminalTabId),
+            )
+          }
+        }
         return placement
       } catch (cause) {
         if (cause instanceof Error && 'data' in cause && cause.data) throw cause
-        const residual = worktreeId ? residualForWorktree(worktreeId, null) : []
+        const residual = worktreeId
+          ? createdTerminalSessionId !== null || terminalTabId !== null
+            ? residualForTerminal(worktreeId, 'created', createdTerminalSessionId ?? undefined, terminalTabId ?? undefined)
+            : residualForWorktree(worktreeId, null)
+          : []
         throw attachPlacementData(cause, effects, residual)
       }
     },
@@ -663,7 +824,7 @@ export function createWorkerRuntime(context: PluginContext): WorkerRuntime {
         if (placement.setup.startupPolicy === 'wait-for-setup' && placement.setup.state === 'running') {
           throw failure('operation_unknown', 'A structured worker was created before its required setup gate completed.')
         }
-        return
+        return waitForStructuredReady(context, placement.session.id, placement.identity, deadline, ensureActive)
       }
       await waitForReadyAgent(context, placement.session.id, deadline, reused, ensureActive)
     },
@@ -729,7 +890,7 @@ export function createWorkerRuntime(context: PluginContext): WorkerRuntime {
       let observation: TurnStart
       try {
         if (placement.session.kind === 'structured') {
-          observation = await thisObserveStructured(context, placement.session.id, beforeSeq, observationDeadline, ensureActive)
+          observation = await thisObserveStructured(context, placement.session.id, beforeSeq, text, placement.identity, observationDeadline, ensureActive)
         } else {
           observation = await thisObserveTerminal(context, placement.session.id, observationDeadline, submittedNotBefore, ensureActive)
         }
@@ -765,21 +926,78 @@ export function createWorkerRuntime(context: PluginContext): WorkerRuntime {
       } catch (cause) {
         return { status: 'unverifiable', exactWorker: false, reason: messageOf(cause), identity: null, session: null }
       }
-      const session = sessions.find(candidate => candidate.id === record.sessionId) ?? null
+      let session = sessions.find(candidate => candidate.id === record.sessionId) ?? null
       if (!session) return { status: 'missing', exactWorker: false, reason: 'The complete session inventory does not contain the recorded session.', identity: null, session: null }
-      let identity: SessionIdentity
+      let identity: SessionIdentity | null = null
+      let identityError: string | null = null
       try {
         identity = await getIdentity(context, record.sessionId)
       } catch (cause) {
-        return { status: 'unverifiable', exactWorker: false, reason: messageOf(cause), identity: null, session }
+        identityError = messageOf(cause)
       }
       if (dispatch.assigneeSessionId === null) {
         return { status: 'unattached', exactWorker: false, reason: 'The Dispatch has not attached worker authority yet.', identity, session }
       }
-      if (identity.processIncarnation !== record.processIncarnation || identity.runtimeEpoch !== record.processRuntimeEpoch || identity.worktreeId !== record.worktreeId || identity.sessionId !== dispatch.assigneeSessionId || identity.kind !== record.mode) {
+      if (identity && (
+        identity.processIncarnation !== record.processIncarnation ||
+        identity.runtimeEpoch !== record.processRuntimeEpoch ||
+        identity.worktreeId !== record.worktreeId ||
+        identity.sessionId !== dispatch.assigneeSessionId ||
+        identity.kind !== record.mode
+      )) {
         return { status: 'identity_changed', exactWorker: false, reason: 'The live process or Dispatch assignee does not match the recorded worker identity.', identity, session }
       }
-      if (identity.live && session.status !== 'exited') {
+      if (!identity && session.status !== 'exited') {
+        return { status: 'unverifiable', exactWorker: false, reason: identityError ?? 'The worker identity is unavailable.', identity: null, session }
+      }
+      // The PTY exit callback refreshes identity asynchronously; timeout never counts as exit evidence.
+      const exitConfirmationDeadline = Date.now() + EXIT_IDENTITY_CONFIRM_TIMEOUT_MS
+      while (
+        (identity === null || (identity.live ? session.status === 'exited' : session.status !== 'exited')) &&
+        Date.now() < exitConfirmationDeadline
+      ) {
+        ensureActive()
+        const remaining = exitConfirmationDeadline - Date.now()
+        const delay = Promise.withResolvers<void>()
+        setTimeout(delay.resolve, Math.min(WAIT_SLICE_MS, remaining))
+        await delay.promise
+        ensureActive()
+        try {
+          sessions = await listSessions(context)
+        } catch (cause) {
+          return { status: 'unverifiable', exactWorker: Boolean(identity), reason: messageOf(cause), identity, session }
+        }
+        session = sessions.find(candidate => candidate.id === record.sessionId) ?? null
+        if (!session) return { status: 'missing', exactWorker: false, reason: 'The complete session inventory does not contain the recorded session.', identity, session: null }
+        try {
+          identity = await getIdentity(context, record.sessionId)
+          identityError = null
+        } catch (cause) {
+          identity = null
+          identityError = messageOf(cause)
+          continue
+        }
+        if (
+          identity.processIncarnation !== record.processIncarnation ||
+          identity.runtimeEpoch !== record.processRuntimeEpoch ||
+          identity.worktreeId !== record.worktreeId ||
+          identity.sessionId !== dispatch.assigneeSessionId ||
+          identity.kind !== record.mode
+        ) {
+          return { status: 'identity_changed', exactWorker: false, reason: 'The live process or Dispatch assignee does not match the recorded worker identity.', identity, session }
+        }
+      }
+      if (!identity) {
+        return { status: 'unverifiable', exactWorker: false, reason: identityError ?? 'The worker identity remains unavailable.', identity: null, session }
+      }
+      if (identity.live ? session.status === 'exited' : session.status !== 'exited') {
+        return {
+          status: 'unverifiable', exactWorker: true,
+          reason: 'The session record and kernel process identity do not confirm the same exit state.',
+          identity, session,
+        }
+      }
+      if (identity.live) {
         let agentWait: WorkerObservation['agentWait']
         try {
           const status = await call<SessionStatusWait>(context, 'quirky.agent-status/wait', {
@@ -868,6 +1086,8 @@ async function thisObserveStructured(
   context: PluginContext,
   sessionId: string,
   afterSeq: number,
+  expectedText: string,
+  expectedIdentity: SessionIdentity,
   deadline: number,
   ensureActive: () => void,
 ): Promise<TurnStart> {
@@ -876,10 +1096,35 @@ async function thisObserveStructured(
     try {
       const messages = await call<StructuredMessage[]>(context, 'quirky.structured/messages', { session: sessionId, afterSeq })
       if (!Array.isArray(messages)) throw failure('invalid_runtime_response', 'quirky.structured/messages returned an invalid journal page.')
-      if (messages.some(message => message.role === 'assistant' || message.role === 'tool' || message.role === 'result')) return 'observed'
+      for (const message of messages) {
+        if (message.sessionId !== sessionId || !Number.isSafeInteger(message.seq) || message.seq <= afterSeq) continue
+        if (message.role === 'assistant' || message.role === 'tool' || message.role === 'result') return 'observed'
+        if (message.role !== 'user' || message.text !== expectedText) continue
+        const receipt = asRecord(message.data)
+        const method = receipt.method
+        const threadId = receipt.threadId
+        if ((method !== 'turn/start' && method !== 'turn/steer') || !nonEmptyString(threadId)) continue
+        if (method === 'turn/steer' && !nonEmptyString(receipt.expectedTurnId)) continue
+        const [session, identity] = await Promise.all([
+          call<Session>(context, 'quirky.session/get', { session: sessionId }),
+          getIdentity(context, sessionId),
+        ])
+        const providerThreadId = session.providerSession?.id
+        if (session.id !== sessionId || session.kind !== 'structured' || session.agent !== 'codex'
+          || expectedIdentity.providerId !== 'codex' || session.worktreeId !== expectedIdentity.worktreeId
+          || !nonEmptyString(providerThreadId) || providerThreadId !== threadId) continue
+        if (!identity.live || identity.sessionId !== expectedIdentity.sessionId
+          || identity.processIncarnation !== expectedIdentity.processIncarnation
+          || identity.runtimeEpoch !== expectedIdentity.runtimeEpoch
+          || identity.worktreeId !== expectedIdentity.worktreeId
+          || identity.kind !== 'structured' || identity.providerId !== 'codex') continue
+        return 'observed'
+      }
       const remaining = deadline - Date.now()
       if (remaining <= 0) break
-      await new Promise(resolve => setTimeout(resolve, Math.min(WAIT_SLICE_MS, remaining)))
+      const delay = Promise.withResolvers<void>()
+      setTimeout(delay.resolve, Math.min(WAIT_SLICE_MS, remaining))
+      await delay.promise
     } catch (cause) {
       if (codeOf(cause) === 'method_not_found' || codeOf(cause) === 'capability_unsupported') return 'unsupported'
       throw cause

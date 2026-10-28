@@ -176,5 +176,104 @@
 - **Revisit if:** a public input-origin hook provides stronger ordering with less machinery
 - **Source:** assumed — autonomous
 
+## D17: Apply the aged-item landing rule without claiming unperformed review
+- **Question:** whether to begin a new final review or formal dogfood campaign after the item's two-hour boundary
+- **Options:** start new campaigns; follow the current LOOP override for already-aged items
+- **Chose:** finish real worker behavior, affected tests, scripts, typecheck and required runtime/UI smoke; do not start a new formal adversarial-review round or using-apps dogfood campaign. D9's verified cross-family pairing is retained as preflight evidence, not represented as a review that ran.
+- **Why:** the authoritative night-mode rule explicitly skips review/dogfood not yet started for an aged item. Higher-priority actual-surface verification still applies to the input change; focused smoke is not a full dogfood pass.
+- **Evidence:** lane9 iteration claim and spec commits on2026-10-27; actual API Run.createdAt2026-10-28T02:23Z and later, beyond the two-hour item boundary; current LOOP Night mode. Only doctor/goals preparation ran, no review dispatch or dogfood begin.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the operator changes the night-mode override
+- **Source:** locked by docs/loop/LOOP.md
+
+## D18: Read the enforced core depth policy, not an undeclared setting
+- **Question:** every actual terminal start failed after authority attachment when building the preamble
+- **Options:** suppress the setting lookup exception; declare a mutable ordinary setting; expose the actual read-only core policy
+- **Chose:** nestedWorkerMaxDepth is a read-only core getter used by admission and preamble generation, default1. Removed the nonexistent getSetting call and duplicate fallback helper. No ordinary RPC setting can raise a worker's own cap.
+- **Why:** actual receipt said no setting setting:quirky.orchestration/nestedWorkerMaxDepth after a real session, custody and authority had been created. A new mutable setting would diverge from the current core cap and the source's caller restrictions.
+- **Evidence:** artifact://152 full receipt line7; Core admission MAX_NESTED_DEPTH and worker starter; getter/adapter/fixture updates
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** the separately-owned settings flow adds an authorized persisted policy through this single core getter
+- **Source:** assumed — autonomous
+
+## D19: Complete the canonical Codex structured catalog cutover
+- **Question:** native worker preflight refused a provider that already has an app-server runner
+- **Options:** add another worker provider table; update canonical model/effort mapping and remove obsolete Claude-only restriction
+- **Chose:** Codex model maps to structured.model and effort to structured.effort in the existing catalog. Structured eligibility consumes that public metadata rather than a stale Claude-only condition; the real native test requests gpt-5.6-luna/high and inspects actual app-server wire values.
+- **Why:** AgentsService.optionsInfo derives structured support from the model mapping. Source inspection then found an additional agentId != claude hardcode in both worker placement paths, so catalog data alone was insufficient.
+- **Evidence:** actual API gate artifact://154 native refusal; quirky.agents manifest Codex tags; workers/runtime.ts resolvePlan and known-workspace path; CodexCatalogSupport source-only result. Native runtime pass remains pending.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a public structured provider registry replaces catalog-declared capability
+- **Source:** assumed — autonomous
+
+## D20: Preserve durable acceptance for destructive worker controls
+- **Question:** actual stop/release rolled back with post-commit checkpoint required
+- **Options:** relax the core ledger invariant; provide the existing truthful Worker acceptance checkpoint for scoped controls
+- **Chose:** stop and release persist run/task/dispatch acceptance in the same transaction as their requested state before asynchronous identity/archive/close effects. Method-specific receipts still distinguish stop, release and start.
+- **Why:** a crash between acceptance and close must remain inspectable without replaying an uncertain effect. No new ledger or fake process evidence is needed.
+- **Evidence:** actual API gate artifact://157, core.ts mutate guard; workers/lifecycle.ts controlCheckpoint and both mutation options. Post-fix gate pending.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the core introduces a richer typed control checkpoint without losing atomic acceptance
+- **Source:** assumed — autonomous
+
+## D21: Read structured authority from its genuine kernel lease registry
+- **Question:** real native deferred session existed but placement could never obtain its identity
+- **Options:** fabricate worker identity; poll terminal-only getter; include the actual current structured lease in the kernel identity getter
+- **Chose:** the kernel identity getter reads the live structured registry entry with current epoch/session/source checks. No worker-side identity fallback, copied token or status-based attestation; no unnecessary public lease identity field.
+- **Why:** the private runtime probe returned placing_unknown/no live runtime identity with no native requests or messages. Source inspection found openStructuredLease already owns the exact real identity, while the current getter consulted terminals only. Waiting cannot make an omitted registry branch appear.
+- **Evidence:** FixNativeStartEvidence isolated raw CLI/request-show/worker-show/session-list/native-wire probe, cleanup completed; daemon/session-authority.ts openStructuredLease/sessionIdentity; existing runtime-authority.test.ts structured lease lifecycle regression. Full native post-fix verification pending.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** structured lease ownership/liveness changes in the public kernel contract
+- **Source:** locked by core D4/D15
+
+## D22: Recover a source overwrite narrowly and preserve unrelated metadata
+- **Question:** an implementer accidentally replaced contracts.ts with tool-request JSON during investigation
+- **Options:** broad checkout/reset; restore the single corrupted file after exact blob checks and preserve all other work
+- **Chose:** paused both affected workers, cancelled the offending task, preserved the129-byte payload/incident record outside the repo, and restored only contracts.ts from verified current HEAD81db1e70 baseline blob3ef7cf7185eaf4cc7f3c400c29dd5f2d1564ab46. No reset/clean or unrelated metadata removal. Further Serena/MCP calls are excluded for this continuation.
+- **Why:** the corrupt blob4e4ef3b84f852b09d8d8bf7cd4e0fafe6520ccef was exact-matched immediately before recovery; other in-scope changes remained intact. Invocation-versus-routing root cause is not independently established.
+- **Evidence:** /tmp/quirky-workers-lane9.3G1efn/contracts-overwrite-incident.json and contracts-overwrite-payload.json; restored941lines/27363bytes before the subsequent intentional checkpoint comment edit.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a later diff identifies additional incident-attributable damage
+- **Source:** assumed — autonomous
+
+## D23: Create worker tabs atomically without stealing focus, and pin the task label
+- **Question:** the actual built UI changed coordinator selection to the new worker and hid the meaningful Task title behind provider OSC
+- **Options:** restore the prior selection after the fact; mutate layout storage; create through the public serialized terminal/newTab activate:false path and use public renameTab
+- **Chose:** extend that existing public tab path with canonical model/options launch picks and explicit session title, then create fresh terminal workers with activate:false. After real custody exists, rename the exact returned tab to the meaningful worker Task title. Structured and external/reused user tabs keep their existing behavior.
+- **Why:** restoring focus would race real user selection and allow transient theft. The existing layout transaction already preserves active group/tab/recent; customTitle already has documented precedence over OSC without changing generic title semantics.
+- **Evidence:** actual private built-UI smoke at /private/tmp/qa-92Zh1R/q: selected tab-3 before worker-start, tab-7 afterward; Session.title was meaningful while rendered tab label was Claude Code. Public terminal/newTab, paneOf and renameTab schemas; layout/service.ts and titles.ts. Source fix and regression in progress.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** the public session creation path gains an equally atomic explicit background-tab contract
+- **Source:** locked by orchestration.md placement/focus and meaningful-title behavior
+
+## D24: Treat provider-acknowledged native turns as distinct from queued user journal input
+- **Question:** a held native turn has no assistant/tool/result yet, despite a genuine successful turn/start response
+- **Options:** count every user message; wait for assistant text; recognize the existing native acknowledgement under exact fresh lease/thread/input checks
+- **Chose:** only a fresh Codex user journal entry whose exact prompt, turn/start or turn/steer receipt, current provider thread and current lease match is positive native turn evidence. The producer appends it only after validating the real server turn ID. Generic Claude user journal entries remain insufficient.
+- **Why:** a held acknowledged native turn has started even before generating output. Requested status or unacknowledged queued input is not that fact.
+- **Evidence:** codex-runner.ts submitInput295-320; actual isolated native probe reached ready/input_accepted with one gpt-5.6-luna/high turn, exact child report, guarded release and archived read. Runtime submission re-attests the exact incarnation after observation.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** the provider-neutral public turn observation API exposes equivalent typed acknowledgement evidence
+- **Source:** assumed — autonomous
+
+## D25: Preserve actual UI custody proof without claiming a formal dogfood pass
+- **Question:** how to verify the renderer's physical-input safety under the aged-item rule
+- **Options:** rely on fake pane tests; start a new formal dogfood campaign; exercise the changed real built surface directly
+- **Chose:** built the real UI/desktop, opened a private managed headless Chromium tab against the private daemon, clicked the worker terminal and typed physical keyboard input. Custody changed owned→user_owned/retained before release. The actual child reported completion; coordinator release returned retained/processAction:none; the same process stayed alive and accepted more visible input. Browser and all private processes were cleaned.
+- **Why:** this proves the renderer→identity→synchronous guard→actual process path while respecting D17. Initial attachment/query traffic left custody owned. Focus/title defects found by this smoke remain tracked under D23 until fixed and re-exercised.
+- **Evidence:** actual browser screenshots omp-sshots-15b770e04d33c0cc.png and omp-sshots-15b770f74fb3c0cd.png; private exact session s_10e0135fb53f / Dispatch ctx_2bda7f6e21b8; build exit0. Two packaging icon-source warnings were emitted, not build failures.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** physical input or custody ordering changes
+- **Source:** assumed — autonomous
+
 ## Progress
-Iteration3: M5 and core contracts/schema merged; combined AC1-20 spec and shared contracts committed through1a75bb8b. Lifecycle component passed23tests/110assertions; output/fleet component passed23tests/159assertions after confirmed fixes. No component committed before the final wave barrier. Starter finishing against replay-safe beforeAccept and explicit driving-submit semantics; core runtime/domain source is still an external integration prerequisite. Parent has uncommitted synchronous input-origin/public terminal/UI code, component composition and real launched-process CLI acceptance fixtures. Actual private-daemon missing-method repros and launched-provider status CLI smoke completed/cleaned; no full worker API/UI acceptance claim. Next: finish starter and core merges, authoritative scope/HEAD audit, integrate real core adapter/manifest/CLI, run all worker end-to-end flows and final affected checks/review, wait deps ready and queue-controlled land. Preserve unattributed .serena/project.local.yml in component trees; never force-delete it as owned. No prepare-only dependency stop.
+Iteration3: worker components committed651605c9/733aa6c7/87e0e424 after scope/HEAD audits; preserved unattributed .serena metadata. Source checkpoints d575d2eb,841f3e08,8796bfbc,ebbfcd33 compose input guards, real core/runtime,29methods/28verbs, CLI and same-store worker migrations. Full manifest parser passes. Assembled worker units59pass/352assertions; merged session/record gate126pass with missing native module, restored exact dependency codex-connection/path, then native runner12pass/49assertions. Actual API gate progresses past authenticated real terminal launch and worker_done, but latest8-scenario gate is3pass/5fail: accepted report leaves Worker ready; stop hits generic live-worker Task guard; release consequently refuses; native path has stale Claude-only restriction; unexpected exit lacks exact observation settlement. Scoped fixers own core.ts and runtime/authority/session proof files, parent owns the acceptance fixture. Public catalog installation refresh and undeclared depth setting root causes were corrected, not bypassed. No full API/UI pass, final suites/typecheck or landing claim. D17 skips unstarted formal review/dogfood; actual mandatory smoke remains. Next: finish integration fixes, prove all reachable real flows, final affected checks, dependency readiness and queue-controlled landing in the same turn.

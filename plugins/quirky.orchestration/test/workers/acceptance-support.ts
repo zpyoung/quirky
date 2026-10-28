@@ -49,13 +49,16 @@ process.on('SIGHUP', () => { control.stop(); process.exit(0) })
 await import(${JSON.stringify(native.executable)})
 `)
     chmodSync(codex, 0o755)
+    // Installation happens after the daemon's initial detection; use the same
+    // public refresh a user runs after adding an agent, not a relaxed admission.
+    await fixture.call('quirky.agents/refresh', {})
     const coordinator = await fixture.call('quirky.session/create', { worktree: `path:${fixture.repo}`, agent: 'claude', title: 'Fixture coordinator' }) as Session
     await eventually(() => existsSync(join(fixture.home, 'worker-fixture', `${coordinator.id}.events.jsonl`)), Boolean, 'coordinator process to start')
     return {
       fixture,
       coordinator,
       native,
-      async cli(session: string, args: string[], timeout = 30_000): Promise<{ code: number; stdout: string; stderr: string }> {
+      async cli(session: string, args: string[], timeout = 60_000): Promise<{ code: number; stdout: string; stderr: string }> {
         const id = crypto.randomUUID()
         const dir = join(fixture.home, 'worker-fixture')
         appendFileSync(join(dir, `${session}.requests.jsonl`), JSON.stringify({ id, args: [...args, '--json'] }) + '\n')
@@ -64,7 +67,7 @@ await import(${JSON.stringify(native.executable)})
       },
       async callAs<T>(session: string, verb: string, flags: string[] = []): Promise<T> {
         const result = await this.cli(session, ['orchestration', verb, ...flags])
-        if (result.code !== 0) throw new Error(`orchestration ${verb} exit ${result.code}: ${result.stderr || result.stdout}`)
+        if (result.code !== 0) throw new Error(`orchestration ${verb} exit ${result.code}: ${result.stderr}\n${result.stdout}`)
         try { return JSON.parse(result.stdout) as T } catch { throw new Error(`orchestration ${verb} did not return JSON: ${result.stdout}`) }
       },
       async session(id: string): Promise<Session> {

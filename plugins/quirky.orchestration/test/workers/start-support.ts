@@ -201,6 +201,7 @@ export function makeWorkerStartHarness(): WorkerStartHarness {
   core = {
     context: pluginContext,
     store,
+    nestedWorkerMaxDepth: 1,
     registerWorkerPort: port => { workerPort = port as WorkerLifecycle },
     requireCoordinator,
     getRun: runId => runId === run.id ? run : (() => { throw error('run_not_found', `Run ${runId} was not found`) })(),

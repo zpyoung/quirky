@@ -215,6 +215,9 @@ function mutationReplay<T extends object>(value: T, requestId: UUID, replayed: b
 export class OrchestrationCore implements OrchestrationWorkerCore {
   readonly context: PluginContext
   readonly store: PluginStore
+  get nestedWorkerMaxDepth(): number {
+    return MAX_NESTED_DEPTH
+  }
   private workerPort: WorkerLifecyclePort | null = null
   private readonly activeMutations = new Map<string, ActiveMutation>()
   private bindingListener: ((sessionId: string, runId: RunId, generation: number) => void) | null = null
@@ -268,6 +271,32 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
     const row = this.store.get<DispatchRecord>('SELECT * FROM dispatches WHERE id = ?', dispatchId)
     if (!row) fail(this.context, 'dispatch_not_found', `Dispatch ${dispatchId} does not exist`, { dispatchId })
     return dispatchRow(row)
+  }
+
+  listDispatches(runId?: RunId): DispatchRow[] {
+    const rows = runId === undefined
+      ? this.store.all<DispatchRecord>('SELECT * FROM dispatches ORDER BY created_at DESC, id DESC')
+      : this.store.all<DispatchRecord>('SELECT * FROM dispatches WHERE run_id = ? ORDER BY created_at DESC, id DESC', runId)
+    return rows.map(dispatchRow)
+  }
+
+  boundRunId(caller: RuntimeCallerEvidence): RunId | null {
+    this.assertEvidence(caller)
+    return this.getBoundRun(caller.runtimeSessionId)?.id ?? null
+  }
+
+  attentionFor(dispatchId: DispatchId): { guidance: boolean; input: boolean; approval: boolean; rootCompletion: boolean } {
+    const row = this.store.get<{ guidance: number; needs_input: number; approval: number; root_completion: number }>(
+      `SELECT
+         EXISTS(SELECT 1 FROM messages m WHERE m.mailbox_kind = 'dispatch' AND m.mailbox_id = d.id AND m.read = 0) AS guidance,
+         EXISTS(SELECT 1 FROM question_threads q WHERE q.dispatch_id = d.id AND q.status = 'pending') AS needs_input,
+         EXISTS(SELECT 1 FROM gates g WHERE g.task_id = d.task_id AND g.status = 'pending') AS approval,
+         EXISTS(SELECT 1 FROM tasks t WHERE t.id = d.task_id AND t.parent_task_id IS NULL AND t.status = 'completed' AND d.status = 'completed') AS root_completion
+       FROM dispatches d WHERE d.id = ?`,
+      dispatchId
+    )
+    if (!row) fail(this.context, 'dispatch_not_found', `Dispatch ${dispatchId} does not exist`, { dispatchId })
+    return { guidance: row.guidance === 1, input: row.needs_input === 1, approval: row.approval === 1, rootCompletion: row.root_completion === 1 }
   }
 
   getDispatchRecord(dispatchId: DispatchId): DispatchRecord {
@@ -507,6 +536,25 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
     }
     const port = this.requireWorkerPort(input.dispatchId)
     const worker = port.transitionWorker(this.store, input)
+    if (input.nextState === 'start_unknown') {
+      const task = this.getTaskRecord(dispatch.task_id as TaskId)
+      if (task.status === 'dispatched') {
+        const otherActiveAttempt = this.store.get<{ id: string }>(
+          `SELECT id FROM dispatches WHERE task_id = ? AND id <> ? AND status IN ('pending', 'dispatched') LIMIT 1`,
+          task.id,
+          dispatch.id
+        )
+        if (!otherActiveAttempt) {
+          const taskUpdate = this.store.run(
+            `UPDATE tasks SET status = 'blocked', completed_at = NULL WHERE id = ? AND status = 'dispatched'`,
+            task.id
+          )
+          if (taskUpdate.changes !== 1) {
+            fail(this.context, 'lifecycle_conflict', `Task ${task.id} changed while its worker start outcome was being reconciled`, { taskId: task.id })
+          }
+        }
+      }
+    }
     if (input.nextState === 'stopping') {
       const at = isoNow()
       const update = this.store.run(
@@ -517,6 +565,18 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
       if (update.changes !== 1) fail(this.context, 'lifecycle_conflict', `Dispatch ${input.dispatchId} changed while it was being stopped`, { dispatchId: input.dispatchId })
       this.fenceDispatchConsumer(input.dispatchId, dispatch.consumer_generation)
       this.closeQuestionsForDispatch(input.dispatchId, at)
+      const otherActiveAttempt = this.store.get<{ id: string }>(
+        `SELECT id FROM dispatches WHERE task_id = ? AND id <> ? AND status IN ('pending', 'dispatched') LIMIT 1`,
+        dispatch.task_id,
+        dispatch.id
+      )
+      const taskStatus = otherActiveAttempt ? 'dispatched' : 'blocked'
+      const taskUpdate = this.store.run(
+        `UPDATE tasks SET status = ?, completed_at = NULL WHERE id = ?`,
+        taskStatus,
+        dispatch.task_id
+      )
+      if (taskUpdate.changes !== 1) fail(this.context, 'lifecycle_conflict', `Task ${dispatch.task_id} changed while its worker was being stopped`, { taskId: dispatch.task_id })
       this.dispatchFencedListener?.(input.dispatchId)
     }
     return worker
@@ -731,9 +791,13 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
       status === 'completed'
         ? { dispatchId: dispatch.id as DispatchId, expectedState: dispatch.status, nextState: 'completed', at }
         : { dispatchId: dispatch.id as DispatchId, expectedState: dispatch.status, nextState: 'failed', failureClass: 'worker_report', failureReason: 'worker_report', at },
-      true,
+      false,
       false
     )
+    if (dispatch.supervised) {
+      worker = this.requireWorkerPort(dispatch.id as DispatchId).workerForDispatch(this.store, dispatch.id as DispatchId)
+      if (!worker) fail(this.context, 'worker_port_unavailable', `supervised Dispatch ${dispatch.id} has no settled worker record`, { dispatchId: dispatch.id })
+    }
     this.store.run(`UPDATE tasks SET status = ?, result_json = ?, completed_at = ? WHERE id = ?`, input.outcome === 'succeeded' ? 'completed' : 'failed', jsonText(result), input.outcome === 'succeeded' ? at : null, task.id)
     this.closeQuestionsForTask(task.id, at)
     if (input.outcome === 'succeeded') this.promoteReadyTasks(task.run_id)
@@ -1102,8 +1166,8 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
       if (occupied) return { admitted: false, reason: 'task_not_startable', failureCount }
     }
     const depth = this.creatorDepth(caller.runtimeSessionId) + 1
-    if (depth > MAX_NESTED_DEPTH) {
-      return { admitted: false, reason: 'nested_worker_depth_exceeded', attemptedDepth: depth, maximumDepth: MAX_NESTED_DEPTH, failureCount }
+    if (depth > this.nestedWorkerMaxDepth) {
+      return { admitted: false, reason: 'nested_worker_depth_exceeded', attemptedDepth: depth, maximumDepth: this.nestedWorkerMaxDepth, failureCount }
     }
     return { admitted: true, depth, failureCount, retryOfDispatchId: retryOf as DispatchId | null }
   }

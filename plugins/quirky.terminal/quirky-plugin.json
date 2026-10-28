@@ -704,7 +704,16 @@
             },
             "title": {
               "type": "string",
-              "description": "The default title; at most 200 characters."
+              "description": "The initial session title and tab's default title; at most 200 characters."
+            },
+            "model": {
+              "type": "string",
+              "description": "Model to launch the agent with (1 to 128 characters); checked against the agent's catalog."
+            },
+            "options": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Option picks for the model, such as {effort: \"high\"}: up to 16 entries whose values are strings or booleans. Needs `model`."
             },
             "quickCommand": {
               "type": "string",

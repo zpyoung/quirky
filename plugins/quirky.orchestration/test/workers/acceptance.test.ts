@@ -131,7 +131,7 @@ test('fleet continuation stays on its captured Run snapshot while another worker
 
 test('a deferred native structured worker starts one turn and reports through its real CLI tool environment', async () => {
   const { h } = await startRun()
-  const flags = ['--spec', '[hold] Native worker holds until its exact CLI report.', '--task-title', 'Native worker', '--worktree', 'current', '--agent', 'codex', '--mode', 'structured', '--timeout-ms', '3000']
+  const flags = ['--spec', '[hold] Native worker holds until its exact CLI report.', '--task-title', 'Native worker', '--worktree', 'current', '--agent', 'codex', '--mode', 'structured', '--model', 'gpt-5.6-luna', '--effort', 'high', '--timeout-ms', '3000']
   const receipt = await h.callAs<MutationResult<WorkerStartReceipt>>(h.coordinator.id, 'worker-start', flags)
   expect(receipt.state).toBe('ready')
   expect(receipt.mode.mode).toBe('structured')
@@ -144,6 +144,9 @@ test('a deferred native structured worker starts one turn and reports through it
   expect(replayed.dispatchId).toBe(receipt.dispatchId)
   const nativeTurns = h.native.requests().filter((request) => request.method === 'turn/start')
   expect(nativeTurns).toHaveLength(1)
+  expect(h.native.requests().find((request) => request.method === 'thread/start')?.params?.model).toBe('gpt-5.6-luna')
+  expect(nativeTurns[0]?.params?.model).toBe('gpt-5.6-luna')
+  expect(nativeTurns[0]?.params?.effort).toBe('high')
   const completed = await report(h, session, receipt)
   expect(completed.report.status).toBe('accepted')
   const read = await h.callAs<WorkerReadResult>(h.coordinator.id, 'worker-read', ['--dispatch', receipt.dispatchId])
@@ -166,7 +169,7 @@ test('a certified unexpected worker exit records its cause and wakes the coordin
   expect(before.sessionId).toBe(worker.session)
   expect(before.live).toBe(true)
   expect(before.processIncarnation).toBe(worker.shown.terminalResource?.processIncarnation)
-  process.kill(started.pid, 'SIGTERM')
+  process.kill(started.pid, 'SIGKILL')
   const failed = await eventually(
     () => h.fixture.call('quirky.orchestration/workerShow', { dispatchId: worker.receipt.dispatchId }) as Promise<WorkerShowResult>,
     (shown) => shown.worker?.stage === 'process_exited',
@@ -186,4 +189,24 @@ test('a certified unexpected worker exit records its cause and wakes the coordin
   const retained = await h.callAs<MutationResult<WorkerControlResult>>(h.coordinator.id, 'worker-retain', ['--dispatch', worker.receipt.dispatchId])
   expect(retained.state).toBe('retained')
   await h.callAs(h.coordinator.id, 'check', ['--ack', delivery.deliveryId])
+}, 90_000)
+
+test('an explicit failed worker report settles without consuming infrastructure retry budget', async () => {
+  const { h, run } = await startRun()
+  const worker = await startWorker(h, 'Report an explicit task failure.')
+  const completion = await report(h, worker.session, worker.receipt, 'failed')
+  expect(completion.report.status).toBe('accepted')
+  const failed = await h.fixture.call('quirky.orchestration/workerShow', { dispatchId: worker.receipt.dispatchId }) as WorkerShowResult
+  expect(failed.worker?.state).toBe('failed')
+  expect(failed.dispatch.status).toBe('failed')
+  expect(failed.dispatch.failureCount).toBe(0)
+  const tasks = await h.callAs<{ tasks: TaskRow[] }>(h.coordinator.id, 'task-list', ['--run', run.id])
+  expect(tasks.tasks.find((task) => task.id === worker.receipt.taskId)?.result).toMatchObject({ kind: 'worker_report', outcome: 'failed', dispatchId: worker.receipt.dispatchId })
+  const retry = await h.callAs<MutationResult<WorkerStartReceipt>>(h.coordinator.id, 'worker-start', ['--task', worker.receipt.taskId, '--retry-of', worker.receipt.dispatchId, '--worktree', 'current', '--agent', 'claude', '--timeout-ms', '3000'])
+  expect(retry.state).toBe('ready')
+  const retried = await h.fixture.call('quirky.orchestration/workerShow', { dispatchId: retry.dispatchId }) as WorkerShowResult
+  expect(retried.dispatch.retryOfDispatchId).toBe(worker.receipt.dispatchId)
+  expect(retried.dispatch.failureCount).toBe(0)
+  expect(await h.ptyAlive(worker.session)).toBe(false)
+  await h.callAs(h.coordinator.id, 'worker-abandon', ['--dispatch', retry.dispatchId])
 }, 90_000)
