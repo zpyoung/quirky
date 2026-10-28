@@ -21,6 +21,7 @@ export interface ServiceCoordinatorPort {
   serviceRunCreate(params: ServiceMethodInputs['serviceRunCreate'], pluginId: string): MaybePromise<ServiceMethodResults['serviceRunCreate']>
   /** Rechecks ownership before collecting or returning workers/questions. */
   serviceRunShow(params: ServiceMethodInputs['serviceRunShow'], pluginId: string, caller: PluginCaller): MaybePromise<ServiceMethodResults['serviceRunShow']>
+  serviceRegisterSubmissionPreflight(params: ServiceMethodInputs['serviceRegisterSubmissionPreflight'], principal: ServiceCoordinatorPrincipal): MaybePromise<ServiceMethodResults['serviceRegisterSubmissionPreflight']>
   serviceWorkerStart(params: ServiceMethodInputs['serviceWorkerStart'], principal: ServiceCoordinatorPrincipal): MaybePromise<ServiceMethodResults['serviceWorkerStart']>
   serviceCheck(params: ServiceMethodInputs['serviceCheck'], principal: ServiceCoordinatorPrincipal): MaybePromise<ServiceMethodResults['serviceCheck']>
   serviceWorkerRelease(params: ServiceMethodInputs['serviceWorkerRelease'], principal: ServiceCoordinatorPrincipal): MaybePromise<ServiceMethodResults['serviceWorkerRelease']>
@@ -63,6 +64,7 @@ export function createServiceHandlers(port: ServiceCoordinatorPort): ServiceMeth
     serviceWorkerRelease: (params, caller) => port.serviceWorkerRelease(params, ownedCoordinator(port, caller, params.runId)),
     serviceWorkerStop: (params, caller) => port.serviceWorkerStop(params, ownedCoordinator(port, caller, params.runId)),
     serviceReply: (params, caller) => port.serviceReply(params, ownedCoordinator(port, caller, params.runId)),
-    serviceSend: (params, caller) => port.serviceSend(params, ownedCoordinator(port, caller, params.runId))
+    serviceSend: (params, caller) => port.serviceSend(params, ownedCoordinator(port, caller, params.runId)),
+    serviceRegisterSubmissionPreflight: (params, caller) => port.serviceRegisterSubmissionPreflight(params, ownedCoordinator(port, caller, params.runId))
   }
 }

@@ -6,7 +6,6 @@ import type {
   DispatchId,
   DispatchRow,
   DispatchStatus,
-  DispatchTransitionInput,
   JsonValue,
   MailboxAddress,
   MessageId,
@@ -919,7 +918,64 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
     return this.getDispatch(dispatchId)
   }
 
+  /** Read-only sender, Dispatch, and worker-state fence used before an asynchronous submission hook. */
+  preflightWorkerDone(input: WorkerDoneReportInput, caller: RuntimeCallerEvidence): WorkerReportResult | null {
+    const dispatch = this.store.get<DispatchRecord>('SELECT * FROM dispatches WHERE id = ?', input.dispatchId)
+    if (!dispatch) return { status: 'rejected', reason: 'unknown_dispatch', audited: true }
+    const task = this.store.get<TaskRecord>('SELECT * FROM tasks WHERE id = ?', input.taskId)
+    if (!task) return { status: 'rejected', reason: 'unknown_task', audited: true }
+    if (task.id !== dispatch.task_id) return { status: 'rejected', reason: 'task_dispatch_mismatch', audited: true }
+    if (dispatch.assignee_session_id === null || caller.callerSessionId !== dispatch.assignee_session_id) {
+      return { status: 'rejected', reason: 'sender_not_assignee', audited: true }
+    }
+    if (
+      caller.runtimeSessionId !== dispatch.assignee_session_id ||
+      caller.attestation.runtimeEpoch !== dispatch.runtime_epoch ||
+      caller.attestation.processIncarnation !== dispatch.process_incarnation
+    ) {
+      return { status: 'rejected', reason: 'worker_identity_changed', audited: true }
+    }
+    const latest = this.store.get<{ id: string }>(
+      `SELECT id FROM dispatches WHERE task_id = ? ORDER BY created_at DESC, id DESC LIMIT 1`,
+      dispatch.task_id,
+    )
+    if (latest?.id !== dispatch.id) return { status: 'rejected', reason: 'stale_dispatch', audited: true }
+    if (finalDispatch(dispatch.status)) {
+      const prior = jsonOf<TaskResult | null>(task.result_json, null)
+      if (prior?.kind === 'worker_report' && prior.dispatchId === dispatch.id && prior.outcome === input.outcome) {
+        const worker = dispatch.supervised ? this.requireWorkerPort(dispatch.id).workerForDispatch(this.store, dispatch.id) : null
+        return { status: 'duplicate', task: taskRow(task), dispatch: dispatchRow(dispatch), worker }
+      }
+      return { status: 'rejected', reason: 'inactive_dispatch', audited: true }
+    }
+    const current = this.store.get<{ id: string }>(
+      `SELECT id FROM dispatches
+       WHERE assignee_session_id = ? AND status IN ('pending', 'dispatched')
+       ORDER BY depth DESC, created_at DESC, id DESC LIMIT 1`,
+      dispatch.assignee_session_id,
+    )
+    if (current?.id !== dispatch.id) return { status: 'rejected', reason: 'sender_not_assignee', audited: true }
+    if (dispatch.status !== 'pending' && dispatch.status !== 'dispatched') {
+      return { status: 'rejected', reason: 'dispatch_inactive', audited: true }
+    }
+    if (task.status !== 'dispatched' && task.status !== 'blocked') {
+      return { status: 'rejected', reason: 'inactive_dispatch', audited: true }
+    }
+    if (dispatch.supervised) {
+      const worker = this.requireWorkerPort(dispatch.id as DispatchId).workerForDispatch(this.store, dispatch.id as DispatchId)
+      if (!worker) fail(this.context, 'worker_port_unavailable', `supervised Dispatch ${dispatch.id} has no worker record`, { dispatchId: dispatch.id })
+      if (worker.state === 'stopping' || worker.state === 'stopped' || worker.state === 'abandoned' ||
+        (worker.state === 'stop_unknown' && worker.stage === 'stopping') ||
+        (worker.state === 'failed' && input.outcome !== 'succeeded') || worker.state === 'succeeded') {
+        return { status: 'rejected', reason: 'dispatch_inactive', audited: true }
+      }
+    }
+    return null
+  }
+
   reportWorkerDone(input: WorkerDoneReportInput, caller: RuntimeCallerEvidence): WorkerReportResult {
+    const preflight = this.preflightWorkerDone(input, caller)
+    if (preflight !== null) return preflight
     const dispatch = this.store.get<DispatchRecord>('SELECT * FROM dispatches WHERE id = ?', input.dispatchId)
     if (!dispatch) return { status: 'rejected', reason: 'unknown_dispatch', audited: true }
     const task = this.store.get<TaskRecord>('SELECT * FROM tasks WHERE id = ?', input.taskId)

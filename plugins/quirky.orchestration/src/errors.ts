@@ -43,6 +43,28 @@ export type OrchestrationReason =
   | 'cursor_invalid'
   | 'no_active_sender_terminal'
   | 'recipient_unreachable'
+  | 'peer_invalid_endpoint'
+  | 'peer_tls_required'
+  | 'peer_invalid_response'
+  | 'peer_invalid_call'
+  | 'peer_plugin_only'
+  | 'peer_invalid_listener'
+  | 'peer_invalid_credential'
+  | 'peer_listener_failed'
+  | 'peer_listener_unavailable'
+  | 'peer_invalid_pairing'
+  | 'peer_pin_mismatch'
+  | 'peer_auth_failed'
+  | 'peer_unavailable'
+  | 'peer_not_found'
+  | 'peer_revision_mismatch'
+  | 'peer_incarnation_changed'
+  | 'peer_method_forbidden'
+  | 'peer_request_id_required'
+  | 'peer_operator_required'
+  | 'peer_credential_reuse'
+  | 'peer_unpaired'
+  | 'peer_capability_missing'
 
 const notFoundReasons: Partial<Record<OrchestrationReason, true>> = {
   run_not_found: true,
@@ -52,7 +74,8 @@ const notFoundReasons: Partial<Record<OrchestrationReason, true>> = {
   terminal_not_found: true,
   unknown_task: true,
   unknown_dispatch: true,
-  gate_not_found: true
+  gate_not_found: true,
+  peer_not_found: true
 }
 
 const invalidReasons: Partial<Record<OrchestrationReason, true>> = {
@@ -63,7 +86,15 @@ const invalidReasons: Partial<Record<OrchestrationReason, true>> = {
   missing_dispatch_id: true,
   invalid_outcome: true,
   cursor_invalid: true,
-  inject_rejected: true
+  inject_rejected: true,
+  peer_invalid_endpoint: true,
+  peer_tls_required: true,
+  peer_invalid_response: true,
+  peer_invalid_call: true,
+  peer_invalid_listener: true,
+  peer_invalid_credential: true,
+  peer_invalid_pairing: true,
+  peer_request_id_required: true
 }
 
 /** Preserve a stable orchestration reason in RPC error data as well as actionable text. */
