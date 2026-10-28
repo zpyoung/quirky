@@ -18,6 +18,21 @@ export interface ServiceRun extends RunRow {
   coordinatorSessionId: null
   serviceOwner: ServiceOwner
 }
+/** Exact worker incarnation is exposed only after the service Run ownership check. */
+export interface ServiceWorkerView {
+  dispatchId: string
+  sessionId: string | null
+  processIncarnation: string | null
+  state: 'live' | 'exited' | 'unverifiable'
+  lastContactAtMs: number | null
+}
+export interface ServiceQuestionView extends QuestionThreadRow { body: string }
+/** Non-consuming projection: no delivery acknowledgement or consumer-generation mutation. */
+export interface ServiceRunDetail {
+  run: ServiceRun
+  workers: readonly ServiceWorkerView[]
+  questions: readonly ServiceQuestionView[]
+}
 export interface ServiceRunCreateParams extends MutationRequest { key: string; objective: string }
 export interface ServiceRunShowParams { runId: RunId }
 export type ServiceWorkerStartParams = Omit<WorkerStartParams, 'from' | 'terminal' | 'runId'> & { runId: RunId }
@@ -44,9 +59,9 @@ export interface ServiceMethodInputs {
 }
 export interface ServiceMethodResults {
   serviceRunCreate: MutationResult<{ run: ServiceRun }>
-  serviceRunShow: { run: ServiceRun }
+  serviceRunShow: ServiceRunDetail
   serviceWorkerStart: MutationResult<WorkerStartReceipt>
-  serviceCheck: CheckResult & { questions: readonly QuestionThreadRow[] }
+  serviceCheck: CheckResult & { questions: readonly ServiceQuestionView[] }
   serviceWorkerRelease: MutationResult<WorkerControlResult>
   serviceWorkerStop: MutationResult<WorkerControlResult>
   serviceReply: ReplyResult

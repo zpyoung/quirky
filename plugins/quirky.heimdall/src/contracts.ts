@@ -2,6 +2,8 @@ import type { PluginContext, PluginStore, Schema } from '@quirky/protocol'
 
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json }
 export type CapabilityMode = 'off' | 'gated' | 'on'
+/** Optional owner configuration is persisted by core; owner execution belongs to the owner layer. */
+export interface OwnerConfig { agent: 'claude'; model?: string; effort?: string }
 export interface BudgetPolicy { wallClockActiveMs: number | null; turns: number | null }
 export interface BudgetUsage { activeMs: number; turns: number; exhausted: 'budget-wall-clock' | 'budget-turns' | null }
 export type PacingTier = 'rapid' | 'active' | 'idle' | 'stopped'
@@ -30,10 +32,14 @@ export interface ExecuteContext {
   dispatchWorker(request: WorkerRequest): Promise<DispatchResult>
 }
 export type StopResult = { kind: 'terminal'; state: string; reason: string } | { kind: 'park'; reason: ParkReason; detail: string } | null
-export interface EnrollmentInput { kind: string; kindPayload: Json; capabilities?: Record<string, CapabilityMode>; budget?: BudgetPolicy }
+export interface EnrollmentInput {
+  kind: string; kindPayload: Json; capabilities?: Record<string, CapabilityMode>; budget?: BudgetPolicy
+  owner?: OwnerConfig; ownerInterventionCapability?: CapabilityMode
+}
 export interface AuthorizedEnrollment {
   workspaceKey: string; workspacePath: string; executionHostId: string; schedulerOwner: string
   repoId?: string | null; worktreeId?: string | null; kindPayload: Json; undo?: Json
+  owner?: OwnerConfig; ownerInterventionCapability?: CapabilityMode
 }
 export interface Enrollment extends AuthorizedEnrollment {
   watcherId: string; kind: string; enabled: boolean; paused: boolean; commandRevision: number
