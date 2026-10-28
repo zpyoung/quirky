@@ -30,9 +30,12 @@ beforeEach(() => {
   mkdirSync(outputDir)
   const testHome = join(scratch, 'home')
   mkdirSync(testHome)
+  const quirkyHome = join(scratch, 'quirky-home')
+  mkdirSync(quirkyHome)
   childPidFile = join(scratch, 'review-child.pid')
   reviewStartedFile = join(scratch, 'review-started')
   setEnv('HOME', testHome)
+  setEnv('QUIRKY_HOME', quirkyHome)
   setEnv('XDG_CONFIG_HOME', join(testHome, '.config'))
   setEnv('UI_REVIEW_FAKE_MODE', 'pass')
   setEnv('UI_REVIEW_FAKE_CHILD_PID', childPidFile)
@@ -81,8 +84,7 @@ function capturePng(theme: 'dark' | 'light'): Buffer {
 }
 
 function manifest(): CaptureManifest {
-  const targetsDir = join(scratch, 'captures')
-  mkdirSync(targetsDir)
+  const targetsDir = mkdtempSync(join(scratch, 'captures-'))
   const captures = (['dark', 'light'] as const).map((theme) => {
     const path = join(targetsDir, `${theme}.png`)
     writeFileSync(path, capturePng(theme))
@@ -145,7 +147,7 @@ if (mode === 'tamper-image') {
   const metadata = JSON.parse(prompt.slice(prompt.indexOf(marker) + marker.length));
   fs.appendFileSync(metadata.imagePath, 'tampered');
 }
-let score = mode === 'bad-score' ? 101 : mode === 'low-dark' && prompt.includes('\"theme\":\"dark\"') ? 84 : 100;
+let score = mode === 'bad-score' ? 101 : mode === 'boundary' ? 85 : mode === 'low-dark' && prompt.includes('\"theme\":\"dark\"') ? 84 : 100;
 const assessment = {
   targetVisible: mode !== 'target-hidden',
   imagesRead: mode !== 'images-not-read',
@@ -364,4 +366,5 @@ test('timed-out reviewer and its owned child are terminated', async () => {
   const childPid = Number(readFileSync(childPidFile, 'utf8'))
   const processState = Bun.spawnSync(['ps', '-o', 'stat=', '-p', String(childPid)])
   expect(processState.exitCode === 1 || processState.stdout.toString().trim().startsWith('Z')).toBe(true)
+  rmSync(childPidFile)
 })

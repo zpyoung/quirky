@@ -30,6 +30,7 @@ Rejected alternatives: screenshot mock stories omit actual mounting/state; pixel
 - `--capture-only` produces capture evidence without model review and reports `not-reviewed`; it never emits a visual-pass claim. A separate `--manifest` review-only mode reviews an existing capture manifest without launching the app, after validating image digests and coverage.
 - `--help` describes prerequisites, flags and exit codes without starting anything.
 - Exit 0: requested capture-only inventory captured successfully, or every requested image reviewed and passed. Exit 1: coverage/capture/mount/visual-score failure. Exit 2: invalid arguments, missing prerequisites, malformed/tampered evidence, failed reviewer or unexpected runtime failure. Capture-only output is distinctly not-reviewed even though successful capture exits 0.
+- Review-only validation failures are returned in `review-report.json` with status `error` and no accepted captures; `ui-review-result.json` records exit 2 and the diagnostic. `ui-review-error.json` is reserved for thrown runtime failures or interruption. Reviewer subprocesses explicitly inherit the current process environment, including runtime configuration changes.
 
 ## Scenarios and acceptance criteria
 

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { delimiter, join } from 'node:path'
 import type { CaptureManifest, ReviewReport } from './contracts'
 import { runUiReview, type SignalSource } from '../ui-review'
 
@@ -205,20 +205,62 @@ describe('ui review CLI boundary', () => {
     expect(persistedError.diagnostic).not.toContain('field-secret')
     expect(JSON.parse(readFileSync(join(outputDir, 'ui-review-result.json'), 'utf8'))).toMatchObject({ status: 'error', exitCode: 2 })
   })
-  test('rejects malformed review-only input and preserves the validation diagnostic', async () => {
+  test('persists malformed evidence as an error report without starting capture or reviewer', async () => {
     const parent = makeTempDir()
     const manifestPath = join(parent, 'malformed.json')
     const outputDir = join(parent, 'malformed-review')
+    const homeDir = join(parent, 'home')
+    const configDir = join(parent, 'config')
+    const reviewerBinDir = join(parent, 'reviewer-bin')
+    const reviewerStartedPath = join(parent, 'reviewer-started')
+    const fakeReviewerPath = join(reviewerBinDir, 'pi-watch')
+    mkdirSync(reviewerBinDir)
     writeFileSync(manifestPath, JSON.stringify({ schemaVersion: 99 }))
+    writeFileSync(fakeReviewerPath, `#!/bin/sh\n: > "${reviewerStartedPath}"\n`)
+    chmodSync(fakeReviewerPath, 0o700)
 
-    const exitCode = await runUiReview([
-      '--author-family', 'openai', '--output', outputDir, '--manifest', manifestPath
-    ])
+    const originalEnv = {
+      PATH: process.env.PATH,
+      HOME: process.env.HOME,
+      QUIRKY_HOME: process.env.QUIRKY_HOME,
+      XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME
+    }
+    process.env.PATH = [reviewerBinDir, originalEnv.PATH].filter((value): value is string => Boolean(value)).join(delimiter)
+    process.env.HOME = homeDir
+    process.env.QUIRKY_HOME = join(parent, 'quirky-home')
+    process.env.XDG_CONFIG_HOME = configDir
+
+    let captureStarted = false
+    let exitCode: number
+    try {
+      exitCode = await runUiReview([
+        '--author-family', 'openai', '--output', outputDir, '--manifest', manifestPath
+      ], {
+        captureApplication: async () => {
+          captureStarted = true
+          throw new Error('capture should not start in manifest mode')
+        },
+        stdout: () => undefined,
+        stderr: () => undefined
+      })
+    } finally {
+      for (const [name, value] of Object.entries(originalEnv)) {
+        if (value === undefined) delete process.env[name]
+        else process.env[name] = value
+      }
+    }
 
     expect(exitCode).toBe(2)
-    const errorOutput = JSON.parse(readFileSync(join(outputDir, 'ui-review-error.json'), 'utf8')) as { diagnostic: string; operation: string }
-    expect(errorOutput.operation).toBe('review')
-    expect(errorOutput.diagnostic.length).toBeGreaterThan(0)
+    expect(captureStarted).toBe(false)
+    expect(existsSync(reviewerStartedPath)).toBe(false)
+    expect(JSON.parse(readFileSync(join(outputDir, 'review-report.json'), 'utf8'))).toMatchObject({
+      status: 'error',
+      captures: []
+    })
+    expect(JSON.parse(readFileSync(join(outputDir, 'ui-review-result.json'), 'utf8'))).toMatchObject({
+      status: 'error',
+      exitCode: 2
+    })
   })
   test('maps a below-threshold image to exit 1 and persists the failed review', async () => {
     const outputDir = join(makeTempDir(), 'low-score')
