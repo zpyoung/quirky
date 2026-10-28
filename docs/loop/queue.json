@@ -1296,8 +1296,7 @@
       "deps": [
         "m7-sweep-editor-source-control"
       ],
-      "status": "in-progress",
-      "lane": 3
+      "status": "done"
     },
     {
       "id": "m7-sweep-terminal-completion",
