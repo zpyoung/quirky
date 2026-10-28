@@ -8,10 +8,10 @@ const approval = (scope: object, status = 'approved', seq = 1) => ({ kind: 'appr
 test('native approval cannot authorize a separate gated owner intervention', () => {
   const enrollment = { ownerInterventionCapability: 'gated' } as OwnerEnrollment
   const native = approval({ actionKind: 'merge', contentIdentity: 'sha1', evidenceKey: 'review1', preparedCommitSha: 'commit1' })
-  expect(gateOwnerAction(enrollment, action, [native])).toEqual({ verdict: 'escalate', reason: 'awaiting-owner-approval' })
+  expect(gateOwnerAction(enrollment, action, [native])).toEqual({ verdict: 'hold', reason: 'awaiting-owner-approval' })
   const owner = approval(ownerApprovalScope(action), 'approved', 2)
   expect(gateOwnerAction(enrollment, action, [native, owner])).toEqual({ verdict: 'allow' })
-  expect(gateOwnerAction(enrollment, { ...action, evidenceKey: 'review2' }, [owner]).verdict).toBe('escalate')
+  expect(gateOwnerAction(enrollment, { ...action, evidenceKey: 'review2' }, [owner]).verdict).toBe('hold')
 })
 
 test('disabled owner authority cannot be revived by a remembered approval', () => {
@@ -25,5 +25,5 @@ test('a later rejection revokes only the exact owner scope', () => {
   const enrollment = { ownerInterventionCapability: 'gated' } as OwnerEnrollment
   const scope = ownerApprovalScope(action)
   const entries = [approval(scope), approval(scope, 'rejected', 3), approval({ ...scope, evidenceKey: 'other' }, 'approved', 5)]
-  expect(gateOwnerAction(enrollment, action, entries).verdict).toBe('escalate')
+  expect(gateOwnerAction(enrollment, action, entries).verdict).toBe('hold')
 })
