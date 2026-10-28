@@ -24,7 +24,7 @@ export type ListRowProps = {
   mainLabel?: string
   onClick?: () => void
 }
-export type SectionHeaderProps = { title: string; actions?: ReactNode }
+export type SectionHeaderProps = Omit<HTMLAttributes<HTMLElement>, 'title'> & { title: string; titleTooltip?: string; actions?: ReactNode }
 export type TabItem = { id: string; label: string; disabled?: boolean; panelId?: string }
 export type TabsProps = { label: string; items: readonly TabItem[]; value: string; onChange: (id: string) => void }
 export type MenuItem = {
