@@ -33,6 +33,7 @@ type Fake = {
   callsTo(method: string): Call[]
   announce(change: Partial<DockState>): void
   completeSend(recoveredDraft: string, outcome: SendResult['outcome']): void
+  resolveSend(outcome: SendResult['outcome'], accepted: boolean): void
   announceAgentStatus(row: { sessionId: string; state?: string } | null): void
 }
 
@@ -81,6 +82,9 @@ function fakeContext(options: FakeOptions = {}): Fake {
   let fileOrdinal = 0
   const sent: { id?: string; text: string; params: Record<string, unknown> }[] = []
   let completeDeferredSend: ((recoveredDraft: string, outcome: SendResult['outcome']) => void) | null = null
+  let resolveDeferredSend: ((outcome: SendResult['outcome'], accepted: boolean) => void) | null = null
+  let deferredSendId: string | null = null
+  let deferredSendText: string | null = null
 
   const publish = () => {
     const event = { type: 'quirky.terminal-dock/changed', data: { pane: current.pane, state: current } } as QuirkyEvent
@@ -106,18 +110,29 @@ function fakeContext(options: FakeOptions = {}): Fake {
       const id = typeof params.id === 'string' ? params.id : 'send-a'
       sent.push({ id, text, params })
       if (options.deferSend) {
+        deferredSendId = id
+        deferredSendText = text
         commit({ draft: '', attachments: [], activeSend: { id, phase: 'submitting' } })
         const { promise, resolve } = Promise.withResolvers<unknown>()
+        const finish = (outcome: SendResult['outcome'], accepted = true) => resolve({ id, outcome, accepted })
+        resolveDeferredSend = (outcome, accepted) => finish(outcome, accepted)
         completeDeferredSend = (recoveredDraft, outcome) => {
           commit({ draft: recoveredDraft, activeSend: null })
-          resolve({ id, outcome, accepted: true })
+          finish(outcome)
         }
         return promise
       }
       commit({ draft: '', attachments: [], activeSend: null })
       return { id, outcome: options.sendOutcome ?? 'observed-cleared', accepted: true }
     },
-    [`${PLUGIN_METHOD}cancel`]: () => commit({ activeSend: null, queuedSends: [] }),
+    // Queued cancellation recovers synchronously; the send response is released separately.
+    [`${PLUGIN_METHOD}cancel`]: () => {
+      const wasQueued = deferredSendId !== null && current.queuedSends.some((send) => send.id === deferredSendId)
+      const recoveredDraft = wasQueued && deferredSendText !== null
+        ? current.draft === '' ? deferredSendText : `${deferredSendText}\n\n${current.draft}`
+        : current.draft
+      return commit({ draft: recoveredDraft, activeSend: null, queuedSends: [] })
+    },
     [`${PLUGIN_METHOD}history`]: (params) => {
       if (params.direction === 'previous') {
         if (historyCursor < 0) historyReturn = current.draft
@@ -204,11 +219,23 @@ function fakeContext(options: FakeOptions = {}): Fake {
       const event = { type: 'quirky.agent-status/changed', data: { sessionId: current.session, row } } as QuirkyEvent
       for (const listener of listeners) listener(event)
     },
-    completeSend(recoveredDraft: string, outcome: SendResult['outcome']) {
+    completeSend(recoveredDraft, outcome) {
       if (completeDeferredSend === null) throw new Error('no deferred send is active')
       const complete = completeDeferredSend
       completeDeferredSend = null
+      resolveDeferredSend = null
+      deferredSendId = null
+      deferredSendText = null
       complete(recoveredDraft, outcome)
+    },
+    resolveSend(outcome, accepted) {
+      if (resolveDeferredSend === null) throw new Error('no deferred send is active')
+      const resolve = resolveDeferredSend
+      completeDeferredSend = null
+      resolveDeferredSend = null
+      deferredSendId = null
+      deferredSendText = null
+      resolve(outcome, accepted)
     }
   }
 }
@@ -672,5 +699,46 @@ describe('terminal dock composer behavior', () => {
     await act(async () => fake.announceAgentStatus(null))
     await settle()
     expect(view.button('Send')).toBeDefined()
+  })
+
+  test('preserves a cancelled prompt and newer draft when Stop races a queued send', async () => {
+    const fake = fakeContext({ state: baseState({ draft: 'first' }), deferSend: true })
+    const view = await openComposer(fake)
+    await view.key('Enter')
+    await settle()
+    expect(fake.sent[0]?.text).toBe('first')
+
+    const sendId = fake.sent[0]!.id!
+    await act(async () => fake.announce({ activeSend: null, queuedSends: [{ id: sendId, phase: 'queued' }] }))
+    await view.type('second')
+    await view.click(view.button('Stop')!)
+    await settle()
+
+    fake.resolveSend('cancelled', false)
+    await settle()
+    expect(view.editor().value).toBe('first\n\nsecond')
+    expect(view.text()).not.toContain('Send may not have completed.')
+    expect(fake.sent).toHaveLength(1)
+  })
+
+  test('preserves a cancelled prompt and newer draft when Escape races a queued send', async () => {
+    const fake = fakeContext({ state: baseState({ draft: 'first' }), deferSend: true })
+    const view = await openComposer(fake)
+    await view.key('Enter')
+    await settle()
+    expect(fake.sent[0]?.text).toBe('first')
+
+    const sendId = fake.sent[0]!.id!
+    await act(async () => fake.announce({ activeSend: null, queuedSends: [{ id: sendId, phase: 'queued' }] }))
+    await view.type('second')
+    const escape = await view.key('Escape')
+    expect(escape.defaultPrevented).toBe(true)
+    await settle()
+
+    fake.resolveSend('cancelled', false)
+    await settle()
+    expect(view.editor().value).toBe('first\n\nsecond')
+    expect(view.text()).not.toContain('Send may not have completed.')
+    expect(fake.sent).toHaveLength(1)
   })
 })

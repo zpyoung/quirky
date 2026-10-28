@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, symlinkSync, watch, writeFileSync, type FSWatcher } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { QuirkyClient, type Session } from '@quirky/protocol'
+import { HOOK_TOKEN_HEADER, QuirkyClient, type Session } from '@quirky/protocol'
 import { E2eHarness, waitFor } from '../../quirky.terminal/test/e2e-support'
 import { readRuntime, rpcUrl } from '@quirky/protocol/node'
 import { openTab } from '../../quirky.terminal/test/e2e/support'
@@ -117,6 +117,23 @@ export async function launchShell(harness: DockHarness): Promise<Session> {
 export async function enableDock(harness: DockHarness): Promise<void> {
   await harness.call('setting.set', { id: 'setting:quirky.terminal-dock/enabled', value: true })
 }
+
+/** Delivers a real Claude hook through the daemon's authenticated local hook route. */
+export async function postClaudeHook(
+  harness: DockHarness,
+  session: string,
+  payload: Record<string, unknown>
+): Promise<void> {
+  const runtime = readRuntime(harness.home)
+  if (!runtime) throw new Error('dock test daemon is not running')
+  const response = await fetch(`http://127.0.0.1:${runtime.port}/hook/claude?session=${encodeURIComponent(session)}`, {
+    method: 'POST',
+    headers: { [HOOK_TOKEN_HEADER]: runtime.hookToken, 'content-type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+  if (!response.ok) throw new Error(`Claude hook delivery failed with HTTP ${response.status}`)
+}
+
 
 export async function connectUi(harness: DockHarness): Promise<QuirkyClient> {
   const runtime = readRuntime(harness.home)

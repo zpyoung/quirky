@@ -50,7 +50,7 @@ type StatusProjection = {
   source?: string
   restoredUnconfirmed?: boolean
   evidenceAt?: number
-  lead?: { ended?: boolean }
+  lead?: { ended?: boolean; providerSession?: string | null }
   programStatus?: { app?: string } | null
   state?: string
 } | null
@@ -58,7 +58,8 @@ type TransportReport = { noTerminal: boolean; reason: string | null }
 type HostReport = { pane: string; mounted: boolean; focused: boolean; transport?: string; updatedAt: number }
 type ProviderCache = { session: string; agent: string; question: DockQuestion | null; options: DockOptions; readAt: number }
 type CachedTitle = { title: string; source: 'fact' | 'list'; updatedAt: number }
-type FreshEvidence = { source: 'hook' | 'program-app'; value: string; at: number }
+type FreshEvidence = { source: 'hook' | 'program-app'; value: string; at: number; providerSession?: string }
+type HookLeadIdentity = { agent: string; providerSession: string }
 type QuestionOverlay = { id: string; collapsed: boolean; dismissed: boolean }
 type HistoryBrowse = { index: number; savedDraft: string }
 type DriverLease = { owner: string; expiresAt: number; timer: ReturnType<typeof setTimeout> }
@@ -85,6 +86,38 @@ type AttachInput = { path?: string; name?: string; mime?: string; base64?: strin
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
 const statusEnded = (status: StatusProjection) => status?.lead?.ended === true
+const CLAUDE_HOOK_AGENTS: Record<string, true> = { claude: true, openclaude: true }
+const HOOK_EVENT_KEYS = ['hook_event_name', 'hookEventName', 'hook_type', 'hookType', 'event']
+const PROVIDER_ID_CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/
+
+function providerSessionId(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const id = value.trim()
+  if (id === '' || id.length > 512 || id.startsWith('-') || PROVIDER_ID_CONTROL_CHARACTERS.test(id)) return undefined
+  return id
+}
+
+function hookEventName(payload: Record<string, unknown>, fallbackEvent: unknown): string | undefined {
+  for (const key of HOOK_EVENT_KEYS) {
+    const value = payload[key]
+    if (typeof value === 'string' && value !== '') return value
+  }
+  return typeof fallbackEvent === 'string' ? fallbackEvent : undefined
+}
+
+function sessionEndIdentity(agent: string, payload: unknown, fallbackEvent: unknown): HookLeadIdentity | null {
+  if (!Object.hasOwn(CLAUDE_HOOK_AGENTS, agent) || !isObject(payload)) return null
+  if (hookEventName(payload, fallbackEvent) !== 'SessionEnd' || (typeof payload.agent_id === 'string' && payload.agent_id.length > 0)) {
+    return null
+  }
+  const providerSession = providerSessionId(payload.session_id)
+  return providerSession ? { agent, providerSession } : null
+}
+
+function sameLeadIdentity(a: HookLeadIdentity, b: HookLeadIdentity): boolean {
+  return a.agent === b.agent && a.providerSession === b.providerSession
+}
+
 
 function findPaneSession(value: unknown, pane: string): string | null {
   if (!isObject(value)) return null
@@ -166,6 +199,8 @@ export class DockService {
   private readonly manualCandidates = new Map<string, string>()
   private readonly confirmedExits = new Map<string, number>()
   private readonly freshEvidence = new Map<string, FreshEvidence>()
+  private readonly statusLeadIdentities = new Map<string, HookLeadIdentity | null>()
+  private readonly sessionEndCandidates = new Map<string, HookLeadIdentity>()
   private readonly queues = new Map<string, SessionQueue>()
   private readonly sendOperations = new Map<string, Operation>()
   private readonly sendAdmissionTails = new Map<string, Promise<void>>()
@@ -248,10 +283,11 @@ export class DockService {
     const detail = event as unknown as Record<string, unknown>
     if (event.type === 'hook.received') {
       if (typeof detail.sessionId === 'string' && typeof detail.agent === 'string') {
-        this.rememberFreshEvidence(detail.sessionId, detail.agent, 'hook')
+        this.observeHookReceived(detail.sessionId, detail.agent, detail)
       }
       return
     }
+    if (event.type === 'quirky.agent-status/changed' && isObject(detail.data)) this.observeAgentStatusChange(detail.data)
     if (event.type === 'setting.changed' && detail.id === 'setting:quirky.terminal-dock/enabled') {
       const enabledNow = this.enabled()
       if (enabledNow === this.wasEnabled) return
@@ -291,6 +327,75 @@ export class DockService {
       if (this.enabled()) await this.reconcileAll()
     }
   }
+  private observeHookReceived(sessionId: string, agent: string, detail: Record<string, unknown>): void {
+    const payload = isObject(detail.payload) ? detail.payload : null
+    const isClaudeHook = Object.hasOwn(CLAUDE_HOOK_AGENTS, agent)
+    const isClaudeChild = isClaudeHook && typeof payload?.agent_id === 'string' && payload.agent_id.length > 0
+    if (!isClaudeChild) {
+      this.rememberFreshEvidence(
+        sessionId,
+        agent,
+        'hook',
+        isClaudeHook ? providerSessionId(payload?.session_id) : undefined
+      )
+    }
+    if (isClaudeChild) return
+
+    if (hookEventName(payload ?? {}, detail.event) !== 'SessionEnd') this.sessionEndCandidates.delete(sessionId)
+    const candidate = sessionEndIdentity(agent, payload, detail.event)
+    if (!candidate) return
+    const current = this.statusLeadIdentities.get(sessionId)
+    if (current && !sameLeadIdentity(candidate, current)) return
+    this.sessionEndCandidates.set(sessionId, candidate)
+    while (this.sessionEndCandidates.size > MAX_RECOGNITION_SESSIONS) {
+      this.sessionEndCandidates.delete(this.sessionEndCandidates.keys().next().value as string)
+    }
+  }
+
+  private rememberStatusLeadIdentity(sessionId: string, row: Record<string, unknown>): void {
+    const lead = isObject(row.lead) ? row.lead : null
+    const providerSession = providerSessionId(lead?.providerSession)
+    if (row.sessionId !== sessionId || typeof row.agent !== 'string' || !providerSession) {
+      this.rememberNoStatusLead(sessionId)
+      this.sessionEndCandidates.delete(sessionId)
+      return
+    }
+    const identity = { agent: row.agent, providerSession }
+    this.statusLeadIdentities.delete(sessionId)
+    this.statusLeadIdentities.set(sessionId, identity)
+    const candidate = this.sessionEndCandidates.get(sessionId)
+    if (candidate && !sameLeadIdentity(candidate, identity)) this.sessionEndCandidates.delete(sessionId)
+    while (this.statusLeadIdentities.size > MAX_RECOGNITION_SESSIONS) {
+      this.statusLeadIdentities.delete(this.statusLeadIdentities.keys().next().value as string)
+    }
+  }
+
+  private rememberNoStatusLead(sessionId: string): void {
+    this.statusLeadIdentities.delete(sessionId)
+    this.statusLeadIdentities.set(sessionId, null)
+    while (this.statusLeadIdentities.size > MAX_RECOGNITION_SESSIONS) {
+      this.statusLeadIdentities.delete(this.statusLeadIdentities.keys().next().value as string)
+    }
+  }
+
+  private observeAgentStatusChange(detail: Record<string, unknown>): void {
+    const sessionId = detail.sessionId
+    if (typeof sessionId !== 'string') return
+    for (const cached of this.providers.values()) {
+      if (cached.session === sessionId) cached.readAt = 0
+    }
+    if (isObject(detail.row)) {
+      this.rememberStatusLeadIdentity(sessionId, detail.row)
+      return
+    }
+    if (detail.row !== null) return
+    const candidate = this.sessionEndCandidates.get(sessionId)
+    const current = this.statusLeadIdentities.get(sessionId)
+    if (candidate && current && sameLeadIdentity(candidate, current)) this.markConfirmedExit(sessionId)
+    this.sessionEndCandidates.delete(sessionId)
+    this.rememberNoStatusLead(sessionId)
+  }
+
   private onPtyFact(sessionId: string, fact: PtyFact): void {
     if (fact.kind === 'title') {
       this.rememberTitle(sessionId, fact.title, 'fact')
@@ -404,9 +509,19 @@ export class DockService {
       this.manualCandidates.delete(this.manualCandidates.keys().next().value as string)
     }
   }
-  private rememberFreshEvidence(sessionId: string, value: string, source: FreshEvidence['source']): void {
+  private rememberFreshEvidence(
+    sessionId: string,
+    value: string,
+    source: FreshEvidence['source'],
+    providerSession?: string
+  ): void {
     this.freshEvidence.delete(sessionId)
-    this.freshEvidence.set(sessionId, { source, value, at: Date.now() })
+    this.freshEvidence.set(sessionId, {
+      source,
+      value,
+      at: Date.now(),
+      ...(providerSession ? { providerSession } : {})
+    })
     while (this.freshEvidence.size > MAX_RECOGNITION_SESSIONS) {
       this.freshEvidence.delete(this.freshEvidence.keys().next().value as string)
     }
@@ -427,6 +542,8 @@ export class DockService {
     this.manualAgents.delete(sessionId)
     this.manualCandidates.delete(sessionId)
     this.statusStates.delete(sessionId)
+    this.rememberNoStatusLead(sessionId)
+    this.sessionEndCandidates.delete(sessionId)
   }
 
   private liveStatusAgent(status: StatusProjection): string | null {
@@ -471,7 +588,9 @@ export class DockService {
           ? agentForAlias(fresh.value, this.catalog)
           : null
       if (
-        liveAgent && freshAgent === liveAgent && fresh && fresh.at > confirmedAt &&
+        liveAgent && freshAgent === liveAgent && fresh &&
+        (fresh.providerSession === undefined || status?.lead?.providerSession === fresh.providerSession) &&
+        fresh.at > confirmedAt &&
         typeof status?.evidenceAt === 'number' && status.evidenceAt >= fresh.at
       ) {
         this.clearConfirmedExit(session.id)
@@ -618,7 +737,11 @@ export class DockService {
         PROVIDER_READ_DEADLINE_MS,
         'agent status lookup'
       )
-      return isObject(value) ? (value as StatusProjection) : null
+      if (isObject(value)) {
+        if (!this.statusLeadIdentities.has(session.id)) this.rememberStatusLeadIdentity(session.id, value)
+        return value as StatusProjection
+      }
+      return null
     } catch {
       return null
     }
@@ -781,6 +904,8 @@ export class DockService {
     for (const sessionId of this.manualCandidates.keys()) if (!activeSessions.has(sessionId)) this.manualCandidates.delete(sessionId)
     for (const sessionId of this.confirmedExits.keys()) if (!activeSessions.has(sessionId)) this.confirmedExits.delete(sessionId)
     for (const sessionId of this.freshEvidence.keys()) if (!activeSessions.has(sessionId)) this.freshEvidence.delete(sessionId)
+    for (const sessionId of this.statusLeadIdentities.keys()) if (!activeSessions.has(sessionId)) this.statusLeadIdentities.delete(sessionId)
+    for (const sessionId of this.sessionEndCandidates.keys()) if (!activeSessions.has(sessionId)) this.sessionEndCandidates.delete(sessionId)
     const knownPanes = new Set([
       ...this.providers.keys(),
       ...this.overlays.keys(),
