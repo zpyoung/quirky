@@ -1197,8 +1197,7 @@
       "deps": [
         "sa-browser-profiles-settings"
       ],
-      "status": "in-progress",
-      "lane": 3
+      "status": "blocked"
     },
     {
       "id": "sa-browser-pane-native-host-controls",
