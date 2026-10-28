@@ -282,9 +282,8 @@
       "deps": [
         "m6-heimdall-core"
       ],
-      "status": "in-progress",
-      "early": true,
-      "lane": 10
+      "status": "done",
+      "early": true
     },
     {
       "id": "m6-heimdall-owner",
