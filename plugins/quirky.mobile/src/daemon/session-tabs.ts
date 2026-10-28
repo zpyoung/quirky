@@ -91,6 +91,7 @@ function unavailableMethod(error: unknown, pluginId: string, method: string): bo
   const message = error instanceof Error ? error.message : ''
   if (record?.code === RpcErrorCode.MethodNotFound && message === `unknown method: ${pluginId}/${method}`) return true
   if (record?.code === RpcErrorCode.NotFound && message.includes(`no contribution ${pluginId}/${method} is in effect`)) return true
+  if (record?.code === RpcErrorCode.MethodNotFound && message === `unknown method: ${pluginId}/${method}`) return true
   return record?.code === RpcErrorCode.Conflict && (message === `${pluginId} is disabled` || message === `${pluginId} is invalid`)
 }
 

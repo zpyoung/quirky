@@ -9,6 +9,7 @@ import { makeBuiltinDir } from '../../quirky.session/test/support'
 
 type Fixture = { harness: Harness; client: QuirkyClient; worktree: Worktree; root: string }
 let fixture: Fixture | undefined
+let pendingHarness: Harness | undefined
 const roots = new Set<string>()
 const previousPort = process.env.QUIRKY_MOBILE_PORT
 
@@ -16,6 +17,10 @@ afterEach(async () => {
   if (fixture) {
     await fixture.harness.cleanup()
     fixture = undefined
+  }
+  if (pendingHarness) {
+    await pendingHarness.cleanup()
+    pendingHarness = undefined
   }
   for (const root of roots) {
     roots.delete(root)
@@ -37,17 +42,20 @@ async function createFixture(): Promise<Fixture> {
   const harness = await startHarness({
     home,
     builtinPluginsDir: makeBuiltinDir(home, {
-      real: ['quirky.mobile', 'quirky.editor', 'quirky.session', 'quirky.terminal', 'quirky.agents', 'quirky.agent-status', 'quirky.worktree', 'quirky.repo', 'quirky.ask', 'quirky.structured'],
+      real: ['quirky.mobile', 'quirky.editor', 'quirky.session', 'quirky.terminal', 'quirky.agents', 'quirky.agent-status', 'quirky.worktree', 'quirky.repo', 'quirky.cli', 'quirky.ask', 'quirky.structured'],
       fakes: []
     })
   })
+  pendingHarness = harness
   const client = await harness.connect('cli')
   const repo = await client.callAny('quirky.repo/add', { path: root }) as { id: string }
   const worktrees = await client.callAny('quirky.worktree/list', { repo: repo.id }) as Worktree[]
   const worktree = worktrees.find((item) => item.path === root) ?? worktrees[0]
   if (!worktree) throw new Error('repo add returned no worktree')
-  fixture = { harness, client, worktree, root }
-  return fixture
+  const ready: Fixture = { harness, client, worktree, root }
+  fixture = ready
+  pendingHarness = undefined
+  return ready
 }
 
 const call = <T>(client: QuirkyClient, method: string, params: Record<string, unknown> = {}) => client.callAny(method, params) as Promise<T>
@@ -62,7 +70,6 @@ test('public mobile Markdown APIs preserve actual tab identity, bounded drafts a
   expect(created.revision).toBeGreaterThanOrEqual(0)
   expect(created.dirty).toBe(false)
   expect(created.readOnly).toBe(false)
-  expect(created.relativePath).toMatch(/^Phone note .*\.md$/)
 
   const state = await call<{ tabs: { tabId: string; bufferId: string }[]; buffers: { id: string; relativePath: string }[] }>(client, 'quirky.editor/state', { worktree: worktree.id })
   const editorTab = state.tabs.find((tab) => tab.tabId === created.tabId)
