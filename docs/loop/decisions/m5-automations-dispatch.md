@@ -352,5 +352,27 @@
 - **Revisit if:** the kernel changes which lifecycle states grant a valid creating context
 - **Source:** assumed — autonomous
 
+## D33: Preserve badge schema and transient-token security during the third recovery
+- **Question:** Another integration tip added presets, workers and browser-pane contracts while the item was landing
+- **Options:** restore an old Session schema/launch snapshot; compose the public metadata and canonical security changes
+- **Chose:** retain background projection and writes together with withoutSessionToken on launch insert/update/readback. Preserve the canonical single setBadge contribution, name/unread/client-role badge fields and changed-event metadata; add background to its compact Session result schema. Keep canonical pointer9/background10 order. Browser Native/Watch modes do not add a SessionKind.
+- **Why:** The incoming conflict removed an older duplicate badge block, not the background capability. A structural inspection found15unique method IDs and one compact Session result missing background; that property was restored without reintroducing duplicate methods. Incoming structured-runner Progress is historical evidence, not clearance for this merge.
+- **Evidence:** ThirdCatchup read m5-loops-presets D1-D5,D9,D11,D14,D18-D19; m6-orchestration-workers D3-D7,D12,D14-D16,D18-D21,D26-D27; sa-browser-pane D2,D4,D8,D13,D21,D23-D24,D26-D30; structured-runner Progress delta only; records/schema conflict resolutions
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** a later Session result adds metadata without declaring it
+- **Source:** assumed — autonomous
+
+## D34: Pin only the disposable native-protocol stand-in to Bun
+- **Question:** Lane6 reported system Node's missing libllhttp9.3 dependency while9.4 was installed
+- **Options:** change Homebrew/production fallback; let the test depend on that unrelated ABI; explicitly select the known test interpreter
+- **Chose:** the permanent native CLI test rewrites only its generated stand-in interpreter to the running Bun before execution and removes its system-Node PATH prerequisite. Production CLI resolution, startup failure and close/diagnostic behavior are unchanged. No confirmation rerun of the reported ABI failure and no package-manager mutation.
+- **Why:** This test proves the app-server protocol, not system Node installation. Fresh third-recovery records/sessions/background/startup/native acceptance passed126/0/435assertions85.30s, followed by frozen-install/typecheck0 (595installs609packages unchanged), total116.70s.
+- **Evidence:** user-reported Node ABI diagnosis; native-cli.test.ts disposable fixture setup; third recovery five-file command output
+- **Reversibility:** easy
+- **Confidence:** high for the exercised protocol and storage paths
+- **Revisit if:** the stand-in starts requiring a Node-specific runtime feature
+- **Source:** assumed — autonomous
+
 ## Progress
-Second recovery is verified. Both Codex evidence cases survive; terminal auto-adoption follows the landed terminal-only policy; valid activating structured creators remain live. Fresh five-file startup/Codex/rate-limit/background/layout acceptance43/0/177assertions and frozen-install/typecheck0 passed. All workers returned. Commit/detach and retry authoritative land immediately; do not restart broad checks, add another follow-up, or claim an unperformed model review.
+Third recovery is verified: token-redacted Session snapshots and background metadata compose, the canonical badge method remains unique and declares background, and migration order stays pointer9/background10. Fresh records/sessions/background/startup/native acceptance126/0/435assertions and frozen-install/typecheck0 passed. All workers returned. Commit/detach and retry authoritative land immediately; one follow-up only, no unperformed model-review clearance.

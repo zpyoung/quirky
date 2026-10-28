@@ -1,8 +1,8 @@
 {
   "id": "quirky.loops",
-  "name": "Until-done loops",
+  "name": "Background loops",
   "version": "0.1.0",
-  "description": "Durable background Claude and Codex loops with independently verified completion and bounded safety holds.",
+  "description": "Durable Claude and Codex background loops with until-done, queue, and interval presets.",
   "main": "main.ts",
   "cli": "cli.ts",
   "cliAliases": ["loop"],
@@ -12,7 +12,7 @@
     "method": [
       {
         "id": "create",
-        "description": "Starts a durable until-done loop in the selected worktree. Only Claude and Codex, repeated prompts and on-idle pacing are supported.",
+        "description": "Starts a durable until-done, queue, or interval loop in the selected worktree.",
         "params": {
           "type": "object",
           "additionalProperties": false,
@@ -21,7 +21,16 @@
             "worktreeId": { "type": "string", "description": "The worktree ID; mutually exclusive with worktree." },
             "name": { "type": "string" },
             "agent": { "type": "string", "enum": ["claude", "codex"] },
-            "preset": { "type": "string", "enum": ["until-done"] },
+            "preset": { "type": "string", "enum": ["until-done", "queue", "interval"] },
+            "queueItems": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": { "body": { "type": "string" } },
+                "required": ["body"]
+              }
+            },
             "config": {
               "type": "object",
               "additionalProperties": false,
@@ -29,13 +38,21 @@
                 "promptSource": {
                   "type": "object",
                   "additionalProperties": false,
-                  "properties": { "kind": { "type": "string", "enum": ["repeat"] }, "body": { "type": "string" } },
-                  "required": ["kind", "body"]
+                  "properties": {
+                    "kind": { "type": "string", "enum": ["repeat", "queue"] },
+                    "body": { "type": "string" },
+                    "repeatQueue": { "type": "boolean" }
+                  },
+                  "required": ["kind"]
                 },
                 "pacing": {
                   "type": "object",
                   "additionalProperties": false,
-                  "properties": { "kind": { "type": "string", "enum": ["on-idle"] } },
+                  "properties": {
+                    "kind": { "type": "string", "enum": ["on-idle", "interval"] },
+                    "minutes": { "type": "integer", "minimum": 1 },
+                    "anchor": { "type": "string", "enum": ["from-end", "wall-clock"] }
+                  },
                   "required": ["kind"]
                 },
                 "sessionPolicy": { "type": "string", "enum": ["fresh", "continue"] },
@@ -76,7 +93,7 @@
                 "askBeforeNext": { "type": "boolean" },
                 "resumeAtLimitReset": { "type": "boolean" }
               },
-              "required": ["promptSource", "pacing", "sessionPolicy", "done", "caps", "noProgress", "checkpointCommits", "askBeforeNext", "resumeAtLimitReset"]
+              "required": ["promptSource", "pacing", "done", "caps", "noProgress", "checkpointCommits", "askBeforeNext", "resumeAtLimitReset"]
             },
             "model": { "type": "string" },
             "options": { "type": "object", "additionalProperties": true }
@@ -180,13 +197,21 @@
                 "promptSource": {
                   "type": "object",
                   "additionalProperties": false,
-                  "properties": { "kind": { "type": "string", "enum": ["repeat"] }, "body": { "type": "string" } },
-                  "required": ["kind", "body"]
+                  "properties": {
+                    "kind": { "type": "string", "enum": ["repeat", "queue"] },
+                    "body": { "type": "string" },
+                    "repeatQueue": { "type": "boolean" }
+                  },
+                  "required": ["kind"]
                 },
                 "pacing": {
                   "type": "object",
                   "additionalProperties": false,
-                  "properties": { "kind": { "type": "string", "enum": ["on-idle"] } },
+                  "properties": {
+                    "kind": { "type": "string", "enum": ["on-idle", "interval"] },
+                    "minutes": { "type": "integer", "minimum": 1 },
+                    "anchor": { "type": "string", "enum": ["from-end", "wall-clock"] }
+                  },
                   "required": ["kind"]
                 },
                 "sessionPolicy": { "type": "string", "enum": ["fresh", "continue"] },
@@ -232,6 +257,30 @@
           "required": ["loopId", "patch"]
         },
         "result": { "type": "object", "description": "The updated LoopSnapshot.", "additionalProperties": true }
+      },
+      {
+        "id": "queue",
+        "description": "Adds, edits, moves, or removes one queue item in a queue loop.",
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "loopId": { "type": "string" },
+            "op": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "kind": { "type": "string", "enum": ["add", "edit", "move", "remove"] },
+                "id": { "type": "string" },
+                "body": { "type": "string" },
+                "position": { "type": "integer", "minimum": 0 }
+              },
+              "required": ["kind"]
+            }
+          },
+          "required": ["loopId", "op"]
+        },
+        "result": { "type": "object", "description": "The updated durable loop snapshot.", "additionalProperties": true }
       }
     ],
     "event": [
@@ -263,14 +312,18 @@
       {
         "id": "create",
         "words": "create",
-        "summary": "start an until-done background loop",
+        "summary": "start an until-done, queue, or interval background loop",
         "flags": {
           "agent": { "type": "string", "description": "required: claude or codex" },
           "worktree": { "type": "string", "description": "worktree selector (default: current)" },
           "name": { "type": "string", "description": "display name" },
-          "preset": { "type": "string", "description": "only until-done is supported" },
-          "prompt": { "type": "string", "description": "required repeated prompt" },
-          "session": { "type": "string", "description": "fresh (default) or continue" },
+          "preset": { "type": "string", "enum": ["until-done", "queue", "interval"], "description": "loop behavior (default: until-done)" },
+          "prompt": { "type": "string", "description": "repeated prompt for until-done or interval" },
+          "session": { "type": "string", "enum": ["fresh", "continue"], "description": "session policy (default: fresh for until-done, continue otherwise)" },
+          "queue-item": { "type": "string", "repeatable": true, "description": "queue task body; repeat for each initial item" },
+          "repeat-queue": { "type": "boolean", "description": "restart the queue after all items are done" },
+          "every": { "type": "integer", "description": "interval duration in positive minutes" },
+          "anchor": { "type": "string", "enum": ["from-end", "wall-clock"], "description": "interval schedule anchor (default: from-end)" },
           "check": { "type": "string", "description": "independent completion command" },
           "check-timeout": { "type": "number", "description": "check timeout seconds, 1 to 600 (default: 300)" },
           "check-when": { "type": "string", "description": "every-iteration (default) or on-claim" },
@@ -360,6 +413,9 @@
           "name": { "type": "string", "description": "display name" },
           "prompt": { "type": "string", "description": "repeated task prompt" },
           "session": { "type": "string", "description": "fresh or continue" },
+          "repeat-queue": { "type": "boolean", "description": "repeat completed queue items after the current cycle" },
+          "every": { "type": "integer", "description": "interval duration in positive minutes" },
+          "anchor": { "type": "string", "enum": ["from-end", "wall-clock"], "description": "interval schedule anchor" },
           "check": { "type": "string", "description": "independent completion command" },
           "check-timeout": { "type": "number", "description": "check timeout seconds, 1 to 600" },
           "check-when": { "type": "string", "description": "every-iteration or on-claim" },
@@ -380,6 +436,21 @@
           "no-protected-paths": { "type": "boolean", "description": "remove all protected paths" }
         },
         "methods": ["quirky.loops/get", "quirky.loops/edit"]
+      },
+      {
+        "id": "queue",
+        "words": "queue",
+        "summary": "add, edit, move, or remove a queue item",
+        "positionals": [
+          { "name": "loop", "required": true, "description": "queue loop ID" },
+          { "name": "operation", "required": true, "description": "add, edit, move, or remove" },
+          { "name": "item-or-body", "required": true, "description": "item ID or add body" },
+          { "name": "body-or-position", "required": false, "description": "edit body or move position" }
+        ],
+        "flags": {
+          "position": { "type": "integer", "description": "zero-based insertion position for add (default: append)" }
+        },
+        "methods": ["quirky.loops/get", "quirky.loops/queue"]
       }
     ]
   }

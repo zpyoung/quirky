@@ -64,7 +64,18 @@ describe('session identity and pointer delivery', () => {
       worktreeId: session.worktreeId
     })
     expect(JSON.stringify(identity)).not.toContain(token)
-    expect(JSON.stringify(await call(client, 'quirky.session/get', { session: session.id }))).not.toContain(token)
+    const db = new Database(join(h.home, 'plugin-data', 'quirky.session', 'store.db'))
+    try {
+      db.query('UPDATE sessions SET launch = ? WHERE id = ?').run(
+        JSON.stringify({ command: 'shell', args: '', env: { SAFE_ENV: 'kept', QUIRKY_SESSION_TOKEN: token } }),
+        session.id
+      )
+    } finally {
+      db.close()
+    }
+    const stored = await call<Session>(client, 'quirky.session/get', { session: session.id })
+    expect(stored.launch?.env).toEqual({ SAFE_ENV: 'kept' })
+    expect(JSON.stringify(stored)).not.toContain(token)
   })
 
   test('replays one pointer operation without a second terminal submit and rejects payload mismatch', async () => {

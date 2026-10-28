@@ -10,6 +10,7 @@ import {
   type LaunchHookInput,
   type PluginCaller,
   type PluginContext,
+  type PluginSessionIdentity,
   type PromptDeliveryState,
   type PtySessionInfo,
   type Session,
@@ -19,10 +20,11 @@ import {
   type SessionStatus
 } from '@quirky/protocol'
 import type { SessionRecords } from './records'
-import { SessionPointers, type SessionIdentity, type SessionPointerResult } from './pointer'
+import { SessionPointers, type SessionPointerResult } from './pointer'
 
 /** The workspace id of the synthetic worktree for sessions that belong to no repository. */
 const FLOATING = 'floating'
+type RuntimeIdentityEvidence = Omit<PluginSessionIdentity, 'live'> & { live: boolean }
 
 /** What a session belongs to and starts in: a git worktree, or the synthetic floating one (no repository). */
 type SessionTarget = { id: string; name: string; path: string; repoId: string | null }
@@ -340,7 +342,23 @@ export class SessionService {
 
   get = (params: Record<string, unknown>): Session => this.require(params.session as string)
 
-  identity = (params: Record<string, unknown>): SessionIdentity => this.pointers.identity(this.require(params.session as string))
+  identity = (params: Record<string, unknown>) => {
+    const session = this.require(params.session as string)
+    const identity = this.context.launch.sessionIdentity(session.id) as RuntimeIdentityEvidence | null
+    if (
+      identity?.live === false &&
+      identity.sessionId === session.id &&
+      (session.kind === 'structured' ? identity.source === 'structured_lease' : identity.source !== 'structured_lease')
+    ) {
+      return {
+        ...identity,
+        kind: session.kind,
+        providerId: session.agent === 'shell' ? null : session.agent,
+        worktreeId: session.worktreeId
+      }
+    }
+    return this.pointers.identity(session)
+  }
 
   pointer = (params: Record<string, unknown>): Promise<SessionPointerResult> =>
     this.pointers.pointer(this.require(params.session as string), params)
@@ -677,9 +695,10 @@ export class SessionService {
         if (expectedIncarnation !== undefined) return { ok: false as const, reason: 'recipient_gone' as const }
         throw this.context.error('not-found', `no such session: ${session.id}`)
       }
-      const identity = this.context.launch.sessionIdentity(current.id)
+      const identity = this.context.launch.sessionIdentity(current.id) as RuntimeIdentityEvidence | null
       if (typeof expectedIncarnation === 'string') {
         if (!identity) return { ok: false as const, reason: 'recipient_gone' as const }
+        if (!identity.live) return { ok: false as const, reason: 'recipient_gone' as const }
         if (
           identity.sessionId !== current.id ||
           identity.processIncarnation !== expectedIncarnation ||

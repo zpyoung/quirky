@@ -159,6 +159,7 @@ describe('start', () => {
       message: { content: 'first custody-recorded turn' }
     })
   })
+
   test('passes the prepared account environment to Claude Code', async () => {
     await runner.start(session, 'hello', { env: { CLAUDE_CONFIG_DIR: '/managed/claude' } })
 
@@ -277,6 +278,18 @@ describe('status', () => {
     expect(statuses).toEqual(['working', 'done', 'working'])
   })
 
+
+  test('failed results journal the error, tear down the query, and exit without publishing done', async () => {
+    const query = await begin()
+    const failure = { type: 'result', subtype: 'error_api_error', result: 'provider failed', is_error: true }
+    query.emit(failure)
+    await until(() => statuses.includes('exited'))
+    expect(messages.at(-1)).toMatchObject({ role: 'result', text: 'provider failed', data: failure })
+    expect(query.interrupted).toBe(1)
+    expect(query.closed).toBe(1)
+    expect(statuses).toEqual(['working', 'exited'])
+    await expect(runner.send('s_1', 'after failure')).rejects.toThrow('session is not running')
+  })
   test('exited when the query ends', async () => {
     const query = await begin()
     query.end()
