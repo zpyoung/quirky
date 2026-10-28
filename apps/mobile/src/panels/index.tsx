@@ -1,3 +1,4 @@
+import { TerminalArtifactsPanel } from './terminal-artifacts'
 import { ActivityPanel } from './activity'
 import { FilesTasksPanel } from './files-tasks'
 import { SourceControlPanel } from './source-control'
@@ -13,6 +14,9 @@ export function PanelApp(props: PanelProps) {
     case 'source-control':
     case 'review':
       return <SourceControlPanel {...props} />
+    case 'terminal-artifacts':
+    case 'terminal-artifact':
+      return <TerminalArtifactsPanel key={JSON.stringify(props.route)} {...props} />
     case 'files':
     case 'file-preview':
     case 'tasks':

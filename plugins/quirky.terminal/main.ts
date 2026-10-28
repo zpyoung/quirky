@@ -5,9 +5,11 @@ import { LayoutStore, migrations } from './src/layout/store'
 import { QuickCommandService } from './src/quick-commands/service'
 import { importV1Scrollback } from './src/scrollback'
 import { factEvent, TerminalService } from './src/terminal'
+import { TerminalArtifactsService } from './src/artifacts'
 
 let service: TerminalService | undefined
 let layout: LayoutService | undefined
+let artifacts: TerminalArtifactsService | undefined
 
 export async function activate(context: PluginContext): Promise<void> {
   const store = context.openStore(migrations)
@@ -17,6 +19,8 @@ export async function activate(context: PluginContext): Promise<void> {
   const layoutService = new LayoutService(context, layoutStore, inputs)
   const quickCommands = new QuickCommandService(context, layoutStore, layoutService, inputs, terminal)
   service = terminal
+  const artifactService = new TerminalArtifactsService(context)
+  artifacts = artifactService
   layout = layoutService
 
   const methods = {
@@ -39,6 +43,7 @@ export async function activate(context: PluginContext): Promise<void> {
     takeBack: terminal.takeBack,
     restoreFit: terminal.restoreFit,
     claim: terminal.claim,
+    artifacts: artifactService.handle,
     ...layoutService.methods,
     ...quickCommands.methods
   }
@@ -69,6 +74,8 @@ export async function activate(context: PluginContext): Promise<void> {
 }
 
 export function deactivate(): void {
+  artifacts?.shutdown()
+  artifacts = undefined
   service?.shutdown()
   layout?.shutdown()
   service = undefined

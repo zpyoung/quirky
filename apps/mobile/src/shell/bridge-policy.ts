@@ -1,5 +1,5 @@
 import type { MobileConnectionState, MobileGrant, MobilePageInit, MobileRoute } from '../contracts'
-import { PANEL_METHOD_PARAMS } from '@quirky/protocol'
+import { PANEL_METHOD_PARAMS, TERMINAL_ARTIFACT_TEXT_BYTES } from '@quirky/protocol'
 import { PANEL_ROUTE_FIELDS, validatePanelRoute } from '../panels/routes'
 import { PAGE_BUNDLE_ROUTES } from './generation'
 
@@ -48,6 +48,12 @@ const FORBIDDEN_FIELDS: Record<string, true> = {
   caller: true, role: true, deviceId: true, connection: true, clientId: true
 }
 const SESSION_ID = /^[A-Za-z0-9_-]{1,128}$/
+const TERMINAL_ARTIFACT_METHOD = 'quirky.terminal/artifacts'
+const TERMINAL_ARTIFACT_ROUTE_METHODS: Record<string, true> = {
+  [TERMINAL_ARTIFACT_METHOD]: true,
+  'quirky.mobile/notificationPoll': true,
+  'quirky.mobile/notificationCancel': true
+}
 const MAX_TEXT_BYTES = 64 * 1024
 
 export function utf8ByteLength(value: string): number {
@@ -87,6 +93,24 @@ function boundedString(params: Record<string, unknown>, key: string, required = 
   return typeof value === 'string' && value.length > 0 && value.length <= 1024
 }
 
+function exactParameters(params: Record<string, unknown>, keys: readonly string[]): boolean {
+  return Object.keys(params).length === keys.length && keys.every((key) => Object.hasOwn(params, key))
+}
+
+function validTerminalArtifactParams(params: Record<string, unknown>): boolean {
+  if (!boundedString(params, 'worktree') || !boundedString(params, 'session') ||
+    typeof params.action !== 'string') return false
+  if (params.action === 'list') return exactParameters(params, ['action', 'worktree', 'session'])
+  if (params.action !== 'preview' && params.action !== 'refresh' && params.action !== 'save') return false
+  if (!boundedString(params, 'artifactId') || (params.artifactId as string).length > 128 ||
+    !boundedString(params, 'grant') || (params.grant as string).length > 1024 ||
+    /[\u0000-\u001f\u007f]/u.test(params.grant as string)) return false
+  if (params.action === 'save') return exactParameters(params, ['action', 'worktree', 'session', 'artifactId', 'grant', 'expectedRevision', 'content']) &&
+    typeof params.expectedRevision === 'string' && params.expectedRevision.length > 0 && params.expectedRevision.length <= 256 &&
+    typeof params.content === 'string' && utf8ByteLength(params.content) <= TERMINAL_ARTIFACT_TEXT_BYTES
+  return exactParameters(params, ['action', 'worktree', 'session', 'artifactId', 'grant'])
+}
+
 function viewport(params: Record<string, unknown>): boolean {
   return Number.isSafeInteger(params.cols) && (params.cols as number) >= 1 && (params.cols as number) <= 1000 &&
     Number.isSafeInteger(params.rows) && (params.rows as number) >= 1 && (params.rows as number) <= 500
@@ -99,6 +123,7 @@ function boundedEditorChunk(value: unknown): value is string {
 }
 
 function validPageSpecificParams(method: string, params: Record<string, unknown>): boolean {
+  if (method === TERMINAL_ARTIFACT_METHOD) return validTerminalArtifactParams(params)
   if (method === 'quirky.repo/list' || method === 'quirky.repo/groupList' || method === 'quirky.mobile/agentCatalog' ||
     method === 'quirky.loops/summaries' || method === 'quirky.mobile/notificationTest') return Object.keys(params).length === 0
   if (method === 'quirky.mobile/notificationPoll') return typeof params.subscriptionId === 'string' && params.subscriptionId.length > 0 && params.subscriptionId.length <= 128 &&
@@ -161,16 +186,50 @@ function validPageSpecificParams(method: string, params: Record<string, unknown>
   return Object.hasOwn(PANEL_METHOD_PARAMS, method)
 }
 
-export function validatePageRpc(method: unknown, params: unknown, grants: readonly MobileGrant[], route: MobileRoute): asserts method is string {
+export function validatePageRpc(
+  method: unknown,
+  params: unknown,
+  grants: readonly MobileGrant[],
+  route: MobileRoute,
+  artifactGrant: string | undefined = route.kind === 'terminal-artifact' ? route.grant : undefined
+): asserts method is string {
   if (typeof method !== 'string' || !Object.hasOwn(PAGE_METHOD_PARAMS, method)) throw new Error('Quirky method is unavailable to page apps')
   if (!grants.includes('rpc')) throw new Error('page route does not have the rpc grant')
+  if ((route.kind === 'terminal-artifacts' || route.kind === 'terminal-artifact') && !Object.hasOwn(TERMINAL_ARTIFACT_ROUTE_METHODS, method)) {
+    throw new Error('RPC method is unavailable to terminal artifact routes')
+  }
   if (Object.hasOwn(PANEL_METHOD_PARAMS, method) && (route.kind === 'workspaces' || route.kind === 'session')) throw new Error('panel RPC method is unavailable to base pages')
-  if (method.startsWith('quirky.terminal/') && !grants.includes('terminal')) throw new Error('page route does not have the terminal grant')
+  if (method.startsWith('quirky.terminal/') && method !== TERMINAL_ARTIFACT_METHOD && !grants.includes('terminal')) throw new Error('page route does not have the terminal grant')
   if (!isPlainRecord(params) || !validTree(params, 0, false) || Object.keys(params).some((key) => !PAGE_METHOD_PARAMS[method]!.includes(key)) || !validPageSpecificParams(method, params)) {
     throw new Error('page RPC parameters are invalid')
   }
+  if (method === TERMINAL_ARTIFACT_METHOD) {
+    if (route.kind === 'terminal-artifacts') {
+      if (params.action !== 'list' || params.worktree !== route.worktreeId || params.session !== route.sessionId) {
+        throw new Error('terminal artifact list is unavailable for this route')
+      }
+    } else if (route.kind === 'terminal-artifact') {
+      if ((params.action !== 'preview' && params.action !== 'refresh' && params.action !== 'save') ||
+        params.worktree !== route.worktreeId || params.session !== route.sessionId ||
+        params.artifactId !== route.artifactId || typeof artifactGrant !== 'string' || params.grant !== artifactGrant) {
+        throw new Error('terminal artifact capability does not match this route')
+      }
+    } else {
+      throw new Error('terminal artifact RPC is unavailable to this route')
+    }
+  }
   const serialized = JSON.stringify({ method, params })
   if (!serialized || utf8ByteLength(serialized) > 640 * 1024) throw new Error('page RPC envelope exceeds the bridge limit')
+}
+
+export function refreshedTerminalArtifactGrant(route: MobileRoute, result: unknown): string | null {
+  if (route.kind !== 'terminal-artifact' || !isPlainRecord(result) || result.kind !== 'refreshed' ||
+    !isPlainRecord(result.artifact)) return null
+  const artifact = result.artifact
+  if (artifact.source !== 'terminalArtifact' || artifact.worktree !== route.worktreeId || artifact.session !== route.sessionId ||
+    artifact.artifactId !== route.artifactId || typeof artifact.grant !== 'string' ||
+    artifact.grant.length === 0 || artifact.grant.length > 1024 || /[\x00-\x1f\x7f]/u.test(artifact.grant)) return null
+  return artifact.grant
 }
 
 const PAGE_MUTATIONS: Record<string, true> = {
@@ -231,7 +290,8 @@ const PAGE_MUTATIONS: Record<string, true> = {
   'quirky.mobile/notificationTest': true
 }
 
-export function isPageMutation(method: string): boolean {
+export function isPageMutation(method: string, params?: Record<string, unknown>): boolean {
+  if (method === TERMINAL_ARTIFACT_METHOD) return params?.action === 'refresh' || params?.action === 'save'
   return Object.hasOwn(PAGE_MUTATIONS, method)
 }
 
@@ -321,11 +381,13 @@ export function validatePageReport(value: unknown): asserts value is Record<stri
   }
   if (Object.hasOwn(PANEL_ROUTE_FIELDS, value.route)) {
     const fields = PANEL_ROUTE_FIELDS[value.route as keyof typeof PANEL_ROUTE_FIELDS]!
-    if (Object.keys(value).some((key) => !common.includes(key) && !fields.includes(key))) throw new Error('panel page report is invalid')
+    const reportFields = fields.filter((field) => field !== 'grant')
+    if (Object.keys(value).some((key) => !common.includes(key) && !reportFields.includes(key))) throw new Error('panel page report is invalid')
     const route: Record<string, unknown> = { kind: value.route }
-    for (const field of fields) {
+    for (const field of reportFields) {
       if (field !== 'kind' && Object.hasOwn(value, field)) route[field] = value[field]
     }
+    if (value.route === 'terminal-artifact') route.grant = 'report-only'
     try {
       validatePanelRoute(route)
     } catch {

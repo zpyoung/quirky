@@ -50,7 +50,8 @@ import Foundation
       ["path": "index.html", "contentType": "text/html; charset=utf-8"],
       ["path": "assets/aa.js", "contentType": "text/javascript; charset=utf-8"],
       ["path": "assets/bb.png", "contentType": "image/png"]
-    ]
+    ],
+    routes: [[String: Any]]? = nil
   ) -> Data {
     let declaredAssets: [[String: Any]] = assets.map { source in
       var asset = source
@@ -58,7 +59,7 @@ import Foundation
       asset["sha256"] = String(repeating: "a", count: 64)
       return asset
     }
-    let routes: [[String: Any]] = [
+    let routeEntries: [[String: Any]] = routes ?? [
       ["kind": "workspaces", "path": "/", "grants": ["rpc", "storage", "navigate", "terminal", "externalLink"]],
       ["kind": "session", "path": "/session", "grants": ["rpc", "storage", "navigate", "terminal", "clipboard.read", "clipboard.write", "externalLink"]]
     ]
@@ -68,7 +69,7 @@ import Foundation
       "buildId": String(repeating: "a", count: 64),
       "assets": declaredAssets,
       "totalBytes": declaredAssets.count,
-      "routes": routes
+      "routes": routeEntries
     ]
     return try! JSONSerialization.data(withJSONObject: root)
   }
@@ -174,6 +175,23 @@ import Foundation
 
   static func checkGenerationMap() {
     guard let built = generation(manifest()) else { preconditionFailure("manifest rejected") }
+    let expandedRoutes: [[String: Any]] = [
+      ["kind": "workspaces", "path": "/", "grants": ["rpc", "storage", "navigate", "terminal", "externalLink"]],
+      ["kind": "session", "path": "/session", "grants": ["rpc", "storage", "navigate", "terminal", "clipboard.read", "clipboard.write", "externalLink"]],
+      ["kind": "source-control", "path": "/source-control", "grants": ["rpc", "storage", "navigate", "clipboard.write", "externalLink"]],
+      ["kind": "review", "path": "/review", "grants": ["rpc", "storage", "navigate", "clipboard.write", "externalLink"]],
+      ["kind": "files", "path": "/files", "grants": ["rpc", "storage", "navigate", "clipboard.write", "externalLink"]],
+      ["kind": "file-preview", "path": "/files/preview", "grants": ["rpc", "storage", "navigate", "clipboard.write", "externalLink"]],
+      ["kind": "terminal-artifacts", "path": "/terminal-artifacts", "grants": ["rpc", "storage", "navigate"]],
+      ["kind": "terminal-artifact", "path": "/terminal-artifact", "grants": ["rpc", "storage", "navigate"]],
+      ["kind": "tasks", "path": "/tasks", "grants": ["rpc", "storage", "navigate", "clipboard.write", "externalLink"]],
+      ["kind": "accounts", "path": "/accounts", "grants": ["rpc", "storage", "navigate"]],
+      ["kind": "agent-history", "path": "/agent-history", "grants": ["rpc", "storage", "navigate"]],
+      ["kind": "notifications", "path": "/notifications", "grants": ["rpc", "storage", "navigate"]]
+    ]
+    precondition(generation(manifest(routes: expandedRoutes)) != nil)
+    let tooManyRoutes = Array(repeating: ["kind": "terminal-artifacts", "path": "/terminal-artifacts", "grants": ["rpc", "navigate"]] as [String: Any], count: 65)
+    precondition(generation(manifest(routes: tooManyRoutes)) == nil)
     precondition(built.entries.count == 4)
     precondition(built.entries["/"]?.file.path == "/tmp/generation/index.html")
     precondition(built.entries["/"]?.contentType == "text/html; charset=utf-8")

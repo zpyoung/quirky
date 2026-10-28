@@ -1,7 +1,7 @@
 import type { MobileCallOptions, MobileConnectionState, MobileNativeActions, MobilePageInit, MobileRoute, MobileRpc, MobileStorage } from '../contracts'
 import { MOBILE_BRIDGE_MAX_BYTES } from '../contracts'
 import { encodeBase64 } from './generation'
-import { isPageMutation, sanitizeConnectionState, utf8ByteLength, validatePageInit, validatePageReport, validatePageRpc, validateRoute } from './bridge-policy'
+import { isPageMutation, refreshedTerminalArtifactGrant, sanitizeConnectionState, utf8ByteLength, validatePageInit, validatePageReport, validatePageRpc, validateRoute } from './bridge-policy'
 import { safeExternalUrl } from './shell-security'
 
 const MAX_TIMEOUT_MS = 30_000
@@ -68,6 +68,7 @@ export function createBridgeHost(options: BridgeHostOptions): PageBridgeHost {
   let ready = false
   let closed = false
   let init = { ...options.init, connectionState: sanitizeConnectionState(rpc.state) }
+  let artifactGrant = init.route.kind === 'terminal-artifact' ? init.route.grant : undefined
   validatePageInit(init)
   const activeStreams = new Set<number>()
   const streamSubscriptions = new Map<number, () => void>()
@@ -152,8 +153,9 @@ export function createBridgeHost(options: BridgeHostOptions): PageBridgeHost {
     const requestId = message.requestId as string
     const method = message.method as string
     const params = message.params as Record<string, unknown>
-    validatePageRpc(method, params, init.grants, init.route)
-    if (isPageMutation(method) && rpc.state.phase !== 'connected') throw new Error('mutations require a connected desktop')
+    const artifactGrantAtStart = artifactGrant
+    validatePageRpc(method, params, init.grants, init.route, artifactGrantAtStart)
+    if (isPageMutation(method, params) && rpc.state.phase !== 'connected') throw new Error('mutations require a connected desktop')
     const timeoutMs = message.timeoutMs
     if (timeoutMs !== undefined && (!Number.isSafeInteger(timeoutMs) || (timeoutMs as number) < 1 || (timeoutMs as number) > MAX_TIMEOUT_MS)) throw new Error('page RPC timeout is invalid')
     const attaching = method === 'quirky.terminal/attach'
@@ -168,6 +170,11 @@ export function createBridgeHost(options: BridgeHostOptions): PageBridgeHost {
       if (attaching) pendingStreamAttachments--
     }
     if (closed || active !== rpc || epoch !== rpcEpoch) throw new Error('connection changed before the operation completed; retry explicitly if needed')
+    if (method === 'quirky.terminal/artifacts' && params.action === 'refresh' &&
+      params.grant === artifactGrantAtStart && artifactGrant === artifactGrantAtStart && rpc.state.phase === 'connected') {
+      const nextGrant = refreshedTerminalArtifactGrant(init.route, result)
+      if (nextGrant && nextGrant !== artifactGrant) artifactGrant = nextGrant
+    }
     if (method === 'quirky.terminal/attach' && isRecord(result) && Number.isSafeInteger(result.streamId) && (result.streamId as number) > 0) activeStreams.add(result.streamId as number)
     if (method === 'quirky.terminal/detach') {
       const streamId = params.streamId as number
