@@ -193,6 +193,28 @@
         }
       },
       {
+        "id": "origins",
+        "description": "Caller-relative durable creation evidence for each workspace. Unknown historical and external origins remain null.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "worktreeId": { "type": "string" },
+              "automation": { "description": "True only when the authenticated creator was quirky.automations; false for known non-automation creators; null when creation evidence is unknown." },
+              "otherClient": { "description": "True or false only when the authenticated creator and this caller are distinguishable by stable paired-device IDs; otherwise null." }
+            },
+            "required": ["worktreeId", "automation", "otherClient"]
+          }
+        }
+      },
+      {
         "id": "create",
         "description": "Creates a worktree from a name, existing branch, GitHub PR or issue, runs configured setup and issue commands, and can start an agent. Folder and group workspaces do not accept GitHub sources.",
         "params": {
@@ -1633,6 +1655,13 @@
         },
         "methods": [
           "quirky.worktree/list"
+        ]
+      },
+      {
+        "id": "origins",
+        "summary": "show caller-relative workspace creation evidence",
+        "methods": [
+          "quirky.worktree/origins"
         ]
       },
       {
