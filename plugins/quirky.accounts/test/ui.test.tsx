@@ -145,7 +145,7 @@ function makeContext(): UiPluginContext {
           consumeFailures -= 1
           throw new Error('fixture failure')
         }
-        return { outcome: 'reset' }
+        return 'reset'
       }
       if (method === 'setting.set') {
         if (params?.id === 'setting:quirky.accounts/gemini-cli-oauth-enabled' && typeof params.value === 'boolean') settingValue = params.value

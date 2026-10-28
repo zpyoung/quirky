@@ -44,7 +44,7 @@ export function createHeadlessMarkdownEditor(markdown: string): Editor {
   return new Editor({
     element: null,
     extensions: createMarkdownExtensions(),
-    content: markdown,
+    content: markdown === '' ? { type: 'doc', content: [{ type: 'paragraph' }] } : markdown,
     contentType: 'markdown',
     editable: true
   })

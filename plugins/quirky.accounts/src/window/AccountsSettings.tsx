@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore, type FormEvent } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
 import { AccountsUiStore, accountSort, ageLabel, credentialLabel, displayIdentity, formatReset, snapshotStatus, windowEntries, type AccountState, type AccountSummary, type CredentialStatus, type ManagedProvider, type PendingLogin } from './model'
 import { ACCOUNTS_CSS } from './styles'
@@ -26,6 +26,7 @@ function statusBadge(account: AccountSummary, activeId: string | null): { text: 
 }
 
 function LoginLinkNotice({ store, pending, provider }: { store: AccountsUiStore; pending: PendingLogin | null; provider: ManagedProvider }) {
+  const loginCancelling = useStore(store).loginCancelling
   if (!pending || pending.provider !== provider) return null
   const isCodex = provider === 'codex'
   const loginUrl = pending.url
@@ -44,15 +45,29 @@ function LoginLinkNotice({ store, pending, provider }: { store: AccountsUiStore;
       }}>Copy link</button>
       {isCodex && <a href={loginUrl} target="_blank" rel="noopener noreferrer">Open</a>}
     </div>}
-    {pending.status === 'pending' && <button type="button" onClick={() => void store.cancelLogin()}>Cancel</button>}
+    {pending.status === 'pending' && <button type="button" disabled={loginCancelling} onClick={() => void store.cancelLogin()}>{loginCancelling ? 'Cancelling…' : 'Cancel'}</button>}
   </div>
 }
 
 
 function AccountRow({ store, provider, account, state }: { store: AccountsUiStore; provider: ManagedProvider; account: AccountSummary; state: AccountState }) {
-  const loginBusy = useStore(store).login?.status === 'pending'
+  const snapshot = useStore(store)
+  const loginBusy = snapshot.loginStarting || snapshot.login?.status === 'pending'
+  const [removing, setRemoving] = useState(false)
+  const removalLock = useRef(false)
   const badges = statusBadge(account, state.active[provider])
   const providerName = provider === 'claude' ? 'Claude' : 'Codex'
+  const remove = async () => {
+    if (removalLock.current) return
+    removalLock.current = true
+    setRemoving(true)
+    try {
+      await store.removeAccount(provider, account.id)
+    } finally {
+      removalLock.current = false
+      setRemoving(false)
+    }
+  }
   return <div className="account-row">
     <div className="account-row-main"><div className="row-badges"><strong>{account.label}</strong>{badges.map((badge) => <span key={badge.text} className={badge.className}>{badge.text}</span>)}</div>
       <small>{[account.email, account.organization, account.lastAuthenticatedAt ? `Last signed in ${new Date(account.lastAuthenticatedAt).toLocaleDateString()}` : null].filter(Boolean).join(' · ') || 'Managed account on this device'}</small>
@@ -64,7 +79,7 @@ function AccountRow({ store, provider, account, state }: { store: AccountsUiStor
         {provider === 'claude' && <details><summary aria-label="More sign-in options">More sign-in options</summary><button type="button" disabled={loginBusy} onClick={() => void store.beginLogin('claude', { accountId: account.id, copyLink: true })}>Copy sign-in link instead</button></details>}
       </>}
       {!account.needsSignIn && <button type="button" aria-label={`Select ${providerName} account ${account.label}`} disabled={state.active[provider] === account.id} onClick={() => void store.selectAccount(provider, account.id)}>{state.active[provider] === account.id ? 'Active' : 'Select'}</button>}
-      <button type="button" aria-label={`Remove ${providerName} account ${account.label}`} onClick={() => void store.removeAccount(provider, account.id)}>Remove</button>
+      <button type="button" aria-label={`Remove ${providerName} account ${account.label}`} disabled={removing} onClick={() => void remove()}>{removing ? 'Removing…' : 'Remove'}</button>
     </div>
   </div>
 }
@@ -76,7 +91,7 @@ function ManagedAccountsSection({ store, provider }: { store: AccountsUiStore; p
   const system = state?.systemDefault[provider]
   const accounts = (state?.accounts ?? []).filter((account) => account.provider === provider).sort(accountSort)
   const pending = snapshot.login ?? state?.pendingLogin ?? null
-  const anyPending = pending?.status === 'pending'
+  const anyPending = snapshot.loginStarting || pending?.status === 'pending'
   const configWarnings = provider === 'codex' && state
     ? state.configWarnings.filter((warning) => warning.provider === 'codex' && warning.accountId === state.active.codex)
     : []
@@ -155,23 +170,43 @@ function sourceName(source: string): string {
 function CredentialField({ store, provider, kind, inputType, statuses }: { store: AccountsUiStore; provider: string; kind: string; inputType: 'password' | 'text' | 'url'; statuses: CredentialStatus[] }) {
   const [value, setValue] = useState('')
   const [saving, setSaving] = useState(false)
+  const [clearing, setClearing] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const actionLock = useRef(false)
   const status = statuses.find((candidate) => candidate.provider === provider && candidate.kind === kind)
+  const busy = saving || clearing
   const save = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!value || saving) return
+    if (!value || actionLock.current) return
+    actionLock.current = true
     setSaving(true)
+    setActionError(null)
     try {
       if (await store.setCredential(provider, kind, value)) setValue('')
+      else setActionError('Could not confirm saving this credential. Check its status before retrying.')
     } finally {
+      actionLock.current = false
       setSaving(false)
     }
   }
+  const clear = async () => {
+    if (actionLock.current) return
+    actionLock.current = true
+    setClearing(true)
+    setActionError(null)
+    try {
+      if (!await store.clearCredential(provider, kind)) setActionError('Could not confirm clearing this credential. Check its status before retrying.')
+    } finally {
+      actionLock.current = false
+      setClearing(false)
+    }
+  }
   return <div className="credential-row">
-    <div className="account-row-main"><strong>{credentialLabel(kind)}</strong><small role="status">{status?.configured ? status.readable ? 'Configured · Readable' : 'Configured · Not readable' : 'Not configured'}</small></div>
+    <div className="account-row-main"><strong>{credentialLabel(kind)}</strong><small role="status">{status?.configured ? status.readable ? 'Configured · Readable' : 'Configured · Not readable' : 'Not configured'}</small>{actionError && <small className="status-error" role="alert">{actionError}</small>}</div>
     <form className="credential-entry" onSubmit={save}>
-      <input className="form-control" aria-label={`${provider} ${credentialLabel(kind)}`} type={inputType} autoComplete="off" spellCheck={false} value={value} onChange={(event) => setValue(event.currentTarget.value)} />
-      <button type="submit" disabled={!value || saving}>{saving ? 'Saving…' : 'Set'}</button>
-      {status?.configured && <button type="button" disabled={saving} onClick={() => void store.clearCredential(provider, kind)}>Clear</button>}
+      <input className="form-control" aria-label={`${provider} ${credentialLabel(kind)}`} type={inputType} autoComplete="off" spellCheck={false} disabled={busy} value={value} onChange={(event) => setValue(event.currentTarget.value)} />
+      <button type="submit" disabled={!value || busy}>{saving ? 'Saving…' : 'Set'}</button>
+      {status?.configured && <button type="button" disabled={busy} onClick={() => void clear()}>{clearing ? 'Clearing…' : 'Clear'}</button>}
     </form>
   </div>
 }
