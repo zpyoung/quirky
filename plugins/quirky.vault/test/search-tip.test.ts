@@ -102,7 +102,7 @@ test('successful local opt-in commits one seen transition, unlocks transcript se
 
   const event = await changed
   expect(event.type).toBe('quirky.vault/searchTipChanged')
-  expect(event.data).toEqual({ id: 'agent-session-search', seen: true })
+  expect('data' in event ? event.data : undefined).toEqual({ id: 'agent-session-search', seen: true })
   expect(await getTip(vault)).toEqual({ id: 'agent-session-search', seen: true })
   expect(vault.searchDatabaseExists()).toBe(true)
 

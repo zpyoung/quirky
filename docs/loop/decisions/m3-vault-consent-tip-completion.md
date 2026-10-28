@@ -44,5 +44,38 @@
 - **Revisit if:** Reviewer dispatch fails or implementation reveals a real dependency.
 - **Source:** assumed — autonomous
 
+## D5: Keep model response and raw local event contracts distinct
+- **Question:** Why did the cold-window disable scenario leave consent hidden?
+- **Options:** Add polling/retries; remove the cold-window case; adapt the actual raw worker event only for the selected local host.
+- **Chose:** The raw local SearchStatus event has a separate parser. Public API responses still require the existing status/hosts envelope. Remote/all-host selection is not overwritten by local worker progress.
+- **Why:** The diagnostic run proved canonical disabled status and seen true, but the mounted UI remained searchEnabled true; parsing a raw event as a response envelope discarded the transition. Correcting the boundary restores ordinary consent after disable without timers or test corrections.
+- **Evidence:** Actual diagnostic artifact31:362-442,748-770; worker.ts emits raw searchStatus, model.ts previously required an envelope. Failing focused case before fix took40.72s; after fix passed1 test19 assertions5.25s. Temporary diagnostics removed. React synchronous-unmount warnings remain disclosed; no passing-without-warnings claim.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Worker events gain a host-qualified envelope with a migration contract.
+- **Source:** assumed — autonomous
+
+## D6: Verify real failures without corrective mutations or production test hooks
+- **Question:** How can failed enable prove the tip remains unseen and search stays off?
+- **Options:** Mock worker success/failure; disable after failure and inspect; obstruct the private SQLite path and use a real store trigger, then observe through a read-only serialized getter.
+- **Chose:** The real daemon tests use a private directory occupying the search DB path to make worker application fail, and a SQLite trigger rejecting only the canonical tip write. The latter starts from an already-enabled policy to exercise fail-closed rollback. The read-only getter drains policy work, never changes it.
+- **Why:** A corrective disable would mask broken rollback; a marker-only mock would not establish the actual owner or worker privacy boundary.
+- **Evidence:** search-tip.test.ts has8 tests60 assertions passing in12.24s, including API/CLI no DB, missing/malformed persisted state, successful consent/query/restart, idempotence/disable/clear, invalid input, actual worker failure/recovery, actual tip-write failure, remote-only/all boundaries. Before implementation, missing getSearchTip failed with RpcError -32009; missing visible tip failed the UI case. Two initial test fixture defects (lazy activation and missing directory parent) were corrected, not product behavior or deadlines.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Vault store or worker policy lifecycle changes.
+- **Source:** assumed — autonomous
+
+## D7: Preserve explicit implementation-attribution and review limits
+- **Question:** What evidence and deviations can this run actually claim?
+- **Options:** Claim a clean spec review and pre-dispatch snapshot; record exact observed limits and parent integration.
+- **Chose:** Codex spec gate reported NEEDS_FIXES with5 scratch-copy-relative path findings rejected against the actual sibling links; its sole model rollback claim was refuted, then wording clarified anyway. Reduced same-family independence and near-total model suppression are explicit. The component baseline was captured after dispatch while it still had no implementation/test edits; generated .serena mode644/blob36cd3def was preserved. Parent added the declared searchTipChanged event schema after component scope audit and before green acceptance because it was omitted from the initial contracts commit.
+- **Why:** No fabricated clean/snapshot assertion; the final actual scope/HEAD barrier covered all owned writes. The one component returned without commits/checks; parent committed2782314a, merged it and removed its owned worktree.
+- **Evidence:** /tmp/quirky-l8-tip-journal.json; /tmp/quirky-l8-tip-review-spec/; component and main HEAD739f3d52 at both barriers, exact7-file component scope plus unchanged generated configuration. Single final roadmap merge brought only sa-browser-design-mode decisions; those are being read before review.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** A review or ownership audit finds an unaccounted write.
+- **Source:** assumed — autonomous
+
 ## Progress
-Brainstormed all relevant API/data/integration/UI gray areas: ownership, persistence/idempotency, fail-closed consent, local/remote scope, UI loading/errors and restart. Autonomous defaults recorded above; no open human questions. Specs are being written and reviewed before implementation. Exactly one item this iteration.
+Implementation merged; eight real API/CLI regressions and the focused cold-window UI case pass. Required affected suite, scripts, typecheck and build are running after the single final roadmap catchup. Next: read incoming decisions, exercise actual built web scenario, run one final cross-family review/fix batch, update receipts/docs, commit/detach and land through the authoritative queue controller. Exactly one item this iteration; no global completion marker for an ordinary land.

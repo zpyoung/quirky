@@ -13,7 +13,7 @@ import {
   waitFor,
   type Features
 } from '../../quirky.terminal/test/e2e-ui/features-support'
-import type { PublicListResult, SearchStatus } from '../src/types'
+import type { PublicListResult, SearchStatus, SearchTipState } from '../src/types'
 
 afterEach(stopAll)
 
@@ -128,7 +128,7 @@ test(
       expect(promotion.textContent).toContain('Find any past conversation by what was said in it, then pick up where the agent left off.')
       const promote = promotion.querySelector<HTMLButtonElement>('[data-vault-enable-search]')
       expect(promote?.textContent?.trim()).toBe('Turn on session search')
-      expect(await f.h.call('quirky.vault/getSearchTip', {})).toEqual({ id: 'agent-session-search', seen: false })
+      expect(await f.h.call<SearchTipState>('quirky.vault/getSearchTip', {})).toEqual({ id: 'agent-session-search', seen: false })
 
       const input = await until(f, () => f!.win.document.querySelector<HTMLInputElement>('[data-vault-search]'))
       await typeInto(input, 'vaultneedle')
@@ -146,14 +146,14 @@ test(
       expect(evidence.textContent).toContain('<img data-vault-spoof="yes">')
       expect(evidence.querySelector('img')).toBeNull()
       expect([...evidence.querySelectorAll('mark')].map((mark) => mark.textContent)).toEqual(['vaultneedle'])
-      expect(await f.h.call('quirky.vault/getSearchTip', {})).toEqual({ id: 'agent-session-search', seen: true })
+      expect(await f.h.call<SearchTipState>('quirky.vault/getSearchTip', {})).toEqual({ id: 'agent-session-search', seen: true })
       expect(f.win.document.querySelector('[data-vault-search-tip]')).toBeNull()
 
       await f.stopWindow()
       await f.startWindow()
       await runCommand(f, 'command:quirky.vault/open')
       await until(f, () => f!.calls.find((call) => call.method === 'quirky.vault/getSearchTip' && call.settled))
-      expect(await f.h.call('quirky.vault/getSearchTip', {})).toEqual({ id: 'agent-session-search', seen: true })
+      expect(await f.h.call<SearchTipState>('quirky.vault/getSearchTip', {})).toEqual({ id: 'agent-session-search', seen: true })
       await f.h.call('quirky.vault/setSearchEnabled', { enabled: false })
       await waitFor('disabled local search after reopening history', async () => (!(await statusOf(f!)).enabled ? true : undefined), 20_000)
       const ordinaryConsent = await until(f, () => f!.win.document.querySelector<HTMLElement>('[data-vault-consent]'))
