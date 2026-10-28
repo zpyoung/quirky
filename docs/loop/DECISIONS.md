@@ -587,6 +587,7 @@ files, not this one.
 | medium | high | [sa-browser-agent-extras D1](decisions/sa-browser-agent-extras.md) | Recover extras onto the current core, not over it | assumed — autonomous |
 | medium | high | [sa-browser-agent-extras D3](decisions/sa-browser-agent-extras.md) | Preserve later profile and identity ownership | locked by docs/loop/decisions/sa-browser-profiles-settings.md |
 | medium | high | [sa-browser-agent-extras D12](decisions/sa-browser-agent-extras.md) | Reconcile the single roadmap catchup without broadening Native or mobile authority | assumed — autonomous |
+| medium | high | [ui-restyle-tasks D1](decisions/ui-restyle-tasks.md) | Preserve feature behavior and host-owned default slots | locked by docs/quirk/specs/2026-10-28-ui-redesign/logic.md |
 | medium | high | [m0-daemon-api D8](decisions/m0-daemon-api.md) | Method results and errors | assumed — autonomous |
 | medium | high | [m0-daemon-api D10](decisions/m0-daemon-api.md) | Stores migrate forward only, by an ordered list, and refuse a downgrade | assumed — autonomous |
 | medium | high | [m0-daemon-api D24](decisions/m0-daemon-api.md) | Plugin methods use the daemon's token, and any client may call any method | locked by docs/roadmap.md |
@@ -2233,6 +2234,15 @@ files, not this one.
 | easy | high | [sa-browser-agent-extras D9](decisions/sa-browser-agent-extras.md) | Repair the cookie canonicalizer and dynamic CDP event schemas at their source | assumed — autonomous |
 | easy | high for exercised behavior only | [sa-browser-agent-extras D10](decisions/sa-browser-agent-extras.md) | Separate changed-path proof from deferred suite and native assurance | locked by docs/loop/LOOP.md |
 | easy | high for listed profile/disclosure rendering, no badge-menu/native parity claim | [sa-browser-agent-extras D11](decisions/sa-browser-agent-extras.md) | Verify imported metadata on the built Settings surface without claiming import-menu completion | assumed — autonomous |
+| easy | high | [ui-restyle-tasks D2](decisions/ui-restyle-tasks.md) | Use shared controls and canonical semantic feature layouts | assumed — autonomous |
+| easy | high | [ui-restyle-tasks D3](decisions/ui-restyle-tasks.md) | Execute three isolated source slices under build-first override | locked by docs/loop/LOOP.md |
+| easy | high | [ui-restyle-tasks D4](decisions/ui-restyle-tasks.md) | Stop the barrier and repair attributed cross-worktree contamination | assumed — autonomous |
+| easy | high | [ui-restyle-tasks D5](decisions/ui-restyle-tasks.md) | Export existing shared context-menu CSS once | assumed — autonomous |
+| easy | high | [ui-restyle-tasks D6](decisions/ui-restyle-tasks.md) | Load canonical CSS once through the host build | assumed — autonomous |
+| easy | high | [ui-restyle-tasks D7](decisions/ui-restyle-tasks.md) | Reuse the actual visible automation tool instead of duplicating its editor | assumed — autonomous |
+| easy | high | [ui-restyle-tasks D8](decisions/ui-restyle-tasks.md) | Reset a width flex basis after the editor stacks vertically | assumed — autonomous |
+| easy | high | [ui-restyle-tasks D9](decisions/ui-restyle-tasks.md) | Record bounded real UI proof without claiming suite or golden acceptance | locked by docs/loop/LOOP.md |
+| easy | high | [ui-restyle-tasks D10](decisions/ui-restyle-tasks.md) | Preserve every incoming restyle and gate the composed source | assumed — autonomous |
 | easy | high | [m0-daemon-api D1](decisions/m0-daemon-api.md) | Classify the item as an API design, and run both research phases | assumed — autonomous |
 | easy | high | [m0-daemon-api D2](decisions/m0-daemon-api.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m0-daemon-api D3](decisions/m0-daemon-api.md) | Select every gray area that matters for the daemon plugin API | assumed — autonomous |
