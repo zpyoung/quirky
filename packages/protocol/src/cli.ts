@@ -3,8 +3,10 @@ export type CliArgs = { positionals: string[]; flags: Record<string, unknown> }
 
 /** The CLI's services for a plugin CLI command. */
 export type CliContext = {
+  /** The request-ID base for deterministic per-invocation operation IDs. */
+  requestBase: string
   /** Calls a daemon method through the link: request IDs, `--yes` and confirmations apply. */
-  call(method: string, params?: Record<string, unknown>): Promise<unknown>
+  call(method: string, params?: Record<string, unknown>, options?: { timeoutMs?: number }): Promise<unknown>
   out: {
     json: boolean
     /** Prints `value` as JSON under `--json`, else the text. */

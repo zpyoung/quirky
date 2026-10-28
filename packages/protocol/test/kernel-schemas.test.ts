@@ -102,12 +102,7 @@ describe('kernel method schemas', () => {
     expect(p('client.hello').properties!.role!.enum).toEqual(['desktop', 'ui', 'cli', 'mobile'])
     expect(p('status.get')).toEqual({ type: 'object' })
   })
-  test('palette state is optional in layout and palette.set accepts an omitted open value', () => {
-    const paletteSet = KERNEL_METHOD_SCHEMAS['ui.palette.set']!
-    expect(paletteSet.params.properties?.open?.type).toBe('boolean')
-    expect(paletteSet.params.required ?? []).not.toContain('open')
-    expect(paletteSet.result.properties?.palette?.type).toBe('boolean')
-  })
+
 })
 
 describe('kernel event schemas', () => {

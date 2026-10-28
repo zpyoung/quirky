@@ -224,6 +224,13 @@
         "@types/react-dom": "^19.3.0",
       },
     },
+    "plugins/quirky.orchestration": {
+      "name": "@quirky/plugin-orchestration",
+      "version": "0.1.0",
+      "dependencies": {
+        "@quirky/protocol": "workspace:*",
+      },
+    },
     "plugins/quirky.palette": {
       "name": "@quirky/plugin-palette",
       "version": "0.1.0",
@@ -436,6 +443,8 @@
     "@quirky/plugin-ledger": ["@quirky/plugin-ledger@workspace:plugins/quirky.ledger"],
 
     "@quirky/plugin-notifications": ["@quirky/plugin-notifications@workspace:plugins/quirky.notifications"],
+
+    "@quirky/plugin-orchestration": ["@quirky/plugin-orchestration@workspace:plugins/quirky.orchestration"],
 
     "@quirky/plugin-palette": ["@quirky/plugin-palette@workspace:plugins/quirky.palette"],
 

@@ -1,7 +1,6 @@
 import type { Ask, AskEnvelope, Session, SessionStatus, Worktree } from '@quirky/protocol'
 
 const WORKTREE_DEFAULTS = {
-  kind: 'git',
   displayName: null,
   comment: '',
   status: 'in-progress',
@@ -37,6 +36,7 @@ export class FakeWorld {
     branch: 'main',
     head: 'abc123',
     isMain: true,
+    kind: 'git',
     name: 'main',
     ...WORKTREE_DEFAULTS
   }
@@ -71,7 +71,7 @@ export class FakeWorld {
         kind: params.kind,
         agent: params.agent,
         worktreeId: this.worktree.id,
-        cwd: this.worktree.path,
+        cwd: params.cwd ?? this.worktree.path,
         title: params.title,
         status: 'starting',
         createdAt: now,
@@ -79,9 +79,32 @@ export class FakeWorld {
         exitCode: null,
         exitSignal: null,
         exitCause: null,
-        restorable: false
+        restorable: false,
+        launchSettings: params.launchSettings ?? null,
+        providerSession: null,
+        resumedFrom: params.resumedFrom ?? null
       }
       this.sessions.set(session.id, session)
+      return session
+    },
+    setProviderSession: (params: Record<string, unknown>, context: PluginCtx) => {
+      if (typeof params.session !== 'string') throw context.error('invalid-params', 'session must be a string')
+      if (typeof params.id !== 'string') throw context.error('invalid-params', 'id must be a string')
+      const id = params.id
+      if (id === '') throw context.error('invalid-params', "provider session id can't be empty")
+      if (id.length > 512) {
+        throw context.error('invalid-params', "provider session id can't be longer than 512 characters")
+      }
+      if (id.startsWith('-')) throw context.error('invalid-params', "provider session id can't start with '-'")
+      if (/[\u0000-\u001f\u007f-\u009f]/.test(id)) {
+        throw context.error('invalid-params', "provider session id can't contain control characters")
+      }
+      const transcriptPath = params.transcriptPath
+      if (transcriptPath !== undefined && typeof transcriptPath !== 'string') {
+        throw context.error('invalid-params', 'transcriptPath must be a string')
+      }
+      const session = this.require(params.session, context)
+      session.providerSession = { id, transcriptPath: transcriptPath ?? null }
       return session
     },
     setStatus: (params: any, context: PluginCtx) => {

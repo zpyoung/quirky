@@ -8,6 +8,7 @@ function harness(open: OpenResult) {
   const out: string[] = []
   const err: string[] = []
   const link: DaemonLink = {
+    requestBase: crypto.randomUUID(),
     call: () => Promise.reject(new Error('daemon must not be contacted')),
     callAny: () => Promise.reject(new Error('daemon must not be contacted')),
     reconnect: async () => {},

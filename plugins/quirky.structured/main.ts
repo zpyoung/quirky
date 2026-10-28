@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { existsSync, statSync } from 'node:fs'
 import { isAbsolute } from 'node:path'
 import type {
@@ -28,6 +29,9 @@ import type {
 
 type StructuredAgent = 'claude' | 'codex'
 type OwnerToken = { key: string; sessionId: string | null }
+type StructuredSendResult =
+  | { ok: true }
+  | { ok: false; reason: 'operation_unknown' | 'recipient_changed' | 'recipient_gone' }
 type LiveSession = {
   worktreeId: string
   agent: StructuredAgent
@@ -35,6 +39,7 @@ type LiveSession = {
   lastAssistantMessage: string | null
   owner: OwnerToken
   stopping: boolean
+  lease: { env: Record<string, string>; release(): void } | null
 }
 
 const AGENT_TITLES: Record<StructuredAgent, string> = { claude: 'Claude', codex: 'Codex' }
@@ -185,6 +190,7 @@ export function activate(context: PluginContext): void {
   const agentRunners = new Map<StructuredAgent, StructuredRunner>()
   const runnerBySession = new Map<string, StructuredRunner>()
   const startTasks = new Map<string, Promise<void>>()
+  const sendFlights = new Map<string, { payloadHash: string; promise: Promise<StructuredSendResult> }>()
   let statusQueue: Promise<void> = Promise.resolve()
   const ensureActive = (): void => {
     if (!active) throw new Error('structured plugin is deactivated')
@@ -200,6 +206,25 @@ export function activate(context: PluginContext): void {
   const releaseOwner = (sessionId: string): void => {
     const token = ownersBySession.get(sessionId) ?? live.get(sessionId)?.owner
     if (token) releaseOwnerToken(token)
+  }
+
+  const releaseStructuredLease = (sessionId: string): void => {
+    const entry = live.get(sessionId)
+    const lease = entry?.lease
+    if (!entry || !lease) return
+    entry.lease = null
+    lease.release()
+  }
+
+  const environmentForLease = (
+    leaseEnv: Record<string, string>,
+    accountEnv: Record<string, string | null>
+  ): Record<string, string | null> => {
+    const environment: Record<string, string | null> = { ...leaseEnv, ...accountEnv }
+    for (const [name, value] of Object.entries(leaseEnv)) {
+      if (name.startsWith('QUIRKY_') || name === 'PATH') environment[name] = value
+    }
+    return environment
   }
 
   const appendMessage = (msg: NewStructuredMessage): StructuredMessage => {
@@ -227,6 +252,7 @@ export function activate(context: PluginContext): void {
     const changed = entry.status !== status
     entry.status = status
     if (status === 'exited') {
+      releaseStructuredLease(sessionId)
       releaseOwner(sessionId)
       void cancelPendingAsks(sessionId)
     }
@@ -485,17 +511,28 @@ export function activate(context: PluginContext): void {
       throw context.error('invalid-params', "Extra arguments can't be applied to a structured session.")
     }
     const unsupported = Object.keys(params).find(
-      (key) => !['worktree', 'agent', 'prompt', 'model', 'options', 'extraArgs'].includes(key)
+      (key) =>
+        !['worktree', 'agent', 'prompt', 'model', 'options', 'extraArgs', 'title', 'deferStart'].includes(key)
     )
     if (unsupported !== undefined) throw context.error('invalid-params', `structured create does not support ${unsupported}`)
-    if (typeof params.prompt !== 'string') throw context.error('invalid-params', 'prompt must be a string')
+    const deferStart = params.deferStart === true
+    if (params.deferStart !== undefined && typeof params.deferStart !== 'boolean') {
+      throw context.error('invalid-params', 'deferStart must be a boolean')
+    }
+    if (params.title !== undefined && (typeof params.title !== 'string' || params.title.trim() === '')) {
+      throw context.error('invalid-params', 'title must be a non-empty string')
+    }
+    if (deferStart && params.prompt !== undefined) {
+      throw context.error('invalid-params', 'prompt cannot be combined with deferStart')
+    }
+    if (!deferStart && typeof params.prompt !== 'string') throw context.error('invalid-params', 'prompt must be a string')
     const agent = params.agent
-    const prompt = params.prompt
+    const prompt = typeof params.prompt === 'string' ? params.prompt : undefined
     const worktree = await resolveWorktree(params.worktree, caller)
     ensureActive()
     const resolution = await resolveStructuredLaunch(params)
     ensureActive()
-    const title = await nextTitle(worktree.id, agent)
+    const title = typeof params.title === 'string' ? params.title : await nextTitle(worktree.id, agent)
     ensureActive()
     const accountPrepare = accountPreparationAvailable(await context.call('plugin.contributions', { kind: 'method' }))
     const userEnv = accountPrepare
@@ -518,6 +555,18 @@ export function activate(context: PluginContext): void {
       ...(resolution?.launchSettings ? { launchSettings: resolution.launchSettings } : {})
     })) as Session
     if (!active) return registered
+    const token: OwnerToken = { key: '', sessionId: registered.id }
+    const entry: LiveSession = {
+      worktreeId: worktree.id,
+      agent,
+      status: registered.status,
+      lastAssistantMessage: null,
+      owner: token,
+      stopping: false,
+      lease: null
+    }
+    live.set(registered.id, entry)
+    ownersBySession.set(registered.id, token)
     let prepared: AccountPreparation | null = null
     if (accountPrepare) {
       try {
@@ -540,32 +589,30 @@ export function activate(context: PluginContext): void {
             }`
           )
         }
+        releaseOwnerToken(token)
         throw error
       }
     }
-    if (!active) return registered
-    const environment = prepared === null ? {} : structuredEnvironment(userEnv, prepared)
-    const launchOptions: StructuredLaunchOptions = {
-      ...(resolution?.structured ?? {}),
-      ...(Object.keys(environment).length > 0 ? { env: environment } : {})
-    }
-    const token: OwnerToken = { key: '', sessionId: registered.id }
-    live.set(registered.id, {
-      worktreeId: worktree.id,
-      agent,
-      status: registered.status,
-      lastAssistantMessage: null,
-      owner: token,
-      stopping: false
-    })
-    ownersBySession.set(registered.id, token)
-    try {
-      journal.setLaunchOptions(registered.id, resolution?.structured ?? {})
-    } catch (error) {
-      startupFailed(registered.id, token, error)
+    if (!active || live.get(registered.id) !== entry) {
+      releaseOwnerToken(token)
       return registered
     }
-    startRunner(registered, agent, prompt, launchOptions, token)
+    const environment = prepared === null ? {} : structuredEnvironment(userEnv, prepared)
+    try {
+      const lease = context.launch.openStructuredLease({
+        sessionId: registered.id,
+        worktreeId: worktree.id,
+        agent
+      })
+      entry.lease = lease
+      const launchOptions: StructuredLaunchOptions = {
+        ...(resolution?.structured ?? {}),
+        env: environmentForLease(lease.env, environment)
+      }
+      startRunner(registered, agent, prompt, launchOptions, token)
+    } catch (error) {
+      startupFailed(registered.id, token, error)
+    }
     return registered
   }
 
@@ -597,7 +644,7 @@ export function activate(context: PluginContext): void {
 
     let options: StructuredLaunchOptions
     try {
-      options = journal.getLaunchOptions(old.id) ?? launchOptionsFromSnapshot(old)
+      options = launchOptionsFromSnapshot(old)
     } catch (error) {
       throw context.error('conflict', `session ${old.id} cannot replay its structured launch options: ${error instanceof Error ? error.message : String(error)}`)
     }
@@ -607,6 +654,7 @@ export function activate(context: PluginContext): void {
     owners.set(key, token)
 
     let registered: Session
+    let entry: LiveSession | null = null
     let accountPrepare = false
     let userEnv: Record<string, string | null> = {}
     try {
@@ -638,6 +686,18 @@ export function activate(context: PluginContext): void {
         releaseOwnerToken(token)
         return registered
       }
+      token.sessionId = registered.id
+      ownersBySession.set(registered.id, token)
+      entry = {
+        worktreeId: old.worktreeId,
+        agent,
+        status: registered.status,
+        lastAssistantMessage: null,
+        owner: token,
+        stopping: false,
+        lease: null
+      }
+      live.set(registered.id, entry)
     } catch (error) {
       releaseOwnerToken(token)
       throw error
@@ -670,31 +730,26 @@ export function activate(context: PluginContext): void {
         throw error
       }
     }
-    if (!active) {
+    if (!active || !entry || live.get(registered.id) !== entry) {
       releaseOwnerToken(token)
       return registered
     }
     const environment = prepared === null ? {} : structuredEnvironment(userEnv, prepared)
-    const launchOptions: StructuredLaunchOptions = {
-      ...options,
-      ...(Object.keys(environment).length > 0 ? { env: environment } : {})
-    }
     const preparedProviderSession =
       prepared?.resumeTranscriptPath === undefined
         ? providerSession
         : { ...providerSession, transcriptPath: prepared.resumeTranscriptPath }
-    token.sessionId = registered.id
-    ownersBySession.set(registered.id, token)
-    live.set(registered.id, {
-      worktreeId: old.worktreeId,
-      agent,
-      status: registered.status,
-      lastAssistantMessage: null,
-      owner: token,
-      stopping: false
-    })
     try {
-      journal.setLaunchOptions(registered.id, options)
+      const lease = context.launch.openStructuredLease({
+        sessionId: registered.id,
+        worktreeId: old.worktreeId,
+        agent
+      })
+      entry.lease = lease
+      const launchOptions: StructuredLaunchOptions = {
+        ...options,
+        env: environmentForLease(lease.env, environment)
+      }
       startRunner(
         registered,
         agent,
@@ -714,18 +769,131 @@ export function activate(context: PluginContext): void {
   }
 
   const send: MethodHandler = async (params) => {
-    const session = await requireStructured(params.session as string)
-    if (!isStructuredAgent(session.agent)) throw context.error('conflict', `structured sessions cannot send to provider ${session.agent}`)
-    await startTasks.get(session.id)
-    ensureActive()
-    const runner = runnerBySession.get(session.id) ?? runnerFor(session.agent)
-    await runner.send(session.id, params.text as string)
-    return { ok: true }
+    if (typeof params.session !== 'string') throw context.error('invalid-params', 'session must be a string')
+    if (typeof params.text !== 'string') throw context.error('invalid-params', 'text must be a string')
+    const sessionId = params.session
+    const text = params.text
+    const expectedIncarnation = params.expectedIncarnation
+    if (expectedIncarnation !== undefined && typeof expectedIncarnation !== 'string') {
+      throw context.error('invalid-params', 'expectedIncarnation must be a string')
+    }
+    const recipientRefusal = (): StructuredSendResult | null => {
+      if (typeof expectedIncarnation !== 'string') return null
+      const identity = context.launch.sessionIdentity(sessionId)
+      if (!identity || identity.source !== 'structured_lease') return { ok: false, reason: 'recipient_gone' }
+      if (identity.sessionId !== sessionId || identity.processIncarnation !== expectedIncarnation) {
+        return { ok: false, reason: 'recipient_changed' }
+      }
+      return null
+    }
+    const operationId = params.operationId
+    if (operationId === undefined) {
+      const session = await requireStructured(sessionId)
+      if (!isStructuredAgent(session.agent)) {
+        throw context.error('conflict', `structured sessions cannot send to provider ${session.agent}`)
+      }
+      const refused = recipientRefusal()
+      if (refused) return refused
+      await startTasks.get(session.id)
+      ensureActive()
+      const revalidated = recipientRefusal()
+      if (revalidated) return revalidated
+      const runner = runnerBySession.get(session.id) ?? runnerFor(session.agent)
+      await runner.send(session.id, text)
+      return { ok: true }
+    }
+    if (typeof operationId !== 'string' || operationId.length === 0) {
+      throw context.error('invalid-params', 'operationId must be a non-empty string')
+    }
+    const payloadHash = createHash('sha256')
+      .update(JSON.stringify([sessionId, text, expectedIncarnation ?? null]))
+      .digest('hex')
+    const existingFlight = sendFlights.get(operationId)
+    if (existingFlight) {
+      if (existingFlight.payloadHash !== payloadHash) {
+        throw context.error('conflict', `structured send operation ${operationId} was reused with different input`)
+      }
+      return existingFlight.promise
+    }
+
+    const existing = journal.sendReceipt(operationId)
+    if (existing) {
+      if (existing.sessionId !== sessionId || existing.payloadHash !== payloadHash) {
+        throw context.error('conflict', `structured send operation ${operationId} was reused with different input`)
+      }
+      return existing.state === 'completed' ? { ok: true } : { ok: false, reason: 'operation_unknown' }
+    }
+
+    const session = await requireStructured(sessionId)
+    if (!isStructuredAgent(session.agent)) {
+      throw context.error('conflict', `structured sessions cannot send to provider ${session.agent}`)
+    }
+    const agent = session.agent
+    const racedFlight = sendFlights.get(operationId)
+    if (racedFlight) {
+      if (racedFlight.payloadHash !== payloadHash) {
+        throw context.error('conflict', `structured send operation ${operationId} was reused with different input`)
+      }
+      return racedFlight.promise
+    }
+    const racedReceipt = journal.sendReceipt(operationId)
+    if (racedReceipt) {
+      if (racedReceipt.sessionId !== sessionId || racedReceipt.payloadHash !== payloadHash) {
+        throw context.error('conflict', `structured send operation ${operationId} was reused with different input`)
+      }
+      return racedReceipt.state === 'completed' ? { ok: true } : { ok: false, reason: 'operation_unknown' }
+    }
+    const refused = recipientRefusal()
+    if (refused) return refused
+    const reservation = journal.reserveSendReceipt({ operationId, sessionId, payloadHash }, Date.now())
+    if (!reservation) throw context.error('conflict', 'structured send receipt ledger is full')
+    if (!reservation.created) {
+      const flight = sendFlights.get(operationId)
+      if (flight) {
+        if (flight.payloadHash !== payloadHash) {
+          throw context.error('conflict', `structured send operation ${operationId} was reused with different input`)
+        }
+        return flight.promise
+      }
+      return reservation.receipt.state === 'completed' ? { ok: true } : { ok: false, reason: 'operation_unknown' }
+    }
+
+    const promise = Promise.resolve().then(async (): Promise<StructuredSendResult> => {
+      await startTasks.get(session.id)
+      ensureActive()
+      const revalidated = recipientRefusal()
+      if (revalidated) return revalidated
+      const runner = runnerBySession.get(session.id) ?? runnerFor(agent)
+      await runner.send(session.id, text)
+      journal.completeSendReceipt(operationId, Date.now())
+      return { ok: true }
+    })
+    const flight = { payloadHash, promise }
+    sendFlights.set(operationId, flight)
+    try {
+      return await promise
+    } finally {
+      if (sendFlights.get(operationId) === flight) sendFlights.delete(operationId)
+    }
   }
 
   const stop: MethodHandler = async (params) => {
+    const expectedIncarnation = params.expectedIncarnation
+    if (expectedIncarnation !== undefined && typeof expectedIncarnation !== 'string') {
+      throw context.error('invalid-params', 'expectedIncarnation must be a string')
+    }
     const session = await requireStructured(params.session as string)
     const entry = live.get(session.id)
+    if (typeof expectedIncarnation === 'string') {
+      const identity = context.launch.sessionIdentity(session.id)
+      if (!identity || identity.source !== 'structured_lease' || !entry?.lease) {
+        return { ok: false as const, reason: 'recipient_gone' as const }
+      }
+      if (identity.sessionId !== session.id || identity.processIncarnation !== expectedIncarnation) {
+        return { ok: false as const, reason: 'recipient_changed' as const }
+      }
+    }
+    releaseStructuredLease(session.id)
     if (entry) entry.stopping = true
     const runner = runnerBySession.get(session.id)
     try {
@@ -736,7 +904,9 @@ export function activate(context: PluginContext): void {
       releaseOwner(session.id)
       runnerBySession.delete(session.id)
     }
-    return { ok: true }
+    return typeof expectedIncarnation === 'string'
+      ? { ok: true as const, closed: true as const, sessionId: session.id, processIncarnation: expectedIncarnation }
+      : { ok: true as const }
   }
 
   context.provide('method:quirky.structured/create', create)
@@ -746,6 +916,7 @@ export function activate(context: PluginContext): void {
   context.provide('method:quirky.structured/stop', stop)
 
   const release = async (sessionId: string): Promise<void> => {
+    releaseStructuredLease(sessionId)
     const runner = runnerBySession.get(sessionId)
     await runner?.stop(sessionId).catch(() => undefined)
     await startTasks.get(sessionId)
@@ -758,16 +929,16 @@ export function activate(context: PluginContext): void {
     if (!active || event.type !== 'quirky.session/removed') return
     const sessionId = (event.data as { sessionId?: unknown } | null)?.sessionId
     if (typeof sessionId !== 'string') return
-    live.delete(sessionId)
     await release(sessionId)
+    live.delete(sessionId)
     if (active) journal.remove(sessionId)
   })
 
   shutdown = async () => {
     active = false
     const sessionIds = [...live.keys()]
-    live.clear()
     await Promise.all(sessionIds.map(release))
+    live.clear()
     runnerBySession.clear()
     owners.clear()
     ownersBySession.clear()
