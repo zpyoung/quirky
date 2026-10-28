@@ -360,5 +360,27 @@
 - **Revisit if:** canonical land reproduces the timeout or any named failure.
 - **Source:** assumed — autonomous; locked by LOOP.md verification/land contract
 
+## D33: Keep residual Watch host-clipboard acceptance with its approved owner
+- **Question:** Does corrected guest editing prove clipboard transfer into the host UI?
+- **Options:** claim a tool-only failure; build an additional clipboard relay here; retain the exact residual base-pane input acceptance under the existing operator-approved owner.
+- **Chose:** retain the residual host-transfer acceptance with sa-browser-pane-native-host-controls, as sa-browser-pane D23 explicitly assigns remaining Watch input/base-pane UI there. No queue addition or title change.
+- **Why:** the final web run visibly selected all “Normal copy text” and left Grab disarmed after cmd+c, so the design shortcut did not hijack normal editing. Public tests proved same-guest copy/paste. Host address paste remained empty; its cause is unresolved and is not labeled a tool failure or a Native result.
+- **Evidence:** Run20261028T094623-7210 obs4 shows selection, obs8 empty host paste, obs9 restored URL without navigation. Report remains partial. Earlier run20261028T080620-50e2 proved fresh-toolbar S feedback and cancellation; wheel had no console errors/host-layout scroll, with guard NO_EFFECT recorded. Both runs ended with no kept-open browser or cleanup error; clipboard restoration is unconfirmed.
+- **Reversibility:** medium
+- **Confidence:** high for observed selection/guard behavior and approved ownership; cross-context clipboard transfer not accepted.
+- **Revisit if:** the existing host-controls owner proves transfer or identifies a supported relay preserving copy semantics.
+- **Source:** locked by latest operator ruling and sa-browser-pane D23; deferred: residual Watch host clipboard transfer
+
+## D34: Preserve local tooling metadata without shipping it
+- **Question:** How can a clean source gate proceed with an unrelated untracked .serena directory?
+- **Options:** stage/delete it; preserve it intact outside the gate and restore it after landing.
+- **Chose:** preserve the directory under the owned scratch root, without staging or deleting its contents; restore the original path before scratch cleanup.
+- **Why:** diagnostic metadata is not feature source and its ownership need not be guessed.
+- **Evidence:** the first gate stopped before tests on its clean-tree prerequisite; subsequent recorded gates used clean committed source. The preserved path is /tmp/quirky-browser-design.hjsqFr/preserved-serena.
+- **Reversibility:** easy
+- **Confidence:** exact filesystem preservation; restoration required in final cleanup.
+- **Revisit if:** the original destination reappears; preserve both rather than overwrite.
+- **Source:** assumed — autonomous
+
 ## Progress
-Dependency readiness is true; authoritative roadmap merged and locks inspected. All original component branches are integrated. Clean8db98e52 browser/scripts/types/full-build gate passed; reports prove Annotate, all7Draw tools, lifetime, actual Send success/refusal, repeated coordinate copy, immediateS and menu PNG. The fresh-toolbar S repair showed actual No element hovered; native wheel emitted no console error and kept host layout fixed, though its guard classification remained partial. Ordinary-copy diagnosis exposed missing macOS editing defaults; D31 repair and isolated public regression passed, but a full-file timeout remains explicitly recorded in D32. Old UI runtimes are stopped. Next: commit keyboard repair, typecheck/build, bounded original normal-copy UI rerun, then canonical merge-result land gate. No unstarted review/newqueue. Archive reports/gates, restore preserved untracked .serena metadata, and remove owned temporary homes only after all owned processes stop.
+Source submission is complete. Dependency readiness is true; authoritative roadmap and incoming locks are merged. The clean8db98e52 gate passed Browser9remote+3Mac files, scripts68/0/570, types and full build; finalebad5509 keyboard source passed types/build and its new public regression. D32 retains the anomalous full-file timeout for the required canonical merge-result gate. Actual reports prove all3design flows, delivery success/refusal, repeated copy, immediateS/menu PNG, toolbar feedback/cancellation and no passive-wheel console error. Residual Watch-to-host ordinary clipboard transfer is explicit under existing D23 ownership; Native-only acceptance remains pending. All owned UI runtimes and source workers have stopped. Next: commit these evidence-only docs, detach and run canonical land; do not claim integration acceptance before that result. Afterward archive raw reports/gates, restore preserved .serena and remove owned temporary homes.

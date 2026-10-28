@@ -13,6 +13,8 @@ All three parts of sa-browser-design-mode are included together. Browser profile
 
 Interactive agent delivery targets terminal panes; structured background sessions remain background-only. Native chat is dropped by the locked architecture, not a missing delivery implementation.
 
+The operator-approved sa-browser-pane D23 leaves residual base Watch input/host-clipboard transfer acceptance with existing sa-browser-pane-native-host-controls. This item's Mod+C guard and macOS guest editing are implemented and tested; the final web run selected text without arming Grab, but paste into the host address field remained empty. Its partial report is retained without a tool-only or cross-context clipboard success claim. Native ordinary-copy acceptance remains N-COPY pending nightly.
+
 ## Key decisions & rationale
 Use injected guest picker plus host-side validation and the existing browser pane. Alternatives: a cross-origin iframe cannot inspect arbitrary pages; moving all browsing to Chrome violates the locked engine separation. Keep extraction and formatting shared between Native and Watch, but treat all guest data as untrusted. Use the existing public agent/terminal APIs rather than importing another plugin's internals. Clipboard permission failure is visible and leaves the selection/notes intact.
 

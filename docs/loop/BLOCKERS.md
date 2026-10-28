@@ -350,3 +350,10 @@ Registration update: `bun scripts/build-loop/queue.ts add /tmp/quirky-session-in
 - Unchanged failures still awaiting the normal merged retry: Git remote SC-29 wait (five possible predicates; available stack does not identify one), daemon lock five-second test bound, incoming loops-store five-second bound. No speculative producer change, timeout increase or waived assertion was used for these.
 - Operator's45-minute target was not met; the first controller verification alone took1800.57seconds after source submission. No on-time or authoritative landed claim is inferred from a submitted command.
 
+## sa-browser-pane-native-host-controls: residual Watch host-clipboard transfer
+
+- **Priority/severity:** P2 / medium; remaining base-pane Watch input acceptance, owned by the existing item under sa-browser-pane D23. No new queue record or title change.
+- **Observed:** guarded run20261028T094623-7210 visibly selected “Normal copy text” through cmd+a; cmd+c did not arm Grab. Paste into the host address input was empty. The URL was restored without navigation. Cause is unresolved, not asserted to be a tool limitation or a Native failure.
+- **Evidence:** `.quirk/using-apps-like-a-user/runs/20261028T094623-7210/report.md`, obs4/obs8/obs9; earlier partial report20261028T080620-50e2. The design item's public Watch regression proves macOS selection and same-guest copy/paste after CDP editing-command translation; it does not prove transfer across browser/UI clipboard contexts.
+- **Remaining acceptance:** establish supported ordinary Watch-to-host clipboard transfer while preserving site copy semantics and page/lease ownership, without broad clipboard permission grants or guessed target selection. Preserve the source and partial reports for the existing host-controls owner. Native ordinary-copy remains pending in `docs/loop/native/sa-browser-design-mode.json` N-COPY.
+
