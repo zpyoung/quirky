@@ -162,3 +162,40 @@ and review actions, file contents, issues, work-item searches, Projects v2, and
 connection-owned refreshes. Use `quirky api --json` for the live method, parameter,
 result, and event contracts. Fixed-cap reads report truncation, partial results, or a limit error;
 only work-item search exposes client `--page` and `--limit`.
+
+## Heimdall fleet and controls
+
+`quirky.heimdall` provides the Heimdall sidebar entry, fleet view and watcher controls.
+Kinds register their enrollment and execution hooks through the public plugin API.
+Enrollment refuses an unknown kind; kind-specific commands such as `objective` require
+that kind's public detail provider.
+
+```sh
+quirky heimdall list --json
+quirky heimdall show <watcher-id>
+quirky heimdall pause <watcher-id> --json
+quirky heimdall budget <watcher-id> --hours 2 --turns none --json
+quirky heimdall debug <watcher-id> --out /tmp/heimdall-debug.json
+```
+
+Controls use the last observed owner fence and command revision. A changed revision is
+refused, so refresh the detail before submitting another command. Results distinguish
+`applied`, `refused` and `indeterminate`; an uncertain reply is not permission to repeat
+an external effect.
+
+Pause drains the current tick before committing. Resume cannot undo Disarm and refuses
+an exhausted budget or pending worker question. A budget limit of zero is valid; `none`
+means unlimited. Objective concurrency is limited to one in folder workspaces.
+
+Deleting a watcher removes its saved history and requires confirmation unless `--yes`
+authorizes it. Worker sessions keep running. `stop-worker` instead uses the exact recorded
+session and process incarnation; missing or unverifiable identity is refused.
+
+The API exposes `quirky.heimdall/fleet`, `detail`, `command` and `debugReport`.
+`fleetChanged` pushes newer snapshots; a failed refresh retains the last confirmed view.
+The schema-2 debug JSON includes bounded journal and trace history. Approval-request and
+terminal transitions go through `quirky.notifications`, including its enabled, focus and
+cooldown policy. Disabling that plugin silences delivery.
+
+Use `quirky heimdall --help` and `quirky api --json` for the live commands and schemas.
+

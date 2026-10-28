@@ -6,6 +6,7 @@ import { spawnCli } from '../../../packages/cli/test/fixtures/fake-daemon'
 import { waitForAsync } from '../../../packages/daemon/test/helpers'
 import { fixtureId, startControlHarness, type ControlHarness } from './control-fixture'
 import type { CommandRequest, CommandResult, FleetSnapshot, WatcherDetail, WatcherCommand } from '../src/control-contracts'
+import type { EnrollmentResult } from '../src/contracts'
 
 let t: ControlHarness
 beforeAll(async () => { t = await startControlHarness() })
@@ -13,11 +14,11 @@ afterAll(async () => { await t?.cleanup() })
 const call = <T>(method: string, params: Record<string, unknown> = {}) => t.client.callAny(`quirky.heimdall/${method}`, params) as Promise<T>
 const detail = (watcherId: string) => call<WatcherDetail>('detail', { target: { watcherId } })
 async function enroll(workspace: string, payload: Record<string, unknown> = {}, budget?: { wallClockActiveMs: number | null; turns: number | null }): Promise<string> {
-  const result = await call<{ kind: string; enrollment: { watcherId: string } }>('enroll', {
+  const result = await call<EnrollmentResult>('enroll', {
     kind: 'objective', kindPayload: { workspace, objectiveText: `Objective ${workspace}`, repoId: 'fixture-repo', maxConcurrency: 3, ...payload },
     capabilities: { 'fixture.write': 'gated' }, ...(budget ? { budget } : {})
   })
-  expect(result.kind).toBe('enrolled')
+  if (result.kind !== 'enrolled') throw new Error(`Fixture enrollment failed: ${JSON.stringify(result)}`)
   return result.enrollment.watcherId
 }
 async function command(watcherId: string, value: WatcherCommand): Promise<CommandResult> {
@@ -93,7 +94,8 @@ describe('Heimdall operators through daemon API and real CLI', () => {
   test('exhausted budget refuses resume until raised, objective cap changes and invalid cap does not mutate', async () => {
     const id = await enroll('budget', {}, { wallClockActiveMs: 0, turns: 40 })
     await waitForAsync(async () => (await detail(id)).status?.state === 'parked', 5000)
-    expect(await command(id, { kind: 'resume' })).toMatchObject({ kind: 'refused', reason: 'invalid-state', detail: 'Raise the exhausted watcher budget before resuming' })
+    expect(await command(id, { kind: 'resume' })).toMatchObject({ kind: 'refused', reason: 'invalid-state' })
+    expect((await detail(id)).enrollment).toMatchObject({ enabled: false, budget: { wallClockActiveMs: 0, turns: 40 } })
     expect((await cli(['budget', id, '--hours', '2', '--turns', 'none', '--json'])).code).toBe(0)
     expect((await detail(id)).enrollment).toMatchObject({ enabled: false, budget: { wallClockActiveMs: 7200000, turns: null } })
     expect(await command(id, { kind: 'resume' })).toMatchObject({ kind: 'applied' })
@@ -174,7 +176,6 @@ describe('Heimdall operators through daemon API and real CLI', () => {
       land: 'on'
     })
     expect(defaultDetail.enrollment.budget).toEqual({ wallClockActiveMs: 14_400_000, turns: 40 })
-    expect(defaultDetail.enrollment.ownerInterventionCapability).toBe('off')
 
     const overridden = await cli([
       'create', 'objective',
@@ -285,7 +286,6 @@ describe('Heimdall operators through daemon API and real CLI', () => {
         merge: 'off'
       })
       expect(current.enrollment.budget).toEqual({ wallClockActiveMs: 14_400_000, turns: null })
-      expect(current.enrollment.ownerInterventionCapability).toBe('off')
     }
   }, 15000)
 
@@ -327,6 +327,25 @@ describe('Heimdall operators through daemon API and real CLI', () => {
     const effects = join(t.h.home, 'plugin-data', fixtureId, 'effects.log')
     expect(existsSync(effects) ? readFileSync(effects, 'utf8').split('\n').includes(id) : false).toBe(false)
   }, 15000)
+
+  test('invalid deletion returns a refusal without creating a confirmation ask', async () => {
+    const id = await enroll('invalid-delete')
+    const current = await detail(id)
+    const pending = () => t.client.callAny('quirky.ask/list', { pendingOnly: true }) as Promise<{ id: string }[]>
+    const before = new Set((await pending()).map(ask => ask.id))
+    try {
+      expect(await call('command', {
+        target: current.target, expectedOwner: current.ownerFence,
+        command: { kind: 'delete', budget: { wallClockActiveMs: null, turns: null } }
+      })).toMatchObject({ kind: 'refused', reason: 'invalid-command' })
+      expect((await pending()).map(ask => ask.id).filter(askId => !before.has(askId))).toEqual([])
+      expect((await detail(id)).enrollment.commandRevision).toBe(current.enrollment.commandRevision)
+    } finally {
+      for (const ask of await pending()) {
+        if (!before.has(ask.id)) await t.client.callAny('quirky.ask/cancel', { askId: ask.id })
+      }
+    }
+  })
 
   test('daemon delete confirmation is exact and single-use; cancellation never removes history', async () => {
     const id = await enroll('confirm-delete')

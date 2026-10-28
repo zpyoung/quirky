@@ -170,11 +170,11 @@ function budgetText(policy: BudgetPolicy): string {
 
 function showText(detail: WatcherDetail): string {
   const pairs: [string, string][] = [
-    ['Watcher', detail.name],
+    ['Watcher', `${detail.name} (${detail.enrollment.watcherId})`],
     ['Kind', detail.enrollment.kind],
     ['State', stateOf(detail)],
     ['Owner', ownerText(detail)],
-    ['Workspace', `${detail.workspaceName} (${detail.enrollment.workspacePath})`],
+    ['Workspace', detail.enrollment.workspacePath],
     ['Owner contact', detail.ownerContact],
     ['Enabled', detail.enrollment.enabled ? 'yes' : 'no'],
     ['Paused', detail.enrollment.paused ? 'yes' : 'no'],
@@ -186,7 +186,7 @@ function showText(detail: WatcherDetail): string {
   ]
   if (detail.status?.reason) pairs.push(['Status reason', detail.status.reason])
   if (detail.status?.detail) pairs.push(['Status detail', detail.status.detail])
-  return pairs.length === 0 ? 'Watcher has no inspectable details.' : pairs.map(([key, value]) => `${key}: ${value}`).join('\n')
+  return pairs.map(([key, value]) => `${key}: ${value}`).join('\n')
 }
 
 async function show(args: CliArgs, ctx: CliContext): Promise<void> {

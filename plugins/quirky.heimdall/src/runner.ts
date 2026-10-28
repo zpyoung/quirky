@@ -596,7 +596,7 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
       }
     }, version, { idempotent: true })
     consecutiveGateHolds += 1
-    if (verdict.verdict === 'escalate' || verdict.reason === 'awaiting-approval') {
+    if (verdict.verdict === 'escalate') {
       updateStatus('escalated', verdict.reason, detail)
       trace.exitPath = 'gate-escalated'
     } else {

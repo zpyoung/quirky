@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { startHarness, type Harness } from '../../../packages/daemon/test/helpers'
@@ -28,7 +28,7 @@ export async function activate(context) {
     const path = join(context.dataDir, 'workspaces', workspace)
     mkdirSync(path, { recursive: true })
     const canonical = realpathSync(path)
-    return { workspaceKey: 'local::' + canonical, workspacePath: canonical, executionHostId: 'local', schedulerOwner: 'local', kindPayload: payload,
+    return { workspaceKey: 'local::' + canonical, workspacePath: canonical, executionHostId: 'local', schedulerOwner: 'daemon', kindPayload: payload,
       worktreeId: payload.worktreeId ?? null, repoId: payload.repoId ?? null }
   })
   context.provide('method:' + hook('read'), async p => {
@@ -46,13 +46,17 @@ export async function activate(context) {
   context.provide('method:' + hook('decide'), p => {
     const world = p.snapshot.world
     if (world.reason) return { action: null, reason: world.reason, detail: world.detail, considered: ['planning', 'implementation'] }
-    if (world.mode !== 'approval') return { action: null, reason: 'fixture-idle', considered: ['fixture'] }
-    return { action: { kind: 'fixture-action', capability: 'fixture.write', visibility: 'external', contentIdentity: p.snapshot.contentIdentity,
+    if (world.mode !== 'approval' && world.mode !== 'worker') return { action: null, reason: 'fixture-idle', considered: ['fixture'] }
+    return { action: { kind: world.mode === 'worker' ? 'fixture-worker' : 'fixture-action', capability: 'fixture.write', visibility: 'external', contentIdentity: p.snapshot.contentIdentity,
       evidenceKey: 'fixture-evidence', expectedState: { target: 'fixture-resource', before: null } }, considered: ['fixture-action'] }
   })
   context.provide('method:' + hook('execute'), p => {
     const e = p.enrollment ?? p.context?.enrollment
     if (!e) throw new Error('missing enrollment context')
+    if (e.kindPayload.mode === 'worker') {
+      if (!e.kindPayload.workerRequest) throw new Error('Fixture worker request missing')
+      return { worker: e.kindPayload.workerRequest }
+    }
     appendFileSync(join(context.dataDir, 'effects.log'), e.watcherId + '\\n')
     return { effect: 'landed', reason: 'fixture action confirmed' }
   })
@@ -74,14 +78,52 @@ export function installControlFixture(builtins: string): void {
 export interface ControlHarness { root: string; h: Harness; client: QuirkyClient; cleanup(): Promise<void> }
 export async function startControlHarness(options: { uiDir?: string } = {}): Promise<ControlHarness> {
   const root = mkdtempSync(join(tmpdir(), 'heimdall-control-'))
+  const home = join(root, 'home')
+  const userHome = join(root, 'user-home')
   const builtins = join(root, 'builtins')
-  mkdirSync(builtins)
-  symlinkSync(resolve(import.meta.dir, '..'), join(builtins, 'quirky.heimdall'))
-  symlinkSync(resolve(import.meta.dir, '../../quirky.ask'), join(builtins, 'quirky.ask'))
-  installControlFixture(builtins)
-  let h: Harness
-  try { h = await startHarness({ home: join(root, 'home'), builtinPluginsDir: builtins, ...options }) }
-  catch (error) { rmSync(root, { recursive: true, force: true }); throw error }
-  const client = await h.connect('cli', 'heimdall-control-acceptance')
-  return { root, h, client, async cleanup() { try { await h.cleanup() } finally { rmSync(root, { recursive: true, force: true }) } } }
+  const plugins = resolve(import.meta.dir, '../..')
+  const linked = new Set<string>()
+  const environmentKeys = ['HOME', 'QUIRKY_HOME', 'CLAUDE_CONFIG_DIR', 'CODEX_HOME', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_CACHE_HOME', 'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_OAUTH_TOKEN', 'OPENAI_API_KEY', 'CODEX_API_KEY']
+  const saved = new Map(environmentKeys.map(key => [key, process.env[key]]))
+  const restore = () => {
+    for (const [key, value] of saved) {
+      if (value === undefined) delete process.env[key]
+      else process.env[key] = value
+    }
+  }
+  function link(pluginId: string): void {
+    if (linked.has(pluginId)) return
+    const dir = join(plugins, pluginId)
+    const manifest: unknown = JSON.parse(readFileSync(join(dir, 'quirky-plugin.json'), 'utf8'))
+    linked.add(pluginId)
+    symlinkSync(dir, join(builtins, pluginId))
+    if (manifest && typeof manifest === 'object' && 'dependencies' in manifest && Array.isArray(manifest.dependencies)) {
+      for (const dependency of manifest.dependencies) {
+        if (typeof dependency !== 'string') throw new Error(`Invalid dependency in ${pluginId}`)
+        link(dependency)
+      }
+    }
+  }
+  let h: Harness | undefined
+  try {
+    mkdirSync(builtins)
+    mkdirSync(userHome, { mode: 0o700 })
+    link('quirky.heimdall')
+    link('quirky.ask')
+    installControlFixture(builtins)
+    for (const key of environmentKeys) delete process.env[key]
+    process.env.HOME = userHome
+    process.env.QUIRKY_HOME = home
+    h = await startHarness({ home, builtinPluginsDir: builtins, ...options })
+    const running = h
+    const client = await running.connect('cli', 'heimdall-control-acceptance')
+    return { root, h: running, client, async cleanup() {
+      try { await running.cleanup() } finally { restore(); rmSync(root, { recursive: true, force: true }) }
+    } }
+  } catch (error) {
+    try { await h?.cleanup() } catch (cleanupError) {
+      throw new AggregateError([error, cleanupError], 'Control fixture setup and cleanup failed')
+    } finally { restore(); rmSync(root, { recursive: true, force: true }) }
+    throw error
+  }
 }

@@ -125,7 +125,7 @@ export function createControlPlane(host: KernelControlHost): ControlPlane {
   }
 
   function command(input: unknown): Promise<CommandResult> {
-    const parsed = parseRequest(input)
+    const parsed = parseControlRequest(input)
     if (!parsed) return Promise.resolve(refused('invalid-command', REFUSAL_DETAILS.invalidRequest))
     if (isRemoteTarget(parsed.target)) {
       return Promise.resolve(refused('owner-unreachable', 'Remote watcher targets are not controlled by this local kernel.'))
@@ -377,7 +377,7 @@ async function stopWorker(host: KernelControlHost, enrollment: Enrollment, ident
   return applied(result.appliedAtMs, true, true)
 }
 
-function parseRequest(value: unknown): ParsedRequest | null {
+export function parseControlRequest(value: unknown): ParsedRequest | null {
   if (typeof value !== 'object' || value === null || Array.isArray(value) || !('command' in value)) return null
   const commandValue = value.command
   if (typeof commandValue !== 'object' || commandValue === null || Array.isArray(commandValue)
