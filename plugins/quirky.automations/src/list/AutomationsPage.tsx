@@ -445,68 +445,120 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
   const dashboardGeneration = useRef(0)
   const rowElements = useRef(new Map<string, HTMLTableRowElement>())
   const historyElements = useRef(new Map<string, HTMLTableRowElement>())
+  const reloadPromise = useRef<Promise<void> | null>(null)
+  const reloadAgain = useRef(false)
+  const mounted = useRef(false)
+  const reloadLatest = useRef<() => Promise<void>>(() => Promise.resolve())
+  const historyRequestGeneration = useRef(0)
+  const activeHistoryAutomationId = navigation.page === 'detail' && navigation.tab === 'runs' ? navigation.automationId : null
+  const historySelection = useRef({ automationId: activeHistoryAutomationId })
+  if (historySelection.current.automationId !== activeHistoryAutomationId) {
+    historySelection.current = { automationId: activeHistoryAutomationId }
+  }
+  const historyEffectAutomationId = useRef<string | null>(null)
 
-  const reload = useCallback(async () => {
-    const generation = ++loadGeneration.current
-    setData((current) => ({
-      ...current, nativeLoading: current.definitions.length === 0, externalLoading: current.managers.length === 0,
-      nativeError: null, editorError: null, externalError: null
-    }))
-    const [definitionsResult, editorResult, externalResult] = await Promise.allSettled([
-      callApi<AutomationDefinition[]>(props.context, 'list', {}),
-      callApi<AutomationEditorData>(props.context, 'editorData', {}),
-      callApi<unknown>(props.context, 'externalList', {})
-    ])
-    if (generation !== loadGeneration.current) return
-    const definitions = definitionsResult.status === 'fulfilled' && Array.isArray(definitionsResult.value) ? definitionsResult.value : null
-    setData((current) => {
-      const next = { ...current, nativeLoading: false, externalLoading: false }
-      if (definitionsResult.status === 'fulfilled' && Array.isArray(definitionsResult.value)) {
-        next.definitions = definitionsResult.value
-        next.nativeLoaded = true
-        next.nativeError = null
-        next.lastRunErrors = []
-        next.lastRunsLoaded = false
-      } else if (definitionsResult.status === 'rejected') next.nativeError = errorMessage(definitionsResult.reason)
-      else next.nativeError = 'The automation list returned an invalid response.'
-      if (editorResult.status === 'fulfilled') {
-        next.editorData = editorResult.value
-        next.editorError = null
-      } else next.editorError = errorMessage(editorResult.reason)
-      if (externalResult.status === 'fulfilled') {
-        try {
-          next.managers = normalizeManagers(externalResult.value)
-          next.externalLoaded = true
-          next.externalError = null
-        } catch (error) {
-          next.externalError = errorMessage(error)
-        }
-      } else next.externalError = errorMessage(externalResult.reason)
-      return next
-    })
-    if (definitions === null) return
-    const lastRuns: Record<string, AutomationRun | null> = {}
-    const errors: string[] = []
-    for (let index = 0; index < definitions.length; index += 8) {
-      const group = definitions.slice(index, index + 8)
-      const results = await Promise.allSettled(group.map(async (definition) => {
-        const page = await readRunPage(props.context, definition.id, 1, null)
-        return { id: definition.id, run: page.runs[0] ?? null }
-      }))
-      if (generation !== loadGeneration.current) return
-      results.forEach((result, resultIndex) => {
-        const id = group[resultIndex]!.id
-        if (result.status === 'fulfilled') lastRuns[id] = result.value.run
-        else {
-          lastRuns[id] = null
-          errors.push(id)
-        }
-      })
+  const reload = useCallback((): Promise<void> => {
+    if (reloadPromise.current !== null) {
+      reloadAgain.current = true
+      return reloadPromise.current
     }
-    if (generation === loadGeneration.current) setData((current) => ({ ...current, lastRuns, lastRunsLoaded: true, lastRunErrors: errors }))
+    const load = async () => {
+      while (mounted.current) {
+        reloadAgain.current = false
+        const generation = ++loadGeneration.current
+        setData((current) => ({
+          ...current, nativeLoading: current.definitions.length === 0, externalLoading: current.managers.length === 0,
+          nativeError: null, editorError: null, externalError: null
+        }))
+        const [definitionsResult, editorResult, externalResult] = await Promise.allSettled([
+          callApi<AutomationDefinition[]>(props.context, 'list', {}),
+          callApi<AutomationEditorData>(props.context, 'editorData', {}),
+          callApi<unknown>(props.context, 'externalList', {})
+        ])
+        if (!mounted.current || generation !== loadGeneration.current) return
+        const definitions = definitionsResult.status === 'fulfilled' && Array.isArray(definitionsResult.value) ? definitionsResult.value : null
+        setData((current) => {
+          const next = { ...current, nativeLoading: false, externalLoading: false }
+          if (definitionsResult.status === 'fulfilled' && Array.isArray(definitionsResult.value)) {
+            next.definitions = definitionsResult.value
+            next.nativeLoaded = true
+            next.nativeError = null
+            next.lastRunErrors = []
+            next.lastRunsLoaded = false
+          } else if (definitionsResult.status === 'rejected') next.nativeError = errorMessage(definitionsResult.reason)
+          else next.nativeError = 'The automation list returned an invalid response.'
+          if (editorResult.status === 'fulfilled') {
+            next.editorData = editorResult.value
+            next.editorError = null
+          } else next.editorError = errorMessage(editorResult.reason)
+          if (externalResult.status === 'fulfilled') {
+            try {
+              next.managers = normalizeManagers(externalResult.value)
+              next.externalLoaded = true
+              next.externalError = null
+            } catch (error) {
+              next.externalError = errorMessage(error)
+            }
+          } else next.externalError = errorMessage(externalResult.reason)
+          return next
+        })
+        if (definitions === null) return
+        const lastRuns: Record<string, AutomationRun | null> = {}
+        const errors: string[] = []
+        for (let index = 0; index < definitions.length; index += 8) {
+          const group = definitions.slice(index, index + 8)
+          const results = await Promise.allSettled(group.map(async (definition) => {
+            const page = await readRunPage(props.context, definition.id, 1, null)
+            return { id: definition.id, run: page.runs[0] ?? null }
+          }))
+          if (!mounted.current || generation !== loadGeneration.current) return
+          results.forEach((result, resultIndex) => {
+            const id = group[resultIndex]!.id
+            if (result.status === 'fulfilled') lastRuns[id] = result.value.run
+            else {
+              lastRuns[id] = null
+              errors.push(id)
+            }
+          })
+        }
+        if (!mounted.current || generation !== loadGeneration.current) return
+        setData((current) => ({ ...current, lastRuns, lastRunsLoaded: true, lastRunErrors: errors }))
+        if (!reloadAgain.current) return
+      }
+    }
+    const promise = Promise.resolve().then(load)
+    reloadPromise.current = promise
+    const clear = () => {
+      if (reloadPromise.current !== promise) return
+      reloadPromise.current = null
+      if (reloadAgain.current && mounted.current) {
+        reloadAgain.current = false
+        void reloadLatest.current()
+      }
+    }
+    void promise.then(clear, clear)
+    return promise
   }, [props.context])
+  reloadLatest.current = reload
 
-  useEffect(() => { void reload() }, [reload])
+  useEffect(() => {
+    mounted.current = true
+    void reload()
+    const unsubscribe = props.context.subscribe((event) => {
+      if (!mounted.current || event.type !== `${API}changed`) return
+      void reload()
+      setHistoryRetry((current) => current + 1)
+      setUsageRetry((current) => current + 1)
+      setRunRetry((current) => current + 1)
+    })
+    return () => {
+      mounted.current = false
+      unsubscribe()
+      reloadAgain.current = false
+      loadGeneration.current++
+      dashboardGeneration.current++
+    }
+  }, [props.context, reload])
 
   useEffect(() => {
     if (navigation.page !== 'runs' || !data.nativeLoaded) {
@@ -560,20 +612,26 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
 
   useEffect(() => {
     const id = navigation.page === 'detail' && navigation.tab === 'runs' ? navigation.automationId : null
+    const sameAutomation = historyEffectAutomationId.current === id
+    historyEffectAutomationId.current = id
+    const requestGeneration = ++historyRequestGeneration.current
+    const selection = historySelection.current
     if (!id) {
       setHistory({ automationId: null, runs: [], cursor: null, loaded: false, loading: false, error: null })
       setHistoryStarts([0])
       setSelectedHistoryIndex(0)
-      return
+      return () => { historyRequestGeneration.current++ }
     }
     let cancelled = false
     setHistory((current) => current.automationId === id
       ? { ...current, loading: true, error: null }
       : { automationId: id, runs: [], cursor: null, loaded: false, loading: true, error: null })
-    setHistoryStarts([0])
-    setSelectedHistoryIndex(0)
+    if (!sameAutomation) {
+      setHistoryStarts([0])
+      setSelectedHistoryIndex(0)
+    }
     void readRunPage(props.context, id, RUN_PAGE_SIZE, null).then((page) => {
-      if (cancelled) return
+      if (cancelled || historyRequestGeneration.current !== requestGeneration || historySelection.current !== selection) return
       setHistory((current) => {
         if (current.automationId !== id) return current
         const hasOlderLoaded = current.runs.length > page.runs.length
@@ -581,11 +639,15 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
         return { ...current, ...merged, loaded: true, loading: false, error: null }
       })
     }).catch((error: unknown) => {
-      if (!cancelled) setHistory((current) => current.automationId === id
+      if (cancelled || historyRequestGeneration.current !== requestGeneration || historySelection.current !== selection) return
+      setHistory((current) => current.automationId === id
         ? { ...current, loading: false, error: errorMessage(error) }
-        : { automationId: id, runs: [], cursor: null, loaded: false, loading: false, error: errorMessage(error) })
+        : current)
     })
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+      if (historyRequestGeneration.current === requestGeneration) historyRequestGeneration.current++
+    }
   }, [historyRetry, navigation.automationId, navigation.page, navigation.tab, props.context])
   useEffect(() => {
     const id = navigation.page === 'detail' && navigation.tab === 'overview' ? navigation.automationId : null
@@ -621,7 +683,7 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
       return
     }
     const runId = navigation.runId
-    const cached = data.dashboardRuns.find((run) => run.id === runId) ?? history.runs.find((run) => run.id === runId) ?? null
+    const cached = runRetry === 0 ? data.dashboardRuns.find((run) => run.id === runId) ?? history.runs.find((run) => run.id === runId) ?? null : null
     let cancelled = false
     setRunAutomation(null)
     setRunOpenTarget(null)
@@ -925,17 +987,39 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
   }, [props.context, props.notify, reload])
 
   const loadMoreHistory = useCallback(async () => {
-    if (!history.automationId || !history.cursor || history.loading) return
+    const automationId = history.automationId
+    if (!automationId || automationId !== activeHistoryAutomationId || !history.cursor || history.loading) return
+    const cursor = history.cursor
+    const requestGeneration = historyRequestGeneration.current
+    const selection = historySelection.current
     const currentLength = history.runs.length
-    setHistory((current) => ({ ...current, loading: true, error: null }))
+    const windowStart = historyStarts[historyStarts.length - 1] ?? 0
+    setHistory((current) => current.automationId === automationId ? { ...current, loading: true, error: null } : current)
     try {
-      const page = await readRunPage(props.context, history.automationId, RUN_PAGE_SIZE, history.cursor)
-      if (page.nextCursor === history.cursor) throw new Error('Run history repeated a paging cursor.')
-      setHistory((current) => ({ ...current, ...appendRunPage(current.runs, page), loaded: true, loading: false, error: null }))
+      const page = await readRunPage(props.context, automationId, RUN_PAGE_SIZE, cursor)
+      if (!mounted.current || historyRequestGeneration.current !== requestGeneration || historySelection.current !== selection) return
+      if (page.nextCursor === cursor) throw new Error('Run history repeated a paging cursor.')
+      const merged = appendRunPage(history.runs, page)
+      const newlyLoaded = merged.runs.length - currentLength
+      if (newlyLoaded > 0 && currentLength <= windowStart + RUN_RENDER_LIMIT && merged.runs.length > windowStart + RUN_RENDER_LIMIT) {
+        setHistoryStarts((current) => {
+          const currentStart = current[current.length - 1] ?? 0
+          return currentStart === windowStart ? [...current, currentStart + newlyLoaded] : current
+        })
+        setSelectedHistoryIndex(0)
+      }
+      setHistory((current) => {
+        if (!mounted.current || historyRequestGeneration.current !== requestGeneration || historySelection.current !== selection
+          || current.automationId !== automationId || current.cursor !== cursor) return current
+        return { ...current, ...appendRunPage(current.runs, page), loaded: true, loading: false, error: null }
+      })
     } catch (error) {
-      setHistory((current) => ({ ...current, loading: false, error: errorMessage(error) }))
+      if (!mounted.current || historyRequestGeneration.current !== requestGeneration || historySelection.current !== selection) return
+      setHistory((current) => current.automationId === automationId
+        ? { ...current, loading: false, error: errorMessage(error) }
+        : current)
     }
-  }, [history.automationId, history.cursor, history.loading, history.runs.length, props.context])
+  }, [activeHistoryAutomationId, history.automationId, history.cursor, history.loading, history.runs, historyStarts, props.context])
 
   const rerun = useCallback(async (run: AutomationRun) => {
     if (!canRerun(run.status) || rerunPending || rerunGate.current || busyAction !== null) return
@@ -1263,6 +1347,14 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
             })}
           </tbody></table></div>}
           {historyStarts.length > 1 && <button className="auto-button" type="button" onClick={() => { setHistoryStarts((current) => current.slice(0, -1)); setSelectedHistoryIndex(0) }}>Show newer runs</button>}
+          {history.runs.length > runWindowStart + RUN_RENDER_LIMIT && <button className="auto-button" type="button" onClick={() => {
+            const maximumStart = Math.max(0, history.runs.length - RUN_RENDER_LIMIT)
+            setHistoryStarts((current) => {
+              const currentStart = current[current.length - 1] ?? 0
+              return currentStart < maximumStart ? [...current, Math.min(currentStart + RUN_PAGE_SIZE, maximumStart)] : current
+            })
+            setSelectedHistoryIndex(0)
+          }}>Show older runs</button>}
           {history.cursor && <button className="auto-button" type="button" disabled={history.loading} onClick={() => void loadMoreHistory()}>{history.loading ? 'Loading…' : 'Load older runs'}</button>}
           {history.runs.length > RUN_RENDER_LIMIT && <p className="auto-muted">At most {RUN_RENDER_LIMIT} run rows are mounted at once.</p>}
         </section>}

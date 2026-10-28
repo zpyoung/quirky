@@ -58,6 +58,7 @@ export function createAutomationUiEnv(context: PluginContext, service: Automatio
     if (!record(current) || !record(current.layout)) return
     const view = current.layout.view
     if (view === null || (record(view) && typeof view.id === 'string' && view.id !== AUTOMATIONS_VIEW && view.id !== AUTOMATIONS_SETTINGS_VIEW)) previousView = view as UiLayout['view']
+    return view
   }
   const env: AutomationUiEnv & { methods: AutomationMethods } = {
     context, service,
@@ -72,9 +73,9 @@ export function createAutomationUiEnv(context: PluginContext, service: Automatio
     },
     async navigate(input) {
       const patch = validateNavigation(context, input)
-      await rememberPrevious()
+      const currentView = await rememberPrevious()
       const next = env.update(value => { Object.assign(value.navigation, patch) })
-      await context.call('ui.view.open', { id: AUTOMATIONS_VIEW, input: { revision: next.revision, navigation: next.navigation } })
+      if (!record(currentView) || currentView.id !== AUTOMATIONS_VIEW) await context.call('ui.view.open', { id: AUTOMATIONS_VIEW })
       return next
     },
     methods: {}
