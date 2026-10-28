@@ -178,6 +178,13 @@
         "result": {"type":"object","properties":{"number":{"type":"integer"},"assignees":{"type":"array","items":{"type":"string"}}},"required":["number","assignees"]}
       },
       {
+        "id": "reviewStack",
+        "description": "Read up to 100 real stack member PRs, keeping the stack number distinct from every PR number.",
+        "readOnly": true,
+        "params": {"type":"object","properties":{"worktree":{"type":"string"},"number":{"type":"integer","minimum":1},"prRepo":{"type":"object","properties":{"host":{"type":"string"},"owner":{"type":"string"},"repo":{"type":"string"}},"required":["host","owner","repo"]},"noCache":{"type":"boolean"}},"required":["number"]},
+        "result": {"type":"object","properties":{"number":{"type":"integer"},"available":{"type":"boolean"},"truncated":{"type":"boolean"},"reason":{"type":"string"},"stack":{"description":"Null for no stack; otherwise the trusted stack summary and real bounded members.","properties":{"number":{"type":"integer"},"position":{"type":"integer"},"size":{"type":"integer"},"base":{"type":"object","properties":{"ref":{"type":"string"},"sha":{"type":"string"}}},"entries":{"type":"array","items":{"type":"object","properties":{"position":{"type":"integer"},"number":{"type":"integer"},"title":{"type":"string"},"url":{"type":"string"},"state":{"type":"string"},"checksStatus":{"type":"string"},"mergeable":{"type":"string"},"updatedAt":{},"headRefName":{},"headRefOid":{},"reviewDecision":{},"mergeStateStatus":{}}}}}}},"required":["number","available","stack","truncated"]}
+      },
+      {
         "id": "checks",
         "description": "List checks, legacy statuses, and approval-required suites for a pull request.",
         "readOnly": true,
@@ -464,6 +471,7 @@
       {"id":"review-conversation","method":"reviewConversation","summary":"add, edit, or confirmed-delete a PR conversation comment"},
       {"id":"review-conversation-confirmation","method":"reviewConversationConfirmation","summary":"describe a PR conversation comment deletion"},
       {"id":"review-assignees","method":"reviewAssignees","summary":"add, remove, replace, or clear PR assignees"},
+      {"id":"review-stack","method":"reviewStack","summary":"read real bounded PR stack membership"},
       {"id": "checks", "method": "checks", "summary": "list pull request checks and status rollup"},
       {"id": "check-details", "method": "checkDetails", "summary": "read check annotations, jobs, and log tails"},
       {"id": "rerun-checks", "method": "rerunChecks", "summary": "rerun pull request checks"},

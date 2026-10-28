@@ -114,6 +114,13 @@ the index or working files. It never fetches or executes a custom merge driver.
 An unavailable preview reports a reason rather than presenting changed files as
 conflicts. Git may add immutable merge-tree objects to its object database.
 
+`quirky hosting review-stack --number 7 --json` hydrates up to 100 member PRs
+through the provider's stack-membership read. The request number is the selected
+PR; `stack.number` is a distinct stack resource ID, and `stack.entries[].number`
+contains the real member PR numbers. Unsupported or mismatched membership is
+explicitly unavailable, never synthesized from that stack ID. `truncated` reports
+omitted members. Optional `--pr-repo` preserves origin/upstream identity.
+
 ## Plugin settings pages
 
 A UI plugin can opt a declared view into the shell's **Settings → Plugin settings**

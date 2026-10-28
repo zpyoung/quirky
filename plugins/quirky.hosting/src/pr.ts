@@ -3,6 +3,7 @@ import { createPRCreationMethods } from './pr-create'
 import { createPRMutationMethods } from './pr-mutations'
 import { createPRLookup } from './pr-review'
 import { createPRConversationMethods } from './review-conversation'
+import { createPRStackMethods } from './review-stack'
 
 export function prMethods(env: HostingEnv): Record<string, Handler> {
   const lookup = createPRLookup(env)
@@ -11,6 +12,7 @@ export function prMethods(env: HostingEnv): Record<string, Handler> {
     review: lookup.review,
     ...createPRCreationMethods(env, lookup),
     ...createPRMutationMethods(env, lookup),
-    ...createPRConversationMethods(env, lookup)
+    ...createPRConversationMethods(env, lookup),
+    ...createPRStackMethods(env, lookup)
   }
 }

@@ -15,8 +15,11 @@ else if(args[0]==='auth'&&args[1]==='token'){out('fixture-token\n');}
 else if(args[0]==='pr'&&args[1]==='view'){if(Number(args[2])!==7)fail('no pull requests found');out(pr);}
 else if(args[0]==='repo'&&args[1]==='view'){out({defaultBranchRef:{name:'main'}});}
 else if(args[0]==='api'&&args.includes('rate_limit')){out({resources:{core:{limit:5000,remaining:4000,reset:1999999999},graphql:{limit:5000,remaining:4000,reset:1999999999},search:{limit:30,remaining:30,reset:1999999999}}});}
-else if(args[0]==='api'&&args.includes('graphql')){out({data:{repository:{viewerDefaultMergeMethod:'SQUASH',mergeCommitAllowed:true,rebaseMergeAllowed:true,squashMergeAllowed:true,autoMergeAllowed:true,defaultBranchRef:{name:'main'},mergeQueue:null,ref:{rules:{nodes:[]}}}}});}
-else if(endpoint==='repos/test-owner/test-repo/pulls/7'&&method==='GET'){out({number:7,state:'open',title:pr.title,body:pr.body,html_url:pr.url,base:{ref:'main',sha:pr.baseRefOid,repo:{name:'test-repo',owner:{login:'test-owner'}}},head:{ref:'feature',sha:pr.headRefOid,repo:{name:'test-repo',owner:{login:'test-owner'}}}});}
+else if(args[0]==='api'&&args.includes('graphql')){
+ if(typeof input.query==='string'&&input.query.includes('entries(first: 100)'))out(state.stackGraph||{data:{repository:{pullRequest:{stack:null}}}});
+ else out({data:{repository:{viewerDefaultMergeMethod:'SQUASH',mergeCommitAllowed:true,rebaseMergeAllowed:true,squashMergeAllowed:true,autoMergeAllowed:true,defaultBranchRef:{name:'main'},mergeQueue:null,ref:{rules:{nodes:[]}}}}});
+}
+else if(endpoint==='repos/test-owner/test-repo/pulls/7'&&method==='GET'){out({number:7,state:'open',title:pr.title,body:pr.body,html_url:pr.url,stack:state.stack??null,base:{ref:'main',sha:pr.baseRefOid,repo:{name:'test-repo',owner:{login:'test-owner'}}},head:{ref:'feature',sha:pr.headRefOid,repo:{name:'test-repo',owner:{login:'test-owner'}}}});}
 else if(endpoint==='repos/test-owner/test-repo/issues/7/comments'&&method==='POST'){
  if(state.failWrite)fail('HTTP 403: forbidden');const id=(state.nextId||100)+1;state.nextId=id;const c={id,body:input.body,issue_url:'https://api.github.com/repos/test-owner/test-repo/issues/7',html_url:pr.url+'#issuecomment-'+id,created_at:'2026-10-27T12:00:00Z',user:{login:'test-user'}};state.comments=[...(state.comments||[]),c];save();out(c);
 }
