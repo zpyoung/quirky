@@ -2,6 +2,17 @@
 
 This directory holds Quirky's built-in plugins, one per subdirectory, each with a `quirky-plugin.json` manifest. The daemon finds it through `QUIRKY_BUILTIN_PLUGINS_DIR`.
 
+## Terminal workspace
+
+Terminal views stay in the center; **Terminal sessions** and **Quick commands** open
+in the bottom-left tool slot by default and can be moved with the host's tool controls.
+Workspace tabs, pane actions, search, floating terminals, quick-command dialogs and the
+agent composer use the shared graphite controls in dark and light appearances.
+Existing terminal palette overrides, shortcuts, split layouts and pane-owned drafts
+are unchanged. Context menus render above adjacent tools, including nested command menus.
+
+See the [terminal presentation specification](../docs/quirk/specs/2026-10-28-ui-restyle-terminal/logic.md).
+
 ## Terminal dock
 
 `quirky.terminal-dock` provides an opt-in composer below recognized terminal agents.

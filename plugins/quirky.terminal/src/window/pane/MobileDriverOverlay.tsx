@@ -1,32 +1,7 @@
-import { useCallback, useEffect, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { Button } from '@quirky/ui'
 import type { MobileTerminalState, UiPluginContext } from '@quirky/protocol'
 
-const shellStyle: CSSProperties = {
-  position: 'absolute',
-  top: 8,
-  right: 8,
-  zIndex: 20,
-  maxWidth: 'min(420px, calc(100% - 16px))',
-  padding: 12,
-  border: '1px solid var(--border, #3a3d45)',
-  borderRadius: 8,
-  background: 'var(--bg-raised, rgba(29, 32, 39, .97))',
-  color: 'var(--text, #d7dae0)',
-  boxShadow: '0 4px 20px rgba(0, 0, 0, .3)',
-  fontFamily: 'inherit',
-  fontSize: 12,
-  lineHeight: 1.45
-}
-
-const buttonStyle: CSSProperties = {
-  border: '1px solid var(--border, #3a3d45)',
-  borderRadius: 5,
-  background: 'var(--bg-hover, #262a33)',
-  color: 'var(--text, #d7dae0)',
-  padding: '5px 8px',
-  cursor: 'pointer',
-  font: 'inherit'
-}
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -75,39 +50,39 @@ export function MobileDriverOverlay({ context, sessionId }: { context: UiPluginC
 
   if (minimized) {
     return (
-      <div data-mobile-driver-overlay style={shellStyle} role="status">
+      <div data-mobile-driver-overlay className="terminal-mobile-driver" role="status">
         <strong>{phoneFit ? 'Still sized for your phone' : 'Phone driving'}</strong>
-        <span style={{ display: 'inline-flex', gap: 6, marginLeft: 10 }}>
+        <span className="terminal-mobile-driver__minimized-actions">
           {phoneFit ? (
-            <button style={buttonStyle} type="button" aria-label="Restore this terminal" onClick={() => void run('restoreFit', sessionParams)}>Restore</button>
+            <Button aria-label="Restore this terminal" onClick={() => void run('restoreFit', sessionParams)}>Restore</Button>
           ) : (
-            <button style={buttonStyle} type="button" aria-label="Take back this terminal" onClick={() => void run('takeBack', sessionParams)}>Take back</button>
+            <Button aria-label="Take back this terminal" onClick={() => void run('takeBack', sessionParams)}>Take back</Button>
           )}
-          <button style={buttonStyle} type="button" aria-label="Restore phone driving controls" onClick={() => setMinimized(false)}>Expand</button>
+          <Button aria-label="Restore phone driving controls" onClick={() => setMinimized(false)}>Expand</Button>
         </span>
       </div>
     )
   }
 
   return (
-    <section data-mobile-driver-overlay style={shellStyle} aria-label={title}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+    <section data-mobile-driver-overlay className="terminal-mobile-driver" aria-label={title}>
+      <div className="terminal-mobile-driver__summary">
         <div>
           <strong>{title}</strong>
-          <p style={{ margin: '5px 0 0', color: 'var(--muted, #8a909e)' }}>{description}</p>
+          <p className="terminal-mobile-driver__description">{description}</p>
         </div>
-        <button style={buttonStyle} type="button" aria-label="Minimize phone driving controls" onClick={() => setMinimized(true)}>Minimize</button>
+        <Button aria-label="Minimize phone driving controls" onClick={() => setMinimized(true)}>Minimize</Button>
       </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+      <div className="terminal-mobile-driver__actions">
         {phoneFit ? (
           <>
-            <button style={buttonStyle} type="button" aria-label="Restore this terminal" onClick={() => void run('restoreFit', sessionParams)}>Restore</button>
-            <button style={buttonStyle} type="button" onClick={() => void run('restoreFit', allParams)}>Restore all</button>
+            <Button aria-label="Restore this terminal" onClick={() => void run('restoreFit', sessionParams)}>Restore</Button>
+            <Button onClick={() => void run('restoreFit', allParams)}>Restore all</Button>
           </>
         ) : (
           <>
-            <button style={buttonStyle} type="button" aria-label="Take back this terminal" onClick={() => void run('takeBack', sessionParams)}>Take back</button>
-            <button style={buttonStyle} type="button" onClick={() => void run('takeBack', allParams)}>Take back all</button>
+            <Button aria-label="Take back this terminal" onClick={() => void run('takeBack', sessionParams)}>Take back</Button>
+            <Button onClick={() => void run('takeBack', allParams)}>Take back all</Button>
           </>
         )}
       </div>

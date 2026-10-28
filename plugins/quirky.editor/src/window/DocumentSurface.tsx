@@ -1,4 +1,5 @@
-import { Component, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type DragEvent as ReactDragEvent, type FocusEvent as ReactFocusEvent, type ReactNode } from 'react'
+import { Component, Suspense, lazy, useCallback, useEffect, useId, useMemo, useRef, useState, type DragEvent as ReactDragEvent, type FocusEvent as ReactFocusEvent, type ReactNode } from 'react'
+import { Badge, Button, Dialog, FormRow, IconButton, TextField } from '@quirky/ui'
 import type { UiPluginContext } from '@quirky/protocol'
 import type { EditorBufferInfo, EditorSurfaceAction, EditorSurfaceBuffer, EditorSurfaceCommandHandler, EditorSurfaceCommandHandlers, SurfaceProps } from '../types'
 import { activeDocument, registerActiveDocument, type ActiveDocumentCommand, type ActiveDocumentRegistration } from './activeDocument'
@@ -69,7 +70,7 @@ class SurfaceErrorBoundary extends Component<BoundaryProps, BoundaryState> {
       return (
         <div className="qe-surface-failure" role="alert">
           <p>The document surface could not be loaded: {this.state.error}</p>
-          <button type="button" onClick={() => { this.setState({ error: null }); this.props.onRetry() }}>Retry</button>
+          <Button onClick={() => { this.setState({ error: null }); this.props.onRetry() }}>Retry</Button>
         </div>
       )
     }
@@ -236,6 +237,7 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
   const localTextRef = useRef<string | null>(null)
   const [editorGeneration, setEditorGeneration] = useState(0)
   const [compareOpen, setCompareOpen] = useState(false)
+  const compareId = useId()
   const [undoReloadUntil, setUndoReloadUntil] = useState(0)
   const [renamePath, setRenamePath] = useState<string | null>(null)
   const [changesOpen, setChangesOpen] = useState(false)
@@ -917,7 +919,7 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
   }
 
   if (!buffer) {
-    if (stateError) return <div className="qe-document-message" role="alert"><p>{stateError}</p><button type="button" onClick={refresh}>Retry</button></div>
+    if (stateError) return <div className="qe-document-message" role="alert"><p>{stateError}</p><Button onClick={refresh}>Retry</Button></div>
     return <div className="qe-document-message" role="status">Loading document…</div>
   }
 
@@ -956,63 +958,62 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
     >
       <header className="qe-document-header">
         <div className="qe-document-path-group">
-          <button type="button" className="qe-document-path" title={buffer.path} onClick={() => void copyPath(false)}>{pathTitle}</button>
-          {buffer.dirty && <span className="qe-dirty-indicator" aria-label="Unsaved changes">●</span>}
-          {buffer.external && <span className="qe-external-indicator">{buffer.external === 'deleted' ? 'Deleted on disk' : 'Changed on disk'}</span>}
+          <Button className="qe-document-path" title={buffer.path} onClick={() => void copyPath(false)}>{pathTitle}</Button>
+          {buffer.dirty && <Badge tone="needs-you" label="Unsaved changes">●</Badge>}
+          {buffer.external && <Badge tone="needs-you">{buffer.external === 'deleted' ? 'Deleted on disk' : 'Changed on disk'}</Badge>}
         </div>
         <div className="qe-document-actions">
           {buffer.kind === 'markdown' && (
             <div className="qe-mode-switch" aria-label="Markdown view mode">
-              <button type="button" aria-pressed={actualMode === 'source'} onClick={() => void openMode('source')}>Source</button>
-              <button type="button" aria-pressed={actualMode === 'rich'} onClick={() => void openMode('rich')}>Rich Editor</button>
-              <button type="button" aria-pressed={actualMode === 'preview'} onClick={() => void openMode('preview')}>Preview</button>
+              <Button className="qe-mode-switch__option" aria-pressed={actualMode === 'source'} onClick={() => void openMode('source')}>Source</Button>
+              <Button className="qe-mode-switch__option" aria-pressed={actualMode === 'rich'} onClick={() => void openMode('rich')}>Rich Editor</Button>
+              <Button className="qe-mode-switch__option" aria-pressed={actualMode === 'preview'} onClick={() => void openMode('preview')}>Preview</Button>
             </div>
           )}
           {isNotebook && (
             <div className="qe-mode-switch" aria-label="Notebook view mode">
-              <button type="button" aria-pressed={actualMode === 'source'} onClick={() => void openMode('source')}>Source</button>
-              <button type="button" aria-pressed={actualMode !== 'source'} onClick={() => void openMode('rich')}>Notebook</button>
+              <Button className="qe-mode-switch__option" aria-pressed={actualMode === 'source'} onClick={() => void openMode('source')}>Source</Button>
+              <Button className="qe-mode-switch__option" aria-pressed={actualMode !== 'source'} onClick={() => void openMode('rich')}>Notebook</Button>
             </div>
           )}
           {buffer.kind === 'csv' && (
             <div className="qe-mode-switch" aria-label="Table view mode">
-              <button type="button" aria-pressed={actualMode === 'source'} onClick={() => void openMode('source')}>Source</button>
-              <button type="button" aria-pressed={actualMode !== 'source'} onClick={() => void openMode('rich')}>Table</button>
+              <Button className="qe-mode-switch__option" aria-pressed={actualMode === 'source'} onClick={() => void openMode('source')}>Source</Button>
+              <Button className="qe-mode-switch__option" aria-pressed={actualMode !== 'source'} onClick={() => void openMode('rich')}>Table</Button>
             </div>
           )}
           {buffer.kind === 'mermaid' && (
             <div className="qe-mode-switch" aria-label="Diagram view mode">
-              <button type="button" aria-pressed={actualMode === 'source'} onClick={() => void openMode('source')}>Source</button>
-              <button type="button" aria-pressed={actualMode !== 'source'} onClick={() => void openMode('rich')}>Preview</button>
+              <Button className="qe-mode-switch__option" aria-pressed={actualMode === 'source'} onClick={() => void openMode('source')}>Source</Button>
+              <Button className="qe-mode-switch__option" aria-pressed={actualMode !== 'source'} onClick={() => void openMode('rich')}>Preview</Button>
             </div>
           )}
-          {canOfferChanges && <button
-            type="button"
+          {canOfferChanges && <Button
             aria-label={changesOpen ? 'Close Changes' : 'Changes'}
             aria-pressed={changesOpen}
             onClick={() => changesOpen ? setChangesOpen(false) : void openChanges()}
-          >{changesOpen ? 'Close Changes' : 'Changes'}</button>}
-          {!buffer.readOnly && <button type="button" onClick={saveButton} disabled={!buffer.untitled && !buffer.dirty && !buffer.external}>{buffer.untitled ? 'Save As…' : 'Save'}</button>}
-          <button type="button" onClick={() => void pin()} aria-pressed={buffer.pinned} title={buffer.pinned ? 'Unpin tab' : 'Pin tab'}>{buffer.pinned ? 'Unpin' : 'Pin'}</button>
-          <button type="button" onClick={() => context.togglePanel(EXPLORER_PANEL, true)}>Explorer</button>
-          <button type="button" onClick={() => void sourceControl()}>Source Control</button>
-          <button type="button" aria-label="Close tab" onClick={closeButton}>×</button>
+          >{changesOpen ? 'Close Changes' : 'Changes'}</Button>}
+          {!buffer.readOnly && <Button variant="primary" onClick={saveButton} disabled={!buffer.untitled && !buffer.dirty && !buffer.external}>{buffer.untitled ? 'Save As…' : 'Save'}</Button>}
+          <Button aria-pressed={buffer.pinned} title={buffer.pinned ? 'Unpin tab' : 'Pin tab'} onClick={() => void pin()}>{buffer.pinned ? 'Unpin' : 'Pin'}</Button>
+          <Button onClick={() => context.togglePanel(EXPLORER_PANEL, true)}>Explorer</Button>
+          <Button onClick={() => void sourceControl()}>Source Control</Button>
+          <IconButton label="Close tab" variant="destructive" onClick={closeButton}>×</IconButton>
           <div className="qe-zoom-controls" aria-label="Editor font size">
-            <button type="button" aria-label="Zoom out" onClick={() => void saveSetting('editorFontZoomLevel', Math.max(-6, settings.fontZoomLevel - 1))}>−</button>
-            <span>{fontSize}px</span>
-            <button type="button" aria-label="Zoom in" onClick={() => void saveSetting('editorFontZoomLevel', Math.min(18, settings.fontZoomLevel + 1))}>+</button>
-            <button type="button" aria-label="Reset zoom" onClick={() => void saveSetting('editorFontZoomLevel', 0)}>Reset</button>
+            <IconButton label="Zoom out" onClick={() => void saveSetting('editorFontZoomLevel', Math.max(-6, settings.fontZoomLevel - 1))}>−</IconButton>
+            <span>{fontSize} px</span>
+            <IconButton label="Zoom in" onClick={() => void saveSetting('editorFontZoomLevel', Math.min(18, settings.fontZoomLevel + 1))}>+</IconButton>
+            <Button aria-label="Reset zoom" onClick={() => void saveSetting('editorFontZoomLevel', 0)}>Reset</Button>
           </div>
           <details className="qe-file-actions">
-            <summary>File actions</summary>
+            <summary className="qe-disclosure-trigger">File actions</summary>
             <div className="qe-file-actions-menu">
-              <button type="button" onClick={() => void copyPath(false)}>Copy Path</button>
-              <button type="button" onClick={() => void copyPath(true)}>Copy Relative Path</button>
-              <button type="button" onClick={() => void revealInExplorer()}>Reveal in Explorer</button>
-              <button type="button" onClick={() => setRenamePath(buffer.relativePath)}>Rename…</button>
-              <button type="button" onClick={() => void duplicateFile()}>Duplicate</button>
-              <button type="button" onClick={() => void deleteFile()}>Delete</button>
-              {buffer.kind === 'markdown' && <button type="button" onClick={() => void openMode('preview')}>Open Markdown Preview</button>}
+              <Button onClick={() => void copyPath(false)}>Copy Path</Button>
+              <Button onClick={() => void copyPath(true)}>Copy Relative Path</Button>
+              <Button onClick={() => void revealInExplorer()}>Reveal in Explorer</Button>
+              <Button onClick={() => setRenamePath(buffer.relativePath)}>Rename…</Button>
+              <Button onClick={() => void duplicateFile()}>Duplicate</Button>
+              <Button variant="destructive" onClick={() => void deleteFile()}>Delete</Button>
+              {buffer.kind === 'markdown' && <Button onClick={() => void openMode('preview')}>Open Markdown Preview</Button>}
               <label><input type="checkbox" checked={settings.wordWrap} onChange={(event) => changeWrap(event.currentTarget.checked)} />Word Wrap</label>
               <label><input type="checkbox" checked={settings.minimap} onChange={(event) => void saveSetting('editorMinimapEnabled', event.currentTarget.checked)} />Show Minimap</label>
               <label><input type="checkbox" checked={settings.autoSave} onChange={(event) => void saveSetting('editorAutoSave', event.currentTarget.checked)} />Auto Save Files</label>
@@ -1032,29 +1033,36 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
       )}
       {renamePath !== null && (
         <div className="qe-inline-rename">
-          <label>Rename to <input autoFocus value={renamePath} onChange={(event) => setRenamePath(event.currentTarget.value)} onKeyDown={(event) => {
-            if (event.key === 'Enter') { event.preventDefault(); void renameFile() }
-            if (event.key === 'Escape') setRenamePath(null)
-          }} /></label>
-          <button type="button" onClick={() => void renameFile()}>Apply</button>
-          <button type="button" onClick={() => setRenamePath(null)}>Cancel</button>
+          <TextField
+            className="qe-inline-rename__field"
+            label="Rename to"
+            autoFocus
+            value={renamePath}
+            onChange={(event) => setRenamePath(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') { event.preventDefault(); void renameFile() }
+              if (event.key === 'Escape') setRenamePath(null)
+            }}
+          />
+          <Button variant="primary" onClick={() => void renameFile()}>Apply</Button>
+          <Button onClick={() => setRenamePath(null)}>Cancel</Button>
         </div>
       )}
       {external && (
         <section className="qe-external-change-banner" role="status">
           <span>{external === 'deleted' ? 'This file was deleted on disk. An explicit save can recreate it.' : 'This file changed on disk while you have unsaved edits. Overwrite replaces the newer disk content.'}</span>
-          <button type="button" onClick={() => void runViewAction('compare').catch(handleError)}>Compare</button>
-          <button type="button" onClick={() => void runViewAction('reload').catch(handleError)}>Reload from Disk</button>
-          {buffer.dirty && <button type="button" onClick={() => void save('overwrite').catch(handleError)}>Overwrite</button>}
-          <button type="button" title="Keeps your version. Your next save replaces the version on disk." onClick={() => void runViewAction('keep').catch(handleError)}>Keep My Edits</button>
+          <Button onClick={() => void runViewAction('compare').catch(handleError)}>Compare</Button>
+          <Button onClick={() => void runViewAction('reload').catch(handleError)}>Reload from Disk</Button>
+          {buffer.dirty && <Button variant="primary" onClick={() => void save('overwrite').catch(handleError)}>Overwrite</Button>}
+          <Button title="Keeps your version. Your next save replaces the version on disk." onClick={() => void runViewAction('keep').catch(handleError)}>Keep My Edits</Button>
         </section>
       )}
-      {undoReloadUntil > Date.now() && <button type="button" className="qe-undo-reload" onClick={() => void runViewAction('undoReload').catch(handleError)}>Undo reload</button>}
+      {undoReloadUntil > Date.now() && <Button className="qe-undo-reload" onClick={() => void runViewAction('undoReload').catch(handleError)}>Undo reload</Button>}
       {(uiError || settingsError || buffer.error || draftConflict) && (
         <div className="qe-document-error" role="alert">
           <span>{uiError ?? settingsError ?? draftConflict ?? buffer.error}</span>
-          {buffer.error && <button type="button" onClick={() => void context.call('quirky.editor/open', { worktree: buffer.worktreeId, path: buffer.relativePath, mode: actualMode, focus: true }).then(() => refresh()).catch(handleError)}>Retry</button>}
-          {draftConflict && <button type="button" onClick={() => setCompareOpen(true)}>Compare local text</button>}
+          {buffer.error && <Button onClick={() => void context.call('quirky.editor/open', { worktree: buffer.worktreeId, path: buffer.relativePath, mode: actualMode, focus: true }).then(() => refresh()).catch(handleError)}>Retry</Button>}
+          {draftConflict && <Button onClick={() => setCompareOpen(true)}>Compare local text</Button>}
         </div>
       )}
       <div className="qe-document-content">
@@ -1117,27 +1125,35 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
           </SurfaceErrorBoundary>
         )}
       </div>
-      {compareOpen && (
-        <div className="qe-modal-layer">
-          <section className="qe-compare-dialog" role="dialog" aria-modal="true" aria-labelledby="qe-compare-title">
-            <h2 id="qe-compare-title">File changed on disk</h2>
-            <p>Disk version on the left, your unsaved edits on the right.</p>
-            <div className="qe-compare-columns">
-              <label>{external ? 'Disk version' : 'Shared draft'}
-                <textarea readOnly value={external ? (buffer.diskContent === undefined ? 'Disk content is not loaded. Retry Compare.' : buffer.diskContent ?? 'File deleted on disk.') : buffer.draft ?? buffer.content} />
-              </label>
-              <label>{external ? 'Your edits' : 'Local edits'}
-                <textarea readOnly value={localText ?? buffer.draft ?? buffer.content} />
-              </label>
-            </div>
-            <div className="qe-dialog-actions">
-              {external && <button type="button" onClick={() => { setCompareOpen(false); void runViewAction('reload').catch(handleError) }}>Reload</button>}
-              {external && <button type="button" onClick={() => { setCompareOpen(false); void runViewAction('keep').catch(handleError) }}>Keep My Edits</button>}
-              <button type="button" onClick={() => setCompareOpen(false)}>Close</button>
-            </div>
-          </section>
+      <Dialog
+        open={compareOpen}
+        title="File changed on disk"
+        onClose={() => setCompareOpen(false)}
+        actions={
+          <>
+            {external && <Button onClick={() => { setCompareOpen(false); void runViewAction('reload').catch(handleError) }}>Reload</Button>}
+            {external && <Button onClick={() => { setCompareOpen(false); void runViewAction('keep').catch(handleError) }}>Keep My Edits</Button>}
+            <Button onClick={() => setCompareOpen(false)}>Close</Button>
+          </>
+        }
+      >
+        <div className="qe-compare-dialog">
+          <p>Disk version on the left, your unsaved edits on the right.</p>
+          <div className="qe-compare-columns">
+            <FormRow label={external ? 'Disk version' : 'Shared draft'} htmlFor={`${compareId}-disk`}>
+              <textarea
+                id={`${compareId}-disk`}
+                className="ui-text-field__input qe-compare-textarea"
+                readOnly
+                value={external ? (buffer.diskContent === undefined ? 'Disk content is not loaded. Retry Compare.' : buffer.diskContent ?? 'File deleted on disk.') : buffer.draft ?? buffer.content}
+              />
+            </FormRow>
+            <FormRow label={external ? 'Your edits' : 'Local edits'} htmlFor={`${compareId}-local`}>
+              <textarea id={`${compareId}-local`} className="ui-text-field__input qe-compare-textarea" readOnly value={localText ?? buffer.draft ?? buffer.content} />
+            </FormRow>
+          </div>
         </div>
-      )}
+      </Dialog>
     </div>
   )
 }

@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'
-import { Button, EmptyState, ListRow, SectionHeader, ToolPanelFrame } from '@quirky/ui'
+import { Button, EmptyState, ListRow, SectionHeader } from '@quirky/ui'
 import type { Context as ContextInfo, FilesTouched, Inspection, LiveActivity, PanelState, SectionId, Usage } from '../types'
 import { contextThreshold, formatCount, formatPercentage, formatTimestamp } from './format'
 import { subscribeCopyFeedback, type CopyFeedback } from './feedback'
@@ -480,8 +480,7 @@ export function SessionInfoPanel({ context, report }: Props) {
 
   return (
     <main aria-label="Session Info" style={PANEL_STYLE}>
-      <ToolPanelFrame title="Session Info">
-        <div style={BODY_STYLE}>
+        <div style={{ ...BODY_STYLE, padding: 'var(--ui-space-8)' }}>
           {info && <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--ui-space-4)', minWidth: '0', paddingBottom: 'var(--ui-space-8)', borderBottom: 'var(--ui-border-width) solid var(--ui-border)' }}>
             <strong style={{ overflowWrap: 'anywhere' }}>{headerModel}</strong>
             {contextPercentage !== null && contextBand !== null && <div data-context-threshold={contextBand}>
@@ -517,7 +516,6 @@ export function SessionInfoPanel({ context, report }: Props) {
             </AccordionSection>)}
           </div>}
         </div>
-      </ToolPanelFrame>
     </main>
   )
 }

@@ -1,3 +1,4 @@
+import { Button, Dialog } from '@quirky/ui'
 import { useEffect } from 'react'
 import { activeDocument } from './activeDocument'
 import { finishCloseRequest, updateCloseError, useCloseRequest, type CloseRequest, type CloseTarget } from './overlayState'
@@ -82,18 +83,23 @@ export function CloseOverlay({ report }: { report?(state: unknown): void }) {
     ? 'Some editor tabs have unsaved changes. Save or discard those changes before closing the tabs.'
     : `“${target?.name ?? 'file'}” has unsaved changes. Do you want to save before closing?`
   return (
-    <div className="qe-modal-layer">
-      <section className="qe-close-dialog" role="dialog" aria-modal="true" aria-labelledby="qe-close-title">
-        <h2 id="qe-close-title">{title}</h2>
+    <Dialog
+      open
+      title={title}
+      onClose={() => { void choose(request, 'cancel') }}
+      actions={
+        <>
+          <Button onClick={() => void choose(request, 'cancel')}>Cancel</Button>
+          <Button variant="destructive" onClick={() => void choose(request, 'discard')}>Don't Save</Button>
+          <Button variant="primary" onClick={() => void choose(request, 'save')}>Save</Button>
+        </>
+      }
+    >
+      <div className="qe-close-dialog">
         <p>{body}</p>
         {request.kind === 'all' && <p className="muted">{request.targets.filter((entry) => entry.dirty).length} dirty tab(s)</p>}
         {request.error && <p className="qe-editor-error" role="alert">{request.error}</p>}
-        <div className="qe-dialog-actions">
-          <button type="button" onClick={() => void choose(request, 'cancel')}>Cancel</button>
-          <button type="button" onClick={() => void choose(request, 'discard')}>Don't Save</button>
-          <button type="button" className="primary" onClick={() => void choose(request, 'save')}>Save</button>
-        </div>
-      </section>
-    </div>
+      </div>
+    </Dialog>
   )
 }

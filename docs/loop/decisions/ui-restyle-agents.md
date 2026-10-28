@@ -110,6 +110,17 @@
 - **Revisit if:** End-phase suites or independent golden scoring identify a mismatch.
 - **Source:** assumed — autonomous
 
+## D11: Union concurrent restyles and retain their shared-system ownership
+- **Question:** The sole roadmap catch-up conflicted in the additive lint enrollment list and brought three binding decision logs.
+- **Options:** Drop another area's enforcement; preserve all eight plugin IDs and incoming exports/tokens/engine styles.
+- **Chose:** Read ui-restyle-browser D1–D13, ui-restyle-editor D1–D13 and ui-restyle-terminal D1–D13/Progress completely. Union all lint IDs. Preserve ContextMenu/body portals, editor-print/selection-overlay exports, KaTeX/content-color ownership, terminal theme/geometry and exact-window routing. Remove Session Info's redundant nested panel frame: the host already draws its tool title. Shorten Activity's visible Open action just as Dashboard's.
+- **Why:** Shared components and source scopes compose additively; no alternate authority is needed. Actual screenshots exposed the duplicate title and internal-ID button. Incoming headless-GPU observations explain why blank terminal pixels do not establish a PTY/state defect; this item changes no GPU defaults or terminal runtime.
+- **Evidence:** Sole roadmap merge conflict in scripts/ui-lint-plugins.json; actual inspected Session Info and Activity screenshots; incoming decision logs, including complete untruncated Progress.
+- **Reversibility:** easy
+- **Confidence:** high for source composition; final caught-up build/typecheck and fresh surface proof remain next
+- **Revisit if:** Canonical gate identifies a concrete integration failure.
+- **Source:** locked by incoming restyle decision logs
+
 ## Progress
 
 All three audited source components are integrated; parent dependency/type fixes and real-surface smoke receipts are ready. No suites, formal review rounds or golden scoring run under build-first. Next: commit docs/integration fixes, catch up build/roadmap once, read incoming decisions, final typecheck and refreshed narrow source smoke, stop owned runtime/browser, canonical queue land and cleanup.

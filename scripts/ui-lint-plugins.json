@@ -1,6 +1,10 @@
 [
   "quirky.agents",
   "quirky.agent-status",
+  "quirky.browser",
+  "quirky.editor",
   "quirky.session",
-  "quirky.session-info"
+  "quirky.session-info",
+  "quirky.terminal",
+  "quirky.terminal-dock"
 ]
