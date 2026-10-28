@@ -48,11 +48,6 @@ function structuredRunnerFactory(
       {
         query: (params: ClaudeQueryParams) => {
           const query = new FakeQuery(params)
-          const nativeSessionId = params.options?.resume ?? params.options?.sessionId
-          if (typeof nativeSessionId !== 'string') {
-            throw new Error('Claude SDK fixture requires a native session ID for initialization')
-          }
-          queueMicrotask(() => query.emit({ type: 'system', subtype: 'init', session_id: nativeSessionId }))
           claudeQueries.push(query)
           const nativeSessionId = params.options?.resume ?? 'claude-provider-session'
           query.emit({ type: 'system', subtype: 'init', session_id: nativeSessionId })

@@ -418,6 +418,28 @@
 - **Revisit if:** supported merge-result verification reports a concrete regression
 - **Source:** locked by docs/loop/LOOP.md and incoming m6-heimdall-core D35–D36
 
+## D39: Perform the single supported roadmap catch-up after the dependency is marked done
+- **Question:** the core finish e68f3025a758b3c80937f772f3b4275fd0d819cb made the owner dependency ready, exposing three final source/metadata conflicts
+- **Options:** land against an old base; directly edit integration; merge the authoritative base once and run the affected gate
+- **Chose:** after ready:true, merge build/roadmap once as b75356c4. Keep the conventional Heimdall UI React dependencies with matching lock entries, and union public background creation with owner lifetime/lifetimeKey fields. Preserve owner/control decision logs; their absence in the incoming branch tree is not an authorized reversal.
+- **Why:** controls' actual UI dependencies cannot be dropped by the core-only package manifest, and both background dispatch and optional owner resources use the same public native constructor.
+- **Evidence:** FinalCatchupBindings read all final deltas: editor-drop-open-in-place D1–D6 (blocked feasibility, no substitute path capability), automations-dispatch D1–D27 (at-most-once structured execution, immutable snapshots, per-turn cursor/background evidence), and core D37 (sprint delivery only). No contradiction with owner/native authority or receipt contracts. The updated decision index is incoming generated state, never hand-edited.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** supported land reports a further actual moving-base conflict
+- **Source:** locked by docs/loop/LOOP.md and final incoming decision logs
+
+## D40: Remove the final merged SDK-initialization duplicate rather than fabricate a native ID
+- **Question:** post-catch-up typecheck found two declarations of nativeSessionId in the resume fixture
+- **Options:** rename both and emit duplicate init events; recover a fabricated pre-init ID; retain the single SDK-producer event
+- **Chose:** remove the obsolete pre-SDK identity block and its second scheduled init. Keep the fixture's native init producer ID and known resume ID. No production resume behavior, deadline or credential check changed.
+- **Why:** the independently added fixture repairs described the same initialization twice. A compiler-clean rename would still duplicate protocol events and preserve the wrong fresh-ID assumption.
+- **Evidence:** typecheck named only the two duplicate bindings in session/test/resume.test.ts; corrected real resume file23pass90assertions3.52s; final full typecheck exits0 in65.69s. The already-uploaded remote suite snapshot predates this small repair; its result and any repaired-scope rerun are recorded separately.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the actual corrected remote resume path fails
+- **Source:** assumed — autonomous
+
 ## Progress
 - Source: complete owner checkpoints and all real M6 dependency fixes are composed through2c713ffb, including the broad roadmap ancestry merge815be88e, typed/SDK fixture repaira3694eef, canonical snapshot/receipt rules and unique native fixture identities. No unresolved merge markers or temporary runtime diagnostics remain.
 - Own latest composed gates:70tests326assertions across owner API, real worker, adapter, native and guarded admission files; full project typecheck exit0; scripts68tests570assertions. Final standalone owner API/CLI publication and native scoped cleanup pass3.20s. Earlier evidence and failures remain recorded separately.
