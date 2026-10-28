@@ -1,6 +1,7 @@
 import { isAbsolute, relative, resolve, sep } from 'node:path'
 import { RpcErrorCode, type PluginContext, type PtySessionInfo, type Repo, type Session, type Worktree } from '@quirky/protocol'
 import type { ExtrasState } from './state'
+import { readReviewDecisions, type ReviewReason } from './reviews'
 
 const DAY_MS = 86_400_000
 const WINDOW_DAYS = { today: 1, week: 7, month: 30 } as const
@@ -11,6 +12,8 @@ type WorkspaceProjection = {
   live: boolean | null
   reason: 'selected' | 'all' | 'recent' | 'old' | 'live' | 'sleeping' | 'main' | 'folder' | 'unknown'
   error?: string
+  reviewReason?: ReviewReason
+  reviewError?: string
 }
 
 export type ActivityProjection = ExtrasState & {
@@ -18,6 +21,8 @@ export type ActivityProjection = ExtrasState & {
   hiddenIds: string[]
   hiddenCount: number
   filterCount: number
+  reviewHiddenIds: string[]
+  reviewHiddenCount: number
   workspaces: WorkspaceProjection[]
 }
 
@@ -168,12 +173,17 @@ export async function projectActivity(
   const worktrees = worktreeResult as Worktree[]
   const repos = repoResult as Repo[]
   const repoById = new Map(repos.map((repo) => [repo.id, repo]))
-  const facts = await runtimeFacts(context, worktrees)
+  const [facts, reviewDecisions] = await Promise.all([
+    runtimeFacts(context, worktrees),
+    readReviewDecisions(context, worktrees, state.preferences)
+  ])
   const sessions = sessionActivity(facts.sessions)
   const cutoff = cutoffFor(state, now())
   const visibleIds: string[] = []
   const hiddenIds: string[] = []
   const workspaces: WorkspaceProjection[] = []
+  const reviewHiddenIds: string[] = []
+  let activityHiddenCount = 0
 
   for (const worktree of worktrees) {
     const active = state.active
@@ -214,23 +224,33 @@ export async function projectActivity(
       visible = !worktree.isMain
     }
 
+    const review = reviewDecisions?.get(worktree.id)
     workspaces.push({
       worktreeId: worktree.id,
       activityAt: activity,
       live,
       reason,
-      ...(error === undefined ? {} : { error })
+      ...(error === undefined ? {} : { error }),
+      ...(review?.reason === undefined ? {} : { reviewReason: review.reason }),
+      ...(review?.error === undefined ? {} : { reviewError: review.error })
     })
-    const destination = visible ? visibleIds : hiddenIds
+    if (!visible) activityHiddenCount++
+    if (review?.hidden === true) reviewHiddenIds.push(worktree.id)
+    const combinedVisible = visible && review?.hidden !== true
+    const destination = combinedVisible ? visibleIds : hiddenIds
     destination.push(worktree.id)
-  }
 
+  }
   return {
     ...state,
     visibleIds,
     hiddenIds,
-    hiddenCount: hiddenIds.length,
-    filterCount: state.preferences.workspaceActivityWindow === 'all' ? 0 : 1,
+    hiddenCount: activityHiddenCount,
+    filterCount: (state.preferences.workspaceActivityWindow === 'all' ? 0 : 1) +
+      (state.preferences.hideCompletedReviewWorkspaces ? 1 : 0) +
+      (state.preferences.hidePassingCheckWorkspaces ? 1 : 0),
+    reviewHiddenIds,
+    reviewHiddenCount: reviewHiddenIds.length,
     workspaces
   }
 }
