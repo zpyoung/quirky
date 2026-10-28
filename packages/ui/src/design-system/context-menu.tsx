@@ -173,6 +173,7 @@ export function ContextMenuList({ items, label, onChoose, onClose, onBack, heade
                   tabIndex={-1}
                   onClick={() => pick(index)}
                 >
+                  {item.swatch ? <span className="qt-swatch" style={{ background: item.swatch }} aria-hidden /> : null}
                   {item.icon !== undefined && <span aria-hidden="true">{item.icon}</span>}
                   <span className={item.detail === undefined ? 'qt-menu-label' : 'qt-menu-label ui-stack'}>
                     {item.label}
@@ -200,23 +201,28 @@ export function ContextMenuList({ items, label, onChoose, onClose, onBack, heade
 /** A menu positioned at its caller-provided screen coordinate. */
 export function ContextMenu({ items, label, x, y, onClose, header, highlightFirst }: ContextMenuProps) {
   const anchor = useRef<HTMLDivElement>(null)
+  const [position, setPosition] = useState({ x, y })
 
   useLayoutEffect(() => {
-    const position = () => {
-      const menu = anchor.current?.firstElementChild
-      if (!(menu instanceof HTMLElement)) return
+    const menu = anchor.current?.firstElementChild
+    if (!(menu instanceof HTMLElement)) return
+    const place = () => {
       fitMenuToViewport(menu)
       const bounds = menu.getBoundingClientRect()
-      const root = anchor.current
-      if (!root) return
-      root.style.left = `${Math.max(0, Math.min(x, window.innerWidth - bounds.width))}px`
-      root.style.top = `${Math.max(0, Math.min(y, window.innerHeight - bounds.height))}px`
+      const left = Math.max(0, Math.min(x, window.innerWidth - bounds.width))
+      const top = Math.max(0, Math.min(y, window.innerHeight - bounds.height))
+      setPosition((current) => current.x === left && current.y === top ? current : { x: left, y: top })
     }
-
-    position()
-    window.addEventListener('resize', position)
-    return () => window.removeEventListener('resize', position)
+    place()
+    const observer = new ResizeObserver(place)
+    observer.observe(menu)
+    window.addEventListener('resize', place)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', place)
+    }
   }, [items, x, y, header])
+
 
   useEffect(() => {
     const onDown = (event: MouseEvent) => {
@@ -232,7 +238,7 @@ export function ContextMenu({ items, label, x, y, onClose, header, highlightFirs
   }
 
   return createPortal(
-    <div ref={anchor} className="qt-menu-anchor" style={{ left: x, top: y }}>
+    <div ref={anchor} className="qt-menu-anchor" style={{ left: position.x, top: position.y }}>
       <ContextMenuList
         items={items}
         label={label}

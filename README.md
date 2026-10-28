@@ -216,14 +216,21 @@ to the daemon.
 
 `bun run ui:lint` checks UI source for raw colors and pixel dimensions. Root
 `bun run typecheck` runs the same gate. Plugin enforcement is staged:
-`scripts/ui-lint-plugins.json` starts empty, and each `ui-restyle-*` item adds its plugin IDs.
-Unlisted legacy plugins are not checked. Listed plugins must also remove their own CSS files,
-private CSS imports, style elements and stylesheet injection; the canonical
-`@quirky/ui/styles.css` import is allowed. Use shared controls and tokens instead.
+`scripts/ui-lint-plugins.json` is the staged enforcement registry; each `ui-restyle-*` item
+adds its plugin IDs. Worktree and repository management are enforced. Unlisted legacy plugins
+are not checked. Listed plugins must remove their own CSS files, private CSS imports, style
+elements and stylesheet injection; the canonical `@quirky/ui/styles.css` import is allowed.
+Use shared controls and tokens instead.
 Only custom-property values in the two central design-system token files may define raw
 primitives. Existing host geometry remains in `compatibility-tokens.css` until its area restyle;
 new shared controls use the approved semantic tokens and size scale. Static source analysis
 does not evaluate arbitrary runtime style computations or trace imported style objects.
+
+Worktrees remains the default left-top tool. It renders repository/project management through
+the existing `quirky.repo` API rather than a separate repository panel. Rows use shared status
+dots, attention counts and a second activity line; project/worktree dialogs and panel options
+use the same graphite controls in both themes. Shared ContextMenu supports pointer-positioned
+menus with nested actions; shared Dialog supports wide content and stacked focus ownership.
 
 ### Public plugin UI and grouping APIs
 

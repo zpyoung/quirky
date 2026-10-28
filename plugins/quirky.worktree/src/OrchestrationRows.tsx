@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react'
+import { ListRow, type UiStatus } from '@quirky/ui'
 import type { Session, UiPluginContext } from '@quirky/protocol'
 
 /** Minimal public workerList shape consumed through UiPluginContext; no orchestration module imports. */
@@ -48,25 +49,6 @@ type CoordinatorGroup = {
 }
 
 const SESSION_VIEW = 'view:quirky.session/worktree'
-const LIST_STYLE: CSSProperties = { listStyle: 'none', margin: 0, padding: 0 }
-const ROW_STYLE: CSSProperties = {
-  appearance: 'none',
-  background: 'transparent',
-  border: 0,
-  color: 'inherit',
-  cursor: 'pointer',
-  display: 'flex',
-  alignItems: 'baseline',
-  gap: '0.4rem',
-  font: 'inherit',
-  minHeight: '1.45rem',
-  padding: '0 0 0 0.75rem',
-  textAlign: 'left',
-  width: '100%'
-}
-const GROUP_STYLE: CSSProperties = { fontSize: '0.86em', margin: '0.12rem 0' }
-const STATUS_STYLE: CSSProperties = { opacity: 0.72, whiteSpace: 'nowrap' }
-const CUSTODY_STYLE: CSSProperties = { fontSize: '0.9em', opacity: 0.82 }
 
 function coordinatorLabel(session: Session | undefined): string {
   if (!session) return 'Orphaned coordinator'
@@ -88,6 +70,24 @@ function activityLabel(row: OrchestrationWorkerRow, session: Session | undefined
   const activity = row.projection.stage.activity
   if (activity === 'unknown') return 'Activity unknown'
   return `${activity[0]!.toUpperCase()}${activity.slice(1)}`
+}
+function statusForActivity(
+  row: OrchestrationWorkerRow,
+  session: Session | undefined
+): UiStatus {
+  if (session?.status === 'exited' || row.projection.liveness.status === 'exited') return 'idle'
+  if (!row.currentAssignment || row.projection.liveness.status !== 'live' || row.projection.evidence.liveStatus !== 'fresh') return 'queued'
+  switch (row.projection.stage.activity) {
+    case 'working':
+      return 'working'
+    case 'blocked':
+    case 'waiting':
+      return 'needs-you'
+    case 'done':
+      return 'done'
+    case 'unknown':
+      return 'idle'
+  }
 }
 
 function custodyLabel(row: OrchestrationWorkerRow): string | null {
@@ -265,80 +265,71 @@ export function OrchestrationRows({ context, workers, sessions, worktreeId }: Pr
       session?.kind === 'terminal' && session.worktreeId === row.resource.worktreeId && session.status !== 'exited'
     const status = activityLabel(row, session)
     const custody = custodyLabel(row)
+    const description = [status, remote ? row.projection.host!.id : null, custody].filter(Boolean).join(' · ')
+    const canOpen = terminal || remote
     const children = node.children.length > 0
-      ? <ul className="orchestration-worker-children" style={LIST_STYLE}>{node.children.map((child) => renderWorker(child, depth + 1))}</ul>
+      ? <ul className="orchestration-worker-children ui-tree">{node.children.map((child) => renderWorker(child, depth + 1))}</ul>
       : null
-    const content = (
-      <>
-        <span>{label}</span>
-        <span className="orchestration-worker-status" style={STATUS_STYLE}> · {status}</span>
-        {remote && <span className="orchestration-worker-host" style={STATUS_STYLE}> · {row.projection.host!.id}</span>}
-        {custody && <span className="orchestration-worker-custody" style={CUSTODY_STYLE}> · {custody}</span>}
-      </>
-    )
+    const openWorker = () => {
+      void context.call('quirky.orchestration/taskTerminal', { taskId: row.taskId }).then((result) => {
+        const target = asTaskTerminal(result)
+        if (!target || target.taskId !== row.taskId) {
+          context.toast('Could not open worker', 'The task no longer has a current inspectable assignment.')
+          return
+        }
+        if (target.dispatchId !== row.dispatchId) {
+          context.toast('Could not open worker terminal', 'The task assignment changed; refresh the sidebar before opening its terminal.')
+          return
+        }
+        if ('kind' in target && target.kind === 'remote_output') {
+          context.openView(target.viewId, target.input)
+        } else if ('sessionId' in target) {
+          context.openView(SESSION_VIEW, { worktree: target.worktreeId, session: target.sessionId })
+        }
+      }).catch((error: unknown) => context.toast('Could not open worker terminal', error instanceof Error ? error.message : String(error)))
+    }
     return (
-      <li className="orchestration-worker-item" key={row.dispatchId} data-lineage-depth={depth + 1} style={GROUP_STYLE}>
-        {terminal || remote
-          ? <button
-              type="button"
-              className="orchestration-worker-row"
-              aria-label={`Open ${label} ${remote ? 'output' : 'terminal'}`}
-              data-visual-depth="1"
-              style={ROW_STYLE}
-              onClick={() => {
-                void context.call('quirky.orchestration/taskTerminal', { taskId: row.taskId }).then((result) => {
-                  const target = asTaskTerminal(result)
-                  if (!target || target.taskId !== row.taskId) {
-                    context.toast('Could not open worker', 'The task no longer has a current inspectable assignment.')
-                    return
-                  }
-                  if (target.dispatchId !== row.dispatchId) {
-                    context.toast('Could not open worker terminal', 'The task assignment changed; refresh the sidebar before opening its terminal.')
-                    return
-                  }
-                  if ('kind' in target && target.kind === 'remote_output') {
-                    context.openView(target.viewId, target.input)
-                  } else if ('sessionId' in target) {
-                    context.openView(SESSION_VIEW, { worktree: target.worktreeId, session: target.sessionId })
-                  }
-                }).catch((error: unknown) => context.toast('Could not open worker terminal', error instanceof Error ? error.message : String(error)))
-              }}
-            >{content}</button>
-          : <span className="orchestration-worker-label" data-visual-depth="1" style={{ ...ROW_STYLE, cursor: 'default' }}>{content}</span>}
+      <li
+        className="orchestration-worker-item ui-tree-item ui-indent"
+        key={row.dispatchId}
+        data-lineage-depth={depth + 1}
+        data-visual-depth="1"
+        style={{ '--depth': depth } as CSSProperties}
+      >
+        <ListRow
+          title={label}
+          description={description}
+          status={statusForActivity(row, session)}
+          mainLabel={canOpen ? `Open ${label} ${remote ? 'output' : 'terminal'}` : undefined}
+          onClick={canOpen ? openWorker : undefined}
+        />
         {children}
       </li>
     )
   }
 
   return (
-    <div
-      className="orchestration-rows"
-      aria-label="Orchestration workers"
-      style={{ display: 'block', flexBasis: '100%', fontSize: '0.88em', gridColumn: '1 / -1', margin: '0.08rem 0 0.2rem 1.65rem', width: '100%' }}
-    >
-      <ul className="orchestration-coordinator-groups" style={LIST_STYLE}>
+    <section className="orchestration-rows ui-stack ui-panel-content" role="group" aria-label="Orchestration workers">
+      <ul className="orchestration-coordinator-groups ui-tree">
         {groups.map((group) => {
           const coordinator = group.coordinatorSessionId ? sessionById.get(group.coordinatorSessionId) : undefined
           const coordinatorIsWorker = group.coordinatorSessionId !== null && representedSessions.has(group.coordinatorSessionId)
           const canFocusCoordinator = coordinator?.kind === 'terminal' && coordinator.status !== 'exited'
           return (
-            <li className="orchestration-coordinator-group" key={group.key} style={GROUP_STYLE}>
-              {!coordinatorIsWorker && (canFocusCoordinator
-                ? <button
-                    type="button"
-                    className="orchestration-coordinator-row"
-                    aria-label="Open coordinator terminal"
-                    style={{ ...ROW_STYLE, paddingInlineStart: 0 }}
-                    onClick={() => focusCoordinator(coordinator)}
-                  >{coordinatorLabel(coordinator)}</button>
-                : <span className="orchestration-coordinator-label" style={{ ...ROW_STYLE, cursor: 'default', paddingInlineStart: 0 }}>
-                    {coordinator ? coordinatorLabel(coordinator) : group.coordinatorSessionId ? 'Orphaned coordinator' : 'Coordinator unavailable'}
-                  </span>)}
-              <ul className="orchestration-workers" style={LIST_STYLE}>{group.roots.map((node) => renderWorker(node, 0))}</ul>
+            <li className="orchestration-coordinator-group ui-tree-item" key={group.key}>
+              {!coordinatorIsWorker && (
+                <ListRow
+                  title={coordinator ? coordinatorLabel(coordinator) : group.coordinatorSessionId ? 'Orphaned coordinator' : 'Coordinator unavailable'}
+                  description={coordinator ? `${coordinator.agent} · ${coordinator.kind} · ${coordinator.status}` : undefined}
+                  mainLabel={canFocusCoordinator ? 'Open coordinator terminal' : undefined}
+                  onClick={canFocusCoordinator ? () => focusCoordinator(coordinator) : undefined}
+                />
+              )}
+              <ul className="orchestration-workers ui-tree">{group.roots.map((node) => renderWorker(node, 0))}</ul>
             </li>
           )
         })}
       </ul>
-    </div>
+    </section>
   )
 }

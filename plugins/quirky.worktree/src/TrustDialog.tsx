@@ -1,4 +1,4 @@
-import { Dialog } from './Dialog'
+import { Button, Dialog } from '@quirky/ui'
 import type { TrustChoice, TrustRequest } from './actions'
 
 type Props = {
@@ -22,19 +22,19 @@ export function TrustDialog({ request, project, onChoose }: Props) {
       ? 'The shared setup script changed since you last trusted it. It will run in the new workspace.'
       : 'This project shares a setup script. It will run in the new workspace.'
   return (
-    <Dialog title={title} onClose={() => onChoose('cancel')}>
-      <p className="dialog-message">{description}</p>
-      <pre className="script-preview">{request.script}</pre>
-      <div className="dialog-actions">
-        <button type="button" onClick={() => onChoose('skip')}>
+    <Dialog open title={title} onClose={() => onChoose('cancel')}>
+      <p className="ui-text-muted">{description}</p>
+      <pre className="ui-text-mono ui-scroll">{request.script}</pre>
+      <div className="ui-actions">
+        <Button type="button" onClick={() => onChoose('skip')}>
           {issueCommand ? 'Don’t run issue command' : "Don't run"}
-        </button>
-        <button type="button" onClick={() => onChoose('always')}>
+        </Button>
+        <Button type="button" onClick={() => onChoose('always')}>
           Always trust
-        </button>
-        <button type="button" className="primary" onClick={() => onChoose('run')}>
+        </Button>
+        <Button type="button" variant="primary" onClick={() => onChoose('run')}>
           {issueCommand ? 'Run issue command' : 'Run hooks'}
-        </button>
+        </Button>
       </div>
     </Dialog>
   )

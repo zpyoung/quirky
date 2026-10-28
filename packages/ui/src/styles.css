@@ -346,95 +346,6 @@ textarea {
 }
 
 
-.repo-scroll {
-  flex: 1;
-  overflow-y: auto;
-  padding-top: var(--compat-px-6);
-}
-
-
-.repo-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--compat-px-4) var(--compat-px-6) var(--compat-px-4) var(--compat-px-12);
-  color: var(--muted);
-  font-size: var(--compat-px-11);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.repo-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.worktree-list {
-  list-style: none;
-  margin: 0 0 var(--compat-px-8);
-  padding: 0;
-}
-
-.worktree {
-  display: flex;
-  align-items: center;
-  margin: 0 var(--compat-px-6);
-  border-radius: var(--compat-px-5);
-}
-
-.worktree:hover {
-  background: var(--bg-hover);
-}
-
-.worktree.selected {
-  background: var(--bg-active);
-}
-
-.worktree-main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: var(--compat-px-8);
-  background: var(--compat-color-transparent);
-  border: none;
-  text-align: left;
-  padding: var(--compat-px-4) var(--compat-px-6);
-}
-
-.worktree-main:hover:not(:disabled) {
-  background: var(--compat-color-transparent);
-}
-
-.worktree-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.worktree-name-unread {
-  font-weight: 700;
-}
-
-.worktree .icon-button {
-  opacity: 0;
-}
-
-.worktree:hover .icon-button,
-.worktree:focus-within .icon-button,
-.worktree.selected .icon-button {
-  opacity: 1;
-}
-
-
-.add-repo {
-  display: flex;
-  gap: var(--compat-px-6);
-  padding: var(--compat-px-8);
-  border-top: var(--compat-px-1) solid var(--border);
-}
-
 .main {
   display: flex;
   flex-direction: column;
@@ -861,62 +772,11 @@ select {
   font: inherit;
 }
 
-.pinned,
-.group {
-  margin-bottom: var(--compat-px-4);
-}
 
 .section-title {
   font-weight: 600;
 }
 
-.group-header {
-  display: flex;
-  align-items: center;
-  padding: var(--compat-px-2) var(--compat-px-6) var(--compat-px-2) var(--compat-px-6);
-}
-
-.group-toggle {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: var(--compat-px-6);
-  background: var(--compat-color-transparent);
-  border: none;
-  text-align: left;
-  padding: var(--compat-px-2) var(--compat-px-6);
-  color: var(--muted);
-  font-size: var(--compat-px-11);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.group-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.group > .repo,
-.group > .worktree-list {
-  margin-left: var(--compat-px-8);
-}
-
-.repo-actions {
-  display: flex;
-  align-items: center;
-}
-
-.worktree {
-  margin-left: calc(var(--compat-px-6) + var(--depth, 0) * var(--compat-px-14));
-}
-
-.worktree.pending,
-.worktree.removing {
-  opacity: 0.6;
-}
 
 .tag {
   flex: none;
@@ -938,16 +798,6 @@ select {
   border-color: var(--amber);
 }
 
-.children-chip {
-  flex: none;
-  padding: 0 var(--compat-px-6);
-  border: none;
-  border-radius: var(--compat-px-8);
-  background: var(--bg-active);
-  color: var(--muted);
-  font-size: var(--compat-px-10);
-  line-height: var(--compat-px-16);
-}
 
 .menu-context {
   position: fixed;
@@ -1090,13 +940,6 @@ select {
   overflow-wrap: anywhere;
 }
 
-.add-repo .add-project {
-  flex: 1;
-}
-
-.group-header .group-menu {
-  flex: none;
-}
 
 .delete-path {
   margin: 0 0 var(--compat-px-8);
@@ -1230,90 +1073,7 @@ select {
 }
 
 
-.workspace-activity-controls {
-  padding: var(--compat-px-4) var(--compat-px-8);
-}
 
-.workspace-options-button {
-  width: 100%;
-  text-align: left;
-}
 
-.workspace-options {
-  display: flex;
-  flex-direction: column;
-  gap: var(--compat-px-6);
-  padding: var(--compat-px-6) 0;
-}
 
-.workspace-filter-options {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--compat-px-4);
-}
-
-.workspace-filter-options button {
-  flex: 1 1 28%;
-  padding: var(--compat-px-4) var(--compat-px-6);
-  font-size: var(--compat-px-11);
-}
-
-.workspace-custom-days,
-.workspace-default-branch {
-  display: flex;
-  align-items: center;
-  gap: var(--compat-px-8);
-  font-size: var(--compat-px-11);
-}
-
-.workspace-custom-days input {
-  width: var(--compat-px-72);
-}
-
-.workspace-default-branch input {
-  flex: none;
-}
-
-.workspace-clear-filters,
-.workspace-hidden-count {
-  width: 100%;
-  font-size: var(--compat-px-11);
-}
-
-.workspace-activity-error {
-  margin: var(--compat-px-4) 0;
-  color: var(--danger);
-  font-size: var(--compat-px-11);
-}
-
-.worktree-tree {
-  display: contents;
-}
-
-.group > .group {
-  margin-left: var(--compat-px-8);
-}
-
-.tag-repo {
-  border-style: dashed;
-}
-
-.section-separator {
-  position: relative;
-}
-
-.section-separator::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  right: var(--compat-px-12);
-  left: var(--compat-px-12);
-  border-top: var(--compat-px-1) solid var(--border);
-  pointer-events: none;
-}
-
-.membership-drop-preview {
-  background: var(--bg-active);
-  box-shadow: inset 0 0 0 var(--compat-px-1) var(--accent);
-}
 

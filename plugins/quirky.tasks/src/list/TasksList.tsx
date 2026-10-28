@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Badge, Button, EmptyState, FormRow, IconButton, Tabs, TextField } from '@quirky/ui'
 import type { ItemKind, ItemTarget, TaskListResult, TaskRepo, TasksSurfaceProps } from '../contracts'
 import { queryForKind } from './search'
 import { useReviewNavigation } from './useReviewNavigation'
@@ -1224,24 +1225,24 @@ export function TasksList({ context, state, refresh }: TasksSurfaceProps) {
   const localError = error
 
   return (
-    <section aria-label="GitHub tasks" style={{ display: 'grid', gap: 12, minWidth: 0, color: 'var(--text, inherit)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '8px 0', borderBottom: '1px solid var(--border, #555)' }}>
+    <section className="tasks-list" data-kind={kind} aria-label="GitHub tasks">
+      <div className="tasks-list__context">
         <span aria-label="Task source context">{hostContext} · {userLabel()} · {sourceContext}</span>
         {selectedSourceValues.length > 1 ? <span>{selectedSourceValues.length} selected sources</span> : null}
         {issueSource.issueSourcePreference === 'upstream' && issueSource.issueSourceFellBack ? <span role="status">Upstream source fell back to origin</span> : null}
       </div>
 
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-        <div style={{ position: 'relative' }}>
-          <button type="button" aria-haspopup="listbox" aria-expanded={repoOpen} onClick={() => setRepoOpen((open) => !open)}>{repoButtonLabel} ▾</button>
+      <div className="tasks-list__repository-controls">
+        <div className="tasks-list__repo-picker">
+          <Button type="button" aria-haspopup="listbox" aria-expanded={repoOpen} onClick={() => setRepoOpen((open) => !open)}>{repoButtonLabel} ▾</Button>
           {repoOpen ? (
-            <div role="group" aria-label="Select repositories" style={{ position: 'absolute', zIndex: 30, top: '100%', left: 0, minWidth: 240, maxHeight: 320, overflow: 'auto', padding: 10, background: 'var(--surface, #222)', border: '1px solid var(--border, #555)', boxShadow: '0 8px 24px rgba(0,0,0,.3)' }}>
-              <label style={{ display: 'flex', gap: 8, padding: 5 }}>
+            <div role="group" aria-label="Select repositories" className="tasks-list__repo-menu">
+              <label className="tasks-list__check-option">
                 <input type="checkbox" checked={navigation.repoIds === null && allRepoIds.length > 0} onChange={(event) => void selectRepositories(event.currentTarget.checked ? allRepoIds : [])} />
                 <span>All repositories</span>
               </label>
               {result?.repositories.filter((repo) => repo.kind === 'git' && repo.path.trim().length > 0).map((repo) => (
-                <label key={repo.id} style={{ display: 'flex', gap: 8, padding: 5 }}>
+                <label key={repo.id} className="tasks-list__check-option">
                   <input type="checkbox" checked={selectedSet.has(repo.id)} onChange={(event) => void selectRepositories(event.currentTarget.checked ? [...selectedRepoIds, repo.id] : selectedRepoIds.filter((id) => id !== repo.id))} />
                   <span>{repo.displayName || repo.name}</span>
                 </label>
@@ -1249,130 +1250,124 @@ export function TasksList({ context, state, refresh }: TasksSurfaceProps) {
             </div>
           ) : null}
         </div>
-        <button type="button" disabled={!repoOpenUrl || selectedRepos.length !== 1} title={selectedRepos.length === 1 ? 'Open repository in GitHub' : 'Select one project to open in GitHub'} onClick={() => repoOpenUrl && openLink(repoOpenUrl)}>Open repository in GitHub</button>
+        <Button type="button" disabled={!repoOpenUrl || selectedRepos.length !== 1} title={selectedRepos.length === 1 ? 'Open repository in GitHub' : 'Select one project to open in GitHub'} onClick={() => repoOpenUrl && openLink(repoOpenUrl)}>Open repository in GitHub</Button>
         {showIssueSource ? (
-          <div role="group" aria-label="Issue source" style={{ display: 'inline-flex', gap: 4 }}>
-            <button type="button" aria-pressed={selectedIssueSource === 'upstream'} onClick={() => void changeRepoSource('upstream')}>Upstream</button>
-            <button type="button" aria-pressed={selectedIssueSource === 'origin'} onClick={() => void changeRepoSource('origin')}>Origin</button>
-          </div>
+          <Tabs
+            label="Issue source"
+            items={[{ id: 'upstream', label: 'Upstream' }, { id: 'origin', label: 'Origin' }]}
+            value={selectedIssueSource}
+            onChange={(id) => { if (id === 'upstream' || id === 'origin') void changeRepoSource(id) }}
+          />
         ) : mode === 'issues' && selectedIssueSource === 'upstream' && hasOneRepo ? <span aria-label="Issues use upstream source">Issues from upstream</span> : null}
       </div>
 
       {allUnavailable ? (
-        <div role="alert" style={{ color: 'var(--error, #dc2626)' }}>
+        <div role="alert" className="tasks-list__notice tasks-list__notice--error">
           {visibleResult?.failures.map((failure) => failure.message).join(' · ') || 'GitHub source is unavailable. Check that gh is installed and authenticated, then refresh.'}
         </div>
       ) : null}
       {!allUnavailable && partialFailureCount > 0 ? (
-        <div role="status" style={{ color: 'var(--warning, #b45309)' }}>
+        <div role="status" className="tasks-list__notice tasks-list__notice--warning">
           {sourceFailureCount > 0 ? `${sourceFailureCount} selected source read${sourceFailureCount === 1 ? '' : 's'} failed. Showing available GitHub work; retry to reload.` : `${countFailureCount} result count${countFailureCount === 1 ? '' : 's'} unavailable. Full pages offer a continuation.`}
         </div>
       ) : null}
-      {localError ? <div role="alert" style={{ color: 'var(--error, #dc2626)' }}>{localError}{visibleResult ? ' Showing the last loaded results.' : ''}</div> : null}
+      {localError ? <div role="alert" className="tasks-list__notice tasks-list__notice--error">{localError}{visibleResult ? ' Showing the last loaded results.' : ''}</div> : null}
       {visibleResult?.failures.map((failure, index) => (
-        <div key={`${failure.repoId}:${index}`} role="status" style={{ color: 'var(--warning, #b45309)' }}>
+        <div key={`${failure.repoId}:${index}`} role="status" className="tasks-list__notice tasks-list__notice--warning">
           {failure.reason === 'missing_origin' ? `No GitHub source detected for ${failure.repoId} — it may have no GitHub remote.` : `${failure.repoId}: ${failure.message}`}
         </div>
       ))}
 
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-        <div role="group" aria-label="Task presets" style={{ display: 'flex', gap: 6 }}>
+      <div className="tasks-list__toolbar">
+        <div role="group" aria-label="Task presets" className="tasks-list__presets">
           {presets.map((item) => (
-            <button key={item.id} type="button" onClick={() => presetClick(item)} onContextMenu={(event) => void makeDefaultPreset(item, event)} title="Right-click to make this the default">
-              {item.label}
-            </button>
+            <Button key={item.id} type="button" onClick={() => presetClick(item)} onContextMenu={(event) => void makeDefaultPreset(item, event)} title="Right-click to make this the default">{item.label}</Button>
           ))}
         </div>
-        <button type="button" aria-haspopup="dialog" aria-expanded={filtersOpen} onClick={() => setFiltersOpen((open) => !open)}>
-          Filters{filterCount > 0 ? ` (${filterCount})` : ''}
-        </button>
-        <label style={{ flex: '1 1 240px', minWidth: 180 }}>
-          <span className="sr-only">Search GitHub {kind === 'issue' ? 'issues' : 'pull requests'}</span>
-          <input
-            data-tasks-search="true"
-            aria-label={`Search GitHub ${kind === 'issue' ? 'issues' : 'pull requests'}`}
-            placeholder={`Search GitHub ${kind === 'issue' ? 'issues' : 'PRs'}…`}
-            value={searchDraft}
-            onChange={(event) => onSearchChange(event.currentTarget.value)}
-            onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commitSearch(event.currentTarget.value) } }}
-            style={{ width: '100%', minWidth: 180 }}
-          />
-        </label>
-        <button type="button" aria-label="Clear search" title="Clear search" onClick={() => commitSearch(presetQuery(normalizedPreset(state.preferences.defaultTaskViewPreset, kind), kind))}>×</button>
-        {kind === 'issue' ? <button type="button" aria-label="New GitHub issue" disabled={selectedRepoIds.length === 0} onClick={() => void navigate({ newIssue: true })}>＋ New GitHub issue</button> : null}
-        <button type="button" aria-label={refreshing ? 'Refreshing GitHub work' : 'Refresh GitHub work'} disabled={refreshing || selectedRepoIds.length === 0} onClick={() => void loadList(true, true)}>{refreshing ? 'Refreshing…' : 'Refresh'}</button>
+        <Button type="button" aria-haspopup="dialog" aria-expanded={filtersOpen} onClick={() => setFiltersOpen((open) => !open)}>
+          Filters{filterCount > 0 ? ` (${filterCount})` : ''}</Button>
+        <TextField
+          label={`Search GitHub ${kind === 'issue' ? 'issues' : 'pull requests'}`}
+          data-tasks-search="true"
+          aria-label={`Search GitHub ${kind === 'issue' ? 'issues' : 'pull requests'}`}
+          placeholder={`Search GitHub ${kind === 'issue' ? 'issues' : 'PRs'}…`}
+          value={searchDraft}
+          onChange={(event) => onSearchChange(event.currentTarget.value)}
+          onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commitSearch(event.currentTarget.value) } }}
+          className="tasks-list__search-input"
+        />
+        <IconButton type="button" label="Clear search" title="Clear search" onClick={() => commitSearch(presetQuery(normalizedPreset(state.preferences.defaultTaskViewPreset, kind), kind))}>×</IconButton>
+        {kind === 'issue' ? <Button variant="primary" type="button" aria-label="New GitHub issue" disabled={selectedRepoIds.length === 0} onClick={() => void navigate({ newIssue: true })}>＋ New GitHub issue</Button> : null}
+        <Button type="button" aria-label={refreshing ? 'Refreshing GitHub work' : 'Refresh GitHub work'} disabled={refreshing || selectedRepoIds.length === 0} onClick={() => void loadList(true, true)}>{refreshing ? 'Refreshing…' : 'Refresh'}</Button>
       </div>
 
       {pills.length > 0 ? (
-        <div aria-label="Active task filters" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {pills.map((pill, index) => <button key={`${pill.category}:${pill.value ?? index}`} type="button" aria-label={`Remove ${pill.label} filter`} onClick={() => removeFilter(pill.category, pill.value)}>{pill.label} ×</button>)}
+        <div aria-label="Active task filters" className="tasks-list__filter-pills">
+          {pills.map((pill, index) => <Button key={`${pill.category}:${pill.value ?? index}`} type="button" aria-label={`Remove ${pill.label} filter`} onClick={() => removeFilter(pill.category, pill.value)}>{pill.label} ×</Button>)}
         </div>
       ) : null}
 
       {filtersOpen ? (
-        <div role="dialog" aria-label="GitHub task filters" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 12, padding: 12, border: '1px solid var(--border, #555)', borderRadius: 8 }}>
-          <label>
-            <span>Status</span>
-            <select value={filters.status || 'any'} onChange={(event) => setFilter('status', event.currentTarget.value === 'any' ? [] : [`is:${event.currentTarget.value}`, ...(filters.draftOnly ? ['is:draft'] : [])])}>
+        <div role="dialog" aria-label="GitHub task filters" className="tasks-list__filters">
+          <FormRow label="Status" htmlFor="tasks-list-status-filter">
+            <select id="tasks-list-status-filter" className="ui-text-field__input" value={filters.status || 'any'} onChange={(event) => setFilter('status', event.currentTarget.value === 'any' ? [] : [`is:${event.currentTarget.value}`, ...(filters.draftOnly ? ['is:draft'] : [])])}>
               {statusOptions.map((value) => <option key={value} value={value}>{value === 'any' ? 'Any state' : value[0]!.toUpperCase() + value.slice(1)}</option>)}
             </select>
-          </label>
-          {kind === 'pullRequest' ? <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={filters.draftOnly} onChange={(event) => setFilter('status', [...(filters.status ? [`is:${filters.status}`] : []), ...(event.currentTarget.checked ? ['is:open', 'is:draft'] : [])])} />Draft only</label> : null}
-          <label>
-            <span>Author</span>
-            <input list="tasks-authors" value={filterAuthorText || filters.author} onChange={(event) => setFilterAuthorText(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); setFilter('author', filterAuthorText ? [`author:${filterAuthorText}`] : []) } }} onBlur={() => { if (filterAuthorText) setFilter('author', [`author:${filterAuthorText}`]) }} placeholder="Filter or type a login…" />
-            <datalist id="tasks-authors"><option value="@me" />{[...new Set(tableRows.flatMap((item) => item.author ? [item.author] : []))].map((value) => <option key={value} value={value} />)}</datalist>
-          </label>
-          <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
+          </FormRow>
+          {kind === 'pullRequest' ? <label className="tasks-list__check-option"><input type="checkbox" checked={filters.draftOnly} onChange={(event) => setFilter('status', [...(filters.status ? [`is:${filters.status}`] : []), ...(event.currentTarget.checked ? ['is:open', 'is:draft'] : [])])} />Draft only</label> : null}
+          <FormRow label="Author" htmlFor="tasks-list-author-filter">
+            <>
+              <input id="tasks-list-author-filter" className="ui-text-field__input" list="tasks-authors" value={filterAuthorText || filters.author} onChange={(event) => setFilterAuthorText(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); setFilter('author', filterAuthorText ? [`author:${filterAuthorText}`] : []) } }} onBlur={() => { if (filterAuthorText) setFilter('author', [`author:${filterAuthorText}`]) }} placeholder="Filter or type a login…" />
+              <datalist id="tasks-authors"><option value="@me" />{[...new Set(tableRows.flatMap((item) => item.author ? [item.author] : []))].map((value) => <option key={value} value={value} />)}</datalist>
+            </>
+          </FormRow>
+          <fieldset className="tasks-list__labels-filter">
             <legend>Labels</legend>
-            <div style={{ maxHeight: 120, overflow: 'auto' }}>
-              {[...new Set([...repoLabels, ...tableRows.flatMap((item) => item.labels)])].sort().map((label) => <label key={label} style={{ display: 'block' }}><input type="checkbox" checked={filters.labels.includes(label)} onChange={(event) => toggleLabel(label, event.currentTarget.checked)} />{label}</label>)}
+            <div className="tasks-list__label-options">
+              {[...new Set([...repoLabels, ...tableRows.flatMap((item) => item.labels)])].sort().map((label) => <label key={label} className="tasks-list__check-option"><input type="checkbox" checked={filters.labels.includes(label)} onChange={(event) => toggleLabel(label, event.currentTarget.checked)} />{label}</label>)}
               {repoLabels.length === 0 && tableRows.every((item) => item.labels.length === 0) ? <span>No labels loaded.</span> : null}
             </div>
           </fieldset>
-          <label>
-            <span>Assignee</span>
-            <select value={filters.assignee} onChange={(event) => setFilter('assignee', event.currentTarget.value ? [`assignee:${event.currentTarget.value}`] : [])}>
+          <FormRow label="Assignee" htmlFor="tasks-list-assignee-filter">
+            <select id="tasks-list-assignee-filter" className="ui-text-field__input" value={filters.assignee} onChange={(event) => setFilter('assignee', event.currentTarget.value ? [`assignee:${event.currentTarget.value}`] : [])}>
               <option value="">Any assignee</option><option value="@me">Current user</option>
               {[...new Set([...repoAssignees, ...tableRows.flatMap((item) => item.assignees)])].sort().map((value) => <option key={value} value={value}>{value}</option>)}
             </select>
-          </label>
+          </FormRow>
           {kind === 'pullRequest' ? (
             <>
-              <label>
-                <span>Review from</span>
-                <input value={filterReviewRequestedText || filters.reviewRequested} onChange={(event) => setFilterReviewRequestedText(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); setFilter('reviewRequested', filterReviewRequestedText ? [`review-requested:${filterReviewRequestedText}`] : []) } }} onBlur={() => { if (filterReviewRequestedText) setFilter('reviewRequested', [`review-requested:${filterReviewRequestedText}`]) }} placeholder="@me or login" />
-              </label>
-              <label>
-                <span>Reviewed by</span>
-                <input value={filterReviewedByText || filters.reviewedBy} onChange={(event) => setFilterReviewedByText(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); setFilter('reviewedBy', filterReviewedByText ? [`reviewed-by:${filterReviewedByText}`] : []) } }} onBlur={() => { if (filterReviewedByText) setFilter('reviewedBy', [`reviewed-by:${filterReviewedByText}`]) }} placeholder="@me or login" />
-              </label>
+              <FormRow label="Review from" htmlFor="tasks-list-review-requested-filter">
+                <input id="tasks-list-review-requested-filter" className="ui-text-field__input" value={filterReviewRequestedText || filters.reviewRequested} onChange={(event) => setFilterReviewRequestedText(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); setFilter('reviewRequested', filterReviewRequestedText ? [`review-requested:${filterReviewRequestedText}`] : []) } }} onBlur={() => { if (filterReviewRequestedText) setFilter('reviewRequested', [`review-requested:${filterReviewRequestedText}`]) }} placeholder="@me or login" />
+              </FormRow>
+              <FormRow label="Reviewed by" htmlFor="tasks-list-reviewed-by-filter">
+                <input id="tasks-list-reviewed-by-filter" className="ui-text-field__input" value={filterReviewedByText || filters.reviewedBy} onChange={(event) => setFilterReviewedByText(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); setFilter('reviewedBy', filterReviewedByText ? [`reviewed-by:${filterReviewedByText}`] : []) } }} onBlur={() => { if (filterReviewedByText) setFilter('reviewedBy', [`reviewed-by:${filterReviewedByText}`]) }} placeholder="@me or login" />
+              </FormRow>
             </>
           ) : null}
-          <button type="button" onClick={() => { setFilter('all', []); setFiltersOpen(false) }}>Clear all filters</button>
+          <Button type="button" onClick={() => { setFilter('all', []); setFiltersOpen(false) }}>Clear all filters</Button>
         </div>
       ) : null}
 
       {loading && !visibleResult ? (
-        <div role="status" aria-label="Loading GitHub tasks">{Array.from({ length: 12 }, (_, index) => <div key={index} style={{ height: 34, marginBlock: 5, borderRadius: 4, background: 'var(--surface-raised, #333)', opacity: .55 }} />)}</div>
+        <div role="status" aria-label="Loading GitHub tasks" className="tasks-list__loading">{Array.from({ length: 12 }, (_, index) => <div key={index} className="tasks-list__skeleton-row" />)}</div>
       ) : visibleResult?.repositories.length === 0 ? (
-        <div role="status"><strong>No eligible Git repositories</strong><p>Add or select a registered Git repository with a local path to load GitHub tasks.</p></div>
+        <div role="status" className="tasks-list__empty"><EmptyState message="No eligible Git repositories. Add or select a registered Git repository with a local path to load GitHub tasks." /></div>
       ) : selectedRepoIds.length === 0 ? (
-        <div role="status"><strong>No project sources selected</strong><p>Select at least one project source so Quirky knows where to fetch GitHub tasks.</p></div>
+        <div role="status" className="tasks-list__empty"><EmptyState message="No project sources selected. Select at least one project source so Quirky knows where to fetch GitHub tasks." action={{ label: 'Select projects', onAction: () => setRepoOpen(true) }} /></div>
       ) : visibleResult && tableRows.length === 0 && visibleResult.failures.every((failure) => failure.stage === 'count') ? (
-        <div role="status"><strong>No matching GitHub work</strong><p>Change the query or clear it.</p></div>
+        <div role="status" className="tasks-list__empty"><EmptyState message="No matching GitHub work. Change the query or clear it." action={{ label: 'Reset query', onAction: () => commitSearch(presetQuery(normalizedPreset(state.preferences.defaultTaskViewPreset, kind), kind)) }} /></div>
       ) : tableRows.length === 0 && visibleResult?.failures.length ? (
-        <div role="alert">GitHub data is temporarily unavailable. Its API may be down, rate-limited, or unreachable. Retry shortly.</div>
+        <div role="alert" className="tasks-list__notice tasks-list__notice--error">GitHub data is temporarily unavailable. Its API may be down, rate-limited, or unreachable. Retry shortly.</div>
       ) : (
-        <div style={{ overflow: 'auto', maxHeight: 'min(70vh, 900px)', border: '1px solid var(--border, #555)', borderRadius: 8 }}>
-          <table style={{ borderCollapse: 'separate', borderSpacing: 0, minWidth: kind === 'issue' ? 860 : 1120, width: '100%' }}>
+        <div className="tasks-body tasks-list__table-scroll">
+          <table className="tasks-list__table">
             <thead>
               <tr>
-                <th scope="col" style={{ position: 'sticky', top: 0, left: 0, zIndex: 5, background: 'var(--surface, #222)', textAlign: 'left' }}>ID</th>
-                <th scope="col" style={{ position: 'sticky', top: 0, left: 74, zIndex: 5, background: 'var(--surface, #222)', textAlign: 'left', minWidth: 350 }}>Title / Context</th>
-                {kind === 'issue' ? <><th scope="col" style={{ position: 'sticky', top: 0, background: 'var(--surface, #222)' }}>Assignees</th><th scope="col" style={{ position: 'sticky', top: 0, background: 'var(--surface, #222)' }}>Status</th></> : <><th scope="col" style={{ position: 'sticky', top: 0, background: 'var(--surface, #222)' }}>Reviewers</th><th scope="col" style={{ position: 'sticky', top: 0, background: 'var(--surface, #222)' }}>Checks</th><th scope="col" style={{ position: 'sticky', top: 0, background: 'var(--surface, #222)' }}>Merge</th></>}
-                <th scope="col" style={{ position: 'sticky', top: 0, background: 'var(--surface, #222)' }}>Updated</th>
-                <th scope="col" style={{ position: 'sticky', top: 0, right: 0, zIndex: 5, background: 'var(--surface, #222)' }}>Actions</th>
+                <th scope="col" className="tasks-list__header-cell tasks-list__header-cell--id">ID</th>
+                <th scope="col" className="tasks-list__header-cell tasks-list__header-cell--title">Title / Context</th>
+                {kind === 'issue' ? <><th scope="col" className="tasks-list__header-cell">Assignees</th><th scope="col" className="tasks-list__header-cell">Status</th></> : <><th scope="col" className="tasks-list__header-cell">Reviewers</th><th scope="col" className="tasks-list__header-cell">Checks</th><th scope="col" className="tasks-list__header-cell">Merge</th></>}
+                <th scope="col" className="tasks-list__header-cell">Updated</th>
+                <th scope="col" className="tasks-list__header-cell tasks-list__header-cell--actions">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -1383,6 +1378,7 @@ export function TasksList({ context, state, refresh }: TasksSurfaceProps) {
                 const when = relativeTime(item.updatedAt)
                 const linked = object(item.linkedWorkspace)
                 const check = checkSummary(checks[key], checksLoading[key] === true)
+                const checkTone = check.tone === 'danger' ? 'failing' : check.tone === 'warning' ? 'needs-you' : check.tone === 'success' ? 'working' : 'neutral'
                 const meta = mergeMetadata[key]
                 const review = meta?.review
                 const displayState = item.state === 'unknown' ? reviewState(review?.state) ?? item.state : item.state
@@ -1420,108 +1416,100 @@ export function TasksList({ context, state, refresh }: TasksSurfaceProps) {
                 const isMergeOpen = mergeFor === key
                 const mergedSelectedCount = selectedRepoIds.length > 1
                 return (
-                  <tr key={key} data-review-key={kind === 'pullRequest' ? key : undefined} tabIndex={0} onMouseEnter={() => kind === 'pullRequest' && void loadMergeMetadata(item)} onFocusCapture={() => kind === 'pullRequest' && void loadMergeMetadata(item)} onClick={() => onRow(item)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onRow(item) } }} style={{ cursor: 'pointer', borderTop: '1px solid var(--border, #444)' }}>
-                    <td style={{ position: 'sticky', left: 0, zIndex: 2, background: 'var(--surface, #222)', whiteSpace: 'nowrap', padding: 8 }}>
+                  <tr className="tasks-row tasks-list__row" key={key} data-review-key={kind === 'pullRequest' ? key : undefined} tabIndex={0} onMouseEnter={() => kind === 'pullRequest' && void loadMergeMetadata(item)} onFocusCapture={() => kind === 'pullRequest' && void loadMergeMetadata(item)} onClick={() => onRow(item)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onRow(item) } }}>
+                    <td className="tasks-list__id-cell">
                       <span aria-label={kind === 'issue' ? 'Issue' : displayIsDraft ? 'Draft pull request' : 'Pull request'}>{kind === 'issue' ? 'I' : displayIsDraft ? 'D' : 'PR'}</span> <strong>#{item.number}</strong>
                     </td>
-                    <td style={{ position: 'sticky', left: 74, zIndex: 2, background: 'var(--surface, #222)', padding: 8, minWidth: 350 }}>
+                    <td className="tasks-list__title-cell">
                       <strong>{item.title}</strong>
-                      {displayState !== 'open' && !(kind === 'pullRequest' && displayIsDraft) ? <span style={{ marginInlineStart: 7, opacity: .75 }}>{displayState}</span> : null}
-                      {displayIsDraft ? <span style={{ marginInlineStart: 7, opacity: .75 }}>Draft</span> : null}
-                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', fontSize: '.88em', opacity: .78, marginTop: 4 }}>
+                      {displayState !== 'open' && !(kind === 'pullRequest' && displayIsDraft) ? <Badge tone={displayState === 'closed' ? 'neutral' : 'accent'}>{displayState}</Badge> : null}
+                      {displayIsDraft ? <Badge>Draft</Badge> : null}
+                      <div className="tasks-list__metadata">
                         <span>{item.author ?? 'unknown author'}</span>
                         {mergedSelectedCount ? <span>{item.repoName}</span> : null}
-                        {item.labels.slice(0, 3).map((label) => <span key={label}>#{label}</span>)}
+                        {item.labels.slice(0, 3).map((label) => <Badge key={label}>{label}</Badge>)}
                         {kind === 'pullRequest' && (additions !== undefined || deletions !== undefined || changedFiles !== undefined) ? <span>{additions !== undefined ? `+${additions}` : ''}{additions !== undefined && deletions !== undefined ? ' ' : ''}{deletions !== undefined ? `−${deletions}` : ''}{(additions !== undefined || deletions !== undefined) && changedFiles !== undefined ? ' ' : ''}{changedFiles !== undefined ? `${changedFiles} files` : ''}</span> : null}
                         {linked && typeof linked.name === 'string' ? <span>▰ {linked.name}</span> : null}
-                        {optimistic[key]?.keepVisible ? <span role="status">Pending refresh</span> : null}
+                        {optimistic[key]?.keepVisible ? <Badge tone="needs-you">Pending refresh</Badge> : null}
                       </div>
                     </td>
                     {kind === 'issue' ? (
                       <>
-                        <td onClick={stop} onKeyDown={stop} style={{ padding: 8 }}>
-                          <button type="button" aria-haspopup="dialog" aria-expanded={isAssigneesOpen} onClick={() => void openAssignees(item)}>{item.assignees.join(', ') || 'Assign issue'}</button>
-                          {isAssigneesOpen ? <div role="dialog" aria-label="Assign issue" style={{ position: 'absolute', zIndex: 20, display: 'grid', gap: 6, padding: 10, background: 'var(--surface, #222)', border: '1px solid var(--border, #555)' }}>
-                            <strong>Assign issue</strong>
-                            {!Object.hasOwn(assigneeChoices, assigneeSourceKey) ? <span role="status">Loading assignable users…</span> : null}
-                            {[...new Set([...item.assignees, ...(assigneeChoices[assigneeSourceKey] ?? [])])].map((login) => <label key={login} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                              <input type="checkbox" checked={assigneeDraft.includes(login)} disabled={busy} onChange={(event) => toggleAssignee(login, event.currentTarget.checked)} />
-                              {login}
-                            </label>)}
-                            {Object.hasOwn(assigneeChoices, assigneeSourceKey) && assigneeChoices[assigneeSourceKey]?.length === 0 && item.assignees.length === 0 ? <span role="status">No assignable users.</span> : null}
-                            <button type="button" onClick={() => void saveAssignees(item)} disabled={busy}>Save assignees</button>
-                            <button type="button" onClick={() => setAssigneesFor(null)}>Cancel</button>
+                        <td className="tasks-list__action-cell" onClick={stop} onKeyDown={stop}><Button type="button" aria-haspopup="dialog" aria-expanded={isAssigneesOpen} onClick={() => void openAssignees(item)}>{item.assignees.join(', ') || 'Assign issue'}</Button>
+                        {isAssigneesOpen ? <div role="dialog" aria-label="Assign issue" >
+                          <strong>Assign issue</strong>
+                          {!Object.hasOwn(assigneeChoices, assigneeSourceKey) ? <span role="status">Loading assignable users…</span> : null}
+                          {[...new Set([...item.assignees, ...(assigneeChoices[assigneeSourceKey] ?? [])])].map((login) => <label key={login} >
+                            <input type="checkbox" checked={assigneeDraft.includes(login)} disabled={busy} onChange={(event) => toggleAssignee(login, event.currentTarget.checked)} />
+                            {login}
+                          </label>)}
+                          {Object.hasOwn(assigneeChoices, assigneeSourceKey) && assigneeChoices[assigneeSourceKey]?.length === 0 && item.assignees.length === 0 ? <span role="status">No assignable users.</span> : null}
+                          <Button type="button" onClick={() => void saveAssignees(item)} disabled={busy}>Save assignees</Button>
+                          <Button type="button" onClick={() => setAssigneesFor(null)}>Cancel</Button>
+                        </div> : null}</td>
+                        <td className="tasks-list__action-cell" onClick={stop} onKeyDown={stop}><Button type="button" aria-haspopup="menu" aria-expanded={isStatusOpen} onClick={() => setStatusFor((current) => current === key ? null : key)}>{item.state === 'closed' ? 'Closed' : 'Open'} ▾</Button>
+                        {isStatusOpen ? <div role="menu" aria-label={`Issue #${item.number} status`} >
+                          <Button type="button" role="menuitem" disabled={busy || item.state === 'open'} onClick={() => void setStatus(item, 'open')}>Open</Button>
+                          <Button type="button" role="menuitem" disabled={busy || item.state === 'closed'} onClick={() => void setStatus(item, 'closed', 'completed')}>Close as completed</Button>
+                          <Button type="button" role="menuitem" disabled={busy || item.state === 'closed'} onClick={() => void setStatus(item, 'closed', 'not_planned')}>Close as not planned</Button>
+                          <Button type="button" role="menuitem" disabled={busy || item.state === 'closed'} onClick={() => { setDuplicateFor(key); setDuplicateText('') }}>Close as duplicate…</Button>
+                          {isDuplicate ? <div role="group" aria-label="Duplicate issue target">
+                            <FormRow label="Search issues" htmlFor={`tasks-list-duplicate-${item.number}`}>
+                              <input id={`tasks-list-duplicate-${item.number}`} className="ui-text-field__input" aria-label="Search issues" value={duplicateText} onChange={(event) => setDuplicateText(event.currentTarget.value)} />
+                            </FormRow>
+                            {/^\d+$/u.test(duplicateText) ? <Button type="button" onClick={() => {
+                              const number = Number(duplicateText)
+                              if (!Number.isSafeInteger(number) || number < 1) { setError('Use a positive issue number.'); return }
+                              if (number === item.number) { setError('Choose a different issue.'); return }
+                              void setStatus(item, 'closed', 'duplicate', number)
+                            }}>Use issue #{duplicateText}</Button> : duplicateText.length > 0 ? <span role="status">Use a whole issue number.</span> : null}
                           </div> : null}
-                        </td>
-                        <td onClick={stop} onKeyDown={stop} style={{ padding: 8 }}>
-                          <button type="button" aria-haspopup="menu" aria-expanded={isStatusOpen} onClick={() => setStatusFor((current) => current === key ? null : key)}>{item.state === 'closed' ? 'Closed' : 'Open'} ▾</button>
-                          {isStatusOpen ? <div role="menu" aria-label={`Issue #${item.number} status`} style={{ position: 'absolute', zIndex: 20, display: 'grid', padding: 8, background: 'var(--surface, #222)', border: '1px solid var(--border, #555)' }}>
-                            <button type="button" role="menuitem" disabled={busy || item.state === 'open'} onClick={() => void setStatus(item, 'open')}>Open</button>
-                            <button type="button" role="menuitem" disabled={busy || item.state === 'closed'} onClick={() => void setStatus(item, 'closed', 'completed')}>Close as completed</button>
-                            <button type="button" role="menuitem" disabled={busy || item.state === 'closed'} onClick={() => void setStatus(item, 'closed', 'not_planned')}>Close as not planned</button>
-                            <button type="button" role="menuitem" disabled={busy || item.state === 'closed'} onClick={() => { setDuplicateFor(key); setDuplicateText('') }}>Close as duplicate…</button>
-                            {isDuplicate ? <div role="group" aria-label="Duplicate issue target">
-                              <label>Search issues<input aria-label="Search issues" value={duplicateText} onChange={(event) => setDuplicateText(event.currentTarget.value)} /></label>
-                              {/^\d+$/u.test(duplicateText) ? <button type="button" onClick={() => {
-                                const number = Number(duplicateText)
-                                if (!Number.isSafeInteger(number) || number < 1) { setError('Use a positive issue number.'); return }
-                                if (number === item.number) { setError('Choose a different issue.'); return }
-                                void setStatus(item, 'closed', 'duplicate', number)
-                              }}>Use issue #{duplicateText}</button> : duplicateText.length > 0 ? <span role="status">Use a whole issue number.</span> : null}
-                            </div> : null}
-                          </div> : null}
-                        </td>
+                        </div> : null}</td>
                       </>
                     ) : (
                       <>
-                        <td onClick={stop} onKeyDown={stop} style={{ padding: 8 }}>
-                          <button type="button" aria-haspopup="dialog" aria-expanded={isReviewersOpen} onClick={() => void openReviewers(item)}>{reviewerLabel}</button>
-                          {isReviewersOpen ? <div role="dialog" aria-label={`Reviewers for PR #${item.number}`} style={{ position: 'absolute', zIndex: 20, display: 'grid', gap: 6, padding: 10, background: 'var(--surface, #222)', border: '1px solid var(--border, #555)' }}>
-                            {requestedReviewers === null ? <span role="status">Requested reviewers are unavailable.</span> : requestedReviewers?.length ? <span>Currently requested: {requestedReviewers.join(', ')}</span> : null}
-                            {review?.reviews === null ? <span role="status">Review history is unavailable.</span> : null}
-                            {review?.assignees === null ? <span role="status">Pull-request assignees are unavailable.</span> : null}
-                            {review?.participantsTruncated === true ? <span role="status">Recent reviewer activity is incomplete.</span> : null}
-                            {!reviewSuggestions ? <span role="status">Loading reviewer suggestions…</span> : null}
-                            {recentReviewers.length > 0 ? <fieldset><legend>Recently active in this pull request</legend>{recentReviewers.map((login) => <button key={login} type="button" onClick={() => addReviewerOption(login)}>{login}</button>)}</fieldset> : null}
-                            {suggestedReviewers.length > 0 ? <fieldset><legend>Suggestions</legend>{suggestedReviewers.map((login) => <button key={login} type="button" onClick={() => addReviewerOption(login)}>{login}</button>)}</fieldset> : null}
-                            {reviewSuggestions && recentReviewers.length === 0 && suggestedReviewers.length === 0 && !reviewerInfoUnknown ? <span role="status">No matching reviewers.</span> : null}
-                            <label><span>Everyone else</span><textarea aria-label="Type or choose a reviewer" value={reviewerText} onChange={(event) => { const value = event.currentTarget.value; if (new TextEncoder().encode(value).byteLength <= 2048) setReviewerText(value); else setError('Reviewer input exceeds the 2048-byte limit.') }} placeholder="Type or choose a user" /></label>
-                            <button type="button" disabled={busy} onClick={() => void saveReviewers(item, 'add')}>Request reviewers</button>
-                            <button type="button" disabled={busy} onClick={() => void saveReviewers(item, 'remove')}>Remove reviewers</button>
-                            <button type="button" onClick={() => setReviewersFor(null)}>Close</button>
+                        <td className="tasks-list__action-cell" onClick={stop} onKeyDown={stop}><Button type="button" aria-haspopup="dialog" aria-expanded={isReviewersOpen} onClick={() => void openReviewers(item)}>{reviewerLabel}</Button>
+                        {isReviewersOpen ? <div role="dialog" aria-label={`Reviewers for PR #${item.number}`} >
+                          {requestedReviewers === null ? <span role="status">Requested reviewers are unavailable.</span> : requestedReviewers?.length ? <span>Currently requested: {requestedReviewers.join(', ')}</span> : null}
+                          {review?.reviews === null ? <span role="status">Review history is unavailable.</span> : null}
+                          {review?.assignees === null ? <span role="status">Pull-request assignees are unavailable.</span> : null}
+                          {review?.participantsTruncated === true ? <span role="status">Recent reviewer activity is incomplete.</span> : null}
+                          {!reviewSuggestions ? <span role="status">Loading reviewer suggestions…</span> : null}
+                          {recentReviewers.length > 0 ? <fieldset><legend>Recently active in this pull request</legend>{recentReviewers.map((login) => <Button key={login} type="button" onClick={() => addReviewerOption(login)}>{login}</Button>)}</fieldset> : null}
+                          {suggestedReviewers.length > 0 ? <fieldset><legend>Suggestions</legend>{suggestedReviewers.map((login) => <Button key={login} type="button" onClick={() => addReviewerOption(login)}>{login}</Button>)}</fieldset> : null}
+                          {reviewSuggestions && recentReviewers.length === 0 && suggestedReviewers.length === 0 && !reviewerInfoUnknown ? <span role="status">No matching reviewers.</span> : null}
+                          <FormRow label="Everyone else" htmlFor={`tasks-list-reviewer-text-${item.number}`}>
+                            <textarea id={`tasks-list-reviewer-text-${item.number}`} className="ui-text-field__input tasks-list__reviewer-input" aria-label="Type or choose a reviewer" value={reviewerText} onChange={(event) => { const value = event.currentTarget.value; if (new TextEncoder().encode(value).byteLength <= 2048) setReviewerText(value); else setError('Reviewer input exceeds the 2048-byte limit.') }} placeholder="Type or choose a user" />
+                          </FormRow>
+                          <Button type="button" disabled={busy} onClick={() => void saveReviewers(item, 'add')}>Request reviewers</Button>
+                          <Button type="button" disabled={busy} onClick={() => void saveReviewers(item, 'remove')}>Remove reviewers</Button>
+                          <Button type="button" onClick={() => setReviewersFor(null)}>Close</Button>
+                        </div> : null}</td>
+                        <td className="tasks-list__action-cell" onClick={stop} onKeyDown={stop}><Button className="tasks-list__check-trigger" data-check-key={key} type="button" aria-label={`Checks for PR #${item.number}: ${check.label}`} onMouseEnter={() => void loadChecks(item)} onFocus={() => void loadChecks(item)} onClick={() => void openReview(rowTarget(item), 'checks')}><Badge tone={checkTone}>{check.label}</Badge></Button></td>
+                        <td className="tasks-list__action-cell" onClick={stop} onKeyDown={stop}><div  >
+                          <Button type="button" aria-haspopup="menu" aria-expanded={isMergeOpen} aria-label={mergeErrors[key] ? `Merge metadata unavailable for PR #${item.number}` : `Merge actions for PR #${item.number}`} onClick={() => toggleMergeMenu(item)} disabled={busy}>{mergeErrors[key] ? 'Merge metadata unavailable' : displayState === 'merged' ? 'Merged' : meta?.queueEligible ? 'Merge when ready' : meta?.mergeEligible ? 'Merge' : 'Check merge safety'} ▾</Button>
+                          {isMergeOpen ? <div role="menu" aria-label={`Merge PR #${item.number}`} >
+                            {mergeLoading[key] ? <span role="status">Loading merge metadata…</span> : null}
+                            {!mergeLoading[key] && !meta && !mergeErrors[key] ? <span role="status">Review metadata has not loaded.</span> : null}
+                            {meta?.mergeQueueRequired === true && meta.queueEligible ? meta.queueMethods.map((method) => <Button key={method} type="button" role="menuitem" disabled={busy} onClick={() => void mergeItem(item, method, 'queue')}>{`Merge when ready (${method})`}</Button>) : null}
+                            {meta?.mergeQueueRequired === false && meta.mergeEligible ? meta.directMethods.map((method) => <Button key={method} type="button" role="menuitem" disabled={busy} onClick={() => void mergeItem(item, method, 'direct')}>{method === 'squash' ? 'Squash and merge' : method === 'merge' ? 'Create merge commit' : 'Rebase and merge'}</Button>) : null}
+                            {meta && !meta.mergeMetadataKnown ? <span>GitHub has not confirmed merge-queue safety metadata.</span> : null}
+                            {meta?.mergeMetadataKnown && meta.mergeQueueRequired === null ? <span>Merge-queue requirement is unknown; refresh before merging.</span> : null}
+                            {meta?.mergeQueueRequired === false && !meta.mergeEligible ? <span>Direct merge is not confirmed safe.</span> : null}
+                            {meta && !meta.autoMergeEnabled && meta.autoMergeAllowed === null ? <span>Auto-merge capability is unknown.</span> : null}
+                            {meta?.autoMergeAllowed === false && !meta.autoMergeEnabled ? <span>GitHub has disabled auto-merge for this repository.</span> : null}
+                            {autoMergeAvailable ? <Button type="button" role="menuitem" onClick={() => void toggleAutoMerge(item)}>{meta?.autoMergeEnabled ? 'Disable auto-merge' : meta?.mergeQueueRequired ? 'Merge when ready' : 'Enable auto-merge'}</Button> : null}
+                            <Button type="button" role="menuitem" onClick={() => openLink(item.url)}>Open on GitHub</Button>
                           </div> : null}
-                        </td>
-                        <td onClick={stop} onKeyDown={stop} style={{ padding: 8 }}>
-                          <button data-check-key={key} type="button" aria-label={`Checks for PR #${item.number}: ${check.label}`} onMouseEnter={() => void loadChecks(item)} onFocus={() => void loadChecks(item)} onClick={() => void openReview(rowTarget(item), 'checks')}>
-                            <span data-tone={check.tone}>{check.label}</span>
-                          </button>
-                        </td>
-                        <td onClick={stop} onKeyDown={stop} style={{ padding: 8 }}>
-                          <div style={{ position: 'relative' }}>
-                            <button type="button" aria-haspopup="menu" aria-expanded={isMergeOpen} aria-label={mergeErrors[key] ? `Merge metadata unavailable for PR #${item.number}` : `Merge actions for PR #${item.number}`} onClick={() => toggleMergeMenu(item)} disabled={busy}>{mergeErrors[key] ? 'Merge metadata unavailable' : displayState === 'merged' ? 'Merged' : meta?.queueEligible ? 'Merge when ready' : meta?.mergeEligible ? 'Merge' : 'Check merge safety'} ▾</button>
-                            {isMergeOpen ? <div role="menu" aria-label={`Merge PR #${item.number}`} style={{ position: 'absolute', zIndex: 20, display: 'grid', minWidth: 220, padding: 8, background: 'var(--surface, #222)', border: '1px solid var(--border, #555)' }}>
-                              {mergeLoading[key] ? <span role="status">Loading merge metadata…</span> : null}
-                              {!mergeLoading[key] && !meta && !mergeErrors[key] ? <span role="status">Review metadata has not loaded.</span> : null}
-                              {meta?.mergeQueueRequired === true && meta.queueEligible ? meta.queueMethods.map((method) => <button key={method} type="button" role="menuitem" disabled={busy} onClick={() => void mergeItem(item, method, 'queue')}>{`Merge when ready (${method})`}</button>) : null}
-                              {meta?.mergeQueueRequired === false && meta.mergeEligible ? meta.directMethods.map((method) => <button key={method} type="button" role="menuitem" disabled={busy} onClick={() => void mergeItem(item, method, 'direct')}>{method === 'squash' ? 'Squash and merge' : method === 'merge' ? 'Create merge commit' : 'Rebase and merge'}</button>) : null}
-                              {meta && !meta.mergeMetadataKnown ? <span>GitHub has not confirmed merge-queue safety metadata.</span> : null}
-                              {meta?.mergeMetadataKnown && meta.mergeQueueRequired === null ? <span>Merge-queue requirement is unknown; refresh before merging.</span> : null}
-                              {meta?.mergeQueueRequired === false && !meta.mergeEligible ? <span>Direct merge is not confirmed safe.</span> : null}
-                              {meta && !meta.autoMergeEnabled && meta.autoMergeAllowed === null ? <span>Auto-merge capability is unknown.</span> : null}
-                              {meta?.autoMergeAllowed === false && !meta.autoMergeEnabled ? <span>GitHub has disabled auto-merge for this repository.</span> : null}
-                              {autoMergeAvailable ? <button type="button" role="menuitem" onClick={() => void toggleAutoMerge(item)}>{meta?.autoMergeEnabled ? 'Disable auto-merge' : meta?.mergeQueueRequired ? 'Merge when ready' : 'Enable auto-merge'}</button> : null}
-                              <button type="button" role="menuitem" onClick={() => openLink(item.url)}>Open on GitHub</button>
-                            </div> : null}
-                            {mergeErrors[key] ? <span role="status">Review metadata unavailable: {mergeErrors[key]} <button type="button" onClick={() => void loadMergeMetadata(item)}>Retry</button></span> : null}
-                          </div>
-                        </td>
+                          {mergeErrors[key] ? <span role="status">Review metadata unavailable: {mergeErrors[key]} <Button type="button" onClick={() => void loadMergeMetadata(item)}>Retry</Button></span> : null}
+                        </div></td>
                       </>
                     )}
-                    <td title={when.absolute} style={{ padding: 8, whiteSpace: 'nowrap' }}>{when.label}</td>
-                    <td onClick={stop} onKeyDown={stop} style={{ position: 'sticky', right: 0, zIndex: 2, background: 'var(--surface, #222)', padding: 8, whiteSpace: 'nowrap' }}>
-                      <button type="button" disabled={busy} onClick={() => void context.call('quirky.tasks/workspace', { target: rowTarget(item), action: linked ? 'resume' : 'start' }).catch((cause) => setError(errorMessage(cause)))}>{linked ? 'Resume' : 'Start'}</button>
-                      {linked ? <button type="button" onClick={() => void context.call('quirky.tasks/workspace', { target: rowTarget(item), action: 'start', newWorkspace: true }).catch((cause) => setError(errorMessage(cause)))}>Start new</button> : null}
-                      <button type="button" aria-label={`Open ${kind === 'issue' ? 'issue' : 'pull request'} #${item.number} on GitHub`} onClick={(event) => openInGitHub(event, item.url)}>↗</button>
+                    <td title={when.absolute} >{when.label}</td>
+                    <td className="tasks-list__actions-cell" onClick={stop} onKeyDown={stop}>
+                      <Button type="button" disabled={busy} onClick={() => void context.call('quirky.tasks/workspace', { target: rowTarget(item), action: linked ? 'resume' : 'start' }).catch((cause) => setError(errorMessage(cause)))}>{linked ? 'Resume' : 'Start'}</Button>
+                      {linked ? <Button type="button" onClick={() => void context.call('quirky.tasks/workspace', { target: rowTarget(item), action: 'start', newWorkspace: true }).catch((cause) => setError(errorMessage(cause)))}>Start new</Button> : null}
+                      <IconButton type="button" label={`Open ${kind === 'issue' ? 'issue' : 'pull request'} #${item.number} on GitHub`} onClick={(event) => openInGitHub(event, item.url)}>↗</IconButton>
                     </td>
                   </tr>
                 )
@@ -1532,12 +1520,12 @@ export function TasksList({ context, state, refresh }: TasksSurfaceProps) {
       )}
 
       {visibleResult && visibleResult.totalPages > 1 ? (
-        <nav aria-label="GitHub task pagination" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-          <button type="button" aria-label="Previous page" disabled={loading || page <= 1} onClick={() => goToPage(page - 1)}>Previous</button>
+        <nav aria-label="GitHub task pagination" className="tasks-list__pagination">
+          <Button type="button" aria-label="Previous page" disabled={loading || page <= 1} onClick={() => goToPage(page - 1)}>Previous</Button>
           {pageNumbers(page, totalPages).map((number, index) => number === 'ellipsis'
             ? <span key={`ellipsis-${index}`} aria-hidden="true">…</span>
-            : <button key={number} type="button" aria-current={page === number ? 'page' : undefined} disabled={loading} onClick={() => goToPage(number)}>{number}</button>)}
-          <button type="button" aria-label="Next page" disabled={loading || page >= totalPages} onClick={() => goToPage(page + 1)}>Next</button>
+            : <Button key={number} variant={page === number ? 'primary' : 'secondary'} type="button" aria-current={page === number ? 'page' : undefined} disabled={loading} onClick={() => goToPage(number)}>{number}</Button>)}
+          <Button type="button" aria-label="Next page" disabled={loading || page >= totalPages} onClick={() => goToPage(page + 1)}>Next</Button>
         </nav>
       ) : null}
     </section>
