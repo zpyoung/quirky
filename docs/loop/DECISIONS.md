@@ -240,6 +240,18 @@ files, not this one.
 | medium | high | [m3-vault D32](decisions/m3-vault.md) | Bound new indexing starts without starving an in-flight one-shot read | assumed — autonomous |
 | medium | high | [m3-vault D35](decisions/m3-vault.md) | A command drag carries a window-local single-use capability | assumed — autonomous |
 | medium | high | [m3-vault D38](decisions/m3-vault.md) | Serialize new calls behind idle retirement rather than replay or strand them | assumed — autonomous |
+| medium | high | [m4-hosting-ui-tasks D1](decisions/m4-hosting-ui-tasks.md) | Build all three assigned GitHub surfaces together | locked by docs/roadmap.md |
+| medium | high | [m4-hosting-ui-tasks D3](decisions/m4-hosting-ui-tasks.md) | Prefer one built-in Tasks plugin over a shell-owned feature or Orca port | assumed — autonomous |
+| medium | high | [m4-hosting-ui-tasks D5](decisions/m4-hosting-ui-tasks.md) | Keep source-specified behavior rather than ambiguous Orca defects | locked by hosting-ui.md |
+| medium | high | [m4-hosting-ui-tasks D7](decisions/m4-hosting-ui-tasks.md) | Isolate three slices behind committed public feature contracts | assumed — autonomous |
+| medium | high | [m4-hosting-ui-tasks D8](decisions/m4-hosting-ui-tasks.md) | Make every navigation action read back from the daemon | locked by docs/roadmap.md; locked by hosting-ui.md |
+| medium | high | [m4-hosting-ui-tasks D9](decisions/m4-hosting-ui-tasks.md) | Retain bounded provider identity and mutation ownership across UI surfaces | locked by hosting-ui.md |
+| medium | high | [m4-hosting-ui-tasks D11](decisions/m4-hosting-ui-tasks.md) | Grow a project-authorized detail read instead of narrowing preview parity | locked by hosting-ui.md; assumed — autonomous (method name) |
+| medium | high | [m4-hosting-ui-tasks D14](decisions/m4-hosting-ui-tasks.md) | Expose native View switches through the public setting declaration | locked by hosting-ui.md; assumed — autonomous (public metadata shape) |
+| medium | high | [m4-hosting-ui-tasks D16](decisions/m4-hosting-ui-tasks.md) | Ask only for the irreversible merge and forward its approved intent | locked by docs/roadmap.md; assumed — autonomous (conditional describe) |
+| medium | high | [m4-hosting-ui-tasks D17](decisions/m4-hosting-ui-tasks.md) | Consume canonical creation and agent-selection APIs | locked by hosting-ui.md; assumed — autonomous (public API integration) |
+| medium | high | [m4-hosting-ui-tasks D19](decisions/m4-hosting-ui-tasks.md) | Share feature boundaries with the review and worktree lanes | locked by user lane coordination; assumed — autonomous (UI-library subpaths) |
+| medium | high for source causes; runtime closure pending | [m4-hosting-ui-tasks D21](decisions/m4-hosting-ui-tasks.md) | Retain behavioral tests and repair observed projection/lifecycle defects | assumed — autonomous (observed gate repairs) |
 | medium | high | [m1-agent-status D14](decisions/m1-agent-status.md) | The fold keeps a finished lead `working` while children or background work live | locked by research/orca-features/agent-status.md |
 | medium | high | [m1-notifications D5](decisions/m1-notifications.md) | A new built-in plugin, `quirky.notifications`, owns the policy; other plugins only report events | supersedes m0-core D12 |
 | medium | high | [m1-notifications D6](decisions/m1-notifications.md) | Producers emit settled and notification events; boundaries and replays still emit nothing | assumed — autonomous |
@@ -954,6 +966,18 @@ files, not this one.
 | easy | high | [m3-vault D56](decisions/m3-vault.md) | Keep fresh restored-runtime proof separate from stale snapshots | locked by verification-before-completion and test-state isolation |
 | easy | high | [m3-vault D57](decisions/m3-vault.md) | Keep the landed dock/palette and canonical PTY fix alongside Vault | locked by the landed additive UI/PTY contracts and configured runner policy |
 | easy | high | [m3-vault D58](decisions/m3-vault.md) | Keep editor-hosted tabs separate from terminal pane ownership | locked by the landed hosted-view lifecycle and terminal ownership contracts |
+| easy | high | [m4-hosting-ui-tasks D2](decisions/m4-hosting-ui-tasks.md) | Apply unattended night-mode approvals and standard gray areas | locked by docs/loop/LOOP.md |
+| easy | high | [m4-hosting-ui-tasks D4](decisions/m4-hosting-ui-tasks.md) | Use OpenAI implementers with Gemini cross-family review | locked by docs/loop/LOOP.md |
+| easy | high | [m4-hosting-ui-tasks D6](decisions/m4-hosting-ui-tasks.md) | Verify only isolated macOS state and hand off real OS effects | deferred: platform |
+| easy | high | [m4-hosting-ui-tasks D10](decisions/m4-hosting-ui-tasks.md) | Separate core contracts from the final verification barrier | assumed — autonomous |
+| easy | high | [m4-hosting-ui-tasks D12](decisions/m4-hosting-ui-tasks.md) | Match the real image-URL action without inventing binary uploads | locked by hosting-ui.md; assumed — autonomous (clarified source behavior) |
+| easy | high | [m4-hosting-ui-tasks D13](decisions/m4-hosting-ui-tasks.md) | Supply real iteration metadata before rendering iteration boards and roadmaps | locked by hosting-ui.md |
+| easy | high | [m4-hosting-ui-tasks D15](decisions/m4-hosting-ui-tasks.md) | Keep the public schema subset and runtime bounds consistent | locked by docs/roadmap.md; assumed — autonomous (assembly) |
+| easy | high | [m4-hosting-ui-tasks D18](decisions/m4-hosting-ui-tasks.md) | Preserve actual participant and timestamp data instead of empty or fresh-looking fallbacks | locked by hosting-ui.md; assumed — autonomous (nullable unknown representation) |
+| easy | high | [m4-hosting-ui-tasks D20](decisions/m4-hosting-ui-tasks.md) | Finish the exercised core under the operator's immediate landing directive | user ruling 2026-10-27 (4am sprint) |
+| easy | high | [m4-hosting-ui-tasks D22](decisions/m4-hosting-ui-tasks.md) | Keep external integration and unexercised parity explicit | deferred: remaining Tasks parity and cross-feature acceptance — operator-directed 4am sprint |
+| easy | high for observed boundary causes | [m4-hosting-ui-tasks D23](decisions/m4-hosting-ui-tasks.md) | Consume authoritative creation and close only the remaining named gate failures | assumed — autonomous (named gate repairs); locked by canonical sourced-worktree contract |
+| easy | high | [m4-hosting-ui-tasks D24](decisions/m4-hosting-ui-tasks.md) | Resolve the controller-reported moving-tip conflict without reopening campaigns | locked by LOOP.md failed-land recovery and operator immediate-landing directive |
 | easy | high | [m1-agent-status D5](decisions/m1-agent-status.md) | Every hook source in the doc gets a normalizer with Orca's event mapping | locked by research/orca-features/agent-status.md |
 | easy | high | [m1-agent-status D8](decisions/m1-agent-status.md) | Installers merge only their own entries, keep the file byte-identical on a rerun, and never write a file they can't parse | locked by research/orca-features/agent-status.md |
 | easy | high | [m1-agent-status D9](decisions/m1-agent-status.md) | Claude's settings file lists only the events the installed Claude knows | locked by research/orca-features/agent-status.md |
