@@ -34,6 +34,9 @@ import type {
   WorkerDoneReportInput,
   WorkerHeartbeatInput,
   WorkerReportResult,
+  WorkerReportAuthority,
+  WorkerExitResult,
+  FederatedWorkerExitInput,
   HeartbeatResult,
   WorkerRow,
   WorkerTransitionInput,
@@ -41,6 +44,8 @@ import type {
   CoordinatorAuthority,
   ServiceRunRow,
 } from './contracts'
+import type { FederationReportAuthority } from './federation/contracts'
+
 import type { SessionIdentity } from './runtime-contracts'
 import type { DurableMutationOptions, OrchestrationWorkerCore, WorkerLifecyclePort } from './worker-integration'
 import { fail } from './errors'
@@ -243,11 +248,13 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
   }
   private workerPort: WorkerLifecyclePort | null = null
   private readonly activeMutations = new Map<string, ActiveMutation>()
+  private federationAuthorityValidator: ((authority: FederationReportAuthority) => void) | null = null
   private bindingListener: ((sessionId: string, runId: RunId, generation: number) => void) | null = null
   private questionsClosedListener: ((messageIds: readonly string[]) => void) | null = null
-  private dispatchSettledListener: ((dispatchId: DispatchId) => void) | null = null
+  private readonly dispatchSettledListeners = new Set<(dispatchId: DispatchId) => void>()
   private dispatchFencedListener: ((dispatchId: DispatchId) => void) | null = null
   private messageCommittedListener: ((arrival: { mailbox: MailboxAddress; messageId: MessageId; type: MessageType }) => void) | null = null
+  private readonly resetListeners = new Set<(mode: ResetMode) => void>()
 
   constructor(context: PluginContext, store: PluginStore) {
     this.context = context
@@ -259,6 +266,13 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
     this.workerPort = port
   }
 
+  registerFederationAuthorityValidator(validator: (authority: FederationReportAuthority) => void): void {
+    if (this.federationAuthorityValidator && this.federationAuthorityValidator !== validator) {
+      throw new Error('orchestration federation authority validator is already registered')
+    }
+    this.federationAuthorityValidator = validator
+  }
+
   onBindingChanged(listener: (sessionId: string, runId: RunId, generation: number) => void): void {
     this.bindingListener = listener
   }
@@ -267,7 +281,7 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
   }
 
   onDispatchSettled(listener: (dispatchId: DispatchId) => void): void {
-    this.dispatchSettledListener = listener
+    this.dispatchSettledListeners.add(listener)
   }
 
   onDispatchFenced(listener: (dispatchId: DispatchId) => void): void {
@@ -276,6 +290,10 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
 
   onMessageCommitted(listener: (arrival: { mailbox: MailboxAddress; messageId: MessageId; type: MessageType }) => void): void {
     this.messageCommittedListener = listener
+  }
+
+  onReset(listener: (mode: ResetMode) => void): void {
+    this.resetListeners.add(listener)
   }
 
   getRun(runId: RunId): RunRow {
@@ -974,23 +992,81 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
     return null
   }
 
-  reportWorkerDone(input: WorkerDoneReportInput, caller: RuntimeCallerEvidence): WorkerReportResult {
-    const preflight = this.preflightWorkerDone(input, caller)
-    if (preflight !== null) return preflight
+  preflightFederatedWorkerDone(input: WorkerDoneReportInput, authority: FederationReportAuthority): WorkerReportResult | null {
+    this.assertFederationAuthority(authority)
+    if (authority.dispatchId !== input.dispatchId) return { status: 'rejected', reason: 'worker_identity_changed', audited: true }
     const dispatch = this.store.get<DispatchRecord>('SELECT * FROM dispatches WHERE id = ?', input.dispatchId)
     if (!dispatch) return { status: 'rejected', reason: 'unknown_dispatch', audited: true }
     const task = this.store.get<TaskRecord>('SELECT * FROM tasks WHERE id = ?', input.taskId)
     if (!task) return { status: 'rejected', reason: 'unknown_task', audited: true }
     if (task.id !== dispatch.task_id) return { status: 'rejected', reason: 'task_dispatch_mismatch', audited: true }
-    if (dispatch.assignee_session_id === null || caller.callerSessionId !== dispatch.assignee_session_id) {
-      return { status: 'rejected', reason: 'sender_not_assignee', audited: true }
+    const latest = this.store.get<{ id: string }>(
+      `SELECT id FROM dispatches WHERE task_id = ? ORDER BY created_at DESC, id DESC LIMIT 1`,
+      dispatch.task_id,
+    )
+    if (latest?.id !== dispatch.id) return { status: 'rejected', reason: 'stale_dispatch', audited: true }
+    if (finalDispatch(dispatch.status)) {
+      const prior = jsonOf<TaskResult | null>(task.result_json, null)
+      if (prior?.kind === 'worker_report' && prior.dispatchId === dispatch.id && prior.outcome === input.outcome) {
+        const worker = dispatch.supervised ? this.requireWorkerPort(dispatch.id as DispatchId).workerForDispatch(this.store, dispatch.id as DispatchId) : null
+        return { status: 'duplicate', task: taskRow(task), dispatch: dispatchRow(dispatch), worker }
+      }
+      return { status: 'rejected', reason: 'inactive_dispatch', audited: true }
     }
-    if (
-      caller.runtimeSessionId !== dispatch.assignee_session_id ||
-      caller.attestation.runtimeEpoch !== dispatch.runtime_epoch ||
-      caller.attestation.processIncarnation !== dispatch.process_incarnation
-    ) {
-      return { status: 'rejected', reason: 'worker_identity_changed', audited: true }
+    if (dispatch.status !== 'pending' && dispatch.status !== 'dispatched') {
+      return { status: 'rejected', reason: 'dispatch_inactive', audited: true }
+    }
+    if (task.status !== 'dispatched' && task.status !== 'blocked') {
+      return { status: 'rejected', reason: 'inactive_dispatch', audited: true }
+    }
+    if (dispatch.supervised) {
+      const worker = this.requireWorkerPort(dispatch.id as DispatchId).workerForDispatch(this.store, dispatch.id as DispatchId)
+      if (!worker) fail(this.context, 'worker_port_unavailable', `supervised Dispatch ${dispatch.id} has no worker record`, { dispatchId: dispatch.id })
+      if (worker.sessionId !== authority.sessionId) return { status: 'rejected', reason: 'worker_identity_changed', audited: true }
+      if (worker.state === 'stopping' || worker.state === 'stop_unknown' || worker.state === 'stopped' ||
+        worker.state === 'abandoned' || (worker.state === 'failed' && input.outcome !== 'succeeded') || worker.state === 'succeeded') {
+        return { status: 'rejected', reason: 'dispatch_inactive', audited: true }
+      }
+    }
+    return null
+  }
+
+  reportWorkerDone(input: WorkerDoneReportInput, caller: RuntimeCallerEvidence): WorkerReportResult {
+    const preflight = this.preflightWorkerDone(input, caller)
+    if (preflight !== null) return preflight
+    return this.reportWorkerDoneAccepted(input, caller)
+  }
+
+  reportFederatedWorkerDone(input: WorkerDoneReportInput, authority: FederationReportAuthority): WorkerReportResult {
+    return this.store.transaction(() => {
+      const preflight = this.preflightFederatedWorkerDone(input, authority)
+      if (preflight !== null) return preflight
+      this.assertFederationAuthority(authority)
+      return this.reportWorkerDoneAccepted(input, authority)
+    })
+  }
+
+  private reportWorkerDoneAccepted(input: WorkerDoneReportInput, authority: WorkerReportAuthority): WorkerReportResult {
+    const federated = authority.kind === 'federated-worker'
+    if (federated) this.assertFederationAuthority(authority)
+    const dispatch = this.store.get<DispatchRecord>('SELECT * FROM dispatches WHERE id = ?', input.dispatchId)
+    if (!dispatch) return { status: 'rejected', reason: 'unknown_dispatch', audited: true }
+    const task = this.store.get<TaskRecord>('SELECT * FROM tasks WHERE id = ?', input.taskId)
+    if (!task) return { status: 'rejected', reason: 'unknown_task', audited: true }
+    if (task.id !== dispatch.task_id) return { status: 'rejected', reason: 'task_dispatch_mismatch', audited: true }
+    if (federated) {
+      if (authority.dispatchId !== dispatch.id) return { status: 'rejected', reason: 'worker_identity_changed', audited: true }
+    } else {
+      if (dispatch.assignee_session_id === null || authority.callerSessionId !== dispatch.assignee_session_id) {
+        return { status: 'rejected', reason: 'sender_not_assignee', audited: true }
+      }
+      if (
+        authority.runtimeSessionId !== dispatch.assignee_session_id ||
+        authority.attestation.runtimeEpoch !== dispatch.runtime_epoch ||
+        authority.attestation.processIncarnation !== dispatch.process_incarnation
+      ) {
+        return { status: 'rejected', reason: 'worker_identity_changed', audited: true }
+      }
     }
     const latest = this.store.get<{ id: string }>(
       `SELECT id FROM dispatches WHERE task_id = ? ORDER BY created_at DESC, id DESC LIMIT 1`,
@@ -1014,46 +1090,36 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
       const currentWorker = port.workerForDispatch(this.store, dispatch.id as DispatchId)
       if (!currentWorker) fail(this.context, 'worker_port_unavailable', `supervised Dispatch ${dispatch.id} has no worker record`, { dispatchId: dispatch.id })
       let state = currentWorker.state
-      if (state === 'stopping' || state === 'stopped' || state === 'abandoned') {
+      if (state === 'stopping' || state === 'stopped' || state === 'abandoned' || state === 'stop_unknown') {
         return { status: 'rejected', reason: 'dispatch_inactive', audited: true }
       }
-      if (state === 'stop_unknown') {
-        if (currentWorker.stage === 'stopping') return { status: 'rejected', reason: 'dispatch_inactive', audited: true }
-        port.transitionWorker(this.store, {
-          dispatchId: dispatch.id as DispatchId,
-          expectedState: 'stop_unknown',
-          nextState: 'ready'
-        })
-        state = 'ready'
-      }
       if (state === 'failed') {
-        if (input.outcome !== 'succeeded') {
-          return { status: 'rejected', reason: 'dispatch_inactive', audited: true }
-        }
+        if (input.outcome !== 'succeeded') return { status: 'rejected', reason: 'dispatch_inactive', audited: true }
         worker = port.transitionWorker(this.store, {
           dispatchId: dispatch.id as DispatchId,
           expectedState: 'failed',
           nextState: 'succeeded',
           correction: 'unobserved_prompt_report',
           report: input,
-          caller
+          caller: authority
         })
       } else if (state === 'succeeded') {
         return { status: 'rejected', reason: 'dispatch_inactive', audited: true }
       } else {
-        worker = port.acceptReport(this.store, { dispatchId: dispatch.id as DispatchId, outcome: input.outcome, caller, at })
+        worker = port.acceptReport(this.store, { dispatchId: dispatch.id as DispatchId, outcome: input.outcome, caller: authority, at })
       }
       if (!worker) fail(this.context, 'worker_port_unavailable', `supervised Dispatch ${dispatch.id} report was not reconciled`, { dispatchId: dispatch.id })
     }
+    const reportingSession = federated ? authority.sessionId : authority.runtimeSessionId
     const result: TaskResult = {
       kind: 'worker_report',
       outcome: input.outcome,
       messageId: input.messageId,
       dispatchId: dispatch.id as DispatchId,
-      reportedBy: caller.runtimeSessionId,
+      reportedBy: reportingSession,
       subject: input.subject,
       body: input.body,
-      completedBy: caller.runtimeSessionId,
+      completedBy: reportingSession,
       filesModified: [...(input.filesModified ?? [])],
       reportPath: input.reportPath ?? null,
       completedAt: at
@@ -1105,6 +1171,123 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
     if (update.changes !== 1) return { status: 'rejected', reason: 'dispatch_inactive', lastHeartbeatAt: null }
     return { status: 'accepted', lastHeartbeatAt: at }
   }
+  recordFederatedHeartbeat(input: WorkerHeartbeatInput, authority: FederationReportAuthority): HeartbeatResult {
+    return this.store.transaction(() => {
+      this.assertFederationAuthority(authority)
+      if (authority.dispatchId !== input.dispatchId) return { status: 'rejected', reason: 'worker_identity_changed', lastHeartbeatAt: null }
+      const dispatch = this.store.get<DispatchRecord>('SELECT * FROM dispatches WHERE id = ?', input.dispatchId)
+      if (!dispatch) return { status: 'rejected', reason: 'unknown_dispatch', lastHeartbeatAt: null }
+      if (dispatch.task_id !== input.taskId) return { status: 'rejected', reason: 'task_dispatch_mismatch', lastHeartbeatAt: null }
+      const latest = this.store.get<{ id: string }>(
+        `SELECT id FROM dispatches WHERE task_id = ? ORDER BY created_at DESC, id DESC LIMIT 1`,
+        dispatch.task_id,
+      )
+      if (latest?.id !== dispatch.id) return { status: 'rejected', reason: 'stale_dispatch', lastHeartbeatAt: null }
+      if (dispatch.status !== 'pending' && dispatch.status !== 'dispatched') {
+        return { status: 'rejected', reason: 'dispatch_inactive', lastHeartbeatAt: null }
+      }
+      const task = this.store.get<TaskRecord>('SELECT * FROM tasks WHERE id = ?', dispatch.task_id)
+      if (!task || (task.status !== 'dispatched' && task.status !== 'blocked')) {
+        return { status: 'rejected', reason: 'inactive_dispatch', lastHeartbeatAt: null }
+      }
+      if (dispatch.supervised) {
+        const port = this.requireWorkerPort(dispatch.id as DispatchId)
+        const worker = port.workerForDispatch(this.store, dispatch.id as DispatchId)
+        if (!worker) fail(this.context, 'worker_port_unavailable', `supervised Dispatch ${dispatch.id} has no worker record`, { dispatchId: dispatch.id })
+        if (worker.sessionId !== authority.sessionId) return { status: 'rejected', reason: 'worker_identity_changed', lastHeartbeatAt: null }
+        if (worker.state === 'stopping' || worker.state === 'stop_unknown' || worker.state === 'stopped' ||
+          worker.state === 'abandoned' || worker.state === 'failed' || worker.state === 'succeeded') {
+          return { status: 'rejected', reason: 'dispatch_inactive', lastHeartbeatAt: null }
+        }
+      }
+      const at = isoNow()
+      if (dispatch.supervised) {
+        this.requireWorkerPort(dispatch.id as DispatchId).recordHeartbeat(this.store, {
+          dispatchId: dispatch.id as DispatchId,
+          caller: authority,
+          at
+        })
+      }
+      const update = this.store.run(
+        `UPDATE dispatches SET last_heartbeat_at = ? WHERE id = ? AND status IN ('pending', 'dispatched')`,
+        at,
+        dispatch.id,
+      )
+      if (update.changes !== 1) return { status: 'rejected', reason: 'dispatch_inactive', lastHeartbeatAt: null }
+      return { status: 'accepted', lastHeartbeatAt: at }
+    })
+  }
+  reportFederatedWorkerExit(input: FederatedWorkerExitInput, authority: FederationReportAuthority): WorkerExitResult {
+    return this.store.transaction(() => {
+      this.assertFederationAuthority(authority)
+      if (authority.dispatchId !== input.dispatchId || authority.processIncarnation !== input.processIncarnation) {
+        return { status: 'rejected', reason: 'worker_identity_changed', audited: true }
+      }
+      const dispatch = this.store.get<DispatchRecord>('SELECT * FROM dispatches WHERE id = ?', input.dispatchId)
+      if (!dispatch) return { status: 'rejected', reason: 'unknown_dispatch', audited: true }
+      const task = this.store.get<TaskRecord>('SELECT * FROM tasks WHERE id = ?', input.taskId)
+      if (!task) return { status: 'rejected', reason: 'unknown_task', audited: true }
+      if (task.id !== dispatch.task_id) return { status: 'rejected', reason: 'task_dispatch_mismatch', audited: true }
+      const latest = this.store.get<{ id: string }>(
+        `SELECT id FROM dispatches WHERE task_id = ? ORDER BY created_at DESC, id DESC LIMIT 1`,
+        dispatch.task_id,
+      )
+      if (latest?.id !== dispatch.id) return { status: 'rejected', reason: 'stale_dispatch', audited: true }
+      const port = this.requireWorkerPort(dispatch.id as DispatchId)
+      const currentWorker = port.workerForDispatch(this.store, dispatch.id as DispatchId)
+      if (!currentWorker) fail(this.context, 'worker_port_unavailable', `supervised Dispatch ${dispatch.id} has no worker record`, { dispatchId: dispatch.id })
+      if (currentWorker.sessionId !== authority.sessionId) {
+        return { status: 'rejected', reason: 'worker_identity_changed', audited: true }
+      }
+      const accepted = port.acceptFederatedExit(this.store, input, authority)
+      if (accepted.status === 'rejected') return { status: 'rejected', reason: accepted.reason, audited: true }
+      if (accepted.status === 'duplicate') {
+        return { status: 'duplicate', task: taskRow(task), dispatch: dispatchRow(dispatch), worker: currentWorker }
+      }
+      if ((dispatch.status !== 'pending' && dispatch.status !== 'dispatched') ||
+        (task.status !== 'dispatched' && task.status !== 'blocked')) {
+        return { status: 'rejected', reason: 'dispatch_inactive', audited: true }
+      }
+      const at = isoNow()
+      const terminationReason = input.reason === 'operator_close' || input.reason === 'killed' ? 'operator_close'
+        : input.reason === 'signaled' ? 'signaled'
+          : input.reason === 'exited' ? 'exited' : 'unknown'
+      const settled = this.transitionDispatchInternal({
+        dispatchId: dispatch.id as DispatchId,
+        expectedState: dispatch.status,
+        nextState: 'failed',
+        failureClass: 'infrastructure',
+        failureReason: 'process_exited',
+        terminationReason,
+        at,
+      }, false, true)
+      const otherActive = this.store.get<{ id: string }>(
+        `SELECT id FROM dispatches WHERE task_id = ? AND id <> ? AND status IN ('pending', 'dispatched') LIMIT 1`,
+        task.id,
+        dispatch.id,
+      )
+      if (otherActive) this.store.run(`UPDATE tasks SET status = 'dispatched', completed_at = NULL WHERE id = ?`, task.id)
+      if (input.reason !== 'operator_close' && input.reason !== 'killed') {
+        const title = task.display_name.trim() || task.task_title.trim() || task.id
+        const disposition = settled.status === 'circuit_broken'
+          ? 'The task failed too many times and will not be retried automatically.'
+          : otherActive ? 'Another attempt is still active.' : 'The task is ready to be dispatched again.'
+        this.emitWorkerStatus(
+          dispatch.id as DispatchId,
+          `Agent exited unexpectedly (${input.reason})`,
+          `Worker ${authority.sessionId} stopped while running task "${title}" (${task.id}). ${input.reason}. ${disposition}`,
+          true,
+          'escalation',
+          { taskId: task.id, dispatchId: dispatch.id, exitCode: input.exitCode, exitCause: input.reason, handle: authority.sessionId },
+        )
+      }
+      const worker = port.workerForDispatch(this.store, dispatch.id as DispatchId)
+      if (!worker) fail(this.context, 'worker_port_unavailable', `Federated exit did not reconcile worker ${dispatch.id}.`, { dispatchId: dispatch.id })
+      return { status: 'accepted', task: this.getTask(task.id as TaskId), dispatch: settled, worker }
+    })
+  }
+
+
 
   async mutate<T extends object>(
     method: MutatingOrchestrationMethod,
@@ -1265,9 +1448,11 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
         at
       )
       this.store.exec(`DELETE FROM pointer_operations WHERE mailbox_kind = 'dispatch'; DELETE FROM gates; DELETE FROM dispatches; DELETE FROM tasks;`)
+      for (const listener of this.resetListeners) listener(mode)
       return
     }
     this.store.exec('DELETE FROM pointer_operations; DELETE FROM question_threads; DELETE FROM gates; DELETE FROM deliveries; DELETE FROM messages; DELETE FROM dispatches; DELETE FROM tasks; DELETE FROM runs;')
+    for (const listener of this.resetListeners) listener(mode)
   }
 
   async dispose(): Promise<void> {
@@ -1275,10 +1460,13 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
     await Promise.allSettled(pending)
     this.bindingListener = null
     this.questionsClosedListener = null
-    this.dispatchSettledListener = null
+    this.dispatchSettledListeners.clear()
     this.dispatchFencedListener = null
     this.messageCommittedListener = null
+    this.federationAuthorityValidator = null
+    this.resetListeners.clear()
   }
+
 
 
 
@@ -1545,7 +1733,7 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
     if (finalDispatch(nextStatus)) {
       this.closeQuestionsForDispatch(current.id, input.at)
       this.retireHeartbeats(current.id, input.at)
-      this.dispatchSettledListener?.(current.id as DispatchId)
+      for (const listener of this.dispatchSettledListeners) listener(current.id as DispatchId)
     }
     if (updateTask && finalDispatch(nextStatus)) this.reconcileTaskAfterDispatch(current, nextStatus, input)
     return this.getDispatch(current.id as DispatchId)
@@ -1671,6 +1859,13 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
   private requireWorkerPort(dispatchId: DispatchId): WorkerLifecyclePort {
     if (!this.workerPort) fail(this.context, 'worker_port_unavailable', `supervised Dispatch ${dispatchId} cannot be accessed until the worker extension is active`, { dispatchId })
     return this.workerPort
+  }
+
+  private assertFederationAuthority(authority: FederationReportAuthority): void {
+    if (!this.federationAuthorityValidator) {
+      fail(this.context, 'worker_port_unavailable', 'federated reports cannot be reconciled until federation is active')
+    }
+    this.federationAuthorityValidator(authority)
   }
 
   private assertEvidence(caller: RuntimeCallerEvidence): void {
