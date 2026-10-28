@@ -396,8 +396,30 @@
 - **Revisit if:** roadmap composition changes a checked declaration or public handler
 - **Source:** assumed — autonomous
 
+## D37: Repair roadmap typing and SDK-init fixture preconditions without changing native behavior
+- **Question:** composed roadmap source exposed four type diagnostics and an idle-Claude test that expected a provider ID before the SDK supplied one
+- **Options:** cast away diagnostics or fabricate native IDs; restore stale UI/context contracts; honor the real public and SDK boundaries
+- **Chose:** preserve the Heimdall-aware workspace type through its non-null filter, remove a duplicate stdin fixture property, and provide a complete fail-closed PluginContext fixture. Keep the incoming stronger satisfies-based context when composing8ce174fb. The Claude test supplies a native ID in the SDK init event, then proves persistence and same-ID resume; remove parameter-copy assertions, never add a fabricated fresh ID.
+- **Why:** metadata-aware rows are subtypes, unsupported fixture capabilities must fail visibly, and native identity belongs to SDK initialization rather than the first queued user packet.
+- **Evidence:** initial composed gate reported4diagnostics/3files and59pass1fail; corrected gate70pass326assertions across five owner/adapter/native/guarded-send files90.65s and full typecheck exit0 in60.68s. No production native identity or readiness rule changed.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a public capability or SDK-confirmed identity cannot reach the composed fixture unchanged
+- **Source:** assumed — autonomous
+
+## D38: Consume final terminal-summary and historical-close invariants through the supported lane workflow
+- **Question:** the final core checkpoint preserves nonzero terminal counters and confirmed stopped-worker identity while its supported land runs
+- **Options:** bypass dependency readiness; infer authority from historical metadata; merge the verified checkpoint and await the queue gate
+- **Chose:** merge8ce174fb as2c713ffb and read core D35–D36. Terminal inspection uses immutable summary budgets; historical closed tuples require matching persisted resource/incarnation and positive close evidence, never reactivated authority. No-ack waiter refusal remains distinct from post-ack interruption. Keep owner/control hub ownership unchanged.
+- **Why:** lifetime counters and cleanup history must survive compaction, but neither proves live authority. This feature lands only through queue.ts after its dependency is done, not directly on integration/main and not by push or PR.
+- **Evidence:** latest own scripts68pass570assertions91.28s and final standalone owner CLI publication/native scoped cleanup3.20s pass. Core's all8 service/native report/archive/exit proof and running land are peer evidence, not an owner landing claim. Finishing-branch workflow is autonomously fixed by LOOP to the supported queue merge; no human option prompt or new review campaign.
+- **Reversibility:** medium
+- **Confidence:** high for the retained invariants and exercised surfaces; queue/dependency and final remote gates remain required
+- **Revisit if:** supported merge-result verification reports a concrete regression
+- **Source:** locked by docs/loop/LOOP.md and incoming m6-heimdall-core D35–D36
+
 ## Progress
-- Source: actual df799424/e410 facade, verified4bb owner boundaries, isolated427 startup-pointer/restart, d34 heldPrefix fixture,1b9 harness option, bd3 real worker acceptance and83e4 independent fixture identities. Core267 schemas,582 stop/control corrections and controlsab953 are merged; all temporary SQL/native probes removed.
-- Own checks: owner API17tests113assertions; earlier combined owner58tests354assertions; native69tests269assertions; driver/worker9tests25assertions; pointer14tests58assertions; semantic restart1test16assertions. Full project typecheck exits0; scripts66tests517assertions pass. Final post-dependency affected remote suite/catch-up remain.
-- Actual worker case passes1test20assertions22.70s through ready/attestation, real message delivery, blocking Ask/exact answer/replay refusal, exact stop, target public exited/PID gone and positively connected same-provider independent sibling alive. Defaults Codex12tests49assertions pass. Latest standalone owner API/CLI publication and native scoped cleanup smokes both pass7.18s.
-- All implementers/scouts returned. Queue core dependency remains pending; bg_54 awaits readiness. Next: consume atomic fixture publication/remaining core report correction, deps ready, merge build/roadmap once/read incoming decisions, affected remote suite/typecheck if changed, commit/detach/queue land. Aged-item policy skips unstarted review/dogfood, not required behavior.
+- Source: complete owner checkpoints and all real M6 dependency fixes are composed through2c713ffb, including the broad roadmap ancestry merge815be88e, typed/SDK fixture repaira3694eef, canonical snapshot/receipt rules and unique native fixture identities. No unresolved merge markers or temporary runtime diagnostics remain.
+- Own latest composed gates:70tests326assertions across owner API, real worker, adapter, native and guarded admission files; full project typecheck exit0; scripts68tests570assertions. Final standalone owner API/CLI publication and native scoped cleanup pass3.20s. Earlier evidence and failures remain recorded separately.
+- Owner behavior is end-to-end verified, including exact human answer, abandonment isolation, worker delivery/answer/replay, exact stop/public exit and same-provider sibling preservation. Static manifest validation was scoped to its checked snapshot, not a new final review.
+- All agents and own checks returned. Core's supported land is running externally; bg_73 awaits owner dependency readiness. Next: ready gate, ONE direct build/roadmap catch-up/read any new decisions, final affected remote suite and changed-source typecheck, commit/detach/queue land. No source asks, new review/dogfood or silent scope reduction.
