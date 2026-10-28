@@ -1913,10 +1913,10 @@
     {
       "id": "fix-native-sa-browser-agent-1028",
       "milestone": "Side A",
-      "title": "Fix the native-only failures in sa-browser-agent from the 2026-10-28 run: C2-native-focus",
+      "title": "Fix the native-only failures in sa-browser-agent from the 2026-10-28 run: C2-native-focus End phase: native reruns are allowed now on a packaged app with fresh owned state (never mock-keychain in place of production credential protection); gather the causal evidence named in its BLOCKERS.md entry, then fix the cause.",
       "docs": [],
       "deps": [],
-      "status": "blocked"
+      "status": "todo"
     },
     {
       "id": "m3-accounts-complete-user-acceptance-20261028",
