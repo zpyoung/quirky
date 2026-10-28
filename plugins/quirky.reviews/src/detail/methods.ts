@@ -21,6 +21,7 @@ import {
   repoFromReviewUrl,
   sameRepo,
   type ChangedFile,
+  type CommentsResult,
   type RepoIdentity,
   type ReviewComment,
   type ReviewStackEntry,
@@ -32,6 +33,14 @@ const audiences = ['all', 'humans', 'bots']
 const groupings = ['grouped', 'timeline']
 const mergeMethods = ['squash', 'merge', 'rebase']
 const reactions = ['+1', '-1', 'laugh', 'confused', 'heart', 'hooray', 'rocket', 'eyes']
+type Audience = 'all' | 'humans' | 'bots'
+type Grouping = 'grouped' | 'timeline'
+function isAudience(value: unknown): value is Audience {
+  return value === 'all' || value === 'humans' || value === 'bots'
+}
+function isGrouping(value: unknown): value is Grouping {
+  return value === 'grouped' || value === 'timeline'
+}
 const sourceShape: Schema = {
   type: 'object',
   properties: { host: { type: 'string' }, owner: { type: 'string' }, repo: { type: 'string' } },
@@ -101,13 +110,13 @@ export const detailSpecs: (MethodSpec & { description: string })[] = [
   {
     id: 'detailSetCommentDraft',
     description: 'Save a comment draft on a review surface.',
-    params: strictObject({ ...draftIdentity, surface: surfaceShape, body: stringShape, draftVersion: { type: 'integer', minimum: 0 } }, ['surface', 'body', 'generation']),
+    params: strictObject({ ...draftIdentity, surface: surfaceShape, body: stringShape, draftVersion: { type: 'integer', minimum: 0 } }, ['surface', 'body', 'draftVersion', 'generation']),
     result: strictObject({ surface: surfaceShape, body: stringShape, draftVersion: { type: 'integer', minimum: 0 }, applied: { type: 'boolean' } }, ['surface', 'body', 'draftVersion', 'applied']),
   },
   {
     id: 'detailSetBodyDraft',
     description: 'Save the pull request description draft.',
-    params: strictObject({ ...draftIdentity, body: { description: 'String or null.' }, draftVersion: { type: 'integer', minimum: 0 } }, ['body', 'generation']),
+    params: strictObject({ ...draftIdentity, body: { description: 'String or null.' }, draftVersion: { type: 'integer', minimum: 0 } }, ['body', 'draftVersion', 'generation']),
     result: strictObject({ body: { description: 'String or null.' }, draftVersion: { type: 'integer', minimum: 0 }, applied: { type: 'boolean' } }, ['body', 'draftVersion', 'applied']),
   },
   {
@@ -498,11 +507,11 @@ function checkState(state: ReviewsState, surface: Surface): JsonRecord | null {
 function commentsFromState(env: ReviewsEnv, selection: Selection): ReviewComment[] {
   const value = commentState(env.read(), selection.surface)
   const parsed = value === null ? null : parseCommentsResult(value, selection.number)
-  if (parsed === null || !Array.isArray(parsed.comments)) throw env.invalid('comments_unavailable', 'Comments have not been loaded for this pull request.')
-  return parsed.comments as unknown as ReviewComment[]
+  if (parsed === null) throw env.invalid('comments_unavailable', 'Comments have not been loaded for this pull request.')
+  return parsed.comments
 }
 
-function commentsEnvelope(number: number, comments: ReviewComment[], previous: JsonRecord | null): JsonRecord {
+function commentsEnvelope(number: number, comments: ReviewComment[], previous: JsonRecord | null): CommentsResult {
   const partial = previous?.partial === true || previous === null
   const previousFailures = Array.isArray(previous?.partialFailures)
     ? previous.partialFailures.filter((entry): entry is string => typeof entry === 'string')
@@ -516,11 +525,11 @@ function commentsEnvelope(number: number, comments: ReviewComment[], previous: J
   return { number, comments: ordered, partial, partialFailures: failures }
 }
 
-function withoutInlineComments(value: JsonRecord | null, number: number): JsonRecord | null {
+function withoutInlineComments(value: JsonRecord | null, number: number): CommentsResult | null {
   if (value === null) return null
   const parsed = parseCommentsResult(value, number)
   if (parsed === null) return null
-  return { ...parsed, comments: (parsed.comments as unknown as ReviewComment[]).filter((comment) => comment.kind !== 'review_comment') }
+  return { ...parsed, comments: parsed.comments.filter((comment) => comment.kind !== 'review_comment') }
 }
 
 function commentIdKey(comment: ReviewComment): string {
@@ -553,7 +562,7 @@ export function reviewMethods(review: ReviewData): { allowed: string[]; defaultM
   const defaultMethod = typeof defaultValue === 'string' && mergeMethods.includes(defaultValue as typeof mergeMethods[number])
     ? defaultValue
     : null
-  return { allowed: allowedValue, defaultMethod, known: review.mergeMetadataKnown !== false }
+  return { allowed: allowedValue, defaultMethod, known: true }
 }
 
 export function directMergeAllowed(review: ReviewData): boolean {
@@ -927,7 +936,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       }
       const parsedComments = commentsResult?.status === 'fulfilled' ? parseCommentsResult(commentsResult.value, selected.number) : null
       if (parsedComments !== null) {
-        const rawComments = parsedComments.comments as unknown as ReviewComment[]
+        const rawComments = parsedComments.comments
         comments = { ...parsedComments, comments: mergeOverlay(rawComments, overlay) }
         loaded.comments = true
       } else {
@@ -999,23 +1008,25 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
     async detailSetAudience(params) {
       const selectedSurface = surface(params)
       const selected = selection(params, selectedSurface, false)
-      if (!audiences.includes(params.audience as typeof audiences[number])) throw env.invalid('invalid_input', 'audience must be all, humans, or bots.')
+      const audience = params.audience
+      if (!isAudience(audience)) throw env.invalid('invalid_input', 'audience must be all, humans, or bots.')
       applyIfOwner(env, selected, (state) => {
-        if (selectedSurface === 'detail') state.detail.audience = params.audience as typeof audiences[number]
-        else state.checks.audience = params.audience as typeof audiences[number]
+        if (selectedSurface === 'detail') state.detail.audience = audience
+        else state.checks.audience = audience
       })
-      return { surface: selectedSurface, audience: params.audience }
+      return { surface: selectedSurface, audience }
     },
 
     async detailSetGrouping(params) {
       const selectedSurface = surface(params)
       const selected = selection(params, selectedSurface, false)
-      if (!groupings.includes(params.grouping as typeof groupings[number])) throw env.invalid('invalid_input', 'grouping must be grouped or timeline.')
+      const grouping = params.grouping
+      if (!isGrouping(grouping)) throw env.invalid('invalid_input', 'grouping must be grouped or timeline.')
       applyIfOwner(env, selected, (state) => {
-        if (selectedSurface === 'detail') state.detail.grouping = params.grouping as typeof groupings[number]
-        else state.checks.grouping = params.grouping as typeof groupings[number]
+        if (selectedSurface === 'detail') state.detail.grouping = grouping
+        else state.checks.grouping = grouping
       })
-      return { surface: selectedSurface, grouping: params.grouping }
+      return { surface: selectedSurface, grouping }
     },
 
     async detailSetCommentDraft(params) {
@@ -1185,7 +1196,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       const checkRunId = positiveNumber(env, params.checkRunId, 'checkRunId')
       const checks = checkState(env.read(), selectedSurface)
       const parsedChecks = checks === null ? null : parseChecksResult(checks, selected.number)
-      const row = parsedChecks?.checks.find((check) => isRecord(check) && check.checkRunId === checkRunId)
+      const row = parsedChecks?.checks.find((check) => check.checkRunId === checkRunId)
       if (!isRecord(row)) throw env.invalid('not_found', 'The selected check run is not in the current pull request checks list.')
       const workflowRunId = params.workflowRunId === undefined ? undefined : positiveNumber(env, params.workflowRunId, 'workflowRunId')
       const jobName = params.jobName
@@ -1297,9 +1308,9 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
         applyIfOwner(env, selected, (state) => {
           const current = commentState(state, selectedSurface)
           const parsed = current === null ? null : parseCommentsResult(current, selected.number)
-          const comments = parsed?.comments as unknown as ReviewComment[] | undefined
+          const comments = parsed?.comments
           const next = commentsEnvelope(selected.number, [...(comments ?? []), comment], current)
-          assignComments(state, selectedSurface, { ...next, comments: mergeOverlay(next.comments as ReviewComment[], overlay) })
+          assignComments(state, selectedSurface, { ...next, comments: mergeOverlay(next.comments, overlay) })
           if (selectedSurface === 'detail' && state.detail.commentDraft === body) state.detail.commentDraft = ''
           if (selectedSurface === 'checks' && state.checks.commentDraft === body) state.checks.commentDraft = ''
           if (selectedSurface === 'detail') state.detail.error = null
@@ -1332,7 +1343,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
         const current = commentState(state, selectedSurface)
         const parsed = current === null ? null : parseCommentsResult(current, selected.number)
         if (parsed === null) return
-        const list = updateCommentList(parsed.comments as unknown as ReviewComment[], commentId, (value) => ({ ...value, body }))
+        const list = updateCommentList(parsed.comments, commentId, (value) => ({ ...value, body }))
         assignComments(state, selectedSurface, { ...parsed, comments: list })
       })
       try {
@@ -1343,7 +1354,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
         applyIfOwner(env, selected, (state) => {
           const current = commentState(state, selectedSurface)
           const parsed = current === null ? null : parseCommentsResult(current, selected.number)
-          if (parsed !== null) assignComments(state, selectedSurface, { ...parsed, comments: updateCommentList(parsed.comments as unknown as ReviewComment[], commentId, () => edited) })
+          if (parsed !== null) assignComments(state, selectedSurface, { ...parsed, comments: updateCommentList(parsed.comments, commentId, () => edited) })
           if (selectedSurface === 'detail') state.detail.error = null
           else state.checks.error = null
         })
@@ -1353,7 +1364,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
           applyIfOwner(env, selected, (state) => {
             const current = commentState(state, selectedSurface)
             const parsed = current === null ? null : parseCommentsResult(current, selected.number)
-            if (parsed !== null) assignComments(state, selectedSurface, { ...parsed, comments: updateCommentList(parsed.comments as unknown as ReviewComment[], commentId, () => original) })
+            if (parsed !== null) assignComments(state, selectedSurface, { ...parsed, comments: updateCommentList(parsed.comments, commentId, () => original) })
           })
         }
         recordError(env, selected, error)
@@ -1377,7 +1388,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       applyIfOwner(env, selected, (state) => {
         const current = commentState(state, selectedSurface)
         const parsed = current === null ? null : parseCommentsResult(current, selected.number)
-        if (parsed !== null) assignComments(state, selectedSurface, { ...parsed, comments: updateCommentList(parsed.comments as unknown as ReviewComment[], commentId, () => null) })
+        if (parsed !== null) assignComments(state, selectedSurface, { ...parsed, comments: updateCommentList(parsed.comments, commentId, () => null) })
       })
       try {
         const raw = await env.call('quirky.hosting/reviewConversation', { ...hostingParams(selected), action: 'delete', commentId, yes: true })
@@ -1390,7 +1401,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
         applyIfOwner(env, selected, (state) => {
           const current = commentState(state, selectedSurface)
           const parsed = current === null ? null : parseCommentsResult(current, selected.number)
-          if (parsed !== null) assignComments(state, selectedSurface, { ...parsed, comments: updateCommentList(parsed.comments as unknown as ReviewComment[], commentId, () => null) })
+          if (parsed !== null) assignComments(state, selectedSurface, { ...parsed, comments: updateCommentList(parsed.comments, commentId, () => null) })
           if (selectedSurface === 'detail') state.detail.error = null
           else state.checks.error = null
         })
@@ -1400,7 +1411,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
           applyIfOwner(env, selected, (state) => {
             const current = commentState(state, selectedSurface)
             const parsed = current === null ? null : parseCommentsResult(current, selected.number)
-            if (parsed !== null && commentIndex(parsed.comments as unknown as ReviewComment[], commentId) === -1) {
+            if (parsed !== null && commentIndex(parsed.comments, commentId) === -1) {
               assignComments(state, selectedSurface, { ...parsed, comments: [...parsed.comments, original] })
             }
           })
@@ -1427,7 +1438,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
         const current = commentState(state, selectedSurface)
         const parsed = current === null ? null : parseCommentsResult(current, selected.number)
         if (parsed === null) return
-        const next = (parsed.comments as unknown as ReviewComment[]).map((comment) => comment.threadId === params.threadId ? { ...comment, isResolved: resolved } : comment)
+        const next = parsed.comments.map((comment) => comment.threadId === params.threadId ? { ...comment, isResolved: resolved } : comment)
         assignComments(state, selectedSurface, { ...parsed, comments: next })
       })
       setResolved(params.resolved as boolean)
@@ -1447,7 +1458,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
             const current = commentState(state, selectedSurface)
             const parsed = current === null ? null : parseCommentsResult(current, selected.number)
             if (parsed === null) return
-            const next = (parsed.comments as unknown as ReviewComment[]).map((comment) => {
+            const next = parsed.comments.map((comment) => {
               if (comment.threadId !== params.threadId) return comment
               const isResolved = oldStates[offset] ?? null
               offset += 1
@@ -1479,7 +1490,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
         const current = commentState(state, selectedSurface)
         const parsed = current === null ? null : parseCommentsResult(current, selected.number)
         if (parsed === null) return
-        const next = (parsed.comments as unknown as ReviewComment[]).map((comment) => {
+        const next = parsed.comments.map((comment) => {
           if (comment.reactionSubjectId !== params.subjectId) return comment
           const found = comment.reactions.find((reaction) => reaction.content === content)
           const nextReactions = comment.reactions.filter((reaction) => reaction.content !== content)
@@ -1821,9 +1832,9 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
           const current = state.detail.comments
           const parsed = current === null ? null : parseCommentsResult(current, selected.number)
           const previous = parsed === null ? null : parsed
-          const currentComments = parsed?.comments as unknown as ReviewComment[] | undefined
+          const currentComments = parsed?.comments
           const next = commentsEnvelope(selected.number, [...(currentComments ?? []), inline], previous)
-          state.detail.comments = { ...next, comments: mergeOverlay(next.comments as ReviewComment[], overlay) }
+          state.detail.comments = { ...next, comments: mergeOverlay(next.comments, overlay) }
           state.detail.error = null
         })
         return { number: selected.number, comment: { id: inline.id as number, path, line, startLine: inline.startLine, body } }

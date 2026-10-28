@@ -19,6 +19,31 @@ export type ReviewComment = {
   isBot?: boolean
   url?: string | null
 }
+export type CommentsResult = JsonRecord & {
+  number: number
+  comments: ReviewComment[]
+  partial: boolean
+  partialFailures: string[]
+}
+export type CheckSummary = JsonRecord & {
+  kind: 'check_run' | 'status' | 'approval'
+  name: string
+  status: string
+  conclusion: string | null
+  url: string | null
+  checkRunId: number | null
+  workflowRunId: number | null
+  suiteId: number | null
+}
+export type ChecksResult = JsonRecord & {
+  number: number
+  headSha: string | null
+  rollup: 'neutral' | 'pending' | 'success' | 'failure' | 'unknown'
+  checks: CheckSummary[]
+  partial: boolean
+  partialFailures: string[]
+  truncated?: true
+}
 export type ChangedFile = {
   path: string
   status: string
@@ -108,9 +133,12 @@ function nullableString(value: unknown): value is string | null {
 function nullablePositive(value: unknown): value is number | null {
   return value === null || typeof value === 'number' && Number.isSafeInteger(value) && value > 0
 }
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === 'string')
+}
 
 function parseComment(value: unknown): ReviewComment | null {
-  if (!isRecord(value) || !['issue_comment', 'review', 'review_comment'].includes(String(value.kind))) return null
+  if (!isRecord(value) || (value.kind !== 'issue_comment' && value.kind !== 'review' && value.kind !== 'review_comment')) return null
   if (!(typeof value.id === 'string' && value.id.length > 0 || typeof value.id === 'number' && Number.isSafeInteger(value.id) && value.id > 0)
     || !nullableString(value.author) || typeof value.body !== 'string' || !nullableString(value.createdAt)
     || !nullableString(value.state) || !nullableString(value.path) || !nullablePositive(value.line)
@@ -127,7 +155,7 @@ function parseComment(value: unknown): ReviewComment | null {
   if (value.isBot !== undefined && value.isBot !== null && typeof value.isBot !== 'boolean') return null
   if (value.url !== undefined && !nullableString(value.url)) return null
   const comment: ReviewComment = {
-    kind: value.kind as ReviewComment['kind'],
+    kind: value.kind,
     id: value.id,
     author: value.author,
     body: value.body,
@@ -147,10 +175,9 @@ function parseComment(value: unknown): ReviewComment | null {
   return comment
 }
 
-export function parseCommentsResult(value: unknown, number: number): JsonRecord | null {
+export function parseCommentsResult(value: unknown, number: number): CommentsResult | null {
   if (!isRecord(value) || value.number !== number || !Array.isArray(value.comments)
-    || typeof value.partial !== 'boolean' || !Array.isArray(value.partialFailures)
-    || !value.partialFailures.every((entry) => typeof entry === 'string') || value.comments.length > 100) return null
+    || typeof value.partial !== 'boolean' || !isStringArray(value.partialFailures) || value.comments.length > 100) return null
   const comments: ReviewComment[] = []
   for (const raw of value.comments) {
     const comment = parseComment(raw)
@@ -210,20 +237,30 @@ export function parseFilesResult(value: unknown, number: number): JsonRecord | n
   }
 }
 
-export function parseChecksResult(value: unknown, number: number): JsonRecord | null {
+export function parseChecksResult(value: unknown, number: number): ChecksResult | null {
   if (!isRecord(value) || value.number !== number || !Array.isArray(value.checks)
-    || typeof value.rollup !== 'string' || !['neutral', 'pending', 'success', 'failure', 'unknown'].includes(value.rollup)
+    || (value.rollup !== 'neutral' && value.rollup !== 'pending' && value.rollup !== 'success'
+      && value.rollup !== 'failure' && value.rollup !== 'unknown')
     || !(value.headSha === null || typeof value.headSha === 'string')
-    || typeof value.partial !== 'boolean' || !Array.isArray(value.partialFailures)
-    || !value.partialFailures.every((entry) => typeof entry === 'string')) return null
-  const checks: JsonRecord[] = []
+    || typeof value.partial !== 'boolean' || !isStringArray(value.partialFailures)) return null
+  const checks: CheckSummary[] = []
   for (const raw of value.checks) {
-    if (!isRecord(raw) || !['check_run', 'status', 'approval'].includes(String(raw.kind))
+    if (!isRecord(raw) || (raw.kind !== 'check_run' && raw.kind !== 'status' && raw.kind !== 'approval')
       || typeof raw.name !== 'string' || typeof raw.status !== 'string'
       || !(raw.conclusion === null || typeof raw.conclusion === 'string')
       || !(raw.url === null || typeof raw.url === 'string')
       || !nullablePositive(raw.checkRunId) || !nullablePositive(raw.workflowRunId) || !nullablePositive(raw.suiteId)) return null
-    checks.push(raw)
+    checks.push({
+      ...raw,
+      kind: raw.kind,
+      name: raw.name,
+      status: raw.status,
+      conclusion: raw.conclusion,
+      url: raw.url,
+      checkRunId: raw.checkRunId,
+      workflowRunId: raw.workflowRunId,
+      suiteId: raw.suiteId,
+    })
   }
   return {
     number,
