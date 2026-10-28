@@ -536,8 +536,7 @@
       "deps": [
         "m4-hosting-api-github"
       ],
-      "status": "in-progress",
-      "lane": 2
+      "status": "done"
     },
     {
       "id": "m4-worktrees-create-from-gitlab",
