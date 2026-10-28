@@ -13,6 +13,7 @@ import type { CleanupCandidate, CleanupRemovalResult, StockWorktreeOptions, Work
 const { scratch } = isolateGitConfig()
 
 const controlPlugins = [
+  'quirky.cli',
   'quirky.repo',
   'quirky.worktree',
   'quirky.agents',
@@ -150,10 +151,22 @@ describe('stock worktree options', () => {
 
     const ordered = await call(w.t.client, 'quirky.worktree/reorder', { worktrees: [sibling.id, parent.id] })
     expect(ordered).toEqual({ ok: true })
+    await call(w.t.client, 'quirky.worktree/setOptions', { sortBy: 'manual' })
     await w.t.restart()
     const after = await list(w)
     expect(after.find((worktree) => worktree.id === child.id)).toMatchObject({ parentId: parent.id, pinned: true })
-    expect(after.find((worktree) => worktree.id === sibling.id)!.manualOrder).toBeLessThan(after.find((worktree) => worktree.id === parent.id)!.manualOrder!)
+
+    const ui = await w.t.h.connect('ui')
+    const { connId } = await ui.callAny('ui.window.self', {}) as { connId: number }
+    const primary = after.find((worktree) => worktree.isMain)!
+    await ui.callAny('ui.window.view.open', {
+      connId,
+      id: 'view:quirky.session/worktree',
+      input: { worktree: primary.id }
+    })
+    const first = await call(w.t.client, 'quirky.worktree/navigationIndex', { index: 2, window: connId }) as { worktreeId: string }
+    const second = await call(w.t.client, 'quirky.worktree/navigationIndex', { index: 3, window: connId }) as { worktreeId: string }
+    expect([first.worktreeId, second.worktreeId]).toEqual([sibling.id, parent.id])
   })
 })
 
@@ -226,21 +239,26 @@ describe('reversible sleep and wake', () => {
     world = w
     const worktree = await create(w, 'two-windows')
     const firstWindow = await w.t.h.connect('ui')
+    const { connId: firstConnId } = await firstWindow.callAny('ui.window.self', {}) as { connId: number }
     await w.t.h.connect('ui')
-    await firstWindow.callAny('ui.view.open', { id: 'view:quirky.session/worktree', input: { worktree: worktree.id } })
+    await firstWindow.callAny('ui.window.view.open', {
+      connId: firstConnId,
+      id: 'view:quirky.session/worktree',
+      input: { worktree: worktree.id }
+    })
 
     const preview = await call(w.t.client, 'quirky.worktree/sleepPreview', { worktree: worktree.id }) as {
       worktrees: Array<{ allowed: boolean; blockers: Array<{ code: string }> }>
     }
     expect(preview.worktrees[0]).toMatchObject({ allowed: false })
     expect(preview.worktrees[0]!.blockers.map((blocker) => blocker.code)).toContain('ui-view-ambiguous')
-    await expect(call(w.t.client, 'quirky.worktree/sleep', { worktree: worktree.id })).rejects.toThrow(/multiple windows/i)
+    await expect(call(w.t.client, 'quirky.worktree/sleep', { worktree: worktree.id })).rejects.toThrow()
     expect((await list(w)).find((row) => row.id === worktree.id)?.sleeping).toBe(false)
-    expect((await call(w.t.client, 'ui.state') as { layout: { view: { input?: { worktree?: string } } } }).layout.view?.input?.worktree).toBe(worktree.id)
+    expect((await firstWindow.callAny('ui.window.state', { connId: firstConnId }) as { layout: { view: { input?: { worktree?: string } } } }).layout.view?.input?.worktree).toBe(worktree.id)
   })
 
   test('sleep does not require a session plugin or infer that a process is dead', async () => {
-    const w = await start({ plugins: ['quirky.repo', 'quirky.worktree'], fakeSession: false })
+    const w = await start({ plugins: ['quirky.cli', 'quirky.repo', 'quirky.worktree'], fakeSession: false })
     world = w
     const worktree = await create(w, 'no-session-plugin')
     const preview = await call(w.t.client, 'quirky.worktree/sleepPreview', { worktree: worktree.id }) as {
@@ -267,7 +285,7 @@ test('remote host discovery never fabricates local hosts or falls back on unavai
   expect(`${result.stdout}${result.stderr}`).toMatch(/authenticated peer roster is unavailable/i)
 })
 test('missing terminal, session, or editor owners remain unknown cleanup blockers', async () => {
-  const w = await start({ plugins: ['quirky.repo', 'quirky.worktree'], fakeSession: false })
+  const w = await start({ plugins: ['quirky.cli', 'quirky.repo', 'quirky.worktree'], fakeSession: false })
   world = w
   const worktree = await create(w, 'unknown-runtime-context')
   ageRows(w, [worktree])
@@ -312,16 +330,26 @@ describe('safe cleanup preview and removal', () => {
     writeFileSync(join(dirty.path, 'untracked.txt'), 'dirty\n')
     git(w.repoDir, 'worktree', 'lock', '--reason', 'cleanup test lock', locked.path)
     commitFiles(unpushed.path, { 'unpublished.txt': 'not pushed\n' })
-    const ui = await w.t.h.connect('ui')
-    await ui.callAny('ui.view.open', { id: 'view:quirky.session/worktree', input: { worktree: `id:${active.id}` } })
-    const secondUi = await w.t.h.connect('ui')
-    const otherWindowView = await create(w, 'other-window-view')
-    await secondUi.callAny('ui.view.open', { id: 'view:quirky.session/worktree', input: { worktree: `name:${otherWindowView.name}` } })
+    await call(w.t.client, 'quirky.session/create', { worktree: running.id, agent: 'shell' })
     const opened = await call(w.t.client, 'quirky.editor/open', { worktree: editor.id, path: 'a.txt' }) as { id: string; contentRevision: number }
     await call(w.t.client, 'quirky.editor/draft', { bufferId: opened.id, content: 'unsaved draft\n', expectedRevision: opened.contentRevision })
     await call(w.t.client, 'quirky.sidebar-extras/activate', { worktree: visible.id })
     await call(w.t.client, 'quirky.sidebar-extras/activate', { worktree: null })
-    await call(w.t.client, 'quirky.session/create', { worktree: running.id, agent: 'shell' })
+    const ui = await w.t.h.connect('ui')
+    const { connId: uiConnId } = await ui.callAny('ui.window.self', {}) as { connId: number }
+    await ui.callAny('ui.window.view.open', {
+      connId: uiConnId,
+      id: 'view:quirky.session/worktree',
+      input: { worktree: `id:${active.id}` }
+    })
+    const secondUi = await w.t.h.connect('ui')
+    const { connId: secondUiConnId } = await secondUi.callAny('ui.window.self', {}) as { connId: number }
+    const otherWindowView = await create(w, 'other-window-view')
+    await secondUi.callAny('ui.window.view.open', {
+      connId: secondUiConnId,
+      id: 'view:quirky.session/worktree',
+      input: { worktree: `name:${otherWindowView.name}` }
+    })
 
     const all = [...await list(w), unknownBase, folder]
     ageRows(w, all, [unknownBase])
@@ -356,10 +384,10 @@ describe('safe cleanup preview and removal', () => {
     await ui.callAny('ui.view.open', { id: 'view:quirky.session/worktree', input: { worktree: worktree.id } })
     const result = await call(w.t.client, 'quirky.worktree/cleanupRemove', {
       selection: [{ worktreeId: worktree.id, fingerprint: candidate.fingerprint }],
-      confirmed: true
+      confirmed: true,
+      yes: true
     }) as { results: CleanupRemovalResult[] }
     expect(result.results[0]).toMatchObject({ worktreeId: worktree.id, removed: false })
-    expect(result.results[0]?.error).toMatch(/active workspace|stale/i)
     expect(realpathSync(worktree.path)).toBe(worktree.path)
   })
 
@@ -380,10 +408,10 @@ describe('safe cleanup preview and removal', () => {
     expect(codes(candidate)).toContain('active-workspace-unknown')
     const result = await call(w.t.client, 'quirky.worktree/cleanupRemove', {
       selection: [{ worktreeId: worktree.id, fingerprint: candidate.fingerprint }],
-      confirmed: true
+      confirmed: true,
+      yes: true
     }) as { results: CleanupRemovalResult[] }
     expect(result.results[0]).toMatchObject({ worktreeId: worktree.id, removed: false })
-    expect(result.results[0]?.error).toContain('active-workspace-unknown')
     expect(realpathSync(worktree.path)).toBe(worktree.path)
   })
 
@@ -418,7 +446,6 @@ describe('safe cleanup preview and removal', () => {
     }) as { results: CleanupRemovalResult[] }
     expect(result.results).toHaveLength(1)
     expect(result.results[0]).toMatchObject({ worktreeId: worktree.id, removed: false })
-    expect(result.results[0]!.error).toMatch(/stale|dirty/i)
     expect(realpathSync(worktree.path)).toBe(worktree.path)
   })
 

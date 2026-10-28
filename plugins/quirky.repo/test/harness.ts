@@ -103,7 +103,7 @@ export type PluginHarness = {
 }
 
 export type PluginHarnessOptions = {
-  /** Built-in plugin IDs to link from `plugins/`; defaults to the repo and worktree plugins. */
+  /** Built-in plugin IDs to link from `plugins/`; defaults to the CLI, repo and worktree plugins. */
   plugins?: string[]
   /** Fake `@quirky/git` (default) or real git. */
   realGit?: boolean
@@ -123,7 +123,7 @@ export type PluginHarnessOptions = {
 export async function startPluginHarness(options: PluginHarnessOptions = {}): Promise<PluginHarness> {
   const builtinPluginsDir = makeTempDir('qp-')
   mkdirSync(builtinPluginsDir, { recursive: true })
-  for (const id of options.plugins ?? ['quirky.repo', 'quirky.worktree']) {
+  for (const id of options.plugins ?? ['quirky.cli', 'quirky.repo', 'quirky.worktree']) {
     if (id === 'quirky.repo' && options.repoGroupCreateBarrier) {
       installRepoGroupCreateBarrierPlugin(builtinPluginsDir, options.repoGroupCreateBarrier.id)
     } else {

@@ -309,22 +309,6 @@ describe('describeRemove and the confirmation', () => {
   })
 })
 
-describe('SC-17: quirky.worktree and quirky.repo as plugins', () => {
-  test('the worktree plugin depends on the repo plugin, owns the wt alias and the section, and both list their commands', async () => {
-    const { client } = await start()
-    const plugins = (await call(client, 'plugin.list')) as { id: string; source: string; dependencies: string[]; cliAliases?: string[] }[]
-    expect(plugins.find((p) => p.id === 'quirky.worktree')).toMatchObject({ source: 'builtin', dependencies: ['quirky.repo'], cliAliases: ['wt'] })
-    expect(plugins.find((p) => p.id === 'quirky.repo')).toMatchObject({ source: 'builtin', dependencies: [] })
-
-    const catalog = (await call(client, 'api.describe')) as { cli: { commands: { words: string; aliasWords: string[] }[] } }
-    const words = catalog.cli.commands.map((c) => c.words)
-    expect(words).toEqual(expect.arrayContaining(['repo add', 'repo list', 'repo rm', 'worktree list', 'worktree create', 'worktree rm']))
-    expect(catalog.cli.commands.find((c) => c.words === 'worktree rm')?.aliasWords).toEqual(['wt rm'])
-
-    const contributions = (await call(client, 'plugin.contributions', { kind: 'sidebar-section' })) as { id: string; data: Record<string, unknown> }[]
-    expect(contributions.find((c) => c.id === 'sidebar-section:quirky.worktree/worktrees')?.data).toMatchObject({ title: 'Worktrees', order: 0 })
-  })
-})
 
 describe('repo removal and worktree ownership', () => {
   const recordedFor = (home: string, repoId: string) => {

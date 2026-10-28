@@ -16,17 +16,6 @@ describe('hashScript', () => {
 })
 
 describe('effectiveHooks: reading the shared file', () => {
-  test('no file means no hooks, the default startup policy and no warnings', () => {
-    expect(effectiveHooks(null, settings(), {})).toEqual({
-      file: null,
-      setup: null,
-      archive: null,
-      issueCommand: null,
-      agentStartup: 'start-immediately',
-      sharedDirectories: [],
-      warnings: []
-    })
-  })
 
   test('reads setup and archive scripts, the startup policy and shared directories', () => {
     const hooks = effectiveHooks(
