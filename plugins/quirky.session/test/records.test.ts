@@ -1,6 +1,9 @@
 import { describe, expect, test } from 'bun:test'
-import type { AgentStatusSummary, Session } from '@quirky/protocol'
-import { SessionRecords } from '../src/records'
+import { rmSync } from 'node:fs'
+import type { AgentStatusSummary, PluginStore, Session } from '@quirky/protocol'
+import { openPluginStore } from '../../../packages/daemon/src/plugins/stores'
+import { makeTempHome } from '../../../packages/daemon/test/helpers'
+import { SessionRecords, sessionMigrations } from '../src/records'
 import { memoryStore, migrateStore } from './memory-store'
 
 const session: Session = {
@@ -42,6 +45,223 @@ const summary: AgentStatusSummary = {
   evidenceAt: 6,
   restoredUnconfirmed: false
 }
+
+describe('session store migration from version 8', () => {
+  test('preserves badges and stores pointer operations for an existing private database', () => {
+    const home = makeTempHome('quirky-session-migration-')
+    let closeStore: (() => void) | undefined
+    const badges = { 'acme/review': { label: 'Review' } }
+    try {
+      const legacyMigrations = sessionMigrations(home).slice(0, 7)
+      legacyMigrations.push((store: PluginStore) => {
+        store.exec('ALTER TABLE sessions ADD COLUMN badges TEXT')
+      })
+      const legacy = openPluginStore({
+        home,
+        pluginId: 'quirky.session',
+        migrations: legacyMigrations,
+        isActive: () => true
+      })
+      closeStore = legacy.close
+      legacy.store.run(
+        `INSERT INTO sessions (
+          id, kind, agent, worktree_id, cwd, title, status, created_at, last_activity_at, exit_code, repo_id,
+          launch, provider_session, prompt_delivery, resumed_from, launch_settings, exit_signal, exit_cause,
+          restorable, agent_status, name, unread, badges
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        session.id,
+        session.kind,
+        session.agent,
+        session.worktreeId,
+        session.cwd,
+        session.title,
+        session.status,
+        session.createdAt,
+        session.lastActivityAt,
+        session.exitCode,
+        'repo',
+        JSON.stringify(session.launch),
+        JSON.stringify(session.providerSession),
+        session.promptDelivery ?? null,
+        session.resumedFrom ?? null,
+        JSON.stringify(session.launchSettings),
+        session.exitSignal,
+        session.exitCause,
+        session.restorable ? 1 : 0,
+        session.agentStatus === null ? null : JSON.stringify(session.agentStatus),
+        session.name ?? null,
+        session.unread ?? null,
+        JSON.stringify(badges)
+      )
+      legacy.close()
+      closeStore = undefined
+
+      const current = openPluginStore({
+        home,
+        pluginId: 'quirky.session',
+        migrations: sessionMigrations(home),
+        isActive: () => true
+      })
+      closeStore = current.close
+      const records = new SessionRecords(current.store)
+      expect(records.get(session.id)?.badges).toEqual(badges)
+      expect(records.get(session.id)?.background).toBeUndefined()
+
+      const backgroundSession = { ...session, id: 's_background_after_v8', background: true }
+      records.insert(backgroundSession, 'repo')
+      expect(records.get(backgroundSession.id)?.background).toBe(true)
+
+      const reserved = records.reservePointerOperation(
+        {
+          operationId: 'pointer-after-v8',
+          sessionId: session.id,
+          expectedIncarnation: 'incarnation-v1',
+          payloadHash: 'payload-v1'
+        },
+        10
+      )
+      expect(reserved).toMatchObject({
+        operationId: 'pointer-after-v8',
+        sessionId: session.id,
+        expectedIncarnation: 'incarnation-v1',
+        phase: 'reserved',
+        result: null
+      })
+
+      records.updatePointerOperation(
+        'pointer-after-v8',
+        'settled',
+        { status: 'submitted', transport: 'terminal_enter' },
+        11
+      )
+      expect(records.pointerOperation('pointer-after-v8')).toMatchObject({
+        phase: 'settled',
+        result: { status: 'submitted', transport: 'terminal_enter' }
+      })
+    } finally {
+      closeStore?.()
+      rmSync(home, { recursive: true, force: true })
+    }
+  })
+
+  test('keeps pointer operation records from the alternate version-8 schema', () => {
+    const home = makeTempHome('quirky-session-pointer-migration-')
+    let closeStore: (() => void) | undefined
+    try {
+      const legacyMigrations = sessionMigrations(home).slice(0, 7)
+      legacyMigrations.push((store: PluginStore) => {
+        store.exec(`
+          CREATE TABLE session_pointer_operations (
+            operation_id TEXT PRIMARY KEY,
+            session_id TEXT NOT NULL,
+            expected_incarnation TEXT NOT NULL,
+            payload_hash TEXT NOT NULL,
+            phase TEXT NOT NULL CHECK (phase IN ('reserved', 'write_attempted', 'enter_attempted', 'settled')),
+            result_json TEXT,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+          );
+          CREATE INDEX session_pointer_operations_updated_at ON session_pointer_operations(updated_at)
+        `)
+      })
+      const legacy = openPluginStore({
+        home,
+        pluginId: 'quirky.session',
+        migrations: legacyMigrations,
+        isActive: () => true
+      })
+      closeStore = legacy.close
+      legacy.store.run(
+        `INSERT INTO session_pointer_operations
+          (operation_id, session_id, expected_incarnation, payload_hash, phase, result_json, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        'pointer-before-v8-upgrade',
+        session.id,
+        'incarnation-v1',
+        'payload-v1',
+        'reserved',
+        null,
+        10,
+        10
+      )
+      legacy.close()
+      closeStore = undefined
+
+      const current = openPluginStore({
+        home,
+        pluginId: 'quirky.session',
+        migrations: sessionMigrations(home),
+        isActive: () => true
+      })
+      closeStore = current.close
+      expect(new SessionRecords(current.store).pointerOperation('pointer-before-v8-upgrade')).toMatchObject({
+        operationId: 'pointer-before-v8-upgrade',
+        sessionId: session.id,
+        phase: 'reserved',
+        result: null
+      })
+    } finally {
+      closeStore?.()
+      rmSync(home, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('session store migration from version 9', () => {
+  test('preserves badges and background while adding pointer operations', () => {
+    const home = makeTempHome('quirky-session-background-migration-')
+    let closeStore: (() => void) | undefined
+    const badges = { 'acme/review': { label: 'Review' } }
+    try {
+      const legacyMigrations = sessionMigrations(home).slice(0, 8)
+      legacyMigrations.push((store: PluginStore) => {
+        store.exec('ALTER TABLE sessions ADD COLUMN background INTEGER NOT NULL DEFAULT 0')
+      })
+      const legacy = openPluginStore({
+        home,
+        pluginId: 'quirky.session',
+        migrations: legacyMigrations,
+        isActive: () => true
+      })
+      closeStore = legacy.close
+      const legacyRecords = new SessionRecords(legacy.store)
+      legacyRecords.insert({ ...session, background: true }, 'repo')
+      legacyRecords.update(session.id, { badges })
+      legacy.close()
+      closeStore = undefined
+
+      const current = openPluginStore({
+        home,
+        pluginId: 'quirky.session',
+        migrations: sessionMigrations(home),
+        isActive: () => true
+      })
+      closeStore = current.close
+      const records = new SessionRecords(current.store)
+      expect(records.get(session.id)).toMatchObject({ badges, background: true })
+
+      expect(
+        records.reservePointerOperation(
+          {
+            operationId: 'pointer-after-v9',
+            sessionId: session.id,
+            expectedIncarnation: 'incarnation-v1',
+            payloadHash: 'payload-v1'
+          },
+          12
+        )
+      ).toMatchObject({
+        operationId: 'pointer-after-v9',
+        sessionId: session.id,
+        phase: 'reserved',
+        result: null
+      })
+    } finally {
+      closeStore?.()
+      rmSync(home, { recursive: true, force: true })
+    }
+  })
+})
 
 describe('session store migration 7', () => {
   test('a row written before it reads with a null name', () => {

@@ -18,16 +18,34 @@ type Fake = ReturnType<typeof fakeContext>
 const agent = (id: string, label: string, extra: Record<string, unknown> = {}) => ({ id, label, installed: true, enabled: true, isDefault: id === 'claude', canGenerate: true, ...extra })
 const AGENTS = { defaultAgent: 'claude', agents: [agent('claude', 'Claude'), agent('codex', 'Codex')] }
 
-const recipe = (action: string, extra: Record<string, unknown> = {}) => ({
-  action,
-  agent: null,
-  args: '',
-  template: '{basePrompt}',
-  sources: { agent: 'default', args: 'default', template: 'default' },
-  ...extra
-})
+const recipe = (action: string, extra: Record<string, unknown> = {}) => {
+  const { sources, ...fields } = extra
+  return {
+    action,
+    agent: null,
+    args: '',
+    template: '{basePrompt}',
+    launchOptions: {},
+    ...fields,
+    sources: { agent: 'default', args: 'default', template: 'default', launchOptions: 'default', ...(sources as Record<string, string> | undefined) }
+  }
+}
 
-const SAVED = { agent: 'codex', args: '--model gpt-5.4', template: '{basePrompt}\nKeep the change small.', sources: { agent: 'repo', args: 'repo', template: 'repo' } }
+const EFFORT_CHOICES = [
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+  { value: 'max', label: 'Max' }
+]
+const option = { id: 'effort', label: 'Effort', type: 'select', choices: EFFORT_CHOICES }
+const SAVED = {
+  agent: 'codex',
+  args: '--model gpt-5.4',
+  template: `{basePrompt}
+Keep the change small.`,
+  launchOptions: { model: 'gpt-5.4', optionValues: { effort: 'high' } },
+  sources: { agent: 'repo', args: 'repo', template: 'repo', launchOptions: 'repo' }
+}
 
 function deferred<T = unknown>() {
   let resolve!: (value: T) => void
@@ -45,6 +63,24 @@ function aiFake(configure: (fake: Fake) => void = () => {}): Fake {
   fake.settings['ai-enabled'] = true
   fake.status = statusOf([entry('util.ts', 'staged')])
   fake.on('quirky.agents/list', () => AGENTS)
+  fake.on('quirky.agents/options', (params) => ({
+    agent: params.agent,
+    label: params.agent === 'codex' ? 'Codex' : 'Claude',
+    supported: true,
+    models: (params.agent === 'codex'
+      ? [{ id: 'gpt-5.5', label: 'GPT-5.5' }, { id: 'gpt-5.6-terra', label: 'GPT-5.6 Terra' }]
+      : [{ id: 'fable', label: 'Fable' }, { id: 'opus', label: 'Opus' }, { id: 'haiku', label: 'Haiku', noEffort: true }])
+      .map((model) => ({ id: model.id, label: model.label, description: null, options: 'noEffort' in model ? [] : [option] })),
+    unlisted: 'accept',
+    unlistedOptions: [option],
+    structured: false,
+    extraArgs: {
+      supported: true,
+      allowed: '--model, --effort, -c model_reasoning_effort=…',
+      placeholder: '--model opus --effort high',
+      message: null
+    }
+  }))
   fake.on('quirky.git/aiRecipe', (params) => recipe(params.action as string))
   fake.on('quirky.git/generateCommitMessage', () => ({ message: 'Rename x to count\n\nClearer name.', subject: 'Rename x to count', body: 'Clearer name.', agent: 'claude' }))
   fake.on('quirky.git/cancelGenerate', () => ({ cancelled: true }))
@@ -532,7 +568,7 @@ describe('NA-37: Customize launch', () => {
     unmount()
   })
 
-  test('an edited launch reads "Save & start agent" and passes the scope, agent, arguments and template', async () => {
+  test('an edited launch passes provider choices and reset fields with the saved recipe', async () => {
     const { fake, unmount } = await openLaunch()
     await choose(field('Agent'), 'codex')
     await type(field('CLI arguments'), '--model gpt-5.4')
@@ -541,7 +577,7 @@ describe('NA-37: Customize launch', () => {
     await choose(field('Save for'), 'repo')
     await click(buttonText(dialog()!, 'Save & start agent'))
     expect(fake.called('quirky.git/aiFix').map((c) => c.params)).toEqual([
-      { worktree: 'feat', action: 'fixCommitFailure', agent: 'codex', args: '--model gpt-5.4', template: '{basePrompt}\nKeep the change small.', save: 'repo' }
+      { worktree: 'feat', action: 'fixCommitFailure', agent: 'codex', args: '--model gpt-5.4', template: '{basePrompt}\nKeep the change small.', launchOptions: null, save: 'repo' }
     ])
     expect(fake.toasts).toEqual([['Started an AI agent for the commit failure.', '']])
     expect(dialog()).toBeNull()
@@ -553,7 +589,7 @@ describe('NA-37: Customize launch', () => {
     await type(field('CLI arguments'), '--fast')
     await choose(field('Save for'), 'global')
     await click(buttonText(dialog()!, 'Save & start agent'))
-    expect(fake.called('quirky.git/aiFix')[0]?.params).toMatchObject({ save: 'global', args: '--fast' })
+    expect(fake.called('quirky.git/aiFix')[0]?.params).toMatchObject({ save: 'global', args: '--fast', launchOptions: {} })
     unmount()
   })
 
@@ -592,6 +628,35 @@ describe('NA-37: Customize launch', () => {
       args: '--model gpt-5.4',
       template: '{basePrompt}\nKeep the change small.'
     })
+    unmount()
+  })
+  test('a one-off model and effort choice is passed through and saved with the recipe', async () => {
+    const { fake, unmount } = await openLaunch()
+    await settle()
+    await type(field('Model'), 'opus')
+    await choose(field('Effort'), 'high')
+    await click(buttonText(dialog()!, 'Save & start agent'))
+    expect(fake.called('quirky.git/aiFix')[0]?.params).toMatchObject({
+      launchOptions: { model: 'opus', optionValues: { effort: 'high' } },
+      save: 'repo'
+    })
+    unmount()
+  })
+
+  test('raw model and effort arguments disable catalog controls and say they are set by CLI arguments', async () => {
+    const { unmount } = await openLaunch((fake) =>
+      fake.on('quirky.git/aiFixPreview', (params) => ({
+        prompt: 'Fix prompt',
+        recipe: recipe(params.action as string, {
+          args: '--model raw --effort max',
+          launchOptions: { model: 'opus', optionValues: { effort: 'high' } }
+        })
+      }))
+    )
+    await settle()
+    expect((field('Model') as HTMLInputElement).disabled).toBe(true)
+    expect((field('Effort') as HTMLSelectElement).disabled).toBe(true)
+    expect(dialog()?.textContent).toContain('Set by CLI arguments')
     unmount()
   })
 
@@ -663,8 +728,9 @@ describe('NA-40: the Source Control AI defaults view', () => {
   const ACTIONS = ['commitMessage', 'fixCommitFailure', 'fixPushFailure', 'resolveConflicts']
 
   async function openSettings(configure: (f: Fake) => void = () => {}) {
-    const fake = aiFake(configure)
+    const fake = aiFake()
     fake.on('quirky.git/setAiRecipe', (params) => ({ saved: true, recipe: recipe(params.action as string) }))
+    configure(fake)
     const mounted = mountSettings(fake)
     await settle()
     return { fake, ...mounted }
@@ -704,6 +770,16 @@ describe('NA-40: the Source Control AI defaults view', () => {
     expect(inSection(element, 'commitMessage', 'Commit message agent').value).toBe('')
     unmount()
   })
+  test('custom command recipes have no catalog model or effort choices', async () => {
+    const { element, unmount } = await openSettings((fake) =>
+      fake.on('quirky.git/aiRecipe', (params) =>
+        recipe(params.action as string, params.action === 'commitMessage' ? { agent: 'custom' } : {})
+      )
+    )
+    expect(section(element, 'commitMessage').textContent).toContain('Custom command does not support catalog model or option picks.')
+    expect(inSection(element, 'commitMessage', 'Commit message model')).toBeNull()
+    unmount()
+  })
 
   test('each change saves the global recipe at once', async () => {
     const { fake, element, unmount } = await openSettings()
@@ -716,9 +792,47 @@ describe('NA-40: the Source Control AI defaults view', () => {
     await type(inSection(element, 'fixCommitFailure', 'Commit failure fixes CLI arguments'), '--model haiku')
     await type(inSection(element, 'resolveConflicts', 'Conflict resolution command template'), '{basePrompt}\nBe careful.')
     expect(fake.called('quirky.git/setAiRecipe').map((c) => c.params)).toEqual([
-      { worktree: 'feat', action: 'commitMessage', scope: 'global', agent: 'codex' },
+      { worktree: 'feat', action: 'commitMessage', scope: 'global', agent: 'codex', launchOptions: null },
       { worktree: 'feat', action: 'fixCommitFailure', scope: 'global', args: '--model haiku' },
       { worktree: 'feat', action: 'resolveConflicts', scope: 'global', template: '{basePrompt}\nBe careful.' }
+    ])
+  })
+  test('settings save provider model and effort choices, then clear them when the agent changes', async () => {
+    const { fake, element, unmount } = await openSettings((f) => {
+      f.on('quirky.git/setAiRecipe', (params) => {
+        const agentId = params.agent as string | undefined
+        const launchOptions = Object.hasOwn(params, 'launchOptions') ? params.launchOptions : {}
+        return {
+          saved: true,
+          recipe: recipe(params.action as string, {
+            agent: agentId ?? null,
+            launchOptions: launchOptions ?? {},
+            sources: {
+              agent: agentId ? 'global' : 'default',
+              args: 'default',
+              template: 'default',
+              launchOptions: Object.hasOwn(params, 'launchOptions') ? 'global' : 'default'
+            }
+          })
+        }
+      })
+    })
+    await type(inSection(element, 'commitMessage', 'Commit message model'), 'opus')
+    const effort = inSection(element, 'commitMessage', 'Commit message effort')
+    await act(async () => {
+      effort.value = 'high'
+      effort.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    const agentSelect = inSection(element, 'commitMessage', 'Commit message agent')
+    await act(async () => {
+      agentSelect.value = 'codex'
+      agentSelect.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    await settle()
+    expect(fake.called('quirky.git/setAiRecipe').map((call) => call.params)).toEqual([
+      { worktree: 'feat', action: 'commitMessage', scope: 'global', launchOptions: { model: 'opus' } },
+      { worktree: 'feat', action: 'commitMessage', scope: 'global', launchOptions: { model: 'opus', optionValues: { effort: 'high' } } },
+      { worktree: 'feat', action: 'commitMessage', scope: 'global', agent: 'codex', launchOptions: null }
     ])
     unmount()
   })

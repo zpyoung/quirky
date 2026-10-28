@@ -239,7 +239,7 @@ function callerOf(from: DispatchSource, withConnection: boolean, sessionAuthorit
     ...(sessionId !== undefined ? { sessionId } : {}),
     ...(worktreeId !== undefined ? { worktreeId } : {}),
     ...(sessionAuthority !== undefined ? { sessionAuthority } : {}),
-    ...(withConnection
+    ...(withConnection || role === 'mobile'
       ? { connection: { id: from.conn.id, transport: from.conn.transport, onClose: (callback) => onConnectionClose(from.conn, callback), openStream: () => openStream(from.conn) } }
       : {})
   }

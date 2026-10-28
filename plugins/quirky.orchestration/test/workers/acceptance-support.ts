@@ -31,7 +31,7 @@ export async function eventually<T>(read: () => T | Promise<T>, accepts: (value:
 }
 
 /** The CLI is executed by the real launched coordinator/worker, not an impersonated hello. */
-export async function startWorkerAcceptance(options: { heldPrefix?: string } = {}): Promise<WorkerAcceptance> {
+export async function startWorkerAcceptance(options: { heldPrefix?: string; uniqueThreads?: boolean } = {}): Promise<WorkerAcceptance> {
   const fixture = await startAgentsE2E({ extraEnv: { WORKER_TEST_CLI: CLI }, timeScale: 0.1 })
   try {
     fixture.addFake('claude')

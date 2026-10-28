@@ -1,11 +1,13 @@
+import type { MobileBundleManifestResult, MobileBundleReadResult } from '@quirky/protocol'
 import type { MobileDevice, MobileHostInfo, MobileNetworkInterface, MobilePairingResult, MobileState } from '@quirky/protocol'
 import type { PluginCaller, PluginContext } from '@quirky/protocol'
 import { hostname } from 'node:os'
 import { assertMobileCallAllowed } from './authorization'
-import { configureInput, openInput, pairInput, revokeInput, type MobileConfigureInput, type MobileOpenInput, type MobilePairInput } from './api'
+import { configureInput, openInput, pairInput, revokeInput, updatePreferencesInput, type MobileConfigureInput, type MobileOpenInput, type MobilePairInput } from './api'
+import { getMobileBundleChunk, getMobileBundleManifest, getMobileBundleRange, MobileBundleError } from './bundle'
 import { bestNetworkAddress, endpointHost, isLoopbackHost, normalizeAdvertisedEndpoint, rankNetworkInterfaces } from './network'
 import { createPairingResult } from './pairing'
-import { MobileStore, MobileStoreError, type AuthenticationResult, type MobileDeviceRecord } from './storage'
+import { MobileStore, MobileStoreError, type AuthenticationResult, type MobileDeviceRecord, type MobileSettings } from './storage'
 import { MAX_MOBILE_INBOUND_FRAME_BYTES, MobileTransport, type MobilePeer } from './transport'
 import { DesktopMobileE2EEV2Session, MAX_MOBILE_BINARY_BYTES, MAX_MOBILE_TEXT_BYTES } from '../crypto/e2ee-v2'
 
@@ -195,6 +197,45 @@ export class MobileService {
       this.emitChanged()
       return this.state()
     })
+  }
+
+  preferences(): { autoRestoreFitMs: number | null } {
+    try { return { autoRestoreFitMs: this.store.settings().autoRestoreFitMs } } catch (error) {
+      throw this.context.error('conflict', error instanceof Error ? error.message : 'Mobile settings unavailable')
+    }
+  }
+
+  async updatePreferences(params: unknown): Promise<{ autoRestoreFitMs: number | null }> {
+    let input: Pick<MobileSettings, 'autoRestoreFitMs'>
+    try { input = updatePreferencesInput(params) } catch (error) {
+      throw this.context.error('invalid-params', error instanceof Error ? error.message : 'Invalid phone preferences')
+    }
+    return this.gate.run(() => {
+      try { this.store.configure(input) } catch (error) {
+        throw this.context.error('conflict', error instanceof Error ? error.message : 'Phone preferences could not be persisted')
+      }
+      this.emitChanged()
+      return this.preferences()
+    })
+  }
+
+  bundleManifest(): MobileBundleManifestResult {
+    return this.withBundleApi(() => getMobileBundleManifest(this.context.dir))
+  }
+
+  bundleChunk(params: unknown): MobileBundleReadResult {
+    return this.withBundleApi(() => getMobileBundleChunk(this.context.dir, params))
+  }
+
+  bundleRange(params: unknown): MobileBundleReadResult {
+    return this.withBundleApi(() => getMobileBundleRange(this.context.dir, params))
+  }
+
+  private withBundleApi<T>(operation: () => T): T {
+    try { return operation() } catch (error) {
+      if (error instanceof MobileBundleError) throw this.context.error(error.kind, error.message)
+      throw this.context.error('conflict', 'Mobile page bundle could not be read')
+    }
   }
 
   async open(params: unknown): Promise<unknown> {
@@ -506,6 +547,11 @@ export function registerMobileMethods(context: PluginContext, service: MobileSer
     devices: (_params, caller) => { requireLocal(caller); return service.devices() },
     revoke: (params, caller) => { requireLocal(caller); return service.revoke(params) },
     configure: (params, caller) => { requireLocal(caller); return service.configure(params) },
+    preferences: () => service.preferences(),
+    updatePreferences: (params) => service.updatePreferences(params),
+    bundleManifest: () => service.bundleManifest(),
+    bundleChunk: (params) => service.bundleChunk(params),
+    bundleRange: (params) => service.bundleRange(params),
     open: (params, caller) => { requireLocal(caller); return service.open(params) }
   }
   for (const [name, handler] of Object.entries(methods)) context.provide(`method:quirky.mobile/${name}`, handler)

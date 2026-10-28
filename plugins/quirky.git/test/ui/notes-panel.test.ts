@@ -124,6 +124,43 @@ describe('NA-13: the shelf and the overflow item exist only with notes', () => {
   })
 })
 
+describe('notes worktree boundaries', () => {
+  test('refreshes the mixed shelf when the editor emits changed', async () => {
+    let notes = [note('git-note', 'src/a.ts', 1)]
+    const { fake, element, unmount } = await open(notes, (context) => {
+      context.on('quirky.git/notes', () => ({ notes }))
+    })
+    expect(qa(element, '.scm-note-row').map((row) => q(row, '.scm-note-path')?.textContent)).toEqual(['src/a.ts'])
+
+    notes = [note('markdown:note-id', 'README.md', 2, 2, 'Markdown review')]
+    await act(async () => fake.emit({ type: 'quirky.editor/changed', data: { revision: 2 } } as never))
+    await settle()
+    expect(qa(element, '.scm-note-row').map((row) => q(row, '.scm-note-path')?.textContent)).toEqual(['README.md'])
+    expect(fake.called('quirky.git/notes')).toHaveLength(2)
+    unmount()
+  })
+
+  test('does not display the previous worktree list while the next read is pending or fails', async () => {
+    const { promise: nextRead, reject: rejectNextRead } = Promise.withResolvers<never>()
+    const { fake, element, unmount } = await open([note('a-note', 'a.md', 1)], (context) => {
+      context.on('quirky.git/notes', (params) =>
+        params.worktree === 'next' ? nextRead : { notes: [note('a-note', 'a.md', 1)] }
+      )
+    })
+
+    await act(async () => fake.setLayout(layoutFor('next')))
+    await settle()
+    expect(shelf(element)).toBeNull()
+    expect(fake.called('quirky.git/notes')).toHaveLength(2)
+
+    rejectNextRead(new Error('Markdown note storage is unavailable'))
+    await settle()
+    expect(fake.toasts).toContainEqual(['Failed to load notes', 'Markdown note storage is unavailable'])
+    expect(shelf(element)).toBeNull()
+    unmount()
+  })
+})
+
 describe('NA-9: rows count notes by path', () => {
   test('every row of a path shows the count; rows without notes show none', async () => {
     const { element, unmount } = await open([note('a', 'math.ts', 5), note('b', 'math.ts', 30), note('c', 'util.ts', 2)], (fake) => {

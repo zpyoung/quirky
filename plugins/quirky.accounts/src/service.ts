@@ -356,10 +356,7 @@ export class AccountService {
         }
         updated.visibleProviders = [...new Set(visibleProviders)]
       }
-      this.store.transaction(() => {
-        writePreferences(this.store, updated)
-        incrementRevision(this.store)
-      })
+      writePreferences(this.store, updated)
       this.publishChanged()
       return this.buildState()
     })

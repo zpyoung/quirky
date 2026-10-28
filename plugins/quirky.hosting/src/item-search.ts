@@ -3,7 +3,6 @@ import {
   array,
   buildSearchQuery,
   ensureOutputBound,
-  graphqlSearch,
   identityKey,
   isRecord,
   mapWorkItem,
@@ -22,9 +21,7 @@ import {
 
 type ItemCaller = Parameters<Handler>[1]
 
-const SEARCH_QUERY = `query WorkItemSearch($search: String!, $first: Int!, $after: String) {
-  search(type: ISSUE, query: $search, first: $first, after: $after) {
-    issueCount
+const SEARCH_FIELDS = `issueCount
     pageInfo { endCursor hasNextPage }
     nodes {
       __typename
@@ -41,10 +38,391 @@ const SEARCH_QUERY = `query WorkItemSearch($search: String!, $first: Int!, $afte
         labels(first: 20) { nodes { name } }
         assignees(first: 20) { nodes { login } }
       }
-    }
+    }`
+
+const SEARCH_QUERY = `query WorkItemSearch($search: String!, $first: Int!, $after: String) {
+  search(type: ISSUE, query: $search, first: $first, after: $after) {
+    ${SEARCH_FIELDS}
   }
   rateLimit { cost }
 }`
+
+const MAX_BATCH_ALIASES = 10
+const MAX_BATCH_QUERY_CHARACTERS = 12_000
+const MAX_EXECUTABLE_QUERY_BYTES = 8_192
+const SEARCH_CACHE_TTL_MS = 120_000
+const MAX_RESULT_CACHE_ENTRIES = 512
+const MAX_RESULT_CACHE_BYTES = 16 * 1024 * 1024
+const MAX_CURSOR_CACHE_ENTRIES = 1_024
+const MAX_CURSOR_CACHE_BYTES = 1024 * 1024
+
+type SearchPage = {
+  items: WorkItemRecord[]
+  totalCount: number
+  endCursor: string | null
+  hasNextPage: boolean
+}
+
+type PendingSearch = {
+  scope: Scope
+  search: string
+  first: number
+  after: string | null
+  repositoryId: string
+  generation: number
+  pageKey: string
+  promise: Promise<SearchPage>
+  resolve(value: SearchPage): void
+  reject(error: unknown): void
+}
+
+type CachedSearchRows = {
+  items: WorkItemRecord[]
+  totalCount: number
+  repositoryId: string
+  generation: number
+  expiresAt: number
+  bytes: number
+}
+
+type CachedSearchCursor = {
+  endCursor: string | null
+  hasNextPage: boolean
+  repositoryId: string
+  generation: number
+  expiresAt: number
+  bytes: number
+}
+
+type SearchBatcher = {
+  read(scope: Scope, identity: Identity, search: string, first: number, after: string | null): Promise<SearchPage>
+}
+
+const searchBatchers = new WeakMap<HostingEnv, SearchBatcher>()
+
+function searchBatcher(env: HostingEnv): SearchBatcher {
+  const existing = searchBatchers.get(env)
+  if (existing) return existing
+  const created = createSearchBatcher(env)
+  searchBatchers.set(env, created)
+  return created
+}
+
+function searchPageFromConnection(env: HostingEnv, value: unknown, identity: Identity): SearchPage {
+  const search = record(value)
+  const totalCount = positiveCount(search?.issueCount)
+  const pageInfo = record(search?.pageInfo)
+  const hasNextPage = pageInfo?.hasNextPage
+  const endCursor = pageInfo?.endCursor
+  if (
+    !search ||
+    totalCount === null ||
+    !Array.isArray(search.nodes) ||
+    !pageInfo ||
+    typeof hasNextPage !== 'boolean' ||
+    (endCursor !== undefined && endCursor !== null && typeof endCursor !== 'string') ||
+    (hasNextPage && (typeof endCursor !== 'string' || endCursor.length === 0))
+  ) throw env.invalid('unknown', 'GitHub returned an invalid work-item search response.')
+  const items: WorkItemRecord[] = []
+  for (const node of search.nodes) {
+    const item = mapWorkItem(node, { identity })
+    if (item === null) throw env.invalid('unknown', 'GitHub returned an invalid work-item search item.')
+    items.push(item)
+  }
+  return { items, totalCount, endCursor: typeof endCursor === 'string' ? endCursor : null, hasNextPage }
+}
+
+function buildSearchRequest(reads: PendingSearch[]): { query: string; variables: Record<string, unknown>; aliases: string[] } {
+  const variables: Record<string, unknown> = {}
+  if (reads.length === 1) {
+    const read = reads[0]!
+    return {
+      query: SEARCH_QUERY,
+      variables: { search: read.search, first: read.first, after: read.after },
+      aliases: ['search']
+    }
+  }
+  const definitions: string[] = []
+  const fields: string[] = []
+  const aliases: string[] = []
+  for (let index = 0; index < reads.length; index += 1) {
+    const read = reads[index]!
+    const alias = `search${index}`
+    const searchVariable = `search${index}`
+    const firstVariable = `first${index}`
+    const afterVariable = `after${index}`
+    aliases.push(alias)
+    definitions.push(`$${searchVariable}: String!`, `$${firstVariable}: Int!`, `$${afterVariable}: String`)
+    variables[searchVariable] = read.search
+    variables[firstVariable] = read.first
+    variables[afterVariable] = read.after
+    fields.push(`  ${alias}: search(type: ISSUE, query: $${searchVariable}, first: $${firstVariable}, after: $${afterVariable}) {
+    ${SEARCH_FIELDS}
+  }`)
+  }
+  return {
+    query: `query WorkItemSearchBatch(${definitions.join(', ')}) {
+${fields.join('\n')}
+  rateLimit { cost }
+}`,
+    variables,
+    aliases
+  }
+}
+
+function createSearchBatcher(env: HostingEnv): SearchBatcher {
+  const queues = new Map<string, PendingSearch[]>()
+  const scheduled = new Set<string>()
+  const pending = new Map<string, PendingSearch>()
+  const resultCache = new Map<string, CachedSearchRows>()
+  const cursorCache = new Map<string, CachedSearchCursor>()
+  const generations = new Map<string, number>()
+  let resultCacheBytes = 0
+  let cursorCacheBytes = 0
+  let disposed = false
+
+  function shutdownError(): Error {
+    return Object.assign(env.context.error('conflict', 'The GitHub hosting plugin is shutting down.'), {
+      data: { reason: 'plugin_inactive' }
+    })
+  }
+
+  function removeCachedPage(key: string): void {
+    const rows = resultCache.get(key)
+    if (rows) {
+      resultCacheBytes -= rows.bytes
+      resultCache.delete(key)
+    }
+    const cursor = cursorCache.get(key)
+    if (cursor) {
+      cursorCacheBytes -= cursor.bytes
+      cursorCache.delete(key)
+    }
+  }
+
+  function trimCache(): void {
+    while (
+      resultCache.size > MAX_RESULT_CACHE_ENTRIES ||
+      resultCacheBytes > MAX_RESULT_CACHE_BYTES ||
+      cursorCache.size > MAX_CURSOR_CACHE_ENTRIES ||
+      cursorCacheBytes > MAX_CURSOR_CACHE_BYTES
+    ) {
+      const oldest = resultCache.keys().next().value
+      if (oldest === undefined) break
+      removeCachedPage(oldest)
+    }
+  }
+
+  function pruneExpired(now: number): void {
+    for (const [key, rows] of resultCache) {
+      if (rows.expiresAt <= now) removeCachedPage(key)
+    }
+  }
+
+  function cachedPage(key: string, repositoryId: string, generation: number): SearchPage | null {
+    const rows = resultCache.get(key)
+    const cursor = cursorCache.get(key)
+    const now = Date.now()
+    if (
+      !rows ||
+      !cursor ||
+      rows.expiresAt <= now ||
+      cursor.expiresAt <= now ||
+      rows.repositoryId !== repositoryId ||
+      cursor.repositoryId !== repositoryId ||
+      rows.generation !== generation ||
+      cursor.generation !== generation
+    ) {
+      if (rows || cursor) removeCachedPage(key)
+      return null
+    }
+    resultCache.delete(key)
+    resultCache.set(key, rows)
+    cursorCache.delete(key)
+    cursorCache.set(key, cursor)
+    return { items: rows.items, totalCount: rows.totalCount, endCursor: cursor.endCursor, hasNextPage: cursor.hasNextPage }
+  }
+
+  function cachePage(key: string, repositoryId: string, generation: number, page: SearchPage): void {
+    const rowsJson = JSON.stringify({ items: page.items, totalCount: page.totalCount }) ?? ''
+    const cursorJson = JSON.stringify({ endCursor: page.endCursor, hasNextPage: page.hasNextPage }) ?? ''
+    const rowsBytes = Buffer.byteLength(key, 'utf8') + Buffer.byteLength(rowsJson, 'utf8')
+    const cursorBytes = Buffer.byteLength(key, 'utf8') + Buffer.byteLength(cursorJson, 'utf8')
+    if (rowsBytes > MAX_RESULT_CACHE_BYTES || cursorBytes > MAX_CURSOR_CACHE_BYTES) return
+    pruneExpired(Date.now())
+    removeCachedPage(key)
+    const expiresAt = Date.now() + SEARCH_CACHE_TTL_MS
+    resultCache.set(key, { items: page.items, totalCount: page.totalCount, repositoryId, generation, expiresAt, bytes: rowsBytes })
+    cursorCache.set(key, { endCursor: page.endCursor, hasNextPage: page.hasNextPage, repositoryId, generation, expiresAt, bytes: cursorBytes })
+    resultCacheBytes += rowsBytes
+    cursorCacheBytes += cursorBytes
+    trimCache()
+  }
+
+  function settleSuccess(read: PendingSearch, page: SearchPage): void {
+    if (pending.get(read.pageKey) === read) pending.delete(read.pageKey)
+    if (!disposed && (generations.get(read.repositoryId) ?? 0) === read.generation) {
+      cachePage(read.pageKey, read.repositoryId, read.generation, page)
+    }
+    read.resolve(page)
+  }
+
+  function settleFailure(read: PendingSearch, error: unknown): void {
+    if (pending.get(read.pageKey) === read) pending.delete(read.pageKey)
+    read.reject(error)
+  }
+
+  function errorsForAliases(response: unknown, aliases: readonly string[]): { failures: Map<string, Error>; globalFailure: Error | null } {
+    const envelope = record(response)
+    const rawErrors = envelope?.errors
+    if (rawErrors === undefined) return { failures: new Map(), globalFailure: null }
+    const partialError = () => env.invalid('unknown', 'GitHub returned a partial work-item search response.')
+    if (!Array.isArray(rawErrors)) return { failures: new Map(), globalFailure: partialError() }
+    const aliasSet = new Set(aliases)
+    const failures = new Map<string, Error>()
+    for (const rawError of rawErrors) {
+      const error = record(rawError)
+      const path = error?.path
+      if (!Array.isArray(path) || typeof path[0] !== 'string') return { failures, globalFailure: partialError() }
+      if (path[0] === 'rateLimit') continue
+      if (!aliasSet.has(path[0])) return { failures, globalFailure: partialError() }
+      failures.set(path[0], partialError())
+    }
+    return { failures, globalFailure: null }
+  }
+
+  async function dispatch(reads: PendingSearch[]): Promise<void> {
+    const request = buildSearchRequest(reads)
+    try {
+      const response = await env.graphql(reads[0]!.scope, request.query, request.variables, { idempotent: true })
+      const envelope = record(response)
+      const data = record(envelope?.data) ?? envelope
+      const { failures, globalFailure } = errorsForAliases(response, request.aliases)
+      if (globalFailure) {
+        for (const read of reads) settleFailure(read, globalFailure)
+        return
+      }
+      for (let index = 0; index < reads.length; index += 1) {
+        const read = reads[index]!
+        const alias = request.aliases[index]!
+        const failure = failures.get(alias)
+        if (failure) {
+          settleFailure(read, failure)
+          continue
+        }
+        try {
+          const page = searchPageFromConnection(env, data?.[alias], read.scope.repository)
+          settleSuccess(read, page)
+        } catch (error: unknown) {
+          settleFailure(read, error)
+        }
+      }
+    } catch (error: unknown) {
+      for (const read of reads) settleFailure(read, error)
+    }
+  }
+
+  function splitBatches(reads: PendingSearch[]): PendingSearch[][] {
+    const batches: PendingSearch[][] = []
+    let current: PendingSearch[] = []
+    for (const read of reads) {
+      const candidate = [...current, read]
+      const query = buildSearchRequest(candidate).query
+      const fits = candidate.length <= MAX_BATCH_ALIASES &&
+        query.length <= MAX_BATCH_QUERY_CHARACTERS &&
+        Buffer.byteLength(query, 'utf8') <= MAX_EXECUTABLE_QUERY_BYTES
+      if (fits) {
+        current = candidate
+      } else if (current.length > 0) {
+        batches.push(current)
+        current = [read]
+      } else {
+        batches.push([read])
+      }
+    }
+    if (current.length > 0) batches.push(current)
+    return batches
+  }
+
+  function flush(scopeKey: string): void {
+    scheduled.delete(scopeKey)
+    const reads = queues.get(scopeKey)
+    if (!reads) return
+    queues.delete(scopeKey)
+    if (disposed) {
+      const error = shutdownError()
+      for (const read of reads) settleFailure(read, error)
+      return
+    }
+    for (const batch of splitBatches(reads)) void dispatch(batch)
+  }
+
+  function invalidate(scope: Scope): void {
+    const repositoryId = scope.worktree.repoId
+    generations.set(repositoryId, (generations.get(repositoryId) ?? 0) + 1)
+    for (const [key, rows] of resultCache) {
+      if (rows.repositoryId === repositoryId) removeCachedPage(key)
+    }
+  }
+
+  function dispose(): void {
+    if (disposed) return
+    disposed = true
+    const error = shutdownError()
+    for (const read of pending.values()) settleFailure(read, error)
+    pending.clear()
+    queues.clear()
+    scheduled.clear()
+    resultCache.clear()
+    cursorCache.clear()
+    generations.clear()
+    resultCacheBytes = 0
+    cursorCacheBytes = 0
+  }
+
+  env.onInvalidate(invalidate)
+  env.onDispose(dispose)
+
+  return {
+    read(scope, identity, search, first, after) {
+      if (disposed) return Promise.reject(shutdownError())
+      const requestScope = scopeForRepository(scope, identity)
+      const repositoryId = scope.worktree.repoId
+      const generation = generations.get(repositoryId) ?? 0
+      const scopeKey = `${env.cacheKey(requestScope, 'work-item-search')}|identity:${identityKey(identity)}`
+      const pageKey = `${scopeKey}\u0000${JSON.stringify([search, first, after])}`
+      const cached = cachedPage(pageKey, repositoryId, generation)
+      if (cached) return Promise.resolve(cached)
+      const existing = pending.get(pageKey)
+      if (existing) return existing.promise
+      const deferred = Promise.withResolvers<SearchPage>()
+      const read: PendingSearch = {
+        scope: requestScope,
+        search,
+        first,
+        after,
+        repositoryId,
+        generation,
+        pageKey,
+        promise: deferred.promise,
+        resolve: deferred.resolve,
+        reject: deferred.reject
+      }
+      pending.set(pageKey, read)
+      let reads = queues.get(scopeKey)
+      if (!reads) {
+        reads = []
+        queues.set(scopeKey, reads)
+      }
+      reads.push(read)
+      if (!scheduled.has(scopeKey)) {
+        scheduled.add(scopeKey)
+        queueMicrotask(() => flush(scopeKey))
+      }
+      return read.promise
+    }
+  }
+}
 
 const PR_FIELDS = 'number,title,body,state,url,createdAt,updatedAt,author,isDraft,labels,assignees,headRefName,baseRefName,headRefOid,baseRefOid,reviewDecision,mergeStateStatus'
 
@@ -80,10 +458,6 @@ function searchFailure(error: unknown): { reason: string; message: string } {
   return { reason, message: messages[reason] ?? 'GitHub work-item search failed.' }
 }
 
-function countFromGraphql(value: unknown): number | null {
-  const search = graphqlSearch(value)
-  return search?.issueCount ?? null
-}
 
 async function graphqlPage(
   env: HostingEnv,
@@ -91,21 +465,8 @@ async function graphqlPage(
   identity: Identity,
   search: string,
   after: string | null
-): Promise<{ items: WorkItemRecord[]; totalCount: number | null; endCursor: string | null; hasNextPage: boolean }> {
-  const result = await env.graphql(scopeForRepository(scope, identity), SEARCH_QUERY, {
-    search,
-    first: 100,
-    after
-  }, { idempotent: true })
-  const page = graphqlSearch(result)
-  if (!page) throw env.invalid('unknown', 'GitHub returned an invalid work-item search response.')
-  const items: WorkItemRecord[] = []
-  for (const node of page.nodes) {
-    const item = mapWorkItem(node, { identity })
-    if (item === null) throw env.invalid('unknown', 'GitHub returned an invalid work-item search item.')
-    items.push(item)
-  }
-  return { items, totalCount: page.issueCount, endCursor: page.endCursor, hasNextPage: page.hasNextPage }
+): Promise<SearchPage> {
+  return searchBatcher(env).read(scope, identity, search, 100, after)
 }
 
 async function fetchGraphqlSearch(
@@ -122,8 +483,15 @@ async function fetchGraphqlSearch(
   let totalCount: number | null = null
   let hasNextPage = false
   const items: WorkItemRecord[] = []
+  const seenCursors = new Set<string>()
   for (let block = 0; block < blockCount; block += 1) {
     const result = await graphqlPage(env, scope, identity, search, cursor)
+    if (result.hasNextPage && result.endCursor !== null) {
+      if (seenCursors.has(result.endCursor)) {
+        throw env.invalid('unknown', 'GitHub returned a nonadvancing work-item search cursor.')
+      }
+      seenCursors.add(result.endCursor)
+    }
     items.push(...result.items)
     if (totalCount === null) totalCount = result.totalCount
     cursor = result.endCursor
@@ -299,6 +667,7 @@ export async function listWorkItems(env: HostingEnv, params: Record<string, unkn
   const page = pageInput(env, params)
   const scope = await env.resolve(params, caller)
   const query = validateSearchRepo(env, page.query, [scope.origin, scope.issueRepository, ...scope.candidates])
+  if (page.noCache) env.invalidate(scope)
   const required = page.offset + page.limit
   const [issueResult, prResult] = await Promise.allSettled([
     fetchIssueSource(env, scope, query, required, page.noCache),
@@ -368,9 +737,8 @@ async function countForRepository(env: HostingEnv, scope: Scope, identity: Ident
   await assertSearchBudget(env, requestScope, identity)
   if (identity.host.toLowerCase() === 'github.com') {
     try {
-      const raw = await env.graphql(requestScope, SEARCH_QUERY, { search, first: 1, after: null }, { idempotent: true })
-      const count = countFromGraphql(raw)
-      if (count !== null) return count
+      const page = await searchBatcher(env).read(scope, identity, search, 1, null)
+      return page.totalCount
     } catch {
       // Search REST is the same-repository fallback for unavailable GitHub.com GraphQL.
     }

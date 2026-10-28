@@ -1,6 +1,13 @@
 import { afterEach, expect, test } from 'bun:test'
 import { bootTasks } from './helpers'
-import { PROJECTS_GH_FIXTURE, seedProjectsState, setProjectScenario, type ProjectFixtureState } from './fixtures/projects'
+import {
+  PROJECTS_GH_FIXTURE,
+  seedProjectsState,
+  seedUserProjectIssueTypesState,
+  setProjectScenario,
+  USER_PROJECT_ISSUE_TYPES_SCENARIO,
+  type ProjectFixtureState
+} from './fixtures/projects'
 import { buildRoadmapTimeline, MAX_ROADMAP_TICKS } from '../src/projects/timeline'
 
 type TasksTest = {
@@ -231,6 +238,43 @@ test('Project issue and issue-type edits mutate the selected project item', asyn
     issueType: { id: 'TYPE_BUG', name: 'Bug' }
   })
 }, 20_000)
+
+test('User-owned Projects discover and change organization-repository issue types through the daemon', async () => {
+  const scenario = USER_PROJECT_ISSUE_TYPES_SCENARIO
+  const instance = await tasks(seedUserProjectIssueTypesState())
+  await instance.call('projectSelect', { action: 'add', input: scenario.projectUrl })
+
+  const params = {
+    action: 'issueType',
+    projectId: scenario.projectId,
+    itemId: scenario.itemId,
+    kind: 'issue',
+    number: scenario.issueNumber
+  }
+  const discovery = object(await instance.call('projectEdit', params))
+  const discovered = object(discovery.result)
+  expect(discovery.action).toBe('issueType')
+  expect(discovered.changed).toBe(false)
+  expect(list(discovered.issueTypes).map(object)).toEqual([
+    expect.objectContaining({ id: 'TYPE_BUG', name: 'Bug', description: 'A defect to fix.', enabled: true }),
+    expect.objectContaining({ id: 'TYPE_TASK', name: 'Task', description: 'A piece of work.', enabled: true }),
+    expect.objectContaining({ id: 'TYPE_ARCHIVED', name: 'Archived', description: 'No longer selectable.', enabled: false })
+  ])
+  expect(object(object(object(instance.readState()).resources).issues)[`${scenario.repository}/${scenario.issueNumber}`])
+    .toMatchObject({ issueType: { id: 'TYPE_TASK', name: 'Task' } })
+
+  const updated = object(await instance.call('projectEdit', { ...params, issueTypeId: 'TYPE_BUG' }))
+  expect(object(updated.result)).toMatchObject({
+    changed: true,
+    issueType: { id: 'TYPE_BUG', name: 'Bug' }
+  })
+
+  const refreshed = loadedTable(await instance.call('projectView', { action: 'refresh' }))
+  const item = list(refreshed.items).map(object).find((candidate) => candidate.id === scenario.itemId)
+  expect(item).toBeDefined()
+  expect(object(item?.content).issueType).toMatchObject({ id: 'TYPE_BUG', name: 'Bug' })
+}, 20_000)
+
 
 test('Project preferences persist durable view choices and reject oversized query state atomically', async () => {
   const instance = await tasks()

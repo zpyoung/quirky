@@ -185,23 +185,59 @@ describe('quirky.agents/generate', () => {
     const t = await start()
     await t.fake('cursor-agent', `${RECORD}\nprintf done`)
 
-    const result = await t.call(A('generate'), { agent: 'cursor', prompt: PROMPT, cwd: t.work })
+    const result = await t.call(A('generate'), { agent: 'cursor', prompt: PROMPT, cwd: t.work, args: '--max-turns 1' })
 
-    expect(t.argvOf('cursor-agent').slice(-2)).toEqual(['auto', PROMPT])
+    expect(t.argvOf('cursor-agent').slice(-4)).toEqual(['auto', '--max-turns', '1', PROMPT])
     expect(t.recorded('cursor-agent', 'stdin')).toBe('')
     expect(result.text).toBe('done')
     expect(result.args.at(-1)).toBe(PROMPT)
   })
 
-  test('NA-32: the user arguments replace Orca\'s model flag and are placed before the prompt', async () => {
+  test('NA-32: raw model and extra arguments are kept once without an unsupported model effort default', async () => {
     const t = await start()
     await t.fake('claude', `${RECORD}\nprintf ok`)
 
     await t.call(A('generate'), { agent: 'claude', prompt: 'p', cwd: t.work, args: '--model haiku --max-turns 1' })
 
+    const argv = t.argvOf('claude')
+    expect(argv.filter((arg) => arg === '--model')).toHaveLength(1)
+    expect(argv[argv.indexOf('--model') + 1]).toBe('haiku')
+    expect(argv[argv.indexOf('--max-turns') + 1]).toBe('1')
+    expect(argv).not.toContain('--effort')
+  })
+
+  test('structured selections override one-shot defaults, raw arguments override picks, and unsupported picks start nothing', async () => {
+    const t = await start()
+    await t.fake('claude', `echo run >> "$REC.runs"\n${RECORD}\nprintf ok`)
+
+    await t.call(A('generate'), { agent: 'claude', prompt: 'p', cwd: t.work, model: 'opus', optionValues: { effort: 'high' } })
     expect(t.argvOf('claude')).toEqual([
-      '-p', '--output-format', 'text', '--model', 'haiku', '--permission-mode', 'plan', '--effort', 'low', '--strict-mcp-config', '--settings', SETTINGS, '--max-turns', '1'
+      '-p', '--output-format', 'text', '--model', 'opus', '--permission-mode', 'plan', '--effort', 'high', '--strict-mcp-config', '--settings', SETTINGS
     ])
+
+    await t.call(A('generate'), {
+      agent: 'claude',
+      prompt: 'p',
+      cwd: t.work,
+      model: 'opus',
+      optionValues: { effort: 'high' },
+      args: '--model fable --effort max --model sonnet --effort low'
+    })
+    expect(t.argvOf('claude')).toEqual([
+      '-p', '--output-format', 'text', '--model', 'fable', '--permission-mode', 'plan', '--effort', 'max', '--strict-mcp-config', '--settings', SETTINGS
+    ])
+
+    await t.call(A('generate'), { agent: 'claude', prompt: 'p', cwd: t.work, optionValues: { effort: 'xhigh' } })
+    expect(t.argvOf('claude')).toEqual([
+      '-p', '--output-format', 'text', '--model', 'sonnet', '--permission-mode', 'plan', '--effort', 'xhigh', '--strict-mcp-config', '--settings', SETTINGS
+    ])
+
+    const invalid = await failure(
+      t.call(A('generate'), { agent: 'claude', prompt: 'p', cwd: t.work, model: 'haiku', optionValues: { effort: 'high' } })
+    )
+    expect(invalid.code).toBe(RpcErrorCode.InvalidParams)
+    expect(invalid.message).toContain('effort')
+    expect(t.recorded('claude', 'runs').trim().split('\n').filter(Boolean)).toHaveLength(3)
   })
 
   test('a command override from configure is what runs', async () => {
@@ -294,17 +330,36 @@ describe('quirky.agents/generate', () => {
   })
 
   test('NA-29: an agent that ignores SIGTERM and starts a child is killed with its whole group at the time limit', async () => {
-    const t = await start({ timeoutMs: 300 })
-    await t.fake('claude', `trap '' TERM\necho $$ > "$REC.pid"\nsleep 120 &\necho $! > "$REC.child"\nwait`)
+    const t = await start({ timeoutMs: 3000 })
+    await t.fake('claude', `trap '' TERM\necho $$ > "$REC.pid"\nsleep 120 &\necho $! > "$REC.child"\necho ready > "$REC.ready"\nwait`)
     const began = Date.now()
+    let settled = false
+    const outcome = failure(t.call(A('generate'), { agent: 'claude', prompt: 'p', cwd: t.work })).then(
+      (error) => {
+        settled = true
+        return error
+      },
+      (error) => {
+        settled = true
+        throw error
+      }
+    )
 
-    const error = await failure(t.call(A('generate'), { agent: 'claude', prompt: 'p', cwd: t.work }))
+    try {
+      await waitFor(() => existsSync(join(t.rec, 'claude.ready')), 2000)
+      expect(settled).toBe(false)
+      expect(alive(pidOf(t, 'claude.pid'))).toBe(true)
+      expect(alive(pidOf(t, 'claude.child'))).toBe(true)
+    } finally {
+      await outcome
+    }
 
-    expect(error).toMatchObject({ code: RpcErrorCode.Conflict, message: 'Claude did not finish within 0.3 seconds.' })
+    const error = await outcome
+    expect(error.code).toBe(RpcErrorCode.Conflict)
     expect(reasonOf(error)).toBe('timeout')
-    expect(Date.now() - began).toBeGreaterThanOrEqual(2000)
+    expect(Date.now() - began).toBeGreaterThanOrEqual(5000)
     await gone(pidOf(t, 'claude.pid'), pidOf(t, 'claude.child'))
-  })
+  }, 15_000)
 
   test('the default limit is 60 seconds and a caller cannot ask for more', async () => {
     const t = await start()

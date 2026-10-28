@@ -358,7 +358,11 @@ export function Comments(props: CommentsProps) {
       <div className="review-comment-actions">
         {comment.threadId ? <button type="button" onClick={() => void resolveThread(comment.threadId as string, comment.isResolved !== true)}>{comment.isResolved === true ? 'Unresolve' : 'Resolve'}</button> : null}
         {comment.kind === 'review_comment' && numericId !== null ? <button type="button" onClick={() => { setReplyTo(numericId); setDraft(data.draft) }}>Reply</button> : null}
-        {safeUrl ? <button type="button" onClick={() => void props.context.call('quirky.reviews/openLink', { url: safeUrl }).catch((error: unknown) => setActionError(errorText(error)))}>Go to comment</button> : null}
+        {safeUrl && data.worktree ? <button type="button" onClick={() => {
+          const worktree = data.worktree
+          if (worktree === null) return
+          void props.context.call('quirky.reviews/openLink', { url: safeUrl, worktree }).catch((error: unknown) => setActionError(errorText(error)))
+        }}>Go to comment</button> : null}
         <button type="button" aria-pressed={data.queued.includes(queueId)} onClick={() => void setQueued(queueId, !data.queued.includes(queueId))}>{data.queued.includes(queueId) ? 'Unqueue for agent' : 'Queue for agent'}</button>
         {comment.author ? <button type="button" onClick={() => void setBotOverride(comment.author as string, !authorIsManuallyMarked)}>{authorIsManuallyMarked ? 'Unmark author as bot' : 'Mark author as bot'}</button> : null}
         {topLevel ? <>

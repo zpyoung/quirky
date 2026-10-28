@@ -2,7 +2,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs'
 import { isAbsolute, posix } from 'node:path'
 import type { PluginCaller } from '@quirky/protocol'
 import type { EditorBuffer, EditorServices, FeatureMethods } from '../types'
-import { createMarkdownNotesMethod } from './notes'
+import { createMarkdownNotesMethod, createWorkspaceNotesMethod } from './notes'
 import { extractSelectedCode, formatMarkdownSelection, insertMarkdown, isSafeMarkdownLink, type MarkdownFormat, type MarkdownSelection } from './operations'
 import { choosePdfDestination, exportPdfWithChrome } from './pdf'
 import { confirmNativeReplacement, chooseMarkdownImage } from './native'
@@ -37,7 +37,7 @@ import {
 } from './files'
 import { serializeMarkdown } from './tiptap'
 
-type MarkdownActionName = 'capabilities' | 'format' | 'insert' | 'apply' | 'links' | 'documents' | 'toc' | 'frontmatter' | 'search' | 'replace' | 'templates' | 'new' | 'retarget' | 'importImage' | 'exportPdf'
+type MarkdownActionName = 'capabilities' | 'format' | 'insert' | 'apply' | 'links' | 'documents' | 'toc' | 'frontmatter' | 'search' | 'replace' | 'templates' | 'new' | 'importImage' | 'exportPdf'
 type ActionParams = Record<string, unknown> & {
   action?: MarkdownActionName
   bufferId?: string
@@ -380,7 +380,8 @@ async function markdownAction(host: EditorServices, rawParams: Record<string, un
         if (existsSync(absolutePath)) continue
         throw error
       }
-      const buffer = await host.context.call('quirky.editor/open', { worktree: `id:${resolved.id}`, path: relativePath, mode: 'rich', focus: false }) as EditorBuffer
+      const opened = await host.context.call('quirky.editor/open', { worktree: `id:${resolved.id}`, path: relativePath, mode: 'rich', focus: false }) as EditorBuffer
+      const buffer = await host.markUntitled(opened.id, templatePath !== undefined)
       return { buffer, path: relativePath, template: templatePath ?? null, templateCreated: templatePath !== undefined }
     }
     throw errorOf(host, 'conflict', 'Could not create an untitled Markdown file after 100 collision-safe attempts.')
@@ -530,22 +531,6 @@ async function markdownAction(host: EditorServices, rawParams: Record<string, un
     return { replacements: replaced.replacements, changed: true, sourcePreserved: true, buffer: updated }
   }
 
-  if (action === 'retarget') {
-    if (!buffer.untitled) throw errorOf(host, 'invalid-params', 'Only an untitled Markdown document can be retargeted.')
-    if (typeof params.path !== 'string' || !params.path.toLowerCase().endsWith('.md') || isAbsolute(params.path) || params.path.split(/[\\/]/).includes('..')) {
-      throw errorOf(host, 'invalid-params', 'Retarget path must be an authorized worktree-relative .md path.')
-    }
-    await host.path(buffer.worktreeId, params.path, { create: true })
-    await host.context.call('quirky.editor/mutate', {
-      worktree: `id:${buffer.worktreeId}`,
-      action: 'rename',
-      path: buffer.relativePath,
-      newPath: params.path
-    })
-    const updated = host.get(buffer.id)
-    const saved = updated.draft === null ? updated : await host.save(updated.id, 'user')
-    return { buffer: saved, path: saved.relativePath }
-  }
 
   if (action === 'importImage') return importMarkdownImage(host, buffer, params)
   if (action === 'exportPdf') return exportMarkdownPdf(host, buffer, params, resources)
@@ -780,8 +765,9 @@ export function createMarkdownMethods(host: EditorServices): FeatureMethods {
   })
   const markdown = (params: Record<string, unknown>, caller: PluginCaller) => markdownAction(host, params, caller, resources)
   const notes = createMarkdownNotesMethod(host)
+  const workspaceNotes = createWorkspaceNotesMethod(host)
   return {
-    methods: { markdown, notes },
+    methods: { markdown, notes, workspaceNotes },
     dispose() {
       removeCloseListener()
       releaseMarkdownImages(resources)

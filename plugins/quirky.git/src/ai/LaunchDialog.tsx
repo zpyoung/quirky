@@ -4,6 +4,8 @@ import { Dialog } from '../panel/Dialog'
 import { messageOf } from '../panel/format'
 import { initialAgent, isUsable, useAgents } from './agents'
 import { DEFAULT_TEMPLATE, type FixAction, type LaunchParams, type Recipe } from './types'
+import type { RecipeLaunchOptions } from '../daemon/recipe-options'
+import { LaunchOptionsEditor } from './LaunchOptionsEditor'
 
 const TITLES: Readonly<Record<FixAction, string>> = {
   fixCommitFailure: 'Fix Commit Failure With AI',
@@ -32,24 +34,44 @@ function templateOf(text: string, prompt: string, template: string): string {
   if (prompt !== '' && text.startsWith(prompt)) return template + text.slice(prompt.length)
   return text
 }
+function sameLaunchOptions(left: RecipeLaunchOptions | null, right: RecipeLaunchOptions | null): boolean {
+  if (left === null || right === null) return left === right
+  const leftValues = left?.optionValues ?? {}
+  const rightValues = right?.optionValues ?? {}
+  const leftKeys = Object.keys(leftValues).sort()
+  const rightKeys = Object.keys(rightValues).sort()
+  return left?.model === right?.model && leftKeys.length === rightKeys.length && leftKeys.every((key, index) => key === rightKeys[index] && leftValues[key] === rightValues[key])
+}
+
+function hasLaunchChoices(value: RecipeLaunchOptions | null): boolean {
+  return value !== null && value !== undefined && (value.model !== undefined || Object.keys(value.optionValues ?? {}).length > 0)
+}
 
 type FormProps = Props & { preview: Preview; agents: ReturnType<typeof useAgents> }
 
-function LaunchForm({ action, preview, agents, onClose, start }: FormProps) {
+function LaunchForm({ context, action, preview, agents, onClose, start }: FormProps) {
   const { recipe } = preview
   const usable = agents.list === null ? [] : agents.list.agents.filter(isUsable)
   const fallback = agents.list === null ? '' : initialAgent(agents.list, usable)
+  const initial = recipe.agent ?? fallback
   const [picked, setPicked] = useState<string | null>(null)
+  const agent = picked ?? initial
+  const [launchChoices, setLaunchChoices] = useState<Map<string, RecipeLaunchOptions | null>>(
+    () => new Map<string, RecipeLaunchOptions | null>([[initial, recipe.launchOptions ?? {}]])
+  )
+  const launchOptions = launchChoices.has(agent) ? launchChoices.get(agent)! : agent === initial ? recipe.launchOptions ?? {} : null
   const [text, setText] = useState(preview.prompt)
   const [args, setArgs] = useState(recipe.args)
   const [saveRecipe, setSaveRecipe] = useState(true)
   const [scope, setScope] = useState<'repo' | 'global'>('repo')
   const [starting, setStarting] = useState(false)
 
-  const initial = recipe.agent ?? fallback
-  const agent = picked ?? initial
   const template = templateOf(text, preview.prompt, recipe.template)
-  const changed = agent !== initial || args !== recipe.args || template !== recipe.template
+  const optionsChanged =
+    agent === initial
+      ? !sameLaunchOptions(launchOptions, recipe.launchOptions)
+      : hasLaunchChoices(recipe.launchOptions)
+  const changed = agent !== initial || args !== recipe.args || template !== recipe.template || optionsChanged
   const hasSaved = Object.values(recipe.sources).some((source) => source !== 'default')
   const alreadySaved = !changed && hasSaved
   const saving = changed && saveRecipe
@@ -57,7 +79,14 @@ function LaunchForm({ action, preview, agents, onClose, start }: FormProps) {
 
   const go = async () => {
     setStarting(true)
-    const started = await start({ agent, args, template, ...(saving ? { save: scope } : {}) })
+    const includeChoices = saving || optionsChanged || agent !== initial
+    const started = await start({
+      agent,
+      args,
+      template,
+      ...(includeChoices ? { launchOptions } : {}),
+      ...(saving ? { save: scope } : {})
+    })
     setStarting(false)
     if (started) onClose()
   }
@@ -101,6 +130,17 @@ function LaunchForm({ action, preview, agents, onClose, start }: FormProps) {
           CLI arguments
           <input type="text" aria-label="CLI arguments" spellCheck={false} value={args} onChange={(event) => setArgs(event.target.value)} />
         </label>
+        <LaunchOptionsEditor
+          context={context}
+          agent={agent}
+          value={launchOptions}
+          args={args}
+          onChange={(next) => setLaunchChoices((current) => {
+            const choices = new Map(current)
+            choices.set(agent, next)
+            return choices
+          })}
+        />
         <div className="scm-ai-save">
           <label className="scm-ai-check">
             <input type="checkbox" aria-label="Save this launch as the recipe" checked={saveRecipe} onChange={(event) => setSaveRecipe(event.target.checked)} />

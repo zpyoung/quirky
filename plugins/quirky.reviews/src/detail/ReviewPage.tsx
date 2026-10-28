@@ -351,9 +351,9 @@ export function ReviewPage(props: ReviewsSurfaceProps) {
   }
 
   const openLink = async (invert: boolean) => {
-    if (url === null) return
+    if (owner === null || url === null) return
     try {
-      await props.context.call('quirky.reviews/openLink', { url, ...(invert ? { invert: true } : {}) })
+      await props.context.call('quirky.reviews/openLink', { url, worktree: owner.worktree, ...(invert ? { invert: true } : {}) })
     } catch (error) {
       props.context.toast('Could not open pull request link', errorText(error))
     }

@@ -53,6 +53,8 @@ quirky browser pane close --pane <pane-id> --json
 
 Every pane API method has a `quirky browser pane ...` CLI command, including suggestions, state reports, frame acknowledgements, typed Watch input, prompt responses and download actions. `pane control` accepts `back`, `forward`, `reload`, `hardReload`, `stop`, `find`, `zoom`, and `viewport`. Address navigation uses the same normalization, safe history and search-engine settings as the UI. The Browser menu contains History, zoom, viewport presets, and Watch choices; the address bar and Find controls are visible in the toolbar. Mod+Shift+B opens a browser tab. While a browser pane is focused, Mod+L focuses the address bar, Mod+F opens Find, Alt+Left/Right navigate history, Mod+R reloads, Mod+Shift+R hard reloads in Watch and reports the Native SDK limitation otherwise, and Mod+=/Mod+-/Mod+0 adjust or reset zoom.
 
+`pane close` returns `true` after the hosted tab and pane resources are removed. Its `fromTab` and `tabId` parameters are reserved for the terminal's authenticated close hook.
+
 Native is available only in the desktop shell. A plain web client explains that the system webview cannot be embedded and offers an explicit Watch action; it never silently substitutes Chrome. Native browsing uses the selected visible viewport size. Mobile device emulation is available only in Watch.
 
 `Open source file` uses public `quirky.editor/open` only with the backend's canonical in-worktree `sourcePath`; outside file URLs have no source action. `Open in Editor Preview` opens a separate editor preview tab and is not a Browser preview conversion. Selecting a supported non-HTML document suggestion navigates its backend-provided resource URL, and Browser Back returns to the prior location. Resource-backed previews do not serve `text/html`; unsupported editor previews show an error. Native `file:` navigation uses runtime authorization, and the UI does not resolve typed paths itself.
@@ -61,13 +63,35 @@ The pinned Electrobun SDK has no public JavaScript-dialog, basic-auth, or certif
 
 The `defaultHomePage`, `defaultSearchEngine`, and `defaultZoom` settings apply to new panes only. Default home page is blank; the search engine defaults to Google and the zoom level to 0.
 
+## Design mode
+
+Grab and Annotate run on the exact ready, nonblank Native or Watch pane. Mod+C starts Grab only when the browser page has no editable focus or selected text; Mod+Shift+C starts Annotate. While Grab is armed, plain C copies the hovered element in either mode; S requests a crop on Watch, while Native reports cropped screenshots unavailable. Esc cancels. Clicking an element in Grab copies bounded text; right-click opens Copy and Copy Screenshot actions without copying automatically. Clipboard errors remain visible and keep the selected data available. Copy success toasts appear only after the text or PNG is actually written to the clipboard.
+
+Watch Grab selections include a cropped PNG in their payload when capture fits the 2 MiB budget; unavailable or oversized crops leave `screenshot: null`. The crop uses captured pixels without resizing the live Watch viewport. After text copy, press S without another hover to copy that selection. Annotation payloads never retain screenshots.
+
+Ordinary selected text is not treated as a Grab shortcut. macOS Watch editing supports select-all/copy/paste inside the managed page. Watch-to-host clipboard transfer remains unaccepted: the recorded web smoke selected the text but pasted an empty value into the host address field. That residual base-pane input acceptance belongs to the existing `sa-browser-pane-native-host-controls` handoff; Native ordinary-copy behavior remains pending the real-window run.
+
+Annotate opens a Change/Question editor (up to 2,000 characters). Notes stay in this window's memory, retain the URL and element context captured when selected, and are not reassigned when the page navigates. They survive hosted-view unmounts while the browser page remains open. Each page keeps at most 20 notes; the oldest is dropped. Closing a page removes its notes, and restarting the application loses all notes. Copy uses the browser's Markdown formatter. Send lists same-worktree agent sessions and available new agents; it removes only notes confirmed delivered and unchanged since the send snapshot.
+
+Draw freezes a real Watch screenshot and opens the markup editor. Copy Markup reports success only after the composed PNG is actually written to the clipboard. Native cropped screenshots and Draw are disabled: the pinned public SDK exposes no page snapshot capability. Native never falls back to Watch or an approximate image.
+
+```sh
+quirky browser design arm --pane <pane-id> --mode grab
+quirky browser design read --pane <pane-id> --op-id <operation-id>
+quirky browser design targets --pane <pane-id>
+quirky browser design format --payload '<payload-json>'
+quirky browser design send --pane <pane-id> --annotations '<annotations-json>' --session <session-id>
+```
+
+The public UI command `quirky.browser/design` accepts `grab`, `annotate`, `draw`, or `cancel` for the focused Native pane. Native Draw returns the documented SDK capability limit.
+
 ## API and command surface
 
 The automation methods are `profileList`, `profileCreate`, `tabList`, `tabShow`, `tabCurrent`, `tabCreate`, `tabSwitch`, `tabClose`, `goto`, `eval`, `snapshot`, `fill`, `click`, `screenshot`, and `exec`. Browser preferences add `preferencesState`, `profileSet` and `openLink`; profile selection targets a hosted Browser **pane**, not an unscoped automation page.
 
 Pane methods are `paneOpen`, `paneState`, `paneNavigate`, `paneControl`, `paneReport`, `paneClose`, `paneSuggestions`, `paneWatch`, `paneWatchStop`, `paneFrameAck`, `paneInput`, `paneRespond`, and `paneDownload`; they use the same Browser CLI group.
 
-`paneClose` returns boolean `true` for direct calls and terminal hosted-tab close hooks. Its `fromTab` and `tabId` fields are reserved for the terminal plugin's validated pre-close callback.
+Design methods are `designArm`, `designRead`, `designHover`, `designCancel`, `designCapture`, `designFormat`, `designTargets`, and `designSend`.
 
 Page commands support navigation, serializable JavaScript evaluation, accessibility snapshots, input fill, selector or current snapshot-reference click, and viewport PNG/JPEG screenshots. Snapshot references are page- and generation-bound; navigation, actual helper-tab switches, closure, and browser epoch loss invalidate them. `exec` is shell-free and accepts only `goto`, `eval`, `snapshot`, `fill`, `click`, and viewport `screenshot`; the documented `open` and `navigate` aliases normalize to `goto`. It cannot access arbitrary helper commands.
 

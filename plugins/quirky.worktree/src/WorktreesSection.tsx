@@ -18,6 +18,7 @@ import { TrustDialog } from './TrustDialog'
 import { UpdateDialog } from './UpdateDialog'
 import { useSidebarActivity } from './useSidebarActivity'
 import { useTree } from './useTree'
+import { useLoopStatus } from './useLoopStatus'
 
 import type { MembershipTarget } from './membership'
 
@@ -64,6 +65,7 @@ export function WorktreesSection({ context, report, requests }: Props) {
   const selectedId = selectedWorktree(layout)
 
   const activity = useSidebarActivity(context, selectedId, loaded)
+  const loopStatus = useLoopStatus(context, worktrees, loaded)
   const selectedInstance = worktrees.find((worktree) => worktree.id === selectedId)?.instanceId
   const activityProjection = activity.projection
   const activityIsCurrent = activityProjection !== null && (
@@ -146,9 +148,10 @@ export function WorktreesSection({ context, report, requests }: Props) {
       dropPreview,
       now,
       dialog: front,
+      loopStatus,
       notices: kept.map((item) => ({ kind: 'kept-branch', branch: item.branch, repoId: item.repoId }))
     })
-  }, [repos, groups, shown, sessions, selectedId, pending, visibleIds, currentProjection, activity.status, activity.error, separatorState, dropPreview, dialog, trust, fallbacks, kept, now])
+  }, [repos, groups, shown, sessions, selectedId, pending, visibleIds, currentProjection, activity.status, activity.error, separatorState, dropPreview, dialog, trust, fallbacks, kept, now, loopStatus])
 
   useEffect(() => {
     if (!loaded) return
@@ -226,7 +229,7 @@ export function WorktreesSection({ context, report, requests }: Props) {
     dialog?.kind === 'delete' && dialog.withDescendants && target
       ? (allRows.find((row) => row.worktree.id === target.id)?.descendants ?? [])
           .map((id) => worktrees.find((worktree) => worktree.id === id))
-          .filter((worktree): worktree is Worktree => worktree !== undefined)
+          .filter((worktree): worktree is NonNullable<typeof worktree> => worktree !== undefined)
       : undefined
   const trustRepo = trust ? repos.find((repo) => repo.id === trust.request.repoId) : undefined
 
@@ -251,6 +254,7 @@ export function WorktreesSection({ context, report, requests }: Props) {
           requestDelete={requestDelete}
           onDropPreviewChange={changeDropPreview}
           onSeparatorStateChange={changeSeparatorState}
+          loopsByWorktree={loopStatus.byWorktree}
         />
       </div>
       <Notices context={context} kept={kept} onDismiss={dismissKept} />

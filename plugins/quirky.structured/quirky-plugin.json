@@ -10,7 +10,7 @@
     "method": [
       {
         "id": "create",
-        "description": "Starts a structured (no PTY) Claude or Codex conversation. `deferStart` reserves a live session and lease without an initial turn; otherwise `prompt` is required. Extra arguments are refused.",
+        "description": "Starts a structured (no PTY) Claude or Codex conversation, optionally with model and effort picks. `deferStart` reserves a live session and lease without an initial turn; otherwise `prompt` is required. Extra arguments are refused.",
         "params": {
           "type": "object",
           "properties": {
@@ -24,6 +24,8 @@
             "deferStart": { "type": "boolean", "description": "Reserve the live structured session and lease without sending an initial turn." },
             "title": { "type": "string", "description": "Optional session title." },
             "model": { "type": "string", "description": "A model ID from the agent's catalog, 1 to 128 characters." },
+            "lifetime": { "type": "string", "enum": ["plugin"], "description": "Plugin callers only: stop this live connection when its authenticated creating plugin is disabled or removed. Omit for an independent session." },
+            "lifetimeKey": { "type": "string", "description": "With plugin lifetime, groups this connection under the creating plugin's opaque resource key (1 to 128 characters, validated at runtime)." },
             "options": {
               "type": "object",
               "additionalProperties": true,
@@ -95,7 +97,9 @@
           "type": "object",
           "properties": {
             "session": { "type": "string", "description": "The structured session to resume." },
-            "prompt": { "type": "string", "description": "Optional first prompt; omit to connect idle and send later." }
+            "prompt": { "type": "string", "description": "Optional first prompt; omit to connect idle and send later." },
+            "lifetime": { "type": "string", "enum": ["plugin"], "description": "Plugin callers only: bind this resumed live connection to the authenticated creating plugin's lifetime." },
+            "lifetimeKey": { "type": "string", "description": "With plugin lifetime, the creating plugin's opaque resource key (1 to 128 characters, validated at runtime)." }
           },
           "required": ["session"]
         },
@@ -141,6 +145,25 @@
             "reason": { "type": "string", "enum": ["recipient_changed", "recipient_gone"] }
           },
           "required": ["ok"]
+        }
+      },
+      {
+        "id": "stopOwned",
+        "description": "Plugin callers only: stops live connections created by this exact plugin under a resource key, including a create whose reply was lost. Session history is retained.",
+        "params": {
+          "type": "object",
+          "properties": { "key": { "type": "string", "description": "The exact creating plugin's resource key, 1 to 128 characters." } },
+          "required": ["key"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "stopped": { "type": "array", "items": { "type": "string" } },
+            "unknown": { "type": "array", "items": { "type": "string" } }
+          },
+          "required": ["stopped", "unknown"],
+          "additionalProperties": false
         }
       },
       {

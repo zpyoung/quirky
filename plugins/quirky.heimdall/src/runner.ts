@@ -3,6 +3,7 @@ import type {
   Attempt,
   BudgetUsage,
   Decision,
+  Deviation,
   DispatchResult,
   Enrollment,
   ExecuteContext,
@@ -30,6 +31,7 @@ import type {
 import { ACTIVE_TIME_CHECKPOINT_MS, ACTIVE_TIME_SAMPLE_MS, budgetGeneration, budgetUsage, openBudgetIntervals, type OpenBudgetInterval } from './budget'
 import { actionFingerprint, gateAction } from './gate'
 import { FULL_RESYNC_INTERVAL_MS, pacingDelay } from './pacing'
+import { gateOwnerAction } from './owner/gate'
 import { isCoordinatorSeatLostError } from './worker-evidence'
 
 const MAX_ACTIONS_PER_TICK = 32
@@ -143,6 +145,7 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
   let consecutiveGateHolds = 0
   let activeAbort: AbortController | null = null
   let recoveringThisTick = false
+  let ownerWakePending = false
   const lastWorkerProofAtMs = new Map<string, number>()
 
   function changed(): void {
@@ -233,6 +236,15 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
     const saved = store.append(watcherId, { ...entry, atMs: entry.atMs ?? now() })
     changed()
     return saved
+  }
+
+  function queueOwnerDeviation(deviation: Deviation, version: number): boolean {
+    const eventId = `owner-input:${watcherId}:${hash(deviation.naturalKey)}`
+    if (latestByEventId(store.journal(watcherId), eventId)) return false
+    return appendEntry({
+      kind: 'owner-deviation-input', class: 'fact', origin: 'owner', resolved: false,
+      eventId, deviation
+    }, version, { idempotent: true }) !== null
   }
 
   function attemptRevision(
@@ -772,6 +784,12 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
     })
     if (verdict.reason === 'awaiting-approval') approvalEscalation(action, detail, version)
     const fingerprint = actionFingerprint(action)
+    if (options.owner && store.get(watcherId)?.owner && typeof action.ownerReportKey !== 'string') {
+      if (queueOwnerDeviation({
+        kind: 'gate-held', naturalKey: `gate-held:${hash(`${fingerprint}:${verdict.reason}`)}`,
+        detail: `${action.kind}: ${detail ?? verdict.reason}`
+      }, version)) ownerWakePending = true
+    }
     appendEntry({
       kind: 'evidence',
       class: 'fact',
@@ -787,7 +805,7 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
       }
     }, version, { idempotent: true })
     consecutiveGateHolds += 1
-    if (verdict.verdict === 'escalate' || verdict.reason === 'awaiting-approval') {
+    if (verdict.verdict === 'escalate') {
       updateStatus('escalated', verdict.reason, detail)
       trace.exitPath = 'gate-escalated'
     } else {
@@ -812,7 +830,8 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
     if (!latest || latest.terminalAtMs !== null) return null
     const journal = store.journal(watcherId)
     const budget = budgetWithPolicy(latest, journal, now())
-    const verdict = gateAction({ action, snapshot, enrollment: latest, journal, budget, stopPredicateFired: stopFired, ignoreAttemptId })
+    const nativeVerdict = gateAction({ action, snapshot, enrollment: latest, journal, budget, stopPredicateFired: stopFired, ignoreAttemptId })
+    const verdict = nativeVerdict.verdict === 'allow' ? gateOwnerAction(latest, action, journal) : nativeVerdict
     return { enrollment: latest, journal, budget, verdict }
   }
 
@@ -891,7 +910,10 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
     version: number
   ): Promise<void> {
     if (snapshot.freshness !== 'live' || !kind.resolveOutcome || !isCurrent(version)) return
-    const unresolved = latestAttempts(store.journal(watcherId)).filter(unresolvedAttempt)
+    const unresolved = latestAttempts(store.journal(watcherId)).filter((attempt) =>
+      unresolvedAttempt(attempt) && !(attempt.state === 'running' && attempt.dispatchId) &&
+      (typeof attempt.action.ownerReportKey !== 'string' || attempt.action.ownerKindAction === true)
+    )
     for (const attempt of unresolved) {
       if (!isCurrent(version)) return
       const latest = store.get(watcherId)
@@ -972,6 +994,12 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
     if (!isCurrent(version)) return false
     const journal = store.journal(watcherId)
     const seenEventId = `mailbox:${message.id}`
+    if (message.dispatchId && latestAttempts(journal).some(attempt => attempt.dispatchId === message.dispatchId)) {
+      appendEntry({
+        kind: 'owner-worker-progress', class: 'fact', origin: 'owner', resolved: true,
+        eventId: `owner-progress:${watcherId}:${message.id}`, dispatchId: message.dispatchId, messageId: message.id
+      }, version, { idempotent: true })
+    }
     if (message.type === 'worker_done') {
       if (!message.dispatchId || (message.outcome !== 'succeeded' && message.outcome !== 'failed')) {
         appendEntry({
@@ -1071,6 +1099,14 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
       }, version, { idempotent: true })
       const current = store.get(watcherId)
       if (current?.parkReason === reason) resumeAfterResolution(current, reason, version)
+      return true
+    }
+    if (store.get(watcherId)?.owner && options.owner) {
+      queueOwnerDeviation({
+        kind: message.type === 'question' ? 'worker-question' : 'worker-escalation',
+        naturalKey: `${message.type}:${message.id}`, detail: message.body, messageId: message.id,
+        ...(message.dispatchId ? { dispatchId: message.dispatchId } : {})
+      }, version)
       return true
     }
 
@@ -1179,6 +1215,16 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
     let failed = false
     let terminalSummary: TerminalSummary | null = null
     let stopPredicateFired = false
+    let stopDeviation: Deviation | undefined
+    let ownerProposal: KernelAction | undefined
+    let ownerCheckAtMs: number | undefined
+    const ownerCanDispatch = () => isCurrent(version) && controlPendingCount === 0
+    const reconcileOwner = async (candidate: Enrollment, observed: Snapshot, deviation?: Deviation) => {
+      if (!options.owner) return undefined
+      const result = await options.owner.step(candidate, observed, deviation, ownerCanDispatch)
+      if (result.nextCheckAtMs !== undefined) ownerCheckAtMs = Math.min(ownerCheckAtMs ?? Infinity, result.nextCheckAtMs)
+      return result
+    }
     try {
       current = store.get(watcherId)
       if (!current || current.terminalAtMs !== null) {
@@ -1284,15 +1330,21 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
           gateHeld = true
           updateStatus('held', 'stop-predicate-deferred', `${stopResult.state}: ${stopResult.reason}`)
         } else {
+          await options.owner?.onTerminal?.(watcherId)
+          if (!isCurrent(version)) { trace.exitPath = 'suspended'; return }
           terminalSummary = saveTerminal(current, stopResult, trace, version)
           if (!terminalSummary) trace.exitPath = 'not-current'
           return
         }
       } else if (stopResult?.kind === 'park') {
-        park(current, stopResult.reason, stopResult.detail, version)
-        trace.decision = { action: null, reason: stopResult.reason, detail: stopResult.detail }
-        trace.exitPath = 'parked'
-        return
+        if (current.owner && options.owner && stopResult.deviation) {
+          stopDeviation = stopResult.deviation
+        } else {
+          park(current, stopResult.reason, stopResult.detail, version)
+          trace.decision = { action: null, reason: stopResult.reason, detail: stopResult.detail }
+          trace.exitPath = 'parked'
+          return
+        }
       }
 
       current = store.get(watcherId)
@@ -1313,12 +1365,23 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
         updateStatus('acting', 'budget-draining')
         return
       }
-      // Owner-step integration belongs after stop/budget checks and before disabled/paused gating.
+      const ownerResult = await reconcileOwner(current, snapshot, stopDeviation)
+      if (!isCurrent(version)) { trace.exitPath = 'suspended'; return }
+      current = store.get(watcherId)
+      if (!current) { trace.exitPath = 'not-current'; return }
+      ownerProposal = ownerResult?.action
+      if (ownerResult?.handled && !ownerProposal) {
+        trace.decision = { action: null, reason: ownerResult.reason ?? 'owner-waiting' }
+        trace.exitPath = current.parkReason ? 'parked' : 'gate-held'
+        gateHeld = true
+        updateStatus(current.parkReason ? 'parked' : 'held', current.parkReason ?? ownerResult.reason ?? 'owner-waiting', current.haltReason ?? undefined)
+        return
+      }
 
       if (!current.enabled || current.paused) {
-        trace.decision = { action: null, reason: current.paused ? 'paused' : 'disabled', detail: current.haltReason ?? undefined }
-        trace.exitPath = current.paused ? 'gate-held' : 'disabled'
-        updateStatus(current.paused ? 'held' : 'disabled', current.paused ? 'paused' : current.haltReason ?? 'disabled')
+        trace.decision = { action: null, reason: current.parkReason ?? (current.paused ? 'paused' : 'disabled'), detail: current.haltReason ?? undefined }
+        trace.exitPath = current.parkReason ? 'parked' : current.paused ? 'gate-held' : 'disabled'
+        updateStatus(current.parkReason ? 'parked' : current.paused ? 'held' : 'disabled', current.parkReason ?? (current.paused ? 'paused' : current.haltReason ?? 'disabled'))
         return
       }
 
@@ -1329,7 +1392,9 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
         journal = store.journal(watcherId)
         budget = budgetWithPolicy(current, journal, now())
         trace.budget = budget
-        const decision: Decision = await kind.decide(snapshot, journal, current)
+        const ownerAction = ownerProposal !== undefined
+        const decision: Decision = ownerProposal ? { action: ownerProposal } : await kind.decide(snapshot, journal, current)
+        ownerProposal = undefined
         if (!isCurrent(version)) { trace.exitPath = 'suspended'; break }
         trace.decision = decision
         recordConsidered(trace, decision.considered)
@@ -1344,15 +1409,14 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
               resolved: true,
               eventId: `deviation:${watcherId}:${trace.seq}:${hash(JSON.stringify(decision.deviation))}`,
               evidenceKind: 'decision-deviation',
-              payload: {
-                kind: decision.deviation.kind,
-                ...(decision.deviation.detail ? { detail: decision.deviation.detail } : {})
-              }
+              payload: decision.deviation
             }, version, { idempotent: true })
             trace.exitPath = 'gate-held'
             consecutiveGateHolds += 1
             gateHeld = true
             updateStatus('held', decision.deviation.kind, decision.deviation.detail)
+            await reconcileOwner(current, snapshot, decision.deviation)
+            if (!isCurrent(version)) { trace.exitPath = 'suspended'; break }
           }
           break
         }
@@ -1379,7 +1443,13 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
         if (selectedAction.visibility === 'external' && snapshot.freshness === 'cached') {
           const freshSnapshot = await readSnapshot(kind, gateState.enrollment, trace, version, true)
           if (!freshSnapshot || !isCurrent(version)) { trace.exitPath = 'suspended'; break }
-          const freshDecision = await kind.decide(freshSnapshot, store.journal(watcherId), store.get(watcherId) ?? gateState.enrollment)
+          let freshDecision: Decision
+          if (ownerAction && options.owner) {
+            const freshOwner = await reconcileOwner(store.get(watcherId) ?? gateState.enrollment, freshSnapshot)
+            freshDecision = freshOwner?.action ? { action: freshOwner.action } : { action: null, reason: freshOwner?.reason ?? 'owner-waiting' }
+          } else {
+            freshDecision = await kind.decide(freshSnapshot, store.journal(watcherId), store.get(watcherId) ?? gateState.enrollment)
+          }
           if (!isCurrent(version)) { trace.exitPath = 'suspended'; break }
           if (!freshDecision.action || actionFingerprint(freshDecision.action) !== fingerprint || freshSnapshot.freshness !== 'live') {
             abandon(selectedAction, 'workspace-moved', 'Cached external decision did not survive a live redecision.', version)
@@ -1554,7 +1624,9 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
         let executionError: unknown
         let executeFailed = false
         try {
-          result = await kind.execute(selectedAction, executeContext)
+          result = ownerAction && options.owner
+            ? await options.owner.execute(selectedAction, executeContext)
+            : await kind.execute(selectedAction, executeContext)
         } catch (error) {
           executeFailed = true
           executionError = error
@@ -1613,6 +1685,7 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
           trace.exitPath = 'acted'
           current = store.get(watcherId)
           if (current) statusValue = latestStatusFromJournal(current, store.journal(watcherId))
+          if (current && ownerAction) await reconcileOwner(current, snapshot)
           const postDispatchStop = await evaluateStop(kind, snapshot, current ?? beforeEffect.enrollment, version)
           if (!isCurrent(version)) { trace.exitPath = 'suspended'; break }
           if (postDispatchStop?.kind === 'terminal') {
@@ -1622,9 +1695,15 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
             gateHeld = true
             updateStatus('held', 'stop-predicate-deferred', postDispatchStop.reason)
           } else if (postDispatchStop?.kind === 'park') {
-            park(current ?? beforeEffect.enrollment, postDispatchStop.reason, postDispatchStop.detail, version)
-            trace.decision = { action: null, reason: postDispatchStop.reason, detail: postDispatchStop.detail }
-            trace.exitPath = 'parked'
+            if ((current ?? beforeEffect.enrollment).owner && options.owner && postDispatchStop.deviation) {
+              if (queueOwnerDeviation(postDispatchStop.deviation, version)) ownerWakePending = true
+              trace.decision = { action: null, deviation: postDispatchStop.deviation }
+              trace.exitPath = 'gate-held'
+            } else {
+              park(current ?? beforeEffect.enrollment, postDispatchStop.reason, postDispatchStop.detail, version)
+              trace.decision = { action: null, reason: postDispatchStop.reason, detail: postDispatchStop.detail }
+              trace.exitPath = 'parked'
+            }
           }
           break
         }
@@ -1663,6 +1742,12 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
         closeInterval(actionIntervalId, 'settled', now(), version)
         trace.exitPath = 'acted'
         actionCompleted = true
+        if (ownerAction) {
+          const latest = store.get(watcherId)
+          if (latest) await reconcileOwner(latest, snapshot)
+          if (!isCurrent(version)) { trace.exitPath = 'suspended'; break }
+          immediateRetick = true
+        }
 
         current = store.get(watcherId)
         if (!current) { trace.exitPath = 'not-current'; break }
@@ -1678,15 +1763,24 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
             updateStatus('held', 'stop-predicate-deferred', `${stopResult.state}: ${stopResult.reason}`)
             break
           }
+          await options.owner?.onTerminal?.(watcherId)
+          if (!isCurrent(version)) { trace.exitPath = 'suspended'; break }
           terminalSummary = saveTerminal(current, stopResult, trace, version)
           break
         }
         if (stopResult?.kind === 'park') {
-          park(current, stopResult.reason, stopResult.detail, version)
-          trace.decision = { action: null, reason: stopResult.reason, detail: stopResult.detail }
-          trace.exitPath = 'parked'
+          if (current.owner && options.owner && stopResult.deviation) {
+            if (queueOwnerDeviation(stopResult.deviation, version)) ownerWakePending = true
+            trace.decision = { action: null, deviation: stopResult.deviation }
+            trace.exitPath = 'gate-held'
+          } else {
+            park(current, stopResult.reason, stopResult.detail, version)
+            trace.decision = { action: null, reason: stopResult.reason, detail: stopResult.detail }
+            trace.exitPath = 'parked'
+          }
           break
         }
+        if (ownerAction) break
       }
       if (actionCount === MAX_ACTIONS_PER_TICK && trace.exitPath === 'acted') {
         trace.decision = { action: null, reason: 'action-limit', detail: `Tick stopped after ${MAX_ACTIONS_PER_TICK} actions.` }
@@ -1750,6 +1844,12 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
       if (actionCompleted && !failed && tier !== 'stopped') immediateRetick = true
       const delayMs = pacingDelay({ tier, nowMs: now(), lastLiveReadAtMs, consecutiveErrors, consecutiveGateHolds })
       let scheduledDelay = immediateRetick ? 0 : delayMs
+      if (!terminalSummary && ownerCheckAtMs !== undefined) {
+        const ownerDelay = Math.max(0, ownerCheckAtMs - now())
+        scheduledDelay = scheduledDelay === null ? ownerDelay : Math.min(scheduledDelay, ownerDelay)
+      }
+      if (ownerWakePending && !terminalSummary) scheduledDelay = 0
+      ownerWakePending = false
       trace.pacing = { tier, delayMs: scheduledDelay }
       trace.runner = {
         ...statusValue,
