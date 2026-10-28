@@ -16,7 +16,7 @@ import {
   latestAutomationOccurrenceAtOrBefore,
   nextAutomationOccurrenceAfter
 } from './schedule'
-import { AutomationStoreError, createAutomationStore, migrations } from './store'
+import { AutomationStoreError, PrunedAutomationOccurrenceError, createAutomationStore, migrations } from './store'
 
 const TICK_INTERVAL_MS = 60_000
 const MISSED_JITTER_ALLOWANCE_MS = 120_000
@@ -34,6 +34,7 @@ const MAX_MODEL_LENGTH = 128
 const MAX_OPTION_COUNT = 16
 const MAX_OPTION_VALUE_LENGTH = 128
 const MAX_OUTPUT_BYTES = 256 * 1024
+const MAX_JSON_RECORD_BYTES = 64 * 1024
 const MAX_SAFE_GRACE_MINUTES = Math.floor(Number.MAX_SAFE_INTEGER / 60_000)
 const RUN_STATUSES: Record<AutomationRun['status'], true> = {
   pending: true, dispatching: true, dispatched: true, completed: true, skipped_precheck: true,
@@ -186,6 +187,15 @@ function objectOrNull(context: AutomationServiceContext, value: unknown, label: 
 function normalizedContext(context: AutomationServiceContext, value: unknown, label: string): Params | null {
   const result = objectOrNull(context, value, label)
   if (result === null) return null
+  let serialized: string
+  try {
+    serialized = JSON.stringify(value)
+  } catch {
+    throw context.error('invalid-params', `${label} must contain serializable JSON.`)
+  }
+  if (Buffer.byteLength(serialized, 'utf8') > MAX_JSON_RECORD_BYTES) {
+    throw context.error('invalid-params', `${label} must be at most ${MAX_JSON_RECORD_BYTES} JSON bytes.`)
+  }
   // Copy enumerable JSON fields so the service never retains caller-owned mutable records.
   return { ...result }
 }
@@ -461,7 +471,7 @@ function runPatch(context: AutomationServiceContext, value: unknown): Automation
   if (patch.launchSettings !== undefined) result.launchSettings = normalizedContext(context, patch.launchSettings, 'patch.launchSettings')
   if (patch.outputSnapshot !== undefined) result.outputSnapshot = outputSnapshot(context, patch.outputSnapshot)
   for (const name of ['precheckResult', 'usage'] as const) {
-    if (patch[name] !== undefined) result[name] = objectOrNull(context, patch[name], `patch.${name}`)
+    if (patch[name] !== undefined) result[name] = normalizedContext(context, patch[name], `patch.${name}`)
   }
   if (patch.error !== undefined) {
     if (patch.error === null) result.error = null
@@ -691,16 +701,23 @@ export function createAutomationService(context: AutomationServiceContext, clock
         const grace = current.missedRunGraceMinutes * 60_000
         const missed = now - scheduledFor > grace + MISSED_JITTER_ALLOWANCE_MS
         const run = database.transaction(() => {
-          const created = store.createRun(current.id, {
-            trigger: 'scheduled',
-            scheduledFor,
-            ...(missed ? { status: 'skipped_missed' as const, error: MISSED_RUN_ERROR } : {}),
-            now
-          })
-          store.update(current.id, { nextRunAt, lastRunAt: now, updatedAt: now })
+          let created: AutomationRun | null
+          try {
+            created = store.createRun(current.id, {
+              trigger: 'scheduled',
+              scheduledFor,
+              ...(missed ? { status: 'skipped_missed' as const, error: MISSED_RUN_ERROR } : {}),
+              now
+            })
+          } catch (error) {
+            if (!(error instanceof PrunedAutomationOccurrenceError)) throw error
+            created = null
+          }
+          store.update(current.id, { nextRunAt, ...(created ? { lastRunAt: now } : {}), updatedAt: now })
           return created
         })
-        mutationEvent(context, 'run', current.id, { runId: run.id, trigger: 'scheduled' })
+        if (run) mutationEvent(context, 'run', current.id, { runId: run.id, trigger: 'scheduled' })
+        else mutationEvent(context, 'definition', current.id, { action: 'advanced' })
       }).catch((error: unknown) => {
         context.log(`scheduler failed for ${definition.id}: ${error instanceof Error ? error.message : String(error)}`)
       })))

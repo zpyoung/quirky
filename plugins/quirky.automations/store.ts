@@ -23,12 +23,20 @@ export class AutomationStoreError extends Error {
   }
 }
 
+export class PrunedAutomationOccurrenceError extends AutomationStoreError {
+  constructor() {
+    super('conflict', 'This scheduled occurrence has already been processed and is no longer retained.')
+    this.name = 'PrunedAutomationOccurrenceError'
+  }
+}
+
 export const migrations: StoreMigration[] = [
   `CREATE TABLE automation_definitions (
     id TEXT PRIMARY KEY NOT NULL,
     creation_key TEXT UNIQUE,
     name TEXT NOT NULL,
     next_run_number INTEGER NOT NULL DEFAULT 1,
+    pruned_scheduled_through INTEGER,
     data TEXT NOT NULL
   );
   CREATE TABLE automation_runs (
@@ -43,11 +51,11 @@ export const migrations: StoreMigration[] = [
     UNIQUE (automation_id, run_number)
   );
   CREATE INDEX automation_runs_history ON automation_runs (automation_id, created_at DESC, id ASC);
+  CREATE UNIQUE INDEX automation_runs_scheduled ON automation_runs (automation_id, scheduled_for) WHERE trigger = 'scheduled';
   CREATE TABLE automation_occurrences (
     automation_id TEXT NOT NULL REFERENCES automation_definitions(id) ON DELETE CASCADE,
     scheduled_for INTEGER NOT NULL,
     run_id TEXT NOT NULL,
-    snapshot TEXT NOT NULL,
     PRIMARY KEY (automation_id, scheduled_for)
   );
   CREATE INDEX automation_occurrences_run ON automation_occurrences (run_id);`
@@ -126,31 +134,6 @@ function capOutputSnapshot(run: AutomationRun): AutomationRun {
   }
 }
 
-// Occurrence keys outlive retained runs; keep only compact identity and lifecycle metadata here.
-function occurrenceSnapshot(run: AutomationRun): AutomationRun {
-  return {
-    id: run.id,
-    automationId: run.automationId,
-    title: run.title.slice(0, 256),
-    runNumber: run.runNumber,
-    scheduledFor: run.scheduledFor,
-    trigger: run.trigger,
-    status: run.status,
-    createdAt: run.createdAt,
-    ...(run.startedAt === undefined ? {} : { startedAt: run.startedAt }),
-    ...(run.dispatchedAt === undefined ? {} : { dispatchedAt: run.dispatchedAt }),
-    ...(run.completedAt === undefined ? {} : { completedAt: run.completedAt }),
-    occurrenceCount: run.occurrenceCount,
-    ...(run.lastOccurrenceAt === undefined ? {} : { lastOccurrenceAt: run.lastOccurrenceAt }),
-    runContext: null,
-    sourceContext: null,
-    workspaceId: null,
-    sessionKind: 'structured',
-    sessionId: null,
-    launchSettings: null,
-    error: run.error === null ? null : run.error.slice(0, 512)
-  }
-}
 
 function normalizeWorkspacePolicy(definition: AutomationDefinition): AutomationDefinition {
   const normalized = { ...definition }
@@ -164,9 +147,9 @@ function normalizeWorkspacePolicy(definition: AutomationDefinition): AutomationD
   return normalized
 }
 
-type DefinitionRow = { id: string; creation_key: string | null; name: string; next_run_number: number; data: string }
+type DefinitionRow = { id: string; creation_key: string | null; name: string; next_run_number: number; pruned_scheduled_through: number | null; data: string }
 type RunRow = { id: string; automation_id: string; run_number: number; scheduled_for: number; created_at: number; trigger: string; status: string; data: string }
-type OccurrenceRow = { run_id: string; snapshot: string }
+type OccurrenceRow = { run_id: string }
 
 type ParsedCursor = { kind: 'offset'; offset: number } | { kind: 'key'; createdAt: number; id: string }
 
@@ -211,7 +194,7 @@ export function createAutomationStore(database: PluginStore): AutomationStore {
   const runFromRow = (row: Pick<RunRow, 'data'>): AutomationRun => decode<AutomationRun>(row.data)
 
   const definitionRow = (id: string): DefinitionRow | null =>
-    database.get<DefinitionRow>('SELECT id, creation_key, name, next_run_number, data FROM automation_definitions WHERE id = ?', id)
+    database.get<DefinitionRow>('SELECT id, creation_key, name, next_run_number, pruned_scheduled_through, data FROM automation_definitions WHERE id = ?', id)
 
   const runRow = (id: string): RunRow | null =>
     database.get<RunRow>(
@@ -221,18 +204,28 @@ export function createAutomationStore(database: PluginStore): AutomationStore {
 
   const runByOccurrence = (automationId: string, scheduledFor: number): AutomationRun | null => {
     const occurrence = database.get<OccurrenceRow>(
-      'SELECT run_id, snapshot FROM automation_occurrences WHERE automation_id = ? AND scheduled_for = ?',
+      'SELECT run_id FROM automation_occurrences WHERE automation_id = ? AND scheduled_for = ?',
       automationId,
       scheduledFor
     )
-    if (!occurrence) return null
-    const retained = runRow(occurrence.run_id)
-    return retained ? runFromRow(retained) : decode<AutomationRun>(occurrence.snapshot)
+    const retained = occurrence ? runRow(occurrence.run_id) : database.get<RunRow>(
+      'SELECT * FROM automation_runs WHERE automation_id = ? AND trigger = ? AND scheduled_for = ?',
+      automationId, 'scheduled', scheduledFor
+    )
+    return retained ? runFromRow(retained) : null
   }
+
+  const assertUnprocessedOccurrence = (automationId: string, scheduledFor: number): void => {
+    const definition = definitionRow(automationId)
+    if (!definition) throw new AutomationStoreError('not-found', `Automation ${automationId} was not found`)
+    if (definition.pruned_scheduled_through !== null && scheduledFor <= definition.pruned_scheduled_through) {
+      throw new PrunedAutomationOccurrenceError()
+    }
+  }
+
 
   const saveRun = (run: AutomationRun): void => {
     const data = encode(run)
-    const snapshot = encode(occurrenceSnapshot(run))
     database.run(
       `UPDATE automation_runs
        SET scheduled_for = ?, created_at = ?, trigger = ?, status = ?, data = ?
@@ -244,7 +237,6 @@ export function createAutomationStore(database: PluginStore): AutomationStore {
       data,
       run.id
     )
-    database.run('UPDATE automation_occurrences SET snapshot = ? WHERE run_id = ?', snapshot, run.id)
   }
 
   const touchDefinition = (automationId: string, now: number): void => {
@@ -267,7 +259,7 @@ export function createAutomationStore(database: PluginStore): AutomationStore {
        WHERE id IN (
          SELECT id FROM (
            SELECT id, ROW_NUMBER() OVER (
-             PARTITION BY automation_id ORDER BY created_at DESC, id ASC
+             PARTITION BY automation_id ORDER BY created_at DESC, scheduled_for DESC, id ASC
            ) AS final_position
            FROM automation_runs
            WHERE status IN (${finalStatuses})
@@ -275,6 +267,26 @@ export function createAutomationStore(database: PluginStore): AutomationStore {
          WHERE final_position > ${MAX_FINAL_RUNS}
        )`
     )
+    const pruned = database.all<{ automation_id: string; scheduled_for: number }>(
+      `DELETE FROM automation_occurrences
+       WHERE run_id NOT IN (SELECT id FROM automation_runs) OR rowid IN (
+         SELECT occurrence_rowid FROM (
+           SELECT occurrence.rowid AS occurrence_rowid,
+             ROW_NUMBER() OVER (PARTITION BY occurrence.automation_id ORDER BY occurrence.scheduled_for DESC) AS position
+           FROM automation_occurrences AS occurrence
+           JOIN automation_runs AS run ON run.id = occurrence.run_id
+           WHERE run.status IN (${finalStatuses})
+         ) WHERE position > ${MAX_FINAL_RUNS}
+       ) RETURNING automation_id, scheduled_for`
+    )
+    for (const occurrence of pruned) {
+      database.run(
+        `UPDATE automation_definitions
+         SET pruned_scheduled_through = MAX(COALESCE(pruned_scheduled_through, ?), ?)
+         WHERE id = ?`,
+        occurrence.scheduled_for, occurrence.scheduled_for, occurrence.automation_id
+      )
+    }
   }
 
   const updateRunWithinTransaction = (id: string, patch: AutomationRunPatch, now: number): AutomationRun => {
@@ -313,6 +325,7 @@ export function createAutomationStore(database: PluginStore): AutomationStore {
     if (input.trigger === 'scheduled') {
       const existing = runByOccurrence(automationId, input.scheduledFor)
       if (existing) return existing
+      assertUnprocessedOccurrence(automationId, input.scheduledFor)
     }
     const status = input.status ?? 'pending'
     if (!isRunStatus(status)) throw new AutomationStoreError('invalid-params', 'Invalid automation run status')
@@ -365,12 +378,11 @@ export function createAutomationStore(database: PluginStore): AutomationStore {
     )
     if (cappedRun.trigger === 'scheduled') {
       database.run(
-        `INSERT INTO automation_occurrences (automation_id, scheduled_for, run_id, snapshot)
-         VALUES (?, ?, ?, ?)`,
+        `INSERT INTO automation_occurrences (automation_id, scheduled_for, run_id)
+         VALUES (?, ?, ?)`,
         automationId,
         cappedRun.scheduledFor,
-        cappedRun.id,
-        encode(occurrenceSnapshot(cappedRun))
+        cappedRun.id
       )
     }
     touchDefinition(automationId, input.now)
@@ -392,7 +404,7 @@ export function createAutomationStore(database: PluginStore): AutomationStore {
 
     findByCreationKey(key) {
       const row = database.get<DefinitionRow>(
-        'SELECT id, creation_key, name, next_run_number, data FROM automation_definitions WHERE creation_key = ?',
+        'SELECT id, creation_key, name, next_run_number, pruned_scheduled_through, data FROM automation_definitions WHERE creation_key = ?',
         key
       )
       return row ? definitionFromRow(row) : null
@@ -524,6 +536,7 @@ export function createAutomationStore(database: PluginStore): AutomationStore {
         if (!definitionRow(automationId)) throw new AutomationStoreError('not-found', `Automation ${automationId} was not found`)
         const duplicate = runByOccurrence(automationId, scheduledFor)
         if (duplicate) return duplicate
+        assertUnprocessedOccurrence(automationId, scheduledFor)
 
         const newest = database.get<RunRow>(
           `SELECT id, automation_id, run_number, scheduled_for, created_at, trigger, status, data
@@ -541,12 +554,11 @@ export function createAutomationStore(database: PluginStore): AutomationStore {
             }
             saveRun(folded)
             database.run(
-              `INSERT INTO automation_occurrences (automation_id, scheduled_for, run_id, snapshot)
-               VALUES (?, ?, ?, ?)`,
+              `INSERT INTO automation_occurrences (automation_id, scheduled_for, run_id)
+               VALUES (?, ?, ?)`,
               automationId,
               scheduledFor,
-              folded.id,
-              encode(occurrenceSnapshot(folded))
+              folded.id
             )
             touchDefinition(automationId, now)
             pruneWithinTransaction()

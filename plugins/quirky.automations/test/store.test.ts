@@ -163,6 +163,25 @@ describe('automation store persistence and retention', () => {
     expect(newAgain).toMatchObject({ workspaceMode: 'new_per_run', workspaceId: null, reuseSession: false })
   })
 
+  test('retention breaks equal creation times by scheduled occurrence before run ID', () => {
+    const item = freshFixture()
+    const { store, database } = item
+    store.insert(definition())
+    const olderOccurrence = createRun(store, 'automation-1', { status: 'completed', now: 1000, scheduledFor: 100 })
+    const newerOccurrence = createRun(store, 'automation-1', { status: 'completed', now: 1000, scheduledFor: 200 })
+    // Fixed persisted IDs oppose occurrence order so this exercises the retention boundary deterministically.
+    database.run('UPDATE automation_runs SET id = ?, data = ? WHERE id = ?',
+      'a-older-occurrence', JSON.stringify({ ...olderOccurrence, id: 'a-older-occurrence' }), olderOccurrence.id)
+    database.run('UPDATE automation_runs SET id = ?, data = ? WHERE id = ?',
+      'z-newer-occurrence', JSON.stringify({ ...newerOccurrence, id: 'z-newer-occurrence' }), newerOccurrence.id)
+    for (let index = 0; index < 99; index++) {
+      createRun(store, 'automation-1', { status: 'completed', now: 2000 + index, scheduledFor: 1000 + index })
+    }
+    expect(store.getRun('a-older-occurrence')).toBeNull()
+    expect(store.getRun('z-newer-occurrence')).toMatchObject({ scheduledFor: 200, createdAt: 1000 })
+    expect(store.runs('automation-1', 100).runs).toHaveLength(100)
+  })
+
   test('retains the newest 100 final runs and every active run without reusing numbers', () => {
     const store = freshFixture().store
     store.insert(definition())
@@ -194,49 +213,38 @@ describe('automation store persistence and retention', () => {
     expect(store.runs('automation-1', 100).runs).toHaveLength(100)
   })
 
-  test('keeps scheduled occurrence deduplication after its final run is pruned', () => {
-    const store = freshFixture().store
+  test('pruned scheduled occurrences cannot be replayed after restart', () => {
+    const item = freshFixture()
+    const store = item.store
     store.insert(definition())
     const first = createRun(store, 'automation-1', { trigger: 'scheduled', scheduledFor: 100, status: 'completed', now: 100 })
     for (let index = 0; index < 100; index++) {
       createRun(store, 'automation-1', { trigger: 'scheduled', scheduledFor: 200 + index, status: 'completed', now: 200 + index })
     }
-
-    expect(store.getRun(first.id)).toBeNull()
-    const duplicate = createRun(store, 'automation-1', { trigger: 'scheduled', scheduledFor: 100, status: 'completed', now: 500 })
-    expect(duplicate).toMatchObject({ id: first.id, runNumber: first.runNumber, status: first.status, trigger: 'scheduled' })
-    expect(store.runs('automation-1', 100).runs).toHaveLength(100)
+    const reopened = item.reopen()
+    expect(reopened.getRun(first.id)).toBeNull()
+    expectStoreError(() => createRun(reopened, 'automation-1', {
+      trigger: 'scheduled', scheduledFor: 100, status: 'completed', now: 500
+    }), 'conflict')
+    const next = createRun(reopened, 'automation-1', { trigger: 'scheduled', scheduledFor: 600, now: 600 })
+    expect(next.runNumber).toBe(102)
   })
 
-  test('retention tombstones do not keep folded run output or result evidence', () => {
-    const item = freshFixture()
-    const { store, database } = item
+  test('occurrence metadata remains bounded while refusals fold and final history is pruned', () => {
+    const { store, database } = freshFixture()
     store.insert(definition())
     const folded = store.foldUnavailable('automation-1', 100, 'Host unavailable', 101)
-    const largeOutput = 'private run evidence '.repeat(5000)
-    store.updateRun(folded.id, {
-      outputSnapshot: { format: 'plain_text', content: largeOutput, capturedAt: 102, truncated: false },
-      precheckResult: { stderr: largeOutput },
-      usage: { providerSessionId: largeOutput }
-    }, 102)
-    store.foldUnavailable('automation-1', 200, 'Host unavailable', 201)
+    for (let index = 1; index <= 200; index++) {
+      store.foldUnavailable('automation-1', 100 + index, 'Host unavailable', 101 + index)
+    }
+    expect(store.getRun(folded.id)?.occurrenceCount).toBe(201)
+    expect(database.get<{ count: number }>('SELECT COUNT(*) AS count FROM automation_occurrences')?.count).toBeLessThanOrEqual(100)
     for (let index = 0; index < 100; index++) {
-      createRun(store, 'automation-1', { trigger: 'scheduled', scheduledFor: 300 + index, status: 'completed', now: 300 + index })
+      createRun(store, 'automation-1', { trigger: 'scheduled', scheduledFor: 500 + index, status: 'completed', now: 500 + index })
     }
-
     expect(store.getRun(folded.id)).toBeNull()
-    const tombstones = database.all<{ snapshot: string }>(
-      'SELECT snapshot FROM automation_occurrences WHERE run_id = ?', folded.id
-    )
-    expect(tombstones).toHaveLength(2)
-    for (const tombstone of tombstones) {
-      expect(tombstone.snapshot).not.toContain(largeOutput)
-      expect(tombstone.snapshot.length).toBeLessThan(4096)
-      const snapshot = JSON.parse(tombstone.snapshot) as Partial<AutomationRun>
-      expect(snapshot.outputSnapshot).toBeUndefined()
-      expect(snapshot.precheckResult).toBeUndefined()
-      expect(snapshot.usage).toBeUndefined()
-    }
+    expect(database.get<{ count: number }>('SELECT COUNT(*) AS count FROM automation_occurrences')?.count).toBeLessThanOrEqual(100)
+    expectStoreError(() => store.foldUnavailable('automation-1', 100, 'Host unavailable', 1000), 'conflict')
   })
 
   test('creates distinct manual runs at the same instant', () => {

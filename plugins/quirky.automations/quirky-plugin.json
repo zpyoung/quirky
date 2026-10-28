@@ -64,7 +64,7 @@
             "creationKey": { "type": "string" }, "name": { "type": "string" }, "prompt": { "type": "string" },
             "agentId": { "type": "string", "enum": ["claude", "codex"] }, "projectId": { "type": "string" },
             "workspaceMode": { "type": "string", "enum": ["existing", "new_per_run"] }, "workspaceId": {}, "baseBranch": {}, "setupDecision": {},
-            "reuseSession": { "type": "boolean" }, "runContext": {}, "sourceContext": {}, "launchOverrides": {}, "precheck": {},
+            "reuseSession": { "type": "boolean" }, "runContext": { "description": "Run metadata object or null; at most 65536 serialized UTF-8 JSON bytes." }, "sourceContext": { "description": "Source metadata object or null; at most 65536 serialized UTF-8 JSON bytes." }, "launchOverrides": {}, "precheck": {},
             "timezone": { "type": "string" }, "rrule": { "type": "string" }, "dtstart": { "type": "integer", "minimum": 0 },
             "enabled": { "type": "boolean" }, "missedRunGraceMinutes": { "type": "integer", "minimum": 0 }
           },
@@ -97,7 +97,7 @@
             "id": { "type": "string" }, "name": { "type": "string" }, "prompt": { "type": "string" },
             "agentId": { "type": "string", "enum": ["claude", "codex"] }, "projectId": { "type": "string" },
             "workspaceMode": { "type": "string", "enum": ["existing", "new_per_run"] }, "workspaceId": {}, "baseBranch": {}, "setupDecision": {},
-            "reuseSession": { "type": "boolean" }, "runContext": {}, "sourceContext": {}, "launchOverrides": {}, "precheck": {},
+            "reuseSession": { "type": "boolean" }, "runContext": { "description": "Run metadata object or null; at most 65536 serialized UTF-8 JSON bytes." }, "sourceContext": { "description": "Source metadata object or null; at most 65536 serialized UTF-8 JSON bytes." }, "launchOverrides": {}, "precheck": {},
             "timezone": { "type": "string" }, "rrule": { "type": "string" }, "dtstart": { "type": "integer", "minimum": 0 },
             "enabled": { "type": "boolean" }, "missedRunGraceMinutes": { "type": "integer", "minimum": 0 }
           },
@@ -250,8 +250,8 @@
               "type": "object",
               "properties": {
                 "status": { "type": "string", "enum": ["pending", "dispatching", "dispatched", "completed", "skipped_precheck", "skipped_missed", "skipped_unavailable", "skipped_needs_interactive_auth", "dispatch_failed"] },
-                "workspaceId": {}, "workspaceDisplayName": {}, "sessionId": {}, "launchSettings": {}, "outputSnapshot": {},
-                "precheckResult": {}, "usage": {}, "error": {}
+                "workspaceId": {}, "workspaceDisplayName": {}, "sessionId": {}, "launchSettings": { "description": "Launch metadata object or null; at most 65536 serialized UTF-8 JSON bytes." }, "outputSnapshot": {},
+                "precheckResult": { "description": "Precheck evidence object or null; at most 65536 serialized UTF-8 JSON bytes." }, "usage": { "description": "Usage evidence object or null; at most 65536 serialized UTF-8 JSON bytes." }, "error": {}
               },
               "additionalProperties": false
             }

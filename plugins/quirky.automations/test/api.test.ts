@@ -302,6 +302,97 @@ describe('automations API', () => {
     expect(result.latest).toBe(Date.parse('2026-11-01T06:30:00.000Z'))
   })
 
+  test('schedule inspector preserves cron step, day-OR and legacy input semantics', async () => {
+    const fixture = await start()
+    const inspect = (rrule: string, after: string) => call(fixture, 'quirky.automations/schedule', {
+      rrule, timezone: 'UTC', dtstart: Date.parse('2026-10-01T00:00:00Z'),
+      after: Date.parse(after), now: Date.parse(after)
+    }) as Promise<{ valid: boolean; runnable: boolean; next: number | null }>
+    const stepped = await inspect('5/20 * * * *', '2026-10-27T00:06:00Z')
+    expect(stepped.next).toBe(Date.parse('2026-10-27T00:25:00Z'))
+    const eitherDay = await inspect('0 9 1 * MON', '2026-10-27T09:00:00Z')
+    expect(eitherDay.next).toBe(Date.parse('2026-11-01T09:00:00Z'))
+    const wildcardDay = await inspect('0 9 */2 * MON', '2026-10-27T09:00:00Z')
+    expect(wildcardDay.next).toBe(Date.parse('2026-11-09T09:00:00Z'))
+    const legacy = await inspect('*/90 * * * *', '2026-10-27T00:06:00Z')
+    expect(legacy).toMatchObject({ valid: false, runnable: true, next: Date.parse('2026-10-27T01:00:00Z') })
+    const impossible = await inspect('0 9 30 2 *', '2026-10-27T00:06:00Z')
+    expect(impossible).toMatchObject({ valid: false, runnable: false, next: null })
+    await expect(call(fixture, 'quirky.automations/create', createParams({ rrule: '*/90 * * * *' })))
+      .rejects.toMatchObject({ code: RpcErrorCode.InvalidParams })
+  })
+
+  test('bounds persisted JSON metadata without rejecting the exact byte limit', async () => {
+    const fixture = await start()
+    const atLimit = { text: 'x'.repeat(64 * 1024 - 11) }
+    expect(Buffer.byteLength(JSON.stringify(atLimit))).toBe(64 * 1024)
+    const definition = await call(fixture, 'quirky.automations/create', createParams({
+      enabled: false, sourceContext: atLimit
+    })) as AutomationDefinition
+    const oversized = { text: atLimit.text + 'x' }
+    await expect(call(fixture, 'quirky.automations/edit', {
+      id: definition.id, runContext: oversized
+    })).rejects.toMatchObject({ code: RpcErrorCode.InvalidParams })
+    expect((await call(fixture, 'quirky.automations/show', { id: definition.id }) as AutomationDefinition).runContext).toBeNull()
+    const run = await call(fixture, 'quirky.automations/run', { id: definition.id }) as AutomationRun
+    for (const field of ['launchSettings', 'usage'] as const) {
+      await expect(call(fixture, 'quirky.automations/updateRun', {
+        runId: run.id, patch: { [field]: oversized }
+      })).rejects.toMatchObject({ code: RpcErrorCode.InvalidParams })
+    }
+  })
+
+  test('history pages preserve active runs while final retention advances run numbers', async () => {
+    const fixture = await start()
+    const definition = await call(fixture, 'quirky.automations/create', createParams({ enabled: false })) as AutomationDefinition
+    const finalizedIds = new Set<string>()
+    for (let number = 0; number < 101; number++) {
+      const run = await call(fixture, 'quirky.automations/run', { id: definition.id }) as AutomationRun
+      finalizedIds.add(run.id)
+      await call(fixture, 'quirky.automations/updateRun', {
+        runId: run.id, patch: { status: 'dispatch_failed', error: 'Dispatch refused before launch' }
+      })
+    }
+    const active: AutomationRun[] = []
+    for (const status of ['pending', 'dispatching', 'dispatched'] as const) {
+      let run = await call(fixture, 'quirky.automations/run', { id: definition.id }) as AutomationRun
+      if (status !== 'pending') run = await call(fixture, 'quirky.automations/claim', { runId: run.id }) as AutomationRun
+      if (status === 'dispatched') {
+        run = await call(fixture, 'quirky.automations/updateRun', {
+          runId: run.id, patch: { status, sessionId: 'recorded-structured-session' }
+        }) as AutomationRun
+      }
+      active.push(run)
+    }
+    const other = await call(fixture, 'quirky.automations/create', createParams({ name: 'Other history', enabled: false })) as AutomationDefinition
+    const foreignRun = await call(fixture, 'quirky.automations/run', { id: other.id }) as AutomationRun
+    const history: AutomationRun[] = []
+    const seenCursors = new Set<string>()
+    let cursor: string | undefined
+    do {
+      const page = await call(fixture, 'quirky.automations/runs', {
+        automationId: definition.id, limit: 17, ...(cursor === undefined ? {} : { cursor })
+      }) as AutomationRunsPage
+      history.push(...page.runs)
+      cursor = page.nextCursor ?? undefined
+      if (cursor !== undefined) {
+        expect(seenCursors.has(cursor)).toBe(false)
+        seenCursors.add(cursor)
+      }
+    } while (cursor !== undefined)
+    const retainedIds = new Set(history.map((run) => run.id))
+    expect(history).toHaveLength(103)
+    expect(retainedIds.size).toBe(103)
+    expect(history.filter((run) => finalizedIds.has(run.id))).toHaveLength(100)
+    expect(history.filter((run) => active.some((candidate) => candidate.id === run.id))).toEqual(expect.arrayContaining(active))
+    expect(retainedIds.has(foreignRun.id)).toBe(false)
+    const next = await call(fixture, 'quirky.automations/run', { id: definition.id }) as AutomationRun
+    expect(next.runNumber).toBe(105)
+    await expect(call(fixture, 'quirky.automations/runs', {
+      automationId: definition.id, cursor: 'not-a-cursor'
+    })).rejects.toMatchObject({ code: RpcErrorCode.InvalidParams })
+  })
+
   test('remove cascades run history and subsequent lookups are not-found', async () => {
     const fixture = await start()
     const definition = await call(fixture, 'quirky.automations/create', createParams({ enabled: false })) as AutomationDefinition

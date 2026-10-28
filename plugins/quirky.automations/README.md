@@ -16,9 +16,11 @@ Definition edits preserve omitted fields. Nullable fields can be cleared with `n
 
 The `quirky.automations/changed` event is emitted only after a durable definition or run mutation. Scheduled evaluation creates only the latest elapsed occurrence. It accepts lateness through the configured grace plus 120 seconds; older occurrences become `skipped_missed`. Per-definition mutation lanes prevent schedule, manual-run, claim, edit, and delete races. A malformed stored schedule is folded into a `skipped_unavailable` history row without blocking other definitions or advancing its cursor.
 
-Run history retains the 100 newest final rows per automation and preserves every active row; run numbers remain monotonic after pruning. API pages default to 100 rows and clamp limits to 1–100, use stable timestamp-and-ID cursors, and accept legacy numeric offsets. Output snapshots are capped at 256 KiB and mark `truncated` when shortened.
+Run history retains the 100 newest final rows per automation and preserves every active row; retention ties use scheduled occurrence time before ID, while history paging uses timestamp and ID. Run numbers remain monotonic after pruning. Occurrence metadata keeps at most 100 final keys plus active keys; a durable pruned-through watermark prevents replay without retaining deleted run snapshots. API pages default to 100 rows and clamp limits to 1–100, with stable timestamp-and-ID cursors and legacy numeric offsets. Output snapshots are capped at 256 KiB and mark `truncated` when shortened.
 
 Runs have `pending`, `dispatching`, `dispatched`, and terminal states. Claiming changes only `pending` to `dispatching`; the core never starts an agent. Structured providers are limited to Claude and Codex. Raw agent arguments are refused; model and option values are stored as structured overrides without catalog resolution.
+
+Run/source context, launch settings, precheck evidence, and usage objects are limited to 64 KiB each as serialized UTF-8 JSON. Oversized metadata is rejected before mutation; it does not reduce the separate output snapshot allowance.
 
 ## CLI
 

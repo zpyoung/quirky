@@ -88,7 +88,66 @@
 - **Revisit if:** platform-specific runtime evidence appears
 - **Source:** deferred: platform
 
+## D9: Distinguish retention ordering from history paging ordering
+- **Question:** Which final row survives when createdAt ties?
+- **Options:** ID order for both operations; scheduledFor then ID for retention and ID for paging
+- **Chose:** retention uses createdAt descending, scheduledFor descending, ID ascending; paging remains createdAt descending, ID ascending
+- **Why:** The feature doc explicitly distinguishes these contracts. Initial AC8 generalized the paging tie-break too broadly. A deterministic persisted-ID regression demonstrated eviction of the newer occurrence before the fix.
+- **Evidence:** automations.md Storage and retention, lines365–367; test/store.test.ts retention tie regression; initial failing run artifact84
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the feature's retention policy changes explicitly
+- **Source:** locked by automations.md
+
+## D10: Bound occurrence metadata while preserving non-replay after pruning
+- **Question:** Parent adjudication of suppressed X1: do compact per-occurrence snapshots still grow without limit?
+- **Options:** retain every compact tombstone; retain bounded keys and a durable pruning watermark
+- **Chose:** at most100 final occurrence keys plus active keys; remove orphan keys and all snapshot payloads; persist one pruned-scheduled-through watermark per definition
+- **Why:** The X refuter rejected a valid citation for an invalid reason. A direct regression observed201 metadata rows for one folded run. Retained duplicate occurrences return their real row; a non-retained timestamp at or before the pruning watermark conflicts, never reconstructs deleted evidence or launches again. Only actual pruning advances the watermark, so out-of-order retained occurrences still fold. The scheduler advances an already-processed pruned cursor without fabricating a run.
+- **Evidence:** review X.promote.json X1 and X.refute.json; test/store.test.ts bounded metadata and restart non-replay regressions; initial failing run artifact90; final57test pass artifact97
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** a consumer needs arbitrary historical occurrence lookup after explicit retention
+- **Source:** supersedes m5-automations-core D5
+
+## D11: Bound arbitrary JSON metadata separately from output snapshots
+- **Question:** Parent adjudication of suppressed X2: should context and result metadata have a byte limit?
+- **Options:** rely on transport bounds alone; cap persisted metadata records explicitly
+- **Chose:**64KiB serialized UTF-8 JSON each for runContext, sourceContext, launchSettings, precheckResult and usage; invalid-params before mutation above the limit; output keeps its independent256KiB truncation behavior
+- **Why:** A public API regression showed a65537-byte object being stored before the fix. Exact65536-byte metadata remains accepted. An initial generic-object placement also restricted output snapshots; the existing output regression caught this, and the limit moved to metadata normalization only.
+- **Evidence:** test/api.test.ts exact-limit and rejected mutation regression; initial failing run artifact88; existing output lifecycle regression; final57test pass artifact97
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** legitimate metadata needs a larger documented bound
+- **Source:** assumed — autonomous
+
+## D12: Record mechanical review PASS without claiming clean clearance
+- **Question:** How much assurance does the final round provide after refuter protocol failures?
+- **Options:** treat gate PASS as clean; disclose mechanical results and adjudicate claims directly
+- **Chose:** limited assurance; one final round only, direct parent confirmation and one fix batch for X1/X2 plus retention parity
+- **Why:** Six real Gemini high dispatches completed under STANDARD C/S/X promote/fresh-refute. C/S raised no findings. X raised two claims, both mechanically suppressed solely for citation ranges whose starts were actually valid. X refute also violated its read-only prompt by writing test-oversized.ts and result.json and executing reproductions. Both reviewer-owned files were preserved then removed; original untracked files stayed untouched. The captured production hashes stayed unchanged. Neither the100% X suppression rate nor the gate PASS proves correctness. No independent closure review is claimed for the final fix delta; focused tests and runtime verification provide its evidence.
+- **Evidence:** local audit archive `.orca/loops/omp-until-done-deaecbdd/review-evidence.tar.gz`, SHA256 `76442c560a31dc1cb215b3a8abd46c2b7412b6320fe5177ed9db3cc0f0eed8c0`; member review/integrity-limitations.json, dispatch-audit.json, C/S/X gates/manifests and raw traces; captured artifact SHA256 `15e92dfbdbe9a40ffbb841a116efde7d9522bf1890fd2408f058c2fabefc53c0`
+- **Reversibility:** easy
+- **Confidence:** high for dispatch/trace facts, limited for review assurance
+- **Revisit if:** the review harness enforces read-only execution or this feature is independently reviewed
+- **Source:** assumed — autonomous
+
+## D13: Serialize script checks with process-level smokes
+- **Question:** Does the initial script timeout represent a waived failure?
+- **Options:** waive it; inspect and rerun without concurrent process scopes
+- **Chose:** inspect the exact cleanup test, run its file alone, then run all scripts serially
+- **Why:** Initial scripts were67pass/1timeout while API tests and a real smoke ran concurrently. The isolated cleanup file passed6/0; the serial full script run passed68/0 with554 assertions. No script, harness deadline or exclusion changed. The helper selects any new guardian globally; concurrent guardian selection or timing is an inference, not a proven root cause because the selected PID was not captured.
+- **Evidence:** scripts/process-scope.test.ts:234–269; initial artifact59, isolated bg10, serial artifact69
+- **Reversibility:** easy
+- **Confidence:** high for observed results; medium for contention hypothesis
+- **Revisit if:** the serial command times out
+- **Source:** assumed — autonomous
+
 ## Progress
 Step5 integrated all three audited components: 2fc69e40 schedule, 8a46547b store, 949ffcbb API/CLI. Each component HEAD stayed cbff475d until parent commit; exact path sets matched ownership, excluding inherited .serena/. Parent removed all three component worktrees after merging. Own-file worker results: schedule18pass/60assertions, store15pass/84assertions. API component's acceptance runs awaited integration because it imports both components; no green result inferred. Parent integration review corrected semantic cron labels, pruned-output duplication in occurrence tombstones, and workspace-mode field normalization; corresponding narrow regressions ran red then green. Replaced forwarding/mock-echo CLI tests and an empty tick clock-pin with actual API/CLI flow coverage.
 
-One roadmap catch-up completed after component integration; incoming changes were queue additions only, with no new decision logs or source conflicts. Parent regenerated bun.lock for the new workspace. Running affected automation suite, scripts, typecheck and actual isolated daemon/CLI smoke now. Next: correct observed failures, final cross-family C/S/X round, record evidence, commit and authoritative queue land. Branch build/m5-automations-core; scratch /tmp/quirky-automations-core-lane7.qfdLfJ. Claim 2026-10-28T01:10Z.
+Final verification before landing: `bun test plugins/quirky.automations/test`57pass/0fail/281assertions across5files; `bun test scripts`68pass/0fail/554assertions; `bun run typecheck`exit0 including frozen install557/572 unchanged. Initial affected-suite remote transport was unavailable and fell back to local execution; its two real failures were fixed rather than excluded. The API acceptance tests exercise real CLI CRUD/run/history, public cron semantics, startup/tick isolation, durable result transitions, metadata bounds and retention/paging.
+
+Final actual-daemon/CLI smoke exited0 in61.85seconds on the final storage schema and metadata limits: fresh HOME and QUIRKY_HOME, isolated built-ins, owned ProcessScope children. Proved paused manual queue, claim/result lifecycle, unchanged pause cursor, grace0, public DST inspector, a real60-second timer-created scheduled pending run with advancement/dedupe, restart durability and cascading delete. No agent was launched by this core item; completed status was recorded through the public result API. Daemon stopped and smoke root removed. No UI or native-only scenarios; Linux/Windows validation not claimed.
+
+All implementers, six review dispatches, nested coordinators, process watchers and smoke processes returned. No open confirmed code findings remain after the single fix batch; review integrity limits remain documented in D12, not treated as clean assurance. Specs, README and API descriptions reflect the final contracts. Next: commit final fixes/docs, detach and run authoritative queue land m5-automations-core. Scratch `/tmp/quirky-automations-core-lane7.qfdLfJ` is removable after landing; review evidence archive beside loop notes is retained. One item only this iteration.
