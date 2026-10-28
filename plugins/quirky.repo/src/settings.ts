@@ -13,6 +13,7 @@ export type SetParams = {
   agentStartup?: NonNullable<ProjectSettings['agentStartup']> | ''
   commandSource?: NonNullable<ProjectSettings['commandSource']> | ''
   setupScript?: string
+  issueCommand?: string
   archiveScript?: string
 }
 
@@ -21,7 +22,7 @@ const DEFAULT_REF = 'HEAD'
 function trustedHashes(env: Env, repoId: string): TrustedHashes {
   const hashes: TrustedHashes = {}
   for (const row of env.store.all<{ kind: string; hash: string }>('SELECT kind, hash FROM trusted_hooks WHERE repo_id = ?', repoId)) {
-    if (row.kind === 'setup' || row.kind === 'archive') hashes[row.kind] = row.hash
+    if (row.kind === 'setup' || row.kind === 'archive' || row.kind === 'issue') hashes[row.kind] = row.hash
   }
   return hashes
 }
@@ -75,18 +76,19 @@ export async function set(env: Env, params: SetParams): Promise<RepoDetails> {
   if (params.commandSource !== undefined) settings.commandSource = params.commandSource === '' ? null : params.commandSource
   if (params.setupScript !== undefined) settings.setupScript = params.setupScript.trim() === '' ? '' : params.setupScript
   if (params.archiveScript !== undefined) settings.archiveScript = params.archiveScript.trim() === '' ? '' : params.archiveScript
+  if (params.issueCommand !== undefined) settings.issueCommand = params.issueCommand.trim() === '' ? '' : params.issueCommand
   const displayName = params.displayName === undefined ? row.display_name : orNull(params.displayName)
   env.store.run('UPDATE repos SET display_name = ?, settings = ? WHERE id = ?', displayName, settingsToJson(settings), repo.id)
   env.changed({ repoId: repo.id })
   return details(env, repo.id)
 }
 
-/** Approves the shared scripts now at `ref` (default `HEAD`), so setup and archive may run them. */
-export async function trustHooks(env: Env, params: { repo: string; kind?: 'setup' | 'archive' | 'all'; ref?: string }): Promise<RepoDetails> {
+/** Approves the shared setup, archive, and issue-command scripts now at `ref` (default `HEAD`), so they may run. */
+export async function trustHooks(env: Env, params: { repo: string; kind?: 'setup' | 'archive' | 'issue' | 'all'; ref?: string }): Promise<RepoDetails> {
   const repo = env.resolve(params.repo)
   const ref = (await checkedRef(env, repo, params.ref)) ?? DEFAULT_REF
   const scripts = sharedScripts(repo.kind === 'git' ? await readHooksFile(repo.path, ref) : null)
-  const kinds: HookKind[] = params.kind === 'setup' || params.kind === 'archive' ? [params.kind] : ['setup', 'archive']
+  const kinds: HookKind[] = params.kind === 'setup' || params.kind === 'archive' || params.kind === 'issue' ? [params.kind] : ['setup', 'archive', 'issue']
   env.store.transaction(() => {
     for (const kind of kinds) {
       const text = scripts[kind]
