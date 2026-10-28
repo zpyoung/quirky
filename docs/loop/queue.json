@@ -1961,6 +1961,21 @@
         "m7-test-triage"
       ],
       "status": "todo"
+    },
+    {
+      "id": "m7-vm-and-owner-bound-host-workspaces",
+      "milestone": "M7",
+      "title": "Implement the remaining unbuilt VM and owner-bound host/workspace flows from m7-terminal-owner-provisioning-and-selector-flows: trusted environmentRecipes create/suspend/resume/destroy with a genuine VM runtime and real workspace attachment lifecycle; durable registered host/workspace identity and generation fencing, remote workspace mirrors/navigation and owner-bound connectivity-aware cleanup/removal, not caller labels or local path copies. Build on shipped separate owner-cli grants, runtimeCall/createRemote and authenticated desktop installation origins; do not widen phone/federation credentials. These are unstarted source-engineering flows, not verification/review/debugging tasks. Native notification permission/click/dismiss still requires supported public SDK callbacks; signed production terminal-host launchd/TCC/admission/upgrade requires an authorized signing/packaging identity. Keep remote automation dispatch/model retirement and Native Browser handoff with their existing canonical owners; no duplicate transport or excluded native-chat/hosting/Objective/sitter scope.",
+      "docs": [
+        "worktrees.md",
+        "cli.md",
+        "term-daemon.md",
+        "notifications.md"
+      ],
+      "deps": [
+        "m7-terminal-owner-provisioning-and-selector-flows"
+      ],
+      "status": "todo"
     }
   ]
 }
