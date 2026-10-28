@@ -605,6 +605,7 @@
           "required": [
             "surface",
             "body",
+            "draftVersion",
             "generation",
             "worktree",
             "number"
@@ -688,6 +689,7 @@
           },
           "required": [
             "body",
+            "draftVersion",
             "generation",
             "worktree",
             "number"
@@ -4590,11 +4592,27 @@
       },
       {
         "id": "open-create",
-        "title": "Create pull request"
+        "title": "Create pull request",
+        "args": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string"
+            }
+          }
+        }
       },
       {
         "id": "open-settings",
-        "title": "Open hosting settings"
+        "title": "Open hosting settings",
+        "args": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string"
+            }
+          }
+        }
       },
       {
         "id": "open-link",

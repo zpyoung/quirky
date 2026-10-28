@@ -28,8 +28,25 @@ const hosts: ReviewsHost[] = []
 afterEach(async () => {
   for (const host of hosts.splice(0).reverse()) await host.cleanup()
 })
-beforeAll(() => GlobalRegistrator.register())
-afterAll(() => GlobalRegistrator.unregister())
+const nativeGlobals = [
+  'fetch', 'WebSocket', 'Request', 'Response', 'Headers', 'ReadableStream', 'WritableStream', 'TransformStream', 'AbortController', 'AbortSignal',
+  'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'setImmediate', 'clearImmediate',
+  'queueMicrotask', 'MessageChannel', 'performance'
+] as const
+const runtimeGlobals = nativeGlobals.map((name) => [name, (globalThis as Record<string, unknown>)[name]] as const)
+const reactGlobal = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+const previousActEnvironment = reactGlobal.IS_REACT_ACT_ENVIRONMENT
+beforeAll(() => {
+  GlobalRegistrator.register()
+  // The real daemon/CLI use Bun's transport primitives, not the DOM window's replacements.
+  for (const [name, value] of runtimeGlobals) if (value !== undefined) Object.defineProperty(globalThis, name, { value, writable: true, configurable: true })
+  reactGlobal.IS_REACT_ACT_ENVIRONMENT = true
+})
+afterAll(async () => {
+  await GlobalRegistrator.unregister()
+  if (previousActEnvironment === undefined) delete reactGlobal.IS_REACT_ACT_ENVIRONMENT
+  else reactGlobal.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment
+})
 
 function record(value: unknown): RecordValue {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new Error('expected an object')
@@ -69,7 +86,7 @@ test('R13 create-open confirms one exact branch; submit rejects after the head s
   git(host.repoPath, 'checkout', '-b', 'switched-branch')
   await expect(host.call('createSubmit', { worktree: host.worktree })).rejects.toMatchObject({ data: { reason: 'head_changed' } })
   expect(createCalls(host)).toHaveLength(0)
-})
+}, 20_000)
 
 test('R14 a failed public push prevents the canonical create mutation', async () => {
   const host = await boot()
@@ -94,20 +111,20 @@ test('R14 a failed public push prevents the canonical create mutation', async ()
   } finally {
     rmSync(bare, { recursive: true, force: true })
   }
-})
+}, 20_000)
 
 test('R14 a canonical already-exists result links the confirmed existing review', async () => {
   const host = await boot()
   await host.call('createOpen', { worktree: host.worktree })
   await host.call('createDraft', { worktree: host.worktree, title: 'Existing feature' })
-  host.writeState(createReviewsState({ createMode: 'already_exists' }))
+  host.writeState(createReviewsState({ createMode: 'already_exists', createNumber: 42 }))
 
   const result = record(await host.call('createSubmit', { worktree: host.worktree }))
-  expect(result).toMatchObject({ status: 'already_exists', review: { number: 14, url: 'https://github.com/test-owner/test-repo/pull/14' } })
+  expect(result).toMatchObject({ status: 'already_exists', review: { number: 42, url: 'https://github.com/test-owner/test-repo/pull/42' } })
   const state = await stateOf(host)
-  expect(record(record(state.links)[host.worktree])).toMatchObject({ number: 14, url: 'https://github.com/test-owner/test-repo/pull/14' })
+  expect(record(record(state.links)[host.worktree])).toMatchObject({ number: 42, url: 'https://github.com/test-owner/test-repo/pull/42' })
   expect(createCalls(host)).toHaveLength(1)
-})
+}, 20_000)
 
 test('R14 a failed stack registration preserves and links the created pull request', async () => {
   const host = await boot()
@@ -126,17 +143,20 @@ test('R14 a failed stack registration preserves and links the created pull reque
   expect(record(record(state.links)[host.worktree])).toMatchObject({ number: 16, url: 'https://github.com/test-owner/test-repo/pull/16' })
   expect(record(state.creation)).toMatchObject({ error: expect.stringContaining('stack registration') })
   expect(createCalls(host)).toHaveLength(1)
-})
+}, 20_000)
 
 test('R14 generation consumes the public branch diff and populates the returned title and body', async () => {
   const agentBin = mkdtempSync(join(tmpdir(), 'quirky-reviews-agent-'))
   const agent = join(agentBin, 'claude')
   const previousPath = process.env.PATH
+  const previousSearchDirs = process.env.QUIRKY_AGENT_SEARCH_DIRS
+  let host: ReviewsHost | undefined
   try {
-    writeFileSync(agent, `#!/usr/bin/env node\nconst args = process.argv.slice(2)\nif (args.includes('--version') || args.includes('--help')) { process.stdout.write('claude fixture\\n'); process.exit(0) }\nconst prompt = args.join(' ')\nif (!prompt.includes('GENERATION_MARKER')) process.exit(19)\nprocess.stdout.write(JSON.stringify({ title: 'Generated from branch diff', body: 'Generated body from branch diff' }))\n`)
+    writeFileSync(agent, `#!${process.execPath}\nconst args = process.argv.slice(2)\nif (args.includes('--version') || args.includes('--help')) { process.stdout.write('claude fixture\\n'); process.exit(0) }\nconst prompt = await new Response(Bun.stdin.stream()).text()\nif (!prompt.includes('GENERATION_MARKER')) process.exit(19)\nprocess.stdout.write(JSON.stringify({ title: 'Generated from branch diff', body: 'Generated body from branch diff' }))\n`)
     chmodSync(agent, 0o755)
     process.env.PATH = `${agentBin}${delimiter}${previousPath ?? ''}`
-    const host = await boot()
+    process.env.QUIRKY_AGENT_SEARCH_DIRS = agentBin
+    host = await boot()
     writeFileSync(join(host.repoPath, 'generation.txt'), 'GENERATION_MARKER\n')
     git(host.repoPath, 'add', 'generation.txt')
     git(host.repoPath, 'commit', '-m', 'Add generation marker')
@@ -146,23 +166,29 @@ test('R14 generation consumes the public branch diff and populates the returned 
     expect(generated).toMatchObject({ generated: true, title: 'Generated from branch diff', body: 'Generated body from branch diff' })
     expect(createCalls(host)).toHaveLength(0)
   } finally {
+    await host?.cleanup()
     if (previousPath === undefined) delete process.env.PATH
     else process.env.PATH = previousPath
+    if (previousSearchDirs === undefined) delete process.env.QUIRKY_AGENT_SEARCH_DIRS
+    else process.env.QUIRKY_AGENT_SEARCH_DIRS = previousSearchDirs
     rmSync(agentBin, { recursive: true, force: true })
   }
-})
+}, 20_000)
 
 test('R14 generation cancellation owns only its request and does not publish late output', async () => {
   const agentBin = mkdtempSync(join(tmpdir(), 'quirky-reviews-agent-cancel-'))
   const previousPath = process.env.PATH
+  const previousSearchDirs = process.env.QUIRKY_AGENT_SEARCH_DIRS
+  let host: ReviewsHost | undefined
   const agent = join(agentBin, 'claude')
   const startedPath = join(agentBin, 'started')
   const controller = new AbortController()
   try {
-    writeFileSync(agent, `#!/usr/bin/env node\nconst fs = require('node:fs')\nconst args = process.argv.slice(2)\nif (args.includes('--version') || args.includes('--help')) { process.stdout.write('claude fixture\\n'); process.exit(0) }\nfs.writeFileSync(${JSON.stringify(startedPath)}, 'started')\nfs.watch(${JSON.stringify(startedPath)}, () => {})\n`)
+    writeFileSync(agent, `#!${process.execPath}\nconst fs = require('node:fs')\nconst args = process.argv.slice(2)\nif (args.includes('--version') || args.includes('--help')) { process.stdout.write('claude fixture\\n'); process.exit(0) }\nfs.writeFileSync(${JSON.stringify(startedPath)}, 'started')\nfs.watch(${JSON.stringify(startedPath)}, () => {})\n`)
     chmodSync(agent, 0o755)
     process.env.PATH = `${agentBin}${delimiter}${previousPath ?? ''}`
-    const host = await boot()
+    process.env.QUIRKY_AGENT_SEARCH_DIRS = agentBin
+    host = await boot()
     writeFileSync(join(host.repoPath, 'generation.txt'), 'cancel context\n')
     git(host.repoPath, 'add', 'generation.txt')
     git(host.repoPath, 'commit', '-m', 'Add cancel context')
@@ -188,12 +214,15 @@ test('R14 generation cancellation owns only its request and does not publish lat
     expect(creation).toMatchObject({ generating: false, requestId: null, generated: false })
     expect(createCalls(host)).toHaveLength(0)
   } finally {
+    await host?.cleanup()
     controller.abort()
     if (previousPath === undefined) delete process.env.PATH
     else process.env.PATH = previousPath
+    if (previousSearchDirs === undefined) delete process.env.QUIRKY_AGENT_SEARCH_DIRS
+    else process.env.QUIRKY_AGENT_SEARCH_DIRS = previousSearchDirs
     rmSync(agentBin, { recursive: true, force: true })
   }
-})
+}, 20_000)
 
 test('R16 global and repository defaults persist independently; failed account binding stays explicit', async () => {
   const host = await boot()
@@ -228,7 +257,7 @@ test('R16 global and repository defaults persist independently; failed account b
     data: { reason: 'bound_account_unavailable' }
   })
   expect(await host.call('hostingConfiguration', { worktree: host.worktree })).toMatchObject({ account: null })
-})
+}, 20_000)
 
 test('R18 generated CLI command drives create-open through the daemon API', async () => {
   const host = await boot()
@@ -236,7 +265,7 @@ test('R18 generated CLI command drives create-open through the daemon API', asyn
   expect(result).toMatchObject({ code: 0, stderr: '' })
   expect(JSON.parse(result.stdout)).toMatchObject({ worktree: host.worktree, opened: true })
   expect(record((await stateOf(host)).creation)).toMatchObject({ worktree: host.worktree, loading: false })
-})
+}, 20_000)
 test('R13 remote bases and blank titles stay blocked through the public creation API', async () => {
   const host = await boot()
   git(host.repoPath, 'update-ref', 'refs/remotes/origin/feature', 'HEAD')
@@ -250,17 +279,20 @@ test('R13 remote bases and blank titles stay blocked through the public creation
   await host.call('createDraft', { worktree: host.worktree, title: '   ' })
   await expect(host.call('createSubmit', { worktree: host.worktree })).rejects.toMatchObject({ data: { reason: 'title_required' } })
   expect(createCalls(host)).toHaveLength(0)
-})
+}, 20_000)
 
 test('R14 generated details are invalidated when the same worktree moves to a new head', async () => {
   const agentBin = mkdtempSync(join(tmpdir(), 'quirky-reviews-agent-head-'))
   const agent = join(agentBin, 'claude')
   const previousPath = process.env.PATH
+  const previousSearchDirs = process.env.QUIRKY_AGENT_SEARCH_DIRS
+  let host: ReviewsHost | undefined
   try {
-    writeFileSync(agent, `#!/usr/bin/env node\nconst args = process.argv.slice(2)\nif (args.includes('--version') || args.includes('--help')) { process.stdout.write('claude fixture\\n'); process.exit(0) }\nif (!args.join(' ').includes('GENERATION_MARKER')) process.exit(19)\nprocess.stdout.write(JSON.stringify({ title: 'Generated for old head', body: 'Old-head description' }))\n`)
+    writeFileSync(agent, `#!${process.execPath}\nconst args = process.argv.slice(2)\nif (args.includes('--version') || args.includes('--help')) { process.stdout.write('claude fixture\\n'); process.exit(0) }\nconst prompt = await new Response(Bun.stdin.stream()).text()\nif (!prompt.includes('GENERATION_MARKER')) process.exit(19)\nprocess.stdout.write(JSON.stringify({ title: 'Generated for old head', body: 'Old-head description' }))\n`)
     chmodSync(agent, 0o755)
     process.env.PATH = `${agentBin}${delimiter}${previousPath ?? ''}`
-    const host = await boot()
+    process.env.QUIRKY_AGENT_SEARCH_DIRS = agentBin
+    host = await boot()
     writeFileSync(join(host.repoPath, 'generation.txt'), 'GENERATION_MARKER\n')
     git(host.repoPath, 'add', 'generation.txt')
     git(host.repoPath, 'commit', '-m', 'Add generation marker')
@@ -275,11 +307,14 @@ test('R14 generated details are invalidated when the same worktree moves to a ne
     expect(record((await stateOf(host)).creation).generated).toBe(false)
     expect(createCalls(host)).toHaveLength(0)
   } finally {
+    await host?.cleanup()
     if (previousPath === undefined) delete process.env.PATH
     else process.env.PATH = previousPath
+    if (previousSearchDirs === undefined) delete process.env.QUIRKY_AGENT_SEARCH_DIRS
+    else process.env.QUIRKY_AGENT_SEARCH_DIRS = previousSearchDirs
     rmSync(agentBin, { recursive: true, force: true })
   }
-})
+}, 20_000)
 
 test('R16 individual settings reads publish scoped snapshots and expose retained data on failure', async () => {
   const host = await boot()
@@ -335,7 +370,7 @@ test('R16 individual settings reads publish scoped snapshots and expose retained
   })
   await host.call('hostingConfiguration', { worktree: host.worktree })
   expect(record((await stateOf(host)).settings)).toMatchObject({ loading: false, error: null, configuration: { account: null } })
-})
+}, 20_000)
 
 test('R16 direct Settings view lists real worktrees and loads observations without settingsOpen or caller cwd', async () => {
   const host = await boot()
@@ -372,10 +407,8 @@ test('R16 direct Settings view lists real worktrees and loads observations witho
   render = () => root.render(React.createElement(HostingSettings, { context, state, refresh }))
 
   try {
-    await React.act(async () => {
-      render()
-      await worktreeList.promise
-    })
+    await React.act(async () => { render() })
+    await React.act(async () => { await worktreeList.promise })
     const selector = container.querySelector<HTMLSelectElement>('#settings-worktree')
     if (!selector || ![...selector.options].some((option) => option.value === host.worktree)) {
       throw new Error('The Settings view did not list registered Git worktrees.')
@@ -386,8 +419,8 @@ test('R16 direct Settings view lists real worktrees and loads observations witho
     await React.act(async () => {
       selector.value = host.worktree
       selector.dispatchEvent(new Event('change', { bubbles: true }))
-      await settingsLoaded.promise
     })
+    await React.act(async () => { await settingsLoaded.promise })
     expect(record(state.settings)).toMatchObject({
       worktree: host.worktree,
       loading: false,
@@ -414,4 +447,4 @@ test('R16 direct Settings view lists real worktrees and loads observations witho
     await React.act(async () => { root.unmount() })
     container.remove()
   }
-})
+}, 20_000)

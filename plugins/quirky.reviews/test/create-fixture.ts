@@ -90,13 +90,15 @@ if (command === 'auth' && args[1] === 'status') {
 } else if (command === 'pr' && args[1] === 'create') {
   if (state.createMode === 'already_exists') {
     if (!records().some((item) => item.headRefName === 'feature' && item.baseRefName === option('--base', 'main'))) {
-      const number = Math.max(0, ...records().map((item) => item.number)) + 1
+      const number = state.createNumber ?? Math.max(0, ...records().map((item) => item.number)) + 1
       state.prs = [...records(), { ...${JSON.stringify(reviewFixture(0, 'feature'))}, number, id: 'PR_test_' + number, title: option('--title', 'Existing pull request'), headRefName: option('--head', 'feature'), baseRefName: option('--base', 'main') }]
       saveState(state)
     }
     fail('A pull request already exists for this branch')
   }
   const number = state.createNumber ?? 14
+  state.prs = [...records(), { ...${JSON.stringify(reviewFixture(0, 'feature'))}, number, id: 'PR_test_' + number, title: option('--title', 'New pull request'), body: option('--body', ''), isDraft: args.includes('--draft'), headRefName: option('--head', 'feature'), baseRefName: option('--base', 'main') }]
+  saveState(state)
   out(htmlUrl(number) + '\n')
 } else if (command === 'api') {
   if (args.includes('rate_limit')) {

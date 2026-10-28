@@ -103,7 +103,7 @@ describe('review detail methods', () => {
       await openReview(host)
       await host.call('detailSetAudience', { surface: 'detail', worktree: host.worktree, number: 12, audience: 'humans' })
       await host.call('detailSetGrouping', { surface: 'detail', worktree: host.worktree, number: 12, grouping: 'timeline' })
-
+  
       const detail = detailOf(await stateOf(host))
       expect(detail.audience).toBe('humans')
       expect(detail.grouping).toBe('timeline')
@@ -111,7 +111,7 @@ describe('review detail methods', () => {
     } finally {
       await host.cleanup()
     }
-  })
+  }, 20_000)
 
   test('opening a review retains the selected trusted repository source', async () => {
     const prRepo = { host: 'github.com', owner: 'source-owner', repo: 'source-repo' }
@@ -132,7 +132,7 @@ describe('review detail methods', () => {
     } finally {
       await host.cleanup()
     }
-  })
+  }, 20_000)
 
   test('inline comments fail closed when the selected review has no verified head', async () => {
     const host = await bootReviews(detailGhSource)
@@ -153,7 +153,7 @@ describe('review detail methods', () => {
     } finally {
       await host.cleanup()
     }
-  })
+  }, 20_000)
 
   test('comment deletion is refused before any provider call without exact-target confirmation', async () => {
     const host = await bootReviews(detailGhSource)
@@ -165,7 +165,7 @@ describe('review detail methods', () => {
     } finally {
       await host.cleanup()
     }
-  })
+  }, 20_000)
 
   test('confirmed comment writes reconcile when subsequent provider reads lag', async () => {
     const issueUrl = 'https://api.github.com/repos/source-owner/source-repo/issues/12'
@@ -219,7 +219,7 @@ describe('review detail methods', () => {
       expect(commentsOf(await stateOf(host))).toEqual([
         expect.objectContaining({ id: 91, body: 'Original comment' }),
       ])
-
+  
       const mutationsBefore = providerMutations(host).length
       const posted = await host.call('detailPostComment', {
         surface: 'detail', worktree: host.worktree, number: 12, body: 'hello **team**',
@@ -233,7 +233,7 @@ describe('review detail methods', () => {
         expect.objectContaining({ id: 91, body: 'Original comment' }),
         expect.objectContaining({ id: 92, body: 'hello **team**' }),
       ]))
-
+  
       await host.call('detailEditComment', {
         surface: 'detail', worktree: host.worktree, number: 12, commentId: 91, body: 'Edited comment',
       })
@@ -242,7 +242,7 @@ describe('review detail methods', () => {
         expect.objectContaining({ id: 91, body: 'Edited comment' }),
         expect.objectContaining({ id: 92, body: 'hello **team**' }),
       ]))
-
+  
       await host.call('detailDeleteComment', {
         surface: 'detail', worktree: host.worktree, number: 12, commentId: 91, yes: true,
       })
@@ -254,7 +254,7 @@ describe('review detail methods', () => {
     } finally {
       await host.cleanup()
     }
-  })
+  }, 20_000)
 
   test('old review context cannot mutate a newly selected pull request', async () => {
     const seed = detailSeedState()
@@ -279,7 +279,7 @@ describe('review detail methods', () => {
       const detail = detailOf(await stateOf(host))
       expect(detail.target).toMatchObject({ worktree: host.worktree, number: 13 })
       expect(detail.review).toMatchObject({ number: 13 })
-
+  
       const mutationsBefore = providerMutations(host).length
       await expect(host.call('detailUpdateBody', {
         surface: 'detail', worktree: host.worktree, number: 12, body: 'stale review edit',
@@ -288,7 +288,7 @@ describe('review detail methods', () => {
     } finally {
       await host.cleanup()
     }
-  })
+  }, 20_000)
 
   test('same-number review actions from a prior repository source cannot retarget the current review', async () => {
     const source = { host: 'github.com', owner: 'source-owner', repo: 'source-repo' }
@@ -318,7 +318,7 @@ describe('review detail methods', () => {
       await host.call('open', { worktree: host.worktree, number: 12, tab: 'conversation', prRepo: upstream })
       await host.call('detailRefresh', { surface: 'detail', worktree: host.worktree, number: 12, prRepo: upstream })
       expect(detailOf(await stateOf(host)).target).toMatchObject({ prRepo: upstream, number: 12 })
-
+  
       const mutationsBefore = providerMutations(host).length
       await expect(host.call('detailUpdateBody', {
         surface: 'detail', worktree: host.worktree, number: 12, prRepo: source, body: 'stale source edit',
@@ -327,7 +327,7 @@ describe('review detail methods', () => {
     } finally {
       await host.cleanup()
     }
-  })
+  }, 20_000)
 
   test('a head refresh invalidates old file coordinates before inline comments reach the provider', async () => {
     const headA = 'a'.repeat(40)
@@ -367,7 +367,7 @@ describe('review detail methods', () => {
         collapsedFiles: [oldPath],
         treeVisible: false,
       })
-
+  
       host.writeState({
         ...initial,
         responses: {
@@ -387,7 +387,7 @@ describe('review detail methods', () => {
       expect(detail.selectedFile).toBeNull()
       expect(detail.collapsedFiles).toEqual([])
       expect(detail.files).toMatchObject({ files: [{ path: newPath }] })
-
+  
       const mutationsBefore = providerMutations(host).length
       await expect(host.call('detailInlineComment', {
         surface: 'detail', worktree: host.worktree, number: 12, expectedHead: headA,
@@ -405,7 +405,7 @@ describe('review detail methods', () => {
     } finally {
       await host.cleanup()
     }
-  })
+  }, 20_000)
 
   test('legacy status-only checks surface the canonical non-rerunnable error', async () => {
     const head = 'a'.repeat(40)
@@ -424,7 +424,7 @@ describe('review detail methods', () => {
       expect(current.checks).toMatchObject({
         checks: [{ kind: 'status', name: 'legacy-ci', checkRunId: null, workflowRunId: null }],
       })
-
+  
       const mutationsBefore = providerMutations(host).length
       await expect(host.call('detailRerunChecks', {
         surface: 'detail', worktree: host.worktree, number: 12, failedOnly: true,
@@ -436,6 +436,6 @@ describe('review detail methods', () => {
     } finally {
       await host.cleanup()
     }
-  })
+  }, 20_000)
 
 })

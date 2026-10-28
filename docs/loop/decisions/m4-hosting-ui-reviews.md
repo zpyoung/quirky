@@ -165,5 +165,60 @@
 - **Revisit if:** provider comment URL/actor types change; retain unavailable rather than unsafe link guesses.
 - **Source:** locked by hosting-ui.md comments/navigation/bot detection
 
+## D16: Use the public flat Schema contract and repair actual integration failures
+- **Question:** may richer JSON Schema keywords or source-only component reports stand in for a loadable plugin?
+- **Options:** widen the protocol to arbitrary JSON Schema; normalize silently at runtime; align descriptors and validate the integrated source.
+- **Chose:** MethodSpec params/result use public Schema; unsupported nullable unions/length/pattern/format keywords become the established flat nullable/description forms, with existing runtime/canonical guards retained. Fixed a malformed schema expression, JSX closer and fixture template nesting. Read-only plugin validation found one command-argument blocker and two contract inconsistencies; window commands now declare workspace args, argument-free Create derives its active view workspace, required draftVersion is declared, and obsolete duplicate recovery with unsupported active:true is removed.
+- **Why:** the loader rejects unsupported descriptors; a second schema dialect or fallback would hide a broken public contract. Input bounds and target/confirmation guards remain real server behavior.
+- **Evidence:** manifest assembly failure; scoped ReviewSchemaAlignment audit; plugin-validator report67 methods/67 aliases and one blocking command contract; type-gate commits0b056214/c1e26455. No full-item green is inferred from those reports.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** protocol Schema explicitly grows a reviewed nullable/constraint feature.
+- **Source:** locked by packages/protocol/src/schema.ts
+
+## D17: Preserve and relocate a misdirected fixer patch before normal integration
+- **Question:** how to handle a fixer that used relative paths in the parent instead of its assigned worktree?
+- **Options:** silently accept parent edits; discard the useful patch; preserve and reattribute exact source before merge.
+- **Chose:** stopped the task, confirmed the assigned tree initially had zero changes, and traced its actual four parent-file edits in history. Git's dirty-path list contained exactly those four files. Preserved the patch, verified baseline/fixed hashes, copied it to the declared component tree and restored only its same-run parent edits. The relocated four-path/unchanged-HEAD/exact-hash audit passed before normal commit and merge.
+- **Why:** an advisory report cannot override the worktree boundary. No user change or unrelated file was discarded; the parent remained the integration owner.
+- **Evidence:** scratch journal typeGateFixes.mislocation and relocatedAudit; exact four files detail/{methods,data}.ts and create/{methods,CreateReview}.ts(x); resulting component commitc1e26455. Parent-only Tasks dependency merge did not touch those files.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** another attribution gap appears; stop and establish provenance rather than widen scope silently.
+- **Source:** assumed — autonomous
+
+## D18: Keep transport fixtures isolated and real readiness proof on a real PTY
+- **Question:** why did process workflows time out, use incompatible web globals, or fail to exercise an agent at all?
+- **Options:** relax product deadlines/confirmation; keep a fake-PTY no-op and claim success; repair the test boundary and exercise real processes.
+- **Chose:** finite native20-second bounds on the multi-RPC cases (no global or production timeout change), preserving callback formatting and every semantic assertion. DOM tests retain Bun transport/stream/timer/Abort primitives and flush React effects before awaiting effect-owned promises. Generation fakes use the exact Bun interpreter, exclusive fixture search directories and the real stdin prompt contract; cleanup precedes restoration of test env. Hosting fixtures default agent discovery to their owned fakebin. Duplicate recovery uses an explicitly controlled existing resource, not an incidental fixture default.
+- **Why:** the observed five-second teardown interrupted legitimate workflows; Happy DOM replaced native I/O and Abort classes; an argv-only fake could not read Claude's stdin prompt. A fake PTY never executed the fake agent, so its supposed ready transition was not evidence.
+- **Evidence:** create test failures and transport traces; canonical Claude oneShot.prompt=stdin; focused generation2pass/0fail; replacement agent-delivery.test.ts uses the existing owned real-daemon/real-PTY E2E harness and passed1test/8assertions, including no resolution on failure, exactly one real bracketed paste, and resolution only after successful delivery. The invalid fake-PTY delivery case was removed, not weakened.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the public agent prompt/delivery protocol or native test harness changes.
+- **Source:** locked by LOOP.md isolated-state and behavioral-verification rules
+
+## D19: Retain confirmed comment overlays until a provider read adopts them
+- **Question:** why did a confirmed new comment disappear after a lagging refresh?
+- **Options:** hide refresh failures; retry the mutation; acknowledge overlays only from provider reads.
+- **Chose:** local rendering/optimistic merges no longer acknowledge their own confirmed overlay. Only a real provider result with the confirmed body can retire that entry; edit/delete overlays continue to reconcile the lagging list.
+- **Why:** the immediate local list already contained the new comment and incorrectly deleted its overlay before the provider ever returned it.
+- **Evidence:** actual detail regression8pass/1fail showed only original comment91 after successful add92; focused post-fix add/edit/delete lag regression passed1test/6assertions in8.54seconds. No assertion was removed.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** another mutation can acknowledge retained state from its own optimistic data rather than authoritative reads.
+- **Source:** locked by hosting-ui.md stale-write and confirmed-comment retention requirements
+
+## D20: Apply the locked night-mode skip to unstarted optional rounds
+- **Question:** should the item start a new full adversarial review or user-dogfood campaign after the night-mode threshold?
+- **Options:** start both campaigns; follow the explicit skip while finishing required checks and smoke proof.
+- **Chose:** do not start the unstarted cross-family final review or full like-a-user dogfood campaign. Retain their unrun status explicitly; static plugin validation and focused API/CLI/real-PTY evidence are not relabeled as those rounds. Finish required affected tests/scripts/typecheck, an actual built-surface smoke, dependency readiness and normal landing.
+- **Why:** canonical LOOP.md explicitly says an already-past-two-hour item lands as soon as its own tests/typecheck pass and skips review/dogfood not yet started. This changes verification scheduling, not the feature acceptance scope or blocker fixes.
+- **Evidence:** branch orientation mergeb4ac5836 at2026-10-27T18:25:31-05:00, already after claiming; observed UTC clock2026-10-28T01:43:55Z. No final Gemini dispatch or likeuser begin occurred; only the web doctor ran.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** an exercised check or actual surface smoke identifies a blocker; fix it before landing.
+- **Source:** locked by docs/loop/LOOP.md Night mode
+
 ## Progress
-Shared read/public Markdown commit0a17328c integrated as a2245435; only extraBuiltins helper conflict reconciled. Parent canonical hosting/Git/Settings seams committed93747fc,71f73d6,292929bc with focused real-daemon/CLI proof. Checks return audit passed; Creation/Detail same-scope retries finish explicitly reported gaps. Parent shared state/env/UI/harness/native/spec docs exist, manifest assembly pending final component exports. No full-item build/typecheck/scripts/affected suite/review/web pass yet. Next: complete retries, authoritative barrier audit, assemble/merge source and full Tasks dependency, then required gates and one final review/web pass, single roadmap catch-up/dependency readiness and normal land.
+All three source components and scoped retries merged after barrier audits; original component/gate worktrees removed. Public plugin has67 methods/67 aliases; descriptors and command args aligned. Own Review source no longer appeared in the latest whole-repo compiler diagnostics;69 remaining errors were in pending Tasks/shared-read source and were sent to its owner. Focused detail lag, generation, auth/eligibility/workspace and actual real-PTY delivery paths have exercised evidence; full affected runner/scripts/typecheck and built-surface smoke still pending. Full Tasks parent runtime/helper checkpoint is required before final integration/land. Unstarted full final-review/dogfood rounds are explicitly skipped under D20, not claimed passing. Roadmap catch-up still not run; finish reachable gates, merge the dependency when ready, catch up once and land through queue.ts.

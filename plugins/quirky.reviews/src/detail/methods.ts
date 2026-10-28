@@ -717,13 +717,13 @@ function parseEditedComment(env: ReviewsEnv, value: unknown, number: number, com
   }
 }
 
-function mergeOverlay(comments: ReviewComment[], overlay: Map<string, ReviewComment | null>): ReviewComment[] {
+function mergeOverlay(comments: ReviewComment[], overlay: Map<string, ReviewComment | null>, fromProvider = false): ReviewComment[] {
   const byKey = new Map(comments.map((comment) => [commentIdKey(comment), comment]))
   for (const [key, comment] of overlay) {
     if (comment === null) byKey.delete(key)
     else {
       const existing = byKey.get(key)
-      if (existing?.body === comment.body) overlay.delete(key)
+      if (fromProvider && existing?.body === comment.body) overlay.delete(key)
       else byKey.set(key, comment)
     }
   }
@@ -937,7 +937,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       const parsedComments = commentsResult?.status === 'fulfilled' ? parseCommentsResult(commentsResult.value, selected.number) : null
       if (parsedComments !== null) {
         const rawComments = parsedComments.comments
-        comments = { ...parsedComments, comments: mergeOverlay(rawComments, overlay) }
+        comments = { ...parsedComments, comments: mergeOverlay(rawComments, overlay, true) }
         loaded.comments = true
       } else {
         errors.push(commentsResult?.status === 'rejected' ? errorMessage(commentsResult.reason) : 'The hosting API returned invalid comment data.')

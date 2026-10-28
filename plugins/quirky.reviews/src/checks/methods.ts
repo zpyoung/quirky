@@ -754,8 +754,8 @@ async function refreshChecks(env: ReviewsEnv, params: Record<string, unknown>, c
         : null
       lookup = existing
         ? { kind: 'found', review: existing, record: { kind: 'found', review: existing, fetchedAt: Date.now() } }
-        : eligibilityLookupUnavailable(forcedEligibility)
-          ? { kind: 'unavailable', record: { kind: 'unavailable', reason: 'upstream_unavailable', message: eligibilityMessage(forcedEligibility), fetchedAt: Date.now() } }
+        : eligibilityLookupUnavailable(forcedEligibility) || eligibilityHasAuthFailure(forcedEligibility)
+          ? { kind: 'unavailable', record: { kind: 'unavailable', reason: eligibilityHasAuthFailure(forcedEligibility) ? 'auth_required' : 'upstream_unavailable', message: eligibilityMessage(forcedEligibility), fetchedAt: Date.now() } }
           : { kind: 'no-review', record: { kind: 'no-review', fetchedAt: Date.now() } }
     } else {
       lookup = await callLookup(env, 'forBranch', {
