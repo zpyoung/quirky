@@ -45,6 +45,17 @@ import type { SessionIdentity } from './runtime-contracts'
 import type {
   ServiceCheckParams, ServiceCoordinatorPrincipal, ServiceQuestionView, ServiceReplyParams, ServiceSendParams,
 } from './services/contracts'
+
+import type { FederationBinding, FederationRelayItem } from './federation/contracts'
+
+export interface FederationMessagingHooks {
+  afterMessage(message: MessageRow, caller: RuntimeCallerEvidence | null): void
+  afterQuestionCreated(message: MessageRow, caller: RuntimeCallerEvidence): void
+  afterQuestionAnswered(questionId: string, answer: MessageRow): void
+  afterReply(originalMessageId: string, replyMessage: MessageRow, caller: RuntimeCallerEvidence): void
+  beforeHeartbeat(input: WorkerHeartbeatInput, caller: RuntimeCallerEvidence): Promise<HeartbeatResult | null>
+  reset(mode: 'messages' | 'tasks' | 'all'): void
+}
 const DELIVERY_BATCH_SIZE = 50
 const READ_LIMIT_MAX = 100
 const DEFAULT_CHECK_WAIT_MS = 120_000
@@ -67,6 +78,7 @@ const GROUP_FORBIDDEN: Partial<Record<MessageType, true>> = {
   escalation: true,
   decision_gate: true
 }
+const FEDERATION_SUBMISSION_PREFLIGHT = 'quirky.orchestration/federationSubmissionPreflight'
 
 const newId = (prefix: string): string => `${prefix}_${randomBytes(6).toString('hex')}`
 const now = (): UtcTimestamp => new Date().toISOString()
@@ -288,6 +300,7 @@ export class OrchestrationMessages implements MessageArrivalPort {
   private readonly arrivalListeners = new Set<(arrival: MessageArrival) => void | Promise<void>>()
   private readonly mailboxAvailableListeners = new Set<(mailbox: MailboxAddress) => void>()
   private nextWaiterId = 1
+  private federationHooks: FederationMessagingHooks | null = null
 
   private get store(): PluginStore {
     return this.core.store
@@ -302,6 +315,166 @@ export class OrchestrationMessages implements MessageArrivalPort {
     this.core.onDispatchSettled((dispatchId) => this.cancelDispatchWaiter(dispatchId))
     this.core.onDispatchFenced((dispatchId) => this.cancelDispatchWaiter(dispatchId))
     this.core.onMessageCommitted((arrival) => this.onCommitted(arrival))
+  }
+
+  bindFederation(hooks: FederationMessagingHooks): void {
+    if (this.federationHooks !== null && this.federationHooks !== hooks) {
+      fail(this.context, 'lifecycle_conflict', 'federation mail hooks are already bound')
+    }
+    this.federationHooks = hooks
+  }
+
+  unbindFederation(hooks: FederationMessagingHooks): void {
+    if (this.federationHooks === hooks) this.federationHooks = null
+  }
+
+  getFederatedMessage(id: MessageId): MessageRow {
+    return this.getMessage(id)
+  }
+
+  notifyFederatedQuestion(messageId: string): void {
+    this.notifyQuestion(messageId)
+  }
+
+  runFederatedSubmissionPreflight(submission: OrchestrationSubmission): Promise<OrchestrationSubmissionVerdict | null> {
+    return this.runSubmissionPreflight(submission)
+  }
+
+  importFederatedItem(
+    binding: FederationBinding,
+    item: FederationRelayItem,
+  ): { message: MessageRow; questionId: string | null } {
+    const toHome = item.direction === 'to_home'
+    if ((toHome && binding.side !== 'home') || (!toHome && binding.side !== 'host') || item.bindingId !== binding.id) {
+      fail(this.context, 'consumer_fenced', 'federated message does not belong to this binding side')
+    }
+    const sourceRunId = toHome ? binding.hostRunId : binding.homeRunId
+    const targetRunId = toHome ? binding.homeRunId : binding.hostRunId
+    const sourceTaskId = toHome ? binding.hostTaskId : binding.homeTaskId
+    const targetTaskId = toHome ? binding.homeTaskId : binding.hostTaskId
+    const sourceDispatchId = toHome ? binding.hostDispatchId : binding.homeDispatchId
+    const targetDispatchId = toHome ? binding.homeDispatchId : binding.hostDispatchId
+    if (!sourceRunId || !targetRunId || !sourceTaskId || !targetTaskId || !sourceDispatchId || !targetDispatchId) {
+      fail(this.context, 'consumer_fenced', 'federated message binding is not fully attached')
+    }
+    const rawMessage = item.payload.message
+    if (!rawMessage || typeof rawMessage !== 'object' || Array.isArray(rawMessage)) {
+      fail(this.context, 'invalid_argument', 'federated message item is missing its message envelope')
+    }
+    const source = rawMessage as Record<string, unknown>
+    if (
+      typeof source.id !== 'string' || source.id.length === 0 ||
+      source.runId !== sourceRunId ||
+      typeof source.subject !== 'string' || typeof source.body !== 'string' ||
+      !this.isMessageType(source.type) ||
+      (source.priority !== 'normal' && source.priority !== 'high' && source.priority !== 'urgent') ||
+      typeof source.createdAt !== 'string' ||
+      (source.threadId !== null && typeof source.threadId !== 'string')
+    ) {
+      fail(this.context, 'invalid_argument', 'federated message envelope is invalid')
+    }
+    if (source.id !== item.id ||
+      (item.kind === 'lifecycle' && source.type !== item.payload.type) ||
+      ((item.kind === 'question' || item.kind === 'reply') && source.type !== 'question') ||
+      (item.kind === 'message' && (source.type === 'worker_done' || source.type === 'heartbeat'))) {
+      fail(this.context, 'invalid_argument', 'federated message ID or type does not match its relay item')
+    }
+    const mapAddress = (raw: unknown): MailboxAddress => {
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+        fail(this.context, 'invalid_argument', 'federated message address is invalid')
+      }
+      const address = raw as Record<string, unknown>
+      if (address.kind === 'run' && address.runId === sourceRunId) return { kind: 'run', runId: targetRunId }
+      if (address.kind === 'dispatch' && address.dispatchId === sourceDispatchId) {
+        return { kind: 'dispatch', dispatchId: targetDispatchId }
+      }
+      fail(this.context, 'invalid_argument', 'federated message address is outside its exact binding')
+    }
+    const sender = mapAddress(source.sender)
+    const mailbox = mapAddress(source.mailbox)
+    const rawPayload = source.payload
+    if (rawPayload !== null && (typeof rawPayload !== 'object' || Array.isArray(rawPayload))) {
+      fail(this.context, 'invalid_argument', 'federated message payload must be an object or null')
+    }
+    let payload: JsonValue | null = rawPayload as JsonValue | null
+    if (payload !== null) {
+      const remapped: Record<string, JsonValue> = { ...(payload as Record<string, JsonValue>) }
+      if (remapped.taskId === sourceTaskId) remapped.taskId = targetTaskId
+      if (remapped.dispatchId === sourceDispatchId) remapped.dispatchId = targetDispatchId
+      payload = remapped
+    }
+    const at = source.createdAt
+    const senderId = mailboxId(sender)
+    const targetId = mailboxId(mailbox)
+    const messageId = source.id as MessageId
+    const remoteSession = `federation:${binding.peer.id}`
+    this.store.run(
+      `INSERT OR IGNORE INTO messages (
+        id, run_id, from_session_id, sender_kind, sender_id, mailbox_kind, mailbox_id,
+        subject, body, type, priority, thread_id, payload_json, read, created_at, delivered_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, NULL)`,
+      messageId, targetRunId, remoteSession, sender.kind, senderId, mailbox.kind, targetId,
+      source.subject, source.body, source.type, source.priority, source.threadId,
+      payload === null ? null : jsonText(payload), at,
+    )
+    let imported = this.getMessage(messageId)
+    if (
+      imported.runId !== targetRunId || imported.sender.kind !== sender.kind ||
+      mailboxId(imported.sender) !== senderId || imported.mailbox.kind !== mailbox.kind ||
+      mailboxId(imported.mailbox) !== targetId || imported.body !== source.body || imported.type !== source.type
+    ) {
+      fail(this.context, 'lifecycle_conflict', `federated message ID ${messageId} conflicts with a local message`)
+    }
+    let questionId: string | null = null
+    if (item.kind === 'question') {
+      if (imported.type !== 'question' || sender.kind !== 'dispatch' || mailbox.kind !== 'run') {
+        fail(this.context, 'invalid_argument', 'federated question must be sent by its exact Dispatch to its Run')
+      }
+      const existing = this.store.get<QuestionRecord>(`SELECT * FROM question_threads WHERE message_id = ?`, messageId)
+      if (!existing) {
+        this.store.run(
+          `INSERT INTO question_threads (
+            message_id, run_id, dispatch_id, asker_session_id, status, answer_message_id, answer_body,
+            answered_by_generation, created_at, answered_at, closed_at
+          ) VALUES (?, ?, ?, ?, 'pending', NULL, NULL, NULL, ?, NULL, NULL)`,
+          messageId, targetRunId, targetDispatchId, remoteSession, at,
+        )
+      } else if (existing.run_id !== targetRunId || existing.dispatch_id !== targetDispatchId) {
+        fail(this.context, 'lifecycle_conflict', `federated question ${messageId} conflicts with an existing thread`)
+      }
+      questionId = messageId
+    } else if (item.kind === 'reply') {
+      const rawQuestionId = item.payload.questionId
+      if (typeof rawQuestionId !== 'string') fail(this.context, 'invalid_argument', 'federated reply is missing its question ID')
+      const question = this.store.get<QuestionRecord>(`SELECT * FROM question_threads WHERE message_id = ?`, rawQuestionId)
+      if (!question || question.run_id !== targetRunId || question.dispatch_id !== targetDispatchId) {
+        fail(this.context, 'question_not_found', `federated question ${rawQuestionId} does not belong to this binding`)
+      }
+      if (question.status === 'closed') fail(this.context, 'dispatch_inactive', `federated question ${rawQuestionId} was closed`)
+      if (question.status === 'answered') {
+        if (question.answer_body !== imported.body) fail(this.context, 'answer_conflict', `federated question ${rawQuestionId} already has another answer`)
+      } else {
+        const update = this.store.run(
+          `UPDATE question_threads SET status = 'answered', answer_message_id = ?, answer_body = ?,
+           answered_by_generation = ?, answered_at = ? WHERE message_id = ? AND status = 'pending'`,
+          messageId, imported.body, this.core.getRun(targetRunId).consumerGeneration, now(), rawQuestionId,
+        )
+        if (update.changes !== 1) fail(this.context, 'lifecycle_conflict', `federated question ${rawQuestionId} changed while importing its answer`)
+      }
+      questionId = rawQuestionId
+    }
+    imported = this.getMessage(messageId)
+    return { message: imported, questionId }
+  }
+
+  markFederatedRejected(
+    messageId: MessageId,
+    originalType: MessageType,
+    reason: string,
+    code: string,
+  ): void {
+    const message = this.getMessage(messageId)
+    this.markRejectedReport(messageId, originalType, message.subject, message.payload, reason, { action: 'rejected', code, reason })
   }
 
   onArrival(listener: (arrival: MessageArrival) => void | Promise<void>): () => void {
@@ -390,6 +563,7 @@ export class OrchestrationMessages implements MessageArrivalPort {
     let sender: SenderContext | null = null
     let targets: RoutedTarget[] | null = null
     let submissionVerdict: OrchestrationSubmissionVerdict | null = null
+    let federatedHeartbeat: HeartbeatResult | null = null
     const beforeAccept = async (): Promise<void> => {
       const resolvedSender = this.senderContext(verified.evidence, type === 'worker_done' || type === 'heartbeat')
       sender = resolvedSender
@@ -422,6 +596,11 @@ export class OrchestrationMessages implements MessageArrivalPort {
             body: input.body ?? '',
             payload: this.submissionPayload(payload),
           })
+        }
+      } else if (type === 'heartbeat') {
+        const parsed = this.heartbeatInput(payload)
+        if (typeof parsed !== 'string') {
+          federatedHeartbeat = await this.federationHooks?.beforeHeartbeat(parsed, verified.evidence) ?? null
         }
       }
     }
@@ -491,9 +670,13 @@ export class OrchestrationMessages implements MessageArrivalPort {
           messages.push(this.getMessage(row.id))
         } else if (type === 'heartbeat') {
           const parsed = this.heartbeatInput(payload)
-          heartbeat = typeof parsed === 'string'
-            ? { status: 'rejected', reason: parsed, lastHeartbeatAt: null }
-            : this.core.recordHeartbeat(parsed, verified.evidence)
+          if (typeof parsed === 'string') {
+            heartbeat = { status: 'rejected', reason: parsed, lastHeartbeatAt: null }
+          } else if (federatedHeartbeat?.status === 'rejected') {
+            heartbeat = federatedHeartbeat
+          } else {
+            heartbeat = this.core.recordHeartbeat(parsed, verified.evidence)
+          }
           if (heartbeat.status === 'rejected') this.store.run(`UPDATE messages SET read = 1, delivered_at = ? WHERE id = ?`, now(), row.id)
           messages.push(this.getMessage(row.id))
         } else if (type === 'status' && submissionVerdict?.kind === 'rejected') {
@@ -512,6 +695,9 @@ export class OrchestrationMessages implements MessageArrivalPort {
         const question = messages[0]!
         this.store.run(`UPDATE messages SET thread_id = ? WHERE id = ?`, question.id, question.id)
         messages[0] = this.getMessage(question.id)
+      }
+      if (type !== 'worker_done' && type !== 'heartbeat' && !(type === 'status' && acceptedSender.dispatchId !== null)) {
+        for (const message of messages) this.federationHooks?.afterMessage(message, verified.evidence)
       }
       if (report !== null) return { kind: 'worker_report' as const, messages, report, threadId }
       if (heartbeat !== null) return { kind: 'heartbeat' as const, messages, heartbeat, threadId }
@@ -562,6 +748,7 @@ export class OrchestrationMessages implements MessageArrivalPort {
         payload: null,
         read: false
       })
+      this.federationHooks?.afterMessage(message, null)
       return { kind: 'message' as const, messages: [message], threadId: null }
     }, {
       beforeAccept: async () => {
@@ -854,7 +1041,7 @@ export class OrchestrationMessages implements MessageArrivalPort {
     }
   }
 
-  resetWaiters(mode: 'messages' | 'tasks' | 'all'): void {
+  resetWaiters(mode: 'messages' | 'tasks' | 'all', notifyFederation = true): void {
     for (const [key, waiter] of this.waiters) {
       if (mode === 'all' || mode === 'messages' || (mode === 'tasks' && waiter.mailbox.kind === 'dispatch')) {
         this.waiters.delete(key)
@@ -867,10 +1054,11 @@ export class OrchestrationMessages implements MessageArrivalPort {
         for (const waiter of waiters) waiter.wake()
       }
     }
+    if (notifyFederation) this.federationHooks?.reset(mode)
   }
 
   dispose(): void {
-    this.resetWaiters('all')
+    this.resetWaiters('all', false)
     this.arrivalListeners.clear()
     this.mailboxAvailableListeners.clear()
   }
@@ -972,7 +1160,8 @@ export class OrchestrationMessages implements MessageArrivalPort {
       }
     }
     const { promise, reject } = Promise.withResolvers<never>()
-    const timer = setTimeout(() => reject(new Error('submission preflight timed out')), 5_000)
+    const timeoutMs = registration.method === FEDERATION_SUBMISSION_PREFLIGHT ? 35_000 : 5_000
+    const timer = setTimeout(() => reject(new Error('submission preflight timed out')), timeoutMs)
     timer.unref()
     try {
       // This private callback receives the JSON object constructed by the authenticated send path.
@@ -1613,6 +1802,7 @@ export class OrchestrationMessages implements MessageArrivalPort {
         messageId: question.message_id
       })
     }
+    this.federationHooks?.afterQuestionAnswered(question.message_id, answer)
     return {
       kind: 'question_answer',
       messageId: question.message_id as QuestionId,
@@ -1651,6 +1841,7 @@ export class OrchestrationMessages implements MessageArrivalPort {
       payload: null,
       read: false
     })
+    this.federationHooks?.afterReply(input.messageId, replyMessage, caller)
     return { kind: 'ordinary_reply', messageId: original.id as MessageId, replyMessage, threadId }
   }
 
@@ -1773,6 +1964,7 @@ export class OrchestrationMessages implements MessageArrivalPort {
       caller.runtimeSessionId,
       at
     )
+    this.federationHooks?.afterQuestionCreated(message, caller)
     return { state: 'cancelled', answer: null, messageId, threadId, timeoutMs, ...handoff }
   }
 

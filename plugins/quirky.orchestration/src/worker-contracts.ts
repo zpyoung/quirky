@@ -33,6 +33,8 @@ export interface WorkerSetup {
 }
 export interface WorkerStartParams extends MutationRequest, DeclaredCallerAliases {
   runId?: RunId; taskId?: TaskId; spec?: string; worktree: string
+  /** Exact paired execution host; absence preserves local placement. */
+  on?: string
   agent?: string; terminal?: string; mode?: WorkerMode
   taskTitle?: string; dependencyTaskIds?: readonly TaskId[]; parentTaskId?: TaskId
   model?: string; effort?: string; name?: string; repo?: string; baseBranch?: string
@@ -96,7 +98,7 @@ export type WorkerLiveness = { status: 'live' | 'exited' | 'unverifiable'; reaso
 export interface WorkerProjection {
   id: DispatchId; role: 'worker'; parent: { taskId: TaskId } | null
   provider: { id: string; model: string | null } | null
-  host: { kind: 'local'; id: string }; workspace: { id: string; kind: string } | null
+  host: { kind: 'local' | 'remote'; id: string }; workspace: { id: string; kind: string } | null
   stage: { worker: string | null; dispatch: string; detail: string; activity: 'working' | 'blocked' | 'waiting' | 'done' | 'unknown' }
   outcome: 'in_progress' | 'succeeded' | 'failed' | 'outcome_unknown' | 'finished_unverified'
   liveness: WorkerLiveness
@@ -131,6 +133,7 @@ export interface WorkerReadResult {
   clipping: { clipped: boolean; maxBytes: number }; nextCursor: string | null
   terminalLiveness: WorkerObservation['status']; agentLiveness: WorkerLiveness
   warnings: readonly string[]; sourceIdentity: string
+  remote?: { peerId: string; bindingId: string; hostDispatchId: string; hostIncarnation: string }
 }
 
 /** Adapter to core's concrete task/receipt/staged-authority APIs, never another store. */
@@ -190,8 +193,14 @@ export interface WorkerLifecycle extends WorkerLifecyclePort {
   onExit(sessionId: string, incarnation: string | null, reason: string, exitCode: number | null): void
   dispose(): void
 }
+export interface FederatedWorkerStartHooks {
+  accepted(receipt: WorkerStartReceipt, worker: WorkerRecord): void
+  beforeLaunch(receipt: WorkerStartReceipt, worker: WorkerRecord): Promise<void>
+  attached(worker: WorkerRecord, dispatch: DispatchRow): Promise<void>
+}
 export interface WorkerStarter {
   start(params: WorkerStartParams, caller: CoordinatorEvidence): Promise<MutationResult<WorkerStartReceipt>>
+  startFederated(params: WorkerStartParams, caller: ServiceCoordinatorEvidence, hooks: FederatedWorkerStartHooks): Promise<MutationResult<WorkerStartReceipt>>
   dispose(): void
 }
 export interface WorkerFleet {

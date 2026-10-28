@@ -1,5 +1,5 @@
 import { chmodSync, mkdirSync, writeFileSync } from 'node:fs'
-import { randomBytes } from 'node:crypto'
+import { randomBytes, randomUUID } from 'node:crypto'
 import { resolve, join } from 'node:path'
 import { afterEach, expect, test } from 'bun:test'
 import { expectReason, startOrchestrationFixture, type OrchestrationFixture } from './fixture'
@@ -49,6 +49,23 @@ test('paired loopback peers expose safe status and reject methods outside the me
   }) as { fingerprint: string; incarnation: string; capabilities: string[] }
   expect(status.fingerprint).toBe(hostListener.fingerprint)
   expect(status.incarnation).toBe(hostListener.incarnation)
+  expect(status.capabilities).toContain('quirky.orchestration/federationAttachStart')
+  expect(status.capabilities).toContain('quirky.orchestration/federationImport')
+  expect(status.capabilities).not.toContain('quirky.orchestration/federationSubmissionPreflight')
+  const spoofedSource = await fetch(`${hostListener.endpoint}/rpc`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${token}`,
+      'content-type': 'application/json',
+      'x-quirky-peer-incarnation': randomUUID(),
+    },
+    body: JSON.stringify({
+      method: 'quirky.orchestration/federationShow',
+      params: { bindingId: 'binding_missing', expectedIncarnation: hostListener.incarnation },
+    }),
+  })
+  expect(spoofedSource.status).toBe(409)
+  expect((await spoofedSource.json() as { error: { code: string } }).error.code).toBe('peer_incarnation_changed')
 
   const inventory = await home.setupClient.callAny('quirky.orchestration/peerList', {}) as { peers: unknown[] }
   expect(Array.isArray(inventory.peers)).toBe(true)

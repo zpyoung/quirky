@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { Session } from '@quirky/protocol'
 import type { DispatchId, DispatchRow, RunId, RuntimeCallerEvidence, TaskRow } from '../contracts'
+import type { FederationEngine } from '../federation/contracts'
 import type {
   TerminalResource, TerminalState, WorkerCore, WorkerFleet, WorkerFleetRow, WorkerLiveness,
   WorkerObservation, WorkerProjection, WorkerRecord, WorkerRepository, WorkerRuntime, WorkerShowParams,
@@ -371,7 +372,7 @@ function makeFleetRow(
     coordinatorSessionId: candidate.coordinatorSessionId,
     parentSessionId: dispatch.creatorSessionId,
     dispatchStatus: dispatch.status,
-    agentTerminalHandle: resource?.ownerDispatchId === dispatch.id ? resource.sessionId : worker?.sessionId ?? null,
+    agentTerminalHandle: resource && resource.ownerDispatchId === dispatch.id ? resource.sessionId : worker?.sessionId ?? null,
     terminalState,
     resource: cloneResource(resource),
     projection
@@ -418,7 +419,30 @@ function snapshotCandidates(core: WorkerCore, repo: WorkerRepository, filter: Fl
   return candidates
 }
 
-async function projectCandidate(runtime: WorkerRuntime, candidate: FleetCandidate): Promise<WorkerFleetRow> {
+async function projectCandidate(
+  runtime: WorkerRuntime,
+  candidate: FleetCandidate,
+  getFederation: () => FederationEngine | null
+): Promise<WorkerFleetRow> {
+  const binding = getFederation()?.home(candidate.dispatch.id)
+  if (binding) {
+    const observation = uncertainObservation('unverifiable', 'remote_observation_not_requested')
+    const evidence: AgentEvidence = {
+      durable: candidate.worker !== null,
+      liveStatus: 'unavailable',
+      lastObservedAt: null,
+      reason: 'remote_observation_not_requested',
+      state: null,
+      display: null,
+      label: null,
+      detail: null
+    }
+    const row = makeFleetRow(candidate, observation, evidence, { status: 'unverifiable', reason: 'remote_observation_not_requested' })
+    const terminalState = row.terminalState === 'released' || row.terminalState === 'retained' ||
+      row.terminalState === 'release_pending' || row.terminalState === 'release_unknown'
+      ? row.terminalState : 'release_unknown'
+    return { ...row, terminalState, projection: { ...row.projection, host: { kind: 'remote', id: binding.peer.id } } }
+  }
   const initialObservation = await observeCandidate(runtime, candidate)
   const evidence = await readAgentEvidence(runtime, candidate.dispatch, candidate.worker, candidate.resource, initialObservation)
   const observation = observationAfterEvidence(initialObservation, evidence)
@@ -426,18 +450,21 @@ async function projectCandidate(runtime: WorkerRuntime, candidate: FleetCandidat
   return makeFleetRow(candidate, observation, evidence, liveness)
 }
 
-async function projectCandidates(runtime: WorkerRuntime, candidates: readonly FleetCandidate[]): Promise<WorkerFleetRow[]> {
+async function projectCandidates(
+  runtime: WorkerRuntime,
+  candidates: readonly FleetCandidate[],
+  getFederation: () => FederationEngine | null
+): Promise<WorkerFleetRow[]> {
   const rows = new Array<WorkerFleetRow>(candidates.length)
   let next = 0
   async function projectBatch(): Promise<void> {
     while (true) {
       const index = next++
       if (index >= candidates.length) return
-      rows[index] = await projectCandidate(runtime, candidates[index])
+      rows[index] = await projectCandidate(runtime, candidates[index], getFederation)
     }
   }
-  const batches = Math.min(OBSERVATION_CONCURRENCY, candidates.length)
-  await Promise.all(Array.from({ length: batches }, () => projectBatch()))
+  await Promise.all(Array.from({ length: Math.min(OBSERVATION_CONCURRENCY, candidates.length) }, projectBatch))
   return rows
 }
 
@@ -445,7 +472,12 @@ function partialHostErrors(includeRemote: boolean): WorkerListResult['partialHos
   return includeRemote ? [{ host: 'remote', reason: 'capability_unsupported' }] : []
 }
 
-export function createWorkerFleet(core: WorkerCore, repo: WorkerRepository, runtime: WorkerRuntime): WorkerFleet {
+export function createWorkerFleet(
+  core: WorkerCore,
+  repo: WorkerRepository,
+  runtime: WorkerRuntime,
+  getFederation: () => FederationEngine | null = () => null
+): WorkerFleet {
   const snapshots = new Map<string, FleetSnapshot>()
   let expiryTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -554,7 +586,7 @@ export function createWorkerFleet(core: WorkerCore, repo: WorkerRepository, runt
     if (legacy && filter.terminalState === null && candidates.length > LEGACY_MAX_ROWS) {
       throw runtime.context.error('invalid-params', 'worker_list_snapshot_too_large')
     }
-    const projected = await projectCandidates(runtime, candidates)
+    const projected = await projectCandidates(runtime, candidates, getFederation)
     const rows = filter.terminalState === null ? projected : projected.filter((row) => row.terminalState === filter.terminalState)
     if (legacy && rows.length > LEGACY_MAX_ROWS) throw runtime.context.error('invalid-params', 'worker_list_snapshot_too_large')
     const id = randomUUID()

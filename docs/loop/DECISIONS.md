@@ -91,6 +91,8 @@ files, not this one.
 | hard | high | [m5-ledger D2](decisions/m5-ledger.md) | Use the same authenticated scripting surface for every ledger action | locked by docs/architecture.md |
 | hard | high | [m5-ledger D7](decisions/m5-ledger.md) | Preserve validation, history and no-op semantics exactly | locked by external research/orca-features/ledger.md |
 | hard | high | [m5-ledger D8](decisions/m5-ledger.md) | Keep imports replay-safe and evidence advisory | locked by external research/orca-features/ledger.md |
+| hard | high | [m7-orchestration-worker-federation D2](decisions/m7-orchestration-worker-federation.md) | Reuse one store and real paired transport with distinct remote authority | assumed — autonomous |
+| hard | high | [m7-orchestration-worker-federation D4](decisions/m7-orchestration-worker-federation.md) | Commit home verdict before host report acceptance | locked by docs/loop/decisions/m6-orchestration-core.md |
 | hard | high | [m0-ui-api D4](decisions/m0-ui-api.md) | The seven UI kinds are `view`, `panel`, `sidebar-section`, `command`, `keybinding`, `setting` and `theme` | assumed — autonomous |
 | hard | high | [m0-ui-api D29](decisions/m0-ui-api.md) | Choose declared slots with lazily imported modules that mount into host elements | assumed — autonomous |
 | hard | high | [m0-registry D12](decisions/m0-registry.md) | Every contribution is declared in the manifest, and code can only provide declared ones | assumed — autonomous |
@@ -585,6 +587,12 @@ files, not this one.
 | medium | high | [m5-ledger D25](decisions/m5-ledger.md) | Preserve imported source identity through automatic owner recovery | locked by external research/orca-features/ledger.md |
 | medium | high | [m5-ledger D30](decisions/m5-ledger.md) | Preserve reviewer write violations as an operational limitation | assumed — autonomous |
 | medium | high | [m4-hosting-ui-review-browser-routing D4](decisions/m4-hosting-ui-review-browser-routing.md) | Hand off native delivery only after isolation preflight | deferred: platform |
+| medium | high | [m7-orchestration-worker-federation D3](decisions/m7-orchestration-worker-federation.md) | Exact remote placement and durable uncertainty without fallback | locked by research/orca-features/orchestration.md |
+| medium | high | [m7-orchestration-worker-federation D5](decisions/m7-orchestration-worker-federation.md) | Remote lifecycle retains host custody and honest fleet/output provenance | locked by research/orca-features/orchestration.md |
+| medium | high | [m7-orchestration-worker-federation D7](decisions/m7-orchestration-worker-federation.md) | Preserve platform and existing lane boundaries | deferred: platform |
+| medium | high for the source contract; runtime surface proof pending. | [m7-orchestration-worker-federation D8](decisions/m7-orchestration-worker-federation.md) | Use exact remote output routes in every existing task navigation consumer | assumed — autonomous |
+| medium | high for observed boundaries and exact diagnostics; complete smoke/viewer proof still pending. | [m7-orchestration-worker-federation D10](decisions/m7-orchestration-worker-federation.md) | Repair concrete integration boundaries without weakening identity fences | assumed — autonomous |
+| medium | high for these paths; acceptance suites/restart/fault campaigns remain unexecuted under loop. | [m7-orchestration-worker-federation D11](decisions/m7-orchestration-worker-federation.md) | Keep lifecycle identity separate from mutable state and record exercised proof | assumed — autonomous |
 | medium (provider contracts and ui scenarios) | high | [m3-accounts D1](decisions/m3-accounts.md) | Implement meters and only Claude/Codex switching | locked by docs/roadmap.md |
 | medium (provider adapter boundaries) | high for cli/codex; medium for observed private quota protocols | [m3-accounts D4](decisions/m3-accounts.md) | Native CLI login and provider-specific usage ports beat custom OAuth or imported snapshots | assumed — autonomous |
 | medium (inter-plugin preparation) | high | [m3-accounts D5](decisions/m3-accounts.md) | Required account preparation is separate from launch hooks | assumed — autonomous |
@@ -2093,6 +2101,11 @@ files, not this one.
 | easy | high | [m4-hosting-ui-review-browser-routing D3](decisions/m4-hosting-ui-review-browser-routing.md) | Follow build-first execution and keep inherited artifacts untouched | locked by docs/loop/LOOP.md |
 | easy | high | [m4-hosting-ui-review-browser-routing D5](decisions/m4-hosting-ui-review-browser-routing.md) | Retain the existing route owner after all incoming decisions | assumed — autonomous |
 | easy | high for the observed gate/module behavior; full acceptance and native effects unverified | [m4-hosting-ui-review-browser-routing D6](decisions/m4-hosting-ui-review-browser-routing.md) | Separate the typecheck gate and isolated module smoke from acceptance | assumed — autonomous |
+| easy | high | [m7-orchestration-worker-federation D1](decisions/m7-orchestration-worker-federation.md) | Apply autonomous combined-spec build-first workflow | locked by docs/loop/LOOP.md |
+| easy | high | [m7-orchestration-worker-federation D6](decisions/m7-orchestration-worker-federation.md) | Three isolated implementers against committed contracts | assumed — autonomous |
+| easy | high for exact attribution/restoration and scope; runtime/type evidence pending. | [m7-orchestration-worker-federation D9](decisions/m7-orchestration-worker-federation.md) | Attribute misplaced mutations before restoring the parent and integrating components | assumed — autonomous |
+| easy | high for the exercised shipped surfaces; full suites/reviews/native/tls-network campaigns were not run. | [m7-orchestration-worker-federation D12](decisions/m7-orchestration-worker-federation.md) | Report focused shipped-view evidence without claiming a UI campaign | assumed — autonomous |
+| easy | high for inspected binding compatibility and exercised checks. | [m7-orchestration-worker-federation D13](decisions/m7-orchestration-worker-federation.md) | Preserve incoming product exclusions and final caught-up gate evidence | locked by docs/loop/LOOP.md |
 | easy (decision review) | high | [m3-accounts D2](decisions/m3-accounts.md) | Answer unattended design questions without a human gate | locked by docs/loop/LOOP.md |
 | easy (no implementation dispatched) | high | [m3-accounts D3](decisions/m3-accounts.md) | Use OpenAI task implementers and Gemini review fallback | assumed — autonomous |
 | easy (ui); medium (cache) | high | [m3-accounts D7](decisions/m3-accounts.md) | Retain documented presentation, errors and freshness defaults | locked by research/orca-features/accounts.md |

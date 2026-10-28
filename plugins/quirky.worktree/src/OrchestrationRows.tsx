@@ -23,6 +23,7 @@ export interface OrchestrationWorkerRow {
     sessionId: string
   } | null
   projection: {
+    host?: { kind: 'local' | 'remote'; id: string }
     workspace: { id: string } | null
     liveness: { status: 'live' | 'exited' | 'unverifiable'; reason: string | null }
     evidence: { liveStatus: 'fresh' | 'stale' | 'unavailable' | 'redacted_restore'; lastObservedAt: string | null }
@@ -103,6 +104,10 @@ function custodyLabel(row: OrchestrationWorkerRow): string | null {
   return null
 }
 
+function isRemote(row: OrchestrationWorkerRow): boolean {
+  return row.projection.host?.kind === 'remote'
+}
+
 function latestCurrentNodes(workers: readonly OrchestrationWorkerRow[]): WorkerNode[] {
   const seenTasks = new Set<string>()
   const seenDispatches = new Set<string>()
@@ -127,14 +132,15 @@ function latestCurrentNodes(workers: readonly OrchestrationWorkerRow[]): WorkerN
   }
 
   const exactSessions = new Set(
-    candidates.filter((node) => node.row.currentAssignment && node.sessionId).map((node) => node.sessionId!)
+    candidates.filter((node) => !isRemote(node.row) && node.row.currentAssignment && node.sessionId).map((node) => node.sessionId!)
   )
   const seenSessions = new Set<string>()
   const nodes: WorkerNode[] = []
   for (const node of candidates) {
-    if (node.sessionId && !node.row.currentAssignment && exactSessions.has(node.sessionId)) continue
-    if (node.sessionId && seenSessions.has(node.sessionId)) continue
-    if (node.sessionId) seenSessions.add(node.sessionId)
+    const key = node.sessionId ? `${isRemote(node.row) ? node.row.projection.host!.id : 'local'}:${node.sessionId}` : null
+    if (!isRemote(node.row) && node.sessionId && !node.row.currentAssignment && exactSessions.has(node.sessionId)) continue
+    if (key && seenSessions.has(key)) continue
+    if (key) seenSessions.add(key)
     node.order = nodes.length
     nodes.push(node)
   }
@@ -168,16 +174,20 @@ function breakLineageCycles(nodes: readonly WorkerNode[]): void {
 
 function groupsForWorktree(
   worktreeId: string,
-  workers: readonly OrchestrationWorkerRow[]
+  workers: readonly OrchestrationWorkerRow[],
+  sessions: readonly Session[]
 ): { groups: CoordinatorGroup[]; representedSessions: Set<string> } {
   const allNodes = latestCurrentNodes(workers)
   const bySession = new Map<string, WorkerNode>()
   for (const node of allNodes) {
-    if (node.row.currentAssignment && node.sessionId && !bySession.has(node.sessionId)) bySession.set(node.sessionId, node)
+    if (!isRemote(node.row) && node.row.currentAssignment && node.sessionId && !bySession.has(node.sessionId)) bySession.set(node.sessionId, node)
   }
-  const nodes = allNodes.filter((node) => node.worktreeId === worktreeId)
+  const sessionById = new Map(sessions.map((session) => [session.id, session]))
+  const nodes = allNodes.filter((node) => isRemote(node.row)
+    ? sessionById.get(node.row.coordinatorSessionId ?? '')?.worktreeId === worktreeId
+    : node.worktreeId === worktreeId)
   const representedSessions = new Set<string>()
-  for (const node of nodes) if (node.sessionId) representedSessions.add(node.sessionId)
+  for (const node of nodes) if (!isRemote(node.row) && node.sessionId) representedSessions.add(node.sessionId)
 
   for (const node of nodes) {
     const candidates = [node.row.parentSessionId, node.row.coordinatorSessionId]
@@ -207,12 +217,24 @@ function groupsForWorktree(
   return { groups: [...groups.values()], representedSessions }
 }
 
-function asTaskTerminal(value: unknown): { taskId: string; dispatchId: string; sessionId: string; worktreeId: string } | null {
+type TaskTarget =
+  | { taskId: string; dispatchId: string; sessionId: string; worktreeId: string }
+  | { kind: 'remote_output'; taskId: string; dispatchId: string; viewId: 'view:quirky.orchestration/remote-worker-output'; input: { dispatchId: string } }
+
+function asTaskTerminal(value: unknown): TaskTarget | null {
   if (value === null || typeof value !== 'object' || Array.isArray(value) ||
-    !('taskId' in value) || !('dispatchId' in value) || !('sessionId' in value) || !('worktreeId' in value)) return null
-  const { taskId, dispatchId, sessionId, worktreeId } = value
-  if (typeof taskId !== 'string' || taskId === '' || typeof dispatchId !== 'string' || dispatchId === '' ||
-    typeof sessionId !== 'string' || sessionId === '' || typeof worktreeId !== 'string' || worktreeId === '') return null
+    !('taskId' in value) || !('dispatchId' in value)) return null
+  const { taskId, dispatchId } = value
+  if (typeof taskId !== 'string' || taskId === '' || typeof dispatchId !== 'string' || dispatchId === '') return null
+  if ('kind' in value && value.kind === 'remote_output') {
+    if (!('viewId' in value) || value.viewId !== 'view:quirky.orchestration/remote-worker-output' ||
+      !('input' in value) || value.input === null || typeof value.input !== 'object' ||
+      !('dispatchId' in value.input) || value.input.dispatchId !== dispatchId) return null
+    return { kind: 'remote_output', taskId, dispatchId, viewId: value.viewId, input: { dispatchId } }
+  }
+  if (!('sessionId' in value) || !('worktreeId' in value)) return null
+  const { sessionId, worktreeId } = value
+  if (typeof sessionId !== 'string' || sessionId === '' || typeof worktreeId !== 'string' || worktreeId === '') return null
   return { taskId, dispatchId, sessionId, worktreeId }
 }
 
@@ -226,7 +248,7 @@ type Props = {
 
 /** Compact worker lineage rows for the current workspace, using only public daemon/UI APIs. */
 export function OrchestrationRows({ context, workers, sessions, worktreeId }: Props) {
-  const { groups, representedSessions } = groupsForWorktree(worktreeId, workers)
+  const { groups, representedSessions } = groupsForWorktree(worktreeId, workers, sessions ?? [])
   if (groups.length === 0) return null
   const sessionById = new Map((sessions ?? []).map((session) => [session.id, session]))
 
@@ -236,7 +258,8 @@ export function OrchestrationRows({ context, workers, sessions, worktreeId }: Pr
 
   const renderWorker = (node: WorkerNode, depth: number): ReactNode => {
     const { row } = node
-    const session = node.sessionId ? sessionById.get(node.sessionId) : undefined
+    const remote = isRemote(row)
+    const session = !remote && node.sessionId ? sessionById.get(node.sessionId) : undefined
     const label = workerLabel(row, session)
     const terminal = row.currentAssignment && row.resource !== null && row.resource.ownerDispatchId === row.dispatchId &&
       session?.kind === 'terminal' && session.worktreeId === row.resource.worktreeId && session.status !== 'exited'
@@ -249,30 +272,35 @@ export function OrchestrationRows({ context, workers, sessions, worktreeId }: Pr
       <>
         <span>{label}</span>
         <span className="orchestration-worker-status" style={STATUS_STYLE}> · {status}</span>
+        {remote && <span className="orchestration-worker-host" style={STATUS_STYLE}> · {row.projection.host!.id}</span>}
         {custody && <span className="orchestration-worker-custody" style={CUSTODY_STYLE}> · {custody}</span>}
       </>
     )
     return (
       <li className="orchestration-worker-item" key={row.dispatchId} data-lineage-depth={depth + 1} style={GROUP_STYLE}>
-        {terminal
+        {terminal || remote
           ? <button
               type="button"
               className="orchestration-worker-row"
-              aria-label={`Open ${label} terminal`}
+              aria-label={`Open ${label} ${remote ? 'output' : 'terminal'}`}
               data-visual-depth="1"
               style={ROW_STYLE}
               onClick={() => {
                 void context.call('quirky.orchestration/taskTerminal', { taskId: row.taskId }).then((result) => {
                   const target = asTaskTerminal(result)
                   if (!target || target.taskId !== row.taskId) {
-                    context.toast('Could not open worker terminal', 'The task no longer has a current local terminal.')
+                    context.toast('Could not open worker', 'The task no longer has a current inspectable assignment.')
                     return
                   }
                   if (target.dispatchId !== row.dispatchId) {
                     context.toast('Could not open worker terminal', 'The task assignment changed; refresh the sidebar before opening its terminal.')
                     return
                   }
-                  context.openView(SESSION_VIEW, { worktree: target.worktreeId, session: target.sessionId })
+                  if ('kind' in target && target.kind === 'remote_output') {
+                    context.openView(target.viewId, target.input)
+                  } else if ('sessionId' in target) {
+                    context.openView(SESSION_VIEW, { worktree: target.worktreeId, session: target.sessionId })
+                  }
                 }).catch((error: unknown) => context.toast('Could not open worker terminal', error instanceof Error ? error.message : String(error)))
               }}
             >{content}</button>

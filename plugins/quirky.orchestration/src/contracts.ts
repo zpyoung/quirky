@@ -6,6 +6,7 @@
  * to `requestId`; the transport supplies `contractVersion`.
  */
 
+import type { FederationReportAuthority } from './federation/contracts'
 import type { ServiceMethodInputs, ServiceMethodResults } from './services/contracts'
 
 export type SessionId = string
@@ -51,6 +52,9 @@ export interface RuntimeCallerEvidence {
     processIncarnation: string
   }
 }
+
+/** A federated report is distinct from locally attested runtime evidence. */
+export type WorkerReportAuthority = RuntimeCallerEvidence | FederationReportAuthority
 /** Service authority comes only from an authenticated plugin caller after owner validation. */
 export interface ServiceCoordinatorPrincipal {
   kind: 'service'
@@ -514,7 +518,7 @@ export type WorkerTransitionInput =
       nextState: 'succeeded'
       correction: 'unobserved_prompt_report'
       report: WorkerDoneReportInput
-      caller: RuntimeCallerEvidence
+      caller: WorkerReportAuthority
     }
 
 export interface WorkerDoneReportInput {
@@ -532,6 +536,15 @@ export interface WorkerHeartbeatInput {
   taskId: TaskId
   dispatchId: DispatchId
   phase?: string
+}
+
+export interface FederatedWorkerExitInput {
+  dispatchId: DispatchId
+  taskId: TaskId
+  processIncarnation: string
+  reason: string
+  exitCode: number | null
+  at: UtcTimestamp
 }
 
 export type WorkerReportRejection =
@@ -553,6 +566,14 @@ export type WorkerReportResult =
   | { status: 'accepted'; task: TaskRow; dispatch: DispatchRow; worker: WorkerRow | null }
   | { status: 'duplicate'; task: TaskRow; dispatch: DispatchRow; worker: WorkerRow | null }
   | { status: 'rejected'; reason: WorkerReportRejection; audited: true; lifecycle?: { action: 'rejected'; code: string; reason: string } }
+
+export type FederatedWorkerExitAcceptance =
+  | { status: 'accepted' | 'duplicate' }
+  | { status: 'rejected'; reason: WorkerReportRejection }
+
+export type WorkerExitResult =
+  | { status: 'accepted' | 'duplicate'; task: TaskRow; dispatch: DispatchRow; worker: WorkerRow | null }
+  | { status: 'rejected'; reason: WorkerReportRejection; audited: true }
 
 export type HeartbeatResult =
   | { status: 'accepted'; lastHeartbeatAt: UtcTimestamp }

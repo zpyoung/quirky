@@ -241,6 +241,9 @@ export function createLifecycleFixture(options: FixtureOptions = {}): LifecycleF
       if (registrationCount > 1) throw new Error('worker port registered more than once')
       registeredPort = port
     },
+    registerFederationAuthorityValidator() {
+      throw new Error('Federated authority is unsupported by the local lifecycle fixture')
+    },
     requireCoordinator(_caller: CoordinatorEvidence, scopedRunId?: string) {
       if (scopedRunId !== undefined && scopedRunId !== runId) throw new Error('coordinator Run mismatch')
       return {
@@ -440,7 +443,11 @@ export function createLifecycleFixture(options: FixtureOptions = {}): LifecycleF
     },
     recordHeartbeat(_input: WorkerHeartbeatInput, _heartbeatCaller: RuntimeCallerEvidence) {
       return { status: 'accepted', lastHeartbeatAt: now }
-    }
+    },
+    preflightFederatedWorkerDone() { return { status: 'rejected', reason: 'worker_identity_changed', audited: true } },
+    reportFederatedWorkerDone() { return { status: 'rejected', reason: 'worker_identity_changed', audited: true } },
+    recordFederatedHeartbeat() { return { status: 'rejected', reason: 'worker_identity_changed', lastHeartbeatAt: null } },
+    reportFederatedWorkerExit() { return { status: 'rejected', reason: 'worker_identity_changed', audited: true } },
   }
 
   let observationOverride: Partial<WorkerObservation> = {}

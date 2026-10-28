@@ -187,5 +187,16 @@
 - **Revisit if:** The canonical merged-source gate names a conflict or type error.
 - **Source:** deferred: remaining provider, remote authorization, native, worktree and terminal implementation flows
 
+## D18: Retry only after the controller named a new federation integration conflict
+- **Question:** The first canonical land rejected the branch because roadmap advanced with worker federation.
+- **Options:** Force the old merge; follow LOOP7.3 and compose the actual new source.
+- **Chose:** Controller-required additional catch-up; read all m7-orchestration-worker-federation D1–D13 and Progress. Preserve distinct remote authority, home-verdict-before-host-acceptance, ordered durable questions, host custody and exact remote-output navigation. Resolve the sole messaging conflict by invoking incoming afterQuestionCreated and retaining our handoff identity in the accepted checkpoint; neither addition replaces the other.
+- **Why:** Dropping the hook would break remote question relay; dropping handoff identity would falsely reject genuine local/native answers. This is an actual controller-directed retry, not a routine second catch-up. Generic federated worker heartbeat/status is now owned; the successor's remote provider-status/hook composition must not duplicate it.
+- **Evidence:** First canonical land exit1 conflict receipt; sole messaging conflict at beginAsk; complete new decision-log read. Composed root/mobile typecheck passed24.99s. Fresh real daemon/PTY native Codex/coordinator and plain-worker Ask replay/answer/unavailable smoke passed with the hook registered; V9 exited0 and home/repo absence confirmed.
+- **Reversibility:** easy
+- **Confidence:** high for named local composition and observed gates; incoming remote federation retains its own proof/acceptance limits
+- **Revisit if:** Canonical merged-source gate reports a concrete new conflict or type error.
+- **Source:** locked by docs/loop/LOOP.md step7.3
+
 ## Progress
-Implementation and additive canonical catch-up are committed through a820291b. D16 records all four incoming logs, root/mobile typecheck25.09s and fresh composed daemon/PTY/CLI proof. D17's single implementation-only successor is registered. All owned workers/services/browser and component trees stopped/removed; smoke homes/checkouts are absent. Native scenarios remain pending; permanent suites/reviews/dogfood unrun. Next: commit this final receipt, detach and canonical land; on an actual named controller failure follow LOOP7.3. After success remove owned /tmp scratch, update ignored loop notes and end this one item without another claim.
+Final integration4465531b first canonical land was rejected only for newly landed federation. Controller-required retry now composes the sole conflict and preserves both relay and handoff identity; all incoming federation decisions read. Root/mobile typecheck24.99s and fresh actual local/native Ask proof passed; all owned workers/services/browser/homes/checkouts are stopped/removed. The single D17 implementation-only successor remains registered; no additional item. Native scenarios pending; permanent suites/reviews/dogfood unrun. Next: commit the resolved retry merge, detach and canonical land again. After success remove the two owned /tmp scratch files, delete merged component branches, update ignored loop notes and end this one item without another claim.

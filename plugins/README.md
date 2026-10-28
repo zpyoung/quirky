@@ -209,12 +209,37 @@ defaults to 1 and governs future dispatch admission and worker preambles; loweri
 stop admitted workers. This is a policy guard, not a sandbox against other holders of the user token.
 
 Terminal `task_…` links and nested sidebar rows resolve the latest exact assignment through
-`taskTerminal`; `task-terminal --task-id <id> --json` returns the same session/workspace target.
-Context-only Dispatches are navigable too. Reused, released, changed or structured-only sessions
-are refused rather than opening an unrelated terminal. Fleet rows separate task labels and
+`taskTerminal`; `task-terminal --task-id <id> --json` returns the same navigation target.
+Local targets name their session/workspace; remote targets return `kind: remote_output` and open
+the host-bound read-only output viewer. Context-only local Dispatches are navigable too. Reused,
+released, changed or structured-only local sessions are refused rather than opening an unrelated
+terminal. Remote released workers retain their readable output archive. Fleet rows separate task labels and
 lineage from `currentAssignment` confidence; uncertain workers remain visible without stale task
 titles. Physical input transfers existing worker custody to the user, so release retains that
 terminal instead of closing it. The setup affordance's open and dismiss actions are public UI commands.
+
+Paired-daemon workers keep the authoritative Run, Tasks and report settlement at home while a
+real host-owned service Run launches and owns the process. Configure reciprocal pinned peers with
+`peer-listen` and `peer-pair`; credentials are read from private token files and are never returned
+in peer inventory. Non-loopback listeners require TLS.
+
+```sh
+quirky orchestration worker-start --on worker-host --worktree wt_exact_remote_id --agent claude --spec "Implement the assigned change" --json
+quirky orchestration worker-start --on worker-host --worktree new-top-level --repo repo_remote_id --name delegated-change --agent claude --spec "Implement in a new host worktree" --json
+```
+
+`--on` is an exact saved peer ID, never an implicit local fallback. Existing remote worktrees use
+their host-issued IDs; `current`, `new-child` and local path inference are refused. Service-owned
+coordinators pass the same `on` field to `serviceWorkerStart`.
+
+Coordinator mail, blocking questions and replies relay in durable sequence order. Question timeouts
+retain the original resume ID. Worker completion succeeds on the host only after the home has
+accepted any owner preflight and committed settlement; unavailable/rejected preflight does not
+complete either attempt. Stop, retain, abandon, release, show and read route to the exact paired
+host/process; a missing connection is uncertainty, not proof of exit. Release archives before
+closing an owned terminal. `worker-list --include-remote` reports source provenance and partial
+host errors; the output viewer displays host, source, liveness and transcript fallback reasons.
+
 
 **Session, worker and setup methods:** `runCreate`, `runUse`, `runCurrent`, `runList`, `runShow`, `taskCreate`,
 `taskList`, `taskUpdate`, `dispatch`, `dispatchShow`, `send`, `check`, `reply`, `inbox`, `ask`,
@@ -223,7 +248,7 @@ terminal instead of closing it. The setup affordance's open and dismiss actions 
 `workerTerminalUserInput` (internal terminal-custody guard), `skillShow`, `skillStatus`,
 `skillInstall`, `policyShow`, `policySet`, `taskTerminal`.
 
-**CLI verbs (34):** `run-create`, `run-use`, `run-current`, `run-list`, `run-show`, `task-create`,
+**CLI verbs:** `run-create`, `run-use`, `run-current`, `run-list`, `run-show`, `task-create`,
 `task-list`, `task-update`, `dispatch`, `dispatch-show`, `send`, `check`, `reply`, `inbox`, `ask`,
 `gate-create`, `gate-resolve`, `gate-list`, `request-show`, `reset`, `worker-start`, `worker-show`,
 `worker-read`, `worker-list`, `worker-stop`, `worker-abandon`, `worker-release`, `worker-retain`,
@@ -233,7 +258,8 @@ Use `quirky api --json` for the current method and result schemas.
 See the [contracts](quirky.orchestration/src/contracts.ts),
 [runtime interfaces](quirky.orchestration/src/runtime-contracts.ts),
 [core behavior specification](../docs/quirk/specs/2026-10-27-m6-orchestration-core/logic.md),
-[worker behavior specification](../docs/quirk/specs/2026-10-27-m6-orchestration-workers/logic.md) and
+[worker behavior specification](../docs/quirk/specs/2026-10-27-m6-orchestration-workers/logic.md),
+[worker federation specification](../docs/quirk/specs/2026-10-28-m7-orchestration-worker-federation/logic.md) and
 [setup and UI specification](../docs/quirk/specs/2026-10-28-m6-orchestration-ui/logic.md).
 
 ## Heimdall kernel and service-owned Runs
