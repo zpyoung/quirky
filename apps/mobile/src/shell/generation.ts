@@ -1,5 +1,6 @@
-import type { MobileBundleAsset, MobileBundleManifest, MobileBundleManifestResult, MobileBundleReadResult, MobileGrant } from '../contracts'
+import type { MobileBundleAsset, MobileBundleManifest, MobileBundleManifestResult, MobileBundleReadResult, MobileBundleRoute, MobileGrant } from '../contracts'
 import { MOBILE_BUNDLE_LIMITS } from '../contracts'
+import { PANEL_BUNDLE_ROUTES } from '../panels/routes'
 
 export type StoredGeneration = { manifest: MobileBundleManifest; directory: string; activatedAt: number }
 export type GenerationStage = {
@@ -28,12 +29,19 @@ export type BundleSha256 = (bytes: Uint8Array) => Promise<Uint8Array> | Uint8Arr
 export type BundleProgress = { receivedBytes: number; totalBytes: number }
 export type BundleChunkFetcher = (buildId: string, path: string, offset: number) => Promise<MobileBundleReadResult>
 
+type PageRouteDefinition = { kind: MobileBundleRoute['kind']; path: string; grants: readonly MobileGrant[] }
+
+export const PAGE_BUNDLE_ROUTES: readonly PageRouteDefinition[] = [
+  { kind: 'workspaces', path: '/', grants: ['rpc', 'storage', 'navigate', 'terminal', 'externalLink'] },
+  { kind: 'session', path: '/session', grants: ['rpc', 'storage', 'navigate', 'terminal', 'clipboard.read', 'clipboard.write', 'externalLink'] },
+  ...PANEL_BUNDLE_ROUTES
+]
+
 const GRANT: Record<string, true> = {
   rpc: true, terminal: true, storage: true, navigate: true,
   'clipboard.read': true, 'clipboard.write': true, externalLink: true, haptics: true
 }
-const WORKSPACE_GRANTS: readonly MobileGrant[] = ['rpc', 'storage', 'navigate', 'terminal', 'externalLink']
-const SESSION_GRANTS: readonly MobileGrant[] = ['rpc', 'storage', 'navigate', 'terminal', 'clipboard.read', 'clipboard.write', 'externalLink']
+
 const ASSET_CONTENT_TYPE = /^[a-zA-Z0-9.+-]+\/[a-zA-Z0-9.+-]+(?:;\s*charset=utf-8)?$/
 const SHA256_HEX = /^[0-9a-f]{64}$/
 const SAFE_ASSET_PART = /^[A-Za-z0-9][A-Za-z0-9_.@-]{0,127}$/
@@ -59,10 +67,6 @@ function isAssetPath(value: unknown): value is string {
   })
 }
 
-function isRoutePath(value: unknown): value is string {
-  return value === '/' || value === '/session'
-}
-
 function sameGrants(actual: unknown, expected: readonly MobileGrant[]): actual is MobileGrant[] {
   if (!Array.isArray(actual) || actual.length !== expected.length) return false
   const seen: Record<string, true> = {}
@@ -73,12 +77,13 @@ function sameGrants(actual: unknown, expected: readonly MobileGrant[]): actual i
   return expected.every((grant) => Object.hasOwn(seen, grant))
 }
 
+
 export function validateBundleManifest(value: unknown): MobileBundleManifest {
   if (!isRecord(value) || !hasExactKeys(value, ['v', 'shellVersion', 'buildId', 'assets', 'totalBytes', 'routes'])) throw new Error('mobile bundle manifest has an invalid shape')
   if (value.v !== 1 || value.shellVersion !== 1) throw new Error('mobile bundle shell version is unsupported')
   if (typeof value.buildId !== 'string' || !SHA256_HEX.test(value.buildId)) throw new Error('mobile bundle build ID is invalid')
   if (!Array.isArray(value.assets) || value.assets.length === 0 || value.assets.length > MOBILE_BUNDLE_LIMITS.assets) throw new Error('mobile bundle asset count is outside supported limits')
-  if (!Array.isArray(value.routes) || value.routes.length !== 2 || value.routes.length > MOBILE_BUNDLE_LIMITS.routes) throw new Error('mobile bundle route count is invalid')
+  if (!Array.isArray(value.routes) || value.routes.length !== PAGE_BUNDLE_ROUTES.length || value.routes.length > MOBILE_BUNDLE_LIMITS.routes) throw new Error('mobile bundle route count is invalid')
   if (!Number.isSafeInteger(value.totalBytes) || (value.totalBytes as number) < 1 || (value.totalBytes as number) > MOBILE_BUNDLE_LIMITS.totalBytes) throw new Error('mobile bundle total size is outside supported limits')
 
   let totalBytes = 0
@@ -98,14 +103,15 @@ export function validateBundleManifest(value: unknown): MobileBundleManifest {
   const routeKinds: Record<string, true> = {}
   for (const rawRoute of value.routes) {
     if (!isRecord(rawRoute) || !hasExactKeys(rawRoute, ['kind', 'path', 'grants'])) throw new Error('mobile bundle route entry has an invalid shape')
-    if (rawRoute.kind !== 'workspaces' && rawRoute.kind !== 'session') throw new Error('mobile bundle route is unsupported')
-    if (!isRoutePath(rawRoute.path) || (rawRoute.kind === 'workspaces' && rawRoute.path !== '/') || (rawRoute.kind === 'session' && rawRoute.path !== '/session')) throw new Error('mobile bundle route path is unsupported')
+    if (typeof rawRoute.kind !== 'string') throw new Error('mobile bundle route is unsupported')
+    const expected = PAGE_BUNDLE_ROUTES.find((route) => route.kind === rawRoute.kind)
+    if (!expected) throw new Error('mobile bundle route is unsupported')
+    if (rawRoute.path !== expected.path) throw new Error('mobile bundle route path is unsupported')
     if (Object.hasOwn(routeKinds, rawRoute.kind)) throw new Error('mobile bundle contains a duplicate route')
     routeKinds[rawRoute.kind] = true
-    const expected = rawRoute.kind === 'workspaces' ? WORKSPACE_GRANTS : SESSION_GRANTS
-    if (!sameGrants(rawRoute.grants, expected)) throw new Error(`mobile bundle ${rawRoute.kind} grants are unsupported`)
+    if (!sameGrants(rawRoute.grants, expected.grants)) throw new Error(`mobile bundle ${rawRoute.kind} grants are unsupported`)
   }
-  if (!Object.hasOwn(routeKinds, 'workspaces') || !Object.hasOwn(routeKinds, 'session')) throw new Error('mobile bundle is missing a required route')
+  if (PAGE_BUNDLE_ROUTES.some((route) => !Object.hasOwn(routeKinds, route.kind))) throw new Error('mobile bundle is missing a required route')
   return value as unknown as MobileBundleManifest
 }
 
@@ -240,7 +246,7 @@ export async function createGenerationStore(fs: BundleFileSystem, root: string, 
     await fs.writeFile(joinPath(hostPath, 'host.json'), encodeUtf8(JSON.stringify({ hostId, lastUsedAt: at })))
   }
 
-  return {
+  const store: GenerationStore = {
     async getActive(hostId) {
       const hostPath = await hostDirectory(hostId)
       if (!await fs.exists(hostPath)) return null
@@ -350,6 +356,7 @@ export async function createGenerationStore(fs: BundleFileSystem, root: string, 
       for (const host of hosts) if (evicted.has(host.hostId)) await fs.removePath(host.directory)
     }
   }
+  return store
 }
 
 async function pruneOldGenerations(fs: BundleFileSystem, hostPath: string, activeGenerationKey: string): Promise<void> {

@@ -10,6 +10,35 @@
   "contributes": {
     "method": [
       {
+        "id": "notificationPoll",
+        "description": "Read or long-poll the bounded notification-only replay for an authenticated phone; never exposes general daemon events.",
+        "connection": true,
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "after": { "type": "integer", "minimum": 0 },
+            "epoch": { "type": "string" },
+            "waitMs": { "type": "integer", "minimum": 0, "maximum": 25000 },
+            "onlyWhenDesktopAway": { "type": "boolean" },
+            "suppressWorktree": { "type": "string" },
+            "subscriptionId": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "notificationCancel",
+        "description": "Cancel only this caller's pending phone notification poll, optionally matching the subscription generation.",
+        "connection": true,
+        "params": { "type": "object", "properties": { "subscriptionId": { "type": "string" } }, "additionalProperties": false }
+      },
+      {
+        "id": "notificationTest",
+        "description": "Send a test alert to direct phone subscriptions without a native desktop banner or cloud service.",
+        "params": { "type": "object", "properties": {}, "additionalProperties": false }
+      },
+      {
         "id": "info",
         "description": "Read the configured desktop name and platform from a paired phone.",
         "readOnly": true,
@@ -437,6 +466,26 @@
     ],
     "cli-command": [
       { "id": "info", "summary": "read this desktop's mobile identity", "methods": ["quirky.mobile/info"] },
+      {
+        "id": "notification-poll",
+        "summary": "read notification replay with optional bounded long-poll",
+        "flags": {
+          "after": { "type": "number", "description": "last consumed notification sequence" },
+          "epoch": { "type": "string", "description": "last observed notification process epoch" },
+          "wait-ms": { "type": "number", "description": "long-poll deadline in milliseconds, at most25000" },
+          "only-away": { "type": "boolean", "description": "omit events while desktop presence is known active" },
+          "suppress-worktree": { "type": "string", "description": "omit the workspace currently viewed on the phone" },
+          "subscription-id": { "type": "string", "description": "bind this poll to a cancellation generation" }
+        },
+        "methods": ["quirky.mobile/notificationPoll"]
+      },
+      { "id": "notification-test", "summary": "send a direct mobile subscription test notification", "methods": ["quirky.mobile/notificationTest"] },
+      {
+        "id": "notification-cancel",
+        "summary": "cancel this client's pending notification poll",
+        "flags": { "subscription-id": { "type": "string", "description": "cancel only the matching subscription generation" } },
+        "methods": ["quirky.mobile/notificationCancel"]
+      },
       { "id": "state", "summary": "show mobile pairing and listener state", "methods": ["quirky.mobile/state"] },
       { "id": "interfaces", "summary": "list ranked mobile pairing addresses", "methods": ["quirky.mobile/interfaces"] },
       {

@@ -396,6 +396,14 @@ Registration update: `bun scripts/build-loop/queue.ts add /tmp/quirky-session-in
 - Unchanged failures still awaiting the normal merged retry: Git remote SC-29 wait (five possible predicates; available stack does not identify one), daemon lock five-second test bound, incoming loops-store five-second bound. No speculative producer change, timeout increase or waived assertion was used for these.
 - Operator's45-minute target was not met; the first controller verification alone took1800.57seconds after source submission. No on-time or authoritative landed claim is inferred from a submitted command.
 
+
+## sb-mobile-app-panels: fixture isolation correction and unverified earlier home effects
+
+- **HIGH historical isolation observation:** the first notification API/CLI smoke fixtures used temporary `QUIRKY_HOME` but retained ambient `HOME` while loading all built-ins, including automatic agent-hook support. No pre-run home/configuration hash baseline was captured. The observed output does not establish an actual hook write, and it cannot establish zero user-configuration effects either.
+- **Corrected source:** new notification/catalog/vault fixtures now use owned `HOME`, `QUIRKY_HOME`, `CODEX_HOME` and `CLAUDE_CONFIG_DIR`, with unrelated hook installation disabled in the owned store before daemon startup. Git/editor proof also clears inherited Git directory/index/object pointers before physical Git commands. Current isolated credential/notification regression run:3tests28assertions passed; corrected CLI settings/catalog/sealed-notification/replay smoke passed.
+- **No blind rollback:** no real agent configuration was overwritten or removed as a cleanup guess. Earlier effects remain unverified because the missing before-state cannot be reconstructed from a fresh run. Any restoration requires comparison with a known user-approved backup, not deletion of files that may be the user's.
+- This records a test-harness safety boundary, not a claim that native app/background push or full phone UI verification passed.
+
 ## sa-browser-pane-native-host-controls: residual Watch host-clipboard transfer
 
 - **Priority/severity:** P2 / medium; remaining base-pane Watch input acceptance, owned by the existing item under sa-browser-pane D23. No new queue record or title change.

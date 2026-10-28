@@ -462,6 +462,14 @@ same JSON-RPC API used by the desktop and CLI. The compatible Quirky phone app
 and its signed installation links are not distributed yet; the desktop does
 not redirect users to the incompatible Orca app or its hosted relay.
 
+The Expo source companion includes Source Control and diff-review notes,
+worktree-contained file previews/editing, GitHub Tasks and linked workspace
+creation, Claude/Codex account usage and selection, agent-history search/resume,
+and direct foreground notification subscriptions. Host and session navigation
+uses the same validated route contract as paired-host deep links.
+Native background push, non-GitHub Tasks providers and grant-authorized terminal
+artifacts remain implementation work in `sb-mobile-app-panels-unbuilt-flows`.
+
 ```sh
 quirky mobile info --json
 quirky mobile state --json
@@ -512,6 +520,46 @@ Their non-secret stage, choices, devices and error state are readable through
 `ui.state` slot reports. The live method schemas are in `quirky api --json`;
 [the behavior spec](../docs/quirk/specs/2026-10-27-sb-mobile-daemon/logic.md)
 defines the scope and limits.
+
+Phone launcher pickers use `quirky.mobile/agentCatalog` (`quirky mobile
+agent-catalog --json`). It exposes labels, installed/enabled/default status and
+resume capability, never configured commands, arguments or environment credentials.
+Mobile Session results omit the optional launch plan before serialization.
+History resumes through `quirky.vault/resume`, which prepares on the desktop;
+the secret-bearing `prepareResume` plan is not granted to phones.
+
+Source Control's **Switch Branch** uses `quirky.git/describeSwitchBranch` followed
+by confirmed `switchBranch`. It requires an uncapped clean tree, no active merge
+or rebase, an exact available local/remote ref and no other worktree holding the
+target. Optional expected branch/HEAD values reject stale UI state. A remote ref
+creates its local tracking branch; an existing divergent local branch is never reset.
+
+```sh
+quirky git describeSwitchBranch --worktree id:<worktree> --branch feature --json
+quirky git switchBranch --worktree id:<worktree> --branch feature --expected-branch main --expected-head <oid> --yes --json
+```
+
+Paired phones subscribe to a notification-only replay feed with
+`quirky.mobile/notificationPoll`; the general daemon event catalog is not granted.
+Keep the returned `epoch` and `cursor` for reconnect catch-up. A process restart
+resets the epoch; a gap beyond the 256-record window reports `truncated`.
+Away/focused-workspace filters still advance the cursor, so suppressed records do
+not reappear after reconnect. Unknown desktop presence does not silence alerts.
+The macOS away check uses 180 seconds of keyboard/mouse idle or a locked console.
+
+```sh
+quirky mobile notification-test --json
+quirky mobile notification-poll --wait-ms 0 --json
+quirky mobile notification-poll --after 12 --epoch <epoch> --only-away --json
+```
+
+Long polls accept `waitMs` up to 25000. A phone can bind its poll to a
+`subscriptionId` and release that same generation with
+`quirky.mobile/notificationCancel`; a late cancellation cannot stop its replacement.
+The server takes device identity from the authenticated connection, never params.
+These are direct foreground subscriptions, **not APNs/FCM background push**.
+No hosted push gateway or upstream Orca token registration is implied.
+
 ## Create a workspace from GitHub
 
 Use the new-workspace dialog's Smart field for `#123` or a GitHub PR/issue URL.
