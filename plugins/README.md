@@ -569,6 +569,9 @@ session and process incarnation; missing or unverifiable identity is refused.
 
 The API exposes `quirky.heimdall/fleet`, `detail`, `command` and `debugReport`.
 `fleetChanged` pushes newer snapshots; a failed refresh retains the last confirmed view.
+Fleet activity counts only live workers whose Dispatch assignment is still active. A live process
+retained after completion is not running work; `detail` and `debugReport` keep that worker visible
+and expose `assignmentActive` separately from process `state`.
 The schema-2 debug JSON includes bounded journal and trace history. Approval-request and
 terminal transitions go through `quirky.notifications`, including its enabled, focus and
 cooldown policy. Disabling that plugin silences delivery.

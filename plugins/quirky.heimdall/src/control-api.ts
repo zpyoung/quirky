@@ -80,10 +80,11 @@ const workerIdentitySchema = object({
 const workerSchema = object({
   identity: workerIdentitySchema,
   state: { type: 'string', enum: ['live', 'exited', 'unverifiable'] },
+  assignmentActive: boolean(),
   title: text(),
   lastContactAtMs: integer(),
   question: object({ messageId: text(), body: text(), answered: boolean() }, ['messageId', 'body'])
-}, ['identity', 'state'], true)
+}, ['identity', 'state', 'assignmentActive'], true)
 
 const escalationSchema = object({
   escalationId: text(),
