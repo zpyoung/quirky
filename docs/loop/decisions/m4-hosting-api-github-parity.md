@@ -220,6 +220,17 @@
 - **Revisit if:** resolved merged candidate fails owning/affected checks or canonical land rejects its next merge.
 - **Source:** locked by docs/loop/LOOP.md
 
+## D21: Remove the duplicate fixture binding and prove the corrected consumer path remotely
+- **Question:** post-merge gate reported124/126 files passing, a deterministic Projects fixture failure and a sidebar setting timeout; what actually needs changing?
+- **Options:** weaken assertions/deadlines; repeat the same full gate without diagnosis; repair the demonstrated fixture syntax and isolate the consumer files.
+- **Chose:** Bun.Transpiler identified `repositoryOwnerType has already been declared` in the merged disposable gh source. Removed the obsolete earlier declaration, retaining the later metadata→canonical issue-owner fallback. No production change. The remote Tasks/worktree gate then passed36/36 files with ok:true/flaky:[], including both previously failing files. Scripts68pass0fail580assertions and typecheck0 subsequently passed. Post-merge actual generated CLI and pending-overlap smokes passed; packaged build passed25UI modules29plugins.
+- **Why:** the duplicate binding prevented every provider operation in that fixture from parsing; it was a merge-reconciliation defect, not a provider-policy failure. The prior126-file run stopped before scripts/types. Two local isolation runs timed out and cascaded into connection/window cleanup errors; those remain failed receipts, not relabeled successes. Static sidebar event-path investigation found no concrete defect, and the36-file remote run passed unchanged assertions and deadlines. No cause is attributed to hosting or to load without proof.
+- **Evidence:** bg20 output124pass2fail/590.65s; actual Bun.Transpiler diagnostic; one-line fixture deletion; local bg22/bg23 failure artifacts127/126; SidebarGateDiagnosis evidence; bg24 remote36pass0fail/126.86s; bg25 scripts68/0/580 and typecheck0/294.27s (artifact://130); post-merge smoke19.97s and build99.53s outputs.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** normal land's current merge-result checks fail or the setting transition fails under controlled isolation.
+- **Source:** assumed — autonomous
+
 ## Progress
 
-Normal land635bfd82 stopped before tests on advancing-roadmap conflicts; item branch merge is in progress, scoped fixture resolver pending. Incoming decision logs read and compatible under D20. Earlier own gates/review/smokes remain historical receipts; rerun affected checks/typecheck and actual CLI/pending-overlap smokes after fixture union, then commit/detach/retry normal queue land. All flow ownership and UI evidence qualifications remain unchanged; no new full review round is claimed.
+Ready to retry normal queue land after committing the final one-line disposable-fixture parser repair and this receipt. Canonical merge2564ff4e is complete; incoming rules reconciled. Prior affected run covered124passing files, and the corrected Tasks/worktree gate passedall36files/noflaky, closing both failed file paths without assertion/deadline changes. Scripts68/0/580, typecheck0, current actual CLI/pending-overlap smokes and25UI-module/29plugin packaged build passed. Earlier local failures, raw model C NEEDS_FIXES→parent rejection, U01 local partial and lane8-reported PASS remain explicitly qualified. All agents/jobs/services returned; commit/detach and canonical queue.ts land next, then archive evidence/clean owned scratch and end exactly this item.

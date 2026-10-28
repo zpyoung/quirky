@@ -424,7 +424,6 @@ if (query.includes('query OrganizationIssueTypes')) {
   const repo = variable('repo')
   const number = Number(variable('number'))
   const repositoryIdentity = repoOwner + '/' + repo
-  const repositoryOwnerType = repositories[repositoryIdentity]?.ownerType === 'User' ? 'User' : 'Organization'
   const issue = issues[repositoryIdentity + '/' + number]
   if (!issue) fail('HTTP 404: Issue not found')
   const configuredOwnerType = repositories[repositoryIdentity]?.ownerType
