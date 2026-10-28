@@ -164,6 +164,11 @@ export function createPtyApi(
       })
       sessionAuthority?.revokeTerminal(sessionId)
     },
+    async stopWithHistory(sessionId) {
+      live()
+      await pty.request('stopWithHistory', { sessionId })
+      sessionAuthority?.revokeTerminal(sessionId)
+    },
     async forget(sessionId) {
       live()
       await pty.request('forget', { sessionId })

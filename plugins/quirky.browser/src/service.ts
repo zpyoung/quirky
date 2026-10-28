@@ -234,7 +234,11 @@ export class BrowserService {
       }
       return result
     }
-    if ((DESIGN_METHODS as readonly string[]).includes(name)) return await this.designMethod(name as DesignMethod, params)
+    if ((DESIGN_METHODS as readonly string[]).includes(name)) {
+      const paneId = optionalString(params, 'pane')
+      if (paneId) this.panes.assertDefaultWatchOwner(paneId)
+      return await this.designMethod(name as DesignMethod, params)
+    }
     switch (name) {
       case 'tabList': return this.tabList(params, caller)
       case 'tabShow': return this.tabShow(params)

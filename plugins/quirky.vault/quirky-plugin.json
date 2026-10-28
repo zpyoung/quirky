@@ -790,7 +790,7 @@
             "lastActivityAt": { "type": "number" },
             "exitCode": { "description": "Exit code, or null while unavailable." },
             "exitSignal": { "description": "Signal name, or null while the process is alive." },
-            "exitCause": { "description": "One of exited, killed, host-restart or host-lost, or null." },
+            "exitCause": { "description": "One of exited, killed, stopped, host-restart or host-lost, or null." },
             "restorable": { "type": "boolean" },
             "launch": {
               "description": "Saved launch record, null, or absent when the session has no saved launch.",

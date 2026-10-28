@@ -208,8 +208,8 @@ describe('when a shell ends', () => {
     }
   })
 
-  test('a session lost with the host changes nothing, and a running session clears a stale exit', () => {
-    for (const exitCause of ['host-restart', 'host-lost'] as const) {
+  test('restorable session exits preserve the pane, and wake clears a stale exit', () => {
+    for (const exitCause of ['host-restart', 'host-lost', 'stopped'] as const) {
       const result = reconcile(withTabs('a'), { sessions: [session('a', { status: 'exited', exitCode: 0, exitCause, restorable: true })], input: ['a'] })
       expect(sessionsOf(result.workspace)).toEqual(['a'])
       expect(paneLeaves(workspaceTabs(result.workspace)[0]!.root)[0]!.exit).toBeNull()

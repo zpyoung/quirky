@@ -165,5 +165,16 @@
 - **Revisit if:** the controller's merged-source typecheck rejects this branch.
 - **Source:** deferred: remote worker federation
 
+## D16: Retry only after the controller names a new integration conflict
+- **Question:** The first canonical land rejected the branch because roadmap advanced with mobile prerequisites.
+- **Options:** force the old merge; follow LOOP step7.3 and compose the new source.
+- **Chose:** Controller-required additional catch-up, preserving runtime-peers plus mobile-workspaces/mobile-browser exports. Read all sb-mobile-app-prerequisites D1–D17 and Progress, including the complete Watch ownership decision. Preserve canonical view-parking Sleep distinct from explicit stop-with-history, producer CAS, session-scoped Watch leases and mobile caller provenance. No second follow-up or new host authority implied.
+- **Why:** These independent public exports do not compete. Worker federation remains deferred; mobile connectivity/metadata still does not authorize remote filesystem or Native mirroring. This retry follows an actual controller conflict, not routine repeated catch-up.
+- **Evidence:** First canonical land exit1 in1.06s with conflict receipt; exact protocol export conflict #3; sb-mobile-app-prerequisites decision log. Source behavior evidence remains D12–D14; fresh composed typecheck is required before this retry.
+- **Reversibility:** easy
+- **Confidence:** high for inspected additive composition.
+- **Revisit if:** the canonical merged-source gate reports another concrete conflict or type error.
+- **Source:** locked by docs/loop/LOOP.md step7.3
+
 ## Progress
-Ready for canonical land: source merge d3dd29e5, final root/mobile typecheck exit0 in24.09s, one implementation-only worker-federation follow-up registered. One roadmap catch-up composed additively; all incoming decisions read. Filesystem epoch and actual isolated two-daemon API/CLI/shipped-view evidence recorded above; no suites, paid-provider call, full UI campaign or final code review ran. Every owned daemon fixture, browser tab and implementer is finished; component worktrees removed. Next: commit this evidence, detach, absolute canonical queue land, record actual receipt in ignored loop notes, remove owned scratch and end this one-item turn. Inherited .serena/ untouched. The prescribed two-hour target was exceeded; no on-time completion claim.
+First canonical land rejected only the newly advanced roadmap merge. Controller-required retry source is composed additively and the new mobile decision log fully read. One implementation-only worker-federation follow-up is registered. All owned workers, processes, tabs and component worktrees are finished/removed. Next: commit the resolved retry merge, run root/mobile typecheck, detach and retry the absolute canonical land; record actual receipt in ignored loop notes and remove owned scratch only after success. No suites, full UI campaign, paid-provider call, final review or native OS-cycle pass is claimed. Inherited .serena/ untouched; two-hour target was missed.

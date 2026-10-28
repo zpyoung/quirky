@@ -12,7 +12,7 @@ export type StoredSession = {
   sessionId: string
   dir: string
   meta: SessionMeta
-  /** `restorable` when the host that ran it went away; `exited` when it ended for good. */
+  /** `restorable` when the process was stopped with recoverable history or its host went away. */
   state: 'restorable' | 'exited'
   /** Output position after the newest retained byte; read from disk on first use. */
   offset: number | null
@@ -41,10 +41,10 @@ function newestOffset(dir: string): number {
 export class StoredSessions {
   private readonly entries = new Map<string, StoredSession>()
 
-  constructor(home: string) {
+  constructor(private readonly home: string) {
     let names: string[]
     try {
-      names = readdirSync(join(home, 'sessions'), { withFileTypes: true })
+      names = readdirSync(join(this.home, 'sessions'), { withFileTypes: true })
         .filter((entry) => entry.isDirectory())
         .map((entry) => entry.name)
     } catch {
@@ -52,11 +52,22 @@ export class StoredSessions {
     }
     for (const name of names.sort()) {
       if (!SESSION_ID.test(name)) continue
-      const dir = join(home, 'sessions', name)
+      const dir = join(this.home, 'sessions', name)
       const meta = readMeta(dir)
       if (!meta || meta.sessionId !== name) continue
       this.entries.set(name, { sessionId: name, dir, meta, state: stateOf(meta), offset: null, title: undefined })
     }
+  }
+
+  /** Re-reads a session's durable metadata after a reversible stop has finalized in this host. */
+  reload(sessionId: string): void {
+    const dir = join(this.home, 'sessions', sessionId)
+    const meta = readMeta(dir)
+    if (!meta || meta.sessionId !== sessionId) {
+      this.entries.delete(sessionId)
+      return
+    }
+    this.entries.set(sessionId, { sessionId, dir, meta, state: stateOf(meta), offset: null, title: undefined })
   }
 
   get(sessionId: string): StoredSession | undefined {
@@ -92,7 +103,13 @@ export class StoredSessions {
       alive: false,
       exitCode: restorable ? null : meta.exitCode,
       exitSignal: restorable ? null : meta.exitSignal,
-      exitCause: restorable ? (meta.endedAt === null ? 'host-lost' : 'host-restart') : (meta.exitCause ?? 'exited'),
+      exitCause: restorable
+        ? meta.exitCause === 'stopped'
+          ? 'stopped'
+          : meta.endedAt === null
+            ? 'host-lost'
+            : 'host-restart'
+        : (meta.exitCause ?? 'exited'),
       cols: meta.cols,
       rows: meta.rows,
       argv: meta.argv,

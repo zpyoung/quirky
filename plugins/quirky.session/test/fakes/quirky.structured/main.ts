@@ -7,6 +7,7 @@ export function activate(context: PluginContext): void {
   const sessionOf = async (params: Record<string, unknown>): Promise<Session> =>
     (await context.call('quirky.session/register', {
       worktree: params.worktree ?? 'id:wt_main',
+      cwd: params.cwd,
       agent: 'claude',
       kind: 'structured',
       title: 'Pointer'
@@ -20,6 +21,31 @@ export function activate(context: PluginContext): void {
       title: 'Claude'
     })
   )
+  context.provide('method:quirky.structured/resume', async (params: Record<string, unknown>) => {
+    const old = (await context.call('quirky.session/get', { session: params.session })) as Session
+    const providerSession = old.providerSession
+    if (!providerSession) throw context.error('conflict', `session ${old.id} has no provider session`)
+    const session = (await context.call('quirky.session/register', {
+      worktree: old.worktreeId,
+      cwd: old.cwd,
+      resumedFrom: old.id,
+      agent: old.agent,
+      kind: 'structured',
+      title: old.title
+    })) as Session
+    const lease = context.launch.openStructuredLease({
+      sessionId: session.id,
+      worktreeId: session.worktreeId,
+      agent: session.agent
+    })
+    leases.set(session.id, lease)
+    await context.call('quirky.session/setStatus', { session: session.id, status: 'running' })
+    return context.call('quirky.session/setProviderSession', {
+      session: session.id,
+      id: providerSession.id,
+      ...(providerSession.transcriptPath === null ? {} : { transcriptPath: providerSession.transcriptPath })
+    })
+  })
 
   context.provide('method:quirky.structured/pointerSession', async (params: Record<string, unknown>) => {
     const session = await sessionOf(params)
@@ -40,7 +66,7 @@ export function activate(context: PluginContext): void {
     return { ok: true }
   })
   context.provide('method:quirky.structured/pointerSends', () => pointerSends)
-  context.provide('method:quirky.structured/stop', (params: Record<string, unknown>) => {
+  context.provide('method:quirky.structured/stop', async (params: Record<string, unknown>) => {
     const session = typeof params.session === 'string' ? params.session : ''
     const identity = session ? context.launch.sessionIdentity(session) : null
     const lease = leases.get(session)
@@ -51,6 +77,7 @@ export function activate(context: PluginContext): void {
     }
     lease?.release()
     leases.delete(session)
+    await context.call('quirky.session/setStatus', { session, status: 'exited' })
     return typeof expectedIncarnation === 'string'
       ? { ok: true, closed: true, sessionId: session, processIncarnation: expectedIncarnation }
       : { ok: true }
