@@ -9,6 +9,7 @@ const FETCH_TIMEOUT_MS = 60_000
 const KILL_GRACE_MS = 5_000
 const FULL_OID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i
 const MAX_GIT_OUTPUT_BYTES = 64 * 1024
+const SSH_CONFIG_TIMEOUT_MS = 5_000
 
 type GitHubEnv = {
   call(method: string, params?: Record<string, unknown>): Promise<unknown>
@@ -39,15 +40,23 @@ export type PullRequestPlan = {
 const failure = (env: GitHubEnv, reason: string, message: string, data: Record<string, unknown> = {}) =>
   env.fail('conflict', message, { reason, ...data })
 
-const identityKey = (identity: GitHubRepositoryIdentity): string => `${identity.host.toLowerCase()}/${identity.owner.toLowerCase()}/${identity.repo.toLowerCase()}`
 
-function identityFromUrl(value: string): GitHubRepositoryIdentity | null {
+type ParsedRemoteIdentity = { identity: GitHubRepositoryIdentity; sshHost: string | null }
+
+function normalizeHost(value: string): string {
+  const host = value.trim().toLowerCase().replace(/\.$/, '')
+  return host === 'ssh.github.com' ? 'github.com' : host
+}
+
+function parseRemoteIdentity(value: string): ParsedRemoteIdentity | null {
   const url = value.trim()
   let host: string
   let path: string
+  let sshHost: string | null = null
   const scp = url.includes('://') ? null : /^(?:[^@/:]+@)?([^/:]+):([^?#]+)$/.exec(url)
   if (scp) {
     host = scp[1]!
+    sshHost = host
     path = scp[2]!
   } else {
     let parsed: URL
@@ -57,17 +66,83 @@ function identityFromUrl(value: string): GitHubRepositoryIdentity | null {
       return null
     }
     if (parsed.protocol !== 'https:' && parsed.protocol !== 'ssh:' && parsed.protocol !== 'git:') return null
-    host = parsed.hostname
+    const ssh = parsed.protocol === 'ssh:' || parsed.protocol === 'git:'
+    host = ssh ? parsed.hostname : parsed.host
+    sshHost = ssh ? parsed.hostname : null
     path = parsed.pathname.replace(/^\/+/, '')
   }
   const parts = path.replace(/\/+$/, '').replace(/\.git$/i, '').split('/')
   if (parts.length !== 2 || parts.some((part) => part.length === 0)) return null
-  return { host: host.toLowerCase(), owner: parts[0]!, repo: parts[1]! }
+  return {
+    identity: { host: normalizeHost(host), owner: parts[0]!, repo: parts[1]! },
+    sshHost: sshHost === null ? null : normalizeHost(sshHost)
+  }
+}
+
+
+function isDotlessAlias(host: string): boolean {
+  return !host.includes('.') && !host.startsWith('[') && host !== 'localhost'
+}
+
+async function remoteIdentityFromUrl(value: string): Promise<ParsedRemoteIdentity | null> {
+  const parsed = parseRemoteIdentity(value)
+  if (!parsed) return null
+  if (parsed.sshHost === null || !isDotlessAlias(parsed.sshHost)) return parsed
+  const host = await resolveSshAlias(parsed.sshHost)
+  return host === null ? null : { ...parsed, identity: { ...parsed.identity, host } }
+}
+
+async function resolveSshAlias(alias: string): Promise<string | null> {
+  let proc: ReturnType<typeof Bun.spawn>
+  try {
+    proc = Bun.spawn(['ssh', '-G', '--', alias], { env: { ...process.env }, stdin: 'ignore', stdout: 'pipe', stderr: 'ignore' })
+  } catch {
+    return null
+  }
+  let timedOut = false
+  const timer = setTimeout(() => {
+    timedOut = true
+    try {
+      proc.kill('SIGKILL')
+    } catch {
+      // the lookup process already exited
+    }
+  }, SSH_CONFIG_TIMEOUT_MS)
+  try {
+    const [output, exitCode] = await Promise.all([new Response(proc.stdout).text(), proc.exited])
+    if (timedOut || exitCode !== 0) return null
+    const hostname = /^hostname\s+(\S+)\s*$/im.exec(output)?.[1]
+    if (!hostname || normalizeHost(hostname) === normalizeHost(alias)) return null
+    return normalizeHost(hostname)
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+function hostnameOf(value: string): string {
+  const host = normalizeHost(value)
+  if (host.startsWith('[')) {
+    const close = host.indexOf(']')
+    if (close !== -1) return host.slice(0, close + 1)
+  }
+  const port = host.lastIndexOf(':')
+  return port === -1 ? host : host.slice(0, port)
+}
+
+function identityMatchesRemote(actual: ParsedRemoteIdentity, expected: GitHubRepositoryIdentity): boolean {
+  const hostMatches = actual.sshHost === null
+    ? actual.identity.host === normalizeHost(expected.host)
+    : hostnameOf(actual.identity.host) === hostnameOf(expected.host)
+  return hostMatches &&
+    actual.identity.owner.toLowerCase() === expected.owner.toLowerCase() &&
+    actual.identity.repo.toLowerCase() === expected.repo.toLowerCase()
 }
 
 function identityMatches(url: string, identity: GitHubRepositoryIdentity): boolean {
-  const actual = identityFromUrl(url)
-  return actual !== null && identityKey(actual) === identityKey(identity)
+  const actual = parseRemoteIdentity(url)
+  return actual !== null && identityMatchesRemote(actual, identity)
 }
 
 function canonicalUrl(source: GitHubWorktreeSource, scheme: 'ssh' | 'https'): string {
@@ -103,7 +178,7 @@ async function readLimited(stream: ReadableStream<Uint8Array>): Promise<string> 
 }
 
 async function runGit(repo: string, args: string[], options: { timeoutMs?: number; network?: boolean } = {}): Promise<GitResult> {
-  const env = { ...process.env, GIT_TERMINAL_PROMPT: '0' }
+  const env: NodeJS.ProcessEnv = { ...process.env, GIT_TERMINAL_PROMPT: '0' }
   if (options.network) {
     env.GIT_ASKPASS = ''
     env.SSH_ASKPASS = ''
@@ -170,20 +245,42 @@ async function remoteUrls(repo: string, remote: string): Promise<RemoteUrls> {
   return { fetch, push: push.length === 0 ? fetch : push }
 }
 
-function urlsMatchIdentity(urls: string[], identity: GitHubRepositoryIdentity): boolean {
-  return urls.length > 0 && urls.every((url) => identityMatches(url, identity))
+type UrlMatcher = (url: string) => Promise<boolean>
+function urlMatcherForIdentity(identity: GitHubRepositoryIdentity): UrlMatcher {
+  const cache = new Map<string, Promise<boolean>>()
+  return (url) => {
+    let match = cache.get(url)
+    if (!match) {
+      match = remoteIdentityFromUrl(url).then((actual) => actual !== null && identityMatchesRemote(actual, identity))
+      cache.set(url, match)
+    }
+    return match
+  }
 }
-function urlsIncludeIdentity(urls: string[], identity: GitHubRepositoryIdentity): boolean {
-  return urls.some((url) => identityMatches(url, identity))
+
+async function urlsMatchIdentity(urls: string[], matchesUrl: UrlMatcher): Promise<boolean> {
+  if (urls.length === 0) return false
+  for (const url of urls) {
+    if (!await matchesUrl(url)) return false
+  }
+  return true
+}
+
+async function urlsIncludeIdentity(urls: string[], matchesUrl: UrlMatcher): Promise<boolean> {
+  for (const url of urls) {
+    if (await matchesUrl(url)) return true
+  }
+  return false
 }
 
 async function matchingRemote(repo: string, identity: GitHubRepositoryIdentity, requirePushIdentity = true): Promise<{ name: string; urls: RemoteUrls } | null> {
   const git = gitApi()
   const candidates: { name: string; urls: RemoteUrls }[] = []
+  const matchesUrl = urlMatcherForIdentity(identity)
   for (const name of await git.listRemotes(repo)) {
     const urls = await remoteUrls(repo, name)
-    if (!urlsIncludeIdentity(urls.fetch, identity)) continue
-    if (!urlsMatchIdentity(urls.fetch, identity) || (requirePushIdentity && !urlsMatchIdentity(urls.push, identity))) {
+    if (!await urlsIncludeIdentity(urls.fetch, matchesUrl)) continue
+    if (!await urlsMatchIdentity(urls.fetch, matchesUrl) || (requirePushIdentity && !await urlsMatchIdentity(urls.push, matchesUrl))) {
       throw failureForRemote(name, identity)
     }
     candidates.push({ name, urls })
@@ -287,7 +384,12 @@ export async function planPullRequest(env: GitHubEnv, repo: Repo, source: GitHub
       const remoteName = remoteNameForFork(head.repository)
       const configured = await remoteUrls(repo.path, remoteName)
       if (configured.fetch.length > 0 || configured.push.length > 0) {
-        if (!urlsMatchIdentity(configured.fetch, head.repository) || !urlsMatchIdentity(configured.push, head.repository)) {
+        const matchesUrl = urlMatcherForIdentity(head.repository)
+        const [fetchMatches, pushMatches] = await Promise.all([
+          urlsMatchIdentity(configured.fetch, matchesUrl),
+          urlsMatchIdentity(configured.push, matchesUrl)
+        ])
+        if (!fetchMatches || !pushMatches) {
           throw failure(env, 'github-push-remote-conflict', `Remote ${remoteName} already points to a different repository and was not changed.`, {
             remote: remoteName,
             repository: head.repository
