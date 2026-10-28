@@ -5,10 +5,10 @@
     {
       "id": "SC-12-native-file-dialog",
       "title": "In a fresh private HOME and QUIRKY_HOME with a supported agent dock, type a draft, click Attach, choose a run-created valid PNG in the OS file dialog, verify its named removable chip without draft loss, and remove only that chip. Never send to a real account or use the normal profile.",
-      "status": "pending",
-      "lastRun": null,
-      "report": null,
-      "summary": null
+      "status": "blocked",
+      "lastRun": "2026-10-28",
+      "report": "/Users/zpyoung/orca/workspaces/quirky/native-qa/.quirk/using-apps-like-a-user/runs/20261028T053308-6eb4/report.md",
+      "summary": "Attach opens the macOS Open panel with the draft kept, but the harness can't drive that separate panel window (keys returned delivery_failed), so the PNG wasn't chosen."
     }
   ]
 }

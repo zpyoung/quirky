@@ -652,6 +652,10 @@ export class SessionService {
    * and may pass the `launchSettings` its launch applied.
    */
   register = async (params: Record<string, unknown>, caller: PluginCaller): Promise<Session> => {
+    const background = params.background
+    if (background !== undefined && typeof background !== 'boolean') {
+      throw this.context.error('invalid-params', 'background must be a boolean')
+    }
     const checked = params.launchSettings === undefined || params.launchSettings === null ? null : checkLaunchSettings(params.launchSettings)
     if (typeof checked === 'string') throw this.context.error('invalid-params', `launchSettings is malformed: ${checked}`)
     const cwd = this.startCwd(params.cwd)
@@ -667,6 +671,7 @@ export class SessionService {
     const session = {
       ...this.newRecord(worktree, 'structured', params.agent as AgentKind, params.title as string),
       launchSettings: checked?.settings ?? null,
+      ...(background === undefined ? {} : { background }),
       ...(resumedFrom === undefined ? {} : { resumedFrom })
     }
     this.records.insert(session, worktree.repoId)

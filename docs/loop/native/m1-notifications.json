@@ -5,50 +5,50 @@
     {
       "id": "SC-19",
       "title": "A finished claude agent in a background worktree shows a macOS banner titled \"<repo> / <worktree> - Claude finished\" with the last message as its body",
-      "status": "pending",
-      "lastRun": null,
-      "report": null,
-      "summary": null
+      "status": "blocked",
+      "lastRun": "2026-10-28",
+      "report": "/Users/zpyoung/orca/workspaces/quirky/native-qa/.quirk/using-apps-like-a-user/runs/20261028T043248-6186/report.md",
+      "summary": "No claude session fixture without the real claude CLI; a shell-session Stop hook gave the in-app toast but no macOS banner was observable."
     },
     {
       "id": "SC-37",
       "title": "With Notification Sound set to Bong the banner is silent and the Bong sound plays at the chosen volume; with System Default the banner plays the system sound",
-      "status": "pending",
-      "lastRun": null,
-      "report": null,
-      "summary": null
+      "status": "blocked",
+      "lastRun": "2026-10-28",
+      "report": "/Users/zpyoung/orca/workspaces/quirky/native-qa/.quirk/using-apps-like-a-user/runs/20261028T043248-6186/report.md",
+      "summary": "The harness cannot hear audio, so the chosen sound can't be checked."
     },
     {
       "id": "SC-44",
       "title": "While the Quirky window is minimized, an agent finishing in any worktree puts an amber dot beside the menu bar \"Q\"; restoring or focusing the window removes it",
-      "status": "pending",
-      "lastRun": null,
-      "report": null,
-      "summary": null
+      "status": "blocked",
+      "lastRun": "2026-10-28",
+      "report": "/Users/zpyoung/orca/workspaces/quirky/native-qa/.quirk/using-apps-like-a-user/runs/20261028T043248-6186/report.md",
+      "summary": "The menu bar item exists in AX but isn't visible on the crowded menu bar, and the harness sees only the Quirky window."
     },
     {
       "id": "SC-45",
-      "title": "The menu bar item's menu reads Show Quirky, Settings\u2026, Quit Quirky; Settings\u2026 brings the window forward on the Notifications view",
-      "status": "pending",
-      "lastRun": null,
-      "report": null,
-      "summary": null
+      "title": "The menu bar item's menu reads Show Quirky, Settings…, Quit Quirky; Settings… brings the window forward on the Notifications view",
+      "status": "blocked",
+      "lastRun": "2026-10-28",
+      "report": "/Users/zpyoung/orca/workspaces/quirky/native-qa/.quirk/using-apps-like-a-user/runs/20261028T043248-6186/report.md",
+      "summary": "The menu bar item isn't visible on the crowded menu bar and the harness can't click outside the Quirky window."
     },
     {
       "id": "SC-45b",
       "title": "Turning Show Menu Bar Icon off in Settings > Notifications removes the menu bar item at once, and turning it on brings it back",
-      "status": "pending",
-      "lastRun": null,
-      "report": null,
-      "summary": null
+      "status": "blocked",
+      "lastRun": "2026-10-28",
+      "report": "/Users/zpyoung/orca/workspaces/quirky/native-qa/.quirk/using-apps-like-a-user/runs/20261028T043248-6186/report.md",
+      "summary": "The menu bar item isn't visible on the crowded menu bar, so removing and restoring it can't be observed."
     },
     {
       "id": "SC-42",
       "title": "The Dock badge shows the number of unread worktrees plus pending asks (empty at zero) and is cleared when Quirky quits",
-      "status": "pending",
-      "lastRun": null,
-      "report": null,
-      "summary": null
+      "status": "blocked",
+      "lastRun": "2026-10-28",
+      "report": "/Users/zpyoung/orca/workspaces/quirky/native-qa/.quirk/using-apps-like-a-user/runs/20261028T043248-6186/report.md",
+      "summary": "The Dock has no window the harness can observe, so the badge can't be checked."
     }
   ]
 }
