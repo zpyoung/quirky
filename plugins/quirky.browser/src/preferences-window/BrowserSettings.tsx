@@ -17,6 +17,9 @@ const TERMINAL_LINK_ACTIONS = [
 const IDENTITY_LABELS = { clean: 'Cleaned', native: 'Native' } as const
 const PROFILE_ROW_STYLE = { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6 } as const
 const ZOOM_LEVELS = Array.from({ length: 17 }, (_, index) => -3 + index * 0.5)
+function isDefaultProfile(profile: ProfileUsage['profile']): boolean {
+  return profile.id === 'default' || profile.scope === 'default'
+}
 
 export function BrowserSettings(props: BrowserPreferencesProps & { embedded?: boolean }) {
   const { context, onError, embedded = false } = props
@@ -77,7 +80,7 @@ export function BrowserSettings(props: BrowserPreferencesProps & { embedded?: bo
   }
 
   const profileAction = async (row: ProfileUsage) => {
-    const isDefault = row.profile.scope === 'default'
+    const isDefault = isDefaultProfile(row.profile)
     if (!isDefault && row.active) return
     const remove = !isDefault
     setActionError(null)
@@ -182,10 +185,10 @@ export function BrowserSettings(props: BrowserPreferencesProps & { embedded?: bo
         {preferences.profiles.map((row) => <li key={row.profile.id} style={PROFILE_ROW_STYLE}>
           <strong>{row.profile.label}</strong>
           {row.active && <span>Active</span>}
-          {row.profile.scope === 'default'
+          {isDefaultProfile(row.profile)
             ? <button type="button" disabled={profilePending !== null || savingSettings.size > 0} onClick={() => void profileAction(row)}>Clear cookies &amp; site data</button>
             : <button type="button" disabled={row.active || profilePending !== null || savingSettings.size > 0} onClick={() => void profileAction(row)}>Remove</button>}
-          {row.profile.scope !== 'default' && row.active && <small>This profile is in use and cannot be removed.</small>}
+          {!isDefaultProfile(row.profile) && row.active && <small>This profile is in use and cannot be removed.</small>}
         </li>)}
       </ul>}
       {preferences && <>
