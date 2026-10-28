@@ -1,9 +1,11 @@
 # GitHub Tasks, issues and Projects
 
-Reader: implementers and reviewers — Decision: which visible and scriptable behavior must ship before this item lands.
+Reader: implementers and reviewers — Decision: the full visible and scriptable parity contract, including the explicitly deferred acceptance below.
 
 ## Status & amendments
 Status: approved autonomously under LOOP.md night mode; technical decisions included below. Self-reviewed against hosting-ui.md sections1–4,6–8 and task-related section12.
+
+**Delivery cutover:** the operator's 4am sprint directive authorizes the exercised core landing and skips unstarted review/dogfood. The original SC01–SC25 catalog remains the contract for registered follow-up `m4-hosting-ui-tasks-complete-remaining-flows`; named remaining flows and evidence limits are in the decision log D20–D23 and BLOCKERS.md. This document does not claim that the unstarted full web campaign passed.
 
 **Amendments:** 2026-10-27: initial composite-scope specification; no separate tech.md or spec review under night mode. Source clarification: the original “add files” footer opens only the HTTP(S) image-URL picker (`GitHubMarkdownComposer.tsx:349–360`, `use-image-input.ts:31–72`), so SC13 removes an inferred binary-upload feature and labels the real URL action accurately. Public API growth: Project-origin detail reads use an authenticated project-item route rather than weakening ordinary configured-remote restrictions.
 
