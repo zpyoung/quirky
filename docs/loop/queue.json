@@ -1718,6 +1718,14 @@
       ],
       "status": "todo",
       "early": true
+    },
+    {
+      "id": "fix-desktop-startup-imports",
+      "milestone": "M7",
+      "title": "The packaged desktop app hangs at startup with no window: 35b193b5 dropped the `electrobun/main` import (ApplicationMenu, BrowserView, BrowserWindow, Tray, Utils, app) and the `./desktop-window-route` import (desktopWindowRouteUrl, folderPickerResult) from apps/desktop/src/bun/index.ts, so `app` is undefined. Restore both imports, and make the root `bun run typecheck` also typecheck apps/desktop (after `hutch electrobun prepare`) so land catches this. Also make `bun run build` work in a fresh checkout, which today fails until `hutch electrobun prepare` has run. Verify by building Quirky.app and launching it on a temporary QUIRKY_HOME until its window shows.",
+      "docs": [],
+      "deps": [],
+      "status": "todo"
     }
   ]
 }
