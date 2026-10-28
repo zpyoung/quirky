@@ -1,4 +1,4 @@
-import { isAbsolute, relative, resolve } from 'node:path'
+import { isAbsolute, relative, resolve, win32 } from 'node:path'
 import {
   BUILTIN_PLUGIN_PREFIX,
   isContributionName,
@@ -20,6 +20,7 @@ const FIELDS = new Set([
   'main',
   'ui',
   'cli',
+  'workers',
   'cliAliases',
   'activation',
   'dependencies',
@@ -80,6 +81,36 @@ function checkPluginPath(manifest: Record_, field: 'main' | 'ui' | 'cli', dir: s
   const rel = relative(dir, resolve(dir, value))
   if (isAbsolute(value) || rel === '' || rel === '..' || rel.startsWith('../') || isAbsolute(rel)) {
     errors.push(`field '${field}' must be a relative path inside the plugin directory, got '${value}'`)
+  }
+}
+
+function checkWorkers(value: unknown, dir: string, errors: string[]): void {
+  if (value === undefined) return
+  if (!isRecord(value)) {
+    errors.push("field 'workers' must be an object of worker names to entry paths")
+    return
+  }
+  for (const [name, entry] of Object.entries(value)) {
+    if (!isContributionName(name)) errors.push(`workers: name '${name}' is not a valid contribution name`)
+    if (typeof entry !== 'string' || entry === '') {
+      errors.push(`workers.${name} must be a non-empty path`)
+      continue
+    }
+    if (hasLoneSurrogate(entry)) {
+      errors.push(`workers.${name} must be a well-formed path`)
+      continue
+    }
+    const rel = relative(dir, resolve(dir, entry))
+    if (
+      isAbsolute(entry) ||
+      win32.isAbsolute(entry) ||
+      rel === '' ||
+      rel === '..' ||
+      rel.startsWith('../') ||
+      isAbsolute(rel)
+    ) {
+      errors.push(`workers.${name} must be a relative path inside the plugin directory, got '${entry}'`)
+    }
   }
 }
 
@@ -239,6 +270,7 @@ export function parseManifest(
   checkPluginPath(raw, 'main', at.dir, errors)
   checkPluginPath(raw, 'ui', at.dir, errors)
   checkPluginPath(raw, 'cli', at.dir, errors)
+  checkWorkers(raw.workers, at.dir, errors)
   checkCliAliases(raw, id, errors)
   checkDependencies(raw, id, errors)
   checkContributes(raw.contributes, errors)

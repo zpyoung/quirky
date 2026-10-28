@@ -12,7 +12,10 @@ const WORKTREE_DEFAULTS = {
   baseRef: null,
   keepBranch: false,
   removing: false,
-  groupId: null
+  groupId: null,
+  projectGroupId: null,
+  lastActivityAt: 0,
+  instanceId: 'instance:wt_1'
 } as const
 
 type PluginCtx = { error(kind: 'invalid-params' | 'not-found' | 'conflict', message: string): Error }

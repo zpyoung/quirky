@@ -243,9 +243,8 @@
         "m1-worktrees",
         "m1-agent-status"
       ],
-      "status": "in-progress",
-      "early": true,
-      "lane": 1
+      "status": "done",
+      "early": true
     },
     {
       "id": "m6-orchestration-workers",
@@ -257,9 +256,8 @@
       "deps": [
         "m6-orchestration-core"
       ],
-      "status": "in-progress",
-      "early": true,
-      "lane": 9
+      "status": "done",
+      "early": true
     },
     {
       "id": "m6-heimdall-core",
@@ -366,8 +364,7 @@
       "deps": [
         "m1-worktrees"
       ],
-      "status": "in-progress",
-      "lane": 4
+      "status": "done"
     },
     {
       "id": "m2-sidebar-extras",
@@ -381,8 +378,7 @@
         "m2-source-control-core",
         "m1-agent-status"
       ],
-      "status": "in-progress",
-      "lane": 7
+      "status": "done"
     },
     {
       "id": "m3-session-info",
@@ -460,8 +456,7 @@
       "deps": [
         "m1-providers"
       ],
-      "status": "in-progress",
-      "lane": 8
+      "status": "done"
     },
     {
       "id": "m4-hosting-api-gitlab",
@@ -497,8 +492,7 @@
       "deps": [
         "m4-hosting-api-github"
       ],
-      "status": "in-progress",
-      "lane": 6
+      "status": "done"
     },
     {
       "id": "m4-hosting-ui-reviews",
@@ -511,9 +505,8 @@
         "m4-hosting-api-github",
         "m4-hosting-ui-tasks"
       ],
-      "status": "in-progress",
-      "early": true,
-      "lane": 5
+      "status": "done",
+      "early": true
     },
     {
       "id": "m4-hosting-ui-gitlab",
@@ -539,8 +532,7 @@
       "deps": [
         "m4-hosting-api-github"
       ],
-      "status": "in-progress",
-      "lane": 2
+      "status": "done"
     },
     {
       "id": "m4-worktrees-create-from-gitlab",
@@ -567,7 +559,7 @@
         "m4-hosting-api-github",
         "m2-sidebar-extras"
       ],
-      "status": "todo",
+      "status": "done",
       "early": true
     },
     {
@@ -592,7 +584,7 @@
       "deps": [
         "sa-browser-agent"
       ],
-      "status": "todo"
+      "status": "done"
     },
     {
       "id": "sa-browser-profiles-settings",
@@ -604,21 +596,9 @@
       "deps": [
         "sa-browser-pane"
       ],
-      "status": "todo",
-      "early": true
-    },
-    {
-      "id": "sa-browser-design-mode",
-      "milestone": "Side A",
-      "title": "Scope: all of the parts below together; a \"Not ...\" note in one part excludes only what no other part here covers. Part 1: Browser design mode: Grab page element only (browser.md section 3 'Grab page element', 'In-guest extraction', 'The payload', 'Safety layer', 'Screenshot', 'Text shape 1: Grab copy'): armed picker overlay, payload extraction, C and S shortcuts, right-click menu, budgets and redaction, clipboard text and image. Not annotate or draw Part 2: Browser design mode: Annotate page element only (browser.md section 3 'Annotate page element', 'Text shape 2: Annotation Markdown', 'Delivery'): annotation popover with Change and Question intent, tray with edit, delete and copy, 20-per-page cap, Markdown generation, Send notes to a running or new agent. Not grab or draw Part 3: Browser design mode: Draw on screenshot only (browser.md section 3 'Draw on screenshot'): frozen screenshot canvas with pen, highlighter, arrow, rectangle, ellipse, text and eraser, color and size, undo, redo, clear, Copy Markup as PNG to the clipboard. Not grab or annotate",
-      "docs": [
-        "browser.md"
-      ],
-      "deps": [
-        "sa-browser-pane"
-      ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 8
     },
     {
       "id": "m5-automations-core",
@@ -631,33 +611,7 @@
         "m5-structured-runner",
         "m1-worktrees"
       ],
-      "status": "todo",
-      "early": true
-    },
-    {
-      "id": "m5-automations-dispatch",
-      "milestone": "M5",
-      "title": "Automations dispatch (automations.md 'Target resolution and refusal reasons', 'Dispatch: claim, recheck, then renderer or headless', 'Prechecks', 'Session reuse', 'Workspace policy, pin, and re-pin', 'Execution target, owner, and host fencing', 'Usage attribution', 'Extra agent args and launch overrides'): run target resolution with refusals and folding, claim and launch of the agent in a hidden terminal, precheck, reuse of a live session, new-per-run workspaces with setup decision, extra args and model and effort overrides with per-run snapshot, completion detection, usage and cost per run",
-      "docs": [
-        "automations.md"
-      ],
-      "deps": [
-        "m5-automations-core"
-      ],
-      "status": "todo",
-      "early": true
-    },
-    {
-      "id": "m5-automations-ui",
-      "milestone": "M5",
-      "title": "Scope: all of the parts below together; a \"Not ...\" note in one part excludes only what no other part here covers. Part 1: Automations UI: create and edit (automations.md 'Create an automation in the UI', 'Run now, pause, edit, delete'): two-pane Create automation dialog with agent and launch fields, extra args, host, project, workspace mode, session, schedule presets and custom cron, grace, precheck, setup decision, validation toasts, the four templates and empty-state cards, Delete Automation dialog Part 2: Automations UI: list, detail and runs (automations.md 'Browse, search, filter, and sort the list', 'Open an automation', 'Runs dashboard and run details'): searchable sortable table with Filters and pills, row menu, empty and host-status states, detail pane with Overview and Runs tabs, Run Now, Pause and Resume, Runs dashboard with 24h and 7d cards, run details with Rerun and status labels Part 3: Automations: external OpenClaw jobs (automations.md 'External automations (OpenClaw)', 'External automations jobs file (OpenClaw)'): jobs file discovery and mapping, list rows with Pause, Resume, Run Now and Delete, `openclaw cron` actions with id validation",
-      "docs": [
-        "automations.md"
-      ],
-      "deps": [
-        "m5-automations-core"
-      ],
-      "status": "todo",
+      "status": "done",
       "early": true
     },
     {
@@ -670,8 +624,50 @@
       "deps": [
         "m5-structured-runner"
       ],
-      "status": "todo",
+      "status": "done",
       "early": true
+    },
+    {
+      "id": "sa-browser-design-mode",
+      "milestone": "Side A",
+      "title": "Scope: all of the parts below together; a \"Not ...\" note in one part excludes only what no other part here covers. Part 1: Browser design mode: Grab page element only (browser.md section 3 'Grab page element', 'In-guest extraction', 'The payload', 'Safety layer', 'Screenshot', 'Text shape 1: Grab copy'): armed picker overlay, payload extraction, C and S shortcuts, right-click menu, budgets and redaction, clipboard text and image. Not annotate or draw Part 2: Browser design mode: Annotate page element only (browser.md section 3 'Annotate page element', 'Text shape 2: Annotation Markdown', 'Delivery'): annotation popover with Change and Question intent, tray with edit, delete and copy, 20-per-page cap, Markdown generation, Send notes to a running or new agent. Not grab or draw Part 3: Browser design mode: Draw on screenshot only (browser.md section 3 'Draw on screenshot'): frozen screenshot canvas with pen, highlighter, arrow, rectangle, ellipse, text and eraser, color and size, undo, redo, clear, Copy Markup as PNG to the clipboard. Not grab or annotate",
+      "docs": [
+        "browser.md"
+      ],
+      "deps": [
+        "sa-browser-pane"
+      ],
+      "status": "in-progress",
+      "early": true,
+      "lane": 3
+    },
+    {
+      "id": "m5-automations-dispatch",
+      "milestone": "M5",
+      "title": "Automations dispatch (automations.md 'Target resolution and refusal reasons', 'Dispatch: claim, recheck, then renderer or headless', 'Prechecks', 'Session reuse', 'Workspace policy, pin, and re-pin', 'Execution target, owner, and host fencing', 'Usage attribution', 'Extra agent args and launch overrides'): run target resolution with refusals and folding, claim and launch of the agent in a hidden terminal, precheck, reuse of a live session, new-per-run workspaces with setup decision, extra args and model and effort overrides with per-run snapshot, completion detection, usage and cost per run",
+      "docs": [
+        "automations.md"
+      ],
+      "deps": [
+        "m5-automations-core"
+      ],
+      "status": "in-progress",
+      "early": true,
+      "lane": 7
+    },
+    {
+      "id": "m5-automations-ui",
+      "milestone": "M5",
+      "title": "Scope: all of the parts below together; a \"Not ...\" note in one part excludes only what no other part here covers. Part 1: Automations UI: create and edit (automations.md 'Create an automation in the UI', 'Run now, pause, edit, delete'): two-pane Create automation dialog with agent and launch fields, extra args, host, project, workspace mode, session, schedule presets and custom cron, grace, precheck, setup decision, validation toasts, the four templates and empty-state cards, Delete Automation dialog Part 2: Automations UI: list, detail and runs (automations.md 'Browse, search, filter, and sort the list', 'Open an automation', 'Runs dashboard and run details'): searchable sortable table with Filters and pills, row menu, empty and host-status states, detail pane with Overview and Runs tabs, Run Now, Pause and Resume, Runs dashboard with 24h and 7d cards, run details with Rerun and status labels Part 3: Automations: external OpenClaw jobs (automations.md 'External automations (OpenClaw)', 'External automations jobs file (OpenClaw)'): jobs file discovery and mapping, list rows with Pause, Resume, Run Now and Delete, `openclaw cron` actions with id validation",
+      "docs": [
+        "automations.md"
+      ],
+      "deps": [
+        "m5-automations-core"
+      ],
+      "status": "in-progress",
+      "early": true,
+      "lane": 6
     },
     {
       "id": "m5-loops-presets",
@@ -683,7 +679,7 @@
       "deps": [
         "m5-loops-core"
       ],
-      "status": "todo",
+      "status": "done",
       "early": true
     },
     {
@@ -697,8 +693,9 @@
         "m5-loops-core",
         "m5-loops-presets"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 1
     },
     {
       "id": "m5-ledger",
@@ -722,8 +719,9 @@
       "deps": [
         "m6-orchestration-workers"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 2
     },
     {
       "id": "m6-objective-plan",
@@ -818,8 +816,7 @@
         "m1-term-daemon",
         "m1-agent-status"
       ],
-      "status": "in-progress",
-      "lane": 3
+      "status": "done"
     },
     {
       "id": "sb-mobile-app",
@@ -831,8 +828,9 @@
       "deps": [
         "sb-mobile-daemon"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 5
     },
     {
       "id": "sb-mobile-app-panels",
@@ -844,8 +842,9 @@
       "deps": [
         "sb-mobile-app"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 4
     },
     {
       "id": "m4-editor-drop-open-in-place",
@@ -1241,6 +1240,166 @@
         "m4-hosting-ui-reviews",
         "sa-browser-pane",
         "sa-browser-profiles-settings"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "sb-mobile-install-links",
+      "milestone": "Side B",
+      "title": "Publish compatible Quirky companion install artifacts and wire desktop iOS Preview/Stable and Android install links/QRs; blocked until the Quirky Expo fork has signed installable builds and supported distribution URLs (never direct users to incompatible Orca apps)",
+      "docs": [
+        "mobile.md"
+      ],
+      "deps": [
+        "sb-mobile-daemon",
+        "sb-mobile-app"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "sa-browser-pane-native-events",
+      "milestone": "Side A",
+      "title": "Complete native system-webview browser page-event flows: JS alert/confirm/prompt/beforeunload overlays with120s fail-closed responses; basic-auth and loopback-only certificate prompts; collision-safe download destination/progress/cancel/open/reveal shelf; opener/postbody-preserving OAuth popup windows and external-app launch interception. Blocked by pinned public Electrobun SDK missing synchronous dialog/auth/cert responders, native download destination/cancel APIs and opener-preserving popup interception; resume when supported hooks exist without private FFI, a Chrome-only human-browser replacement or fake JS dialogs.",
+      "docs": [
+        "browser.md"
+      ],
+      "deps": [
+        "sa-browser-pane"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "sa-browser-profile-import-ui",
+      "milestone": "Side A",
+      "title": "Browser profile UI: connect Import Cookies menus, detected browser/profile source rows, From File dialog, imported-source badges and import summary/error toasts to sa-browser-agent-extras real import engine. Source detection only on explicit opening; Google exclusion disclosed. Blocked prerequisite: import engine removed from shipped core, not fake menu success.",
+      "docs": [
+        "browser.md"
+      ],
+      "deps": [
+        "sa-browser-profiles-settings",
+        "sa-browser-agent-extras"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "sa-browser-native-identity",
+      "milestone": "Side A",
+      "title": "Browser identity: apply Cleaned/Native user-agent mode to human Native system-webview after supported SDK UA override hook becomes available; current public BrowserView exposes partition but no UA setter. Preserve restart requirement and never substitute Chrome for native.",
+      "docs": [
+        "browser.md"
+      ],
+      "deps": [
+        "sa-browser-profiles-settings"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "sa-browser-localhost-label-routing",
+      "milestone": "Side A",
+      "title": "Browser Localhost Worktree Labels: implement reachable per-worktree localhost host/port mapping for native and agent engines using supported routing/DNS capability; do not only rewrite displayed hostnames. Requires a real native mapping/proxy prerequisite absent from current local-only Browser API.",
+      "docs": [
+        "browser.md"
+      ],
+      "deps": [
+        "sa-browser-profiles-settings"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "sa-browser-native-profile-clear-completion",
+      "milestone": "Side A",
+      "title": "Browser profiles: complete Default/native cookies-site-data clear and isolated profile removal ONLY after public native Session deletion completion acknowledgement/barrier exists; current Session.clearStorageData void proves invocation only, so preserve Chrome/metadata and reject before native invocation. Also prove isolated native storage-root configuration before Default nightly clearing; QUIRKY_HOME alone does not relocate websiteDataStore.",
+      "docs": [
+        "browser.md"
+      ],
+      "deps": [
+        "sa-browser-profiles-settings"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "sa-browser-pane-native-host-controls",
+      "milestone": "Side A",
+      "title": "Complete native browser hard reload with genuine cache bypass and explicit network/TLS load-error state while retaining requested URL/retry controls. Pinned public Electrobun tag exposes normal reload and load-started/committed/finished only, no ignoreCache/reloadFromOrigin or load-failed signal; resume with supported native APIs, never simulate hard reload by normal reload or URL mutation and never invent a failure flag.",
+      "docs": [
+        "browser.md"
+      ],
+      "deps": [
+        "sa-browser-pane"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "sa-browser-pane-workspace-preview",
+      "milestone": "Side A",
+      "title": "Complete workspace-document browser preview conversion and Back across convertedFrom/convertedTo: grant-scoped active HTML and in-grant assets in an isolated nonpersistent guest with outbound network/permissions/download denial. Current public file resources intentionally allow only passive MIME and sandbox responses; native SDK lacks equivalent grant protocol/network policy hooks. Add a safe public preview capability before rendering, never relax active HTML onto daemon origin or claim direct file browsing is equivalent.",
+      "docs": [
+        "browser.md"
+      ],
+      "deps": [
+        "sa-browser-pane"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "sb-mobile-settings-visibility",
+      "milestone": "Side B",
+      "title": "Recheck Settings > Mobile paired-device revoke visibility at 1280x720: guarded scroll/PageDown could not reach the clipped button; diagnose host overflow versus driver targeting and fix only reproduced app clipping (Mobile-page revoke path already works)",
+      "docs": [
+        "mobile.md"
+      ],
+      "deps": [
+        "sb-mobile-daemon"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m4-hosting-ui-tasks-complete-remaining-flows",
+      "milestone": "M4",
+      "title": "Complete Tasks remaining parity: canonical github-sourced workspace creation and Project default-agent readiness/delivery; full built-web Tasks, issue/composer/create, Projects table/board/roadmap/settings flows; sticky-all added-repo/deep-link variants, stale source/view/rapid-write/index/comment-lag rollback, complete API/CLI/UI parity and PR navigation/check/merge/auto-merge/queue acceptance. Unblocked by source-worktree and Reviews runtime landings; original25-scenario spec and pending native handoff remain authoritative, no prior exhaustive UI/review pass claimed.",
+      "docs": [
+        "hosting-ui.md"
+      ],
+      "deps": [
+        "m4-hosting-ui-tasks",
+        "m4-worktrees-create-from-github",
+        "m4-hosting-ui-reviews"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m6-heimdall-host-power",
+      "milestone": "M6",
+      "title": "Deferred Heimdall automatic macOS host sleep/wake flow: add a trusted in-process daemon power-event publisher and public pre-sleep fencing callback/ack boundary (not the asynchronous generic event bus), bind kernel runners to suspend/resume and exclude sleep gaps from active budgets, dispose native subscriptions safely, and verify on an idle dedicated macOS/native test host. Current core provides tested explicit runner hooks but no native host event producer; unblock by implementing that producer/public lifecycle seam without helper processes or elapsed-delay inference.",
+      "docs": [
+        "heimdall.md"
+      ],
+      "deps": [
+        "m6-heimdall-core"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m6-orchestration-idle-pointer-shutdown",
+      "milestone": "M6",
+      "title": "Restore automatic idle mailbox nudges with bounded shutdown: preserve the intact AC9 scheduler acceptance from checkpoint/m6-core-idle-pointer; current source hangs in daemon teardown. Explicit safe session/pointer and all durable mail/check/ask/gate flows remain shipped.",
+      "docs": [
+        "orchestration.md"
+      ],
+      "deps": [
+        "m6-orchestration-core"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m5-automations-dispatch-remote-and-args",
+      "milestone": "M5",
+      "title": "Complete automations SSH/runtime host registration-generation fencing, workspace pin/re-pin/re-adoption and remote execution once public host APIs exist; resolve raw extra-agent-args support against locked structured-runner D6 (native options only, no terminal fallback)",
+      "docs": [
+        "automations.md"
+      ],
+      "deps": [
+        "m5-automations-dispatch"
       ],
       "status": "todo"
     }

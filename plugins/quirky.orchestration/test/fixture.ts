@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { QuirkyClient, type ClientHello } from '@quirky/protocol'
@@ -16,7 +16,10 @@ const TESTED_BUILTINS = [
   'quirky.agents',
   'quirky.worktree',
   'quirky.repo',
-  'quirky.agent-status'
+  'quirky.agent-status',
+  'quirky.terminal',
+  'quirky.structured',
+  'quirky.ask'
 ] as const
 const LAUNCH_AGENT_MAIN = join(import.meta.dir, 'launch-agent.ts')
 const FAKE_CLAUDE = `#!${process.execPath}
@@ -28,6 +31,18 @@ type AuthenticatedHello = ClientHello & { sessionToken: string }
 export type OrchestrationParty = OrchestrationSession & { client: QuirkyClient; sessionToken: string }
 export type CliResult = { code: number; stdout: string; stderr: string }
 export type CliProcess = Bun.Subprocess<'ignore', 'pipe', 'pipe'>
+function isCliResult(value: unknown): value is CliResult {
+  if (typeof value !== 'object' || value === null) return false
+  if (!('code' in value) || !('stdout' in value) || !('stderr' in value)) return false
+  return typeof value.code === 'number' && typeof value.stdout === 'string' && typeof value.stderr === 'string'
+}
+
+export function readCliResult(path: string): CliResult | undefined {
+  if (!existsSync(path)) return undefined
+  const result: unknown = JSON.parse(readFileSync(path, 'utf8'))
+  if (!isCliResult(result)) throw new Error('orchestration fixture returned an invalid CLI result')
+  return result
+}
 
 export type OrchestrationFixture = {
   root: string
@@ -188,6 +203,7 @@ export async function startOrchestrationFixture(): Promise<OrchestrationFixture>
     mkdirSync(childHome, { recursive: true, mode: 0o700 })
     const child = Bun.spawn([process.execPath, CLI_MAIN, ...args], {
       cwd: options.cwd ?? party.cwd,
+      stdin: 'ignore',
       env: {
         PATH: process.env.PATH ?? '/usr/bin:/bin',
         HOME: childHome,
@@ -196,7 +212,6 @@ export async function startOrchestrationFixture(): Promise<OrchestrationFixture>
         QUIRKY_WORKTREE_ID: party.worktreeId,
         QUIRKY_SESSION_TOKEN: party.sessionToken
       },
-      stdin: 'ignore',
       stdout: 'pipe',
       stderr: 'pipe'
     })

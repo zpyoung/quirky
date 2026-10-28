@@ -164,6 +164,13 @@ export function createHandlers(
   const { layout, distros } = services
   return {
     'client.hello': async (params, conn) => {
+      if (conn.deviceId !== undefined) {
+        const version = int(params, 'protocolVersion', 0)
+        if (version !== PROTOCOL_VERSION) {
+          throw conflict(`protocol version mismatch: daemon speaks ${PROTOCOL_VERSION}, client ${version}`)
+        }
+        return { protocolVersion: PROTOCOL_VERSION, daemonVersion: core.status().daemonVersion }
+      }
       const role = params.role
       if (typeof role !== 'string' || !ROLES.includes(role as ClientRole)) {
         throw invalidParams(`role must be one of ${ROLES.join(', ')}`)
@@ -235,6 +242,12 @@ export function createHandlers(
     'ui.view.open': (params) => layout.openView(str(params, 'id'), params.input),
     'ui.view.close': () => layout.closeView(),
     'ui.panel.open': (params) => layout.openPanel(str(params, 'id')),
+    'ui.panel.configure': (params) =>
+      layout.configurePanel(
+        str(params, 'id'),
+        params.width as number | undefined,
+        params.activityBarPosition as 'top' | 'side' | undefined
+      ),
     'ui.panel.close': () => layout.closePanel(),
     'ui.sidebar.set': (params) => {
       const visible = optBool(params, 'visible')

@@ -189,11 +189,14 @@ test('NA-40: the command opens the AI defaults view, which saves the global reci
 
   const agent = await w.win.waitFor(() => {
     const select = byLabel('Commit message agent', view) as unknown as HTMLSelectElement | null
-    return select && [...select.options].some((option) => option.value === 'codex') ? select : null
+    return select && [...select.options].some((option) => option.value === 'claude') ? select : null
   })
-  agent.value = 'codex'
+  agent.value = 'claude'
   agent.dispatchEvent(new Event('change', { bubbles: true }))
-  await w.win.waitFor(async () => ((await w.agent.callAny('quirky.git/aiRecipe', { worktree: w.feat.id, action: 'commitMessage' })) as { agent: string | null }).agent === 'codex')
+  await w.win.waitFor(async () => {
+    const recipe = await w.agent.callAny('quirky.git/aiRecipe', { worktree: w.feat.id, action: 'commitMessage' })
+    return typeof recipe === 'object' && recipe !== null && 'agent' in recipe && recipe.agent === 'claude'
+  })
 
   await click(byLabel('Show Source Control AI actions', view))
   await w.win.waitFor(() => byLabel(SPARKLE) === null)

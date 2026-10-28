@@ -123,3 +123,4 @@ describe('formatContributionId', () => {
     expect(() => formatContributionId('k', 'p', 'n'.repeat(129))).toThrow('name')
   })
 })
+

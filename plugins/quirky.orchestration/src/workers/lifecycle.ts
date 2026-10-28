@@ -820,7 +820,7 @@ export function createWorkerLifecycle(
     const settled = repo.get(dispatchId)
     if (settled && settled.state === outcome) {
       updateStage(dispatchId, outcome, {
-        stage: outcome,
+        stage: 'settled',
         updatedAt: at,
         ...(status === 'completed' || dispatch.lastFailure === 'worker_report' ? { lastError: null } : {})
       })
@@ -1109,11 +1109,31 @@ export function createWorkerLifecycle(
     }
   }
 
-  repo.store.transaction(() => repo.reconcile(runtime.epoch))
   core.registerWorkerPort(lifecycle)
-  lifecycleByCore.set(core, lifecycle)
 
   core.store.transaction(() => {
+    for (const worker of repo.list()) {
+      if (worker.runtimeEpoch === runtime.epoch) continue
+      if (worker.state === 'starting') {
+        updateState(worker.dispatchId, 'starting', 'start_unknown')
+        updateStage(worker.dispatchId, 'start_unknown', {
+          stage: 'start_unknown',
+          lastError: 'The runtime restarted before worker-start reached a terminal receipt.'
+        })
+      } else if (worker.state === 'stopping') {
+        updateState(worker.dispatchId, 'stopping', 'stop_unknown')
+        updateStage(worker.dispatchId, 'stop_unknown', {
+          stage: 'stop_unknown',
+          lastError: 'The runtime restarted while worker-stop was awaiting an exact close confirmation.'
+        })
+      } else if (worker.state === 'stop_unknown' && worker.stage === 'stopping') {
+        updateStage(worker.dispatchId, 'stop_unknown', {
+          stage: 'stop_unknown',
+          lastError: 'The runtime restarted while retrying a worker-stop with an unproven outcome.'
+        })
+      }
+    }
+
     for (const dispatch of core.listDispatches()) {
       const worker = repo.get(dispatch.id)
       if (!worker || !ACTIVE_WORKER_STATES.has(worker.state) || !finalDispatchStatus(dispatch.status)) continue
@@ -1126,6 +1146,7 @@ export function createWorkerLifecycle(
       if (resource && resource.ownerDispatchId === dispatch.id) markResourceRetained(resource, 'assignment_settled')
     }
   })
+  lifecycleByCore.set(core, lifecycle)
 
   unregisterExit = runtime.context.pty.onExit((sessionId, exitCode, event) => {
     if (disposed) return

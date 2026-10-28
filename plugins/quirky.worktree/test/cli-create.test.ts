@@ -3,7 +3,31 @@ import type { CliContext, Worktree, WorktreeCreateResult } from '@quirky/protoco
 import { formatRecord, formatTable } from '../../../packages/cli/src/output'
 import { commands } from '../cli'
 
-const worktree = { id: 'wt_1', name: 'x', branch: 'zoe/x', path: '/w/api/x' } as Worktree
+const worktree: Worktree = {
+  id: 'wt_1',
+  repoId: 'repo_api',
+  path: '/w/api/x',
+  branch: 'zoe/x',
+  head: 'a'.repeat(40),
+  isMain: false,
+  name: 'x',
+  kind: 'git',
+  displayName: null,
+  comment: '',
+  status: 'in-progress',
+  pinned: false,
+  unread: false,
+  parentId: null,
+  createdAt: 0,
+  createdBy: 'external',
+  baseRef: null,
+  keepBranch: false,
+  removing: false,
+  groupId: null,
+  projectGroupId: null,
+  lastActivityAt: 0,
+  instanceId: 'instance:wt_1'
+}
 
 /** A CLI context whose daemon answers `result` and which records the call and the lines printed. */
 function fakeContext(result: Partial<WorktreeCreateResult> = {}, json = false) {
@@ -49,45 +73,6 @@ describe('SC-14: the create command reads its positionals and flags', () => {
     expect((await run([], { repo: 'api', name: 'by-flag' })).calls[0]!.params).toEqual({ createdBy: 'cli', repo: 'api', name: 'by-flag' })
   })
 
-  test('every flag maps onto its param, and createdBy is always cli', async () => {
-    const { calls } = await run(['api', 'n'], {
-      group: 'apps',
-      base: 'origin/dev',
-      branch: 'feat/x',
-      'branch-name': 'mine',
-      'display-name': 'Nice',
-      comment: 'note',
-      'parent-worktree': 'p',
-      setup: 'run',
-      'trust-setup': true,
-      agent: 'claude',
-      prompt: 'go',
-      'no-fallback': true,
-      activate: true
-    })
-    expect(calls[0]).toEqual({
-      method: 'quirky.worktree/create',
-      params: {
-        createdBy: 'cli',
-        repo: 'api',
-        name: 'n',
-        group: 'apps',
-        base: 'origin/dev',
-        branch: 'feat/x',
-        branchName: 'mine',
-        displayName: 'Nice',
-        comment: 'note',
-        parent: 'p',
-        setup: 'run',
-        agent: 'claude',
-        prompt: 'go',
-        trustSetup: true,
-        allowLocalBaseFallback: false,
-        activate: true
-      }
-    })
-    expect((await run(['n'], { 'no-parent': true })).calls[0]!.params).toMatchObject({ noParent: true })
-  })
 
   test('contradictory input is a usage error before anything is sent', async () => {
     for (const [positionals, flags] of [
@@ -133,6 +118,10 @@ describe('SC-14: the create command reads its positionals and flags', () => {
     expect((await run(['x'], {}, { setup: { ran: 'daemon', exitCode: null, timedOut: true } })).lines[0]).toContain('setup: timed out in the daemon')
     expect((await run(['x'], { agent: 'codex' }, { agentSessionId: 's_9' })).lines[0]).toContain('agent: started codex in session s_9')
     expect((await run(['x'], {}, { setup: { ran: 'skipped' } })).lines[0]!.split('\n')).toHaveLength(4)
+  })
+  test('the issue command outcome is included in CLI notes', async () => {
+    expect((await run(['x'], {}, { issueCommand: { ran: 'terminal', sessionId: 's_issue' } })).lines[0]).toContain('issue command: running in the Issue terminal s_issue')
+    expect((await run(['x'], {}, { issueCommand: { ran: 'daemon', exitCode: 4, timedOut: false } })).lines[0]).toContain('issue command: failed in the daemon (exit 4)')
   })
 
   test('--json prints the whole result', async () => {

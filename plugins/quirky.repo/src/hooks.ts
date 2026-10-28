@@ -10,8 +10,8 @@ export type HooksFile = { name: 'quirky.yaml' | 'orca.yaml'; text: string }
 export type TrustedHashes = Partial<Record<HookKind, string>>
 
 const FILE_NAMES = ['quirky.yaml', 'orca.yaml'] as const
-const UNSUPPORTED_KEYS = ['issueCommand', 'defaultTabs', 'environmentRecipes']
-const KNOWN_KEYS = ['scripts', 'setupAgentStartupPolicy', 'worktree', ...UNSUPPORTED_KEYS]
+const UNSUPPORTED_KEYS = ['defaultTabs', 'environmentRecipes']
+const KNOWN_KEYS = ['scripts', 'setupAgentStartupPolicy', 'worktree', 'issueCommand', ...UNSUPPORTED_KEYS]
 const STARTUP_POLICIES = ['start-immediately', 'wait-for-setup']
 
 /** The identity of a script for trust: sha256 of its text without surrounding whitespace, as hex. */
@@ -39,6 +39,7 @@ export async function readHooksFile(repoPath: string, ref: string): Promise<Hook
 type SharedHooks = {
   setup: string | null
   archive: string | null
+  issueCommand: string | null
   agentStartup: 'start-immediately' | 'wait-for-setup' | null
   sharedDirectories: string[]
   warnings: string[]
@@ -57,7 +58,7 @@ function scriptOf(value: unknown, label: string, warnings: string[]): string | n
 
 /** What a hooks file says; a file that doesn't parse or isn't a mapping says nothing, with a warning. */
 function parseShared(file: HooksFile): SharedHooks {
-  const shared: SharedHooks = { setup: null, archive: null, agentStartup: null, sharedDirectories: [], warnings: [] }
+  const shared: SharedHooks = { setup: null, archive: null, issueCommand: null, agentStartup: null, sharedDirectories: [], warnings: [] }
   let document: unknown
   try {
     document = Bun.YAML.parse(file.text)
@@ -78,6 +79,7 @@ function parseShared(file: HooksFile): SharedHooks {
       shared.archive = scriptOf(scripts.archive, 'scripts.archive', shared.warnings)
     } else shared.warnings.push('scripts must be a mapping')
   }
+  shared.issueCommand = scriptOf(document.issueCommand, 'issueCommand', shared.warnings)
   if (setupAgentStartupPolicy !== undefined) {
     if (typeof setupAgentStartupPolicy === 'string' && STARTUP_POLICIES.includes(setupAgentStartupPolicy)) {
       shared.agentStartup = setupAgentStartupPolicy as SharedHooks['agentStartup']
@@ -112,8 +114,8 @@ function mergeScript(file: HooksFile | null, shared: string | null, local: strin
 }
 
 /**
- * The setup and archive hooks that apply to a project: the shared file merged with the project's
- * local scripts by its command-source policy, with the trust state of each shared script.
+ * The setup, archive and issue-command hooks that apply to a project: the shared file merged with
+ * the project's local scripts by its command-source policy, with the trust state of each shared script.
  * A script that fails to parse or is the wrong type is ignored with a warning, never an error.
  */
 export function effectiveHooks(file: HooksFile | null, settings: ProjectSettings, trusted: TrustedHashes): EffectiveHooks {
@@ -123,6 +125,7 @@ export function effectiveHooks(file: HooksFile | null, settings: ProjectSettings
     file: file?.name ?? null,
     setup: mergeScript(file, shared?.setup ?? null, local(settings.setupScript), settings.commandSource, trusted.setup),
     archive: mergeScript(file, shared?.archive ?? null, local(settings.archiveScript), settings.commandSource, trusted.archive),
+    issueCommand: mergeScript(file, shared?.issueCommand ?? null, local(settings.issueCommand ?? ''), settings.commandSource, trusted.issue),
     agentStartup: settings.agentStartup ?? shared?.agentStartup ?? 'start-immediately',
     sharedDirectories: shared?.sharedDirectories ?? [],
     warnings: shared?.warnings ?? []
@@ -132,5 +135,9 @@ export function effectiveHooks(file: HooksFile | null, settings: ProjectSettings
 /** The shared script text of each kind in `file`, for recording trust; empty when it has none. */
 export function sharedScripts(file: HooksFile | null): Partial<Record<HookKind, string>> {
   const shared = file ? parseShared(file) : null
-  return { ...(shared?.setup ? { setup: shared.setup } : {}), ...(shared?.archive ? { archive: shared.archive } : {}) }
+  return {
+    ...(shared?.setup ? { setup: shared.setup } : {}),
+    ...(shared?.archive ? { archive: shared.archive } : {}),
+    ...(shared?.issueCommand ? { issue: shared.issueCommand } : {})
+  }
 }

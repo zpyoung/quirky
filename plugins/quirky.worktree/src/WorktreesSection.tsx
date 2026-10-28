@@ -5,18 +5,28 @@ import { AddProjectDialog } from './AddProjectDialog'
 import { BaseFallbackDialog } from './BaseFallbackDialog'
 import { CreateDialog } from './CreateDialog'
 import { DeleteDialog } from './DeleteDialog'
-import { DeleteGroupDialog, NewGroupDialog, RenameGroupDialog } from './GroupDialogs'
-import { Notices } from './Notices'
+import { DeleteGroupDialog, NewGroupDialog, NewWorktreeGroupDialog, RenameGroupDialog } from './GroupDialogs'
 import { ParentDialog } from './ParentDialog'
+import { Notices } from './Notices'
+import { ActivityFilters } from './ActivityFilters'
 import { ProjectSettingsDialog } from './ProjectSettingsDialog'
 import { RemoveProjectDialog } from './RemoveProjectDialog'
-import { buildReport, buildTreeModel, isAddFlow, repoLabel, type DialogState, type PendingCreate, type WorktreesReport } from './report'
+import { buildReport, buildTreeModel, isAddFlow, repoLabel, type DialogState, type GroupNode, type PendingCreate, type SeparatorReport, type TreeRow, type WorktreesReport } from './report'
 import { useNow } from './StatusDot'
 import { Tree } from './Tree'
 import { TrustDialog } from './TrustDialog'
 import { UpdateDialog } from './UpdateDialog'
+import { useSidebarActivity } from './useSidebarActivity'
 import { useTree } from './useTree'
 
+import type { MembershipTarget } from './membership'
+
+const SEPARATOR_SETTING = 'setting:quirky.sidebar-extras/sidebar-section-separators'
+
+function readSeparatorSetting(context: UiPluginContext): boolean {
+  const value = context.getSetting(SEPARATOR_SETTING)
+  return typeof value === 'boolean' ? value : true
+}
 type Props = { context: UiPluginContext; report?(state: unknown): void; requests?: CreateRequests }
 
 /** A trust question waiting for an answer; `resolve` hands it back to the create that asked. */
@@ -53,6 +63,54 @@ export function WorktreesSection({ context, report, requests }: Props) {
 
   const selectedId = selectedWorktree(layout)
 
+  const activity = useSidebarActivity(context, selectedId, loaded)
+  const selectedInstance = worktrees.find((worktree) => worktree.id === selectedId)?.instanceId
+  const activityProjection = activity.projection
+  const activityIsCurrent = activityProjection !== null && (
+    selectedId === null
+      ? activityProjection.active === null
+      : activityProjection.active?.worktreeId === selectedId &&
+        (selectedInstance === undefined || activityProjection.active.instanceId === selectedInstance)
+  )
+  const currentProjection = activity.status === 'available' && activityIsCurrent ? activityProjection : null
+  const visibleIds = useMemo(
+    () => currentProjection ? new Set(currentProjection.visibleIds) : null,
+    [currentProjection]
+  )
+  const [dropPreview, setDropPreview] = useState<MembershipTarget | null>(null)
+  const [separatorState, setSeparatorState] = useState<SeparatorReport>(() => ({
+    enabled: readSeparatorSetting(context),
+    eligibleBoundaries: []
+  }))
+  const separatorEnabled = separatorState.enabled
+
+  useEffect(() => {
+    const unsubscribe = context.subscribe((event) => {
+      if (event.type !== 'plugin.changed' &&
+        !event.type.startsWith('setting.') &&
+        !event.type.startsWith('setting/') &&
+        !event.type.startsWith('settings/')) return
+      const enabled = readSeparatorSetting(context)
+      setSeparatorState((previous) => previous.enabled === enabled ? previous : { ...previous, enabled })
+    })
+    return unsubscribe
+  }, [context])
+
+  const changeDropPreview = useCallback((target: MembershipTarget | null) => {
+    setDropPreview((previous) =>
+      previous?.kind === target?.kind && previous?.id === target?.id ? previous : target
+    )
+  }, [])
+  const changeSeparatorState = useCallback((next: SeparatorReport) => {
+    setSeparatorState((previous) =>
+      previous.enabled === next.enabled &&
+      previous.eligibleBoundaries.length === next.eligibleBoundaries.length &&
+      previous.eligibleBoundaries.every((key, index) => key === next.eligibleBoundaries[index])
+        ? previous
+        : next
+    )
+  }, [])
+
   // the command's project: the one named, else the open worktree's, else the first
   useEffect(() => {
     if (!requested || !loaded) return
@@ -65,7 +123,7 @@ export function WorktreesSection({ context, report, requests }: Props) {
 
   // a delete the window has sent shows as deleting before the daemon's own flag arrives
   const shown = useMemo(() => (deleting.size === 0 ? worktrees : worktrees.map((w) => (deleting.has(w.id) ? { ...w, removing: true } : w))), [worktrees, deleting])
-  const model = useMemo(() => buildTreeModel(repos, groups, shown, pending), [repos, groups, shown, pending])
+  const model = useMemo(() => buildTreeModel(repos, groups, shown, pending, visibleIds), [repos, groups, shown, pending, visibleIds])
   const state: WorktreesReport = useMemo(() => {
     // a stacked question is what the person is looking at, so it is what `ui state` reports
     const front: DialogState | null = trust
@@ -80,11 +138,17 @@ export function WorktreesSection({ context, report, requests }: Props) {
       sessions,
       selectedId,
       pending,
+      visibleIds,
+      activity: currentProjection,
+      activityStatus: activity.status,
+      activityError: activity.error,
+      separators: separatorState,
+      dropPreview,
       now,
       dialog: front,
-      notices: kept.map((k) => ({ kind: 'kept-branch', branch: k.branch, repoId: k.repoId }))
+      notices: kept.map((item) => ({ kind: 'kept-branch', branch: item.branch, repoId: item.repoId }))
     })
-  }, [repos, groups, shown, sessions, selectedId, pending, dialog, trust, fallbacks, kept, now])
+  }, [repos, groups, shown, sessions, selectedId, pending, visibleIds, currentProjection, activity.status, activity.error, separatorState, dropPreview, dialog, trust, fallbacks, kept, now])
 
   useEffect(() => {
     if (!loaded) return
@@ -142,22 +206,37 @@ export function WorktreesSection({ context, report, requests }: Props) {
     dialog?.kind === 'update' || dialog?.kind === 'parent' || dialog?.kind === 'delete'
       ? worktrees.find((w) => w.id === dialog.worktreeId)
       : undefined
-  const dialogRepo = dialog && 'repoId' in dialog ? repos.find((r) => r.id === dialog.repoId) : undefined
-  const dialogGroup = dialog?.kind === 'group' && dialog.action !== 'new' ? groups.find((g) => g.id === dialog.groupId) : undefined
+  const dialogRepo = dialog && 'repoId' in dialog ? repos.find((repo) => repo.id === dialog.repoId) : undefined
+  const dialogGroup = dialog?.kind === 'group' && (dialog.action === 'rename' || dialog.action === 'delete')
+    ? groups.find((group) => group.id === dialog.groupId)
+    : undefined
+  const allRows = useMemo(() => {
+    const rowsInGroups = (nodes: GroupNode[]): TreeRow[] => {
+      const rows: TreeRow[] = []
+      for (const node of nodes) {
+        rows.push(...node.rows, ...node.looseRows)
+        for (const project of node.projects) rows.push(...project.rows)
+        rows.push(...rowsInGroups(node.children))
+      }
+      return rows
+    }
+    return [...rowsInGroups(model.groups), ...model.projects.flatMap((project) => project.rows)]
+  }, [model])
   const descendants =
     dialog?.kind === 'delete' && dialog.withDescendants && target
-      ? model.groups
-          .flatMap((g) => [...g.projects.flatMap((p) => p.rows), ...g.rows])
-          .concat(model.projects.flatMap((p) => p.rows))
-          .filter((row) => row.worktree.id === target.id)
-          .flatMap((row) => row.descendants)
-          .map((id) => worktrees.find((w) => w.id === id))
-          .filter((w) => w !== undefined)
+      ? (allRows.find((row) => row.worktree.id === target.id)?.descendants ?? [])
+          .map((id) => worktrees.find((worktree) => worktree.id === id))
+          .filter((worktree) => worktree !== undefined)
       : undefined
-  const trustRepo = trust ? repos.find((r) => r.id === trust.request.repoId) : undefined
+  const trustRepo = trust ? repos.find((repo) => repo.id === trust.request.repoId) : undefined
 
   return (
     <>
+      <ActivityFilters
+        projection={currentProjection}
+        error={activity.status === 'error' ? activity.error : null}
+        setPreferences={activity.setPreferences}
+      />
       <div className="repo-scroll">
         {repos.length === 0 && <p className="muted pad">No repositories yet.</p>}
         <Tree
@@ -167,8 +246,11 @@ export function WorktreesSection({ context, report, requests }: Props) {
           sessions={sessions}
           selectedId={selectedId}
           now={now}
+          separatorEnabled={separatorEnabled}
           openDialog={setDialog}
           requestDelete={requestDelete}
+          onDropPreviewChange={changeDropPreview}
+          onSeparatorStateChange={changeSeparatorState}
         />
       </div>
       <Notices context={context} kept={kept} onDismiss={dismissKept} />
@@ -212,7 +294,19 @@ export function WorktreesSection({ context, report, requests }: Props) {
       {dialog?.kind === 'remove-project' && dialogRepo && (
         <RemoveProjectDialog context={context} repo={dialogRepo} worktrees={worktrees} sessions={sessions} onClose={closeDialog} />
       )}
-      {dialog?.kind === 'group' && dialog.action === 'new' && dialogRepo && <NewGroupDialog context={context} repo={dialogRepo} onClose={closeDialog} />}
+      {dialog?.kind === 'group' && dialog.action === 'new' && dialogRepo && (
+        <NewGroupDialog context={context} repo={dialogRepo} onClose={closeDialog} />
+      )}
+      {dialog?.kind === 'group' && dialog.action === 'new-worktree' && (
+        <NewWorktreeGroupDialog
+          context={context}
+          worktreeId={dialog.worktreeId}
+          initialName={dialog.initialName}
+          expectedInstanceId={dialog.expectedInstanceId}
+          expectedProjectGroupId={dialog.expectedProjectGroupId}
+          onClose={closeDialog}
+        />
+      )}
       {dialog?.kind === 'group' && dialog.action === 'rename' && dialogGroup && <RenameGroupDialog context={context} group={dialogGroup} onClose={closeDialog} />}
       {dialog?.kind === 'group' && dialog.action === 'delete' && dialogGroup && <DeleteGroupDialog context={context} group={dialogGroup} onClose={closeDialog} />}
       {trust && <TrustDialog request={trust.request} project={trustRepo ? repoLabel(trustRepo) : trust.request.repoId} onChoose={answerTrust} />}

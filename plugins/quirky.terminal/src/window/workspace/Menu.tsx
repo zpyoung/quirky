@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 
 
 /** One row of a menu: a command, a separator, or a submenu. */
 export type MenuItem = {
+  /** Stable identity for rows backed by public contributions. */
+  id?: string
   label: string
   /** The shortcut shown at the row's right edge, such as `⌘W`. */
   key?: string | null
@@ -135,7 +137,7 @@ export function MenuList({ items, label, onChoose, onClose, onBack, header, high
         item.separator ? (
           <div key={`sep-${index}`} className="qt-menu-separator" role="separator" />
         ) : (
-          <div key={`${item.label}-${index}`} className="qt-menu-row">
+          <div key={item.id ?? `${item.label}-${index}`} className="qt-menu-row">
             <button
               type="button"
               role="menuitem"

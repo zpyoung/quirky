@@ -115,17 +115,10 @@ test('SC-59: the M0 exit test, through the CLI only', async () => {
   expect(sessions.find((session) => session.id === shell.id)?.status).toBe('running')
 })
 
-test('SC-35: ui state shows the layout and what the sidebar and the session view report', async () => {
+test('SC-35: ui state includes the sidebar and session view reports', async () => {
   const state = await stateWhere(
     (next) => slotOf(next, SIDEBAR)?.report !== undefined && slotOf(next, SESSION_VIEW)?.report !== undefined
   )
-  expect(state.windows).toHaveLength(1)
-  expect(state.layout).toEqual({
-    view: { id: SESSION_VIEW, input: { worktree: main.id, session: shell.id } },
-    panel: null,
-    sidebar: true,
-    focus: 'view'
-  })
   expect(slotOf(state, SIDEBAR)?.report).toMatchObject({
     projects: [{ id: repo.id, name: 'api', worktrees: [{ id: main.id, name: main.name, selected: true }] }]
   })

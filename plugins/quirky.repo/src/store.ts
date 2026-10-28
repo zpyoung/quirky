@@ -18,13 +18,14 @@ export type GroupRow = {
   id: string
   name: string
   parent_path: string | null
+  parent_id: string | null
   collapsed: number
   sort_order: number
   created_from: string
   created_at: number
 }
 
-export type HookKind = 'setup' | 'archive'
+export type HookKind = 'setup' | 'archive' | 'issue'
 
 /** What a project has when nothing has been set; the store keeps only the differences. */
 export const DEFAULT_SETTINGS: ProjectSettings = {
@@ -34,6 +35,7 @@ export const DEFAULT_SETTINGS: ProjectSettings = {
   agentStartup: null,
   commandSource: null,
   setupScript: '',
+  issueCommand: '',
   archiveScript: ''
 }
 
@@ -54,7 +56,8 @@ export const toGroup = (row: GroupRow, repoIds: string[]): ProjectGroup => ({
   collapsed: row.collapsed !== 0,
   order: row.sort_order,
   createdFrom: row.created_from === 'folder-scan' ? 'folder-scan' : 'manual',
-  repoIds
+  repoIds,
+  parentId: row.parent_id,
 })
 
 /** The settings a row's JSON describes; missing or unreadable fields take their defaults. */
@@ -131,6 +134,15 @@ export function createStore(context: PluginContext): PluginStore {
           kind TEXT NOT NULL,
           hash TEXT NOT NULL,
           PRIMARY KEY (repo_id, kind)
+        );
+      `)
+    },
+    (store) => {
+      store.exec(`
+        ALTER TABLE groups ADD COLUMN parent_id TEXT;
+        CREATE TABLE deleted_groups (
+          id TEXT PRIMARY KEY,
+          deleted_at INTEGER NOT NULL
         );
       `)
     }

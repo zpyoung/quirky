@@ -52,6 +52,7 @@ describe('quirky orchestration generated CLI acceptance', () => {
     )
     expect(created.run.coordinatorSessionId).toBe(coordinator.id)
     expect(created.mutation.replayed).toBe(false)
+    expect(created.mutation.requestId).toMatch(/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/)
 
     const replay = await cliJson<{ run: RunRow; mutation: { requestId: string; replayed: boolean } }>(
       coordinator,
@@ -480,7 +481,7 @@ describe('quirky orchestration generated CLI acceptance', () => {
       '--retry-request',
       crypto.randomUUID(),
       '--json'
-    ])
+    ], { processTimeoutMs: 3_000 })
     expectCliFailure(unconfirmed)
     expect((await call<InboxResult>(coordinator, 'quirky.orchestration/inbox', {
       full: true,

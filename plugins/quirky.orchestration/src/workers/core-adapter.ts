@@ -2,11 +2,8 @@ import type { PluginStore } from '@quirky/protocol'
 import type { DispatchId, DispatchRow, MutationRequest, MutationResult, RunId, RunRow, TaskCreateParams, TaskRow } from '../contracts'
 import type { SessionIdentity } from '../runtime-contracts'
 import type { DurableMutationOptions, OrchestrationWorkerCore } from '../worker-integration'
+import { isServiceCoordinatorEvidence } from '../worker-contracts'
 import type { CoordinatorEvidence, ServiceCoordinatorEvidence, WorkerCore } from '../worker-contracts'
-
-function isServiceCoordinator(caller: CoordinatorEvidence): caller is ServiceCoordinatorEvidence {
-  return 'kind' in caller && caller.kind === 'service'
-}
 
 type InspectionCore = OrchestrationWorkerCore
 
@@ -28,6 +25,7 @@ export function createWorkerCore(core: InspectionCore, service?: WorkerServiceCo
   return {
     context: core.context,
     store: core.store,
+    get nestedWorkerMaxDepth() { return core.nestedWorkerMaxDepth },
     registerWorkerPort: core.registerWorkerPort.bind(core),
     getRun: core.getRun.bind(core),
     getTask: core.getTask.bind(core),
@@ -46,23 +44,23 @@ export function createWorkerCore(core: InspectionCore, service?: WorkerServiceCo
     boundRunId: core.boundRunId.bind(core),
     attentionFor: core.attentionFor.bind(core),
     requireCoordinator(caller: CoordinatorEvidence, runId?: RunId) {
-      if (isServiceCoordinator(caller)) return requireService().requireCoordinator(caller, runId)
+      if (isServiceCoordinatorEvidence(caller)) return requireService().requireCoordinator(caller, runId)
       return core.requireCoordinator(caller, runId)
     },
     createTask(input, caller) {
-      if (isServiceCoordinator(caller)) return requireService().createTask(input, caller)
+      if (isServiceCoordinatorEvidence(caller)) return requireService().createTask(input, caller)
       return core.createTask(input, caller)
     },
     reserveWorkerDispatch(input, caller) {
-      if (isServiceCoordinator(caller)) return requireService().reserveWorkerDispatch(input, caller)
+      if (isServiceCoordinatorEvidence(caller)) return requireService().reserveWorkerDispatch(input, caller)
       return core.reserveWorkerDispatch(input, caller)
     },
     attachWorkerAuthority(dispatchId, identity, caller) {
-      if (isServiceCoordinator(caller)) return requireService().attachWorkerAuthority(dispatchId, identity, caller)
+      if (isServiceCoordinatorEvidence(caller)) return requireService().attachWorkerAuthority(dispatchId, identity, caller)
       return core.attachWorkerAuthority(dispatchId, identity, caller)
     },
     async mutateWorker(method, params, caller, operation, options) {
-      if (isServiceCoordinator(caller)) return requireService().mutateWorker(method, params, caller, operation, options)
+      if (isServiceCoordinatorEvidence(caller)) return requireService().mutateWorker(method, params, caller, operation, options)
       if (method !== 'workerStart' && method !== 'workerStop' && method !== 'workerAbandon' && method !== 'workerRelease' && method !== 'workerRetain') {
         throw core.context.error('invalid-params', `Unknown worker mutation: ${method}`)
       }

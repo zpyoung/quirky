@@ -498,7 +498,7 @@ test('SC-11 and SC-14: group menu opens its ledger and deleting a group reports 
   await groupMenu(world, group.name)
   await chooseMenu(world, 'Delete Group…')
   const dialog = await world.win.waitFor(() => {
-    const current = dialogNamed('Delete Group')
+    const current = document.querySelector<HTMLElement>('[role="dialog"]')
     const action = current && button(current, 'Delete Group')
     return action && !action.disabled ? current : undefined
   })

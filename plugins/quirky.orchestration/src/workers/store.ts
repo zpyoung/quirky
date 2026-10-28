@@ -176,34 +176,6 @@ export function createWorkerStore(store: PluginStore): WorkerRepository {
       )
     },
 
-    reconcile(runtimeEpoch) {
-      store.transaction(() => {
-        for (const worker of repository.list()) {
-          if (worker.runtimeEpoch === runtimeEpoch) continue
-          if (worker.state === 'starting') {
-            repository.update(worker.dispatchId, {
-              state: 'start_unknown',
-              stage: 'start_unknown',
-              lastError: 'The runtime restarted before worker-start reached a terminal receipt.',
-              updatedAt: now()
-            }, 'starting')
-          } else if (worker.state === 'stopping') {
-            repository.update(worker.dispatchId, {
-              state: 'stop_unknown',
-              stage: 'stop_unknown',
-              lastError: 'The runtime restarted while worker-stop was awaiting an exact close confirmation.',
-              updatedAt: now()
-            }, 'stopping')
-          } else if (worker.state === 'stop_unknown' && worker.stage === 'stopping') {
-            repository.update(worker.dispatchId, {
-              stage: 'stop_unknown',
-              lastError: 'The runtime restarted while retrying a worker-stop with an unproven outcome.',
-              updatedAt: now()
-            }, 'stop_unknown')
-          }
-        }
-      })
-    }
   }
 
   return repository

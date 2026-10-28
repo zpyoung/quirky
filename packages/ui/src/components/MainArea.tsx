@@ -3,7 +3,7 @@ import { PanelToggles } from '../plugins/PanelToggles'
 import { PluginSlot } from '../plugins/PluginSlot'
 import { useRegion } from '../plugins/useRegion'
 
-/** The header (the open view's title and the panel toggles) above the open view, or an empty state. */
+/** The view title and the main view, with legacy-inline panel controls when no activity position is configured. */
 export function MainArea() {
   const { model, layout } = usePluginState()
   const region = useRegion('view')
@@ -13,7 +13,7 @@ export function MainArea() {
     <main className="main" {...region}>
       <div className="main-header">
         <div className="main-title">{view ? <strong>{view.title}</strong> : <span className="muted">Quirky</span>}</div>
-        <PanelToggles />
+        {layout.activityBarPosition === undefined && <PanelToggles />}
       </div>
       <div className="main-body">
         {view && <PluginSlot key={view.id} id={view.id} input={layout.view!.input} />}

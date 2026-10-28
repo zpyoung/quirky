@@ -1,4 +1,12 @@
-import type { AskEnvelope, AskSpec, Session, SessionProviderSession, SessionStatus, StructuredMessage, StructuredRole } from '@quirky/protocol'
+import type {
+  AskEnvelope,
+  AskSpec,
+  Session,
+  SessionProviderSession,
+  SessionStatus,
+  StructuredMessage,
+  StructuredRole
+} from '@quirky/protocol'
 
 /** A message a runner journals; the plugin assigns `seq` and, unless given, `at`. */
 export type NewStructuredMessage = {

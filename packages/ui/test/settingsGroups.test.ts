@@ -70,6 +70,24 @@ test('SC-24: does not reorder or mutate its input', () => {
   expect(input).toEqual([mode, fontSize])
 })
 
+test('categorical settings render under their declared category and section', () => {
+  const separators: SettingInfo = {
+    ...hidden,
+    id: 'setting:quirky.sidebar-extras/sidebarSectionSeparators',
+    plugin: 'quirky.sidebar-extras',
+    title: 'Show dividers',
+    category: 'Appearance',
+    section: 'Window & Sidebar'
+  }
+  const groups = settingsGroups([fontSize, separators])
+  expect(groups[0]).toMatchObject({
+    kind: 'category',
+    category: 'Appearance',
+    sections: [{ section: 'Window & Sidebar', fields: [{ id: separators.id }] }]
+  })
+  expect(groups[1]).toMatchObject({ kind: 'plugin', plugin: 'acme.notes', fields: [{ id: fontSize.id }] })
+})
+
 const solar: ThemeInfo = {
   id: 'theme:acme.solar/solar',
   plugin: 'acme.solar',

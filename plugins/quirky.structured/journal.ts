@@ -68,7 +68,10 @@ function createAndImportV1(home: string): StoreMigration {
 
 /** The migrations of the plugin's store, for `context.openStore`. */
 export function journalMigrations(home: string): StoreMigration[] {
-  return [createAndImportV1(home), (store) => store.exec(CREATE_SEND_RECEIPTS_TABLE)]
+  return [
+    createAndImportV1(home),
+    (store) => store.exec(CREATE_SEND_RECEIPTS_TABLE),
+  ]
 }
 
 /** The structured sessions' message journal. */
@@ -129,6 +132,7 @@ export class Journal {
       operationId
     )
   }
+
   /** Stores a message under the next `seq` of its session. */
   append(input: { sessionId: string; role: StructuredRole; text: string; data?: unknown; at: number }): StructuredMessage {
     const seq = this.store.transaction(() => {
@@ -152,13 +156,33 @@ export class Journal {
     return message
   }
 
-  /** The session's messages with `seq` above `afterSeq`, oldest first. */
-  list(sessionId: string, afterSeq = 0): StructuredMessage[] {
-    const rows = this.store.all<Row>(
-      'SELECT session_id, seq, role, text, data, at FROM structured_messages WHERE session_id = ? AND seq > ? ORDER BY seq',
-      sessionId,
-      afterSeq
-    )
+  /** The session's messages with `seq` above `afterSeq`, oldest first unless a bounded tail is requested. */
+  list(sessionId: string, afterSeq = 0, limit?: number, tail = false): StructuredMessage[] {
+    let rows: Row[]
+    if (limit !== undefined && tail) {
+      rows = this.store.all<Row>(
+        `SELECT session_id, seq, role, text, data, at FROM (
+           SELECT session_id, seq, role, text, data, at FROM structured_messages
+           WHERE session_id = ? AND seq > ? ORDER BY seq DESC LIMIT ?
+         ) ORDER BY seq`,
+        sessionId,
+        afterSeq,
+        limit
+      )
+    } else if (limit !== undefined) {
+      rows = this.store.all<Row>(
+        'SELECT session_id, seq, role, text, data, at FROM structured_messages WHERE session_id = ? AND seq > ? ORDER BY seq LIMIT ?',
+        sessionId,
+        afterSeq,
+        limit
+      )
+    } else {
+      rows = this.store.all<Row>(
+        'SELECT session_id, seq, role, text, data, at FROM structured_messages WHERE session_id = ? AND seq > ? ORDER BY seq',
+        sessionId,
+        afterSeq
+      )
+    }
     return rows.map((row) => {
       const message: StructuredMessage = { sessionId: row.session_id, seq: row.seq, role: row.role, text: row.text, at: row.at }
       if (row.data !== null) message.data = JSON.parse(row.data)

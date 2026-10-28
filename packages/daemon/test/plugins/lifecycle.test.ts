@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
+import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { makeTempHome, startHarness, waitFor, type Harness } from '../helpers'
 import { makeTempDir, readMarker, removeTempDirs, writePlugin } from './fixtures'
@@ -16,7 +17,7 @@ const JOB = 'job:acme.all/long'
  * A startup plugin that holds a listener, an open store, a running job and a reference to its first
  * context, all in module scope so `probe` can try them after a disable and re-enable.
  */
-function allSource(marker: string, gate: string): string {
+function allSource(marker: string, gate: string, deactivateGate?: string): string {
   return `
 import { appendFileSync, existsSync } from 'node:fs'
 const record = (line: string) => appendFileSync(${JSON.stringify(marker)}, line + '\\n')
@@ -48,6 +49,43 @@ export function activate(context: any) {
       store: await message(() => savedStore.version),
     }
   })
+}
+
+export async function deactivate() {
+  record('deactivate')
+  ${deactivateGate === undefined ? '' : `while (!existsSync(${JSON.stringify(deactivateGate)})) await Bun.sleep(5)`}
+}
+`
+}
+
+function rescanSource(marker: string, deactivateGate?: string): string {
+  return `
+import { appendFileSync, existsSync } from 'node:fs'
+const record = (line: string) => appendFileSync(${JSON.stringify(marker)}, line + '\\n')
+type CounterStore = {
+  run(sql: string): unknown
+  get<T>(sql: string): T | null
+}
+type CounterContext = {
+  openStore(migrations: string[]): CounterStore
+  subscribe(listener: (event: { type: string }) => void): unknown
+  provide(id: string, implementation: unknown): void
+}
+let counter: CounterStore
+
+export function activate(context: CounterContext) {
+  counter = context.openStore([
+    'CREATE TABLE counter (n INTEGER NOT NULL)',
+    'INSERT INTO counter (n) VALUES (0)'
+  ])
+  counter.run('UPDATE counter SET n = n + 1')
+  context.subscribe((event: { type: string }) => record('event ' + event.type))
+  context.provide('method:acme.all/counter', () => counter.get<{ n: number }>('SELECT n FROM counter'))
+}
+
+export async function deactivate() {
+  record('deactivate')
+  ${deactivateGate === undefined ? '' : `while (!existsSync(${JSON.stringify(deactivateGate)})) await Bun.sleep(5)`}
 }
 `
 }
@@ -102,5 +140,41 @@ describe('plugin lifecycle', () => {
     await client.call('plugin.enable', { id: 'acme.all' })
     const gone = 'acme.all is no longer active'
     expect(await client.callAny('acme.all/probe', {})).toEqual({ emit: gone, call: gone, openStore: gone, store: gone })
+  })
+
+  test('rescan blocks activation until stale runtime cleanup finishes', async () => {
+    const home = makeTempHome()
+    const scratch = makeTempDir()
+    const marker = join(scratch, 'marker.log')
+    const gate = join(scratch, 'gate')
+    const pluginsDir = join(home, 'plugins')
+    const manifest = (version: string) => ({
+      id: 'acme.all',
+      name: 'acme.all',
+      version,
+      main: 'main.ts',
+      activation: 'startup',
+      contributes: { method: [{ id: 'counter' }], event: [{ id: 'ping' }] }
+    })
+    const lines = () => readMarker(marker)
+    writePlugin(pluginsDir, manifest('1.0.0'), { 'main.ts': rescanSource(marker, gate) })
+    h = await startHarness({ home, builtinPluginsDir: null })
+    const client = await h.connect()
+
+    writePlugin(pluginsDir, manifest('2.0.0'), { 'main.ts': rescanSource(marker) })
+    const rescanning = h.daemon.plugins.rescan()
+    try {
+      await waitFor(() => lines().includes('deactivate'))
+      await expect(h.daemon.plugins.activate('acme.all')).rejects.toThrow('acme.all is being replaced')
+    } finally {
+      writeFileSync(gate, '')
+    }
+    await rescanning
+
+    expect((await h.daemon.plugins.activate('acme.all')).state).toBe('active')
+    const eventsBefore = lines().filter((line) => line === 'event ui.state.changed').length
+    await client.call('ui.sidebar.set', { visible: false })
+    await waitFor(() => lines().filter((line) => line === 'event ui.state.changed').length > eventsBefore)
+    expect(await client.callAny('acme.all/counter', {})).toEqual({ n: 2 })
   })
 })
