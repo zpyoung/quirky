@@ -67,7 +67,8 @@ function isTab(value: unknown): value is Tab {
       typeof value.preview === 'boolean' &&
       (value.closeCommand === undefined || isString(value.closeCommand)) &&
       (value.closeMethod === undefined || isString(value.closeMethod)) &&
-      (value.closeParams === undefined || isRecord(value.closeParams))
+      (value.closeParams === undefined || isRecord(value.closeParams)) &&
+      (value.closeContext === undefined || typeof value.closeContext === 'boolean')
     )
   }
   return (

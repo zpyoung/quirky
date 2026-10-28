@@ -949,6 +949,7 @@ export function activate(context: PluginContext): void {
       return await promise
     } finally {
       if (sendFlights.get(operationId) === flight) sendFlights.delete(operationId)
+
     }
   }
 

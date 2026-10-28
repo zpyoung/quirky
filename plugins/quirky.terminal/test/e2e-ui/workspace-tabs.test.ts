@@ -729,12 +729,17 @@ test(
     await waitFor('both tabs drawn', () => (ui.tabTitles().length === 2 ? true : undefined))
 
     ui.q(`[data-plus="${group}"]`)!.click()
-    const open = (await ui.waitView('the + menu with its detected agents', (view) =>
-      view.menu?.kind === 'plus' && view.menu.items.some((item) => /claude/i.test(item.label))
-    )).menu!
+    const open = (await ui.waitView('detected agents in the + menu', (view) => {
+      const menu = view.menu
+      return menu?.kind === 'plus' &&
+        menu.items.some((item) => /claude/i.test(item.label)) &&
+        menu.items.some((item) => /codex/i.test(item.label))
+    })).menu!
     const labels = open.items.map((item) => item.label)
     expect(labels[0]).toBe('New Terminal')
     expect(open.items[0]!.key).toBe('⌘T')
+    expect(labels.filter((label) => /claude/i.test(label)).length).toBeGreaterThanOrEqual(1)
+    expect(labels.some((label) => /codex/i.test(label))).toBe(true)
     const search = await ui.el<HTMLInputElement>('input[aria-label="Search open tabs and agents…"]')
     expect(search.placeholder).toBe('Search open tabs and agents…')
 

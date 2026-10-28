@@ -740,6 +740,10 @@
               "additionalProperties": true,
               "description": "Parameters passed to closeMethod and closeCommand with the actual tabId added."
             },
+            "closeContext": {
+              "type": "boolean",
+              "description": "When true, guard calls receive the host-computed close reason and actual view identity/input."
+            },
             "revision": {
               "type": "integer",
               "description": "Fails with a conflict naming the current revision when the workspace is at another one."

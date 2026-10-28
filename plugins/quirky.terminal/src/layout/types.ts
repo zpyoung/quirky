@@ -59,6 +59,8 @@ export type ViewTab = {
   closeCommand?: string
   closeMethod?: string
   closeParams?: Record<string, unknown>
+  /** Opts this hosted view into host-computed close context for its guard method. */
+  closeContext?: boolean
   createdAt: string
 }
 
