@@ -439,7 +439,8 @@ describe('SC-60: project settings through set and show', () => {
       agentStartup: 'wait-for-setup',
       commandSource: 'run-both',
       setupScript: 'make deps',
-      archiveScript: 'make clean'
+      archiveScript: 'make clean',
+      issueCommand: 'gh issue list'
     })) as RepoDetails
     const expected: ProjectSettings = {
       defaultBase: 'origin/develop',
@@ -448,7 +449,8 @@ describe('SC-60: project settings through set and show', () => {
       agentStartup: 'wait-for-setup',
       commandSource: 'run-both',
       setupScript: 'make deps',
-      archiveScript: 'make clean'
+      archiveScript: 'make clean',
+      issueCommand: 'gh issue list'
     }
     expect(set.settings).toEqual(expected)
     const shown = await show(client, repo.id)
@@ -458,8 +460,8 @@ describe('SC-60: project settings through set and show', () => {
     expect(shown.hooks.agentStartup).toBe('wait-for-setup')
     expect((await list(client))[0]!.displayName).toBe('API')
 
-    const cleared = (await call(client, 'quirky.repo/set', { repo: repo.id, displayName: '', defaultBase: '', worktreeLocation: '', setupScript: '', archiveScript: '' })) as RepoDetails
-    expect(cleared.settings).toEqual({ ...expected, defaultBase: null, worktreeLocation: null, setupScript: '', archiveScript: '' })
+    const cleared = (await call(client, 'quirky.repo/set', { repo: repo.id, displayName: '', defaultBase: '', worktreeLocation: '', setupScript: '', archiveScript: '', issueCommand: '' })) as RepoDetails
+    expect(cleared.settings).toEqual({ ...expected, defaultBase: null, worktreeLocation: null, setupScript: '', archiveScript: '', issueCommand: '' })
     expect(cleared.repo.displayName).toBeNull()
     expect(cleared.hooks.setup).toBeNull()
   })
@@ -486,11 +488,12 @@ describe('SC-60: project settings through set and show', () => {
   test('settings survive a restart', async () => {
     const { t, client, home } = await start()
     const repo = await add(client, makeRepo(join(home, 'api')))
-    await call(client, 'quirky.repo/set', { repo: repo.id, displayName: 'Persisted', commandSource: 'local-only' })
+    await call(client, 'quirky.repo/set', { repo: repo.id, displayName: 'Persisted', commandSource: 'local-only', issueCommand: 'gh issue list' })
     const next = await t.restart()
     const after = (await call(next.client, 'quirky.repo/show', { repo: repo.id })) as RepoDetails
     expect(after.repo.displayName).toBe('Persisted')
     expect(after.settings.commandSource).toBe('local-only')
+    expect(after.settings.issueCommand).toBe('gh issue list')
   })
 
   test('enums are validated by the schema, and show/hooks are read-only', async () => {
@@ -515,7 +518,7 @@ describe('SC-34 and SC-35: hooks from the repo', () => {
     const first = await show(client, repo.id)
     expect(first.hooks.file).toBe('orca.yaml')
     expect(first.hooks.setup).toMatchObject({ text: 'from-orca', source: 'shared', badge: 'orca.yaml' })
-    expect(first.hooks.warnings).toEqual(['issueCommand is recognised but not supported yet', 'unrecognised key colour'])
+    expect(first.hooks.warnings).toEqual(['unrecognised key colour'])
 
     commitFiles(dir, { 'quirky.yaml': 'scripts:\n  setup: from-quirky\n' })
     const second = await show(client, repo.id)
@@ -569,23 +572,28 @@ describe('SC-34 and SC-35: hooks from the repo', () => {
     expect((await hooks(client, repo.id)).setup?.text).toBe('echo shared >> order.txt\necho local >> order.txt')
   })
 
-  test('SC-32 repo half: trustHooks stores the hash, and a changed script is untrusted again', async () => {
+  test('SC-32 repo half: issue trust is separate and all trust includes it', async () => {
     const { client, home } = await start()
-    const dir = makeRepo(join(home, 'api'), { 'quirky.yaml': 'scripts:\n  setup: touch ran.txt\n  archive: touch gone.txt\n' })
+    const dir = makeRepo(join(home, 'api'), {
+      'quirky.yaml': 'scripts:\n  setup: touch ran.txt\n  archive: touch gone.txt\nissueCommand: gh issue list\n'
+    })
     const repo = await add(client, dir)
     const before = await hooks(client, repo.id)
     expect(before.setup?.shared).toMatchObject({ trusted: false, changed: false })
+    expect(before.issueCommand?.shared).toMatchObject({ trusted: false, changed: false })
 
-    const trusted = (await call(client, 'quirky.repo/trustHooks', { repo: repo.id, kind: 'setup' })) as RepoDetails
-    expect(trusted.hooks.setup?.shared).toMatchObject({ trusted: true, changed: false })
-    expect(trusted.hooks.archive?.shared).toMatchObject({ trusted: false })
-
-    commitFiles(dir, { 'quirky.yaml': 'scripts:\n  setup: touch other.txt\n  archive: touch gone.txt\n' })
-    expect((await hooks(client, repo.id)).setup?.shared).toMatchObject({ trusted: false, changed: true })
+    const issueTrusted = (await call(client, 'quirky.repo/trustHooks', { repo: repo.id, kind: 'issue' })) as RepoDetails
+    expect(issueTrusted.hooks.issueCommand?.shared).toMatchObject({ trusted: true, changed: false })
+    expect(issueTrusted.hooks.setup?.shared).toMatchObject({ trusted: false })
+    expect(issueTrusted.hooks.archive?.shared).toMatchObject({ trusted: false })
 
     const all = (await call(client, 'quirky.repo/trustHooks', { repo: repo.id })) as RepoDetails
     expect(all.hooks.setup?.shared).toMatchObject({ trusted: true, changed: false })
     expect(all.hooks.archive?.shared).toMatchObject({ trusted: true })
+    expect(all.hooks.issueCommand?.shared).toMatchObject({ trusted: true, changed: false })
+
+    commitFiles(dir, { 'quirky.yaml': 'scripts:\n  setup: touch ran.txt\n  archive: touch gone.txt\nissueCommand: gh issue list --state open\n' })
+    expect((await hooks(client, repo.id)).issueCommand?.shared).toMatchObject({ trusted: false, changed: true })
   })
 
   test('trusts the scripts at the named ref, not HEAD, and refuses a bad ref', async () => {

@@ -536,8 +536,7 @@
       "deps": [
         "m4-hosting-api-github"
       ],
-      "status": "in-progress",
-      "lane": 2
+      "status": "done"
     },
     {
       "id": "m4-worktrees-create-from-gitlab",
@@ -631,8 +630,9 @@
       "deps": [
         "m5-structured-runner"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 2
     },
     {
       "id": "sa-browser-design-mode",
@@ -1351,6 +1351,32 @@
       ],
       "deps": [
         "sb-mobile-daemon"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m4-hosting-ui-tasks-complete-remaining-flows",
+      "milestone": "M4",
+      "title": "Complete Tasks remaining parity: canonical github-sourced workspace creation and Project default-agent readiness/delivery; full built-web Tasks, issue/composer/create, Projects table/board/roadmap/settings flows; sticky-all added-repo/deep-link variants, stale source/view/rapid-write/index/comment-lag rollback, complete API/CLI/UI parity and PR navigation/check/merge/auto-merge/queue acceptance. Unblocked by source-worktree and Reviews runtime landings; original25-scenario spec and pending native handoff remain authoritative, no prior exhaustive UI/review pass claimed.",
+      "docs": [
+        "hosting-ui.md"
+      ],
+      "deps": [
+        "m4-hosting-ui-tasks",
+        "m4-worktrees-create-from-github",
+        "m4-hosting-ui-reviews"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m6-heimdall-host-power",
+      "milestone": "M6",
+      "title": "Deferred Heimdall automatic macOS host sleep/wake flow: add a trusted in-process daemon power-event publisher and public pre-sleep fencing callback/ack boundary (not the asynchronous generic event bus), bind kernel runners to suspend/resume and exclude sleep gaps from active budgets, dispose native subscriptions safely, and verify on an idle dedicated macOS/native test host. Current core provides tested explicit runner hooks but no native host event producer; unblock by implementing that producer/public lifecycle seam without helper processes or elapsed-delay inference.",
+      "docs": [
+        "heimdall.md"
+      ],
+      "deps": [
+        "m6-heimdall-core"
       ],
       "status": "todo"
     }

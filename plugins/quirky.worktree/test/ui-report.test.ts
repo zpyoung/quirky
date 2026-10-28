@@ -243,3 +243,32 @@ test('a worktree drawn from an agent summary also reports its display and label'
   expect(fix).not.toHaveProperty('display')
   expect(fix).not.toHaveProperty('label')
 })
+test('the report preserves linked GitHub identity and PR push metadata separately from notes', () => {
+  const linkedPR = {
+    provider: 'github' as const,
+    kind: 'pullRequest' as const,
+    number: 3,
+    title: 'Reword the README',
+    url: 'https://github.com/acme/api/pull/3',
+    repository: { host: 'github.com', owner: 'acme', repo: 'api' }
+  }
+  const linkedIssue = {
+    provider: 'github' as const,
+    kind: 'issue' as const,
+    number: 4,
+    title: 'Add a multiply function',
+    url: 'https://github.com/acme/api/issues/4',
+    repository: { host: 'github.com', owner: 'acme', repo: 'api' }
+  }
+  const pushTarget = { remoteName: 'pr-acme-api', branchName: 'feat/conflict', maintainerCanModify: false }
+  const report = buildReport(input({
+    repos: [repo('r1', 'api')],
+    worktrees: [
+      worktree('w-pr', 'r1', 'Reword the README', { linkedPR, pushTarget, comment: 'Editable note' }),
+      worktree('w-issue', 'r1', 'Add a multiply function', { linkedIssue })
+    ]
+  }))
+  expect(report.projects[0]!.worktrees[0]).toMatchObject({ linkedPR, pushTarget })
+  expect(report.projects[0]!.worktrees[0]).not.toHaveProperty('linkedIssue')
+  expect(report.projects[0]!.worktrees[1]).toMatchObject({ linkedIssue })
+})

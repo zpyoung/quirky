@@ -22,6 +22,40 @@ export type WorktreeStatus = 'todo' | 'in-progress' | 'in-review' | 'done'
 /** The surface that created a workspace; `external` for ones found already on disk. */
 export type WorktreeCreatedBy = 'window' | 'cli' | 'api' | 'external'
 
+/** A GitHub repository identity established by the hosting plugin. */
+export type GitHubRepositoryIdentity = { host: string; owner: string; repo: string }
+
+/** Durable linked work, independent of the workspace's editable note and branch. */
+export type GitHubWorktreeLink = {
+  provider: 'github'
+  kind: 'issue' | 'pullRequest'
+  number: number
+  title: string
+  url: string
+  repository: GitHubRepositoryIdentity
+}
+
+/** Fresh, authenticated source information for a GitHub-created worktree. */
+export type GitHubWorktreeSource = {
+  item: GitHubWorktreeLink
+  head: {
+    repository: GitHubRepositoryIdentity
+    refName: string
+    oid: string
+    sshUrl: string
+    httpsUrl: string
+    maintainerCanModify: boolean
+  } | null
+  base: { repository: GitHubRepositoryIdentity; refName: string; oid: string } | null
+}
+
+/** The selected PR's actual push destination, not its synthetic read-only pull ref. */
+export type WorktreePushTarget = {
+  remoteName: string
+  branchName: string
+  maintainerCanModify: boolean
+}
+
 export type Worktree = {
   /** Stable for a given path: `wt_` + the first 12 hex chars of sha1(absolute path). */
   id: string
@@ -51,6 +85,9 @@ export type Worktree = {
   /** True while a removal is in flight, so views can show the row as deleting. */
   removing: boolean
   groupId: string | null
+  linkedPR?: GitHubWorktreeLink | null
+  linkedIssue?: GitHubWorktreeLink | null
+  pushTarget?: WorktreePushTarget | null
   /** Display-only membership in a project group; distinct from folder identity and repo ownership. */
   projectGroupId: string | null
   /** Greatest session lifecycle/activity timestamp observed for this workspace; zero when unknown. */
@@ -82,6 +119,8 @@ export type ProjectSettings = {
   commandSource: 'shared-only' | 'local-only' | 'run-both' | null
   setupScript: string
   archiveScript: string
+  /** Local command template for a linked GitHub issue. */
+  issueCommand?: string
 }
 
 /** One hook script after merging the shared file with the user's local script, with its trust state. */
@@ -97,6 +136,8 @@ export type EffectiveHooks = {
   file: 'quirky.yaml' | 'orca.yaml' | null
   setup: HookScript | null
   archive: HookScript | null
+  /** Linked-issue command with the same shared-content trust boundary as setup. */
+  issueCommand?: HookScript | null
   agentStartup: ProjectSettings['agentStartup']
   sharedDirectories: string[]
   warnings: string[]
@@ -122,6 +163,12 @@ export type WorktreeCreateResult = {
   }
   agentSessionId?: string
   agentPending?: boolean
+  issueCommand?: {
+    ran: 'terminal' | 'daemon' | 'none' | 'skipped'
+    sessionId?: string
+    exitCode?: number | null
+    timedOut?: boolean
+  }
 }
 
 /** What a workspace remove returns: what was deleted and what was deliberately left behind. */

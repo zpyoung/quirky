@@ -206,3 +206,45 @@ not an issue page pretending to be PR detail.
 Task Sources is a contributed Settings view. A boolean setting can also declare
 `"menu": "view"` for a native View-menu toggle backed by the same public setting value.
 Native clipboard, system-browser and focus effects remain pending in the nightly handoff.
+## Create a workspace from GitHub
+
+Use the new-workspace dialog's Smart field for `#123` or a GitHub PR/issue URL.
+The GitHub tab lists both kinds of work item and lets you select or clear a source.
+The same creation path is available from the CLI:
+
+```sh
+quirky wt create --repo demo --github '#3' --json
+quirky wt create --repo demo --github 'https://github.com/OWNER/REPO/issues/4' --issue-command skip --json
+```
+
+Replace `demo` and the URL with your registered project and work item. A URL must
+match a configured GitHub remote in that project. An unresolved source fails;
+it is never treated as a plain workspace name.
+
+API callers use `quirky.worktree/create` with `repo` and `github`. Pass the exact
+item URL when it is already known, including from a Tasks or Project row. To inspect
+the fresh source without creating anything, call `quirky.hosting/worktreeSource`
+with a registered `worktree` and `reference`.
+
+A PR checks out its verified head commit and head branch. Fork pushes target the
+contributor's repository, while the compare base remains the PR's base branch.
+Occupied or diverged local branches are refused without a reset. Issues use the
+ordinary base and branch-prefix rules. The source title supplies the default card
+label and lowercase folder slug; `--name` changes the folder, while
+`--display-name` changes the card label. Linked PR/issue identity survives note edits
+and daemon restarts.
+
+### Run a command for a linked issue
+
+Configure **Custom GitHub issue command** in Project Settings, or set `issueCommand`
+in `quirky.yaml` (`orca.yaml` is the fallback). Templates accept `{{issue}}` and
+`{{artifact_url}}`. The command runs in its own terminal, beside Setup when present.
+`--issue-command skip` suppresses it for one creation.
+
+Local configuration follows the project's command-source policy. Shared commands
+need content approval independently of setup. One-time approval pins the displayed
+script hash; changed content needs another decision and is not approved by an
+earlier prompt. CLI/API callers can pin the same content with
+`--trust-issue-command --trust-issue-command-hash <hash-from-error>`, or
+`--trust-setup --trust-setup-hash <hash-from-error>` for setup.
+Trust flags without a hash authorize the current call's script.
