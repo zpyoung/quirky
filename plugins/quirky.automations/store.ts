@@ -292,7 +292,7 @@ export function createAutomationStore(database: PluginStore): AutomationStore {
     const merged = { ...current } as AutomationRun & Record<string, unknown>
     for (const key of Object.keys(patch) as (keyof AutomationRunPatch)[]) {
       const value = patch[key]
-      if (value !== undefined) merged[key] = value
+      if (value !== undefined) (merged as Record<string, unknown>)[key] = value
     }
     merged.status = requestedStatus
     if (requestedStatus === 'dispatching' && current.startedAt === undefined) merged.startedAt = now
@@ -426,7 +426,7 @@ export function createAutomationStore(database: PluginStore): AutomationStore {
         const updated = { ...current } as AutomationDefinition & Record<string, unknown>
         for (const key of Object.keys(patch) as (keyof AutomationDefinition)[]) {
           const value = patch[key]
-          if (key !== 'id' && value !== undefined) updated[key] = value
+          if (key !== 'id' && value !== undefined) (updated as Record<string, unknown>)[key] = value
         }
         updated.id = id
         const normalized = normalizeWorkspacePolicy(updated)

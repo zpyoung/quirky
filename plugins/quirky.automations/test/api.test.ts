@@ -130,6 +130,7 @@ describe('automations API', () => {
     const created = await call(fixture, 'quirky.automations/create', createParams()) as AutomationDefinition
     const event = await changed
     unsubscribe()
+    if (!('data' in event)) throw new Error('Automation event is missing its committed mutation data')
     expect(event.data).toMatchObject({ reason: 'definition', automationId: created.id })
     expect(await call(fixture, 'quirky.automations/show', { id: created.id })).toEqual(created)
   })

@@ -272,7 +272,7 @@ function normalizedRule(context: AutomationServiceContext, value: unknown, timez
 }
 
 function normalizedGrace(context: AutomationServiceContext, value: unknown, optional = false): number | undefined {
-  if (value === undefined && optional) return undefined
+  if (value === undefined) return optional ? undefined : 720
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0 || value > MAX_SAFE_GRACE_MINUTES) {
     throw context.error('invalid-params', `missedRunGraceMinutes must be an integer from 0 to ${MAX_SAFE_GRACE_MINUTES}.`)
   }

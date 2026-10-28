@@ -46,7 +46,7 @@ describe('automation schedule presets and labels', () => {
   })
 
   test('labels restricted full day-of-month ranges by their OR semantics', () => {
-    const daily = { kind: 'daily', label: 'Daily at 9:00 AM', hour: 9, minute: 0 }
+    const daily = { kind: 'daily' as const, label: 'Daily at 9:00 AM', hour: 9, minute: 0 }
     expect(describeAutomationSchedule('0 9 1-31 * MON')).toEqual(daily)
     expect(describeAutomationSchedule('0 9 1-31 * 1-5')).toEqual(daily)
   })

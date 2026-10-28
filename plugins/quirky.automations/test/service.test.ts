@@ -138,7 +138,7 @@ describe('automation scheduler service', () => {
     await fixture.service.tick()
     expect(fixture.service.runs({ automationId: paused.id, limit: 10 }).runs).toEqual([])
     expect(fixture.service.show({ id: 'broken-record' })).toMatchObject({ nextRunAt: t0 - 1 })
-    expect(fixture.service.runs({ automationId: 'broken-record', limit: 10 }).runs).toMatchObject({
+    expect(fixture.service.runs({ automationId: 'broken-record', limit: 10 })).toMatchObject({
       runs: [{ status: 'skipped_unavailable', error: expect.any(String) }]
     })
 
