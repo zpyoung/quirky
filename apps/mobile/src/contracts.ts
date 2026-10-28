@@ -85,13 +85,16 @@ export type MobilePageInit = {
   route: MobileRoute
   grants: MobileGrant[]
   preferences: MobilePreferences
+  connectionState: MobileConnectionState
   safeArea: { top: number; right: number; bottom: number; left: number }
 }
 export interface MobilePageBridge {
   readonly init: MobilePageInit
+  readonly state: MobileConnectionState
   call<T = unknown>(method: string, params?: Record<string, unknown>, options?: MobileCallOptions): Promise<T>
   onEvent(handler: (event: { event: string; data: unknown }) => void): () => void
   onStream(streamId: number, handler: (bytes: Uint8Array) => void): () => void
+  onState(handler: (state: MobileConnectionState) => void): () => void
   storage: MobileStorage
   native: Pick<MobileNativeActions, 'clipboardRead' | 'clipboardWrite' | 'openExternal' | 'haptic'>
   navigate(route: MobileRoute | { kind: 'home' }): Promise<void>
