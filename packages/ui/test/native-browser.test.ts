@@ -121,6 +121,11 @@ class BrowserBridgeModel implements NativeBrowserAdapter {
     }
 
     return {
+      evaluate: async (script: string): Promise<unknown> => {
+        await ready
+        if (child.disposed) throw new Error('native browser view disposed')
+        return JSON.parse(script)
+      },
       request: async (command: NativeBrowserRequest): Promise<NativeBrowserState> => {
         await ready
         if (child.disposed) throw new Error('native browser view disposed')
@@ -199,6 +204,20 @@ describe('native browser capability', () => {
     second.dispose()
     expect(secondChild.disposed).toBe(true)
   })
+  test('evaluates only on the current browser handle', async () => {
+    const bridge = new BrowserBridgeModel()
+    const capability = createNativeBrowserCapability(bridge)
+    const first = capability.mount(element, options())
+
+    await expect(first.evaluate('{"selected":true}')).resolves.toEqual({ selected: true })
+
+    const second = capability.mount(element, options({ id: 'pane-2', url: 'about:blank' }))
+    await expect(first.evaluate('{"stale":true}')).rejects.toThrow(/disposed/i)
+    await expect(second.evaluate('null')).resolves.toBeNull()
+    second.dispose()
+    await expect(second.evaluate('null')).rejects.toThrow(/disposed/i)
+  })
+
   test('explicit unmount completes before a later native view claims the window', async () => {
     const bridge = new BrowserBridgeModel()
     const capability = createNativeBrowserCapability(bridge)

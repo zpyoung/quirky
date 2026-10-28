@@ -283,6 +283,14 @@ Registration update: `bun scripts/build-loop/queue.ts add /tmp/quirky-session-in
 - **Native host controls:** the public tag provides normal reload and started/committed/finished events, not genuine cache-bypass reload or a load-failed callback. Native UI must not label normal reload as hard reload or invent a network/TLS error flag. Watch's CDP equivalents remain in this item.
 - **Workspace grant preview:** passive plugin file resources reject active HTML and use sandbox CSP. Source `doc-preview-protocol.ts:33-65,75-151` additionally needs isolated nonpersistent grant/asset serving and outbound network/permission/download policy. Do not weaken daemon-origin MIME security or call explicit `file://` browsing/editor new-tab an equivalent conversion. Canonical source actions and explicit local HTML browsing remain core.
 - **Latest operator ruling:** no further browser queue follow-ups; any additional unavoidable gap is recorded in decision log/BLOCKERS only. Lane8 owns its separate native profile-clear completion limitation; this item does not duplicate it.
+
+## sa-browser-design-mode: Native image capture SDK boundary
+
+- **Flows:** Native Grab Copy Screenshot / S and Native Draw on screenshot need actual system-webview page pixels. Native text Grab and annotations remain this item's reachable acceptance; Watch cropped PNG and all drawing tools are required and must pass.
+- **Outside limit:** pinned public Electrobun `BrowserView` supports sandboxed JavaScript execution but exposes no page snapshot/capture operation. The SDK-wide screenshot/capture search found only unrelated UI-atlas dirty-history snapshots; no supported Native pixel source is established.
+- **Evidence:** `apps/desktop/.hutch/devkit/api/sdks/main/core/BrowserView.ts:269–274`; dependency `sa-browser-pane` Native/Watch architecture and safety decisions; `sa-browser-design-mode` D7/D11 and logic spec Scope.
+- **Safe behavior:** Native image actions report unavailable before any host screen capture, private FFI, filesystem read, engine switch or fabricated clipboard success. Watch uses actual bound-page CDP pixels. No DOM-rasterization replacement is accepted.
+- **Unblock:** a supported SDK page snapshot/crop API with owned-view identity and actual completion/error semantics. No new queue item is added under the inherited browser follow-up freeze (`sa-browser-pane` D18, BLOCKERS latest operator ruling).
 ## m3-vault: terminal input timing during affected verification
 
 - **LOW — shell readiness can advance during CLI round trips** (`plugins/quirky.terminal/test/e2e.test.ts:144`). The macOS SC-2 case expected pending after two CLI sends but observed ready under load; its configured isolated retry passed all23 cases169 assertions. The256 remote files and both macOS files returned a passing runner result. No terminal state, test deadline, assertion or retry rule was changed in this item.
@@ -387,6 +395,13 @@ Registration update: `bun scripts/build-loop/queue.ts add /tmp/quirky-session-in
 - Fresh scoped proof: Dock send/defect files2/2pass, no retries; exact terminal SC-22 passes; menu unit file passes; typecheck passes after fixture plumbing. This is not a claim that a single post-fix630-file run passed.
 - Unchanged failures still awaiting the normal merged retry: Git remote SC-29 wait (five possible predicates; available stack does not identify one), daemon lock five-second test bound, incoming loops-store five-second bound. No speculative producer change, timeout increase or waived assertion was used for these.
 - Operator's45-minute target was not met; the first controller verification alone took1800.57seconds after source submission. No on-time or authoritative landed claim is inferred from a submitted command.
+
+## sa-browser-pane-native-host-controls: residual Watch host-clipboard transfer
+
+- **Priority/severity:** P2 / medium; remaining base-pane Watch input acceptance, owned by the existing item under sa-browser-pane D23. No new queue record or title change.
+- **Observed:** guarded run20261028T094623-7210 visibly selected “Normal copy text” through cmd+a; cmd+c did not arm Grab. Paste into the host address input was empty. The URL was restored without navigation. Cause is unresolved, not asserted to be a tool limitation or a Native failure.
+- **Evidence:** `.quirk/using-apps-like-a-user/runs/20261028T094623-7210/report.md`, obs4/obs8/obs9; earlier partial report20261028T080620-50e2. The design item's public Watch regression proves macOS selection and same-guest copy/paste after CDP editing-command translation; it does not prove transfer across browser/UI clipboard contexts.
+- **Remaining acceptance:** establish supported ordinary Watch-to-host clipboard transfer while preserving site copy semantics and page/lease ownership, without broad clipboard permission grants or guessed target selection. Preserve the source and partial reports for the existing host-controls owner. Native ordinary-copy remains pending in `docs/loop/native/sa-browser-design-mode.json` N-COPY.
 
 ## m5-automations-ui: open review findings
 

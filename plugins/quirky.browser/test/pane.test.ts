@@ -11,6 +11,7 @@ const call = (h: BrowserTestHarness, name: string, params: Record<string, unknow
   h.client.callAny(`quirky.browser/${name}`, params)
 
 function startPageServer() {
+  let reloadRequestCount = 0
   const server = Bun.serve({
     hostname: '127.0.0.1',
     port: 0,
@@ -27,6 +28,13 @@ function startPageServer() {
         })
       }
       if (path === '/page') return new Response(`<!doctype html><title>Pane fixture</title><body style="margin:0"><input id="text" value=""><button id="button">Button</button><p>needle needle needle</p></body>`, { headers: { 'content-type': 'text/html; charset=utf-8' } })
+      if (path === '/keyboard') return new Response('<!doctype html><title>Keyboard fixture</title><body style="margin:0"><input id="source" value=""><input id="target" value=""></body>', { headers: { 'content-type': 'text/html; charset=utf-8' } })
+      if (path === '/reload') {
+        const count = ++reloadRequestCount
+        return new Response(`<!doctype html><title>Reload fixture ${count}</title><body><input id="text"><main id="request">${count}</main></body>`, {
+          headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }
+        })
+      }
       if (path === '/dialog') return new Response('<!doctype html><title>Dialog fixture</title><main>dialog</main>', { headers: { 'content-type': 'text/html; charset=utf-8' } })
       if (path === '/download') return new Response('owned download contents', {
         headers: { 'content-type': 'application/octet-stream', 'content-disposition': 'attachment; filename="safe.txt"' }
@@ -38,7 +46,7 @@ function startPageServer() {
       return new Response('not found', { status: 404 })
     }
   })
-  return { url: server.url.href, stop: () => server.stop(true) }
+  return { url: server.url.href, reloadRequestCount: () => reloadRequestCount, stop: () => server.stop(true) }
 }
 async function startCertificateServer(h: BrowserTestHarness) {
   const keyPath = join(h.home, 'pane-test-key.pem')
@@ -268,6 +276,65 @@ test('Watch leases deliver acknowledged latest frames and typed input/find/zoom/
   }
 }, 90_000)
 
+test('Watch keyboard shortcuts select and copy/paste between owned inputs', async () => {
+  const h = await startBrowserHarness()
+  const fixture = startPageServer()
+  const events: QuirkyEvent[] = []
+  try {
+    const worktree = await h.addFolderWorktree('pane-watch-keyboard')
+    await h.client.call('events.subscribe', {})
+    const unsubscribe = h.client.onEvent((event) => events.push(event))
+    try {
+      const page = await createAgentPage(h, worktree, `${fixture.url}keyboard`)
+      const pane = await call(h, 'paneOpen', { worktree: `id:${worktree}`, mode: 'watch', page: page.browserPageId }) as { id: string }
+      const watch = await call(h, 'paneWatch', { pane: pane.id }) as { watchId: string }
+      let acknowledgedSequence = 0
+      const acknowledgeNextFrame = async () => {
+        const frame = await waitFor(() => events.map(paneFrame).find((candidate) =>
+          candidate?.watchId === watch.watchId &&
+          typeof candidate.sequence === 'number' &&
+          candidate.sequence > acknowledgedSequence
+        ))
+        const sequence = frame.sequence as number
+        await call(h, 'paneFrameAck', { pane: pane.id, watchId: watch.watchId, sequence })
+        acknowledgedSequence = sequence
+      }
+      const pressMetaKey = async (key: string, code: string) => {
+        await call(h, 'paneInput', { pane: pane.id, kind: 'key', type: 'keyDown', key, code, modifiers: 4 })
+        await call(h, 'paneInput', { pane: pane.id, kind: 'key', type: 'keyUp', key, code, modifiers: 4 })
+      }
+      await acknowledgeNextFrame()
+
+      await call(h, 'paneInput', { pane: pane.id, kind: 'mouse', type: 'mousePressed', x: 45, y: 16, button: 'left' })
+      await call(h, 'paneInput', { pane: pane.id, kind: 'mouse', type: 'mouseReleased', x: 45, y: 16, button: 'left' })
+      await call(h, 'paneInput', { pane: pane.id, kind: 'text', text: 'watch clipboard' })
+      await acknowledgeNextFrame()
+
+      await pressMetaKey('a', 'KeyA')
+      expect(await call(h, 'eval', {
+        page: page.browserPageId,
+        expression: "(() => { const input = document.querySelector('#source'); return input.value + ':' + input.selectionStart + ':' + input.selectionEnd })()"
+      })).toEqual({ value: 'watch clipboard:0:15' })
+      await acknowledgeNextFrame()
+
+      await pressMetaKey('c', 'KeyC')
+      await call(h, 'paneInput', { pane: pane.id, kind: 'mouse', type: 'mousePressed', x: 220, y: 16, button: 'left' })
+      await call(h, 'paneInput', { pane: pane.id, kind: 'mouse', type: 'mouseReleased', x: 220, y: 16, button: 'left' })
+      await pressMetaKey('v', 'KeyV')
+      expect(await call(h, 'eval', {
+        page: page.browserPageId,
+        expression: "document.querySelector('#target').value"
+      })).toEqual({ value: 'watch clipboard' })
+      await acknowledgeNextFrame()
+    } finally {
+      unsubscribe()
+    }
+  } finally {
+    fixture.stop()
+    await h.cleanup()
+  }
+}, 90_000)
+
 test('profileSet rebinds a Watch pane to isolated managed pages and retires the previous lease', async () => {
   const h = await startBrowserHarness()
   const events: QuirkyEvent[] = []
@@ -341,6 +408,77 @@ test('profileSet rebinds a Watch pane to isolated managed pages and retires the 
       unsubscribe()
     }
   } finally {
+    await h.cleanup()
+  }
+}, 90_000)
+
+test('Watch reload and hard reload navigate the bound page while preserving its lease', async () => {
+  const h = await startBrowserHarness()
+  const fixture = startPageServer()
+  const events: QuirkyEvent[] = []
+  try {
+    const worktree = await h.addFolderWorktree('pane-watch-reload')
+    await h.client.call('events.subscribe', {})
+    const unsubscribe = h.client.onEvent((event) => events.push(event))
+    try {
+      const page = await createAgentPage(h, worktree, `${fixture.url}reload`)
+      const pane = await call(h, 'paneOpen', { worktree: `id:${worktree}`, mode: 'watch', page: page.browserPageId }) as { id: string }
+      const watch = await call(h, 'paneWatch', { pane: pane.id }) as { watchId: string }
+      let acknowledgedSequence = 0
+      const acknowledgeNextFrame = async () => {
+        const frame = await waitFor(() => events.map(paneFrame).find((candidate) =>
+          candidate?.watchId === watch.watchId &&
+          typeof candidate.sequence === 'number' &&
+          candidate.sequence > acknowledgedSequence
+        ))
+        const sequence = frame.sequence as number
+        await call(h, 'paneFrameAck', { pane: pane.id, watchId: watch.watchId, sequence })
+        acknowledgedSequence = sequence
+      }
+      await acknowledgeNextFrame()
+
+      expect(fixture.reloadRequestCount()).toBe(1)
+      expect(await call(h, 'eval', {
+        page: page.browserPageId,
+        expression: 'document.querySelector("#request").textContent'
+      })).toEqual({ value: '1' })
+
+      await call(h, 'paneControl', { pane: pane.id, action: 'reload' })
+      expect(fixture.reloadRequestCount()).toBe(2)
+      expect(await call(h, 'eval', {
+        page: page.browserPageId,
+        expression: 'document.querySelector("#request").textContent'
+      })).toEqual({ value: '2' })
+      await acknowledgeNextFrame()
+      await call(h, 'paneInput', { pane: pane.id, kind: 'mouse', type: 'mousePressed', x: 45, y: 16, button: 'left' })
+      await call(h, 'paneInput', { pane: pane.id, kind: 'mouse', type: 'mouseReleased', x: 45, y: 16, button: 'left' })
+      await call(h, 'paneInput', { pane: pane.id, kind: 'text', text: 'after reload' })
+      expect(await call(h, 'eval', {
+        page: page.browserPageId,
+        expression: 'document.querySelector("#text").value'
+      })).toEqual({ value: 'after reload' })
+      await acknowledgeNextFrame()
+
+      await call(h, 'paneControl', { pane: pane.id, action: 'hardReload' })
+      expect(fixture.reloadRequestCount()).toBe(3)
+      expect(await call(h, 'eval', {
+        page: page.browserPageId,
+        expression: 'document.querySelector("#request").textContent'
+      })).toEqual({ value: '3' })
+      await acknowledgeNextFrame()
+      await call(h, 'paneInput', { pane: pane.id, kind: 'mouse', type: 'mousePressed', x: 45, y: 16, button: 'left' })
+      await call(h, 'paneInput', { pane: pane.id, kind: 'mouse', type: 'mouseReleased', x: 45, y: 16, button: 'left' })
+      await call(h, 'paneInput', { pane: pane.id, kind: 'text', text: 'after hard reload' })
+      expect(await call(h, 'eval', {
+        page: page.browserPageId,
+        expression: 'document.querySelector("#text").value'
+      })).toEqual({ value: 'after hard reload' })
+      await acknowledgeNextFrame()
+    } finally {
+      unsubscribe()
+    }
+  } finally {
+    fixture.stop()
     await h.cleanup()
   }
 }, 90_000)
