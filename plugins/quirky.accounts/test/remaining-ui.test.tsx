@@ -320,10 +320,15 @@ async function mount(id: string, input?: unknown): Promise<void> {
   await settle()
 }
 
-function buttonByText(text: string): HTMLButtonElement {
-  const button = [...container.querySelectorAll('button')].find((candidate) => candidate.textContent?.trim() === text)
+function buttonByText(text: string, root: ParentNode = container): HTMLButtonElement {
+  const button = [...root.querySelectorAll('button')].find((candidate) => candidate.textContent?.trim() === text)
   if (!(button instanceof HTMLButtonElement)) throw new Error(`Missing button: ${text}`)
   return button
+}
+function dialogFooterButtonByText(dialog: HTMLElement, text: string): HTMLButtonElement {
+  const footer = [...dialog.children].find((child) => child.localName === 'footer')
+  if (!footer) throw new Error('Missing dialog action footer')
+  return buttonByText(text, footer)
 }
 function findButtonByText(text: string): HTMLButtonElement | null {
   return [...container.querySelectorAll('button')].find((candidate) => candidate.textContent?.trim() === text) ?? null
@@ -333,6 +338,28 @@ function buttonByLabel(label: string): HTMLButtonElement {
   const button = container.querySelector(`[aria-label="${label}"]`)
   if (!(button instanceof HTMLButtonElement)) throw new Error(`Missing button: ${label}`)
   return button
+}
+function inputByLabel(root: ParentNode, text: string): HTMLInputElement {
+  const label = [...root.querySelectorAll<HTMLLabelElement>('label')].find((candidate) => candidate.textContent?.trim() === text)
+  const input = label?.control
+  if (!(input instanceof HTMLInputElement)) throw new Error(`Missing input: ${text}`)
+  return input
+}
+function selectByLabel(root: ParentNode, text: string): HTMLSelectElement {
+  const label = [...root.querySelectorAll<HTMLLabelElement>('label')].find((candidate) => candidate.textContent?.trim() === text)
+  const select = label?.control
+  if (!(select instanceof HTMLSelectElement)) throw new Error(`Missing select: ${text}`)
+  return select
+}
+function dialogByTitle(root: ParentNode, title: string): HTMLElement | null {
+  return [...root.querySelectorAll<HTMLElement>('[role="dialog"][aria-labelledby]')].find((dialog) => {
+    const titleText = (dialog.getAttribute('aria-labelledby') ?? '')
+      .split(/\s+/)
+      .map((id) => dialog.ownerDocument.getElementById(id)?.textContent?.trim())
+      .filter(Boolean)
+      .join(' ')
+    return titleText === title
+  }) ?? null
 }
 const allProviders = ['claude', 'codex', 'gemini', 'antigravity', 'opencode-go', 'kimi', 'minimax', 'grok', 'cursor', 'zcode'] as const
 const providerLabels: Record<(typeof allProviders)[number], string> = {
@@ -435,25 +462,23 @@ test('Codex pane accessory keeps or restarts the old-account session', async () 
 test('Claude switch opt-out checkbox resets when selection changes', async () => {
   stateValue = makeClaudeSelection(41, 'claude-b', 'Account B')
   await mount('overlay:quirky.accounts/switch-dialog')
-  const checkbox = container.querySelector('input[type="checkbox"]')
-  if (!(checkbox instanceof HTMLInputElement)) throw new Error('Missing switch opt-out checkbox')
+  const originalDialog = dialogByTitle(container, 'Switched to Account B')
+  if (!originalDialog) throw new Error('Missing Claude switch dialog')
+  const checkbox = inputByLabel(originalDialog, "Don't ask again (restart automatically)")
   await act(async () => { checkbox.click() })
   stateValue = makeClaudeSelection(42, 'claude-c', 'Account C')
   await act(async () => {
     await emit({ type: 'quirky.accounts/changed', data: { revision: 42 } } as QuirkyEvent)
   })
-  await waitFor(
-    () => container.querySelector<HTMLInputElement>('[aria-label="Switched to Account C"] input[type="checkbox"]'),
+  const updatedDialog = await waitFor(
+    () => dialogByTitle(container, 'Switched to Account C'),
     'switch dialog to show the changed account selection'
   )
   await settle()
-  const refreshedCheckbox = container.querySelector('input[type="checkbox"]')
-  if (!(refreshedCheckbox instanceof HTMLInputElement)) throw new Error('Switch dialog did not update to the new selection')
+  const refreshedCheckbox = inputByLabel(updatedDialog, "Don't ask again (restart automatically)")
   expect(refreshedCheckbox.checked).toBe(false)
   await act(async () => { refreshedCheckbox.click() })
-  const keep = container.querySelector('.switch-dialog .dialog-actions button:first-child')
-  if (!(keep instanceof HTMLButtonElement)) throw new Error('Missing dialog Keep as is action')
-  await act(async () => { keep.click() })
+  await act(async () => { dialogFooterButtonByText(updatedDialog, 'Keep as is').click() })
   await settle()
   const keepCall = calls.find((call) => call.method === 'quirky.accounts/keep')
   expect(keepCall?.params?.selectionRevision).toBe(42)
@@ -468,11 +493,11 @@ test('Claude switch submission is single-flight while opt-out saves', async () =
   restartGate = gate.promise
   const releaseRestart = gate.resolve
   await mount('overlay:quirky.accounts/switch-dialog')
-  const checkbox = container.querySelector('input[type="checkbox"]')
-  if (!(checkbox instanceof HTMLInputElement)) throw new Error('Missing switch opt-out checkbox')
+  const dialog = dialogByTitle(container, 'Switched to Account B')
+  if (!dialog) throw new Error('Missing Claude switch dialog')
+  const checkbox = inputByLabel(dialog, "Don't ask again (restart automatically)")
   await act(async () => { checkbox.click() })
-  const restart = container.querySelector('.switch-dialog .dialog-actions button:last-child')
-  if (!(restart instanceof HTMLButtonElement)) throw new Error('Missing dialog Restart session action')
+  const restart = dialogFooterButtonByText(dialog, 'Restart session')
   await act(async () => { restart.click(); restart.click() })
   await restartStarted
   expect(calls.filter((call) => call.method === 'quirky.accounts/restart')).toHaveLength(1)
@@ -489,8 +514,9 @@ test('a committed restart does not leave a retry dialog when its account event a
   const response = Promise.withResolvers<unknown>()
   restartGate = response.promise
   await mount('overlay:quirky.accounts/switch-dialog')
-  const restart = container.querySelector('.switch-dialog .dialog-actions button:last-child')
-  if (!(restart instanceof HTMLButtonElement)) throw new Error('Missing dialog restart action')
+  const dialog = dialogByTitle(container, 'Switched to Account B')
+  if (!dialog) throw new Error('Missing Claude switch dialog')
+  const restart = dialogFooterButtonByText(dialog, 'Restart session')
   await act(async () => { restart.click() })
   await restartStarted
   const previousReads = calls.filter((entry) => entry.method === 'quirky.accounts/list').length
@@ -535,7 +561,7 @@ test('stale reset failure stays visible without reporting redemption', async () 
     'Codex account switcher to show the changed selection'
   )
   await settle()
-  const dialog = container.querySelector('[aria-label="Reset Codex limits confirmation"]')
+  const dialog = dialogByTitle(container, 'Reset Codex limits confirmation')
   if (!(dialog instanceof HTMLElement)) throw new Error('Stale reset confirmation disappeared')
   const confirm = [...dialog.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Reset now')
   if (!(confirm instanceof HTMLButtonElement)) throw new Error('Missing reset confirmation action')
@@ -543,7 +569,7 @@ test('stale reset failure stays visible without reporting redemption', async () 
   await settle()
   expect(dialog.querySelector('[role="alert"]')).not.toBeNull()
   expect(container.textContent).not.toContain('Codex limits were reset.')
-  expect(container.querySelector('[aria-label="Reset Codex limits confirmation"]')).not.toBeNull()
+  expect(dialogByTitle(container, 'Reset Codex limits confirmation')).not.toBeNull()
 })
 
 
@@ -558,7 +584,7 @@ test('a provider no-credit outcome remains a visible non-success', async () => {
   await act(async () => { buttonByLabel('Open Codex details and account switcher').click() })
   await settle()
   await act(async () => { buttonByLabel('Reset Codex limits').click() })
-  const dialog = container.querySelector('[aria-label="Reset Codex limits confirmation"]')
+  const dialog = dialogByTitle(container, 'Reset Codex limits confirmation')
   if (!(dialog instanceof HTMLElement)) throw new Error('Missing Codex reset confirmation')
   const confirm = [...dialog.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Reset now')
   if (!(confirm instanceof HTMLButtonElement)) throw new Error('Missing reset confirmation action')
@@ -566,7 +592,7 @@ test('a provider no-credit outcome remains a visible non-success', async () => {
   await settle()
   expect(dialog.querySelector('[role="alert"]')).not.toBeNull()
   expect(container.textContent).not.toContain('Codex limits were reset.')
-  expect(container.querySelector('[aria-label="Reset Codex limits confirmation"]')).not.toBeNull()
+  expect(dialogByTitle(container, 'Reset Codex limits confirmation')).not.toBeNull()
 })
 
 
@@ -656,9 +682,8 @@ test('meter credential clear is single-flight and updates configured status', as
   expect(clear.disabled).toBe(true)
   await act(async () => { gate.resolve({ provider: 'minimax', kind: 'api-key', configured: false, readable: false }) })
   await settle()
-  const keyInput = container.querySelector('[aria-label="minimax API key"]')
-  expect(keyInput).not.toBeNull()
-  expect(keyInput?.closest('.credential-row')?.querySelector('button[type="button"]')).toBeNull()
+  const keyInput = inputByLabel(container, 'minimax API key')
+  expect(keyInput.closest<HTMLElement>('.credential-row')?.querySelector('button[type="button"]')).toBeNull()
   expect(calls.filter((call) => call.method === 'quirky.accounts/clearCredential')).toHaveLength(1)
 })
 test('Claude copy-link and Codex add expose pending links and a working Cancel action', async () => {
@@ -838,8 +863,7 @@ test('Claude Ask, Always and Never policy choices preserve their visible switch 
   stateValue = withTarget(88)
   usageValue = usageFor(stateValue)
   await mount('view:quirky.accounts/settings')
-  const policy = container.querySelector<HTMLSelectElement>('[aria-label="Claude running-session switch policy"]')
-  if (!policy) throw new Error('Missing Claude running-session policy')
+  const policy = selectByLabel(container, 'Claude running-session switch policy')
   expect(policy.value).toBe('ask')
   expect([...policy.options].map((option) => option.value)).toEqual(['ask', 'always', 'never'])
   await act(async () => {
@@ -875,8 +899,7 @@ test('Claude Ask, Always and Never policy choices preserve their visible switch 
   stateValue = withTarget(89)
   usageValue = usageFor(stateValue)
   await mount('view:quirky.accounts/settings')
-  const neverPolicy = container.querySelector<HTMLSelectElement>('[aria-label="Claude running-session switch policy"]')
-  if (!neverPolicy) throw new Error('Missing Claude running-session policy')
+  const neverPolicy = selectByLabel(container, 'Claude running-session switch policy')
   await act(async () => {
     neverPolicy.value = 'never'
     neverPolicy.dispatchEvent(new Event('change', { bubbles: true }))
@@ -969,8 +992,7 @@ test('MiniMax, OpenCode Go and ZCode secrets stay masked through save, clear and
   }
 
   for (const [provider, label] of fields) {
-    const input = container.querySelector<HTMLInputElement>(`[aria-label="${provider} ${label}"]`)
-    if (!input) throw new Error(`Missing ${provider} ${label} field`)
+    const input = inputByLabel(container, `${provider} ${label}`)
     expect(input.type).toBe('password')
     await enterValue(input, `fixture-secret-${provider}-${label}`)
     const row = input.closest<HTMLElement>('.credential-row')
@@ -990,8 +1012,7 @@ test('MiniMax, OpenCode Go and ZCode secrets stay masked through save, clear and
     expect(input.value).toBe('')
   }
 
-  const minimaxInput = container.querySelector<HTMLInputElement>('[aria-label="minimax API key"]')
-  if (!minimaxInput) throw new Error('Missing MiniMax API key field')
+  const minimaxInput = inputByLabel(container, 'minimax API key')
   credentialSaveFailure = true
   await enterValue(minimaxInput, 'failure-secret')
   const minimaxRow = minimaxInput.closest<HTMLElement>('.credential-row')
@@ -1001,8 +1022,7 @@ test('MiniMax, OpenCode Go and ZCode secrets stay masked through save, clear and
   expect(minimaxRow.querySelector('[role="alert"]')?.textContent).toContain('Could not confirm saving this credential')
   expect(toastCalls).toContainEqual({ title: 'Could not save provider credential', body: 'The request could not be completed. Please try again.' })
 
-  const zcodeInput = container.querySelector<HTMLInputElement>('[aria-label="zcode API key"]')
-  if (!zcodeInput) throw new Error('Missing ZCode API key field')
+  const zcodeInput = inputByLabel(container, 'zcode API key')
   await enterValue(zcodeInput, 'zcode-secret')
   const zcodeRow = zcodeInput.closest<HTMLElement>('.credential-row')
   if (!zcodeRow) throw new Error('Missing ZCode credential row')
@@ -1073,12 +1093,12 @@ test('canceling the Codex reset offer leaves it available without consuming a cr
   await settle()
   await act(async () => { buttonByLabel('Open Codex details and account switcher').click() })
   await act(async () => { buttonByLabel('Reset Codex limits').click() })
-  const dialog = container.querySelector('[aria-label="Reset Codex limits confirmation"]')
+  const dialog = dialogByTitle(container, 'Reset Codex limits confirmation')
   if (!dialog) throw new Error('Missing Codex reset offer confirmation')
   expect(dialog.textContent).toContain('Offer shown for Account A')
   await act(async () => { buttonByText('Cancel').click() })
   await settle()
-  expect(container.querySelector('[aria-label="Reset Codex limits confirmation"]')).toBeNull()
+  expect(dialogByTitle(container, 'Reset Codex limits confirmation')).toBeNull()
   expect(buttonByLabel('Reset Codex limits').disabled).toBe(false)
   expect(calls.filter((call) => call.method === 'quirky.accounts/consumeResetCredit')).toHaveLength(0)
 })
@@ -1087,8 +1107,7 @@ test('Always-queued busy Claude restart skips the Ask dialog but keeps pane prog
   usageValue = usageFor(stateValue)
   queueBusyRestart = true
   await mount('view:quirky.accounts/settings')
-  const policy = container.querySelector<HTMLSelectElement>('[aria-label="Claude running-session switch policy"]')
-  if (!policy) throw new Error('Missing Claude running-session policy')
+  const policy = selectByLabel(container, 'Claude running-session switch policy')
   await act(async () => {
     policy.value = 'always'
     policy.dispatchEvent(new Event('change', { bubbles: true }))
@@ -1134,8 +1153,9 @@ test('Ask restart closes its modal when a busy Claude session queues and leaves 
   await mount('overlay:quirky.accounts/switch-dialog')
   expect(container.querySelector('[role="dialog"]')).not.toBeNull()
   expect(container.textContent).toContain('Busy now. Restart will wait until this turn finishes.')
-  const restart = container.querySelector<HTMLButtonElement>('.switch-dialog .dialog-actions button:last-child')
-  if (!restart) throw new Error('Missing dialog restart action')
+  const dialog = dialogByTitle(container, 'Switched to Account B')
+  if (!dialog) throw new Error('Missing Claude switch dialog')
+  const restart = dialogFooterButtonByText(dialog, 'Restart session')
   await act(async () => { restart.click() })
   await waitFor(
     () => container.querySelector('[role="dialog"]') ? null : true,

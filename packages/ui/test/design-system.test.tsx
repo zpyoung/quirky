@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
-import { act, createElement as h, type ReactNode } from 'react'
+import { act, createElement as h, type ReactNode, useState } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import {
   Badge,
@@ -309,6 +309,59 @@ describe('shared graphite components', () => {
     await key(panel, 'Escape')
     expect(calls).toEqual(['close'])
     await render(dialogTree(false))
+    expect(document.activeElement).toBe(opener)
+  })
+
+  test('required-choice dialogs stay open until an explicit enabled action is selected', async () => {
+    const choices: string[] = []
+    const RequiredChoice = () => {
+      const [open, setOpen] = useState(false)
+      return <>
+        <button id="opener" onClick={() => setOpen(true)}>Choose account</button>
+        <Dialog
+          open={open}
+          title="Choose how to continue"
+          actions={<>
+            <Button disabled>Unavailable choice</Button>
+            <Button onClick={() => { choices.push('keep'); setOpen(false) }}>Keep current account</Button>
+            <Button onClick={() => { choices.push('restart'); setOpen(false) }}>Restart on selected account</Button>
+          </>}
+        >
+          <p>Choose an explicit action to continue.</p>
+        </Dialog>
+      </>
+    }
+    await render(<RequiredChoice />)
+    const opener = container.querySelector<HTMLButtonElement>('#opener')!
+    opener.focus()
+    await click(opener)
+
+    const panel = container.querySelector<HTMLElement>('[role="dialog"]')!
+    expect(panel.getAttribute('aria-modal')).toBe('true')
+    const titleId = panel.getAttribute('aria-labelledby')
+    expect(titleId).toBeTruthy()
+    expect(document.getElementById(titleId!)?.textContent).toBe('Choose how to continue')
+    expect(panel.querySelector('button[aria-label="Close dialog"]')).toBeNull()
+    const [unavailable, keep, restart] = [...panel.querySelectorAll<HTMLButtonElement>('button')]
+    expect(unavailable?.disabled).toBe(true)
+    expect(document.activeElement).toBe(keep)
+
+    await key(panel, 'Escape')
+    expect(container.querySelector('[role="dialog"]')).toBe(panel)
+    await click(container.querySelector('.ui-dialog-backdrop')!)
+    expect(container.querySelector('[role="dialog"]')).toBe(panel)
+    expect(choices).toEqual([])
+
+    restart!.focus()
+    await key(restart!, 'Tab')
+    expect(document.activeElement).toBe(keep)
+    keep!.focus()
+    await key(keep!, 'Tab', { shiftKey: true })
+    expect(document.activeElement).toBe(restart)
+
+    await click(restart!)
+    expect(choices).toEqual(['restart'])
+    expect(container.querySelector('[role="dialog"]')).toBeNull()
     expect(document.activeElement).toBe(opener)
   })
 
