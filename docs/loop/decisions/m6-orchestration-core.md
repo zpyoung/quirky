@@ -341,6 +341,50 @@
 - **Revisit if:** a final incoming decision changes shared authority or launch behavior
 - **Source:** locked by docs/loop/decisions/m3-accounts.md
 
+## D32: Apply the aged-item night-mode landing rule
+- **Question:** whether to start a new review/dogfood campaign after the preparation-only stall
+- **Options:** start every remaining campaign; follow the current rule for items already past two hours
+- **Chose:** finish implementation and required behavioral tests, scripts, typecheck and runtime smoke, then land without starting a new final-review or UI-dogfood round. Tool readiness checks are not dogfood passes.
+- **Why:** the initial spec commit predates this iteration's observed runtime by more than two hours. Night mode explicitly directs already-aged items to land as soon as their own tests/typecheck pass and skip review/dogfood not yet started. No acceptance scenario or safety invariant is removed.
+- **Evidence:** 51b4f01 commit timestamp 2026-10-27T16:21:44-05:00; inter-lane message runtime timestamps 2026-10-27T23:44Z onward; current LOOP.md Night mode first bullet. No review dispatch or dogfood begin has run.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the operator changes the night-mode landing instruction
+- **Source:** locked by docs/loop/LOOP.md
+
+## D33: Share atomic staged worker acceptance with lane9
+- **Question:** lane9 requires pre-launch durable acceptance, post-spawn authority attachment and shared receipt ownership
+- **Options:** independent worker ledger/database; fake pending assignee; shared store/service with nullable reserved identity and synchronous lifecycle hooks
+- **Chose:** committed worker-integration.ts service/port contracts. Reserve a pending supervised Dispatch without assignee, create --spec Task and worker row in the same transaction, checkpoint acceptance before effects, then attach exact public runtime identity and CAS to dispatched. Worker methods reuse the core mutate ledger. WorkerRow projection and transition callbacks remain worker-owned; missing supervised port fails closed.
+- **Why:** process/workspace launch cannot precede durable acceptance, and a not-yet-created session has no truthful attestation. One transaction must own report/heartbeat/Task/Dispatch/worker/question/promotion/receipt changes. Lane9 owns src/workers/**, worker-contracts.ts and worker acceptance tests; core owns dispatch/send settlement. Main/manifest/CLI integration is serialized after core merge.
+- **Evidence:** lane9 priority interjections; commits24cf319 and d304f31; exact signatures sent to its confirmed terminal mailbox; OrchestrationDomain acknowledged ownership and atomicity requirements.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** worker integration needs another source-backed lifecycle operation
+- **Source:** assumed — autonomous
+
+## D34: Reserve explicit service coordinator APIs to lane11 without synthetic sessions
+- **Question:** Heimdall needs a headless, service-owned Run while existing core coordinator evidence attests actual sessions
+- **Options:** forge runtime evidence; implicitly trust plugin metadata in ordinary APIs; explicit service APIs with a distinct scoped coordinator principal
+- **Chose:** confirm serviceRunCreate/serviceRunShow/serviceWorkerStart/serviceCheck/serviceWorkerRelease as additive future signatures owned by lane11 after core/worker integration. Kernel pluginId plus owned Run authorizes the service; distinct service-owner Task/Dispatch provenance, one store/ledger, explicit placement only. Ordinary core APIs remain session-authenticated.
+- **Why:** plugin service ownership is real authority but not process attestation. A service principal must never claim runtimeOwned/live process identity. Workers retain independent runtime evidence, lifecycle/custody/close and release checks.
+- **Evidence:** priority lane11/lane9 coordination interjections; /tmp/quirky-lane11-orchestration-service-reply.md Lane1 confirmation; ownership sent to lane9 and active core implementer. No service implementation claim.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** service integration cannot preserve scoped ownership without changing worker identity
+- **Source:** assumed — autonomous
+
+## D35: Repair a worktree-routing violation before accepting runtime output
+- **Question:** runtime agents reported absolute edit paths had modified the active checkout
+- **Options:** accept cross-tree writes; independently revert/recreate concurrently; pause both writers and transfer their exact owned edits with preserved originals
+- **Chose:** pause runtime and kernel helper, preserve active/base/target copies, three-way merge target-only deltas into the runtime worktree, restore only the 25 confirmed runtime-owned active paths from658dd9c, then resume using target-relative edit paths. Preserve unrelated .serena metadata and all domain files. No reset/restore/clean command or foreign work removal.
+- **Why:** simultaneous cleanup/recreation could lose code or erase another writer. Main tracked diff is now empty; isolated runtime diff contains25files +716/-50 plus its new pointer/authority-test files. Required acceptance still runs only after implementation.
+- **Evidence:** both writers' exact path reports and stop acknowledgements; /tmp/quirky-m6-journal-kiHvzE/scope-repair.json and preserved per-file .base/.active/.target; successful scope-transfer output and repaired-boundary command. Domain confirmed its source files existed only in its isolated tree.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** another write escapes its component
+- **Source:** assumed — autonomous
+
 ## Early preparation verification
 - `bun run typecheck`: exit0 on the final contracts, no diagnostics.
 - Actual Bun import of contracts.ts: `CONTRACT_MODULE_INERT_OK`; the module exports no runtime values. No daemon, model, process, real user state or placeholder contribution was started/installed.
