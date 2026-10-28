@@ -143,5 +143,38 @@
 - **Revisit if:** final report or owned raw-browser measurement contradicts these visible outcomes.
 - **Source:** assumed — autonomous, required tool-limit reporting
 
+## D14: Accept one independent review round with its actual coverage limits
+- **Question:** does the reviewed repair meet the fixed correctness/compliance/failure-mode bar?
+- **Options:** silently omit test or source paths; stage all changed code and tests without author reasoning and run the prescribed promote/refute gate.
+- **Chose:** deep open-mandate Gemini review over all ten changed source/test paths relative to caught-up baseline 58ec89b1 through 2545de4c. The staged patch is 53,116 bytes / 1,084 lines, hash 4a846566ec5bfdaae7dc14abcdc90ec5bfb9d0160889a79470f41b204dfac4de. Actual Google Gemini promote and a separate fresh refute both emitted []; deterministic gate and manifest returned PASS, zero findings/advisories/limitations/questions/contests/suppressions. No fix batch was needed and no second discovery round ran.
+- **Why:** the entire code/test change was supplied, with original acceptance criteria pasted verbatim and author decision logs/commit reasoning withheld. Scoped prepass actually ran the composer tests: 17 pass, zero fail, 113 assertions. Other verification remains separately qualified rather than represented as a full green prepass.
+- **Evidence:** private review/{artifact.patch,promote-1.raw,promote-1.stderr,refute-1.raw,refute-1.stderr,gate.json,manifest.json}; reviewer google/gemini-3.1-pro-preview:high, independence full. Dispatches read the staged prompt in chunks but made no surrounding-source tool calls; outside-diff context inspection is unverified. Documentation is deliberately absent from this code artifact, not silently claimed reviewed.
+- **Reversibility:** easy
+- **Confidence:** high for actual dispatch/gate facts; review does not prove completeness.
+- **Revisit if:** an exercised path or authoritative landing identifies a concrete remaining defect.
+- **Source:** assumed — autonomous, bounded final review
+
+## D15: Make native acquisition runnable without erasing the blocked historical report
+- **Question:** how to handle the OS-only chooser while this lane is restricted to unattended web?
+- **Options:** claim a web upload proves the macOS panel; rewrite the historical blocked result; add this item's explicit pending native handoff.
+- **Chose:** new docs/loop/native/fix-terminal-dock-unfinished-flows-20261027.json retains SC12's actual macOS chooser selection/removal goal, with a fresh temporary profile and run-created PNG. Leave the original m3-terminal-dock blocked driver report untouched. No native app/OS-chooser pass is claimed by this item.
+- **Why:** LOOP requires native-only handoff and forbids this lane's native/foreground run. NATIVE's collector lists pending/fail scenarios; the new item must remain runnable while preserving the prior delivery_failed evidence.
+- **Evidence:** docs/loop/NATIVE.md scenario schema and collect rules; original docs/loop/native/m3-terminal-dock.json blocked run 20261028T053308-6eb4; this item's pending JSON.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a capable nightly native run supplies a new actual selection/removal result.
+- **Source:** deferred: platform — native OS chooser, following LOOP native handoff
+
+## D16: Use the pane's rendered pixel height for dock hysteresis
+- **Question:** why did the exact browser 239→260→280 sequence fail to remount at 280 after the model review?
+- **Options:** lower the required threshold; round an independent estimate; share the actual edge-rounded pane height between drawing and dock geometry.
+- **Chose:** compute the existing rendered height `px(rect.y + rect.height) - top` once in PaneLayer and pass that exact value to both style.height and DockHost.availableHeight. Keep shouldMountDock's documented thresholds unchanged. Extend the real daemon/headless-UI regression with the measured fractional container height 279.8125.
+- **Why:** at DPR1.25, the container was 279.8125px while the drawn pane and dock host were exactly 280px. The old caller passed the unrounded container height, so the helper correctly rejected the wrong measurement. Sharing the drawn edge difference also handles fractional split offsets correctly, unlike independently rounding rect.height.
+- **Evidence:** owned browser repeated 239/260/280 sequence, host/client/offset/border/padding measurements and hysteresis-diagnostics-471/492/512.png; container heights238.8125/259.8125/279.8125 versus rendered239/260/280. New fractional regression failed waiting for .qtd-composer before the three-line caller fix. Fresh green and reloaded browser proof are pending.
+- **Reversibility:** easy
+- **Confidence:** high for observed root cause.
+- **Revisit if:** the reloaded actual browser fails the same boundary or another pane no longer fits.
+- **Source:** assumed — autonomous, blocking post-review UI finding; this delta is not claimed covered by D14's fixed review snapshot
+
 ## Progress
 Regression authoring and minimal source fixes are in place. Genuine red: Stop/Escape queued recovery, SessionEnd stale latch and corrected next-question cache refresh. Host re-enable test passes after its selector correction; no extra focus implementation. Baseline actual browser proved canvas occlusion; terminal stack is now isolated but post-fix browser verification remains. Corrected initial compiler mistakes (missing existing freshEvidence field, fixture closure paths, overbroad fixture report field); latest status-event envelope fix uses public plugin event data. Focused lifecycle/card verification is running. Next: finish green gates, integration catch-up, built private web campaign/exact measurements/acquisition, cross-family final review and canonical queue land. Native chooser handoff is pending in this item's native JSON; prior blocked attempt remains untouched.

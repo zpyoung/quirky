@@ -178,10 +178,10 @@ test(
     ui.setRect(paneArea, { left: 0, top: 0, width: 1000, height: 260 })
     await ui.refit()
     expect(paneReport(await ui.view(), agent.pane.id)?.dock?.mounted).toBe(false)
-    ui.setRect(paneArea, { left: 0, top: 0, width: 1000, height: 280 })
+    ui.setRect(paneArea, { left: 0, top: 0, width: 1000, height: 279.8125 })
     await ui.refit()
     await ui.el('.qtd-composer')
-    await waitForDock(ui, agent.pane.id, agent.session, (state) => state.mounted, 'to remount at gutter plus one hundred')
+    await waitForDock(ui, agent.pane.id, agent.session, (state) => state.mounted, 'to remount when the fractional container renders a 280-pixel pane')
 
     const handle = await ui.el<HTMLElement>('.qtd-resize-handle')
     const targetWindow = ui.win.document.defaultView!
