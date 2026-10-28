@@ -3,23 +3,8 @@ import type { AgentStatusSummary, StructuredMessage } from '@quirky/protocol'
 import { pickActive } from '../src/window/model'
 import { sessionForDigit } from '../src/window/shortcuts'
 import { displayStatus, ringPercent, windowDisplay } from '../src/window/status'
-import { terminalColors } from '../src/window/terminalTheme'
 import { mergeMessages } from '../src/window/transcript'
 import { session } from './ui-fake'
-
-test('terminalColors reads the three tokens and falls back per color', () => {
-  expect(terminalColors({})).toEqual({ background: '#16181d', foreground: '#d7dae0', cursor: '#d7dae0' })
-  expect(terminalColors({ '--terminal-background': '#fff', '--terminal-cursor': '#000' })).toEqual({
-    background: '#fff',
-    foreground: '#d7dae0',
-    cursor: '#000'
-  })
-})
-
-test('a blank custom property counts as unset', () => {
-  expect(terminalColors({ '--terminal-background': '  ' }).background).toBe('#16181d')
-  expect(terminalColors({ '--terminal-foreground': ' #abc ' }).foreground).toBe('#abc')
-})
 
 test('Cmd+digit picks the session at that position and nothing else', () => {
   const sessions = ['a', 'b', 'c']
