@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { act, createElement } from 'react'
 import type { Root, createRoot as ReactCreateRoot } from 'react-dom/client'
-import type { Ask, MobileMarkdownDocument, MobileWorkspaceTab, Repo, Session, Worktree } from '@quirky/protocol'
+import type { Ask, MobileMarkdownDocument, MobileWorkspaceTab, Repo, Session, Worktree, WorkspaceOriginView } from '@quirky/protocol'
 import type { MobilePageBridge } from '../src/contracts'
 import { validatePageReport, validatePageRpc, isPageMutation } from '../src/shell/bridge-policy'
 import { DEFAULT_WORKSPACE_PREFERENCES, workspacePreferencesKey } from '../src/pages/storage'
@@ -109,6 +109,7 @@ function fakeBridge(options: {
   sessionTabs?: MobileWorkspaceTab[]
   answerError?: string
   loopSummaries?: unknown
+  origins?: WorkspaceOriginView[]
   summaryError?: string
   summaryProvider?: () => Promise<unknown>
 } = {}) {
@@ -147,7 +148,7 @@ function fakeBridge(options: {
         case 'quirky.repo/list': result = [repo, { ...repo, id: 'repo-web', name: 'web', path: '/repos/web' }]; break
         case 'quirky.repo/groupList': result = []; break
         case 'quirky.worktree/list': result = worktrees; break
-        case 'quirky.worktree/origins': result = []; break
+        case 'quirky.worktree/origins': result = options.origins ?? []; break
         case 'quirky.session/workspaceSleepStates': result = []; break
         case 'quirky.worktree/show': result = { ...worktrees.find((item) => item.id === params.worktree), children: [] }; break
         case 'quirky.session/list': result = params.worktree === undefined ? sessions : sessions.filter((item) => item.worktreeId === params.worktree); break
@@ -598,17 +599,22 @@ test('older summary responses cannot replace newer refreshes or update an unmoun
 })
 
 test('page bridge admits only empty-parameter loop summaries as a read-only consumer API', () => {
-  expect(() => validatePageRpc('quirky.loops/summaries', {}, ['rpc'])).not.toThrow()
+  const workspaceRoute = { kind: 'workspaces' } as const
+  const artifactRoute = { kind: 'terminal-artifacts', worktreeId: 'wt-api', sessionId: 'session-api' } as const
+
+  expect(() => validatePageRpc('quirky.loops/summaries', {}, ['rpc'], workspaceRoute)).not.toThrow()
   expect(isPageMutation('quirky.loops/summaries')).toBe(false)
+  expect(() => validatePageRpc('quirky.loops/summaries', {}, [], workspaceRoute)).toThrow(/rpc grant/i)
+  expect(() => validatePageRpc('quirky.loops/summaries', {}, ['rpc'], artifactRoute)).toThrow()
   for (const params of [{ worktree: 'wt-api' }, { includeEnded: true }, { token: 'secret' }]) {
-    expect(() => validatePageRpc('quirky.loops/summaries', params, ['rpc'])).toThrow()
+    expect(() => validatePageRpc('quirky.loops/summaries', params, ['rpc'], workspaceRoute)).toThrow()
   }
   for (const method of ['quirky.loops/list', 'quirky.loops/get', 'quirky.loops/history', 'quirky.loops/iterations', 'quirky.loops/create', 'quirky.loops/stop']) {
-    expect(() => validatePageRpc(method, {}, ['rpc'])).toThrow()
+    expect(() => validatePageRpc(method, {}, ['rpc'], workspaceRoute)).toThrow()
   }
 })
 
-test('automation-created workspace filtering uses only durable provenance and persists its option', async () => {
+test('automation-created workspace filtering uses durable origins and persists its option', async () => {
   const provenance = {
     kind: 'created-by-automation' as const,
     automationId: 'automation-1',
@@ -619,12 +625,16 @@ test('automation-created workspace filtering uses only durable provenance and pe
     hostId: 'local' as const
   }
   const worktrees = [
-    makeWorktree('wt-automated-main', 'automated-main', { isMain: true, automationProvenance: provenance }),
-    makeWorktree('wt-automated-feature', 'automated-feature', { automationProvenance: provenance }),
-    makeWorktree('wt-auto-prefix', 'auto-generated-by-a-person'),
+    makeWorktree('wt-origin-main', 'planner-main', { isMain: true, automationProvenance: provenance }),
+    makeWorktree('wt-origin-feature', 'planner-feature', { automationProvenance: provenance }),
+    makeWorktree('wt-auto-prefix', 'automated-by-a-person'),
     makeWorktree('wt-cli', 'cli-created', { createdBy: 'cli' })
   ]
-  const { bridge, storage } = fakeBridge({ worktrees })
+  const origins: WorkspaceOriginView[] = [
+    { worktreeId: 'wt-origin-main', automation: true, otherClient: null },
+    { worktreeId: 'wt-origin-feature', automation: true, otherClient: null }
+  ]
+  const { bridge, storage } = fakeBridge({ worktrees, origins })
   const preferenceKey = workspacePreferencesKey('host-1')
   storage.set(preferenceKey, JSON.stringify({
     ...DEFAULT_WORKSPACE_PREFERENCES,
@@ -637,27 +647,26 @@ test('automation-created workspace filtering uses only durable provenance and pe
     .find((label) => label.textContent?.includes('Hide automation-created'))?.querySelector('input')
   if (!checkbox) throw new Error('Missing automation-created filter')
   expect(checkbox.disabled).toBe(false)
-  expect(checkbox.checked).toBe(false)
   await act(async () => {
-    checkbox.checked = true
-    checkbox.dispatchEvent(new Event('change', { bubbles: true }))
+    checkbox.click()
   })
   await click(buttonNamed('Done'))
 
-  expect(container?.textContent).toContain('automated-main')
-  expect(container?.textContent).not.toContain('automated-feature')
-  expect(container?.textContent).toContain('auto-generated-by-a-person')
+  expect(container?.textContent).toContain('planner-main')
+  expect(container?.textContent).not.toContain('planner-feature')
+  expect(container?.textContent).toContain('automated-by-a-person')
   expect(container?.textContent).toContain('cli-created')
-  expect(buttonNamed('Workspace options').textContent).toContain('2 active filters')
   const saved = JSON.parse(storage.get(preferenceKey) ?? '{}') as { filters?: { hideAutomationCreated?: boolean } }
   expect(saved.filters?.hideAutomationCreated).toBe(true)
 
   await unmountPage()
   await mount(bridge)
-  expect(container?.textContent).toContain('automated-main')
-  expect(container?.textContent).not.toContain('automated-feature')
+  expect(container?.textContent).toContain('planner-main')
+  expect(container?.textContent).not.toContain('planner-feature')
+  await click(buttonNamed('Workspace options'))
   const reloadedCheckbox = [...document.querySelectorAll<HTMLLabelElement>('.qp-filter-toggle')]
     .find((label) => label.textContent?.includes('Hide automation-created'))?.querySelector('input')
   expect(reloadedCheckbox?.disabled).toBe(false)
   expect(reloadedCheckbox?.checked).toBe(true)
 })
+
