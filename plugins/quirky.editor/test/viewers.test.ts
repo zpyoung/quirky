@@ -239,6 +239,10 @@ describe('viewer API behavior', () => {
     expect(rows[1]).toEqual(['1', `x${'x'.repeat(65_509)}💡\ninside,quoted`])
     expect(page.readOnly).toBe(true)
     expect(await failure(viewer(world, bufferId, 'edit', { row: 1, column: 0, value: 'no draft' }))).toMatchObject({ code: expect.any(Number) })
+
+    const refusedCopy = await failure(viewer(world, bufferId, 'copy', { row: 0 }))
+    expect(refusedCopy.message).toMatch(/small editable CSV|copy/i)
+    expect(stateBuffer(record(await world.call('state', { bufferId }), 'state after refused copy'), bufferId).dirty).toBe(false)
     const state = record(await world.call('state', { bufferId }), 'editor state')
     expect(stateBuffer(state, bufferId).dirty).toBe(false)
   })
@@ -364,5 +368,122 @@ describe('viewer API behavior', () => {
     const binaryResult = record(await viewer(world, binary.bufferId, 'metadata'))
     expect(binaryResult).toMatchObject({ kind: 'binary', displayable: false, reason: 'binary' })
     expect(binary.buffer.content).toBe('')
+  })
+
+  test('CSV copy returns quoted TSV in source coordinates and pastes it back losslessly', async () => {
+    const world = await start({
+      'quoted.csv': 'Name,Note,Quote,Comma,Blank\r\nA,"tab\tinside","say ""hi""","comma,inside",\r\nB,"line 1\nline 2",plain,normal,\r\n'
+    })
+    const { bufferId } = await world.open('quoted.csv')
+
+    await viewer(world, bufferId, 'sort', { column: 0, order: 'desc' })
+    const sorted = records(record(await viewer(world, bufferId, 'page', { page: 0 })).rows, 'sorted rows')
+    expect(sorted.map((row) => row.index)).toEqual([0, 2, 1])
+    await viewer(world, bufferId, 'filter', { query: 'B' })
+    const visible = records(record(await viewer(world, bufferId, 'page', { page: 0 })).rows, 'filtered rows')
+    expect(visible.map((row) => row.index)).toEqual([0, 2])
+
+    const row = record(await viewer(world, bufferId, 'copy', { row: 1 }))
+    expect(row).toEqual({ text: 'A\t"tab\tinside"\t"say ""hi"""\t"comma,inside"\t""', rows: 1 })
+    const column = record(await viewer(world, bufferId, 'copy', { column: 1 }))
+    expect(column).toEqual({ text: 'Note\n"tab\tinside"\n"line 1\nline 2"', rows: 3 })
+    const range = record(await viewer(world, bufferId, 'copy', { row: 1, column: 1, endRow: 2, endColumn: 2 }))
+    expect(range).toEqual({
+      text: '"tab\tinside"\t"say ""hi"""\n"line 1\nline 2"\tplain',
+      rows: 2
+    })
+    const wholeTable = record(await viewer(world, bufferId, 'copy'))
+    expect(wholeTable).toEqual({
+      text: 'Name\tNote\tQuote\tComma\tBlank\nA\t"tab\tinside"\t"say ""hi"""\t"comma,inside"\t""\nB\t"line 1\nline 2"\tplain\tnormal\t""',
+      rows: 3
+    })
+    const cell = record(await viewer(world, bufferId, 'copy', { row: 1, column: 2 }))
+    expect(cell.text).toBe('"say ""hi"""')
+    const commaCell = record(await viewer(world, bufferId, 'copy', { row: 1, column: 3 }))
+    expect(commaCell.text).toBe('"comma,inside"')
+    const blankCell = record(await viewer(world, bufferId, 'copy', { row: 1, column: 4 }))
+    expect(blankCell.text).toBe('""')
+
+    await viewer(world, bufferId, 'paste', { row: 3, column: 1, text: range.text })
+    await viewer(world, bufferId, 'filter', { query: '' })
+    const pasted = records(record(await viewer(world, bufferId, 'page', { page: 0 })).rows, 'pasted rows')
+    expect(pasted.find((entry) => entry.index === 3)?.cells).toEqual(['', 'tab\tinside', 'say "hi"'])
+    expect(pasted.find((entry) => entry.index === 4)?.cells).toEqual(['', 'line 1\nline 2', 'plain'])
+    await viewer(world, bufferId, 'paste', { row: 5, column: 0, text: commaCell.text })
+    await viewer(world, bufferId, 'paste', { row: 6, column: 0, text: blankCell.text })
+    const pastedCells = records(record(await viewer(world, bufferId, 'page', { page: 0 })).rows, 'single cell paste')
+    expect(pastedCells.find((entry) => entry.index === 5)?.cells).toEqual(['comma,inside'])
+    expect(pastedCells.find((entry) => entry.index === 6)?.cells).toEqual([''])
+  })
+
+  test('CSV copy rejects incomplete, reversed and out-of-bounds ranges without changing the draft', async () => {
+    const world = await start({ 'range.csv': 'A,B\n1,2\n3,4\n' })
+    const { bufferId } = await world.open('range.csv')
+    await viewer(world, bufferId, 'edit', { row: 1, column: 0, value: 'draft' })
+    const before = record(await world.call('state', { bufferId }), 'state before invalid copies')
+    const beforeBuffer = stateBuffer(before, bufferId)
+    const beforeDraft = record(await world.call('read', {
+      bufferId, action: 'text', kind: 'draft', offset: 0, length: 1024, contentRevision: beforeBuffer.contentRevision
+    }), 'draft before invalid copies')
+
+    const invalid = [
+      { row: 1, column: 0, endRow: 2 },
+      { column: 0, endRow: 2, endColumn: 1 },
+      { row: 2, column: 0, endRow: 1, endColumn: 1 },
+      { row: 1, column: 0, endRow: 3, endColumn: 1 },
+      { row: 0, column: 0, endRow: -1, endColumn: 1 }
+    ]
+    for (const range of invalid) {
+      expect((await failure(viewer(world, bufferId, 'copy', range))).code).toBeTypeOf('number')
+      const after = record(await world.call('state', { bufferId }), 'state after invalid copy')
+      const afterBuffer = stateBuffer(after, bufferId)
+      expect(afterBuffer).toMatchObject({
+        dirty: beforeBuffer.dirty,
+        draftLength: beforeBuffer.draftLength
+      })
+      const afterDraft = record(await world.call('read', {
+        bufferId, action: 'text', kind: 'draft', offset: 0, length: 1024, contentRevision: afterBuffer.contentRevision
+      }), 'draft after invalid copy')
+      expect(requiredString(afterDraft, 'text')).toBe(requiredString(beforeDraft, 'text'))
+    }
+  })
+
+  test('viewer leases revoke only their own media resource and close revokes all remaining resources', async () => {
+    const bytes = validPng()
+    const world = await start({ 'leased.png': bytes })
+    const { bufferId, tabId } = await world.open('leased.png')
+    const first = record(await viewer(world, bufferId, 'media', { leaseId: 'split-one' }))
+    const second = record(await viewer(world, bufferId, 'media', { leaseId: 'split-two' }))
+    const anonymous = record(await viewer(world, bufferId, 'media'))
+    const anonymousAgain = record(await viewer(world, bufferId, 'media'))
+    expect(requiredString(anonymousAgain, 'url')).toBe(requiredString(anonymous, 'url'))
+    expect(first.leaseId).toBe('split-one')
+    expect(second.leaseId).toBe('split-two')
+    const firstUrl = requiredString(first, 'url')
+    const secondUrl = requiredString(second, 'url')
+    const anonymousUrl = requiredString(anonymous, 'url')
+    expect(new Set([firstUrl, secondUrl, anonymousUrl]).size).toBe(3)
+
+    const release = record(await viewer(world, bufferId, 'release', { leaseId: 'split-one' }))
+    expect(release).toEqual({ released: true })
+    expect(await viewer(world, bufferId, 'release', { leaseId: 'split-one' })).toEqual({ released: false })
+    expect(await viewer(world, bufferId, 'release', { leaseId: 'unknown' })).toEqual({ released: false })
+    const revoked = await fetch(resourceUrl(world, firstUrl), { headers: { Range: 'bytes=0-0' } })
+    expect([404, 410]).toContain(revoked.status)
+    for (const url of [secondUrl, anonymousUrl]) {
+      const complete = await fetch(resourceUrl(world, url))
+      expect(complete.status).toBe(200)
+      expect([...new Uint8Array(await complete.arrayBuffer())]).toEqual([...bytes])
+      const response = await fetch(resourceUrl(world, url), { headers: { Range: 'bytes=4-11' } })
+      expect(response.status).toBe(206)
+      expect([...new Uint8Array(await response.arrayBuffer())]).toEqual([...bytes.slice(4, 12)])
+    }
+
+    await world.call('close', { bufferId, ...(tabId ? { tabId } : {}), choice: 'discard' })
+    for (const url of [secondUrl, anonymousUrl]) {
+      const response = await fetch(resourceUrl(world, url), { headers: { Range: 'bytes=0-0' } })
+      expect([404, 410]).toContain(response.status)
+    }
+    expect(await viewer(world, bufferId, 'release', { leaseId: 'split-two' })).toEqual({ released: false })
   })
 })
