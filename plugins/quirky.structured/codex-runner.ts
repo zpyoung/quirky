@@ -168,7 +168,10 @@ class CodexRunner implements StructuredRunner {
       if (run) this.running.delete(session.id)
       await startup.connection?.close()
       if (startup.stopped) return
-      throw run?.startupFailure ?? (error instanceof Error ? error : new Error(String(error)))
+      const failure = run?.startupFailure ?? (error instanceof Error ? error : new Error(String(error)))
+      const stderrTail = startup.connection?.stderrTail
+      if (!stderrTail) throw failure
+      throw new Error(`${failure.message}; stderr: ${stderrTail}`, { cause: failure })
     } finally {
       if (this.starting.get(session.id) === startup) this.starting.delete(session.id)
     }

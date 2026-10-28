@@ -1,4 +1,5 @@
 import { gitApi } from '@quirky/git'
+import { KeyedQueue } from './queue'
 
 /** A notice that the requested remote base could not be refreshed and a local branch was used. */
 export type BaseFallback = { requestedRef: string; localRef: string; message: string }
@@ -32,6 +33,9 @@ export type ResolveBaseOptions = {
 }
 
 const FETCH_TIMEOUT_MS = 30_000
+
+// A refresh can outlive create's repo queue slot, so serialize base fetches separately.
+const fetchQueue = new KeyedQueue()
 
 const quoted = (text: string): string => `"${text}"`
 
@@ -81,14 +85,16 @@ export async function resolveBase(repo: string, options: ResolveBaseOptions = {}
   const branch = name.slice(remote.length + 1)
   const remoteRef = `refs/remotes/${name}`
   if (await git.refExists(repo, remoteRef)) {
-    void git.fetchRemote(repo, remote, branch).then((ok) => {
+    void fetchQueue.run(repo, () => git.fetchRemote(repo, remote, branch)).then((ok) => {
       if (!ok) log(`could not refresh ${name} from ${remote} in the background`)
     })
     return { fullRef: remoteRef, shortRef: name }
   }
   if (await git.refExists(repo, `refs/heads/${name}`)) return { fullRef: `refs/heads/${name}`, shortRef: name }
 
-  const fetched = await git.fetchRemote(repo, remote, undefined, options.fetchTimeoutMs ?? FETCH_TIMEOUT_MS)
+  const fetched = await fetchQueue.run(repo, () =>
+    git.fetchRemote(repo, remote, undefined, options.fetchTimeoutMs ?? FETCH_TIMEOUT_MS)
+  )
   if (fetched) {
     if (await git.refExists(repo, remoteRef)) return { fullRef: remoteRef, shortRef: name }
     throw new BaseError('base-unreachable', `Base ref "${name}" was not found after fetching.`, { ref: name, remote })
