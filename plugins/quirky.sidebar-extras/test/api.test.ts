@@ -245,7 +245,7 @@ describe('sidebar-extras API', () => {
   })
 
 
-  test('hydrates absent and corrupt review flags as disabled for legacy clients', async () => {
+  test('normalizes corrupt persisted preferences to conservative defaults', async () => {
     env = await boot()
     await extras(env.client, 'state')
     const store = new Database(join(env.harness.home, 'plugin-data', 'quirky.sidebar-extras', 'store.db'))
@@ -253,19 +253,36 @@ describe('sidebar-extras API', () => {
       const insert = store.query('INSERT INTO preferences (client, value) VALUES (?, ?)')
       insert.run('legacy', JSON.stringify({ workspaceActivityWindow: 'week' }))
       insert.run('corrupt', JSON.stringify({
+        workspaceActivityWindow: 'unknown-window',
+        workspaceActivityCustomDays: 0,
+        alwaysShowDefaultBranchWorkspace: 'true',
+        workspaceActivityWindowBeforeLiveOnly: 'live-only',
         hideCompletedReviewWorkspaces: 'true',
         hidePassingCheckWorkspaces: null
       }))
+      insert.run('invalid-json', '{not-json')
     } finally {
       store.close()
     }
 
     const legacy = await extras<ExtrasState>(env.client, 'state', { client: 'legacy' })
     const corrupt = await extras<ExtrasState>(env.client, 'state', { client: 'corrupt' })
-    expect(legacy.preferences.hideCompletedReviewWorkspaces).toBe(false)
-    expect(legacy.preferences.hidePassingCheckWorkspaces).toBe(false)
-    expect(corrupt.preferences.hideCompletedReviewWorkspaces).toBe(false)
-    expect(corrupt.preferences.hidePassingCheckWorkspaces).toBe(false)
+    const malformed = await extras<ExtrasState>(env.client, 'state', { client: 'invalid-json' })
+    expect(legacy.preferences).toMatchObject({
+      workspaceActivityWindow: 'week',
+      workspaceActivityCustomDays: 30,
+      hideCompletedReviewWorkspaces: false,
+      hidePassingCheckWorkspaces: false
+    })
+    expect(corrupt.preferences).toEqual({
+      workspaceActivityWindow: 'all',
+      workspaceActivityCustomDays: 30,
+      alwaysShowDefaultBranchWorkspace: true,
+      workspaceActivityWindowBeforeLiveOnly: 'all',
+      hideCompletedReviewWorkspaces: false,
+      hidePassingCheckWorkspaces: false
+    })
+    expect(malformed.preferences).toEqual(corrupt.preferences)
   })
   test('does not transfer visits when a canonical worktree is replaced at the same path', async () => {
     env = await boot()

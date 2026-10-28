@@ -1,5 +1,5 @@
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
-import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from 'bun:test'
+import { afterAll, afterEach, beforeAll, beforeEach, expect, mock, test } from 'bun:test'
 import type { ProjectGroup, QuirkyEvent, Repo, Session, UiLayout, UiPluginContext, Worktree } from '@quirky/protocol'
 import { RpcErrorCode } from '@quirky/protocol'
 import { resolveMembershipTarget } from '../src/membership'
@@ -68,6 +68,7 @@ type TestWorld = {
   groups: Group[]
   worktrees: Worktree[]
   sessions: Session[]
+  now: number
   preferences: Preferences
   active: SidebarState['active']
   visits: Record<string, number>
@@ -246,6 +247,7 @@ function setup(
   const world: TestWorld = {
     ...data,
     sessions: [session('s-other', 'w-other', 'working')],
+    now: BASE,
     preferences,
     active: null,
     visits: {},
@@ -302,7 +304,7 @@ function setup(
         }
       } else if (window !== 'all') {
         const days = window === 'today' ? 1 : window === 'week' ? 7 : window === 'month' ? 30 : snapshot.preferences.workspaceActivityCustomDays
-        visible = activityAt >= BASE - days * DAY
+        visible = activityAt >= world.now - days * DAY
         reason = visible ? 'recent' : 'old'
       }
       const review = world.reviews[item.id]
@@ -1222,4 +1224,65 @@ test('hosting review events refresh only active filters and late projections can
   await h.flush()
   expect(card('feature')).toBeUndefined()
   expect(lastReport(h).reviewHiddenIds).toContain('w-feature')
+})
+test('quiet activity aging refreshes at sixty seconds without store events', async () => {
+  const h = setup()
+  h.world.preferences.workspaceActivityWindow = 'today'
+  h.world.worktrees.find((item) => item.id === 'w-other')!.lastActivityAt = BASE - DAY + 1
+  mock.timers.enable({ apis: ['setInterval'] })
+  try {
+    await h.mount()
+    expect(card('other')).toBeDefined()
+    const projectionCalls = h.calls.filter((call) => call.method === 'quirky.sidebar-extras/projection').length
+
+    h.world.now = BASE + 60_000
+    await act(async () => {
+      mock.timers.tick(59_999)
+      await Promise.resolve()
+    })
+    await h.flush()
+    expect(card('other')).toBeDefined()
+    expect(h.calls.filter((call) => call.method === 'quirky.sidebar-extras/projection')).toHaveLength(projectionCalls)
+
+    await act(async () => {
+      mock.timers.tick(1)
+      await Promise.resolve()
+    })
+    await h.flush()
+    expect(card('other')).toBeUndefined()
+    expect(lastReport(h).hiddenCount).toBeGreaterThan(0)
+  } finally {
+    await currentCleanup?.()
+    currentCleanup = null
+    mock.timers.restore()
+  }
+})
+test('section separators mark top-level boundaries only with Pinned first', async () => {
+  const h = setup()
+  await h.mount()
+  const separators = lastReport(h).separators
+  expect(separators.enabled).toBe(true)
+  expect(separators.eligibleBoundaries).toContain('group:g-team')
+  expect(separators.eligibleBoundaries).not.toContain('pinned')
+  expect(host.querySelector('section.pinned')?.classList.contains('section-separator')).toBe(false)
+  expect(sectionForGroup('Team')?.classList.contains('section-separator')).toBe(true)
+  expect(sectionForGroup('Child')?.classList.contains('section-separator')).toBe(false)
+  expect(sectionForRepo('api')?.classList.contains('section-separator')).toBe(false)
+})
+test('sticky top-level headers suppress adjacent section separators', async () => {
+  const style = document.createElement('style')
+  style.textContent = 'section.group[data-top-level-section="group:g-team"] > .group-header { position: sticky; }'
+  document.head.append(style)
+  const h = setup()
+  try {
+    await h.mount()
+    const separators = lastReport(h).separators
+    expect(separators.eligibleBoundaries).not.toContain('group:g-team')
+    expect(separators.eligibleBoundaries).not.toContain('group:g-release')
+    expect(separators.eligibleBoundaries).toContain('repo:r-web')
+    expect(sectionForGroup('Team')?.classList.contains('section-separator')).toBe(false)
+    expect(sectionForGroup('Child')?.classList.contains('section-separator')).toBe(false)
+  } finally {
+    style.remove()
+  }
 })

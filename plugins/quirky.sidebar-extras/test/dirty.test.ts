@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test'
 import { join } from 'node:path'
 import { rmSync, writeFileSync } from 'node:fs'
+import { makeRepo } from '../../quirky.repo/test/git-fixtures'
 import {
   boot,
   createGitProject,
@@ -94,5 +95,24 @@ describe('sidebar-extras dirty status', () => {
       available: false,
       error: expect.any(String)
     })
+  })
+  test('expanded submodule details do not inflate the active worktree count', async () => {
+    env = await boot()
+    const project = await createGitProject(env.client)
+    const library = makeRepo(join(env.harness.home, 'submodule-library'), { 'x.c': 'int x;\n' })
+    git(project.path, '-c', 'protocol.file.allow=always', 'submodule', 'add', '-q', library, 'vendor/lib')
+    git(project.path, 'commit', '-q', '-m', 'add submodule')
+    writeFileSync(join(project.main.path, 'vendor/lib/x.c'), 'int y;\n')
+    await openWorktreeView(env.client, project.main.id)
+
+    const before = await extras<DirtyResult>(env.client, 'dirty')
+    expect(before).toMatchObject({ worktreeId: project.main.id, count: 1, dirty: true, available: true })
+    const children = await env.client.callAny('quirky.git/submoduleStatus', {
+      worktree: `id:${project.main.id}`,
+      path: 'vendor/lib'
+    }) as { entries: { path: string }[] }
+    expect(children.entries.map((entry) => entry.path)).toEqual(['x.c'])
+    const after = await extras<DirtyResult>(env.client, 'dirty')
+    expect(after).toMatchObject({ worktreeId: project.main.id, count: 1, dirty: true, available: true })
   })
 })
