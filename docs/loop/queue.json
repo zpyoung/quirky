@@ -830,8 +830,9 @@
       "deps": [
         "sb-mobile-daemon"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 5
     },
     {
       "id": "sb-mobile-app-panels",
