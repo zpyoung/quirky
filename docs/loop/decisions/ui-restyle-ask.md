@@ -22,15 +22,15 @@
 - **Revisit if:** a source change requires altering an API, setting default or side-effect contract
 - **Source:** locked by docs/loop/decisions/fix-test-ask-1028.md
 
-## D3: Restyle the actual Structured transcript in Session, coordinating its existing owner
+## D3: Reuse the committed Structured transcript restyle from its actual owner
 - **Question:** the named quirky.structured plugin has no UI module; transcript ownership differs from runtime ownership
-- **Options:** invent a structured plugin UI; skip its visible surface; own the two existing Session transcript renderers
-- **Chose:** StructuredView.tsx and MessageRow.tsx plus necessary semantic test selectors, leaving all other Session UI and full Session lint enrollment with concurrent ui-restyle-agents
-- **Why:** this is the real user-visible Structured surface; a new parallel UI or empty lint-only change would not fulfill the item
-- **Evidence:** plugins/quirky.session/src/window/StructuredView.tsx:1-121; MessageRow.tsx:1-29; queue status lane1 owns ui-restyle-agents; accepted one-off terminal message a1baa8bc-208a-4837-a64d-09c575394c2a
+- **Options:** invent a structured plugin UI; skip its visible surface; reuse the existing Session transcript restyle from its actual owner
+- **Chose:** reuse Lane1's committed StructuredView.tsx, MessageRow.tsx and structured-view.test.ts in 6c1b22c9 via the final roadmap catch-up; no duplicate worker. Lane1 retains full Session lint enrollment/dependency
+- **Why:** Lane1 explicitly reported these files already changed/committed and typechecked, and will not rewrite them further. The real Structured surface is covered without conflicting implementations
+- **Evidence:** plugins/quirky.session/src/window/StructuredView.tsx:1-121; MessageRow.tsx:1-29; Lane1 coordination interjection in this session; commit6c1b22c9 on build/ui-restyle-agents
 - **Reversibility:** easy
 - **Confidence:** high
-- **Revisit if:** the concurrent owner reports overlapping already-written source
+- **Revisit if:** the source merge does not contain these committed renderers or violates their existing behavioral contracts
 - **Source:** assumed — autonomous
 
 ## D4: Add a shared read-only preview primitive instead of retaining plugin CSS

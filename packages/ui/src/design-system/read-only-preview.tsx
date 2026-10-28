@@ -12,6 +12,11 @@ const previewCsp = [
 
 const previewStyles = `${tokenStyles}
 body { margin: 0; padding: var(--ui-space-8); color: var(--ui-text); background: var(--ui-surface); font: var(--ui-font-body)/1.5 system-ui, sans-serif; overflow-wrap: anywhere; }
+* { box-sizing: border-box; }
+h1, h2, h3, h4, h5, h6 { margin: var(--ui-space-12) 0 var(--ui-space-6); font-size: var(--ui-font-title); line-height: 1.4; }
+p, pre, blockquote, ul, ol, table { margin-block: var(--ui-space-8); }
+ul, ol { padding-inline-start: var(--ui-space-24); }
+hr { border: 0; border-top: var(--ui-border-width) solid var(--ui-border); margin-block: var(--ui-space-12); }
 pre { overflow: auto; white-space: pre-wrap; }
 code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: var(--ui-font-mono); }
 table { border-collapse: collapse; }

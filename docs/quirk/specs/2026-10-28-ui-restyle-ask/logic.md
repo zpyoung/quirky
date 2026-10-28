@@ -85,7 +85,7 @@ None. No new flows or APIs are proposed.
 Use the `@quirky/ui` public exports and `--ui-*` semantic tokens. Reuse Button/IconButton/TextField/TextArea/SelectField/FormRow/Tabs/Badge/StatusDot/SectionHeader/EmptyState/Dialog as appropriate. Native checkboxes/radios remain semantic children of shared form rows when no dedicated shared primitive exists. Structural inline layout may use unitless flex/grid values, percentages and shared tokens, never local CSS strings or raw pixel/color literals.
 
 
-The actual Structured transcript is owned by `quirky.session/src/window/StructuredView.tsx` and `MessageRow.tsx`; these two files are in scope even though the runtime owner is `quirky.structured`. The concurrent `ui-restyle-agents` owner retains the remaining Session UI and full Session lint enrollment. Coordinate these disjoint slices without copying uncommitted foreign edits.
+The actual Structured transcript is owned by `quirky.session/src/window/StructuredView.tsx` and `MessageRow.tsx`. Lane1 already restyled and committed these and their behavioral test in `6c1b22c9`; reuse that committed source through the final roadmap catch-up, rather than dispatching a duplicate writer. The concurrent `ui-restyle-agents` owner retains the remaining Session UI and full Session lint enrollment.
 
 Shared additive contract: `ReadOnlyPreview({ sanitizedHtml: string, title: string })` in `@quirky/ui` owns the static iframe document stylesheet, inherited dark/light theme, fixed networkless/scriptless CSP and empty sandbox. Ask retains its existing sanitizer and passes only its sanitized HTML. This removes the plugin-owned preview stylesheet without weakening its security boundary.
 No schema/type/API signature change, store migration or protocol cutover. No new shared abstraction unless an actual missing shared primitive prevents faithful presentation. Parent integrates package dependencies/lock, canonical lint list and plugin README notes. Workers may modify only their assigned UI files and necessary semantic selectors in existing behavioral tests; no source-text/appearance/default-copy tests. Preserve existing behavior tests; do not run them under this phase.
@@ -96,4 +96,4 @@ Self-review: SC1–SC5 cover the three owned UI slices and enforcement; each ret
 
 ## Status & amendments
 
-2026-10-28: combined spec accepted autonomously from the approved design and queue title; no separate tech spec/review under authoritative build-first LOOP.
+2026-10-28: combined spec accepted autonomously from the approved design and queue title; no separate tech spec/review under authoritative build-first LOOP. Structured source ownership clarified after Lane1 reported its already-committed implementation; no behavior or acceptance scope changed.
