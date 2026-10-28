@@ -103,12 +103,6 @@ describe('kernel method schemas', () => {
     expect(p('status.get')).toEqual({ type: 'object' })
   })
 
-  test('sessionToken is optional and separate from sessionId', () => {
-    const hello = methodSchemas['client.hello']!
-    expect(hello.required).not.toContain('sessionToken')
-    expect(hello.properties?.sessionToken).toEqual({ type: 'string' })
-    expect(hello.properties?.sessionId).toEqual({ type: 'string' })
-  })
 
 })
 

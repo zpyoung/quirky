@@ -470,12 +470,16 @@ export async function startNativeControlFixture(): Promise<NativeControlFixture>
         const attached = await waitForReady<AttachedWorker>(`live structured worker attachment for ${watcherId}`, WORKER_READY_TIMEOUT_MS, async (): Promise<ReadyObservation<AttachedWorker>> => {
           const detail = await client!.callAny('quirky.heimdall/detail', { target: { watcherId } }) as WatcherDetail | null
           if (!detail) return { ready: false, observed: 'public detail returned null before worker attachment' }
+          const startAttempt = detail.journal.findLast(entry => entry.kind === 'attempt')
+          if (startAttempt?.resolved && startAttempt.effect === 'not-landed') {
+            throw new Error(`worker start was positively rejected: ${JSON.stringify({ status: detail.status, attemptId: startAttempt.attemptId, reason: startAttempt.reason, detail: startAttempt.detail })}`)
+          }
           const worker = detail.workers.find(candidate =>
             candidate.state === 'live' &&
             typeof candidate.identity.sessionId === 'string' &&
             typeof candidate.identity.processIncarnation === 'string'
           )
-          if (worker) {
+          if (worker && startAttempt?.resolved && startAttempt.effect === 'landed') {
             const sessionId = worker.identity.sessionId
             const processIncarnation = worker.identity.processIncarnation
             if (typeof sessionId === 'string' && typeof processIncarnation === 'string') {
@@ -513,14 +517,14 @@ export async function startNativeControlFixture(): Promise<NativeControlFixture>
           return { ready: false, observed: JSON.stringify({ live, providerPid: pidText || null, status: detail.status }) }
         })
 
-        writeFileSync(triggerPath, 'send the question from the attached worker\n', { mode: 0o600 })
+        writeFileSync(triggerPath, 'send the question from the started worker\n', { mode: 0o600 })
         const asked = await waitForReady<string>(`worker question and parked watcher for ${watcherId}`, QUESTION_TIMEOUT_MS, async (): Promise<ReadyObservation<string>> => {
           const detail = await client!.callAny('quirky.heimdall/detail', { target: { watcherId } }) as WatcherDetail | null
           if (!detail) return { ready: false, observed: 'public detail returned null while waiting for worker question' }
           if (existsSync(questionSendPath)) {
             const evidence = JSON.parse(readFileSync(questionSendPath, 'utf8')) as NativeQuestionEvidence
             if (evidence.code !== 0) {
-              throw new Error(`actual worker orchestration send CLI exited ${evidence.code}\nstdout:\n${evidence.stdout}\nstderr:\n${evidence.stderr}${evidence.spawnError ? `\nspawn error: ${evidence.spawnError}` : ''}`)
+              throw new Error(`actual worker orchestration send CLI exited ${evidence.code}\nidentity: ${JSON.stringify({ expectedSessionId: attached.sessionId, actualSessionId: evidence.sessionId, tokenPresent: evidence.sessionTokenPresent })}\nstdout:\n${evidence.stdout}\nstderr:\n${evidence.stderr}${evidence.spawnError ? `\nspawn error: ${evidence.spawnError}` : ''}`)
             }
           }
           const worker = detail.workers.find(candidate =>

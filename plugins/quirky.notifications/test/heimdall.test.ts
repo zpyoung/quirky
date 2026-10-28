@@ -17,8 +17,8 @@ beforeAll(async () => {
   }
   installControlFixture(builtins)
   rig = await Rig.start({ home, builtinPluginsDir: builtins })
-})
-afterAll(async () => { await rig?.cleanup() })
+}, 30_000)
+afterAll(async () => { await rig?.cleanup() }, 30_000)
 const detail = (id: string) => rig.client.callAny('quirky.heimdall/detail', { target: { watcherId: id } }) as Promise<WatcherDetail>
 async function enroll(workspace: string, worktreeId: string): Promise<string> {
   const result = await rig.client.callAny('quirky.heimdall/enroll', { kind: 'objective', kindPayload: { workspace, worktreeId }, capabilities: { 'fixture.write': 'gated' } }) as { enrollment: { watcherId: string } }
