@@ -923,12 +923,14 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
     let worker: WorkerRow | null = null
     if (dispatch.supervised) {
       const port = this.requireWorkerPort(dispatch.id as DispatchId)
-      let state = port.stateForDispatch(this.store, dispatch.id as DispatchId)
-      if (!state) fail(this.context, 'worker_port_unavailable', `supervised Dispatch ${dispatch.id} has no worker record`, { dispatchId: dispatch.id })
+      const currentWorker = port.workerForDispatch(this.store, dispatch.id as DispatchId)
+      if (!currentWorker) fail(this.context, 'worker_port_unavailable', `supervised Dispatch ${dispatch.id} has no worker record`, { dispatchId: dispatch.id })
+      let state = currentWorker.state
       if (state === 'stopping' || state === 'stopped' || state === 'abandoned') {
         return { status: 'rejected', reason: 'dispatch_inactive', audited: true }
       }
       if (state === 'stop_unknown') {
+        if (currentWorker.stage === 'stopping') return { status: 'rejected', reason: 'dispatch_inactive', audited: true }
         port.transitionWorker(this.store, {
           dispatchId: dispatch.id as DispatchId,
           expectedState: 'stop_unknown',

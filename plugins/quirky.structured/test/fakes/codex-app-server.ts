@@ -23,7 +23,7 @@ export type CodexAppServerFixture = {
  * Writes a deterministic native-protocol app-server executable under a test's temporary home.
  * The executable accepts `app-server`, speaks JSONL on stdio, and never contacts a provider.
  */
-export function createCodexAppServerFixture(home: string, options?: { heldPrefix: string }): CodexAppServerFixture {
+export function createCodexAppServerFixture(home: string, options?: { heldPrefix?: string }): CodexAppServerFixture {
   mkdirSync(home, { recursive: true })
   const executable = join(home, 'codex-app-server-fixture')
   const logPath = join(home, 'codex-app-server.jsonl')

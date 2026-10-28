@@ -24,10 +24,12 @@ await import(${JSON.stringify(LAUNCH_AGENT)})
 await import(${JSON.stringify(native.executable)})
 `, { mode: 0o755 })
     chmodSync(codex, 0o755)
+    await e2e.call('quirky.agents/refresh', {})
+    await e2e.call('quirky.agents/setEnabled', { agent: 'codex', enabled: true })
 
     const session = await e2e.call('quirky.structured/create', {
       agent: 'codex',
-      worktree: 'floating',
+      worktree: `path:${e2e.repo}`,
       prompt: 'run the real CLI using the structured launch environment'
     }) as Session
     expect(session.kind).toBe('structured')

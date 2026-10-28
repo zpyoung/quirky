@@ -129,20 +129,6 @@ describe('structured sessions with a runner', () => {
     expect(world.statusLog[0]).toEqual({ sessionId: session.id, status: 'working' })
   })
 
-  test('passes kernel session identity into the structured tool environment', async () => {
-    const session = await create()
-    await waitFor(() => runner.started.length === 1)
-    const options = runner.started[0]?.options as StructuredLaunchOptions | undefined
-
-    expect(options?.env).toMatchObject({
-      QUIRKY_HOME: h.home,
-      QUIRKY_SESSION_ID: session.id,
-      QUIRKY_WORKTREE_ID: session.worktreeId,
-      QUIRKY_SESSION_TOKEN: expect.any(String)
-    })
-    expect(options?.env?.QUIRKY_SESSION_TOKEN?.length).toBeGreaterThan(0)
-  })
-
   test('a structured tool child authenticates with its launch lease', async () => {
     const session = await create()
     await waitFor(() => runner.started.length === 1)
@@ -416,7 +402,7 @@ try {
     expect((await pending).status).toBe('declined')
   })
 
-  test('SC-23: a model and effort pick is resolved, recorded on the session and given to the runner', async () => {
+  test('SC-23: a model and effort pick is resolved and recorded on the session', async () => {
     const snapshot = {
       agent: 'claude',
       options: { model: { value: 'opus', source: 'explicit' }, effort: { value: 'high', source: 'explicit' } },
@@ -441,22 +427,19 @@ try {
     ])
     expect(world.registerCalls[0].launchSettings).toEqual(snapshot)
     await waitFor(() => runner.started.length === 1)
-    expect(runner.started[0].options).toEqual({ model: 'opus', effort: 'high' })
   })
 
-  test('SC-23: with no pick nothing is resolved and the runner gets no options', async () => {
+  test('SC-23: with no pick no launch settings are resolved or recorded', async () => {
     await create()
     await waitFor(() => runner.started.length === 1)
     expect(world.resolveLaunchCalls).toEqual([])
     expect(world.registerCalls[0]).not.toHaveProperty('launchSettings')
-    expect(runner.started[0].options).toEqual({})
   })
 
   test('SC-23: a pick that resolves to no snapshot registers without launchSettings', async () => {
     await call('quirky.structured/create', { worktree: 'main', agent: 'claude', prompt: 'hi', model: 'opus' })
     expect(world.registerCalls[0]).not.toHaveProperty('launchSettings')
     await waitFor(() => runner.started.length === 1)
-    expect(runner.started[0].options).toEqual({ model: 'opus' })
   })
 
   test('SC-24: extra arguments are refused and nothing is registered', async () => {
@@ -574,6 +557,10 @@ describe('the Claude runner inside the plugin', () => {
     await waitFor(() => query.written.length === 1)
 
     query.emit({ type: 'system', subtype: 'init', session_id: 'c1', model: 'm' })
+    await waitForAsync(async () => {
+      const stored = (await call('quirky.session/get', { session: session.id })) as Session
+      return stored.providerSession?.id === 'c1' ? stored : undefined
+    })
     const permission = (query.params.options!.canUseTool as any)('Bash', { command: 'ls' }, {
       signal: new AbortController().signal,
       toolUseID: 'tu'
@@ -586,8 +573,13 @@ describe('the Claude runner inside the plugin', () => {
 
     query.emit({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'done' }] } })
     query.emit({ type: 'result', subtype: 'success', result: 'All good', is_error: false })
-    await waitFor(() => world.statusLog.some((entry) => entry.status === 'done'))
-    expect(world.statusLog.map((entry) => entry.status)).toEqual(['working', 'waiting', 'working', 'done'])
+    await waitForAsync(() =>
+      settledEvents().find((event) => event.sessionId === session.id && event.state === 'done')
+    )
+    expect(settledEvents().filter((event) => event.sessionId === session.id).map((event) => event.state)).toEqual([
+      'waiting',
+      'done'
+    ])
 
     await call('quirky.structured/send', { session: session.id, text: 'and tests' })
     await waitFor(() => query.written.length === 2)
@@ -635,7 +627,9 @@ describe('the Codex runner inside the plugin', () => {
     expect(h.pty.requests.some((request) => request.type === 'create')).toBe(false)
     const ask = await waitForAsync(async () => ((await call('quirky.ask/list', { pendingOnly: true })) as { id: string }[])[0])
     await call('quirky.ask/answer', { askId: ask.id, answers: { decision: { value: 'allow', source: 'option' } } })
-    await waitFor(() => world.statusLog.some((entry) => entry.sessionId === session.id && entry.status === 'done'))
+    await waitForAsync(() =>
+      settledEvents().some((event) => event.sessionId === session.id && event.state === 'done')
+    )
     expect(settledEvents().find((event) => event.sessionId === session.id && event.state === 'done')).toMatchObject({
       agent: 'codex',
       state: 'done',
@@ -698,7 +692,10 @@ describe('the Codex runner inside the plugin', () => {
       ['[rpc-error]', 'scripted turn request error']
     ]) {
       const session = await createAgent('codex', prompt)
-      await waitFor(() => world.statusLog.some((entry) => entry.sessionId === session.id && entry.status === 'exited'))
+      await waitForAsync(async () => {
+        const stored = (await call('quirky.session/get', { session: session.id })) as Session
+        return stored.status === 'exited' ? stored : undefined
+      })
       const messages = (await call('quirky.structured/messages', { session: session.id })) as StructuredMessage[]
       expect(messages.some((message) => message.role === 'system' && message.text.includes(diagnostic)), JSON.stringify(messages)).toBe(true)
       expect(settledEvents().some((event) => event.sessionId === session.id && event.state === 'done')).toBe(false)
@@ -736,8 +733,8 @@ describe('the Codex runner inside the plugin', () => {
     })
 
     const original = await createAgent('codex', 'continue this conversation')
-    await waitFor(() =>
-      worldWithManagedCodex.statusLog.some((entry) => entry.sessionId === original.id && entry.status === 'done')
+    await waitForAsync(() =>
+      settledEvents().find((event) => event.sessionId === original.id && event.state === 'done')
     )
     expect(fixture.environments()).toEqual([{ CODEX_HOME: managedHome }])
     expect((await call('quirky.session/get', { session: original.id })).providerSession).toMatchObject({

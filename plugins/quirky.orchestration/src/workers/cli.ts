@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import type { CliArgs, CliContext, CliModule } from '@quirky/protocol'
 import type { MutationResult } from '../contracts'
 import type { WorkerControlResult, WorkerListResult, WorkerReadResult, WorkerShowResult, WorkerStartReceipt } from '../worker-contracts'
@@ -45,7 +46,7 @@ export const workerCommands: CliModule['commands'] = {
       if (!Array.isArray(dependencies) || dependencies.some((value) => typeof value !== 'string')) throw ctx.usage('--deps must be a JSON array of Task IDs')
       params.dependencyTaskIds = dependencies
     }
-    const receipt = await ctx.call('quirky.orchestration/workerStart', params) as MutationResult<WorkerStartReceipt>
+    const receipt = await ctx.call('quirky.orchestration/workerStart', params, { requestId: randomUUID() }) as MutationResult<WorkerStartReceipt>
     ctx.out.result(receipt, () => startText(receipt))
     if (receipt.state !== 'ready') throw ctx.fail(`Worker ${receipt.dispatchId} did not reach ready; inspect the printed receipt.`)
   },
@@ -76,7 +77,7 @@ export const workerCommands: CliModule['commands'] = {
   ...Object.fromEntries(Object.entries(CONTROL_METHODS).map(([verb, method]) => [verb, async (args: CliArgs, ctx: CliContext) => {
     const params: Record<string, unknown> = { requestId: ctx.requestBase, contractVersion: 1, dispatchId: args.flags.dispatch }
     if (args.flags.from !== undefined) params.from = args.flags.from
-    const result = await ctx.call(`quirky.orchestration/${method}`, params) as MutationResult<WorkerControlResult>
+    const result = await ctx.call(`quirky.orchestration/${method}`, params, { requestId: randomUUID() }) as MutationResult<WorkerControlResult>
     ctx.out.result(result, () => controlText(result))
     if (result.state === 'stop_unknown' || result.state === 'release_unknown') throw ctx.fail(`Worker ${result.dispatchId} outcome is uncertain; inspect the printed receipt.`)
   }]))

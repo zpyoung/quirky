@@ -33,8 +33,8 @@ export class ConnectionLostError extends Error {
  */
 export interface DaemonLink {
   readonly requestBase: string
-  call<M extends MethodName>(method: M, params: ParamsOf<M>, options?: Pick<CallOptions, 'timeoutMs'>): Promise<ResultOf<M>>
-  callAny(method: string, params: Record<string, unknown>, options?: Pick<CallOptions, 'timeoutMs'>): Promise<unknown>
+  call<M extends MethodName>(method: M, params: ParamsOf<M>, options?: Pick<CallOptions, 'requestId' | 'timeoutMs'>): Promise<ResultOf<M>>
+  callAny(method: string, params: Record<string, unknown>, options?: Pick<CallOptions, 'requestId' | 'timeoutMs'>): Promise<unknown>
   reconnect(): Promise<void>
   close(): void
 }
@@ -60,9 +60,8 @@ const isConnectionLost = (error: unknown) => error instanceof Error && error.nam
 
 /**
  * Connects on first use, so commands that fail validation or print help never touch the daemon.
- * Every call carries a request ID (`<base>:<hash of method>#<k>`) so a reply lost to a dropped
- * connection is resent under the same ID and the daemon returns the first outcome. A destructive
- * method that needs confirmation waits for the answer in Quirky, then repeats under a new ID.
+ * Calls without an explicit transport ID use `<base>:<method-hash>#<k>`; each selected ID is
+ * reused across connection-loss resends, while confirmation retries use a fresh ID.
  */
 export function createDaemonLink(connect: () => Promise<QuirkyClient>, options: DaemonLinkOptions = {}): DaemonLink {
   const base = options.requestBase ?? randomUUID()
@@ -94,9 +93,9 @@ export function createDaemonLink(connect: () => Promise<QuirkyClient>, options: 
   const attempt = async (
     method: string,
     params: Record<string, unknown>,
-    callOptions?: Pick<CallOptions, 'timeoutMs'>
+    callOptions?: Pick<CallOptions, 'requestId' | 'timeoutMs'>
   ): Promise<unknown> => {
-    const requestId = nextRequestId(method)
+    const requestId = callOptions?.requestId ?? nextRequestId(method)
     for (let resends = 0; ; resends++) {
       try {
         const client = await get()
@@ -131,7 +130,7 @@ export function createDaemonLink(connect: () => Promise<QuirkyClient>, options: 
   const invoke = async (
     method: string,
     params: Record<string, unknown>,
-    callOptions?: Pick<CallOptions, 'timeoutMs'>
+    callOptions?: Pick<CallOptions, 'requestId' | 'timeoutMs'>
   ): Promise<unknown> => {
     const sent = needsYes(method) ? { ...params, yes: true } : params
     let result: unknown
@@ -143,7 +142,10 @@ export function createDaemonLink(connect: () => Promise<QuirkyClient>, options: 
       options.stderr?.(`confirm in Quirky: ${pending.action} (ask ${pending.askId}); or rerun with --yes\n`)
       const envelope = await awaitAnswer(pending.askId)
       if (envelope.status === 'declined') throw new RpcError(RpcErrorCode.Conflict, 'declined')
-      return attempt(method, { ...sent, confirmation: pending.askId }, callOptions)
+      const confirmationOptions = callOptions?.requestId === undefined
+        ? callOptions
+        : { ...callOptions, requestId: randomUUID() }
+      return attempt(method, { ...sent, confirmation: pending.askId }, confirmationOptions)
     }
     if (method === 'api.describe') learnDestructive(result)
     return result

@@ -93,6 +93,41 @@ Codex stop bounds its final pipe cleanup even when an independently detached chi
 output descriptor. Its process group is the execution ownership boundary; it does not adopt
 independently detached services.
 
+## Heimdall kernel and service-owned Runs
+
+`quirky.heimdall` runs bounded watchers supplied by registered kind plugins. A kind owns its
+authorization, observation, decision, execution and stop hooks; the kernel owns scheduling,
+capability gates, durable attempts, budgets and recovery. Register through `quirky.heimdall/registerKind`,
+then use `enroll`, `inspect` and `reconcile`. Hook and result types are defined in
+[`contracts.ts`](quirky.heimdall/src/contracts.ts).
+
+Enrollment is unique per canonical workspace. Re-enrollment preserves watcher identity;
+re-arming an operator-disarmed watcher starts a new budget generation. Work in flight counts
+toward active time without double-counting overlaps. Background workers require positive live
+identity and an active assignment to count. Missing contact, an idle prompt or a lost reply does
+not prove completion. Unknown effects retain their durable request identity.
+
+Headless plugins use the eight `quirky.orchestration` service methods through `PluginContext.call`:
+
+- `serviceRunCreate` creates a stable Run for the authenticated plugin and its key. It does not
+  invent a coordinator session.
+- `serviceRunShow` reads owned worker identities and blocking Ask threads without consuming mail
+  or changing consumer generations.
+- `serviceWorkerStart` starts an attested worker in an explicit workspace. `serviceSend` sends
+  guidance with the Run as sender; `serviceCheck` consumes and acknowledges owned Run deliveries.
+- `serviceReply` answers a pending blocking Ask. `serviceWorkerStop` requires the exact session
+  and process incarnation; `serviceWorkerRelease` uses settled-outcome, archive and custody guards.
+
+Another plugin cannot read or control that service-owned Run. Ordinary worker CLI commands keep
+their native launch authority; they do not receive the service principal. See
+[`services/contracts.ts`](quirky.orchestration/src/services/contracts.ts) for request and result types.
+
+Watcher state, attempt facts, a bounded diagnostic trace ring and terminal summaries live in the
+plugin's private store; unresolved attempt traces remain pinned. A newer unknown store version
+remains inspectable but cannot execute work. Removing a
+watcher removes its own history, not its workers. Automatic OS sleep/wake binding is not installed
+by this plugin.
+
 ## Shared checks
 
 `quirky.checks` executes local shell commands independently of agent sessions:

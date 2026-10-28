@@ -36,7 +36,11 @@ export async function startWorkerAcceptance(options: { heldPrefix?: string } = {
   try {
     fixture.addFake('claude')
     const launcher = join(fixture.fakebin, 'claude')
-    writeFileSync(launcher, `#!${process.execPath}\nimport ${JSON.stringify(AGENT)}\n`)
+    writeFileSync(launcher, `#!${process.execPath}
+if (process.argv.includes('--version') || process.argv.includes('-v')) { console.log('Claude Code 2.1.80'); process.exit(0) }
+process.stdout.write('\\x1b[?2004h')
+await import(${JSON.stringify(AGENT)})
+`)
     chmodSync(launcher, 0o755)
     const native = createCodexAppServerFixture(join(fixture.userHome, 'native-codex'), options)
     const codex = join(fixture.fakebin, 'codex')
@@ -49,6 +53,8 @@ process.on('SIGHUP', () => { control.stop(); process.exit(0) })
 await import(${JSON.stringify(native.executable)})
 `)
     chmodSync(codex, 0o755)
+    await fixture.call('quirky.agents/refresh', {})
+    await fixture.call('quirky.agents/setEnabled', { agent: 'codex', enabled: true })
     const coordinator = await fixture.call('quirky.session/create', { worktree: `path:${fixture.repo}`, agent: 'claude', title: 'Fixture coordinator' }) as Session
     await eventually(() => existsSync(join(fixture.home, 'worker-fixture', `${coordinator.id}.events.jsonl`)), Boolean, 'coordinator process to start')
     const cli = async (session: string, args: string[], timeout = 30_000): Promise<CliResult> => {

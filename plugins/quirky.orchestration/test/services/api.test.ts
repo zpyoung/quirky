@@ -526,8 +526,10 @@ describe('exact worker controls and guarded release', () => {
       runId: run.id, dispatchId, requestId: requestId(), contractVersion: 1
     }))
     expect(released.state).toBe('released')
-    const archive = record(released.archive)
-    expect(archive.status).toBe('captured')
+    const archive = record(await harness.call('quirky.orchestration/workerRead', { dispatchId, source: 'terminal' }))
+    expect(archive.archived).toBe(true)
+    expect(archive.sourceExact).toBe(true)
+    expect(archive.sessionId).toBe(stableIdentity.sessionId)
 
     const after = parseRunDetail(await callAs(harness, 'a', 'serviceRunShow', { runId: run.id })).workers
       .find((candidate) => candidate.dispatchId === dispatchId)
