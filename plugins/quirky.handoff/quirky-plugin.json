@@ -19,6 +19,41 @@
   "contributes": {
     "method": [
       {
+        "id": "openArchived",
+        "description": "Opens the handoff owner's window dialog on an archived provider source, without treating its provider ID as a live Quirky session.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "source": {
+              "type": "object",
+              "properties": {
+                "archived": {
+                  "type": "object",
+                  "properties": {
+                    "agent": { "type": "string" },
+                    "providerSessionId": { "type": "string" },
+                    "transcriptPath": { "type": "string" },
+                    "title": { "type": "string" },
+                    "worktree": { "type": "string" },
+                    "cwd": { "type": "string" },
+                    "prompt": { "type": "string" },
+                    "lastMessage": { "type": "string" }
+                  },
+                  "required": ["agent"]
+                }
+              },
+              "required": ["archived"]
+            }
+          },
+          "required": ["source"]
+        },
+        "result": {
+          "type": "object",
+          "properties": { "opened": { "type": "boolean" } },
+          "required": ["opened"]
+        }
+      },
+      {
         "id": "prepare",
         "description": "Everything the dialog needs to open on a source: where it can go, the available agents, the controls seeded from the source's draft and the remembered choices, and the templates. Refuses a source with no session context (reason no-context).",
         "params": {
@@ -1310,6 +1345,14 @@
         }
       }
     ],
+    "handoff": [
+      {
+        "id": "vault",
+        "description": "Public archived-source capability used by Agent Session History.",
+        "method": "quirky.handoff/openArchived",
+        "supportsArchivedSource": true
+      }
+    ],
     "event": [
       {
         "id": "delivery",
@@ -1727,6 +1770,37 @@
           "required": [
             "session"
           ]
+        }
+      },
+      {
+        "id": "open-archived",
+        "title": "Hand Off Archived Session",
+        "description": "Opens the Continue in New Session dialog on an archived provider source.",
+        "args": {
+          "type": "object",
+          "properties": {
+            "source": {
+              "type": "object",
+              "properties": {
+                "archived": {
+                  "type": "object",
+                  "properties": {
+                    "agent": { "type": "string" },
+                    "providerSessionId": { "type": "string" },
+                    "transcriptPath": { "type": "string" },
+                    "title": { "type": "string" },
+                    "worktree": { "type": "string" },
+                    "cwd": { "type": "string" },
+                    "prompt": { "type": "string" },
+                    "lastMessage": { "type": "string" }
+                  },
+                  "required": ["agent"]
+                }
+              },
+              "required": ["archived"]
+            }
+          },
+          "required": ["source"]
         }
       },
       {

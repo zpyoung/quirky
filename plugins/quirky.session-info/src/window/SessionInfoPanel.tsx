@@ -95,6 +95,9 @@ function IdentityContent({ state, copied, action }: { state: PanelState; copied:
   const buttons = [
     ...(identity.providerSessionId ? [<button key="copy" type="button" aria-label="Copy ID" style={BUTTON_STYLE} onClick={() => void action('copy-id', state.session)}>{copied?.session === state.session && copied.kind === 'id' ? 'Copied' : 'Copy ID'}</button>] : []),
     <button key="history" type="button" aria-label="Open history" style={BUTTON_STYLE} onClick={() => void action('open-history', state.session)}>Open history</button>,
+    ...(identity.providerSessionId ? [
+      <button key="vault" type="button" aria-label="Open Vault" style={BUTTON_STYLE} onClick={() => void action('open-vault', state.session)}>Open Vault</button>
+    ] : []),
     ...(state.pane === null ? [] : [<button key="focus" type="button" aria-label="Focus pane" style={BUTTON_STYLE} onClick={() => void action('focus-pane', state.session)}>Focus pane</button>]),
     ...(identity.transcriptPath ? [
       <button key="transcript" type="button" aria-label="Open transcript" style={BUTTON_STYLE} onClick={() => void action('open-transcript', state.session)}>Open transcript</button>,
@@ -417,6 +420,15 @@ export function SessionInfoPanel({ context, report }: Props) {
     if (session === null) return
     setActionError(null)
     try {
+      if (name === 'open-vault') {
+        const identity = projectionRef.current?.info?.identity
+        if (!identity?.providerSessionId) throw new Error('This session has no provider ID to open in the Vault.')
+        await context.executeCommand('command:quirky.vault/open', {
+          agent: identity.agent,
+          sessionId: identity.providerSessionId
+        })
+        return
+      }
       await context.executeCommand(`command:quirky.session-info/${name}`, { session })
     } catch (error) {
       if (aliveRef.current) setActionError(messageOf(error))

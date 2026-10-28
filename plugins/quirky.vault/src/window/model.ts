@@ -50,15 +50,20 @@ export type VaultViewReport = {
   focusedSearch: boolean
   group: ViewState['group']
   disabledAgents: string[]
+  browseSort: ViewState['browseSort']
+  searchSort: ViewState['searchSort']
   hideEmptySessions: boolean
   sessionLimit: ViewState['sessionLimit']
+  adjustmentCount: number
   visibleIds: string[]
+  listedCount: number
   total: number
   loading: boolean
   searchEnabled: boolean
   hostIssues: number
   sourceIssues: number
   status: string | null
+  searchError: string | null
 }
 
 export type VaultRow = {
@@ -151,6 +156,12 @@ function worktreeFrom(layout: UiLayout): string | null {
   const input = asRecord(layout.view?.input)
   const worktree = input.worktree
   return typeof worktree === 'string' && worktree.trim() !== '' ? worktree : null
+}
+
+function repoFrom(layout: UiLayout): string | null {
+  const input = asRecord(layout.view?.input)
+  const repo = input.repo
+  return typeof repo === 'string' && repo.trim() !== '' ? repo : null
 }
 
 
@@ -279,7 +290,24 @@ export class VaultWindowModel {
     const generation = ++this.scopeGeneration
     const worktreeSelector = worktreeFrom(layout)
     if (worktreeSelector === null) {
-      this.update({ scope: { ...this.snapshot.scope, loading: false } })
+      const repoSelector = repoFrom(layout)
+      if (repoSelector === null) {
+        this.update({ scope: { worktree: null, repo: null, worktreeName: null, repoName: null, loading: false } })
+        return
+      }
+      this.update({ scope: { worktree: null, repo: null, worktreeName: null, repoName: null, loading: true } })
+      if (!this.snapshot.repoRows.some((repo) => repo.id === repoSelector)) await this.loadRepositories()
+      if (generation !== this.scopeGeneration || this.stopped) return
+      const repo = this.snapshot.repoRows.find((entry) => entry.id === repoSelector)
+      this.update({
+        scope: {
+          worktree: null,
+          repo: repo?.id ?? null,
+          worktreeName: null,
+          repoName: repo?.name ?? null,
+          loading: false
+        }
+      })
       return
     }
     this.update({ scope: { ...this.snapshot.scope, loading: true } })
@@ -397,9 +425,10 @@ export class VaultWindowModel {
     this.scanStartedAt = Date.now()
     this.update({ list: { result: null, loading: true, error: null }, scanProgress: { phase: 'discovering', scannedFiles: 0, parsedFiles: 0 } })
     try {
+      const within = this.within()
       const result = await this.context.call('quirky.vault/list', {
         host: view.host,
-        ...(this.within() ?? {}),
+        ...(within && Object.keys(within).length ? { within } : {}),
         agents,
         ...(view.sessionLimit === null ? { unlimited: true } : { limit: view.sessionLimit }),
         force,
@@ -421,7 +450,7 @@ export class VaultWindowModel {
     }
   }
 
-  async runSearch(options: { cursor?: string; append?: boolean } = {}): Promise<void> {
+  async runSearch(options: { cursor?: string; append?: boolean; freshness?: SearchRequest['freshness'] } = {}): Promise<void> {
     const view = this.snapshot.view
     const agents = this.selectedAgents()
     if (!this.snapshot.searchStatus?.enabled || view.query.trim() === '' || agents.length === 0) {
@@ -440,15 +469,20 @@ export class VaultWindowModel {
       host: view.host,
       limit: 20,
       ...(options.cursor ? { cursor: options.cursor } : {}),
+      ...(options.freshness ? { freshness: options.freshness } : {}),
       filters: { agents, sort: view.searchSort },
       ...(within && Object.keys(within).length ? { within } : {})
     }
-    this.update({ search: { ...this.snapshot.search, loading: true, error: null } })
+    this.update({
+      search: options.cursor
+        ? { ...this.snapshot.search, loading: true, error: null }
+        : { response: null, loading: true, error: null }
+    })
     try {
       const response = await this.context.call('quirky.vault/search', request as unknown as Record<string, unknown>) as SearchResponse
       if (this.stopped || generation !== this.searchGeneration) return
       if (response.kind === 'stale-cursor' && options.cursor) {
-        await this.runSearch()
+        await this.runSearch({ freshness: options.freshness })
         return
       }
       if (options.append && response.kind === 'results' && this.snapshot.search.response?.kind === 'results') {
