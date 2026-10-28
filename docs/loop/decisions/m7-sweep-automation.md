@@ -187,5 +187,49 @@
 - **Revisit if:** scopes overlap or provider composition changes existing methods.
 - **Source:** assumed — autonomous
 
+## D18: Preserve both loop and Heimdall indicators in the roadmap catch-up
+- **Question:** Which status-slot behavior wins the single Tree merge conflict?
+- **Options:** keep only loop/normal glyph; keep only incoming normal/Heimdall glyph; combine independent indicators.
+- **Chose:** unread-or-loop-or-normal primary slot plus the incoming independent HeimdallGlyph. Preserve all auto-merged worktree membership/navigation and fleet metadata.
+- **Why:** The loop indicator replaces ordinary session status, not supervisor ownership. Heimdall's public fleet presentation is a distinct contribution; dropping either would erase a landed feature.
+- **Evidence:** conflict Tree.tsx:122-127; merge698a9d69 from canonical93ea5d00; SweepCatchupDecisions read Heimdall control D1–D15, owner D1–D43, terminal sweep D1–D20, hosting sweep D1–D12.
+- **Reversibility:** easy
+- **Confidence:** high for faithful source composition; merged acceptance gates running.
+- **Revisit if:** composed visible sidebar or fleet consumer test contradicts the two independent indicators.
+- **Source:** locked by docs/loop/decisions/m6-heimdall-control.md D6 and docs/loop/decisions/m6-heimdall-owner.md D35
+
+## D19: Wait for actual attached presentation, not just durable loop state
+- **Question:** Why did the real window test see running state with a detached presentation immediately after view creation?
+- **Options:** force synchronous UI refresh in the daemon method; wait for the actual requested presentation in the test.
+- **Chose:** the integration readiness predicate checks presentation as well as loop ID/state/count. A readiness timeout throws with the latest report; it never returns a failed predicate result.
+- **Why:** A loop can truthfully be running before its hosted view exists. Public openViewTab broadcasts layout invalidation, and the window projects it asynchronously. Durable running alone did not prove the requested attached refresh had completed.
+- **Evidence:** bg20 expected running/got detached at unchanged identity/count; corrected bg21 real daemon/window1pass0fail16assertions4.76s. Sidebar rendered5/0/57 and summaries whole-file3/0/39 also passed; no provider/shell adoption or focus assertion was weakened.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a predicate including attached presentation still fails after a real successful hosted-view operation.
+- **Source:** assumed — autonomous
+
+## D20: Apply the operator's build-first override and typecheck-only landing
+- **Question:** What remains after the user moved all testing/debugging to the end phase?
+- **Options:** continue planned build/dogfood/review; stop those phases and land typed implementation now.
+- **Chose:** stop every unstarted suite, dogfood, review and test-failure fix. Keep written acceptance tests and completed receipts. Add at most one follow-up containing only the three unbuilt flow groups from D9. Run typecheck and canonical land only.
+- **Why:** The priority operator instruction and authoritative LOOP Build first, test at the end section expressly override the prior workflow for in-progress items.
+- **Evidence:** authoritative `git show build/roadmap:docs/loop/LOOP.md` re-read after operator interjection; canonical land now verifies typecheck only. No owned test/review/browser/daemon job was still running at the switch.
+- **Reversibility:** easy
+- **Confidence:** high for instruction compliance; visible UI and final-code-review clearance are not claimed.
+- **Revisit if:** m7-test-triage starts the end phase.
+- **Source:** supersedes m7-sweep-automation D7 (workflow only)
+
+## D21: Repair only the observed type errors and retain exact earlier test evidence
+- **Question:** What did the pre-override merged gate actually finish?
+- **Options:** call the entire chained command green; disclose finished stages and repair its two type diagnostics.
+- **Chose:** retain affected suite234remote+2macOS pass with flaky:[], scripts68pass0fail580assertions, and the initial typecheck failure. Fix SVG title typing with a titled accessible span around the decorative SVG; remove the unnecessary test timer override whose DOM/Bun/Node overload cast failed. No assertions or inner watchdogs changed.
+- **Why:** Typecheck rejected SVGProps.title and an overloaded setInterval cast. The queued build never ran because the chain stopped. No further test execution follows the operator switch.
+- **Evidence:** bg22/artifact57 exit2, duration1905.75s; bg23 `bun run typecheck` exit0 in20.87s,596installs610packages unchanged. Previously written tests retain their earlier receipts, not a post-typing-fix rerun.
+- **Reversibility:** easy
+- **Confidence:** high for typed source; no built-web or final independent review result.
+- **Revisit if:** canonical merge-result typecheck reports an actual integration diagnostic.
+- **Source:** assumed — autonomous
+
 ## Progress
-All implementation/test workers returned and full wave scope/HEAD audit passed; no cross-component source writes or worker commits. Menu accepted component066bc6c4, green7/0/59. Compact provider final whole-file gate running bg19 after lifecycle1/0/30 and separate params/CLI passes; next commit provider and merge it into sidebar worktree for actual API acceptance. Sidebar rendered gate is5/0/57 after catalog-ready repair, API fixture sentinel corrected. Root still has parent-owned spec/decision clarifications only; no source merge/catch-up/build/web service yet. Next: finish integrated API check, commit/merge three components, catch up roadmap/read incoming decisions, required affected/scripts/types/build, built visible smoke, three-lens deep Gemini final round plus one fix batch, staged single completion follow-up, canonical land.
+Ready for operator-directed landing: source components merged and roadmap catch-up698a9d69 complete; initial merged affected suite/scripts passed, two type errors corrected, final local typecheck bg23 passes. Operator override stops all further tests/dogfood/review/debugging. Commit remaining source/docs and register only the single staged unbuilt-flow completion item, detach and invoke canonical queue.ts land m7-sweep-automation. No owned service/browser/agent remains active; prepared smoke/review scripts were never run and make no clearance claim. Remove merged component worktrees and scratch after authoritative landing; preserve inherited root .serena/.

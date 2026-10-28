@@ -1,5 +1,5 @@
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
-import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from 'bun:test'
+import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test'
 import type { ProjectGroup, QuirkyEvent, Repo, UiLayout, UiPluginContext, Worktree } from '@quirky/protocol'
 import { act } from 'react'
 
@@ -165,9 +165,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 let activate: (context: UiPluginContext) => void
-let realSetInterval: typeof globalThis.setInterval
-let realClearInterval: typeof globalThis.clearInterval
-let nextIntervalId = 0
 const cleanups: Array<() => Promise<void>> = []
 
 beforeAll(async () => {
@@ -180,18 +177,9 @@ afterAll(async () => {
   await GlobalRegistrator.unregister()
 })
 
-beforeEach(() => {
-  nextIntervalId = 0
-  realSetInterval = globalThis.setInterval
-  realClearInterval = globalThis.clearInterval
-  globalThis.setInterval = (() => ++nextIntervalId as unknown as ReturnType<typeof setInterval>) as typeof globalThis.setInterval
-  globalThis.clearInterval = (() => {}) as typeof globalThis.clearInterval
-})
 
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0)) await cleanup()
-  globalThis.setInterval = realSetInterval
-  globalThis.clearInterval = realClearInterval
   document.body.innerHTML = ''
 })
 

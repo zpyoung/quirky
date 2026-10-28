@@ -2,9 +2,11 @@
 
 ## Status & amendments
 
-Status: autonomous design approved under LOOP.md; technical specification required because the sidebar change crosses plugin boundaries. Combined Codex promote/refute review completed; F1's stale-needs-you ambiguity is resolved below. Same-family spec review has reduced independence; final code review uses Gemini.
+Status: local menu, compact summary API/CLI and sidebar changes implemented. Operator's build-first override now requires typecheck-only landing; further suites, dogfood, review and test-failure debugging belong to the end phase. Existing regression receipts are historical evidence, not a full parity or visible-UI approval.
 
 Amendments: 2026-10-28 — initial specification. Codex F1: stale or disconnected summary evidence overrides every cached state to unverifiable, including needs-you; fresh needs-you still outranks unknown attachment.
+
+2026-10-28 — operator moved all further testing/debugging to the end phase. Preserve built flows and written tests; land after typecheck. The single completion follow-up contains only unbuilt provenance/mobile-loop/remote-ledger flows, not verification or review work.
 
 ## Purpose
 
@@ -97,7 +99,7 @@ Each row covers the named feature-document sections and their edge cases; existi
 
 ## Verification
 
-New behavioral regression tests drive the rendered components and real daemon/window APIs. A built web run uses fresh HOME/QUIRKY_HOME, seeded disabled automation and controlled loop provider fixture. Exercise S1–S3 through visible UI, not API actions during goals; S4 uses rendered/headless-window fault and stale-response regressions because no user-visible transport-drop control exists. Public summaries and unchanged ledger lifecycle run through real daemon API/CLI. Run affected suites for Automations, Loops, Worktree and direct importers, `bun test scripts`, and `bun run typecheck`; canonical queue land owns the full merged suite. Stop every owned process and delete temporary homes.
+The operator's later build-first instruction supersedes the planned verification campaign: no further suite, dogfood, review or test-failure fixes run for this item. Before that instruction, new rendered/daemon regressions passed, the merged affected suite passed234remote files plus2macOS files with no retries, and scripts passed68tests. The following typecheck found two typing errors, corrected without changing behavior assertions. Final source must pass `bun run typecheck`; canonical land now checks typecheck only. No packaged build, built-web dogfood, real CLI smoke or final independent review is claimed. The end phase owns that work without a new verification follow-up.
 
 ## Non-goals
 
