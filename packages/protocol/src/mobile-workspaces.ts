@@ -31,8 +31,21 @@ export type MobileMarkdownDocument = {
   tabId: string
   worktreeId: string
   title: string
+  relativePath: string
   text: string
   revision: number
   dirty: boolean
   readOnly: boolean
+}
+
+/** Latest-only JPEG Watch frame; data is base64 capped at 512 KiB before the page bridge. */
+export type MobileBrowserFrame = {
+  tabId: string
+  worktreeId: string
+  watchId: string
+  sequence: number
+  width: number
+  height: number
+  mimeType: 'image/jpeg'
+  data: string
 }
