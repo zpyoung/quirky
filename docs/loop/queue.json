@@ -616,9 +616,8 @@
         "m5-structured-runner",
         "m1-worktrees"
       ],
-      "status": "in-progress",
-      "early": true,
-      "lane": 7
+      "status": "done",
+      "early": true
     },
     {
       "id": "m5-loops-core",
@@ -644,8 +643,9 @@
       "deps": [
         "sa-browser-pane"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 3
     },
     {
       "id": "m5-automations-dispatch",
@@ -818,8 +818,7 @@
         "m1-term-daemon",
         "m1-agent-status"
       ],
-      "status": "in-progress",
-      "lane": 3
+      "status": "done"
     },
     {
       "id": "sb-mobile-app",

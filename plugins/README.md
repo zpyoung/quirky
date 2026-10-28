@@ -206,6 +206,64 @@ not an issue page pretending to be PR detail.
 Task Sources is a contributed Settings view. A boolean setting can also declare
 `"menu": "view"` for a native View-menu toggle backed by the same public setting value.
 Native clipboard, system-browser and focus effects remain pending in the nightly handoff.
+## Mobile pairing
+
+`quirky.mobile` adds the sidebar Mobile flow, **Settings > Mobile**, and the
+`quirky mobile` command group. It pairs direct LAN or tailnet clients with the
+same JSON-RPC API used by the desktop and CLI. The compatible Quirky phone app
+and its signed installation links are not distributed yet; the desktop does
+not redirect users to the incompatible Orca app or its hosted relay.
+
+```sh
+quirky mobile info --json
+quirky mobile state --json
+quirky mobile interfaces --json
+quirky mobile pair --address 192.168.1.20 --json
+quirky mobile devices --json
+quirky mobile revoke <device-uuid>
+quirky mobile configure --restore-fit-ms 60000
+quirky mobile configure --keep-phone-size
+quirky mobile open --settings
+```
+
+Treat the pairing URL and QR as credentials. Regenerating replaces the unscanned
+offer, not already-paired phones. Revocation disconnects the device immediately
+and rejects its next encrypted authentication. Device lists and state reports
+never contain tokens.
+
+Paired phones read the configured machine name and platform through
+`quirky.mobile/info`. Pairing state, generation, configuration and revocation
+remain local administration methods.
+
+The mobile-only listener starts on loopback and widens when a network offer is
+issued or a previously paired phone is restored. Its default port and fallback
+ladder are defined in
+[`transport.ts`](quirky.mobile/src/daemon/transport.ts). The desktop UI, plugin
+assets and agent hooks remain on their separate loopback listener.
+`QUIRKY_MOBILE_PORT` pins a nonzero port (`0` chooses a free test port);
+`QUIRKY_MOBILE_HOST` pins the bind address and prevents widening a pinned loopback
+listener.
+
+A phone's terminal attachment claims input and viewport ownership. Desktop output
+continues while typing is paused. Use **Take back** to restore desktop dimensions,
+or **Restore** after the phone leaves. The default retains phone dimensions until
+restored; Settings offers timed restoration. The corresponding APIs are
+`quirky.terminal/mobileState`, `/takeBack`, `/restoreFit` and `/claim`.
+
+Trusted transport plugins can use the public
+[`PluginContext.clients.accept`](../packages/protocol/src/plugins.ts) API after
+authenticating a peer. The admitted identity is immutable; authorization runs
+before each dispatch, including cached and confirmed calls. Disconnect and plugin
+revocation close its streams and subscriptions. Mobile's v2 channel seals text
+requests and binary terminal output; terminal input uses JSON-RPC, not inbound
+binary commands.
+
+Mobile views accept scriptable page input through `ui.view.open`: `stage`
+(`intro`, `install`, `pair`, `paired`), `platform`, `channel` and `address`.
+Their non-secret stage, choices, devices and error state are readable through
+`ui.state` slot reports. The live method schemas are in `quirky api --json`;
+[the behavior spec](../docs/quirk/specs/2026-10-27-sb-mobile-daemon/logic.md)
+defines the scope and limits.
 ## Create a workspace from GitHub
 
 Use the new-workspace dialog's Smart field for `#123` or a GitHub PR/issue URL.

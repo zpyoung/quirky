@@ -49,6 +49,8 @@ files, not this one.
 | hard | high | [m1-agent-status D2](decisions/m1-agent-status.md) | The status row is keyed by Quirky session, and the session ID from the hook's environment is the pane identity | assumed — autonomous |
 | hard | high | [m1-agent-status D4](decisions/m1-agent-status.md) | Orca's four states, its derived display states and its labels are kept as they are | locked by docs/roadmap.md |
 | hard | high | [m1-notifications D40](decisions/m1-notifications.md) | Approach: a daemon policy plugin that listens to producers, with markers on their records and the shell rendering | assumed — autonomous |
+| hard | high | [sb-mobile-daemon D1](decisions/sb-mobile-daemon.md) | Ship the three claimed parts together, using Quirky's JSON-RPC API | locked by docs/architecture.md |
+| hard | high | [sb-mobile-daemon D6](decisions/sb-mobile-daemon.md) | Strict v2 and bounded authorization/failures | locked by mobile.md |
 | hard | high | [m4-hosting-api-github D6](decisions/m4-hosting-api-github.md) | Keep gh as auth boundary with fail-closed per-repo binding | locked by hosting-api.md |
 | hard | high | [m4-hosting-api-github D9](decisions/m4-hosting-api-github.md) | Share one head-guarded destructive merge seam before the sitter exists | locked by docs/roadmap.md |
 | hard | high | [m0-daemon-api D7](decisions/m0-daemon-api.md) | The four kinds are `method`, `event`, `job` and `launch-hook` | assumed — autonomous |
@@ -192,6 +194,10 @@ files, not this one.
 | medium | high | [m4-sidebar-review-filters D4](decisions/m4-sidebar-review-filters.md) | Match conservative visibility and preserve activity-only hidden count | locked by sidebar-extras.md |
 | medium | high | [m2-source-control-core D8](decisions/m2-source-control-core.md) | The status record grows additively, read from porcelain v2 | assumed — autonomous |
 | medium | high | [m2-source-control-core D20](decisions/m2-source-control-core.md) | The compare base is the worktree's base, else the project's, else the detected default, and Change Base Ref writes where the base came from | locked by research/orca-features/source-control.md |
+| medium | high | [m5-automations-core D1](decisions/m5-automations-core.md) | Ship the core slice only, with a durable pending dispatch handoff | locked by docs/loop/queue.json |
+| medium | high | [m5-automations-core D2](decisions/m5-automations-core.md) | Honor the stored IANA timezone and use strict timestamp ordering across DST | assumed — autonomous |
+| medium | high | [m5-automations-core D5](decisions/m5-automations-core.md) | Durable row writes, 100 final runs, never prune active runs | assumed — autonomous |
+| medium | high | [m5-automations-core D10](decisions/m5-automations-core.md) | Bound occurrence metadata while preserving non-replay after pruning | supersedes m5-automations-core D5 |
 | medium | high | [m3-handoff D6](decisions/m3-handoff.md) | A source is a session; a live source is the agent running in a terminal session | assumed — autonomous |
 | medium | high | [m3-handoff D9](decisions/m3-handoff.md) | The pane menu gains a public contribution point other plugins use | locked by docs/roadmap.md |
 | medium | high | [m3-handoff D35](decisions/m3-handoff.md) | The brief is pasted after the agent's input is ready through `quirky.agents/deliver`, not passed on the command line | locked by handoff.md |
@@ -243,6 +249,13 @@ files, not this one.
 | medium | high | [m1-agent-status-scripting D10](decisions/m1-agent-status-scripting.md) | Rows record the evidence that decided them, and explain reads it | assumed — autonomous |
 | medium | high | [m1-agent-status-scripting D19](decisions/m1-agent-status-scripting.md) | Distinct failures are plugin errors with a machine-readable reason | assumed — autonomous |
 | medium | high | [m1-agent-status-scripting D38](decisions/m1-agent-status-scripting.md) | Catching up with build/roadmap brought m1-notifications, m2-source-control-core and m3-terminal-dock; no decision conflicts | assumed — autonomous |
+| medium | high | [sb-mobile-daemon D2](decisions/sb-mobile-daemon.md) | LAN and tailnet only; no hosted relay or misleading installation links | locked by docs/architecture.md |
+| medium | high | [sb-mobile-daemon D5](decisions/sb-mobile-daemon.md) | A separate mobile listener preserves the loopback UI security condition | assumed — autonomous |
+| medium | high | [sb-mobile-daemon D7](decisions/sb-mobile-daemon.md) | Pending reuse, explicit rotation and fail-closed identity | locked by mobile.md |
+| medium | high | [sb-mobile-daemon D9](decisions/sb-mobile-daemon.md) | Terminal service owns driver and phone-fit state | locked by mobile.md |
+| medium | high | [sb-mobile-daemon D12](decisions/sb-mobile-daemon.md) | Keep terminal input on Quirky JSON-RPC, not Orca's inbound binary opcodes | locked by docs/architecture.md |
+| medium | high | [sb-mobile-daemon D17](decisions/sb-mobile-daemon.md) | Preserve incoming extension contracts and dependency locks during catch-up | assumed — autonomous |
+| medium | high | [sb-mobile-daemon D18](decisions/sb-mobile-daemon.md) | Preserve scripted-send exit behavior and desktop read-only streams | assumed — autonomous |
 | medium | high | [m4-hosting-api-github D1](decisions/m4-hosting-api-github.md) | Take the complete GitHub API slice, not its UI or other providers | locked by docs/roadmap.md |
 | medium | high | [m4-hosting-api-github D4](decisions/m4-hosting-api-github.md) | Keep one plugin owner with focused internal modules | assumed — autonomous |
 | medium | high | [m4-hosting-api-github D5](decisions/m4-hosting-api-github.md) | Resolve identity from registered worktrees and local authenticated host inventory | locked by hosting-api.md |
@@ -492,6 +505,7 @@ files, not this one.
 | easy | medium | [m1-agent-status-scripting D22](decisions/m1-agent-status-scripting.md) | Names stay out of the window and out of `quirky terminal` | assumed — autonomous |
 | easy | medium | [m1-agent-status-scripting D40](decisions/m1-agent-status-scripting.md) | Wave 3 landed: end-to-end tests for every scenario; SC-7 stays a unit-level scenario | assumed — autonomous |
 | easy | medium | [m1-agent-status-scripting D43](decisions/m1-agent-status-scripting.md) | The final fix batch closed every Final Round 1 finding; nothing goes to BLOCKERS.md | locked by docs/loop/LOOP.md |
+| easy | medium | [sb-mobile-daemon D22](decisions/sb-mobile-daemon.md) | Report UI observations and unresolved visibility without speculative restyling | deferred: Settings revoke visibility probe |
 | easy | medium (review is not runtime proof) | [fix-sc31-first-shell-race D8](decisions/fix-sc31-first-shell-race.md) | Use Gemini for the resumed final review | assumed — autonomous |
 | easy | medium | [m0-daemon-api D22](decisions/m0-daemon-api.md) | A launch hook that fails or times out is skipped | assumed — autonomous |
 | easy | medium | [m0-daemon-api D23](decisions/m0-daemon-api.md) | Launch hooks apply to terminal sessions only | assumed — autonomous |
@@ -769,6 +783,15 @@ files, not this one.
 | easy | high | [m2-source-control-core D58](decisions/m2-source-control-core.md) | All seven Final Round 1 defects are closed by the fix batch, each with a test | assumed — autonomous |
 | easy | high | [m2-source-control-core D59](decisions/m2-source-control-core.md) | UI verification round 1: 18 goals pass, three app defects found and fixed on the branch | assumed — autonomous |
 | easy | high | [m2-source-control-core D62](decisions/m2-source-control-core.md) | The UI rerun passes SC-61, SC-45 and the conflict badge | assumed — autonomous |
+| easy | high | [m5-automations-core D3](decisions/m5-automations-core.md) | Keep preset and cron semantics explicit and reject impossible new schedules | locked by automations.md |
+| easy | high | [m5-automations-core D4](decisions/m5-automations-core.md) | Preserve pause cursor, latest-only catch-up, and elapsed grace plus 120 seconds | assumed — autonomous |
+| easy | high | [m5-automations-core D6](decisions/m5-automations-core.md) | Use OpenAI implementers and verified Gemini cross-family review | assumed — autonomous |
+| easy | high | [m5-automations-core D7](decisions/m5-automations-core.md) | One combined spec, at most three independent implementers, one final review | locked by docs/loop/LOOP.md |
+| easy | high | [m5-automations-core D8](decisions/m5-automations-core.md) | macOS validation only, preserve inherited files | deferred: platform |
+| easy | high | [m5-automations-core D9](decisions/m5-automations-core.md) | Distinguish retention ordering from history paging ordering | locked by automations.md |
+| easy | high | [m5-automations-core D11](decisions/m5-automations-core.md) | Bound arbitrary JSON metadata separately from output snapshots | assumed — autonomous |
+| easy | high for dispatch/trace facts, limited for review assurance | [m5-automations-core D12](decisions/m5-automations-core.md) | Record mechanical review PASS without claiming clean clearance | assumed — autonomous |
+| easy | high for observed results; medium for contention hypothesis | [m5-automations-core D13](decisions/m5-automations-core.md) | Serialize script checks with process-level smokes | assumed — autonomous |
 | easy | high | [m3-handoff D1](decisions/m3-handoff.md) | Classify the item as Visual, API, CLI and Integration work, and run research phases A and B | assumed — autonomous |
 | easy | high | [m3-handoff D2](decisions/m3-handoff.md) | Skip the visual companion and the adhd offer; use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m3-handoff D3](decisions/m3-handoff.md) | Select every gray area that matters | locked by docs/loop/LOOP.md |
@@ -1027,6 +1050,19 @@ files, not this one.
 | easy | high | [m1-agent-status-scripting D45](decisions/m1-agent-status-scripting.md) | A later land failed on a quirky.worktree test race; this branch carries that plugin's own fix | assumed — autonomous |
 | easy | high | [m1-agent-status-scripting D46](decisions/m1-agent-status-scripting.md) | The resumed lane verifies the existing final fix batch and proceeds to land | assumed — autonomous |
 | easy | high | [m1-agent-status-scripting D47](decisions/m1-agent-status-scripting.md) | Retry landing after the protected queue tests pass unchanged | locked by docs/loop/LOOP.md |
+| easy | high | [sb-mobile-daemon D3](decisions/sb-mobile-daemon.md) | Follow night-mode workflow and autonomous defaults | locked by docs/loop/LOOP.md |
+| easy | high | [sb-mobile-daemon D4](decisions/sb-mobile-daemon.md) | Use omp task implementers and Gemini cross-family review | assumed — autonomous |
+| easy | high | [sb-mobile-daemon D8](decisions/sb-mobile-daemon.md) | Preserve desktop flows with API-backed controls | locked by mobile.md |
+| easy | high | [sb-mobile-daemon D10](decisions/sb-mobile-daemon.md) | Defer Windows firewall and non-macOS runtime verification | deferred: platform |
+| easy | high | [sb-mobile-daemon D11](decisions/sb-mobile-daemon.md) | Reject contaminated attempts and restart from attributed snapshots | assumed — autonomous |
+| easy | high | [sb-mobile-daemon D13](decisions/sb-mobile-daemon.md) | Defer signed phone installation links rather than advertise an incompatible app | deferred: companion installation |
+| easy | high | [sb-mobile-daemon D14](decisions/sb-mobile-daemon.md) | Correct implementation and fixture failures without pinning incidental tests | assumed — autonomous |
+| easy | high | [sb-mobile-daemon D15](decisions/sb-mobile-daemon.md) | Publish non-secret view state and support declarative page input | locked by docs/roadmap.md |
+| easy | high | [sb-mobile-daemon D16](decisions/sb-mobile-daemon.md) | Verify against a real isolated daemon and PTY before desktop dogfood | assumed — autonomous |
+| easy | high | [sb-mobile-daemon D19](decisions/sb-mobile-daemon.md) | Expose only safe host identity to the paired phone | locked by mobile.md |
+| easy | high | [sb-mobile-daemon D20](decisions/sb-mobile-daemon.md) | Complete one deep cross-family review and preserve its transport failures | assumed — autonomous |
+| easy | high | [sb-mobile-daemon D21](decisions/sb-mobile-daemon.md) | Apply one fix batch for S1 and the independently reproduced answer-map edge | assumed — autonomous |
+| easy | high | [sb-mobile-daemon D23](decisions/sb-mobile-daemon.md) | Audit unsandboxed review writes and terminate all owned UI runtimes | assumed — autonomous |
 | easy | high | [m4-hosting-api-github D2](decisions/m4-hosting-api-github.md) | Resolve questions autonomously and keep markdown specs | locked by docs/loop/LOOP.md |
 | easy | high | [m4-hosting-api-github D3](decisions/m4-hosting-api-github.md) | Use OpenAI task implementers and Gemini review after Opus fails preflight | locked by docs/loop/LOOP.md |
 | easy | high | [m4-hosting-api-github D14](decisions/m4-hosting-api-github.md) | Build four disjoint components and integrate before checking | assumed — autonomous |

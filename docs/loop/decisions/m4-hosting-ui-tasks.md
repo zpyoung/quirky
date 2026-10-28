@@ -253,5 +253,16 @@
 - **Revisit if:** corrected list or normal landing verification reports a concrete failure.
 - **Source:** assumed — autonomous (named gate repairs); locked by canonical sourced-worktree contract
 
+## D24: Resolve the controller-reported moving-tip conflict without reopening campaigns
+- **Question:** how should the first normal landing rejection incorporate newly landed Mobile and Automations?
+- **Options:** discard either feature's Settings link; repeat broad verification; preserve additive source and retry the queue gate.
+- **Chose:** mandatory failed-land recovery merge. Keep both contributed settings-view navigation and incoming open-settings command navigation, with their independent error/busy state. Preserve both public guides and all automatically merged producer code. Read the complete incoming Mobile/Automations decision logs; no Tasks ownership conflict.
+- **Why:** queue land stopped before its tests because integration advanced. These are additive UI declarations/documentation, not a reason to restart review/dogfood or change the passed Tasks consumer contract.
+- **Evidence:** bg54 exit1 before verification; two conflict blocks in SettingsDialog.tsx and plugins/README.md; sb-mobile-daemon D5/D8/D12/D22 and m5-automations-core D1/D5/D10/D11 retain separate authentication, terminal and pending-dispatch ownership.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** typecheck or the queue's actual merged gate reports a concrete incompatibility.
+- **Source:** locked by LOOP.md failed-land recovery and operator immediate-landing directive
+
 ## Progress
-Ready for normal queue landing. Follow-up m4-hosting-ui-tasks-complete-remaining-flows is registered; unstarted review/dogfood skipped by explicit operator directive. Canonical sourced creation is integrated. Final bg53 typecheck and corrected list file pass with no flaky rerun; corrected issue11/11 and all145 other broad affected files have passing observations, not one147-file clean-run claim. Scripts68/0/552assertions and prior packaged build pass. Existing UI exit regressions now pass after real lifecycle repair. Commit this final evidence, detach and queue.ts land immediately; the queue owns fresh complete merge-result verification.
+First landing stopped only on a newer integration conflict. D24 resolves it additively; prior functional evidence remains recorded. Commit the resolution, run typecheck, detach and retry queue.ts land immediately. No new review, dogfood or broad semantic campaign; normal land owns complete merged verification. Follow-up and native handoff remain explicit, not claimed passed.
