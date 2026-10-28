@@ -304,7 +304,7 @@ export function IssueSurface(props: TasksSurfaceProps) {
       const source = record(values[2])
       const sourceOption = array(source?.sources).flatMap((value) => {
         const option = record(value)
-        return option?.id === source?.source && typeof option.label === 'string' ? [option.label] : []
+        return option !== null && option.id === source?.source && typeof option.label === 'string' ? [option.label] : []
       })[0]
       setIssueSourceLabel(sourceOption ?? '')
       const available = labels?.available === true && assignees?.available === true

@@ -25,6 +25,7 @@ import {
   type ProjectField,
   type ProjectGroup,
   type ProjectItem,
+  type ProjectRecord,
   type ProjectView
 } from './model'
 import { buildRoadmapTimeline, type RoadmapTimeline, type RoadmapZoom } from './timeline'
@@ -252,7 +253,7 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
   const [chooseView, setChooseView] = useState(false)
   const [pickerSearch, setPickerSearch] = useState('')
   const [addInput, setAddInput] = useState('')
-  const [browseProjects, setBrowseProjects] = useState<ProjectTarget[]>([])
+  const [browsedProjects, setBrowsedProjects] = useState<ProjectTarget[]>([])
   const [browseOpen, setBrowseOpen] = useState(false)
   const [browseError, setBrowseError] = useState<unknown>(null)
   const [browseErrorHost, setBrowseErrorHost] = useState<string | null>(null)
@@ -423,7 +424,7 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
     try {
       const result = object(await context.call('quirky.tasks/projects', { ...(force ? { refresh: true } : {}) }))
       const found = (Array.isArray(result.projects) ? result.projects : []).flatMap((value) => normalizeProjectTarget(value) ? [normalizeProjectTarget(value)!] : []).slice(0, 32)
-      setBrowseProjects(found)
+      setBrowsedProjects(found)
       setPartialFailures(Array.isArray(result.partialFailures) ? result.partialFailures.flatMap((entry) => record(entry) ? [record(entry)!] : []) : [])
       setBrowseOpen(true)
     } catch (error) {
@@ -884,8 +885,9 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
   const pinnedProjects = state.projects.pinned.filter(matchesPickerQuery)
   const recentProjects = state.projects.recent.slice(0, 10).filter(matchesPickerQuery)
   const pinnedIdentities = new Set(state.projects.pinned.map(projectIdentity))
+  const selectedPin = project ? pinnedIdentities.has(projectIdentity(project)) : false
   const recentIdentities = new Set(state.projects.recent.slice(0, 10).map(projectIdentity))
-  const pickerCandidates = browseProjects.filter((candidate) => matchesPickerQuery(candidate) && !pinnedIdentities.has(projectIdentity(candidate)) && !recentIdentities.has(projectIdentity(candidate)))
+  const pickerCandidates = browsedProjects.filter((candidate) => matchesPickerQuery(candidate) && !pinnedIdentities.has(projectIdentity(candidate)) && !recentIdentities.has(projectIdentity(candidate)))
 
   if (!project) return <main style={{ ...panel, justifyContent: 'flex-start' }}>
     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -894,11 +896,11 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
     </div>
     <div style={{ border: '1px dashed var(--border, currentColor)', borderRadius: 8, padding: 24, textAlign: 'center', ...muted }}>Choose a project to get started.</div>
     {pickerOpen && renderPicker()}
-    {browseError && <div role="alert">{renderProjectError(browseError)}</div>}
+    {browseError !== null && <div role="alert">{renderProjectError(browseError)}</div>}
   </main>
 
   const columns = tableColumns(tableFields, deviceColumns.hidden)
-  const sortedItems = sortItems(tableItems, tableFields, sort, currentView)
+  const sortedItems = sortItems(tableItems, tableFields, sort, currentView ?? undefined)
   const tableGroups = currentView ? groupProjectItems(sortedItems, currentView.groupByFields?.[0] ?? null) : []
 
   function renderPicker() {
@@ -914,7 +916,7 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
       {browseOpen && <ProjectChoiceSection title="Browse all" projects={pickerCandidates} current={project} onChoose={(target) => void chooseProject('select', target)} onPin={togglePin} pinnedIdentities={pinnedIdentities} />}
       {browseOpen && pickerCandidates.length === 0 && !pickerBusy && !browseError && <p role="status" style={muted}>{pickerQuery ? 'No projects match this search.' : 'No additional projects were found. Add a project URL or owner/number below.'}</p>}
       {partialFailures.length > 0 && <p role="status" style={muted}>Some organization projects could not be listed. Paste a project URL below to reach missing ones.</p>}
-      {browseError && renderProjectError(browseError)}
+      {browseError !== null && renderProjectError(browseError)}
       <form onSubmit={(event) => { event.preventDefault(); if (addInput.trim()) void chooseProject('add', addInput.trim()) }} style={{ display: 'grid', gap: 6, borderTop: '1px solid var(--border, currentColor)', paddingTop: 10 }}>
         <label htmlFor="project-reference">Add by URL or owner/number</label>
         <div style={{ display: 'flex', gap: 6 }}><input id="project-reference" style={{ ...inputStyle, flex: 1 }} value={addInput} onChange={(event) => setAddInput(event.currentTarget.value)} placeholder="https://github.com/orgs/team/projects/3/views/4" /><button style={button} type="submit" disabled={pickerBusy || addInput.trim().length === 0}>{pickerBusy ? 'Adding…' : 'Add'}</button></div>
@@ -960,8 +962,8 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
       <button type="button" style={button} onClick={() => setColumnsOpen((open) => !open)} aria-expanded={columnsOpen}>Configure columns</button>
     </div>}
     {columnsOpen && selectedView && <ColumnConfigurator fields={tableFields} hidden={deviceColumns.hidden} widths={deviceColumns.widths} onChange={(id, visible) => void updateDeviceColumns((previous) => ({ ...previous, hidden: visible ? previous.hidden.filter((hidden) => hidden !== id) : [...previous.hidden, id] }))} onWidth={(id, width) => void updateDeviceColumns((previous) => ({ ...previous, widths: { ...previous.widths, [id]: Math.max(60, width) } }))} />}
-    {mainError && <div role="alert">{renderProjectError(mainError)}</div>}
-    {writeError && <div role="alert">{renderProjectError(writeError)}</div>}
+    {mainError !== null && <div role="alert">{renderProjectError(mainError)}</div>}
+    {writeError !== null && <div role="alert">{renderProjectError(writeError)}</div>}
     {errorAnnouncement && <div role="status" style={{ color: 'var(--amber, #f0b429)' }}>{errorAnnouncement}</div>}
     {chooseView && <section style={{ display: 'grid', gap: 10, border: '1px solid var(--border, currentColor)', borderRadius: 8, padding: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><button type="button" style={button} onClick={() => { setChooseView(false); setPickerOpen(true) }}>← Back</button><strong>Choose a view</strong></div>
@@ -1097,7 +1099,7 @@ function ProjectItemPreview(props: { item: ProjectItem; url: string | null; guid
     {props.loading && <span role="status">Loading GitHub item details…</span>}
     <h2 style={{ margin: '4px 0' }}>{String(content.title ?? (isRestricted(props.item) ? 'Restricted item' : 'Untitled item'))}</h2>
     <p style={muted}>{String(content.repository ?? 'Repository unavailable')} · {kind} {content.number ? `#${content.number}` : ''}{content.state ? ` · ${String(content.state)}` : ''}{content.author ? ` · @${String(content.author)}` : ''}</p>
-    {content.headRefName && <p style={muted}>{String(content.baseRefName ?? '')} ← {String(content.headRefName)}</p>}
+    {typeof content.headRefName === 'string' && content.headRefName.length > 0 && <p style={muted}>{String(content.baseRefName ?? '')} ← {content.headRefName}</p>}
     {labels.length > 0 && <p style={muted}>Labels: {labels.join(', ')}</p>}
     {assignees.length > 0 && <p style={muted}>Assignees: {assignees.join(', ')}</p>}
     {body && <article aria-label="Description"><Markdown source={body} /></article>}
