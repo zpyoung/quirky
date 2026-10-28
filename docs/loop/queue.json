@@ -630,8 +630,9 @@
       "deps": [
         "m5-structured-runner"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 2
     },
     {
       "id": "sa-browser-design-mode",
