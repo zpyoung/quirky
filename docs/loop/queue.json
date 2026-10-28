@@ -924,8 +924,7 @@
         "m2-editor",
         "m2-sidebar-extras",
         "m4-sidebar-review-filters",
-        "fix-flaky-quirky-git-files-scenarios",
-        "m4-editor-drop-open-in-place"
+        "fix-flaky-quirky-git-files-scenarios"
       ]
     },
     {
