@@ -10,13 +10,14 @@ import {
   type Session
 } from '@quirky/protocol'
 import { InputTracker } from './input-tracker'
+import { MobileDriverService } from './mobile-driver'
 
 const DEFAULT_ENTER_DELAY_MS = 300
 const DEFAULT_READ_LINES = 50
 const DEFAULT_KILL_POLL_MS = 100
 const KILL_POLLS = 65
 
-type Attachment = { connectionId: number; stream: ClientStream; sessionId: string }
+type Attachment = { connectionId: number; stream: ClientStream; sessionId: string; mobile: boolean }
 
 /** Output that arrived while a subscribe request was in flight, kept until its response says where the replay ends. */
 type Tap = { chunks: Uint8Array[]; total: number }
@@ -81,6 +82,7 @@ export class TerminalService {
   private readonly bySession = new Map<string, Set<Attachment>>()
   private readonly silent = new Map<string, Set<Attachment>>()
   private readonly byConnection = new Map<number, Map<number, Attachment>>()
+  private readonly pendingBySession = new Map<string, Set<Attachment>>()
   private readonly received = new Map<string, number>()
   private readonly taps = new Map<string, Tap>()
   private readonly holds = new Map<string, Uint8Array[]>()
@@ -89,10 +91,14 @@ export class TerminalService {
   private readonly forgotten = new Set<string>()
   private closed = false
 
+  private readonly mobile: MobileDriverService
+
   constructor(
     private readonly context: PluginContext,
     private readonly inputs: InputTracker = new InputTracker()
-  ) {}
+  ) {
+    this.mobile = new MobileDriverService(context, (sessionId, work) => this.enqueue(sessionId, work))
+  }
 
   attach = async (params: Record<string, unknown>, caller: PluginCaller) => {
     this.refuseWhenClosed()
@@ -103,27 +109,32 @@ export class TerminalService {
     let restored = false
     if (session.status === 'exited' && session.restorable) {
       session = (await this.context.call('quirky.session/restore', { session: session.id })) as Session
+      this.mobile.sessionRestored(session.id)
       restored = true
       this.refuseWhenClosed()
     }
     const ended = session.status === 'exited'
     const stream = connection.openStream()
-    const attachment: Attachment = { connectionId: connection.id, stream, sessionId: session.id }
+    const attachment: Attachment = { connectionId: connection.id, stream, sessionId: session.id, mobile: caller.role === 'mobile' }
+    const pending = this.pendingBySession.get(session.id) ?? new Set<Attachment>()
+    pending.add(attachment)
+    this.pendingBySession.set(session.id, pending)
     let open = true
     stream.onClose(() => {
       open = false
+      this.untrackPending(attachment)
       this.drop(attachment)
     })
     try {
-      const result = await this.enqueue(session.id, () =>
-        this.subscribe(attachment, {
-          cols: params.cols as number,
-          rows: params.rows as number,
+      const result = await this.enqueue(session.id, async () => {
+        if (!open) throw this.context.error('conflict', 'terminal connection closed while attaching')
+        if (!ended) await this.mobile.attach(session.id, params.cols as number, params.rows as number, caller, params.claim === true)
+        return this.subscribe(attachment, {
           historyLines: params.historyLines as number | undefined,
-          resize: !ended,
           isOpen: () => open
         })
-      )
+      })
+      this.untrackPending(attachment)
       return { ...result, restored }
     } catch (error) {
       stream.close()
@@ -141,17 +152,19 @@ export class TerminalService {
   }
 
   /** Types raw input; the session then counts as touched for the layout's exit rule. */
-  write = async (params: Record<string, unknown>): Promise<{ ok: true }> => {
+  write = async (params: Record<string, unknown>, caller: PluginCaller): Promise<{ ok: true }> => {
     const session = await this.requireWritable(params.session as string)
+    this.mobile.assertCanInput(session.id, caller)
     this.inputs.mark(session.id)
     this.input(session.id, encoder.encode(params.data as string))
     return { ok: true }
   }
 
-  resize = async (params: Record<string, unknown>): Promise<{ ok: true }> => {
+  resize = async (params: Record<string, unknown>, caller: PluginCaller): Promise<{ ok: true }> => {
     const session = await this.requireTerminal(params.session as string)
-    await this.context.pty.resize(session.id, params.cols as number, params.rows as number)
-    return { ok: true }
+    return this.enqueue(session.id, () =>
+      this.mobile.resize(session.id, params.cols as number, params.rows as number, params, caller)
+    )
   }
 
   /** Types `text` into a shell; pastes it into an agent, and presses Enter after a pause when asked. */
@@ -159,13 +172,17 @@ export class TerminalService {
     const session = await this.requireWritable(this.sessionOf(params, caller))
     const text = params.text as string
     const enter = params.enter === true
+    this.mobile.assertCanInput(session.id, caller)
     if (session.agent === 'shell') {
+      this.inputs.mark(session.id)
       this.input(session.id, encoder.encode(enter ? `${text}\r` : text))
       return { ok: true }
     }
+    this.inputs.mark(session.id)
     this.input(session.id, encoder.encode(`\x1b[200~${text}\x1b[201~`))
     if (enter) {
       await new Promise((resolve) => setTimeout(resolve, enterDelayMs()))
+      this.mobile.assertCanInput(session.id, caller)
       this.input(session.id, encoder.encode('\r'))
     }
     return { ok: true }
@@ -228,6 +245,20 @@ export class TerminalService {
   }
 
   restartHost = (): Promise<{ pid: number }> => this.context.pty.restartHost()
+  mobileState = (params: Record<string, unknown>, caller: PluginCaller) => this.mobile.mobileState(params, caller)
+
+  takeBack = (params: Record<string, unknown>, caller: PluginCaller) => this.mobile.takeBack(params, caller)
+
+  restoreFit = (params: Record<string, unknown>, caller: PluginCaller) => this.mobile.restoreFit(params, caller)
+
+  claim = async (params: Record<string, unknown>, caller: PluginCaller): Promise<{ ok: true }> => {
+    const session = await this.requireWritable(params.session as string)
+    return this.enqueue(session.id, () => this.mobile.claim(session.id, params.cols as number, params.rows as number, caller))
+  }
+
+  assertCanInput(sessionId: string, caller: PluginCaller): void {
+    this.mobile.assertCanInput(sessionId, caller)
+  }
 
   onData = (sessionId: string, bytes: Uint8Array): void => {
     const tap = this.taps.get(sessionId)
@@ -245,16 +276,29 @@ export class TerminalService {
     for (const attachment of this.bySession.get(sessionId) ?? []) attachment.stream.send(bytes)
   }
 
-  /** Closes the streams of a session that was closed; the PTY host has already forgotten it. */
+  /** Clears leases and pending/active streams when a session record is removed. */
   onEvent = (event: { type: string }): void => {
     if (event.type !== 'quirky.session/removed') return
     const { sessionId } = (event as PluginEvent).data as { sessionId: string }
     const attachments = this.bySession.get(sessionId)
-    if (attachments && attachments.size > 0) {
-      this.forgotten.add(sessionId)
-      for (const attachment of [...attachments]) attachment.stream.close()
-    }
-    for (const attachment of [...(this.silent.get(sessionId) ?? [])]) attachment.stream.close()
+    const silent = this.silent.get(sessionId)
+    const pending = this.pendingBySession.get(sessionId)
+    if ((attachments?.size ?? 0) > 0 || (silent?.size ?? 0) > 0 || (pending?.size ?? 0) > 0 || (this.attaching.get(sessionId) ?? 0) > 0) this.forgotten.add(sessionId)
+    this.mobile.sessionRemoved(sessionId)
+    if (attachments) for (const attachment of [...attachments]) attachment.stream.close()
+    if (silent) for (const attachment of [...silent]) attachment.stream.close()
+    if (pending) for (const attachment of [...pending]) attachment.stream.close()
+  }
+
+  /** Clears leases and pending/active streams when a PTY exits. */
+  onExit = (sessionId: string): void => {
+    this.mobile.sessionExited(sessionId)
+    const attachments = this.bySession.get(sessionId)
+    const silent = this.silent.get(sessionId)
+    const pending = this.pendingBySession.get(sessionId)
+    if (attachments) for (const attachment of [...attachments]) attachment.stream.close()
+    if (silent) for (const attachment of [...silent]) attachment.stream.close()
+    if (pending) for (const attachment of [...pending]) attachment.stream.close()
   }
 
   /** Re-subscribes every streamed session and sends its streams the output produced while the host was unreachable. */
@@ -285,6 +329,7 @@ export class TerminalService {
   /** Ends every stream and drops the host subscriptions; attaches still in flight are closed when they finish, and new ones are refused. */
   shutdown(): void {
     this.closed = true
+    this.mobile.shutdown()
     for (const attachments of [...this.bySession.values(), ...this.silent.values()]) {
       for (const attachment of [...attachments]) attachment.stream.close()
     }
@@ -344,14 +389,13 @@ export class TerminalService {
 
   private async subscribe(
     attachment: Attachment,
-    options: { cols: number; rows: number; historyLines: number | undefined; resize: boolean; isOpen: () => boolean }
+    options: { historyLines: number | undefined; isOpen: () => boolean }
   ) {
     const { sessionId, stream } = attachment
     const { isOpen } = options
     this.attaching.set(sessionId, (this.attaching.get(sessionId) ?? 0) + 1)
     try {
       this.refuseWhenClosed()
-      if (options.resize) await this.context.pty.resize(sessionId, options.cols, options.rows).catch(() => {})
       const start = this.received.get(sessionId)
       const tap: Tap = { chunks: [], total: 0 }
       this.taps.set(sessionId, tap)
@@ -368,8 +412,9 @@ export class TerminalService {
         stream.close()
         this.refuseWhenClosed()
       }
-      // output after the response is everything the tap holds when this is the first subscription,
-      // else what the running offset has gained beyond the replay's end
+      if (this.forgotten.has(sessionId)) stream.close()
+      // Output after the response is everything the tap holds when this is the first subscription;
+      // otherwise what the running offset has gained beyond the replay's end.
       const end = start === undefined ? result.offset + tap.total : Math.max(start + tap.total, result.offset)
       const after = end - result.offset
       this.received.set(sessionId, end)
@@ -405,7 +450,15 @@ export class TerminalService {
     }
   }
 
+  private untrackPending(attachment: Attachment): void {
+    const pending = this.pendingBySession.get(attachment.sessionId)
+    if (!pending) return
+    pending.delete(attachment)
+    if (pending.size === 0) this.pendingBySession.delete(attachment.sessionId)
+  }
+
   private drop(attachment: Attachment): void {
+    this.untrackPending(attachment)
     this.bySession.get(attachment.sessionId)?.delete(attachment)
     const silent = this.silent.get(attachment.sessionId)
     silent?.delete(attachment)
@@ -414,6 +467,7 @@ export class TerminalService {
     streams?.delete(attachment.stream.streamId)
     if (streams?.size === 0) this.byConnection.delete(attachment.connectionId)
     this.releaseIfIdle(attachment.sessionId)
+    if (attachment.mobile) this.mobile.detach(attachment.sessionId, attachment.connectionId)
   }
 
   private releaseIfIdle(sessionId: string): void {
