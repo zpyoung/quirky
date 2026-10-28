@@ -299,6 +299,8 @@ files, not this one.
 | medium | high | [m3-handoff D72](decisions/m3-handoff.md) | Remove a transient landing candidate captured by catch-up | locked by docs/loop/LOOP.md |
 | medium | high | [m3-handoff D74](decisions/m3-handoff.md) | Preserve the shipped name migration and append handoff badges after it | locked by docs/loop/decisions/m1-agent-status-scripting.md |
 | medium (a future global tip owner would migrate this state, not duplicate it) | high | [m3-vault-consent-tip-completion D1](decisions/m3-vault-consent-tip-completion.md) | Vault owns its one documented search tip, with a real UI consumer | assumed — autonomous |
+| medium (observable address/origin and connection behavior) | high | [sa-browser-localhost-label-routing D1](decisions/sa-browser-localhost-label-routing.md) | Require real worktree routing in both browser engines | locked by docs/loop/decisions/sa-browser-profiles-settings.md |
+| medium (routing scope, origin and ownership contracts) | high for current-code absence; alternatives remain architecture choices, not impossibility claims | [sa-browser-localhost-label-routing D3](decisions/sa-browser-localhost-label-routing.md) | Do not substitute machine-wide or external routing infrastructure | assumed — autonomous |
 | medium | high | [m0-core D8](decisions/m0-core.md) | v1's CLI words stay, with `wt` and `term` as group aliases | assumed — autonomous |
 | medium | high | [m0-core D12](decisions/m0-core.md) | Notifications are a kernel service, and each plugin decides when to notify | locked by docs/architecture.md |
 | medium | high | [m0-core D13](decisions/m0-core.md) | v1's settings become plugin settings | supersedes m0-ui-api D18 |
@@ -1290,6 +1292,11 @@ files, not this one.
 | easy | high | [m3-vault-consent-tip-completion D9](decisions/m3-vault-consent-tip-completion.md) | Retention rollback cannot prevent turning search off | assumed — autonomous |
 | easy | high | [m3-vault-consent-tip-completion D10](decisions/m3-vault-consent-tip-completion.md) | Qualify the final review rather than claim independent clearance | assumed — autonomous |
 | easy | high | [m3-vault-consent-tip-completion D11](decisions/m3-vault-consent-tip-completion.md) | Land now under the operator's build-first policy | locked by docs/loop/LOOP.md |
+| easy (recheck a supported sdk capability when supplied) | high for inspected declarations; no native connection experiment claimed | [sa-browser-localhost-label-routing D2](decisions/sa-browser-localhost-label-routing.md) | The inspected native public SDK still lacks the prerequisite | assumed — autonomous |
+| easy (preserved blocked branch can resume after prerequisite) | high | [sa-browser-localhost-label-routing D4](decisions/sa-browser-localhost-label-routing.md) | Block the whole item rather than ship a Chrome-only fragment | locked by docs/loop/decisions/sa-browser-pane.md |
+| easy | high for unchanged current behavior; not a new ui acceptance claim | [sa-browser-localhost-label-routing D5](decisions/sa-browser-localhost-label-routing.md) | Preserve current unavailable UX and browser isolation | locked by docs/loop/decisions/sa-browser-profiles-settings.md |
+| easy | high for audit outcome; actual routed connectivity remains unimplemented and unverified | [sa-browser-localhost-label-routing D6](decisions/sa-browser-localhost-label-routing.md) | Record a source-capability investigation, not feature acceptance | locked by docs/loop/LOOP.md |
+| easy | high for scope; no cross-platform capability claim | [sa-browser-localhost-label-routing D7](decisions/sa-browser-localhost-label-routing.md) | Retain the macOS-only platform boundary | deferred: platform |
 | easy | high | [m0-core D1](decisions/m0-core.md) | Classify the item as an API, CLI, Organization and Visual design, and run every research phase | assumed — autonomous |
 | easy | high | [m0-core D2](decisions/m0-core.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m0-core D3](decisions/m0-core.md) | Keep m0-core as one item with one pair of specs, built in waves | locked by docs/loop/queue.json |

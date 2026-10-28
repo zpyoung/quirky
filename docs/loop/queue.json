@@ -1184,8 +1184,7 @@
       "deps": [
         "sa-browser-profiles-settings"
       ],
-      "status": "in-progress",
-      "lane": 9
+      "status": "blocked"
     },
     {
       "id": "sa-browser-native-profile-clear-completion",
