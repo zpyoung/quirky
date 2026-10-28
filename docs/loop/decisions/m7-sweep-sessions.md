@@ -44,5 +44,29 @@
 - **Revisit if:** An authorized product ruling changes the locked scope.
 - **Source:** locked by docs/architecture.md and docs/roadmap.md
 
+## D5: Apply normal end-phase specification and caught-up review gates
+- **Question:** Does the triage transition end only test suppression, or every build-first shortcut?
+- **Options:** Combined spec/typecheck-only shortcut; normal logic+tech, combined spec review, affected tests/build/web and final review.
+- **Chose:** Normal gates. Corrected the initial combined-spec assumption before implementation; authored sibling tech.md and performed actual Codex standard promote/refute review. Use omp-task/OpenAI implementer and Gemini final review after actual Opus unavailable/Gemini reachable probes.
+- **Why:** LOOP's build-first overrides last only until m7-test-triage is claimed. The semantic spec review proposed F1 opener outcome ambiguity (refuted: contract already distinguishes accepted spawn from eventual browser/login), F2 too-narrow suffix allocation (contested below-deep, caller clarified reserved minimum and220px acceptance), F3 post-review catch-up ambiguity (standing MEDIUM, gate suppressed due stale LOOP line evidence; caller independently accepts and fixes ordering to catch-up/recheck before final review). No semantic blocker remains after corrections; no fabricated green gate.
+- **Evidence:** /tmp/quirky-session-sweep.2Whr6x/spec-review raw promote/refute/gate/manifest; tech.md Contracts and Testing strategy; canonical queue triage in-progress.
+- **Reversibility:** easy
+- **Confidence:** high for observed review and corrections; Codex same-family independence is reduced.
+- **Revisit if:** Final gate or actual flow reveals a new boundary mismatch.
+- **Source:** supersedes D3 combined-spec shortcut; locked by docs/loop/LOOP.md
+
+The deterministic combined-scratch prepass returned25 path findings, not a clean result. Caller dispositions: F4–6 abbreviated account paths expanded/located under the explicitly named Accounts plugin; F8–15 abbreviated Vault/Dock/Info paths expanded to full plugin paths; F20 protected index path expanded. F7 is an RPC name, not a file. F16–19 are explicitly new helper/test targets or a command naming those future targets. F21 names the newly authored native handoff (created during review, absent from the prepass's tracked snapshot). F22–28 are valid sibling relative links in the actual committed spec directory, relocated by the combined scratch artifact. These are resolved references/planned artifacts/command grammar, not missing product behavior. The gate remains NEEDS_FIXES with25 deterministic findings and3 suppressions; caller adjudication supplies the recorded correction/false-positive disposition rather than changing reviewer JSON.
+
+## D6: Repair the two current Accounts defects and verify, not rewrite, completed flows
+- **Question:** Which apparent gaps remain in current source after historical follow-ups?
+- **Options:** Reimplement old Vault/Dock fixes; trust done queue labels; inspect current source and execute every retained flow.
+- **Chose:** Accounts gap-aware layout/contained measurement and native-compatible Open invocation are the initial repairs. Vault copy-first/log portal, dock stacking/cards/cache/lifecycle/fractional-height fixes and Session Info wrapping already exist and receive actual verification. No shared API change; reuse the public terminal opener and existing validated pending URL.
+- **Why:** SessionParityMap corrected its historical-gap shortlist against current source and complete later logs. Accounts overflow D8 explicitly made no source fix and native link remains target=_blank; the other named gaps were repaired before their verification campaigns stopped.
+- **Evidence:** Accounts Usage.tsx403–434/styles.ts39–44/AccountsSettings.tsx28–49; m3-accounts-overflow-verification D7–D8; native m3-accounts AC6–7; Vault HistoryPanel324/570–572/styles27; dock fix D6–D19; Session Info followup D7–D8.
+- **Reversibility:** medium
+- **Confidence:** high for source/failure records; no current runtime pass claimed.
+- **Revisit if:** Actual smoke/UI/suites expose another kept flow defect.
+- **Source:** assumed — autonomous, source-grounded parity inventory
+
 ## Progress
-Claimed m7-sweep-sessions after42 busy canonical waits; branch created from current build/roadmap. Feature docs read, one read-only canonical-owner mapper running. No implementation started. Next: complete evidence matrix, combined spec and shared contracts, commit them, then dispatch at most three disjoint implementers. xd LSP reports no configured servers; do not create diagnostic scaffolds. No verification result is claimed yet.
+Specs/contracts committed f60971f8, then spec review corrections/native handoff ready to commit. Mapper returned, no code worker launched yet. Accounts component worktree exists under /tmp/quirky-session-sweep.2Whr6x/accounts; update it to the final spec checkpoint before dispatch. Next: two disjoint tasks (Accounts implementation; external real-runtime/API/CLI/web fixture preparation), authoritative scope/HEAD barrier, parent checks and full guarded campaign. No test/build/UI result is claimed yet.
