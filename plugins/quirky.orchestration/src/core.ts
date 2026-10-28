@@ -42,9 +42,9 @@ import type {
 import type { SessionIdentity } from './runtime-contracts'
 import type { DurableMutationOptions, OrchestrationWorkerCore, WorkerLifecyclePort } from './worker-integration'
 import { fail } from './errors'
+import { readNestedWorkerMaxDepth } from './store'
 
 const MAX_TASK_SPEC_BYTES = 1_214_464
-const MAX_NESTED_DEPTH = 1
 const CIRCUIT_BREAK_FAILURES = 3
 const RECEIPT_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000
 const RECEIPT_MAX_ROWS = 10_000
@@ -216,7 +216,7 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
   readonly context: PluginContext
   readonly store: PluginStore
   get nestedWorkerMaxDepth(): number {
-    return MAX_NESTED_DEPTH
+    return readNestedWorkerMaxDepth(this.store)
   }
   private workerPort: WorkerLifecyclePort | null = null
   private readonly activeMutations = new Map<string, ActiveMutation>()
@@ -1166,8 +1166,9 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
       if (occupied) return { admitted: false, reason: 'task_not_startable', failureCount }
     }
     const depth = this.creatorDepth(caller.runtimeSessionId) + 1
-    if (depth > this.nestedWorkerMaxDepth) {
-      return { admitted: false, reason: 'nested_worker_depth_exceeded', attemptedDepth: depth, maximumDepth: this.nestedWorkerMaxDepth, failureCount }
+    const maximumDepth = this.nestedWorkerMaxDepth
+    if (depth > maximumDepth) {
+      return { admitted: false, reason: 'nested_worker_depth_exceeded', attemptedDepth: depth, maximumDepth, failureCount }
     }
     return { admitted: true, depth, failureCount, retryOfDispatchId: retryOf as DispatchId | null }
   }

@@ -57,6 +57,60 @@ const path = async () => (await allLinks()).find((link) => link.text.startsWith(
 const click = (init: MouseEventInit = {}) => new MouseEvent('mouseup', { bubbles: true, cancelable: true, button: 0, ...init })
 const opened = (fake: ReturnType<typeof fakeContext>) => fake.callsTo('quirky.terminal/openExternal').map((call) => call.params)
 const hint = (pane: MountedPane) => pane.element.querySelector('[data-pane-link-hint]')?.textContent ?? null
+const taskHandlers = (refuse = false) => {
+  const taskId = 'task_click'
+  const dispatchId = 'ctx_click'
+  const sessionId = 's_worker'
+  const worktreeId = 'wt_worker'
+  const session = {
+    id: sessionId,
+    kind: 'terminal',
+    agent: 'codex',
+    worktreeId,
+    cwd: '/tmp/w/api',
+    title: 'opaque terminal title',
+    status: 'done',
+    createdAt: 1,
+    lastActivityAt: 2,
+    exitCode: 0,
+    exitSignal: null,
+    exitCause: null,
+    restorable: true,
+    launch: null,
+    providerSession: null,
+    promptDelivery: null,
+    launchSettings: null,
+    resumedFrom: null,
+    agentStatus: null,
+    name: null,
+    unread: null,
+    badges: {}
+  }
+  return paneHandlers({ existing: [FILE] }, {
+    'quirky.orchestration/taskTerminal': () => {
+      if (refuse) throw Object.assign(new Error('No exact current terminal is available.'), { code: 'task_terminal_unavailable' })
+      return { taskId, dispatchId, sessionId, worktreeId }
+    },
+    'quirky.session/get': ({ session: requested }) => requested === sessionId ? session : undefined
+  })
+}
+
+async function taskLink(fake: ReturnType<typeof fakeContext>, pane: MountedPane) {
+  await fake.push(101, '(task_click),')
+  await pane.flush()
+  const y = pane.term().buffer.active.cursorY + 1
+  return (await allLinks(y)).find((link) => link.text === 'task_click')!
+}
+
+function setPlatform(platform: string): () => void {
+  const original = Object.getOwnPropertyDescriptor(navigator, 'platform')
+  Object.defineProperty(navigator, 'platform', { configurable: true, value: platform })
+  return () => {
+    if (original) Object.defineProperty(navigator, 'platform', original)
+    else Reflect.deleteProperty(navigator, 'platform')
+  }
+}
+
 
 describe('SC-40: links are found and hinted', () => {
   test('a URL and an existing relative path are links, a missing path is not', async () => {
@@ -214,5 +268,117 @@ describe('SC-41: what each click does', () => {
     expect(pane.element.querySelector('[data-pane-link-popover]')).not.toBeNull()
     await act(async () => void document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
     expect(pane.element.querySelector('[data-pane-link-popover]')).toBeNull()
+  })
+})
+describe('task terminal links', () => {
+  test('a plain click offers Open task terminal and focuses the exact public worktree session', async () => {
+    const { fake, pane } = await mount({}, taskHandlers())
+    const link = await taskLink(fake, pane)
+
+    await act(async () => link.hover?.(click(), link.text))
+    expect(hint(pane)).toContain('task_click')
+    expect(hint(pane)).toContain('Click')
+    await act(async () => link.activate(click({ clientX: 30, clientY: 40 }), link.text))
+    const buttons = [...pane.element.querySelectorAll('[data-pane-link-popover] button')] as HTMLElement[]
+    expect(buttons.map((button) => button.textContent)).toEqual(['Open task terminal'])
+    expect(fake.callsTo('quirky.orchestration/taskTerminal')).toEqual([])
+
+    const viewOpened = Promise.withResolvers<void>()
+    const openView = fake.context.openView.bind(fake.context)
+    fake.context.openView = (id, input) => {
+      openView(id, input)
+      viewOpened.resolve()
+    }
+    await act(async () => {
+      buttons[0]!.click()
+      await viewOpened.promise
+    })
+
+    expect(fake.callsTo('quirky.orchestration/taskTerminal')[0]?.params).toEqual({ taskId: 'task_click' })
+    expect(fake.callsTo('quirky.orchestration/workerShow')).toEqual([])
+    expect(fake.opened).toEqual([{ id: 'view:quirky.session/worktree', input: { worktree: 'wt_worker', session: 's_worker' } }])
+    expect(fake.callsTo('quirky.terminal/openSession')).toEqual([])
+  })
+
+  test('the macOS modifier opens directly without showing the actions popover', async () => {
+    const restorePlatform = setPlatform('MacIntel')
+    try {
+      const { fake, pane } = await mount({}, taskHandlers())
+      const link = await taskLink(fake, pane)
+      await act(async () => link.hover?.(click(), link.text))
+      expect(hint(pane)).toContain('Cmd+click')
+      const viewOpened = Promise.withResolvers<void>()
+      const openView = fake.context.openView.bind(fake.context)
+      fake.context.openView = (id, input) => {
+        openView(id, input)
+        viewOpened.resolve()
+      }
+      await act(async () => {
+        link.activate(click({ metaKey: true }), link.text)
+        await viewOpened.promise
+      })
+      expect(pane.element.querySelector('[data-pane-link-popover]')).toBeNull()
+    } finally {
+      restorePlatform()
+    }
+  })
+
+  test('the non-macOS modifier opens directly with Ctrl-click', async () => {
+    const restorePlatform = setPlatform('Linux x86_64')
+    try {
+      const { fake, pane } = await mount({}, taskHandlers())
+      const link = await taskLink(fake, pane)
+      await act(async () => link.hover?.(click(), link.text))
+      expect(hint(pane)).toContain('Ctrl+click')
+      const viewOpened = Promise.withResolvers<void>()
+      const openView = fake.context.openView.bind(fake.context)
+      fake.context.openView = (id, input) => {
+        openView(id, input)
+        viewOpened.resolve()
+      }
+      await act(async () => {
+        link.activate(click({ ctrlKey: true }), link.text)
+        await viewOpened.promise
+      })
+      expect(fake.opened).toEqual([{ id: 'view:quirky.session/worktree', input: { worktree: 'wt_worker', session: 's_worker' } }])
+      expect(pane.element.querySelector('[data-pane-link-popover]')).toBeNull()
+    } finally {
+      restorePlatform()
+    }
+  })
+
+  test('a click that ends a text selection does not open task actions', async () => {
+    const { fake, pane } = await mount({}, taskHandlers())
+    const link = await taskLink(fake, pane)
+    pane.term().select(link.range.start.x - 1, link.range.start.y - 1, link.text.length)
+
+    await act(async () => link.activate(click(), link.text))
+
+    expect(fake.callsTo('quirky.orchestration/taskTerminal')).toEqual([])
+    expect(pane.element.querySelector('[data-pane-link-popover]')).toBeNull()
+  })
+
+  test('a public target refusal is visible and never opens a view', async () => {
+    const restorePlatform = setPlatform('MacIntel')
+    try {
+      const { fake, pane } = await mount({}, taskHandlers(true))
+      const link = await taskLink(fake, pane)
+      const refusalShown = Promise.withResolvers<void>()
+      const toast = fake.context.toast.bind(fake.context)
+      fake.context.toast = (title, body) => {
+        toast(title, body)
+        refusalShown.resolve()
+      }
+      await act(async () => {
+        link.activate(click({ metaKey: true }), link.text)
+        await refusalShown.promise
+      })
+
+      expect(fake.toasts).toHaveLength(1)
+      expect(fake.toasts[0]?.body.length).toBeGreaterThan(0)
+      expect(fake.opened).toEqual([])
+    } finally {
+      restorePlatform()
+    }
   })
 })

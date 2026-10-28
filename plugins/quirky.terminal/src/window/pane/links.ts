@@ -134,3 +134,21 @@ export function decideLinkClick(
   if (event.shiftKey) return 'none'
   return fromSetting(settings['link-click'])
 }
+
+export type TaskLinkClickAction = 'popover' | 'open' | 'none'
+
+/** The modifier shown in task-link hints and used to open a worker terminal directly. */
+export function taskLinkModifierLabel(platform: string): 'Cmd' | 'Ctrl' {
+  return platform.toLowerCase().includes('mac') ? 'Cmd' : 'Ctrl'
+}
+
+/** Task links always offer actions on a plain click and only switch on the host's primary modifier. */
+export function decideTaskLinkClick(event: ClickLike, platform: string): TaskLinkClickAction {
+  if (event.button !== 0 || event.altKey || event.shiftKey) return 'none'
+  const mac = platform.toLowerCase().includes('mac')
+  const modifier = mac ? event.metaKey : event.ctrlKey
+  const otherModifier = mac ? event.ctrlKey : event.metaKey
+  if (otherModifier) return 'none'
+  if (modifier) return 'open'
+  return 'popover'
+}

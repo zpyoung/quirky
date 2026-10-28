@@ -137,6 +137,8 @@ export interface HarnessOptions {
   status?: unknown
   boundRunId?: RunId | null
   attention?: { guidance?: boolean; input?: boolean; approval?: boolean; rootCompletion?: boolean }
+  taskOverrides?: readonly Partial<TaskRow>[]
+  coordinatorSessionId?: string | null
 }
 
 export interface Harness {
@@ -155,7 +157,11 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
   const dispatches = options.dispatches ?? [makeDispatch()]
   const records = options.records ?? dispatches.map((dispatch) => makeRecord(dispatch, options.session?.id ?? 'worker-session'))
   const resources = options.resources ?? dispatches.map((dispatch) => makeResource(dispatch, options.session?.id ?? 'worker-session'))
-  const tasks = new Map(dispatches.map((dispatch) => [dispatch.taskId, makeTask(dispatch)]))
+  const taskOverrides = new Map((options.taskOverrides ?? []).filter((task): task is Partial<TaskRow> & { id: TaskId } => typeof task.id === 'string').map((task) => [task.id, task]))
+  const tasks = new Map(dispatches.map((dispatch) => {
+    const task = makeTask(dispatch)
+    return [dispatch.taskId, { ...task, ...taskOverrides.get(dispatch.taskId) }] as const
+  }))
   const calls: Harness['calls'] = []
   const archives = new Map<DispatchId, WorkerArchive>()
   const session = options.session ?? sessionFixture()
@@ -231,7 +237,7 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
     nestedWorkerMaxDepth: 1,
     getDispatch: (id: DispatchId) => dispatches.find((dispatch) => dispatch.id === id) ?? (() => { throw new Error(`missing dispatch ${id}`) })(),
     getTask: (id: TaskId) => tasks.get(id) ?? (() => { throw new Error(`missing task ${id}`) })(),
-    getRun: (id: RunId) => ({ id, objective: 'fixture', coordinatorSessionId: null, coordinatorHistory: [], consumerGeneration: 1, createdAt: now(), updatedAt: now() }),
+    getRun: (id: RunId) => ({ id, objective: 'fixture', coordinatorSessionId: options.coordinatorSessionId ?? null, coordinatorHistory: [], consumerGeneration: 1, createdAt: now(), updatedAt: now() }),
     mutateWorker: async <T extends object>(
       _method: string,
       params: MutationRequest & object,
