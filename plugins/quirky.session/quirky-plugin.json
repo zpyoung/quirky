@@ -78,7 +78,7 @@
                 "description": "The signal that ended the process, or null."
               },
               "exitCause": {
-                "description": "Why the session ended (exited, killed, host-restart or host-lost), or null while it is alive."
+                "description": "Why the session ended (exited, killed, stopped, host-restart or host-lost), or null while it is alive."
               },
               "restorable": {
                 "type": "boolean",
@@ -198,7 +198,7 @@
               "description": "The signal that ended the process, or null."
             },
             "exitCause": {
-              "description": "Why the session ended (exited, killed, host-restart or host-lost), or null while it is alive."
+              "description": "Why the session ended (exited, killed, stopped, host-restart or host-lost), or null while it is alive."
             },
             "restorable": {
               "type": "boolean",
@@ -366,7 +366,7 @@
               "description": "The signal that ended the process, or null."
             },
             "exitCause": {
-              "description": "Why the session ended (exited, killed, host-restart or host-lost), or null while it is alive."
+              "description": "Why the session ended (exited, killed, stopped, host-restart or host-lost), or null while it is alive."
             },
             "restorable": {
               "type": "boolean",
@@ -500,7 +500,7 @@
               "description": "The signal that ended the process, or null."
             },
             "exitCause": {
-              "description": "Why the session ended (exited, killed, host-restart or host-lost), or null while it is alive."
+              "description": "Why the session ended (exited, killed, stopped, host-restart or host-lost), or null while it is alive."
             },
             "restorable": {
               "type": "boolean",
@@ -644,7 +644,7 @@
               "description": "The signal that ended the process, or null."
             },
             "exitCause": {
-              "description": "Why the session ended (exited, killed, host-restart or host-lost), or null while it is alive."
+              "description": "Why the session ended (exited, killed, stopped, host-restart or host-lost), or null while it is alive."
             },
             "restorable": {
               "type": "boolean",
@@ -762,7 +762,7 @@
               "description": "The signal that ended the process, or null."
             },
             "exitCause": {
-              "description": "Why the session ended (exited, killed, host-restart or host-lost), or null while it is alive."
+              "description": "Why the session ended (exited, killed, stopped, host-restart or host-lost), or null while it is alive."
             },
             "restorable": {
               "type": "boolean",
@@ -889,7 +889,7 @@
               "description": "The signal that ended the process, or null."
             },
             "exitCause": {
-              "description": "Why the session ended (exited, killed, host-restart or host-lost), or null while it is alive."
+              "description": "Why the session ended (exited, killed, stopped, host-restart or host-lost), or null while it is alive."
             },
             "restorable": {
               "type": "boolean",
@@ -1039,7 +1039,7 @@
               "description": "The signal that ended the process, or null."
             },
             "exitCause": {
-              "description": "Why the session ended (exited, killed, host-restart or host-lost), or null while it is alive."
+              "description": "Why the session ended (exited, killed, stopped, host-restart or host-lost), or null while it is alive."
             },
             "restorable": {
               "type": "boolean",
@@ -1150,7 +1150,7 @@
               "description": "The signal that ended the process, or null."
             },
             "exitCause": {
-              "description": "Why the session ended (exited, killed, host-restart or host-lost), or null while it is alive."
+              "description": "Why the session ended (exited, killed, stopped, host-restart or host-lost), or null while it is alive."
             },
             "restorable": {
               "type": "boolean",
@@ -1314,7 +1314,7 @@
               "description": "The signal that ended the process, or null."
             },
             "exitCause": {
-              "description": "Why the session ended (exited, killed, host-restart or host-lost), or null while it is alive."
+              "description": "Why the session ended (exited, killed, stopped, host-restart or host-lost), or null while it is alive."
             },
             "restorable": {
               "type": "boolean",
@@ -1436,7 +1436,7 @@
               "description": "The signal that ended the process, or null."
             },
             "exitCause": {
-              "description": "Why the session ended (exited, killed, host-restart or host-lost), or null while it is alive."
+              "description": "Why the session ended (exited, killed, stopped, host-restart or host-lost), or null while it is alive."
             },
             "restorable": {
               "type": "boolean",
@@ -1526,7 +1526,7 @@
                 "lastActivityAt": { "type": "number" },
                 "exitCode": { "description": "The exit code, or null while the process is alive." },
                 "exitSignal": { "description": "The signal that ended the process, or null." },
-                "exitCause": { "description": "Why the session ended (exited, killed, host-restart or host-lost), or null while it is alive." },
+                "exitCause": { "description": "Why the session ended (exited, killed, stopped, host-restart or host-lost), or null while it is alive." },
                 "restorable": { "type": "boolean", "description": "True when the session ended with the PTY host and can be restored." },
                 "background": { "type": "boolean", "description": "True when automatic terminal tab adoption is disabled; explicit viewing remains possible." },
                 "launch": { "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept." },
@@ -1602,6 +1602,100 @@
           },
           "required": ["operationId", "result"]
         }
+      },
+      {
+        "id": "sleepWorkspace",
+        "description": "Durably records recovery intent, stops resumable terminal and structured sessions while retaining PTY or provider history, and returns per-session sleep outcomes.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": { "type": "string", "description": "Worktree selector, or `floating`." }
+          },
+          "required": ["worktree"]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "worktreeId": { "type": "string" },
+            "state": { "type": "string", "enum": ["awake", "sleeping", "asleep", "waking", "partial"] },
+            "updatedAt": { "type": "number" },
+            "sessions": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "sessionId": { "type": "string" },
+                  "state": { "type": "string", "enum": ["pending", "stopped", "restored"] },
+                  "error": { "type": ["string", "null"] }
+                },
+                "required": ["sessionId", "state", "error"]
+              }
+            }
+          },
+          "required": ["worktreeId", "state", "updatedAt", "sessions"]
+        }
+      },
+      {
+        "id": "wakeWorkspace",
+        "description": "Restores stopped shell history and resumes agents using their saved provider conversation identity; partial failures remain retryable.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": { "type": "string", "description": "Worktree selector, or `floating`." }
+          },
+          "required": ["worktree"]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "worktreeId": { "type": "string" },
+            "state": { "type": "string", "enum": ["awake", "sleeping", "asleep", "waking", "partial"] },
+            "updatedAt": { "type": "number" },
+            "sessions": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "sessionId": { "type": "string" },
+                  "state": { "type": "string", "enum": ["pending", "stopped", "restored"] },
+                  "error": { "type": ["string", "null"] }
+                },
+                "required": ["sessionId", "state", "error"]
+              }
+            }
+          },
+          "required": ["worktreeId", "state", "updatedAt", "sessions"]
+        }
+      },
+      {
+        "id": "workspaceSleepStates",
+        "description": "Lists durable workspace sleep and per-session recovery outcomes.",
+        "readOnly": true,
+        "params": { "type": "object" },
+        "result": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "worktreeId": { "type": "string" },
+              "state": { "type": "string", "enum": ["awake", "sleeping", "asleep", "waking", "partial"] },
+              "updatedAt": { "type": "number" },
+              "sessions": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "sessionId": { "type": "string" },
+                    "state": { "type": "string", "enum": ["pending", "stopped", "restored"] },
+                    "error": { "type": ["string", "null"] }
+                  },
+                  "required": ["sessionId", "state", "error"]
+                }
+              }
+            },
+            "required": ["worktreeId", "state", "updatedAt", "sessions"]
+          }
+        }
       }
     ],
     "event": [
@@ -1661,7 +1755,7 @@
                   "description": "The signal that ended the process, or null."
                 },
                 "exitCause": {
-                  "description": "Why the session ended (exited, killed, host-restart or host-lost), or null while it is alive."
+                  "description": "Why the session ended (exited, killed, stopped, host-restart or host-lost), or null while it is alive."
                 },
                 "restorable": {
                   "type": "boolean",
@@ -2067,6 +2161,30 @@
         "methods": [
           "quirky.session/close"
         ]
+      },
+      {
+        "id": "sleep",
+        "words": "sleep",
+        "summary": "stop a worktree's resumable sessions while preserving history",
+        "positionals": [
+          { "name": "worktree", "description": "the worktree selector or `floating`", "required": true, "param": "worktree" }
+        ],
+        "methods": ["quirky.session/sleepWorkspace"]
+      },
+      {
+        "id": "wake",
+        "words": "wake",
+        "summary": "restore terminal history and resume agents in a sleeping worktree",
+        "positionals": [
+          { "name": "worktree", "description": "the worktree selector or `floating`", "required": true, "param": "worktree" }
+        ],
+        "methods": ["quirky.session/wakeWorkspace"]
+      },
+      {
+        "id": "sleep-states",
+        "words": "sleep-states",
+        "summary": "list durable sleep and recovery state for every worktree",
+        "methods": ["quirky.session/workspaceSleepStates"]
       }
     ]
   }

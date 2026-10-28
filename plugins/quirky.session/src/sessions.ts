@@ -17,9 +17,10 @@ import {
   type SessionBadge,
   type SessionLaunch,
   type SessionProviderSession,
-  type SessionStatus
+  type SessionStatus,
+  type WorkspaceSleepState
 } from '@quirky/protocol'
-import type { SessionRecords } from './records'
+import type { SessionRecords, StoredWorkspaceSleep } from './records'
 import { SessionPointers, type SessionPointerResult } from './pointer'
 
 /** The workspace id of the synthetic worktree for sessions that belong to no repository. */
@@ -27,12 +28,17 @@ const FLOATING = 'floating'
 type RuntimeIdentityEvidence = Omit<PluginSessionIdentity, 'live'> & { live: boolean }
 
 /** What a session belongs to and starts in: a git worktree, or the synthetic floating one (no repository). */
-type SessionTarget = { id: string; name: string; path: string; repoId: string | null }
+type SessionTarget = { id: string; name: string; path: string; repoId: string | null; instanceId: string }
+type WorkspaceIdentity = { worktreeId: string; instanceId: string | null }
 
 const isNotFound = (error: unknown) => (error as { code?: unknown } | null)?.code === RpcErrorCode.NotFound
 const isRpcError = (error: unknown) => typeof (error as { code?: unknown } | null)?.code === 'number'
 const isUnknownSession = (error: unknown) => error instanceof Error && /^unknown session\b/.test(error.message)
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
+const verifiedInstance = (instanceId: string | null | undefined): instanceId is string =>
+  instanceId === FLOATING || (typeof instanceId === 'string' && instanceId.length > 0 && !instanceId.startsWith('unverified:'))
+const sameVerifiedInstance = (left: string | null | undefined, right: string | null | undefined): boolean =>
+  verifiedInstance(left) && verifiedInstance(right) && left === right
 
 /** How a session ended; `finish` fills in what is left out (no signal, cause `exited`, not restorable). */
 export type SessionExit = {
@@ -69,6 +75,8 @@ export function nameProblem(name: string): string | null {
 }
 
 const MAX_PROVIDER_SESSION_ID = 512
+const STRUCTURED_WAKE_PROVIDER_UPDATE_LIMIT = 64
+const STRUCTURED_WAKE_PROVIDER_UPDATE_TTL_MS = 5 * 60_000
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/
 const UNREAD_REASONS = ['agent', 'bell', 'notification']
 
@@ -301,7 +309,7 @@ function identityOf(caller: PluginCaller): { cwd?: string; worktreeId?: string }
   }
 }
 
-/** Session lifecycle: records, launch, close, status and reconciliation with the PTY host. */
+/** Session lifecycle: records, launch, close, workspace sleep/wake, status and PTY reconciliation. */
 export class SessionService {
   private readonly pointers: SessionPointers
 
@@ -316,6 +324,108 @@ export class SessionService {
   /** Exit details that arrived while a restore was spawning; a key is present for the whole spawn. */
   private readonly restoreExits = new Map<string, SessionExit | null>()
   private readonly sessionLocks = new Map<string, Promise<void>>()
+  private readonly workspaceLocks = new Map<string, Promise<void>>()
+  /** Narrow admission for provider IDs published asynchronously by structured sessions resumed during wake. */
+  private readonly structuredWakeProviderUpdates = new Map<
+    string,
+    { worktreeId: string; instanceId: string; sourceSessionId: string; expiresAt: number }
+  >()
+
+  private async withWorkspaceLock<T>(worktreeId: string, work: () => Promise<T>): Promise<T> {
+    const previous = this.workspaceLocks.get(worktreeId) ?? Promise.resolve()
+    const { promise: held, resolve: release } = Promise.withResolvers<void>()
+    const queued = previous.then(() => held)
+    this.workspaceLocks.set(worktreeId, queued)
+    await previous
+    try {
+      return await work()
+    } finally {
+      release()
+      if (this.workspaceLocks.get(worktreeId) === queued) this.workspaceLocks.delete(worktreeId)
+    }
+  }
+
+  private ensureWorkspaceAwake(worktreeId: string, instanceId: string | null): void {
+    const stored = this.records.workspaceSleepRecord(worktreeId)
+    if (!stored || stored.state.state === 'awake') return
+    if (this.sameWorkspaceInstance(stored, instanceId)) {
+      throw this.context.error('conflict', `workspace ${worktreeId} is ${stored.state.state}; wake it before launching sessions`)
+    }
+    if (verifiedInstance(instanceId) && (!verifiedInstance(stored.instanceId) || stored.instanceId !== instanceId)) return
+    throw this.context.error('conflict', `workspace ${worktreeId} has sleep recovery state but its filesystem instance cannot be verified`)
+  }
+
+  private async workspaceInstanceForId(worktreeId: string, caller: PluginCaller): Promise<string | null> {
+    if (worktreeId === FLOATING) return FLOATING
+    try {
+      return (await this.resolveWorktree(`id:${worktreeId}`, caller)).instanceId
+    } catch (error) {
+      if (isNotFound(error)) return null
+      throw error
+    }
+  }
+
+  private sameWorkspaceInstance(stored: StoredWorkspaceSleep, currentInstanceId: string | null): boolean {
+    return verifiedInstance(stored.instanceId) && verifiedInstance(currentInstanceId) && stored.instanceId === currentInstanceId
+  }
+
+  private staleWorkspaceSleepState(
+    stored: StoredWorkspaceSleep,
+    currentInstanceId: string | null
+  ): WorkspaceSleepState {
+    const unresolved = stored.state.sessions.some((session) => session.state !== 'restored')
+    if (!unresolved) {
+      return this.records.putWorkspaceSleepState(
+        { ...stored.state, state: 'awake', updatedAt: Date.now() },
+        verifiedInstance(currentInstanceId) ? currentInstanceId : stored.instanceId
+      )
+    }
+    const reason = verifiedInstance(currentInstanceId)
+      ? 'filesystem instance changed; refusing to restore an older session into this replacement workspace'
+      : 'filesystem instance cannot be verified; refusing to restore an older session'
+    const sessions = stored.state.sessions.map((session) => {
+      if (session.state === 'restored') return session
+      if (session.error?.includes('filesystem instance')) return session
+      return { ...session, error: session.error ? `${session.error}; ${reason}` : reason }
+    })
+    return this.records.putWorkspaceSleepState(
+      { ...stored.state, state: 'partial', updatedAt: Date.now(), sessions },
+      stored.instanceId
+    )
+  }
+
+  private async ensureSessionWorkspaceCurrent(session: Session, caller: PluginCaller): Promise<string | null> {
+    const stored = this.records.workspaceSleepRecord(session.worktreeId)
+    if (!stored) return null
+    const currentInstanceId = await this.workspaceInstanceForId(session.worktreeId, caller)
+    if (verifiedInstance(stored.instanceId) && stored.instanceId === currentInstanceId) return currentInstanceId
+    if (stored.state.sessions.some((entry) => entry.sessionId === session.id)) {
+      throw this.context.error(
+        'conflict',
+        `session ${session.id} belongs to a previous filesystem instance at this worktree path; its recovery record was kept`
+      )
+    }
+    return currentInstanceId
+  }
+
+  private async assertCurrentWorktreeTarget(target: SessionTarget, caller: PluginCaller): Promise<string | null> {
+    if (!this.records.workspaceSleepRecord(target.id) || !verifiedInstance(target.instanceId)) return target.instanceId
+    const currentInstanceId = await this.workspaceInstanceForId(target.id, caller)
+    if (!sameVerifiedInstance(target.instanceId, currentInstanceId)) {
+      throw this.context.error('conflict', `worktree ${target.id} changed filesystem instance before the session could start`)
+    }
+    return currentInstanceId
+  }
+
+  private internalCaller(): PluginCaller {
+    return { role: 'plugin', pluginId: this.context.pluginId }
+  }
+
+  private pruneStructuredWakeProviderUpdates(now: number): void {
+    for (const [sessionId, admission] of this.structuredWakeProviderUpdates) {
+      if (admission.expiresAt <= now) this.structuredWakeProviderUpdates.delete(sessionId)
+    }
+  }
 
   private async withSessionLock<T>(sessionId: string, work: () => Promise<T>): Promise<T> {
     const previous = this.sessionLocks.get(sessionId) ?? Promise.resolve()
@@ -338,6 +448,182 @@ export class SessionService {
   list = async (params: Record<string, unknown>, caller: PluginCaller): Promise<Session[]> => {
     if (params.worktree === undefined) return this.records.list()
     return this.records.list(await this.worktreeIdFor(params.worktree as string, caller))
+  }
+
+  sleepWorkspace = async (params: Record<string, unknown>, caller: PluginCaller): Promise<WorkspaceSleepState> => {
+    const target = await this.workspaceIdentityFor(params, caller)
+    const { worktreeId } = target
+    return this.withWorkspaceLock(worktreeId, async () => {
+      let existing = this.records.workspaceSleepRecord(worktreeId)
+      const currentInstanceId = await this.workspaceInstanceForId(worktreeId, caller)
+      if (!sameVerifiedInstance(target.instanceId, currentInstanceId)) {
+        if (existing) return this.staleWorkspaceSleepState(existing, currentInstanceId)
+        throw this.context.error('conflict', `worktree ${worktreeId} changed or cannot be verified before sleep`)
+      }
+      if (!verifiedInstance(currentInstanceId)) {
+        if (existing) return this.staleWorkspaceSleepState(existing, currentInstanceId)
+        throw this.context.error('conflict', `cannot safely sleep worktree ${worktreeId}: filesystem instance identity is unverified`)
+      }
+      if (existing && !this.sameWorkspaceInstance(existing, currentInstanceId)) {
+        const completed = existing.state.state === 'awake' && existing.state.sessions.every((session) => session.state === 'restored')
+        if (!completed) return this.staleWorkspaceSleepState(existing, currentInstanceId)
+        existing = {
+          state: this.records.putWorkspaceSleepState(
+            { ...existing.state, updatedAt: Date.now() },
+            currentInstanceId
+          ),
+          instanceId: currentInstanceId
+        }
+      }
+      if (existing?.state.state === 'asleep') return existing.state
+      if (existing?.state.state === 'waking') {
+        throw this.context.error('conflict', `workspace ${worktreeId} is waking; retry wake before sleeping it`)
+      }
+      if (existing?.state.state === 'partial' && existing.state.sessions.some((session) => session.state === 'restored')) {
+        throw this.context.error('conflict', `workspace ${worktreeId} has a partial wake; retry wake before sleeping it`)
+      }
+
+      const sessions = this.records.list(worktreeId)
+      await this.ensureWorkspaceSessionsCanSleep(sessions.filter((session) => session.status !== 'exited'))
+      const recovery = existing && (existing.state.state === 'partial' || existing.state.state === 'sleeping')
+        ? existing.state.sessions.map((session) => session.state === 'pending' ? { ...session, error: null } : session)
+        : sessions
+            .filter((session) => session.status !== 'exited')
+            .map((session) => ({ sessionId: session.id, state: 'pending' as const, error: null }))
+      let state = this.saveWorkspaceSleepState(worktreeId, currentInstanceId, 'sleeping', recovery)
+
+      for (let index = 0; index < state.sessions.length; index++) {
+        const item = state.sessions[index]!
+        if (item.state !== 'pending') continue
+        try {
+          await this.stopWorkspaceSession(item.sessionId)
+          state = this.replaceWorkspaceSleepSession(state, currentInstanceId, index, { sessionId: item.sessionId, state: 'stopped', error: null })
+        } catch (error) {
+          state = this.replaceWorkspaceSleepSession(
+            state,
+            currentInstanceId,
+            index,
+            { sessionId: item.sessionId, state: 'pending', error: messageOf(error) }
+          )
+        }
+      }
+      const finalInstanceId = await this.workspaceInstanceForId(worktreeId, caller)
+      const latest = this.records.workspaceSleepRecord(worktreeId)
+      if (!latest) throw new Error(`workspace sleep recovery for ${worktreeId} disappeared`)
+      if (!this.sameWorkspaceInstance(latest, finalInstanceId)) {
+        return this.staleWorkspaceSleepState(latest, finalInstanceId)
+      }
+      return this.saveWorkspaceSleepState(
+        worktreeId,
+        currentInstanceId,
+        state.sessions.every((session) => session.state === 'stopped') ? 'asleep' : 'partial',
+        state.sessions
+      )
+    })
+  }
+
+  wakeWorkspace = async (params: Record<string, unknown>, caller: PluginCaller): Promise<WorkspaceSleepState> => {
+    const target = await this.workspaceIdentityFor(params, caller)
+    const { worktreeId } = target
+    return this.withWorkspaceLock(worktreeId, async () => {
+      let existing = this.records.workspaceSleepRecord(worktreeId)
+      const currentInstanceId = await this.workspaceInstanceForId(worktreeId, caller)
+      if (!sameVerifiedInstance(target.instanceId, currentInstanceId)) {
+        if (existing) return this.staleWorkspaceSleepState(existing, currentInstanceId)
+        throw this.context.error('conflict', `worktree ${worktreeId} changed or cannot be verified before wake`)
+      }
+      if (!verifiedInstance(currentInstanceId)) {
+        if (existing) return this.staleWorkspaceSleepState(existing, currentInstanceId)
+        return { worktreeId, state: 'awake', updatedAt: Date.now(), sessions: [] }
+      }
+      if (existing && !this.sameWorkspaceInstance(existing, currentInstanceId)) {
+        const completed = existing.state.state === 'awake' && existing.state.sessions.every((session) => session.state === 'restored')
+        if (!completed) return this.staleWorkspaceSleepState(existing, currentInstanceId)
+        existing = {
+          state: this.records.putWorkspaceSleepState(
+            { ...existing.state, updatedAt: Date.now() },
+            currentInstanceId
+          ),
+          instanceId: currentInstanceId
+        }
+      }
+      if (existing?.state.state === 'awake') return existing.state
+      if (!existing) return this.saveWorkspaceSleepState(worktreeId, currentInstanceId, 'awake', [])
+
+      const active = this.records.list(worktreeId).filter((session) => session.status !== 'exited')
+      await this.ensureWorkspaceSessionsCanSleep(active)
+      let state = this.saveWorkspaceSleepState(worktreeId, currentInstanceId, 'waking', existing.state.sessions)
+      for (let index = 0; index < state.sessions.length; index++) {
+        const item = state.sessions[index]!
+        if (item.state !== 'pending') continue
+        try {
+          await this.stopWorkspaceSession(item.sessionId)
+          state = this.replaceWorkspaceSleepSession(state, currentInstanceId, index, { sessionId: item.sessionId, state: 'stopped', error: null })
+        } catch (error) {
+          state = this.replaceWorkspaceSleepSession(
+            state,
+            currentInstanceId,
+            index,
+            { sessionId: item.sessionId, state: 'pending', error: messageOf(error) }
+          )
+        }
+      }
+      if (state.sessions.some((session) => session.state === 'pending')) {
+        return this.saveWorkspaceSleepState(worktreeId, currentInstanceId, 'partial', state.sessions)
+      }
+
+      for (let index = 0; index < state.sessions.length; index++) {
+        const item = state.sessions[index]!
+        if (item.state !== 'stopped') continue
+        try {
+          const currentInstance = await this.workspaceInstanceForId(worktreeId, caller)
+          if (!sameVerifiedInstance(currentInstanceId, currentInstance)) {
+            throw new Error(`worktree ${worktreeId} filesystem instance changed before session ${item.sessionId} could be resumed`)
+          }
+          const session = this.records.get(item.sessionId)
+          if (!session) throw new Error(`session ${item.sessionId} is missing from its recovery record`)
+          const restored = session.kind === 'terminal' && session.agent === 'shell'
+            ? await this.restoreInWorkspace(session)
+            : await this.resumeSession(session, { session: session.id })
+          if (restored.status === 'exited') {
+            throw new Error(`session ${item.sessionId} exited while it was being resumed`)
+          }
+          state = this.replaceWorkspaceSleepSession(state, currentInstanceId, index, { sessionId: item.sessionId, state: 'restored', error: null })
+        } catch (error) {
+          state = this.replaceWorkspaceSleepSession(
+            state,
+            currentInstanceId,
+            index,
+            { sessionId: item.sessionId, state: 'stopped', error: messageOf(error) }
+          )
+        }
+      }
+      return this.saveWorkspaceSleepState(
+        worktreeId,
+        currentInstanceId,
+        state.sessions.every((session) => session.state === 'restored') ? 'awake' : 'partial',
+        state.sessions
+      )
+    })
+  }
+
+  workspaceSleepStates = async (
+    _params: Record<string, unknown>,
+    caller: PluginCaller
+  ): Promise<WorkspaceSleepState[]> => {
+    const states: WorkspaceSleepState[] = []
+    for (const known of this.records.workspaceSleepRecords()) {
+      const projected = await this.withWorkspaceLock(known.state.worktreeId, async () => {
+        const stored = this.records.workspaceSleepRecord(known.state.worktreeId)
+        if (!stored) return null
+        const currentInstanceId = await this.workspaceInstanceForId(known.state.worktreeId, caller)
+        return this.sameWorkspaceInstance(stored, currentInstanceId)
+          ? stored.state
+          : this.staleWorkspaceSleepState(stored, currentInstanceId)
+      })
+      if (projected) states.push(projected)
+    }
+    return states
   }
 
   get = (params: Record<string, unknown>): Session => this.require(params.session as string)
@@ -376,77 +662,95 @@ export class SessionService {
     const cwd = this.startCwd(params.cwd)
     const resolved = await this.resolveWorktree(params.worktree, caller, cwd)
     const worktree = cwd === undefined ? resolved : { ...resolved, path: cwd }
-    const agent = (params.agent as string | undefined) ?? (await this.pickAgent())
-    const prompt = params.prompt as string | undefined
-    const submitPrompt = (params.submitPrompt as boolean | undefined) ?? true
-    const picks = picksOf(params)
-    if (agent === 'shell' && Object.keys(picks).length > 0) {
-      throw this.context.error('invalid-params', 'Agent shell does not support launch-time model selection.')
-    }
-    const command = params.command as string | undefined
-    if (command !== undefined && agent !== 'shell') {
-      throw this.context.error('invalid-params', 'command is only allowed with agent shell')
-    }
-    const title = (params.title as string | undefined) ?? (agent === 'shell' ? 'Shell' : (await this.agentInfo(agent)).label)
-    const accountPrepare = await this.accountPreparationAvailable()
-    const userEnv =
-      accountPrepare && agent !== 'shell'
-        ? plannedEnvironmentOf(
-            await this.context.call('quirky.agents/plan', {
-              agent,
-              cwd: worktree.path,
-              ...(prompt === undefined ? {} : { prompt }),
-              submitPrompt,
-              ...picks
-            })
-          )
-        : {}
-    const session = { ...this.newRecord(worktree, 'terminal', agent, title), name }
-    const launched = await this.start(session, worktree.repoId, params, prompt, async (additions) => {
-      const prepared = accountPrepare
-        ? await this.prepareAccount(session, agent, worktree.path, userEnv, additions.env)
-        : null
-      const hookEnv = preparedHookEnv(additions.env, userEnv, prepared)
-      if (agent === 'shell') {
+    return this.withWorkspaceLock(worktree.id, async () => {
+      const currentInstanceId = await this.assertCurrentWorktreeTarget(worktree, caller)
+      this.ensureWorkspaceAwake(worktree.id, currentInstanceId)
+      const agent = (params.agent as string | undefined) ?? (await this.pickAgent())
+      const prompt = params.prompt as string | undefined
+      const submitPrompt = (params.submitPrompt as boolean | undefined) ?? true
+      const picks = picksOf(params)
+      if (agent === 'shell' && Object.keys(picks).length > 0) {
+        throw this.context.error('invalid-params', 'Agent shell does not support launch-time model selection.')
+      }
+      const command = params.command as string | undefined
+      if (command !== undefined && agent !== 'shell') {
+        throw this.context.error('invalid-params', 'command is only allowed with agent shell')
+      }
+      const title = (params.title as string | undefined) ?? (agent === 'shell' ? 'Shell' : (await this.agentInfo(agent)).label)
+      const accountPrepare = await this.accountPreparationAvailable()
+      const userEnv =
+        accountPrepare && agent !== 'shell'
+          ? plannedEnvironmentOf(
+              await this.context.call('quirky.agents/plan', {
+                agent,
+                cwd: worktree.path,
+                ...(prompt === undefined ? {} : { prompt }),
+                submitPrompt,
+                ...picks
+              })
+            )
+          : {}
+      const session = { ...this.newRecord(worktree, 'terminal', agent, title), name }
+      const launched = await this.start(session, worktree.repoId, params, prompt, async (additions) => {
+        const prepared = accountPrepare
+          ? await this.prepareAccount(session, agent, worktree.path, userEnv, additions.env)
+          : null
+        const hookEnv = preparedHookEnv(additions.env, userEnv, prepared)
+        if (agent === 'shell') {
+          return {
+            argv: command === undefined ? this.context.launch.shellArgv() : this.context.launch.commandArgv(command),
+            envPatch: hookEnv,
+            ...(prepared?.shellInit ? { shellInit: prepared.shellInit } : {}),
+            launch: null,
+            launchSettings: null,
+            promptDelivery: null,
+            paste: null,
+            providerSession: null
+          }
+        }
+        const plan = (await this.context.call('quirky.agents/prepareLaunch', {
+          agent,
+          cwd: worktree.path,
+          ...(prompt === undefined ? {} : { prompt }),
+          submitPrompt,
+          ...picks,
+          hookArgs: additions.args,
+          hookEnv
+        })) as LaunchPlan
         return {
-          argv: command === undefined ? this.context.launch.shellArgv() : this.context.launch.commandArgv(command),
-          envPatch: hookEnv,
-          ...(prepared?.shellInit ? { shellInit: prepared.shellInit } : {}),
-          launch: null,
-          launchSettings: null,
-          promptDelivery: null,
-          paste: null,
+          argv: this.context.launch.commandArgv(plan.command),
+          envPatch: plan.env,
+          launch: plan.record,
+          launchSettings: plan.launchSettings ?? null,
+          promptDelivery: plan.promptDelivery,
+          paste: plan.paste,
           providerSession: null
         }
-      }
-      const plan = (await this.context.call('quirky.agents/prepareLaunch', {
-        agent,
-        cwd: worktree.path,
-        ...(prompt === undefined ? {} : { prompt }),
-        submitPrompt,
-        ...picks,
-        hookArgs: additions.args,
-        hookEnv
-      })) as LaunchPlan
-      return {
-        argv: this.context.launch.commandArgv(plan.command),
-        envPatch: plan.env,
-        launch: plan.record,
-        launchSettings: plan.launchSettings ?? null,
-        promptDelivery: plan.promptDelivery,
-        paste: plan.paste,
-        providerSession: null
-      }
-    }, picks)
-    return this.deliverAfterLaunch(launched, params.waitForPrompt === true)
+      }, picks)
+      return this.deliverAfterLaunch(launched, params.waitForPrompt === true)
+    })
   }
 
   /**
    * Starts a new terminal session that resumes an agent session in the old session's folder,
    * replaying the old launch record, whose launch settings carry over. The old record is untouched.
    */
-  resume = async (params: Record<string, unknown>): Promise<Session> => {
+  resume = async (params: Record<string, unknown>, caller?: PluginCaller): Promise<Session> => {
     const old = this.require(params.session as string)
+    const effectiveCaller = caller ?? this.internalCaller()
+    const instanceId = await this.ensureSessionWorkspaceCurrent(old, effectiveCaller)
+    if (old.kind === 'structured') {
+      this.ensureWorkspaceAwake(old.worktreeId, instanceId)
+      return this.resumeSession(old, params)
+    }
+    return this.withWorkspaceLock(old.worktreeId, async () => {
+      const currentInstanceId = await this.ensureSessionWorkspaceCurrent(old, effectiveCaller)
+      this.ensureWorkspaceAwake(old.worktreeId, currentInstanceId)
+      return this.resumeSession(old, params)
+    })
+  }
+
+  private async resumeSession(old: Session, params: Record<string, unknown>): Promise<Session> {
     if (old.kind === 'structured') {
       if (params.fork !== undefined) throw this.context.error('conflict', 'structured sessions do not support fork')
       if (params.providerSession !== undefined) {
@@ -581,41 +885,45 @@ export class SessionService {
       throw this.context.error('invalid-params', 'worktree must be a selector string')
     }
     const target = await this.resolveWorktree(params.worktree ?? FLOATING, caller, cwd)
-    const providerSession: SessionProviderSession = { id: providerId, transcriptPath }
-    const session = this.newRecord({ id: target.id, path: cwd }, 'terminal', agent as AgentKind, info.label)
-    const accountPrepare = await this.accountPreparationAvailable()
-    const userEnv = accountPrepare
-      ? record?.env ?? plannedEnvironmentOf(await this.context.call('quirky.agents/plan', { agent, cwd }))
-      : {}
-    const launched = await this.start(session, target.repoId, params, undefined, async (additions) => {
-      const prepared = accountPrepare
-        ? await this.prepareAccount(session, agent, cwd, userEnv, additions.env)
-        : null
-      const preparedProviderSession =
-        prepared?.resumeTranscriptPath === undefined
-          ? providerSession
-          : { ...providerSession, transcriptPath: prepared.resumeTranscriptPath }
-      const hookEnv = preparedHookEnv(additions.env, userEnv, prepared)
-      const resumed = (await this.context.call('quirky.agents/prepareResume', {
-        agent,
-        cwd,
-        record,
-        providerSession: preparedProviderSession,
-        fork,
-        hookArgs: additions.args,
-        hookEnv
-      })) as { command: string; env: Record<string, string | null>; record: SessionLaunch }
-      return {
-        argv: this.context.launch.commandArgv(resumed.command),
-        envPatch: resumed.env,
-        launch: resumed.record,
-        launchSettings: null,
-        promptDelivery: null,
-        paste: null,
-        providerSession: fork ? null : preparedProviderSession
-      }
+    return this.withWorkspaceLock(target.id, async () => {
+      const currentInstanceId = await this.assertCurrentWorktreeTarget(target, caller)
+      this.ensureWorkspaceAwake(target.id, currentInstanceId)
+      const providerSession: SessionProviderSession = { id: providerId, transcriptPath }
+      const session = this.newRecord({ id: target.id, path: cwd }, 'terminal', agent as AgentKind, info.label)
+      const accountPrepare = await this.accountPreparationAvailable()
+      const userEnv = accountPrepare
+        ? record?.env ?? plannedEnvironmentOf(await this.context.call('quirky.agents/plan', { agent, cwd }))
+        : {}
+      const launched = await this.start(session, target.repoId, params, undefined, async (additions) => {
+        const prepared = accountPrepare
+          ? await this.prepareAccount(session, agent, cwd, userEnv, additions.env)
+          : null
+        const preparedProviderSession =
+          prepared?.resumeTranscriptPath === undefined
+            ? providerSession
+            : { ...providerSession, transcriptPath: prepared.resumeTranscriptPath }
+        const hookEnv = preparedHookEnv(additions.env, userEnv, prepared)
+        const resumed = (await this.context.call('quirky.agents/prepareResume', {
+          agent,
+          cwd,
+          record,
+          providerSession: preparedProviderSession,
+          fork,
+          hookArgs: additions.args,
+          hookEnv
+        })) as { command: string; env: Record<string, string | null>; record: SessionLaunch }
+        return {
+          argv: this.context.launch.commandArgv(resumed.command),
+          envPatch: resumed.env,
+          launch: resumed.record,
+          launchSettings: null,
+          promptDelivery: null,
+          paste: null,
+          providerSession: fork ? null : preparedProviderSession
+        }
+      })
+      return this.deliverAfterLaunch(launched, false)
     })
-    return this.deliverAfterLaunch(launched, false)
   }
 
   /**
@@ -636,15 +944,73 @@ export class SessionService {
   }
 
   /** Stores the agent CLI's own session ID (and transcript path) so a later resume can pass it back. */
-  setProviderSession = (params: Record<string, unknown>): Session => {
+  setProviderSession = async (params: Record<string, unknown>, caller?: PluginCaller): Promise<Session> => {
     const session = this.require(params.session as string)
     const id = params.id as string
-    const problem = providerSessionIdProblem(id)
-    if (problem) throw this.context.error('invalid-params', problem)
-    const updated = this.records.update(session.id, {
-      providerSession: { id, transcriptPath: (params.transcriptPath as string | undefined) ?? null }
-    }) as Session
-    return this.publish(updated)
+    const update = (): Session => {
+      const problem = providerSessionIdProblem(id)
+      if (problem) throw this.context.error('invalid-params', problem)
+      const updated = this.records.update(session.id, {
+        providerSession: { id, transcriptPath: (params.transcriptPath as string | undefined) ?? null }
+      }) as Session
+      return this.publish(updated)
+    }
+    const now = Date.now()
+    this.pruneStructuredWakeProviderUpdates(now)
+    const admission = this.structuredWakeProviderUpdates.get(session.id)
+    const sleepRecord = this.records.workspaceSleepRecord(session.worktreeId)
+    const sleepState = sleepRecord?.state
+    const structuredCaller = caller?.role === 'plugin' && caller.pluginId === 'quirky.structured'
+    const stoppingItem =
+      structuredCaller &&
+      session.kind === 'structured' &&
+      (sleepState?.state === 'sleeping' || sleepState?.state === 'waking')
+        ? sleepState?.sessions.find((entry) => entry.sessionId === session.id && entry.state === 'pending')
+        : undefined
+    const currentInstanceId =
+      admission !== undefined || stoppingItem !== undefined
+        ? await this.workspaceInstanceForId(session.worktreeId, caller ?? this.internalCaller())
+        : null
+    const wakeSource =
+      session.kind === 'structured' && typeof session.resumedFrom === 'string'
+        ? sleepState?.sessions.find(
+            (entry) => entry.sessionId === session.resumedFrom && (entry.state === 'stopped' || entry.state === 'restored')
+          )
+        : undefined
+    const admittedWakeUpdate =
+      structuredCaller &&
+      admission !== undefined &&
+      admission.expiresAt > now &&
+      admission.worktreeId === session.worktreeId &&
+      admission.instanceId === sleepRecord?.instanceId &&
+      admission.instanceId === currentInstanceId &&
+      admission.sourceSessionId === session.resumedFrom &&
+      session.kind === 'structured' &&
+      sleepState?.state === 'waking' &&
+      wakeSource !== undefined
+    const stoppingStructuredUpdate =
+      structuredCaller &&
+      stoppingItem !== undefined &&
+      sleepRecord !== null &&
+      this.sameWorkspaceInstance(sleepRecord, currentInstanceId)
+    if (stoppingItem && (!sleepRecord || !this.sameWorkspaceInstance(sleepRecord, currentInstanceId))) {
+      throw this.context.error('conflict', `structured provider update for ${session.id} targets a stale workspace instance`)
+    }
+    if (admittedWakeUpdate || stoppingStructuredUpdate) {
+      const updated = update()
+      if (admittedWakeUpdate) this.structuredWakeProviderUpdates.delete(session.id)
+      return updated
+    }
+    if (admission && sleepState?.state !== 'waking') this.structuredWakeProviderUpdates.delete(session.id)
+    if (structuredCaller && wakeSource !== undefined && sleepState?.state === 'waking') {
+      throw this.context.error('conflict', `structured wake for session ${session.resumedFrom} has no active provider update admission`)
+    }
+    const effectiveCaller = caller ?? this.internalCaller()
+    return this.withWorkspaceLock(session.worktreeId, async () => {
+      const instanceId = await this.ensureSessionWorkspaceCurrent(session, effectiveCaller)
+      this.ensureWorkspaceAwake(session.worktreeId, instanceId)
+      return update()
+    })
   }
 
   /**
@@ -661,21 +1027,63 @@ export class SessionService {
     const cwd = this.startCwd(params.cwd)
     const resolved = await this.resolveWorktree(params.worktree, caller, cwd)
     const worktree = cwd === undefined ? resolved : { ...resolved, path: cwd }
-    const resumedFrom = params.resumedFrom
-    if (resumedFrom !== undefined) {
-      if (typeof resumedFrom !== 'string' || resumedFrom.length === 0) {
-        throw this.context.error('invalid-params', 'resumedFrom must be a non-empty session ID')
+    const registerSession = (currentInstanceId: string | null): Session => {
+      const resumedFrom = params.resumedFrom
+      let source: Session | null = null
+      if (resumedFrom !== undefined) {
+        if (typeof resumedFrom !== 'string' || resumedFrom.length === 0) {
+          throw this.context.error('invalid-params', 'resumedFrom must be a non-empty session ID')
+        }
+        source = this.records.get(resumedFrom)
+        if (!source) throw this.context.error('not-found', `no such resumed session: ${resumedFrom}`)
+        const recovery = this.records.workspaceSleepRecord(worktree.id)
+        if (
+          recovery?.state.sessions.some((entry) => entry.sessionId === source!.id) &&
+          !this.sameWorkspaceInstance(recovery, currentInstanceId)
+        ) {
+          throw this.context.error('conflict', `session ${source.id} belongs to a previous filesystem instance; it cannot be resumed here`)
+        }
       }
-      if (!this.records.get(resumedFrom)) throw this.context.error('not-found', `no such resumed session: ${resumedFrom}`)
+      const session = {
+        ...this.newRecord(worktree, 'structured', params.agent as AgentKind, params.title as string),
+        launchSettings: checked?.settings ?? null,
+        ...(background === undefined ? {} : { background }),
+        ...(resumedFrom === undefined ? {} : { resumedFrom })
+      }
+      this.records.insert(session, worktree.repoId)
+      return this.publish(session)
     }
-    const session = {
-      ...this.newRecord(worktree, 'structured', params.agent as AgentKind, params.title as string),
-      launchSettings: checked?.settings ?? null,
-      ...(background === undefined ? {} : { background }),
-      ...(resumedFrom === undefined ? {} : { resumedFrom })
+    const sleeping = this.records.workspaceSleepRecord(worktree.id)
+    const structuredWakeResume =
+      caller.role === 'plugin' &&
+      caller.pluginId === 'quirky.structured' &&
+      sleeping?.state.state === 'waking' &&
+      typeof params.resumedFrom === 'string' &&
+      this.records.get(params.resumedFrom)?.kind === 'structured' &&
+      sleeping.state.sessions.some((session) => session.sessionId === params.resumedFrom && session.state === 'stopped')
+    if (structuredWakeResume && sleeping && typeof params.resumedFrom === 'string') {
+      if (!this.sameWorkspaceInstance(sleeping, worktree.instanceId)) {
+        throw this.context.error('conflict', `worktree ${worktree.id} changed filesystem instance before structured wake`)
+      }
+      const now = Date.now()
+      this.pruneStructuredWakeProviderUpdates(now)
+      if (this.structuredWakeProviderUpdates.size >= STRUCTURED_WAKE_PROVIDER_UPDATE_LIMIT) {
+        throw this.context.error('conflict', 'too many structured workspace wakes are waiting for provider session identity')
+      }
+      const registered = registerSession(worktree.instanceId)
+      this.structuredWakeProviderUpdates.set(registered.id, {
+        worktreeId: worktree.id,
+        instanceId: worktree.instanceId,
+        sourceSessionId: params.resumedFrom,
+        expiresAt: now + STRUCTURED_WAKE_PROVIDER_UPDATE_TTL_MS
+      })
+      return registered
     }
-    this.records.insert(session, worktree.repoId)
-    return this.publish(session)
+    return this.withWorkspaceLock(worktree.id, async () => {
+      const currentInstanceId = await this.assertCurrentWorktreeTarget(worktree, caller)
+      this.ensureWorkspaceAwake(worktree.id, currentInstanceId)
+      return registerSession(currentInstanceId)
+    })
   }
 
   /**
@@ -683,61 +1091,69 @@ export class SessionService {
    * has forgotten it or reports it unknown; any other failure leaves the record in place, since
    * the process may still be running.
    */
-  close = async (params: Record<string, unknown>) => {
+  close = async (params: Record<string, unknown>, caller?: PluginCaller) => {
     const session = this.require(params.session as string)
     const expectedIncarnation = params.expectedIncarnation
     if (expectedIncarnation !== undefined && typeof expectedIncarnation !== 'string') {
       throw this.context.error('invalid-params', 'expectedIncarnation must be a string')
     }
-    return this.withSessionLock(session.id, async () => {
-      const current = this.records.get(session.id)
-      if (!current) {
-        if (expectedIncarnation !== undefined) return { ok: false as const, reason: 'recipient_gone' as const }
-        throw this.context.error('not-found', `no such session: ${session.id}`)
-      }
-      const identity = this.context.launch.sessionIdentity(current.id) as RuntimeIdentityEvidence | null
-      if (typeof expectedIncarnation === 'string') {
-        if (!identity) return { ok: false as const, reason: 'recipient_gone' as const }
-        if (!identity.live) return { ok: false as const, reason: 'recipient_gone' as const }
-        if (
-          identity.sessionId !== current.id ||
-          identity.processIncarnation !== expectedIncarnation ||
-          (current.kind === 'structured' ? identity.source !== 'structured_lease' : identity.source === 'structured_lease')
-        ) {
-          return { ok: false as const, reason: 'recipient_changed' as const }
-        }
-      }
-      if (current.kind === 'terminal') {
-        try {
-          await this.context.pty.forget(current.id)
-        } catch (error) {
-          if (!isUnknownSession(error)) throw new Error(`could not close session ${current.id}: ${messageOf(error)}`)
+    const effectiveCaller = caller ?? this.internalCaller()
+    await this.ensureSessionWorkspaceCurrent(session, effectiveCaller)
+    const closeSession = () => this.withSessionLock(session.id, async () => {
+        const current = this.records.get(session.id)
+        if (!current) {
           if (expectedIncarnation !== undefined) return { ok: false as const, reason: 'recipient_gone' as const }
+          throw this.context.error('not-found', `no such session: ${session.id}`)
         }
-      } else if (identity) {
-        const incarnation = expectedIncarnation ?? identity.processIncarnation
-        const stopped = await this.context.call('quirky.structured/stop', {
-          session: current.id,
-          expectedIncarnation: incarnation
-        })
-        if (!isPlainObject(stopped) || stopped.ok !== true || stopped.closed !== true) {
-          return {
-            ok: false as const,
-            reason: isPlainObject(stopped) && stopped.reason === 'recipient_changed' ? 'recipient_changed' as const : 'recipient_gone' as const
+        const identity = this.context.launch.sessionIdentity(current.id) as RuntimeIdentityEvidence | null
+        if (typeof expectedIncarnation === 'string') {
+          if (!identity) return { ok: false as const, reason: 'recipient_gone' as const }
+          if (!identity.live) return { ok: false as const, reason: 'recipient_gone' as const }
+          if (
+            identity.sessionId !== current.id ||
+            identity.processIncarnation !== expectedIncarnation ||
+            (current.kind === 'structured' ? identity.source !== 'structured_lease' : identity.source === 'structured_lease')
+          ) {
+            return { ok: false as const, reason: 'recipient_changed' as const }
           }
         }
-        if (stopped.processIncarnation !== incarnation) {
-          return { ok: false as const, reason: 'recipient_changed' as const }
+        if (current.kind === 'terminal') {
+          try {
+            await this.context.pty.forget(current.id)
+          } catch (error) {
+            if (!isUnknownSession(error)) throw new Error(`could not close session ${current.id}: ${messageOf(error)}`)
+            if (expectedIncarnation !== undefined) return { ok: false as const, reason: 'recipient_gone' as const }
+          }
+        } else if (identity) {
+          const incarnation = expectedIncarnation ?? identity.processIncarnation
+          const stopped = await this.context.call('quirky.structured/stop', {
+            session: current.id,
+            expectedIncarnation: incarnation
+          })
+          if (!isPlainObject(stopped) || stopped.ok !== true || stopped.closed !== true) {
+            return {
+              ok: false as const,
+              reason: isPlainObject(stopped) && stopped.reason === 'recipient_changed' ? 'recipient_changed' as const : 'recipient_gone' as const
+            }
+          }
+          if (stopped.processIncarnation !== incarnation) {
+            return { ok: false as const, reason: 'recipient_changed' as const }
+          }
         }
-      }
-      this.records.delete(current.id)
-      this.context.emit('removed', { sessionId: current.id })
-      return typeof expectedIncarnation === 'string'
-        ? { ok: true as const, closed: true as const, sessionId: current.id, processIncarnation: expectedIncarnation }
-        : { ok: true as const }
+        this.records.delete(current.id)
+        this.context.emit('removed', { sessionId: current.id })
+        return typeof expectedIncarnation === 'string'
+          ? { ok: true as const, closed: true as const, sessionId: current.id, processIncarnation: expectedIncarnation }
+          : { ok: true as const }
+      })
+    if (session.status === 'starting') return closeSession()
+    return this.withWorkspaceLock(session.worktreeId, async () => {
+      const instanceId = await this.ensureSessionWorkspaceCurrent(session, effectiveCaller)
+      this.ensureWorkspaceAwake(session.worktreeId, instanceId)
+      return closeSession()
     })
-  }
 
+  }
   setStatus = (params: Record<string, unknown>): Session => {
     const before = this.require(params.session as string)
     const status = params.status as SessionStatus
@@ -810,7 +1226,7 @@ export class SessionService {
   async reconcile(options: { startup: boolean }): Promise<void> {
     if (options.startup) {
       for (const id of this.records.sweepPendingDeliveries()) this.publish(this.require(id))
-      for (const session of this.records.list()) if (session.kind === 'structured') this.finish(session.id, { exitCode: null })
+      this.reconcileInterruptedWorkspaceSleep()
     }
     let live: Map<string, PtySessionInfo>
     try {
@@ -824,8 +1240,8 @@ export class SessionService {
       const info = live.get(session.id)
       if (session.status === 'exited') {
         // the exit event was lost while the host restarted
-        if (info?.state === 'restorable' && info.exitCause === 'host-restart' && !session.restorable) {
-          this.publish(this.records.update(session.id, { exitCause: 'host-restart', restorable: true }) as Session)
+        if (info?.state === 'restorable' && !session.restorable) {
+          this.publish(this.records.update(session.id, { exitCause: info.exitCause, restorable: true }) as Session)
         }
         continue
       }
@@ -843,8 +1259,18 @@ export class SessionService {
    * session keeps its ID and becomes a `shell`. A running session is returned as it is; one that
    * ended on its own or was killed is a conflict. Concurrent calls for one session share one spawn.
    */
-  restore = async (params: Record<string, unknown>): Promise<Session> => {
+  restore = async (params: Record<string, unknown>, caller?: PluginCaller): Promise<Session> => {
     const session = this.require(params.session as string)
+    const effectiveCaller = caller ?? this.internalCaller()
+    await this.ensureSessionWorkspaceCurrent(session, effectiveCaller)
+    return this.withWorkspaceLock(session.worktreeId, async () => {
+      const currentInstanceId = await this.ensureSessionWorkspaceCurrent(session, effectiveCaller)
+      this.ensureWorkspaceAwake(session.worktreeId, currentInstanceId)
+      return this.restoreInWorkspace(session)
+    })
+  }
+
+  private async restoreInWorkspace(session: Session): Promise<Session> {
     const pending = this.restoring.get(session.id)
     if (pending) return pending
     const restoring = this.withSessionLock(session.id, async () => {
@@ -913,6 +1339,139 @@ export class SessionService {
       return this.publish(restored)
     } finally {
       this.restoreExits.delete(session.id)
+    }
+  }
+
+  private async workspaceIdentityFor(params: Record<string, unknown>, caller: PluginCaller): Promise<WorkspaceIdentity> {
+    const selector = params.worktree
+    if (typeof selector !== 'string' || selector.length === 0) {
+      throw this.context.error('invalid-params', 'worktree must be a non-empty selector string')
+    }
+    if (selector === FLOATING) return { worktreeId: FLOATING, instanceId: FLOATING }
+    try {
+      const target = await this.resolveWorktree(selector, caller)
+      return { worktreeId: target.id, instanceId: target.instanceId }
+    } catch (error) {
+      const id = selector.startsWith('id:') ? selector.slice(3) : selector
+      if (isNotFound(error) && (this.records.hasWorktree(id) || this.records.hasWorkspaceSleep(id))) {
+        return { worktreeId: id, instanceId: null }
+      }
+      throw error
+    }
+  }
+
+  private async ensureWorkspaceSessionsCanSleep(sessions: Session[]): Promise<void> {
+    for (const session of sessions) {
+      if (session.kind !== 'terminal' && session.kind !== 'structured') {
+        throw this.context.error('conflict', `active ${session.kind} session ${session.id} cannot be stopped and resumed`)
+      }
+      if (session.kind === 'structured' && session.agent !== 'claude' && session.agent !== 'codex') {
+        throw this.context.error('conflict', `${session.agent} structured session ${session.id} cannot be resumed; workspace sleep was not started`)
+      }
+      let hasWorkingDirectory = false
+      try {
+        hasWorkingDirectory = statSync(session.cwd).isDirectory()
+      } catch {}
+      if (!hasWorkingDirectory) {
+        throw this.context.error('conflict', `session ${session.id} folder ${session.cwd} is unavailable; workspace sleep was not started`)
+      }
+      if (session.kind === 'terminal' && session.agent === 'shell') continue
+      const agent = await this.agentInfo(session.agent)
+      if (!agent.resumable) {
+        throw this.context.error('conflict', `${session.agent} session ${session.id} cannot be resumed; workspace sleep was not started`)
+      }
+      const providerSessionId = session.providerSession?.id
+      if (typeof providerSessionId !== 'string') {
+        throw this.context.error(
+          'conflict',
+          `${session.agent} session ${session.id} has no provider session and cannot be resumed; workspace sleep was not started`
+        )
+      }
+      const problem = providerSessionIdProblem(providerSessionId)
+      if (problem) {
+        throw this.context.error('conflict', `${session.agent} session ${session.id} has an invalid provider session: ${problem}`)
+      }
+    }
+  }
+
+  private async stopWorkspaceSession(sessionId: string): Promise<void> {
+    const session = this.records.get(sessionId)
+    if (!session) throw new Error(`session ${sessionId} is missing from its recovery record`)
+    if (session.kind === 'structured') {
+      const identity = this.context.launch.sessionIdentity(session.id) as RuntimeIdentityEvidence | null
+      if (!identity?.live || identity.source !== 'structured_lease' || identity.sessionId !== session.id) {
+        if (this.records.get(sessionId)?.status === 'exited') return
+        throw new Error(`structured session ${sessionId} has no verified live process to stop`)
+      }
+      const stopped = await this.context.call('quirky.structured/stop', {
+        session: session.id,
+        expectedIncarnation: identity.processIncarnation
+      })
+      if (
+        !isPlainObject(stopped) ||
+        stopped.ok !== true ||
+        stopped.closed !== true ||
+        stopped.sessionId !== session.id ||
+        stopped.processIncarnation !== identity.processIncarnation
+      ) {
+        throw new Error(`structured session ${sessionId} did not confirm that its process stopped`)
+      }
+      if (this.records.get(sessionId)?.status !== 'exited') {
+        throw new Error(`structured session ${sessionId} did not record its stopped state`)
+      }
+      return
+    }
+    if (session.kind !== 'terminal') throw new Error(`session ${sessionId} is not a terminal session`)
+    await this.context.pty.stopWithHistory(sessionId)
+    const ptySession = (await this.context.pty.list()).find((entry) => entry.sessionId === sessionId)
+    if (!ptySession || ptySession.state !== 'restorable' || ptySession.alive) {
+      throw new Error(`PTY host did not confirm that session ${sessionId} stopped with history`)
+    }
+    const current = this.records.get(sessionId)
+    if (!current) throw new Error(`session ${sessionId} was removed while workspace sleep was stopping it`)
+    const stopped = this.records.update(sessionId, {
+      status: 'exited',
+      agentStatus: null,
+      exitCode: ptySession.exitCode ?? current.exitCode,
+      exitSignal: ptySession.exitSignal ?? current.exitSignal,
+      exitCause: ptySession.exitCause,
+      restorable: true,
+      lastActivityAt: Date.now()
+    })
+    if (stopped) this.publish(stopped)
+  }
+
+  private saveWorkspaceSleepState(
+    worktreeId: string,
+    instanceId: string | null,
+    state: WorkspaceSleepState['state'],
+    sessions: WorkspaceSleepState['sessions']
+  ): WorkspaceSleepState {
+    return this.records.putWorkspaceSleepState({ worktreeId, state, updatedAt: Date.now(), sessions }, instanceId)
+  }
+
+  private replaceWorkspaceSleepSession(
+    state: WorkspaceSleepState,
+    instanceId: string | null,
+    index: number,
+    session: WorkspaceSleepState['sessions'][number],
+    nextState: WorkspaceSleepState['state'] = state.state
+  ): WorkspaceSleepState {
+    const sessions = [...state.sessions]
+    sessions[index] = session
+    return this.saveWorkspaceSleepState(state.worktreeId, instanceId, nextState, sessions)
+  }
+
+  private reconcileInterruptedWorkspaceSleep(): void {
+    for (const stored of this.records.workspaceSleepRecords()) {
+      const state = stored.state
+      if (state.state !== 'sleeping' && state.state !== 'waking') continue
+      const sessions = state.sessions.map((session) =>
+        session.state === 'pending' && session.error === null
+          ? { ...session, error: 'daemon restarted while workspace sleep or wake was in progress' }
+          : session
+      )
+      this.records.putWorkspaceSleepState({ ...state, state: 'partial', updatedAt: Date.now(), sessions }, stored.instanceId)
     }
   }
 
@@ -1157,7 +1716,7 @@ export class SessionService {
   private async resolveWorktree(selector: unknown, caller: PluginCaller, cwd?: string): Promise<SessionTarget> {
     const floatingCaller = identityOf(caller).worktreeId === FLOATING
     if (selector === FLOATING || (floatingCaller && (selector === undefined || selector === 'current'))) {
-      return { id: FLOATING, name: 'Floating', path: cwd ?? this.floatingHome(), repoId: null }
+      return { id: FLOATING, name: 'Floating', path: cwd ?? this.floatingHome(), repoId: null, instanceId: FLOATING }
     }
     return (await this.context.call('quirky.worktree/resolve', {
       selector: selector ?? 'current',
@@ -1185,7 +1744,7 @@ export class SessionService {
       return (await this.resolveWorktree(selector, caller)).id
     } catch (error) {
       const id = selector.replace(/^id:/, '')
-      if (isNotFound(error) && this.records.hasWorktree(id)) return id
+      if (isNotFound(error) && (this.records.hasWorktree(id) || this.records.hasWorkspaceSleep(id))) return id
       throw error
     }
   }

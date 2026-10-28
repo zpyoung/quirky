@@ -20,6 +20,19 @@ const WORKTREE_DEFAULTS = {
   lastActivityAt: 0
 } as const
 
+type WorktreeOverride = Partial<Pick<Worktree, 'path' | 'instanceId'>>
+
+declare global {
+  var __QUIRKY_TEST_WORKTREE_OVERRIDES__: Record<string, WorktreeOverride> | undefined
+}
+
+export function setWorktreeOverride(id: string, override: WorktreeOverride | null): void {
+  const overrides = globalThis.__QUIRKY_TEST_WORKTREE_OVERRIDES__ ??= {}
+  if (override === null) delete overrides[id]
+  else overrides[id] = override
+}
+
+
 export const WORKTREES: Worktree[] = [
   { id: 'wt_main', repoId: 'repo_alpha', path: '/fake/alpha', branch: 'main', head, isMain: true, name: 'main', ...WORKTREE_DEFAULTS, instanceId: 'instance:wt_main' },
   { id: 'wt_other', repoId: 'repo_alpha', path: '/fake/other', branch: 'other', head, isMain: false, name: 'other', ...WORKTREE_DEFAULTS, instanceId: 'instance:wt_other' },
@@ -28,12 +41,15 @@ export const WORKTREES: Worktree[] = [
 
 const contains = (parent: string, child: string) => child === parent || child.startsWith(`${parent}/`)
 
-/** The fixed worktrees, plus `wt_real` when a test points `QUIRKY_TEST_REAL_WORKTREE` at a directory that exists. */
 const worktrees = (): Worktree[] => {
   const real = process.env.QUIRKY_TEST_REAL_WORKTREE
-  return real
+  const base = real
     ? [...WORKTREES, { id: 'wt_real', repoId: 'repo_alpha', path: real, branch: 'real', head, isMain: false, name: 'real', ...WORKTREE_DEFAULTS, instanceId: 'instance:wt_real' }]
     : WORKTREES
+  return base.map((worktree) => ({
+    ...worktree,
+    ...(globalThis.__QUIRKY_TEST_WORKTREE_OVERRIDES__?.[worktree.id] ?? {})
+  }))
 }
 
 // ids listed here stop resolving, as a worktree whose directory was deleted does
