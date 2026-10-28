@@ -41,6 +41,8 @@ files, not this one.
 | hard | high | [m0-core D6](decisions/m0-core.md) | v1's methods are renamed to their plugin's namespace, with no aliases, and the protocol version goes to 2 | supersedes m0-daemon-api D5 |
 | hard | high | [m0-core D7](decisions/m0-core.md) | v1's events become the plugins' events | assumed — autonomous |
 | hard | high | [m0-core D31](decisions/m0-core.md) | Port v1 for real, growing the public plugin API, rather than facades or raw RPC primitives | locked by docs/roadmap.md (built-ins use only the public API); assumed — autonomous (the approach) |
+| hard | high | [m6-orchestration-core D4](decisions/m6-orchestration-core.md) | Keep Quirky session identity, not Orca pane compatibility | locked by docs/loop/decisions/m1-agent-status.md |
+| hard | high | [m6-orchestration-core D7](decisions/m6-orchestration-core.md) | Match FIFO replay and generation-fenced acknowledgements | locked by research/orca-features/orchestration.md |
 | hard | high | [m1-worktrees D5](decisions/m1-worktrees.md) | Extend `quirky.repo` and `quirky.worktree` in place, with one create path and one remove path | assumed — autonomous |
 | hard | high | [m1-worktrees D7](decisions/m1-worktrees.md) | Worktree IDs stay v1's path hash; extra folder workspaces get random IDs | assumed — autonomous |
 | hard (sensitive data already read cannot be unread). | high | [m3-vault D5](decisions/m3-vault.md) | Consent controls index creation; disabling preserves it and clear disables before deletion | locked by docs/roadmap.md |
@@ -185,6 +187,15 @@ files, not this one.
 | medium | high | [m2-editor D42](decisions/m2-editor.md) | Preserve approved dock hosting and daemon-owned palette state | locked by docs/loop/decisions/m3-terminal-dock.md and docs/loop/decisions/fix-flaky-pty-host-host.md |
 | medium | high | [m2-editor D44](decisions/m2-editor.md) | Retain the landed sidebar activity rail without losing editor geometry | locked by docs/loop/decisions/m2-sidebar-extras.md |
 | medium | high | [fix-flaky-pty-host-host D2](decisions/fix-flaky-pty-host-host.md) | Preserve independent cleanup ownership and isolate experiments | locked by docs/loop/decisions/fix-test-process-leaks.md |
+| medium | high | [m4-hosting-ui-reviews D1](decisions/m4-hosting-ui-reviews.md) | Build the composite review scope, not only the sidebar | locked by docs/roadmap.md |
+| medium | high | [m4-hosting-ui-reviews D3](decisions/m4-hosting-ui-reviews.md) | Keep the review feature independently replaceable and share hosting policy | assumed — autonomous |
+| medium | high | [m4-hosting-ui-reviews D5](decisions/m4-hosting-ui-reviews.md) | Preserve data ownership and show failures rather than false success | locked by hosting-ui.md |
+| medium | high | [m4-hosting-ui-reviews D7](decisions/m4-hosting-ui-reviews.md) | Grow canonical PR conversation and assignee APIs rather than use Project routes | assumed — autonomous; locked by operator source-ownership ruling |
+| medium | high | [m4-hosting-ui-reviews D10](decisions/m4-hosting-ui-reviews.md) | Expose non-checkout conflict inspection through the canonical Git owner | assumed — autonomous |
+| medium | high | [m4-hosting-ui-reviews D12](decisions/m4-hosting-ui-reviews.md) | Make custom plugin settings pages discoverable without shell feature imports | assumed — autonomous; locked by operator source-ownership ruling |
+| medium | high for the source-supported protocol; provider capability errors remain explicit unavailable. | [m4-hosting-ui-reviews D13](decisions/m4-hosting-ui-reviews.md) | Hydrate real stack members instead of turning a stack ID into a PR link | locked by hosting-ui.md stack map; assumed — autonomous (public method shape) |
+| medium | high | [m4-hosting-ui-reviews D22](decisions/m4-hosting-ui-reviews.md) | Preserve the incoming worktree lifecycle and finish the night-mode gates | locked by incoming m4-worktrees-create-from-github decisions; locked by docs/loop/LOOP.md Night mode |
+| medium | high | [m4-hosting-ui-reviews D25](decisions/m4-hosting-ui-reviews.md) | Observe dependency readiness before the required final integration | locked by docs/loop/LOOP.md Early items build on their dependencies' branches |
 | medium | high | [m2-source-control-notes-ai D3](decisions/m2-source-control-notes-ai.md) | The slice is diff notes, every Source Control AI action, and their settings | supersedes nothing; bound by m2-source-control-core D6 |
 | medium | high | [m2-source-control-notes-ai D6](decisions/m2-source-control-notes-ai.md) | Notes live in a `quirky.git` plugin store keyed by worktree ID and survive a restart | assumed — autonomous |
 | medium | high | [m2-source-control-notes-ai D14](decisions/m2-source-control-notes-ai.md) | Notes are scriptable: `quirky git` gains note commands, which Orca lacks | assumed — autonomous |
@@ -194,6 +205,10 @@ files, not this one.
 | medium | high | [m4-sidebar-review-filters D4](decisions/m4-sidebar-review-filters.md) | Match conservative visibility and preserve activity-only hidden count | locked by sidebar-extras.md |
 | medium | high | [m2-source-control-core D8](decisions/m2-source-control-core.md) | The status record grows additively, read from porcelain v2 | assumed — autonomous |
 | medium | high | [m2-source-control-core D20](decisions/m2-source-control-core.md) | The compare base is the worktree's base, else the project's, else the detected default, and Change Base Ref writes where the base came from | locked by research/orca-features/source-control.md |
+| medium | high | [m5-automations-core D1](decisions/m5-automations-core.md) | Ship the core slice only, with a durable pending dispatch handoff | locked by docs/loop/queue.json |
+| medium | high | [m5-automations-core D2](decisions/m5-automations-core.md) | Honor the stored IANA timezone and use strict timestamp ordering across DST | assumed — autonomous |
+| medium | high | [m5-automations-core D5](decisions/m5-automations-core.md) | Durable row writes, 100 final runs, never prune active runs | assumed — autonomous |
+| medium | high | [m5-automations-core D10](decisions/m5-automations-core.md) | Bound occurrence metadata while preserving non-replay after pruning | supersedes m5-automations-core D5 |
 | medium | high | [m3-handoff D6](decisions/m3-handoff.md) | A source is a session; a live source is the agent running in a terminal session | assumed — autonomous |
 | medium | high | [m3-handoff D9](decisions/m3-handoff.md) | The pane menu gains a public contribution point other plugins use | locked by docs/roadmap.md |
 | medium | high | [m3-handoff D35](decisions/m3-handoff.md) | The brief is pasted after the agent's input is ready through `quirky.agents/deliver`, not passed on the command line | locked by handoff.md |
@@ -209,6 +224,21 @@ files, not this one.
 | medium | high | [m0-core D19](decisions/m0-core.md) | Mutating calls carry a request ID, and the daemon returns the first outcome to a retry | assumed — autonomous |
 | medium | high | [m0-core D23](decisions/m0-core.md) | Plugin UI commands run in the window when called through the API | locked by docs/roadmap.md |
 | medium | high | [m0-core D24](decisions/m0-core.md) | v1's window surfaces become the built-ins' UI contributions, and the shell keeps only the chrome | supersedes m0-ui-api D26 |
+| medium | high | [m6-orchestration-core D1](decisions/m6-orchestration-core.md) | Preserve both combined parts of the claimed item | locked by docs/loop/queue.json |
+| medium | high | [m6-orchestration-core D3](decisions/m6-orchestration-core.md) | Choose one lazy durable plugin, not an in-memory broker or scheduler | locked by docs/architecture.md |
+| medium | high | [m6-orchestration-core D6](decisions/m6-orchestration-core.md) | Preserve transactional DAG and attempt state graphs | locked by research/orca-features/orchestration.md |
+| medium | high | [m6-orchestration-core D8](decisions/m6-orchestration-core.md) | Match durable address routing and fail closed group membership | locked by research/orca-features/orchestration.md |
+| medium | high | [m6-orchestration-core D9](decisions/m6-orchestration-core.md) | Questions time out without duplication and gates are separate | locked by research/orca-features/orchestration.md |
+| medium | high | [m6-orchestration-core D10](decisions/m6-orchestration-core.md) | Pointer delivery is bounded, identity-checked and non-consuming | locked by research/orca-features/orchestration.md |
+| medium | high | [m6-orchestration-core D11](decisions/m6-orchestration-core.md) | Durable receipts must cooperate with kernel request IDs | locked by research/orca-features/orchestration.md |
+| medium | high | [m6-orchestration-core D12](decisions/m6-orchestration-core.md) | Reset is plugin-scoped and preserves receipts | locked by docs/architecture.md |
+| medium | high | [m6-orchestration-core D15](decisions/m6-orchestration-core.md) | Contract preparation is inert and keeps source-level recovery combinations | assumed — autonomous |
+| medium | high | [m6-orchestration-core D30](decisions/m6-orchestration-core.md) | Grow shared public runtime seams rather than infer worker authority | assumed — autonomous |
+| medium | high | [m6-orchestration-core D31](decisions/m6-orchestration-core.md) | Preserve incoming account, hosting and worktree decisions | locked by docs/loop/decisions/m3-accounts.md |
+| medium | high | [m6-orchestration-core D33](decisions/m6-orchestration-core.md) | Share atomic staged worker acceptance with lane9 | assumed — autonomous |
+| medium | high | [m6-orchestration-core D34](decisions/m6-orchestration-core.md) | Reserve explicit service coordinator APIs to lane11 without synthetic sessions | assumed — autonomous |
+| medium | high | [m6-orchestration-core D37](decisions/m6-orchestration-core.md) | Separate transport replay keys from durable orchestration request IDs | assumed — autonomous |
+| medium | high | [m6-orchestration-core D39](decisions/m6-orchestration-core.md) | Preserve landed schema history and all incoming ownership decisions | locked by docs/loop/LOOP.md |
 | medium | high | [m1-worktrees D9](decisions/m1-worktrees.md) | New worktrees go under `<worktrees folder>/<repo>/<name>`, with nesting and a per-project location as settings | locked by research/orca-features/worktrees.md (the rules); assumed — autonomous (v1's root) |
 | medium | high | [m1-worktrees D11](decisions/m1-worktrees.md) | Branches get a prefix, by default the git username | locked by research/orca-features/worktrees.md |
 | medium | high | [m1-worktrees D14](decisions/m1-worktrees.md) | The base is the requested one, else the project's saved base, else the detected default | locked by research/orca-features/worktrees.md |
@@ -236,6 +266,18 @@ files, not this one.
 | medium | high | [m3-vault D32](decisions/m3-vault.md) | Bound new indexing starts without starving an in-flight one-shot read | assumed — autonomous |
 | medium | high | [m3-vault D35](decisions/m3-vault.md) | A command drag carries a window-local single-use capability | assumed — autonomous |
 | medium | high | [m3-vault D38](decisions/m3-vault.md) | Serialize new calls behind idle retirement rather than replay or strand them | assumed — autonomous |
+| medium | high | [m4-hosting-ui-tasks D1](decisions/m4-hosting-ui-tasks.md) | Build all three assigned GitHub surfaces together | locked by docs/roadmap.md |
+| medium | high | [m4-hosting-ui-tasks D3](decisions/m4-hosting-ui-tasks.md) | Prefer one built-in Tasks plugin over a shell-owned feature or Orca port | assumed — autonomous |
+| medium | high | [m4-hosting-ui-tasks D5](decisions/m4-hosting-ui-tasks.md) | Keep source-specified behavior rather than ambiguous Orca defects | locked by hosting-ui.md |
+| medium | high | [m4-hosting-ui-tasks D7](decisions/m4-hosting-ui-tasks.md) | Isolate three slices behind committed public feature contracts | assumed — autonomous |
+| medium | high | [m4-hosting-ui-tasks D8](decisions/m4-hosting-ui-tasks.md) | Make every navigation action read back from the daemon | locked by docs/roadmap.md; locked by hosting-ui.md |
+| medium | high | [m4-hosting-ui-tasks D9](decisions/m4-hosting-ui-tasks.md) | Retain bounded provider identity and mutation ownership across UI surfaces | locked by hosting-ui.md |
+| medium | high | [m4-hosting-ui-tasks D11](decisions/m4-hosting-ui-tasks.md) | Grow a project-authorized detail read instead of narrowing preview parity | locked by hosting-ui.md; assumed — autonomous (method name) |
+| medium | high | [m4-hosting-ui-tasks D14](decisions/m4-hosting-ui-tasks.md) | Expose native View switches through the public setting declaration | locked by hosting-ui.md; assumed — autonomous (public metadata shape) |
+| medium | high | [m4-hosting-ui-tasks D16](decisions/m4-hosting-ui-tasks.md) | Ask only for the irreversible merge and forward its approved intent | locked by docs/roadmap.md; assumed — autonomous (conditional describe) |
+| medium | high | [m4-hosting-ui-tasks D17](decisions/m4-hosting-ui-tasks.md) | Consume canonical creation and agent-selection APIs | locked by hosting-ui.md; assumed — autonomous (public API integration) |
+| medium | high | [m4-hosting-ui-tasks D19](decisions/m4-hosting-ui-tasks.md) | Share feature boundaries with the review and worktree lanes | locked by user lane coordination; assumed — autonomous (UI-library subpaths) |
+| medium | high for source causes; runtime closure pending | [m4-hosting-ui-tasks D21](decisions/m4-hosting-ui-tasks.md) | Retain behavioral tests and repair observed projection/lifecycle defects | assumed — autonomous (observed gate repairs) |
 | medium | high | [m1-agent-status D14](decisions/m1-agent-status.md) | The fold keeps a finished lead `working` while children or background work live | locked by research/orca-features/agent-status.md |
 | medium | high | [m1-notifications D5](decisions/m1-notifications.md) | A new built-in plugin, `quirky.notifications`, owns the policy; other plugins only report events | supersedes m0-core D12 |
 | medium | high | [m1-notifications D6](decisions/m1-notifications.md) | Producers emit settled and notification events; boundaries and replays still emit nothing | assumed — autonomous |
@@ -688,6 +730,22 @@ files, not this one.
 | easy | high | [fix-flaky-pty-host-host D13](decisions/fix-flaky-pty-host-host.md) | Wait for both expected copies before checking cold-restore input | assumed — autonomous |
 | easy | high | [fix-flaky-pty-host-host D14](decisions/fix-flaky-pty-host-host.md) | Follow the incoming night-mode verification contract | locked by docs/loop/LOOP.md |
 | easy | high for attribution to the named test file; no root-cause claim about the fetch implementation | [fix-flaky-pty-host-host D15](decisions/fix-flaky-pty-host-host.md) | Attach the independent fetch failure to its existing queued repair | assumed — autonomous |
+| easy | high | [m4-hosting-ui-reviews D2](decisions/m4-hosting-ui-reviews.md) | Resolve design questions unattended with one self-reviewed logic spec | locked by docs/loop/LOOP.md |
+| easy | high | [m4-hosting-ui-reviews D4](decisions/m4-hosting-ui-reviews.md) | Use OpenAI task implementers and Gemini cross-family review | locked by docs/loop/LOOP.md |
+| easy | high | [m4-hosting-ui-reviews D6](decisions/m4-hosting-ui-reviews.md) | Verify isolated macOS workflows and hand off OS effects | deferred: platform |
+| easy | high | [m4-hosting-ui-reviews D8](decisions/m4-hosting-ui-reviews.md) | Execute three disjoint vertical components against committed contracts | assumed — autonomous |
+| easy | high | [m4-hosting-ui-reviews D9](decisions/m4-hosting-ui-reviews.md) | Defer only provider-dependent and human-browser routing flows with named prerequisites | deferred: other-provider reviews/creation/settings and in-app review-link routing |
+| easy | high | [m4-hosting-ui-reviews D11](decisions/m4-hosting-ui-reviews.md) | Verify new canonical mutations through generated CLI, not only tests | assumed — autonomous |
+| easy | high | [m4-hosting-ui-reviews D14](decisions/m4-hosting-ui-reviews.md) | Finish incomplete component handoffs with focused same-scope retries | assumed — autonomous |
+| easy | high | [m4-hosting-ui-reviews D15](decisions/m4-hosting-ui-reviews.md) | Preserve real comment destinations and provider bot identity | locked by hosting-ui.md comments/navigation/bot detection |
+| easy | high | [m4-hosting-ui-reviews D16](decisions/m4-hosting-ui-reviews.md) | Use the public flat Schema contract and repair actual integration failures | locked by packages/protocol/src/schema.ts |
+| easy | high | [m4-hosting-ui-reviews D17](decisions/m4-hosting-ui-reviews.md) | Preserve and relocate a misdirected fixer patch before normal integration | assumed — autonomous |
+| easy | high | [m4-hosting-ui-reviews D18](decisions/m4-hosting-ui-reviews.md) | Keep transport fixtures isolated and real readiness proof on a real PTY | locked by LOOP.md isolated-state and behavioral-verification rules |
+| easy | high | [m4-hosting-ui-reviews D19](decisions/m4-hosting-ui-reviews.md) | Retain confirmed comment overlays until a provider read adopts them | locked by hosting-ui.md stale-write and confirmed-comment retention requirements |
+| easy | high | [m4-hosting-ui-reviews D20](decisions/m4-hosting-ui-reviews.md) | Apply the locked night-mode skip to unstarted optional rounds | locked by docs/loop/LOOP.md Night mode |
+| easy | high | [m4-hosting-ui-reviews D21](decisions/m4-hosting-ui-reviews.md) | Verify the packaged surface and keep its report bounded | locked by hosting-ui.md scriptable-state and PR-page requirements |
+| easy | high | [m4-hosting-ui-reviews D23](decisions/m4-hosting-ui-reviews.md) | Delete brittle catalog snapshots instead of extending them | assumed — autonomous; locked by engineering test policy |
+| easy | high | [m4-hosting-ui-reviews D24](decisions/m4-hosting-ui-reviews.md) | Close named dependency failures without changing production semantics | assumed — autonomous; locked by sourced-worktree and provider-normalization contracts |
 | easy (test/fix scope only) | high | [fix-flaky-quirky-worktree-window-projects D1](decisions/fix-flaky-quirky-worktree-window-projects.md) | Treat the load-sensitive failures as a fix item | locked by docs/loop/LOOP.md |
 | easy | high | [fix-flaky-quirky-worktree-window-projects D2](decisions/fix-flaky-quirky-worktree-window-projects.md) | Isolate all process-based experiments and own cleanup | locked by docs/loop/LOOP.md |
 | easy | high for the recorded failure; fresh controlled red/green verification remains pending. | [fix-flaky-quirky-worktree-window-projects D3](decisions/fix-flaky-quirky-worktree-window-projects.md) | Reuse the already-landed condition-based report wait | assumed — autonomous |
@@ -779,6 +837,15 @@ files, not this one.
 | easy | high | [m2-source-control-core D58](decisions/m2-source-control-core.md) | All seven Final Round 1 defects are closed by the fix batch, each with a test | assumed — autonomous |
 | easy | high | [m2-source-control-core D59](decisions/m2-source-control-core.md) | UI verification round 1: 18 goals pass, three app defects found and fixed on the branch | assumed — autonomous |
 | easy | high | [m2-source-control-core D62](decisions/m2-source-control-core.md) | The UI rerun passes SC-61, SC-45 and the conflict badge | assumed — autonomous |
+| easy | high | [m5-automations-core D3](decisions/m5-automations-core.md) | Keep preset and cron semantics explicit and reject impossible new schedules | locked by automations.md |
+| easy | high | [m5-automations-core D4](decisions/m5-automations-core.md) | Preserve pause cursor, latest-only catch-up, and elapsed grace plus 120 seconds | assumed — autonomous |
+| easy | high | [m5-automations-core D6](decisions/m5-automations-core.md) | Use OpenAI implementers and verified Gemini cross-family review | assumed — autonomous |
+| easy | high | [m5-automations-core D7](decisions/m5-automations-core.md) | One combined spec, at most three independent implementers, one final review | locked by docs/loop/LOOP.md |
+| easy | high | [m5-automations-core D8](decisions/m5-automations-core.md) | macOS validation only, preserve inherited files | deferred: platform |
+| easy | high | [m5-automations-core D9](decisions/m5-automations-core.md) | Distinguish retention ordering from history paging ordering | locked by automations.md |
+| easy | high | [m5-automations-core D11](decisions/m5-automations-core.md) | Bound arbitrary JSON metadata separately from output snapshots | assumed — autonomous |
+| easy | high for dispatch/trace facts, limited for review assurance | [m5-automations-core D12](decisions/m5-automations-core.md) | Record mechanical review PASS without claiming clean clearance | assumed — autonomous |
+| easy | high for observed results; medium for contention hypothesis | [m5-automations-core D13](decisions/m5-automations-core.md) | Serialize script checks with process-level smokes | assumed — autonomous |
 | easy | high | [m3-handoff D1](decisions/m3-handoff.md) | Classify the item as Visual, API, CLI and Integration work, and run research phases A and B | assumed — autonomous |
 | easy | high | [m3-handoff D2](decisions/m3-handoff.md) | Skip the visual companion and the adhd offer; use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m3-handoff D3](decisions/m3-handoff.md) | Select every gray area that matters | locked by docs/loop/LOOP.md |
@@ -859,6 +926,31 @@ files, not this one.
 | easy | high | [m0-core D43](decisions/m0-core.md) | W3 checkpoint: accept all eight findings, which collapse to five defects | assumed — autonomous |
 | easy | high | [m0-core D45](decisions/m0-core.md) | W4 checkpoint: accept all six findings, which collapse to four defects | assumed — autonomous |
 | easy | high | [m0-core D46](decisions/m0-core.md) | Final Round 1: accept all thirteen findings, which collapse to seven defects | assumed — autonomous |
+| easy | high | [m6-orchestration-core D2](decisions/m6-orchestration-core.md) | Follow unattended night mode and elect recommended defaults | locked by docs/loop/LOOP.md |
+| easy | high | [m6-orchestration-core D5](decisions/m6-orchestration-core.md) | Preserve schema-generated CLI and native JSON-RPC shapes | assumed — autonomous |
+| easy | high | [m6-orchestration-core D13](decisions/m6-orchestration-core.md) | Prepare contracts only while the early dependency is not ready | locked by docs/loop/LOOP.md |
+| easy | high | [m6-orchestration-core D14](decisions/m6-orchestration-core.md) | macOS only; no new native UI scenario in this slice | deferred: platform |
+| easy | high | [m6-orchestration-core D16](decisions/m6-orchestration-core.md) | Retain the early checkpoint while the dependency remains pending | locked by docs/loop/LOOP.md:79-83 |
+| easy | high | [m6-orchestration-core D17](decisions/m6-orchestration-core.md) | Iteration 5 retains the same pending early-item gate | locked by docs/loop/LOOP.md:79-83 |
+| easy | high | [m6-orchestration-core D18](decisions/m6-orchestration-core.md) | Iteration 6 preserves the early checkpoint | locked by docs/loop/LOOP.md:79-83 |
+| easy | high | [m6-orchestration-core D19](decisions/m6-orchestration-core.md) | Iteration 7 remains at the early dependency gate | locked by docs/loop/LOOP.md:79-83 |
+| easy | high | [m6-orchestration-core D20](decisions/m6-orchestration-core.md) | Iteration 8 preserves the dependency-gated checkpoint | locked by docs/loop/LOOP.md:79-83 |
+| easy | high | [m6-orchestration-core D21](decisions/m6-orchestration-core.md) | Iteration 9 preserves the early checkpoint | locked by docs/loop/LOOP.md:79-83 |
+| easy | high | [m6-orchestration-core D22](decisions/m6-orchestration-core.md) | Iteration 10 retains the pending early checkpoint | locked by docs/loop/LOOP.md:79-83 |
+| easy | high | [m6-orchestration-core D23](decisions/m6-orchestration-core.md) | Iteration 11 retains the early dependency checkpoint | locked by docs/loop/LOOP.md:79-83 |
+| easy | high | [m6-orchestration-core D24](decisions/m6-orchestration-core.md) | Iteration 12 retains the early dependency checkpoint | locked by docs/loop/LOOP.md:79-83 |
+| easy | high | [m6-orchestration-core D25](decisions/m6-orchestration-core.md) | Iteration 13 retains the early dependency checkpoint | locked by docs/loop/LOOP.md:79-83 |
+| easy | high | [m6-orchestration-core D26](decisions/m6-orchestration-core.md) | Iteration 14 retains the early dependency checkpoint | locked by docs/loop/LOOP.md:79-83 |
+| easy | high | [m6-orchestration-core D27](decisions/m6-orchestration-core.md) | Iteration 15 retains the early dependency checkpoint | locked by docs/loop/LOOP.md:79-83 |
+| easy | high | [m6-orchestration-core D28](decisions/m6-orchestration-core.md) | Implement against the dependency branch under the current early-item rule | supersedes m6-orchestration-core D13,D16–D27 (execution gate only) |
+| easy | high | [m6-orchestration-core D29](decisions/m6-orchestration-core.md) | Use OpenAI implementers with the verified Gemini review fallback | assumed — autonomous |
+| easy | high | [m6-orchestration-core D32](decisions/m6-orchestration-core.md) | Apply the aged-item night-mode landing rule | locked by docs/loop/LOOP.md |
+| easy | high | [m6-orchestration-core D35](decisions/m6-orchestration-core.md) | Repair a worktree-routing violation before accepting runtime output | assumed — autonomous |
+| easy | high | [m6-orchestration-core D36](decisions/m6-orchestration-core.md) | Publish actual source checkpoints without claiming acceptance | assumed — autonomous |
+| easy | high | [m6-orchestration-core D38](decisions/m6-orchestration-core.md) | Keep behavioral regressions and remove incidental implementation pins | assumed — autonomous |
+| easy | high | [m6-orchestration-core D40](decisions/m6-orchestration-core.md) | Apply the operator's immediate landing scope | supersedes m6-orchestration-core D32 (explicit operator landing instruction) |
+| easy | high | [m6-orchestration-core D41](decisions/m6-orchestration-core.md) | Defer only automatic idle nudging, preserving its intact acceptance contract | deferred: automatic idle-mailbox scheduling |
+| easy | high | [m6-orchestration-core D42](decisions/m6-orchestration-core.md) | Reconcile the queue-reported integration conflict without weakening identity | locked by docs/loop/LOOP.md |
 | easy | high | [m1-worktrees D1](decisions/m1-worktrees.md) | Classify the item as an API, CLI, Organization, Visual and Data design, and run research phases A and B | assumed — autonomous |
 | easy | high | [m1-worktrees D2](decisions/m1-worktrees.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m1-worktrees D4](decisions/m1-worktrees.md) | Select every gray area that matters for worktrees | assumed — autonomous |
@@ -941,6 +1033,18 @@ files, not this one.
 | easy | high | [m3-vault D56](decisions/m3-vault.md) | Keep fresh restored-runtime proof separate from stale snapshots | locked by verification-before-completion and test-state isolation |
 | easy | high | [m3-vault D57](decisions/m3-vault.md) | Keep the landed dock/palette and canonical PTY fix alongside Vault | locked by the landed additive UI/PTY contracts and configured runner policy |
 | easy | high | [m3-vault D58](decisions/m3-vault.md) | Keep editor-hosted tabs separate from terminal pane ownership | locked by the landed hosted-view lifecycle and terminal ownership contracts |
+| easy | high | [m4-hosting-ui-tasks D2](decisions/m4-hosting-ui-tasks.md) | Apply unattended night-mode approvals and standard gray areas | locked by docs/loop/LOOP.md |
+| easy | high | [m4-hosting-ui-tasks D4](decisions/m4-hosting-ui-tasks.md) | Use OpenAI implementers with Gemini cross-family review | locked by docs/loop/LOOP.md |
+| easy | high | [m4-hosting-ui-tasks D6](decisions/m4-hosting-ui-tasks.md) | Verify only isolated macOS state and hand off real OS effects | deferred: platform |
+| easy | high | [m4-hosting-ui-tasks D10](decisions/m4-hosting-ui-tasks.md) | Separate core contracts from the final verification barrier | assumed — autonomous |
+| easy | high | [m4-hosting-ui-tasks D12](decisions/m4-hosting-ui-tasks.md) | Match the real image-URL action without inventing binary uploads | locked by hosting-ui.md; assumed — autonomous (clarified source behavior) |
+| easy | high | [m4-hosting-ui-tasks D13](decisions/m4-hosting-ui-tasks.md) | Supply real iteration metadata before rendering iteration boards and roadmaps | locked by hosting-ui.md |
+| easy | high | [m4-hosting-ui-tasks D15](decisions/m4-hosting-ui-tasks.md) | Keep the public schema subset and runtime bounds consistent | locked by docs/roadmap.md; assumed — autonomous (assembly) |
+| easy | high | [m4-hosting-ui-tasks D18](decisions/m4-hosting-ui-tasks.md) | Preserve actual participant and timestamp data instead of empty or fresh-looking fallbacks | locked by hosting-ui.md; assumed — autonomous (nullable unknown representation) |
+| easy | high | [m4-hosting-ui-tasks D20](decisions/m4-hosting-ui-tasks.md) | Finish the exercised core under the operator's immediate landing directive | user ruling 2026-10-27 (4am sprint) |
+| easy | high | [m4-hosting-ui-tasks D22](decisions/m4-hosting-ui-tasks.md) | Keep external integration and unexercised parity explicit | deferred: remaining Tasks parity and cross-feature acceptance — operator-directed 4am sprint |
+| easy | high for observed boundary causes | [m4-hosting-ui-tasks D23](decisions/m4-hosting-ui-tasks.md) | Consume authoritative creation and close only the remaining named gate failures | assumed — autonomous (named gate repairs); locked by canonical sourced-worktree contract |
+| easy | high | [m4-hosting-ui-tasks D24](decisions/m4-hosting-ui-tasks.md) | Resolve the controller-reported moving-tip conflict without reopening campaigns | locked by LOOP.md failed-land recovery and operator immediate-landing directive |
 | easy | high | [m1-agent-status D5](decisions/m1-agent-status.md) | Every hook source in the doc gets a normalizer with Orca's event mapping | locked by research/orca-features/agent-status.md |
 | easy | high | [m1-agent-status D8](decisions/m1-agent-status.md) | Installers merge only their own entries, keep the file byte-identical on a rerun, and never write a file they can't parse | locked by research/orca-features/agent-status.md |
 | easy | high | [m1-agent-status D9](decisions/m1-agent-status.md) | Claude's settings file lists only the events the installed Claude knows | locked by research/orca-features/agent-status.md |

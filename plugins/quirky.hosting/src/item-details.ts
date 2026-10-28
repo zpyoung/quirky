@@ -1,4 +1,5 @@
 import type { Handler, HostingEnv, Identity, Scope } from './env'
+import { reviewParticipants } from './review-participants'
 import type { GitHubWorktreeSource } from '@quirky/protocol'
 import { parseBranch, parseOid } from './pr-data'
 import { normalizeRestPull } from './pr-review'
@@ -31,9 +32,10 @@ const MAX_COMMENTS = 100
 const ITEM_DETAILS_QUERY = `query WorkItemDetails($owner: String!, $repo: String!, $number: Int!) {
   repository(owner: $owner, name: $repo) {
     issue(number: $number) {
-      __typename number title body state url createdAt updatedAt
+      __typename number title body state stateReason viewerCanUpdate url createdAt updatedAt
       author { login }
       issueType { id name }
+      labels(first: 100) { nodes { name } pageInfo { hasNextPage } }
       assignees(first: 50) { nodes { login } pageInfo { hasNextPage } }
       participants(first: 100) { nodes { login } pageInfo { hasNextPage } }
       comments(first: 100) {
@@ -310,6 +312,7 @@ async function loadIssueDetails(
   let comments: Record<string, unknown>[] = []
   let updatedItem = item
   let truncated = false
+  let viewerCanUpdate: boolean | null = null
   const gqlScope = scopeForRepository(scope, identity)
   try {
     const result = await env.graphql(gqlScope, ITEM_DETAILS_QUERY, { owner: identity.owner, repo: identity.repo, number: item.number }, { idempotent: true })
@@ -317,6 +320,7 @@ async function loadIssueDetails(
     const repository = record(data?.repository)
     const issue = record(repository?.issue)
     if (issue) {
+      if (typeof issue.viewerCanUpdate === 'boolean') viewerCanUpdate = issue.viewerCanUpdate
       const mapped = mapWorkItem(issue, { identity, kind: 'issue' })
       if (mapped) updatedItem = mapped
       const assignees = connectionNodes(issue.assignees)
@@ -327,7 +331,7 @@ async function loadIssueDetails(
         const comment = normalizeComment(value, 'issue')
         return comment === null ? [] : [comment]
       }).slice(0, MAX_COMMENTS)
-      truncated = assignees.hasNextPage || participantNodes.hasNextPage || commentConnection.hasNextPage || commentConnection.nodes.length > MAX_COMMENTS
+      truncated = connectionNodes(issue.labels).hasNextPage || assignees.hasNextPage || participantNodes.hasNextPage || commentConnection.hasNextPage || commentConnection.nodes.length > MAX_COMMENTS
     } else {
       partialFailures.push('GitHub did not return issue details.')
     }
@@ -370,6 +374,7 @@ async function loadIssueDetails(
   }
   return {
     item: updatedItem,
+    viewerCanUpdate,
     participants: [...participants.values()],
     comments,
     timeline,
@@ -487,12 +492,14 @@ async function loadPullDetails(
     partialFailures.push(partialMessage(error, 'Pull request timeline'))
   }
 
-  const statusCheckRollup = await env.json(selected, ['pr', 'view', String(item.number), '--repo', `${identity.owner}/${identity.repo}`, '--json', 'statusCheckRollup'], { idempotent: true }).catch((error: unknown) => {
-    partialFailures.push(partialMessage(error, 'Pull request checks'))
+  const statusCheckRollup = await env.json(selected, ['pr', 'view', String(item.number), '--repo', `${identity.owner}/${identity.repo}`, '--json', 'statusCheckRollup,reviewRequests,reviews,assignees'], { idempotent: true }).catch((error: unknown) => {
+    partialFailures.push(partialMessage(error, 'Pull request checks and participants'))
     return null
   })
   const checkRows = array(record(statusCheckRollup)?.statusCheckRollup)
+  const reviewData = reviewParticipants(record(statusCheckRollup) ?? {})
   return {
+    ...reviewData,
     item: updatedItem,
     files,
     comments,
@@ -501,22 +508,29 @@ async function loadPullDetails(
     checks: checkRows,
     partialFailures,
     filesUnavailable,
-    truncated
+    truncated: truncated || reviewData.participantsTruncated
   }
+}
+
+/** Shared bounded detail loader; the caller has already authorized this exact repository identity. */
+export async function itemDetailsForIdentity(env: HostingEnv, scope: Scope, identity: Identity, item: WorkItemRecord): Promise<Record<string, unknown>> {
+  const detail = item.kind === 'pullRequest'
+    ? await loadPullDetails(env, scope, identity, item)
+    : await loadIssueDetails(env, scope, identity, item)
+  ensureOutputBound(env, detail, 'Work-item details')
+  return detail
 }
 
 async function workItemDetails(env: HostingEnv, params: Record<string, unknown>, caller: ItemCaller): Promise<unknown> {
   const scope = await env.resolve(params, caller)
   const options = itemOptions(env, scope, params)
+  if (params.noCache !== undefined && typeof params.noCache !== 'boolean') throw env.invalid('validation_error', 'noCache must be a boolean.')
+  if (params.noCache === true) env.invalidate(scope)
   const key = env.cacheKey(scope, `work-item-details:${options.kind ?? 'any'}:${options.number}:${options.identity ? identityKey(options.identity) : 'configured'}`)
   return env.cache(key, 60_000, async () => {
     const resolved = await resolveWorkItem(env, scope, options.number, options.kind, options.identity)
     if (!resolved) return null
-    const detail = resolved.item.kind === 'pullRequest'
-      ? await loadPullDetails(env, scope, resolved.identity, resolved.item)
-      : await loadIssueDetails(env, scope, resolved.identity, resolved.item)
-    ensureOutputBound(env, detail, 'Work-item details')
-    return detail
+    return itemDetailsForIdentity(env, scope, resolved.identity, resolved.item)
   })
 }
 

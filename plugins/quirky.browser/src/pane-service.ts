@@ -135,6 +135,15 @@ function normalizeInput(input: string, engine: unknown): NormalizedInput {
     const url = pathToFileURL(value).href
     return { url, historyUrl: url, localPath: value }
   }
+  const hostPort = /^(\[[0-9a-f:]+\]|[^/\s:]+)(?::(\d{1,5}))?(\/[^\s]*)?$/i.exec(value)
+  if (hostPort && (hostPort[1]!.toLowerCase() === 'localhost' || hostPort[1]!.toLowerCase().endsWith('.localhost') ||
+      /^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostPort[1]!) || /^\[[0-9a-f:]+\]$/i.test(hostPort[1]!) || hostPort[1]!.includes('.'))) {
+    const candidate = new URL(`https://${value}`)
+    const protocol = isLocalHost(candidate.hostname) ? 'http:' : 'https:'
+    candidate.protocol = protocol
+    const url = safeUrl(candidate.href)
+    return { url, historyUrl: safeHistoryAddress(url) }
+  }
   if (/^[A-Za-z][A-Za-z\d+.-]*:/.test(value)) {
     let parsed: URL
     try { parsed = new URL(value) } catch { throw fault('invalid_argument', 'address is not a valid URL') }
@@ -153,15 +162,6 @@ function normalizeInput(input: string, engine: unknown): NormalizedInput {
   if (/\s/.test(value)) {
     const url = searchAddress(value, engine)
     return { url, historyUrl: url }
-  }
-  const hostPort = /^(\[[0-9a-f:]+\]|[^/\s:]+)(?::(\d{1,5}))?(\/[^\s]*)?$/i.exec(value)
-  if (hostPort && (hostPort[1]!.toLowerCase() === 'localhost' || hostPort[1]!.toLowerCase().endsWith('.localhost') ||
-      /^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostPort[1]!) || /^\[[0-9a-f:]+\]$/i.test(hostPort[1]!) || hostPort[1]!.includes('.'))) {
-    const candidate = new URL(`https://${value}`)
-    const protocol = isLocalHost(candidate.hostname) ? 'http:' : 'https:'
-    candidate.protocol = protocol
-    const url = safeUrl(candidate.href)
-    return { url, historyUrl: safeHistoryAddress(url) }
   }
   const scheme = /^[A-Za-z][A-Za-z\d+.-]*:/.exec(value)
   if (scheme) throw fault('invalid_argument', `unsupported browser URL scheme: ${scheme[0].slice(0, -1)}`)
@@ -241,7 +241,8 @@ export class PaneService {
     private readonly store: BrowserStore,
     private readonly runtime: BrowserRuntime,
     private readonly resolveWorktree: ResolveWorktree,
-    private readonly listWorktrees: () => Promise<Worktree[]>
+    private readonly listWorktrees: () => Promise<Worktree[]>,
+    private readonly downloadDirectory = join(homedir(), 'Downloads')
   ) {
     this.db = context.openStore([
       `CREATE TABLE IF NOT EXISTS browser_pane_tabs (id TEXT PRIMARY KEY, worktree_id TEXT NOT NULL, active INTEGER NOT NULL, updated_at INTEGER NOT NULL, data TEXT NOT NULL);
@@ -1284,7 +1285,7 @@ export class PaneService {
     }
     const sourceInfo = lstatSync(source)
     if (!sourceInfo.isFile() || sourceInfo.isSymbolicLink()) throw fault('browser_error', 'Chrome produced a non-regular download artifact')
-    const downloads = join(homedir(), 'Downloads')
+    const downloads = this.downloadDirectory
     mkdirSync(downloads, { recursive: true, mode: 0o700 })
     const destinationRoot = realpathSync(downloads)
     const safeName = safeFileName(requestedName)
@@ -1342,7 +1343,7 @@ export class PaneService {
   }
 
   private safeDownloadPath(path: string): string {
-    const root = realpathSync(join(homedir(), 'Downloads'))
+    const root = realpathSync(this.downloadDirectory)
     const candidate = realpathSync(path)
     if (!within(root, candidate)) throw fault('invalid_argument', 'download path is outside the OS Downloads directory')
     const info = lstatSync(candidate)

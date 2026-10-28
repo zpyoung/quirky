@@ -21,11 +21,11 @@ const ALLOWED_FIELDS: Record<string, readonly string[]> = {
   'activity-item': ['title', 'description', 'order'],
   panel: ['title', 'description', 'order'],
   'settings-section': ['title', 'description', 'order'],
-  view: ['title', 'description'],
+  view: ['title', 'description', 'settings'],
   overlay: ['title', 'description', 'order'],
   command: ['title', 'description', 'args'],
   keybinding: ['key', 'command', 'description', 'when'],
-  setting: ['type', 'default', 'title', 'description', 'category', 'section', 'minimum', 'maximum', 'values'],
+  setting: ['type', 'default', 'title', 'description', 'category', 'section', 'minimum', 'maximum', 'values', 'menu'],
   theme: ['title', 'appearance', 'colors', 'description'],
   'menu-item': ['menu', 'title', 'command', 'when', 'after'],
 } satisfies Record<(typeof UI_KINDS)[number], readonly string[]>
@@ -128,6 +128,9 @@ function checkSetting(label: string, entry: Entry, errors: string[]): void {
   const type = entry.type
   const typeValid = (SETTING_TYPES as readonly unknown[]).includes(type)
   if (!typeValid) errors.push(`${label}: type must be boolean, number, string or enum`)
+  if (entry.menu !== undefined && (entry.menu !== 'view' || type !== 'boolean')) {
+    errors.push(`${label}: menu must be view and is only allowed for a boolean setting`)
+  }
 
   let minimum = checkBound(label, entry, 'minimum', type, errors)
   let maximum = checkBound(label, entry, 'maximum', type, errors)
@@ -199,6 +202,9 @@ export function checkUiKindEntry(kind: string, label: string, entry: Entry, erro
   }
   if (allowed.includes('order') && entry.order !== undefined && !isFiniteNumber(entry.order)) {
     errors.push(`${label}: order must be a number`)
+  }
+  if (kind === 'view' && entry.settings !== undefined && typeof entry.settings !== 'boolean') {
+    errors.push(`${label}: settings must be a boolean`)
   }
   if (kind === 'command' && entry.args !== undefined) {
     for (const problem of checkSchemaDeclaration(entry.args, 'args', { object: true })) errors.push(`${label}: ${problem}`)

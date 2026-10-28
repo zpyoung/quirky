@@ -94,11 +94,12 @@ async function mountWithMenuItems(menuItems: UiMenuItemEntry[]) {
 
   const element = document.createElement('div')
   document.body.appendChild(element)
+  const reports: unknown[] = []
   let cleanup: (() => void) | void
   await act(async () => {
     cleanup = fake.provided.get(WORKTREE_VIEW)!(element, {
       input: { worktree: 'wt-main' },
-      report: (state: unknown) => { reports.push(state) }
+      report: (state: unknown) => void reports.push(state)
     }) as () => void
   })
   await settle()

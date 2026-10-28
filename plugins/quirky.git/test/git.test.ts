@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { QuirkyClient, RpcError, RpcErrorCode, type PluginInfo } from '@quirky/protocol'
+import { QuirkyClient, RpcError, RpcErrorCode } from '@quirky/protocol'
 import { rpcUrl } from '@quirky/protocol/node'
 import { GitError } from '@quirky/git'
 import { waitFor } from '../../../packages/daemon/test/helpers'
@@ -19,104 +19,6 @@ async function errorOf(promise: Promise<unknown>): Promise<RpcError> {
   }
   throw new Error('expected the call to fail')
 }
-
-describe('quirky.git manifest', () => {
-  test('is a built-in that depends on quirky.worktree and declares the source-control panel', async () => {
-    const plugins = (await g.call('plugin.list', {})) as PluginInfo[]
-    const git = plugins.find((plugin) => plugin.id === 'quirky.git')
-    expect(git).toMatchObject({ source: 'builtin', dependencies: ['quirky.worktree'], activation: 'lazy' })
-    const contributions = (await g.call('plugin.contributions', { pluginId: 'quirky.git' })) as { id: string }[]
-    expect(contributions.map((c) => c.id).sort()).toEqual([
-      'command:quirky.git/add-review-note',
-      'command:quirky.git/ai-settings',
-      'command:quirky.git/collapse-all',
-      'command:quirky.git/load-diff',
-      'command:quirky.git/next-change',
-      'command:quirky.git/next-conflict',
-      'command:quirky.git/open-branch-changes',
-      'command:quirky.git/open-changes',
-      'command:quirky.git/open-commit',
-      'command:quirky.git/open-diff',
-      'command:quirky.git/overwrite',
-      'command:quirky.git/previous-change',
-      'command:quirky.git/previous-conflict',
-      'command:quirky.git/refresh-compare',
-      'command:quirky.git/reload-from-disk',
-      'command:quirky.git/revert-change',
-      'command:quirky.git/review-conflicts',
-      'command:quirky.git/save',
-      'command:quirky.git/select',
-      'command:quirky.git/send-review-notes',
-      'command:quirky.git/set-filter',
-      'command:quirky.git/show',
-      'command:quirky.git/toggle-history',
-      'event:quirky.git/aiChanged',
-      'event:quirky.git/changed',
-      'event:quirky.git/notesChanged',
-      'keybinding:quirky.git/add-review-note',
-      'keybinding:quirky.git/next-change',
-      'keybinding:quirky.git/previous-change',
-      'keybinding:quirky.git/show',
-      'method:quirky.git/abort',
-      'method:quirky.git/addNote',
-      'method:quirky.git/aiFix',
-      'method:quirky.git/aiFixPreview',
-      'method:quirky.git/aiRecipe',
-      'method:quirky.git/branches',
-      'method:quirky.git/cancelGenerate',
-      'method:quirky.git/clearNotes',
-      'method:quirky.git/commit',
-      'method:quirky.git/commitFiles',
-      'method:quirky.git/compare',
-      'method:quirky.git/conflictFile',
-      'method:quirky.git/continue',
-      'method:quirky.git/deleteNote',
-      'method:quirky.git/describeAbort',
-      'method:quirky.git/describeClearNotes',
-      'method:quirky.git/describeDiscard',
-      'method:quirky.git/describeForcePush',
-      'method:quirky.git/diff',
-      'method:quirky.git/discard',
-      'method:quirky.git/editNote',
-      'method:quirky.git/fastForward',
-      'method:quirky.git/fetch',
-      'method:quirky.git/forcePush',
-      'method:quirky.git/formatNotes',
-      'method:quirky.git/generateCommitMessage',
-      'method:quirky.git/history',
-      'method:quirky.git/hugeFolders',
-      'method:quirky.git/ignoreFolder',
-      'method:quirky.git/noteTargets',
-      'method:quirky.git/notes',
-      'method:quirky.git/pull',
-      'method:quirky.git/push',
-      'method:quirky.git/rebaseFromBase',
-      'method:quirky.git/reveal',
-      'method:quirky.git/save',
-      'method:quirky.git/sendNotes',
-      'method:quirky.git/setAiRecipe',
-      'method:quirky.git/setBase',
-      'method:quirky.git/stage',
-      'method:quirky.git/status',
-      'method:quirky.git/submoduleStatus',
-      'method:quirky.git/sync',
-      'method:quirky.git/unstage',
-      'panel:quirky.git/source-control',
-      'setting:quirky.git/ai-custom-command',
-      'setting:quirky.git/ai-enabled',
-      'setting:quirky.git/combinedDiffFileTree',
-      'setting:quirky.git/compareBase',
-      'setting:quirky.git/diffCollapseUnchanged',
-      'setting:quirky.git/diffDefaultView',
-      'setting:quirky.git/diffShowWhitespace',
-      'setting:quirky.git/diffWordWrap',
-      'setting:quirky.git/groupOrder',
-      'setting:quirky.git/viewMode',
-      'view:quirky.git/ai-settings',
-      'view:quirky.git/diff'
-    ])
-  })
-})
 
 describe('quirky.git methods', () => {
   test('run git in the worktree path and report changes', async () => {

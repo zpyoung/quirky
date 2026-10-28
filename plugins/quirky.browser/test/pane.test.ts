@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:https'
 import { basename, join } from 'node:path'
 import { expect, test } from 'bun:test'
@@ -97,7 +97,7 @@ test('pane navigation normalizes safely, persists bounded recency history, and k
   const h = await startBrowserHarness()
   try {
     const worktree = await h.addFolderWorktree('pane-native')
-    const worktreePath = join(h.home, 'projects', 'pane-native')
+    const worktreePath = realpathSync(join(h.home, 'projects', 'pane-native'))
     writeFileSync(join(worktreePath, 'local-document.txt'), 'safe local page')
     writeFileSync(join(worktreePath, 'suggested-document.txt'), 'workspace suggestion')
     writeFileSync(join(worktreePath, 'local-page.html'), '<!doctype html><title>Local</title>')
@@ -193,6 +193,11 @@ test('Watch leases deliver acknowledged latest frames and typed input/find/zoom/
       expect(events.map(paneFrame).filter((frame) => frame?.watchId === watch.watchId)).toHaveLength(1)
 
       await call(h, 'paneFrameAck', { pane: pane.id, watchId: watch.watchId, sequence: firstFrame.sequence })
+      // CDP only captures damaged frames; a static page need not emit another image.
+      expect(await call(h, 'eval', {
+        page: first.browserPageId,
+        expression: "document.body.style.backgroundColor='rgb(230,20,20)';'repainted'"
+      })).toEqual({ value: 'repainted' })
       const nextFrame = await waitFor(() => events.map(paneFrame).find((frame) => frame?.watchId === watch.watchId && frame.sequence !== firstFrame.sequence))
       expect(nextFrame.sequence).toBeGreaterThan(firstFrame.sequence as number)
 

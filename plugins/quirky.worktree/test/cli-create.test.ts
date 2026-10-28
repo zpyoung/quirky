@@ -34,6 +34,7 @@ function fakeContext(result: Partial<WorktreeCreateResult> = {}, json = false) {
   const calls: { method: string; params: Record<string, unknown> }[] = []
   const lines: string[] = []
   const ctx: CliContext = {
+    requestBase: crypto.randomUUID(),
     call: async (method, params = {}) => {
       calls.push({ method, params })
       return { worktree, warnings: [], setup: { ran: 'none' }, ...result }

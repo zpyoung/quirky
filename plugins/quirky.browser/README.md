@@ -33,6 +33,8 @@ Page operations accept an explicit `--page` or use the existing worktree/current
 CLI values are literal data. In particular, a string beginning with `@file:` is passed unchanged; the CLI does not read files or stdin implicitly.
 
 ## Browser panes
+The operator-authorized delivery for `sa-browser-pane` is pane lifecycle and navigation through the daemon API and CLI. The retained Watch/screencast, advanced controls and page-event source below is not a claim that its remaining UI scenarios passed acceptance. Screencast and base pane UI completion are assigned to `sa-browser-pane-native-host-controls`; page events to `sa-browser-pane-native-events`; grant-scoped document preview to `sa-browser-pane-workspace-preview`; profile integration and settings to `sa-browser-profiles-settings` and its existing focused follow-ups. The exact handoff is recorded in `docs/loop/decisions/sa-browser-pane.md` and `docs/loop/BLOCKERS.md`.
+
 
 Browser panes are real hosted tabs in the worktree's terminal workspace. `pane open` creates a Native pane by default; `--mode watch --page` explicitly binds an existing managed agent page. `pane watch --pane` explicitly switches that pane to Watch and starts/resumes its owned page at the pane's current address. Closing a Watch pane stops its screencast but leaves the agent page open.
 

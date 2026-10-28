@@ -107,6 +107,7 @@ export async function startBrowserHarness(extra: Partial<BrowserTestOverrides> =
     },
     chromeArguments: ['--use-mock-keychain'],
     chromePath: null,
+    downloadDirectory: join(home, 'Downloads'),
     ...extra
   }
   setBrowserTestOverrides(home, overrides)

@@ -87,7 +87,7 @@ export type WorkspaceOptions = {
   workspace?: 'floating'
   /** Rendered after the `+` button of each group's strip. */
   stripExtras?: (group: Group) => ReactNode
-  /** Rows in the Quick Commands submenu for a pane. */
+  /** Rows in the pane menu's Quick Commands submenu. */
   paneMenuExtras?: (pane: PaneLeaf) => MenuItem[]
   /** Rows other plugins contribute to the pane menu, shown right after the Quick Commands row. */
   paneMenuContributions?: (pane: PaneLeaf, session: Session | undefined) => MenuItem[]

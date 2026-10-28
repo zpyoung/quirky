@@ -871,6 +871,13 @@
         }
       },
       {
+        "id": "mergePreview",
+        "description": "Inspect merge-conflict paths from existing commit objects without changing the checkout or index, fetching, or executing custom merge drivers.",
+        "readOnly": true,
+        "params": {"type":"object","properties":{"worktree":{"type":"string"},"base":{"type":"string"},"head":{"type":"string"}},"required":["base","head"]},
+        "result": {"type":"object","properties":{"base":{"type":"string"},"head":{"type":"string"},"available":{"type":"boolean"},"conflicting":{"type":"boolean"},"files":{"type":"array","items":{"type":"string"}},"reason":{"type":"string","enum":["objects-unavailable","custom-merge-driver","preview-unavailable"]}},"required":["base","head","available","conflicting","files"]}
+      },
+      {
         "id": "compare",
         "description": "What the branch changed since its merge base with a base ref. A compare that cannot run is a result with a status and message.",
         "readOnly": true,
