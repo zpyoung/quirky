@@ -385,6 +385,61 @@
 - **Revisit if:** another write escapes its component
 - **Source:** assumed — autonomous
 
+## D36: Publish actual source checkpoints without claiming acceptance
+- **Question:** dependent worker and Heimdall lanes needed executable source before queue landing
+- **Options:** wait for every acceptance result; publish scoped source after the ownership barrier
+- **Chose:** publish runtime7573a84b, semantic6d1e6f9c, surface7538aac7 and item checkpoint833d2a56 with explicit unverified status; later semantic completion25f55c5f preserved the same store and authority ownership.
+- **Why:** the operator explicitly authorized source checkpoints so dependent lanes could exercise real seams rather than copy uncommitted trees or fabricate callers.
+- **Evidence:** priority interlane source-publication request; component scope audits; committed classes, service factory, pointer scheduler, manifest and CLI; lane11 reply file updated with hashes and failed-gate evidence.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** source publication is mistaken for a passing or landed feature
+- **Source:** assumed — autonomous
+
+## D37: Separate transport replay keys from durable orchestration request IDs
+- **Question:** a real launched CLI retry returned the original Run but incorrectly retained mutation.replayed=false
+- **Options:** alter the result marker; change the kernel cache globally; use independent transport IDs while retaining the plugin's durable ID
+- **Chose:** expose the existing public CallOptions through CliContext/DaemonLink; each orchestration CLI call uses a fresh transport requestId while params.requestId remains requestBase. Connection resends retain their transport ID; a confirmation with changed params gets a new one.
+- **Why:** the kernel's 24-hour RequestLog replays the complete first response before the plugin can inspect its own ledger. Independent logical-call keys let the real durable ledger decide replay and mismatch, without faking a marker or weakening transport replay.
+- **Evidence:** launched-smoke.ts failed the replay-marker assertion before the fix and advanced through it afterwards; packages/daemon/src/plugins/requests.ts; packages/cli/src/link.ts; commit550d06fc.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** another CLI module with its own durable ledger reuses the transport replay key
+- **Source:** assumed — autonomous
+
+## D38: Keep behavioral regressions and remove incidental implementation pins
+- **Question:** the first runtime gate failed schema-object, reserved-env and FakeRunner option-copy assertions plus an event-delivery race
+- **Options:** repin every copied object; weaken production reserved-name filtering; retain consumer behavior and remove implementation-only expectations
+- **Chose:** delete schema/option forwarding pins, retain lease lifetime and real child-CLI proof, preserve the QUIRKY_ reserved filter, and wait for the actual settled event rather than an upstream fake status log.
+- **Why:** descriptions and transient launch env are not stable consumer results. Reserved input must not override kernel identity. Subscriber delivery is asynchronous, so upstream status is not proof the event arrived.
+- **Evidence:** artifact72 records309/312 remote files passing and the3 failed files; both macOS files passed. The authority regression separately failed under pre-request revocation and passed after post-success revocation with8 assertions. Rejected worker-report CLI success was reproduced, then corrected to exit1 with its auditable receipt intact.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** native API, permission, identity, event or replay behavior regresses
+- **Source:** assumed — autonomous
+
+## D39: Preserve landed schema history and all incoming ownership decisions
+- **Question:** catching up integration conflicted with session badges, pointer records and structured tests
+- **Options:** choose one branch; combine independent features with deployed migration order preserved
+- **Chose:** preserve incoming badges before the unshipped pointer migration, combine session schemas/fake controls, and retain real deferred/native behavior. No incoming binding conflict was identified.
+- **Why:** already-landed migration indices cannot be repurposed. Session labels and UI membership remain metadata, not worker authority; account preparation, native resume, public plugin composition and process ownership remain unchanged.
+- **Evidence:** merge69b8f12a; IncomingDecisionAudit read all13 incoming logs: fix-flaky-pty-host-host, fix-flaky-quirky-git-files-scenarios, fix-test-cost, m2-editor, m2-sidebar-extras, m3-handoff, m3-session-info, m3-terminal-dock, m3-vault, m4-sidebar-review-filters, m5-ledger, m5-structured-runner and sa-browser-agent.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** a concrete merged contract fails the affected gate
+- **Source:** locked by docs/loop/LOOP.md
+
+## D40: Apply the operator's immediate landing scope
+- **Question:** the overdue core item gated already-built worker, Heimdall and sweep items
+- **Options:** start another review/dogfood campaign; land the passing scope under the sprint instruction
+- **Chose:** skip unstarted review/dogfood, merge integration, run typecheck and affected tests, record at most one follow-up for any unfinished flows, and use only queue.ts land.
+- **Why:** the operator explicitly authorized this scope and landing path. No passing or complete claim is made before observed verification.
+- **Evidence:** operator4am sprint interjection in iteration16; merge69b8f12a; final gate in progress.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the final gate exposes a blocking safety defect
+- **Source:** supersedes m6-orchestration-core D32 (explicit operator landing instruction)
+
 ## Early preparation verification
 - `bun run typecheck`: exit0 on the final contracts, no diagnostics.
 - Actual Bun import of contracts.ts: `CONTRACT_MODULE_INERT_OK`; the module exports no runtime values. No daemon, model, process, real user state or placeholder contribution was started/installed.
@@ -392,4 +447,4 @@
 - No runtime acceptance claim: AC1–AC13, cross-family review, UI pointer dogfood and queue-controlled landing remain gated on implementation after dependency readiness.
 
 ## Progress
-Iteration16 resumed actual implementation under current early-item rules. Merged build/m5-structured-runner; status reports it in progress, not blocked. D28 supersedes the stale preparation-only gate. Resolve independent runtime caller attestation and idempotent safe-send seams, dispatch at most three disjoint implementers, then verify all AC1–AC13. Before landing, merge pending dependency updates, wait for queue deps ready, catch up integration once and read incoming decisions. Product verification, dogfood, final cross-family review and landing are not yet complete.
+Iteration16 implemented and published runtime, core, mailbox, questions/gates, pointer and CLI source. Integration is merged at69b8f12a; all13 incoming decision logs were reconciled. The operator directed immediate scoped landing with no unstarted review/dogfood and at most one follow-up. Final gate is running after concrete compile and fixture corrections. Next: observe the typecheck/affected-suite/scripts/real-launched-CLI verdict, record only exercised evidence, commit the passing scope, detach and queue.ts land. No source worktree or reviewer remains running; the current verifier must return before ending the turn.

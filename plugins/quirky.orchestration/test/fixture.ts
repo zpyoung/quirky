@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { QuirkyClient, type ClientHello } from '@quirky/protocol'
@@ -28,7 +28,19 @@ export type OrchestrationSession = { id: string; worktreeId: string; cwd: string
 type AuthenticatedHello = ClientHello & { sessionToken: string }
 export type OrchestrationParty = OrchestrationSession & { client: QuirkyClient; sessionToken: string }
 export type CliResult = { code: number; stdout: string; stderr: string }
-export type CliProcess = Bun.Subprocess
+export type CliProcess = Bun.Subprocess<'ignore', 'pipe', 'pipe'>
+function isCliResult(value: unknown): value is CliResult {
+  if (typeof value !== 'object' || value === null) return false
+  if (!('code' in value) || !('stdout' in value) || !('stderr' in value)) return false
+  return typeof value.code === 'number' && typeof value.stdout === 'string' && typeof value.stderr === 'string'
+}
+
+export function readCliResult(path: string): CliResult | undefined {
+  if (!existsSync(path)) return undefined
+  const result: unknown = JSON.parse(readFileSync(path, 'utf8'))
+  if (!isCliResult(result)) throw new Error('orchestration fixture returned an invalid CLI result')
+  return result
+}
 
 export type OrchestrationFixture = {
   root: string
@@ -189,6 +201,7 @@ export async function startOrchestrationFixture(): Promise<OrchestrationFixture>
     mkdirSync(childHome, { recursive: true, mode: 0o700 })
     const child = Bun.spawn([process.execPath, CLI_MAIN, ...args], {
       cwd: options.cwd ?? party.cwd,
+      stdin: 'ignore',
       env: {
         PATH: process.env.PATH ?? '/usr/bin:/bin',
         HOME: childHome,
@@ -294,7 +307,7 @@ export async function startOrchestrationFixture(): Promise<OrchestrationFixture>
   }
 }
 
-export function mutation(requestId = crypto.randomUUID()) {
+export function mutation(requestId: string = crypto.randomUUID()) {
   return { requestId, contractVersion: 1 as const }
 }
 
