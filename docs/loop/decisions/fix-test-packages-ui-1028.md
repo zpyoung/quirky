@@ -33,5 +33,49 @@
 - **Revisit if:** scopes overlap or lane9 reports a changed contract
 - **Source:** assumed — autonomous
 
+## D4: Preserve exact-window command authority rather than restoring obsolete focus fallback
+- **Question:** Is SC-41's focus-inferred command target still the public contract?
+- **Options:** restore focus fallback in the daemon; migrate the stale test to the landed explicit-window contract
+- **Chose:** verify singleton compatibility, multi-window ambiguity refusal, exact connId delivery despite another window's latest focus, and stale-target refusal without rerouting
+- **Why:** m7-terminal-provider-host-and-worktree-remainder D3 explicitly chose exact connId routes and refusal of ambiguous/missing/stale targets; the daemon implementation follows that decision
+- **Evidence:** docs/loop/decisions/m7-terminal-provider-host-and-worktree-remainder.md:25-34; packages/daemon/src/plugins/layout.ts:449-465
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** an authoritative decision changes target selection
+- **Source:** locked by docs/loop/decisions/m7-terminal-provider-host-and-worktree-remainder.md D3
+
+## D5: Remove CSS and inventory mirrors; retain behavior checks and use real rendering evidence
+- **Question:** Should tokenized dialog sizing and decorative menu glyphs force production changes?
+- **Options:** replace tokens/decorations to satisfy exact source/text assertions; delete incidental mirrors and exercise the rendered controls
+- **Chose:** delete literal dialog/overlay CSS assertions and gallery category inventory; make gallery lookup ignore aria-hidden decoration; preserve production styling and terminal theme lookup
+- **Why:** the dialog already has tokenized viewport-bounded max-height and overflow-y:auto; Menu's decorative arrow is aria-hidden; happy-dom does not inherit custom properties as a real browser does. A mocked inheritance shim would only test forwarding and is not retained
+- **Evidence:** packages/ui/src/styles.css:916-934; packages/ui/src/design-system/navigation.tsx Menu; packages/ui/src/terminal-theme.ts:10-19; real-browser proof remains required below
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** real Chromium shows a consumer-visible styling or inheritance failure
+- **Source:** assumed — autonomous
+
+## D6: Keep lane9's new shell intact during composition
+- **Question:** Which overlapping UI contracts may this fix change?
+- **Options:** restore old rails/toggles; preserve the new shell and compose only the scoped regression repairs
+- **Chose:** preserve daemon-owned six slots, exact-window history/input/focus, eight-second truthful toast lifecycle, stable mounts and canonical pending-ask authority
+- **Why:** lane9's explicit overlap handoff names App/MainArea/host/styles/layout-shell/toasts changes and no gallery/terminal-theme edits; no wait or dependency was requested
+- **Evidence:** /tmp/quirky-ui-shell-lane9-overlap.md; user handoff during this iteration
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** the catch-up merge exposes a concrete contract conflict
+- **Source:** locked by lane9 overlap handoff
+
+## D7: Keep anonymous Ask integration distinct from authenticated-session auto-open and delayed OS notification
+- **Question:** Why do SC-31/SC-29's report predicates never become true, and should production be changed to satisfy them?
+- **Options:** auto-open Questions for every anonymous CLI ask and notify immediately; preserve exact active-session attention and notification ownership, then update the integration setup
+- **Chose:** anonymous CLI asks preserve the chosen view/panel, still update pending attention, and appear after explicit public panel-open; verify first-answer/second-pending and waiter completion through the real CLI/daemon
+- **Why:** the fixture passes no authenticated session identity. registerAsk records a session-null ask; openQuestionsPanel deliberately refuses session-null auto-open. The feature doc scopes auto-focus to the focused pane and OS escalation to three unattended minutes. A test expecting immediate notification contradicts the notification owner
+- **Evidence:** plugins/quirky.ask/main.ts:184-197,346-355; plugins/quirky.ask/README.md active-session behavior; plugins/quirky.ask/test/main-ui.test.ts; plugins/quirky.notifications/test/ask-escalation.test.ts; research/orca-features/ask.md Auto-focus and Unattended asks escalate
+- **Reversibility:** medium
+- **Confidence:** high for contract mismatch; the actor that sent the baseline CLI SIGTERM remains unobserved
+- **Revisit if:** a real CLI/daemon run still exits143 after the unattainable panel predicate is removed
+- **Source:** locked by research/orca-features/ask.md and docs/loop/decisions/m1-notifications.md D5
+
 ## Progress
 Claimed one item on lane1; branch build/fix-test-packages-ui-1028 from c299501db714670a51a36d5bb5b6090cbf90bcf5. Root-cause mapping in progress. End phase is active; tests and real UI smoke are required. No human questions, protected loop/shared index edits or real profile writes.

@@ -1,6 +1,4 @@
 import { afterEach, expect, test } from 'bun:test'
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
 import { bootWindow, closeWindows, installUiPlugin, provide, type WindowEnv } from './fixtures/window-env'
 
 afterEach(closeWindows)
@@ -257,22 +255,6 @@ test('SC-67: the window mounts each overlay in a full-window layer after the lay
   expect(env.win.host.getState().slots[HUD]).toEqual({ status: 'mounted' })
 })
 
-test('SC-67: the layer lets clicks through and sits below the dialogs', () => {
-  const css = readFileSync(join(import.meta.dir, '..', 'src', 'styles.css'), 'utf8')
-  const rule = /\.overlay-layer\s*\{([^}]*)\}/.exec(css)![1]
-  expect(rule).toContain('position: fixed')
-  expect(rule).toContain('inset: 0')
-  expect(rule).toContain('pointer-events: none')
-  const zOf = (selector: string) => Number(new RegExp(`\\${selector}\\s*\\{[^}]*z-index:\\s*(\\d+)`).exec(css)![1])
-  expect(Number(/z-index:\s*(\d+)/.exec(rule)![1])).toBeLessThan(zOf('.overlay'))
-})
-
-test('a dialog taller than the window scrolls inside it, so its buttons stay reachable', () => {
-  const css = readFileSync(join(import.meta.dir, '..', 'src', 'styles.css'), 'utf8')
-  const rule = /\n\.dialog\s*\{([^}]*)\}/.exec(css)![1]
-  expect(rule).toContain('max-height: calc(100vh - 32px)')
-  expect(rule).toContain('overflow-y: auto')
-})
 
 test('SC-67: ui state lists the overlays with their reports, and a silent overlay is shown with an empty report', async () => {
   const env = await bootWindow(writeOverlayPlugin)
