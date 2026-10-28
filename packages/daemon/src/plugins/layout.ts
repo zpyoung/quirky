@@ -27,7 +27,7 @@ import {
   type UiState,
   type UiToastState,
   type UiWindowInfo,
-  type WindowRouteState
+  type WindowRoute,
 } from '@quirky/protocol'
 import { conflict, invalidParams, notFound } from '../errors'
 import type { Store } from '../store'
@@ -216,11 +216,14 @@ export class LayoutService {
   state(): UiState {
     return this.stateFor(this.focusedConn()?.id, true)
   }
-  /** Returns only this exact connection ID, and only for the calling live UI connection. */
-  windowSelf(conn: ClientConn): { connId: number } {
+  /** Returns only the current live UI connection's kernel-authenticated identity. */
+  windowSelf(conn: ClientConn): WindowRoute {
     const target = this.requireWindowById(conn.id)
     if (target !== conn) throw conflict('the calling UI connection is no longer live')
-    return { connId: target.id }
+    return {
+      connId: target.id,
+      ...(target.desktopClientId === undefined ? {} : { desktopClientId: target.desktopClientId })
+    }
   }
 
   /** Reads the full effective state for one exact live UI connection. */

@@ -70,23 +70,56 @@
       },
       {
         "id": "runtimeAdd",
-        "description": "Validates and privately saves a mobile-v2 paired runtime offer.",
+        "description": "Validates and privately saves an exact mobile-v2 or owner-cli paired runtime offer.",
         "params": { "type": "object", "properties": { "name": { "type": "string" }, "pairingCode": { "type": "string" } }, "required": ["name", "pairingCode"], "additionalProperties": false },
-        "result": { "type": "object", "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "endpoint": { "type": "string" }, "pairedDeviceId": { "type": "string" }, "createdAt": { "type": "number" }, "lastUsedAt": {} }, "required": ["id", "name", "endpoint", "pairedDeviceId", "createdAt", "lastUsedAt"], "additionalProperties": false }
+        "result": { "type": "object", "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "endpoint": { "type": "string" }, "pairedDeviceId": { "type": "string" }, "scope": { "type": "string", "enum": ["mobile", "owner-cli"] }, "grantId": { "type": "string" }, "createdAt": { "type": "number" }, "lastUsedAt": {} }, "required": ["id", "name", "endpoint", "pairedDeviceId", "scope", "createdAt", "lastUsedAt"], "additionalProperties": false }
+      },
+      {
+        "id": "runtimeCall",
+        "description": "Calls an exact remote method through an owner-cli scoped saved target; never falls back to this daemon.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "runtime": { "type": "string" },
+            "method": { "type": "string" },
+            "params": { "type": "object", "additionalProperties": true }
+          },
+          "required": ["runtime", "method"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "runtime": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "string" },
+                "name": { "type": "string" },
+                "endpoint": { "type": "string" },
+                "grantId": { "type": "string" }
+              },
+              "required": ["id", "name", "endpoint", "grantId"],
+              "additionalProperties": false
+            },
+            "result": {}
+          },
+          "required": ["runtime", "result"],
+          "additionalProperties": false
+        }
       },
       {
         "id": "runtimeList",
         "description": "Lists saved paired runtimes with secret-free summaries.",
         "readOnly": true,
         "params": { "type": "object", "properties": {}, "additionalProperties": false },
-        "result": { "type": "object", "properties": { "runtimes": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "endpoint": { "type": "string" }, "pairedDeviceId": { "type": "string" }, "createdAt": { "type": "number" }, "lastUsedAt": {} }, "required": ["id", "name", "endpoint", "pairedDeviceId", "createdAt", "lastUsedAt"], "additionalProperties": false } } }, "required": ["runtimes"], "additionalProperties": false }
+        "result": { "type": "object", "properties": { "runtimes": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "endpoint": { "type": "string" }, "pairedDeviceId": { "type": "string" }, "scope": { "type": "string", "enum": ["mobile", "owner-cli"] }, "grantId": { "type": "string" }, "createdAt": { "type": "number" }, "lastUsedAt": {} }, "required": ["id", "name", "endpoint", "pairedDeviceId", "scope", "createdAt", "lastUsedAt"], "additionalProperties": false } } }, "required": ["runtimes"], "additionalProperties": false }
       },
       {
         "id": "runtimeShow",
         "description": "Shows one saved paired runtime without returning its offer or device token.",
         "readOnly": true,
         "params": { "type": "object", "properties": { "selector": { "type": "string" } }, "required": ["selector"], "additionalProperties": false },
-        "result": { "type": "object", "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "endpoint": { "type": "string" }, "pairedDeviceId": { "type": "string" }, "createdAt": { "type": "number" }, "lastUsedAt": {} }, "required": ["id", "name", "endpoint", "pairedDeviceId", "createdAt", "lastUsedAt"], "additionalProperties": false }
+        "result": { "type": "object", "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "endpoint": { "type": "string" }, "pairedDeviceId": { "type": "string" }, "scope": { "type": "string", "enum": ["mobile", "owner-cli"] }, "grantId": { "type": "string" }, "createdAt": { "type": "number" }, "lastUsedAt": {} }, "required": ["id", "name", "endpoint", "pairedDeviceId", "scope", "createdAt", "lastUsedAt"], "additionalProperties": false }
       },
       {
         "id": "runtimeRemove",
@@ -94,14 +127,14 @@
         "destructive": true,
         "confirm": "Remove this saved paired runtime?",
         "params": { "type": "object", "properties": { "selector": { "type": "string" } }, "required": ["selector"], "additionalProperties": false },
-        "result": { "type": "object", "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "endpoint": { "type": "string" }, "pairedDeviceId": { "type": "string" }, "createdAt": { "type": "number" }, "lastUsedAt": {} }, "required": ["id", "name", "endpoint", "pairedDeviceId", "createdAt", "lastUsedAt"], "additionalProperties": false }
+        "result": { "type": "object", "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "endpoint": { "type": "string" }, "pairedDeviceId": { "type": "string" }, "scope": { "type": "string", "enum": ["mobile", "owner-cli"] }, "grantId": { "type": "string" }, "createdAt": { "type": "number" }, "lastUsedAt": {} }, "required": ["id", "name", "endpoint", "pairedDeviceId", "scope", "createdAt", "lastUsedAt"], "additionalProperties": false }
       },
       {
         "id": "runtimeStatus",
         "description": "Reports saved paired runtime targets without returning credentials.",
         "readOnly": true,
         "params": { "type": "object", "properties": {}, "additionalProperties": false },
-        "result": { "type": "object", "properties": { "runtimes": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "endpoint": { "type": "string" }, "pairedDeviceId": { "type": "string" }, "createdAt": { "type": "number" }, "lastUsedAt": {} }, "required": ["id", "name", "endpoint", "pairedDeviceId", "createdAt", "lastUsedAt"], "additionalProperties": false } } }, "required": ["runtimes"], "additionalProperties": false }
+        "result": { "type": "object", "properties": { "runtimes": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "endpoint": { "type": "string" }, "pairedDeviceId": { "type": "string" }, "scope": { "type": "string", "enum": ["mobile", "owner-cli"] }, "grantId": { "type": "string" }, "createdAt": { "type": "number" }, "lastUsedAt": {} }, "required": ["id", "name", "endpoint", "pairedDeviceId", "scope", "createdAt", "lastUsedAt"], "additionalProperties": false } } }, "required": ["runtimes"], "additionalProperties": false }
       }
     ],
     "view": [
@@ -115,11 +148,22 @@
       { "id": "profileLauncherList", "words": "cli profile list", "summary": "list profile-pinned launchers", "methods": ["quirky.cli/profileLauncherList"] },
       { "id": "profileLauncherInstall", "words": "cli profile install", "summary": "install a profile-pinned launcher", "flags": { "name": { "type": "string", "description": "Profile launcher name.", "required": true }, "home": { "type": "string", "description": "Exact QUIRKY_HOME for this profile.", "required": true }, "path": { "type": "string", "description": "Launcher path." }, "replace-foreign": { "type": "boolean", "description": "Explicitly replace a foreign file." } }, "methods": ["quirky.cli/profileLauncherInstall", "quirky.cli/commandTarget"] },
       { "id": "profileLauncherRemove", "words": "cli profile uninstall", "summary": "remove an unchanged managed profile launcher", "flags": { "path": { "type": "string", "description": "Profile launcher path.", "required": true } }, "methods": ["quirky.cli/profileLauncherRemove"] },
-      { "id": "runtimeAdd", "words": "runtime add", "summary": "save a paired runtime offer", "flags": { "name": { "type": "string", "description": "Saved runtime name.", "required": true }, "code": { "type": "string", "description": "Mobile-v2 pairing offer.", "required": true } }, "methods": ["quirky.cli/runtimeAdd"] },
+      { "id": "runtimeAdd", "words": "runtime add", "summary": "save an exact paired runtime offer", "flags": { "name": { "type": "string", "description": "Saved runtime name.", "required": true }, "code": { "type": "string", "description": "Exact mobile-v2 or owner-cli offer.", "required": true } }, "methods": ["quirky.cli/runtimeAdd"] },
       { "id": "runtimeList", "words": "runtime list", "summary": "list saved paired runtimes", "methods": ["quirky.cli/runtimeList"] },
       { "id": "runtimeShow", "words": "runtime show", "summary": "show one saved paired runtime", "flags": { "selector": { "type": "string", "description": "Saved runtime ID or name.", "required": true } }, "methods": ["quirky.cli/runtimeShow"] },
       { "id": "runtimeRemove", "words": "runtime remove", "summary": "remove one saved paired runtime", "flags": { "selector": { "type": "string", "description": "Saved runtime ID or name.", "required": true } }, "methods": ["quirky.cli/runtimeRemove"] },
-      { "id": "runtimeStatus", "words": "runtime status", "summary": "show saved paired runtime status", "methods": ["quirky.cli/runtimeStatus"] }
+      { "id": "runtimeStatus", "words": "runtime status", "summary": "show saved paired runtime status", "methods": ["quirky.cli/runtimeStatus"] },
+      {
+        "id": "runtimeCall",
+        "words": "runtime call",
+        "summary": "call an exact remote method through a saved owner-cli target",
+        "flags": {
+          "runtime": { "type": "string", "description": "Saved owner runtime ID or name.", "required": true },
+          "method": { "type": "string", "description": "Exact remote API method.", "required": true },
+          "params": { "type": "string", "description": "Optional JSON object of remote method parameters." }
+        },
+        "methods": ["quirky.cli/runtimeCall"]
+      }
     ]
   }
 }

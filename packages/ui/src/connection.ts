@@ -1,6 +1,7 @@
 import { QuirkyClient, type QuirkyEvent } from '@quirky/protocol'
 import { INITIAL_DELAY_MS, nextDelay } from './lib/backoff'
 import { daemonAnswers } from './lib/probe'
+import { loadDesktopClientId } from './lib/desktop-client-id'
 import { parseHashToken, rpcUrl } from './lib/token'
 import type { ConnectionStatus } from './lib/state'
 import type { Store } from './store'
@@ -84,14 +85,15 @@ export class Connection {
 
   private async loop(url: string): Promise<void> {
     const initialDelay = this.options.initialDelayMs ?? INITIAL_DELAY_MS
-    let delay = initialDelay
-    let failures = 0
+    let desktopClientId: string | undefined
+    try { desktopClientId = loadDesktopClientId(globalThis.localStorage) } catch {}
     while (!this.stopped) {
       try {
         const client = await QuirkyClient.connect(url, {
           role: 'ui',
           name: 'quirky-ui',
-          subscribe: true
+          subscribe: true,
+          ...(desktopClientId === undefined ? {} : { desktopClientId })
         })
         const closed = new Promise<void>((resolve) => client.onClose(resolve))
         client.onEvent((event) => this.handleEvent(event))

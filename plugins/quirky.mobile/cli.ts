@@ -122,6 +122,33 @@ export const commands: CliModule['commands'] = {
     const value = await context.call('quirky.mobile/pair', { ...(address === undefined ? {} : { address }), ...(rotate ? { rotate: true } : {}) })
     context.out.result(value, () => JSON.stringify(value, null, 2))
   },
+  async 'owner-pair'(args, context) {
+    if (args.positionals.length > 0) throw context.usage('owner-pair accepts only --name, --address, and --confirm')
+    const name = stringFlag(args, 'name', true)
+    const address = stringFlag(args, 'address')
+    if (!booleanFlag(args, 'confirm')) throw context.usage('owner-pair requires explicit --confirm')
+    const value = await context.call('quirky.mobile/ownerPair', {
+      name,
+      confirm: true,
+      ...(address === undefined ? {} : { address })
+    }) as { offer: string; grant: { grantId: string; name: string; endpoint: string } }
+    context.out.result(value, () => `Owner grant ${value.grant.name} (${value.grant.grantId})\n${value.grant.endpoint}\nCopy this owner-cli offer securely:\n${value.offer}`)
+  },
+  async 'owner-grants'(args, context) {
+    noArgs(args, context)
+    const grants = await context.call('quirky.mobile/ownerGrants', {}) as { grantId: string; name: string; endpoint: string; createdAt: number }[]
+    context.out.result(grants, () => grants.length
+      ? context.format.table(['GRANT', 'NAME', 'ENDPOINT', 'CREATED'], grants.map((grant) => [grant.grantId, grant.name, grant.endpoint, new Date(grant.createdAt).toISOString()]))
+      : 'no owner CLI grants')
+  },
+  async 'owner-revoke'(args, context) {
+    const [grantId] = args.positionals
+    if (!grantId || args.positionals.length !== 1 || Object.keys(args.flags).some((key) => key !== 'confirm') || !booleanFlag(args, 'confirm')) {
+      throw context.usage('usage: mobile owner-revoke <grantId> --confirm')
+    }
+    const value = await context.call('quirky.mobile/ownerRevoke', { grantId, confirm: true })
+    context.out.result(value, () => JSON.stringify(value))
+  },
   async devices(args, context) {
     noArgs(args, context)
     const value = await context.call('quirky.mobile/devices', {}) as { deviceId: string; name: string; pairedAt: number; lastSeenAt: number }[]

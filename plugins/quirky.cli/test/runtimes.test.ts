@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test'
 import { readFileSync, rmSync, statSync, symlinkSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { createPairedDaemonLink } from '../../../packages/cli/src/paired-link'
 import { savedRuntimeStorePath } from '@quirky/protocol/node'
 import { makeTempHome, startHarness, type Harness } from '../../../packages/daemon/test/helpers'
 import { makeTempDir, removeTempDirs } from '../../../packages/daemon/test/plugins/fixtures'
@@ -84,4 +84,71 @@ test('a malformed pairing offer is rejected before any saved runtime is written'
   await expect(caller.callAny('quirky.cli/runtime.add', { name: 'broken', pairingCode: 'not-a-pairing-offer' })).rejects.toThrow(/Pairing/)
   expect(await caller.callAny('quirky.cli/runtime.list', {})).toEqual({ runtimes: [] })
   expect(() => statSync(savedRuntimeStorePath(home))).toThrow()
+})
+
+test('owner targets call only the selected remote daemon through saved and one-off encrypted links', async () => {
+  const local = await start()
+  const remote = await start()
+  const paired = await remote.caller.callAny('quirky.mobile/ownerPair', {
+    name: 'Remote owner',
+    confirm: true,
+    address: '127.0.0.1'
+  }) as { offer: string; grant: { grantId: string }; endpoint: string }
+  const added = await local.caller.callAny('quirky.cli/runtime.add', {
+    name: 'Owner target',
+    pairingCode: paired.offer
+  }) as { id: string; endpoint: string; pairedDeviceId: string; grantId: string; scope: string }
+  expect(added).toMatchObject({
+    scope: 'owner-cli',
+    grantId: paired.grant.grantId,
+    endpoint: paired.endpoint,
+    pairedDeviceId: paired.grant.grantId
+  })
+  expect(JSON.stringify(added)).not.toContain(paired.offer)
+  expect(JSON.stringify(await local.caller.callAny('quirky.cli/runtime.list', {}))).not.toContain(paired.offer)
+
+  const localState = await local.caller.callAny('quirky.mobile/state', {}) as { machineName: string }
+  const remoteState = await remote.caller.callAny('quirky.mobile/state', {}) as { machineName: string }
+  const routed = await local.caller.callAny('quirky.cli/runtimeCall', {
+    runtime: added.id,
+    method: 'quirky.mobile/state',
+    params: {}
+  }) as { runtime: { id: string; grantId: string; endpoint: string }; result: { machineName: string } }
+  expect(routed.runtime).toMatchObject({ id: added.id, grantId: paired.grant.grantId, endpoint: paired.endpoint })
+  expect(routed.result).toEqual(remoteState)
+  expect(await local.caller.callAny('quirky.mobile/state', {})).toEqual(localState)
+
+  const savedLink = createPairedDaemonLink(local.home, { kind: 'saved', selector: added.id }, {})
+  try {
+    const fullApi = await savedLink.callAny('api.describe', {}) as { methods: { name: string }[] }
+    expect(fullApi.methods.some(({ name }) => name === 'quirky.mobile/ownerPair')).toBe(true)
+    await savedLink.callAny('quirky.mobile/configure', { machineName: 'Changed through saved owner' }, { requestId: 'owner-saved-route' })
+  } finally {
+    savedLink.close()
+  }
+  expect(await remote.caller.callAny('quirky.mobile/state', {})).toMatchObject({ machineName: 'Changed through saved owner' })
+  expect(await local.caller.callAny('quirky.mobile/state', {})).toEqual(localState)
+
+  const oneOff = createPairedDaemonLink(local.home, { kind: 'pairing', pairingCode: paired.offer }, {})
+  try {
+    await oneOff.callAny('quirky.mobile/configure', { machineName: 'Changed through one-off owner' }, { requestId: 'owner-one-off-route' })
+  } finally {
+    oneOff.close()
+  }
+  expect(await remote.caller.callAny('quirky.mobile/state', {})).toMatchObject({ machineName: 'Changed through one-off owner' })
+  expect(await local.caller.callAny('quirky.mobile/state', {})).toEqual(localState)
+
+  const phonePair = await remote.caller.callAny('quirky.mobile/pair', { address: '127.0.0.1' }) as {
+    pairingUrl: string
+  }
+  const phoneAdded = await local.caller.callAny('quirky.cli/runtime.add', {
+    name: 'Phone target',
+    pairingCode: phonePair.pairingUrl
+  }) as { id: string; scope: string }
+  expect(phoneAdded.scope).toBe('mobile')
+  await expect(local.caller.callAny('quirky.cli/runtimeCall', {
+    runtime: phoneAdded.id,
+    method: 'quirky.mobile/state',
+    params: {}
+  })).rejects.toThrow(/owner/i)
 })

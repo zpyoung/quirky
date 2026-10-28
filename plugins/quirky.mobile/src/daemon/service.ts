@@ -1,22 +1,32 @@
 import type { MobileBundleManifestResult, MobileBundleReadResult } from '@quirky/protocol'
 import type { MobileDevice, MobileHostInfo, MobileNetworkInterface, MobilePairingResult, MobileState } from '@quirky/protocol'
+import type { OwnerCliPairOffer } from '@quirky/protocol'
 import type { PluginCaller, PluginContext } from '@quirky/protocol'
 import { hostname } from 'node:os'
 import { assertMobileCallAllowed } from './authorization'
-import { configureInput, openInput, pairInput, revokeInput, updatePreferencesInput, type MobileConfigureInput, type MobileOpenInput, type MobilePairInput } from './api'
+import { configureInput, openInput, ownerPairInput, ownerRevokeInput, pairInput, revokeInput, updatePreferencesInput, type MobileConfigureInput, type MobileOpenInput, type MobilePairInput, type OwnerPairInput, type OwnerRevokeInput } from './api'
 import { getMobileBundleChunk, getMobileBundleManifest, getMobileBundleRange, MobileBundleError } from './bundle'
 import { bestNetworkAddress, endpointHost, isLoopbackHost, normalizeAdvertisedEndpoint, rankNetworkInterfaces } from './network'
 import { createPairingResult } from './pairing'
 import { MobileStore, MobileStoreError, type AuthenticationResult, type MobileDeviceRecord, type MobileSettings } from './storage'
+import { OwnerGrantStore, type OwnerGrantRecord, type OwnerGrantSummary } from './owner-store'
 import { MAX_MOBILE_INBOUND_FRAME_BYTES, MobileTransport, type MobilePeer } from './transport'
 import { DesktopMobileE2EEV2Session, MAX_MOBILE_BINARY_BYTES, MAX_MOBILE_TEXT_BYTES } from '../crypto/e2ee-v2'
 
 const AUTH_TIMEOUT_MS = 10_000
-const MAX_REQUESTS_PER_DEVICE = 16
+const MAX_REQUESTS_PER_CREDENTIAL = 16
 const AUTH_FAILURE_WINDOW_MS = 60_000
 const MOBILE_UNAVAILABLE_GUIDANCE = 'Mobile pairing is unavailable. Check the listener, network, and device registry, then try again.'
 const INVALID_ENDPOINT_GUIDANCE = 'No usable advertised address is available. Connect to Wi-Fi or Tailscale, then refresh the network interfaces or add a custom address.'
 const EXPOSURE_FAILED_GUIDANCE = 'The mobile listener could not be widened safely. It was restored to loopback; choose another reachable address or check the listener port.'
+const CALLER_IDENTITY_FIELDS = [
+  'role', 'scope', 'caller', 'credential', 'credentials', 'token', 'connection', 'client', 'clientId', 'deviceToken', 'ownerGrantId', 'desktopClientId'
+] as const
+const ENVELOPE_IDENTITY_FIELDS = [
+  'deviceId', 'role', 'scope', 'caller', 'credential', 'credentials', 'token', 'connection',
+  'client', 'clientId', 'ownerGrantId', 'grantId', 'desktopClientId'
+] as const
+
 
 export type AdmittedMobileClient = {
   readonly id: number
@@ -30,10 +40,15 @@ type ConnectionState = {
   authenticated: boolean
   authTimer: ReturnType<typeof setTimeout> | undefined
   badFrames: number
-  deviceId: string | null
+  credentialScope: 'mobile' | 'owner-cli' | null
+  credentialId: string | null
   token: string | null
   admitted: AdmittedMobileClient | null
   cleaned: boolean
+}
+type InFlightWaiter = {
+  excludeConnectionId: number | undefined
+  resolve(): void
 }
 
 
@@ -73,10 +88,14 @@ class SerialGate {
 /** Owns the mobile listener, identity checks, RPC admission, and every resource it creates. */
 export class MobileService {
   private readonly store: MobileStore
+  private readonly ownerStore: OwnerGrantStore
   private readonly transport: MobileTransport | null
   private readonly connections = new Set<ConnectionState>()
   private readonly deviceConnections = new Map<string, Set<ConnectionState>>()
-  private readonly inFlightByDevice = new Map<string, number>()
+  private readonly ownerConnections = new Map<string, Set<ConnectionState>>()
+  private readonly inFlightByCredential = new Map<string, number>()
+  private readonly inFlightByConnection = new Map<number, number>()
+  private readonly inFlightWaiters = new Map<string, Set<InFlightWaiter>>()
   private readonly gate = new SerialGate()
   private authFailures: number[] = []
   private authToastSent = false
@@ -84,7 +103,8 @@ export class MobileService {
 
   constructor(private readonly context: PluginContext, options: { portValue?: string; hostValue?: string } = {}) {
     this.store = new MobileStore(context.dataDir)
-    const hasPairedHistory = this.store.registryAvailable && this.store.devices().length > 0
+    this.ownerStore = new OwnerGrantStore(context.dataDir)
+    const hasPairedHistory = (this.store.registryAvailable && this.store.devices().length > 0) || this.ownerStore.hasGrants
     try {
       this.transport = new MobileTransport({
         dataDir: context.dataDir,
@@ -172,6 +192,89 @@ export class MobileService {
     })
   }
 
+  async ownerPair(params: unknown): Promise<{ available: true; endpoint: string; offer: string; grant: OwnerGrantSummary }> {
+    let input: OwnerPairInput
+    try { input = ownerPairInput(params) } catch (error) {
+      throw this.context.error('invalid-params', error instanceof Error ? error.message : 'Invalid owner grant parameters')
+    }
+    return this.gate.run(async () => {
+      const transport = this.transport
+      if (this.stopped || !transport?.available) throw this.context.error('conflict', 'Owner grant listener is unavailable')
+      if (!this.ownerStore.registryAvailable) throw this.context.error('conflict', 'Owner grant registry is unavailable')
+      const publicKeyB64 = this.store.publicKeyB64
+      if (!this.store.identityAvailable || !publicKeyB64) throw this.context.error('conflict', 'E2EE identity is unavailable')
+      const interfaces = rankNetworkInterfaces()
+      const customAddresses = this.store.settingsAvailable ? this.store.settings().customAddresses : []
+      const address = input.address ?? bestNetworkAddress(interfaces) ?? customAddresses[0] ?? null
+      const endpoint = normalizeAdvertisedEndpoint(address, transport.port!)
+      if (!endpoint) throw this.context.error('conflict', 'No usable advertised address is available')
+      const host = endpointHost(endpoint)
+      if (!host) throw this.context.error('conflict', 'No usable advertised address is available')
+      if (!isLoopbackHost(host) && !await transport.ensureNetworkExposure()) {
+        throw this.context.error('conflict', EXPOSURE_FAILED_GUIDANCE)
+      }
+      const boundPort = transport.port
+      if (boundPort === null) throw this.context.error('conflict', 'Owner grant listener is unavailable')
+      const actualEndpoint = normalizeAdvertisedEndpoint(address, boundPort)
+      if (!actualEndpoint) throw this.context.error('conflict', 'No usable advertised address is available')
+      let grant: OwnerGrantRecord
+      try { grant = this.ownerStore.create(input.name, actualEndpoint) } catch (error) {
+        throw this.context.error('conflict', error instanceof Error ? error.message : 'Owner grant registry is unavailable')
+      }
+      const offer: OwnerCliPairOffer = {
+        v: 2,
+        endpoint: actualEndpoint,
+        deviceToken: grant.token,
+        publicKeyB64,
+        pairedDeviceId: grant.grantId,
+        scope: 'owner-cli'
+      }
+      const safeGrant: OwnerGrantSummary = {
+        grantId: grant.grantId,
+        name: grant.name,
+        endpoint: grant.endpoint,
+        scope: 'owner-cli',
+        createdAt: grant.createdAt
+      }
+      this.emitChanged()
+      return {
+        available: true,
+        endpoint: actualEndpoint,
+        offer: Buffer.from(JSON.stringify(offer)).toString('base64url'),
+        grant: safeGrant
+      }
+    })
+  }
+
+  ownerGrants(): OwnerGrantSummary[] {
+    try { return this.ownerStore.grants() } catch {
+      throw this.context.error('conflict', 'Owner grant registry is unavailable')
+    }
+  }
+
+  async ownerRevoke(params: unknown, exceptConnectionId?: number): Promise<{ revoked: boolean }> {
+    let input: OwnerRevokeInput
+    try { input = ownerRevokeInput(params) } catch (error) {
+      throw this.context.error('invalid-params', error instanceof Error ? error.message : 'Invalid owner grant ID')
+    }
+    return this.gate.run(async () => {
+      let revoked: boolean
+      try { revoked = this.ownerStore.revoke(input.grantId) } catch {
+        for (const connections of this.ownerConnections.values()) {
+          for (const connection of [...connections]) this.cleanupConnection(connection, 4001, 'Unauthorized', false)
+        }
+        throw this.context.error('conflict', 'Owner grant registry is unavailable')
+      }
+      if (!revoked) return { revoked: false }
+      for (const connection of [...(this.ownerConnections.get(input.grantId) ?? [])]) {
+        this.cleanupConnection(connection, 4001, 'Unauthorized', false)
+      }
+      await this.waitForCredentialIdle(this.credentialKey('owner-cli', input.grantId), exceptConnectionId)
+      this.emitChanged()
+      return { revoked: true }
+    })
+  }
+
   async devices(): Promise<MobileDevice[]> {
     try { return this.store.devices() } catch (error) { throw this.context.error('conflict', error instanceof Error ? error.message : 'Mobile device registry unavailable') }
   }
@@ -247,7 +350,7 @@ export class MobileService {
   private onConnection(peer: MobilePeer): void {
     const state: ConnectionState = {
       peer, channel: null, authenticated: false, authTimer: undefined, badFrames: 0,
-      deviceId: null, token: null, admitted: null, cleaned: false
+      credentialScope: null, credentialId: null, token: null, admitted: null, cleaned: false
     }
     this.connections.add(state)
     state.authTimer = setTimeout(() => {
@@ -330,26 +433,41 @@ export class MobileService {
     }
     await this.gate.run(() => {
       if (!state.channel || state.cleaned || this.stopped || state.authenticated || state.admitted) return
-      let result: AuthenticationResult
-      try { result = this.store.authenticate(token) } catch { result = { status: 'registry_unavailable' } }
-      if (result.status === 'registry_unavailable') {
-        this.failAuthentication(state, 'registry_unavailable')
-        return
+      const ownerAuthentication = this.ownerStore.authenticate(token)
+      let scope: 'mobile' | 'owner-cli'
+      let credentialId: string
+      let name: string
+      if (ownerAuthentication.status === 'paired') {
+        scope = 'owner-cli'
+        credentialId = ownerAuthentication.grant.grantId
+        name = ownerAuthentication.grant.name
+      } else {
+        let mobileAuthentication: AuthenticationResult
+        try { mobileAuthentication = this.store.authenticate(token) } catch {
+          mobileAuthentication = { status: 'registry_unavailable' }
+        }
+        if (mobileAuthentication.status !== 'paired') {
+          const code = ownerAuthentication.status === 'registry_unavailable' || mobileAuthentication.status === 'registry_unavailable'
+            ? 'registry_unavailable'
+            : 'unauthorized'
+          if (code === 'unauthorized') this.recordAuthFailure()
+          this.failAuthentication(state, code)
+          return
+        }
+        scope = 'mobile'
+        credentialId = mobileAuthentication.device.deviceId
+        name = mobileAuthentication.device.name
       }
-      if (result.status === 'unauthorized') {
-        this.recordAuthFailure()
-        this.failAuthentication(state, 'unauthorized')
-        return
-      }
-      const device = result.device
-      state.deviceId = device.deviceId
+      state.credentialScope = scope
+      state.credentialId = credentialId
       state.token = token
+      const clientIdentity = scope === 'mobile'
+        ? { role: 'mobile' as const, deviceId: credentialId, name }
+        : { role: 'cli' as const, ownerGrantId: credentialId, name }
       try {
         state.admitted = this.context.clients.accept({
-          role: 'mobile',
-          deviceId: device.deviceId,
-          name: device.name,
-          authorize: (method, callParams) => this.authorizeConnection(device.deviceId, token, method, callParams),
+          ...clientIdentity,
+          authorize: (method, callParams) => this.authorizeConnection(scope, credentialId, token, method, callParams),
           sendText: (text) => this.sendKernelText(state, text),
           sendBinary: (bytes) => this.sendKernelBinary(state, bytes),
           close: () => this.cleanupConnection(state, 4001, 'Unauthorized', false, false)
@@ -361,9 +479,10 @@ export class MobileService {
       state.authenticated = true
       clearTimeout(state.authTimer)
       state.authTimer = undefined
-      const admittedConnections = this.deviceConnections.get(device.deviceId) ?? new Set<ConnectionState>()
-      admittedConnections.add(state)
-      this.deviceConnections.set(device.deviceId, admittedConnections)
+      const activeMap = scope === 'mobile' ? this.deviceConnections : this.ownerConnections
+      const activeConnections = activeMap.get(credentialId) ?? new Set<ConnectionState>()
+      activeConnections.add(state)
+      activeMap.set(credentialId, activeConnections)
       if (!state.channel?.transcriptHashB64 || !this.sendEncryptedText(state, JSON.stringify({ type: 'e2ee_authenticated', v: 2, transcriptHashB64: state.channel.transcriptHashB64 }))) {
         this.cleanupConnection(state, 1013, 'Outbound reply buffer overflow', false)
         return
@@ -391,49 +510,59 @@ export class MobileService {
 
   private async receiveRpc(state: ConnectionState, text: string): Promise<void> {
     const admitted = state.admitted
-    const deviceId = state.deviceId
+    const scope = state.credentialScope
+    const credentialId = state.credentialId
     const token = state.token
-    if (!admitted || !deviceId || !token || state.cleaned) return
+    if (!admitted || !scope || !credentialId || !token || state.cleaned) return
     const sanitized = this.guardEnvelopeIdentity(text, token)
     const envelope = parseJson(sanitized)
-    const currentCount = this.inFlightByDevice.get(deviceId) ?? 0
-    if (currentCount >= MAX_REQUESTS_PER_DEVICE) {
+    const key = this.credentialKey(scope, credentialId)
+    const currentCount = this.inFlightByCredential.get(key) ?? 0
+    if (currentCount >= MAX_REQUESTS_PER_CREDENTIAL) {
       const request = isRecord(envelope) ? envelope : null
       const params = request?.params ?? {}
       try {
-        this.authorizeConnection(deviceId, token, typeof request?.method === 'string' ? request.method : '', isRecord(params) ? params : {})
+        this.authorizeConnection(scope, credentialId, token, typeof request?.method === 'string' ? request.method : '', isRecord(params) ? params : {})
         this.sendRpcError(state, request?.id, -32002, 'runtime_busy', { code: 'runtime_busy' })
       } catch {
         this.sendRpcError(state, request?.id, -32001, 'not authorized')
       }
       return
     }
-    await this.receiveThroughKernel(admitted, sanitized, deviceId)
+    await this.receiveThroughKernel(state, admitted, sanitized, key)
   }
 
-  private async receiveThroughKernel(admitted: AdmittedMobileClient, text: string, deviceId: string): Promise<void> {
-    this.inFlightByDevice.set(deviceId, (this.inFlightByDevice.get(deviceId) ?? 0) + 1)
+  private async receiveThroughKernel(state: ConnectionState, admitted: AdmittedMobileClient, text: string, key: string): Promise<void> {
+    const connectionId = admitted.id
+    this.inFlightByCredential.set(key, (this.inFlightByCredential.get(key) ?? 0) + 1)
+    this.inFlightByConnection.set(connectionId, (this.inFlightByConnection.get(connectionId) ?? 0) + 1)
     try {
       await admitted.receive(text)
     } catch {
       // The public kernel API reports RPC failures on sendText; receive rejects only on lifecycle failure.
     } finally {
-      const remaining = (this.inFlightByDevice.get(deviceId) ?? 1) - 1
-      if (remaining <= 0) this.inFlightByDevice.delete(deviceId)
-      else this.inFlightByDevice.set(deviceId, remaining)
+      const remaining = (this.inFlightByCredential.get(key) ?? 1) - 1
+      if (remaining <= 0) this.inFlightByCredential.delete(key)
+      else this.inFlightByCredential.set(key, remaining)
+      const connectionRemaining = (this.inFlightByConnection.get(connectionId) ?? 1) - 1
+      if (connectionRemaining <= 0) this.inFlightByConnection.delete(connectionId)
+      else this.inFlightByConnection.set(connectionId, connectionRemaining)
+      this.notifyCredentialWaiters(key)
     }
   }
 
   private guardEnvelopeIdentity(text: string, expectedToken: string): string {
     const message = parseJson(text)
     if (!isRecord(message)) return text
-    const hasForbiddenIdentity = ['deviceId', 'role', 'scope', 'caller', 'credential', 'credentials', 'token', 'connection', 'client', 'clientId'].some((key) => Object.hasOwn(message, key))
+    const params = isRecord(message.params) ? message.params : null
+    const hasForbiddenIdentity = ENVELOPE_IDENTITY_FIELDS.some((key) => Object.hasOwn(message, key))
+    const paramsHaveIdentity = params !== null && CALLER_IDENTITY_FIELDS.some((key) => Object.hasOwn(params, key))
     const hasDeviceToken = Object.hasOwn(message, 'deviceToken')
     const tokenMismatch = hasDeviceToken && message.deviceToken !== expectedToken
-    if (hasForbiddenIdentity || tokenMismatch) {
-      const params = isRecord(message.params) ? { ...message.params } : {}
-      params.deviceToken = 'mismatched-request-identity'
-      return JSON.stringify({ ...message, params })
+    if (hasForbiddenIdentity || paramsHaveIdentity || tokenMismatch) {
+      const safeParams = params ? { ...params } : {}
+      safeParams.deviceToken = 'mismatched-request-identity'
+      return JSON.stringify({ ...message, params: safeParams })
     }
     if (hasDeviceToken) {
       const safeMessage = { ...message }
@@ -443,8 +572,13 @@ export class MobileService {
     return text
   }
 
-  private authorizeConnection(deviceId: string, token: string, method: string, params: Record<string, unknown>): void {
-    if (!this.store.isCurrentCredential(deviceId, token)) throw new Error('not authorized')
+  private authorizeConnection(scope: 'mobile' | 'owner-cli', credentialId: string, token: string, method: string, params: Record<string, unknown>): void {
+    if (CALLER_IDENTITY_FIELDS.some((key) => Object.hasOwn(params, key))) throw new Error('not authorized')
+    if (scope === 'owner-cli') {
+      if (!this.ownerStore.isCurrentCredential(credentialId, token) || method === 'client.hello') throw new Error('not authorized')
+      return
+    }
+    if (!this.store.isCurrentCredential(credentialId, token)) throw new Error('not authorized')
     assertMobileCallAllowed(method, params)
   }
 
@@ -509,10 +643,11 @@ export class MobileService {
     state.authTimer = undefined
     state.channel?.dispose()
     state.channel = null
-    if (state.deviceId) {
-      const active = this.deviceConnections.get(state.deviceId)
+    if (state.credentialScope && state.credentialId) {
+      const activeMap = state.credentialScope === 'mobile' ? this.deviceConnections : this.ownerConnections
+      const active = activeMap.get(state.credentialId)
       active?.delete(state)
-      if (active?.size === 0) this.deviceConnections.delete(state.deviceId)
+      if (active?.size === 0) activeMap.delete(state.credentialId)
     }
     if (state.admitted) {
       const admitted = state.admitted
@@ -524,6 +659,37 @@ export class MobileService {
     this.connections.delete(state)
     if (terminate) state.peer.terminate()
     else state.peer.close(code, reason)
+  }
+
+  private credentialKey(scope: 'mobile' | 'owner-cli', credentialId: string): string {
+    return `${scope}:${credentialId}`
+  }
+
+  private waitForCredentialIdle(key: string, excludeConnectionId: number | undefined): Promise<void> {
+    const inFlight = this.inFlightByCredential.get(key) ?? 0
+    const excluded = excludeConnectionId === undefined ? 0 : this.inFlightByConnection.get(excludeConnectionId) ?? 0
+    if (inFlight <= excluded) return Promise.resolve()
+    const { promise, resolve } = Promise.withResolvers<void>()
+    const waiters = this.inFlightWaiters.get(key) ?? new Set<InFlightWaiter>()
+    waiters.add({ excludeConnectionId, resolve })
+    this.inFlightWaiters.set(key, waiters)
+    return promise
+  }
+
+  private notifyCredentialWaiters(key: string): void {
+    const waiters = this.inFlightWaiters.get(key)
+    if (!waiters) return
+    const inFlight = this.inFlightByCredential.get(key) ?? 0
+    for (const waiter of waiters) {
+      const excluded = waiter.excludeConnectionId === undefined
+        ? 0
+        : this.inFlightByConnection.get(waiter.excludeConnectionId) ?? 0
+      if (inFlight <= excluded) {
+        waiters.delete(waiter)
+        waiter.resolve()
+      }
+    }
+    if (waiters.size === 0) this.inFlightWaiters.delete(key)
   }
 
   private emitChanged(): void {
@@ -539,6 +705,11 @@ export function registerMobileMethods(context: PluginContext, service: MobileSer
   const requireLocal = (caller: PluginCaller): void => {
     if (caller.role === 'mobile') throw new Error('Mobile clients cannot call pairing administration methods')
   }
+  const requireFullOwner = (caller: PluginCaller): void => {
+    if (caller.role !== 'cli' && caller.role !== 'desktop' && caller.role !== 'ui') {
+      throw new Error('Owner grants require a local or authenticated full-owner client')
+    }
+  }
   const methods: Record<string, (params: Record<string, unknown>, caller: PluginCaller) => unknown> = {
     info: () => service.info(),
     state: (_params, caller) => { requireLocal(caller); return service.state() },
@@ -546,6 +717,12 @@ export function registerMobileMethods(context: PluginContext, service: MobileSer
     pair: (params, caller) => { requireLocal(caller); return service.pair(params) },
     devices: (_params, caller) => { requireLocal(caller); return service.devices() },
     revoke: (params, caller) => { requireLocal(caller); return service.revoke(params) },
+    ownerPair: (params, caller) => { requireFullOwner(caller); return service.ownerPair(params) },
+    ownerGrants: (_params, caller) => { requireFullOwner(caller); return service.ownerGrants() },
+    ownerRevoke: (params, caller) => {
+      requireFullOwner(caller)
+      return service.ownerRevoke(params, caller.connection?.id)
+    },
     configure: (params, caller) => { requireLocal(caller); return service.configure(params) },
     preferences: () => service.preferences(),
     updatePreferences: (params) => service.updatePreferences(params),

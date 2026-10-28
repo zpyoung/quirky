@@ -173,11 +173,14 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
         clients: {
           accept: (clientOptions: Parameters<PluginContext['clients']['accept']>[0]) => {
             guard()
+            const identity = clientOptions.role === 'mobile'
+              ? { deviceId: clientOptions.deviceId }
+              : { ownerGrantId: clientOptions.ownerGrantId }
             const conn: ClientConn = {
               id: nextConnId(),
-              role: 'mobile',
+              role: clientOptions.role,
               name: clientOptions.name,
-              deviceId: clientOptions.deviceId,
+              ...identity,
               authorize: async (method, params) => {
                 if (conn.closed || isRevoked()) throw new Error('client owner is no longer active')
                 await clientOptions.authorize(method, params)
@@ -211,7 +214,9 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
             Object.defineProperties(conn, {
               role: { writable: false, configurable: false },
               name: { writable: false, configurable: false },
-              deviceId: { writable: false, configurable: false }
+              ...(clientOptions.role === 'mobile'
+                ? { deviceId: { writable: false, configurable: false } }
+                : { ownerGrantId: { writable: false, configurable: false } })
             })
 
             let connected = true

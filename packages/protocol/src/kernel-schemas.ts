@@ -346,7 +346,8 @@ export const KERNEL_METHOD_SCHEMAS = {
         sessionToken: string('The launch-scoped session token; independent from sessionId.'),
         cwd: string(),
         sessionId: string(),
-        worktreeId: string()
+        worktreeId: string(),
+        desktopClientId: string('Stable first-party UI installation identity; accepted only for role ui.')
       },
       ['role', 'protocolVersion']
     ),
@@ -470,10 +471,10 @@ export const KERNEL_METHOD_SCHEMAS = {
     result: uiState
   },
   'ui.window.self': {
-    description: 'Returns the calling connection ID only for a live UI-role connection.',
+    description: 'Returns the calling connection ID and optional stable desktop identity only for a live UI-role connection.',
     readOnly: true,
     params: noParams,
-    result: object({ connId: integer(1) }, ['connId'])
+    result: object({ connId: integer(1), desktopClientId: string() }, ['connId'])
   },
   'ui.window.state': {
     description: 'The exact live UI connection’s effective layout, its slot reports and its toasts.',
