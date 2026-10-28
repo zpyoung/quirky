@@ -1,0 +1,30 @@
+{
+  "item": "m7-sweep-terminal",
+  "spec": "docs/quirk/specs/2026-10-28-m7-sweep-terminal/logic.md",
+  "scenarios": [
+    {
+      "id": "C1-native-existing",
+      "title": "With a Quirky desktop window open under a fresh temporary QUIRKY_HOME, quirky open reports readiness without creating another native window or invoking the OS opener again",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    },
+    {
+      "id": "C1-native-launch",
+      "title": "With no desktop window under an isolated profile, quirky open succeeds only after the packaged macOS Quirky window becomes available; launcher success with no attached desktop is not reported as ready",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    },
+    {
+      "id": "A3-native-focus",
+      "title": "Clicking a live Activity thread selects its exact workspace and terminal session and physical keyboard input reaches that pane without focusing another session",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    }
+  ]
+}

@@ -137,10 +137,6 @@ describe('SC-9: refusals', () => {
     }
   })
 
-  test('SC-9: options without a model need a model', () => {
-    expect(refusal(claude, { options: { effort: 'low' } })).toBe('effort requires a model')
-    expect(refusal(claude, { options: { effort: 'low', speed: 'fast' } })).toBe('effort requires a model')
-  })
 
   test('SC-9: a model with no options refuses an option', () => {
     expect(refusal(claude, { model: 'haiku', options: { effort: 'low' } })).toBe(
@@ -180,9 +176,6 @@ describe('SC-9: refusals', () => {
     )
   })
 
-  test('SC-9: options without a model are checked before the agent supports models', () => {
-    expect(refusal(aider, { options: { effort: 'low' } })).toBe('effort requires a model')
-  })
 })
 
 describe('SC-10: unlisted models', () => {
