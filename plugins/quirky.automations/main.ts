@@ -22,9 +22,7 @@ export async function activate(context: PluginContext): Promise<void> {
     target: service.target,
     dispatch: service.dispatch,
     schedule: service.schedule,
-    tick: () => service.tick(),
-    claim: service.claim,
-    updateRun: service.updateRun
+    tick: () => service.tick()
   }
   for (const [name, handler] of Object.entries(methods)) {
     context.provide(formatContributionId('method', context.pluginId, name), handler)

@@ -144,7 +144,7 @@
             "createdAt": { "type": "integer" }, "startedAt": { "type": "integer" }, "dispatchedAt": { "type": "integer" }, "completedAt": { "type": "integer" },
             "occurrenceCount": { "type": "integer" }, "lastOccurrenceAt": { "type": "integer" }, "runContext": {}, "sourceContext": {},
             "workspaceId": {}, "workspaceDisplayName": {}, "sessionKind": { "type": "string", "enum": ["structured"] }, "sessionId": {},
-            "dispatchState": {"description":"Durable observation cursor, or null before dispatch.","properties":{"messageCursor":{"type":"integer"},"reused":{"type":"boolean"},"observedWorking":{"type":"boolean"},"observationStartedAt":{"type":"integer"}},"required":["messageCursor","reused","observedWorking","observationStartedAt"],"additionalProperties":false},
+            "dispatchState": {"description":"Durable observation cursor, or null before dispatch.","properties":{"messageCursor":{"type":"integer"},"reused":{"type":"boolean"},"observedWorking":{"type":"boolean"},"observationStartedAt":{"type":"integer"},"claudeCostBaseline":{"description":"Proven prior cumulative SDK cost, or null when unknown."}},"required":["messageCursor","reused","observedWorking","observationStartedAt"],"additionalProperties":false},
             "launchSettings": {}, "outputSnapshot": {}, "precheckResult": {}, "usage": {}, "error": {}
           },
           "required": ["id", "automationId", "title", "runNumber", "scheduledFor", "trigger", "status", "createdAt", "occurrenceCount", "runContext", "sourceContext", "workspaceId", "sessionKind", "sessionId", "launchSettings", "error"],
@@ -189,7 +189,7 @@
             "createdAt": { "type": "integer" }, "startedAt": { "type": "integer" }, "dispatchedAt": { "type": "integer" }, "completedAt": { "type": "integer" },
             "occurrenceCount": { "type": "integer" }, "lastOccurrenceAt": { "type": "integer" }, "runContext": {}, "sourceContext": {},
             "workspaceId": {}, "workspaceDisplayName": {}, "sessionKind": { "type": "string", "enum": ["structured"] }, "sessionId": {},
-            "dispatchState": {"description":"Durable observation cursor, or null before dispatch.","properties":{"messageCursor":{"type":"integer"},"reused":{"type":"boolean"},"observedWorking":{"type":"boolean"},"observationStartedAt":{"type":"integer"}},"required":["messageCursor","reused","observedWorking","observationStartedAt"],"additionalProperties":false},
+            "dispatchState": {"description":"Durable observation cursor, or null before dispatch.","properties":{"messageCursor":{"type":"integer"},"reused":{"type":"boolean"},"observedWorking":{"type":"boolean"},"observationStartedAt":{"type":"integer"},"claudeCostBaseline":{"description":"Proven prior cumulative SDK cost, or null when unknown."}},"required":["messageCursor","reused","observedWorking","observationStartedAt"],"additionalProperties":false},
             "launchSettings": {}, "outputSnapshot": {}, "precheckResult": {}, "usage": {}, "error": {}
           },
           "required": ["id", "automationId", "title", "runNumber", "scheduledFor", "trigger", "status", "createdAt", "occurrenceCount", "runContext", "sourceContext", "workspaceId", "sessionKind", "sessionId", "launchSettings", "error"],
@@ -220,7 +220,7 @@
                   "createdAt": { "type": "integer" }, "startedAt": { "type": "integer" }, "dispatchedAt": { "type": "integer" }, "completedAt": { "type": "integer" },
                   "occurrenceCount": { "type": "integer" }, "lastOccurrenceAt": { "type": "integer" }, "runContext": {}, "sourceContext": {},
                   "workspaceId": {}, "workspaceDisplayName": {}, "sessionKind": { "type": "string", "enum": ["structured"] }, "sessionId": {},
-                  "dispatchState": {"description":"Durable observation cursor, or null before dispatch.","properties":{"messageCursor":{"type":"integer"},"reused":{"type":"boolean"},"observedWorking":{"type":"boolean"},"observationStartedAt":{"type":"integer"}},"required":["messageCursor","reused","observedWorking","observationStartedAt"],"additionalProperties":false},
+                  "dispatchState": {"description":"Durable observation cursor, or null before dispatch.","properties":{"messageCursor":{"type":"integer"},"reused":{"type":"boolean"},"observedWorking":{"type":"boolean"},"observationStartedAt":{"type":"integer"},"claudeCostBaseline":{"description":"Proven prior cumulative SDK cost, or null when unknown."}},"required":["messageCursor","reused","observedWorking","observationStartedAt"],"additionalProperties":false},
                   "launchSettings": {}, "outputSnapshot": {},
                   "precheckResult": {}, "usage": {}, "error": {}
                 },
@@ -270,64 +270,6 @@
         "description": "Evaluates due schedules using the daemon's current time.",
         "params": { "type": "object", "properties": {}, "additionalProperties": false },
         "result": { "type": "object", "properties": { "now": { "type": "integer" }, "evaluated": { "type": "integer" } }, "required": ["now", "evaluated"], "additionalProperties": false }
-      },
-      {
-        "id": "claim",
-        "description": "Dispatches a pending run through the same owned dispatcher; nonpending runs are returned unchanged.",
-        "params": { "type": "object", "properties": { "runId": { "type": "string" } }, "required": ["runId"], "additionalProperties": false },
-        "result": {
-          "type": "object",
-          "properties": {
-            "id": { "type": "string" }, "automationId": { "type": "string" }, "title": { "type": "string" }, "runNumber": { "type": "integer" },
-            "scheduledFor": { "type": "integer" }, "trigger": { "type": "string", "enum": ["scheduled", "manual"] },
-            "status": { "type": "string", "enum": ["pending", "dispatching", "dispatched", "completed", "skipped_precheck", "skipped_missed", "skipped_unavailable", "skipped_needs_interactive_auth", "dispatch_failed"] },
-            "createdAt": { "type": "integer" }, "startedAt": { "type": "integer" }, "dispatchedAt": { "type": "integer" }, "completedAt": { "type": "integer" },
-            "occurrenceCount": { "type": "integer" }, "lastOccurrenceAt": { "type": "integer" }, "runContext": {}, "sourceContext": {},
-            "workspaceId": {}, "workspaceDisplayName": {}, "sessionKind": { "type": "string", "enum": ["structured"] }, "sessionId": {},
-            "dispatchState": {"description":"Durable observation cursor, or null before dispatch.","properties":{"messageCursor":{"type":"integer"},"reused":{"type":"boolean"},"observedWorking":{"type":"boolean"},"observationStartedAt":{"type":"integer"}},"required":["messageCursor","reused","observedWorking","observationStartedAt"],"additionalProperties":false},
-            "launchSettings": {}, "outputSnapshot": {},
-            "precheckResult": {}, "usage": {}, "error": {}
-          },
-          "required": ["id", "automationId", "title", "runNumber", "scheduledFor", "trigger", "status", "createdAt", "occurrenceCount", "runContext", "sourceContext", "workspaceId", "sessionKind", "sessionId", "launchSettings", "error"],
-          "additionalProperties": false
-        }
-      },
-      {
-        "id": "updateRun",
-        "description": "Standalone core evidence write; production dispatcher wiring rejects client-controlled run lifecycle updates.",
-        "params": {
-          "type": "object",
-          "properties": {
-            "runId": { "type": "string" },
-            "patch": {
-              "type": "object",
-              "properties": {
-                "status": { "type": "string", "enum": ["pending", "dispatching", "dispatched", "completed", "skipped_precheck", "skipped_missed", "skipped_unavailable", "skipped_needs_interactive_auth", "dispatch_failed"] },
-                "workspaceId": {}, "workspaceDisplayName": {}, "sessionId": {}, "launchSettings": { "description": "Launch metadata object or null; at most 65536 serialized UTF-8 JSON bytes." }, "outputSnapshot": {},
-                "precheckResult": { "description": "Precheck evidence object or null; at most 65536 serialized UTF-8 JSON bytes." }, "usage": { "description": "Usage evidence object or null; at most 65536 serialized UTF-8 JSON bytes." }, "error": {}
-              },
-              "additionalProperties": false
-            }
-          },
-          "required": ["runId", "patch"],
-          "additionalProperties": false
-        },
-        "result": {
-          "type": "object",
-          "properties": {
-            "id": { "type": "string" }, "automationId": { "type": "string" }, "title": { "type": "string" }, "runNumber": { "type": "integer" },
-            "scheduledFor": { "type": "integer" }, "trigger": { "type": "string", "enum": ["scheduled", "manual"] },
-            "status": { "type": "string", "enum": ["pending", "dispatching", "dispatched", "completed", "skipped_precheck", "skipped_missed", "skipped_unavailable", "skipped_needs_interactive_auth", "dispatch_failed"] },
-            "createdAt": { "type": "integer" }, "startedAt": { "type": "integer" }, "dispatchedAt": { "type": "integer" }, "completedAt": { "type": "integer" },
-            "occurrenceCount": { "type": "integer" }, "lastOccurrenceAt": { "type": "integer" }, "runContext": {}, "sourceContext": {},
-            "workspaceId": {}, "workspaceDisplayName": {}, "sessionKind": { "type": "string", "enum": ["structured"] }, "sessionId": {},
-            "dispatchState": {"description":"Durable observation cursor, or null before dispatch.","properties":{"messageCursor":{"type":"integer"},"reused":{"type":"boolean"},"observedWorking":{"type":"boolean"},"observationStartedAt":{"type":"integer"}},"required":["messageCursor","reused","observedWorking","observationStartedAt"],"additionalProperties":false},
-            "launchSettings": {}, "outputSnapshot": {},
-            "precheckResult": {}, "usage": {}, "error": {}
-          },
-          "required": ["id", "automationId", "title", "runNumber", "scheduledFor", "trigger", "status", "createdAt", "occurrenceCount", "runContext", "sourceContext", "workspaceId", "sessionKind", "sessionId", "launchSettings", "error"],
-          "additionalProperties": false
-        }
       }
     ],
     "event": [

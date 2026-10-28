@@ -154,5 +154,38 @@
 - **Revisit if:** provider discovery introduces an authoritative closed list
 - **Source:** locked by docs/loop/decisions/m1-launch-settings.md
 
+## D15: Give background structured sessions an explicit durable no-auto-tab signal
+- **Question:** Does structured launch alone preserve the person's active terminal tab?
+- **Options:** accept terminal auto-adoption; make all structured reconciliation inactive; mark only background sessions explicitly
+- **Chose:** optional public Session.background and structured/create background boolean, persisted by session/register and resume. Automations passes true. Terminal reconciliation excludes only unbound background sessions; ordinary structured behavior and explicitly bound sessions remain unchanged.
+- **Why:** Actual daemon smoke logged automatic structured tab additions. Scout traced appendTab's default activation to both reconciliation predicates. This is a real focus-selection gap, not permission to use hidden PTYs or change interactive session behavior. Explicit View run uses view:quirky.session/worktree with worktree/session input; terminal/openSession is terminal-only.
+- **Evidence:** terminal/src/layout/reconcile.ts:37-72; terminal/src/layout/ops.ts appendTab; session/src/window/model.ts:4,113-117; BackgroundTabPolicy scout correction
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** the public layout contract adds an explicit background-session adopter
+- **Source:** assumed — autonomous
+
+## D16: Normalize per-run evidence to the feature contract without compatibility aliases
+- **Question:** Can the UI consume check-runner field names and provider-specific cost keys directly?
+- **Options:** make each consumer reinterpret raw provider/check data; publish one automation evidence shape
+- **Chose:** precheck stdout/stderr and completedAt, retaining the last4000characters and truncation flags. Usage has known/unavailable status, provider/model, input/output/cacheRead/cacheWrite/reasoningOutput/total token counts, estimatedCostUsd (null without evidence), collectedAt and structured_turn attribution. Native diagnostics remain in failed output snapshots. Existing known amounts are not downgraded.
+- **Why:** A direct regression found completed reuse records lacked status, totalTokens and estimatedCostUsd; a failed runner lost its diagnostic output. Three focused regressions failed before normalization and the23dispatcher cases passed after. Two precheck field regressions also failed before the contract mapping and then passed with all23cases. Codex input includes cached tokens and output includes reasoning, so total does not double-count them.
+- **Evidence:** test/dispatch.test.ts native usage/reuse/failed-output/precheck cases; feature automations.md Usage attribution and Prechecks; accepted lane6 evidence-contract message1de82abb-cf4d-494c-b0fa-9a380f5c9ec0
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** a provider exposes an independently attributable actual charge
+- **Source:** locked by automations.md
+
+## D17: Preserve the caught-up hosting UI public contracts
+- **Question:** Do incoming reviews/tasks decisions change automation runtime ownership?
+- **Options:** rewrite shared UI seams; preserve the unrelated feature contracts
+- **Chose:** read both incoming logs through CatchupDecisions; preserve Reviews D3-D4,D6,D8,D12,D16,D20-D22 and Tasks D6-D10,D14-D20,D22-D24. No product conflict. Their implementation-model pairing describes their runs, not which provider an automation may execute.
+- **Why:** Generic UI metadata, public feature routes, existing worktree creation, flat schemas, structured settled evidence and no-focus background operations agree with this runtime. No feature-specific shell import was added.
+- **Evidence:** catch-up merge dc6631e0e45d6846b95c44f40259d1bb1d0645aa; CatchupDecisions read-only report
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** incoming API changes contradict a captured dispatch contract
+- **Source:** locked by docs/loop/decisions/m4-hosting-ui-reviews.md
+
 ## Progress
 Design and self-reviewed combined spec written. Shared dispatch-contract.ts committed before implementers. Next: implement three disjoint components, own-file behavioral tests, actual isolated daemon/CLI/native-process smoke, one affected gate and review, catch-up and queue land. Only this item this iteration. No human asks. Follow-up for the two explicitly constrained flows must be added once immediately before land.

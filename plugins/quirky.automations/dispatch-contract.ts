@@ -56,6 +56,8 @@ export type AutomationRunDispatchState = {
   reused: boolean
   observedWorking: boolean
   observationStartedAt: number
+  /** SDK streaming costs are cumulative; null means a reused turn's prior total was not proven. */
+  claudeCostBaseline?: number | null
 }
 export const AUTOMATION_FINAL_STATUSES: readonly AutomationRunStatus[] = [
   'completed', 'skipped_precheck', 'skipped_missed', 'skipped_unavailable',

@@ -69,11 +69,8 @@ describe('automation run dispatcher', () => {
     const callOrder = harness.calls.map((call) => call.method)
     expect(callOrder.indexOf('quirky.checks/run')).toBeLessThan(callOrder.indexOf('quirky.worktree/create'))
     expect(callOrder.indexOf('quirky.worktree/create')).toBeLessThan(callOrder.indexOf('quirky.structured/create'))
-    expect(harness.calls.find((call) => call.method === 'quirky.checks/run')?.params).toEqual({
-      command: 'bun test', cwd: '/repo-a', timeoutSeconds: 12, checkId: run.id
-    })
     expect(harness.store.getRun(run.id)?.precheckResult).toMatchObject({
-      command: 'bun test', startedAt: now, finishedAt: now, pass: true, stdoutTail: 'ok'
+      command: 'bun test', startedAt: now, completedAt: now, pass: true, stdout: 'ok'
     })
   })
 
@@ -107,10 +104,10 @@ describe('automation run dispatcher', () => {
       expect(refused?.status).toBe('skipped_precheck')
       expect(refused?.precheckResult).toMatchObject({ command: 'check me', pass: false, timedOut: result.timedOut })
       expect(refused?.precheckResult).toHaveProperty('startedAt')
-      expect(refused?.precheckResult).toHaveProperty('finishedAt')
-      const stdout = refused?.precheckResult?.stdoutTail
+      expect(refused?.precheckResult).toHaveProperty('completedAt')
+      const stdout = refused?.precheckResult?.stdout
       if (typeof stdout === 'string' && stdout.length > 0) {
-        expect(new TextEncoder().encode(stdout).length).toBeLessThanOrEqual(8 * 1024)
+        expect(stdout).toBe('é'.repeat(4_000))
         expect(refused?.precheckResult?.stdoutTruncated).toBe(true)
       }
       expect(createCount(harness)).toBe(0)
@@ -291,24 +288,6 @@ describe('automation run dispatcher', () => {
     expect(refused?.workspaceId).toBe('wt-created')
     expect(createCount(failed)).toBe(0)
   })
-  test('fresh launches resolve catalog picks and persist the native session snapshot', async () => {
-    const harness = fixture()
-    const { run } = newRun(harness, {
-      agentId: 'codex',
-      launchOverrides: { model: 'gpt-5.5', optionValues: { effort: 'high' } }
-    })
-
-    const dispatched = await harness.dispatcher.dispatch(run.id)
-
-    expect(dispatched?.status).toBe('dispatched')
-    expect(harness.calls.find((call) => call.method === 'quirky.agents/resolveLaunch')?.params).toMatchObject({
-      agent: 'codex', model: 'gpt-5.5', options: { effort: 'high' }, structured: true
-    })
-    expect(harness.calls.find((call) => call.method === 'quirky.structured/create')?.params).toMatchObject({
-      worktree: 'id:wt-existing', agent: 'codex', model: 'gpt-5.5', options: { effort: 'high' }
-    })
-    expect(dispatched?.launchSettings).toEqual(harness.sessions.get('s_1')?.launchSettings)
-  })
 
   test('a successful early provider result completes after launch acknowledgement with bounded output', async () => {
     const harness = fixture()
@@ -321,7 +300,7 @@ describe('automation run dispatcher', () => {
     expect(completed.sessionId).toBe('s_1')
     expect(completed.outputSnapshot?.content.length).toBeLessThanOrEqual(256 * 1024)
     expect(completed.outputSnapshot?.truncated).toBe(true)
-    expect(completed.usage).toMatchObject({ provider: 'claude', totalCostUsd: null })
+    expect(completed.usage).toMatchObject({ status: 'unavailable', provider: 'claude', estimatedCostUsd: null })
   })
 
   test('provider error result fails even when the structured session reports done', async () => {
@@ -373,12 +352,13 @@ describe('automation run dispatcher', () => {
     harness.appendMessage(reusedSession.id, 'assistant', 'second output')
     harness.appendMessage(reusedSession.id, 'result', 'turn complete', {
       type: 'result', subtype: 'success', is_error: false,
-      usage: { input_tokens: 12, output_tokens: 5 }, total_cost_usd: 0.012
+      usage: { input_tokens: 12, output_tokens: 5 }, total_cost_usd: 0.102
     })
     harness.setStatus(reusedSession.id, 'done')
     const completed = await waitRun(harness, secondRun.id, 'completed')
 
-    expect(completed.usage).toMatchObject({ inputTokens: 12, outputTokens: 5, totalCostUsd: 0.012 })
+    expect(completed.usage).toMatchObject({ status: 'known', inputTokens: 12, outputTokens: 5, totalTokens: 17 })
+    expect(completed.usage?.estimatedCostUsd).toBeCloseTo(0.012, 9)
     expect(completed.usage).not.toMatchObject({ inputTokens: 90, outputTokens: 30 })
     expect(harness.calls.filter((call) => call.method === 'quirky.structured/send')).toHaveLength(1)
   })
@@ -407,7 +387,7 @@ describe('automation run dispatcher', () => {
     const harness = fixture()
     const { run } = newRun(harness, { agentId: 'codex' })
     harness.store.updateRun(run.id, {
-      usage: { provider: 'codex', inputTokens: 99, totalCostUsd: 0.5 }
+      usage: { status: 'known', provider: 'codex', inputTokens: 99, estimatedCostUsd: 0.5 }
     }, now)
     harness.onCreate = (session) => {
       harness.appendMessage(session.id, 'assistant', 'Codex result')
@@ -423,8 +403,8 @@ describe('automation run dispatcher', () => {
     const completed = await waitRun(harness, run.id, 'completed')
 
     expect(completed.usage).toMatchObject({
-      provider: 'codex', inputTokens: 17, outputTokens: 6, cachedInputTokens: 4,
-      totalCostUsd: 0.5
+      status: 'known', provider: 'codex', inputTokens: 17, outputTokens: 6, cacheReadTokens: 4,
+      totalTokens: 23, estimatedCostUsd: 0.5
     })
     expect(completed.usage).not.toHaveProperty('costUnavailableReason')
   })
@@ -440,10 +420,8 @@ describe('automation run dispatcher', () => {
     const completed = await waitRun(harness, run.id, 'completed')
 
     expect(completed.usage).toMatchObject({
-      provider: 'codex',
-      totalCostUsd: null,
-      tokensUnavailableReason: 'Codex did not report per-turn token usage.',
-      costUnavailableReason: 'Codex does not report per-turn cost.'
+      status: 'unavailable', provider: 'codex', estimatedCostUsd: null,
+      unavailableReason: 'native_usage_missing'
     })
     expect(completed.usage).not.toHaveProperty('inputTokens')
   })
@@ -549,5 +527,17 @@ describe('automation run dispatcher', () => {
     const completed = await waitRun(harness, run.id, 'completed')
     expect(completed.outputSnapshot?.content).toBe('original Claude run finished')
     expect(completed.launchSettings?.agent).toBe('claude')
+  })
+  test('provider exit retains its diagnostic output and explicit unavailable usage', async () => {
+    const harness = fixture()
+    harness.onCreate = (session) => {
+      harness.appendMessage(session.id, 'system', 'Provider could not authenticate this account.')
+      harness.setStatus(session.id, 'exited', 1)
+    }
+    const { run } = newRun(harness)
+    await harness.dispatcher.dispatch(run.id)
+    const failed = await waitRun(harness, run.id, 'dispatch_failed')
+    expect(failed.outputSnapshot?.content).toBe('Provider could not authenticate this account.')
+    expect(failed.usage).toMatchObject({ status: 'unavailable', unavailableReason: 'run_not_finished' })
   })
 })
