@@ -103,6 +103,8 @@ The public UI command `quirky.browser/design` accepts `grab`, `annotate`, `draw`
 
 The schema-declared automation catalog includes managed profiles/pages, advanced page interactions, captures, observability, cookies/storage, import jobs and page controls. `quirky api --json` is the authoritative method/argument listing. Browser preferences retain `preferencesState`, `profileSet` and `openLink`; `profileSet` targets a hosted Browser **pane**, while `tabProfileSet` targets a managed agent page.
 
+Managed-page `selectAll` focuses the selected element and uses macOS editing commands for the owned Chrome target. Network observations include CORS preflight requests as well as application requests; distinguish them by HTTP method rather than assuming the latest row is a GET response.
+
 Pane methods are `paneOpen`, `paneState`, `paneNavigate`, `paneControl`, `paneReport`, `paneClose`, `paneSuggestions`, `paneWatch`, `paneWatchStop`, `paneFrameAck`, `paneInput`, `paneRespond`, and `paneDownload`; they use the same Browser CLI group.
 
 Design methods are `designArm`, `designRead`, `designHover`, `designCancel`, `designCapture`, `designFormat`, `designTargets`, and `designSend`.
