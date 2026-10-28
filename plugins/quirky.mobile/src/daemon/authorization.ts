@@ -26,7 +26,7 @@ const PARAMS: Readonly<Record<string, readonly string[]>> = {
   'quirky.session/get': ['session'],
   'quirky.session/resume': ['session', 'fork'],
   'quirky.session/restore': ['session'],
-  'quirky.session/create': ['worktree', 'agent', 'prompt', 'submitPrompt', 'waitForPrompt', 'title', 'name', 'cols', 'rows'],
+  'quirky.session/create': ['worktree', 'agent', 'cols', 'rows'],
   'quirky.session/setName': ['session', 'name'],
   'quirky.session/close': ['session'],
   'quirky.agent-status/list': ['worktree'],

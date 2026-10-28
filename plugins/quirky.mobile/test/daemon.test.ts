@@ -172,7 +172,7 @@ describe('mobile daemon integration', () => {
     await mobile.call('quirky.terminal/claim', { session: session.id, cols: 70, rows: 20 })
     const mobileTerminals = await mobile.call('quirky.terminal/mobileState', { session: session.id }) as { terminals: { session: string }[] }
     expect(mobileTerminals.terminals.map(({ session: terminal }) => terminal)).toContain(session.id)
-    const secondSocket = MobileTestClient.connect(offer.endpoint, offer.publicKeyB64, offer.deviceToken)
+    const secondSocket = MobileTestClient.connect(`ws://127.0.0.1:${currentState.listener.port}`, offer.publicKeyB64, offer.deviceToken)
     try {
       await secondSocket.authenticated
       await secondSocket.call('quirky.terminal/attach', { session: session.id, cols: 70, rows: 20 })
