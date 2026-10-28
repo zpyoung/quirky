@@ -16,7 +16,7 @@ Queue exhaustion is a completion condition when no check or evaluator is configu
 
 ## Workspace UI
 
-Open the workspace tab-bar **+** menu and choose **Loop…** after Agent settings. The New loop dialog offers Until done, On an interval, and Queue. It starts with a ten-iteration cap and no-progress pausing enabled; the CLI defaults below remain uncapped with no-progress off. Advanced contains completion checks, evaluator conditions, budgets, protected paths and iteration safety options. Folder workspaces do not offer checkpoint commits.
+Open the workspace tab-bar **+** menu and choose **Loop…**, the last contributed action before the Agent settings footer. The New loop dialog offers Until done, On an interval, and Queue. It starts with a ten-iteration cap and no-progress pausing enabled; the CLI defaults below remain uncapped with no-progress off. Advanced contains completion checks, evaluator conditions, budgets, protected paths and iteration safety options. Folder workspaces do not offer checkpoint commits.
 
 Starting a loop opens its view in a background tab without changing the active tab. Open that tab to read the structured journal beside the Loop rail, or below it in a narrow workspace. The rail shows state, pause reason, progress, check results and retained iteration evidence. Pause waits until the current iteration finishes; Resume can add iterations at a cap. Steer queues guidance for the next prompt. Edit changes subsequent iterations, and queue controls cannot alter an in-progress item.
 

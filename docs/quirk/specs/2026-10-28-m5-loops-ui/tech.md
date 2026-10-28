@@ -32,6 +32,8 @@ Setup actions: update (partial draft), queue-add/edit/move/remove, start, cancel
 
 Public window command IDs under `command:quirky.loops/`: new, setup-action, open, action, close-tab, close-choice. Command declarations carry schemas and CLI aliases. New accepts workspace/group, opens setup. Open accepts loopId, opens/reuses view tab explicitly active, except create invokes background open. Surface-action commands fail when no matching live surface, not success no-op. Close-tab reads fresh snapshot: running/needs-you opens loop close overlay; paused/ended removes tab directly. Close-choice cancel/keep-running/stop performs exact action. Backend closeMethod guards every removal: explicit approved close authorizes only matching loop/tab, does not grant unrelated closes. Bulk closes do not show a dialog or stop a worker; public guard behavior must safely distinguish or explicitly authorize this path.
 
+Canonical tab-menu invocation additionally supplies optional `worktree` context. The New window command validates that context as text but resolves placement only from workspace/group; this does not add a worktree placement argument to the backend New API or its CLI alias. The real setup-flow fixture supplies canonical menu context, including when explicit folder workspace selection differs from the ambient worktree.
+
 Every mutation surfaces backend error; close failure retains tab. UI reads use generation/unmount fences and subscribe/reconnect rehydration. Loop events carry public snapshot; never reach into another plugin implementation. Start opens one background hosted tab; loop updates do not activate a tab. Existing tab reuse must not accidentally activate on background create.
 
 
