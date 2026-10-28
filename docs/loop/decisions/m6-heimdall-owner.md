@@ -352,6 +352,28 @@
 - **Revisit if:** a post-catch-up actual worker or project gate fails
 - **Source:** assumed — autonomous
 
+## D33: Remove merge-created duplicate fake provider declarations instead of loosening activation
+- **Question:** after final dependency integration, owner/native API checks returned unknown structured methods despite a clean compiler
+- **Options:** retry activation or loosen admission; add a fallback; remove duplicate fixture definitions introduced by composing independently complete provider persistence
+- **Chose:** retain one canonical fake session setProviderSession implementation and one manifest declaration. The later implementation preserves immutable session snapshot replacement and all provider-ID/transcript validation. Do not change real plugin activation, optional-owner behavior or the supported schema subset.
+- **Why:** TypeScript cannot detect duplicate JSON contribution IDs. The invalid fake session dependency prevented structured activation, causing downstream unknown-method errors rather than an owner runtime failure.
+- **Evidence:** first integrated run4pass49fail with unknown quirky.structured/create; static manifest query identified two setProviderSession IDs; after deduplication the same owner/native three files53pass258assertions45.84s. No timeout, retry or exception suppression changed.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the final manifest validator reports another duplicate or unsupported declaration
+- **Source:** assumed — autonomous
+
+## D34: Preserve separate logical and transport request identities during final dependency composition
+- **Question:** the final core report/retry checkpoint changes a shared CLI call surface and native fixture persistence
+- **Options:** keep old cached logical replays; merge all semantics blindly; integrate the exact public contract and verify the actual owner callers
+- **Chose:** merge core7f3bd35b as9aba0312, read core D30–D33 and preserve explicit logical request IDs separately from per-invocation transport IDs. Keep connection-loss resend semantics, accepted report settlement, public model mappings, canonical snapshots and receipt safety. Retain verified uniqueThreads opt-in while resolving only overlapping fixture signatures.
+- **Why:** completed logical retries must reach their durable plugin ledger without duplicating effects, and accepted attested reports must settle Worker state rather than infer completion from liveness.
+- **Evidence:** full project typecheck exits0 in40.93s after this composition; actual owner-worker case remains part of the passing53-test API/native check; canonical journal1/receipt2 and atomic message/receipt cleanup preserved. Core's real release evidence is its own, not attributed to owner verification.
+- **Reversibility:** medium
+- **Confidence:** high for integrated owner callers and types; final remote/dependency gate remains required
+- **Revisit if:** a logical replay duplicates an effect or changes another CLI method's existing transport behavior
+- **Source:** assumed — autonomous
+
 ## Progress
 - Source: actual df799424/e410 facade, verified4bb owner boundaries, isolated427 startup-pointer/restart, d34 heldPrefix fixture,1b9 harness option, bd3 real worker acceptance and83e4 independent fixture identities. Core267 schemas,582 stop/control corrections and controlsab953 are merged; all temporary SQL/native probes removed.
 - Own checks: owner API17tests113assertions; earlier combined owner58tests354assertions; native69tests269assertions; driver/worker9tests25assertions; pointer14tests58assertions; semantic restart1test16assertions. Full project typecheck exits0; scripts66tests517assertions pass. Final post-dependency affected remote suite/catch-up remain.
