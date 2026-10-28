@@ -417,6 +417,63 @@ test('GitHub search shows mixed labelled items, selected source, external link, 
   })
 })
 
+test('an issue-derived agent prompt keeps its raw URL as an unsubmitted draft by default', async () => {
+  const h = mountCreate({
+    onCall: (method, params) => {
+      if (method === 'quirky.hosting/listWorkItems') return { items: [item('issue', 4, 'Add a multiply function', ISSUE_URL)], partial: false }
+      if (method === 'quirky.hosting/worktreeSource') return issueSource
+      return undefined
+    }
+  })
+  await h.ready
+  const dialog = h.element.querySelector('[role="dialog"]')!
+  await click(button(dialog, 'GitHub')!)
+  await setText(labelField<HTMLInputElement>(dialog, 'Search GitHub')!, 'multiply')
+  await waitFor(() => buttonContaining(dialog, 'Issue #4'))
+  await click(buttonContaining(dialog, 'Issue #4')!)
+  await waitFor(() => dialog.querySelector('.github-source'))
+  await setSelect(labelField<HTMLSelectElement>(dialog, 'Agent')!, 'claude')
+
+  const submit = labelField<HTMLInputElement>(dialog, 'Submit prompt automatically')!
+  expect(submit.checked).toBe(false)
+  await click(button(dialog, 'Create')!)
+  const params = h.calls.find((call) => call.method === 'quirky.worktree/create')?.params
+  expect(params).toMatchObject({ github: ISSUE_URL, agent: 'claude', prompt: ISSUE_URL, submitPrompt: false })
+})
+
+test('a person can explicitly submit an issue-derived prompt and generic prompts remain submitted by default', async () => {
+  const issue = mountCreate({
+    onCall: (method) => {
+      if (method === 'quirky.hosting/listWorkItems') return { items: [item('issue', 4, 'Add a multiply function', ISSUE_URL)], partial: false }
+      if (method === 'quirky.hosting/worktreeSource') return issueSource
+      return undefined
+    }
+  })
+  await issue.ready
+  let dialog = issue.element.querySelector('[role="dialog"]')!
+  await click(button(dialog, 'GitHub')!)
+  await setText(labelField<HTMLInputElement>(dialog, 'Search GitHub')!, 'multiply')
+  await waitFor(() => buttonContaining(dialog, 'Issue #4'))
+  await click(buttonContaining(dialog, 'Issue #4')!)
+  await waitFor(() => dialog.querySelector('.github-source'))
+  await setSelect(labelField<HTMLSelectElement>(dialog, 'Agent')!, 'claude')
+  await click(labelField<HTMLInputElement>(dialog, 'Submit prompt automatically')!)
+  await click(button(dialog, 'Create')!)
+  expect(issue.calls.find((call) => call.method === 'quirky.worktree/create')?.params)
+    .toMatchObject({ github: ISSUE_URL, agent: 'claude', prompt: ISSUE_URL, submitPrompt: true })
+
+  const generic = mountCreate()
+  await generic.ready
+  dialog = generic.element.querySelector('[role="dialog"]')!
+  await setSelect(labelField<HTMLSelectElement>(dialog, 'Agent')!, 'claude')
+  await setText(labelField<HTMLTextAreaElement>(dialog, 'Prompt')!, 'Implement the requested change.')
+  const genericSubmit = labelField<HTMLInputElement>(dialog, 'Submit prompt automatically')!
+  expect(genericSubmit.checked).toBe(true)
+  await click(button(dialog, 'Create')!)
+  expect(generic.calls.find((call) => call.method === 'quirky.worktree/create')?.params)
+    .toMatchObject({ agent: 'claude', prompt: 'Implement the requested change.', submitPrompt: true })
+})
+
 test('GitHub search exposes loading, empty, partial and error states', async () => {
   const initial = deferred<unknown>()
   const denied = deferred<unknown>()

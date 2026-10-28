@@ -1,8 +1,9 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent } from 'react'
 import type { ProjectGroup, Repo, Session, UiPluginContext, Worktree } from '@quirky/protocol'
+import { DEFAULT_STOCK_OPTIONS, type StockWorktreeOptions, type WorktreeControl } from './control-types'
 import type { HeimdallWorktreeStatus } from './useTree'
 import { resolveMembershipTarget, type MembershipTarget } from './membership'
-import { changeGroup, copyText, SESSION_VIEW, setWorktree } from './actions'
+import { changeGroup, copyText, SESSION_VIEW, setWorkspaceSleeping, setWorktree } from './actions'
 import { ContextMenu, groupMenu, projectMenu, STATUS_LABELS, workspaceMenu, type MenuItem } from './Menu'
 import { projectSeparatorBoundaries, repoLabel, type DialogState, type GroupNode, type ProjectNode, type TreeModel, type TreeRow } from './report'
 import { StatusDot, UnreadBell } from './StatusDot'
@@ -21,6 +22,9 @@ export type TreeProps = {
   /** The clock agent glyphs are judged stale against. */
   now: number
   separatorEnabled: boolean
+  options?: StockWorktreeOptions
+  allWorktrees?: WorktreeControl[]
+  onReorder?(worktrees: string[]): void
   openDialog(dialog: DialogState): void
   /** Starts a delete of `worktree`, with the workspaces nested below it when `descendants` is above 0. */
   requestDelete(worktree: Worktree, descendants: number): void
@@ -92,23 +96,29 @@ type CardProps = {
   now: number
   selected: boolean
   repoName?: string
+  options: StockWorktreeOptions
   onToggle(): void
   onMenu(worktree: Worktree, x: number, y: number): void
   onDragStart(worktree: Worktree, event: DragEvent<HTMLLIElement>): void
   onDragEnd(): void
 }
 
-function WorktreeCard({ context, worktree, depth, childCount, collapsed, sessions, orchestrationWorkers, loop, now, selected, repoName, onToggle, onMenu, onDragStart, onDragEnd }: CardProps) {
-  const open = () => {
+function WorktreeCard({ context, worktree, depth, childCount, collapsed, sessions, orchestrationWorkers, loop, now, selected, repoName, options, onToggle, onMenu, onDragStart, onDragEnd }: CardProps) {
+  const sleeping = 'sleeping' in worktree && worktree.sleeping === true
+  const open = async () => {
+    if (sleeping && !await setWorkspaceSleeping(context, worktree.id, false)) return
     context.openView(SESSION_VIEW, { worktree: worktree.id })
     if (worktree.unread) void setWorktree(context, worktree.id, { unread: false })
   }
   const linkedWork = worktree.linkedPR ?? worktree.linkedIssue
-  const className = ['worktree', selected && 'selected', worktree.removing && 'removing'].filter(Boolean).join(' ')
+  const className = ['worktree', selected && 'selected', worktree.removing && 'removing', sleeping && 'sleeping', options.compact && 'compact'].filter(Boolean).join(' ')
   const heimdall = heimdallStatusOf(worktree)
   return (
     <li
       className={className}
+      data-worktree-id={worktree.id}
+      data-parent-id={worktree.parentId ?? ''}
+      data-project-group-id={worktree.projectGroupId ?? ''}
       style={{ '--depth': depth, flexWrap: 'wrap' } as CSSProperties}
       draggable={worktree.kind === 'git'}
       onDragStart={(event) => onDragStart(worktree, event)}
@@ -118,15 +128,18 @@ function WorktreeCard({ context, worktree, depth, childCount, collapsed, session
         onMenu(worktree, event.clientX, event.clientY)
       }}
     >
-      <button className="worktree-main" onClick={open} title={worktree.path}>
+      <button className="worktree-main" style={options.compact ? { paddingBlock: 2 } : undefined} onClick={() => void open()} title={worktree.path} aria-label={`${sleeping ? 'Wake and open' : 'Open'} ${worktree.name}`}>
         {worktree.unread ? <UnreadBell /> : loop ? <LoopGlyph label={loop.label} /> : <StatusDot glyph={sessions === null ? null : worktreeGlyph(sessions, worktree.id, now)} />}
         {heimdall && <HeimdallGlyph status={heimdall} now={now} />}
         <span className={worktree.unread ? 'worktree-name worktree-name-unread' : 'worktree-name'}>{worktree.name}</span>
         {repoName && <span className="tag tag-repo">{repoName}</span>}
         {worktree.isMain && <span className="tag tag-primary">primary</span>}
         {worktree.status !== 'in-progress' && <span className="tag tag-status">{STATUS_LABELS[worktree.status]}</span>}
+        {sleeping && <span className="tag tag-state">Sleeping</span>}
         {worktree.removing && <span className="tag tag-state">Deleting…</span>}
       </button>
+      {options.showBranch && worktree.branch && <span className="worktree-branch" style={{ color: 'var(--muted)', fontSize: '0.8em' }}>{worktree.branch}</span>}
+      {options.showComment && worktree.comment && <span className="worktree-comment" title={worktree.comment} style={{ color: 'var(--muted)', fontSize: '0.8em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{worktree.comment}</span>}
       {linkedWork && (
         <a
           className="tag tag-github"
@@ -181,6 +194,9 @@ export function Tree({
   selectedId,
   now,
   separatorEnabled,
+  options = DEFAULT_STOCK_OPTIONS,
+  allWorktrees = [],
+  onReorder = () => {},
   openDialog,
   requestDelete,
   onDropPreviewChange,
@@ -324,7 +340,8 @@ export function Tree({
         openDialog,
         openDeleteDialog: requestDelete,
         setMembership: changeMembership,
-        moveProject
+        moveProject,
+        setSleeping: (item, sleeping, withDescendants) => void setWorkspaceSleeping(context, item.id, sleeping, withDescendants)
       })
     })
   }
@@ -357,7 +374,8 @@ export function Tree({
         const looseRepo = worktree.kind === 'git' && groups.some((group) => group.id === worktree.projectGroupId)
           ? repoById.get(worktree.repoId)
           : undefined
-        const repoName = row.repoName ?? (looseRepo ? repoLabel(looseRepo) : undefined)
+        const projectRepo = repoById.get(worktree.repoId)
+        const repoName = row.repoName ?? (looseRepo ? repoLabel(looseRepo) : options.groupBy === 'none' && projectRepo ? repoLabel(projectRepo) : undefined)
         return (
           <WorktreeCard
             key={worktree.id}
@@ -372,6 +390,7 @@ export function Tree({
             now={now}
             selected={worktree.id === selectedId}
             repoName={repoName}
+            options={options}
             onToggle={() => toggleFold(worktree.id)}
             onMenu={openWorkspaceMenu}
             onDragStart={(item, event) => {
@@ -388,6 +407,37 @@ export function Tree({
           />
         )
       })
+  const statusGroupedRows = (list: TreeRow[]) => {
+    if (options.groupBy !== 'status') return rows(list)
+    const byId = new Map(list.map((row) => [row.worktree.id, row]))
+    const rootById = new Map<string, string>()
+    for (const row of list) {
+      let current = row.worktree
+      const seen = new Set([current.id])
+      while (current.parentId && byId.has(current.parentId) && !seen.has(current.parentId)) {
+        seen.add(current.parentId)
+        current = byId.get(current.parentId)!.worktree
+      }
+      rootById.set(row.worktree.id, current.id)
+    }
+    const rootStatus = new Map<string, Worktree['status']>()
+    for (const row of list) {
+      if (rootById.get(row.worktree.id) === row.worktree.id) rootStatus.set(row.worktree.id, row.worktree.status)
+    }
+    const statuses = (Object.keys(STATUS_LABELS) as Worktree['status'][]).filter((status) =>
+      [...rootStatus.values()].includes(status)
+    )
+    return statuses.map((status) => {
+      const roots = new Set([...rootStatus].filter(([, value]) => value === status).map(([id]) => id))
+      const laneRows = list.filter((row) => roots.has(rootById.get(row.worktree.id)!))
+      return (
+        <li className="worktree-status-lane" key={status}>
+          <h3>{STATUS_LABELS[status]}</h3>
+          <ul className="worktree-list">{rows(laneRows)}</ul>
+        </li>
+      )
+    })
+  }
 
   const project = (node: ProjectNode, topLevel = false) => {
     const { repo, rows: projectRows, pending: pendingCreates } = node
@@ -396,6 +446,7 @@ export function Tree({
     return (
       <section className={className} key={repo.id} data-top-level-section={topLevel ? sectionKey : undefined}>
         <header
+          hidden={options.groupBy === 'none'}
           className={`repo-header${dropPreview?.kind === 'repo' && dropPreview.id === repo.id ? ' membership-drop-preview' : ''}`}
           data-repo-target={repo.id}
           onContextMenu={(event) => {
@@ -427,7 +478,7 @@ export function Tree({
           </span>
         </header>
         <ul className="worktree-list">
-          {rows(projectRows)}
+          {statusGroupedRows(projectRows)}
           {pendingCreates.map((create) => <PendingCard key={create.name} name={create.name} />)}
         </ul>
       </section>
@@ -471,9 +522,9 @@ export function Tree({
         </header>
         {!group.collapsed && (
           <>
-            {groupRows.length > 0 && <ul className="worktree-list">{rows(groupRows)}</ul>}
+            {groupRows.length > 0 && <ul className="worktree-list">{statusGroupedRows(groupRows)}</ul>}
             {projects.filter((projectNode) => projectNode.repo.kind === 'folder').map((projectNode) => project(projectNode))}
-            {looseRows.length > 0 && <ul className="worktree-list">{rows(looseRows)}</ul>}
+            {looseRows.length > 0 && <ul className="worktree-list">{statusGroupedRows(looseRows)}</ul>}
             {projects.filter((projectNode) => projectNode.repo.kind === 'git').map((projectNode) => project(projectNode))}
             {children.map((child) => groupSection(child))}
           </>
@@ -482,9 +533,50 @@ export function Tree({
     )
   }
 
+  const worktreeCardAt = (target: EventTarget): HTMLElement | null =>
+    target instanceof Element ? target.closest<HTMLElement>('[data-worktree-id]') : null
+
+  const reorderManual = (sourceId: string, targetId: string, below: boolean): boolean => {
+    if (options.sortBy !== 'manual') return false
+    const source = allWorktrees.find((worktree) => worktree.id === sourceId)
+    const target = allWorktrees.find((worktree) => worktree.id === targetId)
+    if (!source || !target) return false
+    if (source.id === target.id) return true
+    if (
+      source.isMain || target.isMain ||
+      source.repoId !== target.repoId ||
+      source.parentId !== target.parentId ||
+      source.projectGroupId !== target.projectGroupId
+    ) return false
+    const siblings = allWorktrees
+      .filter((worktree) =>
+        !worktree.isMain &&
+        worktree.repoId === source.repoId &&
+        worktree.parentId === source.parentId &&
+        worktree.projectGroupId === source.projectGroupId
+      )
+      .sort((left, right) => right.manualOrder - left.manualOrder || left.createdAt - right.createdAt || left.id.localeCompare(right.id))
+    const ordered = siblings.map((worktree) => worktree.id)
+    const sourceIndex = ordered.indexOf(source.id)
+    const targetIndex = ordered.indexOf(target.id)
+    if (sourceIndex < 0 || targetIndex < 0) return false
+    ordered.splice(sourceIndex, 1)
+    const nextTargetIndex = ordered.indexOf(target.id)
+    ordered.splice(nextTargetIndex + (below ? 1 : 0), 0, source.id)
+    onReorder(ordered)
+    return true
+  }
+
   const onDragOver = (event: DragEvent<HTMLDivElement>) => {
     const worktree = draggedWorktree.current
     if (!worktree) return
+    const card = worktreeCardAt(event.target)
+    if (options.sortBy === 'manual' && card?.dataset.worktreeId) {
+      event.preventDefault()
+      event.dataTransfer.dropEffect = 'move'
+      updatePreview(null)
+      return
+    }
     const target = resolveAt(event.clientX, event.clientY, worktree)
     if (!target) {
       updatePreview(null)
@@ -498,6 +590,15 @@ export function Tree({
   const onDrop = (event: DragEvent<HTMLDivElement>) => {
     const worktree = draggedWorktree.current
     draggedWorktree.current = null
+    const card = worktreeCardAt(event.target)
+    if (worktree && options.sortBy === 'manual' && card?.dataset.worktreeId) {
+      const bounds = card.getBoundingClientRect()
+      if (reorderManual(worktree.id, card.dataset.worktreeId, event.clientY > bounds.top + bounds.height / 2)) {
+        event.preventDefault()
+        updatePreview(null)
+        return
+      }
+    }
     const target = worktree ? resolveAt(event.clientX, event.clientY, worktree) : null
     if (!worktree || !target) {
       updatePreview(null)
@@ -554,6 +655,7 @@ export function Tree({
                   now={now}
                   selected={worktree.id === selectedId}
                   repoName={repoName}
+                  options={options}
                   onToggle={() => {}}
                   onMenu={openWorkspaceMenu}
                   onDragStart={(item, event) => {

@@ -19,6 +19,9 @@ import { UpdateDialog } from './UpdateDialog'
 import { useSidebarActivity } from './useSidebarActivity'
 import { useTree } from './useTree'
 import { useLoopStatus } from './useLoopStatus'
+import { CleanupDialog } from './CleanupDialog'
+import { StockOptions } from './StockOptions'
+import { DEFAULT_STOCK_OPTIONS, isStockWorktreeOptions, type StockWorktreeOptions, type WorktreeControl } from './control-types'
 
 import type { MembershipTarget } from './membership'
 
@@ -40,6 +43,23 @@ function selectedWorktree(layout: UiLayout): string | null {
   const id = input && typeof input === 'object' ? (input as { worktree?: unknown }).worktree : undefined
   return typeof id === 'string' ? id : null
 }
+function orderedWorktrees(worktrees: WorktreeControl[], sortBy: StockWorktreeOptions['sortBy']): WorktreeControl[] {
+  return [...worktrees].sort((left, right) => {
+    if (left.isMain !== right.isMain) return left.isMain ? -1 : 1
+    if (sortBy === 'name') return left.name.localeCompare(right.name) || left.id.localeCompare(right.id)
+    if (sortBy === 'recent') {
+      const recent = Math.max(right.lastActivityAt, right.createdAt + CREATE_GRACE_MS) -
+        Math.max(left.lastActivityAt, left.createdAt + CREATE_GRACE_MS)
+      return recent || left.name.localeCompare(right.name) || left.id.localeCompare(right.id)
+    }
+    return right.manualOrder - left.manualOrder || left.createdAt - right.createdAt || left.id.localeCompare(right.id)
+  })
+}
+
+function isSleeping(worktree: WorktreeControl): boolean {
+  return worktree.sleeping
+}
+const CREATE_GRACE_MS = 5 * 60 * 1_000
 
 /** The sidebar's workspace tree with its menus, dialogs, add-project form and `ui state` report. */
 export function WorktreesSection({ context, report, requests }: Props) {
@@ -54,10 +74,29 @@ export function WorktreesSection({ context, report, requests }: Props) {
   const [deleting, setDeleting] = useState<ReadonlySet<string>>(new Set())
   const [kept, setKept] = useState<KeptBranch[]>([])
   const lastReport = useRef('')
+  const [stockOptions, setStockOptions] = useState<StockWorktreeOptions>({ ...DEFAULT_STOCK_OPTIONS })
+  const [revealSleeping, setRevealSleeping] = useState(false)
+  const [cleanupOpen, setCleanupOpen] = useState(false)
 
   useEffect(() => {
     setLayout(context.getLayout())
     return context.onLayout(setLayout)
+  }, [context])
+  useEffect(() => {
+    let active = true
+    const unsubscribe = context.subscribe((event) => {
+      if (event.type !== 'quirky.worktree/optionsChanged' || !('data' in event)) return
+      const data = event.data
+      if (typeof data !== 'object' || data === null || !('options' in data) || !isStockWorktreeOptions(data.options)) return
+      setStockOptions(data.options)
+    })
+    void context.call('quirky.worktree/options').then((value: unknown) => {
+      if (active && isStockWorktreeOptions(value)) setStockOptions(value)
+    }).catch((error: unknown) => context.toast('Could not load workspace options', error instanceof Error ? error.message : String(error)))
+    return () => {
+      active = false
+      unsubscribe()
+    }
   }, [context])
 
   useEffect(() => requests?.attach(setRequested), [requests])
@@ -79,6 +118,41 @@ export function WorktreesSection({ context, report, requests }: Props) {
     () => currentProjection ? new Set(currentProjection.visibleIds) : null,
     [currentProjection]
   )
+  const alwaysShowPrimary = activityProjection?.preferences.alwaysShowDefaultBranchWorkspace ?? true
+  const ordered = useMemo(() => orderedWorktrees(worktrees, stockOptions.sortBy), [worktrees, stockOptions.sortBy])
+  const hiddenSleepingWorktrees = useMemo(
+    () => stockOptions.showSleeping ? [] : ordered.filter((worktree) =>
+      isSleeping(worktree) && !(worktree.isMain && alwaysShowPrimary) && (!visibleIds || visibleIds.has(worktree.id))
+    ),
+    [ordered, stockOptions.showSleeping, visibleIds, alwaysShowPrimary]
+  )
+  const treeVisibleIds = useMemo(() => {
+    const result = new Set<string>()
+    for (const worktree of ordered) {
+      const showSleeping = !isSleeping(worktree) || stockOptions.showSleeping || revealSleeping || (worktree.isMain && alwaysShowPrimary)
+      if (showSleeping && (!visibleIds || visibleIds.has(worktree.id))) result.add(worktree.id)
+    }
+    return result
+  }, [ordered, stockOptions.showSleeping, revealSleeping, visibleIds, alwaysShowPrimary])
+  const changeStockOptions = useCallback(async (patch: Partial<StockWorktreeOptions>) => {
+    try {
+      const next = await context.call('quirky.worktree/setOptions', patch)
+      if (!isStockWorktreeOptions(next)) throw new Error('the worktree options response was incomplete')
+      setStockOptions(next)
+    } catch (error) {
+      context.toast('Could not update workspace options', error instanceof Error ? error.message : String(error))
+    }
+  }, [context])
+  const reorderWorktrees = useCallback(async (ids: string[]) => {
+    try {
+      await context.call('quirky.worktree/reorder', { worktrees: ids })
+    } catch (error) {
+      context.toast('Could not reorder workspaces', error instanceof Error ? error.message : String(error))
+    }
+  }, [context])
+  useEffect(() => {
+    if (stockOptions.showSleeping) setRevealSleeping(false)
+  }, [stockOptions.showSleeping])
   const [dropPreview, setDropPreview] = useState<MembershipTarget | null>(null)
   const [separatorState, setSeparatorState] = useState<SeparatorReport>(() => ({
     enabled: readSeparatorSetting(context),
@@ -124,34 +198,45 @@ export function WorktreesSection({ context, report, requests }: Props) {
   }, [requested, loaded, repos, worktrees, selectedId, context])
 
   // a delete the window has sent shows as deleting before the daemon's own flag arrives
-  const shown = useMemo(() => (deleting.size === 0 ? worktrees : worktrees.map((w) => (deleting.has(w.id) ? { ...w, removing: true } : w))), [worktrees, deleting])
-  const model = useMemo(() => buildTreeModel(repos, groups, shown, pending, visibleIds), [repos, groups, shown, pending, visibleIds])
+  const shown = useMemo(
+    () => (deleting.size === 0 ? ordered : ordered.map((worktree) => (deleting.has(worktree.id) ? { ...worktree, removing: true } : worktree))),
+    [ordered, deleting]
+  )
+  const model = useMemo(() => buildTreeModel(repos, groups, shown, pending, treeVisibleIds), [repos, groups, shown, pending, treeVisibleIds])
   const state: WorktreesReport = useMemo(() => {
     // a stacked question is what the person is looking at, so it is what `ui state` reports
     const front: DialogState | null = trust
       ? { kind: 'trust', repoId: trust.request.repoId }
       : fallbacks[0]
         ? { kind: 'base-fallback', worktreeId: fallbacks[0].worktreeId }
-        : dialog
-    return buildReport({
-      repos,
-      groups,
-      worktrees: shown,
-      sessions,
-      selectedId,
-      pending,
-      visibleIds,
-      activity: currentProjection,
-      activityStatus: activity.status,
-      activityError: activity.error,
-      separators: separatorState,
-      dropPreview,
-      now,
-      dialog: front,
-      loopStatus,
-      notices: kept.map((item) => ({ kind: 'kept-branch', branch: item.branch, repoId: item.repoId }))
-    })
-  }, [repos, groups, shown, sessions, selectedId, pending, visibleIds, currentProjection, activity.status, activity.error, separatorState, dropPreview, dialog, trust, fallbacks, kept, now, loopStatus])
+        : cleanupOpen
+          ? { kind: 'cleanup' }
+          : dialog
+    return {
+      ...buildReport({
+        repos,
+        groups,
+        worktrees: shown,
+        sessions,
+        selectedId,
+        pending,
+        visibleIds: treeVisibleIds,
+        activity: currentProjection,
+        activityStatus: activity.status,
+        activityError: activity.error,
+        separators: separatorState,
+        dropPreview,
+        now,
+        dialog: front,
+        loopStatus,
+        notices: kept.map((item) => ({ kind: 'kept-branch', branch: item.branch, repoId: item.repoId }))
+      }),
+      stockOptions,
+      stockHiddenIds: hiddenSleepingWorktrees.map((worktree) => worktree.id),
+      stockHiddenCount: hiddenSleepingWorktrees.length,
+      revealSleeping
+    }
+  }, [repos, groups, shown, sessions, selectedId, pending, treeVisibleIds, currentProjection, activity.status, activity.error, separatorState, dropPreview, dialog, trust, fallbacks, cleanupOpen, kept, now, loopStatus, stockOptions, hiddenSleepingWorktrees, revealSleeping])
 
   useEffect(() => {
     if (!loaded) return
@@ -162,6 +247,7 @@ export function WorktreesSection({ context, report, requests }: Props) {
   }, [loaded, state, report])
 
   const closeDialog = useCallback(() => setDialog(null), [])
+  const closeCleanup = useCallback(() => setCleanupOpen(false), [])
   const trackPending = useCallback((repoId: string, name: string) => {
     const create = { repoId, name }
     setPending((prev) => [...prev, create])
@@ -235,6 +321,14 @@ export function WorktreesSection({ context, report, requests }: Props) {
 
   return (
     <>
+      <StockOptions
+        options={stockOptions}
+        hiddenSleepingCount={hiddenSleepingWorktrees.length}
+        revealSleeping={revealSleeping}
+        changeOptions={(patch) => void changeStockOptions(patch)}
+        toggleSleepingReveal={() => setRevealSleeping((current) => !current)}
+        openCleanup={() => setCleanupOpen(true)}
+      />
       <ActivityFilters
         projection={currentProjection}
         error={activity.status === 'error' ? activity.error : null}
@@ -250,6 +344,9 @@ export function WorktreesSection({ context, report, requests }: Props) {
           selectedId={selectedId}
           now={now}
           separatorEnabled={separatorEnabled}
+          options={stockOptions}
+          allWorktrees={ordered}
+          onReorder={(ids) => void reorderWorktrees(ids)}
           openDialog={setDialog}
           requestDelete={requestDelete}
           onDropPreviewChange={changeDropPreview}
@@ -315,6 +412,7 @@ export function WorktreesSection({ context, report, requests }: Props) {
       {dialog?.kind === 'group' && dialog.action === 'delete' && dialogGroup && <DeleteGroupDialog context={context} group={dialogGroup} onClose={closeDialog} />}
       {trust && <TrustDialog request={trust.request} project={trustRepo ? repoLabel(trustRepo) : trust.request.repoId} onChoose={answerTrust} />}
       {fallbacks[0] && <BaseFallbackDialog message={fallbacks[0].message} onClose={() => setFallbacks((prev) => prev.slice(1))} />}
+      {cleanupOpen && <CleanupDialog context={context} onClose={closeCleanup} />}
     </>
   )
 }

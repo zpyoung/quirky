@@ -1,4 +1,5 @@
 import type { CliArgs, CliContext, CliModule, ProjectGroup, Worktree, WorktreeCreateResult, WorktreeRemoveResult } from '@quirky/protocol'
+import type { CleanupCandidate, CleanupRemovalResult, CleanupSelection, StockWorktreeOptions, WorktreeSleepState } from './src/control-types'
 
 const worktreeRecord = (ctx: CliContext, worktree: Worktree) =>
   ctx.format.record([
@@ -19,6 +20,15 @@ function toggle(args: CliArgs, ctx: CliContext, on: string, off: string): boolea
   const wantsOff = args.flags[off] === true
   if (wantsOn && wantsOff) throw ctx.usage(`--${on} and --${off} cannot be used together`)
   return wantsOn ? true : wantsOff ? false : undefined
+}
+function jsonFlag(args: CliArgs, ctx: CliContext, flag: string): unknown {
+  const value = args.flags[flag]
+  if (typeof value !== 'string') return value
+  try {
+    return JSON.parse(value) as unknown
+  } catch {
+    throw ctx.usage(`--${flag} must be valid JSON`)
+  }
 }
 
 const worktreeDetails = (ctx: CliContext, worktree: Worktree & { children: string[] }) => {
@@ -150,6 +160,7 @@ const named: CliModule['commands'] = {
     const parent = stringFlag(args, 'parent-worktree')
     const noParent = args.flags['no-parent'] === true
     if (parent !== undefined && noParent) throw ctx.usage('--parent-worktree and --no-parent cannot be used together')
+    const submitPrompt = toggle(args, ctx, 'submit-prompt', 'draft-prompt')
 
     const optional: [string, unknown][] = [
       ['repo', positionalRepo ?? flagRepo],
@@ -171,6 +182,7 @@ const named: CliModule['commands'] = {
     ]
     const params: Record<string, unknown> = { createdBy: 'cli', ...Object.fromEntries(optional.filter(([, value]) => value !== undefined)) }
     if (noParent) params.noParent = true
+    if (submitPrompt !== undefined) params.submitPrompt = submitPrompt
     if (args.flags['trust-setup'] === true) params.trustSetup = true
     if (args.flags['trust-issue-command'] === true) params.trustIssueCommand = true
     if (args.flags['no-fallback'] === true) params.allowLocalBaseFallback = false
@@ -202,6 +214,130 @@ const named: CliModule['commands'] = {
       }
       return lines.join('\n')
     })
+  },
+
+  async options(args, ctx) {
+    const groupBy = stringFlag(args, 'group-by')
+    const sortBy = stringFlag(args, 'sort-by')
+    const compact = toggle(args, ctx, 'compact', 'detailed')
+    const showBranch = toggle(args, ctx, 'show-branch', 'hide-branch')
+    const showComment = toggle(args, ctx, 'show-comment', 'hide-comment')
+    const showSleeping = toggle(args, ctx, 'show-sleeping', 'hide-sleeping')
+    const patch: Record<string, unknown> = {
+      ...(groupBy === undefined ? {} : { groupBy }),
+      ...(sortBy === undefined ? {} : { sortBy }),
+      ...(compact === undefined ? {} : { compact }),
+      ...(showBranch === undefined ? {} : { showBranch }),
+      ...(showComment === undefined ? {} : { showComment }),
+      ...(showSleeping === undefined ? {} : { showSleeping })
+    }
+    const options = (await ctx.call(
+      Object.keys(patch).length > 0 ? 'quirky.worktree/setOptions' : 'quirky.worktree/options',
+      patch
+    )) as StockWorktreeOptions
+    ctx.out.result(options, () => ctx.format.record([
+      ['group by', options.groupBy],
+      ['sort by', options.sortBy],
+      ['compact', options.compact ? 'yes' : 'no'],
+      ['show branch', options.showBranch ? 'yes' : 'no'],
+      ['show comment', options.showComment ? 'yes' : 'no'],
+      ['show sleeping', options.showSleeping ? 'yes' : 'no']
+    ]))
+  },
+
+  async reorder(args, ctx) {
+    const worktrees = jsonFlag(args, ctx, 'worktrees')
+    if (!Array.isArray(worktrees) || worktrees.length === 0 || !worktrees.every((id) => typeof id === 'string')) {
+      throw ctx.usage('--worktrees must be a non-empty JSON array of worktree IDs in the desired order')
+    }
+    const result = await ctx.call('quirky.worktree/reorder', { worktrees })
+    ctx.out.result(result, () => `ordered ${worktrees.length} sibling worktrees`)
+  },
+
+  async 'sleep-preview'(args, ctx) {
+    const [worktree] = args.positionals as [string]
+    const withDescendants = args.flags['with-descendants'] === true
+    const preview = (await ctx.call('quirky.worktree/sleepPreview', {
+      worktree,
+      ...(withDescendants ? { withDescendants: true } : {})
+    })) as { worktrees: Array<{ name: string; sleeping: boolean; allowed: boolean; blockers: { code: string; detail: string }[] }> }
+    ctx.out.result(preview, () => ctx.format.table(
+      ['WORKTREE', 'SLEEPING', 'ALLOWED', 'BLOCKERS'],
+      preview.worktrees.map((row) => [
+        row.name,
+        row.sleeping ? 'yes' : 'no',
+        row.allowed ? 'yes' : 'no',
+        row.blockers.map((blocker) => `${blocker.code}: ${blocker.detail}`).join('; ') || '-'
+      ])
+    ))
+  },
+
+  async sleep(args, ctx) {
+    const [worktree] = args.positionals as [string]
+    const withDescendants = args.flags['with-descendants'] === true
+    const result = (await ctx.call('quirky.worktree/sleep', {
+      worktree,
+      ...(withDescendants ? { withDescendants: true } : {})
+    })) as { worktrees: WorktreeSleepState[] }
+    ctx.out.result(result, () => `slept ${result.worktrees.map((row) => row.worktreeId).join(', ')}`)
+  },
+
+  async wake(args, ctx) {
+    const [worktree] = args.positionals as [string]
+    const withDescendants = args.flags['with-descendants'] === true
+    const result = (await ctx.call('quirky.worktree/wake', {
+      worktree,
+      ...(withDescendants ? { withDescendants: true } : {})
+    })) as { worktrees: WorktreeSleepState[] }
+    ctx.out.result(result, () => `woke ${result.worktrees.map((row) => row.worktreeId).join(', ')}`)
+  },
+
+  async 'cleanup-preview'(_args, ctx) {
+    const preview = (await ctx.call('quirky.worktree/cleanupPreview')) as { candidates: CleanupCandidate[] }
+    ctx.out.result(preview, () => preview.candidates.length === 0
+      ? 'no idle cleanup candidates'
+      : ctx.format.table(
+          ['ID', 'NAME', 'ELIGIBLE', 'IGNORED', 'BLOCKERS'],
+          preview.candidates.map((row) => [
+            row.worktreeId,
+            row.name,
+            row.eligible ? 'yes' : 'no',
+            row.ignored ? 'yes' : 'no',
+            row.blockers.map((blocker) => `${blocker.code}: ${blocker.detail}`).join('; ') || '-'
+          ])
+        ))
+  },
+
+  async 'cleanup-ignore'(args, ctx) {
+    const [worktreeId] = args.positionals as [string]
+    const fingerprint = stringFlag(args, 'fingerprint')
+    if (!fingerprint) throw ctx.usage('--fingerprint is required from a current cleanup preview')
+    const result = await ctx.call('quirky.worktree/cleanupIgnore', { worktreeId, fingerprint })
+    ctx.out.result(result, () => `ignored ${worktreeId}`)
+  },
+
+  async 'cleanup-restore'(_args, ctx) {
+    const result = await ctx.call('quirky.worktree/cleanupRestoreIgnored') as { restored: number }
+    ctx.out.result(result, () => `restored ${result.restored} cleanup suggestions`)
+  },
+
+  async 'cleanup-remove'(args, ctx) {
+    if (args.flags.confirm !== true) throw ctx.usage('--confirm is required after reviewing the cleanup preview')
+    const selection = jsonFlag(args, ctx, 'selection')
+    if (!Array.isArray(selection) || selection.length === 0 || !selection.every((row) =>
+      typeof row === 'object' && row !== null && 'worktreeId' in row && typeof row.worktreeId === 'string' &&
+      'fingerprint' in row && typeof row.fingerprint === 'string'
+    )) {
+      throw ctx.usage('--selection must be a non-empty JSON array of {worktreeId,fingerprint} rows from cleanup-preview')
+    }
+    const result = await ctx.call('quirky.worktree/cleanupRemove', {
+      selection: selection as CleanupSelection[],
+      confirmed: true
+    }) as { results: CleanupRemovalResult[] }
+    ctx.out.result(result, () => result.results.map((row) =>
+      row.removed ? `removed ${row.worktreeId}` : `kept ${row.worktreeId}: ${row.error ?? 'not removed'}`
+    ).join('\n'))
+    if (result.results.some((row) => !row.removed)) throw ctx.fail('one or more selected cleanup worktrees were not removed')
   },
 
   async 'delete-branch'(args, ctx) {
