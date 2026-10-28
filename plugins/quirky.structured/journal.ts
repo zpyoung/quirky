@@ -166,7 +166,7 @@ export class Journal {
     })
   }
 
-  /** Drops the session's messages and send receipts. */
+  /** Drops the session's messages and send receipts atomically. */
   remove(sessionId: string): void {
     this.store.transaction(() => {
       this.store.run('DELETE FROM structured_messages WHERE session_id = ?', sessionId)

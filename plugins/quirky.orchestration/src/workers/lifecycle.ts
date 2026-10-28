@@ -839,24 +839,30 @@ export function createWorkerLifecycle(
     if (!worker || !isExactCaller(worker, dispatch, input.caller)) return null
     if (worker.state === 'stopping' || (worker.state === 'stop_unknown' && worker.stage === 'stopping') ||
       worker.state === 'stopped' || worker.state === 'abandoned') return null
-    if (worker.state === 'starting' || worker.state === 'start_unknown' || worker.state === 'stop_unknown') {
-      const ready = updateState(dispatch.id, worker.state, 'ready')
-      repo.addObservation(dispatch.id, 'completion_report', {
-        outcome: input.outcome,
-        at: input.at,
-        processIncarnation: worker.processIncarnation
-      })
-      return ready
+
+    let current = worker
+    if (current.state === 'starting' || current.state === 'start_unknown' || current.state === 'stop_unknown') {
+      current = updateState(dispatch.id, current.state, 'ready')
     }
-    if (worker.state === 'ready' || worker.state === input.outcome) {
-      repo.addObservation(dispatch.id, 'completion_report', {
-        outcome: input.outcome,
-        at: input.at,
-        processIncarnation: worker.processIncarnation
-      })
-      return worker
+    if (current.state === 'ready') {
+      current = updateState(dispatch.id, 'ready', input.outcome)
+      const receipt = current.receipt ? {
+        ...current.receipt,
+        state: 'ready' as const,
+        stage: 'settled',
+        workerOutcome: input.outcome,
+      } : null
+      current = updateStage(dispatch.id, input.outcome, { stage: 'settled', lastError: null, receipt })
+    } else if (current.state !== input.outcome) {
+      return null
     }
-    return null
+
+    repo.addObservation(dispatch.id, 'completion_report', {
+      outcome: input.outcome,
+      at: input.at,
+      processIncarnation: current.processIncarnation
+    })
+    return current
   }
 
   const recordHeartbeat: WorkerLifecyclePort['recordHeartbeat'] = (store, input) => {

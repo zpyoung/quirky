@@ -402,6 +402,7 @@ try {
   })
 
 
+
   test('SC-24: extra arguments are refused and nothing is registered', async () => {
     expect(
       await failure(call('quirky.structured/create', { worktree: 'main', agent: 'claude', prompt: 'x', extraArgs: '--verbose' }))
@@ -516,6 +517,10 @@ describe('the Claude runner inside the plugin', () => {
     await waitFor(() => query.written.length === 1)
 
     query.emit({ type: 'system', subtype: 'init', session_id: 'c1', model: 'm' })
+    await waitForAsync(async () => {
+      const stored = (await call('quirky.session/get', { session: session.id })) as Session
+      return stored.providerSession?.id === 'c1' ? stored : undefined
+    })
     const permission = (query.params.options!.canUseTool as any)('Bash', { command: 'ls' }, {
       signal: new AbortController().signal,
       toolUseID: 'tu'
@@ -528,8 +533,13 @@ describe('the Claude runner inside the plugin', () => {
 
     query.emit({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'done' }] } })
     query.emit({ type: 'result', subtype: 'success', result: 'All good', is_error: false })
-    await waitFor(() => world.statusLog.some((entry) => entry.status === 'done'))
-    expect(world.statusLog.map((entry) => entry.status)).toEqual(['working', 'waiting', 'working', 'done'])
+    await waitForAsync(() =>
+      settledEvents().find((event) => event.sessionId === session.id && event.state === 'done')
+    )
+    expect(settledEvents().filter((event) => event.sessionId === session.id).map((event) => event.state)).toEqual([
+      'waiting',
+      'done'
+    ])
 
     await call('quirky.structured/send', { session: session.id, text: 'and tests' })
     await waitFor(() => query.written.length === 2)
@@ -801,7 +811,10 @@ describe('the Codex runner inside the plugin', () => {
       ['[rpc-error]', 'scripted turn request error']
     ]) {
       const session = await createAgent('codex', prompt)
-      await waitFor(() => world.statusLog.some((entry) => entry.sessionId === session.id && entry.status === 'exited'))
+      await waitForAsync(async () => {
+        const stored = (await call('quirky.session/get', { session: session.id })) as Session
+        return stored.status === 'exited' ? stored : undefined
+      })
       const messages = (await call('quirky.structured/messages', { session: session.id })) as StructuredMessage[]
       expect(messages.some((message) => message.role === 'system' && message.text.includes(diagnostic)), JSON.stringify(messages)).toBe(true)
       expect(settledEvents().some((event) => event.sessionId === session.id && event.state === 'done')).toBe(false)
@@ -839,8 +852,8 @@ describe('the Codex runner inside the plugin', () => {
     })
 
     const original = await createAgent('codex', 'continue this conversation')
-    await waitFor(() =>
-      worldWithManagedCodex.statusLog.some((entry) => entry.sessionId === original.id && entry.status === 'done')
+    await waitForAsync(() =>
+      settledEvents().find((event) => event.sessionId === original.id && event.state === 'done')
     )
     expect(fixture.environments()).toEqual([{ CODEX_HOME: managedHome }])
     expect((await call('quirky.session/get', { session: original.id })).providerSession).toMatchObject({

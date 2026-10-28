@@ -7,7 +7,7 @@ let harness: WorkerAcceptance | undefined
 afterEach(async () => { await harness?.cleanup(); harness = undefined })
 
 async function startRun() {
-  harness = await startWorkerAcceptance()
+  harness = await startWorkerAcceptance({ heldPrefix: 'Working on the assigned native fixture task.' })
   const result = await harness.callAs<MutationResult<{ run: RunRow }>>(harness.coordinator.id, 'run-create', ['--objective', 'Isolated real worker lifecycle acceptance'])
   return { h: harness, run: result.run }
 }

@@ -6,21 +6,77 @@ describe('worker lifecycle', () => {
   test('a completion report accepted during starting settles once and cannot be resurrected', () => {
     const f = createLifecycleFixture({ state: 'starting' })
     try {
-      const result = f.core.reportWorkerDone({
+      const input = {
         taskId: f.task.id,
         dispatchId: f.dispatch.id,
-        outcome: 'succeeded',
+        outcome: 'succeeded' as const,
         messageId: 'msg_done' as never,
         subject: 'Finished',
         body: 'The task is complete.'
+      }
+      const caller = exactCaller(f.worker)
+      const result = f.core.reportWorkerDone(input, caller)
+
+      expect(result.status).toBe('accepted')
+      expect(f.repo.get(f.dispatch.id)).toMatchObject({ state: 'succeeded', stage: 'settled' })
+      expect(f.core.getDispatch(f.dispatch.id).status).toBe('completed')
+      expect(f.core.getTask(f.task.id).status).toBe('completed')
+      expect(f.core.reportWorkerDone(input, caller).status).toBe('duplicate')
+      f.lifecycle.settleDispatch(f.store, f.dispatch.id, 'failed', '2026-10-27T00:01:00.000Z')
+      expect(f.repo.get(f.dispatch.id)?.state).toBe('succeeded')
+    } finally {
+      f.close()
+    }
+  })
+  test('a failed report received from start_unknown settles Worker before Dispatch and Task', () => {
+    const f = createLifecycleFixture({ state: 'start_unknown' })
+    try {
+      const result = f.core.reportWorkerDone({
+        taskId: f.task.id,
+        dispatchId: f.dispatch.id,
+        outcome: 'failed',
+        messageId: 'msg_failed' as never,
+        subject: 'Failed',
+        body: 'The assigned task could not be completed.'
       }, exactCaller(f.worker))
 
       expect(result.status).toBe('accepted')
-      expect(f.repo.get(f.dispatch.id)?.state).toBe('succeeded')
-      expect(f.core.getDispatch(f.dispatch.id).status).toBe('completed')
-      expect(f.core.getTask(f.task.id).status).toBe('completed')
-      f.lifecycle.settleDispatch(f.store, f.dispatch.id, 'failed', '2026-10-27T00:01:00.000Z')
-      expect(f.repo.get(f.dispatch.id)?.state).toBe('succeeded')
+      expect(f.repo.get(f.dispatch.id)).toMatchObject({ state: 'failed', stage: 'settled' })
+      expect(f.core.getDispatch(f.dispatch.id).status).toBe('failed')
+      expect(f.core.getTask(f.task.id)).toMatchObject({ status: 'failed', result: { kind: 'worker_report', outcome: 'failed' } })
+    } finally {
+      f.close()
+    }
+  })
+  test('an accepted ready-worker report makes the exact resource releasable', async () => {
+    const f = createLifecycleFixture({ state: 'ready' })
+    const service = {
+      kind: 'service',
+      pluginId: 'quirky.orchestration-test',
+      runId: f.dispatch.runId,
+      authority: 'kernel_plugin'
+    } as const
+    try {
+      const report = f.core.reportWorkerDone({
+        taskId: f.task.id,
+        dispatchId: f.dispatch.id,
+        outcome: 'succeeded',
+        messageId: 'msg_releasable' as never,
+        subject: 'Finished',
+        body: 'The task is complete.'
+      }, exactCaller(f.worker))
+      const resource = f.repo.resource(f.dispatch.id)
+      if (!resource) throw new Error('the worker has no owned terminal resource')
+
+      expect(report.status).toBe('accepted')
+      expect(f.repo.get(f.dispatch.id)).toMatchObject({ state: 'succeeded', stage: 'settled' })
+      const released = await f.lifecycle.release({
+        ...controlParams(f.dispatch.id, 'service-release-after-report'),
+        expectedIdentity: { sessionId: resource.sessionId, processIncarnation: resource.processIncarnation }
+      }, service)
+      expect(released.state).toBe('released')
+      expect(released.processAction).toBe('closed_agent_terminal')
+      expect(f.closed).toHaveLength(1)
     } finally {
       f.close()
     }
@@ -234,6 +290,16 @@ describe('worker lifecycle', () => {
       f.repo.reconcile('new-epoch')
       expect(f.repo.get(f.dispatch.id)?.state).toBe('stop_unknown')
       f.setCloseHandler(() => {
+        expect(f.repo.get(f.dispatch.id)).toMatchObject({ state: 'stop_unknown', stage: 'stopping' })
+        const report = f.core.reportWorkerDone({
+          taskId: f.task.id,
+          dispatchId: f.dispatch.id,
+          outcome: 'succeeded',
+          messageId: 'msg_during_stop' as never,
+          subject: 'Completed',
+          body: 'The assigned work is complete.'
+        }, exactCaller(f.worker))
+        expect(report.status).toBe('rejected')
         expect(f.repo.get(f.dispatch.id)).toMatchObject({ state: 'stop_unknown', stage: 'stopping' })
         expect(f.lifecycle.acceptReport(f.store, {
           dispatchId: f.dispatch.id,
