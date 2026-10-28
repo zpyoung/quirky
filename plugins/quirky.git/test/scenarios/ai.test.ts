@@ -572,9 +572,10 @@ describe('recipes', () => {
       { scope: w.feat.repoId, action: 'commitMessage', agent: null, args: '--model gpt-5.4', template: null }
     ])
 
+    const savedBeforeInvalidCliAction = w.storedRecipes()
     const failure = await w.cli(['git', 'aiRecipe', '--action', 'pullRequest', '--json'])
-    expect(failure.code).toBe(1)
-    expect(JSON.parse(failure.stderr || failure.stdout).error).toMatchObject({ code: 'invalid-params', reason: 'unknown-action' })
+    expect(failure.code).toBe(2)
+    expect(w.storedRecipes()).toEqual(savedBeforeInvalidCliAction)
   })
 
   test('recipes are per action, fields clear and reset, and every save announces aiChanged', async () => {
@@ -605,8 +606,10 @@ describe('recipes', () => {
       { repoId: w.feat.repoId },
       { repoId: null }
     ])
-    expect((await fails(w.api('setAiRecipe', { action: 'nope', scope: 'global', agent: 'claude' }))).data.reason).toBe('unknown-action')
-    expect((await fails(w.api('aiFixPreview', { action: 'commitMessage' }))).data.reason).toBe('unknown-action')
+    const savedBeforeInvalidApiCalls = w.storedRecipes()
+    expect((await fails(w.api('setAiRecipe', { action: 'nope', scope: 'global', agent: 'claude' }))).code).toBe(RpcErrorCode.InvalidParams)
+    expect((await fails(w.api('aiFixPreview', { action: 'commitMessage' }))).code).toBe(RpcErrorCode.InvalidParams)
+    expect(w.storedRecipes()).toEqual(savedBeforeInvalidApiCalls)
   })
 })
 
@@ -843,13 +846,12 @@ describe('AI Fix', () => {
 
     const started = await w.api('aiFix', { action: 'branchSummary' })
     expect(started).toMatchObject({ agent: 'codex', saved: false })
-    const session = await w.call('quirky.session/get', { session: started.session })
-    expect(session.launchSettings.options).toMatchObject({
-      model: { source: 'extra-args' },
-      effort: { value: 'high', source: 'explicit' }
-    })
     const starts = await startsAfter(w, 'codex', 1)
-    expect(valuesAfter(starts[0]!.argv, '-m', '--model')).toEqual(['gpt-5.5'])
+    expect(starts).toHaveLength(1)
+    const argv = starts[0]!.argv
+    expect(valuesAfter(argv, '-m', '--model')).toEqual(['gpt-5.5'])
+    expect(argv).not.toContain('gpt-5.6-sol')
+    expect(codexEffortValues(argv)).toEqual([])
   })
 })
 
@@ -869,17 +871,18 @@ describe('AI name recipes', () => {
       template: '{basePrompt}\nPrefer a short name.',
       launchOptions: {}
     })
+    const committedHead = w.git('rev-parse', 'HEAD').trim()
     const result = json(await w.cli(['git', 'aiName', '--action', 'branchName', '--json']))
     expect(result).toMatchObject({
       action: 'branchName',
       name: 'feature/add-feature',
       agent: 'pi',
       host: 'local',
-      providerSource: { agent: 'recipe' }
+      context: { kind: 'branch', branch: 'zoe/feat', head: committedHead }
     })
     expect(w.recorded('pi').stdin).toContain('Branch: "zoe/feat"')
     expect(w.recorded('pi').stdin).toContain('feature.ts')
-    expect(w.git('branch --show-current').trim()).toBe('zoe/feat')
+    expect(w.git('branch', '--show-current').trim()).toBe('zoe/feat')
   })
 
   test('conversationName uses the exact captured structured conversation and leaves its title untouched', async () => {
@@ -922,6 +925,11 @@ process.stdin.on('end', () => process.exit(0))
       prompt: 'Move repository metadata to one canonical owner.'
     }) as { id: string; title: string }
     const before = await w.call('quirky.session/get', { session: created.id }) as { title: string }
+    await waitUntil(async () => {
+      const current = await w!.call('quirky.structured/messages', { session: created.id }) as { role: string; text: string }[]
+      return current.some((message) => message.role === 'user' && message.text.includes('Move repository metadata')) &&
+        current.some((message) => message.role === 'assistant' && message.text.includes('one owner'))
+    }, 10_000)
     const messages = await w.call('quirky.structured/messages', { session: created.id }) as { role: string; text: string }[]
     expect(messages.some((message) => message.role === 'user' && message.text.includes('Move repository metadata'))).toBe(true)
     expect(messages.some((message) => message.role === 'assistant' && message.text.includes('one owner'))).toBe(true)
@@ -960,11 +968,11 @@ process.stdin.on('end', () => process.exit(0))
       launchOptions: { model: 'structured-model', optionValues: { effort: 'high' } }
     })
 
-    const before = w.git('branch --show-current').trim()
+    const before = w.git('branch', '--show-current').trim()
     expect(await fails(w.api('aiName', { action: 'branchName' }))).toMatchObject({ data: { reason: 'invalid-name' } })
     const recorded = w.recorded('codex')
     expect(valuesAfter(recorded.argv, '-m', '--model')).toEqual(['raw-model'])
     expect(recorded.argv).not.toContain('structured-model')
-    expect(w.git('branch --show-current').trim()).toBe(before)
+    expect(w.git('branch', '--show-current').trim()).toBe(before)
   })
 })

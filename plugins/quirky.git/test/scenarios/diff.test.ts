@@ -28,20 +28,20 @@ describe('diff sources', () => {
   })
 
   test('editor Changes compares HEAD to the working file, not the staged index', async () => {
-    s = await startScenario(scratch)
-    s.write('math.ts', 'staged\\n')
+    s = await startScenario(scratch, { files: { 'math.ts': 'base\n' } })
+    s.write('math.ts', 'staged\n')
     s.gitIn('add', 'math.ts')
-    s.write('math.ts', 'draft\\n')
+    s.write('math.ts', 'draft\n')
 
     expect(await diff({ path: 'math.ts', source: 'unstaged', compareAgainstHead: true })).toMatchObject({
       source: 'unstaged',
       staged: false,
-      original: 'a\\nb\\nc\\nd\\ne\\n',
-      modified: 'draft\\n'
+      original: 'base\n',
+      modified: 'draft\n'
     })
     expect(await diff({ path: 'math.ts', source: 'unstaged' })).toMatchObject({
-      original: 'staged\\n',
-      modified: 'draft\\n'
+      original: 'staged\n',
+      modified: 'draft\n'
     })
     const incompatible = await s.fails(diff({ path: 'math.ts', source: 'staged', compareAgainstHead: true }))
     expect(incompatible.code).toBe(RpcErrorCode.InvalidParams)
