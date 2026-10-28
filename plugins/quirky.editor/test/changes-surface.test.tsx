@@ -12,6 +12,7 @@ type Mounted = {
   element: HTMLElement
   isResourceLive(url: string): boolean
   liveResourceCount(): number
+  pendingLeaseIds(): string[]
   resolvePending(leaseId: string): void
   update(buffer: EditorSurfaceBuffer): Promise<void>
   unmount(): Promise<void>

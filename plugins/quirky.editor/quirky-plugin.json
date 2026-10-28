@@ -569,9 +569,9 @@
           "type": "object",
           "properties": {
             "action": { "type": "string", "enum": ["render", "release"] },
-            "leaseId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9_-]+$", "description": "Unpredictable per-render identifier, normally crypto.randomUUID(). Exact idempotent release also cancels pending acquisition. Never reuse an active identifier." },
-            "worktree": { "type": "string", "minLength": 1, "description": "Required for render; explicit registered worktree selector, normally id:<id>." },
-            "path": { "type": "string", "minLength": 1, "description": "Required for render; authorized worktree-relative .md/.markdown/.mdx source location, including absent historical files. No absolute paths, schemes, backslashes or outside-worktree traversal." },
+            "leaseId": { "type": "string", "description": "Required 1–128 [A-Za-z0-9_-] characters, enforced by the service; unpredictable per-render identifier, normally crypto.randomUUID(). Exact idempotent release also cancels pending acquisition. Never reuse an active identifier." },
+            "worktree": { "type": "string", "description": "Required for render; explicit registered worktree id selector id:<id>. Ambient current/path/name selectors are not accepted by this resource capability." },
+            "path": { "type": "string", "description": "Required non-empty render source; authorized worktree-relative .md/.markdown/.mdx location, including absent historical files. No absolute paths, schemes, backslashes or outside-worktree traversal." },
             "text": { "type": "string", "description": "Required for render; modified Markdown with existing 8 MiB, line and block limits. Only editor-authorized local image resources can become image URLs." }
           },
           "required": ["action", "leaseId"],
@@ -845,6 +845,7 @@
       { "id": "read", "words": "read", "summary": "read a buffer, bounded bytes or revisioned text chunks", "method": "read" },
       { "id": "transfer", "words": "transfer", "summary": "stage and commit a bounded draft, create-file or import upload", "method": "transfer" },
       { "id": "markdown", "words": "markdown", "summary": "run a source-preserving Markdown action", "method": "markdown" },
+      { "id": "markdown-preview-resource", "words": "markdown-preview-resource", "summary": "render source-authorized detached Markdown or release its exact resource lease", "method": "markdownPreview" },
       { "id": "notes", "words": "notes", "summary": "manage Markdown review notes", "method": "notes" },
       { "id": "notebook", "words": "notebook", "summary": "inspect or operate a notebook", "method": "notebook" },
       { "id": "viewer", "words": "viewer", "summary": "inspect or operate a file viewer", "method": "viewer" },

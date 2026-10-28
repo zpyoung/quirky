@@ -5,6 +5,8 @@ Status: Approved autonomously under the authoritative build-first LOOP. One comb
 
 **Amendments:** 2026-10-28 — initial source-authorized detached resource contract. Supersedes parent m7-editor-source-control-completion D11's deliberate image omission only when the new source-bound contract is used. Text-only renderPreview remains text-only.
 
+2026-10-28 — resource renders require explicit `id:<id>` worktrees (no ambient/name/path selectors). The generated CLI entry is `editor markdown-preview-resource`. Backend scope includes exporting the canonical renderer bound validator so pre-acquisition checks reuse one policy rather than duplicate it.
+
 ## Goal and conceptual model
 A Git diff preview renders the modified Markdown text, including safe local images resolved relative to that diff's source path. Editor owns authorization, rendering and opaque file resources; Git owns diff text and hosted tab identity. Editor Changes uses the same detached contract for its shared modified draft. A lease belongs to one render effect, not a path, buffer, tab entity or split group.
 
@@ -50,7 +52,7 @@ Detached preview: rendering supplied modified text without opening/changing a bu
 
 ## Technical decisions and contracts
 `CONTRACT:` Public `quirky.editor/markdownPreview`:
-- Render params `{action:'render',leaseId:string,worktree:string,path:string,text:string}`. leaseId is1–128 URL-safe ASCII chars, clients use crypto.randomUUID(). worktree is an explicit canonical selector (`id:<id>` for known ids), path is a non-empty relative .md/.markdown/.mdx source without NUL/backslash/absolute/scheme escapes. Return `{leaseId,html,worktreeId,path}`; path is normalized worktree-relative source identity. No buffer argument or buffer mutation.
+- Render params `{action:'render',leaseId:string,worktree:string,path:string,text:string}`. leaseId is1–128 `[A-Za-z0-9_-]` chars, clients use crypto.randomUUID(). worktree must be the explicit registered id selector `id:<id>`, path is a non-empty relative .md/.markdown/.mdx source without NUL/backslash/absolute/scheme escapes. Return `{leaseId,html,worktreeId,path}`; path is normalized lexical worktree-relative source identity, not a symlink target identity. No buffer argument or buffer mutation. Generated CLI command: `quirky editor markdown-preview-resource`.
 - Release params `{action:'release',leaseId:string}`. Return `{leaseId,released:boolean}`. No path-wide/buffer-wide release. Releasing unknown/already-released ids returns false.
 - Errors use existing invalid-params/not-found/conflict kinds; active duplicate/cancelled/disposed/capacity conflict. Failed render revokes all owned resources. Service disposal revokes every lease and fences late acquisitions.
 - Existing `markdown` method/text-only renderPreview and buffer resource behavior stay compatible; generic resolver may accept a minimal source shape and optional lifetime fence, with default preserving old callers.

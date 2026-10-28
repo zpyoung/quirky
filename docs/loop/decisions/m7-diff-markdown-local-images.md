@@ -55,5 +55,27 @@
 - **Revisit if:** platform execution provides evidence.
 - **Source:** deferred: platform
 
+## D6: Align the resource contract at the actual supported boundary
+- **Question:** What did integrated source inspection, typecheck and the first daemon smoke establish?
+- **Options:** trust worker/structural PASS reports; keep one canonical contract and diagnose observed failures.
+- **Chose:** backend d5202297 and consumer feb161a6 integrated after both initial HEADs/scopes were checked; both trees removed immediately. Authorized backend scope addition preview.tsx exports the existing bounds validator, removing a duplicate policy. Shared params/results replace private duplicates; lease alphabet matches the schema; explicit id:<id> only, lexical normalized source identity, new generated CLI markdown-preview-resource. Keep all source-buffer behavior independent.
+- **Why:** duplicate bound policies drift; source authority is a resolved id, while a symlink target is not Git's diff path identity. A UUID lease is never shared by a buffer or split.
+- **Evidence:** committed contract d0a50944; scope audit output; detachedPreview.ts; two component handoffs; logic spec dated amendment.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** an actual authorized source cannot preserve public diff identity.
+- **Source:** assumed — autonomous
+
+## D7: Repair declaration rejection and fixture typing without weakening service guards
+- **Question:** Why did the actual daemon expose no editor methods, and why did typecheck fail?
+- **Options:** waive smoke/typecheck or relax validation; remove unsupported declaration syntax and repair exact fixture types.
+- **Chose:** remove minLength/maxLength/pattern from the flat manifest schema while retaining service checks and documenting their limits. The protocol checkSchemaDeclaration diagnostic returned five unsupported-keyword errors. Add the omitted pendingLeaseIds fixture signature and explicit shared Release result types to four expectations. No consumer assertion or runtime guard was removed.
+- **Why:** daemon smoke bg8 failed unknown quirky.editor/state before reaching the new API; the invalid declaration prevented plugin availability. Structural validator PASS did not inspect the schema parser and was insufficient. Typecheck bg7 found7diagnostics in these two test files; these were generic expectation inference and fixture-interface errors.
+- **Evidence:** bg8 actual failure and DIFF_IMAGE_SMOKE_CLEANED; packages/protocol/src/schema.ts:20–31,53–55; actual checkSchemaDeclaration output; bg7/artifact19; corrected manifest and fixtures.
+- **Reversibility:** easy
+- **Confidence:** high for observed roots; corrected runtime/typecheck evidence is recorded separately
+- **Revisit if:** corrected runtime still cannot activate the editor or typecheck reports more diagnostics.
+- **Source:** assumed — autonomous
+
 ## Progress
 Claimed item after six authoritative wait calls (first five completed busy). Branch build/m7-diff-markdown-local-images from current roadmap. Requirements/parent logs/locked roadmap+architecture read; combined logic spec written and self-reviewed. Next commit public types/schema/contracts, dispatch two components, integrate, narrow runtime/surface proof, typecheck, single roadmap catch-up/read incoming decisions, land. No item verification campaigns have run.

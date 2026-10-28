@@ -13,6 +13,7 @@ registerIsolatedEditorFixtures(async () => {
 })
 
 type Preview = Extract<MarkdownPreviewResult, { html: string }>
+type Release = Extract<MarkdownPreviewResult, { released: boolean }>
 type MarkdownCapabilities = { imageUrls: Record<string, string> }
 type Fixture = { harness: Harness; client: QuirkyClient; worktreeId: string; root: string; home: string }
 
@@ -106,10 +107,10 @@ test('detached local image bytes use exact independent leases without editor or 
   expect(await editorState()).toEqual(stateBefore)
   expect(readFileSync(join(f.root, 'docs/Guide.md'), 'utf8')).toBe(diskBefore)
 
-  expect(await call('quirky.editor/markdownPreview', { action: 'release', leaseId: first.leaseId })).toEqual({ leaseId: first.leaseId, released: true })
-  expect(await call('quirky.editor/markdownPreview', { action: 'release', leaseId: first.leaseId })).toEqual({ leaseId: first.leaseId, released: false })
+  expect(await call<Release>('quirky.editor/markdownPreview', { action: 'release', leaseId: first.leaseId })).toEqual({ leaseId: first.leaseId, released: true })
+  expect(await call<Release>('quirky.editor/markdownPreview', { action: 'release', leaseId: first.leaseId })).toEqual({ leaseId: first.leaseId, released: false })
   const unknownLeaseId = crypto.randomUUID()
-  expect(await call('quirky.editor/markdownPreview', { action: 'release', leaseId: unknownLeaseId })).toEqual({
+  expect(await call<Release>('quirky.editor/markdownPreview', { action: 'release', leaseId: unknownLeaseId })).toEqual({
     leaseId: unknownLeaseId,
     released: false
   })
@@ -123,7 +124,7 @@ test('detached local image bytes use exact independent leases without editor or 
   expect(await editorState()).toEqual(stateBefore)
   expect(readFileSync(join(f.root, 'docs/Guide.md'), 'utf8')).toBe(diskBefore)
 
-  expect(await call('quirky.editor/markdownPreview', { action: 'release', leaseId: second.leaseId })).toEqual({ leaseId: second.leaseId, released: true })
+  expect(await call<Release>('quirky.editor/markdownPreview', { action: 'release', leaseId: second.leaseId })).toEqual({ leaseId: second.leaseId, released: true })
 })
 
 test('authorized missing historical Markdown location resolves without creating a file', async () => {
