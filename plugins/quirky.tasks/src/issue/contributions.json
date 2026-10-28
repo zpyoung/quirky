@@ -1,0 +1,206 @@
+{
+  "method": [
+    {
+      "id": "issue",
+      "description": "Read the selected GitHub issue, bounded comments, participants, and timeline through the public hosting API.",
+      "readOnly": true,
+      "params": {
+        "type": "object",
+        "properties": {
+          "worktree": { "type": "string", "description": "Registered local Git worktree; omitted uses the open issue or caller context." },
+          "number": { "type": "integer", "minimum": 1, "description": "Issue number; omitted uses the open issue detail." },
+          "url": { "type": "string", "description": "Credential-free HTTPS GitHub issue URL, used to preserve repository identity." },
+          "projectId": { "type": "string" },
+          "itemId": { "type": "string" },
+          "host": { "type": "string" },
+          "owner": { "type": "string" },
+          "repo": { "type": "string" },
+          "refresh": { "type": "boolean", "description": "Bypass the local issue-detail cache for an explicit re-read." }
+        }
+      },
+      "result": {
+        "type": "object",
+        "description": "Normalized issue detail. Timeline and comments are bounded by quirky.hosting; partialFailures identify unavailable sources.",
+        "properties": {
+          "item": { "type": "object", "description": "Normalized GitHub issue.", "properties": { "kind": { "type": "string", "enum": ["issue"] }, "number": { "type": "integer", "minimum": 1 }, "title": { "type": "string", "maxLength": 256 }, "body": { "type": "string", "maxLength": 1048576 }, "state": { "type": "string", "enum": ["open", "closed", "unknown"] }, "url": { "type": "string", "maxLength": 2048 }, "createdAt": {}, "updatedAt": {}, "author": {}, "labels": { "type": "array", "maxItems": 100, "items": { "type": "string", "maxLength": 256 } }, "assignees": { "type": "array", "maxItems": 100, "items": { "type": "string", "maxLength": 256 } }, "isDraft": { "type": "boolean" }, "stateReason": { "type": "string" }, "duplicateOf": { "type": "integer", "minimum": 1 } }, "required": ["kind", "number", "title", "body", "state", "url", "createdAt", "updatedAt", "author", "labels", "assignees", "isDraft"] },
+          "comments": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": { "description": "Provider comment ID, or null when omitted upstream." },
+                "issueNumber": { "type": "integer" },
+                "body": { "type": "string", "maxLength": 65536 },
+                "author": { "description": "Author login or null." },
+                "createdAt": { "description": "Creation timestamp or null." },
+                "updatedAt": { "description": "Update timestamp or null." },
+                "url": { "description": "Comment URL or null." },
+                "kind": { "type": "string", "enum": ["issue"] }
+              },
+              "required": ["id", "issueNumber", "body", "author", "createdAt", "updatedAt", "url", "kind"]
+            }
+          },
+          "participants": { "type": "array", "maxItems": 100, "items": { "type": "object", "properties": { "login": { "type": "string" }, "name": {}, "url": {} }, "required": ["login", "name", "url"] } },
+          "timeline": { "type": "array", "maxItems": 300, "items": { "type": "object", "properties": { "event": { "type": "string" }, "createdAt": {}, "actor": {}, "label": {}, "state": {}, "body": {}, "commitId": {} }, "required": ["event", "createdAt", "actor", "label", "state", "body", "commitId"] } },
+          "partialFailures": { "type": "array", "maxItems": 10, "items": { "type": "string", "maxLength": 2048 } },
+          "truncated": { "type": "boolean" },
+          "viewerCanUpdate": { "oneOf": [{ "type": "boolean" }, { "type": "null" }], "description": "Whether GitHub confirms this issue description can be edited; null means capability is unknown." },
+          "source": { "type": "string", "enum": ["repository", "project"] }
+        },
+        "required": ["item", "comments", "participants", "timeline", "partialFailures", "truncated", "viewerCanUpdate", "source"]
+      }
+    },
+    {
+      "id": "issueEdit",
+      "description": "Edit issue title, Markdown body, status, duplicate target, labels or assignees; Project items use ambient public Project mutation routing.",
+      "params": {
+        "type": "object",
+        "properties": {
+          "worktree": { "type": "string" },
+          "number": { "type": "integer", "minimum": 1 },
+          "url": { "type": "string" },
+          "projectId": { "type": "string" },
+          "itemId": { "type": "string" },
+          "host": { "type": "string" },
+          "owner": { "type": "string" },
+          "repo": { "type": "string" },
+          "title": { "type": "string", "maxLength": 256 },
+          "body": { "type": "string", "maxLength": 1048576, "description": "Local issues allow up to 1 MiB; GitHub Project issue mutations are bounded to 65,536 bytes by the public hosting API." },
+          "state": { "type": "string", "enum": ["open", "closed"] },
+          "stateReason": { "type": "string", "enum": ["completed", "not_planned"] },
+          "duplicateOf": { "type": "integer", "minimum": 1 },
+          "labels": { "type": "array", "maxItems": 100, "items": { "type": "string", "maxLength": 256 }, "description": "Replace current issue labels; [] clears them." },
+          "assignees": { "type": "array", "maxItems": 100, "items": { "type": "string", "maxLength": 256 }, "description": "Replace current issue assignees; [] clears them." }
+        }
+      },
+      "result": {
+        "type": "object",
+        "properties": {
+          "item": { "type": "object", "description": "Normalized GitHub issue.", "properties": { "kind": { "type": "string", "enum": ["issue"] }, "number": { "type": "integer", "minimum": 1 }, "title": { "type": "string", "maxLength": 256 }, "body": { "type": "string", "maxLength": 1048576 }, "state": { "type": "string", "enum": ["open", "closed", "unknown"] }, "url": { "type": "string", "maxLength": 2048 }, "createdAt": {}, "updatedAt": {}, "author": {}, "labels": { "type": "array", "maxItems": 100, "items": { "type": "string", "maxLength": 256 } }, "assignees": { "type": "array", "maxItems": 100, "items": { "type": "string", "maxLength": 256 } }, "isDraft": { "type": "boolean" }, "stateReason": { "type": "string" }, "duplicateOf": { "type": "integer", "minimum": 1 } }, "required": ["kind", "number", "title", "body", "state", "url", "createdAt", "updatedAt", "author", "labels", "assignees", "isDraft"] },
+          "changed": { "type": "boolean" },
+          "partial": { "type": "boolean" },
+          "completedSteps": { "type": "array", "maxItems": 3, "items": { "type": "string" } },
+          "refreshError": { "type": "string" }
+        },
+        "required": ["item", "changed", "partial"]
+      }
+    },
+    {
+      "id": "issueComment",
+      "description": "Add one Markdown comment to the open issue through the public hosting API.",
+      "params": {
+        "type": "object",
+        "properties": {
+          "worktree": { "type": "string" },
+          "number": { "type": "integer", "minimum": 1 },
+          "url": { "type": "string" },
+          "projectId": { "type": "string" },
+          "itemId": { "type": "string" },
+          "host": { "type": "string" },
+          "owner": { "type": "string" },
+          "repo": { "type": "string" },
+          "body": { "type": "string", "minLength": 1, "maxLength": 65536 }
+        },
+        "required": ["body"]
+      },
+      "result": {
+        "type": "object",
+        "properties": {
+          "source": { "type": "string", "enum": ["repository", "project"] },
+          "comment": { "type": "object", "properties": { "id": { "type": "integer" }, "issueNumber": { "type": "integer" }, "body": { "type": "string", "maxLength": 65536 }, "author": {}, "createdAt": {}, "updatedAt": {}, "url": {}, "kind": { "type": "string", "enum": ["issue"]} }, "required": ["id", "issueNumber", "body", "author", "createdAt", "updatedAt", "url", "kind"] }
+        },
+        "required": ["source", "comment"]
+      }
+    },
+    {
+      "id": "issueChoices",
+      "description": "List selected Git repositories or bounded repository labels and assignable users for the issue editor and new-issue dialog.",
+      "readOnly": true,
+      "params": {
+        "type": "object",
+        "properties": {
+          "worktree": { "type": "string" },
+          "repoId": { "type": "string" },
+          "kind": { "type": "string", "enum": ["repositories", "labels", "assignees", "source"] },
+          "query": { "type": "string", "maxLength": 256 }
+        },
+        "required": ["kind"]
+      },
+      "result": {
+        "type": "object",
+        "properties": {
+          "kind": { "type": "string", "enum": ["repositories", "labels", "assignees", "source"] },
+          "available": { "type": "boolean" },
+          "message": { "type": "string" },
+          "repoId": { "type": "string" },
+          "defaultRepoId": {},
+          "repositories": { "type": "array", "maxItems": 100, "items": { "type": "object", "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "path": { "type": "string" }, "kind": { "type": "string" }, "displayName": {}, "worktree": { "type": "string" } }, "required": ["id", "name", "path", "kind", "worktree"] } },
+          "labels": { "type": "array", "maxItems": 100, "items": { "type": "string" } },
+          "assignees": { "type": "array", "maxItems": 100, "items": { "type": "object", "properties": { "login": { "type": "string" }, "avatarUrl": {} }, "required": ["login", "avatarUrl"] } },
+          "source": { "type": "string", "enum": ["origin", "upstream"] },
+          "sources": { "type": "array", "maxItems": 2, "items": { "type": "object", "properties": { "id": { "type": "string", "enum": ["origin", "upstream"] }, "label": { "type": "string" } }, "required": ["id", "label"] } },
+          "truncated": { "type": "boolean" }
+        },
+        "required": ["kind", "truncated"]
+      }
+    },
+    {
+      "id": "issueSource",
+      "description": "Set the selected repository's GitHub issue source to origin or upstream through the public hosting API.",
+      "params": { "type": "object", "properties": { "repoId": { "type": "string" }, "source": { "type": "string", "enum": ["origin", "upstream"] } }, "required": ["repoId", "source"] },
+      "result": { "type": "object", "properties": { "repoId": { "type": "string" }, "source": { "type": "string", "enum": ["origin", "upstream"] } }, "required": ["repoId", "source"] }
+    },
+    {
+      "id": "draft",
+      "description": "Read or update the current-window, session-only new-issue draft; changing repository clears its repo-scoped labels and assignees.",
+      "params": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string", "maxLength": 256 },
+          "body": { "type": "string", "maxLength": 1048576 },
+          "labels": { "type": "array", "maxItems": 100, "items": { "type": "string", "maxLength": 256 } },
+          "assignees": { "type": "array", "maxItems": 100, "items": { "type": "string", "maxLength": 256 } },
+          "repoId": { "oneOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }] },
+          "reset": { "type": "boolean" }
+        }
+      },
+      "result": { "type": "object", "properties": { "draft": { "type": "object", "properties": { "title": { "type": "string" }, "body": { "type": "string" }, "labels": { "type": "array", "maxItems": 100, "items": { "type": "string" } }, "assignees": { "type": "array", "maxItems": 100, "items": { "type": "string" } }, "repoId": {} }, "required": ["title", "body", "labels", "assignees", "repoId"] } }, "required": ["draft"] }
+    },
+    {
+      "id": "createIssue",
+      "description": "Create exactly one GitHub issue from the session draft or provided fields, then navigate to the provider-created issue; preserves its body as a draft if GitHub cannot save it.",
+      "params": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string", "maxLength": 256 },
+          "body": { "type": "string", "maxLength": 1048576 },
+          "labels": { "type": "array", "maxItems": 100, "items": { "type": "string", "maxLength": 256 } },
+          "assignees": { "type": "array", "maxItems": 100, "items": { "type": "string", "maxLength": 256 } },
+          "repoId": { "type": "string" }
+        }
+      },
+      "result": {
+        "type": "object",
+        "properties": {
+          "item": { "type": "object", "description": "Normalized GitHub issue.", "properties": { "kind": { "type": "string", "enum": ["issue"] }, "number": { "type": "integer", "minimum": 1 }, "title": { "type": "string", "maxLength": 256 }, "body": { "type": "string", "maxLength": 1048576 }, "state": { "type": "string", "enum": ["open", "closed", "unknown"] }, "url": { "type": "string", "maxLength": 2048 }, "createdAt": {}, "updatedAt": {}, "author": {}, "labels": { "type": "array", "maxItems": 100, "items": { "type": "string", "maxLength": 256 } }, "assignees": { "type": "array", "maxItems": 100, "items": { "type": "string", "maxLength": 256 } }, "isDraft": { "type": "boolean" }, "stateReason": { "type": "string" }, "duplicateOf": { "type": "integer", "minimum": 1 } }, "required": ["kind", "number", "title", "body", "state", "url", "createdAt", "updatedAt", "author", "labels", "assignees", "isDraft"] },
+          "repositoryId": { "type": "string" },
+          "partial": { "type": "boolean" },
+          "bodySaveWarning": { "type": "string" },
+          "completedSteps": { "type": "array", "maxItems": 3, "items": { "type": "string" } },
+          "navigationWarning": { "type": "string" }
+        },
+        "required": ["item", "repositoryId", "partial"]
+      }
+    }
+  ],
+  "cli-command": [
+    { "id": "issue", "words": "issue", "summary": "read or refresh the open or numbered GitHub issue", "flags": { "worktree": { "type": "string" }, "number": { "type": "integer" }, "url": { "type": "string" }, "projectId": { "type": "string" }, "itemId": { "type": "string" }, "host": { "type": "string" }, "owner": { "type": "string" }, "repo": { "type": "string" }, "refresh": { "type": "boolean" } }, "methods": ["quirky.tasks/issue"] },
+    { "id": "issue-edit", "words": "issue-edit", "summary": "edit issue title, body, state, labels and assignees", "flags": { "worktree": { "type": "string" }, "number": { "type": "integer" }, "url": { "type": "string" }, "projectId": { "type": "string" }, "itemId": { "type": "string" }, "host": { "type": "string" }, "owner": { "type": "string" }, "repo": { "type": "string" }, "title": { "type": "string" }, "body": { "type": "string" }, "state": { "type": "string", "enum": ["open", "closed"] }, "stateReason": { "type": "string", "enum": ["completed", "not_planned"] }, "duplicateOf": { "type": "integer" }, "labels": { "type": "string", "repeatable": true }, "assignees": { "type": "string", "repeatable": true } }, "methods": ["quirky.tasks/issueEdit"] },
+    { "id": "issue-comment", "words": "issue-comment", "summary": "post one Markdown issue comment", "flags": { "worktree": { "type": "string" }, "number": { "type": "integer" }, "url": { "type": "string" }, "projectId": { "type": "string" }, "itemId": { "type": "string" }, "host": { "type": "string" }, "owner": { "type": "string" }, "repo": { "type": "string" }, "body": { "type": "string", "required": true } }, "methods": ["quirky.tasks/issueComment"] },
+    { "id": "issue-choices", "words": "issue-choices", "summary": "list issue repositories, labels, assignees or source choices", "flags": { "worktree": { "type": "string" }, "repoId": { "type": "string" }, "kind": { "type": "string", "enum": ["repositories", "labels", "assignees", "source"], "required": true }, "query": { "type": "string" } }, "methods": ["quirky.tasks/issueChoices"] },
+    { "id": "issue-source", "words": "issue-source", "summary": "set the selected repository's issue source", "flags": { "repoId": { "type": "string", "required": true }, "source": { "type": "string", "enum": ["origin", "upstream"], "required": true } }, "methods": ["quirky.tasks/issueSource"] },
+    { "id": "draft", "words": "draft", "summary": "read or update the session-only issue creation draft", "flags": { "title": { "type": "string" }, "body": { "type": "string" }, "labels": { "type": "string", "repeatable": true }, "assignees": { "type": "string", "repeatable": true }, "repoId": { "type": "string" }, "reset": { "type": "boolean" } }, "methods": ["quirky.tasks/draft"] },
+    { "id": "create-issue", "words": "create-issue", "summary": "create one GitHub issue from the session draft", "flags": { "title": { "type": "string" }, "body": { "type": "string" }, "labels": { "type": "string", "repeatable": true }, "assignees": { "type": "string", "repeatable": true }, "repoId": { "type": "string" } }, "methods": ["quirky.tasks/createIssue"] }
+  ]
+}
