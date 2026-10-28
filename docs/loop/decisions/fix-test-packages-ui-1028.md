@@ -165,5 +165,16 @@
 - **Revisit if:** merged UI suite or typecheck establishes a real integration defect
 - **Source:** locked by docs/loop/LOOP.md failed-land retry procedure
 
+## D16: Repair the seven real integration failures exposed by the concurrent shell cutover
+- **Question:** Does the successful pre-cutover suite justify landing after the required retry merge's suite fails?
+- **Options:** claim the former suite covers the new shell; restore old rails or widen deadlines; repair the evidenced composed failures in disjoint scopes
+- **Chose:** three isolated source/test slices: stable active-view input and canonical focus; plugin-host/report/activity fixtures aligned to effective tools; new navigation/attention fixtures aligned to real plugin/API setup
+- **Why:** post-merge typecheck passes32.91s, but canonical remote UI31files returns24pass/7fail. Failures include missing symlink destination, unknown repo method in incomplete fixtures, absent tools in legacy unit models, old auto-mounted sidebar assumptions, command/view synchronization and a real focus-only view remount. These are actionable integration findings, not permission to drop six-slot, exact-window or draft-retention behavior
+- **Evidence:** .quirk/build-loop/fix-test-packages-ui-1028/composed-ui-failures.txt (complete6324-line remote output); seven files shell-navigation, shell-attention, plugin-host, layout-shell, sidebar-activity, plugin-host-unit and reports
+- **Reversibility:** easy for fixture repairs; medium for active-view identity
+- **Confidence:** high for observed failures; source diagnoses are verified before acceptance
+- **Revisit if:** focused remote checks reveal another genuine owning path
+- **Source:** assumed — autonomous
+
 ## Progress
-Ready to land exactly this item. Five test files repaired without production changes; components committed and merged; one clean roadmap catch-up completed and incoming decisions read. Full canonical UI suite28/28/no flakes, scripts126/0/1103, typecheck/build exit0; bounded cross-family review PASS/no findings. Final one-line default-panel assumption deletion passed the remote single-file check on the runner's automatic isolated retry, with the initial hook-timeout flake retained in D13. Actual gallery pass and main dialog/Ask screenshot/CLI evidence retained with honest guard partial classifications (D11). All owned workers, reviewer jobs, CLI waiters, browsers and private daemon/PTY have stopped; temporary theme bundle removed. Commit final receipts, detach and use the canonical absolute queue.ts land. No second item, native acceptance reset, production workaround or hidden verification claim.
+Required land-retry integration repair in progress on build/fix-test-packages-ui-1028 after mergeb591f182. Initial five-file repair and its pre-cutover evidence remain committed, but the composed remote31-file suite failed seven files (D16); do not claim the current merge is ready. Three isolated repair components are active. Stable selected-view input and tool-region focus source slice has returned; host/report/activity test migration and new navigation/attention fixture repair remain active. After the writer barrier, audit/integrate, run every test through the remote canonical runner, run typecheck/build and a fresh private draft-retention UI smoke, update existing shell documentation, stop owned runtime, commit, detach and retry canonical absolute queue land. No original runtime/browser remains alive; the prior guard partial classifications and final single-file flake remain recorded.
