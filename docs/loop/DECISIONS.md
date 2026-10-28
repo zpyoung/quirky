@@ -266,6 +266,26 @@ files, not this one.
 | medium | high | [m5-loops-presets D9](decisions/m5-loops-presets.md) | Merge audited core repairs without treating the dependency as landed | locked by docs/loop/LOOP.md |
 | medium | high | [m5-loops-presets D11](decisions/m5-loops-presets.md) | Keep queue writes explicit and skip reads constant-time | assumed — autonomous |
 | medium | high | [m5-loops-presets D14](decisions/m5-loops-presets.md) | Preserve lease-aware send admission and durable CLI request identity | locked by docs/loop/decisions/m6-orchestration-core.md |
+| medium | high | [m6-heimdall-core D1](decisions/m6-heimdall-core.md) | Preserve the queue's kernel-only boundary | locked by docs/loop/queue.json |
+| medium | high | [m6-heimdall-core D3](decisions/m6-heimdall-core.md) | Keep kinds replaceable through declared public method hooks | locked by docs/loop/decisions/m0-daemon-api.md |
+| medium | high | [m6-heimdall-core D4](decisions/m6-heimdall-core.md) | Preserve private-store downgrade refusal and forward-schema diagnostics | locked by docs/loop/decisions/m0-daemon-api.md |
+| medium | high | [m6-heimdall-core D6](decisions/m6-heimdall-core.md) | Implement against early dependencies without fabricating authority | locked by docs/loop/decisions/m6-orchestration-core.md |
+| medium | high | [m6-heimdall-core D8](decisions/m6-heimdall-core.md) | Add scoped service coordinator authority without weakening worker identity | assumed — autonomous |
+| medium | high | [m6-heimdall-core D10](decisions/m6-heimdall-core.md) | Publish a fenced control seam without implementing lane10's controls | assumed — autonomous |
+| medium | high | [m6-heimdall-core D11](decisions/m6-heimdall-core.md) | Expose exact worker identity only through a non-consuming owner read | assumed — autonomous |
+| medium | high | [m6-heimdall-core D12](decisions/m6-heimdall-core.md) | Preserve owner configuration while reserving owner execution to lane12 | assumed — autonomous |
+| medium | high | [m6-heimdall-core D14](decisions/m6-heimdall-core.md) | Preserve Run sender authority for owner-to-worker messages | assumed — autonomous |
+| medium | high | [m6-heimdall-core D17](decisions/m6-heimdall-core.md) | Make RPC description and worker-request replies explicit | assumed — autonomous |
+| medium | high | [m6-heimdall-core D21](decisions/m6-heimdall-core.md) | Defer automatic native host-power binding behind a real trusted publisher | deferred: automatic host sleep/wake binding |
+| medium | high for source composition; runtime acceptance remains gated | [m6-heimdall-core D22](decisions/m6-heimdall-core.md) | Wire the concrete service facade through the actual shared worker components | assumed — autonomous |
+| medium | high for source reconciliation; owned native gates remain required | [m6-heimdall-core D25](decisions/m6-heimdall-core.md) | Preserve actual native provider identity and forward journal versions | assumed — autonomous |
+| medium | high for history preservation; final structured api gates remain required | [m6-heimdall-core D27](decisions/m6-heimdall-core.md) | Use canonical Session launch settings, not a second private snapshot | supersedes m6-heimdall-core D25 |
+| medium | high for the invariant; runtime confirmation remains gated | [m6-heimdall-core D28](decisions/m6-heimdall-core.md) | Persist an exact logical stop fence before asynchronous process control | assumed — autonomous |
+| medium | high for the contract; final cli verification remains required | [m6-heimdall-core D30](decisions/m6-heimdall-core.md) | Separate logical receipt identity from a fresh CLI transport invocation | locked by /Users/zpyoung/PycharmProjects/PERSONAL/quirky/research/orca-features/orchestration.md |
+| medium | high | [m6-heimdall-core D32](decisions/m6-heimdall-core.md) | Settle Worker state from the accepted attested report | assumed — autonomous |
+| medium | high for the binding reconciliation; merged runtime gates remain required | [m6-heimdall-core D34](decisions/m6-heimdall-core.md) | Reconcile the ready roadmap once without restoring superseded behavior | locked by docs/loop/LOOP.md and incoming m6-orchestration-core/m6-orchestration-workers decisions |
+| medium | high | [m6-heimdall-core D35](decisions/m6-heimdall-core.md) | Preserve terminal history without reviving live worker authority | assumed — autonomous |
+| medium | high | [m6-heimdall-core D37](decisions/m6-heimdall-core.md) | Land the passing scope under the operator's final sprint instruction | locked by operator instruction in this iteration |
 | medium | high | [m1-worktrees D9](decisions/m1-worktrees.md) | New worktrees go under `<worktrees folder>/<repo>/<name>`, with nesting and a per-project location as settings | locked by research/orca-features/worktrees.md (the rules); assumed — autonomous (v1's root) |
 | medium | high | [m1-worktrees D11](decisions/m1-worktrees.md) | Branches get a prefix, by default the git username | locked by research/orca-features/worktrees.md |
 | medium | high | [m1-worktrees D14](decisions/m1-worktrees.md) | The base is the requested one, else the project's saved base, else the detected default | locked by research/orca-features/worktrees.md |
@@ -1048,6 +1068,23 @@ files, not this one.
 | easy | high | [m5-loops-presets D17](decisions/m5-loops-presets.md) | Select fixture guardians by exact home and current process owner | assumed — autonomous |
 | easy | high | [m5-loops-presets D18](decisions/m5-loops-presets.md) | Separate EDIT pacing policy from strict CREATE preset combinations | locked by research/orca-features/fork-loops.md |
 | easy | high | [m5-loops-presets D19](decisions/m5-loops-presets.md) | Catch up once after authoritative dependency completion | locked by docs/loop/LOOP.md |
+| easy | high | [m6-heimdall-core D2](decisions/m6-heimdall-core.md) | Resolve all design questions autonomously under night mode | locked by docs/loop/LOOP.md |
+| easy | high | [m6-heimdall-core D5](decisions/m6-heimdall-core.md) | OpenAI implementers and verified Gemini fallback review | assumed — autonomous |
+| easy | high | [m6-heimdall-core D7](decisions/m6-heimdall-core.md) | Verify macOS and isolate every process | deferred: platform |
+| easy | high | [m6-heimdall-core D9](decisions/m6-heimdall-core.md) | Confirm missing APIs through an actual isolated quirkyd process | assumed — autonomous |
+| easy | high | [m6-heimdall-core D13](decisions/m6-heimdall-core.md) | Repair escaped adapter writes before accepting the wave | assumed — autonomous |
+| easy | high for exact source restoration; runtime/build verification remains pending | [m6-heimdall-core D15](decisions/m6-heimdall-core.md) | Restore the actual landed Codex resolver omitted by a dependency merge | assumed — autonomous |
+| easy | high | [m6-heimdall-core D16](decisions/m6-heimdall-core.md) | Replace a failed persistence writer without discarding its regression source | assumed — autonomous |
+| easy | high for exercised paths; service backend and full api verification remain pending | [m6-heimdall-core D18](decisions/m6-heimdall-core.md) | Accept source checkpoints only with observed behavioral checks | assumed — autonomous |
+| easy | high for exercised boundaries | [m6-heimdall-core D19](decisions/m6-heimdall-core.md) | Retain budget history as facts and release only positively resolved trace pins | assumed — autonomous |
+| easy | high | [m6-heimdall-core D20](decisions/m6-heimdall-core.md) | Apply the aged-item night-mode exit policy | locked by docs/loop/LOOP.md |
+| easy | high | [m6-heimdall-core D23](decisions/m6-heimdall-core.md) | Use the supported manifest subset and actual core nesting policy | assumed — autonomous |
+| easy | high | [m6-heimdall-core D24](decisions/m6-heimdall-core.md) | Make provider fixtures input-driven and retain real caller authentication | assumed — autonomous |
+| easy | high for executable source and stated evidence | [m6-heimdall-core D26](decisions/m6-heimdall-core.md) | Publish executable service source without overstating unresolved worker checks | assumed — autonomous |
+| easy | high | [m6-heimdall-core D29](decisions/m6-heimdall-core.md) | Keep structured accepted-work observation distinct from startup acknowledgement | assumed — autonomous |
+| easy | high for the mapping; native end-to-end verification remains required | [m6-heimdall-core D31](decisions/m6-heimdall-core.md) | Describe real Codex structured model and effort support in the catalog | assumed — autonomous |
+| easy | high | [m6-heimdall-core D33](decisions/m6-heimdall-core.md) | Repair fixture transport and native API preconditions, not production readiness | assumed — autonomous |
+| easy | high | [m6-heimdall-core D36](decisions/m6-heimdall-core.md) | Distinguish pre-acceptance waiter refusal from post-ack interruption | locked by docs/loop/decisions/m6-orchestration-core.md D7 |
 | easy | high | [m1-worktrees D1](decisions/m1-worktrees.md) | Classify the item as an API, CLI, Organization, Visual and Data design, and run research phases A and B | assumed — autonomous |
 | easy | high | [m1-worktrees D2](decisions/m1-worktrees.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m1-worktrees D4](decisions/m1-worktrees.md) | Select every gray area that matters for worktrees | assumed — autonomous |
