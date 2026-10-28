@@ -154,5 +154,49 @@
 - **Revisit if:** existing core messaging cannot represent distinct service sender provenance
 - **Source:** assumed — autonomous
 
+## D15: Restore the actual landed Codex resolver omitted by a dependency merge
+- **Question:** lane10 reports desktop build fails because structured/main.ts imports missing ./codex-path
+- **Options:** rerun to reconfirm; invent fallback; restore the real landed dependency module
+- **Chose:** accept the reported failure as ground truth; inspect source/history, restore codex-path.ts exactly from build/roadmap, and include it before core landing. No resolver behavior or provider fallback changed.
+- **Why:** build/m5-structured-runner has already been deleted after landing. The helper exists on build/roadmap from ef16bc50; merging that ancestor reports already-up-to-date, because a later dependency history merge retains deletion2aba9d9c. Restoring the exact committed source repairs the incomplete merge without substituting another implementation.
+- **Evidence:** user lane10 build report; main.ts:17; git full-history path log; source hash46b00aeb0851d2b540b1498d51969e689a3bf33d matches both restored file and build/roadmap blob. No build rerun to reconfirm.
+- **Reversibility:** easy
+- **Confidence:** high for exact source restoration; runtime/build verification remains pending
+- **Revisit if:** final merged dependency build fails after the actual helper is present
+- **Source:** assumed — autonomous
+
+## D16: Replace a failed persistence writer without discarding its regression source
+- **Question:** the store agent acknowledged production modules were absent after rejected oversized mutations
+- **Options:** continue reporting planned files; discard its tests; stop the writer and repartition concrete implementation
+- **Chose:** cancel/fence the original writer, preserve its test file, parent implements actual store.ts in its assigned worktree, and a fresh bounded registry/enrollment task owns only those two modules in a new isolated worktree. Correct mechanical test imports and real failure injection; delete forwarding-only assertions rather than pinning implementation details. No checks during in-flight edits.
+- **Why:** failed mutations executed nothing; source absence was confirmed by the writer and both integrating lanes. Repartitioning produces actual reachable code while preserving behavioral requirements and test provenance. All file-tool paths are absolute.
+- **Evidence:** agent cancellation result; physical-path/source acknowledgement; /tmp/quirky-lane11-source-checkpoint.md; actual store.ts written and preserved enrollment-store.test.ts
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** replacement scope cannot satisfy the same AC1-4 contract
+- **Source:** assumed — autonomous
+
+## D17: Make RPC description and worker-request replies explicit
+- **Question:** serializable kind hooks cannot return callbacks or synchronous RPC results
+- **Options:** pass dispatch callbacks over RPC; guess result keys; publish exact serializable replies
+- **Chose:** KindExecuteReply is ExecuteResult or `{worker:WorkerRequest}`, never both. Registry uses the internal dispatchWorker capability under the recorded attempt. Description hooks support async results; runner awaits description and rechecks its lifecycle fence before storing trace JSON. Nullable owner config and optional naturalKey/dispatch/message/trigger deviation fields preserve lane12's published types without importing or running owner modules.
+- **Why:** Promise-as-JSON loses the trace summary; callbacks cannot cross the shared RPC boundary. Exact wire fields let operator smoke drive real worker effects rather than fake forwarding.
+- **Evidence:** contracts.ts KindExecuteReply/WatcherKind; runner readSnapshot integration correction; /tmp/quirky-lane10-core-control-reply.md Exact result; lane12 published owner/contracts.ts
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** actual hook API proof shows a different source-grounded serialization need
+- **Source:** assumed — autonomous
+
+## D18: Accept source checkpoints only with observed behavioral checks
+- **Question:** integrated kernel components exposed both real defects and incidental test expectations
+- **Options:** trust handoff reports; pin observed revision counts/trace wording; exercise invariants and repair causes
+- **Chose:** actual SQLite migration regression proved mailbox sequence reuse (expected101, got2), then passed after preserving the prior autoincrement watermark. Capability regression proved inherited constructor allowed an ungranted action, then passed after requiring an own explicit on/gated grant. Contact-loss regression proved8000ms charged instead of1000ms, then passed with checkpoint-only close. Fixed runner's timing constants import from the owning budget module, without re-export shims. Deleted incidental attempt-row-count/trace-wording assertions; retained the32-effect bound and strengthened unresolved-to-terminal transition proof.
+- **Why:** append-only attempt revisions legitimately create multiple rows per effect; trace summary wording is not the terminal safety invariant. Actual counters, permission boundaries, durable cursor identity and positive outcome transitions are consumer-visible.
+- **Evidence:** targeted migration/capability/contact red-green outputs; final integrated five-file check51pass0fail172assertions; contact targeted rerun1pass0fail3assertions. Resolver real-child smoke also passed. No daemon/API/worker/whole-feature pass claim from these unit checks.
+- **Reversibility:** easy
+- **Confidence:** high for exercised paths; service backend and full API verification remain pending
+- **Revisit if:** actual daemon or dependency integration shows a contract mismatch
+- **Source:** assumed — autonomous
+
 ## Progress
-Iteration4: spec/contracts committed6764039; three disjoint implementation worktrees running, no checks/commits until their wave barrier. Worker dependency query returned ready:false pending m6-orchestration-workers after510s; independent implementation continues. Lanes1+9 approved service authority extension reserved to lane11, parent authored type contracts; actual core/worker runtime still pending. Missing feature/API smoke completed with isolated actual quirkyd and cleanup. Next: accept/audit components after all return, integrate dependency implementation and additive service APIs, exercise AC1-11 including real worker adapter, affected suite/scripts/typecheck, deps-ready/catch-up/final independent review/queue landing. No runtime feature acceptance claim.
+Iteration4: original source wave/replacement barrier audited; actual store/registry/enrollment/runner/plugin/adapter plus additive service handler/migration/test checkpoints are merged on the item branch. Integrated kernel/storage/adapter/migration unit regressions pass51/51 with172assertions; three concrete regressions have red-green proof. Runtime checkpoint794266f1 is published, final import/test safety correction follows. No owned implementer remains running. Full daemon API/worker proof and actual eight-service core facade/hubs still require the prerequisite's committed executable source; lane1 has supplied read-only component paths, not a runtime API claim. Continue real service integration, affected gates/typecheck, deps-ready/catch-up and queue-controlled landing. Lane10 controls then lane12 owner integrate their own serial hubs; their modules remain untouched.

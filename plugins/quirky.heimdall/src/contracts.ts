@@ -29,6 +29,8 @@ export type DispatchResult =
   | { kind: 'refused'; reason: string; detail?: string }
   | { kind: 'indeterminate'; requestId: string; detail?: string }
 export type ExecuteResult = { effect: 'landed' | 'not-landed' | 'indeterminate'; reason?: string; expectedAfter?: Json; failureClass?: string }
+/** Serializable hook reply. The worker branch asks the kernel to dispatch under its recorded attempt. */
+export type KindExecuteReply = ExecuteResult | { worker: WorkerRequest }
 export interface ExecuteContext {
   enrollment: Enrollment; attemptId: string; fingerprint: string; signal: AbortSignal
   dispatchWorker(request: WorkerRequest): Promise<DispatchResult>
@@ -83,9 +85,9 @@ export interface WatcherKind<W = Json, A extends KernelAction = KernelAction> {
   authorizeEnrollment(input: EnrollmentInput): Promise<AuthorizedEnrollment>
   validateEnrollment?(candidate: AuthorizedEnrollment, existing: Enrollment | null): Promise<void> | void
   undoAuthorization?(authorization: AuthorizedEnrollment): Promise<void>
-  describeEnrollment?(enrollment: Enrollment): string
+  describeEnrollment?(enrollment: Enrollment): string | Promise<string>
   read(enrollment: Enrollment, options: { fresh: boolean }): Promise<Snapshot<W>>
-  describeSnapshot?(snapshot: Snapshot<W>): Json
+  describeSnapshot?(snapshot: Snapshot<W>): Json | Promise<Json>
   decide(snapshot: Snapshot<W>, journal: JournalEntry[], enrollment: Enrollment): Decision<A> | Promise<Decision<A>>
   preflight?(action: A, snapshot: Snapshot<W>, journal: JournalEntry[], enrollment: Enrollment): Promise<GateVerdict>
   execute(action: A, context: ExecuteContext): Promise<ExecuteResult>
@@ -99,7 +101,7 @@ export interface WatcherKind<W = Json, A extends KernelAction = KernelAction> {
 /** Serializable public kind registration. All hook references belong to the authenticated declaring plugin. */
 export interface KindRegistration {
   id: string; displayName: string; enrollmentPayloadSchema: Schema
-  hooks: { authorize: string; read: string; decide: string; execute: string; validate?: string; undo?: string; describeSnapshot?: string; resolveOutcome?: string; preflight?: string; pace?: string; stop?: string; reconcile?: string; ownerAction?: string }
+  hooks: { authorize: string; read: string; decide: string; execute: string; validate?: string; undo?: string; describeEnrollment?: string; describeSnapshot?: string; resolveOutcome?: string; preflight?: string; pace?: string; stop?: string; reconcile?: string; ownerAction?: string }
   concurrency?: WatcherKind['concurrency']; pluginId?: string
 }
 export interface KindRegistry {
