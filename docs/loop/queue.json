@@ -1344,30 +1344,6 @@
       "status": "todo"
     },
     {
-      "id": "m7-test-triage",
-      "milestone": "M7",
-      "title": "End-phase test triage: run bun scripts/suite.ts packages apps plugins, bun test scripts and bun run typecheck on build/roadmap, and add one fix-test-<area>-<MMDD> item per failing package, app or plugin (naming its failing files and tests) so the lanes split the debugging; change no code",
-      "docs": [],
-      "deps": [
-        "sb-mobile-app-panels",
-        "sa-browser-agent-extras",
-        "m4-hosting-ui-review-browser-routing",
-        "sa-browser-profile-import-ui",
-        "m4-hosting-ui-tasks-complete-remaining-flows",
-        "m6-heimdall-host-power",
-        "m6-orchestration-idle-pointer-shutdown",
-        "m5-loops-ui-visible-stop-close-review",
-        "m7-editor-source-control-completion",
-        "m7-sweep-terminal-completion",
-        "sb-mobile-app-prerequisites",
-        "m2-editor-build-unbuilt-flows",
-        "m7-sweep-automation-completion",
-        "m7-orchestration-heimdall-unbuilt-flows",
-        "sb-mobile-app-panels-unbuilt-flows"
-      ],
-      "status": "todo"
-    },
-    {
       "id": "fix-test-process-leaks",
       "milestone": "M1",
       "title": "Fix leaked test processes: test runs and UI passes leave quirkyd daemons and pty-host processes running after the test ends, timed out, or was killed (97 found on 2026-10-27, about 1.9 GB, under the lane worktrees, the integration worktree, agent worktrees and /tmp test folders; pty-hosts outlive their daemon with parent PID 1). Find which harnesses start them without a guaranteed stop (packages/daemon/test/helpers.ts, plugins/*/test support, the e2e harnesses, the like-a-user web pass), make every start paired with a kill of the whole process tree on any exit, make a pty-host exit when its daemon goes away, and add a test that fails if a run leaves one behind",
@@ -1426,6 +1402,30 @@
       ],
       "deps": [],
       "status": "done"
+    },
+    {
+      "id": "m7-test-triage",
+      "milestone": "M7",
+      "title": "End-phase test triage: run bun scripts/suite.ts packages apps plugins, bun test scripts and bun run typecheck on build/roadmap, and add one fix-test-<area>-<MMDD> item per failing package, app or plugin (naming its failing files and tests) so the lanes split the debugging; change no code",
+      "docs": [],
+      "deps": [
+        "sb-mobile-app-panels",
+        "sa-browser-agent-extras",
+        "m4-hosting-ui-review-browser-routing",
+        "sa-browser-profile-import-ui",
+        "m4-hosting-ui-tasks-complete-remaining-flows",
+        "m6-heimdall-host-power",
+        "m6-orchestration-idle-pointer-shutdown",
+        "m5-loops-ui-visible-stop-close-review",
+        "m7-editor-source-control-completion",
+        "m7-sweep-terminal-completion",
+        "sb-mobile-app-prerequisites",
+        "m2-editor-build-unbuilt-flows",
+        "m7-sweep-automation-completion",
+        "m7-orchestration-heimdall-unbuilt-flows",
+        "sb-mobile-app-panels-unbuilt-flows"
+      ],
+      "status": "todo"
     },
     {
       "id": "m7-sweep-sessions",
