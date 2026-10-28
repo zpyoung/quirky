@@ -121,5 +121,49 @@
 - **Revisit if:** an actual pre-drain fixture fence cannot keep inspection independent of tick completion.
 - **Source:** assumed — autonomous
 
+## D12: Land current implementation under the operator's build-first directive
+- **Question:** The operator moved all suites, debugging, UI dogfood and review work to the end phase while this implementation was running.
+- **Options:** continue the planned verification campaign; collect current implementation, typecheck and land immediately.
+- **Chose:** Stop unstarted suites, dogfood, final code review and test-failure fixes. Preserve already-written regression source without running it. Typecheck is the only queue landing gate; no test/review/debug follow-up is added.
+- **Why:** The direct operator note and updated LOOP Build first, test at the end supersede the earlier acceptance-execution plan. The spec review and pre-fix reproduction already completed remain historical evidence, not final-code clearance.
+- **Evidence:** actual fresh `git show build/roadmap:docs/loop/LOOP.md`; priority message delivered to FleetProjection; agent returned without running any checks or committing.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the canonical typecheck-only land reports a type error or merge conflict.
+- **Source:** locked by docs/loop/LOOP.md Build first, test at the end; supersedes D9's current test-gate plan
+
+## D13: Integrate the audited complete projection slice and preserve test execution limits
+- **Question:** What source and fixture work was actually returned and integrated?
+- **Options:** trust the worker's report; verify HEAD, exact paths and inherited metadata before committing.
+- **Chose:** Component HEAD and main HEAD both remained b7cb3637; all ten changed/new files matched the declared Heimdall scope. The component's inherited .serena/project.local.yml retained blob36cd3defd719a2bf479631b0eff650f14447499b. Commit9bc6e3a7 contains adapter/count/schema changes, typed fixture migration and written mixed/malformed/actual-worker regressions. Parent merged it and removed the owned component worktree.
+- **Why:** Assignment activity is preserved without hiding worker rows or changing process controls. Parent inherited files remain unstaged. New actual-worker fixture/acceptance source is not a passing runtime claim.
+- **Evidence:** authoritative returned-work HEAD/scope/hash audit; commit9bc6e3a7; test/fleet-worker-acceptance.test.ts and test/fleet-worker-fixture.ts. Agent's concern about owner-workers.test.ts is not a demonstrated failure: that file exercises unchanged owner/workers.ts, not the tightened control-host adapter.
+- **Reversibility:** medium
+- **Confidence:** high for integrated source attribution; tests and real-worker/UI execution unverified.
+- **Revisit if:** end-phase execution reports a concrete defect.
+- **Source:** assumed — autonomous
+
+## D14: Preserve incoming decisions and exact observed landing evidence
+- **Question:** Does the current integration source typecheck, and what behavior evidence is actually available?
+- **Options:** extrapolate full parity from source; retain only observed results and pending end-phase execution.
+- **Chose:** One conflict-free roadmap catchup. Read all incoming m3-accounts-remaining-flows D1–D20, m7-sweep-editor-source-control D1–D18 and sb-mobile-app D1–D29 plus trailing Progress/evidence; no conflict with this local projection repair. `bun run typecheck` passed, including mobile, in26.84s after frozen install512packages.
+- **Why:** No authority, session identity, native/platform or cross-owner policy changed here. A minimal module-boundary smoke returned runningWorkers0 and preserved the same live worker with assignmentActivefalse, exit0; this is not a suite, actual-worker daemon proof or UI pass. No acceptance test, affected suite, UI dogfood or final code review was run.
+- **Evidence:** root/mobile typecheck bg2 exit0; standalone projection-before.ts output after cutover; new regression source remains unexecuted. The pre-fix run in D10 returned1 and failed its0 assertion.
+- **Reversibility:** easy
+- **Confidence:** high for these exact observations only.
+- **Revisit if:** canonical merged typecheck or end-phase execution contradicts them.
+- **Source:** assumed — autonomous
+
+## D15: Register only one follow-up for genuinely unbuilt product flows
+- **Question:** Which work may remain queued under the new follow-up restriction?
+- **Options:** create verification/policy items; one item containing only absent feature flows.
+- **Chose:** Added `m7-orchestration-heimdall-unbuilt-flows` depending on this item. It names real federation/remote navigation, generic Heimdall leases/remote mirrors/shadow judgment, confirmed-workspace-removal termination and generic submission preflight. Preserve D9 gate policy; no gate-policy, test, review, debugging or dogfood follow-up. Reuse existing pointer-shutdown and host-power items.
+- **Why:** Canonical queue add exited0 and a direct authoritative queue read confirmed the single new todo item. These are absent product capabilities, not failed or unfinished verification of built code.
+- **Evidence:** /tmp/quirky-orchestration-lane7.g8Qvwk/followup.json; canonical queue add and authoritative queue JSON; logic.md Feature flow inventory.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** a completion prerequisite is implemented or an authorized scope ruling changes.
+- **Source:** deferred: unbuilt orchestration and Heimdall flows; supersedes D8's gate-policy follow-up proposal
+
 ## Progress
-2026-10-28: Full feature inventory, logic.md and tech.md authored; independent Codex review completed and both findings incorporated. Throwaway real-module reproduction failed expected0/actual1 before production changes. Type-only WatcherWorker contract adds required assignmentActive before dispatch. Next: isolated single component implements adapter/count/schema cutover plus deterministic and actual API/CLI regressions; parent runs checks after returned-work barrier, actual UI/runtime proof, catchup/review and canonical land.
+Operator build-first override applied. Projection source and written regressions are integrated; the one roadmap catchup is conflict-free and all three incoming decision logs were read. Root/mobile typecheck passed26.84s. One unbuilt-flow item is registered; existing pointer/power items are not duplicated. No suites, actual-worker acceptance, UI dogfood or final code review were executed. All agents/jobs returned and component worktree removed. Commit metadata, detach and invoke canonical typecheck-only queue land now; then preserve notes/evidence, remove owned scratch and end this single-item iteration.

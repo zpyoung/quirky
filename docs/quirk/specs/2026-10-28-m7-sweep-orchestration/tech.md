@@ -1,6 +1,6 @@
 # Orchestration and Heimdall parity sweep — technical specification
 
-Status: combined Codex specification review completed; two confirmed findings incorporated. Behavior: [logic.md](logic.md).
+Status: implementation and regression source committed; current operator directive requires immediate typecheck-only landing. Acceptance suites, actual-worker smoke, UI dogfood and final code review below are unexecuted end-phase obligations, not completion evidence or current gates. The combined Codex spec review preceded that directive. Behavior: [logic.md](logic.md).
 
 ## Architecture
 Implements [conceptual model](logic.md#conceptual-model-and-data-flow) and [SC1](logic.md#sc1--a-completed-assignment-is-not-running-work).
@@ -78,6 +78,8 @@ Migration/rollback: no persisted-state migration. Runtime schemas and manifest c
 
 ## Testing strategy
 Implements [acceptance](logic.md#behavior--acceptance-scenarios).
+
+The following is the written end-phase verification strategy. Do not run these tests, suites or UI passes before `m7-test-triage` under the updated LOOP. Current landing runs only `bun run typecheck`; the standalone pre-fix projection reproduction was completed before the operator's directive.
 
 1. Tests are prepared before production behavior changes. Parent observes RED for the demonstrated retained-live count (and malformed boundary if separately exercised), then implements the minimal source fix and observes GREEN. Permanent tests must assert consumer behavior, not source strings, schema copies or mocked forwarding.
 2. Deterministic fleet test covers the mixed activity matrix and full detail/debug retention. Adapter test covers malformed evidence because accepting it would fabricate activity certainty.

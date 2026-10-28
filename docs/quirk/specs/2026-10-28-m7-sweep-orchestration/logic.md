@@ -1,9 +1,11 @@
 # Orchestration and Heimdall parity sweep
 
 ## Status & amendments
-Status: autonomous design accepted under LOOP.md; combined Codex spec review completed, both confirmed findings incorporated. Tech spec required: public projection contract crosses orchestration and Heimdall control/UI boundaries.
+Status: implemented for immediate typecheck-only landing under the operator's build-first directive. Acceptance tests are written but not run; UI dogfood, suites and final code review move to the end phase. The combined spec review and narrow pre-fix reproduction below predate that directive.
 
 **Amendments:** 2026-10-28 — initial sweep; spec review replaces unsafe pause-as-cleanup-fence assumption with an acknowledged bounded pre-mailbox-read fixture fence, and explicitly inventories generic workspace-removal/submission-preflight gaps. No production pause semantics or prior product contract overridden.
+
+**Amendments:** 2026-10-28 — operator moved all testing/debugging to the end phase. Stop unstarted suites, UI dogfood and review rounds; typecheck is the landing gate. Keep one follow-up only for unbuilt product flows, not verification or a change to the already-built D9 gate policy.
 
 ## Purpose and consumers
 Give operators and agents a truthful view of supervised work. A retained worker process is useful for inspection but is not an active assignment. The Heimdall fleet must stop counting that process as running work after its Dispatch settles, without hiding or terminating it.
@@ -11,7 +13,7 @@ Give operators and agents a truthful view of supervised work. A retained worker 
 Consumers: people reading the Heimdall fleet/detail UI; agents reading the same schema-declared API and generated CLI; built-in and third-party plugins using owner-scoped orchestration services.
 
 ## Scope and non-goals
-This item inventories both feature docs, verifies existing behavior with affected suites, fixes the demonstrated local fleet projection defect, and records remaining larger parity flows in one completion item. The queue title explicitly authorizes follow-ups for work too large for this sweep. A landed sweep is not an assertion that those completion flows shipped.
+This item inventories both feature docs, implements the demonstrated local fleet projection correction, writes regression coverage without running it, and records larger unbuilt parity flows in one completion item. The operator requires immediate typecheck-only landing; end-phase triage owns suites, UI dogfood, review and debugging. A landed sweep is not an assertion that the completion flows shipped or the new tests passed.
 
 Explicit user exclusions: GitLab, Bitbucket, Gitea/Forgejo, Azure DevOps, concrete Objective runner and PR sitter. Generic kind fixtures exercise the kernel contract, not those deferred products.
 
@@ -24,7 +26,7 @@ Orchestration owns Runs, Tasks, Dispatches, worker process identity and resource
 - Recommended: carry assignment activity through the existing projection and fix the count at its source. Alternatives: hide all inactive workers (loses debugging visibility); infer activity from liveness (the demonstrated defect); reread every Dispatch from the UI (duplicates authority and adds races).
 - Require explicit boolean activity evidence, matching the service contract already used by the kernel and owner detector. Missing or malformed evidence is an inspection failure, not invented zero work.
 - Keep process lifecycle, custody, mailbox acknowledgement, budgets and owner policy unchanged. Reading the fleet must never stop, release or retain a worker.
-- Preserve core D9's deliberate gate-resolution behavior. A separate completion decision must resolve its conflict with prerequisite-consistent `ready` listings; no dispatch bypass was found because admission rechecks dependencies and pending gates.
+- Preserve core D9's deliberate gate-resolution behavior. Prerequisite-consistent `ready` listings would require a source-backed policy amendment, not an unbuilt-flow or verification follow-up; no dispatch bypass was found because admission rechecks dependencies and pending gates.
 
 ## Decisions Locked
 - **API/data mapping:** assignment activity and process liveness remain separate; both are exposed for every detail/debug worker. No inferred activity from idle state, provider text or process existence.
@@ -91,7 +93,10 @@ The orchestration feature doc describes stale Experimental enablement documentat
 LOOP's feature docs, roadmap and earlier decision logs are the research source; no external research claims. Critical evidence: `orchestration.md` process ownership and worker lifecycle; `heimdall.md` fleet Activity semantics; core D9/D41, Heimdall core D1/D21/D22 and control D4. The owner's existing activity filtering demonstrates the intended distinction; controls currently discard it.
 
 ## Deferred Ideas
-One new completion item will name federation, Heimdall leases/remote fleet/judgment, confirmed-workspace-removal termination, generic worker-report submission preflight, and the gate-status contract question. Reuse the two existing pointer/power items. Complete excluded watcher kinds only if the user separately requeues them; this sweep does not do so.
+One new completion item names federation, Heimdall leases/remote fleet/judgment, confirmed-workspace-removal termination and generic worker-report submission preflight. Reuse the two existing pointer/power items. Preserve built core D9 gate policy. Testing, review, UI dogfood and debugging belong to the end phase, not a new follow-up. Complete excluded watcher kinds only if the user separately requeues them.
 
 ## Glossary
 Assignment activity: whether the Dispatch remains active, independent of process liveness. Retained worker: process kept for inspection after assignment settlement. Running worker count: live process plus active assignment. Owner service: plugin-scoped authority to inspect/control one owned orchestration Run. Journal: Heimdall's durable action history, separate from the project ledger.
+
+## Technical decisions
+The existing owner service already produces required boolean `assignmentActive`. Carry it through control-host validation/mapping and the public detail/debug worker schemas; count only positively live, active assignments in fleet.ts. Keep every worker row for inspection, existing command eligibility, process custody and mailbox semantics unchanged. No database migration or dependency is added. The pre-directive [tech.md](tech.md) retains exact code/test anchors; its runtime verification plan is end-phase work rather than a current landing gate.
