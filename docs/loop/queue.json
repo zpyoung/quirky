@@ -1345,8 +1345,7 @@
       "deps": [
         "m2-editor-complete-remaining-flows"
       ],
-      "status": "in-progress",
-      "lane": 6
+      "status": "done"
     },
     {
       "id": "m7-sweep-automation-completion",

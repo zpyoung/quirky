@@ -80,6 +80,7 @@ files, not this one.
 | hard | high | [sa-browser-agent-extras D2](decisions/sa-browser-agent-extras.md) | Resolve API, CLI, data and integration gray areas explicitly | locked by docs/architecture.md |
 | hard | high | [m0-daemon-api D7](decisions/m0-daemon-api.md) | The four kinds are `method`, `event`, `job` and `launch-hook` | assumed — autonomous |
 | hard | high | [m0-daemon-api D13](decisions/m0-daemon-api.md) | Choose declared contributions with provided implementations | supersedes nothing; extends m0-registry D23 |
+| hard | high | [m2-editor-build-unbuilt-flows D3](decisions/m2-editor-build-unbuilt-flows.md) | Extend the canonical services, not a second editor state model | locked by docs/architecture.md |
 | hard (architecture) | high | [sa-browser-native-identity D4](decisions/sa-browser-native-identity.md) | Preserve the native engine and truthful capability state | locked by docs/architecture.md |
 | hard | high | [m5-automations-ui D4](decisions/m5-automations-ui.md) | Honor structured sessions and existing scheduling fixes | locked by docs/architecture.md |
 | hard for deployed migration order | high | [m5-automations-ui D14](decisions/m5-automations-ui.md) | Preserve canonical pointer migration9 and append background as migration10 | locked by docs/loop/decisions/m6-orchestration-core.md |
@@ -491,6 +492,10 @@ files, not this one.
 | medium | high | [m0-daemon-api D8](decisions/m0-daemon-api.md) | Method results and errors | assumed — autonomous |
 | medium | high | [m0-daemon-api D10](decisions/m0-daemon-api.md) | Stores migrate forward only, by an ordered list, and refuse a downgrade | assumed — autonomous |
 | medium | high | [m0-daemon-api D24](decisions/m0-daemon-api.md) | Plugin methods use the daemon's token, and any client may call any method | locked by docs/roadmap.md |
+| medium (work ownership) | high | [m2-editor-build-unbuilt-flows D1](decisions/m2-editor-build-unbuilt-flows.md) | Preserve the prior ownership cutover | locked by docs/loop/decisions/m2-editor-complete-remaining-flows.md D20 |
+| medium | high | [m2-editor-build-unbuilt-flows D4](decisions/m2-editor-build-unbuilt-flows.md) | Separate Explorer focus, anchor and selected membership | locked by editor.md |
+| medium | high | [m2-editor-build-unbuilt-flows D5](decisions/m2-editor-build-unbuilt-flows.md) | Preserve restart trust revocation and publish genuine idle death | locked by existing notebook public restart contract |
+| medium | high | [m2-editor-build-unbuilt-flows D7](decisions/m2-editor-build-unbuilt-flows.md) | Resource capabilities belong to exact mounted leases | locked by docs/loop/decisions/m2-editor-complete-remaining-flows.md D11 |
 | medium | high | [m4-worktrees-create-from-github D1](decisions/m4-worktrees-create-from-github.md) | Extend the existing worktree create owner through the public hosting API | locked by docs/loop/decisions/m1-worktrees.md |
 | medium | high | [m4-worktrees-create-from-github D4](decisions/m4-worktrees-create-from-github.md) | GitHub sources keep the existing lifecycle and fail visibly rather than become names | locked by worktrees.md; locked by docs/loop/decisions/m4-hosting-api-github.md |
 | medium | high | [m4-worktrees-create-from-github D5](decisions/m4-worktrees-create-from-github.md) | Resolve a source freshly in hosting, not from consumer-supplied checkout data | assumed — autonomous (method); locked by docs/loop/decisions/m4-hosting-api-github.md D5-D8 (auth) |
@@ -1820,6 +1825,18 @@ files, not this one.
 | easy | high | [m0-daemon-api D41](decisions/m0-daemon-api.md) | The daemon plugin API is kernel, not a built-in plugin | locked by docs/roadmap.md |
 | easy | high | [m0-daemon-api D43](decisions/m0-daemon-api.md) | The final review loop ends after the closure round passes on all three lenses | assumed — autonomous |
 | easy | high | [m0-daemon-api D44](decisions/m0-daemon-api.md) | Every scenario has an API test, and there are no Orca defects to test | locked by docs/loop/LOOP.md |
+| easy | high | [m2-editor-build-unbuilt-flows D2](decisions/m2-editor-build-unbuilt-flows.md) | Apply unattended build-first workflow | locked by docs/loop/LOOP.md |
+| easy | high | [m2-editor-build-unbuilt-flows D6](decisions/m2-editor-build-unbuilt-flows.md) | Clipboard ranges use source coordinates and quoted TSV | assumed — autonomous |
+| easy | high | [m2-editor-build-unbuilt-flows D8](decisions/m2-editor-build-unbuilt-flows.md) | Three disjoint vertical components share committed contracts | assumed — autonomous |
+| easy | high | [m2-editor-build-unbuilt-flows D9](decisions/m2-editor-build-unbuilt-flows.md) | Defer cross-family review under build-first, not as a passing review | locked by docs/loop/LOOP.md |
+| easy | high | [m2-editor-build-unbuilt-flows D10](decisions/m2-editor-build-unbuilt-flows.md) | Preserve compact accessible controls and platform boundaries | deferred: platform |
+| easy | high | [m2-editor-build-unbuilt-flows D11](decisions/m2-editor-build-unbuilt-flows.md) | Isolate all smoke dependencies and retain exact component ownership | assumed — autonomous |
+| easy | high | [m2-editor-build-unbuilt-flows D12](decisions/m2-editor-build-unbuilt-flows.md) | Keep the compiler gate authoritative and repair integration diagnostics | assumed — autonomous |
+| easy (evidence) | high for exercised paths only | [m2-editor-build-unbuilt-flows D13](decisions/m2-editor-build-unbuilt-flows.md) | Retain narrow runtime proof without claiming end-phase acceptance | assumed — autonomous |
+| easy | high | [m2-editor-build-unbuilt-flows D14](decisions/m2-editor-build-unbuilt-flows.md) | Capture clipboard input values synchronously before deferred state updates | assumed — autonomous |
+| easy | high | [m2-editor-build-unbuilt-flows D15](decisions/m2-editor-build-unbuilt-flows.md) | Distinguish browser permission limits from native clipboard proof | assumed — autonomous |
+| easy | high for inspected authority boundaries and exercised helper lifetime | [m2-editor-build-unbuilt-flows D16](decisions/m2-editor-build-unbuilt-flows.md) | Preserve all seven incoming owners and isolate physical Git fixture setup | locked by docs/loop/decisions/sb-mobile-app-panels.md D14 |
+| easy | high for structural scope only | [m2-editor-build-unbuilt-flows D17](decisions/m2-editor-build-unbuilt-flows.md) | Keep structural validation separate from runtime and semantic review | assumed — autonomous |
 | easy | high | [m4-worktrees-create-from-github D2](decisions/m4-worktrees-create-from-github.md) | Resolve unattended design questions locally using night-mode protocol | locked by docs/loop/LOOP.md |
 | easy | high | [m4-worktrees-create-from-github D3](decisions/m4-worktrees-create-from-github.md) | Use OpenAI task implementation and Gemini review after Opus fails preflight | locked by docs/loop/LOOP.md (pairing); assumed — autonomous (fallback and state preservation) |
 | easy | high | [m4-worktrees-create-from-github D8](decisions/m4-worktrees-create-from-github.md) | Commit contracts first and implement three isolated disjoint components | locked by docs/loop/LOOP.md (night-mode cap/contracts); assumed — autonomous (partition) |
