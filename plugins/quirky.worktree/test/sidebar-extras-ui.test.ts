@@ -14,6 +14,8 @@ type Preferences = {
   workspaceActivityCustomDays: number
   alwaysShowDefaultBranchWorkspace: boolean
   workspaceActivityWindowBeforeLiveOnly: Exclude<WindowName, 'live-only'>
+  hideCompletedReviewWorkspaces: boolean
+  hidePassingCheckWorkspaces: boolean
 }
 type SidebarState = {
   client: string
@@ -22,17 +24,28 @@ type SidebarState = {
   visits: Record<string, number>
   exits: Record<string, number>
 }
+type ReviewFact = {
+  state: 'open' | 'draft' | 'closed' | 'merged'
+  checksStatus: 'neutral' | 'pending' | 'success' | 'failure'
+  stale?: boolean
+  error?: string
+} | null
 type ProjectedWorkspace = {
   worktreeId: string
   activityAt: number
   live: boolean | null
   reason: 'selected' | 'all' | 'recent' | 'old' | 'live' | 'sleeping' | 'main' | 'folder' | 'unknown'
+  error?: string
+  reviewReason?: 'completed' | 'passing' | 'unknown'
+  reviewError?: string
 }
 type SidebarProjection = SidebarState & {
   visibleIds: string[]
   hiddenIds: string[]
   hiddenCount: number
   filterCount: number
+  reviewHiddenIds: string[]
+  reviewHiddenCount: number
   workspaces: ProjectedWorkspace[]
 }
 type Mount = (element: HTMLElement, props?: { report?(state: unknown): void }) => () => void
@@ -44,6 +57,9 @@ type RendererReport = {
   dialog: { kind: string; worktreeId?: string; withDescendants?: boolean; action?: string; groupId?: string } | null
   appliedFilter: Preferences | null
   hiddenCount: number
+  reviewHiddenIds: string[]
+  reviewHiddenCount: number
+  filterCount: number
   dropPreview: { kind: 'group' | 'repo'; id: string } | null
 }
 type TestWorld = {
@@ -56,6 +72,7 @@ type TestWorld = {
   visits: Record<string, number>
   exits: Record<string, number>
   live: Record<string, boolean | null>
+  reviews: Record<string, ReviewFact>
   calls: Call[]
   logs: string[]
   extrasDisabled: boolean
@@ -71,9 +88,24 @@ type UiHarness = {
   flush(): Promise<void>
   setLayout(next: UiLayout): Promise<void>
   click(element: Element): Promise<void>
+  emit(type: string): Promise<void>
+  deferNextSet(): { started: Promise<void>; release(): void }
+  deferNextProjection(): { started: Promise<void>; release(): void }
 }
 
 let act: (callback: () => unknown) => Promise<void>
+type CallGate = { started: Promise<void>; wait: Promise<void>; start(): void; release(): void }
+function callGate(): CallGate {
+  const started = Promise.withResolvers<void>()
+  const gate = Promise.withResolvers<void>()
+  return {
+    started: started.promise,
+    wait: gate.promise,
+    start: started.resolve,
+    release: gate.resolve
+  }
+}
+
 let activate: (context: UiPluginContext) => void
 let host: HTMLElement
 let currentCleanup: (() => Promise<void>) | null = null
@@ -206,7 +238,9 @@ function setup(
     workspaceActivityWindow: 'all',
     workspaceActivityCustomDays: 30,
     alwaysShowDefaultBranchWorkspace: true,
-    workspaceActivityWindowBeforeLiveOnly: 'all'
+    workspaceActivityWindowBeforeLiveOnly: 'all',
+    hideCompletedReviewWorkspaces: false,
+    hidePassingCheckWorkspaces: false
   }
   const world: TestWorld = {
     ...data,
@@ -216,6 +250,7 @@ function setup(
     visits: {},
     exits: {},
     live: { 'w-main': false, 'w-feature': false, 'w-child': false, 'w-independent': null, 'w-other': true, 'w-notes': false },
+    reviews: {},
     extrasDisabled: options.disabled ?? false,
     extrasFailure: options.failure ?? null,
     ledgerPreview: null,
@@ -223,6 +258,8 @@ function setup(
     calls: [],
     logs: []
   }
+  let nextSetGate: CallGate | null = null
+  let nextProjectionGate: CallGate | null = null
   const calls: Call[] = []
   const reports: unknown[] = []
   const provided = new Map<string, unknown>()
@@ -267,16 +304,45 @@ function setup(
         visible = activityAt >= BASE - days * DAY
         reason = visible ? 'recent' : 'old'
       }
-      return { worktreeId: item.id, activityAt, live, reason, ...(visible ? {} : { error: 'hidden' }) } as ProjectedWorkspace
+      const review = world.reviews[item.id]
+      const usable = review && !review.stale && !review.error ? review : null
+      const completed = usable?.state === 'merged' || usable?.state === 'closed'
+      const passing = usable?.checksStatus === 'success'
+      const reviewReason = snapshot.preferences.hideCompletedReviewWorkspaces && completed
+        ? 'completed'
+        : snapshot.preferences.hidePassingCheckWorkspaces && passing
+          ? 'passing'
+          : 'unknown'
+      return {
+        worktreeId: item.id,
+        activityAt,
+        live,
+        reason,
+        ...(visible ? {} : { error: 'hidden' }),
+        reviewReason,
+        ...(review?.error ? { reviewError: review.error } : {})
+      }
     })
-    const visibleIds = projected.filter((item) => item.reason !== 'sleeping' && item.reason !== 'old').map((item) => item.worktreeId)
-    const hiddenIds = projected.filter((item) => !visibleIds.includes(item.worktreeId)).map((item) => item.worktreeId)
+    const activityHiddenIds = new Set(projected.filter((item) => item.reason === 'sleeping' || item.reason === 'old').map((item) => item.worktreeId))
+    const reviewHiddenIds = projected.filter((item) => {
+      const review = world.reviews[item.worktreeId]
+      if (!review || review.stale || review.error) return false
+      return (snapshot.preferences.hideCompletedReviewWorkspaces && (review.state === 'merged' || review.state === 'closed')) ||
+        (snapshot.preferences.hidePassingCheckWorkspaces && review.checksStatus === 'success')
+    }).map((item) => item.worktreeId)
+    const hidden = new Set([...activityHiddenIds, ...reviewHiddenIds])
+    const visibleIds = projected.filter((item) => !hidden.has(item.worktreeId)).map((item) => item.worktreeId)
+    const hiddenIds = projected.filter((item) => hidden.has(item.worktreeId)).map((item) => item.worktreeId)
     return {
       ...snapshot,
       visibleIds,
       hiddenIds,
-      hiddenCount: hiddenIds.length,
-      filterCount: window === 'all' ? 0 : 1,
+      hiddenCount: activityHiddenIds.size,
+      filterCount: (window === 'all' ? 0 : 1) +
+        Number(snapshot.preferences.hideCompletedReviewWorkspaces) +
+        Number(snapshot.preferences.hidePassingCheckWorkspaces),
+      reviewHiddenIds,
+      reviewHiddenCount: reviewHiddenIds.length,
       workspaces: projected
     }
   }
@@ -315,16 +381,32 @@ function setup(
           if (world.extrasDisabled) throw new RpcLike('sidebar extras is disabled', RpcErrorCode.MethodNotFound)
           if (world.extrasFailure) throw world.extrasFailure
           return state(typeof params.client === 'string' ? params.client : 'desktop')
-        case 'quirky.sidebar-extras/projection':
+        case 'quirky.sidebar-extras/projection': {
           if (world.extrasDisabled) throw new RpcLike('sidebar extras is disabled', RpcErrorCode.MethodNotFound)
           if (world.extrasFailure) throw world.extrasFailure
-          return project(typeof params.client === 'string' ? params.client : 'desktop')
+          const projection = project(typeof params.client === 'string' ? params.client : 'desktop')
+          if (nextProjectionGate) {
+            const gate = nextProjectionGate
+            nextProjectionGate = null
+            gate.start()
+            await gate.wait
+          }
+          return projection
+        }
         case 'quirky.sidebar-extras/set':
           if (world.extrasDisabled) throw new RpcLike('sidebar extras is disabled', RpcErrorCode.MethodNotFound)
           if (world.extrasFailure) throw world.extrasFailure
+          if (nextSetGate) {
+            const gate = nextSetGate
+            nextSetGate = null
+            gate.start()
+            await gate.wait
+          }
           if (params.workspaceActivityWindow !== undefined) world.preferences.workspaceActivityWindow = params.workspaceActivityWindow as WindowName
           if (params.workspaceActivityCustomDays !== undefined) world.preferences.workspaceActivityCustomDays = params.workspaceActivityCustomDays as number
           if (params.alwaysShowDefaultBranchWorkspace !== undefined) world.preferences.alwaysShowDefaultBranchWorkspace = params.alwaysShowDefaultBranchWorkspace as boolean
+          if (params.hideCompletedReviewWorkspaces !== undefined) world.preferences.hideCompletedReviewWorkspaces = params.hideCompletedReviewWorkspaces as boolean
+          if (params.hidePassingCheckWorkspaces !== undefined) world.preferences.hidePassingCheckWorkspaces = params.hidePassingCheckWorkspaces as boolean
           return state(typeof params.client === 'string' ? params.client : 'desktop')
         case 'quirky.sidebar-extras/activate': {
           if (world.extrasDisabled) throw new RpcLike('sidebar extras is disabled', RpcErrorCode.MethodNotFound)
@@ -471,11 +553,25 @@ function setup(
         await Promise.resolve()
       })
       await flush()
+    },
+    async emit(type: string) {
+      await emit({ type, data: {} } as QuirkyEvent)
+    },
+    deferNextSet() {
+      const gate = callGate()
+      nextSetGate = gate
+      return { started: gate.started, release: gate.release }
+    },
+    deferNextProjection() {
+      const gate = callGate()
+      nextProjectionGate = gate
+      return { started: gate.started, release: gate.release }
     }
   }
 }
 const buttons = (within: ParentNode = host) => [...within.querySelectorAll<HTMLButtonElement>('button')]
 const card = (name: string) => [...host.querySelectorAll<HTMLElement>('section.repo li.worktree, section.group li.worktree')].find((row) => row.querySelector('.worktree-name')?.textContent === name)
+const childChip = (name: string) => card(name)?.querySelector<HTMLButtonElement>('button[aria-expanded]')
 const sectionForRepo = (name: string) => [...host.querySelectorAll<HTMLElement>('section.repo')].find((section) => section.querySelector('.repo-name')?.textContent === name)
 const sectionForGroup = (name: string) => [...host.querySelectorAll<HTMLElement>('section.group')].find((section) => section.querySelector('.group-name')?.textContent === name)
 const menuItems = () => [...document.querySelectorAll<HTMLButtonElement>('[role="menu"] [role="menuitem"]')]
@@ -486,6 +582,11 @@ const openCardMenu = async (h: UiHarness, name: string) => {
   await h.click(target)
 }
 const filterButton = () => buttons().find((button) => /workspace options|filters/i.test(button.textContent ?? '') || /workspace options|filters/i.test(button.getAttribute('aria-label') ?? ''))
+
+const checkboxFor = (label: string) =>
+  [...host.querySelectorAll<HTMLLabelElement>('label')]
+    .find((item) => item.textContent?.trim() === label)
+    ?.querySelector<HTMLInputElement>('input[type="checkbox"]')
 const openFilters = async (h: UiHarness) => {
   const trigger = filterButton()
   if (!trigger) throw new Error('workspace activity filters are unavailable')
@@ -974,3 +1075,125 @@ test('disabled extras falls back to the ordinary tree, while ordinary failures r
   expect(unavailable.world.preferences.workspaceActivityWindow).toBe('all')
 })
 
+test('review filters use server preferences, compose with activity, and clear independently', async () => {
+  const h = setup({ view: { id: 'view:quirky.session/worktree', input: { worktree: 'w-child' } }, panel: null, sidebar: true, focus: 'view' })
+  h.world.worktrees.find((item) => item.id === 'w-child')!.projectGroupId = 'g-team'
+  h.world.reviews['w-child'] = { state: 'merged', checksStatus: 'failure' }
+  h.world.reviews['w-other'] = { state: 'open', checksStatus: 'success' }
+  await h.mount()
+  await openFilters(h)
+
+  expect(h.world.active).toEqual({ worktreeId: 'w-child', instanceId: 'instance-w-child' })
+  expect(checkboxFor('Hide merged/closed reviews')?.checked).toBe(false)
+  expect(checkboxFor('Hide passing checks')?.checked).toBe(false)
+  expect(filterButton()?.textContent).toContain('0')
+
+  const pendingSet = h.deferNextSet()
+  await h.click(checkboxFor('Hide merged/closed reviews')!)
+  await pendingSet.started
+  expect(checkboxFor('Hide merged/closed reviews')?.checked).toBe(false)
+  expect(card('child')).toBeDefined()
+  expect(filterButton()?.textContent).toContain('0')
+  pendingSet.release()
+  await h.flush()
+
+  expect(h.world.preferences.hideCompletedReviewWorkspaces).toBe(true)
+  expect(checkboxFor('Hide merged/closed reviews')?.checked).toBe(true)
+  expect(card('child')).toBeUndefined()
+  expect(childChip('feature')).toBeUndefined()
+  expect(lastReport(h).hiddenIds).toContain('w-child')
+  expect(lastReport(h).reviewHiddenIds).toEqual(['w-child'])
+  expect(lastReport(h).reviewHiddenCount).toBe(1)
+  expect(lastReport(h).appliedFilter?.hideCompletedReviewWorkspaces).toBe(true)
+  expect(h.calls.filter((call) => call.method === 'quirky.sidebar-extras/set').at(-1)?.params).toEqual({ hideCompletedReviewWorkspaces: true })
+  expect(filterButton()?.textContent).toContain('1')
+
+  await h.click(checkboxFor('Hide passing checks')!)
+  expect(h.world.preferences.hidePassingCheckWorkspaces).toBe(true)
+  expect(card('other')).toBeUndefined()
+  expect(lastReport(h).reviewHiddenCount).toBe(2)
+  expect(h.calls.filter((call) => call.method === 'quirky.sidebar-extras/set').at(-1)?.params).toEqual({ hidePassingCheckWorkspaces: true })
+  expect(filterButton()?.textContent).toContain('2')
+
+  await h.click(checkboxFor('Hide merged/closed reviews')!)
+  expect(h.world.preferences.hideCompletedReviewWorkspaces).toBe(false)
+  expect(card('child')).toBeDefined()
+  expect(childChip('feature')).toBeDefined()
+  expect(card('other')).toBeUndefined()
+  expect(filterButton()?.textContent).toContain('1')
+
+  await h.click(checkboxFor('Hide merged/closed reviews')!)
+  await selectWindow(h, 'Week')
+  expect(h.world.preferences.workspaceActivityWindow).toBe('week')
+  expect(lastReport(h).filterCount).toBe(3)
+  expect(lastReport(h).hiddenCount).toBeGreaterThan(lastReport(h).reviewHiddenCount)
+  expect(lastReport(h).reviewHiddenIds).toContain('w-child')
+  expect(lastReport(h).hiddenIds).toContain('w-child')
+  expect(lastReport(h).appliedFilter?.hidePassingCheckWorkspaces).toBe(true)
+  expect(filterButton()?.textContent).toContain('3')
+
+  const recovery = buttons().find((button) => /hidden/i.test(button.textContent ?? ''))
+  expect(recovery).toBeDefined()
+  await h.click(recovery!)
+  expect(h.world.preferences.workspaceActivityWindow).toBe('all')
+  expect(h.world.preferences.hideCompletedReviewWorkspaces).toBe(true)
+  expect(h.world.preferences.hidePassingCheckWorkspaces).toBe(true)
+  expect(lastReport(h).hiddenCount).toBe(0)
+  expect(lastReport(h).reviewHiddenCount).toBe(2)
+  expect(card('child')).toBeUndefined()
+  expect(card('other')).toBeUndefined()
+  expect(filterButton()?.textContent).toContain('2')
+
+  await h.click(buttons().find((button) => button.textContent?.trim() === 'Clear filters')!)
+  expect(h.world.preferences.workspaceActivityWindow).toBe('all')
+  expect(h.world.preferences.hideCompletedReviewWorkspaces).toBe(false)
+  expect(h.world.preferences.hidePassingCheckWorkspaces).toBe(false)
+  expect(checkboxFor('Hide merged/closed reviews')?.checked).toBe(false)
+  expect(checkboxFor('Hide passing checks')?.checked).toBe(false)
+  expect(card('child')).toBeDefined()
+  expect(card('other')).toBeDefined()
+  expect(childChip('feature')).toBeDefined()
+  expect(lastReport(h).reviewHiddenIds).toEqual([])
+  expect(lastReport(h).reviewHiddenCount).toBe(0)
+  expect(filterButton()?.textContent).toContain('0')
+})
+
+test('hosting review events refresh only active filters and late projections cannot restore stale visibility', async () => {
+  const h = setup()
+  h.world.reviews['w-feature'] = { state: 'open', checksStatus: 'failure' }
+  h.world.reviews['w-other'] = { state: 'open', checksStatus: 'success' }
+  await h.mount()
+
+  const offCalls = h.calls.length
+  const offReports = h.reports.length
+  await h.emit('quirky.hosting/changed')
+  await h.emit('quirky.hosting/refresh')
+  await h.emit('quirky.hosting/reviewCacheChanged')
+  await h.flush()
+  expect(h.calls).toHaveLength(offCalls)
+  expect(h.reports).toHaveLength(offReports)
+
+  await openFilters(h)
+  await h.click(checkboxFor('Hide merged/closed reviews')!)
+  await h.click(checkboxFor('Hide passing checks')!)
+  expect(checkboxFor('Hide passing checks')?.checked).toBe(true)
+  expect(card('other')).toBeUndefined()
+  expect(card('feature')).toBeDefined()
+  const activeCalls = h.calls.filter((call) => call.method === 'quirky.sidebar-extras/projection').length
+  h.world.reviews['w-feature'] = { state: 'merged', checksStatus: 'failure' }
+  await h.emit('quirky.hosting/reviewCacheChanged')
+  await h.flush()
+  expect(h.calls.filter((call) => call.method === 'quirky.sidebar-extras/projection').length).toBeGreaterThan(activeCalls)
+  expect(card('feature')).toBeUndefined()
+
+  h.world.reviews['w-feature'] = { state: 'open', checksStatus: 'failure' }
+  const delayed = h.deferNextProjection()
+  await h.emit('quirky.hosting/reviewCacheChanged')
+  await delayed.started
+  h.world.reviews['w-feature'] = { state: 'merged', checksStatus: 'failure' }
+  await h.emit('quirky.hosting/reviewCacheChanged')
+  delayed.release()
+  await h.flush()
+  expect(card('feature')).toBeUndefined()
+  expect(lastReport(h).reviewHiddenIds).toContain('w-feature')
+})
