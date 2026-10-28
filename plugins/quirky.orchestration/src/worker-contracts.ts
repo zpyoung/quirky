@@ -5,7 +5,7 @@ import type {
   TaskRow, UtcTimestamp, WorkerRow,
 } from './contracts'
 import type { SessionIdentity } from './runtime-contracts'
-import type { OrchestrationWorkerCore, WorkerLifecyclePort } from './worker-integration'
+import type { DurableMutationOptions, OrchestrationWorkerCore, WorkerLifecyclePort } from './worker-integration'
 
 /** A service principal is constructed only after kernel plugin-caller and owned-Run checks. */
 export interface ServiceCoordinatorEvidence {
@@ -129,7 +129,7 @@ export interface WorkerCore extends OrchestrationWorkerCore {
   createTask(input: Omit<TaskCreateParams, keyof MutationRequest>, caller: CoordinatorEvidence): TaskRow
   reserveWorkerDispatch(input: { taskId: TaskId; runId: RunId; retryOfDispatchId?: DispatchId }, caller: CoordinatorEvidence): DispatchRow
   attachWorkerAuthority(dispatchId: DispatchId, identity: SessionIdentity, caller: CoordinatorEvidence): DispatchRow
-  mutateWorker<T extends object>(method: string, params: MutationRequest & object, caller: CoordinatorEvidence, work: () => Promise<T> | T): Promise<MutationResult<T>>
+  mutateWorker<T extends object>(method: string, params: MutationRequest & object, caller: CoordinatorEvidence, operation: (store: PluginStore) => T, options?: DurableMutationOptions<T>): Promise<MutationResult<T>>
   emitWorkerStatus(dispatchId: DispatchId, subject: string, body: string, high: boolean): void
   closeWorkerQuestions(dispatchId: DispatchId, at: UtcTimestamp): void
   listDispatches(): DispatchRow[]
