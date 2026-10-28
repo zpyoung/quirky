@@ -1610,6 +1610,19 @@
         "m7-sweep-automation"
       ],
       "status": "todo"
+    },
+    {
+      "id": "m7-orchestration-heimdall-unbuilt-flows",
+      "milestone": "M7",
+      "title": "Implement unbuilt orchestration/Heimdall flows inventoried by m7-sweep-orchestration: real remote worker placement and federation attachment/relay/mail/ask/report settlement/stop/release/output/fleet/task navigation with peer capability and incarnation fencing; generic Heimdall workspace-host epoch leases, paired-runtime fleet mirrors and owner-fenced remote controls, optional private-config shadow judgment with bounded provider calls, authoritative confirmed-workspace-removal termination without stopping workers, and public kind-owned report submission preflight before orchestration settlement. These flows lack real transport/lease/credential/lifecycle seams; do not simulate local success or infer absence/outcomes. Reuse existing m6-orchestration-idle-pointer-shutdown and m6-heimdall-host-power for their already-queued flows. Preserve core D9 gate policy and exclude user-deferred Objective runner, PR sitter and non-GitHub hosts. No verification-only work in this item; end-phase triage owns testing/debugging.",
+      "docs": [
+        "orchestration.md",
+        "heimdall.md"
+      ],
+      "deps": [
+        "m7-sweep-orchestration"
+      ],
+      "status": "todo"
     }
   ]
 }
