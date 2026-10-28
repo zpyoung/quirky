@@ -167,5 +167,16 @@ Recovery verification: merge541e682f passed fresh `bun run typecheck && bun pack
 - **Revisit if:** the composed compiler or actual modal/menu boundary fails
 - **Source:** locked by docs/loop/LOOP.md failed-land retry procedure
 
+## D16: Close composed-source interaction proof with the installed stable testing shell
+- **Question:** can the current merged menu and modal paths be exercised without the newer branded-browser transport failures?
+- **Options:** relabel failed attempts; change product timeouts; use the already-installed stable testing executable identified by the incoming owner
+- **Chose:** merge6b5b15ad passed full UIlint/root/mobile/prepared-desktop typecheck and actual UI build exit0/30.94s. Fresh private daemon and installed headless_shell1148 at an exclusively owned profile/CDP58113 loaded the real current renderer. Actual nested status action changed the real worktree to in-review; wide composer retained typed Name and Escape closed it. Real shared-hook trust produced2dialogs/topfocus →1dialog/parentfocus →0dialogs through two Escapes, and public list proved the cancelled workspace absent. Settled dark/light controls and screenshots use canonical token colors; no page-wide overflow, final app error inventory empty.
+- **Why:** the same app/source works through the known stable transport without a product timeout/retry/renderer/default change. Initial light capture caught the120ms shared background transition; condition-based computed-color settlement recaptured it correctly, not a theme override. One host-side screenshot-return expression referenced document outside page.evaluate; it was a driver-only ReferenceError after both captures succeeded, not an app error. Historical newer-browser failures and updater side effects remain D12–D13.
+- **Evidence:** current compiler/build output30.94s; stable explicit-CDP actual interactions and public API readbacks; lane evidence stable-dark.png/stable-light.png/final-stable.json; final page errors[] and bodyWidth=viewportWidth1340
+- **Reversibility:** easy
+- **Confidence:** high for these final-source boundaries only; no suite/native/golden-score clearance
+- **Revisit if:** existing end-phase or final visual-review acceptance finds a regression
+- **Source:** assumed — autonomous
+
 ## Progress
-Second required recovery D15 is resolved with all shared field/dialog/progress and semantic test contracts retained. No worker remains active. Next: commit this recovery, run fresh typecheck/UI build and minimal current-source proof using the already-installed stable testing headless shell identified by the incoming orchestration owner, then detach/retry authoritative land. Earlier browser-isolation and validation limits remain explicit; do not launch branded Chrome or touch unrelated user Library state.
+Ready for authoritative land: recovery6b5b15ad preserves all shared fields, refs, progress, wide/fixed-footer/top-stack dialog behavior and semantic tests. Fresh full typecheck/UIlint+UI build passed30.94s, and final current-source menu/input/nested-trust/dark/light proof is D16. Every worker/check finished; all four component worktrees removed, browser attachments released and exact owned stable browser service stopped. Final private daemon/PTY scope exited0 with homeRemoved:true. Commit this receipt, detach and retry canonical queue land. Preserve earlier validation/native/isolation qualifications, add no verification follow-up item, and remove owned scratch only after actual success.
