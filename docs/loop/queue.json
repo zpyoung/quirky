@@ -1434,6 +1434,27 @@
       "lane": 12
     },
     {
+      "id": "m7-terminal-runtime-native-and-worktree-parity",
+      "milestone": "M7",
+      "title": "Build the distinct unbuilt terminal-domain flows in docs/quirk/specs/2026-10-28-m7-sweep-terminal-completion/logic.md disposition ledger: caller-preserving orchestration/native-provider Ask handoff and unavailable-envelope/kernel/mobile caller migration; external installed CLI command manager/status/reveal/profile launchers and saved/one-off paired runtime selection without local fallback; public Dashboard pop-out window route; Codex/Muse transcript polling/retry, private OSC9999 and remote status/hook producers (Claude per-launch statusline already ships); authoritative nonempty model discovery/retirement, stale-choice UI and host capability gates; hosting/review/branch/conversation AI recipe composition through the canonical resolver; distinct terminal browser/Markdown/editor/handoff tab composition, Mobile Emulator tab, renderer extras and remappable shortcuts consistent with visible-only mounted views; remaining worktree PR grouping/agent-activity sort/project order/card/property/CLI-origin/default-branch/detached/other-client/host filters, external visibility inbox/policies, back-forward/keyboard/Open-in, manual reference link/unlink, custom-status board/icons/avatar/tracker/project identity, sparse/prepared-pool/keep-main/behind/host-run/issue-command-split/environment/default-tabs/model/shared-path creation choices; archived-seven-day cleanup metadata, volatile/remote-connectivity classifiers and exact per-window sleep routes; supported native notification permission/click/dismiss hooks, signed terminal-host launchd/TCC/admission/upgrade packaging and public folder-picker bridge (SDK dialog exists). Reconcile later shipped owners before coding: do NOT duplicate landed phone panels/foreground notification controls/terminal artifact grants, automation provenance/sidebar filters, Browser agent/import/routing controls, editor viewer leases, host-power/orchestration shutdown or the existing automation-remote/sidebar-extras/dock/native clipboard owners. Preserve explicit hosting/Objective/sitter exclusions and macOS scope. This is unbuilt flow implementation, not a testing/review/debug task.",
+      "docs": [
+        "ask.md",
+        "cli.md",
+        "agent-status.md",
+        "launch-settings.md",
+        "notifications.md",
+        "providers.md",
+        "term-daemon.md",
+        "term-ui.md",
+        "worktrees.md"
+      ],
+      "deps": [
+        "m7-sweep-terminal-completion"
+      ],
+      "status": "in-progress",
+      "lane": 11
+    },
+    {
       "id": "m7-test-triage",
       "milestone": "M7",
       "title": "End-phase test triage: run bun scripts/suite.ts packages apps plugins, bun test scripts and bun run typecheck on build/roadmap, and add one fix-test-<area>-<MMDD> item per failing package, app or plugin (naming its failing files and tests) so the lanes split the debugging; change no code",
@@ -1453,7 +1474,8 @@
         "m7-sweep-automation-completion",
         "m7-orchestration-heimdall-unbuilt-flows",
         "sb-mobile-app-panels-unbuilt-flows",
-        "m7-diff-markdown-local-images"
+        "m7-diff-markdown-local-images",
+        "m7-terminal-runtime-native-and-worktree-parity"
       ],
       "status": "todo"
     },
@@ -1653,27 +1675,6 @@
       ],
       "status": "todo",
       "early": true
-    },
-    {
-      "id": "m7-terminal-runtime-native-and-worktree-parity",
-      "milestone": "M7",
-      "title": "Build the distinct unbuilt terminal-domain flows in docs/quirk/specs/2026-10-28-m7-sweep-terminal-completion/logic.md disposition ledger: caller-preserving orchestration/native-provider Ask handoff and unavailable-envelope/kernel/mobile caller migration; external installed CLI command manager/status/reveal/profile launchers and saved/one-off paired runtime selection without local fallback; public Dashboard pop-out window route; Codex/Muse transcript polling/retry, private OSC9999 and remote status/hook producers (Claude per-launch statusline already ships); authoritative nonempty model discovery/retirement, stale-choice UI and host capability gates; hosting/review/branch/conversation AI recipe composition through the canonical resolver; distinct terminal browser/Markdown/editor/handoff tab composition, Mobile Emulator tab, renderer extras and remappable shortcuts consistent with visible-only mounted views; remaining worktree PR grouping/agent-activity sort/project order/card/property/CLI-origin/default-branch/detached/other-client/host filters, external visibility inbox/policies, back-forward/keyboard/Open-in, manual reference link/unlink, custom-status board/icons/avatar/tracker/project identity, sparse/prepared-pool/keep-main/behind/host-run/issue-command-split/environment/default-tabs/model/shared-path creation choices; archived-seven-day cleanup metadata, volatile/remote-connectivity classifiers and exact per-window sleep routes; supported native notification permission/click/dismiss hooks, signed terminal-host launchd/TCC/admission/upgrade packaging and public folder-picker bridge (SDK dialog exists). Reconcile later shipped owners before coding: do NOT duplicate landed phone panels/foreground notification controls/terminal artifact grants, automation provenance/sidebar filters, Browser agent/import/routing controls, editor viewer leases, host-power/orchestration shutdown or the existing automation-remote/sidebar-extras/dock/native clipboard owners. Preserve explicit hosting/Objective/sitter exclusions and macOS scope. This is unbuilt flow implementation, not a testing/review/debug task.",
-      "docs": [
-        "ask.md",
-        "cli.md",
-        "agent-status.md",
-        "launch-settings.md",
-        "notifications.md",
-        "providers.md",
-        "term-daemon.md",
-        "term-ui.md",
-        "worktrees.md"
-      ],
-      "deps": [
-        "m7-sweep-terminal-completion"
-      ],
-      "status": "in-progress",
-      "lane": 11
     }
   ]
 }
