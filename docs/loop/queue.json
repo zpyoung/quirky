@@ -644,8 +644,9 @@
       "deps": [
         "sa-browser-pane"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 3
     },
     {
       "id": "m5-automations-dispatch",
