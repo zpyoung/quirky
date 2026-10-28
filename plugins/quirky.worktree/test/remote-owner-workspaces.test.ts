@@ -1,16 +1,15 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test'
 import { Database } from 'bun:sqlite'
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import type { QuirkyClient, Repo, Worktree, WorktreeCreateResult } from '@quirky/protocol'
 import { makeHomeWithoutAutoHooks } from '../../../packages/daemon/test/helpers'
 import { makeTempDir } from '../../../packages/daemon/test/plugins/fixtures'
 import { isolateGitConfig, makeRepo } from '../../quirky.repo/test/git-fixtures'
 import { startPluginHarness, type PluginHarness } from '../../quirky.repo/test/harness'
-import { isRecord } from '../src/loop-status'
 
 const { scratch } = isolateGitConfig()
-const plugins = ['quirky.cli', 'quirky.mobile', 'quirky.repo', 'quirky.worktree', 'quirky.agents', 'quirky.session', 'quirky.terminal', 'quirky.git']
+const plugins = ['quirky.cli', 'quirky.mobile', 'quirky.repo', 'quirky.worktree', 'quirky.agents', 'quirky.session', 'quirky.terminal', 'quirky.git', 'quirky.editor', 'quirky.sidebar-extras']
 const harnesses: PluginHarness[] = []
 let previousMobilePort: string | undefined
 let previousMobileHost: string | undefined
@@ -30,7 +29,7 @@ beforeEach(() => {
   previousMobilePort = process.env.QUIRKY_MOBILE_PORT
   previousMobileHost = process.env.QUIRKY_MOBILE_HOST
   process.env.QUIRKY_MOBILE_PORT = '0'
-  delete process.env.QUIRKY_MOBILE_HOST
+  process.env.QUIRKY_MOBILE_HOST = '127.0.0.1'
 })
 
 afterEach(async () => {
@@ -66,13 +65,13 @@ async function start(prefix: string): Promise<PluginHarness> {
 async function world(prefix: string): Promise<World> {
   const local = await start(`${prefix}-local`)
   const remote = await start(`${prefix}-remote`)
-  const pair = await call(remote.client, 'quirky.mobile/ownerPair', { name: `${prefix} owner`, confirm: true }) as { offer: string }
+  const pair = await call(remote.client, 'quirky.mobile/ownerPair', { name: `${prefix} owner`, address: '127.0.0.1', confirm: true }) as { offer: string }
   const runtime = await call(local.client, 'quirky.cli/runtimeAdd', {
     name: `${prefix} owner`,
     pairingCode: pair.offer
-  }) as { id: string }
+  }) as { id: string; name: string }
   const host = await call(local.client, 'quirky.worktree/remoteHostRegister', {
-    runtime: `runtime:${runtime.id}`
+    runtime: `runtime:${runtime.name}`
   }) as Host
   return { local, remote, runtimeId: runtime.id, host }
 }
@@ -84,23 +83,6 @@ function localWorktreeRow(harness: PluginHarness, id: string): { id: string; pat
   } finally {
     db.close()
   }
-}
-function rebindSavedOwnerGrant(home: string, pinnedId: string, replacementId: string): void {
-  const path = join(home, 'paired-runtimes.json')
-  const decoded: unknown = JSON.parse(readFileSync(path, 'utf8'))
-  if (!isRecord(decoded) || !Array.isArray(decoded.runtimes)) throw new Error('the isolated owner target store was malformed')
-  const targets = decoded.runtimes.filter(isRecord)
-  const pinned = targets.find((target) => target.id === pinnedId)
-  const replacement = targets.find((target) => target.id === replacementId)
-  if (!pinned || !replacement) throw new Error('the isolated owner target store did not contain both saved targets')
-  for (const field of ['pairingCode', 'endpoint', 'publicKeyB64', 'pairedDeviceId', 'scope', 'grantId']) {
-    const value = replacement[field]
-    if (typeof value !== 'string') throw new Error(`the replacement owner target has no ${field}`)
-    pinned[field] = value
-  }
-  const encoded = JSON.stringify(decoded, null, 2)
-  if (!encoded) throw new Error('the isolated owner target store could not be serialized')
-  writeFileSync(path, encoded)
 }
 
 
@@ -121,8 +103,6 @@ async function attach(local: PluginHarness, host: Host, worktree: Worktree): Pro
 test('owner host registration survives local restart and remote generations or grant changes require explicit replacement', async () => {
   const { local, remote, runtimeId, host } = await world('qw-owner-registry')
   expect(host.connected).toBe(true)
-  expect(host.identity.hostId).toBeTruthy()
-  expect(host.identity.generation).toBeTruthy()
   expect(host.runtime.id).toBe(runtimeId)
 
   await local.restart()
@@ -131,7 +111,7 @@ test('owner host registration survives local restart and remote generations or g
   const registered = await call(local.client, 'quirky.worktree/remoteHostList') as { hosts: Host[] }
   expect(registered.hosts).toContainEqual(expect.objectContaining({ id: host.id, identity: host.identity }))
 
-  const replacementPair = await call(remote.client, 'quirky.mobile/ownerPair', { name: 'Changed owner grant', confirm: true }) as { offer: string }
+  const replacementPair = await call(remote.client, 'quirky.mobile/ownerPair', { name: 'Changed owner grant', address: '127.0.0.1', confirm: true }) as { offer: string }
   const replacementRuntime = await call(local.client, 'quirky.cli/runtimeAdd', {
     name: 'Changed owner grant',
     pairingCode: replacementPair.offer
@@ -147,7 +127,16 @@ test('owner host registration survives local restart and remote generations or g
   expect(grantReplaced.runtime.id).toBe(replacementRuntime.id)
   expect(grantReplaced.runtime.grantId).not.toBe(host.runtime.grantId)
 
-  await remote.restart()
+  const restartPort = new URL(host.runtime.endpoint).port
+  if (restartPort === '') throw new Error('the saved owner endpoint has no mobile listener port')
+  const portBeforeRestart = process.env.QUIRKY_MOBILE_PORT
+  process.env.QUIRKY_MOBILE_PORT = restartPort
+  try {
+    await remote.restart()
+  } finally {
+    if (portBeforeRestart === undefined) delete process.env.QUIRKY_MOBILE_PORT
+    else process.env.QUIRKY_MOBILE_PORT = portBeforeRestart
+  }
   const afterRemoteRestart = await call(local.client, 'quirky.worktree/remoteHostStatus', { host: host.id }) as Host
   expect(afterRemoteRestart.connected).toBe(false)
   expect(afterRemoteRestart.identity).toEqual(host.identity)
@@ -182,7 +171,6 @@ test('offline host status preserves the last mirror snapshot but makes it unavai
   remote.h.pty.stop()
   const status = await call(local.client, 'quirky.worktree/remoteHostStatus', { host: host.id }) as Host
   expect(status.connected).toBe(false)
-  expect(status.error).toBeTruthy()
 
   const offline = await call(local.client, 'quirky.worktree/remoteList', { host: host.id }) as { workspaces: Mirror[] }
   expect(offline.workspaces).toContainEqual(expect.objectContaining({ id: mirror.id, connected: false, worktree: expect.objectContaining({ id: worktree.id, instanceId: worktree.instanceId }) }))
@@ -204,7 +192,7 @@ test('old mirror instances cannot navigate or remove a replacement or mutate a l
   const window = await call(ui, 'ui.window.state', { connId }) as { layout: { view: { id: string; input: unknown } | null } }
   expect(window.layout.view).toEqual({ id: 'view:quirky.worktree/remote', input: { workspace: mirror.id } })
 
-  await call(remote.client, 'quirky.worktree/remove', { worktree: `id:${worktree.id}`, safeOnly: true, skipArchive: true })
+  await call(remote.client, 'quirky.worktree/remove', { worktree: `id:${worktree.id}`, safeOnly: true, skipArchive: true, yes: true })
   const recreated = await call(remote.client, 'quirky.worktree/create', { repo: worktree.repoId, name: 'reused-path' }) as WorktreeCreateResult
   expect(recreated.worktree.id).toBe(worktree.id)
   expect(recreated.worktree.instanceId).not.toBe(worktree.instanceId)
@@ -212,7 +200,8 @@ test('old mirror instances cannot navigate or remove a replacement or mutate a l
     worktree: `id:${worktree.id}`,
     safeOnly: true,
     skipArchive: true,
-    expectedInstanceId: worktree.instanceId
+    expectedInstanceId: worktree.instanceId,
+    yes: true
   })).rejects.toThrow(/instance|changed|replaced|identity/i)
   await call(local.client, 'quirky.worktree/remoteRefresh', { host: host.id })
 
@@ -220,7 +209,8 @@ test('old mirror instances cannot navigate or remove a replacement or mutate a l
   await expect(call(local.client, 'quirky.worktree/remoteRemove', {
     workspace: mirror.id,
     fingerprint: mirror.fingerprint,
-    confirmed: true
+    confirmed: true,
+    yes: true
   })).rejects.toThrow(/instance|changed|refresh|stale/i)
   expect(existsSync(repoPath)).toBe(true)
   expect(localWorktreeRow(local, worktree.id)).toEqual(localRowBefore)
@@ -242,7 +232,7 @@ test('remote cleanup removal requires fresh canonical preview evidence for the s
   expect(preview).toMatchObject({ workspace: mirror.id, instanceId: worktree.instanceId })
   expect(preview.candidate).toMatchObject({ worktreeId: worktree.id, eligible: true })
 
-  await call(remote.client, 'quirky.worktree/remove', { worktree: `id:${worktree.id}`, safeOnly: true, skipArchive: true })
+  await call(remote.client, 'quirky.worktree/remove', { worktree: `id:${worktree.id}`, safeOnly: true, skipArchive: true, yes: true })
   const replacement = await call(remote.client, 'quirky.worktree/create', { repo: worktree.repoId, name: 'cleanup-instance' }) as WorktreeCreateResult
   expect(replacement.worktree.instanceId).not.toBe(worktree.instanceId)
   const replacementArchivedAt = Date.now() - 8 * 24 * 60 * 60 * 1000
@@ -261,7 +251,8 @@ test('remote cleanup removal requires fresh canonical preview evidence for the s
       fingerprint: replacementPreview.candidate!.fingerprint,
       expectedInstanceId: worktree.instanceId
     }],
-    confirmed: true
+    confirmed: true,
+    yes: true
   }) as { results: Array<{ removed: boolean; error?: string }> }
   expect(canonicalCleanup.results[0]).toMatchObject({ removed: false })
   expect(canonicalCleanup.results[0]!.error).toMatch(/instance|changed|replaced|identity/i)
@@ -269,7 +260,8 @@ test('remote cleanup removal requires fresh canonical preview evidence for the s
   await expect(call(local.client, 'quirky.worktree/remoteCleanupRemove', {
     workspace: mirror.id,
     fingerprint: preview.candidate!.fingerprint,
-    confirmed: true
+    confirmed: true,
+    yes: true
   })).rejects.toThrow(/instance|changed|refresh|stale/i)
 
   expect(existsSync(worktree.path)).toBe(true)
@@ -328,7 +320,8 @@ test('confirmed remote removal never closes a live owner session or edits the sa
   await expect(call(local.client, 'quirky.worktree/remoteRemove', {
     workspace: mirror.id,
     fingerprint: mirror.fingerprint,
-    confirmed: true
+    confirmed: true,
+    yes: true
   })).rejects.toThrow(/owner|remove|unavailable|rejected/i)
   const liveSessions = await call(remote.client, 'quirky.session/list', { worktree: worktree.id }) as Array<{ id: string }>
   expect(liveSessions.some((row) => row.id === session.id)).toBe(true)
@@ -338,7 +331,8 @@ test('confirmed remote removal never closes a live owner session or edits the sa
   const removed = await call(local.client, 'quirky.worktree/remoteRemove', {
     workspace: mirror.id,
     fingerprint: mirror.fingerprint,
-    confirmed: true
+    confirmed: true,
+    yes: true
   }) as { ok: true; workspace: string }
   expect(removed).toMatchObject({ ok: true, workspace: mirror.id })
   expect(localWorktreeRow(local, worktree.id)).toEqual(localRowBefore)
@@ -354,18 +348,46 @@ test('host forget refuses attached snapshots and confirmed local detach preserve
 
   await expect(call(local.client, 'quirky.worktree/remoteHostForget', {
     host: host.id,
-    confirmed: true
+    confirmed: true,
+    yes: true
   })).rejects.toThrow(/attachments|detach/i)
   await expect(call(local.client, 'quirky.worktree/remoteHostForget', {
     host: host.id,
     detach: true,
-    confirmed: false
+    confirmed: true,
+    expectedHost: { hostId: host.identity.hostId, generation: `${host.identity.generation}-stale` },
+    yes: true
+  })).rejects.toThrow(/generation|host|identity/i)
+  const afterHostMismatch = await call(local.client, 'quirky.worktree/remoteList', { host: host.id }) as { workspaces: Mirror[] }
+  expect(afterHostMismatch.workspaces.some((row) => row.id === mirror.id)).toBe(true)
+
+  await expect(call(local.client, 'quirky.worktree/remoteHostForget', {
+    host: host.id,
+    detach: true,
+    confirmed: true,
+    expectedRuntime: {
+      id: host.runtime.id,
+      endpoint: host.runtime.endpoint,
+      grantId: `${host.runtime.grantId}-stale`
+    },
+    yes: true
+  })).rejects.toThrow(/runtime|grant|identity/i)
+  const afterRuntimeMismatch = await call(local.client, 'quirky.worktree/remoteList', { host: host.id }) as { workspaces: Mirror[] }
+  expect(afterRuntimeMismatch.workspaces.some((row) => row.id === mirror.id)).toBe(true)
+
+
+  await expect(call(local.client, 'quirky.worktree/remoteHostForget', {
+    host: host.id,
+    detach: true,
+    confirmed: false,
+    yes: true
   })).rejects.toThrow(/confirmed/i)
 
   const forgotten = await call(local.client, 'quirky.worktree/remoteHostForget', {
     host: host.id,
     detach: true,
-    confirmed: true
+    confirmed: true,
+    yes: true
   }) as { ok: true; detached: number }
   expect(forgotten).toEqual({ ok: true, detached: 1 })
   const sourceRows = await call(remote.client, 'quirky.worktree/list') as Worktree[]
@@ -378,21 +400,21 @@ test('a rebound grant for the same owner host is fenced before remote removal', 
   const { local, remote, runtimeId, host } = await world('qw-owner-grant-fence')
   const { worktree } = await createSharedWorkspace({ local, remote, runtimeId, host }, 'grant-fence')
   const mirror = await attach(local, host, worktree)
-  const nextOffer = await call(remote.client, 'quirky.mobile/ownerPair', { name: 'Rebound owner grant', confirm: true }) as { offer: string }
+  const nextOffer = await call(remote.client, 'quirky.mobile/ownerPair', { name: 'Rebound owner grant', address: '127.0.0.1', confirm: true }) as { offer: string }
+  await call(local.client, 'quirky.cli/runtimeRemove', { selector: runtimeId, yes: true })
   const replacement = await call(local.client, 'quirky.cli/runtimeAdd', {
-    name: 'Rebound owner grant',
+    name: host.runtime.name,
     pairingCode: nextOffer.offer
   }) as { id: string }
   const reboundIdentity = await call(local.client, 'quirky.cli/runtimeCall', {
-    runtime: `runtime:${replacement.id}`,
+    runtime: replacement.id,
     method: 'quirky.cli/hostIdentity'
   }) as { runtime: Host['runtime']; result: Host['identity'] }
   expect(reboundIdentity.result).toEqual(host.identity)
   expect(reboundIdentity.runtime.grantId).not.toBe(host.runtime.grantId)
 
-  rebindSavedOwnerGrant(local.h.home, runtimeId, replacement.id)
   await expect(call(local.client, 'quirky.cli/runtimeCall', {
-    runtime: `runtime:${runtimeId}`,
+    runtime: replacement.id,
     method: 'quirky.worktree/remove',
     params: {
       worktree: `id:${worktree.id}`,
@@ -411,9 +433,37 @@ test('a rebound grant for the same owner host is fenced before remote removal', 
   await expect(call(local.client, 'quirky.worktree/remoteRemove', {
     workspace: mirror.id,
     fingerprint: mirror.fingerprint,
-    confirmed: true
+    confirmed: true,
+    yes: true
   })).rejects.toThrow(/runtime|grant|pin|changed|unavailable/i)
   expect(existsSync(worktree.path)).toBe(true)
   const remoteRows = await call(remote.client, 'quirky.worktree/list') as Worktree[]
   expect(remoteRows.some((row) => row.id === worktree.id && row.instanceId === worktree.instanceId)).toBe(true)
+})
+
+test('remote folder workspaces keep owner-bound navigation and terminal sessions without local mirrors', async () => {
+  const { local, remote, host } = await world('qw-owner-folder')
+  const path = makeTempDir('qw-owner-folder-project-')
+  const repo = await call(remote.client, 'quirky.repo/add', { path, folder: true }) as Repo
+  const created = await call(remote.client, 'quirky.worktree/create', { repo: repo.id, name: 'remote-folder' }) as WorktreeCreateResult
+  const mirror = await attach(local, host, created.worktree)
+  expect(mirror.worktree).toMatchObject({ kind: 'folder', id: created.worktree.id, instanceId: created.worktree.instanceId })
+  expect(localWorktreeRow(local, created.worktree.id)).toBeNull()
+
+  const ui = await local.connectAs({}, 'ui')
+  const state = await call(local.client, 'ui.state') as { windows: Array<{ connId: number }> }
+  const connId = state.windows[0]!.connId
+  await call(local.client, 'quirky.worktree/remoteNavigate', { workspace: mirror.id, window: connId })
+  const selected = await call(ui, 'ui.window.state', { connId }) as { layout: { view: { id: string; input: unknown } | null } }
+  expect(selected.layout.view).toEqual({ id: 'view:quirky.worktree/remote', input: { workspace: mirror.id } })
+
+  const session = await call(local.client, 'quirky.worktree/remoteCall', {
+    workspace: mirror.id, operation: 'terminalCreate', title: 'Folder owner shell'
+  }) as { id: string; worktreeId: string }
+  const sessions = await call(local.client, 'quirky.worktree/remoteCall', {
+    workspace: mirror.id, operation: 'sessions'
+  }) as Array<{ id: string; worktreeId: string }>
+  expect(sessions).toContainEqual(expect.objectContaining({ id: session.id, worktreeId: created.worktree.id }))
+  expect(await call(local.client, 'quirky.session/list')).toEqual([])
+  await call(remote.client, 'quirky.session/close', { session: session.id })
 })

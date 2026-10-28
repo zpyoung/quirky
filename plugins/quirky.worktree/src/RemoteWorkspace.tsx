@@ -108,6 +108,7 @@ function asMirror(value: unknown): RemoteWorkspaceMirror | null {
     !identity || typeof identity.hostId !== 'string' || typeof identity.generation !== 'string' ||
     !worktree || typeof worktree.id !== 'string' || typeof worktree.name !== 'string' ||
     typeof worktree.path !== 'string' || typeof worktree.instanceId !== 'string' ||
+    (worktree.kind !== 'git' && worktree.kind !== 'folder') ||
     typeof record.connected !== 'boolean' || typeof record.fingerprint !== 'string'
   ) return null
   return record as unknown as RemoteWorkspaceMirror
@@ -178,14 +179,14 @@ export function RemoteWorkspace({ context, workspace }: Props) {
         return
       }
       const [rawStatus, rawSessions, rawTerminal] = await Promise.all([
-        context.call('quirky.worktree/remoteCall', { workspace, operation: 'changes' }),
+        shown.worktree.kind === 'git' ? context.call('quirky.worktree/remoteCall', { workspace, operation: 'changes' }) : null,
         context.call('quirky.worktree/remoteCall', { workspace, operation: 'sessions' }),
         context.call('quirky.worktree/remoteCall', { workspace, operation: 'terminalWorkspace' })
       ])
       const nextSessions = sessionsOf(rawSessions, shown.worktree.id)
       const terminal = isRecord(rawTerminal) && isRecord(rawTerminal.workspace) ? rawTerminal.workspace : null
       if (!terminal || terminal.id !== shown.worktree.id) throw new Error('The remote terminal owner returned a workspace layout for a different or incomplete remote instance.')
-      setStatus(statusOf(rawStatus))
+      setStatus(rawStatus === null ? null : statusOf(rawStatus))
       setSessions(nextSessions)
       setSelectedSession((selected) => nextSessions.some((session) => session.id === selected) ? selected : nextSessions[0]?.id ?? '')
       setNotice('Remote terminal workspace is available.')
@@ -377,8 +378,8 @@ export function RemoteWorkspace({ context, workspace }: Props) {
             <dt>Host</dt><dd style={monoStyle}>{mirror.hostId}</dd>
             <dt>Project</dt><dd>{mirror.worktree.repoId}</dd>
             <dt>Remote path</dt><dd style={monoStyle}>{mirror.worktree.path}</dd>
-            <dt>Branch</dt><dd>{mirror.worktree.branch ?? 'Detached'}</dd>
-            <dt>HEAD</dt><dd style={monoStyle}>{mirror.worktree.head}</dd>
+            <dt>Branch</dt><dd>{mirror.worktree.kind === 'folder' ? 'Not applicable' : mirror.worktree.branch ?? 'Detached'}</dd>
+            <dt>HEAD</dt><dd style={monoStyle}>{mirror.worktree.kind === 'folder' ? 'Not applicable' : mirror.worktree.head}</dd>
             <dt>Instance</dt><dd style={monoStyle}>{mirror.worktree.instanceId}</dd>
           </dl>
           {!mirror.connected && <p role="status">This is a saved snapshot only; remote reads and actions are blocked until the exact owner and instance are available.</p>}
@@ -391,6 +392,7 @@ export function RemoteWorkspace({ context, workspace }: Props) {
 
       <section aria-label="Remote changes" style={cardStyle}>
         <h2>Changes</h2>
+        {mirror?.worktree.kind === 'folder' ? <p>Folder workspaces do not have Git changes.</p> : <>
         <div style={{ opacity: 0.8, marginBottom: 8 }}>Branch: {status?.branch ?? mirror?.worktree.branch ?? 'Unknown'} · Operation: {status?.operation ?? (connected ? 'unknown' : 'unavailable')}</div>
         {files.length === 0 ? <p>{connected ? 'No changed files were reported.' : 'Remote changes are unavailable.'}</p> : (
           <ul>{files.map((change) => (
@@ -411,6 +413,7 @@ export function RemoteWorkspace({ context, workspace }: Props) {
             </div>}
           </div>
         )}
+        </>}
       </section>
 
       <section aria-label="Remote terminal controls" style={cardStyle}>

@@ -106,7 +106,7 @@ export async function isOwnedPreparedRegistration(
   return false
 }
 
-async function removePrepared(env: PreparedEnv, repo: Repo, row: PreparedWorktreeRow): Promise<boolean> {
+async function removePrepared(env: PreparedEnv, repo: Pick<Repo, 'id' | 'path'>, row: PreparedWorktreeRow): Promise<boolean> {
   if (repo.id !== row.repo_id || repo.path !== row.repo_path || !isAbsolute(row.path)) return false
   const root = resolve(row.root_path)
   const pool = resolve(root, PREPARATION_DIR)
@@ -338,5 +338,15 @@ export async function cleanupPreparedCheckouts(env: PreparedEnv, repos: Repo[]):
       continue
     }
     await removePrepared(env, repo, row)
+  }
+}
+export async function cleanupActivationPreparedCheckouts(env: PreparedEnv): Promise<void> {
+  for (const row of preparedRows(env.store)) {
+    if (row.owner_id !== env.ownerId) continue
+    if (!isAbsolute(row.repo_path)) {
+      env.log(`kept prepared checkout ${row.id}: its stored repository path is not absolute`)
+      continue
+    }
+    await removePrepared(env, { id: row.repo_id, path: row.repo_path }, row)
   }
 }

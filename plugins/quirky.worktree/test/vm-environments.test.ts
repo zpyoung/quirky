@@ -42,6 +42,7 @@ let db: Database
 let methods: Map<string, Handler>
 let calls: Array<{ method: string; params: Record<string, unknown> }>
 let registeredHost: RegisteredOwnerHost
+let hostRegistered: boolean
 let envRecipe: VmEnvironmentRecipe
 let savedRuntime: Record<string, unknown>
 let disposeVm: (() => Promise<void>) | undefined
@@ -101,6 +102,7 @@ beforeEach(() => {
     runtime: { id: 'runtime-vm-01', name: 'VM guest', endpoint: 'https://guest.invalid', grantId: 'grant-vm-01' },
     identity: guestIdentity, connected: true, error: null, updatedAt: 1
   }
+  hostRegistered = true
   methods = new Map()
   db = new Database(join(home, 'vm.sqlite'))
   store = {
@@ -130,22 +132,52 @@ beforeEach(() => {
       }
       if (method === 'quirky.cli/runtimeAdd') {
         savedRuntime = { ...runtimeSummary, name: params.name }
+        registeredHost = { ...registeredHost, runtime: { ...registeredHost.runtime, name: String(params.name) } }
         return savedRuntime
       }
-      if (method === 'quirky.worktree/remoteHostRegister') return registeredHost
+      if (method === 'quirky.worktree/remoteHostRegister') {
+        hostRegistered = true
+        return registeredHost
+      }
       if (method === 'quirky.cli/runtimeCall') {
         const result = params.method === 'quirky.worktree/show' ? worktree : guestIdentity
         return { runtime: registeredHost.runtime, result }
       }
       if (method === 'quirky.worktree/remoteAttach') return mirror
-      if (method === 'quirky.worktree/remoteHostStatus') return registeredHost
-      if (method === 'quirky.worktree/remoteRefresh') {
+      if (method === 'quirky.worktree/remoteHostStatus') {
+        if (!hostRegistered) throw new Error('registered host not found')
+        const connected = readFileSync(statePath, 'utf8').includes('Running')
+        return { ...registeredHost, connected }
+      }
+      if (method === 'quirky.worktree/remoteHostList') {
+        if (!hostRegistered) {
+          return {
+            hosts: [{
+              id: 'unrelated-host',
+              runtime: { id: 'unrelated-runtime', name: 'Other runtime', endpoint: 'https://other.invalid', grantId: 'other-grant' },
+              identity: { hostId: 'other-stable-host', generation: 'other-generation' },
+              connected: false, error: 'offline', updatedAt: 1
+            }]
+          }
+        }
+        const connected = readFileSync(statePath, 'utf8').includes('Running')
+        return { hosts: [{ ...registeredHost, connected }] }
+      }
+      if (method === 'quirky.worktree/remoteList') {
         const connected = readFileSync(statePath, 'utf8').includes('Running')
         return { workspaces: [{ ...mirror, connected }] }
       }
+      if (method === 'quirky.worktree/remoteRefresh') {
+        if (!readFileSync(statePath, 'utf8').includes('Running')) throw new Error('guest owner unreachable while Lima is stopped')
+        return { workspaces: [{ ...mirror, connected: true }] }
+      }
       if (method === 'quirky.worktree/remoteHostForget') {
         expect(JSON.parse(readFileSync(statePath, 'utf8'))).toEqual([])
-        return { forgotten: true, mirrors: 1 }
+        expect(params.expectedHost).toEqual(guestIdentity)
+        expect(params.expectedRuntime).toMatchObject({ id: savedRuntime.id, endpoint: savedRuntime.endpoint, grantId: savedRuntime.grantId })
+        expect(params.yes).toBe(true)
+        hostRegistered = false
+        return { ok: true, detached: 1 }
       }
       if (method === 'quirky.cli/runtimeList') return { runtimes: [savedRuntime] }
       if (method === 'quirky.cli/runtimeShow') return savedRuntime
@@ -237,6 +269,11 @@ test.skipIf(process.platform !== 'darwin')('runs trusted scripts through an isol
   expect(readFileSync(logPath, 'utf8')).toBe(beforeStaleRequest)
   const suspended = vmFromResult(await method('vmSuspend')({ vm: created.id, instanceId: created.instanceId }))
   expect(suspended.state).toBe('stopped')
+  expect(suspended.remoteWorkspace).toMatchObject({
+    id: mirror.id,
+    connected: false,
+    worktree: { id: worktree.id, instanceId: worktree.instanceId }
+  })
   const resumed = vmFromResult(await method('vmResume')({ vm: created.id, instanceId: created.instanceId }))
   expect(resumed.state).toBe('running')
   expect(resumed.remoteWorkspace).toEqual(mirror)
@@ -285,4 +322,29 @@ test.skipIf(process.platform !== 'darwin')('exposes creating records and blocks 
   const created = vmFromResult(await creation)
   expect(created.state).toBe('running')
   await method('vmDestroy')({ vm: created.id, instanceId: created.instanceId })
+})
+test.skipIf(process.platform !== 'darwin')('reconciles an already-forgotten host without touching another host registration', async () => {
+  const created = vmFromResult(await method('vmCreate')({ repo: 'repo_local', recipe: envRecipe.id, trustHash: environmentRecipeHash(envRecipe) }))
+  const [instance] = JSON.parse(readFileSync(statePath, 'utf8')) as Array<{ dir: string }>
+  rmSync(instance!.dir, { recursive: true, force: true })
+  writeFileSync(statePath, '[]\n')
+  hostRegistered = false
+
+  const destroyed = vmFromResult(await method('vmDestroy')({ vm: created.id, instanceId: created.instanceId }))
+  expect(destroyed.state).toBe('destroyed')
+  expect(calls.some((call) => call.method === 'quirky.worktree/remoteHostList')).toBe(true)
+  expect(calls.some((call) => call.method === 'quirky.worktree/remoteHostForget')).toBe(false)
+  expect(calls.some((call) => call.method === 'quirky.cli/runtimeRemove' && call.params.selector === savedRuntime.id)).toBe(true)
+})
+
+test.skipIf(process.platform !== 'darwin')('refuses retirement when the registered host identity was replaced', async () => {
+  const created = vmFromResult(await method('vmCreate')({ repo: 'repo_local', recipe: envRecipe.id, trustHash: environmentRecipeHash(envRecipe) }))
+  const [instance] = JSON.parse(readFileSync(statePath, 'utf8')) as Array<{ dir: string }>
+  rmSync(instance!.dir, { recursive: true, force: true })
+  writeFileSync(statePath, '[]\n')
+  registeredHost = { ...registeredHost, identity: { hostId: 'replacement-host', generation: 'replacement-generation' } }
+
+  await expect(method('vmDestroy')({ vm: created.id, instanceId: created.instanceId })).rejects.toThrow(/identity|replaced/i)
+  expect(calls.some((call) => call.method === 'quirky.worktree/remoteHostForget')).toBe(false)
+  expect(calls.some((call) => call.method === 'quirky.cli/runtimeRemove')).toBe(false)
 })

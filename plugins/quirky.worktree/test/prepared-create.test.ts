@@ -1,4 +1,4 @@
-import { mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync } from 'node:fs'
 import { Database } from 'bun:sqlite'
 import { afterEach, expect, test } from 'bun:test'
 import { join } from 'node:path'
@@ -114,7 +114,7 @@ test('prepared pool remains bounded to three entries and expires persisted stale
   await call(first, 'quirky.worktree/prefetchCreate', { repo: first.repo.id, base: 'main' })
   expect(git(first.dir, 'worktree', 'list', '--porcelain').match(/\.quirky-preparing/g)).toHaveLength(1)
 })
-test('restart removes only the exact owned preparation and preserves a foreign locked worktree', async () => {
+test('disabling the worktree plugin removes only its exact prepared checkout and preserves a foreign locked worktree', async () => {
   const w = await start()
   const preparation = await call(w, 'quirky.worktree/prefetchCreate', { repo: w.repo.id, base: 'origin/main' }) as { prepared: boolean }
   expect(preparation.prepared).toBe(true)
@@ -131,9 +131,17 @@ test('restart removes only the exact owned preparation and preserves a foreign l
   const foreignPath = join(w.root, '.quirky-preparing', 'foreign-registration')
   mkdirSync(join(w.root, '.quirky-preparing'), { recursive: true })
   git(w.dir, 'worktree', 'add', '--detach', '--no-checkout', '--lock', '--reason', 'foreign-owner', foreignPath, 'origin/main')
-  await w.t.restart()
+  const repoHeadBefore = git(w.dir, 'rev-parse', 'HEAD')
+  const foreignHeadBefore = git(foreignPath, 'rev-parse', 'HEAD')
+
+  await call(w, 'plugin.disable', { id: 'quirky.worktree' })
   const registrations = git(w.dir, 'worktree', 'list', '--porcelain')
   expect(registrations).toContain(foreignPath)
+  expect(registrations).toContain('locked foreign-owner')
   expect(registrations).not.toContain(preparedPath)
+  expect(existsSync(preparedPath)).toBe(false)
+  expect(existsSync(foreignPath)).toBe(true)
+  expect(git(w.dir, 'rev-parse', 'HEAD')).toBe(repoHeadBefore)
+  expect(git(foreignPath, 'rev-parse', 'HEAD')).toBe(foreignHeadBefore)
 })
 

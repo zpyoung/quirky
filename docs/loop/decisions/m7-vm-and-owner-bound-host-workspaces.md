@@ -110,5 +110,71 @@
 - **Revisit if:** Real multi-host teardown still crosses an activation boundary.
 - **Source:** assumed — autonomous
 
+## D11: Treat the real remote API and mounted UI scenario as bounded evidence
+- **Question:** What did the actual isolated runtime and browser exercise, and what remains unproved?
+- **Options:** Infer acceptance from types; substitute mock data; run real private owners and distinguish hardware/native limits.
+- **Chose:** Two real remote daemon kernels, actual Git worktrees and E2EE owner calls passed host issuance, pre-dispatch host/grant refusals, durable registration/generation restart fencing, remote-only projection, current/stale removal without another ask, actual Git diff, foreign-session refusal, exact-window isolation, recipe hash refusal with no provisioning record, and real remote-list/vm-doctor CLI commands. Mounted production RemoteWorkspace/sidebar/VM components showed the actual diff; live sidebar navigation worked; Create VM stayed disabled before full-lifecycle consent and enabled after it; the unsupported Linux host produced a visible durable failed record instead of a fake VM.
+- **Why:** This proves actual changed interfaces, not only fixture copies. The unrelated PTY/session seam does not prove a real terminal, live Lima guest, native shell or full inventory/visual score. A temporary host-layout overlap was corrected only in the controlled embedding, and normal busy-state waits replaced premature clicks; production layout was not patched to force a pass.
+- **Evidence:** final remote smoke exit0/276.33s, one file passed/flaky[]; actual readiness receipt artifact48; two saved screenshots and empty browser errors; canonical APIs and real Git source assertions in preserved executed smoke source.
+- **Reversibility:** easy
+- **Confidence:** high for exercised paths and explicit limits
+- **Revisit if:** Native/full-shell/live-VM execution establishes a different owner or renderer lifetime.
+- **Source:** assumed — autonomous
+
+## D12: Preserve every incoming authority through the sole roadmap catch-up
+- **Question:** Which concurrently landed decisions bind final integration and visible reachability?
+- **Options:** Restore old shell assumptions; merge repeatedly; consume incoming decisions and preserve their owners.
+- **Chose:** One clean merge after f27a1d09. Read all 18 pinned incoming logs at a47845a9 plus the two newer ui-restyle-editor/terminal logs in full, including long Progress footers. Preserve exact-window and active-view input identity, six-slot canonical tools, filtered one-use Ask snapshot, private saved-target storage, mobile grants, clipboard authority and explicit native/GPU/browser limitations. The generic remaining-contribution projection makes remote-workspaces a right-bottom stripe tool, unopened by default; no WorktreesSection insertion or old sidebar pile is needed.
+- **Why:** Incoming triage owns the broader failure inventory and was not suite-green. It does not authorize credential widening or pretend native acceptance. Actual source projection retains all effective sidebar contributions, so duplicating this panel would violate the landed shell model.
+- **Evidence:** all20 decision receipts; packages/daemon/src/plugins/ui-model.ts390–412 and tool-layout.ts101–139,176–183; ToolShell.tsx stripe/PluginSlot paths; clean merge output; caught-up full typecheck exit0/35.39s.
+- **Reversibility:** medium
+- **Confidence:** high for read source/log contracts
+- **Revisit if:** Canonical land reports a concrete new conflict or registry failure.
+- **Source:** locked by incoming decision logs
+
+## D13: Fix real lifetime/retirement defects without weakening admission
+- **Question:** What did the caught-up regressions and genuine stopped-guest semantics require?
+- **Options:** Relax confirmation/permissions; fabricate offline refresh; repair ownership and realistic fixtures.
+- **Chose:** Mobile listener/tabs/notifications now return their own activation disposer instead of sharing module globals. Restart fixtures preserve the paired listener port and use loopback offers; destructive tests supply kernel consent while preserving handler confirmed checks. Real editor/sidebar evidence producers replace missing cleanup context; public remove/re-add of the saved name replaces encrypted-file editing; non-destructive session close does not accept yes. The confirmation descriptor accepts canonical remove's instance/safe-only fields. Folder views do not request inapplicable Git status. Stopped VM attachment reads HostStatus plus retained remoteList, never a live remoteRefresh. Host retirement compares generation/grant pins atomically with deletion and reconciles verified local absence without detaching replacements.
+- **Why:** The initial seven-file run had five passing files and two failing owner files. Those failures exposed Mobile's same module-global teardown issue and stale fixture contracts; broader package execution later exposed only a misplaced yes on the new folder fixture plus four independently owned Mobile files. A powered-off guest cannot answer a live refresh, and deleting a re-registered host by ID alone could remove another generation's mirrors.
+- **Evidence:** remote artifacts65/68; Mobile main activation globals; vm.ts stopped mirror/remoteRetire; remoteHostForget transaction; final canonical remote19/19 files pass, zero failures/flaky[], exit0/29.67s. Final UIlint/root/mobile/prepared-desktop typecheck passed44.74s; packaged build passed18.44s with30plugins.
+- **Reversibility:** medium
+- **Confidence:** high for executed owner/kernel/process/script paths; real VM lifecycle remains unexercised
+- **Revisit if:** Genuine Lima or full/native surface acceptance identifies a remaining boundary mismatch.
+- **Source:** assumed — autonomous; locked by incoming CLI/admission contracts
+
+## D14: Register one exact native capability implementation successor
+- **Question:** Which inherited source flows remain unavailable after the core owner/VM implementation?
+- **Options:** Invent callbacks/ad-hoc production identity; duplicate VM/Browser/automation work; retain exact prerequisites in one successor.
+- **Chose:** Canonical queue add registered m7-native-notification-and-signed-terminal-host, todo, depending on this item. Its only flows are native notification permission/click/dismiss after supported public SDK callbacks, and production terminal-host signing/launchd/TCC/admission/upgrade after authorized signing/packaging identity. No VM/host implementation successor or test/review/debug follow-up was added. Four broader Mobile test files remain with existing fix-test-mobile-1028 and are appended as concrete evidence in BLOCKERS.
+- **Why:** Native delivery/signing cannot be fabricated from an unacknowledged SDK call or ad-hoc identity. The reachable source is complete independently; outside capability gaps and separately owned regression inventory must remain explicit.
+- **Evidence:** absolute canonical queue add exit0; canonical JSON readback confirms exact ID/title/docs/dependency/todo. Predecessor D6/D15 retains the real SDK/signing observations. BLOCKERS additional Mobile inventory and final feature/kernel/script receipts.
+- **Reversibility:** easy
+- **Confidence:** high for registered ownership and inherited prerequisite limits
+- **Revisit if:** Supported callbacks or authorized production identity is provided.
+- **Source:** deferred: native notification callbacks and signed terminal-host packaging
+
+## D15: Apply the now-active end-phase technical and independent review gates
+- **Question:** Can the early combined-spec/review skip remain the final assurance after incoming triage confirms the end phase?
+- **Options:** Keep the initial skip as final; silently claim review; separate the current technical map and execute the bounded final round.
+- **Chose:** Author sibling tech.md from the live contracts and move detailed technical ownership there. One fixed-scope C/S/X final discovery round uses independent promote/refute contexts, followed by one accepted fix batch and fresh checks as LOOP prescribes. Opus/sonnet are not authenticated/shipping in the actual alias probe; Gemini3.1Pro is the available cross-family fallback for OpenAI-authored implementation. Review tools exclude shell and all writes; reproduction limitations must remain explicit.
+- **Why:** The pinned incoming triage log establishes that end-phase verification is active. Earlier decisions correctly record what ran then, but do not establish an independent final review. The incoming Mobile review incident also demonstrates why an unsandboxed reviewer must not receive mutation tools or real-home access.
+- **Evidence:** all-alias pi-watch preflight exit5 lists Opus/sonnet unavailable and google/gemini-3.1-pro-preview:high ready; sibling tech.md; m7-test-triage D1–D6 and incoming fix-test-apps-mobile review boundary.
+- **Reversibility:** easy
+- **Confidence:** high for gate/model availability; review outcome not yet claimed
+- **Revisit if:** A review dispatch fails or its schema/evidence cannot be resolved.
+- **Source:** locked by docs/loop/LOOP.md end-phase/final-round rules
+
+## D16: Release exact owned preparations without a revoked context call
+- **Question:** Why did successful regression teardown still log could-not-clean/no-longer-active, and could a prepared checkout actually be released?
+- **Options:** Suppress the warning; keep asking a revoked context; use this activation's durable creation record plus existing Git proof.
+- **Chose:** Add cleanupActivationPreparedCheckouts over only matching owner_id rows and absolute repo paths, calling existing removePrepared after narrowing its repo input to the ID/path it really consumes. Preserve root/realpath/head/detached/lock-reason/dirty safeguards. Startup cleanup still enumerates canonical repos while active; deactivation uses the owner-only helper on the same queue. A real plugin.disable regression checks the exact owned checkout disappears while the foreign locked registration and HEAD remain.
+- **Why:** The returned disposer runs after its context is revoked for new calls, though saved-store teardown remains available. Re-querying quirky.repo/list cannot establish cleanup authority then. The private creation row and exact live Git lock proof already carry the needed ownership; no synthetic Repo, broad fallback or hidden exception is needed.
+- **Evidence:** observed warning in remote artifacts65/68; worktree main's old releasePrepared listRepos call; prepared.ts removePrepared guards and new owner-only helper; prepared-create.test.ts disable/resource regression.
+- **Reversibility:** medium
+- **Confidence:** high for source cause; fresh pre-pass includes the added regression
+- **Revisit if:** Resource teardown can target a foreign or changed registration, or the new live regression fails.
+- **Source:** assumed — autonomous
+
 ## Progress
-Claimed lane6 on build/m7-vm-and-owner-bound-host-workspaces from build/roadmap. Requirements, locked roadmap/architecture and predecessor decisions read; source scout returned. Combined logic/technical spec self-reviewed, shared OwnerHostIdentity/RegisteredOwnerHost and expectedHost forwarding contract prepared. Next: commit contracts/spec and dispatch disjoint CLI-owner, remote-workspace and VM components, integrate their hubs, then narrow isolated runtime smoke/typecheck, single roadmap catch-up, record disposition and canonical land.
+Feature source and current sibling logic/technical maps are prepared. Three initial component worktrees are removed; all source implementers returned. One clean roadmap catch-up consumed all20 incoming logs. The prior named19-file gate, full typecheck and packaged build pass; the actual API/CLI/production-component proof is preserved with its limits. End-phase final review is now being staged against a fixed feature baseline; its deterministic pre-pass adds the owned-preparation regression. Browser, SSH tunnel, remote scenario and throwaway product-tree bundles are closed/removed. One native capability successor is verified. Next: capture the frozen source/spec artifact, run the independent final round, adjudicate and fix accepted findings once, rerun the exact checks, update the archived receipt, commit and canonical land; end only after the verdict and owned cleanup.

@@ -39,13 +39,20 @@ async function start(options: { home?: string; port?: number } = {}): Promise<St
   return { home: harness.home, harness, caller: await harness.connect('cli') }
 }
 
-async function restart(started: Started): Promise<Started> {
+async function restart(started: Started, mobilePort?: string): Promise<Started> {
   await started.caller.close()
   await started.harness.daemon.stop()
   await started.harness.pty.stop()
   const index = harnesses.indexOf(started.harness)
   if (index !== -1) harnesses.splice(index, 1)
-  return start({ home: started.home, port: started.harness.runtime.port })
+  const previousPort = process.env.QUIRKY_MOBILE_PORT
+  if (mobilePort !== undefined) process.env.QUIRKY_MOBILE_PORT = mobilePort
+  try {
+    return await start({ home: started.home, port: started.harness.runtime.port })
+  } finally {
+    if (previousPort === undefined) delete process.env.QUIRKY_MOBILE_PORT
+    else process.env.QUIRKY_MOBILE_PORT = previousPort
+  }
 }
 
 function identity(value: unknown): HostIdentity {
@@ -88,7 +95,7 @@ test('runtimeCall rejects stale host and saved-runtime pins before mutation and 
     expectedHost: initialHost,
     expectedRuntime: ownerPin
   })
-  remote = await restart(remote)
+  remote = await restart(remote, new URL(ownerTarget.endpoint).port)
   const currentResult = await local.caller.callAny('quirky.cli/runtimeCall', {
     runtime: ownerTarget.id,
     method: 'quirky.cli/hostIdentity',

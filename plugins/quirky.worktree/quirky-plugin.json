@@ -1542,7 +1542,9 @@
             "allowFailedArchiveHook": {
               "type": "boolean",
               "description": "Remove even if the archive script fails."
-            }
+            },
+            "safeOnly": { "type": "boolean", "description": "The removal must retain live or unknown runtime state." },
+            "expectedInstanceId": { "type": "string", "description": "The exact selected filesystem instance; canonical removal rechecks it." }
           },
           "required": [
             "worktree"
@@ -2415,7 +2417,7 @@
       },
       {
         "id": "remoteHostForget",
-        "description": "Forget one host registration. Existing attachments require detach:true and confirmed:true; detach removes local mirror rows only and never calls remote source removal.",
+        "description": "Forget a host registration only while any supplied expectedHost and expectedRuntime pins still match the stored registration. Existing attachments require detach:true and confirmed:true; detach removes only local mirrors and never remote source workspaces.",
         "params": {
           "type": "object",
           "additionalProperties": false,
@@ -2426,6 +2428,27 @@
             "detach": {
               "type": "boolean",
               "description": "Explicitly detach all local mirror snapshots for this host without deleting remote workspaces."
+            },
+            "expectedHost": {
+              "type": "object",
+              "description": "Optional exact host ID and activation generation required for a stale VM caller to forget this registration.",
+              "additionalProperties": false,
+              "properties": {
+                "hostId": { "type": "string" },
+                "generation": { "type": "string" }
+              },
+              "required": ["hostId", "generation"]
+            },
+            "expectedRuntime": {
+              "type": "object",
+              "description": "Optional exact saved owner grant pin required for a stale VM caller to forget this registration.",
+              "additionalProperties": false,
+              "properties": {
+                "id": { "type": "string" },
+                "endpoint": { "type": "string" },
+                "grantId": { "type": "string" }
+              },
+              "required": ["id", "endpoint", "grantId"]
             },
             "confirmed": {
               "type": "boolean"

@@ -790,6 +790,21 @@ function validateHost(context: PluginContext, host: unknown, runtimeId: string):
   return host as unknown as RegisteredOwnerHost & { identity: OwnerHostIdentity }
 }
 
+function validateOfflineHostStatus(context: PluginContext, row: VmRow, value: unknown): RegisteredOwnerHost {
+  if (row.host_id === null) conflict(context, `VM ${row.id} has no registered owner host`)
+  const runtime = parseSavedRuntimeIdentity(context, row)
+  const identity = parseStoredIdentity(context, row)
+  if (!runtime || !identity || !isRecord(value) || value.id !== row.host_id || value.connected !== false ||
+    !isRecord(value.runtime) || value.runtime.id !== runtime.id || value.runtime.name !== runtime.name ||
+    value.runtime.endpoint !== runtime.endpoint || value.runtime.grantId !== runtime.grantId) {
+    conflict(context, "Offline guest host status no longer matches this VM's pinned runtime and owner identity")
+  }
+  if (!sameIdentity(parseIdentity(value.identity, 'Offline guest host status', context), identity)) {
+    conflict(context, 'Offline guest host generation changed; refusing to refresh a stale VM attachment')
+  }
+  return value as unknown as RegisteredOwnerHost
+}
+
 function validateMirror(context: PluginContext, value: unknown, host: RegisteredOwnerHost, expectedWorktree?: { id: string; instanceId: string }): VmRemoteWorkspace {
   if (!isRecord(value) || typeof value.id !== 'string' || value.id.trim() === '' || value.hostId !== host.id ||
     typeof value.connected !== 'boolean' || typeof value.fingerprint !== 'string' || !isRecord(value.worktree)) {
@@ -945,30 +960,33 @@ async function backendState(context: PluginContext, service: VmService, store: P
 }
 
 function mirrorForWorkspace(context: PluginContext, row: VmRow, workspaces: unknown, expectedIdentity: OwnerHostIdentity, expectedConnected: boolean): VmRemoteWorkspace {
-  if (!Array.isArray(workspaces)) conflict(context, 'Remote refresh returned an invalid workspace list')
+  if (!Array.isArray(workspaces)) conflict(context, 'Remote workspace read returned an invalid workspace list')
   const previous = parseMirror(context, row)
   if (!previous) conflict(context, `VM ${row.id} has no saved guest workspace to refresh`)
   const value = workspaces.find((entry) => isRecord(entry) && entry.id === previous.id && entry.hostId === previous.hostId)
-  if (!isRecord(value) || !isRecord(value.worktree)) conflict(context, 'Remote refresh no longer contains this exact VM workspace mirror')
+  if (!isRecord(value) || !isRecord(value.worktree)) conflict(context, 'Remote workspace read no longer contains this exact VM mirror')
   const worktree = value.worktree as unknown as Worktree
-  if (worktree.id !== row.worktree_id || worktree.instanceId !== row.worktree_instance_id) conflict(context, 'Remote refresh found a replacement workspace instance; refusing to retarget this VM')
-  const identity = parseIdentity(value.identity, 'Remote workspace refresh', context)
-  if (!sameIdentity(identity, expectedIdentity)) conflict(context, 'Remote workspace refresh has a stale or replaced owner generation')
+  if (worktree.id !== row.worktree_id || worktree.instanceId !== row.worktree_instance_id) conflict(context, 'Remote workspace read found a replacement instance; refusing to retarget this VM')
+  const identity = parseIdentity(value.identity, 'Remote workspace read', context)
+  if (!sameIdentity(identity, expectedIdentity)) conflict(context, 'Remote workspace read has a stale or replaced owner generation')
   if (value.connected !== expectedConnected) conflict(context, expectedConnected
-    ? 'Guest owner refresh did not confirm the exact workspace is connected'
-    : 'Guest owner refresh still reports an attachment connected after the Lima VM stopped')
-  if (typeof value.fingerprint !== 'string') conflict(context, 'Remote refresh omitted its workspace fingerprint')
+    ? 'Guest owner read did not confirm the exact workspace is connected'
+    : 'Guest owner status still reports an attachment connected after the Lima VM stopped')
+  if (typeof value.fingerprint !== 'string') conflict(context, 'Remote workspace read omitted its fingerprint')
   return { id: previous.id, hostId: previous.hostId, identity, worktree, connected: value.connected, fingerprint: value.fingerprint }
 }
 
 async function refreshStoppedMirror(context: VmContext, service: VmService, row: VmRow): Promise<VmRemoteWorkspace> {
   if (row.host_id === null) conflict(context, `VM ${row.id} has no registered owner host to refresh`)
-  assertServiceActive(context, service)
-  const refreshed = await context.call('quirky.worktree/remoteRefresh', { host: row.host_id })
-  assertServiceActive(context, service)
-  const workspaces = isRecord(refreshed) ? refreshed.workspaces : undefined
   const identity = parseStoredIdentity(context, row)
   if (!identity) conflict(context, `VM ${row.id} has no saved owner host identity`)
+  assertServiceActive(context, service)
+  const statusValue = await context.call('quirky.worktree/remoteHostStatus', { host: row.host_id })
+  assertServiceActive(context, service)
+  const host = validateOfflineHostStatus(context, row, statusValue)
+  const listed = await context.call('quirky.worktree/remoteList', { host: host.id })
+  assertServiceActive(context, service)
+  const workspaces = isRecord(listed) ? listed.workspaces : undefined
   return mirrorForWorkspace(context, row, workspaces, identity, false)
 }
 
@@ -1238,9 +1256,49 @@ async function remoteRetire(context: VmContext, store: PluginStore, service: VmS
   if (row.host_id !== null && row.host_forgotten === 0) {
     const other = store.get<{ id: string }>("SELECT id FROM vm_environments WHERE id <> ? AND host_id = ? AND state <> 'destroyed' LIMIT 1", row.id, row.host_id)
     if (other) conflict(context, `Host registration ${row.host_id} is also bound to VM ${other.id}; refusing to forget a shared guest host`)
+    const expectedHost = parseStoredIdentity(context, row)
+    const expectedRuntime = parseSavedRuntimeIdentity(context, row)
+    if (!expectedHost || !expectedRuntime) conflict(context, `VM ${row.id} has no complete pinned host/runtime identity for retirement`)
     assertServiceActive(context, service)
-    await context.call('quirky.worktree/remoteHostForget', { host: row.host_id, detach: true, confirmed: true, yes: true })
+    const listing = await context.call('quirky.worktree/remoteHostList', {})
     assertServiceActive(context, service)
+    if (!isRecord(listing) || !Array.isArray(listing.hosts)) conflict(context, 'Registered host list returned an invalid result during VM retirement')
+    let exactHost: unknown
+    let exactMatches = 0
+    let runtimeMatches = 0
+    for (const value of listing.hosts) {
+      if (!isRecord(value) || typeof value.id !== 'string' || value.id.trim() === '' || !isRecord(value.runtime) ||
+        typeof value.runtime.id !== 'string' || value.runtime.id.trim() === '' ||
+        typeof value.runtime.name !== 'string' || value.runtime.name.trim() === '' ||
+        typeof value.runtime.endpoint !== 'string' || value.runtime.endpoint.trim() === '' ||
+        typeof value.runtime.grantId !== 'string' || value.runtime.grantId.trim() === '' ||
+        typeof value.connected !== 'boolean' || (value.error !== null && typeof value.error !== 'string') ||
+        typeof value.updatedAt !== 'number' || !Number.isFinite(value.updatedAt)) {
+        conflict(context, 'Registered host list contains a malformed host entry; refusing VM credential cleanup')
+      }
+      parseIdentity(value.identity, 'Registered host list entry', context)
+      if (value.id === row.host_id) {
+        exactHost = value
+        exactMatches += 1
+      }
+      if (value.runtime.id === expectedRuntime.id) runtimeMatches += 1
+    }
+    if (exactMatches > 1 || runtimeMatches > 1) conflict(context, 'Registered host list contains duplicate VM host/runtime registrations')
+    if (exactMatches === 0 && runtimeMatches > 0) {
+      conflict(context, 'The VM runtime is registered under a replacement host ID; refusing to forget the replacement')
+    }
+    if (exactMatches === 1) {
+      const host = validateOfflineHostStatus(context, row, exactHost)
+      await context.call('quirky.worktree/remoteHostForget', {
+        host: host.id,
+        detach: true,
+        confirmed: true,
+        yes: true,
+        expectedHost,
+        expectedRuntime: { id: expectedRuntime.id, endpoint: expectedRuntime.endpoint, grantId: expectedRuntime.grantId }
+      })
+      assertServiceActive(context, service)
+    }
     store.run('UPDATE vm_environments SET host_forgotten = 1, mirror_json = NULL, updated_at = ? WHERE id = ?', Date.now(), row.id)
   }
   const current = rowById(store, row.id)!

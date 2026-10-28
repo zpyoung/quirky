@@ -70,6 +70,26 @@ function parseRuntime(context: PluginContext, value: unknown, source: string): O
     grantId: requiredString(context, record.grantId, `${source}.grantId`, 256)
   }
 }
+function parseExpectedHost(context: PluginContext, value: unknown): OwnerHostIdentity {
+  const record = recordOf(value)
+  if (!record) reject(context, 'invalid-params', 'expectedHost must contain hostId and generation')
+  assertKeys(context, record, ['hostId', 'generation'])
+  return {
+    hostId: requiredString(context, record.hostId, 'expectedHost.hostId', 256),
+    generation: requiredString(context, record.generation, 'expectedHost.generation', 256)
+  }
+}
+
+function parseExpectedRuntime(context: PluginContext, value: unknown): Pick<OwnerRuntimeIdentity, 'id' | 'endpoint' | 'grantId'> {
+  const record = recordOf(value)
+  if (!record) reject(context, 'invalid-params', 'expectedRuntime must contain id, endpoint and grantId')
+  assertKeys(context, record, ['id', 'endpoint', 'grantId'])
+  return {
+    id: requiredString(context, record.id, 'expectedRuntime.id', 256),
+    endpoint: requiredString(context, record.endpoint, 'expectedRuntime.endpoint', 2048),
+    grantId: requiredString(context, record.grantId, 'expectedRuntime.grantId', 256)
+  }
+}
 
 function parseCallResult(context: PluginContext, value: unknown, source: string): OwnerCallResult {
   const record = recordOf(value)
@@ -123,7 +143,10 @@ function sameIdentity(left: OwnerHostIdentity, right: OwnerHostIdentity): boolea
   return left.hostId === right.hostId && left.generation === right.generation
 }
 
-function sameRuntimePin(left: OwnerRuntimeIdentity, right: OwnerRuntimeIdentity): boolean {
+function sameRuntimePin(
+  left: Pick<OwnerRuntimeIdentity, 'id' | 'endpoint' | 'grantId'>,
+  right: Pick<OwnerRuntimeIdentity, 'id' | 'endpoint' | 'grantId'>
+): boolean {
   return left.id === right.id && left.endpoint === right.endpoint && left.grantId === right.grantId
 }
 
@@ -737,19 +760,31 @@ export function registerRemoteWorkspaces(context: PluginContext, store: PluginSt
   })
 
   provide('remoteHostForget', (params) => {
-    assertKeys(context, params, ['host', 'detach', 'confirmed'])
-    const host = requireHost(context, store, params.host)
+    assertKeys(context, params, ['host', 'detach', 'confirmed', 'expectedHost', 'expectedRuntime'])
+    const hostId = requiredString(context, params.host, 'host', 256)
     const detach = optionalBoolean(context, params.detach, 'detach') === true
+    const expectedHost = params.expectedHost === undefined ? undefined : parseExpectedHost(context, params.expectedHost)
+    const expectedRuntime = params.expectedRuntime === undefined ? undefined : parseExpectedRuntime(context, params.expectedRuntime)
     if (params.confirmed !== true) reject(context, 'invalid-params', 'confirmed must be true after reviewing the local detach.')
-    const attached = store.get<{ count: number }>('SELECT COUNT(*) AS count FROM remote_workspaces WHERE host_id = ?', host.value.id)?.count ?? 0
-    if (attached > 0 && !detach) {
-      reject(context, 'conflict', `Host ${host.value.id} still has ${attached} remote mirror attachment(s); use confirmed local detach to forget them without deleting the remote source.`)
-    }
-    store.transaction(() => {
-      if (detach) store.run('DELETE FROM remote_workspaces WHERE host_id = ?', host.value.id)
-      store.run('DELETE FROM remote_hosts WHERE id = ?', host.value.id)
+    const detached = store.transaction(() => {
+      const row = hostRow(store, hostId)
+      if (!row) reject(context, 'not-found', `No registered remote owner host ${hostId} exists.`)
+      const host = hostFromRow(context, row)
+      if (expectedHost && !sameIdentity(host.value.identity, expectedHost)) {
+        reject(context, 'conflict', 'The registered owner host generation changed; refusing host forget.')
+      }
+      if (expectedRuntime && !sameRuntimePin(host.value.runtime, expectedRuntime)) {
+        reject(context, 'conflict', 'The registered saved owner grant changed; refusing host forget.')
+      }
+      const attached = store.get<{ count: number }>('SELECT COUNT(*) AS count FROM remote_workspaces WHERE host_id = ?', hostId)?.count ?? 0
+      if (attached > 0 && !detach) {
+        reject(context, 'conflict', `Host ${hostId} still has ${attached} remote mirror attachment(s); use confirmed local detach to forget them without deleting the remote source.`)
+      }
+      if (detach) store.run('DELETE FROM remote_workspaces WHERE host_id = ?', hostId)
+      store.run('DELETE FROM remote_hosts WHERE id = ?', hostId)
+      return detach ? attached : 0
     })
-    return { ok: true, detached: detach ? attached : 0 }
+    return { ok: true, detached }
   })
 
   provide('remoteAttach', async (params) => {

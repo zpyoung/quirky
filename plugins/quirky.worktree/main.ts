@@ -38,7 +38,7 @@ import { archiveWorktree, linkReference, listReferences, unlinkReference, type R
 import { readStatusDefinitions, setStatusDefinitions } from './src/daemon/statuses'
 import { navigate, navigationHistoryMove, navigationIndex, navigationState, navigationStep, openIn } from './src/daemon/navigation'
 import { availableHosts } from './src/daemon/hosts'
-import { cleanupExpiredPreparedCheckouts, cleanupPreparedCheckouts, PREPARATION_TTL_MS } from './src/daemon/prepared'
+import { cleanupActivationPreparedCheckouts, cleanupExpiredPreparedCheckouts, cleanupPreparedCheckouts, PREPARATION_TTL_MS } from './src/daemon/prepared'
 import { registerRemoteWorkspaces } from './src/daemon/remote'
 import { registerVmEnvironments } from './src/daemon/vm'
 import type { CleanupSelection, WorktreeControl } from './src/control-types'
@@ -261,15 +261,10 @@ export async function activate(context: PluginContext): Promise<PluginActivation
     suggestions: new Map(),
     pending: pendingStarts
   }
-  releasePrepared = async () => {
-    try {
-      const repos = await listRepos()
-      await poolQueue.run('prepared-worktree-pool', () => cleanupPreparedCheckouts(preparedEnv, repos))
-    } catch (error) {
-      context.log(`could not clean prepared worktrees during deactivation: ${errorMessage(error)}`)
-    }
-  }
-  await releasePrepared()
+  releasePrepared = () =>
+    poolQueue.run('prepared-worktree-pool', () => cleanupActivationPreparedCheckouts(preparedEnv))
+  const repos = await listRepos()
+  await poolQueue.run('prepared-worktree-pool', () => cleanupPreparedCheckouts(preparedEnv, repos))
   armPreparedExpiry()
 
   const removeEnv: RemoveEnv = {
