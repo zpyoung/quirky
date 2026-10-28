@@ -40,9 +40,11 @@ const PROJECT_ITEM_CONTEXT = `query ProjectItemContext($projectId: ID!, $itemId:
   project: node(id: $projectId) { __typename ... on ProjectV2 { id owner { __typename ... on Organization { login } ... on User { login } } } }
   item: node(id: $itemId) { __typename ... on ProjectV2Item { id type project { id } content { __typename ... on Issue { number url } ... on PullRequest { number url } } } }
 }`
-const ISSUE_TYPE_QUERY = `query OrganizationIssueTypes($owner: String!, $repoOwner: String!, $repo: String!, $number: Int!, $cursor: String) {
-  repository(owner: $repoOwner, name: $repo) { issue(number: $number) { id } }
-  organization(login: $owner) { issueTypes(first: 100, after: $cursor) { nodes { id name description isEnabled } pageInfo { endCursor hasNextPage } } }
+const ISSUE_TYPE_QUERY = `query OrganizationIssueTypes($repoOwner: String!, $repo: String!, $number: Int!, $cursor: String) {
+  repository(owner: $repoOwner, name: $repo) {
+    owner { __typename ... on Organization { issueTypes(first: 100, after: $cursor) { nodes { id name description isEnabled } pageInfo { endCursor hasNextPage } } } }
+    issue(number: $number) { id }
+  }
 }`
 const ISSUE_TYPE_MUTATION = `mutation SetIssueType($input: UpdateIssueIssueTypeInput!) {
   updateIssueIssueType(input: $input) { issue { id issueType { id name } } }
@@ -160,7 +162,7 @@ function workItemIdentity(env: HostingEnv, hostIdentity: Identity, value: unknow
   return { host: hostIdentity.host, owner: match[1], repo: match[2] }
 }
 
-type ProjectItemContext = { identity: Identity; number: number; kind: 'issue' | 'pullRequest'; owner: string; ownerType: 'organization' | 'user' }
+type ProjectItemContext = { identity: Identity; number: number; kind: 'issue' | 'pullRequest' }
 
 async function projectItemContext(
   env: HostingEnv,
@@ -187,7 +189,7 @@ async function projectItemContext(
     throw env.invalid('validation_error', 'Project item must contain a GitHub issue or pull request.')
   }
   const identity = workItemIdentity(env, hostIdentity, issueContent?.url, number, kind)
-  return { identity, number, kind, owner, ownerType: projectType }
+  return { identity, number, kind }
 }
 
 function validateMutationKind(env: HostingEnv, context: ProjectItemContext, params: Record<string, unknown>): void {
@@ -253,13 +255,12 @@ async function issueTypes(
   hostIdentity: Identity,
   context: ProjectItemContext
 ): Promise<IssueTypeResult> {
-  if (context.ownerType !== 'organization') throw env.invalid('unsupported_operation', 'Issue type actions require an organization-owned project.')
   const types: Record<string, unknown>[] = []
   let cursor: string | null = null
   let issueId: string | null = null
+  const seenCursors = new Set<string>()
   for (let page = 0; page < 100; page += 1) {
     const result = await projectGraphql(env, scope, hostIdentity, ISSUE_TYPE_QUERY, {
-      owner: context.identity.owner,
       repoOwner: context.identity.owner,
       repo: context.identity.repo,
       number: context.number,
@@ -268,19 +269,37 @@ async function issueTypes(
     const data = record(record(result)?.data)
     const repository = record(data?.repository)
     const issue = record(repository?.issue)
-    issueId = nonEmptyString(issue?.id)
-    if (issueId === null) throw projectError(env, 'not_found', 'The configured issue was not found.')
-    const organization = record(data?.organization)
-    const connection = record(organization?.issueTypes)
-    for (const node of array(connection?.nodes)) {
+    const pageIssueId = nonEmptyString(issue?.id)
+    if (pageIssueId === null) throw projectError(env, 'not_found', 'The configured issue was not found.')
+    if (issueId !== null && pageIssueId !== issueId) {
+      throw projectError(env, 'schema_drift', 'GitHub changed the issue identity while loading issue types.')
+    }
+    issueId = pageIssueId
+    const repositoryOwner = record(repository?.owner)
+    const ownerType = repositoryOwner?.__typename
+    if (ownerType !== 'Organization' && ownerType !== 'User') {
+      throw projectError(env, 'schema_drift', 'GitHub did not return the issue repository owner type.')
+    }
+    if (ownerType === 'User') return { types, issueId }
+    const connection = record(repositoryOwner?.issueTypes)
+    const nodes = connection?.nodes
+    const pageInfo = record(connection?.pageInfo)
+    if (!Array.isArray(nodes) || pageInfo === null || typeof pageInfo.hasNextPage !== 'boolean') {
+      throw projectError(env, 'schema_drift', 'GitHub returned a malformed issue type connection.')
+    }
+    for (const node of nodes) {
       const raw = record(node)
       const id = nonEmptyString(raw?.id)
       const name = nonEmptyString(raw?.name)
       if (id && name) types.push({ id, name, description: typeof raw?.description === 'string' ? raw.description : null, enabled: raw?.isEnabled !== false })
     }
-    const pageInfo = record(connection?.pageInfo)
-    cursor = nonEmptyString(pageInfo?.endCursor)
-    if (pageInfo?.hasNextPage !== true || cursor === null) return { types, issueId }
+    if (!pageInfo.hasNextPage) return { types, issueId }
+    const nextCursor = nonEmptyString(pageInfo.endCursor)
+    if (nextCursor === null || seenCursors.has(nextCursor)) {
+      throw projectError(env, 'schema_drift', 'GitHub returned an invalid issue type pagination cursor.')
+    }
+    seenCursors.add(nextCursor)
+    cursor = nextCursor
   }
   throw projectError(env, 'too_large', 'GitHub returned more than 10000 issue types.', { totalCount: types.length })
 }
@@ -550,11 +569,16 @@ async function projectItemMutation(env: HostingEnv, params: Record<string, unkno
   const result = await projectGraphql(env, scope, projectHostIdentity, ISSUE_TYPE_MUTATION, {
     input: { issueId: typeResult.issueId, issueTypeId: selectedType.id }
   }, false)
+  env.changed(scope, { type: 'issue', number: context.number, projectId: project, action })
   const mutation = record(record(record(result)?.data)?.updateIssueIssueType)
   const updatedIssue = record(mutation?.issue)
-  if (nonEmptyString(updatedIssue?.id) === null) throw projectError(env, 'unknown', 'GitHub did not confirm the issue type update.')
-  env.changed(scope, { type: 'issue', number: context.number, projectId: project, action })
-  return mutationResult(context, action, true, { issueType: record(updatedIssue?.issueType) })
+  const updatedIssueId = nonEmptyString(updatedIssue?.id)
+  if (updatedIssueId === null) throw projectError(env, 'unknown', 'GitHub did not confirm the issue type update.')
+  const updatedIssueType = record(updatedIssue?.issueType)
+  if (updatedIssueId !== typeResult.issueId || nonEmptyString(updatedIssueType?.id) !== selectedType.id) {
+    throw projectError(env, 'unknown', 'GitHub did not confirm the requested issue type update.')
+  }
+  return mutationResult(context, action, true, { issueType: updatedIssueType })
 }
 
 async function projectItemDetails(env: HostingEnv, params: Record<string, unknown>, caller: ProjectCaller): Promise<Record<string, unknown>> {

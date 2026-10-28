@@ -1,6 +1,6 @@
 import type { GitStatusEntry, Worktree } from '@quirky/protocol'
 import { buildFixCommitFailurePrompt, buildFixPushFailurePrompt, buildResolveConflictsPrompt, renderTemplate } from './ai-prompts'
-import { pickDefaultAgent, recipeAction, saveRecipe, type EffectiveRecipe, type RecipeAction } from './ai-recipes'
+import { pickDefaultAgent, recipeAction, saveRecipe, validateRecipeLaunchOptions, type EffectiveRecipe, type RecipeAction } from './ai-recipes'
 import type { DaemonEnv, Handler } from './env'
 
 type FileEntry = { path: string; status: GitStatusEntry['status']; area: GitStatusEntry['area'] }
@@ -137,48 +137,68 @@ function newestSession(workspace: { root: GroupNode; activeGroup: string }): str
   return node?.session ?? null
 }
 
+
 /**
- * Shows the prompt `aiFix` would send for the action, rendered through the recipe in effect, and
- * that recipe, without starting anything. Fails like `aiFix` when there is nothing to fix.
+ * Shows the prompt aiFix would send and the provider-compatible recipe in effect; starts nothing.
  */
 export function aiFixPreview(env: DaemonEnv): Handler {
   return async (params, caller) => {
     const action = fixAction(env, params.action)
     const worktree = await env.resolve(params, caller)
-    const recipe = env.recipes.effective(action, worktree.repoId)
+    const stored = env.recipes.effective(action, worktree.repoId)
+    let provider = stored.agent
+    if (provider === null) {
+      try {
+        provider = await pickDefaultAgent(env)
+      } catch {
+        provider = null
+      }
+    }
+    const recipe = env.recipes.effective(action, worktree.repoId, provider)
     return { prompt: renderTemplate(recipe.template, { basePrompt: await basePrompt(env, worktree, action) }), recipe }
   }
 }
 
 /**
  * Opens a new agent tab in the worktree whose first prompt asks the agent to fix the held commit
- * or push failure, or to resolve the conflicts. `agent`, `args` and `template` override the
- * action's recipe for this launch, and `save` then stores what the launch used as the recipe of
- * that scope unless it is already stored. Resolves with the new session, the agent, the prompt
- * and whether a recipe was written.
+ * or push failure, or to resolve the conflicts. Agent, arguments, template and catalog picks
+ * override the action's recipe for this launch. Saving writes the complete effective choices.
  */
 export function aiFix(env: DaemonEnv): Handler {
   return async (params, caller) => {
     const action = fixAction(env, params.action)
     const worktree = await env.resolve(params, caller)
     const base = await basePrompt(env, worktree, action)
-    const recipe = env.recipes.effective(action, worktree.repoId)
-    const agent = await chooseAgent(env, given(params.agent), recipe)
+    const savedRecipe = env.recipes.effective(action, worktree.repoId)
+    const agent = await chooseAgent(env, given(params.agent), savedRecipe)
+    const recipe = env.recipes.effective(action, worktree.repoId, agent)
+    const launchOptions = await validateRecipeLaunchOptions(
+      env,
+      agent,
+      Object.hasOwn(params, 'launchOptions') ? params.launchOptions : recipe.launchOptions
+    )
     const args = typeof params.args === 'string' ? params.args : recipe.args
     const template = typeof params.template === 'string' ? params.template : recipe.template
     const prompt = renderTemplate(template, { basePrompt: base })
     if (prompt.trim() === '') throw env.errors.reasoned('invalid-params', 'empty-prompt', EMPTY_PROMPT[action])
 
+    const choices = launchOptions ?? {}
+    const optionValues = choices.optionValues ?? {}
     const { workspace } = (await env.context.call('quirky.terminal/newTab', {
       workspace: worktree.id,
       agent,
       prompt,
-      ...(args.trim() === '' ? {} : { extraArgs: args })
+      ...(args.trim() === '' ? {} : { extraArgs: args }),
+      ...(choices.model === undefined ? {} : { model: choices.model }),
+      ...(Object.keys(optionValues).length === 0 ? {} : { options: optionValues })
     })) as { workspace: { root: GroupNode; activeGroup: string } }
     const session = newestSession(workspace)
     if (session === null) throw env.errors.reasoned('conflict', 'not-started', 'The agent tab did not start.')
 
-    const saved = params.save === undefined ? false : saveRecipe(env, worktree, action, params.save, { agent, args, template })
+    const saved =
+      params.save === undefined
+        ? false
+        : saveRecipe(env, worktree, action, params.save, { agent, args, template, launchOptions }, agent)
     return { session, agent, prompt, saved }
   }
 }

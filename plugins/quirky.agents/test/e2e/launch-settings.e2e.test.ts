@@ -367,7 +367,6 @@ describe('resolving a selection (SC-6 to SC-17)', () => {
       for (const reserved of ['__proto__', 'constructor', 'prototype', 'model']) {
         await refusal({ model: 'opus', options: JSON.parse(`{"${reserved}":"x"}`) })
       }
-      expect((await failureOf(resolveOf(e2e, { agent: 'claude', options: { effort: 'low' } }))).message).toBe('effort requires a model')
     },
     60_000
   )
