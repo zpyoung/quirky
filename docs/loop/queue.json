@@ -662,9 +662,8 @@
       "deps": [
         "m5-automations-core"
       ],
-      "status": "in-progress",
-      "early": true,
-      "lane": 6
+      "status": "done",
+      "early": true
     },
     {
       "id": "m5-loops-presets",

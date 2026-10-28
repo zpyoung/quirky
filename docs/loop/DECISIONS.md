@@ -64,6 +64,9 @@ files, not this one.
 | hard | high | [m4-hosting-api-github D9](decisions/m4-hosting-api-github.md) | Share one head-guarded destructive merge seam before the sitter exists | locked by docs/roadmap.md |
 | hard | high | [m0-daemon-api D7](decisions/m0-daemon-api.md) | The four kinds are `method`, `event`, `job` and `launch-hook` | assumed — autonomous |
 | hard | high | [m0-daemon-api D13](decisions/m0-daemon-api.md) | Choose declared contributions with provided implementations | supersedes nothing; extends m0-registry D23 |
+| hard | high | [m5-automations-ui D4](decisions/m5-automations-ui.md) | Honor structured sessions and existing scheduling fixes | locked by docs/architecture.md |
+| hard for deployed migration order | high | [m5-automations-ui D14](decisions/m5-automations-ui.md) | Preserve canonical pointer migration9 and append background as migration10 | locked by docs/loop/decisions/m6-orchestration-core.md |
+| hard for migration order; medium otherwise | high for contract reconciliation | [m5-automations-ui D22](decisions/m5-automations-ui.md) | Reconcile final dispatch landing without weakening canonical session contracts | locked by docs/loop/decisions/m5-automations-dispatch.md D31-D34 |
 | hard | high | [m5-ledger D2](decisions/m5-ledger.md) | Use the same authenticated scripting surface for every ledger action | locked by docs/architecture.md |
 | hard | high | [m5-ledger D7](decisions/m5-ledger.md) | Preserve validation, history and no-op semantics exactly | locked by external research/orca-features/ledger.md |
 | hard | high | [m5-ledger D8](decisions/m5-ledger.md) | Keep imports replay-safe and evidence advisory | locked by external research/orca-features/ledger.md |
@@ -405,6 +408,15 @@ files, not this one.
 | medium (cross-feature integration) | high for the observed conflict; incoming deletion provenance still being traced | [m5-structured-runner D45](decisions/m5-structured-runner.md) | Reconcile a newer integration tip instead of discarding verified m5 work | assumed — autonomous (operator-directed landing continuation) |
 | medium (cross-feature merge composition) | high | [m5-structured-runner D46](decisions/m5-structured-runner.md) | Restore the unlanded candidate removed by handoff's cleanup, not an obsolete feature design | assumed — autonomous (operator-directed feature landing) |
 | medium (shared public launch/ui contracts) | high | [m5-structured-runner D47](decisions/m5-structured-runner.md) | Preserve the three new binding decision logs and their public contracts | locked by docs/loop/decisions/m3-session-info.md |
+| medium | high | [m5-automations-ui D1](decisions/m5-automations-ui.md) | Build the complete union of the three assigned UI and external-job slices | locked by docs/loop/LOOP.md |
+| medium | high | [m5-automations-ui D2](decisions/m5-automations-ui.md) | Use the existing plugin and public daemon-owned UI conventions | locked by docs/roadmap.md |
+| medium | high | [m5-automations-ui D7](decisions/m5-automations-ui.md) | Consume dispatch authority rather than inventing remote ownership | locked by docs/loop/decisions/m5-automations-dispatch.md |
+| medium | high | [m5-automations-ui D9](decisions/m5-automations-ui.md) | Preserve explicit setup consent and background-only structured sessions | locked by docs/loop/decisions/m5-automations-dispatch.md |
+| medium | high | [m5-automations-ui D15](decisions/m5-automations-ui.md) | Keep unavailable remote UI flows in one dependent follow-up | deferred: remote automation UI authorities |
+| medium | high for exercised explicit selection | [m5-automations-ui D18](decisions/m5-automations-ui.md) | Honor explicit structured-session navigation without creating a replacement shell | locked by docs/loop/decisions/m5-loops-core.md D19 |
+| medium | high for the ownership boundary; owning gate result recorded separately | [m5-automations-ui D26](decisions/m5-automations-ui.md) | Serialize repository base fetches without changing the immutable setup revision | assumed — autonomous |
+| medium | high for the traced acceptance race; owning gate result recorded separately | [m5-automations-ui D27](decisions/m5-automations-ui.md) | Preserve send arrival order before asynchronous preflight can reorder it | assumed — autonomous |
+| medium | high for reconciled contracts and exercised paths | [m5-automations-ui D29](decisions/m5-automations-ui.md) | Compose equivalent canonical publication and verify new Heimdall/profile contracts | locked by docs/loop/LOOP.md step7.3 |
 | medium | high | [m5-ledger D1](decisions/m5-ledger.md) | Implement the complete Project ledger feature | locked by docs/roadmap.md |
 | medium | high | [m5-ledger D4](decisions/m5-ledger.md) | Normalize ledger storage in the public plugin SQLite store | locked by docs/loop/decisions/m0-daemon-api.md |
 | medium | high | [m5-ledger D6](decisions/m5-ledger.md) | Preserve target distinctions and reject ambiguous selector combinations | locked by external research/orca-features/ledger.md |
@@ -1450,6 +1462,23 @@ files, not this one.
 | easy | high for recorded outcomes and index operation | [m5-structured-runner D51](decisions/m5-structured-runner.md) | Preserve all historical snapshot failures and reconcile the actual Git index before committing | assumed — autonomous |
 | easy | high for final exercised integration | [m5-structured-runner D52](decisions/m5-structured-runner.md) | Land the fully reconciled final source after consumer and smoke proof | assumed — autonomous |
 | easy | high | [m5-structured-runner D53](decisions/m5-structured-runner.md) | Use the operator's immediate landing gate ownership | assumed — autonomous (operator-directed verification ownership) |
+| easy | high | [m5-automations-ui D3](decisions/m5-automations-ui.md) | Prefer feature-document layout, explicit status, and capability-aware controls | locked by automations.md |
+| easy | high | [m5-automations-ui D5](decisions/m5-automations-ui.md) | Use night-mode workflow and verified cross-family review fallback | assumed — autonomous |
+| easy | high | [m5-automations-ui D6](decisions/m5-automations-ui.md) | Validate macOS only and preserve external-manager safety on other platforms | deferred: platform |
+| easy | high | [m5-automations-ui D8](decisions/m5-automations-ui.md) | Report actual surface data alongside daemon-owned navigation | locked by docs/roadmap.md |
+| easy | high for traced causes; final verification recorded below | [m5-automations-ui D10](decisions/m5-automations-ui.md) | Keep navigation inputs stable and invalidate data through native change events | assumed — autonomous |
+| easy | high for those exercised paths only | [m5-automations-ui D11](decisions/m5-automations-ui.md) | Separate actual native-process proof from incomplete test-gate results | assumed — autonomous |
+| easy | high | [m5-automations-ui D12](decisions/m5-automations-ui.md) | Fix evidence boundaries rather than accepting repeat failures as flaky | assumed — autonomous |
+| easy | high for exercised source/package paths; ui and native-menu proof are separate | [m5-automations-ui D13](decisions/m5-automations-ui.md) | Verify typed source and packaged output before visible UI verification | assumed — autonomous |
+| easy | high for process compliance; no independent-review assurance | [m5-automations-ui D16](decisions/m5-automations-ui.md) | Apply the two-hour rule without inventing independent review | locked by docs/loop/LOOP.md |
+| easy | high for exercised client and integration paths; visible ui outcome remains separately recorded | [m5-automations-ui D17](decisions/m5-automations-ui.md) | Verify the composed runtime with real clients, not only merge text | assumed — autonomous |
+| easy | high | [m5-automations-ui D19](decisions/m5-automations-ui.md) | Preserve native startup diagnostics and isolate a broken external Node installation | assumed — autonomous |
+| easy | high for the named observations only | [m5-automations-ui D20](decisions/m5-automations-ui.md) | Close the started visible campaign with specific continuation evidence | assumed — autonomous |
+| easy | high | [m5-automations-ui D21](decisions/m5-automations-ui.md) | Correct saved-output parsing, canonical launch evidence and clipped navigation controls | assumed — autonomous |
+| easy | high for the exercised gates | [m5-automations-ui D23](decisions/m5-automations-ui.md) | Use the final composed candidate's observed gates | assumed — autonomous |
+| easy | high for observed gate failure; causes remain under investigation | [m5-automations-ui D24](decisions/m5-automations-ui.md) | Repair the normal merged gate's owning failures rather than waive them | locked by docs/loop/LOOP.md step7.3 |
+| easy | high for traced causes; owning gate result recorded separately | [m5-automations-ui D25](decisions/m5-automations-ui.md) | Publish fixture replies atomically and observe the CLI's real recovery daemon | assumed — autonomous |
+| easy | high for exercised paths; authoritative normal land remains the final gate | [m5-automations-ui D28](decisions/m5-automations-ui.md) | Require actual recovery, PTY consumption and remote-base creation proof | assumed — autonomous |
 | easy | high | [m5-ledger D3](decisions/m5-ledger.md) | Use omp implementers with the reachable Gemini reviewer fallback | assumed — autonomous |
 | easy | high | [m5-ledger D11](decisions/m5-ledger.md) | Build and verify macOS behavior without claiming other platforms | deferred: platform |
 | easy | high | [m5-ledger D13](decisions/m5-ledger.md) | Use two independent implementation components with one integration owner | assumed — autonomous |
