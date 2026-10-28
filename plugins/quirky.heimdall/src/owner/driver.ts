@@ -49,6 +49,7 @@ export function createOwnerDriver(options: DriverOptions): OwnerKernelPort & { c
       const journal = store.journal(enrollment.watcherId)
       const attempted = latestAttempts(journal).filter(entry => entry.action?.ownerReportKey === pending.reportKey).at(-1)
       if (attempted) {
+        if (attempted.state === 'running' && attempted.dispatchId) return { kind: 'applied', reason: 'owner-worker-dispatched' }
         if (attempted.state !== 'settled') return { kind: 'held', reason: 'owner-attempt-in-flight' }
         if (attempted.effect === 'landed') return { kind: 'applied', reason: attempted.reason }
         if (attempted.effect === 'indeterminate') return { kind: 'indeterminate', reason: attempted.reason }
@@ -72,7 +73,7 @@ export function createOwnerDriver(options: DriverOptions): OwnerKernelPort & { c
           ...(worker ? { expectedState: { target: intervention.dispatchId, before: { deviation: deviation.naturalKey } } } : {}),
         }
       }
-      action = { ...action, ownerReportKey: pending.reportKey, ownerIntervention: intervention }
+      action = { ...action, ownerReportKey: pending.reportKey, ownerKindAction: intervention.kind === 'kind-action', ownerIntervention: intervention }
       if (stopped) return { kind: 'refused', reason: 'owner-stopped' }
       const verdict = gateOwnerAction(enrollment, action, store.journal(enrollment.watcherId))
       if (verdict.verdict !== 'allow' && verdict.reason === 'awaiting-owner-approval') {
@@ -179,8 +180,7 @@ export function createOwnerDriver(options: DriverOptions): OwnerKernelPort & { c
       dispatchFences.delete(enrollment.watcherId)
     }
     const action = proposals.get(enrollment.watcherId)
-    const completed = result.handled && controller.inspect(enrollment.watcherId).pending === null
-    const deadline = Math.min(completed ? now() : result.nextCheckAtMs ?? Infinity, scan.nextCheckAtMs ?? Infinity)
+    const deadline = Math.min(result.nextCheckAtMs ?? Infinity, scan.nextCheckAtMs ?? Infinity)
     return { ...result, ...(action ? { action } : {}), ...(Number.isFinite(deadline) ? { nextCheckAtMs: deadline } : {}) }
   }
 
@@ -205,5 +205,5 @@ export function createOwnerDriver(options: DriverOptions): OwnerKernelPort & { c
     }
     return { effect: 'landed', reason: `owner-${intervention.kind}` }
   }
-  return { controller, step, execute, shutdown: async () => { stopped = true; proposals.clear(); dispatchFences.clear(); await controller.shutdown() } }
+  return { controller, step, execute, onTerminal: watcherId => controller.release(watcherId), shutdown: async () => { stopped = true; proposals.clear(); dispatchFences.clear(); await controller.shutdown() } }
 }

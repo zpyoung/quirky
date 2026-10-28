@@ -689,6 +689,26 @@ async function debug(args: CliArgs, ctx: CliContext): Promise<void> {
   }
 }
 
+async function ownerReady(args: CliArgs, ctx: CliContext): Promise<void> {
+  requireNoExtraPositionals(args, 0, ctx)
+  const watcherId = flagString(args, 'watcher-id', ctx)
+  const reportKey = flagString(args, 'report-key', ctx)
+  if (!watcherId || !reportKey) usage(ctx, '--watcher-id and --report-key are required')
+  const result = await ctx.call(`${PLUGIN_ID}/ownerReady`, { watcherId, reportKey })
+  if (!isRecord(result) || (result.kind !== 'accepted' && result.kind !== 'refused')) fail(ctx, 'Invalid owner report result')
+  ctx.out.result(result, () => result.kind === 'accepted' ? 'Owner report accepted' : String(result.reason ?? 'Owner report refused'))
+  if (result.kind === 'refused') fail(ctx, String(result.reason ?? 'Owner report refused'))
+}
+
+async function ownerInspect(args: CliArgs, ctx: CliContext): Promise<void> {
+  requireNoExtraPositionals(args, 0, ctx)
+  const watcherId = flagString(args, 'watcher-id', ctx)
+  if (!watcherId) usage(ctx, '--watcher-id is required')
+  const result = await ctx.call(`${PLUGIN_ID}/ownerInspect`, { watcherId })
+  if (!isRecord(result) || !Object.hasOwn(result, 'sessionId') || !Object.hasOwn(result, 'pending')) fail(ctx, 'Invalid owner state')
+  ctx.out.jsonLine(result)
+}
+
 const createHandler = async (args: CliArgs, ctx: CliContext) => create(args, ctx)
 const debugHandler = async (args: CliArgs, ctx: CliContext) => debug(args, ctx)
 const handlers = {
@@ -697,6 +717,8 @@ const handlers = {
   objective,
   create: createHandler,
   debug: debugHandler,
+  'owner-ready': ownerReady,
+  'owner-inspect': ownerInspect,
   ...Object.fromEntries(CONTROL_COMMANDS.map((name) => [name, (args: CliArgs, ctx: CliContext) => runControl(name, args, ctx)]))
 } as Record<string, (args: CliArgs, context: CliContext) => Promise<void>>
 

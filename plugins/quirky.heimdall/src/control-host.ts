@@ -42,6 +42,7 @@ export interface OperatorKernel {
   /** Removes the stopped runner from the registry without awaiting the current control operation. */
   forgetRunner(watcherId: string): void
   answerOwnerEscalation?(enrollment: Enrollment, escalationId: string, body: string): Promise<CommandResult>
+  releaseOwner?(watcherId: string): Promise<void>
 }
 
 const refused = (detail: string): CommandResult => ({ kind: 'refused', reason: 'worker-unverifiable', detail })
@@ -82,7 +83,8 @@ export function createControlHost(context: PluginContext, kernel: OperatorKernel
     },
     changed: id => kernel.changed(id),
     reconcile: id => kernel.reconcile(id),
-    remove(id) {
+    async remove(id) {
+      await kernel.releaseOwner?.(id)
       const runner = kernel.runner(id)
       runner?.suspend()
       if (!kernel.store.remove) throw new Error('Watcher store does not support atomic deletion')
