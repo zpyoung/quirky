@@ -508,6 +508,7 @@ files, not this one.
 | medium | high | [m6-orchestration-idle-pointer-shutdown D1](decisions/m6-orchestration-idle-pointer-shutdown.md) | Restore exactly the deferred automatic hint flow | locked by docs/loop/decisions/m6-orchestration-core.md |
 | medium | high for lifetime dependency; medium for historical hang cause | [m6-orchestration-idle-pointer-shutdown D3](decisions/m6-orchestration-idle-pointer-shutdown.md) | Fence scheduler lifetime rather than wait indefinitely for external work | assumed — autonomous |
 | medium | high | [m6-orchestration-idle-pointer-shutdown D4](decisions/m6-orchestration-idle-pointer-shutdown.md) | Keep existing identity, waiter and consumption authority | locked by research/orca-features/orchestration.md |
+| medium | high | [ui-restyle-ledger D1](decisions/ui-restyle-ledger.md) | Preserve Ledger placement and operation authority | locked by docs/quirk/specs/2026-10-28-ui-redesign/logic.md |
 | medium | high | [m7-editor-source-control-completion D1](decisions/m7-editor-source-control-completion.md) | Complete existing owners without changing the locked platform or exclusions | locked by docs/roadmap.md and docs/architecture.md |
 | medium | high | [m7-editor-source-control-completion D5](decisions/m7-editor-source-control-completion.md) | Preserve the nonoverlapping earlier editor handoff | locked by docs/loop/decisions/m2-editor-complete-remaining-flows.md D20 |
 | medium | high | [m7-editor-source-control-completion D6](decisions/m7-editor-source-control-completion.md) | Commit shared public contracts before three disjoint components | assumed — autonomous |
@@ -1997,6 +1998,15 @@ files, not this one.
 | easy | high | [m6-orchestration-idle-pointer-shutdown D8](decisions/m6-orchestration-idle-pointer-shutdown.md) | Execute the hint command instead of preserving an incorrect substring pin | supersedes m6-orchestration-idle-pointer-shutdown D4's Dispatch command choice; locked by research/orca-features/orchestration.md |
 | easy | high for exercised smoke paths only; permanent regressions remain unrun | [m6-orchestration-idle-pointer-shutdown D9](decisions/m6-orchestration-idle-pointer-shutdown.md) | Keep exact smoke evidence and defer permanent test execution | assumed — autonomous |
 | easy | high for the observed type/smoke gates; no suite/ui/native pass claimed | [m6-orchestration-idle-pointer-shutdown D10](decisions/m6-orchestration-idle-pointer-shutdown.md) | Preserve incoming lifecycle decisions and final merged evidence | locked by docs/loop/LOOP.md |
+| easy | high | [ui-restyle-ledger D2](decisions/ui-restyle-ledger.md) | Remove injected CSS rather than relocate legacy widgets | assumed — autonomous |
+| easy | high | [ui-restyle-ledger D3](decisions/ui-restyle-ledger.md) | Keep loading, empty, errors and pending confirmation truthful | assumed — autonomous |
+| easy | high | [ui-restyle-ledger D4](decisions/ui-restyle-ledger.md) | Follow build-first gates with two bounded implementers | locked by docs/loop/LOOP.md |
+| easy | high | [ui-restyle-ledger D5](decisions/ui-restyle-ledger.md) | Retain macOS-only proof and native limits | deferred: platform |
+| easy | high | [ui-restyle-ledger D6](decisions/ui-restyle-ledger.md) | Preserve fixed dialog actions through an opt-in shared contract | locked by docs/loop/decisions/m5-ledger.md |
+| easy | high | [ui-restyle-ledger D7](decisions/ui-restyle-ledger.md) | Replan the misplaced App slice under parent integration ownership | assumed — autonomous |
+| easy | high | [ui-restyle-ledger D8](decisions/ui-restyle-ledger.md) | Report actual renderer proof without claiming a visual score or suite pass | locked by docs/loop/LOOP.md |
+| easy | high | [ui-restyle-ledger D9](decisions/ui-restyle-ledger.md) | Bound browser isolation claims after observing branded Chrome updater behavior | assumed — autonomous |
+| easy | high | [ui-restyle-ledger D10](decisions/ui-restyle-ledger.md) | The sole roadmap catch-up brought no incoming changes | locked by docs/loop/LOOP.md |
 | easy | high | [m7-editor-source-control-completion D2](decisions/m7-editor-source-control-completion.md) | Resolve gray areas autonomously with source-grounded defaults | locked by docs/loop/LOOP.md |
 | easy | high | [m7-editor-source-control-completion D3](decisions/m7-editor-source-control-completion.md) | Author acceptance now and defer execution to the end phase | locked by docs/loop/LOOP.md |
 | easy | high | [m7-editor-source-control-completion D4](decisions/m7-editor-source-control-completion.md) | Preserve unrelated diagnostic metadata | assumed — autonomous |

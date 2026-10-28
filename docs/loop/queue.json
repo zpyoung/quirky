@@ -1683,8 +1683,7 @@
         "ui-terminal-theme",
         "ui-screenshot-review"
       ],
-      "status": "in-progress",
-      "lane": 8
+      "status": "done"
     },
     {
       "id": "ui-restyle-accounts",
