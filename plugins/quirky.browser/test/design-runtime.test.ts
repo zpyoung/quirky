@@ -1,6 +1,63 @@
-import { expect, test } from 'bun:test'
+import { afterAll, expect, test } from 'bun:test'
+import { GlobalRegistrator } from '@happy-dom/global-registrator'
+import { act, createElement } from 'react'
+import { createRoot, type Root } from 'react-dom/client'
+import type { UiPluginContext } from '@quirky/protocol'
+import { DesignWindow, setLiveDesignPageKeys } from '../src/design-window/DesignWindow'
+import type { DesignAction } from '../src/design-window/DesignWindow'
+import type { DesignAnnotation } from '../src/design-contract'
 import { inflateSync } from 'node:zlib'
 import { startBrowserHarness, type BrowserTestHarness } from './harness'
+
+const RUNTIME_GLOBALS = ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'setImmediate', 'clearImmediate', 'queueMicrotask', 'MessageChannel', 'performance', 'fetch', 'WebSocket', 'Response', 'Request', 'Headers', 'AbortController', 'AbortSignal'] as const
+const nativeGlobals = RUNTIME_GLOBALS.map((name) => [name, (globalThis as Record<string, unknown>)[name]] as const)
+GlobalRegistrator.register()
+for (const [name, value] of nativeGlobals) {
+  if (value !== undefined) Object.defineProperty(globalThis, name, { value, writable: true, configurable: true })
+}
+;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+
+afterAll(() => {
+  setLiveDesignPageKeys([])
+  GlobalRegistrator.unregister()
+})
+
+async function waitForUi(root: Node, predicate: () => boolean): Promise<void> {
+  if (predicate()) return
+  const { promise, resolve } = Promise.withResolvers<void>()
+  const observer = new MutationObserver(() => {
+    if (!predicate()) return
+    observer.disconnect()
+    resolve()
+  })
+  observer.observe(root, { attributes: true, characterData: true, childList: true, subtree: true })
+  if (predicate()) {
+    observer.disconnect()
+    resolve()
+  }
+  await promise
+}
+
+function uiButton(root: ParentNode, name: string): HTMLButtonElement {
+  const found = [...root.querySelectorAll('button')].find((entry) =>
+    entry.textContent?.trim() === name || entry.getAttribute('aria-label') === name
+  )
+  if (!found) throw new Error(`Expected an accessible ${name} button`)
+  return found
+}
+
+async function addUiComment(host: HTMLElement, comment: string, annotationCount: number): Promise<void> {
+  await waitForUi(host, () => host.querySelector('textarea[aria-label="Feedback"]') !== null)
+  const textarea = host.querySelector('textarea[aria-label="Feedback"]') as HTMLTextAreaElement
+  await act(async () => {
+    textarea.focus()
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(textarea, comment)
+    textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    textarea.dispatchEvent(new Event('keyup', { bubbles: true }))
+  })
+  await act(async () => { uiButton(host, 'Add').click() })
+  await waitForUi(host, () => host.querySelectorAll('.qbp-design-note').length === annotationCount)
+}
 
 const call = (h: BrowserTestHarness, name: string, params: Record<string, unknown> = {}) =>
   h.client.callAny(`quirky.browser/${name}`, params)
@@ -284,3 +341,110 @@ test('Watch crop uses local viewport coordinates and the actual screenshot scale
     await h.cleanup()
   }
 }, 90_000)
+test('Watch picker stores two real annotation selections with distinct IDs and redacted payloads without page clicks', async () => {
+  const h = await startBrowserHarness()
+  const fixture = startDesignFixture()
+  let root: Root | null = null
+  let host: HTMLDivElement | null = null
+  let rootElement: HTMLDivElement | null = null
+  try {
+    const worktree = await h.addFolderWorktree('design-two-annotations')
+    const page = await watchPage(h, worktree, fixture.url)
+    setLiveDesignPageKeys([page.page])
+    host = document.createElement('div')
+    rootElement = document.createElement('div')
+    document.body.append(host, rootElement)
+
+    const sendTarget = {
+      session: 'session-one',
+      agent: 'agent-one',
+      label: 'Test target',
+      title: 'Fixture session',
+      status: 'running',
+      state: 'running',
+      lastActivityAt: 1,
+      sendable: true
+    }
+    let capturedAnnotations: unknown
+    const context = {
+      call: async (method: string, params: Record<string, unknown> = {}) => {
+        if (method === 'quirky.browser/designTargets') return { sessions: [sendTarget], agents: [] }
+        if (method === 'quirky.browser/designSend') {
+          capturedAnnotations = params.annotations
+          return { delivery: 'unknown' }
+        }
+        return await h.client.callAny(method, params)
+      }
+    } as unknown as UiPluginContext
+    const actionRef: { current: ((action: DesignAction) => Promise<boolean>) | null } = { current: null }
+    const pane = {
+      id: page.pane,
+      mode: 'watch' as const,
+      page: page.page,
+      url: fixture.url,
+      title: 'Design fixture',
+      loading: false,
+      error: null,
+      worktreeId: worktree
+    }
+    root = createRoot(rootElement)
+    await act(async () => root!.render(createElement(DesignWindow, {
+      context,
+      pane,
+      nativeHandle: null,
+      pageHost: host,
+      watchId: page.watchId,
+      watchReady: true,
+      actionRef,
+      onMessage: () => {}
+    })))
+    const annotateButton = () => [...rootElement!.querySelectorAll('.qbp-design-toolbar button')].find((button) =>
+      button.textContent?.trim().startsWith('Annotate')
+    ) as HTMLButtonElement | undefined
+    const waitForAnnotationPicker = () => waitForUi(rootElement!, () => annotateButton()?.getAttribute('aria-pressed') === 'true')
+
+    await act(async () => { annotateButton()?.click() })
+    await waitForAnnotationPicker()
+    await clickAt(h, page.pane, 60, 60)
+    const firstComment = 'Move the header lower'
+    await addUiComment(host, firstComment, 1)
+    await waitForAnnotationPicker()
+
+    await clickAt(h, page.pane, 320, 55)
+    const secondComment = 'Increase this button contrast'
+    await addUiComment(host, secondComment, 2)
+
+    expect(await call(h, 'eval', { page: page.page, expression: 'window.__designClicks' })).toEqual({ value: 0 })
+    await act(async () => { uiButton(host!, 'Send').click() })
+    await waitForUi(host, () => host!.querySelector('button.qbp-design-target') !== null)
+    await act(async () => { host!.querySelector<HTMLButtonElement>('button.qbp-design-target')!.click() })
+    await waitForUi(document.body, () => capturedAnnotations !== undefined)
+
+    if (!Array.isArray(capturedAnnotations)) throw new Error('Design send did not receive the stored annotations')
+    const annotations = capturedAnnotations as DesignAnnotation[]
+    expect(annotations).toHaveLength(2)
+    expect(annotations.map((annotation) => annotation.browserPageId)).toEqual([page.page, page.page])
+    expect(annotations.map((annotation) => annotation.comment)).toEqual([firstComment, secondComment])
+    expect(annotations.map((annotation) => annotation.payload.target.textSnippet)).toEqual([
+      'Coordinate-only paragraph',
+      'Second element'
+    ])
+    expect(annotations.map((annotation) => annotation.intent)).toEqual(['change', 'change'])
+    expect(annotations[0]!.id).not.toBe(annotations[1]!.id)
+    expect(annotations.every((annotation) => annotation.id.length > 0)).toBe(true)
+    expect(annotations[0]!.payload.target.attributes.title).toBe('[redacted]')
+    expect(annotations.map((annotation) => annotation.payload.screenshot)).toEqual([null, null])
+    const visibleComments = [...host.querySelectorAll('.qbp-design-note p')].map((entry) => entry.textContent ?? '')
+    expect(visibleComments).toHaveLength(2)
+    expect(visibleComments[0]).toContain(firstComment)
+    expect(visibleComments[1]).toContain(secondComment)
+    expect(await actionRef.current?.('cancel')).toBe(true)
+  } finally {
+    if (root) await act(async () => root!.unmount())
+    host?.remove()
+    rootElement?.remove()
+    setLiveDesignPageKeys([])
+    fixture.stop()
+    await h.cleanup()
+  }
+}, 120_000)
