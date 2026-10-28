@@ -842,8 +842,9 @@
       "deps": [
         "sb-mobile-app"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 4
     },
     {
       "id": "m4-editor-drop-open-in-place",
