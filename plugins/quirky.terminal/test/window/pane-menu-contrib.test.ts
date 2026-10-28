@@ -42,6 +42,15 @@ const HANDOFF: UiMenuItemEntry = {
   when: { agent: 'any' },
   after: 'quick-commands'
 }
+const FORK_AGENT: UiMenuItemEntry = {
+  id: 'menu-item:quirky.terminal/fork-agent-session',
+  plugin: 'quirky.terminal',
+  menu: 'quirky.terminal/pane',
+  title: 'Fork Agent Session',
+  command: 'command:quirky.terminal/fork-agent-session',
+  when: { agent: 'any' },
+  after: 'quick-commands'
+}
 
 /** Activates the plugin over a fake daemon whose pane-3 session runs claude and mounts the worktree view. */
 async function mount(menuItems: UiMenuItemEntry[]) {
@@ -160,5 +169,64 @@ describe('the controller option', () => {
     expect(rows.slice(3, 6)).toEqual(['Quick Commands', 'Extra', '---'])
     expect(seen).toContainEqual(['pane-3', 's-3'])
     await mounted.unmount()
+  })
+})
+describe('pane Fork command', () => {
+  test('the pane menu hides Fork on shells and passes the exact agent session ID', async () => {
+    const view = await mount([FORK_AGENT])
+    await openPaneMenu(view, 'pane-4')
+    expect(labels(view)).not.toContain('Fork Agent Session')
+    await openPaneMenu(view, 'pane-3')
+    expect(labels(view)).toContain('Fork Agent Session')
+    await click(row(view, 'Fork Agent Session'))
+    expect(view.executed).toEqual([{ id: 'command:quirky.terminal/fork-agent-session', args: { session: 's-3' } }])
+  })
+
+  test('the scriptable command forks the provider session returned by exact source-session inspection', async () => {
+    const source = session('s-3', {
+      agent: 'claude',
+      providerSession: { id: 'claude-provider-3', transcriptPath: '/tmp/claude-3.jsonl' }
+    })
+    const forked = session('s-forked', { agent: 'claude', providerSession: null, resumedFrom: 's-3' })
+    const fake = fakeContext({
+      'quirky.session/get': ({ session: id }) => (id === source.id ? source : session('wrong-session', { agent: 'claude' })),
+      'quirky.session/resume': (params) => {
+        expect(params).toEqual({ session: 's-3', fork: true })
+        return forked
+      },
+      'quirky.terminal/openSession': () => ({ workspace: { id: 'wt-main' }, pane: 'pane-forked' })
+    })
+    const executed: { id: string; args: unknown }[] = []
+    fake.context.executeCommand = async (id, args) => void executed.push({ id, args })
+    ui.activate(fake.context)
+    const command = fake.provided.get('command:quirky.terminal/fork-agent-session')!
+
+    await command({ session: source.id })
+
+    expect(fake.calls.filter((call) => call.method === 'quirky.session/get')).toEqual([
+      { method: 'quirky.session/get', params: { session: 's-3' } }
+    ])
+    expect(fake.calls.filter((call) => call.method === 'quirky.session/resume')).toEqual([
+      { method: 'quirky.session/resume', params: { session: 's-3', fork: true } }
+    ])
+    expect(fake.calls.filter((call) => call.method === 'quirky.terminal/openSession')).toEqual([
+      { method: 'quirky.terminal/openSession', params: { session: 's-forked', workspace: 'wt-main' } }
+    ])
+    expect(executed).toEqual([{ id: 'command:quirky.terminal/focus-pane', args: { pane: 'pane-forked', workspace: 'wt-main' } }])
+  })
+
+  test('shell and stale pane IDs refuse without resuming or opening a replacement session', async () => {
+    const shell = session('s-shell')
+    const wrong = session('s-other', { agent: 'claude', providerSession: { id: 'other-provider', transcriptPath: null } })
+    const fake = fakeContext({ 'quirky.session/get': ({ session: id }) => (id === 's-shell' ? shell : wrong) })
+    const executed: { id: string; args: unknown }[] = []
+    fake.context.executeCommand = async (id, args) => void executed.push({ id, args })
+    ui.activate(fake.context)
+    const command = fake.provided.get('command:quirky.terminal/fork-agent-session')!
+
+    await expect(command({ session: 's-shell' })).rejects.toThrow('shell')
+    await expect(command({ session: 'stale-session-id' })).rejects.toThrow('exact')
+    expect(fake.calls.filter((call) => call.method === 'quirky.session/resume')).toEqual([])
+    expect(executed).toEqual([])
   })
 })

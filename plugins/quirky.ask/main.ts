@@ -5,6 +5,27 @@ import { ClaudeVersionGate, commandProbe, suppressionHook } from './suppression'
 import { v1AsksMigration } from './v1-import'
 
 const QUESTIONS_PANEL = 'panel:quirky.ask/questions'
+const WORKTREE_VIEW = 'view:quirky.session/worktree'
+
+function focusedSession(state: UiState): string | null {
+  if (!state.windows.some((window) => window.focused) || state.layout.focus !== 'view') return null
+  const view = state.layout.view
+  if (view?.id !== WORKTREE_VIEW) return null
+  const slot = state.slots.find((candidate) => candidate.id === WORKTREE_VIEW && candidate.shown)
+  if (slot?.report !== undefined) {
+    const report = slot.report
+    if (typeof report === 'object' && report !== null && !Array.isArray(report) && 'active' in report) {
+      return typeof report.active === 'string' ? report.active : null
+    }
+    return null
+  }
+  const input = view.input
+  if (typeof input === 'object' && input !== null && !Array.isArray(input) && 'session' in input) {
+    return typeof input.session === 'string' ? input.session : null
+  }
+  return null
+}
+
 
 function str(params: Record<string, unknown>, name: string): string | undefined {
   const value = params[name]
@@ -46,15 +67,15 @@ async function cancelInactiveOwners(context: PluginContext, asks: AskService): P
   }
 }
 
-/** Opens the Questions panel when a window is connected and no panel is showing; never throws. */
-async function openQuestionsPanel(context: PluginContext): Promise<void> {
+/** Reveals Questions only for the exact active terminal session and never replaces a chosen panel. */
+async function openQuestionsPanel(context: PluginContext, sessionId: string | null): Promise<void> {
+  if (sessionId === null) return
   try {
     const state = (await context.call('ui.state')) as UiState
-    if (state.windows.length > 0 && state.layout.panel === null) {
-      await context.call('ui.panel.open', { id: QUESTIONS_PANEL })
-    }
+    if (state.layout.panel !== null || focusedSession(state) !== sessionId) return
+    await context.call('ui.panel.open', { id: QUESTIONS_PANEL })
   } catch (error) {
-    context.log(`could not open the Questions panel: ${error instanceof Error ? error.message : String(error)}`)
+    logSafely(context, `could not open the Questions panel: ${error instanceof Error ? error.message : String(error)}`)
   }
 }
 
@@ -68,13 +89,14 @@ export function activate(context: PluginContext): void {
     {
       invalidParams: (message) => errorSafely(context, 'invalid-params', message),
       notFound: (message) => errorSafely(context, 'not-found', message),
-      conflict: (message) => errorSafely(context, 'conflict', message)
+      conflict: (message) => errorSafely(context, 'conflict', message),
+      busy: (message) => Object.assign(errorSafely(context, 'conflict', message), { data: { reason: 'runtime_busy' } })
     },
     {
       created: (ask, seq) => emitSafely(context, 'created', { ask, seq }),
       surfaced: (ask, seq) => {
         emitSafely(context, 'surfaced', { ask, seq })
-        void openQuestionsPanel(context)
+        void openQuestionsPanel(context, ask.sessionId)
       },
       updated: (askId, partial, seq) => emitSafely(context, 'updated', { askId, partial, seq }),
       resolved: (askId, envelope, seq) => emitSafely(context, 'resolved', { askId, envelope, seq })
@@ -105,12 +127,16 @@ export function activate(context: PluginContext): void {
         ...(ownerPluginId === undefined ? {} : { ownerPluginId })
       }
     )
-    if (!ask.queued && ask.envelope.status === 'pending') await openQuestionsPanel(context)
+    if (!ask.queued && ask.envelope.status === 'pending') await openQuestionsPanel(context, ask.sessionId)
     return { askId: ask.id }
   })
-  context.provide('method:quirky.ask/wait', (params: Record<string, unknown>) =>
-    asks.wait(str(params, 'askId')!, typeof params.timeoutMs === 'number' ? params.timeoutMs : undefined)
-  )
+  context.provide('method:quirky.ask/wait', (params: Record<string, unknown>, caller: PluginCaller) => {
+    const controller = new AbortController()
+    const unsubscribe = caller.role === 'plugin' ? undefined : caller.connection?.onClose(() => controller.abort())
+    return asks
+      .wait(str(params, 'askId')!, typeof params.timeoutMs === 'number' ? params.timeoutMs : undefined, controller.signal)
+      .finally(() => unsubscribe?.())
+  })
   context.provide('method:quirky.ask/answer', (params: Record<string, unknown>) =>
     asks.answer(str(params, 'askId')!, params.answers, params.skipped)
   )

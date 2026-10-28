@@ -289,48 +289,41 @@ describe('program notifications', () => {
 })
 
 describe('asks', () => {
-  test('SC-25: asks keep their text, skip the source switches and leave no marker', async () => {
+  test('Q3: registration stays silent, and only the surfaced head contributes to pending attention', async () => {
     rig = await Rig.start()
-    await rig.setting('agentTaskComplete', false)
-    await rig.setting('terminalNotifications', false)
-    const s = await rig.session('b')
-    const b = rig.worktrees.b!
+    const session = await rig.session('b')
+    const worktree = rig.worktrees.b!
+    const first = (await askFrom(session.id, worktree.id, 'First?')) as { askId: string }
+    const second = (await askFrom(session.id, worktree.id, 'Second?')) as { askId: string }
 
-    await askFrom(s.id, b.id)
-    await rig.waitDecided(1)
-
-    expect(rig.notifies()).toMatchObject([{ title: 'Deploy?', body: 'Ship to prod?' }])
-    expect((await rig.getSession(s.id)).unread ?? null).toBeNull()
-    expect((await rig.getWorktree('b')).unread).toBe(false)
+    const pending = await rig.client.callAny('quirky.ask/list', { pendingOnly: true }) as { id: string; queued: boolean }[]
+    expect(pending.map((ask) => ask.queued)).toEqual([false, true])
+    expect((await rig.status()).pendingAsks).toBe(1)
+    expect(rig.notifies()).toEqual([])
     expect(rig.attentions()).toEqual([])
-    expect(rig.decisions()[0]).toMatchObject({ source: 'ask', result: 'delivered' })
+    expect(rig.decisions()).toEqual([])
+    expect((await rig.getSession(session.id)).unread ?? null).toBeNull()
+    expect((await rig.getWorktree('b')).unread).toBe(false)
+
+    await rig.client.callAny('quirky.ask/cancel', { askId: first.askId })
+    await waitForAsync(async () => {
+      const asks = await rig.client.callAny('quirky.ask/list', { pendingOnly: true }) as { id: string; queued: boolean }[]
+      return asks.length === 1 && asks[0]?.id === second.askId && !asks[0].queued
+    })
+    expect((await rig.status()).pendingAsks).toBe(1)
+    expect(rig.notifies()).toEqual([])
+    expect(rig.decisions()).toEqual([])
   })
 
-  test('SC-25: with Enable Notifications off an ask is disabled', async () => {
+  test('an ask with notifications disabled is not delivered at registration', async () => {
     rig = await Rig.start()
     await rig.setting('enabled', false)
-    const s = await rig.session('b')
+    const session = await rig.session('b')
 
-    await askFrom(s.id, rig.worktrees.b!.id)
-    await rig.waitDecided(1)
+    await askFrom(session.id, rig.worktrees.b!.id)
 
-    expect(rig.decisions()[0]).toMatchObject({ source: 'ask', result: 'disabled' })
     expect(rig.notifies()).toEqual([])
-  })
-
-  test('a queued ask is announced when it surfaces, not when it is created', async () => {
-    rig = await Rig.start()
-    const s = await rig.session('b')
-    const b = rig.worktrees.b!
-    const first = (await askFrom(s.id, b.id, 'First?')) as { askId: string }
-    await rig.waitDecided(1)
-    await askFrom(s.id, b.id, 'Second?')
-    await rig.settle(300)
-    expect(rig.decisions()).toHaveLength(1)
-
-    await rig.client.callAny('quirky.ask/answer', { askId: first.askId, answers: { go: { value: true, source: 'input' } } })
-    await rig.waitDecided(2)
-    expect(rig.decisions()[1]).toMatchObject({ source: 'ask', result: 'cooldown' })
+    expect(rig.decisions()).toEqual([])
   })
 })
 

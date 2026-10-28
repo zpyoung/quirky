@@ -12,12 +12,15 @@ const MAX_DEADLINE_MS = 8640000000000000
 
 /** Largest delay `setTimeout` honours; longer deadlines re-arm in steps of this size. */
 const MAX_TIMER_DELAY_MS = 2147483647
+/** Maximum number of concurrent pending `wait` calls in one AskService. */
+export const MAX_WAIT_CONCURRENCY = 4
 
-/** Builds the errors the RPC layer reports as InvalidParams, NotFound and Conflict. */
+/** Builds InvalidParams, NotFound, Conflict, and typed busy-conflict errors for the RPC layer. */
 export type AskErrors = {
   invalidParams(message: string): Error
   notFound(message: string): Error
   conflict(message: string): Error
+  busy(message: string): Error
 }
 
 /** The time source of an `AskService`; tests substitute one they can move by hand. */
@@ -93,6 +96,7 @@ type Waiter = { resolve(envelope: AskEnvelope): void; reject(error: Error): void
 export class AskService {
   private readonly waiters = new Map<string, Set<Waiter>>()
   private readonly deadlines = new Map<string, unknown>()
+  private activeWaits = 0
   private stopped = false
 
   constructor(
@@ -161,36 +165,68 @@ export class AskService {
   }
 
   /**
-   * Resolves as soon as the ask leaves `pending`, or returns it still pending after `timeoutMs`.
-   * If the service is shut down while the wait is pending, the promise rejects with a "shut down"
-   * error instead of reading the store, which the host closes right after deactivation.
+   * Resolves when the ask becomes terminal, or returns it still pending after `timeoutMs`; at most
+   * four waits run concurrently. Shutdown or caller disconnect rejects and releases the slot
+   * without reading a store the host is about to close or resolving the ask.
    */
-  async wait(askId: string, timeoutMs = MAX_WAIT_MS): Promise<AskEnvelope> {
+  async wait(askId: string, timeoutMs = MAX_WAIT_MS, signal?: AbortSignal): Promise<AskEnvelope> {
     if (this.stopped) throw new Error('quirky.ask has shut down')
     const ask = this.get(askId)
+    if (signal?.aborted) throw new Error('ask wait connection closed')
     const limit = Math.max(0, Math.min(timeoutMs, MAX_WAIT_MS))
     if (ask.envelope.status !== 'pending' || limit === 0) return ask.envelope
-    return new Promise((resolve, reject) => {
-      const waiter: Waiter = {
-        resolve: (envelope) => {
-          this.clock.clearTimeout(waiter.timer)
-          resolve(envelope)
-        },
-        reject: (error) => {
-          this.clock.clearTimeout(waiter.timer)
-          reject(error)
-        },
-        timer: this.clock.setTimeout(() => {
-          this.removeWaiter(askId, waiter)
-          try {
-            resolve(this.get(askId).envelope)
-          } catch (error) {
-            reject(error as Error)
-          }
-        }, limit)
-      }
+    if (this.activeWaits >= MAX_WAIT_CONCURRENCY) throw this.errors.busy('ask wait capacity is busy')
+    const { promise, resolve, reject } = Promise.withResolvers<AskEnvelope>()
+    this.activeWaits++
+    let released = false
+    let abortListener: (() => void) | undefined
+    const release = () => {
+      if (released) return false
+      released = true
+      this.activeWaits--
+      return true
+    }
+    const removeAbortListener = () => {
+      if (signal && abortListener) signal.removeEventListener('abort', abortListener)
+    }
+    const waiter: Waiter = {
+      resolve: (envelope) => {
+        if (!release()) return
+        this.clock.clearTimeout(waiter.timer)
+        removeAbortListener()
+        resolve(envelope)
+      },
+      reject: (error) => {
+        if (!release()) return
+        this.clock.clearTimeout(waiter.timer)
+        removeAbortListener()
+        reject(error)
+      },
+      timer: undefined
+    }
+    try {
+      waiter.timer = this.clock.setTimeout(() => {
+        this.removeWaiter(askId, waiter)
+        try {
+          waiter.resolve(this.get(askId).envelope)
+        } catch (error) {
+          waiter.reject(error as Error)
+        }
+      }, limit)
       this.addWaiter(askId, waiter)
-    })
+      if (signal) {
+        abortListener = () => {
+          this.removeWaiter(askId, waiter)
+          waiter.reject(new Error('ask wait connection closed'))
+        }
+        if (signal.aborted) abortListener()
+        else signal.addEventListener('abort', abortListener, { once: true })
+      }
+    } catch (error) {
+      this.removeWaiter(askId, waiter)
+      waiter.reject(error as Error)
+    }
+    return promise
   }
 
   /** Clears every timer and rejects each pending waiter; call before the store closes. */

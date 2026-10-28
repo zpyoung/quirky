@@ -2,6 +2,7 @@ import { Database } from 'bun:sqlite'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import type { GitHubWorktreeLink, PluginContext, PluginStore, ProjectGroup, Worktree, WorktreeAutomationProvenance, WorktreeCreatedBy, WorktreePushTarget, WorktreeStatus } from '@quirky/protocol'
+import type { WorktreeControl } from '../control-types'
 
 /** One `worktrees` row: Quirky's metadata for a workspace, keyed by the workspace ID. */
 export type WorktreeRow = {
@@ -29,6 +30,11 @@ export type WorktreeRow = {
   linked_pr: string | null
   linked_issue: string | null
   push_target: string | null
+  manual_order: number
+  sleeping: number
+  sleep_changed_at: number
+  cleanup_ignored_fingerprint: string | null
+  cleanup_ignored_at: number | null
   automation_provenance?: string | null
 }
 
@@ -110,6 +116,11 @@ export function openWorktreeStore(context: PluginContext): PluginStore {
     },
     (store) => {
       store.exec(`
+        ALTER TABLE worktrees ADD COLUMN manual_order INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE worktrees ADD COLUMN sleeping INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE worktrees ADD COLUMN sleep_changed_at INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE worktrees ADD COLUMN cleanup_ignored_fingerprint TEXT;
+        ALTER TABLE worktrees ADD COLUMN cleanup_ignored_at INTEGER;
         ALTER TABLE worktrees ADD COLUMN automation_provenance TEXT;
       `)
     }
@@ -141,14 +152,15 @@ export type NewRow = {
   projectGroupId?: string | null
   lastActivityAt?: number
   instanceId?: string
+  manualOrder?: number
   automationProvenance?: WorktreeAutomationProvenance | null
 }
 
 /** Inserts a row, or fills a v1 row (ID and repo only) with the given values; never overwrites a row that has them. */
 export function insertRow(store: PluginStore, row: NewRow): WorktreeRow {
   store.run(
-    `INSERT INTO worktrees (id, repo_id, kind, path, name, display_name, comment, parent_id, created_at, created_by, base_ref, keep_branch, birthtime, group_id, created_root, project_group_id, last_activity_at, instance_id, linked_pr, linked_issue, push_target, automation_provenance)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO worktrees (id, repo_id, kind, path, name, display_name, comment, parent_id, created_at, created_by, base_ref, keep_branch, birthtime, group_id, created_root, project_group_id, last_activity_at, instance_id, linked_pr, linked_issue, push_target, manual_order, automation_provenance)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        repo_id = excluded.repo_id,
        kind = excluded.kind,
@@ -181,6 +193,7 @@ export function insertRow(store: PluginStore, row: NewRow): WorktreeRow {
     row.linkedPR == null ? null : JSON.stringify(row.linkedPR),
     row.linkedIssue == null ? null : JSON.stringify(row.linkedIssue),
     row.pushTarget == null ? null : JSON.stringify(row.pushTarget),
+    row.manualOrder ?? -row.createdAt,
     row.automationProvenance == null ? null : JSON.stringify(row.automationProvenance)
   )
   return rowOf(store, row.id)!
@@ -255,7 +268,7 @@ function storedAutomationProvenance(value: string | null | undefined): WorktreeA
 export function metadataOf(row: WorktreeRow): Pick<
   Worktree,
   'displayName' | 'comment' | 'status' | 'pinned' | 'unread' | 'parentId' | 'createdAt' | 'createdBy' | 'baseRef' | 'keepBranch' | 'projectGroupId' | 'lastActivityAt' | 'instanceId' | 'linkedPR' | 'linkedIssue' | 'pushTarget' | 'automationProvenance'
-> {
+> & Pick<WorktreeControl, 'manualOrder' | 'sleeping' | 'sleepChangedAt'> {
   const linkedPR = storedLink(row.linked_pr)
   const linkedIssue = storedLink(row.linked_issue)
   const pushTarget = storedPushTarget(row.push_target)
@@ -277,6 +290,9 @@ export function metadataOf(row: WorktreeRow): Pick<
     ...(linkedPR === null ? {} : { linkedPR }),
     ...(linkedIssue === null ? {} : { linkedIssue }),
     ...(pushTarget === null ? {} : { pushTarget }),
+    manualOrder: row.manual_order,
+    sleeping: row.sleeping !== 0,
+    sleepChangedAt: row.sleep_changed_at === 0 ? null : row.sleep_changed_at,
     ...(automationProvenance === null ? {} : { automationProvenance })
   }
 }
