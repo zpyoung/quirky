@@ -176,5 +176,27 @@
 - **Revisit if:** an exclusively owned surviving child is identified by exact process/profile identity
 - **Source:** locked by incoming browser-isolation decisions and operator resource directive
 
+## D17: Complete the mandatory failed-land recovery without dropping concurrent contracts
+- **Question:** canonical land rejected concurrent shared-field and lint-enrollment conflicts after source2f87ac80
+- **Options:** retry unchanged or discard another restyle; follow required recovery and retain additive fields/opt-ins
+- **Chose:** required recovery mergea0c1f056 unions RefObject with TextArea/SelectField native attribute imports and retains Ledger scrollBody default behavior plus all12plugin lint opt-ins. Read Accounts completion, Ledger and orchestration logs fully, including raw omitted qualifications. Their exact authority, native, test and browser-isolation limits remain intact
+- **Why:** these are additive presentation/type/enforcement changes, not competing feature semantics. This second roadmap merge is required failed-land recovery, not an unsolicited catch-up. No source workaround, linter exception, golden threshold or test deadline changed
+- **Evidence:** first canonical land exit1/1.19s; two actual conflict blocks; recovery merge/typecheck/build command exit0/36.07s including UIlint/root/mobile/prepared-desktop and11host/25plugin modules
+- **Reversibility:** easy
+- **Confidence:** high for the composed gate and fresh minimal surface proof
+- **Revisit if:** controller merge-result gate identifies another actual conflict
+- **Source:** locked by docs/loop/LOOP.md failed-land recovery procedure
+
+## D18: Bound browser OS-isolation claims and verify the recovery with the testing distribution
+- **Question:** incoming Ledger D9 records branded Chrome updater writes despite private HOME/profile
+- **Options:** infer full OS isolation from a profile; inspect/restore real Library; use installed Chrome for Testing for final recovery proof and retain uncertainty
+- **Chose:** no claim that earlier branded-browser runs independently isolated every macOS OS-directory/updater behavior; no real Library inspection/restoration. Final fresh recovery uses installed Playwright Chrome for Testing, private HOME/TMP/profile, background networking/component updates/breakpad disabled, mock keychain and exact owned CDP60848. Fresh actual Changes/diff rendered in both themes; base Dialog opened and Escape closed it; canonical BODY menu stayed inside1340viewport; browser errors[] and own-origin guard true
+- **Why:** renderer correctness and browser OS-side-effect isolation are separate evidence claims. Incoming knowledge requires safer subsequent tooling, not editing user browser state. Earlier proof remains scoped. The recovery browser and fifth fixture daemon are stopped; all owned tabs/workers/checks are finished
+- **Evidence:** testing-browser service PID91282 and exact profile/flags; recovery-dark.png/recovery-light.png; actual modal/menu/error readbacks; service stop and daemon exit0/cleanup receipt
+- **Reversibility:** easy
+- **Confidence:** high for named final owned resources and UI outcomes; earlier OS updater behavior remains uncertified
+- **Revisit if:** another branded/native verification tool is proposed
+- **Source:** locked by incoming ui-restyle-ledger D9 safety evidence
+
 ## Progress
-Ready to land. Sole catch-up merge7a234811 read all6incoming logs and preserved every shared export/ref/enforcement contract. Canonical shared menu convergence removed the duplicate; live syntax now follows both appearance transitions without changing editor text. Final typecheck/UIlint/root/mobile/prepared-desktop plus actual UI build passed30.75s; bounded final real surface proof and all limitations are D15. No suite, formal/golden review, populated provider/AI or native acceptance is claimed. All owned workers/checks/fixture scopes and unique browser are finished; shared-profile browser is intentionally untouched per D16. Commit final source/docs, detach and run canonical absolute queue land; await its result and remove only owned scratch after success.
+Ready for canonical retry. First land of2f87ac80 failed on concurrent fields/enforcement; required recovery mergea0c1f056 preserves additive native field/ref contracts, scrollBody defaults and all12lint opt-ins. All3new incoming logs fully read. Fresh composed typecheck/UIlint/root/mobile/prepared-desktop plus UI build passed36.07s; fresh private Chrome-for-Testing actual dark/light modal/menu proof passed with errors[] and preserved prior D15limits. All5private fixture daemons, unique browsers, workers and checks have finished; shared-profile helper stays untouched. Commit recovery receipts, detach and retry canonical absolute land immediately; await actual result before removing owned scratch or ending this one item.
