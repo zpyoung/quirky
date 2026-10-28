@@ -14,6 +14,61 @@ const FALLBACK_AGENTS = [
 ]
 
 type AgentChoice = { id: string; label: string }
+type LaunchOption = {
+  id: string
+  label: string
+  type: 'select' | 'boolean'
+  choices: { value: string; label: string }[] | null
+}
+type AgentOptionsCatalog = {
+  supported: boolean
+  models: { id: string; label: string; options: LaunchOption[] }[]
+  unlisted: 'accept' | 'refuse'
+  unlistedOptions: LaunchOption[]
+}
+type AgentOptionsState = {
+  agent: string
+  status: 'loading' | 'ready' | 'error'
+  catalog?: AgentOptionsCatalog
+  error?: string
+}
+
+function optionOf(value: unknown): LaunchOption | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
+  const option = value as Record<string, unknown>
+  if (typeof option.id !== 'string' || typeof option.label !== 'string' || (option.type !== 'select' && option.type !== 'boolean')) return null
+  if (option.choices !== null && (!Array.isArray(option.choices) || !option.choices.every((choice) =>
+    typeof choice === 'object' && choice !== null && typeof (choice as Record<string, unknown>).value === 'string' &&
+    typeof (choice as Record<string, unknown>).label === 'string'
+  ))) return null
+  return {
+    id: option.id,
+    label: option.label,
+    type: option.type,
+    choices: option.choices === null ? null : (option.choices as { value: string; label: string }[])
+  }
+}
+
+function agentOptionsOf(value: unknown): AgentOptionsCatalog {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new Error('Agent returned an invalid option catalog.')
+  const catalog = value as Record<string, unknown>
+  if (
+    typeof catalog.supported !== 'boolean' || !Array.isArray(catalog.models) ||
+    (catalog.unlisted !== 'accept' && catalog.unlisted !== 'refuse') || !Array.isArray(catalog.unlistedOptions)
+  ) throw new Error('Agent returned an invalid option catalog.')
+  const models = catalog.models.flatMap((model) => {
+    if (typeof model !== 'object' || model === null || Array.isArray(model)) return []
+    const entry = model as Record<string, unknown>
+    if (typeof entry.id !== 'string' || typeof entry.label !== 'string' || !Array.isArray(entry.options)) return []
+    return [{ id: entry.id, label: entry.label, options: entry.options.map(optionOf).filter((option): option is LaunchOption => option !== null) }]
+  })
+  return {
+    supported: catalog.supported,
+    models,
+    unlisted: catalog.unlisted,
+    unlistedOptions: catalog.unlistedOptions.map(optionOf).filter((option): option is LaunchOption => option !== null)
+  }
+}
 
 /** The installed, enabled agents `quirky.agents` reports, else the fallback list. */
 async function loadAgents(context: UiPluginContext): Promise<AgentChoice[]> {
@@ -101,6 +156,11 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
   const [branch, setBranch] = useState('')
   const [agent, setAgent] = useState('')
   const [agents, setAgents] = useState<AgentChoice[]>([])
+  const [model, setModel] = useState('')
+  const [launchPicks, setLaunchPicks] = useState<Record<string, string | boolean>>({})
+  const [agentOptionsState, setAgentOptionsState] = useState<AgentOptionsState | null>(null)
+  const [sparsePathsText, setSparsePathsText] = useState('')
+  const [keepMain, setKeepMain] = useState(false)
   const [prompt, setPrompt] = useState('')
   const [submitPrompt, setSubmitPrompt] = useState<boolean | null>(null)
   const [advanced, setAdvanced] = useState(false)
@@ -134,6 +194,10 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
     branchRequest.current += 1
     setProject(null)
     setSetupChoice(null)
+    setModel('')
+    setLaunchPicks({})
+    setSparsePathsText('')
+    setKeepMain(false)
     setChoiceDemanded(false)
     setSelectedSource(null)
     setSubmitPrompt(null)
@@ -163,6 +227,29 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
       live = false
     }
   }, [context])
+  useEffect(() => {
+    if (!agent) {
+      setAgentOptionsState(null)
+      return
+    }
+    let live = true
+    setAgentOptionsState({ agent, status: 'loading' })
+    void context.call('quirky.agents/options', { agent })
+      .then((value) => {
+        if (!live) return
+        try {
+          setAgentOptionsState({ agent, status: 'ready', catalog: agentOptionsOf(value) })
+        } catch (error) {
+          setAgentOptionsState({ agent, status: 'error', error: messageOf(error) })
+        }
+      })
+      .catch((error: unknown) => {
+        if (live) setAgentOptionsState({ agent, status: 'error', error: messageOf(error) })
+      })
+    return () => {
+      live = false
+    }
+  }, [context, agent])
 
   useEffect(() => {
     let live = true
@@ -305,6 +392,16 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
   const asksForSetup = choiceDemanded || (setup !== null && project?.settings?.setupPolicy === 'ask')
   const waitsForSetup = project?.hooks?.agentStartup === 'wait-for-setup'
   const defaultBase = project?.settings?.defaultBase ?? ''
+  const agentOptionsCatalog = agentOptionsState?.agent === agent && agentOptionsState.status === 'ready' ? agentOptionsState.catalog : undefined
+  const selectedModel = agentOptionsCatalog?.models.find((candidate) => candidate.id === model)
+  const visibleLaunchOptions = selectedModel?.options ?? (agentOptionsCatalog && (!model || agentOptionsCatalog.unlisted === 'accept')
+    ? agentOptionsCatalog.unlistedOptions
+    : [])
+  const sparsePaths = sparsePathsText.split(/\r?\n/).map((path) => path.trim()).filter(Boolean)
+  const launchSelectionRequested = model.trim() !== '' || Object.keys(launchPicks).length > 0
+  const unsupportedCreateWarnings = project?.hooks?.warnings.filter((warning) =>
+    warning.startsWith('defaultTabs') || warning.startsWith('environmentRecipes')
+  ) ?? []
   const currentSearch = search && mode === 'github' && search.repoId === repoId && search.primaryId === (primary?.id ?? '') && search.query === query.trim() ? search : null
   const currentBranchSearch = branchSearch && mode === 'branch' && branchSearch.repoId === repoId && branchSearch.primaryId === (primary?.id ?? '') && branchSearch.query === branch.trim() ? branchSearch : null
   const issuePromptIsDerived = source?.item.kind === 'issue' && prompt.trim() === ''
@@ -312,8 +409,8 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
   const showBase = !folder && (source ? source.item.kind === 'issue' : mode !== 'github' && !fromBranch && !explicitSmartReference)
   const showBranchName = !folder && !isPullRequest && !fromBranch && (source ? source.item.kind === 'issue' : mode !== 'github' && !explicitSmartReference)
   const blocked = !repo || busy || (asksForSetup && setupChoice === null) || sourceBusy || unsupportedFolderReference ||
-    (mode === 'github' && source === null) || (explicitSmartReference && source === null)
-  const workspaceName = name.trim() || (mode === 'smart' && !explicitSmartReference ? smartInput.trim() : '')
+    (mode === 'github' && source === null) || (explicitSmartReference && source === null) ||
+    (launchSelectionRequested && (!agentOptionsCatalog?.supported || agentOptionsState?.status !== 'ready'))
 
   const fields = (): Record<string, unknown> => {
     const typedBase = base.trim()
@@ -326,6 +423,10 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
       ...(fromBranch ? { branch: branch.trim() } : !source && mode !== 'github' && !explicitSmartReference && showBase && typedBase && typedBase !== defaultBase ? { base: typedBase } :
         source?.item.kind === 'issue' && typedBase && typedBase !== defaultBase ? { base: typedBase } : {}),
       ...(agent ? { agent, ...(startupPrompt ? { prompt: startupPrompt, submitPrompt: submitPromptValue } : {}) } : {}),
+      ...(model.trim() ? { model: model.trim() } : {}),
+      ...(Object.keys(launchPicks).length > 0 ? { options: launchPicks } : {}),
+      ...(sparsePaths.length > 0 ? { sparsePaths } : {}),
+      ...(keepMain ? { keepMain: true } : {}),
       ...(displayName.trim() ? { displayName: displayName.trim() } : {}),
       ...(branchName.trim() && !fromBranch && !isPullRequest && showBranchName ? { branchName: branchName.trim() } : {}),
       ...(parent ? { parent } : {}),
@@ -359,6 +460,11 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
     setName('')
     setQuery('')
     setAgent('')
+    setModel('')
+    setLaunchPicks({})
+    setAgentOptionsState(null)
+    setSparsePathsText('')
+    setKeepMain(false)
     setPrompt('')
     setSubmitPrompt(null)
     setSetupChoice(null)
@@ -563,7 +669,15 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
         )}
         <label>
           <span>Agent</span>
-          <select value={agent} onChange={(event) => setAgent(event.target.value)}>
+          <select
+            value={agent}
+            onChange={(event) => {
+              setAgent(event.target.value)
+              setModel('')
+              setLaunchPicks({})
+              setAgentOptionsState(null)
+            }}
+          >
             <option value="">None</option>
             {agents.map((choice) => (
               <option key={choice.id} value={choice.id}>
@@ -572,6 +686,60 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
             ))}
           </select>
         </label>
+        {agent && agentOptionsState?.agent === agent && agentOptionsState.status === 'loading' && (
+          <p className="muted" role="status">Loading {agent} model options…</p>
+        )}
+        {agent && agentOptionsState?.agent === agent && agentOptionsState.status === 'error' && (
+          <p className="error" role="alert">Could not load {agent} model options: {agentOptionsState.error}</p>
+        )}
+        {agentOptionsCatalog && !agentOptionsCatalog.supported && (
+          <p className="muted">This agent does not support launch-time model and option selection.</p>
+        )}
+        {agentOptionsCatalog?.supported && (
+          <div className="agent-launch-options">
+            <label>
+              <span>Model</span>
+              <input
+                list="worktree-agent-models"
+                value={model}
+                onChange={(event) => {
+                  setModel(event.target.value)
+                  setLaunchPicks({})
+                }}
+                placeholder="Use the agent's native default"
+              />
+              <datalist id="worktree-agent-models">
+                {agentOptionsCatalog.models.map((choice) => <option key={choice.id} value={choice.id}>{choice.label}</option>)}
+              </datalist>
+            </label>
+            {visibleLaunchOptions.map((option) => option.type === 'boolean' ? (
+              <label className="check-row" key={option.id}>
+                <input
+                  type="checkbox"
+                  checked={launchPicks[option.id] === true}
+                  onChange={(event) => setLaunchPicks((current) => ({ ...current, [option.id]: event.currentTarget.checked }))}
+                />
+                <span>{option.label}</span>
+              </label>
+            ) : (
+              <label key={option.id}>
+                <span>{option.label}</span>
+                <select
+                  value={typeof launchPicks[option.id] === 'string' ? launchPicks[option.id] as string : ''}
+                  onChange={(event) => setLaunchPicks((current) => {
+                    const next = { ...current }
+                    if (event.target.value === '') delete next[option.id]
+                    else next[option.id] = event.target.value
+                    return next
+                  })}
+                >
+                  <option value="">Use default</option>
+                  {option.choices?.map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}
+                </select>
+              </label>
+            ))}
+          </div>
+        )}
         {agent && (
           <label>
             <span>Prompt</span>
@@ -619,6 +787,29 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
               <span>Note</span>
               <textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} />
             </label>
+            {repo?.kind === 'git' && (
+              <>
+                <label>
+                  <span>Sparse checkout paths</span>
+                  <textarea
+                    rows={3}
+                    value={sparsePathsText}
+                    onChange={(event) => setSparsePathsText(event.target.value)}
+                    placeholder="src&#10;docs"
+                  />
+                  <small className="muted">One tracked repository-relative file or directory per line. Unsafe or missing paths are refused before creating the worktree.</small>
+                </label>
+                <label className="check-row">
+                  <input type="checkbox" checked={keepMain} onChange={(event) => setKeepMain(event.target.checked)} />
+                  <span>Fast-forward primary checkout when it is clean and exactly behind this remote base</span>
+                </label>
+              </>
+            )}
+            {unsupportedCreateWarnings.length > 0 && (
+              <p className="muted" role="status">
+                Default tabs and environment recipes are unsupported by the current public owners and will be refused before creation.
+              </p>
+            )}
             {(setup || asksForSetup) && (
               <div className="setup-block">
                 <div className="setup-heading">

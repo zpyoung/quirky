@@ -1,4 +1,4 @@
-import type { UiPluginContext, Worktree, WorktreeCreateResult, WorktreeRemoveResult } from '@quirky/protocol'
+import { RpcErrorCode, type FolderPickerRequest, type FolderPickerResult, type UiPluginContext, type Worktree, type WorktreeCreateResult, type WorktreeRemoveResult } from '@quirky/protocol'
 
 export const SESSION_VIEW = 'view:quirky.session/worktree'
 
@@ -9,6 +9,47 @@ export function messageOf(error: unknown): string {
 function reasonOf(error: unknown): string | undefined {
   const reason = (error as { data?: { reason?: unknown } } | null)?.data?.reason
   return typeof reason === 'string' ? reason : undefined
+}
+export class FolderPickerUnavailableError extends Error {
+  readonly code = RpcErrorCode.Conflict
+  readonly reason = 'native-folder-picker-unavailable'
+
+  constructor() {
+    super('This shell does not provide the native folder picker.')
+    this.name = 'FolderPickerUnavailableError'
+  }
+}
+
+/** Calls the shell-owned native folder picker, returning null on cancellation. */
+export async function pickNativeFolder(context: UiPluginContext, title: string, startingFolder?: string): Promise<string | null> {
+  let result: unknown
+  try {
+    const request: FolderPickerRequest & { multiple: false } = {
+      title,
+      ...(startingFolder ? { startingFolder } : {}),
+      multiple: false
+    }
+    result = await context.call('desktop.folder.pick', request as Record<string, unknown>)
+  } catch (error) {
+    const code = (error as { code?: unknown } | null)?.code
+    const reason = (error as { data?: { reason?: unknown } } | null)?.data?.reason
+    const unavailableConflict = code === RpcErrorCode.Conflict && typeof reason === 'string' &&
+      reason.toLowerCase().includes('folder') && reason.toLowerCase().includes('picker') && reason.toLowerCase().includes('unavailable')
+    if (code === RpcErrorCode.MethodNotFound || unavailableConflict) throw new FolderPickerUnavailableError()
+    throw error
+  }
+  if (typeof result !== 'object' || result === null || Array.isArray(result)) {
+    throw new Error('desktop.folder.pick returned an invalid result.')
+  }
+  const picked = result as Partial<FolderPickerResult>
+  if (typeof picked.cancelled !== 'boolean' || !Array.isArray(picked.paths) || !picked.paths.every((path) => typeof path === 'string')) {
+    throw new Error('desktop.folder.pick returned an invalid result.')
+  }
+  if (picked.cancelled) return null
+  if (picked.paths.length !== 1 || picked.paths[0] === '') {
+    throw new Error('desktop.folder.pick must return exactly one folder when not cancelled.')
+  }
+  return picked.paths[0] as string
 }
 
 /** Hands the new-worktree command's request to the sidebar section, now or when it next mounts. */
@@ -143,9 +184,31 @@ export async function createWorkspace(
   for (;;) {
     try {
       const result = (await context.call('quirky.worktree/create', { ...attempt, createdBy: 'window' })) as WorktreeCreateResult
-      if (JSON.stringify(context.getLayout().view) === viewAtSubmit) context.openView(SESSION_VIEW, { worktree: result.worktree.id })
+      if (JSON.stringify(context.getLayout().view) === viewAtSubmit) {
+        try {
+          await context.call('quirky.worktree/navigate', { worktree: result.worktree.id })
+        } catch (error) {
+          context.toast('Created worktree but could not open it', messageOf(error))
+        }
+      }
       else context.toast(`Created ${result.worktree.name}`, result.worktree.path)
       if (result.baseFallback) hooks.showFallback(result.worktree.id, result.baseFallback.message)
+      const receipt = (result as WorktreeCreateResult & {
+        creationReceipt?: {
+          sparsePaths?: string[]
+          sharedDirectories?: string[]
+          main?: { status: string; reason?: string; to?: string }
+          agentLaunch?: { launchSettings: { summary?: string } | null }
+        }
+      }).creationReceipt
+      const receiptLines: string[] = []
+      if (receipt?.sparsePaths?.length) receiptLines.push(`Sparse checkout: ${receipt.sparsePaths.join(', ')}`)
+      if (receipt?.sharedDirectories?.length) receiptLines.push(`Shared paths linked: ${receipt.sharedDirectories.join(', ')}`)
+      if (receipt?.main?.status === 'fast-forwarded') receiptLines.push(`Primary checkout fast-forwarded to ${receipt.main.to ?? 'the selected base'}.`)
+      else if (receipt?.main?.status === 'already-current') receiptLines.push('Primary checkout was already at the selected base.')
+      else if (receipt?.main?.status === 'not-updated') receiptLines.push(`Primary checkout left unchanged (${receipt.main.reason ?? 'not safe to update'}).`)
+      if (receipt?.agentLaunch?.launchSettings?.summary) receiptLines.push(`Agent launch: ${receipt.agentLaunch.launchSettings.summary}`)
+      if (receiptLines.length > 0) context.toast(`Created ${result.worktree.name}`, receiptLines.join('\n'))
       return result
     } catch (error) {
       if (reasonOf(error) === 'setup-decision-required') return SETUP_CHOICE_NEEDED
@@ -214,7 +277,7 @@ export async function setWorktree(
   context: UiPluginContext,
   worktreeId: string,
   patch: {
-    status?: Worktree['status']
+    status?: string
     pinned?: boolean
     unread?: boolean
     noParent?: boolean

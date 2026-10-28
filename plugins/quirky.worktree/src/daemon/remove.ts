@@ -101,6 +101,9 @@ function blankRow(id: string, repoId: string, path: string): WorktreeRow {
     sleeping: 0,
     sleep_changed_at: 0,
     cleanup_ignored_fingerprint: null,
+    references_json: '[]',
+    archived_at: null,
+    automation_provenance: null,
     cleanup_ignored_at: null
   }
 }
@@ -119,7 +122,7 @@ async function gatherScope(env: RemoveEnv): Promise<Scope> {
 
   const add = (repo: Repo, id: string, path: string, branch: string | null, head: string, orphan: Orphan) => {
     const row = orphan.row ?? blankRow(id, repo.id, path)
-    worktrees.push(joinMetadata({ id, repoId: repo.id, path, branch, head, isMain: false, kind: 'git', groupId: null }, row, env.removing.has(id)))
+    worktrees.push(joinMetadata({ id, repoId: repo.id, path, branch, head, isMain: false, kind: 'git', groupId: null }, row, env.removing.has(id), env.store))
     orphans.set(id, orphan)
     known.add(id)
   }

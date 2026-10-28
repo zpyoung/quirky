@@ -30,7 +30,11 @@ import {
   worktreeRuntimeBlockers,
   type ControlEnv
 } from './src/daemon/controls'
-import { readStockOptions, reorderWorktrees, setStockOptions } from './src/daemon/options'
+import { readProjectOrder, readStockOptions, reorderProjects, reorderWorktrees, setStockOptions } from './src/daemon/options'
+import { getProjectMetadata, projectMetadata, setExternalInboxSuppressed, setProjectMetadata } from './src/daemon/project'
+import { archiveWorktree, linkReference, listReferences, unlinkReference, type RecordEnv } from './src/daemon/records'
+import { readStatusDefinitions, setStatusDefinitions } from './src/daemon/statuses'
+import { navigate, navigationHistoryMove, navigationIndex, navigationState, navigationStep, openIn } from './src/daemon/navigation'
 import type { CleanupSelection, WorktreeControl } from './src/control-types'
 
 const DEFAULT_WORKTREES_ROOT = '~/quirky/workspaces'
@@ -305,6 +309,21 @@ export async function activate(context: PluginContext): Promise<void> {
     identitySource: filesystemIdentitySource,
     changed: (data) => void context.emit('changed', data)
   }
+  const recordEnv: RecordEnv = {
+    store,
+    fail,
+    find: async (selector, identity) => {
+      const { worktree, all } = await findWorktree(selector, identity)
+      return { worktree, all }
+    },
+    changed: (data) => void context.emit('changed', data)
+  }
+  const projectEnv = {
+    store,
+    fail,
+    call: (method: string, params: Record<string, unknown>) => context.call(method, params),
+    resolveRepo: async (selector: string) => (await context.call('quirky.repo/resolve', { selector })) as Repo
+  }
   const controlEnv: ControlEnv = {
     list: listEnv,
     remove: removeEnv,
@@ -317,6 +336,23 @@ export async function activate(context: PluginContext): Promise<void> {
     },
     fail,
     changed: (data) => void context.emit('changed', data)
+  }
+  const navigationEnv = {
+    store,
+    fail,
+    call: (method: string, params?: Record<string, unknown>) => context.call(method, params),
+    list: async () => listEverything(listEnv, await listRepos()),
+    find: async (selector: string, identity: CallerIdentity) => {
+      const { worktree, all } = await findWorktree(selector, identity)
+      return { worktree, all }
+    },
+    options: () => readStockOptions(store),
+    changed: (data: { repoId: string; worktreeId: string }) => void context.emit('changed', data)
+  }
+  async function notifyProjectWorktrees(selector?: string): Promise<void> {
+    const repos = selector === undefined ? await listRepos() : [await projectEnv.resolveRepo(selector)]
+    const rows = await Promise.all(repos.map((repo) => listProject(listEnv, repo).catch(() => [] as WorktreeControl[])))
+    for (const worktree of rows.flat()) context.emit('changed', { repoId: worktree.repoId, worktreeId: worktree.id })
   }
 
   const handlers: Record<string, Handler> = {
@@ -353,11 +389,78 @@ export async function activate(context: PluginContext): Promise<void> {
     async resolve(params, caller) {
       return (await findWorktree(String(params.selector), identityOf(caller, params))).worktree
     },
-    ownedIds,
+    navigate: (params, caller) => navigate(navigationEnv, params as { worktree: string; target?: unknown }, identityOf(caller)),
+    openIn: (params, caller) => openIn(navigationEnv, params as { worktree: string; target: unknown }, identityOf(caller)),
+    navigationState: () => navigationState(store),
+    navigationBack: () => navigationHistoryMove(navigationEnv, 'back'),
+    navigationForward: () => navigationHistoryMove(navigationEnv, 'forward'),
+    navigationMove(params) {
+      if (params.direction !== 'previous' && params.direction !== 'next') throw fail('invalid-params', 'direction must be previous or next')
+      return navigationStep(navigationEnv, params.direction)
+    },
+    navigationIndex: (params) => navigationIndex(navigationEnv, params.index),
+    projectMetadata(params) {
+      if (params.repo === undefined) throw fail('invalid-params', 'repo is required')
+      return getProjectMetadata(projectEnv, String(params.repo), readStockOptions(store).externalVisibilityDefault)
+    },
+    projectMetadataList() {
+      const globalExternalVisibility = readStockOptions(store).externalVisibilityDefault
+      return listRepos().then((repos) => repos.map((repo) => projectMetadata(store, repo, globalExternalVisibility)))
+    },
+    async setProjectMetadata(params) {
+      const updated = await setProjectMetadata(projectEnv, params as { repo: string; identity?: unknown; externalVisibility?: unknown; sharedDirectories?: unknown }, readStockOptions(store).externalVisibilityDefault)
+      context.emit('projectMetadataChanged', { repoId: updated.repoId })
+      return updated
+    },
+    async suppressExternalInbox(params) {
+      const updated = await setExternalInboxSuppressed(projectEnv, params as { repo: string; suppressed: unknown }, readStockOptions(store).externalVisibilityDefault)
+      await notifyProjectWorktrees(String(params.repo))
+      return updated
+    },
+    async externalInbox() {
+      const repos = await listRepos()
+      const worktrees = await listEverything(listEnv, repos)
+      const defaultVisibility = readStockOptions(store).externalVisibilityDefault
+      const projects = repos.map((repo) => {
+        const metadata = projectMetadata(store, repo, defaultVisibility)
+        const hidden = worktrees.filter((worktree) =>
+          worktree.repoId === repo.id && worktree.kind === 'git' && !worktree.isMain &&
+          worktree.createdBy === 'external' && !worktree.externalVisible
+        )
+        return {
+          repoId: repo.id,
+          projectName: repo.displayName ?? repo.name,
+          externalVisibility: metadata.externalVisibility,
+          effectiveExternalVisibility: metadata.effectiveExternalVisibility,
+          suppressed: metadata.externalInboxSuppressed,
+          hiddenWorktreeIds: hidden.map((worktree) => worktree.id),
+          hiddenWorktrees: hidden
+        }
+      }).filter((project) => project.hiddenWorktreeIds.length > 0)
+      return { defaultVisibility, projects }
+    },
+    projectOrder: async () => readProjectOrder(store, await listRepos()),
+    async reorderProjects(params) {
+      const result = reorderProjects({ store, fail }, await listRepos(), params.projects)
+      context.emit('optionsChanged', { options: readStockOptions(store) })
+      return result
+    },
+    statusDefinitions: () => readStatusDefinitions(store),
+    setStatusDefinitions(params) {
+      const statuses = setStatusDefinitions(store, fail, params.statuses)
+      context.emit('statusDefinitionsChanged', { statuses })
+      return statuses
+    },
+    archive: (params, caller) => archiveWorktree(recordEnv, params as { worktree: string; archivedAt?: unknown }, identityOf(caller)),
+    references: (params, caller) => listReferences(recordEnv, String(params.worktree), identityOf(caller)),
+    linkReference: (params, caller) => linkReference(recordEnv, params as { worktree: string; url: unknown; label?: unknown }, identityOf(caller)),
+    unlinkReference: (params, caller) => unlinkReference(recordEnv, params as { worktree: string; reference: unknown }, identityOf(caller)),
     options: () => readStockOptions(store),
     setOptions(params) {
+      const before = readStockOptions(store)
       const options = setStockOptions({ store, fail }, params)
       context.emit('optionsChanged', { options })
+      if (before.externalVisibilityDefault !== options.externalVisibilityDefault) void notifyProjectWorktrees()
       return options
     },
     async reorder(params) {

@@ -4,18 +4,39 @@ Reader: people and scripts managing worktrees — Decision: choose how the sideb
 
 ## Sidebar options
 
-Options are persisted in the worktree plugin's SQLite store; no new global setting IDs are used. Defaults are project grouping, recent sort, detailed cards, branch and comment properties shown, and sleeping worktrees visible.
+Options persist in the worktree plugin's SQLite store; no new global setting IDs are used. Defaults are project grouping, recent sorting, manual project order, detailed cards, all available card properties, sleeping worktrees shown, external worktrees hidden globally, and archived worktrees hidden.
 
-- `groupBy`: `project`, `status`, or `none`. Project-group nesting and the Pinned section remain intact for every choice. Status groups keep each parent and its descendants together.
-- `sortBy`: `recent`, `name`, or `manual`. Manual order can be changed by dragging sibling cards or with `quirky.worktree/reorder({worktrees:[...]})`; the list must contain every non-primary sibling in that project, parent and project-group membership.
-- `compact`, `showBranch`, `showComment`, and `showSleeping` control card layout and properties. Hiding sleeping worktrees shows a count and a reveal control. The existing sidebar-extras activity and review preferences remain unchanged; their own hidden counts and reveal controls remain authoritative.
+- `groupBy`: `project`, `status`, `pr`, or `none`. PR grouping uses the worktree's recorded linked PR; rows without one use a “No pull request” lane. Parent and descendants stay together.
+- `sortBy`: `recent`, `agent-activity`, `name`, `project`, or `manual`. Agent activity prioritizes sessions in `waiting` status, then uses persisted activity timestamps. Project sorting uses project name then activity.
+- `projectOrderBy`: `manual` or `recent`; manual project order is persisted by `quirky.worktree/reorderProjects({projects:[...]})`.
+- `compact`, `showProperties`, and `showSleeping` control card layout, available branch/note/PR/issue/automation/activity properties, and sleeping visibility. Hiding rows leaves a count and a temporary reveal control.
+- `hideCliCreated`, `hideDefaultBranch`, `hideDetached`, `hideArchived`, and `filterRepoIds` filter only worktrees with authoritative local provenance/branch/project data.
+- Host and other-client filters are not offered: the public `Repo` and `Worktree` contracts have no host or client ownership identity. The plugin does not fabricate either.
 
-Read or update options through `quirky.worktree/options({})` and `quirky.worktree/setOptions({groupBy?,sortBy?,compact?,showBranch?,showComment?,showSleeping?})`. For example:
+Read or update options through `quirky.worktree/options({})` and `quirky.worktree/setOptions({...})`. The CLI accepts the same choices; `quirky worktree reorder --worktrees '["wt_first","wt_second"]'` still requires every non-primary sibling in that project, parent, and project-group membership.
 
 ```sh
-quirky worktree options --group-by status --sort-by manual --compact --hide-sleeping
-quirky worktree reorder --worktrees '["wt_first", "wt_second"]'
+quirky worktree options --group-by pr --sort-by agent-activity --project-order-by recent --hide-cli-created
+quirky worktree reorder-projects --projects '["repo_web","repo_api"]'
 ```
+
+## External worktrees and project identity
+
+Only non-primary Git worktrees discovered with `createdBy: "external"` are external. The global default is `hide`; each project's `externalVisibility` may be `show`, `hide`, or `inherit`. Hidden rows remain on disk and in the review inbox. The inbox can show a project's worktrees, keep that project hidden, or suppress its review line without deleting anything.
+
+Use `quirky.worktree/projectMetadata({repo})`, `setProjectMetadata({repo,identity?,externalVisibility?})`, `externalInbox({})`, and `suppressExternalInbox({repo,suppressed})`. `quirky worktree project-show <repo>` and `project-set <repo> --external-worktree-visibility show|hide|inherit` share those methods. Project icon, color, tracker key, and display name are stored under the owning project authority; the checkout path and branch are unchanged.
+
+## References, statuses, and workspace board
+
+`linkReference({worktree,url,label?})` accepts absolute HTTP or HTTPS references, persists them independently of branch/path, and displays them as text rather than executing them. `references({worktree})` reads them and `unlinkReference({worktree,reference})` removes one by stable ID. The workspace details dialog has the same link/unlink controls.
+
+`statusDefinitions({})` reads the built-ins and custom definitions; `setStatusDefinitions({statuses})` requires the four built-in IDs and refuses to remove a status that a workspace still uses. The sidebar's Workspace board and status-group lanes use those persisted labels and colors. `quirky worktree status-list` and `status-set --statuses '<json>'` are the scriptable forms.
+
+## Navigation and Open in
+
+Opening a card records durable worktree history. `navigate({worktree,target?})`, `navigationBack({})`, `navigationForward({})`, `navigationMove({direction})`, `navigationIndex({index})`, and `openIn({worktree,target})` are the common API behind card clicks, the workspace menu, and CLI commands `back`, `forward`, `previous`, `next`, `index`, and `open-in`. Supported targets are the existing terminal workspace view and the public Git changes view. Stale history entries are skipped; when multiple windows are connected, navigation refuses because the public API cannot target one window exactly.
+
+Keyboard controls are Mod+Alt+Left/Right for history, Mod+Shift+Up/Down for previous/next, and Mod+1…9 for index selection. They do not intercept typing in editable fields.
 
 ## Reversible sleep and wake
 
@@ -31,7 +52,7 @@ Sleep state and change timestamps survive daemon restart. The public UI API does
 
 ## Cleanup preview and removal
 
-`quirky.worktree/cleanupPreview({})` lists worktrees idle for at least 30 days with a safety fingerprint, eligibility, and readable blocker details. Fingerprints are a current preview, not a durable deletion permit. `cleanupIgnore({worktreeId,fingerprint})` ignores only the matching suggestion; `cleanupRestoreIgnored({})` restores ignored suggestions.
+`quirky.worktree/cleanupPreview({})` includes 30-day idle candidates (`idle-clean`) and worktrees explicitly archived for at least seven days (`archived-7day`). Both carry a current safety fingerprint and readable blockers. `archive({worktree,archivedAt?})` and `quirky worktree archive <worktree> [--off]` set or clear archived metadata; changing that timestamp invalidates an older preview fingerprint. `cleanupIgnore({worktreeId,fingerprint})` ignores only the matching suggestion; `cleanupRestoreIgnored({})` restores ignored suggestions.
 
 A bulk request must name the exact selected fingerprints and set `confirmed:true`. The method is kernel-destructive: callers must also use `yes:true` or an answered confirmation. The UI asks for confirmation; the CLI requires `--confirm` for the reviewed selection and still honors global `--yes` or the normal ask flow.
 
@@ -48,8 +69,24 @@ The public evidence supports blockers for primary and folder workspaces, pins, a
 
 ## Evidence limits
 
-The current public `Repo` and `Worktree` contracts do not expose host connectivity, an archived flag, or a generic volatile-local-context classification. The preview therefore does not invent `ssh-disconnected`, `archived` (the source's 7-day archived reason), or a generic `volatile-local-context` result. It offers the supported 30-day idle-clean path, reports concrete public session/editor/Git/UI risks, and fails closed when a required evidence API is unavailable. It cannot distinguish a remote-host failure from another Git status error without public host identity.
+The plugin now owns the archived timestamp, but neither public `Repo` nor `Worktree` provides host connectivity or generic volatile-local-context evidence. `cleanupContext.volatile` and `cleanupContext.remoteConnected` therefore remain `null`; the classifier does not invent remote-disconnected or volatile-context blockers, and unknown runtime evidence never proves process death. Cleanup still rechecks current evidence through canonical non-forced removal.
+ 
+## Creation parity limits
 
+Existing create behavior remains the canonical `quirky.worktree/create` service. It keeps GitHub issue/PR drafts, setup and issue-command decisions, issue-command execution, and public `EffectiveHooks.sharedDirectories` carry behavior. This revision extends that create path rather than adding a second one.
+
+The create dialog, API and CLI support sparse paths, safe `keepMain` fast-forwards, and agent model/option choices. Launch picks are checked by the public `quirky.agents/resolveLaunch` owner before a worktree is created, then passed to `quirky.session/create`; a receipt reports materialized sparse paths, successfully linked shared directories, the primary-checkout update outcome, and the session's actual launch settings. Sparse paths are restricted to tracked repository-relative files/directories. `--keep-main` only fast-forwards a clean primary checkout on the exact selected remote-tracking branch when it is strictly behind; it never resets or falls back to a local base.
+
+```sh
+quirky worktree create --repo api --name sparse --sparse-paths '["src"]' --keep-main
+quirky wt project-set api --shared-directories '[".env.local"]'
+```
+
+Project Settings and `quirky wt project-set --shared-directories '[".env.local","config/private"]'` store per-project shared paths. The existing carry owner validates and links those ignored directories together with `EffectiveHooks.sharedDirectories`. Add Project and project Worktree Location expose the public native `desktop.folder.pick` dialog; cancellation keeps the typed draft, and shells without the picker return a conflict instead of imitating it in the browser.
+
+Default tabs and environment recipes remain unsupported by the current public owners (`quirky.repo/hooks` reports both); create API/CLI requests are explicitly refused before creating a worktree. A prepared-checkout pool and host runs remain separate flows and are not represented by local clones or fallback execution.
+
+The public protocol `Repo` and `Worktree` have no host or other-client ownership fields, so host/other-client filtering remains unavailable. The public UI state exposes only a connected-window count and one global layout; sleep and navigation refuse multiple-window routing instead of closing or opening an unrelated window.
 ## Issue-derived startup prompts
 
 Creating a GitHub issue worktree with an agent passes the raw issue URL through `quirky.worktree/create` to the public `quirky.session/create` API. That issue-derived prompt is left as a draft by default. `submitPrompt` can explicitly override the default; generic user-written prompts retain the session API's existing submitted default.
