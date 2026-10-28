@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path'
 import { QuirkyClient, type ClientRole, type QuirkyEvent } from '@quirky/protocol'
 import { rpcUrl, type RuntimeInfo } from '@quirky/protocol/node'
 import { startDaemon, type DaemonHandle, type DaemonOptions } from '../src/daemon'
+import { Store } from '../src/store'
 import { startFakePtyHost, type FakePtyHost } from './fixtures/fake-pty-host'
 
 export type Harness = {
@@ -26,6 +27,18 @@ export function builtinsDir(): string {
 
 export function makeTempHome(prefix = 'qd-'): string {
   return mkdtempSync(join(tmpdir(), prefix))
+}
+
+/** Disables unrelated agent-config writes before a fixture daemon activates built-ins. */
+export function makeHomeWithoutAutoHooks(prefix = 'qd-'): string {
+  const home = makeTempHome(prefix)
+  const store = new Store(join(home, 'quirky.db'))
+  try {
+    store.setSettingValue('setting:quirky.agent-status/hooks', false)
+  } finally {
+    store.close()
+  }
+  return home
 }
 
 const sharedBuiltinDirs = new Map<string, string>()

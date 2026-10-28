@@ -627,5 +627,16 @@
 - **Revisit if:** A combined contribution cannot mount, account preparation is bypassed, or replay/live bytes no longer join exactly.
 - **Source:** locked by the landed additive UI/PTY contracts and configured runner policy
 
+## D58: Keep editor-hosted tabs separate from terminal pane ownership
+- **Question:** How should the editor catch-up coexist with Vault group adoption and drag authority?
+- **Options:** Drop one method family; cast every tab as a terminal; retain independent methods and narrow tabs through the landed discriminator.
+- **Chose:** Keep commandDrag state and all four groupInfo/adoptSession/openViewTab/rekeyViewTabs registrations. Preserve Editor and Checks lock entries. Tests use isTerminalTab before pane traversal and explicitly require a resumed Vault tab to be terminal.
+- **Why:** Hosted views have no pane/session and do not replace terminal tab ownership. The source API is additive; casting away that distinction would hide an actual consumer invariant.
+- **Evidence:** Complete m2-editor log read, no account/settings/Worker conflict. Post-install typecheck and22-plugin build pass; the first build raced the new dependency installation and was not counted passing. Fresh adoption/positive/forged-drop3-file remote run passes,flaky[]. Editor/UI/terminal/Vault132remote files plus3macOS files pass under configured retry policy; terminal search's one null-input readiness failure passes isolated5/5.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** A hosted view acquires a session/pane or Vault resume produces a view tab.
+- **Source:** locked by the landed hosted-view lifecycle and terminal ownership contracts
+
 ## Progress
-Core and public support pass current typecheck, packaged21-plugin build, fresh25-file focused verification and256 remote affected files. Both macOS checks pass under configured isolated-retry policy; local readiness timing remains recorded. All4 restored web goals and real fake-provider execution are proven, account guards remain enforced, and both completion items are queued. Final whole-suite verification and done status remain owned by queue.ts land.
+Core/public graph and additive editor compatibility pass current typecheck/build, fresh3-file adoption/authority checks and132 remote affected files plus3macOS files under configured retry policy. Fresh25-file core proof and4-goal restored web smoke remain recorded. Account guards and original cwd/provider identity remain intact; both completion items and open nonblocking findings are tracked. Final whole-suite verification and done status remain owned by queue.ts land.

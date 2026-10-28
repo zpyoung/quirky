@@ -130,8 +130,11 @@ function setup(
       switch (method) {
         case 'ui.contributions':
           return model
-        case 'ui.state':
-          return { windows: [], layout: effective(), slots: [] }
+        case 'ui.state': {
+          const snapshot = { windows: [], layout: effective(), slots: [] }
+          await holds.get(method)
+          return snapshot
+        }
         case 'ui.view.open':
           if (!model.views.some((v) => v.id === params.id)) throw new Error(`no view ${params.id}`)
           return changeLayout({ view: { id: params.id as string, ...(params.input !== undefined ? { input: params.input } : {}) } })
@@ -1900,11 +1903,15 @@ test('D21: a broadcast layout equal to the current one changes nothing, and an e
   expect(state(t).openView).toBe(view)
 })
 
-test('D21: an event that arrives while the layout is being fetched is not overwritten by the older snapshot', async () => {
+test('D21: a layout event received during ui.state cannot be overwritten by its stale snapshot', async () => {
   const t = setup(makeModel({ views: [view(NOTES, 'page'), view(NOTES, 'other')] }))
   await t.host.refresh()
+  const release = gate()
+  t.holds.set('ui.state', release.opened)
   const refreshing = t.host.refresh()
+  await tick()
   t.changeLayout({ view: { id: OTHER } })
+  release.open()
   await refreshing
   expect(state(t).openView?.id).toBe(OTHER)
 })

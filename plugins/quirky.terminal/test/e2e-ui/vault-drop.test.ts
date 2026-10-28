@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import type { PublicListResult } from '../../../quirky.vault/src/types'
 import { startAgentsE2E, type E2E } from '../../../quirky.agents/test/support/e2e'
+import { isTerminalTab } from '../../src/layout/types'
 import {
   FEATURE_MS,
   attachFeatures,
@@ -136,6 +137,7 @@ test(
       )
       const target = groupsOf(layout).find((group) => group.id === targetGroup.id)!
       const resumed = target.tabs.find((tab) => tab.id !== destinationId)!
+      if (!isTerminalTab(resumed)) throw new Error('Vault resume must create a terminal tab, not a hosted view')
       const pane = leavesOf(resumed.root)[0]!
       const records = await h.call<{ id: string; agent: string; worktreeId: string | null }[]>('quirky.session/list', { worktree: layout.id })
       expect(records.find((entry) => entry.id === pane.session)).toMatchObject({ agent: 'claude', worktreeId: layout.id })

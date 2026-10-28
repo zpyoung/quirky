@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { HOOK_TOKEN_HEADER, type QuirkyEvent } from '@quirky/protocol'
 import type { Core } from '../src/service'
 import { startServer } from '../src/server'
+import { FileResourceRegistry } from '../src/file-resources'
 
 const TOKEN = 'hook-token'
 
@@ -25,6 +26,7 @@ function start() {
     daemonVersion: 'test',
     uiDir: '/nonexistent',
     pluginFile: () => null,
+    fileResources: new FileResourceRegistry(),
     log: () => {}
   })
   stop = () => void server.stop(true)

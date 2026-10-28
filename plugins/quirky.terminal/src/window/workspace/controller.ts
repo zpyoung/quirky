@@ -3,8 +3,8 @@ import { RpcErrorCode, type QuirkyEvent, type Session, type UiPluginContext } fr
 import { displayTitle } from '../../layout/titles'
 import { findGroup, groupsInOrder, paneLeaves, setGroupRatio, setPaneRatio } from '../../layout/tree'
 import type { DropZone } from '../../layout/tree'
-import { FLOATING_WORKSPACE, TAB_COLOR_HEX, TAB_COLORS } from '../../layout/types'
-import type { Edge, Group, GroupNode, PaneLeaf, PaneNode, Workspace } from '../../layout/types'
+import { FLOATING_WORKSPACE, isTerminalTab, isViewTab, TAB_COLOR_HEX, TAB_COLORS } from '../../layout/types'
+import type { Edge, Group, GroupNode, PaneLeaf, PaneNode, Tab, Workspace } from '../../layout/types'
 import type { PaneReport, SearchOptions, TerminalPaneHandle, TerminalPaneProps } from '../pane/TerminalPaneView'
 import type { DockState } from '../dock/types'
 import { SEPARATOR, type MenuItem } from './Menu'
@@ -36,6 +36,7 @@ export const DOUBLE_REQUEST_GUARD_MS = 350
 
 const TERMINAL_PREFIX = 'quirky.terminal/'
 const SETTING_PREFIX = 'setting:quirky.terminal/'
+const EDITOR_VIEW_ID = 'view:quirky.editor/document'
 
 /** What the person closes: one tab, one pane, or the tabs on one side of a tab. */
 export type CloseTarget =
@@ -359,7 +360,7 @@ export class WorkspaceController {
       if (loc) void this.focusPane(loc.leaf.id)
     }
     const unknown = groupsInOrder(workspace.root).some((group) =>
-      group.tabs.some((tab) => paneLeaves(tab.root).some((leaf) => !this.state.sessions[leaf.session]))
+      group.tabs.some((tab) => isTerminalTab(tab) && paneLeaves(tab.root).some((leaf) => !this.state.sessions[leaf.session]))
     )
     if (unknown) void this.reloadSessions()
   }
@@ -580,6 +581,25 @@ export class WorkspaceController {
     await this.run('pinTab', { tab: tabId, pinned }, pinned ? 'pin the tab' : 'unpin the tab')
   }
 
+  async promoteViewTab(tabId: string): Promise<void> {
+    const loc = this.ws ? locateTab(this.ws, tabId) : null
+    if (!loc || !isViewTab(loc.tab) || !loc.tab.preview) return
+    const bufferId = loc.tab.viewId === EDITOR_VIEW_ID ? loc.tab.input?.bufferId : undefined
+    if (typeof bufferId === 'string') {
+      try {
+        await this.context.call('quirky.editor/view', { bufferId, tabId, action: 'promote' })
+      } catch (error) {
+        this.context.toast('Could not promote the preview', messageOf(error))
+      }
+      return
+    }
+    await this.run('rekeyViewTabs', {
+      workspace: this.workspaceId,
+      viewId: loc.tab.viewId,
+      changes: [{ tab: tabId, key: loc.tab.key, preview: false }]
+    }, 'promote the preview')
+  }
+
   /** Moves a tab to `index` of a group (the end when omitted); it becomes that group's active tab. */
   async moveTabToGroup(tabId: string, group: string, index?: number): Promise<void> {
     await this.run('moveTab', { tab: tabId, group, ...(index === undefined ? {} : { index }) }, 'move the tab')
@@ -638,7 +658,7 @@ export class WorkspaceController {
 
   private async cycleFocus(offset: 1 | -1): Promise<void> {
     const at = this.ws ? focusedTabOf(this.ws) : null
-    if (at) await this.run('focusPane', { tab: at.tab.id, offset }, 'focus the pane')
+    if (at && isTerminalTab(at.tab)) await this.run('focusPane', { tab: at.tab.id, offset }, 'focus the pane')
   }
 
   focusNext(): Promise<void> {
@@ -660,7 +680,9 @@ export class WorkspaceController {
     const at = this.ws ? focusedTabOf(this.ws) : null
     const tab = tabId ?? at?.tab.id
     const loc = tab && this.ws ? locateTab(this.ws, tab) : null
-    if (loc && paneLeaves(loc.tab.root).length > 1) await this.run('equalize', { tab: loc.tab.id }, 'equalize the panes')
+    if (loc && isTerminalTab(loc.tab) && paneLeaves(loc.tab.root).length > 1) {
+      await this.run('equalize', { tab: loc.tab.id }, 'equalize the panes')
+    }
   }
 
   async clearPane(paneId?: string): Promise<void> {
@@ -706,7 +728,7 @@ export class WorkspaceController {
     if (rename.kind === 'tab') {
       const loc = locateTab(ws, rename.id)
       if (!loc) return
-      const current = loc.tab.customTitle ?? displayTitle(loc.tab)
+      const current = isViewTab(loc.tab) ? loc.tab.title : loc.tab.customTitle ?? displayTitle(loc.tab)
       if (value.trim() === current) return
       await this.run('renameTab', { tab: rename.id, title: value }, 'rename the tab')
     } else {
@@ -784,8 +806,22 @@ export class WorkspaceController {
   }
 
   private async execClose(target: CloseTarget): Promise<void> {
-    const params = { ...this.closeParams(target), yes: true }
     const hadTabs = this.ws !== null && hasTabs(this.ws)
+    if (target.kind === 'tab') {
+      const loc = this.ws ? locateTab(this.ws, target.tab) : null
+      if (loc && isViewTab(loc.tab) && loc.tab.closeCommand) {
+        try {
+          await this.context.executeCommand(loc.tab.closeCommand, { ...(loc.tab.closeParams ?? {}), tabId: loc.tab.id })
+        } catch (error) {
+          this.context.toast('Could not close the tab', messageOf(error))
+          return
+        }
+        const after = await this.run('workspace', { workspace: this.workspaceId }, 'refresh the workspace')
+        if (hadTabs && after && !hasTabs(after)) await this.minimizeFloating()
+        return
+      }
+    }
+    const params = { ...this.closeParams(target), yes: true }
     let after: Workspace | null
     if (target.kind === 'tab') after = await this.run('closeTab', params, 'close the tab')
     else if (target.kind === 'pane') after = await this.run('closePane', params, 'close the pane')
@@ -833,8 +869,13 @@ export class WorkspaceController {
     return this.requestClose({ kind: 'tabs', tab: tabId, which })
   }
 
-  /** Closes the focused pane of a split tab, else the focused tab; with nothing open a floating workspace minimizes. */
+  /** Closes the active view tab or terminal pane; with nothing open a floating workspace minimizes. */
   async closeFocused(): Promise<void> {
+    const selected = this.ws ? focusedTabOf(this.ws) : null
+    if (selected && isViewTab(selected.tab)) {
+      await this.requestClose({ kind: 'tab', tab: selected.tab.id })
+      return
+    }
     const at = this.ws ? focusedPaneOf(this.ws) : null
     if (!at) {
       await this.minimizeFloating()
@@ -954,13 +995,13 @@ export class WorkspaceController {
         enabled: group.tabs.length > 1,
         submenu: sides.map(([label, side]) => ({ label, onSelect: () => void this.moveTabToSplit(tabId, side, group.id) }))
       },
-      {
+      ...(isTerminalTab(tab) ? [{
         label: 'Split Terminal',
         submenu: [
           { label: 'Right', onSelect: () => void this.splitRight(tab.activePane) },
           { label: 'Down', onSelect: () => void this.splitDown(tab.activePane) }
         ]
-      },
+      }] : []),
       { label: tab.pinned ? 'Unpin Tab' : 'Pin Tab', onSelect: () => void this.pinTab(tabId, !tab.pinned) },
       { label: 'Copy Tab ID', onSelect: () => void this.copyText(tabId) },
       { label: 'Close', key: '⌘W', onSelect: () => void this.closeTab(tabId) },

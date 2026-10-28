@@ -2,7 +2,7 @@ import { afterEach, expect, test } from 'bun:test'
 import { QuirkyClient, RpcErrorCode } from '@quirky/protocol'
 import { waitForAsync, type Harness } from '../../../../packages/daemon/test/helpers'
 import { groupsInOrder, paneLeaves } from '../../src/layout/tree'
-import type { Group, Workspace } from '../../src/layout/types'
+import { isTerminalTab, type Group, type Workspace } from '../../src/layout/types'
 import { call, createSession, startPluginHarness, TERMINAL_PLUGINS } from '../support'
 
 let h: Harness
@@ -15,7 +15,7 @@ afterEach(async () => {
 
 const api = <T>(method: string, params: Record<string, unknown> = {}) => call<T>(client, `quirky.terminal/${method}`, params)
 const groups = (workspace: Workspace): Group[] => groupsInOrder(workspace.root)
-const allPanes = (workspace: Workspace) => groups(workspace).flatMap((group) => group.tabs.flatMap((tab) => paneLeaves(tab.root)))
+const allPanes = (workspace: Workspace) => groups(workspace).flatMap((group) => group.tabs.flatMap((tab) => isTerminalTab(tab) ? paneLeaves(tab.root) : []))
 
 async function start(): Promise<void> {
   h = await startPluginHarness(TERMINAL_PLUGINS)
@@ -45,7 +45,7 @@ test('groupInfo reports the owner and adoptSession moves an auto-adopted tab exa
   await api<{ workspace: Workspace }>('adoptSession', { session: session.id, group: right.id })
   const after = (await api<{ workspace: Workspace }>('workspace', { workspace: 'wt_main' })).workspace
   expect(allPanes(after).filter((pane) => pane.session === session.id)).toHaveLength(1)
-  expect(groups(after).find((group) => group.id === right.id)?.tabs.some((tab) => paneLeaves(tab.root).some((pane) => pane.session === session.id))).toBe(true)
+  expect(groups(after).find((group) => group.id === right.id)?.tabs.some((tab) => isTerminalTab(tab) && paneLeaves(tab.root).some((pane) => pane.session === session.id))).toBe(true)
 })
 
 test('adoptSession rejects a group owned by another worktree before changing either layout', async () => {
