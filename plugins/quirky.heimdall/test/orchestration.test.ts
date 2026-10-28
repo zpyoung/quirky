@@ -361,6 +361,7 @@ function makeContext(
   return {
     pluginId: 'quirky.heimdall',
     dir: '/tmp/heimdall',
+    workerEntrypoint: () => { throw new Error('workerEntrypoint is unsupported in the orchestration fixture') },
     dataDir: '/tmp/heimdall-data',
     home: '/tmp/quirky-home',
     workerEntrypoint: () => { throw new Error('unexpected worker entrypoint request') },

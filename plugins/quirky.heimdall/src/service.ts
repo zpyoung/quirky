@@ -215,14 +215,17 @@ export function createKernelService(context: PluginContext, now: () => number = 
         consecutiveErrors: 0,
         consecutiveGateHolds: 0
       })
+      const summary = store.summary(enrollment.watcherId)
       return {
         readOnly: store.readOnly,
         enrollment,
         status,
         journal,
         traces: store.traces(enrollment.watcherId),
-        summary: store.summary(enrollment.watcherId),
-        budget: budgetUsage(journal, now(), enrollment.budget)
+        summary,
+        budget: enrollment.terminalAtMs !== null && summary !== null
+          ? summary.budget
+          : budgetUsage(journal, now(), enrollment.budget)
       }
     })
   }

@@ -374,5 +374,27 @@
 - **Revisit if:** an actual merged caller violates a preserved authority or receipt boundary
 - **Source:** locked by docs/loop/LOOP.md and incoming m6-orchestration-core/m6-orchestration-workers decisions
 
+## D35: Preserve terminal history without reviving live worker authority
+- **Question:** real completion compacted the journal and exposed zero inspection counters; a confirmed exact stop erased identities from its owner-only view
+- **Options:** retain live authority; infer exit from missing state; use the persisted summary and exact confirmed-close history
+- **Chose:** terminal inspection uses its immutable summary budget, while active inspection still calculates live usage. Owned Run views recover the historical tuple only from a matching persisted resource/incarnation and confirmed-close observation; they do not mutate or reactivate the assignment.
+- **Why:** compaction may discard resolved details but cannot erase final counters. Historical identity and positive close evidence are not credentials.
+- **Evidence:** actual terminal summary had one turn while inspection returned zero; actual stopped receipt was positive but owner view lost its tuple; real-store regression and exact-stop API case; subsequent all8 service and native kernel smokes both passed with captured structured output and positive session exit
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** unconfirmed, transferred or abandoned resources acquire a false exit or active authority
+- **Source:** assumed — autonomous
+
+## D36: Distinguish pre-acceptance waiter refusal from post-ack interruption
+- **Question:** the merged no-ack overlapping-wait fixture expected a cancelled result despite rejection before mutation acceptance
+- **Options:** accept a second actionable waiter; change preflight into a fake accepted result; preserve the two actual transaction boundaries
+- **Chose:** a no-ack overlapping wait receives waiter_exists before acceptance. A wait interrupted after acknowledgement retains its committed ack and reports waitInterrupted. Preserve one actionable waiter and the separate post-ack regression.
+- **Why:** a new request with no committed effect can be refused; a response must not hide an acknowledgement that already landed.
+- **Evidence:** messaging.ts pre-acceptance reservation guard and post-ack interruption branch; Core D7; corrected full ordinary API acceptance23pass253assertions
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** acknowledgement is lost or two actionable waiters become active
+- **Source:** locked by docs/loop/decisions/m6-orchestration-core.md D7
+
 ## Progress
-Iteration4: current source checkpoints99a5cc3f/7f3bd35b include all eight real service APIs, exact control fences/checkpoints, accepted-report Worker settlement, canonical launch settings, explicit CLI transport/logical receipt separation and typed Codex catalog mappings. Source APIs and docs contain no owner/control hubs or fake process authority. Own earlier full typecheck passed0diagnostics; scripts63pass478assertions; affected remote gate114/121 files passed before the identified fixes. Current dependency gate is ready:true. The ONE required roadmap merge is in progress with disjoint core/CLI, worker and native integration owners; all17 incoming decision logs were read with no unresolved contradiction. Native conflict resolution is complete, other slices still running; no checks until that barrier. Lane10's additional isolated API/CLI fixture corrections remain pending publication. Next: finish and commit this merge, import that test-only follow-up, then actual all8 services and native kind-to-report-to-terminal/archive smoke, affected remote gate including CLI/agents/protocol, scripts/typecheck, and queue land. D20 skips only the unstarted review campaign; D21 is the sole deferred native host-power flow. No human ask.
+Iteration4: roadmap catchup committed0d45d83a; isolated fixture followup committedbd082884; all integration/fix agents returned. Both OWN actual-process smokes PASS: all8 owner services through native CLI Ask/answer/report/release/exact stop with foreign/stale-identity rejection, and real kernel-kind structured Codex dispatch through authenticated worker_done to terminal summary, one retained turn, captured structured journal and positive exact session exit. Private homes/processes cleaned. OWN full typecheck PASS0diagnostics20.71s; exact scripts gate PASS68tests570assertions after serializing local runtime work without changing deadlines; ordinary API acceptance PASS23tests253assertions. The193-file affected run passed187; corrected plugin follow-up passed51/52 before the final pre-acceptance waiter assertion correction. Final52-file affected follow-up is running. Dependency proof ready:true; one roadmap catchup done and all17 incoming logs read. Next: finish that remote gate, commit final boundary fixes/docs and queue land, whose merge-result whole-suite verification remains mandatory. D20 skips only the unstarted review campaign; D21 remains the sole deferred native host-power flow. No owner/control hubs, fake worker authority, new human ask or unverified whole-feature claim.

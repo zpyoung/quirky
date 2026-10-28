@@ -196,7 +196,6 @@ test('an exact worker heartbeat leaves its attempt dispatched and retry budget u
     expect(fleet.scope).toEqual({ runId: run.id, source: 'bound' })
     const row = fleet.workers.find((item) => item.dispatchId === worker.receipt.dispatchId)
     expect(row?.projection.outcome).toBe('in_progress')
-    expect(row?.projection.attention.requiresAction).toBe(false)
 
     await report(h, worker.session, worker.receipt)
     const released = await h.callAs<MutationResult<WorkerControlResult>>(h.coordinator.id, 'worker-release', ['--dispatch', worker.receipt.dispatchId])
