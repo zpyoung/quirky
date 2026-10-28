@@ -35,3 +35,4 @@ export function usePluginState(): HostState {
   const host = usePluginHost()
   return useSyncExternalStore(host.subscribe, host.getState)
 }
+

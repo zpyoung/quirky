@@ -8,7 +8,7 @@ import {
   openMobileE2EEV2Frame,
   sealMobileE2EEV2Frame,
   validateMobileE2EEV2Handshake
-} from '../src/transport/crypto'
+} from '@quirky/protocol/paired-client'
 
 const b64 = (bytes: Uint8Array) => {
   let binary = ''

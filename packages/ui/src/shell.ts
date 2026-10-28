@@ -1,3 +1,4 @@
+import type { DesktopShellAction, DesktopShellBridge, QuirkyEvent } from '@quirky/protocol'
 import { confirmForPlugin } from './components/ConfirmHost'
 import { dismissToastByKey } from './components/Toasts'
 import { Connection } from './connection'
@@ -5,6 +6,50 @@ import type { AppContextValue } from './context'
 import { WindowPluginHost, type HostDeps } from './plugins/host'
 import { reportedToasts } from './lib/state'
 import { Store } from './store'
+import { desktopBridgeForWindow, noNativeDesktopCapabilities, type DesktopWindowRoute } from './desktop-bridge'
+
+type DesktopShellRequestEvent = Extract<QuirkyEvent, { type: 'desktop.shell.request' }>
+
+async function answerDesktopShellRequest(
+  connection: Connection,
+  bridge: DesktopShellBridge | null,
+  event: DesktopShellRequestEvent,
+  log: (message: string) => void
+): Promise<void> {
+  try {
+    if (!bridge) throw new Error('native desktop shell is unavailable')
+    let result
+    const action: DesktopShellAction = event.action
+    switch (action.kind) {
+      case 'folder-picker':
+        if (!bridge.capabilities.directoryPicker) throw new Error('native directory selection is unavailable')
+        result = await bridge.pickFolder(action.request)
+        break
+      case 'window-open':
+        if (!bridge.capabilities.auxiliaryWindows) throw new Error('auxiliary native windows are unavailable')
+        result = await bridge.openWindow(action.request, event.ownerShell)
+        break
+      case 'window-close':
+        if (!bridge.capabilities.auxiliaryWindows) throw new Error('auxiliary native windows are unavailable')
+        result = await bridge.closeWindow(action.request.windowId)
+        break
+      case 'window-activate-owner':
+        if (!bridge.capabilities.auxiliaryWindows) throw new Error('auxiliary native windows are unavailable')
+        result = await bridge.activateOwner(action.request.windowId)
+        if (!result.activated) throw new Error('the owning native window could not be activated')
+        break
+      case 'reveal-item':
+        if (!bridge.capabilities.revealItem) throw new Error('native item reveal is unavailable')
+        result = await bridge.revealItem(action.request)
+        break
+    }
+    await connection.callAny('desktop.shell.reply', { requestId: event.requestId, result })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'native desktop operation failed'
+    await connection.callAny('desktop.shell.reply', { requestId: event.requestId, error: { message } })
+      .catch((replyError) => log(`native desktop reply failed: ${replyError}`))
+  }
+}
 
 /** Window focus as the browser reports it. */
 export function browserWindowFocus(): NonNullable<HostDeps['windowFocus']> {
@@ -44,9 +89,14 @@ export type ShellOptions = {
   log(message: string): void
   windowFocus?: HostDeps['windowFocus']
   windowActivity?: HostDeps['windowActivity']
+  /** Trusted native bridge from this exact desktop window, absent in browser shells. */
+  desktopBridge?: DesktopShellBridge | null
+  /** A local-only route used by an auxiliary native window. */
+  windowRoute?: DesktopWindowRoute | null
   /** Delay before the first reconnect attempt. */
   initialDelayMs?: number
 }
+
 
 /**
  * The window's store, daemon connection and plugin host, wired together: the host refreshes on
@@ -55,6 +105,8 @@ export type ShellOptions = {
 export function createShell(options: ShellOptions): AppContextValue {
   const store = new Store()
   const connection = new Connection(store, options.where, { initialDelayMs: options.initialDelayMs })
+  const desktopBridge = options.desktopBridge === undefined ? desktopBridgeForWindow() : options.desktopBridge
+
   const plugins = new WindowPluginHost({
     call: (method, params) => connection.callAny(method, params),
     onEvent: (listener) => connection.onEvent(listener),
@@ -67,8 +119,15 @@ export function createShell(options: ShellOptions): AppContextValue {
     dismissToast: (key) => dismissToastByKey({ store, plugins }, key),
     log: options.log,
     windowFocus: options.windowFocus,
-    windowActivity: options.windowActivity
+    windowActivity: options.windowActivity,
+    windowRoute: options.windowRoute
   })
+  connection.onEvent((event) => {
+    if (event.type === 'desktop.shell.request') {
+      void answerDesktopShellRequest(connection, desktopBridge, event, options.log)
+    }
+  })
+
   const reportToasts = () => {
     connection.callAny('ui.shell.report', { toasts: reportedToasts(store.getState().toasts) }).catch(() => undefined)
   }
@@ -80,6 +139,13 @@ export function createShell(options: ShellOptions): AppContextValue {
     reportToasts()
   })
   connection.onConnected(() => {
+    if (options.windowRoute) {
+      connection.callAny('desktop.window.attach', {
+        windowId: options.windowRoute.windowId, ownerShellConnId: options.windowRoute.ownerShellConnId
+      }).catch((error) => options.log(`auxiliary window attach failed: ${error}`))
+    }
+    connection.callAny('desktop.shell.capabilities', desktopBridge?.capabilities ?? noNativeDesktopCapabilities())
+      .catch((error) => options.log(`native desktop capabilities report failed: ${error}`))
     reportToasts()
     plugins.connected().catch((error) => options.log(`plugin refresh failed: ${error}`))
   })

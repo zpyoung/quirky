@@ -4,7 +4,7 @@ import { createBridgeHost } from '../src/shell/bridge-host'
 import { createPageBridge, type PageBridgePort } from '../src/shell/page-bridge'
 import { builtinsDir, startHarness } from '../../../packages/daemon/test/helpers'
 import type { Harness } from '../../../packages/daemon/test/helpers'
-import { createMobileRpc } from '../src/transport/client'
+import { createMobileRpc } from '@quirky/protocol/paired-client'
 
 const state = (phase: MobileConnectionState['phase'] = 'connected'): MobileConnectionState => ({ phase, attempts: 0 })
 const init: MobilePageInit = {

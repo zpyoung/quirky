@@ -10,8 +10,10 @@ import {
   type UiModel,
   type UiPluginContext,
   type UiPluginModule,
-  type UiSlotEntry
+  type UiSlotEntry,
+  type DesktopWindowSummary
 } from '@quirky/protocol'
+import type { DesktopWindowRoute } from '../src/desktop-bridge'
 import { WindowPluginHost, type HostState } from '../src/plugins/host'
 
 type Fake = { text?: string }
@@ -90,11 +92,12 @@ type WindowFocus = NonNullable<ConstructorParameters<typeof WindowPluginHost>[0]
 
 function setup(
   initial: UiModel,
-  options: { settings?: SettingInfo[]; activationTimeoutMs?: number; windowFocus?: WindowFocus } = {}
+  options: { settings?: SettingInfo[]; activationTimeoutMs?: number; windowFocus?: WindowFocus; windowRoute?: DesktopWindowRoute } = {}
 ) {
   let model = initial
   let settings = options.settings ?? []
   let layout: UiLayout = { view: null, panel: null, sidebar: true, focus: null }
+  let windowRoute = options.windowRoute ?? null
   const listeners = new Set<(event: QuirkyEvent) => void>()
   const emitEvent = (event: QuirkyEvent) => listeners.forEach((listener) => listener(event))
   /** What the daemon would answer: a view or panel the model no longer has is dropped. */
@@ -140,6 +143,29 @@ function setup(
           return changeLayout({ view: { id: params.id as string, ...(params.input !== undefined ? { input: params.input } : {}) } })
         case 'ui.view.close':
           return changeLayout({ view: null })
+        case 'desktop.window.update': {
+          if (!windowRoute || params.windowId !== windowRoute.windowId) throw new Error('no owned auxiliary window route')
+          windowRoute = {
+            ...windowRoute,
+            view: params.view as string | null,
+            ...(params.view === null || params.input === undefined ? {} : { input: params.input })
+          }
+          const summary: DesktopWindowSummary = {
+            windowId: windowRoute.windowId,
+            view: windowRoute.view,
+            ...(windowRoute.input === undefined ? {} : { input: windowRoute.input }),
+            ...(windowRoute.title === undefined ? {} : { title: windowRoute.title }),
+            ownerShell: {
+              connId: windowRoute.ownerShellConnId,
+              ...(windowRoute.ownerShellName ? { name: windowRoute.ownerShellName } : {})
+            },
+            attached: windowRoute.attached
+          }
+          emitEvent({ type: 'desktop.window.changed', windows: [summary] })
+          return summary
+        }
+        case 'desktop.window.runOwnerCommand':
+          return { result: { opened: true }, activated: true }
         case 'ui.panel.open':
           if (!model.panels.some((p) => p.id === params.id)) throw new Error(`no panel ${params.id}`)
           return changeLayout({ panel: params.id as string })
@@ -200,7 +226,8 @@ function setup(
     },
     log: (message) => logs.push(message),
     activationTimeoutMs: options.activationTimeoutMs,
-    windowFocus: options.windowFocus
+    windowFocus: options.windowFocus,
+    windowRoute: options.windowRoute
   })
 
   return {
@@ -2674,4 +2701,44 @@ describe('mountView', () => {
     await until(() => t.logs.length > 0)
     expect(t.logs[0]).toContain('kaboom')
   })
+})
+
+test('an auxiliary view context reads and updates its own daemon route without changing the global layout', async () => {
+  const viewId = 'view:acme.dashboard/page'
+  const initialInput = { filters: { hidden: false, group: 'ready' } }
+  const route: DesktopWindowRoute = {
+    windowId: 'window-route-1', ownerShellConnId: 21, view: viewId, input: initialInput, title: 'Dashboard', attached: true
+  }
+  const t = setup(makeModel({
+    views: [view('acme.dashboard', 'page')],
+    commands: [command('acme.dashboard', 'openActivityThread')]
+  }), { windowRoute: route })
+  let context: UiPluginContext | undefined
+  t.useModule('acme.dashboard', {
+    activate(next) {
+      context = next
+      next.provide(viewId, () => () => {})
+      next.provide('command:acme.dashboard/openActivityThread', () => ({ opened: true }))
+    }
+  })
+  await t.host.refresh()
+  t.host.mount(viewId, element(), { input: initialInput })
+  await until(() => context !== undefined)
+
+  expect(context!.getLayout().view).toEqual({ id: viewId, input: initialInput })
+  const nextInput = { filters: { hidden: true, group: 'review' } }
+  context!.openView(viewId, nextInput)
+  await until(() => state(t).windowRoute?.input === nextInput)
+  await context!.executeCommand('command:acme.dashboard/openActivityThread', { worktreeId: 'worktree-1' })
+
+  expect(t.methodCalls('desktop.window.update')).toEqual([{
+    method: 'desktop.window.update', params: { windowId: route.windowId, view: viewId, input: nextInput }
+  }])
+  expect(t.methodCalls('ui.view.open')).toEqual([])
+  expect(t.daemonLayout().view).toBeNull()
+  expect(context!.getLayout().view).toEqual({ id: viewId, input: nextInput })
+  expect(t.methodCalls('desktop.window.runOwnerCommand')).toEqual([{
+    method: 'desktop.window.runOwnerCommand',
+    params: { windowId: route.windowId, id: 'command:acme.dashboard/openActivityThread', args: { worktreeId: 'worktree-1' } }
+  }])
 })

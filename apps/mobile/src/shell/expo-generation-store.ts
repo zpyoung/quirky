@@ -1,5 +1,5 @@
 import * as FileSystem from 'expo-file-system/legacy'
-import { sha256 } from '../transport/crypto'
+import { sha256 } from '@quirky/protocol/paired-client'
 import { createGenerationStore, decodeBase64, encodeBase64, type BundleFileSystem, type GenerationStore } from './generation'
 
 const fileSystem: BundleFileSystem = {

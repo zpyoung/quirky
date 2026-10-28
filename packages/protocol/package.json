@@ -5,6 +5,11 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./node": "./src/node/index.ts"
+    "./node": "./src/node/index.ts",
+    "./paired-client": "./src/paired-client/index.ts"
+  },
+  "dependencies": {
+    "@noble/hashes": "1.8.0",
+    "tweetnacl": "1.0.3"
   }
 }

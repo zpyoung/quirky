@@ -214,3 +214,7 @@ export async function connectDaemon(
   }
   return QuirkyClient.connect(rpcUrl(runtime), { ...options, ...options.identity })
 }
+
+export * from './paired-runtimes'
+
+export * from './cli-install'

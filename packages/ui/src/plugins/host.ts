@@ -17,8 +17,10 @@ import {
   type UiPluginModule,
   type UiSlotEntry,
   type UiState,
-  type NativeBrowserCapability
+  type NativeBrowserCapability,
+  type DesktopWindowSummary
 } from '@quirky/protocol'
+import type { DesktopWindowRoute } from '../desktop-bridge'
 
 /** What the host needs from its surroundings; the React shell wires these to `Connection` and the browser. */
 export type HostDeps = {
@@ -40,6 +42,8 @@ export type HostDeps = {
   windowFocus?: { hasFocus(): boolean; subscribe(listener: (focused: boolean) => void): () => void }
   /** User input in the window (pointer, key, wheel), reported to the daemon so it knows someone is at the machine. */
   windowActivity?: { subscribe(listener: () => void): () => void }
+  /** Route-local state for an auxiliary native window, if this webview owns one. */
+  windowRoute?: DesktopWindowRoute | null
   /** The clock for activity throttling; defaults to `Date.now`. */
   now?: () => number
   /** Covers a plugin's import plus `activate`; defaults to 10000. */
@@ -61,6 +65,8 @@ export type HostState = {
   layout: UiLayout
   /** `layout.view`, kept as the same object while its ID and input are unchanged. */
   openView: { id: string; input?: unknown } | null
+  /** Route-local view state for an auxiliary native window; null in the main shell. */
+  windowRoute: DesktopWindowRoute | null
   openPanel: string | null
   /** Panel ID to the count its plugin shows on the panel's toggle. */
   badges: Record<string, number>
@@ -179,8 +185,8 @@ function sameJson(a: unknown, b: unknown): boolean {
  * Loads every enabled plugin's UI module once the window has the UI model, keeps it active while
  * the plugin stays enabled, and mounts its contributions into elements the shell owns.
  * It holds no React and touches no DOM global: an element is a value passed through to the
- * plugin's mount function, never inspected. All state the shell renders is in `getState()`; the
- * layout in it is the daemon's, changed only by the daemon's `ui.state.changed` broadcasts.
+ * plugin's mount function, never inspected. Global layout is daemon-owned; auxiliary view/input
+ * state is read and updated through the exact daemon-owned window route.
  */
 export class WindowPluginHost {
   private state: HostState = {
@@ -190,6 +196,7 @@ export class WindowPluginHost {
     slots: {},
     layout: DEFAULT_LAYOUT,
     openView: null,
+    windowRoute: null,
     openPanel: null,
     badges: {},
     badgeTitles: {},
@@ -218,6 +225,16 @@ export class WindowPluginHost {
   private stopped = false
   private commandDrag: CommandDragCapability | null = null
   constructor(private readonly deps: HostDeps) {
+    const windowRoute = deps.windowRoute ?? null
+    if (windowRoute) {
+      this.state = {
+        ...this.state,
+        windowRoute,
+        openView: windowRoute.view === null
+          ? null
+          : { id: windowRoute.view, ...(windowRoute.input === undefined ? {} : { input: windowRoute.input }) }
+      }
+    }
     this.nativeBrowser = deps.nativeBrowser ?? nativeBrowserCapabilityForWindow()
     this.unsubscribeEvents = deps.onEvent((event) => this.handleEvent(event))
     this.unsubscribeFocus = deps.windowFocus?.subscribe((focused) => this.reportFocus(focused))
@@ -354,13 +371,20 @@ export class WindowPluginHost {
     return (this.state.model?.commands ?? []).filter((command) => command.title.toLowerCase().includes(needle))
   }
 
-  /** Asks the daemon to show view `id`; the layout changes when its broadcast arrives. */
+  /** Updates the view in this window without stealing the main shell's global view. */
   openView(id: string, input?: unknown): void {
+    const route = this.state.windowRoute
+    if (route) {
+      this.layoutCall('desktop.window.update', { windowId: route.windowId, view: id, ...(input !== undefined ? { input } : {}) })
+      return
+    }
     this.layoutCall('ui.view.open', { id, ...(input !== undefined ? { input } : {}) })
   }
 
   closeView(): void {
-    if (this.state.layout.view) this.layoutCall('ui.view.close', {})
+    const route = this.state.windowRoute
+    if (route) this.layoutCall('desktop.window.update', { windowId: route.windowId, view: null })
+    else if (this.state.layout.view) this.layoutCall('ui.view.close', {})
   }
 
   /** Asks the daemon to open panel `id` (closing any other); with no `open`, to toggle it. */
@@ -856,7 +880,13 @@ export class WindowPluginHost {
       }),
       getSetting: live((name: string) => this.getSetting(pluginId, name)),
       executeCommand: live(async (id: string, args?: unknown) => {
-        await this.invokeCommand(this.requireCommand(id), args)
+        const command = this.requireCommand(id)
+        const route = this.state.windowRoute
+        if (route) {
+          await this.deps.call('desktop.window.runOwnerCommand', { windowId: route.windowId, id, args: args ?? {} })
+          return
+        }
+        await this.invokeCommand(command, args)
       }),
       createCommandDrag: live((command: string, args?: Record<string, unknown>) => {
         const snapshot = structuredClone(args ?? {})
@@ -884,7 +914,7 @@ export class WindowPluginHost {
       closeView: live(() => this.closeView()),
       togglePanel: live((id: string, open?: boolean) => this.togglePanel(id, open)),
       setPalette: live((open?: boolean) => this.setPalette(open)),
-      getLayout: live(() => this.state.layout),
+      getLayout: live(() => this.layoutForWindow()),
       onLayout: live((listener: (layout: UiLayout) => void) => {
         this.layoutListeners.add(listener)
         return track(() => this.layoutListeners.delete(listener))
@@ -963,13 +993,15 @@ export class WindowPluginHost {
   }
 
   private handleEvent(event: QuirkyEvent): void {
+    if (event.type === 'desktop.shell.request') return
     if (event.type === 'ui.state.changed') {
       this.layoutEventVersion++
       this.setLayout(event.layout)
     }
+    if (event.type === 'desktop.window.changed') this.updateAuxiliaryWindowRoute(event.windows)
     if (event.type === 'ui.command.request') void this.answerCommand(event.requestId, event.id, event.args)
     if (event.type === 'setting.changed') this.applySetting(event.id, event.value)
-    if (event.type === 'plugin.changed' || event.type === 'theme.changed') {
+    if (event.type === 'plugin.changed' || event.type === 'theme.changed' || event.type === 'ui.keybindings.changed') {
       const deliver = () => setTimeout(() => this.deliver(event), 0)
       void this.refresh().then(deliver, (error) => {
         this.deps.log(`refresh failed: ${messageOf(error)}`)
@@ -984,21 +1016,66 @@ export class WindowPluginHost {
     this.deps.call(method, params).catch((error) => this.deps.log(`${method} failed: ${messageOf(error)}`))
   }
 
-  /** Takes the daemon's layout; a layout equal to the current one changes nothing and tells nobody. */
+  /** Takes the daemon's layout; auxiliary window views stay local to their exact window route. */
   private setLayout(layout: UiLayout): void {
     const current = this.state.layout
     if (sameJson(current, layout)) return
-    // a view with the same ID and input stays the same object, so a mounted view is not remounted
     const view = sameJson(current.view, layout.view) ? current.view : layout.view
     const next = { ...layout, view }
-    this.commit({ layout: next, openView: view, openPanel: layout.panel })
+    const localView = this.state.windowRoute ? this.routeView(this.state.windowRoute) : view
+    const openView = sameJson(this.state.openView, localView) ? this.state.openView : localView
+    this.commit({ layout: next, openView, openPanel: layout.panel })
+    const visibleLayout = this.layoutForWindow(next)
     for (const listener of [...this.layoutListeners]) {
       try {
-        listener(next)
+        listener(visibleLayout)
       } catch (error) {
         this.deps.log(`layout listener failed: ${messageOf(error)}`)
       }
     }
+  }
+
+  private routeView(route: DesktopWindowRoute | null): { id: string; input?: unknown } | null {
+    if (!route || route.view === null) return null
+    return { id: route.view, ...(route.input === undefined ? {} : { input: route.input }) }
+  }
+
+  private layoutForWindow(layout: UiLayout = this.state.layout, route: DesktopWindowRoute | null = this.state.windowRoute): UiLayout {
+    return route ? { ...layout, view: this.routeView(route) } : layout
+  }
+
+  private setWindowRoute(route: DesktopWindowRoute): void {
+    if (sameJson(this.state.windowRoute, route)) return
+    const routeView = this.routeView(route)
+    const openView = sameJson(this.state.openView, routeView) ? this.state.openView : routeView
+    this.commit({ windowRoute: route, openView })
+    const visibleLayout = this.layoutForWindow(this.state.layout, route)
+    for (const listener of [...this.layoutListeners]) {
+      try {
+        listener(visibleLayout)
+      } catch (error) {
+        this.deps.log(`layout listener failed: ${messageOf(error)}`)
+      }
+    }
+  }
+
+  private updateAuxiliaryWindowRoute(windows: DesktopWindowSummary[]): void {
+    const current = this.state.windowRoute
+    if (!current) return
+    const summary = windows.find((window) => window.windowId === current.windowId)
+    if (!summary) {
+      this.setWindowRoute({ ...current, attached: false })
+      return
+    }
+    this.setWindowRoute({
+      windowId: summary.windowId,
+      ownerShellConnId: summary.ownerShell.connId,
+      ...(summary.ownerShell.name ? { ownerShellName: summary.ownerShell.name } : {}),
+      view: summary.view,
+      ...(summary.input === undefined ? {} : { input: summary.input }),
+      ...(summary.title === undefined ? {} : { title: summary.title }),
+      attached: summary.attached
+    })
   }
 
   private setBadge(panelId: string, count: number | null, title?: string): void {

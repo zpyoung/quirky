@@ -38,15 +38,17 @@ export const GLOBAL_FLAGS: Record<string, FlagSpec> = {
   json: { type: 'boolean', description: 'print machine-readable JSON' },
   help: { type: 'boolean', description: 'show help' },
   yes: { type: 'boolean', description: 'confirm destructive actions without asking in Quirky' },
-  'retry-request': { type: 'string', description: 'send calls under this request ID so a repeat returns the first outcome' }
+  'retry-request': { type: 'string', description: 'send calls under this request ID so a repeat returns the first outcome' },
+  runtime: { type: 'string', description: 'use a saved paired runtime, or "local"' },
+  'pairing-code': { type: 'string', description: 'use a paired runtime for this invocation without saving its pairing' }
 }
 
 /** The switches every command takes that change how calls are sent, not what the command does. */
-export type GlobalOptions = { yes: boolean; retryRequest?: string }
+export type GlobalOptions = { yes: boolean; retryRequest?: string; runtime?: string; pairingCode?: string }
 
 /**
- * Takes `--yes` and `--retry-request <id>` out of `argv` (wherever they stand before `--`), so
- * routing and command parsing never see them. A bad `--retry-request` is a usage error.
+ * Removes global routing/confirmation options before command parsing. Runtime selectors never
+ * enter plugin parameters and cannot be combined on one invocation.
  */
 export function extractGlobals(argv: readonly string[]): { argv: string[]; options: GlobalOptions } {
   const rest: string[] = []
@@ -71,10 +73,32 @@ export function extractGlobals(argv: readonly string[]): { argv: string[]; optio
         throw new UsageError(`--retry-request must be at most ${MAX_REQUEST_BASE} characters`)
       }
       options.retryRequest = value
+    } else if (token === '--runtime' || token.startsWith('--runtime=')) {
+      let value: string | undefined = token.includes('=') ? token.slice(token.indexOf('=') + 1) : undefined
+      if (value === undefined) {
+        value = argv[i + 1]
+        if (value === undefined || value.startsWith('--')) throw new UsageError('--runtime requires a value')
+        i++
+      }
+      if (value === '') throw new UsageError('--runtime requires a value')
+      options.runtime = value
+    } else if (token === '--pairing-code' || token.startsWith('--pairing-code=')) {
+      let value: string | undefined = token.includes('=') ? token.slice(token.indexOf('=') + 1) : undefined
+      if (value === undefined) {
+        value = argv[i + 1]
+        if (value === undefined || value.startsWith('--')) throw new UsageError('--pairing-code requires a value')
+        i++
+      }
+      if (value === '') throw new UsageError('--pairing-code requires a value')
+      options.pairingCode = value
     } else rest.push(token)
+  }
+  if (options.runtime !== undefined && options.pairingCode !== undefined) {
+    throw new UsageError('--runtime and --pairing-code cannot be used together')
   }
   return { argv: rest, options }
 }
+
 
 function parseValue(name: string, spec: FlagSpec, raw: string): unknown {
   let value: unknown

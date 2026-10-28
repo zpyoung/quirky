@@ -1,5 +1,5 @@
 import nacl from 'tweetnacl'
-import type { MobileCallOptions, MobileConnectionState, MobileRpc } from '../contracts'
+import type { MobileCallOptions, MobileConnectionState, MobileRpc } from './types'
 import {
   createMobileE2EEV2Hello,
   decodeBase64,

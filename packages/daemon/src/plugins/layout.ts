@@ -1,7 +1,24 @@
+import { isAbsolute } from 'node:path'
 import {
   DESKTOP_AWAY_MS,
   parseContributionId,
   validateValue,
+  type DesktopShellAction,
+  type DesktopShellReply,
+  type DesktopShellResult,
+  type DesktopWindowAttachRequest,
+  type DesktopWindowCloseResult,
+  type DesktopWindowClosedRequest,
+  type DesktopWindowOwner,
+  type DesktopWindowRequest,
+  type DesktopWindowSummary,
+  type DesktopWindowUpdateRequest,
+  type DesktopWindowRunOwnerCommandRequest,
+  type DesktopWindowRunOwnerCommandResult,
+  type DesktopWindowResult,
+  type FolderPickerRequest,
+  type FolderPickerResult,
+  type NativeDesktopCapabilities,
   type QuirkyEvent,
   type Schema,
   type UiLayout,
@@ -55,7 +72,52 @@ type PendingCommand = {
   timer: ReturnType<typeof setTimeout>
 }
 
+type PendingDesktopRequest = {
+  conn: ClientConn
+  action: DesktopShellAction
+  resolve(result: DesktopShellResult): void
+  reject(error: Error): void
+  timer: ReturnType<typeof setTimeout>
+}
+
+type AuxiliaryWindowRoute = {
+  windowId: string
+  view: string | null
+  input?: unknown
+  title?: string
+  ownerShell: DesktopWindowOwner
+  rendererConnId: number | null
+}
+
+const DEFAULT_DESKTOP_CAPABILITIES: NativeDesktopCapabilities = {
+  directoryPicker: false,
+  auxiliaryWindows: false,
+  revealItem: false,
+  notifications: { permission: false, click: false, dismiss: false }
+}
+
 const unanswered = () => conflict('the window did not answer')
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function nativeResultMatches(action: DesktopShellAction, value: unknown): value is DesktopShellResult {
+  if (!isRecord(value)) return false
+  switch (action.kind) {
+    case 'folder-picker':
+      return typeof value.cancelled === 'boolean' && Array.isArray(value.paths) &&
+        value.paths.every((path) => typeof path === 'string') && value.cancelled === (value.paths.length === 0)
+    case 'window-open':
+      return typeof value.windowId === 'string' && value.windowId.length > 0
+    case 'window-close':
+      return typeof value.closed === 'boolean'
+    case 'window-activate-owner':
+      return typeof value.activated === 'boolean'
+    case 'reveal-item':
+      return value.requested === true
+  }
+}
 
 function overlayShown(report: Report | undefined): boolean {
   if (!report) return false
@@ -124,6 +186,9 @@ export class LayoutService {
   private readonly reports = new Map<string, Map<number, Report>>()
   private readonly toastReports = new Map<number, ToastReport>()
   private readonly pending = new Map<string, PendingCommand>()
+  private readonly pendingDesktop = new Map<string, PendingDesktopRequest>()
+  private readonly desktopCapabilitiesByWindow = new Map<number, NativeDesktopCapabilities>()
+  private readonly auxiliaryWindows = new Map<string, AuxiliaryWindowRoute>()
   private reportCounter = 0
   private lastFocusedAt = 0
   private awayMs: number
@@ -148,12 +213,15 @@ export class LayoutService {
     const model = this.options.ui.contributions()
     const windows = this.windows()
     const focusedConn = windows.find((window) => window.focused)?.connId
+    const routeViewId = focusedConn === undefined
+      ? undefined
+      : [...this.auxiliaryWindows.values()].find((route) => route.rendererConnId === focusedConn)?.view ?? undefined
     const slots: UiSlotState[] = [
       ...model.activityItems.map((entry) => ({ entry, shown: () => true })),
       ...model.sidebarSections.map((entry) => ({ entry, shown: () => layout.sidebar })),
       ...model.statusBars.map((entry) => ({ entry, shown: () => true })),
       ...model.panels.map((entry) => ({ entry, shown: () => layout.panel === entry.id })),
-      ...model.views.map((entry) => ({ entry, shown: () => layout.view?.id === entry.id })),
+      ...model.views.map((entry) => ({ entry, shown: () => layout.view?.id === entry.id || routeViewId === entry.id })),
       ...model.overlays.map((entry) => ({ entry, shown: (report?: Report) => overlayShown(report) }))
     ].map(({ entry, shown }) => {
       const report = this.reportFor(entry.id, focusedConn)
@@ -304,6 +372,122 @@ export class LayoutService {
     return this.route(target, id, args)
   }
 
+  /** Records capabilities reported by this exact UI window's trusted native preload. */
+  setDesktopCapabilities(conn: ClientConn, capabilities: NativeDesktopCapabilities): void {
+    this.requireWindow(conn)
+    if (capabilities.notifications.permission || capabilities.notifications.click || capabilities.notifications.dismiss) {
+      throw invalidParams('native notification permission and callbacks are unavailable in this SDK')
+    }
+    this.desktopCapabilitiesByWindow.set(conn.id, {
+      directoryPicker: capabilities.directoryPicker,
+      auxiliaryWindows: capabilities.auxiliaryWindows,
+      revealItem: capabilities.revealItem,
+      notifications: { ...DEFAULT_DESKTOP_CAPABILITIES.notifications }
+    })
+  }
+
+  /** Reports the exact calling window's capabilities, or the currently focused window for a CLI caller. */
+  desktopCapabilities(conn?: ClientConn): NativeDesktopCapabilities {
+    const target = conn?.role === 'ui' ? conn : this.targetWindow()
+    if (!target) return { ...DEFAULT_DESKTOP_CAPABILITIES, notifications: { ...DEFAULT_DESKTOP_CAPABILITIES.notifications } }
+    const value = this.desktopCapabilitiesByWindow.get(target.id) ?? DEFAULT_DESKTOP_CAPABILITIES
+    return { ...value, notifications: { ...value.notifications } }
+  }
+
+  pickFolder(conn: ClientConn, request: FolderPickerRequest): Promise<FolderPickerResult> {
+    return this.requestDesktopShell(conn, { kind: 'folder-picker', request }) as Promise<FolderPickerResult>
+  }
+
+  openDesktopWindow(conn: ClientConn, request: DesktopWindowRequest): Promise<DesktopWindowResult> {
+    this.requireSlot(request.view, 'view')
+    if (jsonLength(request.input) > MAX_JSON_LENGTH) throw invalidParams('input is over 64 KiB')
+    return this.requestDesktopShell(conn, { kind: 'window-open', request }) as Promise<DesktopWindowResult>
+  }
+
+  listDesktopWindows(conn?: ClientConn): DesktopWindowSummary[] {
+    const routes = [...this.auxiliaryWindows.values()].filter((route) =>
+      conn?.role !== 'ui' || route.ownerShell.connId === conn.id
+    )
+    return routes.map((route) => this.auxiliaryWindowSummary(route))
+      .sort((left, right) => left.windowId.localeCompare(right.windowId))
+  }
+
+  attachDesktopWindow(conn: ClientConn, request: DesktopWindowAttachRequest): DesktopWindowSummary {
+    this.requireWindow(conn)
+    const route = this.auxiliaryWindows.get(request.windowId)
+    if (!route) throw notFound(`no auxiliary window ${request.windowId}`)
+    if (route.ownerShell.connId !== request.ownerShellConnId) throw conflict('auxiliary window owner does not match')
+    if (route.rendererConnId !== null && route.rendererConnId !== conn.id) throw conflict('auxiliary window is attached to another UI connection')
+    route.rendererConnId = conn.id
+    this.announceDesktopWindows()
+    return this.auxiliaryWindowSummary(route)
+  }
+
+  updateDesktopWindow(conn: ClientConn, request: DesktopWindowUpdateRequest): DesktopWindowSummary {
+    this.requireWindow(conn)
+    const route = this.auxiliaryWindows.get(request.windowId)
+    if (!route || route.rendererConnId !== conn.id) throw conflict('this UI connection does not own the auxiliary window route')
+    if (request.view !== null) {
+      this.requireSlot(request.view, 'view')
+      if (jsonLength(request.input) > MAX_JSON_LENGTH) throw invalidParams('input is over 64 KiB')
+      route.view = request.view
+      if (request.input === undefined) delete route.input
+      else route.input = request.input
+    } else {
+      route.view = null
+      delete route.input
+    }
+    if (request.title !== undefined) route.title = request.title
+    this.announceDesktopWindows()
+    return this.auxiliaryWindowSummary(route)
+  }
+
+  desktopWindowClosed(conn: ClientConn, request: DesktopWindowClosedRequest): DesktopWindowCloseResult {
+    if (conn.role !== 'desktop') throw invalidParams('only the native desktop shell can close an auxiliary window')
+    const route = this.auxiliaryWindows.get(request.windowId)
+    if (!route || route.ownerShell.connId !== request.ownerShellConnId) return { closed: false }
+    this.auxiliaryWindows.delete(request.windowId)
+    this.announceDesktopWindows()
+    return { closed: true }
+  }
+  async runOwnerCommand(conn: ClientConn, request: DesktopWindowRunOwnerCommandRequest): Promise<DesktopWindowRunOwnerCommandResult> {
+    const route = this.requireAttachedAuxiliaryWindow(conn, request.windowId)
+    const owner = this.openWindows().find((window) => window.id === route.ownerShell.connId)
+    if (!owner) throw conflict('the owning Quirky window is not connected')
+    if (!this.options.ui.contributions().commands.some((command) => command.id === request.id)) {
+      throw notFound(`no UI command ${request.id}`)
+    }
+    const args = request.args ?? {}
+    const problem = validateValue(this.argsSchema(request.id), args, 'args')
+    if (problem !== null) throw invalidParams(problem)
+    const result = await this.route(owner, request.id, args)
+    const activation = await this.requestDesktopShell(conn, {
+      kind: 'window-activate-owner',
+      request: { windowId: request.windowId }
+    })
+    if (!isRecord(activation) || activation.activated !== true) {
+      throw conflict('the owning native window could not be activated')
+    }
+    return { result: result.result, activated: true }
+  }
+
+
+  closeDesktopWindow(conn: ClientConn, windowId: string): Promise<DesktopWindowCloseResult> {
+    if (windowId.length === 0) throw invalidParams('windowId must be a non-empty string')
+    const route = this.auxiliaryWindows.get(windowId)
+    if (!route) throw notFound(`no auxiliary window ${windowId}`)
+    const owner = conn.role === 'ui' ? conn : this.openWindows().find((window) => window.id === route.ownerShell.connId)
+    if (!owner) throw conflict('the owning Quirky window is not connected')
+    if (owner.id !== route.ownerShell.connId) throw conflict('auxiliary window belongs to another shell')
+    return this.requestDesktopShell(owner, { kind: 'window-close', request: { windowId } }) as Promise<DesktopWindowCloseResult>
+  }
+
+  revealDesktopItem(conn: ClientConn, path: string): Promise<{ requested: true }> {
+    if (!isAbsolute(path)) throw invalidParams('path must be absolute')
+    return this.requestDesktopShell(conn, { kind: 'reveal-item', request: { path } }) as Promise<{ requested: true }>
+  }
+
+
   /**
    * Keeps the toasts a window shows, replacing its earlier list. InvalidParams for a connection
    * that is not a window, a list that is not an array or one over 64 KiB of JSON.
@@ -338,6 +522,46 @@ export class LayoutService {
     })
   }
 
+  /** Completes a native request only when the reply comes from the exact shell that received it. */
+  desktopShellReply(conn: ClientConn, reply: DesktopShellReply): void {
+    this.requireWindow(conn)
+    const pending = this.pendingDesktop.get(reply.requestId)
+    if (!pending || pending.conn !== conn) return
+    if (reply.error) {
+      this.settleDesktop(reply.requestId, (request) => request.reject(conflict(reply.error!.message)))
+      return
+    }
+    const result = reply.result
+    if (!nativeResultMatches(pending.action, result)) {
+      this.settleDesktop(reply.requestId, (request) => request.reject(conflict('native desktop shell returned an invalid result')))
+      return
+    }
+    if (pending.action.kind === 'window-open' && 'windowId' in result) {
+      const request = pending.action.request
+      if (this.auxiliaryWindows.has(result.windowId)) {
+        this.settleDesktop(reply.requestId, (request) => request.reject(conflict('native desktop window identity was already registered')))
+        return
+      }
+      this.auxiliaryWindows.set(result.windowId, {
+        windowId: result.windowId,
+        view: request.view,
+        ...(request.input === undefined ? {} : { input: request.input }),
+        ...(request.title === undefined ? {} : { title: request.title }),
+        ownerShell: { connId: conn.id, ...(conn.name ? { name: conn.name } : {}) },
+        rendererConnId: null
+      })
+      this.announceDesktopWindows()
+    } else if (pending.action.kind === 'window-close' && 'closed' in result && result.closed) {
+      const route = this.auxiliaryWindows.get(pending.action.request.windowId)
+      if (route?.ownerShell.connId === conn.id) {
+        this.auxiliaryWindows.delete(route.windowId)
+        this.announceDesktopWindows()
+      }
+    }
+    this.settleDesktop(reply.requestId, (request) => request.resolve(result))
+  }
+
+
   /**
    * Forgets a disconnected window's reports, telling plugins about each one removed, fails commands
    * routed to it, and announces the remaining windows.
@@ -352,9 +576,92 @@ export class LayoutService {
     for (const [requestId, pending] of this.pending) {
       if (pending.conn === conn) this.settle(requestId, (settled) => settled.reject(unanswered()))
     }
+    this.desktopCapabilitiesByWindow.delete(conn.id)
+    for (const [requestId, pending] of this.pendingDesktop) {
+      if (pending.conn === conn) {
+        this.settleDesktop(requestId, (request) => request.reject(conflict('the native desktop window disconnected before replying')))
+      }
+    }
+    let auxiliaryRoutesChanged = false
+    for (const [windowId, route] of this.auxiliaryWindows) {
+      if (route.ownerShell.connId === conn.id || route.rendererConnId === conn.id) {
+        this.auxiliaryWindows.delete(windowId)
+        auxiliaryRoutesChanged = true
+      }
+    }
+    if (auxiliaryRoutesChanged) this.announceDesktopWindows()
     if (conn.role === 'ui') this.announceWindows()
   }
 
+
+
+  private requestDesktopShell(conn: ClientConn, action: DesktopShellAction): Promise<DesktopShellResult> {
+    const target = conn.role === 'ui' ? conn : this.targetDesktopWindow(action.kind)
+    if (!target || target.closed || !this.supportsDesktopAction(this.desktopCapabilitiesByWindow.get(target.id), action.kind)) {
+      throw conflict(`no capable native desktop window supports ${this.desktopActionLabel(action.kind)}`)
+    }
+    const requestId = crypto.randomUUID()
+    const { promise, resolve, reject } = Promise.withResolvers<DesktopShellResult>()
+    const timer = setTimeout(
+      () => this.settleDesktop(requestId, (pending) => pending.reject(conflict('the native desktop window did not respond'))),
+      this.options.commandTimeoutMs ?? COMMAND_TIMEOUT_MS
+    )
+    this.pendingDesktop.set(requestId, { conn: target, action, resolve, reject, timer })
+    try {
+      this.options.sendTo(target, {
+        type: 'desktop.shell.request',
+        requestId,
+        action,
+        ownerShell: { connId: target.id, ...(target.name ? { name: target.name } : {}) }
+      })
+    } catch {
+      this.settleDesktop(requestId, (pending) => pending.reject(conflict('the native desktop request could not be delivered')))
+    }
+    return promise
+  }
+
+  private settleDesktop(requestId: string, finish: (pending: PendingDesktopRequest) => void): void {
+    const pending = this.pendingDesktop.get(requestId)
+    if (!pending) return
+    this.pendingDesktop.delete(requestId)
+    clearTimeout(pending.timer)
+    finish(pending)
+  }
+
+  private targetDesktopWindow(kind: DesktopShellAction['kind']): ClientConn | undefined {
+    const capable = this.openWindows().filter((conn) =>
+      this.supportsDesktopAction(this.desktopCapabilitiesByWindow.get(conn.id), kind)
+    )
+    const focused = capable.filter((conn) => conn.focusedAt !== undefined)
+    if (focused.length > 0) {
+      return focused.reduce((best, conn) => (conn.focusedAt! > best.focusedAt! ? conn : best))
+    }
+    return capable.length === 1 ? capable[0] : undefined
+  }
+
+  private supportsDesktopAction(
+    capabilities: NativeDesktopCapabilities | undefined,
+    kind: DesktopShellAction['kind']
+  ): boolean {
+    if (!capabilities) return false
+    switch (kind) {
+      case 'folder-picker': return capabilities.directoryPicker
+      case 'window-open':
+      case 'window-close':
+      case 'window-activate-owner': return capabilities.auxiliaryWindows
+      case 'reveal-item': return capabilities.revealItem
+    }
+  }
+
+  private desktopActionLabel(kind: DesktopShellAction['kind']): string {
+    switch (kind) {
+      case 'folder-picker': return 'directory selection'
+      case 'window-open':
+      case 'window-close':
+      case 'window-activate-owner': return 'auxiliary windows'
+      case 'reveal-item': return 'item reveal'
+    }
+  }
   private route(target: ClientConn, id: string, args: unknown): Promise<{ result: unknown }> {
     const requestId = crypto.randomUUID()
     return new Promise((resolve, reject) => {
@@ -379,6 +686,14 @@ export class LayoutService {
     if (conn.role !== 'ui') throw invalidParams('only a window (role ui) can do this')
   }
 
+  private requireAttachedAuxiliaryWindow(conn: ClientConn, windowId: string): AuxiliaryWindowRoute {
+    this.requireWindow(conn)
+    const route = this.auxiliaryWindows.get(windowId)
+    if (!route) throw notFound(`no auxiliary window ${windowId}`)
+    if (route.rendererConnId !== conn.id) throw conflict('this UI connection does not own the auxiliary window route')
+    return route
+  }
+
   private now(): number {
     return (this.options.now ?? Date.now)()
   }
@@ -400,6 +715,21 @@ export class LayoutService {
 
   private announceWindows(): void {
     this.options.broadcast({ type: 'ui.window.changed', windows: this.windows() })
+  }
+
+  private announceDesktopWindows(): void {
+    this.options.broadcast({ type: 'desktop.window.changed', windows: this.listDesktopWindows() })
+  }
+
+  private auxiliaryWindowSummary(route: AuxiliaryWindowRoute): DesktopWindowSummary {
+    return {
+      windowId: route.windowId,
+      view: route.view,
+      ...(route.input === undefined ? {} : { input: route.input }),
+      ...(route.title === undefined ? {} : { title: route.title }),
+      ownerShell: { ...route.ownerShell },
+      attached: route.rendererConnId !== null
+    }
   }
 
   private windows(): UiWindowInfo[] {
