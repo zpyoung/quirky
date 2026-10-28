@@ -14,6 +14,7 @@ import {
   type Worktree,
   type WorktreeCreatedBy,
   type WorktreeCreateResult,
+  type OwnerRuntimeCallResult,
   type GitHubWorktreeSource,
   type WorktreeAutomationProvenance,
   type WorktreeAutomationProvenanceRequest
@@ -87,6 +88,8 @@ export type CreateParams = {
   createdBy?: WorktreeCreatedBy
   automationProvenanceRequest?: WorktreeAutomationProvenanceRequest
 }
+export type RemoteCreateParams = CreateParams & { runtime: string }
+type CreateWorkspaceOptions = { requireGitRepository?: boolean }
 type DefaultTabTemplate = { title?: string; color?: string; command?: string }
 type DefaultTabsTrust = { text: string; hash: string; trusted: boolean; changed: boolean } | null
 type EnvironmentRecipe = { id: string; name: string; create: string; checkoutMode?: 'orca-worktree' | 'provisioned-root' }
@@ -724,7 +727,13 @@ type Created = {
 }
 
 /** Creates a workspace: a git worktree on a branch, or a folder workspace for a folder project or a group. */
-export async function createWorkspace(env: CreateEnv, params: CreateParams, identity: CallerIdentity, origin: WorktreeOriginCreator): Promise<CreateResult> {
+export async function createWorkspace(
+  env: CreateEnv,
+  params: CreateParams,
+  identity: CallerIdentity,
+  origin: WorktreeOriginCreator,
+  options: CreateWorkspaceOptions = {}
+): Promise<CreateResult> {
   params = normalizeCreateChoices(env, params)
   await preflightAgentSelection(env, params)
   if (Object.hasOwn(params, 'automationProvenance')) {
@@ -744,12 +753,15 @@ export async function createWorkspace(env: CreateEnv, params: CreateParams, iden
       env,
       'conflict',
       'remote-worktree-create-unavailable',
-      `Peer "${host.label}" is authenticated and available, but no exact remote worktree-create owner exists. Refusing local fallback.`,
+      `Peer "${host.label}" is authenticated and available, but peer credentials cannot authorize owner-runtime worktree creation. Use quirky.worktree/createRemote with a saved owner target; refusing local fallback.`,
       { hostId: host.id, pairingRevision: host.pairingRevision, fingerprint: host.fingerprint }
     )
   }
   const selectedWindow = params.activate === true ? await preflightCreateWindow(env, params.window) : null
   const target = await resolveTarget(env, params, identity)
+  if (options.requireGitRepository === true && (!('repo' in target) || target.repo.kind !== 'git')) {
+    throw env.fail('invalid-params', 'Remote owner worktree creation requires a Git repository.')
+  }
   let automationProvenance: WorktreeAutomationProvenance | undefined
   if (provenanceRequest) {
     if (!('repo' in target) || target.repo.kind !== 'git') {
@@ -774,6 +786,38 @@ export async function createWorkspace(env: CreateEnv, params: CreateParams, iden
 
   env.changed({ repoId: created.worktree.repoId, worktreeId: created.worktree.id })
   return finish(env, created, params, selectedWindow)
+}
+
+/** Dispatches canonical creation to a saved owner runtime without registering or activating a local mirror. */
+export async function createRemoteWorkspace(env: CreateEnv, params: RemoteCreateParams): Promise<OwnerRuntimeCallResult> {
+  if (typeof params.runtime !== 'string' || !params.runtime.startsWith('runtime:') || params.runtime.length === 'runtime:'.length) {
+    throw env.fail('invalid-params', 'runtime must be a saved owner target in runtime:<selector> form')
+  }
+  if (typeof params.repo !== 'string' || params.repo.trim() === '' || params.group !== undefined) {
+    throw env.fail('invalid-params', 'remote create requires an explicit remote Git repository selector')
+  }
+  if (params.host !== undefined) {
+    throw env.fail('invalid-params', 'remote create uses an owner runtime target, not a paired or federation peer host')
+  }
+  if (params.activate === true || params.window !== undefined) {
+    throw env.fail('invalid-params', 'a remote worktree cannot be activated in a local UI window')
+  }
+  if (params.automationProvenanceRequest !== undefined || Object.hasOwn(params, 'automationProvenance')) {
+    throw env.fail('invalid-params', 'remote create cannot assign caller-supplied automation provenance')
+  }
+
+  const remoteParams: Record<string, unknown> = { ...params }
+  delete remoteParams.runtime
+  delete remoteParams.activate
+  delete remoteParams.window
+  delete remoteParams.createdBy
+  delete remoteParams.automationProvenanceRequest
+  remoteParams.requireGitRepository = true
+  return await env.call('quirky.cli/runtimeCall', {
+    runtime: params.runtime,
+    method: 'quirky.worktree/create',
+    params: remoteParams
+  }) as OwnerRuntimeCallResult
 }
 
 async function createFolder(env: CreateEnv, target: Target, params: CreateParams, createdBy: WorktreeCreatedBy, parentId: string | null, origin: WorktreeOriginCreator): Promise<Created> {
