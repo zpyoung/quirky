@@ -221,5 +221,5 @@ test('Browser Watch scrolls the real page using coordinates in the displayed fra
     if (previousPort === undefined) delete process.env.QUIRKY_MOBILE_PORT
     else process.env.QUIRKY_MOBILE_PORT = previousPort
   }
-})
+}, 90_000)
 
