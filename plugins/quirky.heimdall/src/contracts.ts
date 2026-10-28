@@ -24,12 +24,15 @@ export interface Deviation {
 export type Decision<A extends KernelAction = KernelAction> =
   | { action: A; considered?: string[] }
   | { action: null; reason: string; detail?: string; considered?: string[]; deviation?: Deviation }
+  | { action: null; deviation: Deviation; reason?: string; detail?: string; considered?: string[] }
 export interface WorkerRequest { spec: string; worktree: string; agent?: string; mode?: 'terminal' | 'structured'; taskTitle?: string; [key: string]: unknown }
 export type DispatchResult =
   | { kind: 'dispatched'; dispatchId: string; terminalHandle?: string }
   | { kind: 'refused'; reason: string; detail?: string }
   | { kind: 'indeterminate'; requestId: string; detail?: string }
 export type ExecuteResult = { effect: 'landed' | 'not-landed' | 'indeterminate'; reason?: string; expectedAfter?: Json; failureClass?: string }
+/** Serializable hook reply. The worker branch asks the kernel to dispatch under its recorded attempt. */
+export type KindExecuteReply = ExecuteResult | { worker: WorkerRequest }
 export interface ExecuteContext {
   enrollment: Enrollment; attemptId: string; fingerprint: string; signal: AbortSignal
   dispatchWorker(request: WorkerRequest): Promise<DispatchResult>
