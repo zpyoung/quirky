@@ -1,9 +1,10 @@
-import { RpcErrorCode, type PluginStore } from '@quirky/protocol'
+import { RpcErrorCode, type PluginStore, type Worktree } from '@quirky/protocol'
 import type { DaemonEnv, Handler } from './env'
 import { formatNotes as formatPrompt } from './notes-format'
 import { containedPath } from './paths'
+import { listMarkdownNotes, settleMarkdownNotes, type MarkdownNoteSnapshot, type MarkdownShelfNote } from './note-bridge'
 
-/** A diff note: text pinned to a line range of one path in one worktree. */
+/** The common shelf shape for diff notes and editor-owned Markdown notes. */
 export type Note = {
   id: string
   worktreeId: string
@@ -13,8 +14,9 @@ export type Note = {
   body: string
   createdAt: number
   updatedAt: number | null
+  source?: 'markdown'
+  markdownSnapshot?: MarkdownNoteSnapshot
 }
-
 type NoteRow = {
   id: string
   worktree_id: string
@@ -160,11 +162,54 @@ function validBody(env: DaemonEnv, body: unknown): string {
 
 const noSuchNote = (env: DaemonEnv, id: string): Error => env.errors.reasoned('not-found', 'no-note', `There is no note ${id} in this worktree.`)
 
+type NoteScope = { worktree: Worktree; path: string | undefined }
+
 /** The worktree a call names and the notes in its path scope; a path need not exist on disk. */
-async function scoped(env: DaemonEnv, params: Record<string, any>, caller: Parameters<Handler>[1]) {
+async function scoped(env: DaemonEnv, params: Record<string, any>, caller: Parameters<Handler>[1]): Promise<NoteScope> {
   const worktree = await env.resolve(params, caller)
   const path = params.path === undefined ? undefined : (await containedPath(worktree.path, params.path)).rel
   return { worktree, path }
+}
+export async function listMixedNotes(env: DaemonEnv, worktree: Worktree, path?: string): Promise<Note[]> {
+  const markdownNotes = await listMarkdownNotes(env, worktree, path)
+  return [...env.notes.list(worktree.id, path), ...markdownNotes].sort((left, right) =>
+    left.path.localeCompare(right.path) ||
+    left.line - right.line ||
+    left.startLine - right.startLine ||
+    left.createdAt - right.createdAt ||
+    left.id.localeCompare(right.id)
+  )
+}
+function markdownNoteResult(note: MarkdownShelfNote): Note {
+  return {
+    id: note.id,
+    worktreeId: note.worktreeId,
+    path: note.path,
+    startLine: note.startLine,
+    line: note.line,
+    body: note.body,
+    createdAt: note.createdAt,
+    updatedAt: note.updatedAt
+  }
+}
+
+async function findMarkdownNote(env: DaemonEnv, worktree: Worktree, id: string): Promise<MarkdownShelfNote | null> {
+  if (!id.startsWith('markdown:')) return null
+  return (await listMarkdownNotes(env, worktree)).find((note) => note.id === id) ?? null
+}
+
+async function openMarkdownNoteBuffer(env: DaemonEnv, worktree: Worktree, note: MarkdownShelfNote): Promise<string> {
+  const opened = await env.context.call('quirky.editor/open', {
+    worktree: `id:${worktree.id}`,
+    path: note.path,
+    mode: 'source',
+    line: note.startLine,
+    focus: false
+  })
+  if (opened === null || typeof opened !== 'object' || Array.isArray(opened) || !('id' in opened) || typeof opened.id !== 'string') {
+    throw new Error('quirky.editor/open returned no Markdown buffer ID.')
+  }
+  return opened.id
 }
 
 /** Announces `notesChanged` so every window showing the worktree reads its notes again. */
@@ -175,15 +220,16 @@ export function announce(env: DaemonEnv, worktreeId: string): void {
 /** Lists a worktree's notes; a worktree that no longer exists has its notes dropped here. */
 export function notes(env: DaemonEnv): Handler {
   return async (params, caller) => {
+    let scope: NoteScope
     try {
-      const { worktree, path } = await scoped(env, params, caller)
-      return { notes: env.notes.list(worktree.id, path) }
+      scope = await scoped(env, params, caller)
     } catch (error) {
       if ((error as { code?: number } | null)?.code === RpcErrorCode.NotFound && typeof params.worktree === 'string') {
         env.notes.clear(params.worktree.replace(/^id:/, ''))
       }
       throw error
     }
+    return { notes: await listMixedNotes(env, scope.worktree, scope.path) }
   }
 }
 
@@ -200,44 +246,74 @@ export function addNote(env: DaemonEnv): Handler {
   }
 }
 
-/** Replaces a note's text and stamps `updatedAt`. */
+/** Replaces a Git note's text, or routes a Markdown note edit to its owning editor API. */
 export function editNote(env: DaemonEnv): Handler {
   return async (params, caller) => {
     const body = validBody(env, params.body)
+    if (typeof params.id !== 'string') throw env.errors.reasoned('invalid-params', 'missing-id', 'Note ID is required.')
     const worktree = await env.resolve(params, caller)
-    if (env.notes.get(worktree.id, params.id) === null) throw noSuchNote(env, params.id)
-    env.notes.setBody(params.id, body, Date.now())
+    const existing = env.notes.get(worktree.id, params.id)
+    if (existing !== null) {
+      env.notes.setBody(params.id, body, Date.now())
+      announce(env, worktree.id)
+      return { note: env.notes.get(worktree.id, params.id)! }
+    }
+    const markdown = await findMarkdownNote(env, worktree, params.id)
+    if (!markdown) throw noSuchNote(env, params.id)
+    const bufferId = await openMarkdownNoteBuffer(env, worktree, markdown)
+    await env.context.call('quirky.editor/notes', {
+      action: 'edit',
+      bufferId,
+      noteId: markdown.markdownSnapshot.id,
+      text: body
+    })
+    const updated = await findMarkdownNote(env, worktree, params.id)
+    if (!updated) throw env.errors.reasoned('conflict', 'markdown-note-changed', 'Markdown note could not be read after editing.')
     announce(env, worktree.id)
-    return { note: env.notes.get(worktree.id, params.id)! }
+    return { note: markdownNoteResult(updated) }
   }
 }
-
 /** Deletes one note, even while a send holds it; the send then reports it as already gone. */
 export function deleteNote(env: DaemonEnv): Handler {
   return async (params, caller) => {
+    if (typeof params.id !== 'string') throw env.errors.reasoned('invalid-params', 'missing-id', 'Note ID is required.')
     const worktree = await env.resolve(params, caller)
-    if (env.notes.get(worktree.id, params.id) === null) throw noSuchNote(env, params.id)
-    env.notes.remove(params.id)
-    announce(env, worktree.id)
-    return { ok: true }
+    if (env.notes.get(worktree.id, params.id) !== null) {
+      env.notes.remove(params.id)
+      announce(env, worktree.id)
+      return { ok: true }
+    }
+    const markdown = await findMarkdownNote(env, worktree, params.id)
+    if (!markdown) throw noSuchNote(env, params.id)
+    const settlement = await settleMarkdownNotes(env, worktree, undefined, [markdown])
+    if (settlement.sent.includes(markdown.id)) {
+      announce(env, worktree.id)
+      return { ok: true }
+    }
+    if (await findMarkdownNote(env, worktree, params.id)) {
+      throw env.errors.reasoned('conflict', 'markdown-note-changed', 'Markdown note changed before it could be deleted.')
+    }
+    throw noSuchNote(env, params.id)
   }
 }
+
 
 /** Deletes every note of the worktree, or of one path. */
 export function clearNotes(env: DaemonEnv): Handler {
   return async (params, caller) => {
     const { worktree, path } = await scoped(env, params, caller)
-    const cleared = env.notes.clear(worktree.id, path)
+    const markdownNotes = await listMarkdownNotes(env, worktree, path)
+    const settled = await settleMarkdownNotes(env, worktree, undefined, markdownNotes)
+    const cleared = env.notes.clear(worktree.id, path) + settled.sent.length
     announce(env, worktree.id)
     return { cleared }
   }
 }
-
 /** The question asked before `clearNotes`: how many notes go, from one path or the whole worktree. */
 export function describeClearNotes(env: DaemonEnv): Handler {
   return async (params, caller) => {
     const { worktree, path } = await scoped(env, params, caller)
-    const count = plural(env.notes.list(worktree.id, path).length)
+    const count = plural((await listMixedNotes(env, worktree, path)).length)
     return path === undefined ? `Clear ${count} from this workspace?` : `Clear ${count} from ${path}?`
   }
 }
@@ -246,11 +322,16 @@ export function describeClearNotes(env: DaemonEnv): Handler {
 export function formatNotes(env: DaemonEnv): Handler {
   return async (params, caller) => {
     const { worktree, path } = await scoped(env, params, caller)
-    let picked = env.notes.list(worktree.id, path)
+    const visible = await listMixedNotes(env, worktree, path)
+    let picked = visible
     if (params.ids !== undefined) {
+      if (!Array.isArray(params.ids) || params.ids.some((id: unknown) => typeof id !== 'string')) {
+        throw env.errors.reasoned('invalid-params', 'invalid-note-ids', 'ids must be an array of note IDs.')
+      }
       const wanted = new Set<string>(params.ids)
-      for (const id of wanted) if (env.notes.get(worktree.id, id) === null) throw noSuchNote(env, id)
-      picked = picked.filter((note) => wanted.has(note.id))
+      const all = path === undefined ? visible : await listMixedNotes(env, worktree)
+      for (const id of wanted) if (!all.some((note) => note.id === id)) throw noSuchNote(env, id)
+      picked = visible.filter((note) => wanted.has(note.id))
     }
     return { text: formatPrompt(picked), count: picked.length }
   }
