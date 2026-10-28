@@ -208,6 +208,11 @@ export function sessionMigrations(home: string): StoreMigration[] {
       store.exec('ALTER TABLE sessions ADD COLUMN badges TEXT')
     },
     (store) => {
+      // Version 8 diverged between the two branches; finish both schema additions for either store.
+      const columns = store.all<{ name: string }>('PRAGMA table_info(sessions)')
+      if (!columns.some(({ name }) => name === 'badges')) {
+        store.exec('ALTER TABLE sessions ADD COLUMN badges TEXT')
+      }
       store.exec(`
         CREATE TABLE IF NOT EXISTS session_pointer_operations (
           operation_id TEXT PRIMARY KEY,

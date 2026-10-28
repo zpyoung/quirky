@@ -255,6 +255,14 @@ Registration update: `bun scripts/build-loop/queue.ts add /tmp/quirky-session-in
 - **Isolated retry:** a different case, “a remote base that moves after the hooks were read does not change the commit checked out”, failed `git fetch -q origin` with `cannot lock ref refs/remotes/origin/main: is at 5549f0f4044fc0bd6207c2f67aa3ace59af0f97c but expected f85218387be054f4435ae642b09ba319f631971a`.
 - **Evidence:** `bun run test`, remote snapshot `runs/1793142204136-90736`, artifact://51. No worktree implementation or test was edited in the PTY item, and this failure was not suppressed. The corrected PTY package separately passed two complete 14-file remote runs with no flaky reruns.
 
+## m6-heimdall-core: deferred automatic native host-power binding
+
+- **Follow-up:** `m6-heimdall-host-power`, confirmed `todo` in the authoritative queue and dependent on core.
+- **Missing flow:** no trusted macOS daemon sleep/wake producer currently invokes the tested runner suspend/resume hooks. Automatic exclusion of host-sleep gaps is not claimed.
+- **Evidence:** daemon/native entrypoints expose no power source; `PluginContext.subscribe` receives only existing events and delivers asynchronously after emit (`packages/daemon/src/plugins/events.ts:61-70`). A subscription alone cannot establish a pre-sleep fencing/ack barrier.
+- **Risk:** an unfenced host sleep can be counted as active work until contact is re-established; explicit suspend/resume and observed contact-loss accounting remain implemented.
+- **Unblock:** an in-process trusted native publisher and public pre-sleep callback/ack seam, with runner binding/subscription disposal and verification on an idle macOS/native test host. No helper-process workaround or timer-delay inference.
+- **Decision:** core D21 and the amended logic spec record this one deferred flow under the authorized night-mode policy. All other reachable core acceptance remains required before landing.
 ## sa-browser-pane: deferred native page-event interception
 
 - **Owner:** queued `sa-browser-pane-native-events`, dependent on `sa-browser-pane`; authoritative queue add confirmed on 2026-10-28.

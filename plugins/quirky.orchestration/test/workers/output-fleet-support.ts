@@ -10,24 +10,28 @@ import type { SessionIdentity } from '../../src/runtime-contracts'
 
 const now = (): UtcTimestamp => new Date().toISOString()
 
-export const sessionFixture = (overrides: Partial<Session> = {}): Session => ({
-  id: 'worker-session',
-  kind: 'terminal',
-  agent: 'claude',
-  worktreeId: 'wt-main',
-  cwd: '/tmp/worker',
-  title: 'Worker task',
-  status: 'running',
-  createdAt: Date.now(),
-  lastActivityAt: Date.now(),
-  exitCode: null,
-  exitSignal: null,
-  exitCause: null,
-  restorable: false,
-  launchSettings: { agent: overrides.agent ?? 'claude', options: { model: { value: 'sonnet', source: 'explicit' } }, summary: `${overrides.agent ?? 'claude'} · Sonnet` },
-  providerSession: { id: 'provider-session', transcriptPath: '/private/captured/session.jsonl' },
-  ...overrides
-})
+export const sessionFixture = (overrides: Partial<Session> = {}): Session => {
+  const agent = overrides.agent ?? 'claude'
+  const label = agent === 'claude' ? 'Claude' : agent === 'codex' ? 'Codex' : agent === 'qwen-code' ? 'Qwen Code' : agent
+  return {
+    id: 'worker-session',
+    kind: 'terminal',
+    agent,
+    worktreeId: 'wt-main',
+    cwd: '/tmp/worker',
+    title: 'Worker task',
+    status: 'running',
+    createdAt: Date.now(),
+    lastActivityAt: Date.now(),
+    exitCode: null,
+    exitSignal: null,
+    exitCause: null,
+    restorable: false,
+    launchSettings: { agent, options: { model: { value: 'sonnet', source: 'explicit' } }, summary: `${label} · Sonnet` },
+    providerSession: { id: 'provider-session', transcriptPath: '/private/captured/session.jsonl' },
+    ...overrides
+  }
+}
 
 const identityFixture = (session: Session, incarnation = 'incarnation-1', providerId = session.agent): SessionIdentity => ({
   sessionId: session.id,

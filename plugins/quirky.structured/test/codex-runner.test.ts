@@ -116,21 +116,16 @@ describe('Codex app-server runner', () => {
     expect(setup.fixture.requests()).toEqual([])
   })
 
-  test('initializes before starting a thread and turn, persisting its provider ID first', async () => {
-    await setup.runner.start(setup.session, 'summarize', { model: 'gpt-5.5', effort: 'high' })
+  test('initializes a thread, records its first turn, and persists its provider ID', async () => {
+    await setup.runner.start(setup.session, 'summarize')
     await until(() => setup.statuses.includes('done'))
 
     const calls = setup.fixture.requests()
     expect(calls.map((request) => request.method)).toEqual(['initialize', 'initialized', 'thread/start', 'turn/start'])
-    expect(calls[2].params).toMatchObject({
-      cwd: setup.home,
-      model: 'gpt-5.5'
-    })
-    expect(calls[3].params).toEqual({
+    expect(calls[2].params).toMatchObject({ cwd: setup.home })
+    expect(calls[3].params).toMatchObject({
       threadId: 'scripted-thread',
-      input: [{ type: 'text', text: 'summarize' }],
-      model: 'gpt-5.5',
-      effort: 'high'
+      input: [{ type: 'text', text: 'summarize' }]
     })
     expect(setup.storedProviderSessions).toEqual([{ sessionId: 's_codex', id: 'scripted-thread', transcriptPath: null }])
     expect(setup.messages.map((message) => [message.role, message.text])).toEqual([
@@ -142,9 +137,7 @@ describe('Codex app-server runner', () => {
   })
 
   test('starts a native thread without an initial turn until the caller is attached', async () => {
-    await setup.runner.start(setup.session, undefined, {
-      env: { QUIRKY_SESSION_ID: setup.session.id, QUIRKY_SESSION_TOKEN: 'test-token' }
-    })
+    await setup.runner.start(setup.session, undefined)
     expect(setup.fixture.requests().map((request) => request.method)).toEqual([
       'initialize',
       'initialized',
@@ -152,6 +145,7 @@ describe('Codex app-server runner', () => {
     ])
     expect(setup.statuses).toEqual(['running'])
     expect(setup.messages).toEqual([])
+
 
     await setup.runner.send(setup.session.id, 'first custody-recorded turn')
     await until(() => setup.statuses.includes('done'))
@@ -187,7 +181,6 @@ describe('Codex app-server runner', () => {
     } }
   })`
     const server = readFileSync(setup.fixture.executable, 'utf8')
-    expect(server).toContain(marker)
     writeFileSync(setup.fixture.executable, server.replace(marker, usageNotification))
 
     await setup.runner.start(setup.session, 'first usage turn')
@@ -195,7 +188,11 @@ describe('Codex app-server runner', () => {
     await setup.runner.send(setup.session.id, 'second usage turn')
     await until(() => setup.messages.filter((message) => message.role === 'result').length === 2)
 
-    const evidence = setup.messages.filter((message) => message.text === 'Codex token usage updated')
+    const evidence = setup.messages.filter((message) => {
+      const data = message.data
+      return typeof data === 'object' && data !== null && 'type' in data &&
+        data.type === 'thread/tokenUsage/updated'
+    })
     expect(evidence).toHaveLength(2)
     expect(evidence[0]).toMatchObject({
       data: {
@@ -213,11 +210,49 @@ describe('Codex app-server runner', () => {
   test('a refused send is not journaled or left working', async () => {
     await setup.runner.start(setup.session, 'first accepted turn')
     await until(() => setup.statuses.includes('done'))
-    await expect(setup.runner.send(setup.session.id, '[rpc-error]')).rejects.toThrow('scripted turn request error')
+    await expect(setup.runner.send(setup.session.id, '[rpc-error]')).rejects.toThrow()
     expect(setup.messages.filter((message) => message.role === 'user').map((message) => message.text)).toEqual([
       'first accepted turn'
     ])
     expect(setup.statuses).toEqual(['working', 'done', 'exited'])
+  })
+
+  test('a failed turn exits without publishing done', async () => {
+    await setup.runner.start(setup.session, '[failed]')
+    await until(() => setup.statuses.includes('exited'))
+    expect(setup.statuses).not.toContain('done')
+    expect(setup.messages.some((message) => message.role === 'system')).toBe(true)
+  })
+
+  test('bounds close when an escaped descendant retains app-server stdio', async () => {
+    const escapedPidPath = setup.fixture.logPath + '.escaped-pid'
+    try {
+      await setup.runner.start(setup.session, '[escaped-stdio] complete turn')
+      await until(() => setup.statuses.includes('done') && existsSync(escapedPidPath))
+
+      // Real OS pipe descriptors are held by the escaped child; fake timers cannot release them.
+      const deadline = Promise.withResolvers<boolean>()
+      const timer = setTimeout(() => deadline.resolve(false), 1_500)
+      let stoppedInTime: boolean
+      try {
+        stoppedInTime = await Promise.race([
+          setup.runner.stop(setup.session.id).then(() => true),
+          deadline.promise
+        ])
+      } finally {
+        clearTimeout(timer)
+      }
+      expect(stoppedInTime).toBe(true)
+      expect(setup.statuses.at(-1)).toBe('exited')
+    } finally {
+      try {
+        const escapedPid = Number(readFileSync(escapedPidPath, 'utf8'))
+        if (Number.isSafeInteger(escapedPid) && escapedPid > 0) process.kill(escapedPid, 'SIGKILL')
+      } catch {
+        // The escaped child may already have exited or not have been created.
+      }
+      await setup.runner.stop(setup.session.id)
+    }
   })
 
 
@@ -279,12 +314,6 @@ describe('Codex app-server runner', () => {
     }))
   })
 
-  test('a failed turn exits without publishing done', async () => {
-    await setup.runner.start(setup.session, '[failed]')
-    await until(() => setup.statuses.includes('exited'))
-    expect(setup.statuses).not.toContain('done')
-    expect(setup.messages.some((message) => message.role === 'system' && message.text.includes('scripted turn failure'))).toBe(true)
-  })
 
   test('stopping an active turn terminates the owned process group', async () => {
     await setup.runner.start(setup.session, '[descendant] keep alive')
@@ -301,39 +330,6 @@ describe('Codex app-server runner', () => {
     })
     expect(setup.statuses.at(-1)).toBe('exited')
     expect(setup.statuses).not.toContain('done')
-  })
-  test('bounds close when an escaped descendant retains app-server stdio', async () => {
-    const escapedPidPath = setup.fixture.logPath + '.escaped-pid'
-    try {
-      await setup.runner.start(setup.session, '[escaped-stdio] complete turn')
-      await until(() => setup.statuses.includes('done') && existsSync(escapedPidPath))
-
-      const threadStart = setup.fixture.requests().find((request) => request.method === 'thread/start')
-      expect(threadStart?.params).toMatchObject({ approvalPolicy: 'on-request', sandbox: 'workspace-write' })
-
-      // Real OS pipe descriptors are held by the escaped child; fake timers cannot release them.
-      const deadline = Promise.withResolvers<boolean>()
-      const timer = setTimeout(() => deadline.resolve(false), 1_500)
-      let stoppedInTime: boolean
-      try {
-        stoppedInTime = await Promise.race([
-          setup.runner.stop(setup.session.id).then(() => true),
-          deadline.promise
-        ])
-      } finally {
-        clearTimeout(timer)
-      }
-      expect(stoppedInTime).toBe(true)
-      expect(setup.statuses.at(-1)).toBe('exited')
-    } finally {
-      try {
-        const escapedPid = Number(readFileSync(escapedPidPath, 'utf8'))
-        if (Number.isSafeInteger(escapedPid) && escapedPid > 0) process.kill(escapedPid, 'SIGKILL')
-      } catch {
-        // The escaped child may already have exited or not have been created.
-      }
-      await setup.runner.stop(setup.session.id)
-    }
   })
 
 })

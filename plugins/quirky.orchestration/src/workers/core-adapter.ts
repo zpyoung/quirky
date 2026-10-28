@@ -5,7 +5,7 @@ import type { DurableMutationOptions, OrchestrationWorkerCore } from '../worker-
 import { isServiceCoordinatorEvidence } from '../worker-contracts'
 import type { CoordinatorEvidence, ServiceCoordinatorEvidence, WorkerCore } from '../worker-contracts'
 
-type InspectionCore = OrchestrationWorkerCore & Pick<WorkerCore, 'listDispatches' | 'boundRunId' | 'attentionFor'>
+type InspectionCore = OrchestrationWorkerCore
 
 /** Lane11 supplies this after kernel admission; every method enforces pluginId and owned Run. */
 export interface WorkerServiceCoordinatorPort {
@@ -33,6 +33,7 @@ export function createWorkerCore(core: InspectionCore, service?: WorkerServiceCo
     createDispatch: core.createDispatch.bind(core),
     admitDispatch: core.admitDispatch.bind(core),
     transitionTask: core.transitionTask.bind(core),
+    blockTaskForWorkerStop: core.blockTaskForWorkerStop.bind(core),
     transitionDispatch: core.transitionDispatch.bind(core),
     transitionWorker: core.transitionWorker.bind(core),
     reportWorkerDone: core.reportWorkerDone.bind(core),
@@ -56,7 +57,7 @@ export function createWorkerCore(core: InspectionCore, service?: WorkerServiceCo
     },
     attachWorkerAuthority(dispatchId, identity, caller) {
       if (isServiceCoordinatorEvidence(caller)) return requireService().attachWorkerAuthority(dispatchId, identity, caller)
-      return core.attachDispatchAuthority(dispatchId, identity, caller)
+      return core.attachWorkerAuthority(dispatchId, identity, caller)
     },
     async mutateWorker(method, params, caller, operation, options) {
       if (isServiceCoordinatorEvidence(caller)) return requireService().mutateWorker(method, params, caller, operation, options)
@@ -66,6 +67,5 @@ export function createWorkerCore(core: InspectionCore, service?: WorkerServiceCo
       return core.mutate(method, params as MutationRequest & Record<string, unknown>, caller, operation, options)
     },
     mutate: core.mutate.bind(core),
-    attachDispatchAuthority: core.attachDispatchAuthority.bind(core),
   }
 }
