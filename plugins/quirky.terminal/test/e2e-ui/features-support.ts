@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import type { ILink, ILinkProvider, Terminal } from '@xterm/xterm'
 import { readRuntime } from '@quirky/protocol/node'
-import type { UiSlotState, UiState } from '@quirky/protocol'
+import type { DesktopShellBridge, UiSlotState, UiState } from '@quirky/protocol'
 import { startHeadlessWindow, type HeadlessWindow } from '../../../../packages/ui/test/fixtures/headless-window'
 import type { ViewReport } from '../../src/window/workspace/controller'
 import type { FloatingState, Workspace } from '../../src/layout/types'
@@ -75,7 +75,7 @@ function guardSearchTimer(module: typeof import('@xterm/addon-search')): void {
  * layout boxes happy-dom cannot provide are stubbed, and the xterm instances and link providers
  * the plugin creates are recorded.
  */
-function createWindowKit(home: string): WindowKit {
+function createWindowKit(home: string, desktopBridge?: DesktopShellBridge): WindowKit {
   const clipboard: Clipboard = { writes: [], text: '' }
   const terminals: Terminal[] = []
   const calls: WindowKit['calls'] = []
@@ -102,7 +102,7 @@ function createWindowKit(home: string): WindowKit {
       const runtime = readRuntime(home)
       if (!runtime) throw new Error('quirkyd is not running')
       const native = HTTP_GLOBALS.map((name) => [name, (globalThis as Record<string, unknown>)[name]] as const)
-      win = await startHeadlessWindow({ home, runtime })
+      win = await startHeadlessWindow({ home, runtime, desktopBridge })
       for (const [name, value] of native) Object.defineProperty(globalThis, name, { value, writable: true, configurable: true })
       restoreStubs = installStubs(clipboard)
       const connection = win.connection as unknown as { callAny(method: string, params: Record<string, unknown>): Promise<unknown> }
@@ -181,6 +181,8 @@ export type StartOptions = {
   open?: boolean
   /** Start the window at all (default true). */
   window?: boolean
+  /** Native clipboard scenarios use the same trusted bridge as the desktop shell. */
+  desktopBridge?: DesktopShellBridge
 }
 
 /**
@@ -191,7 +193,7 @@ export async function startFeatures(options: StartOptions = {}): Promise<Feature
   const logDir = mkdtempSync('/tmp/qo-')
   const openLog = join(logDir, 'open.log')
   const h = await startE2e({ env: { QUIRKY_TEST_OPEN_LOG: openLog, ...options.env } })
-  const kit = createWindowKit(h.home)
+  const kit = createWindowKit(h.home, options.desktopBridge)
   const features = withKit(kit, {
     h,
     worktree: '',

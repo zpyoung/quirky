@@ -186,6 +186,7 @@ function createWindow(
         pickFolder,
         openWindow,
         closeWindow,
+        readClipboardText: () => Utils.clipboardReadText() ?? '',
         revealItem,
         activateOwner
       }

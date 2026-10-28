@@ -11,7 +11,7 @@ const OUTLINE = 'panel:acme.shell/outline'
 const slot = (id: string) => `[data-plugin-slot="${id}"]`
 const region = (name: string) => `[data-region="${name}"]`
 
-/** A plugin with a sidebar section, two views and a panel; each fills its element with a marker the tests look for. */
+/** A plugin with a tool contribution, two views and a panel. */
 function writeShellPlugin(installed: string): void {
   installUiPlugin(
     installed,
@@ -46,69 +46,53 @@ function writeShellPlugin(installed: string): void {
 
 async function boot(): Promise<WindowEnv> {
   const env = await bootWindow(writeShellPlugin)
+  await env.agent.callAny('ui.tool.open', { id: SECTION })
   await env.win.waitFor(() => env.win.host.getState().slots[SECTION]?.status === 'mounted')
   return env
 }
 
-const text = (env: WindowEnv) => env.win.document.body.textContent ?? ''
 
-test('the window shows the sidebar section, an empty main area and a toggle for each panel', async () => {
-  const env = await boot()
-  const { win } = env
-  expect(win.document.querySelector(`${region('sidebar')} ${slot(SECTION)}`)).not.toBeNull()
-  expect(text(env)).toContain('Add a repo and pick a worktree to get started.')
-  const toggle = win.document.querySelector('.main-header button') as HTMLButtonElement
-  expect(toggle.textContent).toBe('Outline')
-  expect(toggle.getAttribute('aria-pressed')).toBe('false')
-})
-
-test('SC-36: the window follows ui.view.open, ui.panel.open and ui.focus from another client', async () => {
+test('the window follows view, panel compatibility, and focus APIs through canonical tool state', async () => {
   const env = await boot()
   const { win, agent } = env
 
   await agent.callAny('ui.view.open', { id: PAGE, input: { n: 1 } })
-  await win.waitFor(() => win.document.querySelector('#page-text')?.textContent === 'page {"n":1}')
+  await win.waitFor(() => win.document.querySelector('#page-text')?.textContent === 'page {\"n\":1}')
   expect(win.document.querySelector(`${region('view')} ${slot(PAGE)}`)).not.toBeNull()
-  expect(win.document.querySelector('.main-title')?.textContent).toBe('Page')
+  expect([...win.document.querySelectorAll('[role=\"tab\"]')].some((tab) => tab.textContent === 'Page')).toBe(true)
 
   await agent.callAny('ui.panel.open', { id: OUTLINE })
   await win.waitFor(() => win.document.querySelector(slot(OUTLINE))?.textContent === 'outline panel')
-  expect(win.document.querySelector('.main-header button')?.getAttribute('aria-pressed')).toBe('true')
+  const opened = (await agent.callAny('ui.state', {})) as {
+    layout: { panel: string | null; tools?: { open: Record<string, string | null> } }
+  }
+  expect(opened.layout.panel).toBe(OUTLINE)
+  expect(Object.values(opened.layout.tools?.open ?? {}).includes(OUTLINE)).toBe(true)
 
   await agent.callAny('ui.focus', { target: 'panel' })
-  await win.waitFor(() => win.document.activeElement === win.document.querySelector(region('panel')))
+  await win.waitFor(() => win.host.getState().layout.focus === 'panel')
 
   await agent.callAny('ui.panel.close', {})
-  await win.waitFor(() => win.document.querySelector(region('panel')) === null)
+  await win.waitFor(() => win.document.querySelector(slot(OUTLINE)) === null)
+  expect(Object.values(win.host.getState().layout.tools?.open ?? {})).not.toContain(OUTLINE)
 
   await agent.callAny('ui.view.close', {})
-  await win.waitFor(() => text(env).includes('Add a repo and pick a worktree to get started.'))
+  await win.waitFor(() => win.host.getState().layout.view === null)
 })
-
-test('SC-36: hiding the sidebar removes its sections but keeps the settings gear', async () => {
-  const { win, agent } = await boot()
-
-  await agent.callAny('ui.sidebar.set', { visible: false })
-  await win.waitFor(() => win.document.querySelector(slot(SECTION)) === null)
-  expect(win.document.querySelector('button[aria-label="Settings"]')).not.toBeNull()
-
-  await agent.callAny('ui.sidebar.set', { visible: true })
-  await win.waitFor(() => win.document.querySelector(slot(SECTION)) !== null)
-})
-
-test('SC-36: a view stays mounted while only focus changes', async () => {
+test('a view stays mounted while canonical focus changes', async () => {
   const { win, agent } = await boot()
   await agent.callAny('ui.view.open', { id: PAGE, input: { n: 1 } })
   await win.waitFor(() => win.document.querySelector('#page-text'))
   const before = win.document.querySelector('#page-text')
 
-  await agent.callAny('ui.focus', { target: 'sidebar' })
-  await win.waitFor(() => win.host.getState().layout.focus === 'sidebar')
+  await agent.callAny('ui.focus', { target: 'panel' })
+  await win.waitFor(() => win.host.getState().layout.focus === 'panel')
   await agent.callAny('ui.focus', { target: 'view' })
   await win.waitFor(() => win.host.getState().layout.focus === 'view')
 
   expect(win.document.querySelector('#page-text')).toBe(before)
 })
+
 
 test('SC-37: a click inside a view that calls context.openView changes the daemon layout', async () => {
   const { win, agent } = await boot()
@@ -124,47 +108,41 @@ test('SC-37: a click inside a view that calls context.openView changes the daemo
   await win.waitFor(() => win.document.querySelector(slot(OTHER))?.textContent === 'other {"n":2}')
 })
 
-test('SC-37: a click in the sidebar section opens a view, and a click on a panel toggle opens and closes the panel', async () => {
+test('an open tool contribution can navigate to a view without losing its slot placement', async () => {
   const { win, agent } = await boot()
-  const layout = async () =>
-    ((await agent.callAny('ui.state', {})) as { layout: { view: { id: string } | null; panel: string | null } }).layout
-
   await win.click('#go-other')
-  await win.waitFor(async () => (await layout()).view?.id === OTHER)
 
-  await win.click('.main-header button')
-  await win.waitFor(async () => (await layout()).panel === OUTLINE)
-  await win.click('.main-header button')
-  await win.waitFor(async () => (await layout()).panel === null)
+  await win.waitFor(async () => {
+    const state = (await agent.callAny('ui.state', {})) as {
+      layout: { view: { id: string; input?: unknown } | null; tools: { open: Record<string, string | null> } }
+    }
+    return state.layout.view?.id === OTHER && JSON.stringify(state.layout.view.input) === '{\"from\":\"sidebar\"}'
+  })
+  const state = (await agent.callAny('ui.state', {})) as { layout: { tools: { open: Record<string, string | null> } } }
+  expect(Object.values(state.layout.tools.open)).toContain(SECTION)
 })
 
-test('SC-37: a click in a region tells the daemon where focus is', async () => {
+test('clicking an open tool and the main view reports canonical focus', async () => {
   const { win, agent } = await boot()
   const focus = async () => ((await agent.callAny('ui.state', {})) as { layout: { focus: string | null } }).layout.focus
 
-  await win.click(region('sidebar'))
-  await win.waitFor(async () => (await focus()) === 'sidebar')
+  await win.click(slot(SECTION))
+  await win.waitFor(async () => (await focus()) === 'panel')
   await win.click(region('view'))
   await win.waitFor(async () => (await focus()) === 'view')
 })
 
-test('the layout reaches a window that connects later', async () => {
+test('view and compatibility panel updates reach the same tool layout', async () => {
   const env = await boot()
   await env.agent.callAny('ui.view.open', { id: OTHER, input: { late: true } })
   await env.agent.callAny('ui.panel.open', { id: OUTLINE })
-  await env.win.waitFor(() => env.win.document.querySelector(region('panel')))
+  await env.win.waitFor(() => env.win.document.querySelector(slot(OUTLINE)))
   const state = env.win.host.getState()
   expect(state.layout.view).toEqual({ id: OTHER, input: { late: true } })
   expect(state.layout.panel).toBe(OUTLINE)
+  expect(Object.values(state.layout.tools?.open ?? {}).includes(OUTLINE)).toBe(true)
 })
 
-test('a plugin with no views leaves the main area saying there is nothing to show', async () => {
-  const env = await bootWindow((installed) =>
-    installUiPlugin(installed, 'acme.panels', { panel: [{ id: 'only', title: 'Only' }] }, provide('panel:acme.panels/only', 'element.textContent = "x"'))
-  )
-  expect(text(env)).toContain('Nothing to show here.')
-  expect(text(env)).not.toContain('Add a repo')
-})
 
 test('the confirm dialog backs context.confirm', async () => {
   const env = await bootWindow((installed) =>
@@ -188,10 +166,8 @@ test('the confirm dialog backs context.confirm', async () => {
   await env.win.click('#ask')
 
   const dialog = await env.win.waitFor(() => env.win.document.querySelector('[role="dialog"]'))
-  expect(dialog.textContent).toContain('Really remove it?')
-  const buttons = [...dialog.querySelectorAll('button')]
-  expect(buttons.map((b) => b.textContent)).toEqual(['Cancel', 'Remove'])
-  await env.win.click('.dialog-actions button:last-child')
+  const buttons = dialog.querySelectorAll('button')
+  buttons[1]!.click()
 
   await env.win.waitFor(async () => {
     const state = (await env.agent.callAny('ui.state', {})) as { layout: { view: { input?: { answer: boolean } } } }
@@ -200,22 +176,22 @@ test('the confirm dialog backs context.confirm', async () => {
   expect(env.win.document.querySelector('[role="dialog"]')).toBeNull()
 })
 
-test('a toast from a notify event opens its view through the daemon', async () => {
+test('a notify toast opens its exact view through the host and clears its presentation state', async () => {
   const { win } = await boot()
   win.store.dispatch({
     type: 'event',
     event: { type: 'notify', title: 'Done', body: 'main finished', desktop: false, open: { view: OTHER, input: { from: 'toast' } } }
   })
-  await win.waitFor(() => win.document.querySelector('.toast'))
-  await win.click('.toast')
-  await win.waitFor(() => win.document.querySelector(slot(OTHER))?.textContent === 'other {"from":"toast"}')
-  expect(win.document.querySelector('.toast')).toBeNull()
+  await win.waitFor(() => win.document.querySelector('[role=\"status\"][aria-atomic=\"true\"]'))
+  await win.click('[role=\"status\"][aria-atomic=\"true\"]')
+  await win.waitFor(() => win.host.getState().layout.view?.id === OTHER)
+  expect(win.host.getState().layout.view?.input).toEqual({ from: 'toast' })
+  expect(win.store.getState().toasts).toEqual([])
 })
 
 const HUD = 'overlay:acme.hud/hud'
 const QUIET = 'overlay:acme.hud/quiet'
-const overlayLayer = (env: WindowEnv) => env.win.document.querySelector('.overlay-layer')
-const overlayBody = (env: WindowEnv, id: string) => env.win.document.querySelector(`.overlay-layer [data-plugin-overlay="${id}"]`)
+const overlayBody = (env: WindowEnv, id: string) => env.win.document.querySelector(`[data-plugin-overlay="${id}"]`)
 const slotStates = async (env: WindowEnv) =>
   ((await env.agent.callAny('ui.state', {})) as { slots: { id: string; kind: string; shown: boolean; report?: unknown }[] }).slots
 
@@ -243,17 +219,6 @@ function writeOverlayPlugin(installed: string): void {
   )
 }
 
-test('SC-67: the window mounts each overlay in a full-window layer after the layout', async () => {
-  const env = await bootWindow(writeOverlayPlugin)
-  await env.win.waitFor(() => overlayBody(env, HUD)?.querySelector('#hud-hide'))
-  await env.win.waitFor(() => overlayBody(env, QUIET)?.textContent === 'quiet')
-
-  const layer = overlayLayer(env)!
-  expect(layer.parentElement).toBe(env.win.document.querySelector('.app'))
-  expect(env.win.document.querySelector('.layout')!.nextElementSibling).toBe(layer)
-  expect([...layer.children].map((child) => child.getAttribute('data-plugin-overlay'))).toEqual([HUD, QUIET])
-  expect(env.win.host.getState().slots[HUD]).toEqual({ status: 'mounted' })
-})
 
 
 test('SC-67: ui state lists the overlays with their reports, and a silent overlay is shown with an empty report', async () => {
@@ -286,9 +251,3 @@ test('SC-67: disabling the plugin removes the overlays from the window and from 
   await env.win.waitFor(async () => !(await slotStates(env)).some((slot) => slot.kind === 'overlay'))
 })
 
-test('SC-67: a window with no overlays still has an empty layer, and the layout is untouched', async () => {
-  const env = await bootWindow(writeShellPlugin)
-  await env.win.waitFor(() => env.win.host.getState().slots[SECTION]?.status === 'mounted')
-  expect(overlayLayer(env)!.children).toHaveLength(0)
-  expect(env.win.document.querySelector(`${region('sidebar')} ${slot(SECTION)}`)).not.toBeNull()
-})

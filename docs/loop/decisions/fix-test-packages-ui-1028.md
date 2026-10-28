@@ -154,5 +154,16 @@
 - **Revisit if:** teardown evidence identifies an owned live child
 - **Source:** locked by operator resource directive
 
+## D15: Compose the concurrent shell landing after canonical land refused a conflict
+- **Question:** How should the required land-retry merge resolve overlapping layout-shell tests?
+- **Options:** restore the old DOM-order assertion; discard the redesigned shell; preserve lane9's behavioral tests and the shared deletion of incidental structural/source copies
+- **Chose:** follow the canonical land failure route, merge roadmap again, and choose the incoming empty conflict side for the obsolete overlay DOM-order test. Keep all nonconflicting gallery/theme/Ask/exact-route repairs, including initial-tool-independent Ask setup
+- **Why:** the first canonical land exited1 solely because lane9's shell had concurrently landed. Both lanes explicitly agreed to delete source/structure mirrors; .layout sibling order is not a consumer contract. This is the required failed-land retry, not an unsolicited repeated catch-up. Read all five incoming decision logs in full; preserve native clipboard window-local authority, PTY history/screen separation, agent-status OSC ownership, encrypted CLI targets, six slots, canonical Ask attention and exact-window view/history/input
+- **Evidence:** first queue.ts land output; sole conflict packages/ui/test/layout-shell.test.ts overlay DOM-order test; incoming fix-native-m1-term-ui-1028, fix-test-agent-status-1028, fix-test-cli-1028, fix-test-packages-pty-host-1028 and ui-shell-slots decisions; lane9 explicit test-only ACK
+- **Reversibility:** easy
+- **Confidence:** high for the composition; post-merge gates remain required
+- **Revisit if:** merged UI suite or typecheck establishes a real integration defect
+- **Source:** locked by docs/loop/LOOP.md failed-land retry procedure
+
 ## Progress
 Ready to land exactly this item. Five test files repaired without production changes; components committed and merged; one clean roadmap catch-up completed and incoming decisions read. Full canonical UI suite28/28/no flakes, scripts126/0/1103, typecheck/build exit0; bounded cross-family review PASS/no findings. Final one-line default-panel assumption deletion passed the remote single-file check on the runner's automatic isolated retry, with the initial hook-timeout flake retained in D13. Actual gallery pass and main dialog/Ask screenshot/CLI evidence retained with honest guard partial classifications (D11). All owned workers, reviewer jobs, CLI waiters, browsers and private daemon/PTY have stopped; temporary theme bundle removed. Commit final receipts, detach and use the canonical absolute queue.ts land. No second item, native acceptance reset, production workaround or hidden verification claim.

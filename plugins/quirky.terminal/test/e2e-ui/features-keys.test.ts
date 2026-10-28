@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'bun:test'
-import type { UiModel } from '@quirky/protocol'
+import type { DesktopShellBridge, UiModel } from '@quirky/protocol'
 import {
   FEATURE_MS,
   bufferLines,
@@ -33,6 +33,66 @@ const setSetting = (f: Features, name: string, value: string) => f.h.ok(['settin
 
 /** The window's own view of the context keys the plugin sets, which a key press is checked against. */
 const contextKey = (f: Features, key: string): boolean | undefined => (f.win.host as unknown as { contextValues: Map<string, boolean> }).contextValues.get(key)
+
+test(
+  'SC-37: native Cmd+V bypasses WebKit clipboard permission and preserves bracketed paste mode',
+  async () => {
+    let text = ''
+    let nativeFailure = false
+    const unsupported = async (): Promise<never> => { throw new Error('not used in this clipboard scenario') }
+    const desktopBridge: DesktopShellBridge = {
+      capabilities: {
+        directoryPicker: false, auxiliaryWindows: false, revealItem: false,
+        notifications: { permission: false, click: false, dismiss: false }
+      },
+      readClipboardText: async () => {
+        if (nativeFailure) throw new Error('native pasteboard unavailable')
+        return text
+      },
+      pickFolder: unsupported, openWindow: unsupported, closeWindow: unsupported,
+      revealItem: unsupported, activateOwner: unsupported
+    }
+    const f = await startFeatures({ desktopBridge })
+    const { session } = await firstPane(f)
+    // A mounted pane is not yet proof that the replay/input gate has opened.
+    await f.h.run(session, ':')
+    let webReads = 0
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        readText: async () => {
+          webReads++
+          throw new DOMException('WKWebView denied clipboard access', 'NotAllowedError')
+        }
+      }
+    })
+    const term = termOf(f, session)
+    for (const bracketed of [false, true]) {
+      const parsed = Promise.withResolvers<void>()
+      term.write(`\x1b[?2004${bracketed ? 'h' : 'l'}`, parsed.resolve)
+      await parsed.promise
+      expect(term.modes.bracketedPasteMode).toBe(bracketed)
+      text = bracketed ? 'native-bracketed' : 'native-plain'
+      await focusTerminal(f, session)
+      const from = f.calls.length
+      expect((await press('mod+v')).defaultPrevented).toBe(true)
+      await waitFor('native paste or permission failure', () =>
+        writes(f, from).length > 0 || document.body.textContent?.includes('Could not paste') ? true : undefined)
+      const expected = bracketed ? `\x1b[200~${text}\x1b[201~` : text
+      expect(writes(f, from).map((call) => call.params.data)).toEqual([expected])
+      await waitForScreen(f, session, 'native clipboard text at the actual PTY prompt', (rows) => rows.some((row) => row.includes(text)))
+      expect(webReads).toBe(0)
+      expect(document.body.textContent).not.toContain('Could not paste')
+    }
+    nativeFailure = true
+    const beforeFailure = f.calls.length
+    await runCommand(f, 'paste')
+    expect(writes(f, beforeFailure)).toEqual([])
+    expect(webReads).toBe(0)
+    await until(f, () => document.body.textContent?.includes('native pasteboard unavailable'))
+  },
+  FEATURE_MS
+)
 
 test(
   'SC-60: terminal keys act only in a terminal',

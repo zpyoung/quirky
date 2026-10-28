@@ -17,6 +17,8 @@ import {
   type UiPluginModule,
   type UiSlotEntry,
   type UiState,
+  type UiToolResize,
+  type UiToolSlot,
   type WindowRoute,
   type NativeBrowserCapability,
   type DesktopWindowSummary
@@ -38,6 +40,7 @@ export type HostDeps = {
   /** Dismisses the toast keyed `key` and runs its `onDismiss`, for the daemon's `ui.toast.dismiss`; nothing happens when none has it. */
   dismissToast?(key: string): void
   log(message: string): void
+  readClipboardText?: () => Promise<string>
   nativeBrowser?: NativeBrowserCapability
   /** Window focus, reported to the daemon so it can pick the window a routed command runs in. */
   windowFocus?: { hasFocus(): boolean; subscribe(listener: (focused: boolean) => void): () => void }
@@ -394,17 +397,33 @@ export class WindowPluginHost {
     if (current) this.callWindowLayout('ui.window.view.close', { expectedView: current })
   }
 
-  /** Asks the daemon to open panel `id` (closing any other); with no `open`, to toggle it. */
+  /** Panel controls address the same resolved tool authority as the host's stripes. */
   togglePanel(id: string, open?: boolean): void {
-    const wanted = open ?? this.state.layout.panel !== id
-    if (wanted) this.layoutCall('ui.panel.open', { id })
-    else if (this.state.layout.panel === id) this.layoutCall('ui.panel.close', {})
+    const tool = this.state.model?.tools?.find((candidate) => candidate.id === id || candidate.aliases.includes(id))
+    if (!tool) return
+    const placement = this.state.layout.tools?.placements[tool.id] ?? tool.defaultSlot
+    const current = this.state.layout.tools?.open[placement]
+    const wanted = open ?? current !== tool.id
+    if (wanted) this.openTool(tool.id)
+    else if (current === tool.id) this.closeTool(placement)
   }
 
-  /** Configures one panel's desired geometry through the daemon's public layout API. */
-  configurePanel(id: string, options: { width?: number; activityBarPosition?: 'top' | 'side' }): void {
-    this.layoutCall('ui.panel.configure', { id, ...options })
+  openTool(id: string): void {
+    this.layoutCall('ui.tool.open', { id })
   }
+
+  closeTool(slot: UiToolSlot): void {
+    this.layoutCall('ui.tool.close', { slot })
+  }
+
+  moveTool(id: string, slot: UiToolSlot): void {
+    this.layoutCall('ui.tool.move', { id, slot })
+  }
+
+  resizeTools(sizes: UiToolResize): void {
+    this.layoutCall('ui.tool.resize', { ...sizes })
+  }
+
 
   /** Opens or closes the shared palette; omitted `open` toggles its daemon-owned state. */
   setPalette(open?: boolean): void {
@@ -880,6 +899,10 @@ export class WindowPluginHost {
         session.provided.set(contributionId, implementation)
       }),
       call: live((method: string, params?: Record<string, unknown>) => this.deps.call(method, params ?? {})),
+      readClipboardText: live(async () => {
+        if (this.deps.readClipboardText) return this.deps.readClipboardText()
+        return (await navigator.clipboard?.readText()) ?? ''
+      }),
       subscribe: live((listener: (event: QuirkyEvent) => void | Promise<void>) => {
         session.listeners.add(listener)
         return () => {
