@@ -252,6 +252,9 @@ files, not this one.
 | medium | high | [m6-heimdall-owner D39](decisions/m6-heimdall-owner.md) | Perform the single supported roadmap catch-up after the dependency is marked done | locked by docs/loop/LOOP.md and final incoming decision logs |
 | medium | high for the tested historical variants | [m6-heimdall-owner D41](decisions/m6-heimdall-owner.md) | Reconcile divergent version-8/9 session stores without rewriting migration history | assumed — autonomous |
 | medium | high for the reproduced publication boundary and regression | [m6-heimdall-owner D43](decisions/m6-heimdall-owner.md) | Prevent asynchronous read head-of-line blocking without bypassing command publication | assumed — autonomous |
+| medium | high | [sa-browser-profile-import-ui D1](decisions/sa-browser-profile-import-ui.md) | Reuse the real importer and one shared tracked-job UI | locked by docs/architecture.md |
+| medium | high | [sa-browser-profile-import-ui D4](decisions/sa-browser-profile-import-ui.md) | Preserve native and platform boundaries | deferred: platform |
+| medium | high for observed gates only | [sa-browser-profile-import-ui D7](decisions/sa-browser-profile-import-ui.md) | Preserve incoming authority and pass the integrated landing gate | assumed — autonomous |
 | medium | high | [m5-loops-ui D1](decisions/m5-loops-ui.md) | Both UI slices ship as one item | locked by docs/loop/queue.json |
 | medium | high | [m5-loops-ui D3](decisions/m5-loops-ui.md) | Keep feature logic in its plugin and grow a generic plus-menu target | locked by docs/roadmap.md |
 | medium | high | [m5-loops-ui D6](decisions/m5-loops-ui.md) | Read authoritative snapshots; never infer stop from view absence | assumed — autonomous |
@@ -1072,6 +1075,10 @@ files, not this one.
 | easy | high | [m6-heimdall-owner D37](decisions/m6-heimdall-owner.md) | Repair roadmap typing and SDK-init fixture preconditions without changing native behavior | assumed — autonomous |
 | easy | high | [m6-heimdall-owner D40](decisions/m6-heimdall-owner.md) | Remove the final merged SDK-initialization duplicate rather than fabricate a native ID | assumed — autonomous |
 | easy | high | [m6-heimdall-owner D42](decisions/m6-heimdall-owner.md) | Replace fixture source-text rewriting with input-driven typed event production | assumed — autonomous |
+| easy | high | [sa-browser-profile-import-ui D2](decisions/sa-browser-profile-import-ui.md) | Resolve visual, data and integration gray areas without a person | assumed — autonomous |
+| easy | high | [sa-browser-profile-import-ui D3](decisions/sa-browser-profile-import-ui.md) | Follow unattended build-first process and isolate implementation | locked by docs/loop/LOOP.md |
+| easy | high | [sa-browser-profile-import-ui D5](decisions/sa-browser-profile-import-ui.md) | Repair actual wrapped-menu anchoring instead of bypassing hit tests | assumed — autonomous |
+| easy | high for exercised flows only | [sa-browser-profile-import-ui D6](decisions/sa-browser-profile-import-ui.md) | Separate focused real-path evidence from unrun suites and OS chooser assurance | locked by docs/loop/LOOP.md |
 | easy | high | [m5-loops-ui D4](decisions/m5-loops-ui.md) | Resolve all visual gray areas through feature defaults | locked by research/orca-features/fork-loops.md |
 | easy | high | [m5-loops-ui D5](decisions/m5-loops-ui.md) | Preserve draft text and full nested config sections | locked by research/orca-features/fork-loops.md |
 | easy | high | [m5-loops-ui D9](decisions/m5-loops-ui.md) | Autonomous spec review and full scoped work after the nightly target | locked by docs/loop/LOOP.md |
