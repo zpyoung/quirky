@@ -178,5 +178,18 @@ The initial unsandboxed X reviewer violated its read-only prompt: it created tes
 - **Revisit if:** the final integration catch-up contains an additional decision
 - **Source:** locked by incoming decision logs
 
+## D17: Land the verified merge, not an on-time or full-parity claim
+- **Question:** What did the final catch-up and queue registration establish?
+- **Options:** infer that earlier checks cover incoming source; skip the new decision logs; verify the actual merge and keep all timing/scope limits explicit
+- **Chose:** sole catch-up d0f14be25bd87bb4da7a9ddba3a230f265483ecf, incoming parent eaf268560ddbf2288dd25262f10d44436cc3f71a; read all five incoming logs and verify that merge
+- **Why:** the actual merge also brought m5-automations-ui D1–29 and m6-orchestration-ui D1–15. All140 numbered decisions and trailing Progress/verification text were read, with no Accounts conflict. Post-merge affected58remote files passed without retries, typecheck and build passed, scripts passed68tests/574assertions, and actual private authority/Codex C-leg probes passed with cleanup. The commit/catch-up command completed after3929.83seconds; its delay's cause was not established. The two-hour/4am target was missed; no on-time claim is made.
+- **Evidence:** merged-incoming-decisions.json; post-merge-evidence.json; build9UIoutputs/22modules/29plugins with icon-source warnings; affected80.95s, typecheck49.48s, build40.39s, scripts137.51s, runtime7.33s
+- **Reversibility:** easy
+- **Confidence:** high for these observed results; the queue full-merge verifier remains authoritative for landing
+- **Revisit if:** canonical queue land reports a failure
+- **Source:** assumed — autonomous
+
+The canonical queue add exited0 and the integration queue confirmed exactly one new todo item, m3-accounts-complete-user-acceptance-20261028, depending on this item. Canonical deps returned ready:true with no pending dependencies. No unfinished acceptance requirement was deleted; D9 and BLOCKERS remain the follow-up's contract.
+
 ## Progress
-Final Round1 completed with the explicit limitations in D13. Parent accepted and reproduced C1, fixed it and the observed wrapping defect; the final narrow gate passed23tests/114assertions. Guarded wrapping/Cancel repair passed; the earlier full-matrix runs remain partial. All browsers and the owned daemon/PTY/provider ProcessScope are closed (service exited0). Finish the single integration catch-up and post-merge checks, register exactly one complete D9 follow-up with the open findings, commit evidence and canonical queue land. Native-only scenarios remain pending.
+The source, final fix batch, sole integration catch-up, complete incoming-decision read and required post-merge gates are complete. All owned subprocesses/browsers/reviewers are stopped and all three component trees removed with unknown metadata preserved. One complete acceptance follow-up is registered and confirmed; native-only scenarios remain pending. Archive final evidence, commit this result, detach and run canonical queue land; do not claim landed until its actual verdict. Full remaining UI/native parity and full-independent three-lens clearance are not claimed.
