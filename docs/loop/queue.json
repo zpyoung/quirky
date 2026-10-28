@@ -1512,6 +1512,18 @@
         "m7-sweep-terminal"
       ],
       "status": "todo"
+    },
+    {
+      "id": "sb-mobile-app-prerequisites",
+      "milestone": "Side B",
+      "title": "Complete deferred phone flows only after their prerequisites: interactive native-chat/attachments/queued-chat/options/background-task UI and dictation/voice model/settings need an authorized architecture/roadmap ruling and public APIs; workspace Sleep/Hide sleeping needs reversible PTY stop-with-history and durable session resume; automation-created/other-client filters need actual origin provenance; Browser/Markdown session tabs need safe phone-authorized data/renderers and public tab identity. Preserve the terminal/ask companion; see sb-mobile-app D5,D8,D21,D24.",
+      "docs": [
+        "mobile.md"
+      ],
+      "deps": [
+        "sb-mobile-app"
+      ],
+      "status": "todo"
     }
   ]
 }
