@@ -394,5 +394,16 @@
 - **Revisit if:** the merged source violates admission/target ownership or loses either feature's tests.
 - **Source:** locked by incoming decision logs and LOOP.md land-conflict recovery
 
+## D36: Accept only the observed post-recovery source gate
+- **Question:** Is the composed profiles/design source ready for the controller?
+- **Options:** reuse a pre-merge result; run the changed Browser files and full compiler/build on the composed committed tree.
+- **Chose:** run the composed-source gate. Do not start an additional review or new dogfood campaign under overdue Night mode; retain the original actual UI reports and the explicit base-pane residual ownership.
+- **Why:** the facade, UI imports, manifest and independent profile/design tests changed during conflict recovery.
+- **Evidence:** Clean cfb15734 tree0a6dfbc88132ef004b2e8f7f1b0c2487702600e7 passed typecheck,15remote+3Mac Browser files, and full29-plugin/22-UI-module build in348719ms, with no isolated retries. This includes the complete merged pane file and its keyboard/profile/reload scenarios. The earlier one-hour timeout remains unexplained, not erased or assigned a speculative cause.
+- **Reversibility:** easy
+- **Confidence:** actual post-recovery source checks passed; canonical merge-result acceptance remains separate.
+- **Revisit if:** canonical land names a failure or conflict.
+- **Source:** locked by LOOP.md Night mode and land-conflict recovery
+
 ## Progress
-Source submission is complete. Dependency readiness is true; authoritative roadmap and incoming locks are merged. The clean8db98e52 gate passed Browser9remote+3Mac files, scripts68/0/570, types and full build; finalebad5509 keyboard source passed types/build and its new public regression. D32 retains the anomalous full-file timeout for the required canonical merge-result gate. Actual reports prove all3design flows, delivery success/refusal, repeated copy, immediateS/menu PNG, toolbar feedback/cancellation and no passive-wheel console error. Residual Watch-to-host ordinary clipboard transfer is explicit under existing D23 ownership; Native-only acceptance remains pending. All owned UI runtimes and source workers have stopped. Next: commit these evidence-only docs, detach and run canonical land; do not claim integration acceptance before that result. Afterward archive raw reports/gates, restore preserved .serena and remove owned temporary homes.
+Ready for canonical land after conflict recovery. All incoming locks and both profile/design contracts are preserved; clean cfb15734 passed typecheck, Browser15remote+3Mac files and full build. Prior scripts68/0/570 and unchanged importer results remain recorded. Actual design UI campaigns and exact partial outcomes are retained; residual Watch-to-host clipboard transfer belongs to existing host-controls, and Native-only acceptance is pending. No new review/dogfood campaign or queue record is started. All owned UI runtimes and workers are stopped. Next: commit these evidence-only records, detach, submit canonical land and wait for its actual merge-result verdict. After landing archive evidence, restore .serena metadata, and remove owned temporary homes.
