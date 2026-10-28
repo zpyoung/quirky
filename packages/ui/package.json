@@ -8,6 +8,9 @@
     "./terminal-theme": "./src/terminal-theme.ts"
   },
   "type": "module",
+  "exports": {
+    "./terminal-theme": "./src/terminal-theme.ts"
+  },
   "scripts": {
     "build": "bun build.ts"
   },

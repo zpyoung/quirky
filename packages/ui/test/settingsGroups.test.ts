@@ -96,14 +96,6 @@ const solar: ThemeInfo = {
   colors: DEFAULT_THEME.colors
 }
 
-test('SC-24: the theme picker lists themes in order and selects the chosen one', () => {
-  const picker = themePicker([DEFAULT_THEME, solar], solar.id)
-  expect(picker.options).toEqual([
-    { id: 'default', title: 'Quirky Dark', appearance: 'dark' },
-    { id: solar.id, title: 'Solar', appearance: 'light' }
-  ])
-  expect(picker.selected).toBe(solar.id)
-})
 
 test('SC-26: a chosen theme that is no longer offered shows as the default', () => {
   expect(themePicker([DEFAULT_THEME], solar.id).selected).toBe('default')

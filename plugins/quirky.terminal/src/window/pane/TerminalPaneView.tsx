@@ -22,7 +22,8 @@ import { isSafeRegex } from './regexSafety'
 import { SearchBox } from './SearchBox'
 import { trimGutter } from './selection'
 import { fontStack, zoomed, type PaneSettings } from './settings'
-import { readTerminalColors, withAlpha } from './terminalTheme'
+import { readTerminalTheme } from '@quirky/ui/terminal-theme'
+import { withAlpha } from './terminalTheme'
 import { resolveTerminalAppearance } from './appearance'
 import { ContextLossGuard, loseWebglContext, webglBudget } from './webgl'
 import { MobileDriverOverlay } from './MobileDriverOverlay'
@@ -305,7 +306,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
     const systemTheme = host.ownerDocument.defaultView?.matchMedia?.('(prefers-color-scheme: light)')
     let warnedPalette: string | undefined
     const readColors = (settingsNow: PaneSettings) => {
-      const appearance = resolveTerminalAppearance(settingsNow, readTerminalColors(colorSource), systemTheme?.matches ?? false)
+      const appearance = resolveTerminalAppearance(settingsNow, readTerminalTheme(colorSource), systemTheme?.matches ?? false)
       if (appearance.warning && appearance.warning !== warnedPalette) context.toast('Invalid custom terminal palette', appearance.warning)
       warnedPalette = appearance.warning
       return appearance.colors

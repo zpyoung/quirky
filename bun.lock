@@ -474,6 +474,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@quirky/protocol": "workspace:*",
+        "@quirky/ui": "workspace:*",
         "@xterm/addon-fit": "0.10.0",
         "@xterm/addon-webgl": "0.18.0",
         "@xterm/xterm": "5.5.0",
@@ -541,6 +542,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@quirky/protocol": "workspace:*",
+        "@quirky/ui": "workspace:*",
         "@xterm/addon-clipboard": "0.1.0",
         "@xterm/addon-fit": "0.10.0",
         "@xterm/addon-image": "0.8.0",

@@ -1,7 +1,8 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test'
 import { act } from 'react'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
-import { bytesToBase64, RpcError, RpcErrorCode, type AgentDisplayState, type AgentStatusSummary, type QuirkyEvent } from '@quirky/protocol'
+import { bytesToBase64, GRAPHITE_TERMINAL_PALETTES, TERMINAL_ANSI_KEYS, RpcError, RpcErrorCode, type AgentDisplayState, type AgentStatusSummary, type QuirkyEvent, type TerminalAppearanceMode, type TerminalPalette } from '@quirky/protocol'
+import type { ITheme } from '@xterm/xterm'
 import { resetSessionMemory } from '../src/window/model'
 import manifest from '../quirky-plugin.json'
 import {
@@ -61,11 +62,19 @@ afterEach(async () => {
   await mounted?.unmount()
   mounted = null
   document.body.innerHTML = ''
+  document.documentElement.removeAttribute('data-theme')
 })
 
 async function open(input: unknown) {
   mounted = await mountView(fake, input)
   return mounted
+}
+function expectGraphitePalette(theme: ITheme | undefined, appearance: TerminalAppearanceMode, base: Partial<TerminalPalette> = {}) {
+  const expected = GRAPHITE_TERMINAL_PALETTES[appearance]
+  for (const key of ['background', 'foreground', 'cursor', 'cursorAccent', 'selectionBackground', 'selectionForeground'] as const) {
+    expect(theme?.[key]).toBe(base[key] ?? expected[key])
+  }
+  for (const key of TERMINAL_ANSI_KEYS) expect(theme?.[key]).toBe(expected[key])
 }
 
 describe('the plugin module', () => {
@@ -686,29 +695,37 @@ describe('terminal pane', () => {
     expect(terminals[0]!.options.scrollback).toBe(9000)
   })
 
-  test('takes its colors from the custom properties on the mount element and follows theme changes', async () => {
+  test('uses the complete app palette in place without losing output and stops observing on unmount', async () => {
+    document.documentElement.setAttribute('data-theme', 'light')
     start([shell1])
-    mounted = await mountView(fake, { worktree: WORKTREE.id }, { '--terminal-background': '#101010', '--terminal-cursor': '#ff0000' })
-    expect(terminals[0]!.options.theme).toEqual({ background: '#101010', foreground: '#d7dae0', cursor: '#ff0000' })
-    mounted.element.style.setProperty('--terminal-foreground', '#00ff00')
-    await fake.emit({ type: 'theme.changed', chosen: 'x', active: 'x' })
-    await settle()
-    expect(terminals[0]!.options.theme).toEqual({ background: '#101010', foreground: '#00ff00', cursor: '#ff0000' })
-  })
-
-  test('re-reads its colors when the shell applies the theme after theme.changed was delivered', async () => {
-    start([shell1])
-    mounted = await mountView(fake, { worktree: WORKTREE.id }, { '--terminal-background': '#101010' })
-    await fake.emit({ type: 'theme.changed', chosen: 'x', active: 'x' })
-    await settle()
-    expect(terminals[0]!.options.theme).toEqual({ background: '#101010', foreground: '#d7dae0', cursor: '#d7dae0' })
-
-    await act(async () => {
-      mounted!.element.style.setProperty('--terminal-background', '#fafafa')
-      mounted!.element.style.setProperty('--terminal-foreground', '#111111')
+    mounted = await mountView(fake, { worktree: WORKTREE.id }, {
+      '--terminal-background': '#101010',
+      '--terminal-cursor': '#ff0000'
     })
+    const terminal = terminals[0]!
+    expectGraphitePalette(terminal.options.theme, 'light', { background: '#101010', cursor: '#ff0000' })
+    await act(async () => fake.streams.get(7)!(text('retained output')))
+    expect(writes).toContain('retained output')
+
+    document.documentElement.setAttribute('data-theme', 'dark')
     await settle()
-    expect(terminals[0]!.options.theme).toEqual({ background: '#fafafa', foreground: '#111111', cursor: '#d7dae0' })
+    expectGraphitePalette(terminal.options.theme, 'dark', { background: '#101010', cursor: '#ff0000' })
+    expect(terminals).toHaveLength(1)
+
+    await act(async () => mounted!.element.style.setProperty('--terminal-foreground', '#00ff00'))
+    await settle()
+    expectGraphitePalette(terminal.options.theme, 'dark', {
+      background: '#101010',
+      foreground: '#00ff00',
+      cursor: '#ff0000'
+    })
+    const themeBeforeUnmount = terminal.options.theme
+
+    await mounted.unmount()
+    mounted = null
+    document.documentElement.setAttribute('data-theme', 'light')
+    await settle()
+    expect(terminal.options.theme).toEqual(themeBeforeUnmount)
   })
 
   test('detaches when the view unmounts', async () => {

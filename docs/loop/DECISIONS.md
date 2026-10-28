@@ -6,6 +6,13 @@ files, not this one.
 
 | Reversibility | Confidence | Entry | Decision | Source |
 | --- | --- | --- | --- | --- |
+| easy. | high. | [ui-terminal-theme D3](decisions/ui-terminal-theme.md) | Preserve existing terminal overrides and validated custom/Tango behavior | assumed — autonomous |
+| easy. | high. | [ui-terminal-theme D5](decisions/ui-terminal-theme.md) | Use build-first two-component implementation and minimal verification | locked by docs/loop/LOOP.md |
+| easy. | high. | [ui-terminal-theme D6](decisions/ui-terminal-theme.md) | Keep inherited user metadata and test only isolated state | locked by docs/loop/LOOP.md |
+| easy. | high. | [ui-terminal-theme D7](decisions/ui-terminal-theme.md) | Use portable browser appearance APIs, with macOS-only verification | deferred: platform |
+| medium. | high. | [ui-terminal-theme D8](decisions/ui-terminal-theme.md) | Preserve the existing theme API while superseding the old default palette | supersedes m0-ui-api D19 |
+| easy. | high. | [ui-terminal-theme D9](decisions/ui-terminal-theme.md) | Run only the published UI lint gate, never a substitute scanner | assumed — autonomous |
+| easy. | high. | [ui-terminal-theme D10](decisions/ui-terminal-theme.md) | Minimal live surface proof, not an end-phase campaign | assumed — autonomous |
 | medium. | high. | [sa-browser-pane-native-host-controls D4](decisions/sa-browser-pane-native-host-controls.md) | Require real cache bypass without changing page identity or data | locked by browser.md and sa-browser-pane D15-D17 |
 | medium. | high. | [sa-browser-pane-native-host-controls D5](decisions/sa-browser-pane-native-host-controls.md) | Native failure state must come from actual navigation failure | locked by browser.md and sa-browser-pane D4/D17 |
 | easy. | high. | [sa-browser-pane-native-host-controls D8](decisions/sa-browser-pane-native-host-controls.md) | Audit isolated sources only and preserve unrelated metadata | deferred: platform |
@@ -111,6 +118,8 @@ files, not this one.
 | hard (only an authorized scope ruling can change the product boundary) | high | [sb-mobile-app-prerequisites D3](decisions/sb-mobile-app-prerequisites.md) | A follow-up title cannot override the locked native-chat and dictation exclusions | locked by docs/architecture.md |
 | hard | high | [m1-term-ui D7](decisions/m1-term-ui.md) | Layout lives in the daemon; the window renders it and changes it only through methods | locked by docs/roadmap.md |
 | hard | high | [m1-providers D9](decisions/m1-providers.md) | Agent IDs, labels and table values are Orca's | locked by docs/architecture.md |
+| medium (public ids and existing default semantics). | high. | [ui-terminal-theme D2](decisions/ui-terminal-theme.md) | Follow system is the existing default application theme; dark/light pin it | assumed — autonomous |
+| medium (shared appearance selector). | high. | [ui-terminal-theme D4](decisions/ui-terminal-theme.md) | Share resolved appearance through data-theme and central palette data | assumed — autonomous |
 | medium (acceptance ownership). | high. | [sa-browser-pane-native-host-controls D1](decisions/sa-browser-pane-native-host-controls.md) | Retain the queue core and all binding inherited acceptance | locked by sa-browser-pane D23 and sa-browser-design-mode D33 |
 | medium (lifecycle and safety) | source-backed, runtime proof pending at recording | [sa-browser-design-mode D12](decisions/sa-browser-design-mode.md) | Close source integration defects before claiming acceptance | assumed — autonomous |
 | medium (payload latency) | source-backed; final runtime test required | [sa-browser-design-mode D19](decisions/sa-browser-design-mode.md) | Finish the original Grab payload image contract without holding a user-waiting lock | locked by browser.md |
@@ -775,6 +784,7 @@ files, not this one.
 | medium | high | [m3-session-info D9](decisions/m3-session-info.md) | macOS local execution is the supported transport | deferred: platform |
 | medium | high | [m3-session-info D12](decisions/m3-session-info.md) | Accept the specification review's three implementation gaps | assumed — autonomous |
 | medium | high | [m3-session-info D27](decisions/m3-session-info.md) | Close supplemental final A1 with a real bounded-I/O fix | assumed — autonomous |
+| easy (palette/data plumbing remains independent of layout). | high. | [ui-terminal-theme D1](decisions/ui-terminal-theme.md) | Implement only the approved desktop terminal-theme slice | locked by docs/quirk/specs/2026-10-28-ui-redesign/logic.md |
 | easy (process). | high. | [sa-browser-pane-native-host-controls D2](decisions/sa-browser-pane-native-host-controls.md) | Answer design questions autonomously and stop at the unsupported core boundary | locked by docs/loop/LOOP.md |
 | easy (queue item can be re-enabled when prerequisite exists). | high. | [sa-browser-pane-native-host-controls D7](decisions/sa-browser-pane-native-host-controls.md) | Block the whole item without clearing retained acceptance or fabricating a landing | assumed — autonomous |
 | easy (window-only state) | source-backed; actual shortcut rerun and native nightly remain required | [sa-browser-design-mode D24](decisions/sa-browser-design-mode.md) | Preserve armed keyboard and Native overlay semantics | locked by browser.md design interaction and sa-browser-pane Native mask contract |

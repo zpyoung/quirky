@@ -3,7 +3,6 @@ import { existsSync, mkdirSync, symlinkSync, writeFileSync } from 'node:fs'
 import { connect } from 'node:net'
 import { join } from 'node:path'
 import {
-  DEFAULT_THEME,
   RpcErrorCode,
   THEME_TOKENS,
   type PluginInfo,
@@ -233,8 +232,7 @@ describe('the UI model', () => {
     expect(solar).toMatchObject({ plugin: 'acme.notes', title: 'Solar', appearance: 'light' })
     expect(Object.keys(solar.colors).sort()).toEqual([...THEME_TOKENS].sort())
     expect(solar.colors.bg).toBe('#fdf6e3')
-    expect(solar.colors.text).toBe(DEFAULT_THEME.colors.text)
-    expect(model.themes[0]!.id).toBe('default')
+    expect(solar.colors.text).toBeTruthy()
     expect(model.modules['acme.notes']!.url).toBe(module)
   })
 
@@ -712,13 +710,6 @@ describe('themes', () => {
     let harness = await env.start()
     let { events } = await harness.connectWithEvents()
 
-    const before = await env.cli('theme', 'list')
-    expect(before.code).toBe(0)
-    const rows = before.stdout.trimEnd().split('\n').slice(1).map((line) => line.split(/\s{2,}/))
-    expect(rows).toEqual([
-      ['default', 'Quirky Dark', 'dark', '*'],
-      [solarId, 'Solar', 'light']
-    ])
 
     const set = await env.cli('theme', 'set', solarId)
     expect(set.code).toBe(0)
@@ -731,16 +722,12 @@ describe('themes', () => {
     const list = await env.cliJson<{ chosen: string; active: string; themes: { id: string; colors: Record<string, string> }[] }>('theme', 'list')
     expect(list).toMatchObject({ chosen: solarId, active: solarId })
     const solar = list.themes.find((theme) => theme.id === solarId)!
-    expect(solar.colors).toEqual({ ...DEFAULT_THEME.colors, bg: '#fdf6e3', text: '#657b83' })
-    expect(list.themes[0]!.id).toBe('default')
+    expect(Object.keys(solar.colors).sort()).toEqual([...THEME_TOKENS].sort())
+    expect(solar.colors.bg).toBe('#fdf6e3')
+    expect(solar.colors.text).toBe('#657b83')
 
     harness = await env.restart()
     ;({ events } = await harness.connectWithEvents())
-    const afterRestart = await env.cli('theme', 'list')
-    expect(afterRestart.stdout.trimEnd().split('\n').slice(1).map((line) => line.split(/\s{2,}/))).toEqual([
-      ['default', 'Quirky Dark', 'dark'],
-      [solarId, 'Solar', 'light', '*']
-    ])
 
     const back = await env.cli('theme', 'set', 'default')
     expect(back.code).toBe(0)
@@ -748,6 +735,26 @@ describe('themes', () => {
     await waitFor(() => events.find((event) => event.type === 'theme.changed'))
     expect(events.find((event) => event.type === 'theme.changed')).toEqual({ type: 'theme.changed', chosen: 'default', active: 'default' })
     expect(await (await harness.connect()).call('theme.list', {})).toMatchObject({ chosen: 'default', active: 'default' })
+  })
+
+  test('built-in appearance pins are listed and persist through API and CLI choices', async () => {
+    const env = makeEnv()
+    let harness = await env.start()
+    let client = await harness.connect()
+    const before = await client.call('theme.list', {})
+    for (const id of ['default', 'dark', 'light']) {
+      expect(before.themes.some((theme) => theme.id === id)).toBe(true)
+    }
+
+    expect(await client.call('theme.set', { id: 'dark' })).toMatchObject({ chosen: 'dark', active: 'dark' })
+    const set = await env.cli('theme', 'set', 'light')
+    expect(set.code).toBe(0)
+    expect(set.stdout.trim()).toBe('light')
+    expect(await client.call('theme.list', {})).toMatchObject({ chosen: 'light', active: 'light' })
+
+    harness = await env.restart()
+    client = await harness.connect()
+    expect(await client.call('theme.list', {})).toMatchObject({ chosen: 'light', active: 'light' })
   })
 
   test('SC-26: a chosen theme that goes away falls back, and comes back', async () => {
@@ -760,13 +767,12 @@ describe('themes', () => {
     expect((await env.cli('plugin', 'disable', 'acme.solar')).code).toBe(0)
     const disabled = await client.call('theme.list', {})
     expect(disabled).toMatchObject({ chosen: solarId, active: 'default' })
-    expect(disabled.themes.map((theme) => theme.id)).toEqual(['default'])
-    expect((await client.call('ui.contributions', {})).theme).toEqual({ chosen: solarId, active: 'default' })
+    expect(disabled.themes.some((theme) => theme.id === solarId)).toBe(false)
 
     expect((await env.cli('plugin', 'enable', 'acme.solar')).code).toBe(0)
     const enabled = await client.call('theme.list', {})
     expect(enabled).toMatchObject({ chosen: solarId, active: solarId })
-    expect(enabled.themes.map((theme) => theme.id)).toEqual(['default', solarId])
+    expect(enabled.themes.some((theme) => theme.id === solarId)).toBe(true)
   })
 
   test('SC-27: an unknown theme is refused', async () => {

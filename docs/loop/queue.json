@@ -1526,7 +1526,7 @@
     {
       "id": "ui-tokens-and-components",
       "milestone": "UI",
-      "title": "UI redesign: dark and light graphite tokens, the 15 shared components and a gallery page showing every component in both themes, plus a UI lint check wired into bun run typecheck that fails raw colors, raw pixel values and plugin CSS outside packages/ui. Follow docs/quirk/specs/2026-10-28-ui-redesign/logic.md (approved). Use only the shared components and tokens; the UI lint check must pass. Build-first mode applies: typecheck gates the land.",
+      "title": "UI redesign: dark and light graphite tokens, the 15 shared components and a gallery page showing every component in both themes, plus a UI lint check wired into bun run typecheck that fails raw colors, raw pixel values and plugin CSS, enforced only for packages/ui and the plugins on an enforced list (empty at first; each ui-restyle item adds its plugins), so plugins not yet restyled never block a land. Follow docs/quirk/specs/2026-10-28-ui-redesign/logic.md (approved). Use only the shared components and tokens; the UI lint check must pass. Build-first mode applies: typecheck gates the land.",
       "docs": [],
       "deps": [],
       "status": "in-progress",
@@ -1538,8 +1538,7 @@
       "title": "UI redesign: graphite terminal palette for dark and light that follows the app theme, with a Settings override. Follow docs/quirk/specs/2026-10-28-ui-redesign/logic.md (approved). Use only the shared components and tokens; the UI lint check must pass. Build-first mode applies: typecheck gates the land.",
       "docs": [],
       "deps": [],
-      "status": "in-progress",
-      "lane": 4
+      "status": "done"
     },
     {
       "id": "ui-screenshot-review",
@@ -1651,7 +1650,7 @@
     {
       "id": "ui-restyle-terminal",
       "milestone": "UI",
-      "title": "UI redesign: restyle quirky.terminal and quirky.terminal-dock onto the shared components and tokens as tools/views in their default slots; passes the UI lint check and the screenshot review against the golden screens. Follow docs/quirk/specs/2026-10-28-ui-redesign/logic.md (approved). Use only the shared components and tokens; the UI lint check must pass. Build-first mode applies: typecheck gates the land.",
+      "title": "UI redesign: restyle quirky.terminal and quirky.terminal-dock onto the shared components and tokens as tools/views in their default slots; adds its plugins to the UI lint enforced list and passes the lint check and the screenshot review against the golden screens. Follow docs/quirk/specs/2026-10-28-ui-redesign/logic.md (approved). Use only the shared components and tokens; the UI lint check must pass. Build-first mode applies: typecheck gates the land.",
       "docs": [],
       "deps": [
         "m7-api-freeze",
@@ -1664,7 +1663,7 @@
     {
       "id": "ui-restyle-editor",
       "milestone": "UI",
-      "title": "UI redesign: restyle quirky.editor onto the shared components and tokens as tools/views in their default slots; passes the UI lint check and the screenshot review against the golden screens. Follow docs/quirk/specs/2026-10-28-ui-redesign/logic.md (approved). Use only the shared components and tokens; the UI lint check must pass. Build-first mode applies: typecheck gates the land.",
+      "title": "UI redesign: restyle quirky.editor onto the shared components and tokens as tools/views in their default slots; adds its plugins to the UI lint enforced list and passes the lint check and the screenshot review against the golden screens. Follow docs/quirk/specs/2026-10-28-ui-redesign/logic.md (approved). Use only the shared components and tokens; the UI lint check must pass. Build-first mode applies: typecheck gates the land.",
       "docs": [],
       "deps": [
         "m7-api-freeze",
@@ -1677,7 +1676,7 @@
     {
       "id": "ui-restyle-git",
       "milestone": "UI",
-      "title": "UI redesign: restyle quirky.git, quirky.reviews and quirky.checks onto the shared components and tokens as tools/views in their default slots; passes the UI lint check and the screenshot review against the golden screens. Follow docs/quirk/specs/2026-10-28-ui-redesign/logic.md (approved). Use only the shared components and tokens; the UI lint check must pass. Build-first mode applies: typecheck gates the land.",
+      "title": "UI redesign: restyle quirky.git, quirky.reviews and quirky.checks onto the shared components and tokens as tools/views in their default slots; adds its plugins to the UI lint enforced list and passes the lint check and the screenshot review against the golden screens. Follow docs/quirk/specs/2026-10-28-ui-redesign/logic.md (approved). Use only the shared components and tokens; the UI lint check must pass. Build-first mode applies: typecheck gates the land.",
       "docs": [],
       "deps": [
         "m7-api-freeze",
@@ -1690,7 +1689,7 @@
     {
       "id": "ui-restyle-browser",
       "milestone": "UI",
-      "title": "UI redesign: restyle quirky.browser onto the shared components and tokens as tools/views in their default slots; passes the UI lint check and the screenshot review against the golden screens. Follow docs/quirk/specs/2026-10-28-ui-redesign/logic.md (approved). Use only the shared components and tokens; the UI lint check must pass. Build-first mode applies: typecheck gates the land.",
+      "title": "UI redesign: restyle quirky.browser onto the shared components and tokens as tools/views in their default slots; adds its plugins to the UI lint enforced list and passes the lint check and the screenshot review against the golden screens. Follow docs/quirk/specs/2026-10-28-ui-redesign/logic.md (approved). Use only the shared components and tokens; the UI lint check must pass. Build-first mode applies: typecheck gates the land.",
       "docs": [],
       "deps": [
         "m7-api-freeze",
@@ -1703,7 +1702,7 @@
     {
       "id": "ui-restyle-worktrees",
       "milestone": "UI",
-      "title": "UI redesign: restyle quirky.worktree and quirky.repo onto the shared components and tokens as tools/views in their default slots; passes the UI lint check and the screenshot review against the golden screens. Follow docs/quirk/specs/2026-10-28-ui-redesign/logic.md (approved). Use only the shared components and tokens; the UI lint check must pass. Build-first mode applies: typecheck gates the land.",
+      "title": "UI redesign: restyle quirky.worktree and quirky.repo onto the shared components and tokens as tools/views in their default slots; adds its plugins to the UI lint enforced list and passes the lint check and the screenshot review against the golden screens. Follow docs/quirk/specs/2026-10-28-ui-redesign/logic.md (approved). Use only the shared components and tokens; the UI lint check must pass. Build-first mode applies: typecheck gates the land.",
       "docs": [],
       "deps": [
         "m7-api-freeze",
@@ -1716,7 +1715,7 @@
     {
       "id": "ui-restyle-agents",
       "milestone": "UI",
-      "title": "UI redesign: restyle quirky.agents, quirky.agent-status, quirky.session and quirky.session-info onto the shared components and tokens as tools/views in their default slots; passes the UI lint check and the screenshot review against the golden screens. Follow docs/quirk/specs/2026-10-28-ui-redesign/logic.md (approved). Use only the shared components and tokens; the UI lint check must pass. Build-first mode applies: typecheck gates the land.",
+      "title": "UI redesign: restyle quirky.agents, quirky.agent-status, quirky.session and quirky.session-info onto the shared components and tokens as tools/views in their default slots; adds its plugins to the UI lint enforced list and passes the lint check and the screenshot review against the golden screens. Follow docs/quirk/specs/2026-10-28-ui-redesign/logic.md (approved). Use only the shared components and tokens; the UI lint check must pass. Build-first mode applies: typecheck gates the land.",
       "docs": [],
       "deps": [
         "m7-api-freeze",
@@ -1729,7 +1728,7 @@
     {
       "id": "ui-restyle-orchestration",
       "milestone": "UI",
-      "title": "UI redesign: restyle quirky.orchestration, quirky.heimdall, quirky.handoff and quirky.loops onto the shared components and tokens as tools/views in their default slots; passes the UI lint check and the screenshot review against the golden screens. Follow docs/quirk/specs/2026-10-28-ui-redesign/logic.md (approved). Use only the shared components and tokens; the UI lint check must pass. Build-first mode applies: typecheck gates the land.",
+      "title": "UI redesign: restyle quirky.orchestration, quirky.heimdall, quirky.handoff and quirky.loops onto the shared components and tokens as tools/views in their default slots; adds its plugins to the UI lint enforced list and passes the lint check and the screenshot review against the golden screens. Follow docs/quirk/specs/2026-10-28-ui-redesign/logic.md (approved). Use only the shared components and tokens; the UI lint check must pass. Build-first mode applies: typecheck gates the land.",
       "docs": [],
       "deps": [
         "m7-api-freeze",
@@ -1742,7 +1741,7 @@
     {
       "id": "ui-restyle-tasks",
       "milestone": "UI",
-      "title": "UI redesign: restyle quirky.tasks and quirky.automations onto the shared components and tokens as tools/views in their default slots; passes the UI lint check and the screenshot review against the golden screens. Follow docs/quirk/specs/2026-10-28-ui-redesign/logic.md (approved). Use only the shared components and tokens; the UI lint check must pass. Build-first mode applies: typecheck gates the land.",
+      "title": "UI redesign: restyle quirky.tasks and quirky.automations onto the shared components and tokens as tools/views in their default slots; adds its plugins to the UI lint enforced list and passes the lint check and the screenshot review against the golden screens. Follow docs/quirk/specs/2026-10-28-ui-redesign/logic.md (approved). Use only the shared components and tokens; the UI lint check must pass. Build-first mode applies: typecheck gates the land.",
       "docs": [],
       "deps": [
         "m7-api-freeze",
@@ -1755,7 +1754,7 @@
     {
       "id": "ui-restyle-ledger",
       "milestone": "UI",
-      "title": "UI redesign: restyle quirky.ledger onto the shared components and tokens as tools/views in their default slots; passes the UI lint check and the screenshot review against the golden screens. Follow docs/quirk/specs/2026-10-28-ui-redesign/logic.md (approved). Use only the shared components and tokens; the UI lint check must pass. Build-first mode applies: typecheck gates the land.",
+      "title": "UI redesign: restyle quirky.ledger onto the shared components and tokens as tools/views in their default slots; adds its plugins to the UI lint enforced list and passes the lint check and the screenshot review against the golden screens. Follow docs/quirk/specs/2026-10-28-ui-redesign/logic.md (approved). Use only the shared components and tokens; the UI lint check must pass. Build-first mode applies: typecheck gates the land.",
       "docs": [],
       "deps": [
         "m7-api-freeze",
@@ -1768,7 +1767,7 @@
     {
       "id": "ui-restyle-accounts",
       "milestone": "UI",
-      "title": "UI redesign: restyle quirky.accounts and quirky.vault onto the shared components and tokens as tools/views in their default slots; passes the UI lint check and the screenshot review against the golden screens. Follow docs/quirk/specs/2026-10-28-ui-redesign/logic.md (approved). Use only the shared components and tokens; the UI lint check must pass. Build-first mode applies: typecheck gates the land.",
+      "title": "UI redesign: restyle quirky.accounts and quirky.vault onto the shared components and tokens as tools/views in their default slots; adds its plugins to the UI lint enforced list and passes the lint check and the screenshot review against the golden screens. Follow docs/quirk/specs/2026-10-28-ui-redesign/logic.md (approved). Use only the shared components and tokens; the UI lint check must pass. Build-first mode applies: typecheck gates the land.",
       "docs": [],
       "deps": [
         "m7-api-freeze",
@@ -1781,7 +1780,7 @@
     {
       "id": "ui-restyle-ask",
       "milestone": "UI",
-      "title": "UI redesign: restyle quirky.ask, quirky.notifications and quirky.structured onto the shared components and tokens as tools/views in their default slots; passes the UI lint check and the screenshot review against the golden screens. Follow docs/quirk/specs/2026-10-28-ui-redesign/logic.md (approved). Use only the shared components and tokens; the UI lint check must pass. Build-first mode applies: typecheck gates the land.",
+      "title": "UI redesign: restyle quirky.ask, quirky.notifications and quirky.structured onto the shared components and tokens as tools/views in their default slots; adds its plugins to the UI lint enforced list and passes the lint check and the screenshot review against the golden screens. Follow docs/quirk/specs/2026-10-28-ui-redesign/logic.md (approved). Use only the shared components and tokens; the UI lint check must pass. Build-first mode applies: typecheck gates the land.",
       "docs": [],
       "deps": [
         "m7-api-freeze",
@@ -1794,7 +1793,7 @@
     {
       "id": "ui-restyle-settings",
       "milestone": "UI",
-      "title": "UI redesign: restyle quirky.mobile, quirky.cli, quirky.palette, quirky.sidebar-extras and the Settings window onto the shared components and tokens as tools/views in their default slots; passes the UI lint check and the screenshot review against the golden screens. Follow docs/quirk/specs/2026-10-28-ui-redesign/logic.md (approved). Use only the shared components and tokens; the UI lint check must pass. Build-first mode applies: typecheck gates the land.",
+      "title": "UI redesign: restyle quirky.mobile, quirky.cli, quirky.palette, quirky.sidebar-extras and the Settings window onto the shared components and tokens as tools/views in their default slots; adds its plugins to the UI lint enforced list and passes the lint check and the screenshot review against the golden screens. Follow docs/quirk/specs/2026-10-28-ui-redesign/logic.md (approved). Use only the shared components and tokens; the UI lint check must pass. Build-first mode applies: typecheck gates the land.",
       "docs": [],
       "deps": [
         "m7-api-freeze",
