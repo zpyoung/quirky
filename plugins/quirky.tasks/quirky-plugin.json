@@ -1311,6 +1311,14 @@
             "setup": {
               "description": "Setup policy for a composer result; the public setup outcome for a created result."
             },
+            "setupDecisionRequired": {
+              "type": "boolean",
+              "description": "The visible composer must collect an explicit setup run-or-skip choice."
+            },
+            "blocked": {
+              "type": "boolean",
+              "description": "Creation is waiting for a setup or hook-trust decision."
+            },
             "url": {
               "type": "string"
             },
@@ -1334,6 +1342,30 @@
             },
             "issueCommand": {
               "description": "Independent issue-command choice in a composer or canonical execution outcome after creation."
+            },
+            "trustKind": {
+              "type": "string",
+              "enum": ["setup", "issue"]
+            },
+            "trustScript": {
+              "type": "string",
+              "description": "The exact untrusted shared hook content requiring a decision."
+            },
+            "trustHash": {
+              "type": "string",
+              "description": "Creator-issued SHA-256 of the displayed hook content."
+            },
+            "trustChanged": {
+              "type": "boolean",
+              "description": "The displayed script differs from a previously trusted or displayed version."
+            },
+            "trustSetupHash": {
+              "type": "string",
+              "description": "Retained setup approval pinned to its displayed hash."
+            },
+            "trustIssueCommandHash": {
+              "type": "string",
+              "description": "Retained issue-command approval pinned to its displayed hash."
             },
             "error": {
               "type": "string"
