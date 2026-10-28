@@ -9,6 +9,8 @@ export type LoopDraft = {
   prompt: string
   queueItems: string[]
   repeatQueue: boolean
+  /** Editing pacing is independent of the loop's immutable creation preset. */
+  pacingKind: 'on-idle' | 'interval'
   intervalMinutes: string
   anchor: 'from-end' | 'wall-clock'
   sessionPolicy: 'fresh' | 'continue'

@@ -33,6 +33,8 @@ Public close guard context is supplied by the tab host, not a caller-provided bo
 ## Data models / schemas
 Implements [defaults](logic.md#decisions-locked). Draft string fields preserve invalid user input: name, agent, preset, prompt, queue bodies, intervalMinutes, anchor, sessionPolicy, maxIterations, checkCommand/checkTimeout/checkWhen, evaluatorCondition, maxActiveMinutes/maxCostUsd, protectedPaths plus noProgress/checkpointCommits/askBeforeNext/resumeAtLimitReset/repeatQueue/advanced booleans. Empty optional caps/check/evaluator map to omitted configuration; nonblank lines form protectedPaths. No-progress true and maxIterations10 are UI-only defaults. Create payload uses dependency LoopCreateInput; edit changed sections map to LoopConfigPatch, merging current complete nested sections before changed fields so omitted siblings survive.
 
+`LoopDraft.pacingKind: 'on-idle' | 'interval'` records editable pacing independently from immutable creation preset. Setup derives it from Run; Edit shows Pacing (“As soon as the agent is idle” / “On an interval”) and validates interval fields from this kind. `draftFromLoop` uses actual config.pacing.kind, not preset. Changing pacing does not change agent/workspace/preset/prompt-source kind. Native API edit must permit this documented UI behavior while create validation and CLI-specific preset flag restrictions remain intact; dependency lane5 owns that runtime policy adjustment.
+
 Window state uses existing daemon-owned layout + slot reports. Any durable detached/bound-view metadata must be isolated loop UI plugin-store data, not a PTY/session ownership field. Avoid migration if derivable safely from workspace hosted tabs; never infer child exit from view absence.
 
 ## DO-NOT-CHANGE fences

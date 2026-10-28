@@ -143,5 +143,16 @@
 - **Revisit if:** another misplaced edit occurs; stop that writer before checks.
 - **Source:** assumed — autonomous
 
+## D14: Edit pacing is independent of the immutable creation preset
+- **Question:** U08 names Edit Pacing choices but shared draft and dependency edit validation tied pacing to preset.
+- **Options:** silently omit pacing switch; mutate preset; independent pacing draft and edit-only API policy.
+- **Chose:** add pacingKind to shared draft, setup derives it from Run, edit derives actual config and offers on-idle/interval. Keep preset immutable. Lane5 notified to own edit-only runtime validation fix; create/CLI preset restrictions unchanged.
+- **Why:** feature117 explicitly names both Pacing choices in Edit. UI cannot substitute a disabled Run field or silently narrow this flow. No locked architecture requires preset-bound pacing after creation.
+- **Evidence:** fork-loops.md117; config-form.tsx178-227; main.ts edit310 and service.ts569; durable lane5 message05:05:50Z.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** dependency owner finds a locked contrary requirement.
+- **Source:** assumed — autonomous
+
 ## Progress
 Reviewed specs/contracts committed9c99a8f7; P2 close-context blocker resolved, prescribed Codex spec closure remaining blockers[] (reduced independence, not runtime proof). Three disjoint implementers active: LoopSetup in/tmp/quirky-loops-ui-setup, LoopRail in/tmp/quirky-loops-ui-rail, LoopUiIntegration in/tmp/quirky-loops-ui-integration, each baseline9c99a8f7 and no commits. Parent baseline launched daemon proved missing loop UI command (LOOP_UI_MISSING_SURFACE_REPRODUCED) and cleaned (LOOP_UI_BEFORE_CLEANUP_OK), exit0. Web dogfood doctor ready. Scratch/tmp/quirky-loops-ui.Xnoash has journal/wave/goals/before.ts/serve.ts; serve is prepared but not run. Dependency-ready command running; no ready claim yet. Next: wait for every writer, HEAD/scope audit and integrate, own runtime/API/visual proof and required gates, dependency latest tips/readiness, one roadmap catchup/read decisions, final cross-family review+blocking fixes and authoritative land. Do not end while workers/jobs run; no second item.
