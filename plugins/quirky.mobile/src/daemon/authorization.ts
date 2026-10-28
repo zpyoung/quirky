@@ -15,6 +15,7 @@ const PARAMS: Readonly<Record<string, readonly string[]>> = {
   'quirky.mobile/bundleRange': ['buildId', 'path', 'offset', 'gzip'],
   'quirky.mobile/agentCatalog': [],
   'quirky.repo/list': [],
+  'quirky.loops/summaries': [],
   'quirky.repo/groupList': [],
   'quirky.worktree/list': ['repo'],
   'quirky.worktree/show': ['worktree'],
