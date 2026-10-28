@@ -70,6 +70,29 @@ export function activate(context: PluginContext): void {
     }
   })
 
+  provide('resolveLaunch', (params) => {
+    const structured: Record<string, string | boolean> = {}
+    const selected: Record<string, { value: string | boolean; source: 'explicit' }> = {}
+    if (typeof params.model === 'string') {
+      structured.model = params.model
+      selected.model = { value: params.model, source: 'explicit' }
+    }
+    const options =
+      params.options !== null && typeof params.options === 'object' && !Array.isArray(params.options)
+        ? (params.options as Record<string, unknown>)
+        : {}
+    for (const [key, value] of Object.entries(options)) {
+      if (typeof value !== 'string' && typeof value !== 'boolean') continue
+      structured[key] = value
+      selected[key] = { value, source: 'explicit' }
+    }
+    const launchSettings =
+      Object.keys(selected).length > 0
+        ? { agent: params.agent, options: selected, summary: `${String(params.agent)} selected options` }
+        : null
+    return { added: [], args: '', structured, shadowed: [], launchSettings }
+  })
+
   provide('prepareLaunch', (params) => {
     const found = entry(params.agent)
     if (fakeAgents().disabled.has(params.agent)) throw context.error('conflict', `agent ${params.agent} is disabled`)
