@@ -491,6 +491,9 @@ files, not this one.
 | medium (cross-feature integration) | high for the observed conflict; incoming deletion provenance still being traced | [m5-structured-runner D45](decisions/m5-structured-runner.md) | Reconcile a newer integration tip instead of discarding verified m5 work | assumed — autonomous (operator-directed landing continuation) |
 | medium (cross-feature merge composition) | high | [m5-structured-runner D46](decisions/m5-structured-runner.md) | Restore the unlanded candidate removed by handoff's cleanup, not an obsolete feature design | assumed — autonomous (operator-directed feature landing) |
 | medium (shared public launch/ui contracts) | high | [m5-structured-runner D47](decisions/m5-structured-runner.md) | Preserve the three new binding decision logs and their public contracts | locked by docs/loop/decisions/m3-session-info.md |
+| medium | high | [m3-vault-parity-completion D1](decisions/m3-vault-parity-completion.md) | Finish the queued matrix without reopening the landed core | locked by docs/loop/LOOP.md |
+| medium | high | [m3-vault-parity-completion D6](decisions/m3-vault-parity-completion.md) | Keep platform and unrelated feature ownership boundaries | deferred: platform |
+| medium | high | [m3-vault-parity-completion D10](decisions/m3-vault-parity-completion.md) | Persist child ownership, not caller-supplied source paths | assumed — autonomous |
 | medium | high | [m7-sweep-editor-source-control D1](decisions/m7-sweep-editor-source-control.md) | Audit all three documents without treating earlier ownership as exclusion | locked by queue item m7-sweep-editor-source-control |
 | medium | high | [m7-sweep-editor-source-control D3](decisions/m7-sweep-editor-source-control.md) | Extend canonical owners with an exact-snapshot note bridge | assumed — autonomous |
 | medium | high | [m7-sweep-editor-source-control D4](decisions/m7-sweep-editor-source-control.md) | Implement real untitled lifetime and preserve editor CAS | assumed — autonomous |
@@ -1806,6 +1809,18 @@ files, not this one.
 | easy | high for recorded outcomes and index operation | [m5-structured-runner D51](decisions/m5-structured-runner.md) | Preserve all historical snapshot failures and reconcile the actual Git index before committing | assumed — autonomous |
 | easy | high for final exercised integration | [m5-structured-runner D52](decisions/m5-structured-runner.md) | Land the fully reconciled final source after consumer and smoke proof | assumed — autonomous |
 | easy | high | [m5-structured-runner D53](decisions/m5-structured-runner.md) | Use the operator's immediate landing gate ownership | assumed — autonomous (operator-directed verification ownership) |
+| easy | high | [m3-vault-parity-completion D2](decisions/m3-vault-parity-completion.md) | Answer workflow gates autonomously and retain the source defaults | locked by docs/loop/LOOP.md |
+| easy | high | [m3-vault-parity-completion D3](decisions/m3-vault-parity-completion.md) | Use three disjoint vertical components and existing public contracts | assumed — autonomous |
+| easy | high | [m3-vault-parity-completion D4](decisions/m3-vault-parity-completion.md) | Pair OpenAI task implementers with the available Gemini reviewer | locked by docs/loop/LOOP.md |
+| easy | high | [m3-vault-parity-completion D5](decisions/m3-vault-parity-completion.md) | Native observations are handed off, not fabricated as web passes | locked by docs/loop/LOOP.md |
+| easy | high | [m3-vault-parity-completion D7](decisions/m3-vault-parity-completion.md) | Implement Session Info navigation in its actual owner | assumed — autonomous |
+| easy | high | [m3-vault-parity-completion D8](decisions/m3-vault-parity-completion.md) | Express project-only context through existing public view input | assumed — autonomous |
+| easy | high | [m3-vault-parity-completion D9](decisions/m3-vault-parity-completion.md) | Preserve the handoff owner's last-prompt meaning | locked by docs/loop/decisions/m3-handoff.md |
+| easy | high | [m3-vault-parity-completion D11](decisions/m3-vault-parity-completion.md) | Reset failure holdout when the source signature changes | assumed — autonomous |
+| easy | high | [m3-vault-parity-completion D12](decisions/m3-vault-parity-completion.md) | Correct source-aligned regression oracles and fixture bootstrapping | assumed — autonomous |
+| easy | high | [m3-vault-parity-completion D13](decisions/m3-vault-parity-completion.md) | Stop verification/debugging and land under the operator's typecheck-only gate | locked by docs/loop/LOOP.md |
+| easy | high for compilation; no additional behavioral assurance claimed. | [m3-vault-parity-completion D14](decisions/m3-vault-parity-completion.md) | Preserve incoming authorities and correct only compiler-reported contracts | locked by docs/loop/LOOP.md |
+| easy | high for compilation and additive contract preservation; end-phase behavior remains unverified. | [m3-vault-parity-completion D15](decisions/m3-vault-parity-completion.md) | Preserve the incoming consent tip and parity controls during land retry | locked by docs/loop/decisions/m3-vault-consent-tip-completion.md |
 | easy | high | [m7-sweep-editor-source-control D2](decisions/m7-sweep-editor-source-control.md) | Apply unattended night defaults and source-grounded brainstorming | locked by docs/loop/LOOP.md |
 | easy | high | [m7-sweep-editor-source-control D5](decisions/m7-sweep-editor-source-control.md) | Preserve the native source-path block and macOS boundary | deferred: platform |
 | easy | high | [m7-sweep-editor-source-control D6](decisions/m7-sweep-editor-source-control.md) | Use OpenAI implementers and the reachable Gemini reviewer | assumed — autonomous |
