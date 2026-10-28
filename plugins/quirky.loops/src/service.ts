@@ -566,7 +566,9 @@ export class LoopService implements LoopServiceContract {
     if (Object.keys(configPatch).length > 0) {
       try {
         config = mergeLoopConfig(previous.config, configPatch as LoopConfigPatch)
-        validatePresetConfig(previous.preset, config)
+        if (config.promptSource.kind !== previous.config.promptSource.kind) {
+          throw new TypeError('prompt source kind cannot be changed')
+        }
       } catch (error) {
         throw this.context.error('invalid-params', errorMessage(error))
       }
