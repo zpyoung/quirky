@@ -2,7 +2,7 @@
 
 ## Status & amendments
 
-Status: Implemented with scoped API/CLI, kernel and real terminal-UI verification; queue integration and landing remain pending. Technical decisions are the final section of this document. The UI proof used an explicit private profile with the optional editor disabled; the default-profile editor activation timeout is recorded in the decision log and BLOCKERS.md.
+Status: Implemented and post-integration verified through API/CLI, kernel and real terminal-UI scenarios. The authoritative queue records the final merge verdict. Technical decisions are the final section of this document. UI proof used an explicit private profile with the optional editor disabled; the observed default-profile editor activation timeout is recorded in the decision log and BLOCKERS.md.
 
 **Amendments:** 2026-10-27 — initial combined specification for the complete two-part queue item.
 

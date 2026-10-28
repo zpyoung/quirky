@@ -330,6 +330,17 @@
 - **Revisit if:** the public error-envelope contract changes
 - **Source:** locked by typed output/cursor recovery requirements
 
+## D31: Remove owned component worktrees without deleting unattributed metadata
+- **Question:** the three merged component worktrees retained parent contract mirrors and untracked Serena configuration
+- **Options:** force-delete the dirty trees; leave their build/dependency copies consuming disk; preserve the exact known state and use checked removal
+- **Chose:** verify the mirrors against the parent audit blob, preserve them in component commits, archive and move the Serena folders into the ignored iteration directory, then remove each clean owned worktree with ordinary git worktree remove.
+- **Why:** the parent-owned mirror was attributable; the Serena metadata was not. This removes the owned copies while retaining the unknown files and refusing any unexpected remaining dirt.
+- **Evidence:** all mirrors matched1f41749e5c52cafc4e3459dcf3ec3a3b23bdc9bb; preservation commits b6b3a98e/9be8988c/cf6a6fe1; metadata archive SHA256cf90669464ba91bd27000eca09ea734481e0fe9f0fe1ede4db86ea153fb287a5; the full checked-removal chain exited0. An incomplete full-tree archive was removed, never treated as evidence.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** another owner establishes different provenance for the retained metadata
+- **Source:** assumed — autonomous
+
 ## Scoped verification before integration catch-up
 - The affected runner exercised407 remote files and2 macOS files. Its first snapshot passed391 remote and both macOS files;16 failures were corrected, not reported as a passing aggregate.
 - Correction gates covered the failed files and changed worker components. The final13-file API subset passed12 files; its remaining recovery file then passed unchanged after D30 (3 tests71 assertions). Output/fleet passed24 tests165 assertions; repaired protocol fixtures passed22 tests264 assertions.
@@ -340,5 +351,13 @@
 - Actual dedicated Chromium proof retained coordinator tab-3, displayed the meaningful worker title, transferred custody on physical typing, retained the completed human-owned terminal, and stopped only a second owned worker. D29 records the editor-disabled profile and observed default-profile issue.
 - All implementation/fix agents have returned. No formal final review or dogfood campaign is claimed under D17. Authoritative queue deps returned ready:true; integration catch-up and queue landing remain.
 
+## Final integration verification
+- The sole roadmap catch-up is2bb56574. Its terminal launch conflict preserves both incoming shell commands and worker model/options/title; all six incoming binding decision logs were read in full and had no worker contract conflict.
+- The affected integration runner passed415 remote files. Both macOS files initially failed under the runner and then passed its configured isolated retries: pane features5tests53assertions, terminal E2E23tests169assertions. The aggregate command exited0; no assertion, timeout or retry policy was changed for those results.
+- Post-integration `bun run typecheck` and `bun run build` both exited0. The build produced19 plugin UI modules and27 bundled plugins; the same missing icon-source warnings remain explicit.
+- Post-integration real Chromium interaction again retained tab-3, displayed Worker: Integrated visible worker, transferred custody on physical INTEGRATED9 input, and left the accepted human-owned worker live after release returned retained/processAction:none. Screenshot omp-sshots-15b78409aa4ca163.png and post-integration-ui-proof.json preserve the scoped proof; all private resources were cleaned.
+- The default-profile editor timeout remains a recorded integration observation, not a worker-flow deferral or a whole-app UI pass. Source/native/CLI/archive/authority evidence and the public profile boundary remain as documented above.
+- Worker depth is still the single enforced read-only core cap; the lane11 followup agrees with D18. The canonical-hook patch c8639c31 changes only the separately owned Heimdall service and introduces no worker signature conflict.
+
 ## Progress
-Iteration3 implementation and scoped verification are complete through source checkpoint092aba81 plus the final replay/archive/error and fixture corrections. No worker flow is voluntarily deferred; the inherited automatic idle scheduler deferral belongs to core D41 and does not remove explicit worker submission. Next: commit the verified changes, merge build/roadmap once, read new binding decisions, rerun affected integration paths, build, then detach and invoke the authoritative queue land. Preserve the unrelated Serena metadata and archive the iteration evidence; do not claim landed until the queue confirms it.
+Iteration3 is ready for authoritative landing: source e44874ca, sole roadmap merge2bb56574,415 remote files plus both macOS isolated retries passed, final build/typecheck passed, and actual post-integration terminal UI verified. All agents and private resources are finished; the three owned component worktrees were removed after preserving metadata. No local worker flow is voluntarily deferred. Next: commit this evidence, detach, invoke the canonical queue.ts land m6-orchestration-workers and wait for its full-merge verdict. Persist the outcome in the ignored iteration notes; do not claim landed until the queue confirms it.
