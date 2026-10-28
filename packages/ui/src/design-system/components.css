@@ -827,6 +827,99 @@
   color: var(--ui-muted);
 }
 
+
+/* Shared multiline, selection and long-form content primitives. */
+.ui-text-area {
+  min-height: calc(var(--ui-row-double) * 3);
+  resize: vertical;
+}
+
+.ui-select-field {
+  appearance: auto;
+}
+
+.ui-readout {
+  background: var(--ui-rail);
+  border: var(--ui-border-width) solid var(--ui-border);
+  border-radius: var(--ui-radius-control);
+  color: var(--ui-text);
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: var(--ui-font-mono);
+  line-height: 1.5;
+  margin: 0;
+  max-height: 40vh;
+  min-width: 0;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  padding: var(--ui-space-8);
+  white-space: pre-wrap;
+}
+
+.ui-option-list {
+  background: var(--ui-rail);
+  border: var(--ui-border-width) solid var(--ui-border);
+  border-radius: var(--ui-radius-control);
+  display: flex;
+  flex-direction: column;
+  gap: var(--ui-space-4);
+  max-height: 30vh;
+  min-width: 0;
+  overflow: auto;
+  padding: var(--ui-space-4);
+}
+
+.ui-option-list > .ui-button {
+  justify-content: flex-start;
+  overflow-wrap: anywhere;
+  text-align: start;
+}
+
+/* CodeMirror owns editing; the shared system owns its appearance. */
+.ui-code-editor {
+  border: var(--ui-border-width) solid var(--ui-border);
+  border-radius: var(--ui-radius-control);
+  min-height: calc(var(--ui-row-double) * 4);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.ui-code-editor .cm-editor {
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  font-size: var(--ui-font-mono);
+  min-height: inherit;
+}
+
+.ui-code-editor .cm-scroller {
+  font-family: ui-monospace, Menlo, monospace;
+  line-height: 1.5;
+  max-height: 40vh;
+  overflow: auto;
+}
+
+.ui-code-editor .cm-content {
+  caret-color: var(--ui-accent);
+}
+
+.ui-code-editor .cm-cursor {
+  border-left-color: var(--ui-accent);
+}
+
+.ui-code-editor .cm-gutters {
+  background: var(--ui-rail);
+  border: none;
+  color: var(--ui-muted);
+}
+
+.ui-code-editor .cm-focused {
+  outline: var(--ui-focus-width) solid var(--ui-accent);
+  outline-offset: calc(-1 * var(--ui-focus-width));
+}
+
+.ui-code-editor .ui-secret-highlight {
+  background: color-mix(in srgb, var(--ui-failing) 35%, var(--ui-transparent));
+  border-bottom: var(--ui-focus-width) solid var(--ui-failing);
+}
 @media (max-width: 48rem) {
   .ui-gallery-grid {
     grid-template-columns: minmax(0, 1fr);

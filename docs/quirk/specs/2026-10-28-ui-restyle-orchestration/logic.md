@@ -66,6 +66,8 @@ None. No additional product feature is included.
 
 **Contract:** all implementers reuse existing @quirky/ui props and semantic token names as published at dispatch. No new cross-plugin types, schemas or API signatures are required; this committed boundary is the shared contract. Any missing shared primitive must be coordinated with the parent before changing shared files.
 
+**Coordinated shared additions:** parent owns public `TextArea`/`TextAreaProps` and `SelectField`/`SelectFieldProps`, each with required label, optional help/error and native textarea/select attributes. They preserve native form participation, accessible label and description ownership, disabled behavior and caller state. The canonical shared stylesheet supplies `.ui-readout` for bounded wrapping long output, `.ui-option-list` for composed searchable selection, and `.ui-code-editor` with `.ui-secret-highlight` for CodeMirror editing/secret marks. CodeMirror retains editing authority; plugins no longer inject their own theme CSS. Existing input-only TextField remains unchanged.
+
 **Isolation:** at most three disjoint external component worktrees; each worker uses absolute paths within its assigned root, no git commits, tests, lint, formatters, builds or reviews. Parent owns lint opt-in, shared integration changes, one final typecheck and narrow real browser/API proof. The inherited .serena directory remains untouched.
 
 **Acceptance commands (parent only):** `bun scripts/ui-lint.ts`; `bun run typecheck`; `bun packages/ui/build.ts`. Expected exit0. A disposable private HOME/QUIRKY_HOME real daemon and owned Chromium verify changed surfaces and dark/light mounting; persistent evidence excludes credentials. Suites, independent screenshot score, full dogfood and native acceptance remain unclaimed.
@@ -76,4 +78,4 @@ None. No additional product feature is included.
 
 2026-10-28: self-reviewed against all four named plugins and approved parent. Scope, lifecycle authority, empty/failure behavior and theme ownership are explicit. One combined logic/technical spec follows the authoritative LOOP override; no separate tech.md or review round.
 
-**Amendments:** none.
+**Amendments:** 2026-10-28 — all three implementers identified missing multiline/select primitives and the handoff editor's private theme. Added the coordinated shared additions above instead of local CSS or replacing functional CodeMirror behavior.

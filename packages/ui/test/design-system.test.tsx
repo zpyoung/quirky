@@ -16,6 +16,8 @@ import {
   StatusDot,
   Tabs,
   TextField,
+  TextArea,
+  SelectField,
   Toast,
   ToolPanelFrame,
 } from '../src/design-system'
@@ -125,6 +127,31 @@ describe('shared graphite components', () => {
     expect(input.getAttribute('aria-describedby')?.split(' ')).toHaveLength(2)
     expect(container.textContent).toContain('Shown in history')
     expect(container.textContent).toContain('Message is required')
+  })
+
+  test('multiline and selection fields preserve native form values and accessible error ownership', async () => {
+    await render(<form>
+      <span id="existing-help">Inherited description</span>
+      <TextArea label="Instructions" name="instructions" defaultValue={'first line\nsecond line'} help="Keep line breaks" error="Review instructions" aria-describedby="existing-help" />
+      <SelectField label="Agent" name="agent" defaultValue="codex">
+        <option value="claude">Claude</option>
+        <option value="codex">Codex</option>
+      </SelectField>
+      <TextArea label="Unavailable" name="disabled" defaultValue="not submitted" disabled />
+    </form>)
+    const form = container.querySelector('form')!
+    const instructions = form.querySelector('textarea[name="instructions"]')!
+    const agent = form.querySelector('select')!
+    expect(Object.fromEntries(new FormData(form))).toEqual({ instructions: 'first line\nsecond line', agent: 'codex' })
+    expect([...form.querySelectorAll('label')].map((label) => label.control)).toEqual([
+      instructions, agent, form.querySelector('textarea[name="disabled"]'),
+    ])
+    expect(instructions.getAttribute('aria-invalid')).toBe('true')
+    const describedIds = instructions.getAttribute('aria-describedby')!.split(' ')
+    expect(describedIds.map((id) => document.getElementById(id)?.textContent)).toEqual([
+      'Inherited description', 'Keep line breaks', 'Review instructions',
+    ])
+    expect(new Set([...form.querySelectorAll('textarea,select')].map((field) => field.id)).size).toBe(3)
   })
 
   test('list rows announce selection and disabled rows ignore activation', async () => {

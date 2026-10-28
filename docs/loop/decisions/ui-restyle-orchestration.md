@@ -55,5 +55,16 @@
 - **Revisit if:** supported platform scope changes
 - **Source:** deferred: platform
 
+## D6: Add missing native fields and editor appearance once in the shared system
+- **Question:** all three implementers identified multiline/select controls absent from public input-only TextField; handoff also injects its own CodeMirror theme
+- **Options:** local native-styled controls/CSS; discard functional editor; add minimal shared primitives and scoped shared editor styles
+- **Chose:** public TextArea and SelectField with native form/label/help/error semantics, shared wrapping readout/option-list utilities, central CodeMirror/secret-highlight token bridge. Existing functional editor and composed combobox retain their model behavior
+- **Why:** every named plugin needs these controls; adding them once avoids four bespoke controls and preserves secret markers/editing. No CodeMirror dependency or state machine is added to the shared components
+- **Evidence:** RestyleFleet/RestyleHandoff/RestyleLoops handoffs; plugins/quirky.handoff/src/window/PreviewEditor.tsx:28-39; packages/ui/src/design-system/contracts.ts:10
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** real browser proof exposes native form/selection/secret-mark regressions
+- **Source:** assumed — autonomous
+
 ## Progress
 Spec and shared unchanged API/type boundary recorded before worker dispatch. Planned disjoint components: orchestration+Heimdall, handoff, loops. Parent owns shared package integration if needed, lint opt-in, generated lock, docs and verification. No tests/review/dogfood run. Next commit contracts/spec, create three external worktrees, dispatch implementers, then barrier audit/integrate/typecheck/minimum live smoke, one roadmap catch-up and canonical land.
