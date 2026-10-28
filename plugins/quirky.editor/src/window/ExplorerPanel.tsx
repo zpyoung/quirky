@@ -851,12 +851,6 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
             <label><input type="checkbox" checked={state?.explorer.showDotfiles ?? true} onChange={() => void toggleDotfiles()} />Show Dotfiles</label>
             <label><input type="checkbox" checked={settings.showGitIgnored} onChange={(event) => void setEditorSetting(context, 'showGitIgnoredFiles', event.currentTarget.checked).then(refreshExplorer).catch((reason: unknown) => setError(messageOf(reason)))} />Show Git Ignored Files</label>
             <label><input type="checkbox" checked={settings.followSymlinkedDirectories} onChange={(event) => void setEditorSetting(context, 'followSymlinkedDirectories', event.currentTarget.checked).then(refreshExplorer).catch((reason: unknown) => setError(messageOf(reason)))} />Follow symlinked directories</label>
-            <label>Activity Bar Position
-              <select value={settings.activityBarPosition} onChange={(event) => void setEditorSetting(context, 'activityBarPosition', event.currentTarget.value).catch((reason: unknown) => setError(messageOf(reason)))}>
-                <option value="top">Top</option>
-                <option value="side">Side</option>
-              </select>
-            </label>
             <label className="qe-range-setting">Explorer Sidebar Width
               <input type="range" min="220" max="900" step="10" value={settings.sidebarWidth} onChange={(event) => void setEditorSetting(context, 'editorSidebarWidth', Number(event.currentTarget.value)).catch((reason: unknown) => setError(messageOf(reason)))} />
               <span>{settings.sidebarWidth}px</span>

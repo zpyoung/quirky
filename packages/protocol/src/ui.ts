@@ -216,8 +216,6 @@ export type UiLayout = {
   focus: 'sidebar' | 'view' | 'panel' | null
   /** Desired width by effective panel ID; absent entries retain the shell's default width. */
   panelWidths?: Record<string, number>
-  /** Global activity-bar position; absence retains the shell's existing default geometry. */
-  activityBarPosition?: 'top' | 'side'
   /** Whether the command palette is open; absent means closed. */
   palette?: boolean
   /** Host-owned six-slot placement, visibility and geometry, shared across projects. */

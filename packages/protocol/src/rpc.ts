@@ -137,9 +137,9 @@ export type Methods = {
   'ui.view.open': { params: { id: string; input?: unknown }; result: UiLayout }
   'ui.view.close': { params: Record<string, never>; result: UiLayout }
   'ui.panel.open': { params: { id: string }; result: UiLayout }
-  /** Configures one effective panel's desired width and/or the global activity-bar position. */
+  /** Configures one effective panel's desired width in its current tool slot. */
   'ui.panel.configure': {
-    params: { id: string; width?: number; activityBarPosition?: 'top' | 'side' }
+    params: { id: string; width: number }
     result: UiLayout
   }
   'ui.panel.close': { params: Record<string, never>; result: UiLayout }

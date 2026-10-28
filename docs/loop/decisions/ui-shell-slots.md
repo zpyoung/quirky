@@ -88,5 +88,27 @@
 - **Revisit if:** actual shell smoke exposes a narrow-window accessibility problem
 - **Source:** assumed — autonomous
 
+## D9: Remove the obsolete top/side activity-bar preference at cutover
+- **Question:** coherence sweep found editor settings still configuring the removed global rail
+- **Options:** retain an inert preference; preserve a second old rail; remove the dead preference while keeping meaningful panel width configuration
+- **Chose:** remove activityBarPosition from editor setting/control/resolver/call and public layout/schema/CLI; panel width continues to target the same canonical tool authority
+- **Why:** the approved six movable stripes replace old fixed top/side geometry. An inert setting or parallel rail contradicts the new shell. Parent owns the editor slice and shared contract removals; layout worker owns schema/CLI/daemon/test cutover
+- **Evidence:** plugins/quirky.editor/src/ui.tsx:629-675; src/window/settings.ts and ExplorerPanel.tsx old control; packages/protocol/src/ui.ts and rpc.ts; approved spec:35-59
+- **Reversibility:** medium (old preference ceases to be effective)
+- **Confidence:** high
+- **Revisit if:** a tool requires its own internal, distinct activity bar preference
+- **Source:** supersedes m2-editor D11 (activity-position clause only), under the approved redesign
+
+## D10: Recover two misplaced source slices through explicit parent ownership
+- **Question:** all-worker attribution found two assigned worktrees clean while their source changes existed in the parent
+- **Options:** discard owned completed source; conceal the boundary failure; stop writers, audit exact disjoint paths and replan parent integration
+- **Chose:** stopped both writers; their admitted repository-relative tool paths resolved from the parent, not their assigned absolute roots. Parent assumes these exact daemon and attention path sets after the barrier, with no simultaneous writers. The shell slice remains isolated. One unauthorized CLI test path is admitted only for removing new mock-forwarding/wording cases and retaining real input-validation coverage
+- **Why:** initial parent tracked baseline was clean, the parent editor changes are separately enumerated, all three source sets are disjoint, and no unrelated metadata is accepted. Source attribution must be verified rather than trusting worker reports. No isolated-tree execution claim is made for these two components
+- **Evidence:** journal.json baselines; all four git HEAD/status inventories; ShellLayout and ShellAttention explicit tool-routing admissions; CLI test inspection
+- **Reversibility:** easy (component path sets remain independently committable)
+- **Confidence:** high
+- **Revisit if:** the barrier audit finds a changed path or hash outside these known owners
+- **Source:** assumed — autonomous
+
 ## Progress
-Design self-reviewed and combined spec/shared types prepared. Next commit contracts, dispatch three disjoint source implementers, integrate after all return, typecheck and minimum private-home real shell smoke, one roadmap catch-up and canonical land. Tests/review/full dogfood remain unrun in build-first. Exactly one claimed item this iteration.
+Committed contracts/spec077cb9e6. Three isolated source workers active under /tmp/quirky-shell-lane9.UWEAD5/{layout,shell,attention}; journal.json records exact HEAD/untracked metadata hashes. Parent owns only independent editor clean-cutover source +shared activityBarPosition removal after dispatch. Prepared private smoke service, not run. Next collect all workers, audit scope/HEAD/metadata, integrate, typecheck and minimum real shell smoke, one roadmap catch-up/read decisions/typecheck and canonical land. No tests/review/full dogfood run.
