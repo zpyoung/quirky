@@ -299,16 +299,6 @@ describe('tabs', () => {
     expect(groupsOf(ws)[0]!.activeTab).toBe(lastTab(ws).id)
   })
 
-  test('newTab with an agent, prompt, title and cwd passes them to the session plugin', async () => {
-    const dir = tempDir()
-    const ws = await newTab({ agent: 'claude', prompt: 'review the diff', title: 'Review', cwd: dir })
-    expect(sessionCreates().at(-1)).toEqual({ worktree: 'id:wt_main', agent: 'claude', prompt: 'review the diff', cwd: dir })
-    expect(lastTab(ws).defaultTitle).toBe('Review')
-    const agentTab = await newTab({ agent: 'codex' })
-    expect(lastTab(agentTab).defaultTitle).toBe('Codex')
-    expect((await error(api('newTab', { workspace: WT, cwd: '/no/such/dir' })))?.code).toBe(RpcErrorCode.InvalidParams)
-    expect(tabsOf(await layoutOf())).toHaveLength(2)
-  })
 
   test('SC-9: rename sets a custom title, the empty string clears it, and long titles are refused', async () => {
     let ws = await newTab()

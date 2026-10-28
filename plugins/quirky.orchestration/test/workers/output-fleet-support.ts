@@ -133,6 +133,7 @@ export interface HarnessOptions {
   transcript?: { path: string; text: string } | Error
   structuredMessages?: readonly { sessionId: string; seq: number; role: string; text: string; at: number }[]
   terminalLines?: string[]
+  terminalScreenLines?: string[]
   status?: unknown
   boundRunId?: RunId | null
   attention?: { guidance?: boolean; input?: boolean; approval?: boolean; rootCompletion?: boolean }
@@ -189,6 +190,14 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
         }
       }
       throw new Error(`unexpected public method ${method}`)
+    },
+    pty: {
+      read: async (_sessionId: string, lines: number) => ({
+        lines: lines === 0 ? options.terminalScreenLines ?? [] : [],
+        cols: 80,
+        rows: 24,
+        alt: false
+      })
     },
     error: (kind: string, message: string) => Object.assign(new Error(message), { kind })
   } as unknown as PluginContext

@@ -1,7 +1,7 @@
 import type { PluginContext, PluginStore, QuirkyEvent, Session } from '@quirky/protocol'
 import type {
-  DispatchId, DispatchRow, DispatchStatus, DispatchTransitionInput, ResetMode,
-  MutationRequest, RunId, RunRow, RuntimeCallerEvidence, TaskId, TaskRow,
+  DispatchAdmissionInput, DispatchId, DispatchRow, DispatchStatus, DispatchTransitionInput, ResetMode,
+  MutationRequest, MutatingOrchestrationMethod, RunId, RunRow, RuntimeCallerEvidence, TaskId, TaskRow,
   TaskTransitionInput, UtcTimestamp, WorkerOutcome, WorkerTransitionInput,
 } from '../../src/contracts'
 import type {
@@ -186,7 +186,6 @@ export function makeWorkerStartHarness(): WorkerStartHarness {
       status: input.nextState,
       result: input.result === undefined ? current.result : input.result,
       completedAt: input.nextState === 'completed' ? input.at : null,
-      updatedAt: input.at,
     }
     tasks.set(input.taskId, updated)
     return updated
@@ -251,7 +250,7 @@ export function makeWorkerStartHarness(): WorkerStartHarness {
         lastHeartbeatAt: null,
       }
       dispatches.set(dispatchId, dispatch)
-      tasks.set(task.id, { ...task, status: 'dispatched', updatedAt: NOW })
+      tasks.set(task.id, { ...task, status: 'dispatched' })
       return dispatch
     },
     createTask: (input, evidence) => {
@@ -292,7 +291,7 @@ export function makeWorkerStartHarness(): WorkerStartHarness {
         consumerGeneration: 1, createdAt: NOW, dispatchedAt: null, completedAt: null, lastHeartbeatAt: null,
       }
       dispatches.set(dispatchId, dispatch)
-      tasks.set(task.id, { ...task, status: 'dispatched', updatedAt: NOW })
+      tasks.set(task.id, { ...task, status: 'dispatched' })
       return dispatch
     },
     attachDispatchAuthority: (dispatchId, identity, evidence) => {
@@ -321,7 +320,13 @@ export function makeWorkerStartHarness(): WorkerStartHarness {
       dispatches.set(dispatchId, updated)
       return updated
     },
-    mutate: async <T extends object>(method, params, evidence, operation, options) =>
+    mutate: async <T extends object>(
+      method: MutatingOrchestrationMethod,
+      params: MutationRequest & Record<string, unknown>,
+      evidence: RuntimeCallerEvidence,
+      operation: (store: PluginStore) => T,
+      options?: DurableMutationOptions<T>,
+    ) =>
       core.mutateWorker(method, params, evidence, operation, options),
     mutateWorker: async <T extends object>(
       _method: string,
@@ -390,16 +395,6 @@ export function makeWorkerStartHarness(): WorkerStartHarness {
       const record = repository.get(input.dispatchId)
       if (!record || record.state !== input.expectedState) throw error('lifecycle_conflict', `Worker ${input.dispatchId} changed`)
       const updated = repository.update(input.dispatchId, { state: input.nextState }, input.expectedState)
-      if (input.nextState === 'start_unknown') {
-        const dispatch = dispatches.get(input.dispatchId)
-        const task = dispatch ? tasks.get(dispatch.taskId) : null
-        const anotherActiveAttempt = dispatch && [...dispatches.values()].some(candidate =>
-          candidate.taskId === dispatch.taskId && candidate.id !== dispatch.id &&
-          (candidate.status === 'pending' || candidate.status === 'dispatched'))
-        if (task?.status === 'dispatched' && !anotherActiveAttempt) {
-          tasks.set(task.id, { ...task, status: 'blocked', completedAt: null, updatedAt: NOW })
-        }
-      }
       return updated
     },
     reportWorkerDone: (input, evidence) => {

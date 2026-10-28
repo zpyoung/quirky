@@ -448,6 +448,7 @@ async function launchAccepted(
   let residualResources: JsonValue[] = []
   let inputMayHaveBeenAccepted = false
   let placementForFailure: WorkerPlacement | undefined
+  let custodyRecorded = false
 
   try {
     await releaseRetryResource(lifecycle, repository, params, caller, run.id)
@@ -470,6 +471,7 @@ async function launchAccepted(
         const current = repository.get(dispatch.id)
         if (!current || current.state !== 'starting') throw fail('lifecycle_conflict', `Worker ${dispatch.id} changed before custody was recorded.`)
         const runtimeEffects = [...placed.effects]
+        const resource = workerSessionResource(repository, dispatch, placed)
         repository.putResource(resource)
         repository.update(dispatch.id, {
           stage: 'custody_recorded',

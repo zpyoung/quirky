@@ -14,6 +14,13 @@ async function createRun(h: WorkerAcceptance): Promise<RunRow> {
   return result.run
 }
 
+async function taskForRun(h: WorkerAcceptance, runId: string, taskId: string): Promise<TaskRow> {
+  const tasks = await h.callAs<{ tasks: TaskRow[] }>(h.coordinator.id, 'task-list', ['--run', runId])
+  const task = tasks.tasks.find((row) => row.id === taskId)
+  if (!task) throw new Error(`Task ${taskId} missing from run ${runId}`)
+  return task
+}
+
 async function startWorker(h: WorkerAcceptance, spec: string) {
   const receipt = await h.callAs<MutationResult<WorkerStartReceipt>>(h.coordinator.id, 'worker-start', [
     '--spec', spec, '--task-title', 'Recovery acceptance worker', '--worktree', 'current', '--agent', 'claude', '--timeout-ms', '3000'
@@ -24,12 +31,22 @@ async function startWorker(h: WorkerAcceptance, spec: string) {
   return { receipt, session: shown.worker!.sessionId!, shown }
 }
 
-async function report(h: WorkerAcceptance, session: string, receipt: WorkerStartReceipt, outcome: 'succeeded' | 'failed' = 'succeeded'): Promise<WorkerReportSend> {
-  return h.callAs<WorkerReportSend>(session, 'send', [
+function reportFlags(receipt: WorkerStartReceipt, outcome: 'succeeded' | 'failed' = 'succeeded'): string[] {
+  return [
     '--type', 'worker_done', '--task-id', receipt.taskId, '--dispatch-id', receipt.dispatchId,
     '--outcome', outcome, '--subject', `Recovery report ${outcome}`,
     '--body', 'The exact worker completed this report through its inherited CLI environment.'
-  ])
+  ]
+}
+
+async function report(h: WorkerAcceptance, session: string, receipt: WorkerStartReceipt, outcome: 'succeeded' | 'failed' = 'succeeded'): Promise<WorkerReportSend> {
+  return h.callAs<WorkerReportSend>(session, 'send', reportFlags(receipt, outcome))
+}
+
+async function rejectedReport(h: WorkerAcceptance, session: string, receipt: WorkerStartReceipt, outcome: 'succeeded' | 'failed' = 'succeeded'): Promise<WorkerReportSend> {
+  const result = await h.cli(session, ['orchestration', 'send', ...reportFlags(receipt, outcome)])
+  expect(result.code).not.toBe(0)
+  return JSON.parse(result.stdout) as WorkerReportSend
 }
 
 function inputText(h: WorkerAcceptance, session: string): string {
@@ -130,8 +147,11 @@ test('idle readiness with an accepted but unobserved preamble stays unknown and 
       worktree: `path:${h.fixture.repo}`, agent: 'claude', title: 'Unrelated report sender'
     }) as { id: string }
     await eventually(() => h.events(outsider.id), (events) => events.some((event) => event.type === 'started'), 'unrelated launched reporter')
-    const copied = await report(h, outsider.id, initial)
+    const taskBeforeCopied = await taskForRun(h, run.id, initial.taskId)
+    const copied = await rejectedReport(h, outsider.id, initial)
     expect(copied.report).toMatchObject({ status: 'rejected', reason: 'sender_not_assignee' })
+    const taskAfterCopied = await taskForRun(h, run.id, initial.taskId)
+    expect(taskAfterCopied).toEqual(taskBeforeCopied)
     const remainsUnknown = await h.fixture.call('quirky.orchestration/workerShow', { dispatchId: initial.dispatchId }) as WorkerShowResult
     expect(remainsUnknown.worker?.state).toBe('start_unknown')
     expect(remainsUnknown.dispatch.status).toBe('pending')
@@ -140,8 +160,11 @@ test('idle readiness with an accepted but unobserved preamble stays unknown and 
     expect(completed.report).toMatchObject({ status: 'accepted', worker: { state: 'succeeded' } })
     const duplicate = await report(h, session, initial)
     expect(duplicate.report).toMatchObject({ status: 'duplicate' })
-    const conflict = await report(h, session, initial, 'failed')
+    const taskBeforeConflict = await taskForRun(h, run.id, initial.taskId)
+    const conflict = await rejectedReport(h, session, initial, 'failed')
     expect(conflict.report).toMatchObject({ status: 'rejected', reason: 'inactive_dispatch' })
+    const taskAfterConflict = await taskForRun(h, run.id, initial.taskId)
+    expect(taskAfterConflict).toEqual(taskBeforeConflict)
     const settled = await h.fixture.call('quirky.orchestration/workerShow', { dispatchId: initial.dispatchId }) as WorkerShowResult
     expect(settled.worker?.state).toBe('succeeded')
     expect(settled.dispatch.status).toBe('completed')
@@ -186,7 +209,7 @@ test('an exact worker heartbeat leaves its attempt dispatched and retry budget u
 test('a live abandoned prior process cannot report into its retry Dispatch', async () => {
   const h = await startWorkerAcceptance()
   try {
-    await createRun(h)
+    const run = await createRun(h)
     const first = await startWorker(h, 'Keep this process alive while its retry starts.')
     const abandoned = await h.callAs<MutationResult<WorkerControlResult>>(h.coordinator.id, 'worker-abandon', ['--dispatch', first.receipt.dispatchId])
     expect(abandoned.state).toBe('abandoned')
@@ -198,8 +221,11 @@ test('a live abandoned prior process cannot report into its retry Dispatch', asy
       '--worktree', 'current', '--agent', 'claude', '--timeout-ms', '3000'
     ])
     expect(retry.state).toBe('ready')
-    const stale = await report(h, first.session, first.receipt)
+    const taskBeforeStale = await taskForRun(h, run.id, first.receipt.taskId)
+    const stale = await rejectedReport(h, first.session, first.receipt)
     expect(stale.report).toMatchObject({ status: 'rejected', reason: 'stale_dispatch' })
+    const taskAfterStale = await taskForRun(h, run.id, first.receipt.taskId)
+    expect(taskAfterStale).toEqual(taskBeforeStale)
 
     const current = await h.fixture.call('quirky.orchestration/workerShow', { dispatchId: retry.dispatchId }) as WorkerShowResult
     expect(current.worker?.state).toBe('ready')

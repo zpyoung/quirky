@@ -15,6 +15,7 @@ type Worktree = {
   repoId: string
   path: string
   name: string
+  branch: string
   kind: string
   parentId: string | null
   displayName: string | null
@@ -275,7 +276,7 @@ test('new-top-level honors requested repository metadata and wait-for-setup befo
   expect(topLevel).toMatchObject({
     repoId: repo.id,
     parentId: null,
-    name: 'worker-top-level-placement',
+    branch: 'worker-top-level-placement',
     displayName: 'Requested top-level display name',
     comment: 'Requested top-level placement comment',
     baseRef: 'main',
