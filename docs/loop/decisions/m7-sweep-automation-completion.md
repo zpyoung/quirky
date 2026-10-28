@@ -110,5 +110,27 @@
 - **Revisit if:** a public host foundation lands before that item's implementation.
 - **Source:** deferred: SSH ledger ownership/routing/import/evidence/selected-runtime availability
 
+## D11: Preserve concurrent panel admissions and local owner boundaries at catch-up
+- **Question:** Which intent wins the single bridge-policy merge conflict?
+- **Options:** keep only summary validation; keep only notification validation; compose independent bounded admissions.
+- **Chose:** merge5478ed07 preserves read-only empty-parameter loop summaries plus incoming notificationTest, bounded notificationPoll and notificationCancel validators. Preserve all auto-merged panel routes/grants, source identity and host-power/orchestration lifecycle changes.
+- **Why:** these methods have independent authorities; dropping either would erase a landed feature. No new incoming decision supplies the missing remote workspace registration/filesystem foundation.
+- **Evidence:** conflict bridge-policy.ts:102–114, resolved DA34; final merged bridge smoke accepted summaries and notificationTest, rejected summary selectors and full loops/list; bg11 public API lifecycle exit0 in1.81s. ReadCatchupDecisions read all five parent-enumerated incoming logs: m4-hosting-ui-review-browser-routing, m5-loops-ui-visible-stop-close-review, m6-heimdall-host-power, m6-orchestration-idle-pointer-shutdown, sb-mobile-app-panels. Initial scout enumeration was unavailable; parent supplied the exact Git-range list, then scout read every listed log.
+- **Reversibility:** easy
+- **Confidence:** high for faithful contract composition; full suites remain unrun
+- **Revisit if:** final typecheck or end-phase acceptance reports an integration mismatch.
+- **Source:** locked by docs/loop/decisions/sb-mobile-app-panels.md D21
+
+## D12: Delete incidental authorization-table assertions instead of repinning their import
+- **Question:** How to fix the merged mobile test's removed allowlist import?
+- **Options:** restore the table import to re-pin implementation membership; keep observable authorization-boundary assertions.
+- **Chose:** delete only the two Object.hasOwn(MOBILE_METHOD_ALLOWLIST, ...) assertions in the new summary policy test. Retain accepted empty parameters, rejection of extra/identity fields and denial of full history/mutation methods.
+- **Why:** incoming panel work removed the implementation-table import. The final merged typecheck reported two undefined names. Table-membership assertions duplicate wiring; the consumer-visible allow/deny boundary remains covered without importing the table.
+- **Evidence:** bg10 typecheck two TS2304 diagnostics at authorization.test.ts:39,48; anchored deletion3353. No behavior assertion weakened and no new test execution.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** end-phase API acceptance disproves the public authorization boundary.
+- **Source:** assumed — autonomous
+
 ## Progress
-All three scoped components integrated, worktrees removed, structural validation returned, observed source/type diagnostics repaired, narrow API and actual component smoke receipts recorded in D8–D9. One ledger-only prerequisite follow-up registered. No owned browser/service/agent remains active. Next commit these integration repairs and documentation, catch up exactly once with build/roadmap, read newly landed decisions, run final root/mobile typecheck, then commit the receipt, detach and invoke authoritative absolute queue.ts land m7-sweep-automation-completion. Suites/reviews/full-app dogfood remain end-phase-owned; no clearance claim for them.
+Final catch-up5478ed07 complete; all five incoming decision logs read and no new authority conflict found. Merged API lifecycle and strict bridge permission smoke passed (D11). Final `bun run typecheck` bg13 exited0 in23.45s, covering root and apps/mobile after the merged assertion cleanup. The single remote-ledger follow-up was added. All agents returned and component services/tabs are stopped. Commit this test/documentation delta, detach and invoke authoritative absolute queue.ts land m7-sweep-automation-completion; wait for land and the outstanding follow-up deps command before ending. Suites/reviews/full-app/native dogfood remain end-phase-owned. No other unbuilt flow is silently dropped.

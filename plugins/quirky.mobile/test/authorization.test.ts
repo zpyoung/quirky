@@ -36,7 +36,6 @@ describe('mobile RPC authorization', () => {
   })
 
   test('admits only empty-parameter compact loop summaries as read-only mobile access', () => {
-    expect(Object.hasOwn(MOBILE_METHOD_ALLOWLIST, 'quirky.loops/summaries')).toBe(true)
     expect(() => assertMobileCallAllowed('quirky.loops/summaries', {})).not.toThrow()
     for (const params of [{ worktree: 'worktree-1' }, { includeEnded: true }, { token: 'secret' }]) {
       expect(() => assertMobileCallAllowed('quirky.loops/summaries', params)).toThrow()
@@ -45,7 +44,6 @@ describe('mobile RPC authorization', () => {
       'quirky.loops/list', 'quirky.loops/get', 'quirky.loops/history', 'quirky.loops/iterations',
       'quirky.loops/create', 'quirky.loops/edit', 'quirky.loops/pause', 'quirky.loops/resume', 'quirky.loops/stop'
     ]) {
-      expect(Object.hasOwn(MOBILE_METHOD_ALLOWLIST, method)).toBe(false)
       expect(() => assertMobileCallAllowed(method, {})).toThrow()
     }
   })
