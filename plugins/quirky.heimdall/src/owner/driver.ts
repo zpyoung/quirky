@@ -5,7 +5,7 @@ import { scanWorkers } from './detection'
 import { gateOwnerAction, ownerApprovalScope } from './gate'
 import { createOwnerController, parseOwnerDeviation, parseOwnerIntervention } from './runtime'
 import { executeWorkerIntervention, readOwnedRun } from './workers'
-import type { OwnerController, OwnerDeviation, OwnerEnrollment, OwnerKernelPort, WorkerActivity } from './contracts'
+import type { OwnerController, OwnerDeviation, OwnerEnrollment, OwnerKernelPort, OwnerStepResult, WorkerActivity } from './contracts'
 
 interface DriverOptions {
   context: PluginContext; store: KernelStore; registry: KindRegistry
@@ -24,6 +24,7 @@ export function createOwnerDriver(options: DriverOptions): OwnerKernelPort & { c
   const { context, store, registry } = options
   const now = options.now ?? Date.now
   const proposals = new Map<string, KernelAction>()
+  const dispatchFences = new Map<string, () => boolean>()
   let stopped = false
   const append = (id: string, kind: string, fields: Record<string, unknown>, resolved = false) => {
     if (stopped || store.readOnly || !store.get(id)) return
@@ -41,6 +42,7 @@ export function createOwnerDriver(options: DriverOptions): OwnerKernelPort & { c
   }
   const controller = createOwnerController({
     context, store, reportDirectory: options.reportDirectory, now, park, wake: options.wake,
+    canDispatch: (watcherId) => !stopped && (dispatchFences.get(watcherId)?.() ?? true),
     apply: async (enrollment, intervention, deviation, snapshot) => {
       const pending = controller.inspect(enrollment.watcherId).pending
       if (!pending || stopped) return { kind: 'refused', reason: 'owner-not-current' }
@@ -135,7 +137,7 @@ export function createOwnerDriver(options: DriverOptions): OwnerKernelPort & { c
     return result
   }
 
-  async function step(enrollment: Enrollment, snapshot: Snapshot, deviation?: OwnerDeviation) {
+  async function step(enrollment: Enrollment, snapshot: Snapshot, deviation?: OwnerDeviation, canDispatch?: () => boolean) {
     proposals.delete(enrollment.watcherId)
     if (stopped || enrollment.terminalAtMs !== null) return { handled: false }
     const ownerEnrollment = enrollment as OwnerEnrollment
@@ -169,7 +171,13 @@ export function createOwnerDriver(options: DriverOptions): OwnerKernelPort & { c
         }
       }
     }
-    const result = await controller.step(store.get(enrollment.watcherId) as OwnerEnrollment ?? ownerEnrollment, snapshot, inputs)
+    if (canDispatch) dispatchFences.set(enrollment.watcherId, canDispatch)
+    let result: OwnerStepResult
+    try {
+      result = await controller.step(store.get(enrollment.watcherId) as OwnerEnrollment ?? ownerEnrollment, snapshot, inputs)
+    } finally {
+      dispatchFences.delete(enrollment.watcherId)
+    }
     const action = proposals.get(enrollment.watcherId)
     const completed = result.handled && controller.inspect(enrollment.watcherId).pending === null
     const deadline = Math.min(completed ? now() : result.nextCheckAtMs ?? Infinity, scan.nextCheckAtMs ?? Infinity)
@@ -197,5 +205,5 @@ export function createOwnerDriver(options: DriverOptions): OwnerKernelPort & { c
     }
     return { effect: 'landed', reason: `owner-${intervention.kind}` }
   }
-  return { controller, step, execute, shutdown: async () => { stopped = true; proposals.clear(); await controller.shutdown() } }
+  return { controller, step, execute, shutdown: async () => { stopped = true; proposals.clear(); dispatchFences.clear(); await controller.shutdown() } }
 }

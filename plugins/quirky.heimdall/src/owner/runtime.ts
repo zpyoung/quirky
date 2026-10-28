@@ -51,7 +51,7 @@ type IssuedFile = { reportKey: string; reportPath: string }
 const NO_CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/
 const REPORT_FILENAME = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.json$/i
 const DEVIATION_KIND_SET = new Set<string>(OWNER_DEVIATION_KINDS)
-const PENDING_PHASES = new Set<OwnerPending['phase']>(['issuing', 'waiting', 'ready', 'indeterminate', 'parked'])
+const PENDING_PHASES: Record<OwnerPending['phase'], true> = { deferred: true, issuing: true, waiting: true, ready: true, indeterminate: true, parked: true }
 const OWNER_SHUTDOWN_TIMEOUT_MS = 1_500
 
 async function waitUntilOwnerShutdownDeadline(work: Promise<unknown>, deadlineAtMs: number): Promise<void> {
@@ -198,7 +198,7 @@ function validPending(value: unknown): OwnerRuntimePending {
   if (!isRecord(value)) throw new TypeError('stored owner pending report is malformed')
   const deviation = parseOwnerDeviation(value.deviation)
   const phase = value.phase
-  if (typeof phase !== 'string' || !PENDING_PHASES.has(phase as OwnerPending['phase'])) throw new TypeError('stored owner phase is malformed')
+  if (typeof phase !== 'string' || !Object.hasOwn(PENDING_PHASES, phase)) throw new TypeError('stored owner phase is malformed')
   if (typeof value.reportKey !== 'string' || value.reportKey.length === 0 || typeof value.reportPath !== 'string') {
     throw new TypeError('stored owner report identity is malformed')
   }
@@ -750,6 +750,16 @@ export function createOwnerController(host: OwnerRuntimeHost): OwnerController {
     return validateReturnedSession(raw, sessionId)
   }
 
+  function deferDispatch(watcherId: string, state: OwnerRuntimeState): string {
+    if (state.pending) {
+      state.pending.phase = 'deferred'
+      closeOwnerInterval(watcherId, state.pending, 'settled')
+    }
+    clearError(state)
+    persistState(watcherId, state)
+    return 'owner-dispatch-fenced'
+  }
+
   async function ownerCall(method: string, params: Record<string, unknown>): Promise<unknown> {
     ensureOpen()
     const result = await host.context.call(method, params)
@@ -787,6 +797,7 @@ export function createOwnerController(host: OwnerRuntimeHost): OwnerController {
       ensureOwnerInterval(watcherId, state)
       persistState(watcherId, state)
       if (state.sessionId === null) {
+        if (host.canDispatch?.(watcherId) === false) return deferDispatch(watcherId, state)
         const raw = await ownerCall('quirky.structured/create', {
           lifetime: 'plugin',
           worktree: enrollment.worktreeId ? `id:${enrollment.worktreeId}` : `path:${enrollment.workspacePath}`,
@@ -801,9 +812,11 @@ export function createOwnerController(host: OwnerRuntimeHost): OwnerController {
         if (!oldSessionId) throw new Error('owner session identity is missing during restart')
         const oldSession = await ownerCall('quirky.session/get', { session: oldSessionId })
         validateNativeSession(oldSession, oldSessionId)
+        if (host.canDispatch?.(watcherId) === false) return deferDispatch(watcherId, state)
         const raw = await ownerCall('quirky.structured/resume', { lifetime: 'plugin', session: oldSessionId, prompt })
         persistReturnedSession(watcherId, state, raw)
       } else {
+        if (host.canDispatch?.(watcherId) === false) return deferDispatch(watcherId, state)
         await ownerCall('quirky.structured/send', { session: state.sessionId, text: prompt })
       }
       ensureOpen()
@@ -1001,6 +1014,7 @@ export function createOwnerController(host: OwnerRuntimeHost): OwnerController {
         return { handled: true, reason: detail }
       }
       try {
+        if (host.canDispatch?.(watcherId) === false) return { handled: true, reason: 'owner-dispatch-fenced' }
         pending.phase = 'indeterminate'
         pending.wakeCount = 1
         pending.lastWakeAtMs = time
@@ -1072,6 +1086,10 @@ export function createOwnerController(host: OwnerRuntimeHost): OwnerController {
     // The host stages proposals only; the runner still owns every effect and commit fence.
     if (state.pending?.phase === 'ready') return applyReady(watcherId, enrollment, snapshot, state)
     if (!isActive(enrollment)) return { handled: stateChanged || state.pending !== null, reason: 'owner work is paused or disarmed' }
+    if (state.pending?.phase === 'deferred') {
+      const error = await deliverPending(watcherId, enrollment, state, config, Boolean(state.sessionId && state.instanceId !== instanceId))
+      return { handled: true, ...(error ? { reason: error } : { nextCheckAtMs: state.pending!.lastWakeAtMs + OWNER_STALL_THRESHOLD_MS }) }
+    }
     if (state.pending?.phase === 'issuing') {
       const detail = recordUncertainty(watcherId, state, 'recover-owner-turn', new Error('an earlier create, send, or resume has an unknown outcome'))
       return { handled: true, reason: detail }

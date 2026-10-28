@@ -21,7 +21,8 @@ export type GateVerdict = { verdict: 'allow' } | { verdict: 'hold' | 'escalate';
 export type Deviation = OwnerDeviation
 export type Decision<A extends KernelAction = KernelAction> =
   | { action: A; considered?: string[] }
-  | { action: null; reason: string; detail?: string; considered?: string[]; deviation?: Deviation }
+  | { action: null; reason: string; detail?: string; considered?: string[]; deviation?: undefined }
+  | { action: null; deviation: Deviation; reason?: string; detail?: string; considered?: string[] }
 export interface WorkerRequest { spec: string; worktree: string; agent?: string; mode?: 'terminal' | 'structured'; taskTitle?: string; [key: string]: unknown }
 export type DispatchResult =
   | { kind: 'dispatched'; dispatchId: string; terminalHandle?: string }
@@ -35,12 +36,12 @@ export interface ExecuteContext {
 export type StopResult = { kind: 'terminal'; state: string; reason: string } | { kind: 'park'; reason: ParkReason; detail: string; deviation?: OwnerDeviation } | null
 export interface EnrollmentInput {
   kind: string; kindPayload: Json; capabilities?: Record<string, CapabilityMode>; budget?: BudgetPolicy
-  owner?: OwnerConfig; ownerInterventionCapability?: CapabilityMode
+  owner?: OwnerConfig | null; ownerInterventionCapability?: CapabilityMode
 }
 export interface AuthorizedEnrollment {
   workspaceKey: string; workspacePath: string; executionHostId: string; schedulerOwner: string
   repoId?: string | null; worktreeId?: string | null; kindPayload: Json; undo?: Json
-  owner?: OwnerConfig; ownerInterventionCapability?: CapabilityMode
+  owner?: OwnerConfig | null; ownerInterventionCapability?: CapabilityMode
 }
 export interface Enrollment extends AuthorizedEnrollment {
   watcherId: string; kind: string; enabled: boolean; paused: boolean; commandRevision: number

@@ -143,5 +143,27 @@
 - **Revisit if:** an inactive proposal reaches an effect without a pre-existing durable attempt
 - **Source:** assumed — autonomous
 
+## D14: Recheck the live runner fence at automatic owner dispatch
+- **Question:** pause/disarm can arrive while an owner brief is preparing asynchronously, before the structured call
+- **Options:** trust the earlier enrollment snapshot; treat positive non-dispatch as uncertainty; recheck the captured runner fence and durably defer
+- **Chose:** OwnerKernelPort.step accepts a current per-tick canDispatch predicate; driver supplies it to automatic create/send/resume/reminder checks immediately before the native call. A positively fenced, unstarted turn persists phase deferred, closes its unused owner interval and resumes only after authority returns. Exact human answers remain the separate serialized control operation. Ready proposals still recover existing durable outcomes, never execute under the fence.
+- **Why:** an earlier enabled snapshot does not authorize a new model turn after a control fence. No native call occurred, so calling the result indeterminate would strand a safely resumable turn.
+- **Evidence:** new regression failed because creates length1 under a false fence; focused green4assertions after repair, including persisted deferred restart; reminder allowance remains unused while fenced. Hung-send shutdown watchdog test passed2assertions in1.65s and proved no late journal writes.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** a native call occurs after its captured runner predicate turns false
+- **Source:** assumed — autonomous
+
+## D15: Prove lifecycle and conversation behavior with real isolated provider processes
+- **Question:** acceptance's original callback-only runner could prove wiring but not resource cleanup or native continuity
+- **Options:** retain mock echoes; use a non-paid process-backed native boundary
+- **Chose:** scripted JSONL child per session, fresh ProcessScope HOME/QUIRKY_HOME, hashed durable native conversation file. Lifecycle assertions observe owner child exit, an unrelated child's real follow-up acknowledgement, and persisted turns; restart reads prior conversation state. Remove unit assertions that only copy native params or pin diagnostic wording. Core's confirmed scheduler is daemon, host local; nullable owner fields align with the published core contract. Deviation-only decisions are admitted without an otherwise redundant reason.
+- **Why:** callback arrays do not prove a process stopped or a conversation survived. Public owner behavior must remain independently exercised through the real daemon and CLI.
+- **Evidence:** standalone /tmp/quirky-owner-native-lifetime-l12.ts emitted REAL_CHILD_PLUGIN_LIFETIME_SMOKE_OK (ownerExit0, independentAlive true, nativeTurns2, client lifetime refused), then cleanup success;45owned boundary tests passed215assertions. Core publication watcher observed794266f1, not queue completion.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the scripted boundary diverges from a public structured contract
+- **Source:** assumed — autonomous
+
 ## Progress
-Runtime component ad985463 and detection5b305152 merged after barrier; worktrees removed. Parent checkpoint3ce5124a contains gated proposals/API/common worker effects/canonical contracts and opt-in structured lifetime. Runtime19pass/144assertions, detector18pass/65assertions, owner gate/worker boundaries6pass/15assertions. Standalone actual daemon lifetime smoke passed and cleaned. D13 fixed a reproduced parked-settlement deadlock; full runtime regression stays green. Acceptance component remains uncommitted in /tmp/quirky-owner-acceptance-l12, fixture updated to core inspect array and owned temporary worktree. Core/controls runtime still pending; their hubs remain untouched. deps bg_6 currently waiting core. Next: merge committed core/control runtime, central runner/registry/service/manifest integration, real owner/worker API+CLI flows, affected suite/scripts/typecheck, deps-ready/catch-up/final review/land. No whole-feature completion claimed.
+All owner implementers returned; runtime/detector components merged and removed, process-backed acceptance remains uncommitted in /tmp/quirky-owner-acceptance-l12 with scope audit clean and HEAD63ec. Main HEAD7f783 unchanged through that barrier.45owned boundary tests passed215assertions; actual real-child lifetime smoke passed and cleaned. Core source794266f1 now published, confirmed by event-driven ref watcher; watcher ended. Next: commit owner fence/contracts/test checkpoint, merge current core (resolve typed deviation/config overlaps), integrate runner/registry while controls finishes serial main/service/manifest handoff, then exercise actual owner API/CLI and worker services. Stale A-to-B owner report case is authored but driver recovery not yet implemented; reproduce after API wiring before fixing. No active deps job and no whole-feature completion/landing claim.

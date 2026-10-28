@@ -27,7 +27,7 @@ export type OwnerIntervention =
   | { kind: 'message-worker'; dispatchId: string; body: string }
   | { kind: 'kind-action'; action: Json }
 export interface OwnerEnrollment extends Enrollment {
-  owner?: OwnerConfig
+  owner?: OwnerConfig | null
   ownerInterventionCapability?: 'off' | 'gated' | 'on'
 }
 export interface WorkerActivity {
@@ -54,6 +54,8 @@ export interface OwnerApplyResult {
 }
 export interface OwnerRuntimeHost {
   context: PluginContext; store: KernelStore; reportDirectory: string; now: () => number
+  /** Automatic turns recheck the runner's current control/lifecycle fence immediately before dispatch. */
+  canDispatch?(watcherId: string): boolean
   /** Parent owns ordinary write-ahead execution and BOTH native and owner capability gates. */
   apply(enrollment: OwnerEnrollment, intervention: OwnerIntervention, deviation: OwnerDeviation, snapshot: Snapshot): Promise<OwnerApplyResult>
   /** Serialized under the runner; persists disabled+park reason+exact escalation. */
@@ -63,7 +65,7 @@ export interface OwnerRuntimeHost {
 export interface OwnerPending {
   reportKey: string; reportPath: string; deviation: OwnerDeviation; escalationId: string
   issuedAtMs: number; lastWakeAtMs: number; wakeCount: number; contentIdentity: string
-  phase: 'issuing' | 'waiting' | 'ready' | 'indeterminate' | 'parked'
+  phase: 'deferred' | 'issuing' | 'waiting' | 'ready' | 'indeterminate' | 'parked'
   intervention?: OwnerIntervention
 }
 export interface OwnerState {
@@ -82,7 +84,7 @@ export interface OwnerController {
 
 /** Runner insertion port; proposals always use the ordinary native gate/write-ahead executor. */
 export interface OwnerKernelPort {
-  step(enrollment: Enrollment, snapshot: Snapshot, deviation?: OwnerDeviation): Promise<OwnerStepResult & { action?: KernelAction }>
+  step(enrollment: Enrollment, snapshot: Snapshot, deviation?: OwnerDeviation, canDispatch?: () => boolean): Promise<OwnerStepResult & { action?: KernelAction }>
   execute(action: KernelAction, context: ExecuteContext): Promise<ExecuteResult>
   shutdown(): Promise<void>
 }
