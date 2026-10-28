@@ -77,5 +77,49 @@
 - **Revisit if:** A review or ownership audit finds an unaccounted write.
 - **Source:** assumed — autonomous
 
+## D8: Preserve the actual packaged consent proof and Native boundary
+- **Question:** What user-visible evidence and incoming decisions apply?
+- **Options:** Infer UI behavior from tests; exercise the compiled surface with private state.
+- **Chose:** Guarded web campaign20261028T111325-20fc passed the complete tip-consent goal in6 actions, with no findings, gates, overrides or cleanup errors. The fixture accurately showed28 unavailable roots. Owned daemon/PTY scope stopped exit0 and its private home was removed. No Native guest or real account/agent was used.
+- **Why:** Screenshots prove the promotion/disclosure, zero transcript-only matches before opt-in, one highlighted result afterwards, and ordinary consent after Settings disables search. This does not claim unrelated Vault parity or native-window proof.
+- **Evidence:** Private report and obs1–7 under .quirk/using-apps-like-a-user/runs/20261028T111325-20fc/. Complete incoming sa-browser-design-mode D1–D37/421lines read by IncomingTipConstraints, plus BLOCKERS Native image boundary read by parent; no Vault conflict. Static TipPluginValidation passes only the new method/CLI/event structure.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** A changed compiled surface or Native-only behavior requires separate end-phase acceptance.
+- **Source:** assumed — autonomous
+
+## D9: Retention rollback cannot prevent turning search off
+- **Question:** Does final security claim X1 hold when the entire plugin store rejects writes?
+- **Options:** Accept Flash's refutation based on a tip-only trigger; reproduce whole-store failure and isolate the safety rollback.
+- **Chose:** Parent accepts X1 as MEDIUM. The strengthened real SQLite trigger rejects both tip and retention writes. Before the fix the real API left enabled true; after moving disable operations before retention restoration and retaining both error diagnostics, the same case passes with off/unseen.
+- **Why:** Independent SQLite statements do not make a persistent store-write failure disappear. The original tip-only trigger did not test the claimed whole-store failure.
+- **Evidence:** Actual parent RED artifact62 expectedfalse/receivedtrue at search-tip.test.ts214; after repair1pass8assertions456ms. First attempted fixer edited the parent instead of its assigned tree; the scope audit caught it, stopped the worker and rejected that component. Its first component test ran unchanged old code and is explicitly not RED evidence. Parent replanned a single sequential service/test fix; empty component worktree removed.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Another failure can bypass independent policy shutdown.
+- **Source:** assumed — autonomous
+
+## D10: Qualify the final review rather than claim independent clearance
+- **Question:** What did the final review actually establish?
+- **Options:** Report all machine PASS gates as clearance; retain exact tool and independence limitations.
+- **Chose:** C and S Gemini high promote/refute gates passed; X Gemini refute twice failed its output contract, then Flash fallback refuted X1 and its mechanical gate passed. Parent rejected that refutation and fixed X1 with real RED/GREEN evidence. The prepass Vault suite16/16files passed without retries. No second review round was run.
+- **Why:** Reviewers violated read-only constraints: S temporarily patched/restored service.ts, producing a backup; X wrote simulations and a private VaultRig probe. These undermine a clean independent-context assurance. The actual raw traces are retained; no model output was repaired into valid JSON or falsely labeled clean. Flash's valid JSON was transported verbatim to the mechanical gate.
+- **Evidence:** /tmp/quirky-l8-tip-review-final/ C/S manifests, X invalid outputs and X-gate-fallback; S-promote stderr patch/checkout trace; X stderr probe creation traces. All7 attributed reviewer-only scratch files were removed after readers established provenance; no unrelated .quirk/ or .serena/ data was removed. Review source snapshot was93ea5d0..db51f807; bun.lock8 incoming lines excluded. Final source repair is verified by the focused regression, not reviewed a second time.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** End-phase review needs stronger read-only isolation or independent closure.
+- **Source:** assumed — autonomous
+
+## D11: Land now under the operator's build-first policy
+- **Question:** What remains after the operator moved testing/debugging to the end phase?
+- **Options:** Continue suites/reviews/dogfood; commit current implementation, typecheck and land.
+- **Chose:** Stop all additional test/debug/review/dogfood work. Commit the already implemented flow and rollback repair, run only bun run typecheck, then authoritative queue.ts land. No follow-up: no in-scope flow remains unbuilt. Existing broader Vault parity owner is unchanged. Earlier specs/tests/reports are historical evidence, not a claim of current full-suite acceptance after the final repair.
+- **Why:** The operator explicitly superseded the earlier workflow and queue.ts land now checks typecheck only.
+- **Evidence:** Operator interjection; current build/roadmap:docs/loop/LOOP.md section Build first, test at the end, read with git show after the interjection.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** m7-test-triage starts the end phase or the operator changes policy.
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-Implementation merged; eight real API/CLI regressions and the focused cold-window UI case pass. Required affected suite, scripts, typecheck and build are running after the single final roadmap catchup. Next: read incoming decisions, exercise actual built web scenario, run one final cross-family review/fix batch, update receipts/docs, commit/detach and land through the authoritative queue controller. Exactly one item this iteration; no global completion marker for an ordinary land.
+All in-scope flows implemented. All workers, review processes, suites and the owned UI service have finished; no additional testing/debugging/reviews are authorized before the end phase. Commit current source/tests/docs, make bun run typecheck pass, detach and land m3-vault-consent-tip-completion through the authoritative queue controller. No new follow-up and no second item. An ordinary successful land does not print LOOP_DONE.

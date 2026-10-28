@@ -755,12 +755,18 @@ export class VaultService {
         status = await this.readLocalStatus()
         if (enabled && status.enabled) this.markSearchTipSeen()
       } catch (error) {
+        let retentionFailure = ''
         if (enabled) {
-          this.saveHistoryDays(previousHistoryDays)
+          // Turning search off must not depend on a writable ancillary plugin store.
           await this.context.call('setting.set', { id: SEARCH_SETTING, value: false }).catch(() => undefined)
           await this.applySearchPolicy({ enabled: false, historyDays: previousHistoryDays }).catch(() => undefined)
+          try {
+            this.saveHistoryDays(previousHistoryDays)
+          } catch (rollbackError) {
+            retentionFailure = `; could not restore history retention: ${messageOf(rollbackError)}`
+          }
         }
-        throw this.context.error('conflict', `could not ${enabled ? 'enable' : 'disable'} transcript search: ${messageOf(error)}`)
+        throw this.context.error('conflict', `could not ${enabled ? 'enable' : 'disable'} transcript search: ${messageOf(error)}${retentionFailure}`)
       }
       return status
     })

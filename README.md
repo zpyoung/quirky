@@ -35,11 +35,17 @@ titles only. Enabling stores a local searchable copy of unredacted conversations
 characters per tool result; authenticated clients can search that copy. Disable retains it.
 **Clear search data** disables search and removes only the derived index, not original transcripts.
 
+Vault owns the **Search every agent session** tip. A successful local enable marks it seen;
+disable, clear and restart preserve that state. The tip never grants consent: when search is
+off, the full disclosure and explicit **Enable** control remain available. Read the canonical
+state with `quirky vault search-tip --json` or `quirky.vault/getSearchTip`.
+
 The same core flows are scriptable:
 
 ```sh
 quirky vault list --unlimited --json
 quirky vault search --index-status --json
+quirky vault search-tip --json
 quirky vault enable
 quirky vault search 'remembered words' --fresh --json
 quirky vault resume '<id from list>'

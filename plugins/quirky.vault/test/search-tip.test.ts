@@ -193,12 +193,10 @@ test('tip-store write failure rejects opt-in and rolls an already enabled local 
   const store = new Database(join(vault.home, 'plugin-data', 'quirky.vault', 'store.db'))
   try {
     store.exec(`
-      CREATE TRIGGER fail_search_tip_insert BEFORE INSERT ON vault_state
-      WHEN NEW.name = 'searchTip:agent-session-search'
-      BEGIN SELECT RAISE(ABORT, 'forced search tip persistence failure'); END;
-      CREATE TRIGGER fail_search_tip_update BEFORE UPDATE ON vault_state
-      WHEN NEW.name = 'searchTip:agent-session-search'
-      BEGIN SELECT RAISE(ABORT, 'forced search tip persistence failure'); END;
+      CREATE TRIGGER fail_vault_state_insert BEFORE INSERT ON vault_state
+      BEGIN SELECT RAISE(ABORT, 'forced whole-store vault_state persistence failure'); END;
+      CREATE TRIGGER fail_vault_state_update BEFORE UPDATE ON vault_state
+      BEGIN SELECT RAISE(ABORT, 'forced whole-store vault_state persistence failure'); END;
     `)
   } finally {
     store.close()
@@ -209,7 +207,7 @@ test('tip-store write failure rejects opt-in and rolls an already enabled local 
     (error: unknown) => error
   )
   expect(failure).not.toBeNull()
-  expect(failure instanceof Error ? failure.message : JSON.stringify(failure)).toContain('forced search tip persistence failure')
+  expect(failure instanceof Error ? failure.message : JSON.stringify(failure)).toContain('forced whole-store vault_state persistence failure')
 
   // Read through the serialized owner before checking that the failed opt-in left policy off.
   expect(await getTip(vault)).toEqual({ id: 'agent-session-search', seen: false })

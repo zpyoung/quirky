@@ -60,7 +60,15 @@ No new scope. Other Vault parity flows retain their existing queue owner. Cross-
 - **Consent card:** The complete privacy disclosure and explicit enable control, which remains available whenever local search is off.
 - **Tip consumer:** The existing card changes promotional copy using canonical daemon state.
 
+## Verification evidence
+- A1–A5: search-tip.test.ts passes8 real daemon/API/CLI cases60 assertions: unseen/no DB; malformed durable JSON; local enable/query/restart; repeated enable/disable/clear; invalid enable; real worker failure/recovery; real tip-store failure/rollback; remote-only versus local/all enable.
+- A1–A3 consumer: focused SC-07 window test passes19 assertions, including active-query retry and cold-window ordinary consent after disable. The test exposed and closed a raw-status-event/envelope mismatch; diagnostic output and before/after results are in D5. React unmount warnings remain disclosed.
+- Actual packaged surface: guarded web report `.quirk/using-apps-like-a-user/runs/20261028T111325-20fc/report.md` passes the full tip-consent goal in6 actions, with no findings/gates/test overrides/kept-open windows/cleanup errors. This is web evidence, not Native proof.
+- Required gates: complete affected Vault suite16/16files with no retries; scripts68pass582assertions; final root typecheck exit0 after4 test-consumer typing corrections; full build29plugins25UI modules exit0 with icon/release-URL warnings. Native-only behavior is unchanged, so no new native scenario is needed.
+
 ## Status & amendments
 Status: Autonomous design accepted under LOOP.md; reviewed by Codex promote/refute. Parent rejected five scratch-copy-relative prepass path findings because the original sibling logic links resolve. One rollback wording claim was refuted; wording nevertheless made explicit. This same-family review has reduced independence and suppressed its sole model claim, not a clean cross-family assurance. Tech spec required by LOOP and daemon/window boundary.
 
 **Amendments:** 2026-10-28: Explicitly state existing fail-closed rollback also disables an already-enabled policy if a subsequent requested enable fails to persist tip state; no new permission is inferred.
+
+2026-10-28 operator policy: all in-scope behavior is implemented, including the confirmed whole-store rollback repair (focused RED then GREEN before the stop). Subsequent suites/review/dogfood are intentionally not run; typecheck and authoritative landing are the only remaining gates. Earlier broad verification evidence predates that final repair. Final review qualifications and the rejected X1 refutation are recorded in the item decision log D9–D11. No new follow-up is needed for an unbuilt flow.
