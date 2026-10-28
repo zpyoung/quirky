@@ -51,8 +51,8 @@ test('SC-62: View all opens a combined diff with lazy sections, a Load diff for 
     await w.win.waitFor(async () => (await w.viewReport())?.loadedSections.length === 6)
     const big = q('[data-git-view-root] section[data-path="big.txt"]')!
     expect(text(big)).toContain('Large diffs are not rendered by default.')
-    expect(q(big, '[aria-label="Added 12000 lines"]')).not.toBeNull()
-    expect(q(big, '[aria-label="Removed 12000 lines"]')).not.toBeNull()
+    expect(q('[aria-label="Added 12000 lines"]', big)).not.toBeNull()
+    expect(q('[aria-label="Removed 12000 lines"]', big)).not.toBeNull()
     expect(buttonText('Copy path', big)).toBeDefined()
     expect(buttonText('Open diff', big)).toBeDefined()
     await click(buttonText('Collapse All', q('[data-git-view-root]')!))

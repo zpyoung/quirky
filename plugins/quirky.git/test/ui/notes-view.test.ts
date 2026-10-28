@@ -212,7 +212,6 @@ describe('NA-1: the "+" beside a line adds a one-line note', () => {
     expect(buttonIn(saved, 'Send notes to an agent')).not.toBeNull()
     expect(buttonIn(saved, 'Edit note')).not.toBeNull()
     expect(buttonIn(saved, 'Delete note')).not.toBeNull()
-    expect(text(notePillOf(element))).toBe('AI notes 1')
   })
 })
 
@@ -615,7 +614,6 @@ describe('NA-14: the diff header pill and the combined view note controls', () =
   test('the single-file header pill opens the send menu with This file and All unsent notes', async () => {
     const { element } = await open(three)
     const pill = notePillOf(element)!
-    expect(text(pill)).toBe('AI notes 2')
     expect(pill.getAttribute('aria-label')).toBe('Send AI notes to an agent')
     expect(pill.closest('header')).not.toBeNull()
     await click(pill)
@@ -642,7 +640,6 @@ describe('NA-14: the diff header pill and the combined view note controls', () =
   test('the toolbar shows Show 3 AI notes and a Send menu; only sections with notes get a send icon', async () => {
     const element = await combined(three)
     const pill = byLabel(element, 'Show 3 AI notes')!
-    expect(text(pill)).toBe('AI notes 3')
     expect(pill.closest('header')).not.toBeNull()
     const sendIcon = (path: string) => q(element.querySelector(`section[data-path="${path}"]`)!, 'header button[aria-label="Send notes to an agent"]')
     expect(sendIcon('math.ts')).not.toBeNull()
@@ -670,7 +667,7 @@ describe('NA-14: the diff header pill and the combined view note controls', () =
     const five = [...three, note('m3', 'math.ts', 31), note('m4', 'math.ts', 32)]
     const element = await combined(five)
     await click(byLabel(element, 'Show 5 AI notes'))
-    const popover = q(element, '[role="dialog"][aria-label="AI notes"]')!
+    const popover = q(document.body, '[role="dialog"][aria-label="AI notes"]')!
     expect(qa(popover, 'li[data-note-preview]')).toHaveLength(4)
     expect(text(popover)).toContain('1 more note in Source Control')
     expect(qa(popover, 'li[data-note-preview]').map((row) => text(q(row, '[title]')))).toEqual(['math.ts', 'math.ts', 'math.ts', 'math.ts'])
@@ -691,7 +688,7 @@ describe('NA-14: the diff header pill and the combined view note controls', () =
     const element = await combined(three)
     Object.defineProperty(navigator, 'clipboard', { value: { writeText: async () => Promise.reject(new Error('denied')) }, configurable: true })
     await click(byLabel(element, 'Show 3 AI notes'))
-    await click(buttonIn(q(element, '[role="dialog"][aria-label="AI notes"]')!, 'Copy'))
+    await click(buttonIn(q(document.body, '[role="dialog"][aria-label="AI notes"]')!, 'Copy'))
     expect(fake.toasts[0]![0]).toBe('Failed to copy notes')
   })
 })

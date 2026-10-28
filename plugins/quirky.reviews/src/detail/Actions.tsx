@@ -172,6 +172,7 @@ export function ReviewActions(props: ReviewActionsProps) {
     ...(owner.repo === null ? {} : { prRepo: owner.repo }),
   }
   const busyFromState = props.surface === 'detail' && props.state.detail.pending.length > 0
+  const openState = review.state === 'open' || review.state === 'draft'
 
   const setErrorMessage = (error: unknown) => {
     const message = errorText(error)
@@ -382,7 +383,7 @@ export function ReviewActions(props: ReviewActionsProps) {
   return <section className="ui-stack" aria-label="Pull request actions">
     <SectionHeader title="Pull request" />
     <Badge tone={review.state === 'open' ? 'working' : review.state === 'merged' ? 'accent' : 'neutral'}>{review.state === 'open' ? 'Open' : review.state === 'draft' ? 'Draft' : review.state === 'closed' ? 'Closed' : 'Merged'}</Badge>
-    <Badge title={statusLine(review)} tone={review.checksStatus === 'failure' || hasConflict ? 'failing' : review.reviewDecision === 'REVIEW_REQUIRED' || review.reviewDecision === 'CHANGES_REQUESTED' ? 'needs-you' : review.checksStatus === 'success' ? 'working' : 'neutral'}>{mergeStateLabel(review)}</Badge>
+    <span title={statusLine(review)}><Badge tone={review.checksStatus === 'failure' || hasConflict ? 'failing' : review.reviewDecision === 'REVIEW_REQUIRED' || review.reviewDecision === 'CHANGES_REQUESTED' ? 'needs-you' : review.checksStatus === 'success' ? 'working' : 'neutral'}>{mergeStateLabel(review)}</Badge></span>
     <p className="ui-text-muted">{statusLine(review)}</p>
     {stackPresent ? <section className="ui-stack" aria-label="Pull request stack">
       <strong>{stackComplete ? `Stack ${stack?.stack?.number}: ${included.length} pull requests included` : 'Stack membership unavailable'}</strong>

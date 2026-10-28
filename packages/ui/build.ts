@@ -58,7 +58,7 @@ const pluginBuilds = await Promise.all(
       minify: true,
       splitting: true,
       outdir: outputDirectory,
-      naming: { entry: 'ui.js', chunk: 'chunk-[hash].[ext]', asset: 'asset-[hash].[ext]' },
+      naming: { entry: 'ui.[ext]', chunk: 'chunk-[hash].[ext]', asset: 'asset-[hash].[ext]' },
       external: shared,
       define
     })

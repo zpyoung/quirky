@@ -266,6 +266,7 @@ describe('NA-11: notes are copied as their prompt text', () => {
 })
 
 describe('NA-12: notes are cleared per file or all at once, after a yes', () => {
+  const dialog = () => q(document.body, '[role="dialog"]')
   const dialogTitle = () => {
     const titleId = dialog()?.getAttribute('aria-labelledby')
     return titleId ? document.getElementById(titleId)?.textContent ?? null : null
@@ -440,7 +441,7 @@ describe('NA-17: the send menu offers scopes, then targets', () => {
     const sub = menus()[1]!
     expect(menuText(sub)).toContain('Send notes to')
     const [s1, s2] = menuButtons(sub) as HTMLButtonElement[]
-    expect(text(s1!)).toContain('Working · 2m ago · fix tests')
+    expect((s1!.textContent ?? '').replace(/\s+/g, ' ').trim()).toContain('Working · 2m ago · fix tests')
     expect(q(s1!, '[role="img"][aria-label="Working"]')).not.toBeNull()
     expect(s1!.disabled).toBe(false)
     expect(s2!.disabled).toBe(true)

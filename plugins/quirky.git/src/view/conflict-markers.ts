@@ -55,6 +55,7 @@ class LabelWidget extends WidgetType {
   }
 
   toDOM(): HTMLElement {
+    const span = document.createElement('span')
     span.className = 'ui-editor-conflict-label'
     span.textContent = this.label
     return span

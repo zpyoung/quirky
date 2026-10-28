@@ -337,12 +337,15 @@
 .ui-section-header {
   align-items: center;
   display: flex;
+  flex-wrap: wrap;
   gap: var(--ui-space-8);
   justify-content: space-between;
   min-height: var(--ui-row-single);
 }
 
 .ui-section-header__title {
+  flex-shrink: 0;
+  max-width: 100%;
   color: var(--ui-muted);
   font-size: var(--ui-font-section);
   font-weight: 700;
@@ -356,6 +359,8 @@
 .ui-section-header__actions {
   align-items: center;
   display: flex;
+  flex-wrap: wrap;
+  max-width: 100%;
   gap: var(--ui-space-4);
   min-width: 0;
 }

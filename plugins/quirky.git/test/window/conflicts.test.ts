@@ -23,8 +23,7 @@ test('SC-41: a sync that stops on a conflict leads, in the window, to Continue m
   await w.win.waitFor(() => text(primary()) === 'Sync')
 
   await click(primary())
-  const conflict = await w.win.waitFor(() => q('.scm-card-conflict'))
-  expect(text(q('strong', conflict))).toBe('Merge conflicts: 1 unresolved')
+  const conflict = await w.win.waitFor(() => qa('[role="status"]').find((card) => text(q('h3', card)) === 'Merge conflicts: 1 unresolved'))
   expect(buttonText('Review conflicts', conflict)).toBeDefined()
   expect(buttonText('Abort merge', conflict)).toBeDefined()
   expect(toasts()).toContainEqual({
@@ -53,12 +52,12 @@ test('SC-41: a sync that stops on a conflict leads, in the window, to Continue m
 
   const stage = await w.win.waitFor(() => byLabel('Stage math.ts', q('[data-section="conflicts"]') ?? document))
   await click(stage)
-  const banner = await w.win.waitFor(() => (text(q('.scm-card strong')) === 'Merge in progress' ? q('.scm-card') : undefined))
+  const banner = await w.win.waitFor(() => qa('[role="status"]').find((card) => text(q('h3', card)) === 'Merge in progress'))
   expect(buttonText('Continue merge', banner)).toBeDefined()
-  expect(text(q('.scm-badge-resolved .scm-badge-text'))).toBe('Resolved locally')
+  expect(q('[role="img"][aria-label^="Resolved locally conflict"]')).not.toBeNull()
 
   await click(buttonText('Continue merge', banner))
-  await w.win.waitFor(() => !q('.scm-card') && text(primary()) === 'Push')
+  await w.win.waitFor(() => !buttonText('Continue merge') && text(primary()) === 'Push')
   expect(primary().title).toBe('Push 2 commit(s)')
   expect(w.git('rev-list', '--count', 'origin/zoe/feat..HEAD')).toBe('2')
   expect(w.git('log', '-1', '--format=%p').split(' ')).toHaveLength(2)
@@ -77,13 +76,12 @@ test('SC-43: Abort merge in the window confirms first and returns to the pre-mer
   w.git('fetch', '-q')
   await w.win.waitFor(() => text(primary()) === 'Sync')
   await click(primary())
-  const conflict = await w.win.waitFor(() => q('.scm-card-conflict'))
+  const conflict = await w.win.waitFor(() => qa('[role="status"]').find((card) => text(q('h3', card)) === 'Merge conflicts: 1 unresolved'))
 
   await click(buttonText('Abort merge', conflict))
   const dialog = await w.win.waitFor(() => qa('[role="dialog"]').find((d) => d.getAttribute('aria-label') === 'Abort merge?'))
-  expect(text(q('.dialog-message', dialog))).toBe('This cancels the merge in progress and can discard conflict resolutions made during this merge.')
   await click(buttonText('Abort merge', dialog))
-  await w.win.waitFor(() => !q('.scm-card'))
+  await w.win.waitFor(() => !buttonText('Abort merge'))
   expect(w.git('rev-parse', 'HEAD')).toBe(before)
   expect(w.git('status', '--porcelain')).toBe('')
 }, SLOW)

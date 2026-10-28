@@ -443,7 +443,7 @@ function Section(props: SectionProps) {
       (hits) => {
         if (hits.some((hit) => hit.isIntersecting)) onVisible(key)
       },
-      { root, rootMargin: '100% 0' }
+      { root, rootMargin: '100% 0%' }
     )
     observer.observe(el)
     return () => {

@@ -52,7 +52,7 @@ test('NA-1: the "+" beside line 12 adds a note that every part of the window sho
   expect(await stored(w)).toMatchObject([{ path: 'math.ts', startLine: 12, line: 12, body: 'Handle the empty list' }])
   expect(text(q('button[aria-label="Show 1 AI note"]'))).toBe('AI notes 1')
   await w.win.waitFor(() => q('[data-note-count]', rowContainerOf('math.ts')!)?.title === '1 note')
-  expect(text(q('.ui-section-header__title', q('section[aria-label="Notes"]')))).toBe('Notes')
+  expect(text(q('.ui-section-header__title', q('section[aria-label="Notes"]')!))).toBe('Notes')
   expect(text(q('section[aria-label="Notes"] [aria-label="1 note"]'))).toBe('1')
 
   await click(byLabel('Edit note', card))
@@ -60,7 +60,7 @@ test('NA-1: the "+" beside line 12 adds a note that every part of the window sho
   await type(editor, 'Handle empty and null')
   await press(editor, 'Enter')
   await w.win.waitFor(async () => (await stored(w))[0]?.body === 'Handle empty and null')
-  await w.win.waitFor(() => text(q('p', q('[data-note-card="saved"]'))) === 'Handle empty and null')
+  await w.win.waitFor(() => text(q('p', q('[data-note-card="saved"]')!)) === 'Handle empty and null')
 
   await click(byLabel('Delete note', q('[data-note-card="saved"]')!))
   await w.win.waitFor(async () => (await stored(w)).length === 0)

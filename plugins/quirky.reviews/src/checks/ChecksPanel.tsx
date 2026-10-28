@@ -780,7 +780,7 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
   const currentTargetRef = useRef<ChecksPollingTarget | null>(currentTarget)
   currentTargetRef.current = currentTarget
   const pending = currentTarget?.pending ?? false
-  const isPanelVisible = layout.panel === CHECKS_PANEL && windowVisible
+  const isPanelVisible = Object.values(layout.tools?.open ?? {}).includes(CHECKS_PANEL) && windowVisible
   useEffect(() => setAuthDiagnostics(null), [activeWorktree])
 
   useEffect(() => context.onLayout(setLayout), [context])
@@ -837,7 +837,7 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
       return
     }
     const runtime: ChecksPollingRuntime = {
-      visible: () => context.getLayout().panel === CHECKS_PANEL && typeof document !== 'undefined' && document.visibilityState === 'visible',
+      visible: () => Object.values(context.getLayout().tools?.open ?? {}).includes(CHECKS_PANEL) && typeof document !== 'undefined' && document.visibilityState === 'visible',
       subscribeVisibility: (listener) => {
         document.addEventListener('visibilitychange', listener)
         return () => document.removeEventListener('visibilitychange', listener)

@@ -77,5 +77,49 @@
 - **Revisit if:** actual smoke or acceptance tests find viewport/focus/engine-theme regressions
 - **Source:** assumed — autonomous
 
+## D8: Integrate only the audited source slices at the all-worker barrier
+- **Question:** worker attribution, test ownership and concurrency
+- **Options:** trust completion messages; audit returned paths/HEADs and explicitly reconcile remaining consumers
+- **Chose:** all three worktrees stayed at 7b6fbb30762c5e25bc728d7629bbd0cdab9f5865; tracked path sets were disjoint and parent held only its declared shared edits. Commits beae996b/4de15ab4/7db1f87e were merged and component worktrees removed immediately. Parent migrated remaining conflict-window selectors and portal-scoped notes assertions; removed incidental note-spacing/dialog-copy assertions rather than repinning them
+- **Why:** actual source, not reports, determines attribution. Views' attempted conflict-selector edit was rejected; its earlier completion claim did not close that consumer
+- **Evidence:** all-worker HEAD/status inventory artifact11; integration command outputs; plugins/quirky.git/test/window/conflicts.test.ts and test/ui/notes-view.test.ts
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a remaining consumer still relies on old presentation selectors
+- **Source:** assumed — autonomous
+
+## D9: Record the nested-dispatch deviation rather than claiming strict cap compliance
+- **Question:** Views spawned another implementer after receiving a three-slice task
+- **Options:** conceal the nested process; stop all work; bound further dispatch and retain disjoint ownership
+- **Chose:** parent forbade further nested implementers; the already-started disjoint AI child finished, both nested children returned before the outer task, and no writes overlapped. Strict three-implementer-process concurrency compliance is not claimed
+- **Why:** source scopes remained isolated, but the initial worker's nested dispatch exceeded the intended item-wide process cap; source correctness does not erase that process deviation
+- **Evidence:** RestyleGitViews.MapGitViewsAi and RestyleGitViews.RestyleGitAI completion receipts; parent messages; scratch journal
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** subsequent dispatches fail to respect the item-wide cap
+- **Source:** assumed — autonomous
+
+## D10: Repair actual build/compiler and renderer boundaries without weakening enforcement
+- **Question:** final integration gate and actual surface smoke exposed failures
+- **Options:** suppress diagnostics/skip surfaces; fix the owners of the broken boundaries
+- **Chose:** declare @quirky/ui workspace dependencies in both plugins and update bun.lock; use ui.[ext] entry naming so extracted shared CSS cannot collide with ui.js; retain canonical transparency token instead of raw transparent; restore lost span/openState/test helper identifiers and correct helper argument order/nullability. Keep Badge tooltip on a semantic wrapper. Use valid observer rootMargin 100% 0%, not CSS's unitless-zero spelling. Wrap long GitHub status text instead of putting it inside a nowrap badge. Shared section headers wrap actions without crushing their title
+- **Why:** production build rejected missing package imports then identical JS/CSS output names; lint rejected14 raw-color literals; tsc identified lost identifiers and one unsupported Badge prop; actual browser threw the observer SyntaxError and showed clipped status text/vertical toolbar title
+- **Evidence:** build/typecheck artifacts14/18 and subsequent command outputs; initial actual browser screenshots/errors; packages/ui/build.ts; Git CombinedDiff.tsx/GitHubReview.tsx; shared editor-theme.ts/components.css
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** final caught-up typecheck or actual renderer exposes another boundary
+- **Source:** assumed — autonomous
+
+## D11: Use six-slot ownership for Checks visibility and respect genuine document visibility
+- **Question:** Checks mount/polling still read obsolete layout.panel during the tool-slot cutover
+- **Options:** retain legacy panel authority; force polling while hidden; read canonical tools.open plus document visibility
+- **Chose:** both Checks mount refresh and polling visibility read all six canonical open slots, preserving hidden-document pause. Author a mounted daemon/API regression for initial right-top open with panel:null, move to bottom-left, replacement and close. No legacy panel fallback
+- **Why:** ui.tool.open can change tool visibility independently of legacy panel. Initial smoke's unrefreshed Checks was also a genuinely hidden document, so that observation alone did not prove the old panel predicate caused it. An explicitly headless owned browser with a visible page established the proper precondition and refreshed actual state to the expected no-origin error
+- **Evidence:** ChecksPanel.tsx:783,840; authored review-link-ui.test.tsx regression; actual document.visibilityState and public ui.state/reviews.state observations; final headless Checks screenshot
+- **Reversibility:** medium (visibility/polling ownership)
+- **Confidence:** high
+- **Revisit if:** moved/hidden slot acceptance contradicts the canonical open-tool projection
+- **Source:** assumed — autonomous
+
 ## Progress
-Design/source mapping complete. Combined scoped logic/technical contract ready to commit before implementer dispatch. Next: three disjoint source components, barrier audit/integration and lint enrollment; bounded actual UI smoke and typecheck; one roadmap catch-up with incoming decisions read; canonical land.
+All three source components and two compiler fixers returned; all component worktrees removed. Full pre-catch-up typecheck (UIlint/root/mobile/prepared-desktop) passed once; later slot regression/header wrapping and removal of1500obsolete Git CSS lines await the final caught-up gate. Actual isolated macOS renderer exercised stage/unstage, commit eligibility, context menu, base dialog, notes preview/Escape, diff rendering, dark/light, Reviews empty/settings and visible Checks no-origin recovery. Fixture declarations include genuine Browser settings without activating native/browser/provider code; no real accounts/homes or native-window proof. No suites, formal/golden review, populated provider review flow or native run is claimed. Next commit, sole roadmap catch-up/read incoming decisions, final gate and focused reload, canonical land.

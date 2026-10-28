@@ -76,9 +76,9 @@ test('NA-9, NA-10, NA-13: the shelf, the row counts and the overflow item agains
     ['util.ts', 'Lines 2-4', 'Note util']
   ])
   await w.win.waitFor(() => rowOf('util.ts', 'staged') && rowOf('README.md', 'branch'))
-  expect(q(rowContainerOf('math.ts', 'unstaged')!, '[data-note-count]')?.title).toBe('2 notes')
-  expect(q(rowContainerOf('util.ts', 'staged')!, '[data-note-count]')?.title).toBe('1 note')
-  expect(q(rowContainerOf('README.md', 'branch')!, '[data-note-count]')?.title).toBe('1 note')
+  expect(q('[data-note-count]', rowContainerOf('math.ts', 'unstaged')!)?.title).toBe('2 notes')
+  expect(q('[data-note-count]', rowContainerOf('util.ts', 'staged')!)?.title).toBe('1 note')
+  expect(q('[data-note-count]', rowContainerOf('README.md', 'branch')!)?.title).toBe('1 note')
 
   await click(byLabel('More source control actions'))
   expect(qa('[role="menu"] button').map(text)).toContain('Notes 5')

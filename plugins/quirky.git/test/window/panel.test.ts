@@ -3,7 +3,7 @@ import { chmodSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Repo, Worktree } from '@quirky/protocol'
 import { isolateGitConfig, makeRepo } from '../../../quirky.repo/test/git-fixtures'
-import { buttonText, byLabel, click, dialogNamed, press, q, qa, rowOf, sectionHeadings, text, type } from './dom'
+import { buttonText, byLabel, click, dialogNamed, press, q, qa, rowContainerOf, rowOf, sectionHeadings, text, type } from './dom'
 import { boot, DIFF_VIEW, openView, SESSION_VIEW, sc1, shutdown, type World } from './world'
 
 const { scratch } = isolateGitConfig()
@@ -192,8 +192,9 @@ test('SC-7: a dirty submodule row expands to its read-only changes from the daem
 
   await click(byLabel('Expand vendor/lib'))
   await w.win.waitFor(() => qa('[data-submodule-entry]').length === 1)
-  expect(text(q('[data-row-name]', q('[data-submodule-entry]')))).toBe('x.c')
-  expect(text(q('[aria-label="Git status modified"]', q('[data-submodule-entry]')))).toBe('M')
+  const submoduleEntry = q('[data-submodule-entry]')!
+  expect(text(q('[data-row-name]', submoduleEntry))).toBe('x.c')
+  expect(text(q('[aria-label="Git status modified"]', submoduleEntry))).toBe('M')
   expect(qa('[data-submodule-entry] button')).toHaveLength(0)
   expect((await openView(w))?.id).not.toBe(DIFF_VIEW)
 

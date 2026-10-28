@@ -141,7 +141,7 @@ test('SC-59: a capped status offers to add node_modules to .gitignore, once', as
   w.write('math.ts', 'a\nB\nc\nd\ne\n')
   const notice = await w.win.waitFor(() => q('[aria-label="Source control notices"] > [role="status"], [aria-label="Source control notices"] > [role="alert"]'), 20_000)
   expect(text(notice)).toContain('This repository has too many active changes. Add "node_modules" to .gitignore?')
-  expect(text(q('h3', q('[role="status"] .ui-inline-agent-card')))).toBe('Too many changes detected. Only the first 1000 are shown.')
+  expect(text(q('h3', q('[role="status"] .ui-inline-agent-card')!))).toBe('Too many changes detected. Only the first 1000 are shown.')
   await click(buttonText('Add to .gitignore', notice))
   await w.win.waitFor(() => !q('[role="status"] .ui-inline-agent-card h3'), 20_000)
   expect(await Bun.file(`${w.dir}/.gitignore`).text()).toContain('node_modules/')

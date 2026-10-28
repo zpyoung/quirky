@@ -250,10 +250,8 @@ export function GitHubReviewStatus({ context, lookup, aiEnabled = false, busy = 
   if (lookup.kind === 'unavailable') {
     return (
       <div className="ui-stack">
-        <p role="status" style={{ margin: 0 }}>
-          <Badge tone="needs-you">
-            <span data-scm-review-status data-state="unavailable">GitHub pull-request lookup unavailable: {lookup.message}</span>
-          </Badge>
+        <p role="status" data-scm-review-status data-state="unavailable" className="ui-text-muted" style={{ margin: 0, overflowWrap: 'anywhere' }}>
+          GitHub pull-request lookup unavailable: {lookup.message}
         </p>
         {actions(false)}
       </div>
@@ -262,10 +260,8 @@ export function GitHubReviewStatus({ context, lookup, aiEnabled = false, busy = 
   if (lookup.kind === 'no-review') {
     return (
       <div className="ui-stack">
-        <p role="status" style={{ margin: 0 }}>
-          <Badge tone="neutral">
-            <span data-scm-review-status data-state="no-review">No pull request is linked to this branch.</span>
-          </Badge>
+        <p role="status" data-scm-review-status data-state="no-review" className="ui-text-muted" style={{ margin: 0, overflowWrap: 'anywhere' }}>
+          No pull request is linked to this branch.
         </p>
         {actions(false)}
       </div>
