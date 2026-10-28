@@ -59,7 +59,7 @@ async function decode(command: Command, payload: string, signal: AbortSignal): P
   if ((command.t ?? 'd') !== 'd') throw new Error('ENOTSUP: only direct graphics transmission is authorized')
   if (payload.length > MAX_BYTES || payload.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(payload)) throw new Error('EINVAL: invalid or oversized base64 graphics')
   const raw = atob(payload)
-  let bytes = Uint8Array.from(raw, (char) => char.charCodeAt(0))
+  let bytes: Uint8Array = Uint8Array.from(raw, (char) => char.charCodeAt(0))
   if (command.o !== undefined) {
     if (command.o !== 'z') throw new Error('ENOTSUP: unsupported graphics compression')
     bytes = await inflate(bytes, signal)

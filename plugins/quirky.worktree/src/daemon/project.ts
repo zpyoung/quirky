@@ -14,7 +14,7 @@ type PreferenceRow = {
 
 type ProjectEnv = {
   store: PluginStore
-  fail(kind: 'invalid-params' | 'not-found', message: string): Error
+  fail(kind: 'invalid-params' | 'not-found' | 'conflict', message: string): Error
   call(method: string, params: Record<string, unknown>): Promise<unknown>
   resolveRepo(selector: string): Promise<Repo>
 }

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { Worktree } from '@quirky/protocol'
 import { gitApi } from '@quirky/git'
+import { readCompare } from './compare'
 import { buildBranchNamePrompt, buildConversationNamePrompt, renderTemplate } from './ai-prompts'
 import {
   parseLaunchOptions,

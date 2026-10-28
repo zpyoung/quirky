@@ -4,6 +4,7 @@ import {
   PUSH_FAILURE_PROMPT_FILE_LIMIT,
   STAGED_DIFF_BYTE_BUDGET,
   buildBranchNamePrompt,
+  buildBranchSummaryPrompt,
   buildConversationNamePrompt,
   buildCommitMessagePrompt,
   buildFixCommitFailurePrompt,

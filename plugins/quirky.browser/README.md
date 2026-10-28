@@ -148,3 +148,8 @@ The controls show queued/running progress, then the actual imported/skipped/Goog
 Replacement is restricted to safely imported registrable domain families, including private public-suffix rules. Unrelated cookies remain untouched. Google logins are excluded; sign in to Google directly in Quirky. Unreadable partition/decryption families are preserved instead of being wiped by partial imports. Failed writes restore the previous exact cookie identities; an unprovable rollback fails explicitly as `browser_unsafe_replace`. There is no plaintext restart-staging fallback or success claim for rejected live writes.
 
 Cookie and storage CRUD share the same scoped API/CLI. Dialog accept/dismiss uses the current exact page session outside the ordinary command FIFO, allowing a pending prompt-producing evaluation to complete without answering another page. Clipboard operations use Chrome's private modern-headless clipboard, not the desktop clipboard.
+
+## Floating workspace destinations
+
+`paneOpen` and `pane open` accept explicit `worktree:"floating"` and an optional exact terminal `group`. The public editor owner supplies only its profile-owned floating document root; HOME and other worktrees are not inferred. Native and Watch retain their existing separate owners, profile rules and resource lifetimes. Opening a floating Browser tab does not navigate the main worktree view. Real native focus and system-webview visibility remain in the native handoff.
+

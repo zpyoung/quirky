@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { existsSync, lstatSync, mkdirSync, realpathSync } from 'node:fs'
-import { isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { gitApi } from '@quirky/git'
 import type { PluginStore, Repo } from '@quirky/protocol'
 
@@ -285,6 +285,21 @@ export async function claimPreparedCheckout(
       await removePrepared(env, repo, row)
       return false
     }
+    // `git worktree move` does not create the first per-project parent directory.
+    const parent = resolve(dirname(destination))
+    const parentRelative = relative(resolve(rootPath), parent)
+    if (parentRelative === '..' || parentRelative.startsWith(`..${sep}`) || isAbsolute(parentRelative)) return false
+    let directory = resolve(rootPath)
+    for (const part of parentRelative.split(sep).filter(Boolean)) {
+      directory = join(directory, part)
+      try { mkdirSync(directory) } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+      }
+      const info = lstatSync(directory)
+      if (!info.isDirectory() || info.isSymbolicLink() || realpathSync(directory) !== directory) {
+        throw new Error('prepared checkout destination parent is not a real owned directory')
+      }
+    }
 
     await runGit(repo.path, ['worktree', 'unlock', row.path])
     await runGit(repo.path, ['worktree', 'move', row.path, destination])
@@ -293,7 +308,11 @@ export async function claimPreparedCheckout(
       deleteRow(env.store, row.id)
       return true
     } catch (error) {
-      await git.removeWorktree(repo.path, destination, true).catch(() => undefined)
+      const removed = await git.removeWorktree(repo.path, destination, false).then(() => true, (cleanupError) => {
+        env.log(`kept failed preparation at ${destination}: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`)
+        return false
+      })
+      if (!removed) return false
       await git.deleteRefIfAt(repo.path, branch, baseOid).catch(() => false)
       deleteRow(env.store, row.id)
       env.log(`discarded prepared checkout after branch materialization failed: ${error instanceof Error ? error.message : String(error)}`)

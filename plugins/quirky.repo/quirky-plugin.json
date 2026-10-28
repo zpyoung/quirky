@@ -634,6 +634,7 @@
                 }
               },
               "required": ["agentStartup", "sharedDirectories", "warnings", "defaultTabsTrust", "defaultTabsRunCommands", "environmentRecipeDiagnostics"]
+            }
           },
           "required": [
             "repo",

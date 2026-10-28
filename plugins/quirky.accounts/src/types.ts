@@ -102,7 +102,6 @@ export type PrepareInput = {
     providerSession: { id: string; transcriptPath: string | null }
   }
 }
-export type ProviderPrepareInput = Omit<PrepareInput, 'sessionId' | 'worktreeId' | 'resume'>
 
 export type AccountPrepareResult = {
   env: Record<string, string | null>

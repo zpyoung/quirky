@@ -55,7 +55,7 @@ function viewWorktree(layout: UiLayout): unknown {
 test('navigation history and open-in are isolated by exact kernel UI connection', async () => {
   const w = await start()
   world = w
-  const [first, second] = await Promise.all([w.harness.connect('ui'), w.harness.connect('ui')])
+  const [first, second] = await Promise.all([w.harness.connectAs({}, 'ui'), w.harness.connectAs({}, 'ui')])
   const ids = await connIds(w.harness.client)
   expect(ids).toHaveLength(2)
   const [firstId, secondId] = ids
@@ -92,7 +92,7 @@ test('navigation history and open-in are isolated by exact kernel UI connection'
 test('create activation refuses an untargeted multiwindow before worktree mutation', async () => {
   const w = await start()
   world = w
-  await Promise.all([w.harness.connect('ui'), w.harness.connect('ui')])
+  await Promise.all([w.harness.connectAs({}, 'ui'), w.harness.connectAs({}, 'ui')])
   await expect(call(w.harness.client, 'quirky.worktree/create', {
     repo: w.repo.id,
     name: 'ambiguous-activation',
@@ -113,7 +113,7 @@ test('create activation refuses an untargeted multiwindow before worktree mutati
 test('sleep parks only the selected window view and leaves sessions and other layouts alive', async () => {
   const w = await start()
   world = w
-  const [first, second] = await Promise.all([w.harness.connect('ui'), w.harness.connect('ui')])
+  const [first, second] = await Promise.all([w.harness.connectAs({}, 'ui'), w.harness.connectAs({}, 'ui')])
   const [firstId, secondId] = await connIds(w.harness.client)
   const worktree = await create(w.harness.client, w.repo.id, 'parked')
   const other = await create(w.harness.client, w.repo.id, 'other')
@@ -131,10 +131,40 @@ test('sleep parks only the selected window view and leaves sessions and other la
   expect(await call(w.harness.client, 'quirky.worktree/navigationState', { window: firstId })).toMatchObject({ worktrees: [worktree.id], index: 0 })
 })
 
+test('sleep resolves explicit view selectors before parking and refuses unknown view owners', async () => {
+  const w = await start()
+  world = w
+  const ui = await w.harness.connectAs({}, 'ui')
+  const [connId] = await connIds(w.harness.client)
+  const worktree = await create(w.harness.client, w.repo.id, 'selector-owned-view')
+  const session = await call(w.harness.client, 'quirky.session/create', { worktree: worktree.id, agent: 'shell' }) as { id: string }
+  await call(ui, 'ui.window.view.open', {
+    connId,
+    id: 'view:quirky.session/worktree',
+    input: { worktree: `id:${worktree.id}` }
+  })
+
+  await call(w.harness.client, 'quirky.worktree/sleep', { worktree: worktree.id, window: connId })
+  expect((await layoutFor(ui, connId!)).view).toBeNull()
+  const sessions = await call(w.harness.client, 'quirky.session/list', { worktree: worktree.id }) as Array<{ id: string }>
+  expect(sessions.some((row) => row.id === session.id)).toBe(true)
+
+  const unknown = await create(w.harness.client, w.repo.id, 'unknown-selector-view')
+  await call(ui, 'ui.window.view.open', {
+    connId,
+    id: 'view:quirky.session/worktree',
+    input: { worktree: 'id:wt_missing' }
+  })
+  await expect(call(w.harness.client, 'quirky.worktree/sleep', { worktree: unknown.id, window: connId })).rejects.toThrow(/could not sleep/i)
+  const worktrees = await call(w.harness.client, 'quirky.worktree/list') as Array<{ id: string; sleeping: boolean }>
+  expect(worktrees.find((row) => row.id === unknown.id)?.sleeping).toBe(false)
+  expect((await layoutFor(ui, connId!)).view).not.toBeNull()
+})
+
 test('compare-and-close refuses a stale inspected view without closing the newly selected view', async () => {
   const w = await start()
   world = w
-  const ui = await w.harness.connect('ui')
+  const ui = await w.harness.connectAs({}, 'ui')
   const [connId] = await connIds(w.harness.client)
   const first = await create(w.harness.client, w.repo.id, 'first')
   const second = await create(w.harness.client, w.repo.id, 'second')
@@ -148,7 +178,7 @@ test('compare-and-close refuses a stale inspected view without closing the newly
 test('navigation CLI targets the selected numeric window and refuses missing window identities', async () => {
   const w = await start()
   world = w
-  const [first, second] = await Promise.all([w.harness.connect('ui'), w.harness.connect('ui')])
+  const [first, second] = await Promise.all([w.harness.connectAs({}, 'ui'), w.harness.connectAs({}, 'ui')])
   const [firstId, secondId] = await connIds(w.harness.client)
   const rows = await call(w.harness.client, 'quirky.worktree/list') as Worktree[]
   const primary = rows.find((row) => row.isMain)!

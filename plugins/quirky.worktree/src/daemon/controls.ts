@@ -17,6 +17,7 @@ import { worktreeIdForPath } from '../../paths'
 import type { CallerIdentity } from '../../selector'
 import { listGroup, listProject, type ListEnv } from './list'
 import { removeWorktree, type RemoveEnv } from './remove'
+import { rowOf } from './store'
 import { closeWindowView, selectWindow, type SelectedWindow } from './window'
 
 const DAY_MS = 24 * 60 * 60 * 1_000
@@ -362,6 +363,7 @@ function addActiveBlockers(
   worktree: WorktreeControl,
   ui: WindowEvidence,
   sidebar: ReadEvidence,
+  knownWorkspaceIds: ReadonlySet<string>,
   blockers: CleanupBlocker[]
 ): unknown[] {
   const identityParts: unknown[] = []
@@ -388,6 +390,10 @@ function addActiveBlockers(
       const activeId = typeof input.worktree === 'string' ? input.worktree : null
       const activePath = typeof input.path === 'string' ? input.path : null
       identityParts.push([window.connId, view.id ?? null, activeId, activePath])
+      if ((activeId !== null && !knownWorkspaceIds.has(activeId)) ||
+        (activeId === null && (activePath === null || !isAbsolute(activePath)))) {
+        addBlocker(blockers, 'active-workspace-unknown', `UI connection ${window.connId} has no resolved canonical workspace owner.`)
+      }
       if (activeId === worktree.id || (activePath !== null && pathIsWithin(worktree.path, activePath))) {
         addBlocker(blockers, 'active-workspace', `This workspace is open in UI connection ${window.connId}.`)
       }
@@ -585,6 +591,7 @@ async function buildCleanupSnapshot(env: ControlEnv): Promise<Snapshot> {
   }))
   const groups = await env.list.groups()
   const worktrees = [...projectWorktrees.flat(), ...groups.flatMap((group) => listGroup(env.list, group))]
+  const knownWorkspaceIds = new Set(worktrees.map((worktree) => worktree.id))
   const repoById = new Map(repos.map((repo) => [repo.id, repo]))
   const childrenById = new Set(worktrees.flatMap((worktree) => worktree.parentId ? [worktree.parentId] : []))
   const [sessionEvidence, ui, editor, sidebar] = await Promise.all([
@@ -621,7 +628,7 @@ async function buildCleanupSnapshot(env: ControlEnv): Promise<Snapshot> {
     if (worktree.cleanupContext.remoteConnected === null) {
       addBlocker(blockers, 'remote-context-unknown', 'The worktree has no authoritative local repo or remote-host connectivity evidence.')
     }
-    fingerprintEvidence.push(addActiveBlockers(worktree, ui, sidebar, blockers))
+    fingerprintEvidence.push(addActiveBlockers(worktree, ui, sidebar, knownWorkspaceIds, blockers))
     fingerprintEvidence.push(addEditorBlockers(worktree, editor, blockers))
     if (worktree.kind === 'git') {
       fingerprintEvidence.push(await gitBlockers(env, worktree, repository, blockers))

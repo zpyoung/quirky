@@ -52,6 +52,7 @@ type MobileRpcClientOptionsWithoutToken = Omit<MobileRpcClientOptions, 'token'>
 type Deferred<T> = { promise: Promise<T>; resolve(value: T): void; reject(reason: unknown): void }
 type PendingCall = { resolve(value: unknown): void; reject(reason: unknown): void; timer: ReturnType<typeof setTimeout> }
 type E2EEAuth = { type: 'e2ee_auth'; v: 2; transcriptHashB64: string; deviceToken: string }
+
 const DEFAULT_CONNECT_TIMEOUT_MS = 12_000
 const DEFAULT_HANDSHAKE_TIMEOUT_MS = 5_000
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000

@@ -289,7 +289,7 @@ test('workspace status icon/avatar controls persist safe plain text and render o
   await click(button(dialog, 'Save statuses')!)
   await win.waitFor(() => document.querySelector('[role="dialog"]') === null)
 
-  const statuses = await agent.callAny('quirky.worktree/statusDefinitions') as Array<{ id: string; icon?: string }>
+  const statuses = await agent.callAny('quirky.worktree/statusDefinitions', {}) as Array<{ id: string; icon?: string }>
   expect(statuses.find((status) => status.id === 'in-review')?.icon).toBe('🧪')
   const board = await win.waitFor(() => button(document, 'Workspace board'))
   await click(board)

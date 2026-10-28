@@ -130,9 +130,12 @@ export async function runCodexAppServerModelProbe(
     return { ok: false, reason: 'could-not-start' }
   }
 
-  const stdin = child.stdin as WritableStream<Uint8Array>
+  const stdin = child.stdin as Bun.FileSink
   const stdout = child.stdout as ReadableStream<Uint8Array>
-  const writer = stdin.getWriter()
+  const send = async (message: Record<string, unknown>): Promise<void> => {
+    stdin.write(`${JSON.stringify(message)}\n`)
+    await stdin.flush()
+  }
   const reader = stdout.getReader()
   const decoder = new TextDecoder('utf-8', { fatal: true })
   const timeout = Promise.withResolvers<ModelProbeResult>()
@@ -179,7 +182,7 @@ export async function runCodexAppServerModelProbe(
   }
 
   const request = async (id: number, method: string, params: Record<string, unknown>): Promise<unknown> => {
-    await writer.write(Buffer.from(`${JSON.stringify({ id, method, params })}\n`, 'utf8'))
+    await send({ id, method, params })
     for (;;) {
       const message = await readMessage()
       if (Object.hasOwn(message, 'method')) {
@@ -201,7 +204,7 @@ export async function runCodexAppServerModelProbe(
       clientInfo: { name: 'quirky_model_discovery', title: 'Quirky model discovery', version: '0.1.0' }
     })
     if (!isPlainObject(initialized)) throw new ProbeFailure('malformed-output', 'Codex app-server initialization response was invalid.')
-    await writer.write(Buffer.from(`${JSON.stringify({ method: 'initialized', params: {} })}\n`, 'utf8'))
+    await send({ method: 'initialized', params: {} })
 
     const data: unknown[] = []
     let cursor: string | null = null
@@ -256,12 +259,10 @@ export async function runCodexAppServerModelProbe(
     timeout.resolve({ ok: false, reason: code === 0 ? 'output-not-closed' : 'nonzero-exit' })
   })
 
+  const result = await timeout.promise
   clearTimeout(timeoutTimer)
-  try {
-    await writer.close()
-  } catch {
-    // Closing stdin after the app-server exits is expected.
-  }
+  const closing = Promise.resolve(stdin.end()).catch(() => undefined)
+  await Promise.race([closing, Bun.sleep(DRAIN_GRACE_MS)])
   await terminateGroup(child)
   await cancelReader(reader)
   void work

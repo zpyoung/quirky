@@ -21,6 +21,7 @@ import {
   type Catalog,
   type DeliveryOutcome,
   type LaunchPlan,
+  type LaunchRecord,
   type ModelDecl,
   type LaunchCatalog,
   type OptionDecl,
@@ -107,7 +108,7 @@ function providerHomeOverridesOf(userEnv: Env): {
 }
 
 function commonOptions(models: ModelDecl[], catalog: LaunchCatalog): OptionUse[] {
-  return catalog.options.flatMap((option) => {
+  return catalog.options.flatMap<OptionUse>((option) => {
     const uses = models.map((model) => model.options.find((use) => use.id === option.id))
     const declaredUses = uses.filter((use): use is OptionUse => use !== undefined)
     if (declaredUses.length !== models.length) return []

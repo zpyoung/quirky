@@ -16,6 +16,8 @@ export const RECIPE_ACTIONS = [
   'conversationName'
 ] as const
 
+export type RecipeAction = (typeof RECIPE_ACTIONS)[number]
+
 export const DEFAULT_TEMPLATE = '{basePrompt}'
 
 const GLOBAL_SCOPE = 'global'

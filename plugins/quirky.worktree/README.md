@@ -50,6 +50,8 @@ quirky worktree wake id:wt_parent --with-descendants
 
 Sleep state and change timestamps survive daemon restart. Exact `ui.window.state`, `ui.window.view.open`, and compare-and-close routes isolate each live `connId`; stale, missing, or ambiguous identities refuse rather than redirecting another window.
 
+The remaining owner-resolution flow is tracked in `m7-terminal-owner-provisioning-and-selector-flows`: a view input containing a selector such as `id:wt_id`, rather than the canonical bare ID, can currently be marked sleeping without its view closing. Do not rely on that selector form for view release. Cleanup treats an unresolved view owner as unknown and blocks removal; it does not infer that the visible worktree is inactive.
+
 ## Cleanup preview and removal
 
 `quirky.worktree/cleanupPreview({})` includes 30-day idle candidates (`idle-clean`) and worktrees explicitly archived for at least seven days (`archived-7day`). Both carry a current safety fingerprint and readable blockers. `archive({worktree,archivedAt?})` and `quirky worktree archive <worktree> [--off]` set or clear archived metadata; changing that timestamp invalidates an older preview fingerprint. `cleanupIgnore({worktreeId,fingerprint})` ignores only the matching suggestion; `cleanupRestoreIgnored({})` restores ignored suggestions.

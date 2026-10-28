@@ -47,7 +47,6 @@ const DEFAULT_SETTINGS: MobileSettings = {
 }
 const TOKEN_RE = /^[0-9a-f]{48}$/
 
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
@@ -349,7 +348,6 @@ export class MobileStore {
     }
   }
 }
-
 
 function decodeCanonicalBase64(value: string, length: number): Uint8Array | null {
   if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value)) return null

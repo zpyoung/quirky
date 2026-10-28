@@ -875,10 +875,10 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
                 </label>
               </>
             )}
-                {project.hooks?.defaultTabs?.length ? (
+                {project?.hooks?.defaultTabs?.length ? (
                   <fieldset className="form-group">
                     <legend>Default terminal tabs</legend>
-                    {project.hooks.defaultTabs.map((tab, index) => {
+                    {project?.hooks?.defaultTabs?.map((tab, index) => {
                       const selector = String(index + 1)
                       return (
                         <label className="check-row" key={selector}>

@@ -99,5 +99,38 @@
 - **Revisit if:** Existing account boundary cannot supply effective env without changing genuine session identity.
 - **Source:** assumed — autonomous
 
+## D10: Apply the operator's immediate typecheck-only landing cutover
+- **Question:** What happens when the operator says the item exceeded its two-hour cap and stops further implementation/proofs?
+- **Options:** Continue the runtime campaign; wait for a helper; cancel the helper, close owned resources and land integrated source with typecheck.
+- **Chose:** Cancel RemainderWorktree immediately; close all three owned browser handles/processes and the private runtime; remove its private home. No further daemon/Chromium proof, suite, formal review or platform run. Commit integrated source, one implementation-only successor, one roadmap catch-up, fresh typecheck, canonical queue land.
+- **Why:** The current conversation's operator instruction supersedes the earlier runtime campaign and enforces build-first. Existing observations remain evidence only for paths actually exercised.
+- **Evidence:** Operator interjection; helper cancellation receipt; owned browser closure receipts; private service exited0; private home removed.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** The canonical landing controller names a concrete source conflict or type error.
+- **Source:** locked by operator instruction in this conversation
+
+## D11: Preserve honest boundaries between source, exercised paths and remaining owner resolution
+- **Question:** What did integration and the pre-cutover narrow execution actually establish?
+- **Options:** Claim complete acceptance; discard successful paths because another failed; record exact source and independent observed outcomes.
+- **Chose:** Three isolated components passed HEAD/scope/hash attribution and were committed/merged as provider9bc9230f, runtimeb37c7e28 and worktreea78ce765; parent terminal source d4c92384. The first compiler found50 diagnostics, then a FileSink number-or-Promise cleanup type error; fixes led to root/mobile typecheck0. UI artifact build passed. Real RGBA Kitty pixels, custom terminal color, rich floating notes/outside-root refusal and two actual UI connIds4/6 with isolated views/stale-close refusal passed. Do not infer all protocol/provider/creation flows passed.
+- **Why:** Narrow execution also found a malformed repo manifest, a missing prepared destination parent and incomplete raw-selector sleep ownership. Repo JSON now parses; destination-parent source is repaired but not reproved. Sleep returned sleeping:true without closing an id:-selector view; that owner-resolution flow is unbuilt, not a successful sleep proof. Cleanup blocks unresolved view owners before destructive removal.
+- **Evidence:** Compiler artifact46 and later root/mobile exit0; manifest parser valid21methods; private daemon log fatal worktree move No such file or directory; screenshots omp-sshots-15b84092a47032f0.png,15b840a251b032f1.png,15b841b14f78166b.png; window-smoke.json; spec Landing disposition.
+- **Reversibility:** medium
+- **Confidence:** high for named observations; no unexecuted acceptance claim
+- **Revisit if:** End-phase execution exercises the unresolved owner-resolution flow or another authored boundary.
+- **Source:** assumed — autonomous
+
+## D12: Register one exact unbuilt-flow successor without widening old credentials
+- **Question:** Which implementation obligations remain at the operator cutover?
+- **Options:** Hide them as unsupported; create separate debug/verification tasks; register one source-implementation remainder and preserve canonical blocked owners.
+- **Chose:** Canonical add registered m7-terminal-owner-provisioning-and-selector-flows, todo, depending on this item. Its exact inventory is in the spec Landing disposition. Separate owner CLI/remote config grants remain distinct from mobile and federation; only bounded read-only provider/status peer projections were added. VM recipes are provisioning lifecycle, not command tabs. Durable desktop/remote row identity stays unknown. Existing blocked m5-automations-dispatch-remote-and-args and dependent remote UI retain their execution ownership; native Browser owners are not duplicated.
+- **Why:** LOOP permits at most one follow-up for unbuilt flows, never a testing/review/debugging campaign. A catalog/read projection is not process launch or config-write authority.
+- **Evidence:** Canonical add exit0 and authoritative queue readback of exact successor/dependency/status; overlap-queue.json; predecessor binding decisions; spec remaining-flow inventory.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** A canonical owner publishes the missing authenticated grant, execution/provisioning lifecycle, stable identity or SDK/signing prerequisite.
+- **Source:** deferred: unbuilt owner, provisioning and selector-resolution flows
+
 ## Progress
-Claimed after twenty-one busy waits. Branch created from current integration. All predecessor decisions and source map read; combined spec self-reviewed. Shared exact-window type and RPC signatures authored; next commit spec/contracts, create isolated component trees and dispatch three implementers. No tests/reviews/dogfood run, no runtime smoke or typecheck pass yet. Foreign .serena preserved.
+Integrated source and authored tests are ready for the operator's immediate cutover. All helpers and owned browser/runtime resources stopped; private runtime data removed; three merged component trees removed after metadata/hash archive. Exactly one source successor is registered. Existing pre-cutover evidence and failures are recorded without full acceptance claims. Next: commit final integrated repairs/docs, merge build/roadmap once and read incoming decisions, run bun run typecheck only, detach and canonical queue land. No new daemon/Chromium/suite/review run.

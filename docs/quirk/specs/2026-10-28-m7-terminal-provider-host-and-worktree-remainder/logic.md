@@ -80,3 +80,32 @@ No additional feature ideas. Authoritative host: real execution owner, not calle
 
 ## Self-review
 All inherited flows have P1-P3/W1-W4/T1-T2/N1 ownership; no related feature is treated as a substitute. Native missing authority differs from reachable source engineering. Contracts are explicit and disjoint; no open human question or placeholder. Final landing disposition must state actual shipped flows and exact remaining flows with evidence rather than silently deleting acceptance scenarios.
+
+## Landing disposition under the operator cutover
+
+The operator stopped further implementation and real-daemon/Chromium proofs after the two-hour cap. Land integrated source with typecheck only; no suite, review or additional runtime campaign. The acceptance scenarios above remain the obligation inventory, not a claim that every one passed.
+
+### Integrated source
+- P1/P3: bounded account-prepared Codex app-server model listing; host-specific catalogs and exact-peer read-only discovery/options/launch resolution; local-owner, agent and captured-host retirement; distinct contextual branch/conversation naming recipes, API/generated CLI/UI and provenance. Other providers require real declared discovery protocols.
+- P2: read-only exact-peer status and hook-status projections. Remote config mutations and process launch are not supplied by the old federation or mobile credential.
+- W1: exact live-window self/state/open/close/command kernel APIs, isolated renderer views, full-view close CAS, per-window history/navigation and targeted sleep source. Canonical selector-to-owner resolution remains incomplete as described below.
+- W2/W4: authenticated available-peer roster/status, conservative window/session/editor/terminal cleanup evidence and fingerprints, safe persisted project/status icons and provider-backed project choices. Unknown desktop/remote row ownership stays unknown.
+- W3: canonical prepared-checkout API/CLI/composer integration, materialized detached locked pool, capacity/expiry/identity fences and non-forced cleanup; trusted configured default-tab command/cwd/title/color composition through the terminal owner. VM lifecycle execution is not substituted with ordinary shell commands.
+- T1/T2: bounded direct static Kitty raster protocol, independent terminal palettes, safe hexadecimal tab colors, shell-command tab composition, and editor-profile-owned floating Markdown/editor/Browser destinations. Native floating Browser handoff is pending.
+
+### Exact remaining flows
+
+Exactly one source-implementation successor is registered: `m7-terminal-owner-provisioning-and-selector-flows`, depending on this item. It carries separate owner CLI grants/admission/revocation/routing; genuine remote provider execution and hook/config mutations; additional real built-in model probes; remote-owner automation retirement after its canonical owner; ordinary remote worktree create; durable desktop/client/worktree-host identity and remote cleanup ownership; VM environment recipe lifecycle/attachment; and complete canonical view-selector owner resolution across navigation/history/sleep/close.
+
+The selector gap is observed, not hypothetical: sleeping a window whose view input contains `worktree:"id:wt_id"` returned sleeping state while its view remained open, because the consumer compared the raw selector with a bare ID. The helper was cancelled at the operator's instruction before completing that flow. Kernel exact-window isolation and stale-view CAS passed separately. Cleanup now blocks unresolved view owners rather than using that missing resolution as deletion evidence.
+
+Native notification permission/click/dismiss remains gated on supported SDK callbacks; signed production helper/TCC/launchd/admission/upgrade requires an authorized packaging identity. Existing blocked remote-automation and native Browser owners retain their scopes; no second transport or duplicate owner is introduced. Advanced Kitty animation/virtual/file/shared-memory controls explicitly refuse and are not claimed as supported static raster operations.
+
+### Exercised evidence and limits
+
+Before the operator stop, root/mobile typecheck passed and the UI build produced nine files and 25 plugin modules. Real private runtime/API/CLI and owned Chromium showed direct RGBA Kitty pixels `[0,220,90,255]`, independent custom terminal colors, rich floating notes with outside-root refusal, and two distinct UI connections retaining different workspace views with stale-close CAS refusal. Those named paths passed; no whole-feature acceptance pass is claimed.
+
+The same narrow execution found a malformed repo manifest (repaired and parsed), then prepared checkout claim failed at the first missing per-project destination parent. Source now safely creates that parent before the move, but the prepared-claim scenario was not rerun after the operator stop. A previous normal CLI create succeeded with `preparedCheckout:false`; it is not preparation-consumption proof. The selector/sleep gap above remains unbuilt. Managed Codex probe, naming, remote-peer, default-tab, cleanup and boundary cases have authored tests, not executed acceptance.
+
+All helpers, owned browser processes and the private runtime were stopped at cutover; the private home was removed. Final landing gate is the fresh merged `bun run typecheck` result recorded in the decision log. No new runtime, Chromium, suite or review run is authorized after the cutover.
+

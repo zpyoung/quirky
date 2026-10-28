@@ -1,10 +1,11 @@
 import { mkdirSync } from 'node:fs'
+import { Database } from 'bun:sqlite'
 import { afterEach, expect, test } from 'bun:test'
 import { join } from 'node:path'
 import type { Repo, WorktreeCreateResult } from '@quirky/protocol'
 import { spawnCli } from '../../../packages/cli/test/fixtures/fake-daemon'
-import { git, isolateGitConfig, makeOrigin, makeProject } from '../../quirky.repo/test/git-fixtures'
-import { githubUser, setSetting, startWorld, useGlobalGitConfig, type World } from './fixtures/repos'
+import { git, isolateGitConfig } from '../../quirky.repo/test/git-fixtures'
+import { githubUser, makeOrigin, makeProject, setSetting, startWorld, useGlobalGitConfig, type World } from './fixtures/repos'
 
 const { scratch } = isolateGitConfig()
 let world: World | undefined
