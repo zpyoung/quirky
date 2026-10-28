@@ -8,7 +8,7 @@ export type UiAction = { label: string; onAction: () => void; disabled?: boolean
 export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'destructive' }
 export type IconButtonProps = Omit<ButtonProps, 'children'> & { label: string; children: ReactNode }
 export type TextFieldProps = InputHTMLAttributes<HTMLInputElement> & { label: string; help?: string; error?: string }
-export type StatusDotProps = { status: UiStatus; label?: string }
+export type StatusDotProps = { status: UiStatus; label?: string; progress?: number }
 export type BadgeProps = { children: ReactNode; tone?: UiTone; label?: string }
 export type ListRowProps = {
   title: ReactNode
