@@ -477,6 +477,7 @@ export function createAutomationService(
   const targets = options.targets
   const workspaceProvenanceCapabilities = new Map<string, WorkspaceProvenanceCapability>()
   const issueWorkspaceProvenance = (runId: string, repoId: string): WorktreeAutomationProvenanceRequest => {
+    const now = clock()
     const run = store.getRun(runId)
     const definition = run ? store.get(run.automationId) : null
     const owner = definition?.owner

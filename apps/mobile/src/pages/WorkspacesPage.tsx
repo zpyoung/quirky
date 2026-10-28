@@ -544,6 +544,7 @@ export function WorkspacesPage({ bridge, connected, onNavigate, onReport }: Prop
                     {!isGroupCollapsed && <div className="qp-worktree-rows">
                       {roots.map((worktree) => renderWorktreeTree(worktree, 0, group.worktrees, {
                         bridge, canMutate, groupsById, loopSummaries, loopSummaryStatus, menuWorktreeId, preferences, reposById, sessionsByWorktree,
+                        collapsed, onOpen: (item) => void onNavigate({ kind: 'session', worktreeId: item.id }), onToggleCollapse: toggleCollapsed,
                         onToggleMenu: (id) => setMenuWorktreeId(menuWorktreeId === id ? null : id), onPin: togglePin, onDelete: requestDelete
                       }))}
                     </div>}

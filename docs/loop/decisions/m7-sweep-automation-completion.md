@@ -55,5 +55,60 @@
 - **Revisit if:** m7-test-triage starts end phase or typecheck reports integration diagnostics.
 - **Source:** locked by docs/loop/LOOP.md
 
+## D6: Restore the attributable misplaced worker patch without touching user state
+- **Question:** How to handle a sidebar worker edit accidentally sent to a relative parent path?
+- **Options:** accept malformed parent code; discard unrelated state; revert only the attributable patch and enforce absolute paths.
+- **Chose:** parent read the file and HEAD baseline, attributed the exact diff, then reverted those changes through anchored edits. Worker continued only in its assigned tree after acknowledging the boundary. No unrelated state or inherited .serena was touched.
+- **Why:** the malformed patch included a literal PUT directive and replaced the activate case opener. It was entirely this worker's change, not user work. Silently committing it would bypass the component barrier.
+- **Evidence:** BuildSidebar self-report; parent file snapshot D573; exact git diff for sidebar-extras-ui.test.ts; restoration edit C6A4.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** another path crosses the assigned worktree boundary (stop that writer).
+- **Source:** assumed — autonomous
+
+## D7: Integrate three scoped components and retain written consumer regressions
+- **Question:** Did the implementation remain within the committed public contracts?
+- **Options:** accept reports without attribution; audit worker HEAD/scope at the settled barrier and integrate explicit paths.
+- **Chose:** backend3f39d14b, sidebar28855c30 and phoned85a58a9 integrated after all workers returned. Each HEAD remained dbb01d3a; explicit owned paths only, inherited component .serena excluded. Removed each component worktree immediately after merge. Approved sidebar CLI file scope to complete the persisted filter's actual scriptable flag.
+- **Why:** provider/storage, sidebar/preference and phone/policy components have disjoint source scopes. Structural plugin validation found no manifest/schema/provider/CLI mismatch across the four changed plugins; this is not a semantic code-review result.
+- **Evidence:** component audit and commit/merge tool receipts; ValidateCompletionPlugins returned PASS structure-only, zero scoped warnings. New acceptance files: automations/test/provenance-api.test.ts; worktree/test/automation-provenance.test.ts,automation-sidebar.test.tsx,automation-sidebar-api.test.ts; mobile/test/loop-summaries.test.ts. Existing dispatch/sidebar-extras/mobile page/authorization consumers updated.
+- **Reversibility:** medium
+- **Confidence:** high for attribution/declarations; suites deliberately not executed
+- **Revisit if:** end-phase consumer execution finds a behavioral gap.
+- **Source:** assumed — autonomous
+
+## D8: Repair observed integration diagnostics without weakening assertions
+- **Question:** What did the typecheck and narrow runtime scenario actually find?
+- **Options:** suppress diagnostics; defer a broken implemented path; repair each concrete source/type boundary.
+- **Chose:** add the missing issue-time `const now = clock()` to provenance issuance; restore accidentally omitted separatorEnabled and mobile collapsed/open/toggle callbacks; type the provenance expected snapshot and capability assertions; use the repository-relative git testing import; update the existing no-provenance Tree fixture with neutral new props.
+- **Why:** first real API run failed with `Automation dispatch failed: now is not defined` before workspace creation. Typecheck independently reported that free identifier plus four test/prop typing boundaries; second typecheck reached mobile and identified omitted existing render callbacks. No exception suppression, changed acceptance expectation, or broad test-failure debugging was used.
+- **Evidence:** bg5 actual daemon failure; bg4 ten diagnostics; bg9 mobile RenderContext diagnostic; successful bg8 public API scenario after clock repair. Smoke's separate early dispatch_failed expectation was a fixture mistake: structured registration can return dispatched before native resolution; corrected scenario explicitly stops its returned structured session rather than asserting no launch.
+- **Reversibility:** easy
+- **Confidence:** high for observed failures and scoped repairs; final merged typecheck still required
+- **Revisit if:** final typecheck or consumer execution reports another actual diagnostic.
+- **Source:** assumed — autonomous
+
+## D9: Record narrow runtime evidence without claiming suite, app or native clearance
+- **Question:** What runtime proof is required before delivering these significant changes?
+- **Options:** type-only claims; full forbidden pre-triage dogfood campaign; scoped temporary-home API and actual component observations.
+- **Chose:** one real daemon/public API scenario and two ephemeral browser component surfaces. No acceptance suite, packaged app build, final semantic review, physical phone, native shell, notification or full-app dogfood run.
+- **Why:** developer verification requires exercised behavior. API scenario created a generic API workspace and new-per-run automation workspace, rejected a forged request before creation, checked snapshots/no token leakage, proved ordinary API visibility and persisted hiding, renamed/deleted definition, restarted daemon and observed retained attribution/filter. Structured session was explicitly stopped; daemon/home cleanup awaited. Browser mounted production PageApp/WorkspacesPage and production Tree/useAutomationAvailability against controlled read fixtures, not a replacement UI.
+- **Evidence:** bg8 exit0 in1.72s; phone browser390x844 showed detailed and compact `Loop 2/2 · paused: iteration cap reached`, saved filtering left only wt-ordinary, disconnect reported `Loop 2/2 · unverifiable`, no page errors. Desktop browser520x700 showed badge/snapshots, exact uiNavigate automation-original/run-original despite newer run, disabled only missing run, distinguished deleted definition and failed check. Ephemeral renderer initially had wrong guessed dependency paths and then two React versions; actual Bun resolution corrected fixture imports only. Tabs released and both final component services stopped.
+- **Reversibility:** easy
+- **Confidence:** high for exercised boundaries; physical/native/full-app visual fidelity unverified
+- **Revisit if:** end-phase full app/native acceptance contradicts the component or API result.
+- **Source:** assumed — autonomous
+
+## D10: Retain the single unbuilt remote-ledger flow with its prerequisite
+- **Question:** How is the independent remote ledger gap kept actionable without duplicating existing owners?
+- **Options:** silently omit; duplicate remote automation work; one explicit ledger-only prerequisite follow-up.
+- **Chose:** canonical queue add of m7-ledger-remote-host-flows, depending on this item. It names ownership/routing/import/evidence/selected-runtime availability, prohibits local SSH path reads, and instructs the claimant to block while the public host foundation is absent.
+- **Why:** D4's isolated flow can remain deferred while durable local provenance and actual phone composition ship. There is no new test/review/debugging follow-up.
+- **Evidence:** authoritative absolute queue.ts add /tmp/quirky-l12-remote-ledger-followup-r8.json returned exit0; MapLedgerHost and prior blocked remote-dispatch decision.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a public host foundation lands before that item's implementation.
+- **Source:** deferred: SSH ledger ownership/routing/import/evidence/selected-runtime availability
+
 ## Progress
-Scope mapped with two returned read-only scouts. Combined spec self-reviewed against inherited flow inventory and feature docs; shared protocol provenance types authored. Next commit contracts/spec/decisions, dispatch <=3 disjoint workers in isolated worktrees, integrate, record narrow evidence and typecheck, register the single remote-ledger unbuilt-flow follow-up, catch up once and land through absolute queue executable. No tests/build/review/dogfood/runtime checks run yet; no success claim.
+All three scoped components integrated, worktrees removed, structural validation returned, observed source/type diagnostics repaired, narrow API and actual component smoke receipts recorded in D8–D9. One ledger-only prerequisite follow-up registered. No owned browser/service/agent remains active. Next commit these integration repairs and documentation, catch up exactly once with build/roadmap, read newly landed decisions, run final root/mobile typecheck, then commit the receipt, detach and invoke authoritative absolute queue.ts land m7-sweep-automation-completion. Suites/reviews/full-app dogfood remain end-phase-owned; no clearance claim for them.

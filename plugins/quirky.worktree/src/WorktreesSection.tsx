@@ -273,6 +273,7 @@ export function WorktreesSection({ context, report, requests }: Props) {
           automationAvailability={automationAvailability}
           onToggleAutomationDetails={toggleAutomationDetails}
           now={now}
+          separatorEnabled={separatorEnabled}
           openDialog={setDialog}
           requestDelete={requestDelete}
           onDropPreviewChange={changeDropPreview}

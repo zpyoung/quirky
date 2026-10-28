@@ -2,10 +2,10 @@ import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test'
 import { mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { RpcErrorCode, type QuirkyClient, type Repo, type Worktree, type WorktreeAutomationProvenanceRequest, type WorktreeCreateResult } from '@quirky/protocol'
+import { RpcErrorCode, type QuirkyClient, type Repo, type Worktree, type WorktreeAutomationProvenance, type WorktreeAutomationProvenanceRequest, type WorktreeCreateResult } from '@quirky/protocol'
 import type { AutomationDefinition, AutomationRun, AutomationRunsPage } from '../types'
 import { makeTempHome, startHarness, type Harness } from '../../../packages/daemon/test/helpers'
-import { useTestGit } from '@quirky/git/testing'
+import { useTestGit } from '../../../packages/git/src/testing'
 import { failure, isolateGitConfig, makeRepo } from '../../quirky.repo/test/git-fixtures'
 
 isolateGitConfig()
@@ -188,7 +188,7 @@ describe('automation provenance public API', () => {
     expect(run.workspaceId).toBeTruthy()
     const created = await call(fixture, 'quirky.worktree/show', { worktree: run.workspaceId }) as Worktree
     const request = capturedRequests(fixture)[0]!
-    const snapshot = {
+    const snapshot: WorktreeAutomationProvenance = {
       kind: 'created-by-automation',
       automationId: definition.id,
       automationName: definition.name,

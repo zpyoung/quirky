@@ -80,12 +80,12 @@ describe('automation run dispatcher', () => {
     const dispatched = await harness.dispatcher.dispatch(run.id)
 
     const create = harness.calls.find((call) => call.method === 'quirky.worktree/create')
-    const request = create?.params.automationProvenanceRequest as Record<string, unknown>
+    const request = harness.provenanceRequests[0]!
     expect(dispatched?.status).toBe('dispatched')
     expect(harness.provenanceRequests).toHaveLength(1)
     expect(request).toMatchObject({ automationId: run.automationId, runId: run.id })
     expect(Object.keys(request).sort()).toEqual(['automationId', 'dispatchToken', 'runId'])
-    expect(harness.provenanceRequests[0]).toEqual(request)
+    expect(create?.params.automationProvenanceRequest).toEqual(request)
     expect(harness.provenanceRevoked).toEqual([request.dispatchToken])
   })
 
