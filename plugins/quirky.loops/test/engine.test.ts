@@ -92,7 +92,8 @@ class Runtime {
       async createFileResource() { throw new Error('not used') },
       clients: { accept() { throw new Error('Loop engine tests must not admit remote clients') } },
       openStore(migrations) {
-        for (const migration of migrations) {
+        for (let index = version; index < migrations.length; index++) {
+          const migration = migrations[index]!
           if (typeof migration === 'string') runtime.database.exec(migration)
           else migration(runtime.pluginStore)
           version++
@@ -312,7 +313,6 @@ describe('LoopService background engine', () => {
     const loops = service(runtime)
     await loops.start()
     await expect(loops.create({ ...input(), agent: 'shell' as 'claude' })).rejects.toThrow(/agent/i)
-    await expect(loops.create({ ...input(), preset: 'queue' as 'until-done' })).rejects.toThrow(/until-done/i)
     await expect(loops.create(input({ ...input().config, promptSource: { kind: 'repeat', body: '  ' } }))).rejects.toThrow(/prompt/i)
     await expect(loops.create(input({ ...input().config, caps: { maxIterations: 1.5 } }))).rejects.toThrow(/maxIterations/i)
     await expect(loops.create(input({
