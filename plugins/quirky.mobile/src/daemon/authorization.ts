@@ -1,3 +1,6 @@
+import { PANEL_METHOD_PARAMS } from '@quirky/protocol'
+import { assertPanelParameters } from './panel-authorization'
+
 export class MobileAuthorizationError extends Error {
   constructor(message: string) {
     super(message)
@@ -14,6 +17,9 @@ const PARAMS: Readonly<Record<string, readonly string[]>> = {
   'quirky.mobile/bundleChunk': ['buildId', 'path', 'offset'],
   'quirky.mobile/bundleRange': ['buildId', 'path', 'offset', 'gzip'],
   'quirky.mobile/agentCatalog': [],
+  'quirky.mobile/notificationPoll': ['after', 'epoch', 'waitMs', 'onlyWhenDesktopAway', 'suppressWorktree', 'subscriptionId'],
+  'quirky.mobile/notificationCancel': ['subscriptionId'],
+  'quirky.mobile/notificationTest': [],
   'quirky.repo/list': [],
   'quirky.loops/summaries': [],
   'quirky.repo/groupList': [],
@@ -49,20 +55,22 @@ const PARAMS: Readonly<Record<string, readonly string[]>> = {
   'quirky.terminal/history': ['session', 'lines', 'before', 'format'],
   'quirky.terminal/write': ['session', 'data'],
   'quirky.terminal/send': ['session', 'text', 'enter'],
-  'quirky.terminal/resize': ['session', 'cols', 'rows', 'claim']
+  'quirky.terminal/resize': ['session', 'cols', 'rows', 'claim'],
+  'quirky.worktree/resolve': ['selector'],
+  'quirky.repo/show': ['repo'],
+  'quirky.repo/resolve': ['selector'],
+  'quirky.ask/wait': ['askId', 'timeoutMs'],
+  ...PANEL_METHOD_PARAMS
 }
 
 const FORBIDDEN_KEYS: Readonly<Record<string, true>> = {
   deviceId: true, role: true, token: true, deviceToken: true, credential: true, credentials: true,
-  caller: true, connection: true, client: true, clientId: true, scope: true
+  caller: true, connection: true, client: true, clientId: true
 }
 const MAX_STRING_LENGTH = 64 * 1024
 const MAX_ARRAY_LENGTH = 2048
 const MAX_OBJECT_KEYS = 256
 
-export const MOBILE_METHOD_ALLOWLIST: Readonly<Record<string, true>> = Object.freeze(
-  Object.fromEntries(Object.keys(PARAMS).map((method) => [method, true] as const))
-)
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
@@ -147,15 +155,17 @@ function checkMethodSpecific(method: string, params: Record<string, unknown>): v
   }
   if (method === 'quirky.session/list' && params.worktree !== undefined && !boundedString(params.worktree)) throw new MobileAuthorizationError('invalid mobile worktree selector')
   if (method === 'quirky.session/create' &&
-    ((params.cols !== undefined && (!Number.isInteger(params.cols) || (params.cols as number) < 1 || (params.cols as number) > 1000)) ||
+    (!boundedString(params.worktree) || !boundedString(params.agent) ||
+      (params.cols !== undefined && (!Number.isInteger(params.cols) || (params.cols as number) < 1 || (params.cols as number) > 1000)) ||
       (params.rows !== undefined && (!Number.isInteger(params.rows) || (params.rows as number) < 1 || (params.rows as number) > 500)))) {
-    throw new MobileAuthorizationError('invalid mobile session dimensions')
+    throw new MobileAuthorizationError('invalid mobile session creation parameters')
   }
   if (method === 'quirky.session/setName' &&
     (!boundedString(params.session) || (params.name !== null && (typeof params.name !== 'string' || params.name.length > 128)))) {
     throw new MobileAuthorizationError('invalid mobile session name')
   }
-  if (method === 'quirky.session/close' || method === 'quirky.terminal/describeClose' ||
+  if (method === 'quirky.session/get' || method === 'quirky.session/resume' || method === 'quirky.session/restore' ||
+    method === 'quirky.session/close' || method === 'quirky.terminal/describeClose' ||
     method === 'quirky.terminal/clear' || method === 'quirky.terminal/snapshot') {
     if (!boundedString(params.session)) throw new MobileAuthorizationError('invalid mobile terminal session')
   }
@@ -167,6 +177,10 @@ function checkMethodSpecific(method: string, params: Record<string, unknown>): v
     (!boundedString(params.askId) || !isPlainRecord(params.answers) || Object.keys(params.answers).length > 100 ||
       (params.skipped !== undefined && (!Array.isArray(params.skipped) || params.skipped.length > 100 || params.skipped.some((id) => !boundedString(id)))))) {
     throw new MobileAuthorizationError('invalid ask answer map')
+  }
+  if (method === 'quirky.ask/wait' && (!boundedString(params.askId) ||
+    (params.timeoutMs !== undefined && (!Number.isInteger(params.timeoutMs) || (params.timeoutMs as number) < 0 || (params.timeoutMs as number) > 60000)))) {
+    throw new MobileAuthorizationError('invalid bounded mobile ask wait')
   }
   if (method === 'quirky.agent-status/wait' && params.timeoutMs !== undefined &&
     (!Number.isInteger(params.timeoutMs) || (params.timeoutMs as number) < 0 || (params.timeoutMs as number) > 60_000)) {
@@ -228,4 +242,5 @@ export function assertMobileCallAllowed(method: string, params: unknown): assert
   if (Object.keys(params).some((key) => !allowed.includes(key))) throw new MobileAuthorizationError('mobile method params contain an unsupported field')
   checkTree(params)
   checkMethodSpecific(method, params)
+  assertPanelParameters(method, params)
 }

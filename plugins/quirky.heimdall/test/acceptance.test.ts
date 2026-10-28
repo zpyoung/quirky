@@ -8,6 +8,7 @@ import type { Inspection } from '../src/contracts'
 import { startHarness, waitFor, waitForAsync, type Harness } from '../../../packages/daemon/test/helpers'
 import { writePlugin } from '../../../packages/daemon/test/plugins/fixtures'
 
+import type { HostPowerTransition } from '../../../packages/daemon/src/host-power-contracts'
 const PLUGINS_DIR = resolve(import.meta.dir, '../..')
 const FIXTURE_ID = 'quirky.heimdall-fixture'
 const KERNEL_METHOD = 'quirky.heimdall'
@@ -24,6 +25,7 @@ let client!: QuirkyClient
 let daemonStopped = false
 let ptyStopped = false
 let oldHome: string | undefined
+let publishPower: (transition: HostPowerTransition) => void
 
 beforeEach(async () => {
   daemonStopped = false
@@ -47,7 +49,7 @@ beforeEach(async () => {
     activation: 'startup',
     dependencies: [KERNEL_METHOD],
     contributes: {
-      method: ['authorize', 'read', 'decide', 'execute', 'resolveOutcome'].map((id) => ({
+      method: ['authorize', 'read', 'releaseRead', 'decide', 'execute', 'resolveOutcome'].map((id) => ({
         id,
         params: { type: 'object', additionalProperties: true },
         result: {}
@@ -58,7 +60,7 @@ beforeEach(async () => {
   })
   oldHome = process.env.HOME
   process.env.HOME = userHome
-  harness = await startHarness({ home, builtinPluginsDir })
+  harness = await startWithHome()
   client = await harness.connect('cli')
 })
 
@@ -75,6 +77,48 @@ afterEach(async () => {
 })
 
 describe('Heimdall daemon acceptance', () => {
+  test('native lifecycle fences an in-flight decision and new enrollments through the daemon API', async () => {
+    try {
+      const enrolled = await client.callAny(`${KERNEL_METHOD}/enroll`, {
+        kind: 'fixture',
+        kindPayload: { valid: true, workspace: 'power-in-flight', action: 'landed', blockRead: true },
+        capabilities: { 'fixture.write': 'on' }
+      }) as { enrollment: { watcherId: string } }
+      const watcherId = enrolled.enrollment.watcherId
+      await waitFor(() => existsSync(join(builtinPluginsDir, FIXTURE_ID, 'read-entered')))
+      publishPower('suspend')
+      await client.callAny(`${FIXTURE_ID}/releaseRead`, {})
+      const suspended = await client.callAny(`${KERNEL_METHOD}/reconcile`, { watcherId }) as Inspection
+      expect(suspended.status).toMatchObject({ state: 'held', reason: 'suspended', nextPulseAtMs: null })
+      expect(suspended.journal.filter((entry) => entry.kind === 'attempt')).toEqual([])
+      expect(existsSync(counterFile)).toBe(false)
+
+      const late = await client.callAny(`${KERNEL_METHOD}/enroll`, {
+        kind: 'fixture', kindPayload: { valid: true, workspace: 'power-late', action: 'none' }
+      }) as { enrollment: { watcherId: string } }
+      const lateSuspended = await client.callAny(`${KERNEL_METHOD}/reconcile`, {
+        watcherId: late.enrollment.watcherId
+      }) as Inspection
+      expect(lateSuspended.status).toMatchObject({ state: 'held', reason: 'suspended', nextPulseAtMs: null })
+      expect(lateSuspended.traces).toEqual([])
+
+      writeFileSync(join(builtinPluginsDir, FIXTURE_ID, 'world-revision'), 'post-native-wake')
+      publishPower('resume')
+      const awakened = await waitForAsync(async () => {
+        const [item] = await client.callAny(`${KERNEL_METHOD}/inspect`, { watcherId }) as Inspection[]
+        return item?.journal.some((entry) => entry.kind === 'attempt' && entry.effect === 'landed') ? item : undefined
+      })
+      expect(awakened.traces.some((trace) => trace.contentIdentity === 'post-native-wake')).toBe(true)
+      expect(readFileSync(counterFile, 'utf8')).toBe('fixture-write\n')
+      const lateAwakened = await waitForAsync(async () => {
+        const [item] = await client.callAny(`${KERNEL_METHOD}/inspect`, { watcherId: late.enrollment.watcherId }) as Inspection[]
+        return item?.traces.some((trace) => trace.contentIdentity === 'post-native-wake') ? item : undefined
+      })
+      expect(lateAwakened.status?.reason).not.toBe('suspended')
+    } finally {
+      await client.callAny(`${FIXTURE_ID}/releaseRead`, {})
+    }
+  })
   test('registers a real fixture kind, enrolls immediately, inspects, and reconciles through RPC', async () => {
     const result = await client.callAny(`${KERNEL_METHOD}/enroll`, {
       kind: 'fixture', kindPayload: { valid: true, workspace: 'main', action: 'none' }
@@ -297,7 +341,17 @@ describe('Heimdall daemon acceptance', () => {
 
 async function startWithHome(): Promise<Harness> {
   process.env.HOME = userHome
-  return startHarness({ home, builtinPluginsDir })
+  return startHarness({
+    home,
+    builtinPluginsDir,
+    hostPowerSource: {
+      start(listener) {
+        let disposed = false
+        publishPower = (transition) => { if (!disposed) listener(transition) }
+        return () => { disposed = true }
+      }
+    }
+  })
 }
 
 async function stopDaemonKeepingHome(current: Harness): Promise<void> {
@@ -320,6 +374,8 @@ const releasePath = ${JSON.stringify(release)}
 const hook = (name) => pluginId + '/' + name
 
 export async function activate(context) {
+  const { promise: readReleased, resolve: releaseRead } = Promise.withResolvers()
+  context.provide('method:' + hook('releaseRead'), () => { releaseRead(); return {} })
   const descriptor = {
     id: 'fixture',
     displayName: 'Heimdall acceptance fixture',
@@ -346,7 +402,12 @@ export async function activate(context) {
       kindPayload: payload
     }
   })
-  context.provide('method:' + hook('read'), () => {
+  context.provide('method:' + hook('read'), async (params) => {
+    const enrollment = params.enrollment ?? params
+    if (enrollment.kindPayload?.blockRead) {
+      writeFileSync(join(context.dir, 'read-entered'), 'entered')
+      await readReleased
+    }
     const revisionPath = join(context.dir, 'world-revision')
     const revision = existsSync(revisionPath) ? readFileSync(revisionPath, 'utf8') : 'fixture-live'
     return { freshness: 'live', contentIdentity: revision, observedAtMs: Date.now(), world: { revision } }

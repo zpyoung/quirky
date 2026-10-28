@@ -396,6 +396,14 @@ Registration update: `bun scripts/build-loop/queue.ts add /tmp/quirky-session-in
 - Unchanged failures still awaiting the normal merged retry: Git remote SC-29 wait (five possible predicates; available stack does not identify one), daemon lock five-second test bound, incoming loops-store five-second bound. No speculative producer change, timeout increase or waived assertion was used for these.
 - Operator's45-minute target was not met; the first controller verification alone took1800.57seconds after source submission. No on-time or authoritative landed claim is inferred from a submitted command.
 
+
+## sb-mobile-app-panels: fixture isolation correction and unverified earlier home effects
+
+- **HIGH historical isolation observation:** the first notification API/CLI smoke fixtures used temporary `QUIRKY_HOME` but retained ambient `HOME` while loading all built-ins, including automatic agent-hook support. No pre-run home/configuration hash baseline was captured. The observed output does not establish an actual hook write, and it cannot establish zero user-configuration effects either.
+- **Corrected source:** new notification/catalog/vault fixtures now use owned `HOME`, `QUIRKY_HOME`, `CODEX_HOME` and `CLAUDE_CONFIG_DIR`, with unrelated hook installation disabled in the owned store before daemon startup. Git/editor proof also clears inherited Git directory/index/object pointers before physical Git commands. Current isolated credential/notification regression run:3tests28assertions passed; corrected CLI settings/catalog/sealed-notification/replay smoke passed.
+- **No blind rollback:** no real agent configuration was overwritten or removed as a cleanup guess. Earlier effects remain unverified because the missing before-state cannot be reconstructed from a fresh run. Any restoration requires comparison with a known user-approved backup, not deletion of files that may be the user's.
+- This records a test-harness safety boundary, not a claim that native app/background push or full phone UI verification passed.
+
 ## sa-browser-pane-native-host-controls: residual Watch host-clipboard transfer
 
 - **Priority/severity:** P2 / medium; remaining base-pane Watch input acceptance, owned by the existing item under sa-browser-pane D23. No new queue record or title change.
@@ -590,6 +598,22 @@ The operator moved all testing/debugging to the end phase during this item. Its 
 - **Unblock prerequisite:** provide a supported isolated per-view/session native proxy/resolver/host-mapping API with actual hostname/port routing, or explicitly authorize the different native/networking model and revise the binding decision. Then implement and prove both engines' real mapped connections, including ownership/lifetime and subresource/WebSocket routing. No human question was sent in this unattended run.
 - **Decision log/evidence:** docs/loop/decisions/sa-browser-localhost-label-routing.md D1–D7. Lane9 ignored loop folder retains routing-capability-audit.ts and routing-capability-evidence/audit.json plus six exact source snapshots. No production code or feature-completion claim.
 
+## m6-orchestration-idle-pointer-shutdown: deferred implementation restored
+
+- **Addresses:** the `m6-orchestration-core: deferred automatic idle-mailbox scheduling` entry above; historical checkpoint69083459 remains unchanged.
+- **Implementation:** automatic Run/Dispatch scheduling is wired again; disposal and reset fences prevent stale scheduler continuations from further RPC/store work. The fake PTY fixture now preserves partially written framed responses and drains them in order.
+- **Evidence:** a real daemon/public API/generated CLI smoke delivered only command text and separate Enter to the idle assignee, kept mail unread until acknowledgement, and executed the captured worker command successfully. Stop during the next text/Enter gap returned in61ms. A separate SQLite-backed scheduler smoke disposed with each identity/status/submission dependency unresolved and observed zero late store/RPC accesses for both resolution and rejection.
+- **Acceptance integrity:** preserve AC9's idle target/privacy/unread checks and20-second timeout. Its incorrect Dispatch `--run` substring pin is replaced with execution of the captured command and positive exact-message receipt; explicit `--run` still selects coordinator mail, per the feature contract. No mailbox authority policy changed.
+- **Verification boundary:** permanent AC9/lifecycle/transport regressions are written but unrun under the current build-first instruction. No suite, review or UI dogfood pass is claimed. One admitted session pointer rejected on revoked context during shutdown and logged a handled method error; shutdown did not await it, repeat Enter or touch the closed orchestration store.
+- **Record:** docs/loop/decisions/m6-orchestration-idle-pointer-shutdown.md D7–D9 and the matching logic spec. No test-only follow-up item is added.
+## m5-loops-ui-visible-stop-close-review: build-phase handoff to the existing end phase
+
+- **Policy update:** the current authoritative LOOP.md Build first, test at the end supersedes this older follow-up's visible campaign and bounded review request. No dogfood, suite or review is run for this item; no verification-only follow-up is added. This does not turn the prior visible results into passes.
+- **Coverage goals:** the combined spec `docs/quirk/specs/2026-10-28-m5-loops-ui-visible-stop-close-review/logic.md` names native rendered Stop Cancel/After this iteration/Now and Close Cancel/Keep running/Stop loop. End-phase execution must distinguish an uninterrupted deferred stop from an interrupted Now, show detached next-iteration progress, preserve the exact tab/session on Cancel, and leave a concurrent loop unaffected by another loop's explicit Stop.
+- **Native fixture prerequisite:** use the shared native Codex app-server fixture with `uniqueThreads:true`; fresh conversations must have distinct provider IDs while resume preserves its requested ID. Retain the shipped exclusive-owner guard, stale-binding close refusal, paused-race Stop choice, setup validations and all existing tests. No production change is justified by the old duplicate-fixture-ID failure.
+- **Setup verdict finalized:** the committed parent handoff reports successful background Start and preserved focus in `20261028T060845-277a`, but the tool's final-action guard left it UNSETTLED. It remains tool-limited, neither an app failure nor a formal visible pass. The original private report is absent from this worktree; no new runtime result is inferred from its committed summary.
+- **Review status:** the cross-family campaign remains NOT RUN. The existing end phase owns one bounded review and its confirmed blocking fixes, as well as actual browser proof of the named visible controls. Headless acceptance coverage is not a browser or native-window pass.
+- **Records:** this item's specification and decision log D1–D6 explain the policy, fixture identity, evidence limits and macOS-only boundary. The original m5-loops-ui entry above remains historical evidence rather than being rewritten.
 ## sa-browser-pane-workspace-preview: blocked
 
 - **Stopped at:** LOOP.md step 3, brainstorming/technical feasibility, before approved spec, contracts or implementation. The item's entire active-HTML conversion/Back flow depends on a safe Native preview capability; there is no independently complete new flow to land.
@@ -625,3 +649,17 @@ Retained ownership, NOT cleared by blocking: sa-browser-pane D23 assigns base-pa
 - **Raw arguments:** resolved, not an open decision. Keep structured-runner D6: catalog-native model/effort only, no raw extras and no terminal fallback. Existing automation and structured guards already enforce it (`service.ts:484-505`, structured `main.ts:569-597`).
 - **Required prerequisite:** implement and publish host registration/incarnation lookup, remote repo/workspace identity and availability, and generation-fenced remote worktree/checks/structured execution. Then resume this item to integrate remote capture, pin/re-pin/re-adoption and dispatch against that authority. Do not silently replace the locked native-options policy while unblocking remote integration.
 - **Decision log:** `docs/loop/decisions/m5-automations-dispatch-remote-and-args.md` D1-D4. Existing local behavior remains unchanged. No human question or additional follow-up item was created.
+
+## m5-loops-ui-visible-stop-close-review: committed coverage and build evidence
+
+- Added `plugins/quirky.loops/test/ui-native-controls.test.ts`: three native-protocol/headless rendered-control scenarios for all six named Stop/Close choices. Optional native mode in `test/rig.ts` uses distinct fresh conversation IDs, preserves resume identity, restores environment/runner overrides and neutralizes inherited Git pointers/config injection. No product source or existing test assertion changed.
+- Fresh `bun run typecheck` passed root and mobile. A disposable fixture lifecycle smoke exercised two distinct held native conversations, actual stop interrupts, zero completed iterations, home removal and environment restoration. Shutdown callbacks logged already-deactivated worktree/notification plugins; they were not suppressed or relabelled as clean UI evidence.
+- The permanent acceptance tests remain NOT RUN. End phase command: `bun test plugins/quirky.loops/test/ui-native-controls.test.ts`; actual browser proof and one bounded cross-family review remain separate, unexecuted obligations under the earlier handoff. Setup remains tool-limited UNSETTLED. This is not a visible acceptance or review pass.
+- Final decision record: this item's D1–D9. No new verification-only queue item was created.
+
+## m4-hosting-ui-review-browser-routing: implemented consumer flow, acceptance pending end phase
+
+- Checks header, stack-member buttons and detail Open on host now share public CHORD_PLATFORM gesture interpretation and reactive normal/alternate destination hints. Existing Review API/window command/Browser router, exact source worktree, URL validation and no-fallback errors remain unchanged. Stack resource IDs are not synthesized as PR links.
+- Root and mobile typecheck passed. Disposable mounted shared-hook smoke exercised live hints and five macOS gesture classifications; no daemon, OS launch or native guest ran. This is not visual or composed acceptance proof.
+- `plugins/quirky.reviews/test/review-link-ui.test.tsx` contains new mounted-control/real-daemon regression scenarios; existing `test/link-routing.test.ts` retains canonical API/safety coverage. Both remain NOT RUN under build-first policy. No suite, build, dogfood or review pass is claimed and no verification-only queue item was added.
+- Actual native rendering, system-browser delivery and focus are pending in `docs/loop/native/m4-hosting-ui-review-browser-routing.json`. Before any route click, require proven isolated native Default root and run-owned system-browser session; otherwise block before touching real user state. Browser's separately blocked native/localhost prerequisites remain their own owners.

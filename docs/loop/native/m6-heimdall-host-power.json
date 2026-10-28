@@ -1,0 +1,22 @@
+{
+  "item": "m6-heimdall-host-power",
+  "spec": "docs/quirk/specs/2026-10-28-m6-heimdall-host-power/logic.md",
+  "scenarios": [
+    {
+      "id": "NATIVE-POWER-1",
+      "title": "Idle dedicated macOS host only: launch quirkyd with a fresh temporary QUIRKY_HOME and a real Heimdall watcher with observable work in flight. Arrange a safe external/manual wake before requesting real system sleep. Observe that native SystemWillSleep fences pending decisions before acknowledgment; on confirmed wake the watcher reads live state and cannot blindly replay its previous attempt. Never run on an active shared build host.",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    },
+    {
+      "id": "NATIVE-POWER-2",
+      "title": "Idle dedicated macOS host only: record a watcher's active budget and its interval-close timestamp, sleep the real host for a known interval, then wake. Verify budget excludes the sleeping gap and a new live reconciliation occurs. Stop the daemon, start a new isolated daemon and repeat to establish native notifier/source/callback cleanup. Do not claim this from synthetic lifecycle events or registration-only smoke.",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    }
+  ]
+}

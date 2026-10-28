@@ -137,6 +137,7 @@ files, not this one.
 | medium | medium | [m1-notifications D9](decisions/m1-notifications.md) | Unread is a marker on the session and on its worktree, written before delivery and whatever the switches say | locked by research/orca-features/notifications.md |
 | medium | medium | [m1-notifications D10](decisions/m1-notifications.md) | Viewing means a focused window whose person is present and whose view shows the session | locked by research/orca-features/notifications.md |
 | medium | medium | [m1-notifications D35](decisions/m1-notifications.md) | The session record carries its unread reason; the worktree keeps its `unread` flag | assumed — autonomous |
+| medium | medium | [m6-heimdall-host-power D2](decisions/m6-heimdall-host-power.md) | Drive the native runloop source on the Bun JS thread | assumed — autonomous |
 | medium | medium | [m1-agent-status-scripting D2](decisions/m1-agent-status-scripting.md) | Screen rules decide what scripts see, never the dot (approach A) | supersedes m1-agent-status D23 (the rules engine is now built, for scripts) |
 | medium | medium | [m1-agent-status-scripting D4](decisions/m1-agent-status-scripting.md) | A fresh hook row decides working and idle; the screen may only add blocked, and decides alone without one | assumed — autonomous |
 | medium | medium | [m1-agent-status-scripting D6](decisions/m1-agent-status-scripting.md) | A user file replaces the whole rule set; then a plugin's contribution; then the built-in file | assumed — autonomous |
@@ -430,6 +431,11 @@ files, not this one.
 | medium | high | [m1-notifications D7](decisions/m1-notifications.md) | The old "Notify when agents finish" switch becomes Agent Task Complete, and its value carries over | supersedes m0-core D13 |
 | medium | high | [m1-notifications D11](decisions/m1-notifications.md) | The window reports input activity, and focus and presence changes reach plugins as an event | assumed — autonomous |
 | medium | high | [m1-notifications D28](decisions/m1-notifications.md) | The PTY host recognises OSC 9, OSC 99 and OSC 777 notifications | assumed — autonomous |
+| medium | high | [m6-orchestration-idle-pointer-shutdown D1](decisions/m6-orchestration-idle-pointer-shutdown.md) | Restore exactly the deferred automatic hint flow | locked by docs/loop/decisions/m6-orchestration-core.md |
+| medium | high for lifetime dependency; medium for historical hang cause | [m6-orchestration-idle-pointer-shutdown D3](decisions/m6-orchestration-idle-pointer-shutdown.md) | Fence scheduler lifetime rather than wait indefinitely for external work | assumed — autonomous |
+| medium | high | [m6-orchestration-idle-pointer-shutdown D4](decisions/m6-orchestration-idle-pointer-shutdown.md) | Keep existing identity, waiter and consumption authority | locked by research/orca-features/orchestration.md |
+| medium | high | [m6-heimdall-host-power D1](decisions/m6-heimdall-host-power.md) | Implement a daemon-owned synchronous lifecycle capability | locked by docs/loop/decisions/m6-heimdall-core.md |
+| medium | high for implementation ordering; native-cycle proof pending | [m6-heimdall-host-power D6](decisions/m6-heimdall-host-power.md) | Keep native callback lifetime and activation lifetime explicit | assumed — autonomous |
 | medium | high | [m1-agent-status-scripting D10](decisions/m1-agent-status-scripting.md) | Rows record the evidence that decided them, and explain reads it | assumed — autonomous |
 | medium | high | [m1-agent-status-scripting D19](decisions/m1-agent-status-scripting.md) | Distinct failures are plugin errors with a machine-readable reason | assumed — autonomous |
 | medium | high | [m1-agent-status-scripting D38](decisions/m1-agent-status-scripting.md) | Catching up with build/roadmap brought m1-notifications, m2-source-control-core and m3-terminal-dock; no decision conflicts | assumed — autonomous |
@@ -537,6 +543,7 @@ files, not this one.
 | medium | high | [m5-ledger D16](decisions/m5-ledger.md) | Correct import paths, value flags and Quirky JSON rather than copy Orca's transport envelope | assumed — autonomous |
 | medium | high | [m5-ledger D25](decisions/m5-ledger.md) | Preserve imported source identity through automatic owner recovery | locked by external research/orca-features/ledger.md |
 | medium | high | [m5-ledger D30](decisions/m5-ledger.md) | Preserve reviewer write violations as an operational limitation | assumed — autonomous |
+| medium | high | [m4-hosting-ui-review-browser-routing D4](decisions/m4-hosting-ui-review-browser-routing.md) | Hand off native delivery only after isolation preflight | deferred: platform |
 | medium (provider contracts and ui scenarios) | high | [m3-accounts D1](decisions/m3-accounts.md) | Implement meters and only Claude/Codex switching | locked by docs/roadmap.md |
 | medium (provider adapter boundaries) | high for cli/codex; medium for observed private quota protocols | [m3-accounts D4](decisions/m3-accounts.md) | Native CLI login and provider-specific usage ports beat custom OAuth or imported snapshots | assumed — autonomous |
 | medium (inter-plugin preparation) | high | [m3-accounts D5](decisions/m3-accounts.md) | Required account preparation is separate from launch hooks | assumed — autonomous |
@@ -656,6 +663,18 @@ files, not this one.
 | medium | high | [m6-heimdall-control D7](decisions/m6-heimdall-control.md) | Preserve typed owner config and reserve owner runtime integration | assumed — autonomous |
 | medium | high for source mapping; public runtime proof still pending core integration | [m6-heimdall-control D8](decisions/m6-heimdall-control.md) | Translate CLI creation flags from the actual source contract, not inferred payload names | locked by docs/roadmap.md |
 | medium | high for observed persistence/native/public boundaries; worker backend acceptance not yet passing | [m6-heimdall-control D12](decisions/m6-heimdall-control.md) | Compose genuine dependency authority and preserve landed persistence history | assumed — autonomous |
+| medium | high | [sb-mobile-app-panels D1](decisions/sb-mobile-app-panels.md) | Own every enumerated panel and direct-host notification flow | locked by docs/loop/queue.json |
+| medium | high | [sb-mobile-app-panels D2](decisions/sb-mobile-app-panels.md) | Resolve all relevant gray areas using source-grounded defaults | assumed — autonomous |
+| medium | high | [sb-mobile-app-panels D5](decisions/sb-mobile-app-panels.md) | Add notification-only replay rather than grant general daemon events | assumed — autonomous |
+| medium | high | [sb-mobile-app-panels D6](decisions/sb-mobile-app-panels.md) | Extend Git's public contract for guarded branch switching | assumed — autonomous |
+| medium | high | [sb-mobile-app-panels D8](decisions/sb-mobile-app-panels.md) | Keep native background push separate from direct foreground subscriptions | deferred: native background push service |
+| medium | high | [sb-mobile-app-panels D9](decisions/sb-mobile-app-panels.md) | Respect absent non-GitHub Tasks provider prerequisites | deferred: non-GitHub Tasks providers |
+| medium | high | [sb-mobile-app-panels D10](decisions/sb-mobile-app-panels.md) | Require a real terminal artifact producer before exposing outside-worktree edits | deferred: terminal artifact authority prerequisite |
+| medium | high | [sb-mobile-app-panels D11](decisions/sb-mobile-app-panels.md) | Keep configured environments out of phone metadata at the producer | supersedes sb-mobile-app D13 (catalog field installed, not available); assumed — autonomous |
+| medium | high for fixture correction, unknown for earlier home effects | [sb-mobile-app-panels D14](decisions/sb-mobile-app-panels.md) | Correct process-fixture isolation without guessing at user-state rollback | assumed — autonomous |
+| medium | high | [sb-mobile-app-panels D18](decisions/sb-mobile-app-panels.md) | Complete the route/bridge cutover and translate resolved history scopes | assumed — autonomous |
+| medium | high | [sb-mobile-app-panels D19](decisions/sb-mobile-app-panels.md) | Require the native authenticated transcript proof before any RPC or binary data | assumed — autonomous |
+| medium | high | [sb-mobile-app-panels D21](decisions/sb-mobile-app-panels.md) | Compose the single catch-up without regressing the panel ceiling or connection lease | locked by docs/loop/LOOP.md; supersedes the pending catch-up step in D20 |
 | medium | high | [m3-session-info D1](decisions/m3-session-info.md) | Build the local session inspection flows, not adjacent agent extras | locked by docs/roadmap.md |
 | medium | high | [m3-session-info D5](decisions/m3-session-info.md) | Statusline consent changes only future launch overlays | locked by docs/roadmap.md |
 | medium | high | [m3-session-info D6](decisions/m3-session-info.md) | Correlate every rich value to the active provider session | assumed — autonomous |
@@ -1160,6 +1179,15 @@ files, not this one.
 | easy | high | [m3-accounts-overflow-verification D7](decisions/m3-accounts-overflow-verification.md) | Land immediately under the operator's build-first override | supersedes this item D1/D4/D6 verification schedule under explicit operator decision |
 | easy | high for the measured pre-catchup snapshot; no merged-source acceptance claim | [m3-accounts-overflow-verification D8](decisions/m3-accounts-overflow-verification.md) | Preserve measured defects without claiming a repair | assumed — autonomous |
 | easy | high for observed results only | [m3-accounts-overflow-verification D9](decisions/m3-accounts-overflow-verification.md) | Distinguish completed checks, cancellation and incoming Accounts changes | locked by operator decision and incoming Accounts decisions |
+| easy | high | [m5-loops-ui-visible-stop-close-review D1](decisions/m5-loops-ui-visible-stop-close-review.md) | Apply the current build-first policy to this older verification follow-up | locked by docs/loop/LOOP.md |
+| easy | high | [m5-loops-ui-visible-stop-close-review D2](decisions/m5-loops-ui-visible-stop-close-review.md) | Preserve product behavior and add actual native Stop/Close coverage | locked by docs/loop/decisions/m5-loops-ui.md |
+| easy | high | [m5-loops-ui-visible-stop-close-review D3](decisions/m5-loops-ui-visible-stop-close-review.md) | Finalize setup as tool-limited, not failed or passed | locked by docs/loop/decisions/m5-loops-ui.md |
+| easy | high | [m5-loops-ui-visible-stop-close-review D4](decisions/m5-loops-ui-visible-stop-close-review.md) | Resolve skill questions autonomously with one combined specification | locked by docs/loop/LOOP.md |
+| easy | high | [m5-loops-ui-visible-stop-close-review D5](decisions/m5-loops-ui-visible-stop-close-review.md) | One isolated OpenAI implementer; no review model dispatch | assumed — autonomous |
+| easy | high | [m5-loops-ui-visible-stop-close-review D6](decisions/m5-loops-ui-visible-stop-close-review.md) | Isolate processes on macOS and leave other platforms unclaimed | deferred: platform |
+| easy | high | [m5-loops-ui-visible-stop-close-review D7](decisions/m5-loops-ui-visible-stop-close-review.md) | Preserve fixture teardown even when window shutdown fails | assumed — autonomous |
+| easy | high | [m5-loops-ui-visible-stop-close-review D8](decisions/m5-loops-ui-visible-stop-close-review.md) | Preserve incoming contracts and neutralize ambient Git state | locked by docs/loop/decisions/sb-mobile-app-panels.md |
+| easy | high for observed fixture lifetime only | [m5-loops-ui-visible-stop-close-review D9](decisions/m5-loops-ui-visible-stop-close-review.md) | Typecheck and a focused fixture smoke are not visible acceptance | assumed — autonomous |
 | easy (ui presentation) | high | [sa-browser-pane D3](decisions/sa-browser-pane.md) | Adopt source-visible interaction, loading, error and settings defaults | locked by browser.md |
 | easy (next run) | high | [sa-browser-pane D6](decisions/sa-browser-pane.md) | Use three disjoint implementation components and Gemini review | assumed — autonomous |
 | easy | high | [sa-browser-pane D7](decisions/sa-browser-pane.md) | Verify macOS-native only by pending nightly scenarios and isolate all process tests | deferred: platform |
@@ -1626,6 +1654,17 @@ files, not this one.
 | easy | high | [m1-notifications D60](decisions/m1-notifications.md) | The descriptor fix lives in `startHarness`, shared by every symlink-only built-in directory | supersedes m1-term-ui D51 |
 | easy | high | [m1-notifications D61](decisions/m1-notifications.md) | The final gate passes; nothing goes to BLOCKERS.md | locked by docs/loop/LOOP.md |
 | easy | high | [m1-notifications D62](decisions/m1-notifications.md) | The first land failed on the integration tree's missing package links for the new plugin; they were copied in, as m1-term-daemon D49 did | assumed — autonomous |
+| easy | high | [m6-orchestration-idle-pointer-shutdown D2](decisions/m6-orchestration-idle-pointer-shutdown.md) | Resolve standard gray areas autonomously using build-first rules | locked by docs/loop/LOOP.md |
+| easy | high | [m6-orchestration-idle-pointer-shutdown D5](decisions/m6-orchestration-idle-pointer-shutdown.md) | One isolated implementation component with already committed public contracts | assumed — autonomous |
+| easy | high | [m6-orchestration-idle-pointer-shutdown D6](decisions/m6-orchestration-idle-pointer-shutdown.md) | Isolate macOS runtime proof and preserve platform limits | deferred: platform |
+| easy | high for this demonstrated fixture hang; historical checkpoint's exact bytes were not recorded | [m6-orchestration-idle-pointer-shutdown D7](decisions/m6-orchestration-idle-pointer-shutdown.md) | Repair proven fixture response truncation rather than weakening AC9 | assumed — autonomous |
+| easy | high | [m6-orchestration-idle-pointer-shutdown D8](decisions/m6-orchestration-idle-pointer-shutdown.md) | Execute the hint command instead of preserving an incorrect substring pin | supersedes m6-orchestration-idle-pointer-shutdown D4's Dispatch command choice; locked by research/orca-features/orchestration.md |
+| easy | high for exercised smoke paths only; permanent regressions remain unrun | [m6-orchestration-idle-pointer-shutdown D9](decisions/m6-orchestration-idle-pointer-shutdown.md) | Keep exact smoke evidence and defer permanent test execution | assumed — autonomous |
+| easy | high for the observed type/smoke gates; no suite/ui/native pass claimed | [m6-orchestration-idle-pointer-shutdown D10](decisions/m6-orchestration-idle-pointer-shutdown.md) | Preserve incoming lifecycle decisions and final merged evidence | locked by docs/loop/LOOP.md |
+| easy | high | [m6-heimdall-host-power D3](decisions/m6-heimdall-host-power.md) | Apply unattended build-first execution | locked by docs/loop/LOOP.md |
+| easy | high | [m6-heimdall-host-power D4](decisions/m6-heimdall-host-power.md) | Hand off disruptive native verification and non-macOS support | deferred: platform |
+| easy | high for exercised paths; real os sleep/wake cycle remains unverified | [m6-heimdall-host-power D5](decisions/m6-heimdall-host-power.md) | Verify registration separately from a real system sleep cycle | assumed — autonomous |
+| easy | high for exercised evidence and inspected decision scopes | [m6-heimdall-host-power D7](decisions/m6-heimdall-host-power.md) | Preserve all incoming decisions at the one roadmap catch-up | assumed — autonomous |
 | easy | high | [m1-agent-status-scripting D1](decisions/m1-agent-status-scripting.md) | The item covers the roadmap's five bullets for scripts; the dot, the Activity view and `quirky terminal` stay as they are | locked by docs/roadmap.md |
 | easy | high | [m1-agent-status-scripting D7](decisions/m1-agent-status-scripting.md) | Rules are never downloaded | locked by docs/roadmap.md |
 | easy | high | [m1-agent-status-scripting D11](decisions/m1-agent-status-scripting.md) | Explain answers for any session, with or without a row | assumed — autonomous |
@@ -1905,6 +1944,11 @@ files, not this one.
 | easy | high | [m5-ledger D29](decisions/m5-ledger.md) | Close XR1 despite its malformed first review packet, with one scoped fix batch | assumed — autonomous |
 | easy | high | [m5-ledger D31](decisions/m5-ledger.md) | Finish this item through queue-controlled integration without new flows or review rounds | locked by docs/loop/LOOP.md |
 | easy — prior snapshots remain in committed history | high | [m5-ledger D32](decisions/m5-ledger.md) | Keep only the ledger patch when catching up with the restored integration history | locked by docs/loop/LOOP.md; supersedes D27's integration snapshot selection, not its frozen review evidence |
+| easy | high | [m4-hosting-ui-review-browser-routing D1](decisions/m4-hosting-ui-review-browser-routing.md) | Reuse the implemented core and finish all three visible controls | locked by hosting-ui.md and docs/loop/decisions/m7-sweep-hosting.md |
+| easy | high | [m4-hosting-ui-review-browser-routing D2](decisions/m4-hosting-ui-review-browser-routing.md) | Resolve standard gray areas without a person | locked by docs/loop/decisions/sa-browser-profiles-settings.md |
+| easy | high | [m4-hosting-ui-review-browser-routing D3](decisions/m4-hosting-ui-review-browser-routing.md) | Follow build-first execution and keep inherited artifacts untouched | locked by docs/loop/LOOP.md |
+| easy | high | [m4-hosting-ui-review-browser-routing D5](decisions/m4-hosting-ui-review-browser-routing.md) | Retain the existing route owner after all incoming decisions | assumed — autonomous |
+| easy | high for the observed gate/module behavior; full acceptance and native effects unverified | [m4-hosting-ui-review-browser-routing D6](decisions/m4-hosting-ui-review-browser-routing.md) | Separate the typecheck gate and isolated module smoke from acceptance | assumed — autonomous |
 | easy (decision review) | high | [m3-accounts D2](decisions/m3-accounts.md) | Answer unattended design questions without a human gate | locked by docs/loop/LOOP.md |
 | easy (no implementation dispatched) | high | [m3-accounts D3](decisions/m3-accounts.md) | Use OpenAI task implementers and Gemini review fallback | assumed — autonomous |
 | easy (ui); medium (cache) | high | [m3-accounts D7](decisions/m3-accounts.md) | Retain documented presentation, errors and freshness defaults | locked by research/orca-features/accounts.md |
@@ -2209,6 +2253,15 @@ files, not this one.
 | easy | high for the identified setup and dispatch semantics; final native acceptance not yet passing | [m6-heimdall-control D14](decisions/m6-heimdall-control.md) | Require an acknowledged dispatch, not merely a live process or completed work | assumed — autonomous |
 | easy | high for the exercised complete native worker-control flow | [m6-heimdall-control D15](decisions/m6-heimdall-control.md) | Exercise a blocking Ask rather than invent a pending one-way message | locked by docs/roadmap.md |
 | easy | high | [m6-heimdall-control D16](decisions/m6-heimdall-control.md) | Verify observable settlement rather than incidental exit metadata or callback timing | assumed — autonomous |
+| easy | high | [sb-mobile-app-panels D3](decisions/sb-mobile-app-panels.md) | Use night-mode autonomous workflow and isolated implementations | locked by docs/loop/LOOP.md |
+| easy | high | [sb-mobile-app-panels D4](decisions/sb-mobile-app-panels.md) | Pair OpenAI omp workers with Gemini reviewer | assumed — autonomous |
+| easy | high | [sb-mobile-app-panels D7](decisions/sb-mobile-app-panels.md) | Bind subscription cancellation to an authenticated device and generation | assumed — autonomous |
+| easy | high | [sb-mobile-app-panels D12](decisions/sb-mobile-app-panels.md) | Use bounded draft transfers and authoritative workspace outcomes | assumed — autonomous |
+| easy | high | [sb-mobile-app-panels D13](decisions/sb-mobile-app-panels.md) | Audit and integrate complete component source before surface verification | assumed — autonomous |
+| easy | high | [sb-mobile-app-panels D15](decisions/sb-mobile-app-panels.md) | Repair both advertised CLI and guarded confirmation contracts | assumed — autonomous |
+| easy | high | [sb-mobile-app-panels D16](decisions/sb-mobile-app-panels.md) | Prepare private-branch panel admission before the base queue item lands | supersedes sb-mobile-app D7 (private-branch admission timing only) |
+| easy | high | [sb-mobile-app-panels D17](decisions/sb-mobile-app-panels.md) | Apply the already-over-two-hours completion rule without overstating verification | locked by docs/loop/LOOP.md |
+| easy | high | [sb-mobile-app-panels D20](decisions/sb-mobile-app-panels.md) | Land with typecheck only under the operator's build-first cutover | supersedes sb-mobile-app-panels D17; locked by docs/loop/LOOP.md |
 | easy | high | [m3-session-info D2](decisions/m3-session-info.md) | Use the existing right-column panel slot without a shortcut | locked by docs/loop/decisions/m0-ui-api.md |
 | easy | high | [m3-session-info D3](decisions/m3-session-info.md) | Keep view state in the daemon and default only Live activity open | locked by docs/roadmap.md |
 | easy | high | [m3-session-info D4](decisions/m3-session-info.md) | Show missing, waiting, refreshing, stale and error states honestly | locked by external session-info.md |

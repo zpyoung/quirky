@@ -7,6 +7,7 @@ import { rpcUrl } from '@quirky/protocol/node'
 import { formatRecord, formatTable } from '../../../packages/cli/src/output'
 import { startHarness, waitForAsync, type Harness } from '../../../packages/daemon/test/helpers'
 import type { LoopConfig, LoopSnapshot } from '../src/types'
+import { createCodexAppServerFixture, type CodexAppServerFixture } from '../../quirky.structured/test/fakes/codex-app-server'
 
 const PLUGINS_ROOT = resolve(import.meta.dir, '../..')
 const PLUGINS = [
@@ -20,7 +21,12 @@ const PLUGINS = [
   'quirky.notifications',
   'quirky.loops'
 ]
-const ENV_KEYS = ['HOME', 'PATH', 'QUIRKY_HOME', 'CLAUDE_CONFIG_DIR', 'CODEX_HOME', 'QUIRKY_AGENT_SEARCH_DIRS', 'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM'] as const
+const GIT_ENV_KEYS = [
+  'GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE',
+  'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES',
+  'GIT_CONFIG_PARAMETERS', 'GIT_CONFIG_COUNT'
+] as const
+const ENV_KEYS = ['HOME', 'PATH', 'QUIRKY_HOME', 'CLAUDE_CONFIG_DIR', 'CODEX_HOME', 'QUIRKY_AGENT_SEARCH_DIRS', 'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM', ...GIT_ENV_KEYS] as const
 
 type RunnerContext = {
   appendMessage(input: { sessionId: string; role: 'user' | 'assistant' | 'system' | 'tool' | 'result'; text: string; data?: unknown }): unknown
@@ -106,7 +112,7 @@ export const loopConfig = (body: string, patch: Partial<LoopConfig> = {}): LoopC
   ...patch
 })
 
-export type LoopRigOptions = { script?: ScriptedTurn; onStop?: (sessionId: string) => void; extraPlugins?: string[] }
+export type LoopRigOptions = { script?: ScriptedTurn; onStop?: (sessionId: string) => void; extraPlugins?: string[]; nativeCodex?: boolean }
 export type LoopRig = {
   home: string
   cwd: string
@@ -116,6 +122,7 @@ export type LoopRig = {
   events: QuirkyEvent[]
   starts: Controller['starts']
   sends: Controller['sends']
+  nativeFixture?: CodexAppServerFixture
   call<T = unknown>(method: string, params?: Record<string, unknown>): Promise<T>
   snapshot(loopId: string): Promise<LoopSnapshot>
   waitForLoop(loopId: string, predicate: (snapshot: LoopSnapshot) => boolean, timeoutMs?: number): Promise<LoopSnapshot>
@@ -129,33 +136,10 @@ export async function startLoopRig(options: LoopRigOptions = {}): Promise<LoopRi
   const globals = globalThis as typeof globalThis & { __QUIRKY_TEST_STRUCTURED_RUNNER__?: (context: RunnerContext) => unknown }
   const hadRunnerFactory = Object.hasOwn(globals, '__QUIRKY_TEST_STRUCTURED_RUNNER__')
   const previousRunnerFactory = globals.__QUIRKY_TEST_STRUCTURED_RUNNER__
-  const home = realpathSync(mkdtempSync(join(tmpdir(), 'quirky-loop-home-')))
-  const builtinPluginsDir = realpathSync(mkdtempSync(join(tmpdir(), 'quirky-loop-builtins-')))
-  const providerHomes = ['claude', 'codex'].map((name) => join(home, 'providers', name))
-  const providerBin = join(home, 'providers', 'bin')
-  mkdirSync(providerBin, { recursive: true })
-  for (const executable of ['claude', 'codex']) {
-    const path = join(providerBin, executable)
-    writeFileSync(path, `#!/bin/sh
-printf '%s\\n' 'VERDICT: not-met' 'REASON: isolated evaluator fixture'
-`)
-    chmodSync(path, 0o700)
-  }
-  for (const providerHome of providerHomes) mkdirSync(providerHome, { recursive: true })
-  process.env.HOME = home
-  process.env.PATH = `${providerBin}${process.env.PATH ? `:${process.env.PATH}` : ''}`
-  process.env.QUIRKY_AGENT_SEARCH_DIRS = providerBin
-  // Login shells may replace inherited PATH; the disposable provider fixture must remain discoverable there too.
-  writeFileSync(join(home, '.bash_profile'), `export PATH='${process.env.PATH.replaceAll("'", "'\\''")}'\n`, { mode: 0o600 })
-  process.env.QUIRKY_HOME = home
-  process.env.CLAUDE_CONFIG_DIR = providerHomes[0]
-  process.env.CODEX_HOME = providerHomes[1]
-  process.env.GIT_CONFIG_GLOBAL = '/dev/null'
-  process.env.GIT_CONFIG_NOSYSTEM = '1'
-
-  const controller: Controller = { starts: [], sends: [], script: options.script, onStop: options.onStop }
-  globals.__QUIRKY_TEST_STRUCTURED_RUNNER__ = (context) => new ScriptedRunner(context, controller)
+  let home = ''
+  let builtinPluginsDir = ''
   let harness: Harness | undefined
+  let nativeFixture: CodexAppServerFixture | undefined
   let disposed = false
 
   const restoreEnvironment = (): void => {
@@ -168,7 +152,62 @@ printf '%s\\n' 'VERDICT: not-met' 'REASON: isolated evaluator fixture'
     else delete globals.__QUIRKY_TEST_STRUCTURED_RUNNER__
   }
 
+  const cleanupOwnedRig = async (): Promise<void> => {
+    if (disposed) return
+    disposed = true
+    try {
+      await harness?.cleanup()
+    } finally {
+      try {
+        if (builtinPluginsDir) rmSync(builtinPluginsDir, { recursive: true, force: true })
+      } finally {
+        try {
+          if (home) rmSync(home, { recursive: true, force: true })
+        } finally {
+          restoreEnvironment()
+        }
+      }
+    }
+  }
+
   try {
+    home = mkdtempSync(join(tmpdir(), 'quirky-loop-home-'))
+    home = realpathSync(home)
+    builtinPluginsDir = mkdtempSync(join(tmpdir(), 'quirky-loop-builtins-'))
+    builtinPluginsDir = realpathSync(builtinPluginsDir)
+    const providerHomes = ['claude', 'codex'].map((name) => join(home, 'providers', name))
+    const providerBin = join(home, 'providers', 'bin')
+    mkdirSync(providerBin, { recursive: true })
+    for (const executable of ['claude', 'codex']) {
+      if (options.nativeCodex && executable === 'codex') continue
+      const path = join(providerBin, executable)
+      writeFileSync(path, `#!/bin/sh
+printf '%s\\n' 'VERDICT: not-met' 'REASON: isolated evaluator fixture'
+`)
+      chmodSync(path, 0o700)
+    }
+    for (const providerHome of providerHomes) mkdirSync(providerHome, { recursive: true })
+    if (options.nativeCodex) {
+      nativeFixture = createCodexAppServerFixture(join(providerHomes[1]!, 'native-app-server'), { uniqueThreads: true })
+      symlinkSync(nativeFixture.executable, join(providerBin, 'codex'))
+      symlinkSync(process.execPath, join(providerBin, 'node'))
+    }
+    process.env.HOME = home
+    process.env.PATH = `${providerBin}${process.env.PATH ? `:${process.env.PATH}` : ''}`
+    process.env.QUIRKY_AGENT_SEARCH_DIRS = providerBin
+    // Login shells may replace inherited PATH; the disposable provider fixture must remain discoverable there too.
+    writeFileSync(join(home, '.bash_profile'), `export PATH='${process.env.PATH.replaceAll("'", "'\\''")}'\n`, { mode: 0o600 })
+    process.env.QUIRKY_HOME = home
+    process.env.CLAUDE_CONFIG_DIR = providerHomes[0]
+    process.env.CODEX_HOME = providerHomes[1]
+    process.env.GIT_CONFIG_GLOBAL = '/dev/null'
+    process.env.GIT_CONFIG_NOSYSTEM = '1'
+    for (const key of GIT_ENV_KEYS) delete process.env[key]
+
+    const controller: Controller = { starts: [], sends: [], script: options.script, onStop: options.onStop }
+    if (options.nativeCodex) delete globals.__QUIRKY_TEST_STRUCTURED_RUNNER__
+    else globals.__QUIRKY_TEST_STRUCTURED_RUNNER__ = (context) => new ScriptedRunner(context, controller)
+
     for (const pluginId of new Set([...PLUGINS, ...(options.extraPlugins ?? [])])) symlinkSync(join(PLUGINS_ROOT, pluginId), join(builtinPluginsDir, pluginId))
     const start = async () => startHarness({ home, builtinPluginsDir, shell: '/bin/bash' })
     harness = await start()
@@ -209,6 +248,7 @@ printf '%s\\n' 'VERDICT: not-met' 'REASON: isolated evaluator fixture'
       events,
       starts: controller.starts,
       sends: controller.sends,
+      ...(nativeFixture === undefined ? {} : { nativeFixture }),
       call<T = unknown>(method: string, params: Record<string, unknown> = {}) { return client.callAny(method, params) as Promise<T> },
       snapshot(loopId) { return rig.call<LoopSnapshot>('quirky.loops/get', { loopId }) },
       waitForLoop(loopId, predicate, timeoutMs = 10_000) {
@@ -250,25 +290,11 @@ printf '%s\\n' 'VERDICT: not-met' 'REASON: isolated evaluator fixture'
         await connect()
         rig.harness = harness!
       },
-      async cleanup() {
-        if (disposed) return
-        disposed = true
-        try {
-          await harness?.cleanup()
-        } finally {
-          rmSync(builtinPluginsDir, { recursive: true, force: true })
-          restoreEnvironment()
-        }
-      }
+      async cleanup() { await cleanupOwnedRig() }
     }
     return rig
   } catch (error) {
-    try {
-      await harness?.cleanup()
-    } finally {
-      rmSync(builtinPluginsDir, { recursive: true, force: true })
-      restoreEnvironment()
-    }
+    await cleanupOwnedRig()
     throw error
   }
 }
