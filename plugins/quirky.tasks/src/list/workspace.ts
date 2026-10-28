@@ -381,9 +381,9 @@ async function createFromComposer(
       github: targetUrl(target),
       ...(name !== undefined ? { name } : {}),
       setup,
-      ...(issueCommand === undefined ? {} : { issueCommand }),
+      ...(issueCommand === 'run' || issueCommand === 'skip' ? { issueCommand } : {}),
       ...(agent ? { agent } : {}),
-      ...(promptValue !== undefined ? { prompt: promptValue } : {}),
+      ...(request.prompt.trim().length > 0 ? { prompt: request.prompt } : {}),
       ...(trustSetup ? { trustSetup: true, trustSetupHash: approvedSetupHash } : {}),
       ...(trustIssueCommand ? { trustIssueCommand: true, trustIssueCommandHash: approvedIssueCommandHash } : {}),
       createdBy: 'window',
@@ -395,7 +395,7 @@ async function createFromComposer(
 
     const canonical = { ...created.record, kind: 'created', target } as unknown as TaskWorkspaceCreated
     const warnings = Array.isArray(canonical.warnings) ? [...canonical.warnings] : []
-    const promptWasProvided = typeof promptValue === 'string' && promptValue.trim().length > 0
+    const promptWasProvided = request.prompt.trim().length > 0
     let promptDelivery: unknown = canonical.promptDelivery
     if (typeof canonical.agentSessionId === 'string') {
       try {

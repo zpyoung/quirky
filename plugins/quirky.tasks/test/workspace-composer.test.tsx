@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test'
+import { act, createElement } from 'react'
 import { WorkspaceComposer } from '../src/list/WorkspaceComposer'
 import type { Root, createRoot as CreateRoot } from 'react-dom/client'
 import type { UiPluginContext } from '@quirky/protocol'

@@ -144,7 +144,7 @@ export const PANEL_METHOD_PARAMS: Readonly<Record<string, readonly string[]>> = 
   'quirky.tasks/issue': ['worktree', 'number', 'url', 'projectId', 'itemId', 'host', 'owner', 'repo', 'refresh'],
   'quirky.tasks/issueEdit': ['worktree', 'number', 'url', 'projectId', 'itemId', 'host', 'owner', 'repo', 'title', 'body', 'state', 'stateReason', 'duplicateOf', 'labels', 'assignees'],
   'quirky.tasks/issueComment': ['worktree', 'number', 'url', 'projectId', 'itemId', 'host', 'owner', 'repo', 'body'],
-  'quirky.tasks/workspace': ['target', 'action', 'newWorkspace', 'name', 'prompt', 'setup', 'agent', 'composerRequestId', 'trustSetup'],
+  'quirky.tasks/workspace': ['target', 'action', 'newWorkspace', 'name', 'prompt', 'setup', 'issueCommand', 'agent', 'composerRequestId', 'trustSetup', 'trustSetupHash', 'trustIssueCommand', 'trustIssueCommandHash'],
   'quirky.tasks/workspaceComposerCancel': ['requestId'],
   'quirky.accounts/list': ['provider'],
   'quirky.accounts/usage': [],

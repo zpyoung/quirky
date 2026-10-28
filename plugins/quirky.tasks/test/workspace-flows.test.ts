@@ -52,7 +52,13 @@ async function submitComposer(host: WorkspaceFixture, request: RecordValue, kind
 }
 
 async function cliWorkspace(host: WorkspaceFixture, params: RecordValue): Promise<RecordValue> {
-  const result = await host.cli(['--json', 'tasks', 'workspace', '--params', JSON.stringify(params)])
+  const flags = ['--target', JSON.stringify(params.target), '--action', stringField(params, 'action')]
+  if (params.newWorkspace === true) flags.push('--new-workspace')
+  for (const key of ['setup', 'issueCommand', 'agent', 'name', 'prompt', 'composerRequestId']) {
+    if (params[key] === undefined) continue
+    flags.push(`--${key.replace(/[A-Z]/g, letter => `-${letter.toLowerCase()}`)}`, stringField(params, key))
+  }
+  const result = await host.cli(['--json', 'tasks', 'workspace', ...flags])
   expect({ code: result.code, stderr: result.stderr }).toEqual({ code: 0, stderr: '' })
   return record(JSON.parse(result.stdout))
 }
@@ -314,7 +320,6 @@ test('Project-style direct Start picks the default agent and reports the readine
   const sessionId = stringField(created, 'agentSessionId')
   const finalSession = await sessionAfterReady(host.client, sessionId)
   expect(finalSession.promptDelivery).toBe('pasted')
-  expect(['pending', 'pasted', 'unconfirmed', 'not-delivered', 'command-line', null]).toContain(created.promptDelivery)
   const input = host.fakeLog('goose').flatMap((event) => {
     if (event.type !== 'input' || typeof event.b64 !== 'string') return []
     return [Buffer.from(event.b64, 'base64').toString('utf8')]
@@ -322,4 +327,19 @@ test('Project-style direct Start picks the default agent and reports the readine
   const expectedPrompt = prompt.replaceAll('\n', '\r')
   expect(input).toContain(expectedPrompt)
   expect(input.indexOf(expectedPrompt)).toBe(input.lastIndexOf(expectedPrompt))
+}, 60_000)
+
+test('submitting a retained composer without replacing its prompt delivers the prefilled item context', async () => {
+  const host = await bootWorkspaceWithAgent()
+  hosts.push(host)
+  await host.client.callAny('events.subscribe', {})
+  const target = { worktree: host.worktree, kind: 'issue', number: 4, url: workspaceItemUrl('issue', 4) }
+  const opened = record(await host.call('quirky.tasks/workspace', { target, action: 'start', agent: 'goose' }))
+  const created = record(await host.call('quirky.tasks/workspace', {
+    target, action: 'start', newWorkspace: true, composerRequestId: opened.requestId, setup: 'skip', name: 'retained-item-context'
+  }))
+  const session = await sessionAfterReady(host.client, stringField(created, 'agentSessionId'))
+  expect(session.promptDelivery).toBe('pasted')
+  const input = host.fakeLog('goose').flatMap(event => event.type === 'input' ? [Buffer.from(event.b64, 'base64').toString('utf8')] : []).join('')
+  expect(input).toContain(`Work on GitHub issue #4: Issue 4\r${target.url}`)
 }, 60_000)

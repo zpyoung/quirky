@@ -99,12 +99,12 @@ process.exit(result.exitCode ?? 1)
 }
 
 
-export async function bootWorkspace(): Promise<WorkspaceFixture> {
+export async function bootWorkspace(options: { extraBuiltins?: string[] } = {}): Promise<WorkspaceFixture> {
   const realGit = Bun.which('git')
   if (!realGit) throw new Error('Git is required to start the workspace fixture.')
   let host: TasksTest | undefined
   try {
-    host = await bootTasks(workspaceFixtureSource)
+    host = await bootTasks(workspaceFixtureSource, options)
     const baseBare = join(host.root, 'base.git')
     const forkBare = join(host.root, 'fork.git')
     const forkSeed = join(host.root, 'fork-seed')
@@ -133,13 +133,13 @@ export async function bootWorkspace(): Promise<WorkspaceFixture> {
           headOwner: 'fork-owner',
           headRepoName: 'fork-repo'
         }) as WorkspaceFixtureItem
-        this.writeState(seedListFixture({ ...items, 'test-owner/test-repo': [issue, pull, ...(items['test-owner/test-repo'] ?? [])] }))
+        host!.writeState(seedListFixture({ ...items, 'test-owner/test-repo': [issue, pull, ...(items['test-owner/test-repo'] ?? [])] }))
       },
       setHooks(hooks: { setup?: string; issueCommand?: string; file?: string }) {
         const filename = hooks.file ?? DEFAULT_HOOK_FILE
         const path = join(host!.repoPath, filename)
         const body = [
-          ...(hooks.setup === undefined ? [] : [`setup: ${JSON.stringify(hooks.setup)}`]),
+          ...(hooks.setup === undefined ? [] : [`scripts:\n  setup: ${JSON.stringify(hooks.setup)}`]),
           ...(hooks.issueCommand === undefined ? [] : [`issueCommand: ${JSON.stringify(hooks.issueCommand)}`])
         ].join('\n') + '\n'
         runGit(realGit, host!.repoPath, ['checkout', '--quiet', 'main'])
@@ -148,7 +148,7 @@ export async function bootWorkspace(): Promise<WorkspaceFixture> {
         runGit(realGit, host!.repoPath, ['-c', 'user.name=Workspace Fixture', '-c', 'user.email=workspace@example.test', '-c', 'commit.gpgsign=false', 'commit', '--quiet', '-m', `set ${filename}`])
         const revision = runGit(realGit, host!.repoPath, ['rev-parse', 'HEAD'])
         runGit(realGit, host!.repoPath, ['update-ref', 'refs/remotes/origin/main', revision])
-        runGit(realGit, host!.repoPath, ['push', '--quiet', host!.baseBare, 'refs/heads/main:refs/heads/main'])
+        runGit(realGit, host!.repoPath, ['push', '--quiet', baseBare, 'refs/heads/main:refs/heads/main'])
         runGit(realGit, host!.repoPath, ['checkout', '--quiet', 'feature'])
         return revision
       }
@@ -212,11 +212,12 @@ export async function bootWorkspaceWithAgent(): Promise<WorkspaceAgentFixture> {
     const worktree = resolved.id
     await e2e.call('quirky.tasks/state', { worktree })
 
+    const cleanupAgentRuntime = e2e.cleanup
     const cleanup = async () => {
       if (cleaned) return
       cleaned = true
       try {
-        await e2e!.cleanup()
+        await cleanupAgentRuntime()
       } finally {
         rmSync(fixtureRoot, { recursive: true, force: true })
       }
