@@ -132,5 +132,16 @@
 - **Revisit if:** A real packaged Worker loses a request without the fault fixture wrapper.
 - **Source:** assumed — autonomous
 
+## D13: Stop verification/debugging and land under the operator's typecheck-only gate
+- **Question:** What happens to the ongoing parity verification after the operator moved it to the end phase?
+- **Options:** Continue fixing failed tests and running browser/review campaigns; freeze the built work, make types pass and land now.
+- **Chose:** Freeze implementation components and commit them, skip every unfinished suite/dogfood/review and test-failure fix, run only typecheck, catch up once and land through the current queue tool.
+- **Why:** The operator explicitly changed the workflow, and the authoritative Build first, test at the end section now makes this the current-item landing rule. Failures are evidence for the end phase, not reasons to invent verification follow-ups.
+- **Evidence:** Operator interjection in iteration6; git show build/roadmap:docs/loop/LOOP.md, Build first, test at the end.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** m7-test-triage is claimed or the operator changes the gate.
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-Spec/contracts committed before three disjoint implementers; actual Session Info owner and bounded project-context amendments recorded. Worker component scope/HEAD audit is clean at b59ba608 and targeted acceptance passes37tests477assertions, with baseline child failure retained. Window component returned and its acceptance is underway; action/integration component remains active. No branch-wide, packaged or browser completion claim yet. Next: full component barrier/audit, integrated acceptance/build, packaged lifecycle and complete browser campaign, required affected runner/scripts/typecheck, one catch-up/review and supported queue land. Inherited .serena/ remains excluded.
+Operator-authorized typecheck-only landing is active (D13). Source implementations and acceptance tests are being assembled from the three owned components. Worker targeted checks completed before the rule change; multiple Window/Actions fixture and consumer failures remain explicitly recorded for the end phase. Baseline and corrected standalone symlink-deletion API smoke ran before the interjection: baseline falsely reported deleted; corrected path refused without mutating source/sentinel. No built-browser, packaged long-idle, full affected-suite or final review claim. Native scenarios remain pending. Next: commit the frozen components, run/fix typecheck only, one integration catch-up and supported queue land. No verification/debugging follow-up item.

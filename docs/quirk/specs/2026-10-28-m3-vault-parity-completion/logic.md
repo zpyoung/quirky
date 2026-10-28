@@ -76,3 +76,5 @@ Status: Approved autonomously per LOOP.md. Combined technical section replaces s
 **Amendments:** 2026-10-28 — Specify the missing project-only context using existing `view.input.repo` JSON, with worktree precedence and public registered-repo validation. No new project page or kernel identity field.
 
 **Amendments:** 2026-10-28 — Preserve Handoff's existing last-user-prompt semantics. Complete source context remains available through the validated transcript, and SC-18 still exposes/copies the full first prompt. Remove the completion spec's accidental conflation of first prompt with the owner's `prompt` field; no user scenario was removed.
+
+**Amendments:** 2026-10-28 — Operator moved all testing/debugging to the end phase. This item now lands its implemented flows and written tests after typecheck only; unfinished browser, packaged lifecycle, suite and review obligations remain end-phase work, not new follow-up items. The acceptance catalog remains the target, not a claim of passing verification.
