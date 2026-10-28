@@ -77,5 +77,27 @@
 - **Revisit if:** corrected runtime still cannot activate the editor or typecheck reports more diagnostics.
 - **Source:** assumed — autonomous
 
+## D8: Keep exercised API and component evidence distinct from deferred acceptance
+- **Question:** What has actually passed, and what remains deliberately unrun?
+- **Options:** treat authored tests/typecheck as full parity; report only observed isolated paths.
+- **Chose:** corrected root/mobile typecheck bg9 passed24.08s. Actual daemon/API+generated CLI bg10 passed2.67s:68-byte local PNG, two independent URLs, exact release404 while sibling/source-buffer remain200, idempotent release, four unsafe-source refusals, text-only boundary, absent historical source, no detached buffer/disk mutation. Production FileDiff browser mount showed two modified-only sanitized previews with real1px image decode; unmounting one yielded404/200. Production ChangesSurface with a controlled shared-draft boundary and real daemon APIs showed the shared draft/image; Source returned that draft, released its URL404 and retained both Git URLs200.
+- **Why:** actual mounted components plus resource GETs establish changed paths but not packaged-app/native/full acceptance. The scratch harness is not the shell/tab owner. Same-tab hosted behavior, deferred-acquisition races and bounds have authored permanent coverage, not a reported passing suite.
+- **Evidence:** bg9/bg10; component service r9b and r9c readiness/exit0/DIFF_IMAGE_SMOKE_CLEANED; managed browser DOM/screenshots and resource statuses. Scratch JSX initially lacked react/jsx-dev-runtime resolution; fixing only its resolver allowed real component mounts. First browser worker timed out/was killed; reopened owned tab supplied the actual evidence. Resource cancellation logged expected net::ERR_ABORTED on revoked image fetches; no observed page exception. Browser tabs released, both owned services exited0; shutdown response socket close occurred while awaited teardown completed.
+- **Reversibility:** easy
+- **Confidence:** high for exercised paths only
+- **Revisit if:** end-phase acceptance or native/platform execution contradicts these observations.
+- **Source:** assumed — autonomous
+
+## D9: Preserve the single incoming terminal completion's ownership
+- **Question:** Did the one integration catch-up alter this source/resource contract?
+- **Options:** duplicate terminal rendering/authority; preserve the incoming owners and source authorization.
+- **Chose:** single conflict-free merge754cab76; immutable HEAD^1...HEAD^2 inventory contained only m7-sweep-terminal-completion.md, read in full including its truncated evidence/Progress. Preserve Ask's separate inert preview pipeline, Dashboard/Fork ownership, panel-only Sleep, worktree provenance, exact scoped cleanup and remote/native capability limits. No source/image contract conflict and no extra in-scope flow remains unbuilt; no follow-up item.
+- **Why:** Ask output is not a file-authorized diff source, and terminal Sleep/cleanup must retain its own resource/lifecycle authority. Incoming new hooks wrote only the smoke's isolated provider homes; cleanup removed them.
+- **Evidence:** git merge output754cab76 and exact incoming log inventory; complete incoming D1–D14; merged actual daemon/API/CLI bg12 passed2.69s with DIFF_IMAGE_SMOKE_CLEANED; merged root/mobile typecheck bg11 passed24.04s.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** canonical landing introduces a conflicting owner or compiler failure.
+- **Source:** locked by docs/loop/decisions/m7-sweep-terminal-completion.md
+
 ## Progress
-Claimed item after six authoritative wait calls (first five completed busy). Branch build/m7-diff-markdown-local-images from current roadmap. Requirements/parent logs/locked roadmap+architecture read; combined logic spec written and self-reviewed. Next commit public types/schema/contracts, dispatch two components, integrate, narrow runtime/surface proof, typecheck, single roadmap catch-up/read incoming decisions, land. No item verification campaigns have run.
+Ready for canonical landing: implementation, authored acceptance and bounded runtime/component evidence complete; merged root/mobile typecheck bg11 passed24.04s and actual merged API/CLI bg12 passed2.69s. No suites/reviews/full dogfood/native clearance claimed. Both component worktrees removed immediately after merge. Single roadmap catch-up754cab76 and its only incoming decision log reconciled. All workers/checks returned and owned browser/services stopped. Commit final evidence, detach and canonical queue land. After its receipt remove only owned scratch/component branches, update loop notes and end this one item.
