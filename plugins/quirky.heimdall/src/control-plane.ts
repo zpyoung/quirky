@@ -172,7 +172,14 @@ export function createControlPlane(host: KernelControlHost): ControlPlane {
 
     if (completion.result.kind !== 'applied') return completion.result
     if (completion.changed) host.changed(watcherId)
-    if (completion.reconcile) await host.reconcile(watcherId)
+    if (completion.reconcile) {
+      try {
+        const cycle = host.reconcile(watcherId)
+        if (cycle) void cycle.catch(error => host.context.log(`Watcher ${watcherId} reconciliation failed after an applied control: ${errorDetail(error)}`))
+      } catch (error) {
+        host.context.log(`Watcher ${watcherId} reconciliation failed after an applied control: ${errorDetail(error)}`)
+      }
+    }
     return completion.result
   }
 

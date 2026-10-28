@@ -738,6 +738,7 @@
     "@quirky/plugin-checks": ["@quirky/plugin-checks@workspace:plugins/quirky.checks"],
 
     "@quirky/plugin-editor": ["@quirky/plugin-editor@workspace:plugins/quirky.editor"],
+
     "@quirky/plugin-git": ["@quirky/plugin-git@workspace:plugins/quirky.git"],
 
     "@quirky/plugin-handoff": ["@quirky/plugin-handoff@workspace:plugins/quirky.handoff"],

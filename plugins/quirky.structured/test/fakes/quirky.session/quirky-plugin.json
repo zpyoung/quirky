@@ -14,7 +14,10 @@
           "type": "object",
           "properties": {
             "session": { "type": "string", "description": "The session ID." },
-            "id": { "type": "string", "description": "The agent CLI's session ID: 1 to 512 characters, no leading `-`, no control characters." },
+            "id": {
+              "type": "string",
+              "description": "The agent CLI's session ID: 1 to 512 characters, no leading `-`, no control characters."
+            },
             "transcriptPath": { "type": "string", "description": "The transcript file, for agents that resume from one." }
           },
           "required": ["session", "id"]

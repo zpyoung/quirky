@@ -580,7 +580,19 @@ export function activate(context: PluginContext): void {
     }
     const unsupported = Object.keys(params).find(
       (key) =>
-        !['worktree', 'agent', 'prompt', 'model', 'options', 'extraArgs', 'background', 'title', 'deferStart', 'lifetime', 'lifetimeKey'].includes(key)
+        ![
+          'worktree',
+          'agent',
+          'prompt',
+          'model',
+          'options',
+          'extraArgs',
+          'background',
+          'title',
+          'deferStart',
+          'lifetime',
+          'lifetimeKey'
+        ].includes(key)
     )
     if (unsupported !== undefined) throw context.error('invalid-params', `structured create does not support ${unsupported}`)
     const deferStart = params.deferStart === true
@@ -691,7 +703,9 @@ export function activate(context: PluginContext): void {
 
   const resume: MethodHandler = async (params, caller) => {
     const ownerPluginId = await ownerPluginFor(caller)
-    const unsupported = Object.keys(params).find((key) => key !== 'session' && key !== 'prompt' && key !== 'lifetime' && key !== 'lifetimeKey')
+    const unsupported = Object.keys(params).find(
+      (key) => key !== 'session' && key !== 'prompt' && key !== 'lifetime' && key !== 'lifetimeKey'
+    )
     if (unsupported !== undefined) throw context.error('invalid-params', `structured resume does not support ${unsupported}`)
     if (typeof params.prompt !== 'undefined' && typeof params.prompt !== 'string') {
       throw context.error('invalid-params', 'prompt must be a string')
@@ -874,12 +888,8 @@ export function activate(context: PluginContext): void {
       receipt?: { operationId: string; payloadHash: string }
     ): Promise<StructuredSendResult> => enqueueSend<StructuredSendResult>(sessionId, async () => {
       ensureActive()
-      const session = await requireStructured(sessionId)
-      if (!isStructuredAgent(session.agent)) {
-        throw context.error('conflict', `structured sessions cannot send to provider ${session.agent}`)
-      }
       const recipientRefusal = (): StructuredSendResult | null => {
-        if (guards.expectedIncarnation === undefined) return null
+        if (typeof guards.expectedIncarnation !== 'string') return null
         const identity = context.launch.sessionIdentity(sessionId)
         if (!identity || identity.source !== 'structured_lease') return { ok: false, reason: 'recipient_gone' }
         if (identity.sessionId !== sessionId || identity.processIncarnation !== guards.expectedIncarnation) {
@@ -887,19 +897,25 @@ export function activate(context: PluginContext): void {
         }
         return null
       }
+      const session = await requireStructured(sessionId)
+      if (!isStructuredAgent(session.agent)) {
+        throw context.error('conflict', `structured sessions cannot send to provider ${session.agent}`)
+      }
       const refused = recipientRefusal()
       if (refused) return refused
+      const entryBeforeStart = live.get(session.id)
+      if (entryBeforeStart?.stopping) throw context.error('conflict', 'structured session is stopping')
       await startTasks.get(session.id)
       ensureActive()
-      if (live.get(session.id)?.stopping) throw context.error('conflict', 'structured session is stopping')
       const revalidated = recipientRefusal()
       if (revalidated) return revalidated
-      const entry = live.get(sessionId)
+      const entry = live.get(session.id)
       const rejectGuard = (reason: 'agent-busy' | 'stale-evidence'): never => {
         const error = context.error('conflict', `structured send refused: ${reason}`)
         Object.assign(error, { data: { reason } })
         throw error
       }
+      if (entry?.stopping) rejectGuard('agent-busy')
       if (guards.requireIdle === true && (
         !entry ||
         !entry.lease ||
@@ -908,7 +924,6 @@ export function activate(context: PluginContext): void {
       )) {
         rejectGuard('agent-busy')
       }
-      if (entry?.stopping) rejectGuard('agent-busy')
       if (guards.expectedAfterSeq !== undefined) {
         const latestSeq = journal.list(sessionId, 0, 1, true)[0]?.seq ?? 0
         if (latestSeq !== guards.expectedAfterSeq) rejectGuard('stale-evidence')
@@ -928,8 +943,8 @@ export function activate(context: PluginContext): void {
         }
       }
       if (entry) entry.hasSent = true
-      const runner = runnerBySession.get(sessionId) ?? runnerFor(session.agent)
-      await runner.send(sessionId, text)
+      const runner = runnerBySession.get(session.id) ?? runnerFor(session.agent)
+      await runner.send(session.id, text)
       if (receipt) journal.completeSendReceipt(receipt.operationId, Date.now())
       return { ok: true }
     })

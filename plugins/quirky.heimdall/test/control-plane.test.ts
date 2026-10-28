@@ -579,6 +579,28 @@ describe('Heimdall control plane', () => {
     expect(h.store.get(WATCHER_ID)?.commandRevision).toBe(0)
   })
 
+  test('returns a confirmed stop without waiting for the following watcher cycle', async () => {
+    const workerIdentity = identity()
+    const h = fixture({ workers: [{ identity: workerIdentity, state: 'live' }] })
+    const nextCycle = deferred<void>()
+    h.host.reconcile = () => nextCycle.promise
+    const control = createControlPlane(h.host)
+    const stopped = control.command(request(h, { kind: 'stop-worker', identity: workerIdentity }))
+    try {
+      const result = await Promise.race([
+        stopped,
+        new Promise<'still-waiting'>(resolve => setImmediate(() => resolve('still-waiting')))
+      ])
+      expect(result).toMatchObject({ kind: 'applied' })
+      expect((await h.host.workers(h.store.get(WATCHER_ID)!))[0]?.state).toBe('exited')
+      expect(h.store.get(WATCHER_ID)?.commandRevision).toBe(1)
+      expect(control.pending(WATCHER_ID)).toEqual([])
+    } finally {
+      nextCycle.resolve()
+      await stopped
+    }
+  })
+
   test('does not fall back to an unbarriered control operation', async () => {
     const h = fixture()
     const control = createControlPlane(h.host)

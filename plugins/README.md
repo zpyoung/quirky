@@ -311,7 +311,6 @@ Concurrent work-item search/count reads batch within the same authenticated repo
 scope. Valid cursor pages are reused for up to two minutes within bounded caches;
 forced refresh and mutations invalidate them. A failed GraphQL alias does not discard
 another alias's successful result. Tasks' direct numbered pages remain direct requests.
-
 Top-level PR conversation comments use `hosting review-conversation`, not issue
 or Project mutation routes:
 

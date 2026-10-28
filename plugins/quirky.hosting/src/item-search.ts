@@ -483,8 +483,15 @@ async function fetchGraphqlSearch(
   let totalCount: number | null = null
   let hasNextPage = false
   const items: WorkItemRecord[] = []
+  const seenCursors = new Set<string>()
   for (let block = 0; block < blockCount; block += 1) {
     const result = await graphqlPage(env, scope, identity, search, cursor)
+    if (result.hasNextPage && result.endCursor !== null) {
+      if (seenCursors.has(result.endCursor)) {
+        throw env.invalid('unknown', 'GitHub returned a nonadvancing work-item search cursor.')
+      }
+      seenCursors.add(result.endCursor)
+    }
     items.push(...result.items)
     if (totalCount === null) totalCount = result.totalCount
     cursor = result.endCursor
