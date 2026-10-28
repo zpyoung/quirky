@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
 if (process.argv.includes('--version')) {
@@ -15,6 +15,8 @@ const nativeModel = 'claude-sonnet-4-5'
 const transcript = join(home, '.claude', 'projects', 'dock-e2e', `${providerSession}.jsonl`)
 const settings = join(home, '.claude', 'settings.json')
 const interactions = join(home, 'dock-claude-interactions.log')
+const refusalScreen = join(home, 'dock-claude-refusal-screen')
+const questionScreen = join(home, 'dock-claude-question-screen')
 mkdirSync(dirname(transcript), { recursive: true })
 writeFileSync(transcript, '')
 writeFileSync(interactions, '')
@@ -50,7 +52,13 @@ function draw(screen: string): void {
 }
 
 function renderPrompt(): void {
-  draw(`Claude fake terminal\nCurrent model: ${nativeModel}\nCurrent effort: ${currentEffort}\n❯`)
+  if (existsSync(refusalScreen)) {
+    draw('Save model as the new default?\n1. Yes\n2. No')
+  } else if (existsSync(questionScreen)) {
+    draw('AskUserQuestion\nChoose a color\n1. Red\n2. Blue')
+  } else {
+    draw(`Claude fake terminal\nCurrent model: ${nativeModel}\nCurrent effort: ${currentEffort}\n❯`)
+  }
 }
 
 function renderPicker(): void {
@@ -78,6 +86,9 @@ function runPromptCommand(command: string): void {
     openPicker(command)
   } else if (command === '/effort low') {
     persistDefault('persistent:slash-effort-low')
+  } else if (command === '/quit') {
+    logInteraction('quit')
+    process.exit(0)
   }
 }
 
@@ -112,6 +123,8 @@ function consumeByte(byte: number): void {
     return
   }
   if (escapeState === 2) {
+    // Public terminal sends frame pasted text with CSI 200~/201~.
+    if (byte >= 0x30 && byte <= 0x3f) return
     escapeState = 0
     if (byte === 0x41) handleArrow('up')
     else if (byte === 0x42) handleArrow('down')
@@ -152,7 +165,11 @@ appendFileSync(transcript, `${JSON.stringify({
 process.stdin.setRawMode(true)
 process.stdin.resume()
 process.stdout.write('\u001b[?2004h')
+process.on('exit', () => {
+  if (process.stdin.isTTY && typeof process.stdin.setRawMode === 'function') process.stdin.setRawMode(false)
+})
 renderPrompt()
 process.stdin.on('data', (chunk: Buffer) => {
+  appendFileSync(join(home, 'dock-pty-input.bin'), chunk)
   for (const byte of chunk) consumeByte(byte)
 })
