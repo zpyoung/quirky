@@ -1,4 +1,5 @@
 import { Badge, IconButton, StatusDot } from '@quirky/ui'
+import { createElement, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { MountFunction, QuirkyEvent, UiLayout, UiPluginContext } from '@quirky/protocol'
 import { isPlainRecord } from './daemon/state'
@@ -109,24 +110,20 @@ function ActivityButton({ context, status }: { context: UiPluginContext; status:
           ? 'Uncommitted changes are present'
           : 'No uncommitted changes'
   const count = status?.capped ? `${status.count}+` : String(status?.count ?? 0)
-  return createElement(
-    IconButton,
-    {
-      title,
-      label,
-      'data-available': status === null ? 'unknown' : String(status.available),
-      'data-dirty': status?.available && status.dirty ? 'true' : 'false',
-      onClick: () => context.togglePanel(PANEL_ID)
-    },
-    createElement(
-      'span',
-      { className: 'ui-cluster' },
-      createElement(BranchIcon),
-      createElement(StatusDot, { status: statusKind, label: statusLabel }),
-      status?.available && status.dirty
-        ? createElement(Badge, { tone: 'needs-you' }, count)
-        : null
-    )
+  return (
+    <IconButton
+      title={title}
+      label={label}
+      data-available={status === null ? 'unknown' : String(status.available)}
+      data-dirty={status?.available && status.dirty ? 'true' : 'false'}
+      onClick={() => context.togglePanel(PANEL_ID)}
+    >
+      <span className="ui-cluster">
+        <BranchIcon />
+        <StatusDot status={statusKind} label={statusLabel} />
+        {status?.available && status.dirty ? <Badge tone="needs-you">{count}</Badge> : null}
+      </span>
+    </IconButton>
   )
 }
 

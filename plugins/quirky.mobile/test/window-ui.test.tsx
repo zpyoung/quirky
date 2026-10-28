@@ -71,7 +71,7 @@ function pluginContext(call: (method: string, params: Record<string, unknown>) =
   return {
     pluginId: 'quirky.mobile',
     nativeBrowser: {} as UiPluginContext['nativeBrowser'],
-    call: async (method, params) => call(method, params ?? {}) as Promise<unknown>,
+    call: async (method: string, params?: Record<string, unknown>) => call(method, params ?? {}),
     subscribe: () => () => {},
     openView: () => {},
     onLayout: () => () => {},

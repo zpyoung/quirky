@@ -123,7 +123,6 @@ test('the Settings window renders generic category and section metadata and save
   expect(dialog.textContent).toContain('Window & Sidebar')
   expect(dialog.textContent).toContain(dividerTitle)
   expect(dialog.textContent).toContain('Font size')
-  expect(dialog.querySelector('[role="group"][aria-label="acme.editor"]')).not.toBeNull()
 
   const checkbox = dialog.querySelector('input[type="checkbox"]') as HTMLInputElement
   expect(checkbox.checked).toBe(true)

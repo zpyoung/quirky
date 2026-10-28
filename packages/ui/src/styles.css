@@ -993,57 +993,6 @@ textarea {
   flex: 1;
 }
 
-.palette-list {
-  list-style: none;
-  margin: var(--compat-px-8) 0 0;
-  padding: 0;
-  max-height: 50vh;
-  overflow-y: auto;
-}
-
-.palette-item {
-  width: 100%;
-  display: flex;
-  justify-content: space-between;
-  gap: var(--compat-px-12);
-  text-align: left;
-  background: var(--compat-color-transparent);
-  border: none;
-}
-
-.palette-item.selected {
-  background: var(--bg-active);
-}
-
-.settings-group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--compat-px-10);
-  margin: 0;
-  padding: var(--compat-px-8) var(--compat-px-10);
-  border: var(--compat-px-1) solid var(--border);
-  border-radius: var(--compat-px-5);
-}
-
-.settings-group legend {
-  padding: 0 var(--compat-px-4);
-  color: var(--muted);
-  font-size: var(--compat-px-11);
-}
-
-.settings-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--compat-px-10);
-}
-
-.settings-section-title {
-  margin: 0;
-  color: var(--muted);
-  font-size: var(--compat-px-12);
-  font-weight: 600;
-}
-
 select {
   background: var(--bg);
   border: var(--compat-px-1) solid var(--border);

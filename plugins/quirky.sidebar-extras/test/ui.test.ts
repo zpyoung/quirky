@@ -260,6 +260,7 @@ test('the mounted activity item reports singular, plural and capped status and c
 
   await act(async () => item.element.querySelector('button')?.click())
   expect(item.panelToggles.at(-1)?.id).toBe(PANEL)
+})
 
 
 test('a delayed dirty response cannot overwrite a newer workspace status', async () => {

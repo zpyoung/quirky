@@ -7,5 +7,9 @@
   "quirky.orchestration",
   "quirky.heimdall",
   "quirky.handoff",
-  "quirky.loops"
+  "quirky.loops",
+  "quirky.mobile",
+  "quirky.cli",
+  "quirky.palette",
+  "quirky.sidebar-extras"
 ]

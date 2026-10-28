@@ -55,5 +55,49 @@
 - **Revisit if:** supported platform matrix expands
 - **Source:** deferred: platform
 
+## D6: Integrate only attributed components and remove obsolete presentation consumers
+- **Question:** worker scope/lifecycle boundary, component integration and coherence sweep
+- **Options:** trust summaries; accept only all-worker HEAD/path attribution and preserve behavioral consumers
+- **Chose:** all three trees retained base33c68018ca3ae4218567aacb077e160c9c301a43; parent delta was exactly its lint/docs/external-terminal-test/legacy-CSS scope. Accepted Mobile dc0193d8, CLI bd40fea8 and host5ff06f7c, merged and removed all three trees. Mobile test DOM dependency explicitly approved; parent declares CLI's matching React/DOM test dependencies. ui-cluster is the existing utility (initial packet ui-inline-actions typo corrected). Removed dead palette/settings CSS, MobileStyles and CLI ui.js; external terminal setting test follows accessible label/control rather than removed fieldset chrome
+- **Why:** no concurrent shared writer or hidden source attribution; one convention replaces local DOM/CSS. Removed new parameter-forwarding CLI test, redundant mocked palette suite and incidental group-markup assertion instead of re-pinning. Existing real-daemon palette coverage remains authoritative
+- **Evidence:** four HEAD/status inventories at barrier; component merge/worktree-remove receipts; repository-wide old CLI/style/class consumer grep; components.css:813–826; features-settings.test.ts
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** composed typecheck or runtime exposes a consumer mismatch
+- **Source:** assumed — autonomous
+
+## D7: Repair compiler-detected integration defects without weakening the gate
+- **Question:** which failures in the first composed checks require correction
+- **Options:** suppress diagnostics; restore missing syntax/bindings and explicit fixture types
+- **Chose:** restore the lost closing test callback in sidebar-extras, restore its missing createElement/useEffect/useState imports, and type the Mobile fixture call parameters. Canonical lint already admitted all four scoped plugin IDs; no suppression/baseline/timeout change
+- **Why:** source compilation exposed actual incomplete edits, not a reason to narrow the product or its gate. Static plugin structure validation independently found the missing React bindings; manifest/module/build discovery contracts otherwise matched
+- **Evidence:** first typecheck TS1005 at sidebar-extras/test/ui.test.ts:336; second TS2552/TS2304/TS7006; SettingsPluginStructure report; repaired source ranges
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** final composed typecheck or actual mounts find another mismatch
+- **Source:** assumed — autonomous
+
+## D8: Record actual presentation proof, not a complete feature acceptance claim
+- **Question:** minimum verification supported under explicit build-first
+- **Options:** typecheck alone; prohibited suites/scoring campaign; actual disposable daemon/browser changed-path smoke and bounded claims
+- **Chose:** canonical UIlint/root/mobile/prepared-desktop typecheck and actual UI build passed32.28s, emitting11host files/26plugin modules. A fresh HOME/QUIRKY_HOME daemon and dedicated owned Chromium1148 CDP rendered Settings, compiled CLI and Mobile. Actual Settings Cancel retained the default, Save persisted false, UI Theme Save pinned dark, long content scrolled764px viewport over11905px content with fixed actions and no horizontal overflow. CLI disabled missing-target installation; invalid offer stayed masked/retained with real daemon error and no saved runtime; draft survived theme change. Mobile explicit QR, machine-name save/readback, custom loopback address, actual162px QR loaded at204/408px, enlarge/Escape, rotation and safe public reports passed. Mobile opened left-bottom; palette empty-search then keyboard CLI navigation passed. Browser errors[]
+- **Why:** exercises changed presentation paths without claiming suites, full dogfood, native behavior or an independent golden-screen score. No private capability/approval/RPC bypass. Screenshots omit live offer/QR credentials; proof JSON contains only boolean/size outcomes
+- **Evidence:** settings-restyle-evidence/{proof.json,settings-dark.png,settings-light.png,cli-light.png,mobile-dark.png,mobile-light.png,cli-mobile-tool-dark.png} beside lane notes; canonical typecheck/build output and real daemon RPC readbacks
+- **Reversibility:** easy
+- **Confidence:** high for exercised paths
+- **Revisit if:** end-phase behavior or screenshot scoring finds a presentation regression
+- **Source:** assumed — autonomous
+
+## D9: Correct smoke-driver assumptions without changing product behavior
+- **Question:** how to interpret failed automation steps and a misleading confidentiality probe
+- **Options:** treat driver failures as product defects; inspect actual surface/API and correct only harness extraction/waits
+- **Chose:** direct waitForSelector does not accept state:hidden, so used page.waitForFunction for disappearance. Custom-address save awaited canonical option before selection. Corrected press signature to key/options. Rotation temporarily removes the URL field; an early null extraction made JSON.includes(null) match ordinary nulls. Repeated only after the real offered field/QR returned; both339-character old/new URLs differed and neither appeared in ui.state. No credential value persisted in evidence
+- **Why:** actual visible/API outcomes resolve each ambiguity; no source workaround or timing increase is justified
+- **Evidence:** smoke tool errors and subsequent option/field-length/public-report observations
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a stable nonempty offered URL is ever present in a public report
+- **Source:** assumed — autonomous
+
 ## Progress
 Spec and public package dependency contracts ready to commit. Next create three isolated component worktrees, dispatch disjoint workers (Mobile; CLI; host/settings/palette/sidebar-extras), integrate after the barrier, typecheck/build and minimum owned surface proof, single roadmap catch-up/read decisions, final typecheck, commit/detach/canonical land. No tests/reviews run; exactly one item this iteration.
