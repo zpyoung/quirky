@@ -60,11 +60,26 @@ function isCommandResult(value: unknown): value is CommandResult {
   return data.kind === 'indeterminate' && typeof data.detail === 'string'
 }
 
-function initialWatcherId(input: unknown): string | null {
+function initialTarget(input: unknown): WatcherTarget | null {
   const value = record(input)
   const nestedTarget = record(value.target)
-  const candidate = nestedTarget.watcherId ?? value.watcherId
-  return typeof candidate === 'string' && candidate !== '' ? candidate : null
+  const watcherId = nestedTarget.watcherId ?? value.watcherId
+  if (typeof watcherId !== 'string' || watcherId === '') return null
+  const connectionId = nestedTarget.connectionId
+  const pairingRevision = nestedTarget.pairingRevision
+  return {
+    watcherId,
+    ...(typeof connectionId === 'string' ? { connectionId } : {}),
+    ...(typeof pairingRevision === 'number' && Number.isSafeInteger(pairingRevision) ? { pairingRevision } : {})
+  }
+}
+
+function targetKey(target: WatcherTarget): string {
+  return JSON.stringify([target.watcherId, target.connectionId ?? null, target.pairingRevision ?? null])
+}
+
+function sameTargetOwner(left: WatcherTarget, right: WatcherTarget): boolean {
+  return left.watcherId === right.watcherId && (left.connectionId ?? null) === (right.connectionId ?? null)
 }
 
 function isRemoteTarget(target: WatcherTarget): boolean {
@@ -159,13 +174,14 @@ function FleetTable({ rows, now, selectedId, onSelect }: { rows: readonly FleetR
         </thead>
         <tbody>
           {rows.map((row) => {
-            const selected = row.target.watcherId === selectedId
+            const key = targetKey(row.target)
+            const selected = key === selectedId
             const pathName = row.enrollment.workspacePath.split(/[\\/]/).filter(Boolean).at(-1)
             const workspaceName = row.workspaceName || pathName || 'Workspace'
             const turnsLimit = row.enrollment.budget.turns
             return (
               <tr
-                key={row.target.watcherId}
+                key={key}
                 aria-selected={selected}
                 tabIndex={0}
                 onClick={() => onSelect(row)}
@@ -179,6 +195,7 @@ function FleetTable({ rows, now, selectedId, onSelect }: { rows: readonly FleetR
                 <td style={{ padding: '8px 10px' }}>
                   <div>{workspaceName}</div>
                   <div style={subtleStyle}>{row.branch ?? 'Branch unavailable'}</div>
+                  {row.ownerLabel && <div style={subtleStyle}>Remote · {row.ownerLabel}</div>}
                 </td>
                 <td style={{ padding: '8px 10px' }}>
                   <div>{row.name}</div>
@@ -208,8 +225,8 @@ function ActionHistory({ items }: { items: readonly FleetAction[] }) {
       {entries.length === 0 ? <p style={{ ...subtleStyle, margin: 0 }}>No persisted watcher action attempts yet.</p> : (
         <ol style={{ margin: 0, paddingLeft: 22, display: 'grid', gap: 8 }}>
           {entries.map((item) => (
-            <li key={`${item.watcherId}:${item.attemptId}`}>
-              <div><strong>{item.actionKind}</strong> · {item.watcherName} <span style={subtleStyle}>({item.watcherId})</span></div>
+            <li key={`${targetKey(item.target ?? { watcherId: item.watcherId })}:${item.attemptId}`}>
+              <div><strong>{item.actionKind}</strong> · {item.watcherName} <span style={subtleStyle}>({item.watcherId}){item.ownerLabel ? ` · Remote · ${item.ownerLabel}` : ''}</span></div>
               <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
                 <span style={subtleStyle}>{timestamp(item.atMs)}</span>
                 <span style={{ border: '1px solid var(--border)', borderRadius: 999, color: item.effect === 'landed' ? 'var(--green)' : item.effect === 'not-landed' ? 'var(--danger)' : item.effect === 'indeterminate' ? 'var(--amber)' : 'var(--muted)', padding: '2px 8px' }}>
@@ -558,7 +575,7 @@ function WatcherDetailPane({
       <header style={{ ...cardStyle, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
         <div>
           <h2 style={{ margin: 0 }}>{detail.name}</h2>
-          <div style={subtleStyle}>{detail.enrollment.kind} · {isRemoteTarget(detail.target) ? 'Remote device' : 'This device'} · {statusSource?.state ?? 'unknown'}</div>
+          <div style={subtleStyle}>{detail.enrollment.kind} · {isRemoteTarget(detail.target) ? `Remote · Controlled by ${detail.ownerLabel ?? detail.target.connectionId ?? 'paired owner'}` : 'This device'} · {statusSource?.state ?? 'unknown'}</div>
         </div>
         <button type="button" style={buttonStyle} onClick={copyDebug}>Copy debug report</button>
       </header>
@@ -570,7 +587,7 @@ function WatcherDetailPane({
         {detail.enrollment.malformed && <div><strong>Malformed enrollment:</strong> {detail.enrollment.malformed}</div>}
         {detail.ownerContact === 'unverifiable' && <div style={{ color: 'var(--amber)' }}>Owner contact is unverifiable; this is the last confirmed state.</div>}
         {detail.readOnly && <div style={{ color: 'var(--amber)' }}>This enrollment is read-only. Controls are unavailable.</div>}
-        {isRemoteTarget(detail.target) && <div style={{ color: 'var(--amber)' }}>This watcher is remote and cannot be controlled from this device.</div>}
+        {isRemoteTarget(detail.target) && <div style={subtleStyle}>Controls are routed to {detail.ownerLabel ?? 'the paired owner'} and checked against its current host, workspace, watcher revision, and daemon incarnation.</div>}
       </div>
 
       {feedback && (
@@ -653,7 +670,7 @@ function HeimdallFleet({ context, input }: { context: UiPluginContext; input: un
   const snapshotRef = useRef<FleetSnapshot | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [refreshError, setRefreshError] = useState<string | null>(null)
-  const [selectedId, setSelectedId] = useState<string | null>(() => initialWatcherId(input))
+  const [selectedTarget, setSelectedTarget] = useState<WatcherTarget | null>(() => initialTarget(input))
   const [detail, setDetail] = useState<WatcherDetail | null>(null)
   const [detailBusy, setDetailBusy] = useState(false)
   const [detailError, setDetailError] = useState<string | null>(null)
@@ -662,8 +679,8 @@ function HeimdallFleet({ context, input }: { context: UiPluginContext; input: un
   const pendingRef = useRef(false)
   const latestDetailRequest = useRef(0)
   const latestFleetRequest = useRef(0)
-  const selectedIdRef = useRef(selectedId)
-  selectedIdRef.current = selectedId
+  const selectedTargetRef = useRef(selectedTarget)
+  selectedTargetRef.current = selectedTarget
   const now = useClock()
 
   const accept = useCallback((incoming: FleetSnapshot): boolean => {
@@ -674,12 +691,12 @@ function HeimdallFleet({ context, input }: { context: UiPluginContext; input: un
     return true
   }, [])
 
-  const loadDetail = useCallback(async (watcherId: string) => {
+  const loadDetail = useCallback(async (requestedTarget: WatcherTarget) => {
     const ticket = ++latestDetailRequest.current
     setDetailBusy(true)
     setDetailError(null)
-    const row = snapshotRef.current?.rows.find((item) => item.target.watcherId === watcherId)
-    const target: WatcherTarget = row?.target ?? { watcherId }
+    const row = snapshotRef.current?.rows.find((item) => targetKey(item.target) === targetKey(requestedTarget))
+    const target = row?.target ?? requestedTarget
     try {
       const loaded = await context.call('quirky.heimdall/detail', { target }) as WatcherDetail | null
       if (ticket !== latestDetailRequest.current) return
@@ -722,8 +739,8 @@ function HeimdallFleet({ context, input }: { context: UiPluginContext; input: un
       const changed = accept(data)
       if (changed) {
         setRefreshError(null)
-        const selectedWatcherId = selectedIdRef.current
-        if (selectedWatcherId) void loadDetail(selectedWatcherId)
+        const target = selectedTargetRef.current
+        if (target) void loadDetail(target)
       }
     })
     const unsubscribeConnection = context.onConnection((status) => {
@@ -738,29 +755,38 @@ function HeimdallFleet({ context, input }: { context: UiPluginContext; input: un
   }, [accept, context, loadDetail, refreshFleet])
 
   useEffect(() => {
-    if (selectedId) void loadDetail(selectedId)
+    if (!selectedTarget || !snapshot) return
+    const replacement = snapshot.rows.find((row) => sameTargetOwner(row.target, selectedTarget))
+    if (replacement && targetKey(replacement.target) !== targetKey(selectedTarget)) setSelectedTarget(replacement.target)
+  }, [selectedTarget, snapshot])
+
+  useEffect(() => {
+    if (selectedTarget) void loadDetail(selectedTarget)
     else {
       latestDetailRequest.current += 1
       setDetail(null)
       setDetailError(null)
       setDetailBusy(false)
     }
-  }, [loadDetail, selectedId])
+  }, [loadDetail, selectedTarget])
 
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
       event.preventDefault()
-      if (selectedId !== null) setSelectedId(null)
+      if (selectedTarget !== null) setSelectedTarget(null)
       else context.closeView()
     }
     window.addEventListener('keydown', keydown)
     return () => window.removeEventListener('keydown', keydown)
-  }, [context, selectedId])
+  }, [context, selectedTarget])
 
   const orderedRows = useMemo(() => snapshot ? sortFleetRows(snapshot.rows) : [], [snapshot])
-  const selectedRow = snapshot?.rows.find((row) => row.target.watcherId === selectedId)
-  const canCommand = Boolean(detail && !detail.readOnly && !detail.enrollment.malformed && detail.ownerContact === 'live' && !isRemoteTarget(detail.target))
+  const selectedRow = selectedTarget ? snapshot?.rows.find((row) => targetKey(row.target) === targetKey(selectedTarget)) : undefined
+  const canCommand = Boolean(
+    detail && !detail.readOnly && !detail.enrollment.malformed && detail.ownerContact === 'live' &&
+    (!isRemoteTarget(detail.target) || Boolean(detail.ownerIncarnation))
+  )
 
 
   const sendCommand = async (command: WatcherCommand, label: string, confirmedDelete = false) => {
@@ -768,7 +794,11 @@ function HeimdallFleet({ context, input }: { context: UiPluginContext; input: un
     const request: CommandRequest = { target: detail.target, expectedOwner: detail.ownerFence, command }
     let result: CommandResult
     try {
-      const params = confirmedDelete ? { ...request, yes: true } : { ...request }
+      const params = {
+        ...request,
+        ...(isRemoteTarget(detail.target) && detail.ownerIncarnation ? { expectedIncarnation: detail.ownerIncarnation } : {}),
+        ...(confirmedDelete ? { yes: true } : {})
+      }
       const response = await context.call('quirky.heimdall/command', params)
       result = isCommandResult(response) ? response : { kind: 'indeterminate', detail: 'The owner returned an unrecognized result; the command outcome could not be confirmed.' }
     } catch (error) {
@@ -777,9 +807,9 @@ function HeimdallFleet({ context, input }: { context: UiPluginContext; input: un
     setFeedback({ command: label, result })
     if (result.kind === 'applied') {
       context.toast(`${label} applied`, formatCommandResult(result), { kind: 'success' })
-      if (command.kind === 'delete') setSelectedId(null)
+      if (command.kind === 'delete') setSelectedTarget(null)
       void refreshFleet()
-      if (command.kind !== 'delete') void loadDetail(detail.target.watcherId)
+      if (command.kind !== 'delete') void loadDetail(detail.target)
     } else if (result.kind === 'refused') {
       context.toast(`${label} refused`, `${result.reason}: ${result.detail}`, { kind: 'warning' })
     } else {
@@ -824,15 +854,15 @@ function HeimdallFleet({ context, input }: { context: UiPluginContext; input: un
     <main style={rootStyle}>
       <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          {selectedId !== null ? (
-            <button type="button" style={buttonStyle} onClick={() => setSelectedId(null)}>Back to fleet</button>
+          {selectedTarget !== null ? (
+            <button type="button" style={buttonStyle} onClick={() => setSelectedTarget(null)}>Back to fleet</button>
           ) : (
             <button type="button" style={buttonStyle} onClick={() => context.closeView()}>Back</button>
           )}
           <h1 style={{ fontSize: 22, margin: 0 }}>Heimdall fleet</h1>
           {snapshot && <span style={subtleStyle}>{snapshot.activeCount} active · {snapshot.attentionCount} need attention</span>}
         </div>
-        {selectedId === null && <button type="button" style={buttonStyle} disabled={refreshing} onClick={() => void refreshFleet()}>{refreshing ? 'Refreshing…' : 'Refresh fleet'}</button>}
+        {selectedTarget === null && <button type="button" style={buttonStyle} disabled={refreshing} onClick={() => void refreshFleet()}>{refreshing ? 'Refreshing…' : 'Refresh fleet'}</button>}
       </header>
 
       {refreshError && (
@@ -841,19 +871,19 @@ function HeimdallFleet({ context, input }: { context: UiPluginContext; input: un
         </div>
       )}
       {!snapshot && !refreshError && <p style={cardStyle}>Loading Heimdall fleet…</p>}
-      {selectedId === null && snapshot && (
+      {selectedTarget === null && snapshot && (
         <>
           <section style={{ display: 'grid', gap: 8 }}>
             <h2 style={{ fontSize: 16, margin: 0 }}>Watcher fleet</h2>
-            <FleetTable rows={orderedRows} now={now} selectedId={selectedId} onSelect={(row) => { setFeedback(null); setSelectedId(row.target.watcherId) }} />
+            <FleetTable rows={orderedRows} now={now} selectedId={null} onSelect={(row) => { setFeedback(null); setSelectedTarget(row.target) }} />
           </section>
           <ActionHistory items={snapshot?.actionHistory ?? []} />
         </>
       )}
-      {selectedId !== null && (
+      {selectedTarget !== null && (
         <>
           {detailBusy && !detail && <p style={cardStyle}>Loading watcher details…</p>}
-          {detailError && <div role="alert" style={{ ...cardStyle, color: 'var(--danger)' }}><div>Could not load watcher details: {detailError}</div><button type="button" style={{ ...buttonStyle, marginTop: 8 }} onClick={() => void loadDetail(selectedId)}>Retry details</button></div>}
+          {detailError && <div role="alert" style={{ ...cardStyle, color: 'var(--danger)' }}><div>Could not load watcher details: {detailError}</div><button type="button" style={{ ...buttonStyle, marginTop: 8 }} onClick={() => void loadDetail(selectedTarget)}>Retry details</button></div>}
           {detail && (
             <WatcherDetailPane
               context={context}

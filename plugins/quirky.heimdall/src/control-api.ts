@@ -1,7 +1,6 @@
-import { flagNameOf, type Schema } from '@quirky/protocol'
+import { flagNameOf, type PluginCaller, type Schema } from '@quirky/protocol'
 import type {
   CommandRequest,
-  CommandResult,
   ControlPlane,
   FleetAction,
   FleetService,
@@ -188,6 +187,8 @@ const fleetRowSchema = object({
   branch: any('Workspace branch, or null when the kind did not supply one.'),
   phase: any('Current kind phase, or null when unavailable.'),
   ownerContact: { type: 'string', enum: ['live', 'unverifiable'] },
+  ownerLabel: text('Paired owner label; omitted for this local kernel.'),
+  ownerIncarnation: text('Confirmed daemon incarnation; omitted for this local kernel.'),
   observedAtMs: integer(),
   lastSuccessfulTickAtMs: any('Last successful tick time, or null when none is retained.'),
   budget: budgetUsageSchema,
@@ -208,7 +209,9 @@ const fleetActionProperties: Record<keyof FleetAction, Schema> = {
   actionKind: text(),
   state: { type: 'string', enum: ['attempted', 'running', 'settled'] },
   effect: { type: 'string', enum: ['landed', 'not-landed', 'indeterminate'] },
-  reason: text()
+  reason: text(),
+  target: targetSchema,
+  ownerLabel: text()
 }
 const fleetActionSchema = object(fleetActionProperties, ['watcherId', 'watcherName', 'attemptId', 'atMs', 'actionKind', 'state'])
 
@@ -226,6 +229,8 @@ const watcherDetailSchema = object({
   target: targetSchema,
   ownerFence: ownerFenceSchema,
   ownerContact: { type: 'string', enum: ['live', 'unverifiable'] },
+  ownerLabel: text('Paired owner label; omitted for this local kernel.'),
+  ownerIncarnation: text('Confirmed daemon incarnation; omitted for this local kernel.'),
   observedAtMs: integer(),
   name: text(),
   workers: array(workerSchema),
@@ -269,8 +274,16 @@ const watcherCommandSchema = object({
 const commandRequestSchema = object({
   target: targetSchema,
   expectedOwner: ownerFenceSchema,
-  command: watcherCommandSchema
+  command: watcherCommandSchema,
+  expectedIncarnation: text('The confirmed remote daemon incarnation, required for remote controls.')
 }, ['target', 'expectedOwner', 'command'])
+const remoteCommandRequestSchema = object({
+  target: targetSchema,
+  expectedOwner: ownerFenceSchema,
+  command: watcherCommandSchema,
+  expectedIncarnation: text(),
+  requestId: text()
+}, ['target', 'expectedOwner', 'command', 'expectedIncarnation', 'requestId'])
 
 const commandResultSchema = object({
   kind: { type: 'string', enum: ['applied', 'refused', 'indeterminate'] },
@@ -310,21 +323,21 @@ export const controlContributions = {
   method: [
     {
       id: 'fleet',
-      description: 'Read the locally owned Heimdall watcher fleet.',
+      description: 'Read the locally owned and paired remote Heimdall watcher fleet.',
       readOnly: true,
       params: noParams,
       result: fleetSnapshotSchema
     },
     {
       id: 'detail',
-      description: 'Read one locally owned watcher and bounded operator projections.',
+      description: 'Read one locally owned or paired watcher and bounded operator projections.',
       readOnly: true,
       params: targetParams,
       result: watcherDetailSchema
     },
     {
       id: 'command',
-      description: 'Run one owner-fenced Heimdall watcher control.',
+      description: 'Run one owner-fenced local or paired Heimdall watcher control.',
       destructive: true,
       confirm: 'Delete watcher {watcherId} and its saved history? Worker terminals will continue running.',
       describe: 'describeCommand',
@@ -340,16 +353,43 @@ export const controlContributions = {
     },
     {
       id: 'debugReport',
-      description: 'Read a bounded schema-two diagnostic report for one local watcher.',
+      description: 'Read a bounded schema-two diagnostic report for one local or paired watcher.',
       readOnly: true,
       params: targetParams,
       result: debugReportSchema
+    },
+    {
+      id: 'remoteFleet',
+      description: 'Read only this host’s local Heimdall watcher fleet for its paired coordinator.',
+      readOnly: true,
+      params: noParams,
+      result: fleetSnapshotSchema
+    },
+    {
+      id: 'remoteDetail',
+      description: 'Read one locally owned watcher for an authenticated paired coordinator.',
+      readOnly: true,
+      params: targetParams,
+      result: watcherDetailSchema
+    },
+    {
+      id: 'remoteDebugReport',
+      description: 'Read a bounded local watcher diagnostic report for an authenticated paired coordinator.',
+      readOnly: true,
+      params: targetParams,
+      result: debugReportSchema
+    },
+    {
+      id: 'remoteCommand',
+      description: 'Run one local owner-fenced Heimdall command for an authenticated paired coordinator.',
+      params: remoteCommandRequestSchema,
+      result: commandResultSchema
     }
   ],
   event: [
     {
       id: 'fleetChanged',
-      description: 'A newer locally observed Heimdall fleet snapshot is available.',
+      description: 'A newer locally and remotely observed Heimdall fleet snapshot is available.',
       data: fleetSnapshotSchema
     },
     {
@@ -470,50 +510,90 @@ function deletePreview(detail: WatcherDetail): string {
 }
 
 function commandPreview(request: CommandRequest, detail: WatcherDetail | null): string | null {
-  if (request.command.kind !== 'delete' || isRemote(request.target) || detail === null || detail.readOnly) return null
-  if (detail.target.watcherId !== request.target.watcherId || !sameOwnerFence(request.expectedOwner, detail.ownerFence)) return null
+  if (request.command.kind !== 'delete' || detail === null || detail.readOnly || (isRemote(request.target) && detail.ownerContact !== 'live')) return null
+  if (
+    detail.target.watcherId !== request.target.watcherId ||
+    (detail.target.connectionId ?? null) !== (request.target.connectionId ?? null) ||
+    (detail.target.pairingRevision ?? null) !== (request.target.pairingRevision ?? null) ||
+    !sameOwnerFence(request.expectedOwner, detail.ownerFence)
+  ) return null
   return deletePreview(detail)
-}
-
-function remoteRefusal(): CommandResult {
-  return { kind: 'refused', reason: 'owner-unreachable', detail: 'Remote Heimdall targets are not supported by this local control API.' }
 }
 
 function asCommandRequest(params: Record<string, unknown>, host: KernelControlHost): CommandRequest {
   try {
     return commandRequest(params)
   } catch {
-    throw host.context.error('invalid-params', 'A Heimdall command needs a local watcher target, owner fence and command.')
+    throw host.context.error('invalid-params', 'A Heimdall command needs a watcher target, owner fence and command.')
+  }
+}
+function requireOrchestrationCaller(caller: PluginCaller, host: KernelControlHost): void {
+  if (caller.role !== 'plugin' || caller.pluginId !== 'quirky.orchestration') {
+    throw host.context.error('conflict', 'This Heimdall endpoint is reserved for the paired orchestration gateway.')
   }
 }
 
 export function registerControlApi(host: KernelControlHost, controls: ControlPlane, fleet: FleetService): void {
   host.context.provide('method:quirky.heimdall/fleet', () => fleet.fleet())
   host.context.provide('method:quirky.heimdall/detail', async (params: Record<string, unknown>) => {
-    if (!validTarget(params.target)) throw host.context.error('invalid-params', 'A local watcher target is required.')
-    if (isRemote(params.target)) throw host.context.error('invalid-params', 'Remote Heimdall targets are not supported by this local control API.')
+    if (!validTarget(params.target)) throw host.context.error('invalid-params', 'A watcher target is required.')
     return fleet.detail(params.target)
   })
   host.context.provide('method:quirky.heimdall/command', async (params: Record<string, unknown>) => {
     const request = asCommandRequest(params, host)
-    if (isRemote(request.target)) return remoteRefusal()
-    const result = await controls.command(request)
+    const expectedIncarnation = typeof params.expectedIncarnation === 'string' ? params.expectedIncarnation : undefined
+    const result = await fleet.command(request, expectedIncarnation)
     if (result.kind !== 'refused') {
       void fleet.publish(request.target.watcherId).catch(error => {
-        host.context.log(`Heimdall command applied but fleet push failed: ${error instanceof Error ? error.message : String(error)}`)
+        host.context.log(`Heimdall command result recorded but fleet push failed: ${error instanceof Error ? error.message : String(error)}`)
       })
     }
     return result
   })
   host.context.provide('method:quirky.heimdall/describeCommand', async (params: Record<string, unknown>) => {
-    const request = parseControlRequest(params)
-    if (!request || isRemote(request.target) || request.command.kind !== 'delete') return null
+    const { expectedIncarnation: _expectedIncarnation, ...requestParams } = params
+    const request = parseControlRequest(requestParams)
+    if (!request || request.command.kind !== 'delete') return null
     const detail = await fleet.detail(request.target)
     return commandPreview(request, detail)
   })
   host.context.provide('method:quirky.heimdall/debugReport', async (params: Record<string, unknown>) => {
-    if (!validTarget(params.target)) throw host.context.error('invalid-params', 'A local watcher target is required.')
-    if (isRemote(params.target)) throw host.context.error('invalid-params', 'Remote Heimdall targets are not supported by this local control API.')
+    if (!validTarget(params.target)) throw host.context.error('invalid-params', 'A watcher target is required.')
     return fleet.debugReport(params.target)
+  })
+  host.context.provide('method:quirky.heimdall/remoteFleet', async (_params: Record<string, unknown>, caller: PluginCaller) => {
+    requireOrchestrationCaller(caller, host)
+    return fleet.localFleet()
+  })
+  host.context.provide('method:quirky.heimdall/remoteDetail', async (params: Record<string, unknown>, caller: PluginCaller) => {
+    requireOrchestrationCaller(caller, host)
+    if (!validTarget(params.target) || isRemote(params.target)) {
+      throw host.context.error('invalid-params', 'A local watcher target is required.')
+    }
+    return fleet.localDetail({ watcherId: params.target.watcherId })
+  })
+  host.context.provide('method:quirky.heimdall/remoteDebugReport', async (params: Record<string, unknown>, caller: PluginCaller) => {
+    requireOrchestrationCaller(caller, host)
+    if (!validTarget(params.target) || isRemote(params.target)) {
+      throw host.context.error('invalid-params', 'A local watcher target is required.')
+    }
+    return fleet.localDebugReport({ watcherId: params.target.watcherId })
+  })
+  host.context.provide('method:quirky.heimdall/remoteCommand', async (params: Record<string, unknown>, caller: PluginCaller) => {
+    requireOrchestrationCaller(caller, host)
+    if (!validTarget(params.target) || isRemote(params.target) ||
+      typeof params.expectedIncarnation !== 'string' || params.expectedIncarnation.trim() === '' ||
+      typeof params.requestId !== 'string' || params.requestId.trim() === '') {
+      throw host.context.error('invalid-params', 'A local target, current daemon incarnation, request ID and owner fence are required.')
+    }
+    const { expectedIncarnation: _expectedIncarnation, requestId: _requestId, ...requestParams } = params
+    const request = asCommandRequest(requestParams, host)
+    const result = await controls.command(request)
+    if (result.kind !== 'refused') {
+      void fleet.publish(request.target.watcherId).catch(error => {
+        host.context.log(`Heimdall remote command result recorded but fleet push failed: ${error instanceof Error ? error.message : String(error)}`)
+      })
+    }
+    return result
   })
 }
