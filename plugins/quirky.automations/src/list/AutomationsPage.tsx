@@ -41,7 +41,7 @@ const PAGE_CSS = `
  .auto-page-header,.auto-toolbar,.auto-detail-header,.auto-run-header,.auto-section-heading,.auto-dialog-actions{display:flex;align-items:center;gap:.65rem}
  .auto-page-header,.auto-detail-header,.auto-run-header,.auto-section-heading{justify-content:space-between}.auto-page-header h1,.auto-detail-header h1,.auto-run-header h1{margin:0;font-size:1.35rem}
  .auto-toolbar{flex-wrap:wrap}.auto-automations input,.auto-automations select{min-height:2.2rem;padding:.4rem .55rem;border:1px solid var(--border);border-radius:.35rem;background:var(--bg-raised)}
- .auto-search{flex:1;min-width:14rem}.auto-filter-menu{position:relative}.auto-filter-menu>summary{cursor:pointer;border:1px solid var(--border);border-radius:.35rem;padding:.45rem .7rem;list-style:none}.auto-filter-panel{position:absolute;z-index:5;top:calc(100% + .25rem);left:0;display:grid;gap:.7rem;min-width:18rem;padding:.75rem;border:1px solid var(--border);border-radius:.45rem;background:var(--bg-raised);box-shadow:0 .5rem 1.5rem color-mix(in srgb,var(--text) 18%,transparent)}
+ .auto-search{flex:1;min-width:14rem}.auto-filter-menu{position:relative}.auto-filter-menu>summary{cursor:pointer;border:1px solid var(--border);border-radius:.35rem;padding:.45rem .7rem;list-style:none}.auto-filter-panel{position:absolute;z-index:5;top:calc(100% + .25rem);right:0;display:grid;gap:.7rem;min-width:18rem;padding:.75rem;border:1px solid var(--border);border-radius:.45rem;background:var(--bg-raised);box-shadow:0 .5rem 1.5rem color-mix(in srgb,var(--text) 18%,transparent)}
  .auto-filter-panel label{display:grid;gap:.25rem}.auto-filter-choices{display:flex;flex-wrap:wrap;gap:.3rem}.auto-filter-choices button,.auto-pill,.auto-button{border:1px solid var(--border);border-radius:.35rem;background:var(--bg-raised);padding:.4rem .65rem}.auto-filter-choices [aria-pressed=true],.auto-pill{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,var(--bg-raised))}
 .quirky-automations button.auto-button-primary{border:1px solid var(--accent);border-radius:.35rem;background:var(--accent);color:var(--bg);padding:.48rem .8rem;font-weight:650}
 .quirky-automations button.auto-button-danger{border:1px solid var(--danger);background:var(--danger);color:var(--bg);padding:.45rem .7rem;border-radius:.35rem}
@@ -317,12 +317,10 @@ function runWorkspace(run: AutomationRun): string {
 
 function launchSummary(run: AutomationRun, data: AutomationEditorData | null): string {
   const settings = run.launchSettings
-  const agentId = typeof settings?.agentId === 'string' ? settings.agentId : typeof settings?.agent === 'string' ? settings.agent : typeof settings?.provider === 'string' ? settings.provider : null
-  const agent = agentLabel(data, agentId)
-  const model = typeof settings?.model === 'string' ? settings.model : null
-  const options = settings?.optionValues
-  const optionText = isRecord(options) ? Object.entries(options).filter(([, value]) => typeof value === 'string' || typeof value === 'boolean').map(([key, value]) => `${key}: ${String(value)}`).join(', ') : ''
-  return [agent, model, optionText].filter(Boolean).join(' · ')
+  if (!settings) return ''
+  if (typeof settings.summary === 'string' && settings.summary.trim()) return settings.summary
+  const agentId = typeof settings.agent === 'string' ? settings.agent : null
+  return agentId ? agentLabel(data, agentId) : ''
 }
 
 function externalStatusLabel(status: string | null): string {
@@ -1421,7 +1419,7 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
     const runHostId = run ? getAutomationHostId(runAutomation, data.editorData) ?? (typeof run.runContext?.hostId === 'string' ? run.runContext.hostId : null) : null
     const runHost = hostLabel(data.editorData, runHostId)
     return <main className="auto-automations" aria-label="Run details"><style>{PAGE_CSS}</style>
-      <div className="auto-breadcrumb"><button type="button" onClick={() => navigation.automationId ? void navigate({ page: 'detail', automationId: navigation.automationId, runId: null, tab: 'runs' }) : void navigate({ page: 'runs', runId: null, automationId: null })}>Automations</button><span>›</span><button type="button" onClick={() => navigation.automationId ? void navigate({ page: 'detail', automationId: navigation.automationId, runId: null, tab: 'runs' }) : void navigate({ page: 'runs', runId: null, automationId: null })}>{dashboardName ?? 'Runs'}</button><span>›</span><span>Run details</span></div>
+      <div className="auto-breadcrumb"><button type="button" onClick={() => void navigate({ page: 'list', runId: null, automationId: null })}>Automations</button><span>›</span><button type="button" onClick={() => navigation.automationId ? void navigate({ page: 'detail', automationId: navigation.automationId, runId: null, tab: 'runs' }) : void navigate({ page: 'runs', runId: null, automationId: null })}>{dashboardName ?? 'Runs'}</button><span>›</span><span>Run details</span></div>
       {runDetail.loading && !run && <div className="auto-info" role="status">Loading run…</div>}
       {runDetail.loading && run && <div className="auto-info" role="status">Refreshing run and navigation availability…</div>}
       {runDetail.error && <div className="auto-error" role="alert">Run details are unavailable. {runDetail.error} <button type="button" onClick={() => setRunRetry((current) => current + 1)}>Retry</button></div>}

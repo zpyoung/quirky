@@ -187,5 +187,71 @@
 - **Revisit if:** a later integration merge changes the runtime contract
 - **Source:** assumed — autonomous
 
+## D18: Honor explicit structured-session navigation without creating a replacement shell
+- **Question:** Why did View run open Terminal1 rather than the recorded automation session?
+- **Options:** terminal-only openSession; honor the public worktree view's explicit session input
+- **Chose:** validate the requested session's workspace, explicitly adopt/select it, and skip default-shell creation. Missing or mismatched identities produce an alert, not a fallback session. Queue nested structured-root disposal rather than unmounting during a parent render.
+- **Why:** Background sessions deliberately have no automatic terminal binding. Selecting the recorded session is distinct from automatic adoption and must preserve its identity.
+- **Evidence:** source4d5109d6; workspace-view8pass/0fail/84assertions and complete typecheck/build0; actual UI20261028T061353-1ab4 obs5-6 selected the Codex transcript with AUTOMATION_WEB_OK and no replacement shell. Existing nested-root test warnings were not claimed eliminated.
+- **Reversibility:** medium
+- **Confidence:** high for exercised explicit selection
+- **Revisit if:** session identity or public worktree input contracts change
+- **Source:** locked by docs/loop/decisions/m5-loops-core.md D19
+
+## D19: Preserve native startup diagnostics and isolate a broken external Node installation
+- **Question:** Why did the real UI run fail before the protocol fixture started?
+- **Options:** change production launch/PATH behavior; preserve stderr and diagnose the actual child failure
+- **Chose:** await existing connection close, then attach bounded stderr to the startup error while preserving cause. Only the disposable scripted Codex fixture uses the existing absolute Bun interpreter; production resolver, environment, argv and ownership policy remain unchanged.
+- **Why:** UI20261028T060737-232c obs4 exposed dyld's missing llhttp9.3.dylib from the installed Node25.9.0_1. The fixture never reached its body. This is not evidence against native model/effort validation and does not justify a production fallback or modifying Homebrew.
+- **Evidence:** source4d5109d6; real-child diagnostic regression14pass/0fail/59assertions, typecheck0; independent Bun-pinned actual daemon/CLI smoke completed run8f94283d-2973-4955-bdfb-b11d1abbd0be, session s_7335b3cb1b1b in5.47seconds. Protocol stand-in evidence is not a live-provider or billing claim.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the external interpreter is repaired or a native startup failure lacks usable stderr
+- **Source:** assumed — autonomous
+
+## D20: Close the started visible campaign with specific continuation evidence
+- **Question:** Which UI flows actually passed after the first child campaign stopped early?
+- **Options:** count prepared goals as passes; retain original partial results and cite exercised continuations
+- **Chose:** original20261028T044328-79db passed create-validation and edit-list-detail; its external pause/resume/run/delete actions succeeded but its sequence prerequisite was partial. Continuation20261028T052940-2f1b passed delete-confirm, all four honest-empty template cards, and settings/navigation. Fresh20261028T061353-1ab4 passed paused manual completion despite scheduled precheck exit77, saved output/history, explicit View run and dashboard counts/filter.
+- **Why:** The original100-action wrap-up did not complete the campaign. Continuations exercise the missing visible paths without relabeling old failures or using APIs during UI workflows.
+- **Evidence:** corresponding .quirk/using-apps-like-a-user/runs/<id>/report.json and screenshots. All runs were web/yours/unattended, with no foreground/native override. The manual closure's end returned a frontmost-restoration tool error, but kept_open was empty; its goal passed. Browser reload hotkeys did not establish reload. Original row-menu Escape dismissal remains a LOW open finding.
+- **Reversibility:** easy
+- **Confidence:** high for the named observations only
+- **Revisit if:** an actual provider or native-only surface contradicts this controlled fixture
+- **Source:** assumed — autonomous
+
+## D21: Correct saved-output parsing, canonical launch evidence and clipped navigation controls
+- **Question:** Why were intraword underscores consumed, model/effort missing, the filter panel clipped, and the root breadcrumb indirect?
+- **Options:** accept the rendered differences; repair their actual source boundaries
+- **Chose:** emphasis delimiters exclude Unicode intraword underscores; launch display consumes the recorded canonical summary rather than invented flat aliases; filters anchor to the right viewport edge; the root run breadcrumb navigates directly to the list.
+- **Why:** The previous actual run exposed AUTOMATION<em>WEB</em>OK, an offscreen filter selector and a detail detour. The saved launch snapshot already carries the authoritative model/effort summary.
+- **Evidence:** rendered identifier regression failed before the parser fix, then14pass/0fail/49assertions with typecheck/build0. Final fresh-browser render closure20261028T065201-fe17 passed: obs2 panel fully visible; obs3 Failed gives an honest filtered empty state; obs4 Successful restores Done; obs5 preserves AUTOMATION_WEB_OK and displays Codex/gpt-5-codex/reasoning effort medium; obs6 root goes directly to list. End returned0, no overrides, no kept-open windows or cleanup errors. Owned daemon stopped and its temporary home no longer exists.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** canonical launch metadata or Markdown delimiter rules change
+- **Source:** assumed — autonomous
+
+## D22: Reconcile final dispatch landing without weakening canonical session contracts
+- **Question:** Which late runtime/loop/worker/browser decisions bind the final UI source?
+- **Options:** keep the earlier temporary composition; consume canonical e4ec3492 and reconcile every incoming log
+- **Chose:** preserve terminal-only automatic adoption for all background values and explicit bindings; active OR activating owner liveness; Codex per-turn usage plus raw rate-limit/reset evidence; session-launch token redaction; canonical badge dedup/name/client-role fields; pointer migration9 then background10. Browser pane modes do not change SessionKind.
+- **Why:** These are published contracts, not optional UI preferences. Explicit View run remains compatible and no remote authority or private runtime fallback is introduced.
+- **Evidence:** e4ec34921082b57d166806975470e978983e90ed merged without conflict; incoming loops-core D1-D27, presets D1-D19, workers D1-D31, browser-pane D1-D34, dispatch D30-D34 and structured-runner changes read/reconciled by AutomationCatchupDecisions with no actual conflict. Lane7 reports canonical dispatch DONE after649remote+5mac pass and scripts/typecheck0; that report is not this item's final gate.
+- **Reversibility:** hard for migration order; medium otherwise
+- **Confidence:** high for contract reconciliation
+- **Revisit if:** later canonical integration changes these contracts
+- **Source:** locked by docs/loop/decisions/m5-automations-dispatch.md D31-D34
+
+## D23: Use the final composed candidate's observed gates
+- **Question:** Did the final UI fixes still pass after consuming the canonical dispatch landing?
+- **Options:** rely on earlier isolated results; verify the composed candidate
+- **Chose:** final affected suite over Automations plus workspace-view, Codex runner and session-record regressions passed17remote files,0failed,flaky:[]; frozen install and complete typecheck passed; packaged macOS build passed with28plugins and21UI modules.
+- **Why:** This checks the exact source composition after the renderer fixes and incoming runtime contracts. The earlier170/179 result is retained as historical failure evidence, not relabeled all-green.
+- **Evidence:** bg31 exit0/211.38seconds, suite-result ok:true;595installs/609packages unchanged; Quirky.app packaged successfully. Missing icon.iconset and absent release.baseUrl remain non-fatal packaging warnings; neither icon nor release-publishing proof is claimed. Earlier scripts68pass/0fail/562assertions remain the item's observed script gate; normal queue land reruns the whole merged gate.
+- **Reversibility:** easy
+- **Confidence:** high for the exercised gates
+- **Revisit if:** the authoritative land reports a concrete conflict or failure
+- **Source:** assumed — autonomous
+
 ## Progress
-Step7 preparation: one catch-up and mandatory runtime composition are verified by focused merged tests, complete typecheck, real daemon/CLI smoke and packaged build. Started AutomationWebDogfood is still running; finish/end every goal and clean its owned browser/service before landing. Unstarted cross-family review is skipped under D16 with no clearance claimed. Register only the single remote UI follow-up, commit final evidence, detach and run canonical queue land; handle only its concrete conflict/failure recovery.
+Step7 ready: all owned web campaigns and browser sessions ended; final render closure passed and the owned daemon/home are cleaned. Canonical e4ec3492 is merged; final affected17files/typecheck/packaged build passed. Register only the single remote UI follow-up immediately before landing, commit, detach and run canonical queue land. Independent review remains explicitly unstarted/skipped under D16. Handle only concrete normal-land failures; do not start another item.

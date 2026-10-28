@@ -274,7 +274,7 @@ function safeHref(value: string): boolean {
 }
 
 export function parseSafeMarkdownInline(source: string): SafeInlineToken[] {
-  const pattern = /(\*\*[^*]+\*\*|__[^_]+__|`[^`]+`|\*[^*]+\*|_[^_]+_|\[[^\]]+\]\([^)]+\))/g
+  const pattern = /(\*\*[^*]+\*\*|(?<![\p{L}\p{N}_])__[^_]+__(?![\p{L}\p{N}_])|`[^`]+`|\*[^*]+\*|(?<![\p{L}\p{N}_])_[^_]+_(?![\p{L}\p{N}_])|\[[^\]]+\]\([^)]+\))/gu
   const tokens: SafeInlineToken[] = []
   const pushText = (value: string) => {
     if (!value) return

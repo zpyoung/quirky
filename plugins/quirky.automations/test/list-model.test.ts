@@ -1,4 +1,7 @@
 import { describe, expect, test } from 'bun:test'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { SafeMarkdown } from '../src/list/SafeMarkdown'
 import type { AutomationRun } from '../types'
 import {
   appendRunPage,
@@ -183,4 +186,12 @@ describe('automation run model', () => {
       { type: 'text', value: ' [bad](javascript:alert(1))' }
     ])
   })
+})
+
+test('run output preserves underscores inside identifiers while rendering standalone emphasis', () => {
+  const markup = renderToStaticMarkup(createElement(SafeMarkdown, { content: 'AUTOMATION_WEB_OK file_name_test and _standalone_ **bold**' }))
+  expect(markup).toContain('AUTOMATION_WEB_OK')
+  expect(markup).toContain('file_name_test')
+  expect(markup).toContain('<em>standalone</em>')
+  expect(markup).toContain('<strong>bold</strong>')
 })

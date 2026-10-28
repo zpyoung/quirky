@@ -356,3 +356,7 @@ Registration update: `bun scripts/build-loop/queue.ts add /tmp/quirky-session-in
 - Unchanged failures still awaiting the normal merged retry: Git remote SC-29 wait (five possible predicates; available stack does not identify one), daemon lock five-second test bound, incoming loops-store five-second bound. No speculative producer change, timeout increase or waived assertion was used for these.
 - Operator's45-minute target was not met; the first controller verification alone took1800.57seconds after source submission. No on-time or authoritative landed claim is inferred from a submitted command.
 
+## m5-automations-ui: open review findings
+
+- **LOW — row action menu Escape dismissal unconfirmed** (`plugins/quirky.automations/src/list/AutomationsPage.tsx:1132,1148`). Original guarded campaign20261028T044328-79db observed Escape/Refresh leave the row menu open. Toggle/action navigation remained usable; the final expired-item batch fixed blocking flow/render failures only. No dismissal fix or passing dismissal assertion is claimed.
+- **Tool-only limits:** browser reload hotkeys returned no observable reload in the original campaign. The passing manual-run continuation20261028T061353-1ab4 closed its browser but reported a frontmost-restoration error; later render closure20261028T065201-fe17 ended cleanly with no kept-open windows or cleanup errors. Native menu/focus proof remains pending, not inferred from web screenshots.
