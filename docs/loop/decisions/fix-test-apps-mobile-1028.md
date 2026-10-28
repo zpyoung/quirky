@@ -22,5 +22,38 @@
 - **Revisit if:** mapping shows a shared root cause or write scope.
 - **Source:** assumed — autonomous
 
+## D3: Repair fixtures without narrowing the production summary contract
+- **Question:** Did the reported failures require a new workspace-only summaries restriction?
+- **Options:** narrow all callers; supply the required route and authoritative origin projection in the fixture.
+- **Chose:** keep production bridge-policy byte-for-byte unchanged. Parent removed an unsolicited worker workspace-only guard and consolidated its duplicate provenance scenario. The retained test supplies the required route, checks missing RPC authority and artifact-route exclusion, retains empty-param and loop-method denial coverage, and drives persisted origin filtering through the UI.
+- **Why:** the observed failure came from an omitted route argument; durable origins are a separate producer projection. Neither failure establishes a production admission defect or authorizes changing other base routes.
+- **Evidence:** MobileFailureMap source report; parent component diff; apps/mobile/src/shell/bridge-policy.ts; apps/mobile/test/pages.test.ts.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** consumer evidence establishes a summary admission defect.
+- **Source:** assumed — autonomous
+
+## D4: Use actual Chrome placement and coordinate overlapping ownership
+- **Question:** How to handle real Watch tests on the remote host and the simultaneous broader sweep?
+- **Options:** skip/fake Watch; install a new runtime remotely; use the existing macOS runner placement.
+- **Chose:** place the real Chrome-dependent session-tabs test file on the canonical macOS runner list without skipping any cases. Lane8 owns the six assigned app test files; lane7 m7-sweep-browser-mobile retains PhoneLinks production, mobile-plugin repairs and their markers. Published this ownership through the exact live terminal handle; receipt proves input acceptance only.
+- **Why:** the triage error explicitly says no Chrome/Chromium on the remote host. Existing Browser tests use the same owned macOS harness. Lane7 D6 names the same failure set, so uncoordinated repairs would duplicate work.
+- **Evidence:** scripts/test-on-macos.txt; triage mobile Watch error; build/m7-sweep-browser-mobile D6; Orca terminal send request b0c77919-eb49-4434-b98d-ce43c139fefa accepted true.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** canonical runner gains a supported isolated Chrome environment elsewhere.
+- **Source:** assumed — autonomous; deferred: platform
+
+## D5: Prefer a verified cross-family review fallback
+- **Question:** Which reviewer is reachable on this omp lane?
+- **Options:** preferred Opus; available Gemini; same-family fallback.
+- **Chose:** OpenAI omp implementers and Gemini google/gemini-3.1-pro-preview:high reviewer. One final promote/refute review round through correctness, contract and security lenses, with a single accepted-finding repair batch as LOOP specifies.
+- **Why:** actual Opus probe failed with no authenticated/shipping model; Gemini probe succeeded. No model availability inferred from the malformed multi-alias attempt or aborted Eval.
+- **Evidence:** pi-watch --check opus exit5; pi-watch --check gemini exit0; authoritative LOOP end-phase review rules.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the real reviewer dispatch fails.
+- **Source:** assumed — autonomous
+
 ## Progress
 Claimed this iteration's sole item on build/fix-test-apps-mobile-1028. Read authoritative LOOP and recorded triage evidence; source mapping in progress. No source edits or checks run yet.
