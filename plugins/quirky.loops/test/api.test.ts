@@ -42,7 +42,7 @@ describe('quirky.loops public API', () => {
         return 'LOOP_DONE'
       }
     })
-    const focusBefore = await rig.call('ui.state')
+    const focusBefore = await rig.call<Record<string, unknown>>('ui.state')
     const created = await createLoop(rig, 'Create result.txt', loopConfig('Create result.txt', {
       done: { check: { command: 'test -f result.txt', timeoutSeconds: 5, runWhen: 'every-iteration' } },
       caps: { maxIterations: 3 }
@@ -54,7 +54,7 @@ describe('quirky.loops public API', () => {
     expect(typeof completed.sessionId).toBe('string')
     expect(existsSync(completed.notesPath)).toBe(true)
     expect(readFileSync(join(rig.cwd, 'result.txt'), 'utf8')).toBe('verified\n')
-    expect(await rig.call('ui.state')).toEqual(focusBefore)
+    expect(await rig.call<Record<string, unknown>>('ui.state')).toEqual(focusBefore)
     expect((await rig.call<any[]>('quirky.loops/list', {})).map((item) => item.id)).toContain(created.id)
     expect((await rig.call<any>('quirky.loops/get', { loopId: created.id })).state).toBe('completed')
     expect(await rig.call<any[]>('quirky.loops/iterations', { loopId: created.id })).toHaveLength(1)
@@ -174,17 +174,29 @@ describe('quirky.loops public API', () => {
 
   test('L08: stop-now interrupts the owned structured session without completing an iteration', async () => {
     const hold = deferred()
+    let runnerStopped = false
     rig = await startLoopRig({
       script: async () => { await hold.promise; return 'must not settle' },
-      onStop: () => hold.resolve()
+      onStop: () => { runnerStopped = true; hold.resolve() }
     })
     const loop = await createLoop(rig, 'stop now', loopConfig('stop now', { caps: { maxIterations: 4 } }))
     await waitFor(() => rig!.sends.length >= 1 || undefined, 10_000)
+    const ownedSessionId = rig.sends[0]!.sessionId
     const stopped = await rig.call<any>('quirky.loops/stop', { loopId: loop.id, mode: 'now' })
     expect(stopped.state).toBe('stopped')
     expect(stopped.iterationsCompleted).toBe(0)
-    const session = await rig.call<any>('quirky.session/get', { session: stopped.sessionId })
-    expect(session.status).toBe('exited')
+    const ownedState = await waitForAsync(async () => {
+      try {
+        const current = await rig!.call<any>('quirky.session/get', { session: ownedSessionId })
+        return current.status === 'exited' ? 'exited' : undefined
+      } catch (error) {
+        if ((error as RpcError).code === RpcErrorCode.NotFound) return 'removed'
+        throw error
+      }
+    }, 10_000)
+    expect(['exited', 'removed']).toContain(ownedState)
+    expect(runnerStopped).toBe(true)
+    expect(rig.sends).toHaveLength(1)
   })
 
   test('L09: steering, config edits and added iterations apply to the next send', async () => {
@@ -211,8 +223,7 @@ describe('quirky.loops public API', () => {
     const completed = await rig.waitForLoop(loop.id, (snapshot) => snapshot.state === 'completed')
     expect(completed.config.caps.maxIterations).toBe(2)
     expect(rig.sends[1]?.text).toContain('updated prompt')
-    expect(rig.sends[1]?.text).toContain('Use banana in the change.')
-    expect(rig.sends[1]?.text.match(/Use banana in the change\\./g)).toHaveLength(1)
+    expect(rig.sends[1]?.text.match(/Use banana in the change\./g)).toHaveLength(1)
     expect((await rig.call<any[]>('quirky.loops/iterations', { loopId: loop.id })).length).toBe(2)
   })
 
@@ -271,9 +282,10 @@ describe('quirky.loops public API', () => {
   })
   test('disabling the loops plugin stops only its owned structured session', async () => {
     const hold = deferred()
+    let runnerStopped = false
     rig = await startLoopRig({
       script: async () => { await hold.promise; return 'must not continue' },
-      onStop: () => hold.resolve()
+      onStop: () => { runnerStopped = true; hold.resolve() }
     })
     const unrelated = await rig.call<any>('quirky.structured/create', { agent: 'claude', prompt: '' })
     await createLoop(rig, 'remain daemon-owned until disable', loopConfig('remain daemon-owned until disable', { caps: { maxIterations: 4 } }))
@@ -281,11 +293,17 @@ describe('quirky.loops public API', () => {
     const ownedSessionId = rig.sends[0]!.sessionId
 
     await rig.call('plugin.disable', { id: 'quirky.loops' })
-    const owned = await waitForAsync(async () => {
-      const current = await rig!.call<any>('quirky.session/get', { session: ownedSessionId })
-      return current.status === 'exited' ? current : undefined
+    const ownedState = await waitForAsync(async () => {
+      try {
+        const current = await rig!.call<any>('quirky.session/get', { session: ownedSessionId })
+        return current.status === 'exited' ? 'exited' : undefined
+      } catch (error) {
+        if ((error as RpcError).code === RpcErrorCode.NotFound) return 'removed'
+        throw error
+      }
     }, 10_000)
-    expect(owned.status).toBe('exited')
+    expect(['exited', 'removed']).toContain(ownedState)
+    expect(runnerStopped).toBe(true)
     expect((await rig.call<any>('quirky.session/get', { session: unrelated.id })).status).toBe('running')
     const sendsAtDisable = rig.sends.length
     // One default driver poll proves the disabled owner cannot submit another iteration.

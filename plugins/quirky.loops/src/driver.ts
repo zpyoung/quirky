@@ -1,11 +1,12 @@
 import { appendFileSync } from 'node:fs'
 import { RpcErrorCode, type PluginContext, type Session, type StructuredMessage } from '@quirky/protocol'
 import { decideNext } from './decision'
-import { sessionCumulativeCostUsd, type EvidenceEngineContract } from './evidence'
+import { sessionCumulativeCostUsd } from './evidence'
 import { buildIterationPrompt } from './prompt'
 import { LoopStore, type LoopRequests, type SteerNote } from './store'
 import type {
   DecisionInput,
+  EvidenceEngineContract,
   IterationDetail,
   IterationEvidence,
   LoopDecision,
@@ -85,14 +86,15 @@ function isBusy(status: Session['status']): boolean {
 }
 
 function isIdle(status: Session['status']): boolean {
-  return status === 'waiting' || status === 'done' || status === 'running'
+  return status === 'done' || status === 'running'
 }
 
 function messageHasRateLimit(message: StructuredMessage): boolean {
   if (message.role !== 'system' || !isObject(message.data)) return false
   const type = message.data.type
   const event = message.data.event
-  return (typeof type === 'string' && RATE_LIMIT_EVENT.test(type)) ||
+  return message.data.method === 'account/rateLimits/updated' ||
+    (typeof type === 'string' && RATE_LIMIT_EVENT.test(type)) ||
     (typeof event === 'string' && RATE_LIMIT_EVENT.test(event)) ||
     'rateLimit' in message.data || 'rate_limit' in message.data
 }
@@ -134,12 +136,13 @@ export class LoopDriver {
   private readonly store: LoopStore
   private readonly evidence: EvidenceEngineContract
   private readonly loopId: string
-  private readonly hooks: DriverHooks
+  private readonly hooks: LoopDriverHooks
   private readonly pollMs: number
   private readonly userIdleMs: number
   private readonly noBusyEdgeMs: number
   private readonly now: () => number
   private readonly wakeWaiters = new Set<() => void>()
+  private readonly shutdownWaiters = new Set<() => void>()
   private readonly acceptedPrompts: AcceptedPrompt[] = []
   private pendingPrompt: PendingPrompt | null = null
   private currentController: AbortController | null = null
@@ -168,6 +171,9 @@ export class LoopDriver {
     if (this.runPromise !== null) return
     this.runPromise = this.run().finally(() => this.hooks.finished(this))
   }
+  waitForFinish(): Promise<void> {
+    return this.runPromise ?? Promise.resolve()
+  }
 
   wake(): void {
     for (const resolve of this.wakeWaiters) resolve()
@@ -182,7 +188,8 @@ export class LoopDriver {
       const pending = this.pendingPrompt
       if (pending && pending.sessionId === message.sessionId && message.seq > pending.afterSeq && message.text === pending.text) {
         pending.candidates.push(message.seq)
-      } else if (!this.isAcceptedPrompt(message)) {
+      } else if (!this.isAcceptedPrompt(message) &&
+        !this.store.isOwnedMessage(this.loopId, message.sessionId, message.seq)) {
         this.recordHumanMessage(message.at)
         this.setEligible(false)
       }
@@ -220,6 +227,8 @@ export class LoopDriver {
       this.context.log(`could not account active time before shutting down loop ${this.loopId}: ${error instanceof Error ? error.message : String(error)}`)
     }
     this.shuttingDown = true
+    for (const resolve of this.shutdownWaiters) resolve()
+    this.shutdownWaiters.clear()
     this.currentController?.abort(new DriverCancelled())
     this.wake()
     await Promise.allSettled([
@@ -248,8 +257,37 @@ export class LoopDriver {
     if (this.stopNowRequested) throw new StopNow()
   }
 
-  private async call(method: string, params: Record<string, unknown>, signal?: AbortSignal): Promise<unknown> {
-    const result = await this.context.call(method, params)
+  private async awaitCall<T>(operation: Promise<T>, signal?: AbortSignal): Promise<T> {
+    if (!signal) return await operation
+    if (this.shuttingDown) throw new DriverCancelled()
+    const { promise, resolve } = Promise.withResolvers<void>()
+    const wakeOnShutdown = () => resolve()
+    const onAbort = () => {
+      if (this.shuttingDown || signal.reason instanceof DriverCancelled) wakeOnShutdown()
+    }
+    this.shutdownWaiters.add(wakeOnShutdown)
+    signal.addEventListener('abort', onAbort, { once: true })
+    if (this.shuttingDown) wakeOnShutdown()
+    try {
+      return await Promise.race([
+        operation,
+        promise.then(() => { throw new DriverCancelled() })
+      ])
+    } finally {
+      signal.removeEventListener('abort', onAbort)
+      this.shutdownWaiters.delete(wakeOnShutdown)
+    }
+  }
+
+  private async call(
+    method: string,
+    params: Record<string, unknown>,
+    signal?: AbortSignal,
+    acceptStopNowResult = false
+  ): Promise<unknown> {
+    this.assertActive(signal)
+    const result = await this.awaitCall(this.context.call(method, params), signal)
+    if (acceptStopNowResult && this.stopNowRequested && !this.shuttingDown) return result
     this.assertActive(signal)
     return result
   }
@@ -363,16 +401,38 @@ export class LoopDriver {
     }
   }
   private async startStructuredSession(method: string, params: Record<string, unknown>, signal: AbortSignal): Promise<Session> {
-    const value = await this.context.call(method, params)
+    this.assertActive(signal)
+    const operation = this.context.call(method, params)
+    let value: unknown
+    try {
+      value = await this.awaitCall(operation, signal)
+    } catch (error) {
+      if (this.shuttingDown) {
+        void operation.then((lateValue) => this.cleanupLateStructuredSession(lateValue), () => undefined)
+      }
+      throw error
+    }
     const session = sessionOf(value)
     try {
       this.assertActive(signal)
     } catch (error) {
-      await this.stopOwnedSession(session.id)
-      await this.closeOwnedSession(session.id)
+      await this.cleanupLateStructuredSession(session)
       throw error
     }
     return session
+  }
+
+  private async cleanupLateStructuredSession(value: unknown): Promise<void> {
+    let session: Session
+    try {
+      session = sessionOf(value)
+    } catch {
+      return
+    }
+    await Promise.allSettled([
+      this.stopOwnedSession(session.id),
+      this.closeOwnedSession(session.id)
+    ])
   }
 
   private async approvalPending(sessionId: string, signal?: AbortSignal): Promise<boolean | null> {
@@ -395,12 +455,13 @@ export class LoopDriver {
       if (current?.status === 'exited') throw new Error(`structured session ${sessionId} exited before it became ready`)
       const asks = await this.approvalPending(sessionId, signal)
       this.assertActive(signal)
-      if (asks === true) {
+      if (asks === true || current?.status === 'waiting') {
         this.setNeedsYou()
       } else if (asks === false && current && isIdle(current.status)) {
+        this.setRunningFromNeedsYou()
         return current
       }
-      if (asks !== true && current !== null && this.now() - started > READY_TIMEOUT_MS) {
+      if (asks !== true && current !== null && current.status !== 'waiting' && this.now() - started > READY_TIMEOUT_MS) {
         throw new Error(`structured session ${sessionId} did not become ready`)
       }
       await this.delay(this.pollMs, signal)
@@ -409,11 +470,11 @@ export class LoopDriver {
   }
 
   private setNeedsYou(): void {
+    if (this.current()?.state === 'needs-you') return
+    this.setEligible(false)
     const current = this.requireLoop()
     if (current.state === 'needs-you') return
-    const snapshot = { ...current, state: 'needs-you' as const, phase: 'waiting' as const }
-    this.setEligible(false)
-    this.commit(snapshot)
+    this.commit({ ...current, state: 'needs-you', phase: 'waiting' })
   }
 
   private setRunningFromNeedsYou(): LoopSnapshot {
@@ -544,8 +605,8 @@ export class LoopDriver {
       if (current?.status === 'exited') throw new Error(`structured session ${sessionId} exited before prompt delivery`)
       const asks = await this.approvalPending(sessionId, signal)
       this.assertActive(signal)
-      if (asks === true) this.setNeedsYou()
-      else if (asks === false) this.setRunningFromNeedsYou()
+      if (asks === true || current?.status === 'waiting') this.setNeedsYou()
+      else if (asks === false && current) this.setRunningFromNeedsYou()
 
       let messages: StructuredMessage[]
       try {
@@ -670,12 +731,12 @@ export class LoopDriver {
       this.turnSentAt = this.now()
       this.busyEdgeAt = null
       try {
-        const sent = await this.context.call('quirky.structured/send', {
+        const sent = await this.call('quirky.structured/send', {
           session: sessionId,
           text: prompt,
           requireIdle: true,
           expectedAfterSeq: cursor
-        })
+        }, signal, true)
         if (!isObject(sent) || sent.ok !== true) {
           this.assertActive(signal)
           throw new Error('structured send did not confirm prompt delivery')
@@ -754,8 +815,8 @@ export class LoopDriver {
 
       const asks = await this.approvalPending(sessionId, signal)
       this.assertActive(signal)
-      if (asks === true) this.setNeedsYou()
-      else if (asks === false) this.setRunningFromNeedsYou()
+      if (asks === true || current?.status === 'waiting') this.setNeedsYou()
+      else if (asks === false && current) this.setRunningFromNeedsYou()
 
       let messages: StructuredMessage[] = []
       let journalKnown = true
@@ -770,10 +831,11 @@ export class LoopDriver {
       const humanAt = lastHumanMessageAt(messages, this.store, this.loopId, sessionId)
       if (humanAt !== null) this.recordHumanMessage(humanAt)
       if (current && isBusy(current.status)) busyEdge = true
+      if (this.busyEdgeAt !== null && this.turnSentAt !== null && this.busyEdgeAt >= this.turnSentAt) busyEdge = true
 
       const now = this.now()
       const userQuiet = this.lastHumanAt === null || now - this.lastHumanAt >= this.userIdleMs
-      const eligible = current !== null && asks === false && journalKnown && userQuiet
+      const eligible = current !== null && current.status !== 'waiting' && asks === false && journalKnown && userQuiet
       if (eligible) {
         this.setRunningFromNeedsYou()
         this.setEligible(true)
@@ -934,10 +996,11 @@ export class LoopDriver {
       }
       this.setEligible(false)
       const finished = this.requireLoop()
+      const priorCostUsd = finished.iterationsCompleted === 0 ? 0 : finished.costUsd
       finished.iterationsCompleted += 1
       finished.phase = null
       finished.sessionId = sessionId
-      finished.costUsd = finished.costUsd === null || evidence.costUsd === null ? null : finished.costUsd + evidence.costUsd
+      finished.costUsd = priorCostUsd === null || evidence.costUsd === null ? null : priorCostUsd + evidence.costUsd
       this.commit(finished, detail)
       appendLoopLog(this.context, detail, finished)
     } catch (error) {

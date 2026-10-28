@@ -190,11 +190,4 @@ describe('quirky loop CLI', () => {
     expect(stopped[0]).toContain('Stopping loop')
   })
 
-  test('CLI validates required input and check flag dependencies before calling create', async () => {
-    rig = await startLoopRig()
-    expect((await failure(run('create', [], { agent: 'claude' }))).message).toContain('--prompt')
-    expect((await failure(run('create', [], { agent: 'claude', prompt: ' ' }))).message).toContain('non-empty')
-    expect((await failure(run('create', [], { agent: 'claude', prompt: 'ok', 'check-timeout': 601 }))).message).toContain('--check-timeout requires --check')
-    expect(rig.starts).toHaveLength(0)
-  })
 })

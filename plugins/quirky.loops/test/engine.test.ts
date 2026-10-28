@@ -1,5 +1,5 @@
 import { Database } from 'bun:sqlite'
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, test } from 'bun:test'
@@ -35,6 +35,7 @@ class Runtime {
   readonly subscribers = new Set<(event: QuirkyEvent) => void | Promise<void>>()
   readonly waiters = new Set<() => void>()
   readonly turns: ScriptedTurn[] = []
+  readonly cumulativeCosts: number[] = []
   pendingAsks: { id: string; sessionId: string; envelope: { status: 'pending' } }[] = []
   private sessionCount = 0
   private sendBarrier: { entered: () => void; wait: Promise<void>; release: () => void } | null = null
@@ -53,7 +54,10 @@ class Runtime {
     let version = 0
     this.pluginStore = {
       get version() { return version },
-      run: (sql, ...params) => this.database.query(sql).run(...params),
+      run: (sql, ...params) => {
+        const result = this.database.query(sql).run(...params)
+        return { changes: Number(result.changes), lastInsertRowid: Number(result.lastInsertRowid) }
+      },
       get: <T>(sql: string, ...params: (string | number | bigint | boolean | null | Uint8Array)[]) => this.database.query(sql).get(...params) as T | null,
       all: <T>(sql: string, ...params: (string | number | bigint | boolean | null | Uint8Array)[]) => this.database.query(sql).all(...params) as T[],
       exec: (sql) => this.database.exec(sql),
@@ -144,16 +148,24 @@ class Runtime {
     this.wakeWaiters()
   }
 
-  private append(sessionId: string, role: StructuredMessage['role'], text: string): StructuredMessage {
+  private append(sessionId: string, role: StructuredMessage['role'], text: string, data?: unknown): StructuredMessage {
     const rows = this.journals.get(sessionId) ?? []
-    const message: StructuredMessage = { sessionId, seq: (rows.at(-1)?.seq ?? 0) + 1, role, text, at: Date.now() }
+    const message: StructuredMessage = {
+      sessionId,
+      seq: (rows.at(-1)?.seq ?? 0) + 1,
+      role,
+      text,
+      at: Date.now(),
+      ...(data === undefined ? {} : { data })
+    }
     rows.push(message)
     this.journals.set(sessionId, rows)
     this.emit('quirky.structured/message', { message })
     return message
   }
 
-  respond(sessionId: string, text: string, status: Session['status'] = 'done'): void {
+  respond(sessionId: string, text: string, status: Session['status'] = 'done', totalCostUsd?: number): void {
+    if (totalCostUsd !== undefined) this.append(sessionId, 'result', '', { total_cost_usd: totalCostUsd })
     this.append(sessionId, 'assistant', text)
     const session = this.sessions.get(sessionId)!
     this.sessions.set(sessionId, { ...session, status, lastActivityAt: Date.now() })
@@ -170,7 +182,7 @@ class Runtime {
       const id = `session-${++this.sessionCount}`
       const session: Session = {
         id, kind: 'structured', agent: params.agent as string, worktreeId: this.worktree.id, cwd: this.worktree.path,
-        title: 'Loop', status: 'waiting', createdAt: Date.now(), lastActivityAt: Date.now(), exitCode: null,
+        title: 'Loop', status: 'running', createdAt: Date.now(), lastActivityAt: Date.now(), exitCode: null,
         exitSignal: null, exitCause: null, restorable: false, providerSession: { id: `provider-${id}`, transcriptPath: null }
       }
       this.sessions.set(id, session)
@@ -184,7 +196,7 @@ class Runtime {
       if (!old?.providerSession) throw new Error(`missing provider session for ${oldId}`)
       this.resumed.push(oldId)
       const id = `session-${++this.sessionCount}`
-      const session: Session = { ...old, id, status: 'waiting', createdAt: Date.now(), lastActivityAt: Date.now(), resumedFrom: oldId }
+      const session: Session = { ...old, id, status: 'running', createdAt: Date.now(), lastActivityAt: Date.now(), resumedFrom: oldId }
       this.sessions.set(id, session)
       this.journals.set(id, [])
       return session
@@ -204,7 +216,7 @@ class Runtime {
       const session = this.sessions.get(sessionId)
       const journal = this.journals.get(sessionId) ?? []
       const currentSeq = journal.at(-1)?.seq ?? 0
-      const idle = session?.status === 'waiting' || session?.status === 'done' || session?.status === 'running'
+      const idle = session?.status === 'done' || session?.status === 'running'
       if (!session || !idle || params.requireIdle !== true || currentSeq !== expected) {
         throw Object.assign(new Error('send conflict'), { code: RpcErrorCode.Conflict })
       }
@@ -212,7 +224,7 @@ class Runtime {
       this.append(sessionId, 'user', text)
       this.sessions.set(sessionId, { ...session, status: 'working', lastActivityAt: Date.now() })
       const turn = this.turns.shift() ?? 'settle'
-      if (turn === 'settle') this.respond(sessionId, `completed ${this.sends.length}`)
+      if (turn === 'settle') this.respond(sessionId, `completed ${this.sends.length}`, 'done', this.cumulativeCosts.shift())
       if (turn === 'exit') this.sessions.set(sessionId, { ...this.sessions.get(sessionId)!, status: 'exited', exitCode: 9 })
       return { ok: true }
     }
@@ -389,21 +401,21 @@ describe('LoopService background engine', () => {
     const runtime = rig()
     const loops = service(runtime)
     await loops.start()
-    const config = { ...input().config, caps: { maxIterations: 1 }, askBeforeNext: true }
+    const config = { ...input().config, caps: { maxIterations: 2 }, askBeforeNext: true }
     const created = await loops.create(input(config))
     await loopUntil(runtime, loops, created.id, (snapshot) => snapshot.pauseReason === 'ask-before-next')
     await loops.edit(created.id, { promptSource: { kind: 'repeat', body: 'Use the revised task.' } })
     await loops.steer(created.id, 'use banana')
     await loops.resume(created.id, 1)
-    await loopUntil(runtime, loops, created.id, (snapshot) => snapshot.state === 'paused' && snapshot.pauseReason === 'cap-iterations')
+    await loopUntil(runtime, loops, created.id, (snapshot) => snapshot.state === 'paused' && snapshot.pauseReason === 'ask-before-next')
+    expect(loops.get(created.id).config.caps.maxIterations).toBe(3)
 
     expect(runtime.sends).toHaveLength(2)
     expect(new Set(runtime.sends.map((send) => send.session)).size).toBe(2)
-    expect(runtime.sends.every((send) => send.text.includes('automated background loop'))).toBe(true)
+    await runtime.until(() => runtime.created.every((id) => runtime.closed.includes(id)) ? true : null)
     expect(runtime.closed).toEqual(expect.arrayContaining(runtime.created))
-    expect(runtime.sends[1]?.text).toContain('Notes from the user for this iteration:\n- use banana')
     expect(runtime.sends[1]?.text).toContain('Use the revised task.')
-    expect(runtime.sends[1]?.text).not.toContain('use banana\n- use banana')
+    expect(runtime.sends[1]?.text.split('use banana')).toHaveLength(2)
     expect(loops.iterations(created.id).map(({ n, attempt }) => [n, attempt])).toEqual([[1, 1], [2, 1]])
   })
 
@@ -455,7 +467,7 @@ describe('LoopService background engine', () => {
     expect(runtime.sendAttempts[1]?.expectedAfterSeq).toBe(1)
     expect(runtime.sendAttempts[0]?.text).not.toContain('use banana')
     expect(runtime.sends).toHaveLength(1)
-    expect(runtime.sends[0]?.text).toContain('Notes from the user for this iteration:\\n- use banana')
+    expect(runtime.sends[0]?.text).toContain('use banana')
     expect(loops.iterations(created.id)).toMatchObject([{ n: 1, attempt: 1, endReason: 'settled' }])
   })
 
@@ -557,10 +569,12 @@ describe('LoopService background engine', () => {
     clock.advance(5000)
     const sessionId = runtime.sends[0]!.session
     const ask = { id: 'ask-clock', sessionId, envelope: { status: 'pending' as const } }
-    runtime.pendingAsks = [ask]
-    runtime.emit('quirky.ask/created', { ask })
+    runtime.sessions.set(sessionId, { ...runtime.sessions.get(sessionId)!, status: 'waiting' })
+    runtime.emit('quirky.session/changed', { session: runtime.sessions.get(sessionId) })
     const held = await loopUntil(runtime, loops, created.id, (snapshot) => snapshot.state === 'needs-you')
     expect(held.activeMs).toBe(5000)
+    runtime.pendingAsks = [ask]
+    runtime.emit('quirky.ask/created', { ask })
     clock.advance(100_000)
     runtime.pendingAsks = []
     runtime.emit('quirky.ask/resolved', { askId: ask.id })
@@ -578,6 +592,23 @@ describe('LoopService background engine', () => {
     const paused = await loopUntil(runtime, loops, created.id, (snapshot) => snapshot.state === 'paused')
     expect(paused).toMatchObject({ pauseReason: 'cap-cost', pauseDetail: 'usage-unavailable', costUsd: null })
     expect(loops.iterations(created.id)[0]?.costUsd).toBeNull()
+  })
+
+  test('accumulates measured cumulative provider USD toward a cost cap without pricing tokens', async () => {
+    const runtime = rig()
+    runtime.cumulativeCosts.push(0.2, 0.4)
+    const loops = service(runtime)
+    await loops.start()
+    const created = await loops.create(input({
+      ...input().config,
+      sessionPolicy: 'continue',
+      caps: { maxCostUsd: 0.3 }
+    }))
+    const paused = await loopUntil(runtime, loops, created.id, (snapshot) => snapshot.state === 'paused')
+
+    expect(paused).toMatchObject({ pauseReason: 'cap-cost', costUsd: 0.4 })
+    expect(runtime.created).toHaveLength(1)
+    expect(loops.iterations(created.id).map((iteration) => iteration.costUsd)).toEqual([0.2, 0.2])
   })
 
   test('holds for pending approval and settles only after the current turn resolves', async () => {

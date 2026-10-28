@@ -108,7 +108,7 @@ function boundedAttempt(detail: IterationDetail): IterationDetail {
   }
 }
 
-function encodeLoop(snapshot: LoopSnapshot): Omit<LoopRow, 'journal_cursor' | 'pause_requested' | 'stop_requested' | 'stop_now' | 'needs_resume'> {
+function encodeLoop(snapshot: LoopSnapshot): Omit<LoopRow, 'journal_cursor' | 'pause_requested' | 'stop_requested' | 'stop_now' | 'needs_resume' | 'resume_native'> {
   return {
     id: snapshot.id,
     name: snapshot.name,
@@ -230,7 +230,9 @@ export class LoopStore {
 
   private recent(loopId: string, limit: number): IterationDetail[] {
     const rows = this.store.all<IterationRow>(
-      'SELECT detail_json FROM loop_iterations WHERE loop_id = ? ORDER BY n DESC, attempt DESC LIMIT ?',
+      `SELECT detail_json FROM loop_iterations
+       WHERE loop_id = ? AND json_extract(detail_json, '$.endedAt') IS NOT NULL
+       ORDER BY n DESC, attempt DESC LIMIT ?`,
       loopId,
       limit
     )

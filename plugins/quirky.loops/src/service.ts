@@ -404,12 +404,16 @@ export class LoopService implements LoopServiceContract {
   async resume(loopId: string, addIterations?: number): Promise<LoopSnapshot> {
     await this.start()
     this.requireWritable()
-    const previous = this.get(loopId)
-    const storedRequests = this.store.requests(loopId)
+    let previous = this.get(loopId)
     if (previous.state !== 'paused') throw this.context.error('conflict', `Loop ${loopId} is ${previous.state}, not paused`)
     if (addIterations !== undefined && (!Number.isFinite(addIterations) || !Number.isInteger(addIterations) || addIterations < 1)) {
       throw this.context.error('invalid-params', 'addIterations must be a finite integer of at least 1')
     }
+    const existingDriver = this.drivers.get(loopId)
+    if (existingDriver) await existingDriver.waitForFinish()
+    previous = this.get(loopId)
+    if (previous.state !== 'paused') throw this.context.error('conflict', `Loop ${loopId} is ${previous.state}, not paused`)
+    const storedRequests = this.store.requests(loopId)
     const snapshot = cloneSnapshot(previous)
     if (addIterations !== undefined) {
       const currentCap = snapshot.config.caps.maxIterations ?? 0
