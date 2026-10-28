@@ -17,6 +17,7 @@ import {
   nextAutomationOccurrenceAfter
 } from './schedule'
 import { AutomationStoreError, PrunedAutomationOccurrenceError, createAutomationStore, migrations } from './store'
+import type { AutomationDispatcher, AutomationDispatchHooks, AutomationServiceOptions, AutomationTargetResolution } from './dispatch-contract'
 
 const TICK_INTERVAL_MS = 60_000
 const MISSED_JITTER_ALLOWANCE_MS = 120_000
@@ -53,7 +54,7 @@ type ScheduleInspection = {
 }
 type LaunchOverrides = NonNullable<AutomationDefinition['launchOverrides']>
 
-export type AutomationServiceContext = Pick<PluginContext, 'pluginId' | 'openStore' | 'emit' | 'error' | 'log'>
+export type AutomationServiceContext = Pick<PluginContext, 'pluginId' | 'openStore' | 'emit' | 'error' | 'log'> & Partial<Pick<PluginContext, 'call'>>
 export type AutomationService = {
   list(params: Params): AutomationDefinition[]
   show(params: Params): AutomationDefinition
@@ -63,6 +64,8 @@ export type AutomationService = {
   run(params: Params): Promise<AutomationRun>
   runs(params: Params): AutomationRunsPage
   schedule(params: Params): ScheduleInspection
+  target(params: Params): Promise<AutomationTargetResolution>
+  dispatch(params: Params): Promise<AutomationRun>
   tick(): Promise<ServiceResult>
   claim(params: Params): Promise<AutomationRun>
   updateRun(params: Params): Promise<AutomationRun>
@@ -308,7 +311,7 @@ function normalizedDefinitionInput(
   const allowed = [
     'creationKey', 'name', 'prompt', 'agentId', 'projectId', 'workspaceMode', 'workspaceId', 'baseBranch', 'setupDecision',
     'reuseSession', 'runContext', 'sourceContext', 'launchOverrides', 'precheck', 'timezone', 'rrule', 'dtstart', 'enabled',
-    'missedRunGraceMinutes'
+    'missedRunGraceMinutes', 'extraAgentArgs'
   ]
   checkFields(context, input, allowed, creating ? 'definition' : 'patch')
 
@@ -530,14 +533,71 @@ function handleAsyncError<T>(context: AutomationServiceContext, work: () => Prom
   return work().catch((error) => throwStoreError(context, error))
 }
 
-export function createAutomationService(context: AutomationServiceContext, clock: () => number = Date.now): AutomationService {
+export function createAutomationService(
+  context: AutomationServiceContext,
+  clock: () => number = Date.now,
+  options: AutomationServiceOptions = {}
+): AutomationService {
   const database: PluginStore = context.openStore(migrations)
   const store = createAutomationStore(database)
   const lanes = new Map<string, Promise<void>>()
+  const targets = options.targets
+  if (options.createDispatcher && !targets) {
+    throw context.error('invalid-params', 'An automation dispatcher requires a target resolver.')
+  }
+  const hooks: AutomationDispatchHooks | undefined = targets ? {
+    store,
+    targets,
+    clock,
+    inLane: <T>(automationId: string, work: () => T | Promise<T>) => runInLane(lanes, automationId, work),
+    changed: (automationId, runId) => mutationEvent(context, 'run', automationId, { runId, action: 'dispatched' })
+  } : undefined
+  const dispatcher: AutomationDispatcher | undefined = hooks && options.createDispatcher
+    ? options.createDispatcher(hooks)
+    : undefined
   let evaluating = false
   let started = false
   let disposed = false
   let timer: ReturnType<typeof setInterval> | undefined
+
+  const rejectExtraAgentArgs = (object: Params): void => {
+    if (object.extraAgentArgs === undefined) return
+    if (typeof object.extraAgentArgs !== 'string') {
+      throw context.error('invalid-params', 'extraAgentArgs must be a string.')
+    }
+    if (!empty(object.extraAgentArgs)) {
+      throw context.error('invalid-params', 'Raw agent arguments are unsupported for structured automation runs.')
+    }
+  }
+
+  const validateLaunchPicks = async (definition: AutomationDefinition): Promise<void> => {
+    const overrides = definition.launchOverrides
+    if (!overrides) return
+    if (!context.call) {
+      if (targets) throw context.error('invalid-params', 'Structured launch validation is unavailable.')
+      return
+    }
+    await context.call('quirky.agents/resolveLaunch', {
+      agent: definition.agentId,
+      structured: true,
+      ...(overrides.model === undefined ? {} : { model: overrides.model }),
+      ...(overrides.optionValues === undefined ? {} : { options: overrides.optionValues })
+    })
+  }
+
+  const captureTarget = async (definition: AutomationDefinition): Promise<AutomationDefinition> => {
+    if (!targets) return definition
+    const captured = await targets.capture(definition)
+    if (!captured.owner) throw context.error('conflict', 'The automation target resolver did not capture a local owner.')
+    const runContext = normalizedContext(context, captured.runContext, 'runContext')
+    return { ...captured, runContext }
+  }
+
+  const assertExpectedOwner = (definition: AutomationDefinition, value: unknown): void => {
+    if (value === undefined) return
+    if (!targets) throw context.error('conflict', 'The saved owner cannot be checked without a target resolver.')
+    targets.assertExpectedOwner(definition, value)
+  }
 
   const list = (params: Params) => handleError(context, () => {
     const object = checkRecord(context, params, 'list')
@@ -557,17 +617,18 @@ export function createAutomationService(context: AutomationServiceContext, clock
     checkFields(context, object, [
       'creationKey', 'name', 'prompt', 'agentId', 'projectId', 'workspaceMode', 'workspaceId', 'baseBranch', 'setupDecision',
       'reuseSession', 'runContext', 'sourceContext', 'launchOverrides', 'precheck', 'timezone', 'rrule', 'dtstart', 'enabled',
-      'missedRunGraceMinutes'
+      'missedRunGraceMinutes', 'extraAgentArgs'
     ], 'create')
+    rejectExtraAgentArgs(object)
     const now = clock()
     const key = object.creationKey === undefined ? undefined : requiredString(context, object.creationKey, 'creationKey', MAX_CREATION_KEY_LENGTH)
     const normalized = normalizedDefinitionInput(context, object, now)
-    const createInsideLane = () => {
+    const createInsideLane = async (): Promise<AutomationDefinition> => {
       if (key) {
         const existing = store.findByCreationKey(key)
         if (existing) return existing
       }
-      const definition: AutomationDefinition = {
+      let definition: AutomationDefinition = {
         id: randomUUID(),
         name: normalized.name!,
         prompt: normalized.prompt!,
@@ -593,6 +654,8 @@ export function createAutomationService(context: AutomationServiceContext, clock
         updatedAt: now,
         ...(normalized.creationKey === undefined ? {} : { creationKey: normalized.creationKey })
       }
+      await validateLaunchPicks(definition)
+      definition = await captureTarget(definition)
       const saved = store.insert(definition)
       mutationEvent(context, 'definition', saved.id, { action: 'created' })
       return saved
@@ -602,12 +665,19 @@ export function createAutomationService(context: AutomationServiceContext, clock
 
   const edit = (params: Params) => handleAsyncError(context, async () => {
     const object = checkRecord(context, params, 'edit')
+    checkFields(context, object, ['id', 'expectedOwner', 'creationKey', 'name', 'prompt', 'agentId', 'projectId', 'workspaceMode',
+      'workspaceId', 'baseBranch', 'setupDecision', 'reuseSession', 'runContext', 'sourceContext', 'launchOverrides', 'precheck',
+      'timezone', 'rrule', 'dtstart', 'enabled', 'missedRunGraceMinutes', 'extraAgentArgs'], 'edit')
+    rejectExtraAgentArgs(object)
     const id = requiredString(context, object.id, 'edit.id')
+    const expectedOwner = object.expectedOwner
     const patch = { ...object }
     delete patch.id
-    return runInLane(lanes, id, () => {
+    delete patch.expectedOwner
+    return runInLane(lanes, id, async () => {
       const current = store.get(id)
       if (!current) throw context.error('not-found', `Automation ${id} was not found.`)
+      assertExpectedOwner(current, expectedOwner)
       const now = clock()
       const normalized = normalizedDefinitionInput(context, patch, now, current)
       const changedSchedule = normalized.rrule !== undefined && normalized.rrule !== current.rrule
@@ -616,6 +686,20 @@ export function createAutomationService(context: AutomationServiceContext, clock
       if (changedSchedule && patch.dtstart === undefined) normalized.dtstart = now
       if (!changedSchedule && patch.dtstart === undefined) delete normalized.dtstart
       if (!changedSchedule && !changedTimezone && !changedDtstart) delete normalized.nextRunAt
+      const targetMoved =
+        (normalized.projectId !== undefined && normalized.projectId !== current.projectId)
+        || (normalized.workspaceMode !== undefined && normalized.workspaceMode !== current.workspaceMode)
+        || (normalized.workspaceId !== undefined && normalized.workspaceId !== current.workspaceId)
+        || (normalized.runContext !== undefined && JSON.stringify(normalized.runContext) !== JSON.stringify(current.runContext))
+      let candidate = { ...current, ...normalized }
+      await validateLaunchPicks(candidate)
+      if (targetMoved) {
+        candidate = await captureTarget(candidate)
+        normalized.projectId = candidate.projectId
+        normalized.workspaceId = candidate.workspaceId
+        normalized.owner = candidate.owner
+        normalized.runContext = candidate.runContext
+      }
       const saved = store.update(id, { ...normalized, updatedAt: now })
       mutationEvent(context, 'definition', id, { action: 'updated' })
       return saved
@@ -624,10 +708,13 @@ export function createAutomationService(context: AutomationServiceContext, clock
 
   const remove = (params: Params) => handleAsyncError(context, async () => {
     const object = checkRecord(context, params, 'remove')
-    checkFields(context, object, ['id', 'yes'], 'remove')
+    checkFields(context, object, ['id', 'yes', 'expectedOwner'], 'remove')
     const id = requiredString(context, object.id, 'remove.id')
     optionalBoolean(context, object.yes, 'remove.yes')
     return runInLane(lanes, id, () => {
+      const current = store.get(id)
+      if (!current) throw context.error('not-found', `Automation ${id} was not found.`)
+      assertExpectedOwner(current, object.expectedOwner)
       if (!store.remove(id)) throw context.error('not-found', `Automation ${id} was not found.`)
       mutationEvent(context, 'definition', id, { action: 'removed' })
       return { id, removed: true as const }
@@ -635,15 +722,22 @@ export function createAutomationService(context: AutomationServiceContext, clock
   })
 
   const run = (params: Params) => handleAsyncError(context, async () => {
-    const { id } = idParam(context, params, 'run')
-    return runInLane(lanes, id, () => {
+    const object = checkRecord(context, params, 'run')
+    checkFields(context, object, ['id', 'expectedOwner'], 'run')
+    const id = requiredString(context, object.id, 'run.id')
+    const created = await runInLane(lanes, id, () => {
       const definition = store.get(id)
       if (!definition) throw context.error('not-found', `Automation ${id} was not found.`)
+      assertExpectedOwner(definition, object.expectedOwner)
       const now = clock()
       const run = database.transaction(() => store.createRun(id, { trigger: 'manual', scheduledFor: now, now }))
       mutationEvent(context, 'run', id, { runId: run.id, trigger: 'manual' })
       return run
     })
+    if (dispatcher) await dispatcher.dispatch(created.id)
+    const current = store.getRun(created.id)
+    if (!current) throwNotFound(context, 'Run', created.id)
+    return current
   })
 
   const runs = (params: Params) => handleError(context, () => {
@@ -661,16 +755,38 @@ export function createAutomationService(context: AutomationServiceContext, clock
 
   const schedule = (params: Params): ScheduleInspection => handleError(context, () => inspection(context, params, clock))
 
+  const target = (params: Params) => handleAsyncError(context, async () => {
+    const { id } = idParam(context, params, 'target')
+    if (!targets) throw context.error('conflict', 'Automation target inspection is unavailable.')
+    return runInLane(lanes, id, async () => {
+      const definition = store.get(id)
+      if (!definition) throw context.error('not-found', `Automation ${id} was not found.`)
+      return targets.resolve(definition)
+    })
+  })
+
+  const dispatch = (params: Params) => handleAsyncError(context, async () => {
+    const object = checkRecord(context, params, 'dispatch')
+    checkFields(context, object, ['runId'], 'dispatch')
+    const runId = requiredString(context, object.runId, 'dispatch.runId')
+    if (!dispatcher) throw context.error('conflict', 'Automation dispatch is unavailable.')
+    const dispatched = await dispatcher.dispatch(runId)
+    const current = store.getRun(runId)
+    if (!current) throwNotFound(context, 'Run', runId)
+    return current ?? dispatched!
+  })
+
   const tick = async (): Promise<ServiceResult> => {
     const now = clock()
     if (disposed || evaluating) return { now, evaluated: 0 }
     evaluating = true
     let evaluated = 0
+    const pendingRunIds: string[] = []
     try {
       const due = store.list()
         .filter((definition) => definition.enabled && definition.nextRunAt <= now)
         .sort((left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id))
-      await Promise.all(due.map((definition) => runInLane(lanes, definition.id, () => {
+      await Promise.all(due.map((definition) => runInLane(lanes, definition.id, async () => {
         if (disposed) return
         const current = store.get(definition.id)
         if (!current || !current.enabled || current.nextRunAt > now) return
@@ -681,16 +797,10 @@ export function createAutomationService(context: AutomationServiceContext, clock
           scheduledFor = latestAutomationOccurrenceAtOrBefore(current.rrule, current.dtstart, now, current.timezone)
           nextRunAt = nextAutomationOccurrenceAfter(current.rrule, current.dtstart, now, current.timezone)
         } catch {
-          const previous = store.runs(current.id, 1).runs[0]
           const skipped = database.transaction(() =>
             store.foldUnavailable(current.id, current.nextRunAt, UNEVALUABLE_SCHEDULE_ERROR, now)
           )
-          const changed = previous === undefined || previous.id !== skipped.id
-            || previous.occurrenceCount !== skipped.occurrenceCount
-            || previous.lastOccurrenceAt !== skipped.lastOccurrenceAt
-            || previous.status !== skipped.status
-            || previous.error !== skipped.error
-          if (changed) mutationEvent(context, 'run', current.id, { runId: skipped.id, trigger: 'scheduled', folded: true })
+          mutationEvent(context, 'run', current.id, { runId: skipped.id, trigger: 'scheduled', folded: true })
           return
         }
         if (scheduledFor === null) {
@@ -698,15 +808,25 @@ export function createAutomationService(context: AutomationServiceContext, clock
           mutationEvent(context, 'definition', saved.id, { action: 'advanced' })
           return
         }
-        const grace = current.missedRunGraceMinutes * 60_000
-        const missed = now - scheduledFor > grace + MISSED_JITTER_ALLOWANCE_MS
+        const missed = now - scheduledFor > current.missedRunGraceMinutes * 60_000 + MISSED_JITTER_ALLOWANCE_MS
+        const resolution = !missed && targets ? await targets.resolve(current) : undefined
+        if (resolution && !resolution.available && resolution.status === 'skipped_unavailable') {
+          const skipped = database.transaction(() => {
+            const run = store.foldUnavailable(current.id, scheduledFor!, resolution.error, now)
+            store.update(current.id, { nextRunAt, lastRunAt: now, updatedAt: now })
+            return run
+          })
+          mutationEvent(context, 'run', current.id, { runId: skipped.id, trigger: 'scheduled', folded: true })
+          return
+        }
         const run = database.transaction(() => {
           let created: AutomationRun | null
           try {
             created = store.createRun(current.id, {
               trigger: 'scheduled',
-              scheduledFor,
-              ...(missed ? { status: 'skipped_missed' as const, error: MISSED_RUN_ERROR } : {}),
+              scheduledFor: scheduledFor!,
+              ...(missed ? { status: 'skipped_missed' as const, error: MISSED_RUN_ERROR }
+                : resolution && !resolution.available ? { status: resolution.status, error: resolution.error } : {}),
               now
             })
           } catch (error) {
@@ -716,11 +836,24 @@ export function createAutomationService(context: AutomationServiceContext, clock
           store.update(current.id, { nextRunAt, ...(created ? { lastRunAt: now } : {}), updatedAt: now })
           return created
         })
-        if (run) mutationEvent(context, 'run', current.id, { runId: run.id, trigger: 'scheduled' })
-        else mutationEvent(context, 'definition', current.id, { action: 'advanced' })
+        if (run) {
+          mutationEvent(context, 'run', current.id, { runId: run.id, trigger: 'scheduled' })
+          if (run.status === 'pending') pendingRunIds.push(run.id)
+        } else {
+          mutationEvent(context, 'definition', current.id, { action: 'advanced' })
+        }
       }).catch((error: unknown) => {
         context.log(`scheduler failed for ${definition.id}: ${error instanceof Error ? error.message : String(error)}`)
       })))
+      if (dispatcher) {
+        await Promise.all(pendingRunIds.map(async (runId) => {
+          try {
+            await dispatcher.dispatch(runId)
+          } catch (error) {
+            context.log(`automation dispatch failed for ${runId}: ${error instanceof Error ? error.message : String(error)}`)
+          }
+        }))
+      }
       return { now, evaluated }
     } finally {
       evaluating = false
@@ -733,6 +866,12 @@ export function createAutomationService(context: AutomationServiceContext, clock
     const runId = requiredString(context, object.runId, 'claim.runId')
     const existing = store.getRun(runId)
     if (!existing) throwNotFound(context, 'Run', runId)
+    if (dispatcher) {
+      const claimed = await dispatcher.dispatch(runId)
+      const current = store.getRun(runId)
+      if (!current) throwNotFound(context, 'Run', runId)
+      return current ?? claimed!
+    }
     return runInLane(lanes, existing.automationId, () => {
       const current = store.getRun(runId)
       if (!current) throwNotFound(context, 'Run', runId)
@@ -747,6 +886,7 @@ export function createAutomationService(context: AutomationServiceContext, clock
     const object = checkRecord(context, params, 'updateRun')
     checkFields(context, object, ['runId', 'patch'], 'updateRun')
     const runId = requiredString(context, object.runId, 'updateRun.runId')
+    if (dispatcher) throw context.error('conflict', 'Run lifecycle evidence is owned by the automation dispatcher.')
     const patch = runPatch(context, object.patch)
     const existing = store.getRun(runId)
     if (!existing) throwNotFound(context, 'Run', runId)
@@ -769,6 +909,8 @@ export function createAutomationService(context: AutomationServiceContext, clock
     run,
     runs,
     schedule,
+    target,
+    dispatch,
     tick,
     claim,
     updateRun,
@@ -776,6 +918,7 @@ export function createAutomationService(context: AutomationServiceContext, clock
       if (started || disposed) return
       started = true
       store.prune()
+      await dispatcher?.start()
       timer = setInterval(() => {
         void tick().catch((error) => context.log(`scheduler tick failed: ${error instanceof Error ? error.message : String(error)}`))
       }, TICK_INTERVAL_MS)
@@ -783,6 +926,7 @@ export function createAutomationService(context: AutomationServiceContext, clock
     },
     dispose() {
       if (disposed) return
+      dispatcher?.dispose()
       disposed = true
       if (timer !== undefined) clearInterval(timer)
       timer = undefined
