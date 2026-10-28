@@ -540,6 +540,7 @@ files, not this one.
 | medium | high | [m5-ledger D16](decisions/m5-ledger.md) | Correct import paths, value flags and Quirky JSON rather than copy Orca's transport envelope | assumed — autonomous |
 | medium | high | [m5-ledger D25](decisions/m5-ledger.md) | Preserve imported source identity through automatic owner recovery | locked by external research/orca-features/ledger.md |
 | medium | high | [m5-ledger D30](decisions/m5-ledger.md) | Preserve reviewer write violations as an operational limitation | assumed — autonomous |
+| medium | high | [m4-hosting-ui-review-browser-routing D4](decisions/m4-hosting-ui-review-browser-routing.md) | Hand off native delivery only after isolation preflight | deferred: platform |
 | medium (provider contracts and ui scenarios) | high | [m3-accounts D1](decisions/m3-accounts.md) | Implement meters and only Claude/Codex switching | locked by docs/roadmap.md |
 | medium (provider adapter boundaries) | high for cli/codex; medium for observed private quota protocols | [m3-accounts D4](decisions/m3-accounts.md) | Native CLI login and provider-specific usage ports beat custom OAuth or imported snapshots | assumed — autonomous |
 | medium (inter-plugin preparation) | high | [m3-accounts D5](decisions/m3-accounts.md) | Required account preparation is separate from launch hooks | assumed — autonomous |
@@ -1933,6 +1934,11 @@ files, not this one.
 | easy | high | [m5-ledger D29](decisions/m5-ledger.md) | Close XR1 despite its malformed first review packet, with one scoped fix batch | assumed — autonomous |
 | easy | high | [m5-ledger D31](decisions/m5-ledger.md) | Finish this item through queue-controlled integration without new flows or review rounds | locked by docs/loop/LOOP.md |
 | easy — prior snapshots remain in committed history | high | [m5-ledger D32](decisions/m5-ledger.md) | Keep only the ledger patch when catching up with the restored integration history | locked by docs/loop/LOOP.md; supersedes D27's integration snapshot selection, not its frozen review evidence |
+| easy | high | [m4-hosting-ui-review-browser-routing D1](decisions/m4-hosting-ui-review-browser-routing.md) | Reuse the implemented core and finish all three visible controls | locked by hosting-ui.md and docs/loop/decisions/m7-sweep-hosting.md |
+| easy | high | [m4-hosting-ui-review-browser-routing D2](decisions/m4-hosting-ui-review-browser-routing.md) | Resolve standard gray areas without a person | locked by docs/loop/decisions/sa-browser-profiles-settings.md |
+| easy | high | [m4-hosting-ui-review-browser-routing D3](decisions/m4-hosting-ui-review-browser-routing.md) | Follow build-first execution and keep inherited artifacts untouched | locked by docs/loop/LOOP.md |
+| easy | high | [m4-hosting-ui-review-browser-routing D5](decisions/m4-hosting-ui-review-browser-routing.md) | Retain the existing route owner after all incoming decisions | assumed — autonomous |
+| easy | high for the observed gate/module behavior; full acceptance and native effects unverified | [m4-hosting-ui-review-browser-routing D6](decisions/m4-hosting-ui-review-browser-routing.md) | Separate the typecheck gate and isolated module smoke from acceptance | assumed — autonomous |
 | easy (decision review) | high | [m3-accounts D2](decisions/m3-accounts.md) | Answer unattended design questions without a human gate | locked by docs/loop/LOOP.md |
 | easy (no implementation dispatched) | high | [m3-accounts D3](decisions/m3-accounts.md) | Use OpenAI task implementers and Gemini review fallback | assumed — autonomous |
 | easy (ui); medium (cache) | high | [m3-accounts D7](decisions/m3-accounts.md) | Retain documented presentation, errors and freshness defaults | locked by research/orca-features/accounts.md |
