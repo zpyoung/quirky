@@ -99,5 +99,16 @@
 - **Revisit if:** end-phase suites or golden review find a behavior or visual regression
 - **Source:** locked by docs/loop/LOOP.md
 
+## D10: Preserve every incoming restyle and gate the composed source
+- **Question:** sole roadmap catch-up conflicted in shared lint enrollment
+- **Options:** keep one lane's list; union all enrolled plugins and retain additive shared controls/styles
+- **Chose:** union all18 opted-in IDs. Incoming full decision logs read: Accounts acceptance D1–17, Agents D1–15, Browser D1–13, Git D1–18, Ledger D1–10 and Orchestration D1–13, including each Progress. No normative conflict. Preserve their authority/private-home/model/catalog boundaries, projected tool placement, centralized menus, additive field/ref exports and Dialog.scrollBody defaultfalse
+- **Why:** the conflict was additive enrollment, not competing implementation. Discarding another lane would weaken the shared gate
+- **Evidence:** source2407a8c4, catch-up00cbf4aa; full merged bun run typecheck exit0/30.80s including UIlint/root/mobile/preparedDesktop; composed renderer build11 host/vendor files25 plugin modules. Postmerge actual private UI rendered Tasks row and1 automation editor, accepted Composed source typing at640x480, name top193.875, no horizontal overflow, Escape cancelled, unrelated center remained null and fresh error entries[]
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** final controller merge typecheck or end-phase visual/behavioral checks identify a conflict
+- **Source:** assumed — autonomous
+
 ## Progress
-All source slices and the scoped tool-navigation correction are complete; actual evidence and limits are D4–D9. Full typecheck/UIlint/root/mobile/preparedDesktop passed before the final CSS-axis correction, which has actual renderer-build and narrow-UI proof. All workers returned, three component worktrees removed after metadata preservation, all three private runtime services exited0 and exact owned Chrome stopped. Next: commit source/docs, sole integration catch-up and read incoming binding decisions, run final merged typecheck, archive credential-free evidence and land through the canonical queue. No suites/reviews/golden scoring run or claimed.
+Ready to land. Source/components/docs and consumer-visible regressions are complete; authored tests remain unrun under build-first. Sole roadmap catch-up completed and six incoming binding logs read in full. Final composed typecheck, renderer build and bounded actual UI passed (D10); no suites, review, full dogfood, golden/native acceptance claimed. All workers/scouts returned; component worktrees removed after full unrelated metadata preservation; all four private runtime services exited0; all owned managed tabs released and both exact Chrome services stopped. Next: commit final receipt, archive credential-free evidence, detach and run canonical queue.ts land ui-restyle-tasks, await authoritative success, then remove only owned scratch.
