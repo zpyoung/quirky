@@ -6,6 +6,7 @@ import type { StructuredLaunchOptions } from './runner'
 
 type Row = { session_id: string; seq: number; role: StructuredRole; text: string; data: string | null; at: number }
 type LaunchOptionsRow = { options_json: string }
+type StoredLaunchOptions = Pick<StructuredLaunchOptions, 'model' | 'effort'>
 export type StructuredSendReceipt = {
   operationId: string
   sessionId: string
@@ -40,7 +41,7 @@ const CREATE_SEND_RECEIPTS_TABLE = `
 `
 
 
-function parseLaunchOptions(json: string): StructuredLaunchOptions {
+function parseLaunchOptions(json: string): StoredLaunchOptions {
   let value: unknown
   try {
     value = JSON.parse(json)
@@ -103,7 +104,7 @@ function createLaunchOptionsTable(): StoreMigration {
 export function journalMigrations(home: string): StoreMigration[] {
   return [
     createAndImportV1(home),
-    createLaunchOptionsTable(),
+    (store) => store.exec(CREATE_LAUNCH_OPTIONS_TABLE),
     (store) => store.exec(CREATE_SEND_RECEIPTS_TABLE)
   ]
 }
@@ -113,17 +114,21 @@ export class Journal {
   constructor(private readonly store: PluginStore) {}
 
   /** Stores the exact native model and effort selection applied to a structured session. */
-  setLaunchOptions(sessionId: string, options: StructuredLaunchOptions): void {
+  setLaunchOptions(sessionId: string, options: StoredLaunchOptions): void {
+    const stored: StoredLaunchOptions = {
+      ...(options.model === undefined ? {} : { model: options.model }),
+      ...(options.effort === undefined ? {} : { effort: options.effort })
+    }
     this.store.run(
       `INSERT INTO structured_launch_options (session_id, options_json) VALUES (?, ?)
        ON CONFLICT(session_id) DO UPDATE SET options_json = excluded.options_json`,
       sessionId,
-      JSON.stringify(options)
+      JSON.stringify(stored)
     )
   }
 
   /** Returns null when the session predates the private launch-options migration. */
-  getLaunchOptions(sessionId: string): StructuredLaunchOptions | null {
+  getLaunchOptions(sessionId: string): StoredLaunchOptions | null {
     const row = this.store.get<LaunchOptionsRow>(
       'SELECT options_json FROM structured_launch_options WHERE session_id = ?',
       sessionId

@@ -1,4 +1,4 @@
-import { bytesToBase64, type ExitCause, type PluginPty, type PtyFact } from '@quirky/protocol'
+import { bytesToBase64, type ExitCause, type PluginPty, type PluginUserInput, type PtyFact } from '@quirky/protocol'
 import type { PtyClient } from '../pty-client'
 import type { RuntimeSessionAuthority } from '../session-authority'
 
@@ -24,6 +24,8 @@ type Fanout = {
   exit: Set<{ pluginId: string; listener: ExitListener }>
   fact: Set<{ pluginId: string; listener: FactListener }>
   input: Set<{ pluginId: string; listener: InputListener }>
+  userInput: Set<{ pluginId: string; listener: (input: PluginUserInput) => void }>
+  userInputEvidence: Map<string, PluginUserInput>
   reconnect: Set<{ pluginId: string; listener: ReconnectListener }>
   /** Plugins holding a host subscription per session; the host subscription ends when the last holder lets go. */
   holds: Map<string, Set<string>>
@@ -42,6 +44,8 @@ function fanoutFor(pty: PtyClient, log: (message: string) => void): Fanout {
     exit: new Set(),
     fact: new Set(),
     input: new Set(),
+    userInput: new Set(),
+    userInputEvidence: new Map(),
     reconnect: new Set(),
     holds: new Map(),
     log,
@@ -163,6 +167,7 @@ export function createPtyApi(
     async forget(sessionId) {
       live()
       await pty.request('forget', { sessionId })
+      fanout.userInputEvidence.delete(sessionId)
       sessionAuthority?.revokeTerminal(sessionId)
     },
     async list() {
@@ -223,6 +228,19 @@ export function createPtyApi(
     onExit: (listener) => listen(fanout.exit, { pluginId, listener }),
     onFact: (listener) => listen(fanout.fact, { pluginId, listener }),
     onInput: (listener) => listen(fanout.input, { pluginId, listener }),
+    reportUserInput(input) {
+      live()
+      const evidence: PluginUserInput = { ...input, at: Date.now() }
+      fanout.userInputEvidence.set(input.session, evidence)
+      // Unlike informational listeners, custody guards must run before input and
+      // must fail closed instead of being logged and swallowed.
+      for (const entry of [...fanout.userInput]) entry.listener(evidence)
+    },
+    lastUserInput(sessionId) {
+      live()
+      return fanout.userInputEvidence.get(sessionId) ?? null
+    },
+    onUserInput: (listener) => listen(fanout.userInput, { pluginId, listener }),
     onReconnect: (listener) => listen(fanout.reconnect, { pluginId, listener })
   }
 

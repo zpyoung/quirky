@@ -53,10 +53,11 @@ ordering is unchanged. See the public
 
 ## Background structured sessions
 
-`quirky.structured` runs Claude through its Agent SDK and Codex through `codex app-server` over
-stdio JSONL. Neither allocates a PTY. Start a background session from a registered worktree:
+`quirky.structured` runs Claude through its Agent SDK and Codex through the native `codex app-server`
+over stdio JSONL. Both run without a PTY. Start either provider in a registered worktree:
 
 ```sh
+quirky session new --background --agent claude --prompt "Review this repository" --json
 quirky session new --background --agent codex --prompt "Review this repository" \
   --model gpt-5.5 --effort high --json
 ```
@@ -124,10 +125,11 @@ Plugin stores still refuse a schema newer than their migration list by default. 
 in with `context.openStore(migrations, { newerVersion: 'read-only' })` and inspect `store.readOnly`;
 SQLite enforces read-only access, migrations do not run, and write/transaction methods refuse.
 
-## Orchestration core
+## Orchestration
 
 `quirky.orchestration` provides durable Runs, dependent Tasks, authoritative Dispatch attempts,
-mailboxes, resumable questions and decision gates through `quirky orchestration`.
+mailboxes, resumable questions, decision gates and worker lifecycle operations. The manifest
+declares 29 API methods and 28 CLI verbs under `quirky orchestration`.
 Actor-sensitive commands run inside a live Quirky-managed terminal or structured session;
 the kernel verifies its launch credential and process or lease identity. `--from` and
 `--terminal` are equality assertions, not credentials.
@@ -151,11 +153,25 @@ Public session helpers provide exact-incarnation identity, guarded close and ide
 submission. Structured `create` accepts `deferStart: true` without a prompt, so authority can attach
 before the first turn. Automatic idle-mailbox nudging is deferred to
 `m6-orchestration-idle-pointer-shutdown`; explicit safe submission and durable mail remain available.
-Worker placement/custody/fleet and headless service coordinators are separate orchestration slices.
+Worker placement, custody and fleet use this same core. Headless service coordinators remain a
+separate orchestration slice; plugin metadata cannot impersonate a session.
+
+**Methods (29):** `runCreate`, `runUse`, `runCurrent`, `runList`, `runShow`, `taskCreate`,
+`taskList`, `taskUpdate`, `dispatch`, `dispatchShow`, `send`, `check`, `reply`, `inbox`, `ask`,
+`gateCreate`, `gateResolve`, `gateList`, `requestShow`, `reset`, `workerStart`, `workerShow`,
+`workerRead`, `workerList`, `workerStop`, `workerAbandon`, `workerRelease`, `workerRetain`,
+`workerTerminalUserInput` (internal terminal-custody guard).
+
+**CLI verbs (28):** `run-create`, `run-use`, `run-current`, `run-list`, `run-show`, `task-create`,
+`task-list`, `task-update`, `dispatch`, `dispatch-show`, `send`, `check`, `reply`, `inbox`, `ask`,
+`gate-create`, `gate-resolve`, `gate-list`, `request-show`, `reset`, `worker-start`, `worker-show`,
+`worker-read`, `worker-list`, `worker-stop`, `worker-abandon`, `worker-release`, `worker-retain`.
+Use `quirky api --json` for the current method and result schemas.
 
 See the [contracts](quirky.orchestration/src/contracts.ts),
-[runtime interfaces](quirky.orchestration/src/runtime-contracts.ts) and
-[behavior specification](../docs/quirk/specs/2026-10-27-m6-orchestration-core/logic.md).
+[runtime interfaces](quirky.orchestration/src/runtime-contracts.ts),
+[core behavior specification](../docs/quirk/specs/2026-10-27-m6-orchestration-core/logic.md) and
+[worker behavior specification](../docs/quirk/specs/2026-10-27-m6-orchestration-workers/logic.md).
 
 ## Shared checks
 
@@ -185,6 +201,7 @@ Timeout/cancel sends TERM to the process group, then KILL after a two-second gra
 including descendants retaining output pipes. Plugin shutdown cancels and awaits active checks.
 Completed IDs can be reused; cancelling an unknown/completed ID returns `cancelled: false`.
 Process-tree cleanup is verified on macOS; Windows requires separate process-tree support.
+
 ## GitHub hosting
 
 `quirky.hosting` provides GitHub's API and generated `quirky hosting` commands. It

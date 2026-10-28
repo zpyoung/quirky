@@ -9,6 +9,7 @@ type StructuredLease = {
   tokenHash: string
   identity: PluginSessionIdentity
 }
+type TerminalIdentity = Omit<PluginSessionIdentity, 'live'> & { live: boolean }
 
 const tokenHash = (token: string): string => createHash('sha256').update(token).digest('hex')
 
@@ -43,10 +44,22 @@ function isLiveMatch(row: RuntimeAuthorityRow, hostPid: number, info: PtySession
   )
 }
 
+function isExitedMatch(row: RuntimeAuthorityRow, hostPid: number, info: PtySessionInfo | undefined): boolean {
+  return (
+    row.ptyHostPid === hostPid &&
+    row.ptyPid !== null &&
+    row.ptyCreatedAt !== null &&
+    info?.state === 'exited' &&
+    !info.alive &&
+    info.pid === row.ptyPid &&
+    info.createdAt === row.ptyCreatedAt
+  )
+}
+
 /** Kernel-owned launch credentials, with PTY identity as independent terminal process evidence. */
 export class RuntimeSessionAuthority {
   readonly runtimeEpoch = randomUUID()
-  private readonly terminals = new Map<string, PluginSessionIdentity>()
+  private readonly terminals = new Map<string, TerminalIdentity>()
   private readonly structured = new Map<string, StructuredLease>()
 
   constructor(
@@ -54,20 +67,21 @@ export class RuntimeSessionAuthority {
     private readonly pty: PtyClient
   ) {
     pty.onExit((sessionId) => {
-      this.terminals.delete(sessionId)
+      const row = this.store.getRuntimeAuthority(sessionId)
       void this.refreshTerminal(sessionId).catch(() => {
-        this.terminals.delete(sessionId)
+        if (row) this.deleteLiveIdentityForRow(row)
       })
     })
     pty.onReconnect(() => {
-      this.terminals.clear()
-      void this.restoreLiveTerminalIdentities().catch(() => {
-        this.terminals.clear()
-      })
+      for (const [sessionId, identity] of this.terminals) {
+        if (identity.live) this.terminals.delete(sessionId)
+      }
+      void this.restoreLiveTerminalIdentities().catch(() => undefined)
     })
   }
 
   issueTerminalToken(sessionId: string): string {
+    if (this.terminals.get(sessionId)?.live === false) this.terminals.delete(sessionId)
     if (this.terminals.has(sessionId) || this.structured.has(sessionId) || this.hasUnreconciledTerminal(sessionId)) {
       throw new Error(`session ${sessionId} already has live runtime authority`)
     }
@@ -89,6 +103,7 @@ export class RuntimeSessionAuthority {
     identity: PluginSessionIdentity
     release(): void
   } {
+    if (this.terminals.get(sessionId)?.live === false) this.terminals.delete(sessionId)
     if (this.terminals.has(sessionId) || this.structured.has(sessionId) || this.hasUnreconciledTerminal(sessionId)) {
       throw new Error(`session ${sessionId} already has live runtime authority`)
     }
@@ -123,10 +138,14 @@ export class RuntimeSessionAuthority {
 
   sessionIdentity(sessionId: string): PluginSessionIdentity | null {
     const structured = this.structured.get(sessionId)
-    if (structured) return { ...structured.identity }
-    if (!this.pty.connected) return null
+    if (structured && structured.identity.live && structured.identity.sessionId === sessionId
+      && structured.identity.runtimeEpoch === this.runtimeEpoch && structured.identity.source === 'structured_lease') {
+      return { ...structured.identity }
+    }
     const terminal = this.terminals.get(sessionId)
-    return terminal ? { ...terminal } : null
+    if (terminal?.live === false) return { ...terminal } as PluginSessionIdentity
+    if (!this.pty.connected) return null
+    return terminal ? { ...terminal } as PluginSessionIdentity : null
   }
 
   async resolveForConnection(conn: ClientConn): Promise<PluginSessionAuthority | null> {
@@ -179,7 +198,9 @@ export class RuntimeSessionAuthority {
   }
 
   async restoreLiveTerminalIdentities(): Promise<void> {
-    this.terminals.clear()
+    for (const [sessionId, identity] of this.terminals) {
+      if (identity.live) this.terminals.delete(sessionId)
+    }
     const hostPid = this.pty.hostPid
     if (!this.pty.connected || hostPid === null) return
     let sessions: PtySessionInfo[]
@@ -199,23 +220,23 @@ export class RuntimeSessionAuthority {
   private async verifyTerminal(row: RuntimeAuthorityRow, expectedTokenHash: string): Promise<PluginSessionIdentity | null> {
     const hostPid = this.pty.hostPid
     if (!this.pty.connected || hostPid === null) {
-      this.terminals.delete(row.sessionId)
+      this.deleteLiveIdentityForRow(row)
       return null
     }
     let sessions: PtySessionInfo[]
     try {
       sessions = await this.pty.request('list', {})
     } catch {
-      this.terminals.delete(row.sessionId)
+      this.deleteLiveIdentityForRow(row)
       return null
     }
     if (!this.pty.connected || this.pty.hostPid !== hostPid) {
-      this.terminals.delete(row.sessionId)
+      this.deleteLiveIdentityForRow(row)
       return null
     }
     const current = this.store.getRuntimeAuthority(row.sessionId)
     if (current === null || !sameRecord(current, row) || !hashesMatch(current.tokenHash, expectedTokenHash)) {
-      this.terminals.delete(row.sessionId)
+      this.deleteLiveIdentityForRow(row)
       return null
     }
     if (row.ptyHostPid === null || row.ptyPid === null || row.ptyCreatedAt === null) return null
@@ -228,7 +249,11 @@ export class RuntimeSessionAuthority {
     info: PtySessionInfo | undefined
   ): PluginSessionIdentity | null {
     if (!isLiveMatch(row, hostPid, info)) {
-      this.terminals.delete(row.sessionId)
+      if (isExitedMatch(row, hostPid, info)) {
+        this.terminals.set(row.sessionId, this.exitedIdentityFor(row))
+      } else {
+        this.terminals.delete(row.sessionId)
+      }
       this.deleteIfCurrent(row)
       return null
     }
@@ -252,10 +277,26 @@ export class RuntimeSessionAuthority {
       live: true
     }
   }
+  private exitedIdentityFor(row: RuntimeAuthorityRow): TerminalIdentity {
+    return {
+      sessionId: row.sessionId,
+      runtimeEpoch: row.runtimeEpoch,
+      processIncarnation: row.processIncarnation,
+      source: row.runtimeEpoch === this.runtimeEpoch ? 'terminal_launch' : 'restored_authority',
+      live: false
+    }
+  }
 
   private hasUnreconciledTerminal(sessionId: string): boolean {
     const row = this.store.getRuntimeAuthority(sessionId)
     return row !== null && row.ptyHostPid !== null && row.ptyPid !== null && row.ptyCreatedAt !== null
+  }
+
+  private deleteLiveIdentityForRow(row: RuntimeAuthorityRow): void {
+    const identity = this.terminals.get(row.sessionId)
+    if (identity?.live && identity.processIncarnation === row.processIncarnation) {
+      this.terminals.delete(row.sessionId)
+    }
   }
 
   private deleteIfCurrent(row: RuntimeAuthorityRow): void {

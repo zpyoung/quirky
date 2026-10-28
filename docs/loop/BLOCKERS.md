@@ -291,6 +291,23 @@ Registration update: `bun scripts/build-loop/queue.ts add /tmp/quirky-session-in
   and no pending waiters/foreign process cleanup. No human decision is required.
 - **Still shipped:** durable Run/Dispatch mail, FIFO delivery/ack, exclusive waits, resumable
   questions/replies, gates, and explicit exact-incarnation/idempotent session prompt submission.
+
+## m6-orchestration-workers: observed default-profile editor activation timeout
+
+- **Type:** observed integration bug, medium severity.
+- **File:** `plugins/quirky.editor/main.ts:28-51`, awaited restore in `src/daemon/service.ts:212-226`.
+- **Description:** the final merged built UI on a fresh private profile displayed
+  `quirky.editor failed to activate: activation timed out`; subsequent shared-browser
+  observations also timed out. The editor timeout's cause is not established.
+- **Evidence:** screenshot `omp-sshots-15b77ad4f1dc5ef8.png`; private test PATH was
+  `fakebin:/usr/bin:/bin`. Source inspection does not establish missing `rg` as the cause.
+- **Verification boundary:** the worker terminal UI was exercised successfully in a fresh
+  private profile after public `plugin.disable({id:"quirky.editor"})`, using a dedicated
+  owned Chromium process. No editor source or worker guard was changed to make that pass.
+  Actual worker focus/title, physical takeover, retained release and exact stop passed.
+- **Next diagnostic:** reproduce editor activation with its restore trace and normal tool
+  environment; distinguish that producer timeout from the shared-browser driver timeouts.
+  This records an observation, not an unfinished worker flow or a human decision.
 ## m4-hosting-ui-tasks: deferred parity and cross-feature acceptance
 
 - **Owner:** registered follow-up `m4-hosting-ui-tasks-complete-remaining-flows`, dependent on Tasks, sourced worktree creation and Reviews. The operator's 4am sprint directive authorizes the exercised core landing, not a claim that all25 original scenarios passed.
