@@ -269,7 +269,7 @@ function safeMarkdownLink(value: string): string | null {
   return safeExternalUrl(value)
 }
 
-function renderInline(value: string, openLink: (url: string) => void): ReactNode[] {
+function renderInline(value: string, openLink?: (url: string) => void): ReactNode[] {
   const output: ReactNode[] = []
   const pattern = /(`[^`]*`|\*\*[^*]+\*\*|\*[^*]+\*|\[[^\]]+\]\([^)]+\))/gu
   let offset = 0
@@ -287,9 +287,11 @@ function renderInline(value: string, openLink: (url: string) => void): ReactNode
     } else {
       const link = /^\[([^\]]+)\]\(([^)]+)\)$/u.exec(token)
       const href = link ? safeMarkdownLink(link[2]!) : null
-      output.push(href && link
-        ? <button key={`i${index++}`} type="button" onClick={() => openLink(href)} style={{ padding: 0, border: 0, color: 'var(--accent, #8ab4f8)', background: 'none', font: 'inherit', textDecoration: 'underline', cursor: 'pointer' }}>{link[1]}</button>
-        : token)
+      if (href && link && openLink) {
+        output.push(<button key={`i${index++}`} type="button" onClick={() => openLink(href)} style={{ padding: 0, border: 0, color: 'var(--accent, #8ab4f8)', background: 'none', font: 'inherit', textDecoration: 'underline', cursor: 'pointer' }}>{link[1]}</button>)
+      } else {
+        output.push(token)
+      }
     }
     offset = start + token.length
   }
@@ -297,7 +299,7 @@ function renderInline(value: string, openLink: (url: string) => void): ReactNode
   return output
 }
 
-function MarkdownView({ value, openLink }: { value: string; openLink: (url: string) => void }) {
+export function MarkdownView({ value, openLink }: { value: string; openLink?: (url: string) => void }) {
   const blocks = useMemo(() => {
     const lines = value.replace(/\r\n?/gu, '\n').split('\n')
     const output: { kind: 'paragraph' | 'heading' | 'quote' | 'unordered' | 'ordered' | 'code'; lines: string[]; level?: number; language?: string }[] = []

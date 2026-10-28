@@ -14,4 +14,10 @@ export type PanelRoute =
 
 export type PhoneRoute = MobileRoute | { kind: 'home' }
 export type PanelBridge = MobilePageBridge
-export type PanelProps = { bridge: PanelBridge; route: PanelRoute }
+export type PanelNavigationGuard = () => Promise<boolean>
+export type PanelProps = {
+  bridge: PanelBridge
+  route: PanelRoute
+  connected?: boolean
+  onRegisterNavigationGuard?: (guard: PanelNavigationGuard) => () => void
+}

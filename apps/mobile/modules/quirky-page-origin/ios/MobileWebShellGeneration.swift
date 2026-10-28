@@ -54,7 +54,8 @@ struct MobileWebShellGeneration {
       !assets.isEmpty,
       assets.count <= maxAssets,
       let routes = root["routes"] as? [[String: Any]],
-      routes.count == 2
+      routes.count >= 2,
+      routes.count <= 64
     else { throw MobileWebShellGenerationError.unreadable }
 
     var entries: [String: MobileWebShellAsset] = [:]

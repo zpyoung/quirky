@@ -21,11 +21,33 @@ private fun manifest(
     asset("index.html", "text/html; charset=utf-8"),
     asset("assets/aa.js", "text/javascript; charset=utf-8"),
     asset("assets/bb.png", "image/png")
-  )
+  ),
+  routeKinds: List<String> = listOf("workspaces", "session")
 ): String {
+  val paths = mapOf(
+    "workspaces" to "/", "session" to "/session", "source-control" to "/source-control", "review" to "/review",
+    "files" to "/files", "file-preview" to "/files/preview", "terminal-artifacts" to "/terminal-artifacts",
+    "terminal-artifact" to "/terminal-artifact", "tasks" to "/tasks", "accounts" to "/accounts",
+    "agent-history" to "/agent-history", "notifications" to "/notifications"
+  )
+  val grants = mapOf(
+    "workspaces" to listOf("rpc", "storage", "navigate", "terminal", "externalLink"),
+    "session" to listOf("rpc", "storage", "navigate", "terminal", "clipboard.read", "clipboard.write", "externalLink"),
+    "source-control" to listOf("rpc", "storage", "navigate", "clipboard.write", "externalLink"),
+    "review" to listOf("rpc", "storage", "navigate", "clipboard.write", "externalLink"),
+    "files" to listOf("rpc", "storage", "navigate", "clipboard.write", "externalLink"),
+    "file-preview" to listOf("rpc", "storage", "navigate", "clipboard.write", "externalLink"),
+    "terminal-artifacts" to listOf("rpc", "storage", "navigate"),
+    "terminal-artifact" to listOf("rpc", "storage", "navigate"),
+    "tasks" to listOf("rpc", "storage", "navigate", "clipboard.write", "externalLink"),
+    "accounts" to listOf("rpc", "storage", "navigate"),
+    "agent-history" to listOf("rpc", "storage", "navigate"),
+    "notifications" to listOf("rpc", "storage", "navigate")
+  )
   val routes = JSONArray()
-    .put(JSONObject().put("kind", "workspaces").put("path", "/").put("grants", JSONArray()))
-    .put(JSONObject().put("kind", "session").put("path", "/session").put("grants", JSONArray()))
+  routeKinds.forEach { kind ->
+    routes.put(JSONObject().put("kind", kind).put("path", paths[kind] ?: "/").put("grants", JSONArray(grants[kind] ?: emptyList())))
+  }
   return JSONObject()
     .put("v", schemaVersion)
     .put("shellVersion", 1)
@@ -55,6 +77,16 @@ class MobileWebShellGenerationTest {
     // The manifest is written last and is not part of the content hash, so it is not in assets[].
     assertEquals("application/json", entries["/manifest.json"]!!.contentType)
     assertNull(entries["/assets/cc.js"])
+  }
+
+  @Test
+  fun `accepts the expanded phone route table but keeps a bounded manifest count`() {
+    val routeKinds = listOf(
+      "workspaces", "session", "source-control", "review", "files", "file-preview",
+      "terminal-artifacts", "terminal-artifact", "tasks", "accounts", "agent-history", "notifications"
+    )
+    assertNotNull(make(manifest(routeKinds = routeKinds)))
+    assertNull(make(manifest(routeKinds = List(65) { "terminal-artifact" })))
   }
 
   @Test
