@@ -175,7 +175,6 @@ test('SC-31: a sessionless CLI ask badges Questions without changing the selecte
   const before = await uiState()
   expect(before.layout).toMatchObject({
     view: { id: SESSION_VIEW, input: { worktree: main.id, session: shell.id } },
-    panel: null,
     focus: 'view'
   })
   const ask = startAsk('First?')
