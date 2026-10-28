@@ -139,7 +139,8 @@ export interface DispatchRow {
   taskId: TaskId
   contractVersion: ContractVersion
   status: DispatchStatus
-  assigneeSessionId: SessionId
+  /** Null until supervised authority attaches, including a settled pre-launch failure. */
+  assigneeSessionId: SessionId | null
   creatorSessionId: SessionId | null
   creatorDispatchId: DispatchId | null
   retryOfDispatchId: DispatchId | null
@@ -285,6 +286,40 @@ export interface AcceptedAskCheckpoint {
   timeoutMs: number
 }
 
+/** Durable supervised acceptance before any process/workspace launch effect. */
+export interface AcceptedWorkerCheckpoint {
+  state: 'accepted'
+  accepted: true
+  runId: RunId
+  taskId: TaskId
+  dispatchId: DispatchId
+}
+
+/** Accepted context-only dispatch before optional external prompt injection. */
+export interface AcceptedDispatchCheckpoint {
+  state: 'accepted'
+  accepted: true
+  runId: RunId
+  taskId: TaskId
+  dispatchId: DispatchId
+}
+
+/** Accepted acknowledgement/read boundary before a connection-aware mailbox wait. */
+export interface AcceptedCheckCheckpoint {
+  state: 'accepted'
+  accepted: true
+  mailbox: MailboxAddress
+  runId: RunId | null
+  consumerGeneration: number
+  acknowledged: DeliveryId | null
+}
+
+export type MutationCheckpoint =
+  | AcceptedAskCheckpoint
+  | AcceptedWorkerCheckpoint
+  | AcceptedDispatchCheckpoint
+  | AcceptedCheckCheckpoint
+
 export type MutatingOrchestrationMethod =
   | 'runCreate'
   | 'runUse'
@@ -297,6 +332,11 @@ export type MutatingOrchestrationMethod =
   | 'ask'
   | 'gateCreate'
   | 'gateResolve'
+  | 'workerStart'
+  | 'workerStop'
+  | 'workerAbandon'
+  | 'workerRelease'
+  | 'workerRetain'
   | 'reset'
 
 /** Public receipt projection intentionally omits caller fingerprints and payload hashes. */
@@ -304,7 +344,7 @@ export interface MutationReceiptRow {
   requestId: UUID
   method: MutatingOrchestrationMethod
   state: StoredMutationState
-  checkpoint?: AcceptedAskCheckpoint
+  checkpoint?: MutationCheckpoint
   result?: JsonValue
   createdAt: UtcTimestamp
   updatedAt: UtcTimestamp
