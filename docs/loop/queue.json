@@ -1582,8 +1582,7 @@
         "ui-terminal-theme",
         "ui-screenshot-review"
       ],
-      "status": "in-progress",
-      "lane": 10
+      "status": "done"
     },
     {
       "id": "ui-restyle-editor",
@@ -1595,8 +1594,7 @@
         "ui-terminal-theme",
         "ui-screenshot-review"
       ],
-      "status": "in-progress",
-      "lane": 9
+      "status": "done"
     },
     {
       "id": "ui-restyle-git",
@@ -1647,7 +1645,8 @@
         "ui-terminal-theme",
         "ui-screenshot-review"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 1
     },
     {
       "id": "ui-restyle-orchestration",
@@ -1659,7 +1658,8 @@
         "ui-terminal-theme",
         "ui-screenshot-review"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 10
     },
     {
       "id": "ui-restyle-tasks",
@@ -1925,6 +1925,16 @@
       "status": "done"
     },
     {
+      "id": "fix-test-packages-ui-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase packages/ui failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area packages/ui). Files and exact failed tests: packages/ui/test/gallery.test.tsx: typing, selecting a tab, and selecting a menu item update local status in both themes | packages/ui/test/terminal-theme.test.ts: the root dark appearance stays authoritative over a light system and inherits terminal base colors | packages/ui/test/exit.e2e.test.ts: SC-31: an ask opens the Questions panel, badges its toggle and announces itself; SC-29: a second pending ask stays listed after the first is answered, and answering it resolves its waiter | packages/ui/test/layout-shell.test.ts: a dialog taller than the window scrolls inside it, so its buttons stay reachable | packages/ui/test/routed-commands.test.ts: SC-41: with two windows the command runs once, in the one that last reported focus. Coordinate with ui-shell-slots for active shared-shell changes. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "done"
+    },
+    {
       "id": "m7-sweep-sessions",
       "milestone": "M7",
       "docs": [
@@ -2001,17 +2011,6 @@
       ],
       "status": "in-progress",
       "lane": 11
-    },
-    {
-      "id": "fix-test-packages-ui-1028",
-      "milestone": "M7",
-      "title": "Repair end-phase packages/ui failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area packages/ui). Files and exact failed tests: packages/ui/test/gallery.test.tsx: typing, selecting a tab, and selecting a menu item update local status in both themes | packages/ui/test/terminal-theme.test.ts: the root dark appearance stays authoritative over a light system and inherits terminal base colors | packages/ui/test/exit.e2e.test.ts: SC-31: an ask opens the Questions panel, badges its toggle and announces itself; SC-29: a second pending ask stays listed after the first is answered, and answering it resolves its waiter | packages/ui/test/layout-shell.test.ts: a dialog taller than the window scrolls inside it, so its buttons stay reachable | packages/ui/test/routed-commands.test.ts: SC-41: with two windows the command runs once, in the one that last reported focus. Coordinate with ui-shell-slots for active shared-shell changes. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
-      "docs": [],
-      "deps": [
-        "m7-test-triage"
-      ],
-      "status": "in-progress",
-      "lane": 1
     },
     {
       "id": "fix-test-browser-1028",

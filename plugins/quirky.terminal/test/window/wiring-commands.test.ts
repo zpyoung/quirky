@@ -359,7 +359,7 @@ describe('the quick commands', () => {
         { label: '+ Command', key: null, enabled: true, separator: false }
       ]
     })
-    expect(wired.element.querySelector('.qt-menu')).toBeNull()
+    expect(wired.element.ownerDocument.querySelector('.qt-menu')).toBeNull()
     await wired.run('toggle-quick-commands')
     expect(quickMenu()).toBeNull()
     expect(wired.last().menu).toBeNull()
@@ -412,11 +412,11 @@ describe('the quick commands', () => {
     expect(wired.element.querySelectorAll('.qc-strip').length).toBeGreaterThan(0)
     expect(wired.fake.callsTo('quirky.worktree/resolve').map((call) => call.params)).toEqual([{ selector: 'id:wt-main' }])
     await wired.run('open-menu', { kind: 'pane' })
-    const rows = wired.element.querySelectorAll('[role="menuitem"]')
+    const rows = wired.element.ownerDocument.querySelectorAll('[role="menuitem"]')
     const quick = [...rows].find((el) => el.textContent?.startsWith('Quick Commands'))! as HTMLElement
     await act(async () => quick.click())
     await settle()
-    const labels = [...wired.element.querySelectorAll('.qt-submenu [role="menuitem"]')].map((el) => el.querySelector('.qt-menu-label')!.textContent)
+    const labels = [...wired.element.ownerDocument.querySelectorAll('.qt-submenu [role="menuitem"]')].map((el) => el.querySelector('.qt-menu-label')!.textContent)
     expect(labels).toEqual(['Test', 'Hello', 'Add Quick Command…'])
   })
 

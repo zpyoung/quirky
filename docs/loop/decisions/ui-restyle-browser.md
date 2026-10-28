@@ -117,5 +117,16 @@
 - The sole roadmap catch-up changed queue state only, brought no new decision logs and caused no source conflicts. No second roadmap merge is planned except actual controller-failure recovery.
 - No suites, formal review round, full dogfood or default85 independent screenshot score ran under build-first. The existing ui-final-review item remains the collected-visual-review owner; no testing/review follow-up was added.
 
+## D11: Compose concurrent restyles through the required failed-land recovery
+- **Question:** the canonical land exited1 on concurrent public export, token-map and lint-enrollment conflicts
+- **Options:** drop another lane's exports/enforcement; retry unchanged; merge current roadmap and preserve both contracts
+- **Chose:** merge current roadmap only as required controller-failure recovery. Keep selection-overlay, terminal-theme and editor-print public exports; retain Browser shadow/scrim aliases with the shared identical transparent token; enforce Browser, editor, terminal and terminal-dock together. Read incoming editor D1–D13, terminal D1–D13 and UI repair D1–D20/Progress completely
+- **Why:** these are additive shared-system registrations, not competing palettes or state authorities. Preserve canonical active-view input/focus, rich document-body context menus, content color/geometry ownership, exact-window routing and the independently reported native/GPU/browser-isolation limits
+- **Evidence:** first controller land exit1/20.97s; three exact conflict blocks and explicit union resolutions; incoming decision logs; recovery merge/type/build receipts
+- **Reversibility:** easy
+- **Confidence:** high for contract composition; fresh merged gate remains required
+- **Revisit if:** merged typecheck or minimal current Browser surface fails
+- **Source:** locked by docs/loop/LOOP.md failed-land retry procedure
+
 ## Progress
-All three disjoint source components integrated after HEAD/scope barriers; all three external worktrees removed. Final source passes canonical typecheck/UIlint and built isolated changed-surface smoke with D7–D10 qualifications. Combined spec/README reflect the presentation cutover. Sole roadmap catch-up done (queue-only). All owned fixture/explicit-CDP services exited0; shared-path handle intentionally left untouched per user ownership notice. Next commit final source/docs, detach, run authoritative queue land and await its actual receipt in this turn.
+First canonical land refused concurrent restyle integration. Required recovery merge resolves the three additive conflicts under D11; the initial single catch-up was queue-only, and this second merge is controller-directed recovery. All owned old runtime/browser services already stopped. Next commit the resolved merge, run merged canonical typecheck/build and a narrow explicit-CDP Browser mount/Find proof, record exact result, detach and retry authoritative land in this turn.
