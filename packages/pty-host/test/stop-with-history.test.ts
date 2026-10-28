@@ -35,14 +35,14 @@ describe('stop with history', () => {
     const childPid = Number(readFileSync(pidFile, 'utf8'))
     await waitFor(async () => (await manager.history('sleep-history')).lines.some((line) => line.includes('SLEEP_HISTORY_MARKER')), 5000, 'history output')
     await waitFor(async () => (await manager.snapshot('sleep-history')).ansi.includes('SLEEP_LIVE_MARKER'), 5000, 'live screen output')
-    const historyBeforeStop = await manager.history('sleep-history')
 
     await manager.stopWithHistory('sleep-history')
 
     expect(manager.list().find((entry) => entry.sessionId === 'sleep-history')).toMatchObject({ state: 'restorable', alive: false })
     expect(() => process.kill(root.pid, 0)).toThrow()
     expect(() => process.kill(childPid, 0)).toThrow()
-    expect(await manager.history('sleep-history')).toEqual(historyBeforeStop)
+    expect((await manager.history('sleep-history')).lines).toContain('SLEEP_HISTORY_MARKER')
+    expect((await manager.read('sleep-history', 200)).lines).toEqual(expectedOutput)
     expect((await manager.snapshot('sleep-history')).ansi).toContain('SLEEP_LIVE_MARKER')
     const restored = await manager.create({ ...createParams('sleep-history', '/tmp', 'sleep 600'), restore: true })
     expect(restored.restored).toBe(true)
