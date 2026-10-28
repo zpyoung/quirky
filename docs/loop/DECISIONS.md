@@ -51,6 +51,7 @@ files, not this one.
 | hard | high | [m0-core D31](decisions/m0-core.md) | Port v1 for real, growing the public plugin API, rather than facades or raw RPC primitives | locked by docs/roadmap.md (built-ins use only the public API); assumed — autonomous (the approach) |
 | hard | high | [m6-orchestration-core D4](decisions/m6-orchestration-core.md) | Keep Quirky session identity, not Orca pane compatibility | locked by docs/loop/decisions/m1-agent-status.md |
 | hard | high | [m6-orchestration-core D7](decisions/m6-orchestration-core.md) | Match FIFO replay and generation-fenced acknowledgements | locked by research/orca-features/orchestration.md |
+| hard (cross-feature api and user scope). | high | [m7-sweep-orchestration D2](decisions/m7-sweep-orchestration.md) | Preserve the locked plugin/API architecture and explicit kind exclusions | locked by docs/roadmap.md |
 | hard | high | [m1-worktrees D5](decisions/m1-worktrees.md) | Extend `quirky.repo` and `quirky.worktree` in place, with one create path and one remove path | assumed — autonomous |
 | hard | high | [m1-worktrees D7](decisions/m1-worktrees.md) | Worktree IDs stay v1's path hash; extra folder workspaces get random IDs | assumed — autonomous |
 | hard (sensitive data already read cannot be unread). | high | [m3-vault D5](decisions/m3-vault.md) | Consent controls index creation; disabling preserves it and clear disables before deletion | locked by docs/roadmap.md |
@@ -311,6 +312,11 @@ files, not this one.
 | medium | high | [m6-orchestration-core D34](decisions/m6-orchestration-core.md) | Reserve explicit service coordinator APIs to lane11 without synthetic sessions | assumed — autonomous |
 | medium | high | [m6-orchestration-core D37](decisions/m6-orchestration-core.md) | Separate transport replay keys from durable orchestration request IDs | assumed — autonomous |
 | medium | high | [m6-orchestration-core D39](decisions/m6-orchestration-core.md) | Preserve landed schema history and all incoming ownership decisions | locked by docs/loop/LOOP.md |
+| medium (public projection contract tightened, no persisted migration). | high for the source mismatch; runtime red/green required before shipping. | [m7-sweep-orchestration D5](decisions/m7-sweep-orchestration.md) | Repair the demonstrated assignment-versus-process projection mismatch | assumed — autonomous |
+| medium (consumer-visible task status semantics). | high | [m7-sweep-orchestration D7](decisions/m7-sweep-orchestration.md) | Preserve core D9 gate-resolution policy rather than silently amend it | locked by docs/loop/decisions/m6-orchestration-core.md |
+| medium | high | [m7-sweep-orchestration D8](decisions/m7-sweep-orchestration.md) | Inventory larger parity work without duplicating existing queue owners | deferred: remaining orchestration and Heimdall parity |
+| medium | high for integrated source attribution; tests and real-worker/ui execution unverified. | [m7-sweep-orchestration D13](decisions/m7-sweep-orchestration.md) | Integrate the audited complete projection slice and preserve test execution limits | assumed — autonomous |
+| medium | high | [m7-sweep-orchestration D15](decisions/m7-sweep-orchestration.md) | Register only one follow-up for genuinely unbuilt product flows | deferred: unbuilt orchestration and Heimdall flows; supersedes D8's gate-policy follow-up proposal |
 | medium | high | [m5-loops-presets D1](decisions/m5-loops-presets.md) | Extend core's plugin, not its pending branch | locked by docs/loop/LOOP.md |
 | medium | high | [m5-loops-presets D3](decisions/m5-loops-presets.md) | Queue identity and atomic claim govern mutation | locked by research/orca-features/fork-loops.md |
 | medium | high | [m5-loops-presets D4](decisions/m5-loops-presets.md) | Resume approves one iteration; pacing never catches up | assumed — autonomous |
@@ -1297,6 +1303,15 @@ files, not this one.
 | easy | high | [m6-orchestration-core D40](decisions/m6-orchestration-core.md) | Apply the operator's immediate landing scope | supersedes m6-orchestration-core D32 (explicit operator landing instruction) |
 | easy | high | [m6-orchestration-core D41](decisions/m6-orchestration-core.md) | Defer only automatic idle nudging, preserving its intact acceptance contract | deferred: automatic idle-mailbox scheduling |
 | easy | high | [m6-orchestration-core D42](decisions/m6-orchestration-core.md) | Reconcile the queue-reported integration conflict without weakening identity | locked by docs/loop/LOOP.md |
+| easy (decisions remain reviewable). | high | [m7-sweep-orchestration D1](decisions/m7-sweep-orchestration.md) | Follow the unattended queue workflow without human questions | locked by docs/loop/LOOP.md |
+| easy (review binding, no product contract). | high | [m7-sweep-orchestration D3](decisions/m7-sweep-orchestration.md) | Use OpenAI task implementers with Gemini as the reachable cross-family reviewer | assumed — autonomous |
+| easy | high | [m7-sweep-orchestration D4](decisions/m7-sweep-orchestration.md) | Preserve inherited user files and isolate all running state | locked by docs/loop/LOOP.md |
+| easy | high | [m7-sweep-orchestration D6](decisions/m7-sweep-orchestration.md) | Resolve design gray areas with explicit evidence instead of new policy | assumed — autonomous |
+| easy | high | [m7-sweep-orchestration D9](decisions/m7-sweep-orchestration.md) | Commit explicit contracts and use one isolated implementation component | assumed — autonomous |
+| easy (throwaway evidence). | high for projection failure; real process/api proof pending. | [m7-sweep-orchestration D10](decisions/m7-sweep-orchestration.md) | Reproduce the projection failure before production changes | assumed — autonomous |
+| easy (test fence and inventory). | high | [m7-sweep-orchestration D11](decisions/m7-sweep-orchestration.md) | Incorporate both independent specification-review findings before implementation | assumed — autonomous |
+| easy | high | [m7-sweep-orchestration D12](decisions/m7-sweep-orchestration.md) | Land current implementation under the operator's build-first directive | locked by docs/loop/LOOP.md Build first, test at the end; supersedes D9's current test-gate plan |
+| easy | high for these exact observations only. | [m7-sweep-orchestration D14](decisions/m7-sweep-orchestration.md) | Preserve incoming decisions and exact observed landing evidence | assumed — autonomous |
 | easy | high | [m5-loops-presets D2](decisions/m5-loops-presets.md) | Autonomously accept one combined specification | locked by docs/loop/LOOP.md |
 | easy | high | [m5-loops-presets D5](decisions/m5-loops-presets.md) | Keep strict public contracts and preset defaults | locked by research/orca-features/fork-loops.md |
 | easy | high | [m5-loops-presets D6](decisions/m5-loops-presets.md) | OpenAI implementers and reachable Gemini reviewer | assumed — autonomous |
