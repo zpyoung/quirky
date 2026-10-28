@@ -657,8 +657,9 @@
       "deps": [
         "m5-automations-core"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 7
     },
     {
       "id": "m5-automations-ui",
