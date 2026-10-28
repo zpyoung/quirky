@@ -110,5 +110,27 @@
 - **Revisit if:** lane10 KernelControlHost needs a narrower adapter
 - **Source:** assumed — autonomous
 
+## D11: Expose exact worker identity only through a non-consuming owner read
+- **Question:** lane10 fleet/detail needs worker identity and pending questions without consuming mail
+- **Options:** use serviceCheck for refresh; expose incarnation in generic DispatchRow; owned serviceRunShow projection
+- **Chose:** serviceRunShow returns owned Run, worker views with nullable session/incarnation and evidence-derived live/exited/unverifiable state, plus question rows joined to original body. Verify kernel caller plugin owns Run before disclosure. No check/ack, generation rotation, pointer delivery or mutation receipt on refresh. serviceReply supplies positive exact-question result; serviceWorkerStop takes expected session/incarnation and enters existing guarded lifecycle only after equality/owner checks.
+- **Why:** consuming mail to draw fleet changes supervision state; a generic dispatch read must not grant exact stop authority. Null or unverifiable identity is never guessed from PID/handle.
+- **Evidence:** lane10 user interjection; services/contracts.ts ServiceRunDetail/ServiceWorkerView/ServiceQuestionView; /tmp/quirky-lane10-core-control-reply.md Final signatures
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** prerequisite worker projection cannot provide verified owner-only identity
+- **Source:** assumed — autonomous
+
+## D12: Preserve owner configuration while reserving owner execution to lane12
+- **Question:** lane12 owner item requests configuration and an owner-step insertion seam
+- **Options:** duplicate owner behavior in core; publish inert configuration and explicit integration point
+- **Chose:** optional Claude owner config/model/effort and intervention capability persist through enrollment. Lane12 owns owner/*, typed deviation vocabulary and kind owner adapter. Runner has a documented insertion point after mailbox/recovery/stop/budget and before disabled/paused. No speculative owner runtime or nonexistent owner-module import in this item. Hub integration is serialized with lane10 after core merge.
+- **Why:** source owner is Claude-only and core item explicitly excludes owner execution. Keeping the step reachable before disabled/paused does not grant general kind actions a gate bypass.
+- **Evidence:** lane12 user interjection; contracts.ts OwnerConfig and enrollment fields; /tmp/quirky-lane12-owner-core-reply.md; runner implementer confirmation
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** lane12 publishes a different source-grounded hook contract
+- **Source:** assumed — autonomous
+
 ## Progress
 Iteration4: spec/contracts committed6764039; three disjoint implementation worktrees running, no checks/commits until their wave barrier. Worker dependency query returned ready:false pending m6-orchestration-workers after510s; independent implementation continues. Lanes1+9 approved service authority extension reserved to lane11, parent authored type contracts; actual core/worker runtime still pending. Missing feature/API smoke completed with isolated actual quirkyd and cleanup. Next: accept/audit components after all return, integrate dependency implementation and additive service APIs, exercise AC1-11 including real worker adapter, affected suite/scripts/typecheck, deps-ready/catch-up/final independent review/queue landing. No runtime feature acceptance claim.
