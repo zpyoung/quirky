@@ -66,5 +66,16 @@
 - **Revisit if:** end-phase suites or native chooser scenario fail
 - **Source:** locked by docs/loop/LOOP.md
 
+## D7: Preserve incoming authority and pass the integrated landing gate
+- **Question:** Does the one roadmap catchup conflict with import ownership, or does structure require a new API?
+- **Options:** ignore incoming rulings; broaden source/host authority; reconcile and retain canonical methods
+- **Chose:** fully read m2-editor-build-unbuilt-flows D1–D17/Progress and m7-ledger-remote-host-flows D1–D4/Progress. No Browser contract conflict. Preserve exact mounted-resource leases, fresh provider-home/Git environment isolation and absent remote-host authority. Existing source roots remain synthetic in smoke and the UI never maps client file paths to daemon paths. Integrated root+mobile typecheck exited0 in24.04s. Scoped plugin-validator structural inspection passed with no blocking issues; no semantic review or suite was run.
+- **Why:** neither editor leases nor local mobile/session metadata grant a remote credential host. All import calls match existing schema-declared public methods, reserved yes confirmation is consumed before schema validation, and only type-only backend contracts enter the client bundle.
+- **Evidence:** conflict-free single git merge build/roadmap; complete incoming logs; actual bun run typecheck output; ValidateImportStructure public RPC/confirmation/bundle/import/removed-symbol inspection.
+- **Reversibility:** medium
+- **Confidence:** high for observed gates only
+- **Revisit if:** canonical merge-result typecheck or end-phase acceptance reports an actual fault
+- **Source:** assumed — autonomous
+
 ## Progress
-Implementation and focused actual-surface smoke complete; permanent suites/review/full dogfood unrun. Contracts09f8f41c and both components merged, worktrees removed; D5 includes verified wrapped-menu fix, D6 records runtime/cleanup receipts. README and one pending native chooser scenario updated. Next: commit receipts, exactly one roadmap catchup and read incoming decision logs, rerun root+mobile typecheck, detach and canonical queue land. No added follow-up: every named implementation flow ships within existing local managed-Chrome authority.
+Ready for canonical land. All two implementers, prerequisite scout and scoped structural validator returned. Component worktrees removed; actual UI browser/daemon/owned Chrome stopped with cleanup/homeRemoved/scratchRemoved=true. All named implementation entrypoints connected, real nondefault JSON/Firefox imports and summaries/badges exercised, wrapped menu corrected with shipped-source geometry proof. Single roadmap catchup complete, both incoming logs fully read, final root/mobile typecheck passed24.04s. Permanent suites/review/full dogfood unrun and native file chooser scenario pending; no unsupported Native/remote import parity claimed. Next: commit final evidence, detach, canonical absolute queue land, await actual outcome, remove owned throwaway script/branches and save iteration notes. End after this one item.
