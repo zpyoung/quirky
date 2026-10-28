@@ -143,5 +143,16 @@
 - **Revisit if:** m7-test-triage is claimed or the operator changes the gate.
 - **Source:** locked by docs/loop/LOOP.md
 
+## D14: Preserve incoming authorities and correct only compiler-reported contracts
+- **Question:** What remains before the operator-authorized immediate landing?
+- **Options:** Restart semantic verification; preserve the one catch-up and fix only the typecheck diagnostics.
+- **Chose:** Merge build/roadmap once without conflicts; read every incoming decision delta; retain account source-home/mandatory preparation, canonical Session.launchSettings, exact-session navigation, PTY incarnation policy and public optional-host boundaries. Fix four type errors only: optional subagent count, missing row error callback, optional test-call params and a test's nullable discovered row.
+- **Why:** The incoming decisions do not conflict with this implementation. The operator's only remaining gate is typecheck; test failures are intentionally not chased.
+- **Evidence:** frozen components c42ba3dd,27f078f5,7c8bc2a5; ReadIncomingDecisions complete-read report; first merged typecheck4diagnostics; corrected `bun run typecheck` exits0 including apps/mobile/tsconfig.json in24.17s.
+- **Reversibility:** easy
+- **Confidence:** high for compilation; no additional behavioral assurance claimed.
+- **Revisit if:** The land-owned merged typecheck reports a new conflict.
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-Operator-authorized typecheck-only landing is active (D13). Source implementations and acceptance tests are being assembled from the three owned components. Worker targeted checks completed before the rule change; multiple Window/Actions fixture and consumer failures remain explicitly recorded for the end phase. Baseline and corrected standalone symlink-deletion API smoke ran before the interjection: baseline falsely reported deleted; corrected path refused without mutating source/sentinel. No built-browser, packaged long-idle, full affected-suite or final review claim. Native scenarios remain pending. Next: commit the frozen components, run/fix typecheck only, one integration catch-up and supported queue land. No verification/debugging follow-up item.
+All three frozen components are committed and merged; their temporary worktrees are removed. One build/roadmap catch-up merged cleanly and all incoming decision deltas were read. Corrected root and mobile typecheck passes. Baseline and corrected symlink-deletion smoke started before the operator interjection; their observed outcomes are retained, without starting another test. Existing Window/Actions failures remain end-phase evidence in BLOCKERS.md; no built-browser, packaged long-idle, affected-suite or final review claim. Native scenarios remain pending. Next: commit this typecheck-only receipt, detach and run supported queue land for this single item. No unbuilt product flow or verification/debugging follow-up item identified.

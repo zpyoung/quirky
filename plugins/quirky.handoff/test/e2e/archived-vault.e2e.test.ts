@@ -138,7 +138,7 @@ test('Vault opens the real archived handoff dialog with provider identity and fu
   expect(fetchedFirstPrompt.prompt).toBe(firstPrompt)
 
   const uiContext = {
-    call: (method: string, params?: Record<string, unknown>) => window.client.callAny(method, params),
+    call: (method: string, params: Record<string, unknown> = {}) => window.client.callAny(method, params),
     toast: () => {}
   } as unknown as UiPluginContext
   const dialog = new HandoffDialog(uiContext)

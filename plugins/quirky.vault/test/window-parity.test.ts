@@ -151,7 +151,7 @@ test(
       }
       const listed = await features.h.call<PublicListResult>('quirky.vault/list', { within: { worktree: features.worktree }, agents: ['claude'], unlimited: true })
       const old = listed.sessions.find((session) => session.sessionId === 'old-active-worktree-session')
-      expect(old).toBeDefined()
+      if (!old) throw new Error('The scoped history did not return the old active-worktree source.')
 
       await features.h.call('quirky.vault/setView', { scope: 'workspace' })
       await runCommand(features, 'command:quirky.vault/open')

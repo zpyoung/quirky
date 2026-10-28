@@ -310,7 +310,7 @@ function SessionDetails({
     </div>
     {!detail.firstPromptLoaded ? <div className="qvh-muted" role="status">Loading first prompt…</div> : null}
     {!detail.sessionLoaded && previewMessages.length === 0 ? <div className="qvh-muted" role="status">Loading latest turns…</div> : null}
-    {!detail.subagentsLoaded && row.subagentTranscriptCount > 0 ? <div className="qvh-muted" role="status">Loading subagents…</div> : null}
+    {!detail.subagentsLoaded && (row.subagentTranscriptCount ?? 0) > 0 ? <div className="qvh-muted" role="status">Loading subagents…</div> : null}
     {detail.errors.length ? <div className="qvh-error" role="alert">Could not inspect this source. {detail.errors.join('; ')} <button type="button" className="qvh-button" onClick={() => setAttempt((value) => value + 1)}>Retry</button></div> : null}
     {row.presence !== 'present' ? <div className="qvh-error" role="status">{row.presence === 'missing' ? 'The source transcript is no longer available.' : 'The source transcript availability could not be verified.'} Resume and file actions are unavailable.</div> : null}
     {detail.firstPromptLoaded && detail.firstPrompt !== null ? <section className="qvh-detail-section"><span className="qvh-detail-label">First prompt</span><div className="qvh-first-prompt" data-vault-first-prompt>{detail.firstPrompt}</div><button type="button" className="qvh-button" onClick={() => void copyFirstPrompt()}>Copy first prompt</button></section> : detail.firstPromptLoaded ? <div className="qvh-muted" data-vault-first-prompt-unavailable>No first prompt is available.</div> : null}
@@ -899,6 +899,7 @@ function HistoryPanel({ context, report }: HistoryPanelProps) {
             onExpand={() => { selectRow(row.id); toggleExpanded(row.id) }}
             onMenu={() => { selectRow(row.id); setMenuId((current) => current === row.id ? null : row.id) }}
             onCloseMenu={() => setMenuId(null)}
+            onError={setError}
             onResumeWorktree={() => { selectRow(row.id); void resumeInWorktree(row) }}
             onResume={() => { selectRow(row.id); void resume(row) }}
             onHandoff={() => { selectRow(row.id); void handoff(row) }}
