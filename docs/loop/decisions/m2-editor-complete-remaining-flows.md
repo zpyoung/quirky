@@ -209,5 +209,16 @@
 - **Revisit if:** implementation chooses a final contract or end-phase review evaluates it
 - **Source:** assumed — autonomous
 
+## D20: Preserve delivered editor work from the single catch-up and narrow follow-up execution to unbuilt behavior
+- **Question:** What changes after roadmap lands another editor implementation while this item is a design checkpoint?
+- **Options:** rebuild the initial plan; silently claim it as this item's work; retain the incoming canonical contracts and classify coverage explicitly
+- **Chose:** preserve m7-sweep-editor-source-control D1–D18, including its owned untitled/public saveAs/provenance, Preview return and local-ack implementation. Do not introduce the proposed markdown retarget alias or replacement service API. Its m7-editor-source-control-completion already owns rich details/document-link and permission work; the single new follow-up must skip delivered and already-owned behavior and implement only remaining missing interactions/controls/lifetime paths.
+- **Why:** canonical source changed after our initial mapping/queue registration. The follow-up's historical title is not permission to replace delivered code or duplicate ownership. Queue CLI has no field-edit/removal operation; no shared queue file was edited or extra item added.
+- **Evidence:** clean single `git merge build/roadmap`; full incoming m7-sweep-editor-source-control, m3-accounts-remaining-flows and sb-mobile-app decision logs read; current editor manifest saveAs declaration; canonical existing completion item; `bun run typecheck` exit0 in25.62s including root/mobile checks
+- **Reversibility:** easy (handoff scope)
+- **Confidence:** high
+- **Revisit if:** the canonical implementation changes or a later end-phase check identifies a defect
+- **Source:** supersedes m2-editor-complete-remaining-flows D6/D8/D9/D17 proposals; preserves incoming canonical owners
+
 ## Progress
-Immediate landing under D16. Only retained logic/design, this decision log and an append-only BLOCKERS receipt changed; no product source/test/type/schema changed. Canonical queue add exited 0 and direct queue read confirms the single `m2-editor-build-unbuilt-flows` item is todo, depending on this item. It names feature implementations only; all testing/review/GUI/known-bug debugging remains in the end phase. Both workers returned partial/incomplete with no processes running; no review verdict or GUI pass is claimed. Next: commit checkpoint, catch up once, run only typecheck, detach and canonical queue land. The separate tech draft and partial review artifacts are retained with ignored iteration evidence.
+Ready for immediate canonical land. Checkpoint141b13ec and the single clean roadmap catch-up are committed; only this item's design/decision/append-only findings are authored by this lane. No product source/test/type/schema implementation was added. Full root and mobile `bun run typecheck` passed exit0 in25.62s after frozen install; no post-instruction suite, review, dogfood or debugging ran. Incoming three decision logs read, with editor delivery/ownership cutover recorded in D20. The sole new follow-up is m2-editor-build-unbuilt-flows; skip its concurrently delivered/already-owned title portions under D20. All agents/subprocesses settled. Commit this receipt, detach, canonical queue land, archive scratch and end exactly this item.
