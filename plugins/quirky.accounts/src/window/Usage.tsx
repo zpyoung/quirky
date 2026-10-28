@@ -4,7 +4,7 @@ import { useStableReport, type UiReport } from './report'
 import {
   ageLabel, accountSort, AccountsUiStore, canShowProviderVisibility, compactWindow, displayIdentity, displayPercent, formatReset, isConfigured, isCurrentSnapshot, maxUsed, providerSource,
   PROVIDER_BADGES, PROVIDER_LABELS, snapshotStatus, windowEntries,
-  type AccountState, type CredentialStatus, type ManagedProvider, type Preferences, type ProviderId, type ProviderSnapshot, type ResetExpectedScope, type StaleSession, type UsageState, type WindowData
+  type AccountState, type CredentialStatus, type ManagedProvider, type Preferences, type ProviderId, type ProviderSnapshot, type ResetCreditResult, type ResetExpectedScope, type StaleSession, type UsageState, type WindowData
 } from './model'
 
 const useStore = (store: AccountsUiStore) => useSyncExternalStore(store.subscribe, store.getSnapshot)
@@ -197,13 +197,41 @@ function AccountSwitcher({ store, provider, state, usage }: { store: AccountsUiS
   </section>
 }
 
-function StaleSessionActions({ store, session }: { store: AccountsUiStore; session: StaleSession }) {
+function StaleSessionActions({ store, session, disabled = false }: { store: AccountsUiStore; session: StaleSession; disabled?: boolean }) {
+  const [submitting, setSubmitting] = useState(false)
+  const [failure, setFailure] = useState<{ key: string; message: string } | null>(null)
+  const submissionLock = useRef(false)
+  const actionKey = `${session.sessionId}:${session.selectionRevision}`
+  const failureMessage = failure?.key === actionKey ? failure.message : null
+  const run = async (action: 'keep' | 'restart') => {
+    if (submissionLock.current || disabled) return
+    submissionLock.current = true
+    setSubmitting(true)
+    setFailure(null)
+    try {
+      const result = action === 'keep'
+        ? await store.keep([session.sessionId], session.selectionRevision)
+        : await store.restart([session.sessionId], session.selectionRevision)
+      if (result !== 'applied') {
+        setFailure({
+          key: actionKey,
+          message: result === 'selection-changed'
+            ? 'The account selection changed. Refresh account state before choosing again.'
+            : `Could not confirm ${action === 'keep' ? 'keeping' : 'restarting'} this session. Refresh account state before trying again.`
+        })
+      }
+    } finally {
+      submissionLock.current = false
+      setSubmitting(false)
+    }
+  }
   return <div className="account-stack">
     {session.provider === 'claude' && session.busy && session.queued && <small className="status-loading">Waiting for this Claude session to finish before restarting on {session.selectedLabel}.</small>}
     {session.kept ? <small className="muted">Kept on {session.accountLabel}.</small> : <div className="details-actions">
-      <button type="button" onClick={() => void store.keep([session.sessionId], session.selectionRevision)}>{session.provider === 'codex' ? 'Keep old account' : 'Keep as is'}</button>
-      <button type="button" onClick={() => void store.restart([session.sessionId], session.selectionRevision)}>{session.provider === 'codex' ? 'Restart' : 'Restart session'}</button>
+      <button type="button" disabled={disabled || submitting} onClick={() => void run('keep')}>{session.provider === 'codex' ? 'Keep old account' : 'Keep as is'}</button>
+      <button type="button" disabled={disabled || submitting} onClick={() => void run('restart')}>{session.provider === 'codex' ? 'Restart' : 'Restart session'}</button>
     </div>}
+    {failureMessage && <small className="status-error" role="alert">{failureMessage}</small>}
   </div>
 }
 
@@ -212,51 +240,73 @@ function ResetCredit({ store, snapshot, accounts }: { store: AccountsUiStore; sn
   const expectedScope = offer?.expectedScope
   const [pendingOffer, setPendingOffer] = useState<{ expectedScope: ResetExpectedScope; accountLabel: string } | null>(null)
   const [dontAsk, setDontAsk] = useState(false)
-  const [retryFailed, setRetryFailed] = useState(false)
-  if (!offer && !pendingOffer) return null
+  const [submitting, setSubmitting] = useState(false)
+  const [outcome, setOutcome] = useState<ResetCreditResult | null>(null)
+  const submitLock = useRef(false)
+  if (!offer && !pendingOffer && !outcome) return null
   const currentAccount = expectedScope?.accountId ? accounts?.accounts.find((account) => account.provider === 'codex' && account.id === expectedScope.accountId) : null
   const accountLabel = currentAccount?.label ?? pendingOffer?.accountLabel ?? accounts?.systemDefault.codex.label ?? 'System default'
-  const submit = async (scope: ResetExpectedScope, label: string) => {
-    const success = await store.consumeResetCredit(store.resetRequestId(scope), scope)
-    if (success) {
-      setPendingOffer(null)
-      setRetryFailed(false)
-    } else {
-      setRetryFailed(true)
-      setPendingOffer((current) => current ?? { expectedScope: scope, accountLabel: label })
+  const submit = async (scope: ResetExpectedScope, label: string, rememberChoice = false) => {
+    if (submitLock.current) return
+    submitLock.current = true
+    setSubmitting(true)
+    setOutcome(null)
+    try {
+      if (rememberChoice) await store.setPreferences({ skipCodexResetConfirm: true })
+      const result = await store.consumeResetCredit(store.resetRequestId(scope), scope)
+      setOutcome(result)
+      if (result === 'reset' || result === 'alreadyRedeemed') {
+        setPendingOffer(null)
+        setDontAsk(false)
+      } else {
+        setPendingOffer((current) => current ?? { expectedScope: scope, accountLabel: label })
+      }
+    } finally {
+      submitLock.current = false
+      setSubmitting(false)
     }
   }
   const requestReset = () => {
-    if (!expectedScope) return
+    if (!expectedScope || submitting || pendingOffer) return
+    setOutcome(null)
     if (accounts?.preferences.skipCodexResetConfirm) {
       void submit(expectedScope, accountLabel)
       return
     }
     setDontAsk(false)
     setPendingOffer({ expectedScope, accountLabel })
-    setRetryFailed(false)
   }
   const availableCount = offer?.availableCount ?? 0
+  const outcomeMessage = outcome === 'reset' ? 'Codex limits were reset.'
+    : outcome === 'alreadyRedeemed' ? 'This reset request was already redeemed.'
+      : outcome === 'scope-changed' ? 'This reset offer changed before confirmation. No reset was applied. Refresh usage and confirm the current offer.'
+        : outcome === 'noCredit' ? 'No Codex reset credit was available. Refresh usage before confirming again.'
+          : outcome === 'nothingToReset' ? 'There are no eligible Codex limits to reset. Refresh usage before confirming again.'
+            : outcome === 'failed' ? 'The reset could not be confirmed. Retry uses the same request ID and displayed account scope.'
+              : null
+  const refreshBeforeRetry = outcome === 'scope-changed' || outcome === 'noCredit' || outcome === 'nothingToReset'
   return <section className="section-card" aria-label="Codex reset credits">
     {offer && <>
       <div className="row-heading"><strong>{availableCount > 0 ? `${availableCount} rate-limit reset${availableCount === 1 ? '' : 's'} available` : 'No rate-limit resets available'}</strong>{offer.nextExpiresAt ? <small>Next expiry {new Date(offer.nextExpiresAt).toLocaleString()}</small> : null}</div>
       {offer.totalEarnedCount !== undefined && <small>Total earned: {offer.totalEarnedCount}</small>}
       {availableCount > 0 && <>
         <p className="settings-description">Use a Codex reset credit for the active account's eligible usage windows.</p>
-        <button type="button" aria-label="Reset Codex limits" disabled={!expectedScope} title={!expectedScope ? 'A verified offer scope is unavailable.' : undefined} onClick={requestReset}>Reset now</button>
+        <button type="button" aria-label="Reset Codex limits" disabled={!expectedScope || submitting || Boolean(pendingOffer)} title={!expectedScope ? 'A verified offer scope is unavailable.' : undefined} onClick={requestReset}>{submitting && !pendingOffer ? 'Resetting…' : 'Reset now'}</button>
         {!expectedScope && <small className="status-error" role="status">Reset is unavailable because the displayed offer could not be bound to an account revision.</small>}
       </>}
     </>}
+    {outcomeMessage && !pendingOffer && <p className={outcome === 'reset' || outcome === 'alreadyRedeemed' ? 'status-ready' : 'status-error'} role={outcome === 'reset' || outcome === 'alreadyRedeemed' ? 'status' : 'alert'}>{outcomeMessage}</p>}
     {pendingOffer && <div className="reset-confirm" role="dialog" aria-label="Reset Codex limits confirmation" aria-modal="false">
       <h3>Reset Codex limits?</h3>
       <p>This uses one Codex reset credit for the account and offer displayed when you requested it.</p>
       <small>Offer shown for {pendingOffer.accountLabel}. The confirmation remains bound to that account and offer.</small>
-      <label className="checkbox-row"><input type="checkbox" checked={dontAsk || accounts?.preferences.skipCodexResetConfirm === true} onChange={(event) => setDontAsk(event.currentTarget.checked)} />Don't ask again</label>
-      {retryFailed && <p className="status-error" role="alert">The reset did not complete. Retry keeps the same request ID and displayed account scope.</p>}
-      <div className="dialog-actions"><button type="button" onClick={() => { setPendingOffer(null); setRetryFailed(false); setDontAsk(false) }}>Cancel</button><button type="button" onClick={async () => {
-        if (dontAsk) await store.setPreferences({ skipCodexResetConfirm: true })
-        await submit(pendingOffer.expectedScope, pendingOffer.accountLabel)
-      }}>{retryFailed ? 'Retry reset' : 'Reset now'}</button></div>
+      <label className="checkbox-row"><input type="checkbox" checked={dontAsk || accounts?.preferences.skipCodexResetConfirm === true} disabled={accounts?.preferences.skipCodexResetConfirm === true} onChange={(event) => setDontAsk(event.currentTarget.checked)} />Don't ask again</label>
+      {outcomeMessage && <p className="status-error" role="alert">{outcomeMessage}</p>}
+      <div className="dialog-actions">
+        <button type="button" disabled={submitting} onClick={() => { setPendingOffer(null); setOutcome(null); setDontAsk(false) }}>Cancel</button>
+        <button type="button" disabled={submitting || refreshBeforeRetry} onClick={() => void submit(pendingOffer.expectedScope, pendingOffer.accountLabel, dontAsk || accounts?.preferences.skipCodexResetConfirm === true)}>{submitting ? 'Resetting…' : outcome === 'failed' ? 'Retry reset' : 'Reset now'}</button>
+        {refreshBeforeRetry && <button type="button" disabled={submitting} onClick={() => void store.refresh('codex')}>Refresh usage</button>}
+      </div>
     </div>}
   </section>
 }
@@ -456,23 +506,37 @@ export function SessionAccessory({ store, input, report }: { store: AccountsUiSt
   })
   if (!session || (session.provider === 'claude' && !session.queued && !session.error)) return null
   const providerName = session.provider === 'codex' ? 'Codex' : 'Claude'
+  const sessionCopy = session.provider === 'codex'
+    ? session.kept
+      ? `Codex is still signed in as ${session.accountLabel}. This session is kept on that previous account.`
+      : `Codex is still signed in as ${session.accountLabel}. Restart this session to use ${session.selectedLabel}. It stays on the previous account until you do.`
+    : `Claude is still running as ${session.accountLabel}. Restarting continues this conversation on ${session.selectedLabel}.`
   return <div className="accounts-ui provider-details" data-pane={paneId ?? undefined} aria-label={`${providerName} account switched`}>
     <style>{ACCOUNTS_CSS}</style>
     <strong>{providerName} account switched</strong>
-    <span>{session.provider === 'codex' ? `Codex is still signed in as ${session.accountLabel}. Restart this session to use ${session.selectedLabel}. It stays on the previous account until you do.` : `Claude is still running as ${session.accountLabel}. Restarting continues this conversation on ${session.selectedLabel}.`}</span>
+    <span>{sessionCopy}</span>
+    <StaleSessionActions store={store} session={session} />
     {session.error && <small className="status-error" role="alert">Restart failed. The session remains on its previous account; retry when available.</small>}
   </div>
 }
 
 export function AccountSwitchDialog({ store, report }: { store: AccountsUiStore; report?: UiReport }) {
   const snapshot = useStore(store)
-  const [dontAskAgain, setDontAskAgain] = useState(false)
+  const [dontAskChoice, setDontAskChoice] = useState<{ key: string; checked: boolean }>({ key: '', checked: false })
+  const [submitting, setSubmitting] = useState(false)
+  const [actionFailure, setActionFailure] = useState<{ key: string; message: string } | null>(null)
+  const [pinnedSessions, setPinnedSessions] = useState<{ key: string; sessions: StaleSession[] } | null>(null)
+  const submissionLock = useRef(false)
   const state = snapshot.accounts
   const askSessions = state?.preferences.claudeSwitchPolicy === 'ask'
     ? state.staleSessions.filter((session) => session.provider === 'claude' && !session.kept)
     : []
   const queued = state?.staleSessions.filter((session) => session.provider === 'claude' && session.queued && !session.kept) ?? []
-  const visible = [...askSessions, ...queued.filter((session) => !askSessions.some((candidate) => candidate.sessionId === session.sessionId))]
+  const currentVisible = [...askSessions, ...queued.filter((session) => !askSessions.some((candidate) => candidate.sessionId === session.sessionId))]
+  const dialogKey = state ? `${state.active.claude ?? 'system'}:${state.revision}` : 'loading'
+  const visible = [...currentVisible, ...(pinnedSessions?.key === dialogKey ? pinnedSessions.sessions.filter((session) => !currentVisible.some((candidate) => candidate.sessionId === session.sessionId)) : [])]
+  const dontAskAgain = dontAskChoice.key === dialogKey && dontAskChoice.checked
+  const failureMessage = actionFailure?.key === dialogKey ? actionFailure.message : null
   useStableReport(report, {
     view: 'switch-dialog',
     visible: visible.length > 0,
@@ -486,6 +550,40 @@ export function AccountSwitchDialog({ store, report }: { store: AccountsUiStore;
       selectionRevision: session.selectionRevision
     }))
   })
+  const choose = async (action: 'keep' | 'restart') => {
+    if (submissionLock.current || !state) return
+    submissionLock.current = true
+    setSubmitting(true)
+    setActionFailure(null)
+    const sessionsToActOn = [...visible]
+    const selectionKey = dialogKey
+    setPinnedSessions({ key: selectionKey, sessions: sessionsToActOn })
+    try {
+      if (dontAskAgain) await store.setPreferences({ claudeSwitchPolicy: 'always' })
+      const groups = new Map<number, string[]>()
+      for (const session of sessionsToActOn) groups.set(session.selectionRevision, [...(groups.get(session.selectionRevision) ?? []), session.sessionId])
+      for (const [selectionRevision, sessions] of groups) {
+        const result = action === 'keep'
+          ? await store.keep(sessions, selectionRevision)
+          : await store.restart(sessions, selectionRevision)
+        if (result !== 'applied') {
+          setActionFailure({
+            key: selectionKey,
+            message: result === 'selection-changed'
+              ? 'The account selection changed. Review the refreshed sessions before choosing again.'
+              : `Could not confirm ${action === 'keep' ? 'keeping' : 'restarting'} the Claude sessions. Refresh account state before trying again.`
+          })
+          const latest = store.getSnapshot().accounts
+          if (!latest || `${latest.active.claude ?? 'system'}:${latest.revision}` !== selectionKey) setPinnedSessions(null)
+          return
+        }
+      }
+      setPinnedSessions(null)
+    } finally {
+      submissionLock.current = false
+      setSubmitting(false)
+    }
+  }
   if (!visible.length) return null
   const revisions = new Set(visible.map((session) => session.selectionRevision))
   return <div className="accounts-ui switch-overlay">
@@ -498,22 +596,13 @@ export function AccountSwitchDialog({ store, report }: { store: AccountsUiStore;
         {session.queued ? <small className="status-loading">Restart queued; waiting for Claude to become idle.</small> : null}
         {session.busy && <small>Busy now. Restart will wait until this turn finishes.</small>}
         {session.error && <small className="status-error" role="alert">Restart failed. This session remains on its old account.</small>}
-        <StaleSessionActions store={store} session={session} />
+        <StaleSessionActions store={store} session={session} disabled={submitting} />
       </div>)}</div>
-      <label className="checkbox-row"><input type="checkbox" checked={dontAskAgain} onChange={(event) => setDontAskAgain(event.currentTarget.checked)} />Don't ask again (restart automatically)<small>You can turn this off in Settings → AI Provider Accounts.</small></label>
+      <label className="checkbox-row"><input type="checkbox" checked={dontAskAgain} disabled={submitting} onChange={(event) => setDontAskChoice({ key: dialogKey, checked: event.currentTarget.checked })} />Don't ask again (restart automatically)<small>You can turn this off in Settings → AI Provider Accounts.</small></label>
+      {failureMessage && <p className="status-error" role="alert">{failureMessage}</p>}
       <div className="dialog-actions">
-        <button type="button" onClick={async () => {
-          if (dontAskAgain) await store.setPreferences({ claudeSwitchPolicy: 'always' })
-          const groups = new Map<number, string[]>()
-          for (const session of visible) groups.set(session.selectionRevision, [...(groups.get(session.selectionRevision) ?? []), session.sessionId])
-          for (const [selectionRevision, sessions] of groups) await store.keep(sessions, selectionRevision)
-        }}>Keep as is</button>
-        <button type="button" onClick={async () => {
-          if (dontAskAgain) await store.setPreferences({ claudeSwitchPolicy: 'always' })
-          const groups = new Map<number, string[]>()
-          for (const session of visible) groups.set(session.selectionRevision, [...(groups.get(session.selectionRevision) ?? []), session.sessionId])
-          for (const [selectionRevision, sessions] of groups) await store.restart(sessions, selectionRevision)
-        }}>{visible.length === 1 ? 'Restart session' : `Restart ${visible.length} sessions`}</button>
+        <button type="button" disabled={submitting} onClick={() => void choose('keep')}>Keep as is</button>
+        <button type="button" disabled={submitting} onClick={() => void choose('restart')}>{visible.length === 1 ? 'Restart session' : `Restart ${visible.length} sessions`}</button>
       </div>
       {revisions.size > 1 && <small className="muted">Sessions from different account selections are protected by their own selection revisions.</small>}
     </section>

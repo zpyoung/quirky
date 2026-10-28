@@ -1,0 +1,36 @@
+{
+  "item": "sb-mobile-app",
+  "spec": "docs/quirk/specs/2026-10-28-sb-mobile-app/logic.md",
+  "scenarios": [
+    {
+      "id": "N1",
+      "title": "On a Quirky Expo iOS development build paired to a fresh temporary QUIRKY_HOME, deny then grant camera access; scan the actual QR, cancel and confirm a quirky://pair link, and pair via pasted code. Verify no host is added before authenticated success and re-pair preserves one host identity.",
+      "status": "pending", "lastRun": null, "report": null, "summary": null
+    },
+    {
+      "id": "N2",
+      "title": "Use actual iOS SecureStore: persist and reopen a paired host, lock/unlock the phone and distinguish unavailable from missing credentials; remove the host with locked storage, then retry pending secure cleanup after unlock. No token appears in metadata or diagnostics.",
+      "status": "pending", "lastRun": null, "report": null, "summary": null
+    },
+    {
+      "id": "N3",
+      "title": "Open downloaded workspace/session pages in the actual iOS custom-origin Expo module. Verify the per-mount local origin loads the verified generation, external navigation is refused, clipboard/native actions honor grants, background/foreground restores the socket without a partial-generation mount, and closing the screen releases its WebView.",
+      "status": "pending", "lastRun": null, "report": null, "summary": null
+    },
+    {
+      "id": "N4",
+      "title": "With a real temporary-home shell/PTY, tap both keyboard text and icon, type a command and observe output on phone and desktop. Verify desktop typing is paused during phone ownership, desktop Take back restores fit and denies phone input until explicit reclaim, and leaving retains/restores phone size under the selected delay.",
+      "status": "pending", "lastRun": null, "report": null, "summary": null
+    },
+    {
+      "id": "N5",
+      "title": "At narrow phone width with system keyboard shown, open and cancel workspace options, new workspace, new tab and confirmation sheets. Every control remains reachable, no content clips to the right or stays shifted after dismissal, and selected preferences survive restart.",
+      "status": "pending", "lastRun": null, "report": null, "summary": null
+    },
+    {
+      "id": "N6",
+      "title": "In the actual iOS development build, finish onboarding once, verify connected/reconnecting/revoked and secure-store-unavailable host verdicts, edit the friendly name and reachable address without duplicating host identity, reconnect/disconnect, copy redacted diagnostics, and resume the remembered workspace. Persist terminal text scale/autocomplete/custom shortcuts/link target and daemon auto-restore delay; verify unsupported push/voice/distribution settings remain truthful.",
+      "status": "pending", "lastRun": null, "report": null, "summary": null
+    }
+  ]
+}

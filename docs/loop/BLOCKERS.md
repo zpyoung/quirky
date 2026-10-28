@@ -423,6 +423,42 @@ Tried: current installed SDK and app drop/typed-RPC routes; latest published SDK
 
 Unblock when Electrobun publishes a supported dropped-source-path callback/extractor, or the user explicitly approves a native patch/fork. Then carry real paths through typed shell RPC/public events and prove same-worktree open-in-place versus external collision-safe import with actual Finder drops. Until then m2-editor D19's approved import-all policy remains in force. Decision log: `docs/loop/decisions/m4-editor-drop-open-in-place.md`; archived evidence: lane 9 ignored iteration folder, `editor-drop-feasibility-evidence.tar.gz`.
 
+## m7-sweep-editor-source-control: explicit completion follow-up
+
+The queue item authorizes larger remaining flows as a follow-up. Exactly one was added:
+`m7-editor-source-control-completion`, dependent on this sweep.
+
+- **Implementation:** lossless rich details/collapsible headings and document-link insertion/completion; integrated edit-tab Changes/Markdown diff preview and hosted preview/permanent/split diff tabs; permission-aware save/annotation UX.
+- **GitHub target boundary:** fork notices, validated PR-derived push destinations and target-specific push-before-PR. Current public hosting APIs do not return a validated destination; this sweep deliberately retains Git's configured push target rather than guessing.
+- **Remaining acceptance:** the exhaustive editor SC-3–22 GUI/setup/media/shortcut/remount variants listed in the original m2-editor completion matrix, and the all17 sidebar edge audit including quiet aging, fresh-agent-only liveness, corrupt preferences and separator boundaries/persistence. Existing implementation/test presence is not a new passing claim for those variants.
+- **Closed here:** real untitled/provenance/Save As, same-tab Preview return, own-draft acknowledgment correlation, canonical mixed Markdown/diff Notes shelf with owning-store reservations and exact settlement, current GitHub review status/composer handoff/unpublished guards, blur-only Custom-days regression, and empty headless Markdown initialization. Real daemon/CLI smoke and five guarded web goals passed. Corrected affected gate7/7 and final typecheck passed; prior broad coverage and the landing gate remain separately recorded in the decision log.
+- **Not duplicated:** `m4-editor-drop-open-in-place` remains independently blocked on supported native dropped-source paths. No native patch, basename guess or picker substitute was introduced.
+## m3-accounts-remaining-flows: night-cutoff acceptance deferral and open findings
+
+Authoritative LOOP night rules stopped new flows at02:54CDT,90minutes after claim. Verified repairs and runtime proof land without asserting the full remaining UI matrix. Exactly one dependent completion item, `m3-accounts-complete-user-acceptance-20261028`, carries every unfinished flow; native-only checks remain pending in `docs/loop/native/m3-accounts-remaining-flows.json`.
+
+Verified: preference saves no longer invalidate captured restart/reset authority; pending usage-only reloads cannot swallow account events; Codex pane Keep/Restart controls exist; successful RPCs cannot leave a false retry dialog solely because their snapshot was superseded; Usage no longer covers the Claude modal, and full reset warnings wrap. Real daemon/PTY Codex A→B→remove-A→C read accumulated conversation bytes after A's home was removed, with current C locator and public focus/layout. Guarded web exercised Detailed/Remaining, Claude/Codex drill-ins, ordinary Keep and opt-out Keep, scoped reset opt-out/redemption/replay, pane Restart A→B with actual prior rollout contents, and wrapped confirmation Cancel. These are individual observations, not a full goal-matrix pass.
+
+Remaining user acceptance:
+- Same-home daemon-restart Compact/Detailed, Used/Remaining and provider visibility through the UI.
+- All ten provider drill-ins and inactive-account refresh/debounce.
+- Native-login link/Cancel, Codex UI add, reauthentication and Needs sign-in refusal.
+- Full Claude Ask Restart/Always/Never/busy-idle/superseding-switch UI choices.
+- Codex pane Keep old account and keyboard follow-through. Pane Restart selected the new Codex2 tab and focused terminal input; the guard refused typing into xterm's opacity0 textarea (F1), so typing/OS-focus is not claimed.
+- Provider-specific removal warnings, Cancel/confirm and System-default fallback through the UI.
+- Masked MiniMax/OpenCode Go/ZCode configure/clear and secret-free error presentation.
+- Reset stale-account/stale-offer/failure/idempotent retry UI matrix; ordinary wrapped Cancel and opt-out redemption/replay have their own proof.
+- Retained Codex configuration warning/recovery UI.
+- Native clipboard/browser, Keychain denial and real window/pane focus, only under the explicit pending synthetic-only native scenarios.
+
+Open findings retained for that same item:
+- **MEDIUM X1, source-confirmed inherited failure path:** `plugins/quirky.accounts/src/window/model.ts:650-668` (before final fix-line shifts): cancellation increments login generation and stops polling before its RPC; an RPC failure does not resume status polling. The original baseline has the same path. No live-provider outcome or data loss is claimed. Final review raw X gate remains NEEDS_FIXES; parent did not label this an introduced regression.
+- **MEDIUM G2, source/UI evidence; refused-action runtime not exercised:** `plugins/quirky.accounts/src/service.ts:877-917` includes structured/background account records in stale projection, while `src/restarts.ts:51-53` only restarts terminal sessions. After the actual terminal had resumed onto B, a held structured A fixture remained as “1 Codex session still on the old account” with Restart in Usage (wrapping runobs2). Clarify eligible background controls without relabeling the true old identity or pretending terminal restart can resume a background runner.
+
+Final Round1 limitations: S completed valid full-independence Gemini promote/refute with no findings. C/X exhausted bounded external calls, then completed actual fresh OpenAI task promote/refute with reduced independence. C1 was suppressed by the evidence gate's bad line anchors, independently reproduced by parent as a pinned ghost dialog, and fixed; the regression passed afterward. No three-lens clean approval or new formal closure campaign is claimed. An initial unsandboxed X reviewer created three prohibited scratch scripts in the repo and attempted Bun execution; payload hashes/logs were archived and only those attributed files were removed. Individual unauthorized command outputs were unavailable, not fabricated.
+
+Evidence: decisions D5–D16; first two guarded runs `20261028T073937-8f70` and `20261028T074759-9b79` are partial, closed, with no test overrides. Scoped wrapping/Cancel repair `20261028T081956-5813` passed. Affected gate297remote+2Mac passed without retries; scripts68/568, typecheck and build passed before integration catch-up; final narrow repair gate23/114 passed. Post-merge/full landing verification remains separate. All owned browser/daemon/PTY/provider processes stopped; component metadata is preserved in the lane's ignored loop evidence folder.
+
 ## sa-browser-profiles-settings: final verification receipt
 
 - The latest Browser boundary after exact headless-target resume and Watch profile/orphan fixes passed9remote files and2macOS files without retries. Earlier helper/frame failures above remain historical evidence, not a claim that every intermittent cause was attributed.
@@ -462,4 +498,11 @@ Unblock when Electrobun publishes a supported dropped-source-path callback/extra
 - **One unbuilt-flow owner:** `m2-editor-build-unbuilt-flows` depends on this item and owns lossless details/toggle/document-link insertion/completion; true untitled/Save As/provenance; filesystem-permission UX; missing Explorer navigation/range keys; live notebook death/restart controls; CSV row/column/range clipboard; and mounted-view resource release preserving splits. These are missing feature paths, not a verification-only follow-up.
 - **End-phase evidence retained:** original Preview-to-Rich and own-ack warnings; native Copy Path/Relative Path failure in `docs/loop/native/m2-editor.json` / report `20261028T061952-27c6`; empty-query Search routing; complete API/GUI/native acceptance matrix. No new item was added for testing, review, verification or debugging these.
 - **Interrupted review:** Codex promote finished, but no refute/gate/manifest ran. Two unrefuted design candidates concern collision-allocated template filenames and successful Save As placeholder cleanup. They are not adjudicated findings or a review verdict. Raw artifacts remain in this iteration's ignored evidence.
+## sb-mobile-app: prerequisite-dependent flows and native proof
+
+- **Owner:** one dependent item, `sb-mobile-app-prerequisites`; see decisions D5,D8,D21,D24. Interactive native-chat/attachments/queued-chat/options/background-task UI and voice/model/settings require an authorized architecture/roadmap ruling and public APIs. Workspace Sleep/Hide sleeping requires reversible PTY stop-with-history and durable session resume; closing or killing is not sleep. Automation/other-client filters need real origin provenance, not `createdBy=api`. Browser/Markdown tabs need a safe phone-authorized data/renderer path and public tab identity.
+- **Independent owners:** `sb-mobile-app-panels` owns other panels and notification subscriptions; `sb-mobile-install-links` owns installation/distribution links. This item does not duplicate those follow-ups or claim remote push delivery.
+- **UI evidence:** guarded `20261028T104207-81f5` passed real ask response and New tab cancellation; workspace/terminal remained tool-limited partial after UNSETTLED actions despite correct screenshots. Separate actual320px browser proof verified scrollable options/new-workspace/new-tab/close sheets, cancellation, both keyboard controls focusing the terminal input, real PTY output, second-tab creation and tab-specific replay. The native bridge shim is not a device WebView. Original report keeps CSP/favicons findings; ineffective meta directives were corrected, and native response-header/navigation enforcement remains.
+- **Native/platform:** `docs/loop/native/sb-mobile-app.json` N1–N6 remain pending for camera/deep links, actual SecureStore locking, custom-origin WebView, physical keyboard/driver behavior and native home/onboarding/settings. No iOS device/simulator or Android execution is claimed. Expo iOS export and portable Swift policy checks ran on macOS; Android and Linux/Windows host work remain unverified.
+- **Review limit:** the already-overdue item used LOOP.md's unstarted-review waiver; no final model-review clearance is claimed. Canonical landing still verifies the complete merged result.
 

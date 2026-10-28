@@ -14,6 +14,8 @@ export type LadderState = {
   committing: boolean
   /** The compare base ref, such as `origin/main` or `refs/remotes/origin/main`; null when none is known. */
   base: string | null
+  /** Blocks the unpublished-branch action until the current GitHub review state is known. */
+  reviewGate?: 'loading' | 'unavailable' | 'merged'
 }
 
 /** What the primary button does when pressed. */
@@ -78,6 +80,15 @@ function pick(state: LadderState): PrimaryAction {
   const up = status.upstreamStatus
   if (!up.hasUpstream) {
     if (status.detached) return commitRow('Check out a branch before publishing commits.')
+    if (state.reviewGate === 'loading') {
+      return { kind: 'publish', label: 'Publish Branch', enabled: false, title: 'Checking GitHub pull-request status before publishing this branch.' }
+    }
+    if (state.reviewGate === 'unavailable') {
+      return { kind: 'publish', label: 'Publish Branch', enabled: false, title: 'GitHub pull-request status is unavailable. Retry before publishing this branch.' }
+    }
+    if (state.reviewGate === 'merged') {
+      return { kind: 'publish', label: 'Publish Branch', enabled: false, title: 'Nothing to commit. PR is already merged.' }
+    }
     return { kind: 'publish', label: 'Publish Branch', enabled: true, title: 'Publish this branch to origin' }
   }
   if (up.ahead > 0 && up.behind > 0) {

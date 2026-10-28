@@ -53,34 +53,35 @@ other lanes land while you work (step 5 brings them in). If your item's evidence
 wrong, record a new decision that names the old one, explain the conflict, and either work within
 it or block the item. Never silently diverge.
 
-## Night mode: everything in scope lands by 4am on 2026-10-28
+## Build first, test at the end
 
-The user set this target, so until then these rules override the steps below wherever they differ.
-After 4am, `docs/loop/BLOCKERS.md` lists the deferred items to requeue.
+The user moved all testing and debugging to an end phase that starts once every feature item has
+landed. Until `m7-test-triage` is claimed, these rules override the steps below wherever they differ.
 
-- **Two hours per item.** Have the item ready to land within two hours of claiming it. At an hour
-  and a half, stop starting new flows and land what passes, deferring the rest as
-  [Blocking an item](#blocking-an-item) describes. An item claimed before this rule, or already
-  past two hours, lands as soon as its own tests and typecheck pass: skip any review round or
-  dogfood pass it hasn't started.
-- **One follow-up per item.** Each follow-up is a whole item to build and land before 4am, so
-  defer flows sparingly. Add follow-ups only once, just before landing, as a single item naming
-  every flow this item defers.
+- **Write tests, don't run them.** Implementers still write the acceptance and defect tests step 6
+  lists, alongside the code, and native-only scenarios still go in `docs/loop/native/<id>.json`.
+  Nobody runs a suite, dogfoods the UI, runs a review round or checkpoint review, or chases a
+  failing test. A test that fails is the end phase's problem.
+- **Typecheck is the only gate.** Before landing, run `bun run typecheck` and fix what it reports.
+  `queue.ts land` checks only typecheck on the merge result; if it fails, fix the type errors and
+  land again.
+- **An item already in progress lands now.** Commit what it has, make typecheck pass, and land at
+  its next step. Skip every test run, review and dogfood pass it hasn't finished.
+- **Two hours per item.** Have the item landed within two hours of claiming it. Defer any flow you
+  haven't started by then, as [Blocking an item](#blocking-an-item) describes.
+- **Follow-ups only for unbuilt flows.** Add at most one follow-up per item, just before landing,
+  naming the flows this item didn't implement. Never add an item to test, verify, review or debug
+  something: the end phase does that.
 - **No research swarms.** The feature doc, the roadmap and earlier decision logs are the research.
   Brainstorm with the standard gray areas and answer them yourself.
 - **One spec.** Write `logic.md` with the tech decisions in a final section, and skip `tech.md` and
   the separate spec review. Self-review it against the feature doc's flows.
 - **Contracts before implementers.** Commit the shared types, schemas and API signatures on
   `build/<id>` first, then dispatch at most three implementers against them.
-- **Test once.** Implementers run only their own test files. Before landing, run
-  `bun scripts/suite.ts <dirs>` for the packages and plugins you changed, `bun test scripts` and
-  `bun run typecheck`, once. Never run the whole suite; the land does.
-- **Dogfood once,** at the end, only for the UI scenarios this item adds.
 - **Catch up once,** with `git merge build/roadmap`, just before landing.
-- **One final review round.** Fix only blocking findings; record the rest as open findings.
-- **Clean up as you go.** The Mac's disk is nearly full. Remove each implementer's worktree with
-  `git worktree remove --force <path>` once its branch is merged, and delete your temporary
-  directories under `/tmp` after the item lands.
+- **Clean up as you go.** Remove each implementer's worktree with `git worktree remove --force
+  <path>` once its branch is merged, and delete your temporary directories under `/tmp` after the
+  item lands.
 - **Early items build on their dependencies' branches.** An item marked `"early": true` can be
   claimed once each dependency is claimed, even when those dependencies are early items too.
   Never end the turn just because a dependency hasn't landed:
@@ -88,10 +89,25 @@ After 4am, `docs/loop/BLOCKERS.md` lists the deferred items to requeue.
   2. Write the spec and commit the contracts against the dependencies' specs on their
      `build/<dep>` branches.
   3. Run `git merge build/<dep>` for each pending dependency whose branch exists, and implement
-     against what they provide. Merge them again before your final tests. If a dependency is
-     blocked, take its code back out or block your item.
+     against what they provide. If a dependency is blocked, take its code back out or block your
+     item.
   4. When everything but the land is done, run `queue.ts deps <id>` again, in this same turn, until
-     it reports `"ready": true`. Then merge `build/roadmap`, rerun your affected tests, and land.
+     it reports `"ready": true`. Then merge `build/roadmap`, rerun typecheck, and land.
+
+### The end phase
+
+The queue holds it back: `m7-test-triage` depends on every feature item, and the fix items, the
+verification items and the remaining `m7-sweep-*` items depend on `m7-test-triage`. From there the
+normal steps apply again, including step 6, so every end-phase item runs its own tests before it
+lands.
+
+1. **`m7-test-triage`** runs `bun scripts/suite.ts packages apps plugins`, `bun test scripts` and
+   `bun run typecheck` on `build/roadmap`. It adds one `fix-test-<area>-<MMDD>` item per failing
+   package, app or plugin with `queue.ts add`, each naming its failing files and tests, so the lanes
+   split the debugging. It changes no code, and lands with its report in its decision log.
+2. **The fix items, the verification items and the `m7-sweep-*` items** then run in parallel. Each
+   sweep dogfoods every flow in its feature docs and fixes what fails.
+3. **`m7-api-freeze`** comes last, and `queue.ts check` runs the whole suite once every item is done.
 
 ## Each iteration
 
@@ -182,8 +198,7 @@ After 4am, `docs/loop/BLOCKERS.md` lists the deferred items to requeue.
 7. **Land.**
    1. Commit everything on `build/<id>` and run `git switch --detach`.
    2. Run `bun scripts/build-loop/queue.ts land <id>`. It merges `build/<id>` into `build/roadmap`,
-      runs `bun run test`, `bun test scripts` and `bun run typecheck` on the result, marks the item
-      done, rebuilds `DECISIONS.md`, and deletes the branch. On a conflict or a failure it leaves
+      runs `bun run typecheck` on the result, marks the item done, rebuilds `DECISIONS.md`, and deletes the branch. On a conflict or a failure it leaves
       `build/roadmap` as it was. Other lanes' items waiting to land are merged and verified in the
       same run when they can be; if it prints that your item was landed with another lane's, it's
       done.
