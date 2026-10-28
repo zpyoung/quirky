@@ -6,6 +6,13 @@ files, not this one.
 
 | Reversibility | Confidence | Entry | Decision | Source |
 | --- | --- | --- | --- | --- |
+| easy. | high. | [ui-terminal-theme D3](decisions/ui-terminal-theme.md) | Preserve existing terminal overrides and validated custom/Tango behavior | assumed — autonomous |
+| easy. | high. | [ui-terminal-theme D5](decisions/ui-terminal-theme.md) | Use build-first two-component implementation and minimal verification | locked by docs/loop/LOOP.md |
+| easy. | high. | [ui-terminal-theme D6](decisions/ui-terminal-theme.md) | Keep inherited user metadata and test only isolated state | locked by docs/loop/LOOP.md |
+| easy. | high. | [ui-terminal-theme D7](decisions/ui-terminal-theme.md) | Use portable browser appearance APIs, with macOS-only verification | deferred: platform |
+| medium. | high. | [ui-terminal-theme D8](decisions/ui-terminal-theme.md) | Preserve the existing theme API while superseding the old default palette | supersedes m0-ui-api D19 |
+| easy. | high. | [ui-terminal-theme D9](decisions/ui-terminal-theme.md) | Run only the published UI lint gate, never a substitute scanner | assumed — autonomous |
+| easy. | high. | [ui-terminal-theme D10](decisions/ui-terminal-theme.md) | Minimal live surface proof, not an end-phase campaign | assumed — autonomous |
 | medium. | high. | [sa-browser-pane-native-host-controls D4](decisions/sa-browser-pane-native-host-controls.md) | Require real cache bypass without changing page identity or data | locked by browser.md and sa-browser-pane D15-D17 |
 | medium. | high. | [sa-browser-pane-native-host-controls D5](decisions/sa-browser-pane-native-host-controls.md) | Native failure state must come from actual navigation failure | locked by browser.md and sa-browser-pane D4/D17 |
 | easy. | high. | [sa-browser-pane-native-host-controls D8](decisions/sa-browser-pane-native-host-controls.md) | Audit isolated sources only and preserve unrelated metadata | deferred: platform |
@@ -111,6 +118,8 @@ files, not this one.
 | hard (only an authorized scope ruling can change the product boundary) | high | [sb-mobile-app-prerequisites D3](decisions/sb-mobile-app-prerequisites.md) | A follow-up title cannot override the locked native-chat and dictation exclusions | locked by docs/architecture.md |
 | hard | high | [m1-term-ui D7](decisions/m1-term-ui.md) | Layout lives in the daemon; the window renders it and changes it only through methods | locked by docs/roadmap.md |
 | hard | high | [m1-providers D9](decisions/m1-providers.md) | Agent IDs, labels and table values are Orca's | locked by docs/architecture.md |
+| medium (public ids and existing default semantics). | high. | [ui-terminal-theme D2](decisions/ui-terminal-theme.md) | Follow system is the existing default application theme; dark/light pin it | assumed — autonomous |
+| medium (shared appearance selector). | high. | [ui-terminal-theme D4](decisions/ui-terminal-theme.md) | Share resolved appearance through data-theme and central palette data | assumed — autonomous |
 | medium (acceptance ownership). | high. | [sa-browser-pane-native-host-controls D1](decisions/sa-browser-pane-native-host-controls.md) | Retain the queue core and all binding inherited acceptance | locked by sa-browser-pane D23 and sa-browser-design-mode D33 |
 | medium (lifecycle and safety) | source-backed, runtime proof pending at recording | [sa-browser-design-mode D12](decisions/sa-browser-design-mode.md) | Close source integration defects before claiming acceptance | assumed — autonomous |
 | medium (payload latency) | source-backed; final runtime test required | [sa-browser-design-mode D19](decisions/sa-browser-design-mode.md) | Finish the original Grab payload image contract without holding a user-waiting lock | locked by browser.md |
@@ -472,6 +481,9 @@ files, not this one.
 | medium | high | [m1-notifications D7](decisions/m1-notifications.md) | The old "Notify when agents finish" switch becomes Agent Task Complete, and its value carries over | supersedes m0-core D13 |
 | medium | high | [m1-notifications D11](decisions/m1-notifications.md) | The window reports input activity, and focus and presence changes reach plugins as an event | assumed — autonomous |
 | medium | high | [m1-notifications D28](decisions/m1-notifications.md) | The PTY host recognises OSC 9, OSC 99 and OSC 777 notifications | assumed — autonomous |
+| medium (public component props become consumer contracts) | high | [ui-tokens-and-components D1](decisions/ui-tokens-and-components.md) | Implement the approved system row, not the area restyles | locked by docs/quirk/specs/2026-10-28-ui-redesign/logic.md |
+| medium (import contract) | high | [ui-tokens-and-components D4](decisions/ui-tokens-and-components.md) | Public package entrypoint and separate static gallery | assumed — autonomous |
+| medium (cross-item seam) | high | [ui-tokens-and-components D5](decisions/ui-tokens-and-components.md) | Lane4 owns appearance resolution and terminal adapter | locked by lane4 ownership agreement |
 | medium | high | [m6-orchestration-idle-pointer-shutdown D1](decisions/m6-orchestration-idle-pointer-shutdown.md) | Restore exactly the deferred automatic hint flow | locked by docs/loop/decisions/m6-orchestration-core.md |
 | medium | high for lifetime dependency; medium for historical hang cause | [m6-orchestration-idle-pointer-shutdown D3](decisions/m6-orchestration-idle-pointer-shutdown.md) | Fence scheduler lifetime rather than wait indefinitely for external work | assumed — autonomous |
 | medium | high | [m6-orchestration-idle-pointer-shutdown D4](decisions/m6-orchestration-idle-pointer-shutdown.md) | Keep existing identity, waiter and consumption authority | locked by research/orca-features/orchestration.md |
@@ -775,6 +787,7 @@ files, not this one.
 | medium | high | [m3-session-info D9](decisions/m3-session-info.md) | macOS local execution is the supported transport | deferred: platform |
 | medium | high | [m3-session-info D12](decisions/m3-session-info.md) | Accept the specification review's three implementation gaps | assumed — autonomous |
 | medium | high | [m3-session-info D27](decisions/m3-session-info.md) | Close supplemental final A1 with a real bounded-I/O fix | assumed — autonomous |
+| easy (palette/data plumbing remains independent of layout). | high. | [ui-terminal-theme D1](decisions/ui-terminal-theme.md) | Implement only the approved desktop terminal-theme slice | locked by docs/quirk/specs/2026-10-28-ui-redesign/logic.md |
 | easy (process). | high. | [sa-browser-pane-native-host-controls D2](decisions/sa-browser-pane-native-host-controls.md) | Answer design questions autonomously and stop at the unsupported core boundary | locked by docs/loop/LOOP.md |
 | easy (queue item can be re-enabled when prerequisite exists). | high. | [sa-browser-pane-native-host-controls D7](decisions/sa-browser-pane-native-host-controls.md) | Block the whole item without clearing retained acceptance or fabricating a landing | assumed — autonomous |
 | easy (window-only state) | source-backed; actual shortcut rerun and native nightly remain required | [sa-browser-design-mode D24](decisions/sa-browser-design-mode.md) | Preserve armed keyboard and Native overlay semantics | locked by browser.md design interaction and sa-browser-pane Native mask contract |
@@ -904,6 +917,7 @@ files, not this one.
 | easy | medium | [m1-notifications D45](decisions/m1-notifications.md) | Opening a worktree from its card counts as Mark Read | locked by research/orca-features/notifications.md |
 | easy | medium | [m1-notifications D50](decisions/m1-notifications.md) | The W1 gate's 65 `EBADF` failures are the suite's descriptor exhaustion, not a regression | assumed — autonomous |
 | easy | medium | [m1-notifications D55](decisions/m1-notifications.md) | The suite is over the descriptor limit after the catch-up; this item moves the remaining harnesses to shared plugin directories | supersedes m1-term-ui D51 |
+| easy (owning restyles remove obsolete compatibility values) | medium | [ui-tokens-and-components D3](decisions/ui-tokens-and-components.md) | Preserve legacy host geometry with centralized compatibility tokens | assumed — autonomous |
 | easy | medium | [m1-agent-status-scripting D8](decisions/m1-agent-status-scripting.md) | Unsafe patterns reject the file they are in | assumed — autonomous |
 | easy | medium | [m1-agent-status-scripting D9](decisions/m1-agent-status-scripting.md) | Built-in rules ship for the agents whose screens Orca's published rules describe | assumed — autonomous |
 | easy | medium | [m1-agent-status-scripting D12](decisions/m1-agent-status-scripting.md) | Send refuses only a blocked agent; a working agent gets the prompt | assumed — autonomous |
@@ -1785,6 +1799,12 @@ files, not this one.
 | easy | high | [m1-notifications D60](decisions/m1-notifications.md) | The descriptor fix lives in `startHarness`, shared by every symlink-only built-in directory | supersedes m1-term-ui D51 |
 | easy | high | [m1-notifications D61](decisions/m1-notifications.md) | The final gate passes; nothing goes to BLOCKERS.md | locked by docs/loop/LOOP.md |
 | easy | high | [m1-notifications D62](decisions/m1-notifications.md) | The first land failed on the integration tree's missing package links for the new plugin; they were copied in, as m1-term-daemon D49 did | assumed — autonomous |
+| easy (each restyle adds its plugin ids) | high | [ui-tokens-and-components D2](decisions/ui-tokens-and-components.md) | Enforce all UI source and only explicitly opted-in plugins | locked by operator update to ui-tokens-and-components title |
+| easy | high | [ui-tokens-and-components D6](decisions/ui-tokens-and-components.md) | Build-first execution uses three disjoint implementers and one typecheck gate | locked by docs/loop/LOOP.md |
+| easy | high | [ui-tokens-and-components D7](decisions/ui-tokens-and-components.md) | Accept only the audited three-component source at the all-worker barrier | assumed — autonomous |
+| easy | high | [ui-tokens-and-components D8](decisions/ui-tokens-and-components.md) | Fix scanner sibling traversal and theme-scope text inheritance from observed evidence | assumed — autonomous |
+| easy | high | [ui-tokens-and-components D9](decisions/ui-tokens-and-components.md) | Record focused runtime proof without claiming suites or automated visual review | assumed — autonomous |
+| easy | high | [ui-tokens-and-components D10](decisions/ui-tokens-and-components.md) | Compose landed theme exports and admit only the canonical shared stylesheet | assumed — autonomous |
 | easy | high | [m6-orchestration-idle-pointer-shutdown D2](decisions/m6-orchestration-idle-pointer-shutdown.md) | Resolve standard gray areas autonomously using build-first rules | locked by docs/loop/LOOP.md |
 | easy | high | [m6-orchestration-idle-pointer-shutdown D5](decisions/m6-orchestration-idle-pointer-shutdown.md) | One isolated implementation component with already committed public contracts | assumed — autonomous |
 | easy | high | [m6-orchestration-idle-pointer-shutdown D6](decisions/m6-orchestration-idle-pointer-shutdown.md) | Isolate macOS runtime proof and preserve platform limits | deferred: platform |
@@ -1887,6 +1907,10 @@ files, not this one.
 | easy | high | [sb-mobile-daemon D20](decisions/sb-mobile-daemon.md) | Complete one deep cross-family review and preserve its transport failures | assumed — autonomous |
 | easy | high | [sb-mobile-daemon D21](decisions/sb-mobile-daemon.md) | Apply one fix batch for S1 and the independently reproduced answer-map edge | assumed — autonomous |
 | easy | high | [sb-mobile-daemon D23](decisions/sb-mobile-daemon.md) | Audit unsandboxed review writes and terminate all owned UI runtimes | assumed — autonomous |
+| easy (test synchronization only) | high for the reproduced race; the timestamp-only flake log cannot establish that every historical failure had this cause | [fix-flaky-terminal-features-pane D1](decisions/fix-flaky-terminal-features-pane.md) | SC-38 raced the pane's replay input gate, not shell startup | assumed — autonomous, from logged failure and deterministic boundary evidence |
+| easy | high | [fix-flaky-terminal-features-pane D2](decisions/fix-flaky-terminal-features-pane.md) | Synchronize SC-38 on real shell output parsed by its own xterm | assumed — autonomous |
+| easy | high | [fix-flaky-terminal-features-pane D3](decisions/fix-flaky-terminal-features-pane.md) | Keep verification scoped and macOS-only under build-first rules | locked by docs/loop/LOOP.md; assumed — autonomous for focused smoke design |
+| easy | high for this controlled boundary and static gate; not a repeated-suite flake-rate claim | [fix-flaky-terminal-features-pane D4](decisions/fix-flaky-terminal-features-pane.md) | Post-edit smoke and typecheck passed; no suite verdict is claimed | assumed — autonomous, observed verification |
 | easy | high | [m4-hosting-api-github D2](decisions/m4-hosting-api-github.md) | Resolve questions autonomously and keep markdown specs | locked by docs/loop/LOOP.md |
 | easy | high | [m4-hosting-api-github D3](decisions/m4-hosting-api-github.md) | Use OpenAI task implementers and Gemini review after Opus fails preflight | locked by docs/loop/LOOP.md |
 | easy | high | [m4-hosting-api-github D14](decisions/m4-hosting-api-github.md) | Build four disjoint components and integrate before checking | assumed — autonomous |

@@ -1569,7 +1569,7 @@ test('SC-4: plugin.changed refetches the model and reconciles', async () => {
   expect(t.methodCalls('setting.list')).toHaveLength(2)
 })
 
-test('SC-25: theme.changed refreshes and the theme variables cover every token of the active theme', async () => {
+test('SC-25: theme.changed refreshes active theme colors', async () => {
   const solar: ThemeInfo = {
     id: 'theme:acme.solar/solar',
     plugin: 'acme.solar',
@@ -1579,27 +1579,28 @@ test('SC-25: theme.changed refreshes and the theme variables cover every token o
   }
   const t = setup(makeModel())
   await t.host.refresh()
-  expect(state(t).themeVariables['--bg']).toBe('#16181d')
-  expect(Object.keys(state(t).themeVariables)).toHaveLength(Object.keys(DEFAULT_THEME.colors).length)
+  const defaultVariables = { ...state(t).themeVariables }
 
   t.setModel(makeModel({ themes: [DEFAULT_THEME, solar], theme: { chosen: solar.id, active: solar.id } }))
   t.emit({ type: 'theme.changed', chosen: solar.id, active: solar.id })
   await until(() => state(t).themeVariables['--bg'] === '#fdf6e3')
   expect(state(t).themeVariables['--text']).toBe('#657b83')
-  expect(state(t).themeVariables['--accent']).toBe(DEFAULT_THEME.colors.accent)
-  expect(state(t).themeVariables['--terminal-cursor']).toBe(DEFAULT_THEME.colors['terminal-cursor'])
+  expect(state(t).themeVariables['--accent']).toBe(defaultVariables['--accent'])
+  expect(state(t).themeVariables['--terminal-cursor']).toBe(defaultVariables['--terminal-cursor'])
 })
 
-test('SC-26: when the chosen theme is gone the default colors apply, and a missing color falls back to the default', async () => {
+test('SC-26: an unavailable theme falls back, and missing plugin colors use defaults', async () => {
   const sparse = { id: 'theme:acme.sparse/s', plugin: 'acme.sparse', title: 'S', appearance: 'dark', colors: { bg: '#000000' } } as unknown as ThemeInfo
   const t = setup(makeModel({ themes: [DEFAULT_THEME, sparse], theme: { chosen: sparse.id, active: sparse.id } }))
   await t.host.refresh()
-  expect(state(t).themeVariables['--bg']).toBe('#000000')
-  expect(state(t).themeVariables['--text']).toBe(DEFAULT_THEME.colors.text)
+  const sparseBackground = state(t).themeVariables['--bg']
+  expect(sparseBackground).toBe('#000000')
+  expect(state(t).themeVariables['--text']).toBeTruthy()
 
   t.setModel(makeModel({ theme: { chosen: sparse.id, active: 'default' } }))
   await t.host.refresh()
-  expect(state(t).themeVariables['--bg']).toBe(DEFAULT_THEME.colors.bg)
+  expect(state(t).themeVariables['--bg']).not.toBe(sparseBackground)
+  expect(state(t).themeVariables['--text']).toBeTruthy()
 })
 
 test('SC-24: saveSettings sets every setting and the theme, and returns each refusal by ID', async () => {

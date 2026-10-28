@@ -14,8 +14,9 @@
     "test": "bun scripts/suite.ts packages apps plugins",
     "test:bash": "bun scripts/test-bash-versions.ts",
     "build:mobile-pages": "bun apps/mobile/scripts/build-pages.ts",
+    "ui:lint": "bun scripts/ui-lint.ts",
     "typecheck:mobile": "bunx tsc --noEmit -p apps/mobile/tsconfig.json",
-    "typecheck": "bun install --frozen-lockfile && bunx tsc --noEmit -p tsconfig.json && bun run typecheck:mobile && bun run typecheck:desktop",
+    "typecheck": "bun install --frozen-lockfile && bun run ui:lint && bunx tsc --noEmit -p tsconfig.json && bun run typecheck:mobile && bun run typecheck:desktop",
     "typecheck:desktop": "bun run --filter './apps/desktop' typecheck",
     "ui:review": "bun scripts/ui-review.ts"
   },

@@ -8,7 +8,6 @@ import { createProcessScope, type ProcessScope } from '../test-support/process-s
 import {
   createCaptureTerminalFixture,
   createIsolatedRuntimeEnvironment,
-  FIXTURE_THEME_PLUGIN_ID,
   openFixtureEditorBuffer,
   prepareCaptureFixtureHome,
   registerCaptureFixtures,
@@ -325,10 +324,9 @@ async function rpc(
 }
 
 function chooseTheme(themes: RendererTheme[], appearance: CaptureTheme): RendererTheme {
-  const candidates = themes.filter((theme) => theme.appearance === appearance && theme.plugin !== FIXTURE_THEME_PLUGIN_ID)
-  const selected = candidates.find((theme) => theme.id !== 'default') ??
-    candidates[0] ??
-    themes.find((theme) => theme.appearance === appearance)
+  const candidates = themes.filter((theme) => theme.appearance === appearance)
+  const selected = candidates.find((theme) => theme.id === appearance) ??
+    candidates.find((theme) => theme.id !== 'default') ?? candidates[0]
   if (!selected) throw new Error(`no ${appearance} appearance theme is available`)
   return selected
 }

@@ -154,5 +154,16 @@
 - Actual SIGINT after daemon/Git fixtures were ready initially exposed premature library exit; after the signal fix, throwaway interrupt driver exited0 and observed command130, error result and persisted progress (5.39s).
 - No permanent tests/suites, formal branch-review rounds, full-inventory dogfood campaign or native run executed under build-first. Tests authored in5new test files; final post-merge typecheck remains next.
 
+## D14: Compose the landed UI gate and use genuine built-in appearance pins
+- **Question:** Which contracts changed in the sole roadmap catch-up?
+- **Options:** retain the temporary light-theme fixture; duplicate lint/theme authorities; use the newly landed canonical implementations
+- **Chose:** Preserve incoming `ui:lint` in root typecheck and our `ui:review` command when resolving the sole package.json conflict. Read all three incoming logs: fix-flaky-terminal-features-pane, ui-terminal-theme and ui-tokens-and-components. Prefer built-in `dark`/`light` pins; remove the now-obsolete theme-only fixture plugin, its copied colors and literal/forwarding tests. Public themes, data-theme and shared UI package exports remain the owners' authority.
+- **Why:** Incoming ui-terminal-theme supplies both appearances permanently, so a compatibility fixture is dead weight. UI lint now exists and must gate this land; no second scanner or app styling is introduced. Terminal replay readiness decisions do not conflict with capture's condition-based DOM readiness.
+- **Evidence:** incoming decision logs read fully; packages/protocol/src/ui.ts DARK_THEME/LIGHT_THEME; root package conflict resolution; scripts/ui-review/fixtures.ts and capture.ts chooseTheme
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the kernel's published built-in theme choices change.
+- **Source:** supersedes ui-screenshot-review D9
+
 ## Progress
 Three disjoint implementers integrated after final HEAD/scope barrier: capture f4141b15, reviewer6f487299, CLI40c8bf87. Their worktrees were removed immediately after merge. Parent fixes and documentation ready to commit; one build/roadmap catch-up merge, incoming-decision read, final typecheck and canonical land remain. All smoke/model jobs and agents have returned.

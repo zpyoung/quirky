@@ -169,11 +169,11 @@ describe('SC-54: installing a distro applies its layer', () => {
     expect(layer.events).toContainEqual({ type: 'setting.changed', id: SCROLLBACK, value: 6000 })
   })
 
-  test('SC-54: a user-chosen theme beats the distro theme', async () => {
+  test('SC-54: a user-chosen app appearance pin beats the distro theme', async () => {
     const layer = makeLayer()
     await layer.distros.install(writeDistro(makeTempDir('qd-n-')))
-    layer.ui.setTheme('default')
-    expect(layer.ui.listThemes()).toMatchObject({ chosen: 'default', active: 'default' })
+    layer.ui.setTheme('light')
+    expect(layer.ui.listThemes()).toMatchObject({ chosen: 'light', active: 'light' })
   })
 
   test('reinstalling the installed distro replaces its plugins and drops the ones it no longer bundles', async () => {

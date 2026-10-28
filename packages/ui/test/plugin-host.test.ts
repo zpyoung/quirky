@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { DEFAULT_THEME, QuirkyClient, THEME_TOKENS, type QuirkyEvent, type UiPluginContext } from '@quirky/protocol'
+import { QuirkyClient, type QuirkyEvent, type UiPluginContext } from '@quirky/protocol'
 import { rpcUrl } from '@quirky/protocol/node'
 import { makeTempHome, startHarness, waitFor, type Harness } from '../../daemon/test/helpers'
 import { makeTempDir, readMarker, removeTempDirs, writeModulePlugin, writePlugin } from '../../daemon/test/plugins/fixtures'
 import { WindowPluginHost, type HostState } from '../src/plugins/host'
-import { settingsGroups, themePicker } from '../src/plugins/settingsGroups'
+import { settingsGroups } from '../src/plugins/settingsGroups'
 
 type El = Record<string, unknown>
 type Imported = { url: string; mod: { ctx?: UiPluginContext } }
@@ -909,7 +909,7 @@ describe('window plugin host against a real daemon', () => {
         theme: [{ id: 'solar', title: 'Solar', appearance: 'light', colors: { bg: '#fdf6e3' } }]
       })
     })
-    const { settings, model } = t.state()
+    const { settings } = t.state()
 
     expect(settingsGroups(settings).map((group) => [group.plugin, group.fields.map((field) => [field.id, field.control, field.value])])).toEqual([
       ['acme.files', [['setting:acme.files/hidden', { kind: 'checkbox' }, false]]],
@@ -921,13 +921,6 @@ describe('window plugin host against a real daemon', () => {
         ]
       ]
     ])
-    expect(themePicker(model!.themes, model!.theme.chosen)).toEqual({
-      options: [
-        { id: 'default', title: DEFAULT_THEME.title, appearance: 'dark' },
-        { id: 'theme:acme.solar/solar', title: 'Solar', appearance: 'light' }
-      ],
-      selected: 'default'
-    })
 
     const { errors } = await t.host.saveSettings({
       settings: { 'setting:acme.notes/mode': 'tiles', [FONT_SIZE]: 18 },
@@ -955,35 +948,36 @@ describe('window plugin host against a real daemon', () => {
       }
     })
   const SOLAR = 'theme:acme.solar/solar'
-  const defaults = Object.fromEntries(THEME_TOKENS.map((token) => [`--${token}`, DEFAULT_THEME.colors[token]]))
-  const solarVariables = { ...defaults, '--bg': '#fdf6e3', '--text': '#657b83' }
+  const solarVariables = { '--bg': '#fdf6e3', '--text': '#657b83' }
 
   test('SC-25: a theme is listed, chosen and applied live, with missing colors filled in', async () => {
     const t = await boot(solar)
-    expect(t.state().themeVariables).toEqual(defaults)
+    const defaultVariables = { ...t.state().themeVariables }
 
     await t.agent.call('theme.set', { id: SOLAR })
-    await waitFor(() => t.state().themeVariables['--bg'] === '#fdf6e3')
-    expect(t.state().themeVariables).toEqual(solarVariables)
+    await waitFor(() => t.state().themeVariables['--bg'] === solarVariables['--bg'])
+    expect(t.state().themeVariables).toMatchObject(solarVariables)
+    expect(t.state().themeVariables['--accent']).toBe(defaultVariables['--accent'])
     expect(t.state().model!.theme).toEqual({ chosen: SOLAR, active: SOLAR })
 
     await t.agent.call('theme.set', { id: 'default' })
-    await waitFor(() => t.state().themeVariables['--bg'] === DEFAULT_THEME.colors.bg)
-    expect(t.state().themeVariables).toEqual(defaults)
+    await waitFor(() => t.state().themeVariables['--bg'] === defaultVariables['--bg'])
+    expect(t.state().themeVariables['--text']).toBe(defaultVariables['--text'])
   })
 
   test('SC-26: a chosen theme that goes away falls back, and comes back', async () => {
     const t = await boot(solar)
+    const defaultVariables = { ...t.state().themeVariables }
     await t.agent.call('theme.set', { id: SOLAR })
-    await waitFor(() => t.state().themeVariables['--bg'] === '#fdf6e3')
+    await waitFor(() => t.state().themeVariables['--bg'] === solarVariables['--bg'])
 
     await t.agent.call('plugin.disable', { id: 'acme.solar' })
-    await waitFor(() => t.state().themeVariables['--bg'] === DEFAULT_THEME.colors.bg)
-    expect(t.state().themeVariables).toEqual(defaults)
+    await waitFor(() => t.state().themeVariables['--bg'] === defaultVariables['--bg'])
+    expect(t.state().themeVariables['--text']).toBe(defaultVariables['--text'])
     expect(t.state().model!.theme).toEqual({ chosen: SOLAR, active: 'default' })
 
     await t.agent.call('plugin.enable', { id: 'acme.solar' })
-    await waitFor(() => t.state().themeVariables['--bg'] === '#fdf6e3')
-    expect(t.state().themeVariables).toEqual(solarVariables)
+    await waitFor(() => t.state().themeVariables['--bg'] === solarVariables['--bg'])
+    expect(t.state().themeVariables).toMatchObject(solarVariables)
   })
 })

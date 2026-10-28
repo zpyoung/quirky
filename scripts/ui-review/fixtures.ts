@@ -1,27 +1,6 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 
-export const FIXTURE_THEME_PLUGIN_ID = 'ui-review.fixture'
-
-const FIXTURE_LIGHT_COLORS = {
-  bg: '#ffffff',
-  'bg-raised': '#f4f5f7',
-  'bg-hover': '#e7e9ef',
-  'bg-active': '#e7e9ef',
-  border: '#e3e5ea',
-  text: '#1b1d22',
-  muted: '#80868f',
-  accent: '#5b6cff',
-  amber: '#c98a0b',
-  green: '#1f9d63',
-  grey: '#80868f',
-  dim: '#80868f',
-  danger: '#d6455d',
-  'terminal-background': '#ffffff',
-  'terminal-foreground': '#1b1d22',
-  'terminal-cursor': '#1b1d22'
-} as const
-
 const FIXTURE_FILES = {
   source: 'src/app.ts',
   markdown: 'docs/review-notes.md',
@@ -130,7 +109,6 @@ export type PreparedCaptureFixtureHome = {
   home: string
   repoPath: string
   worktreesRoot: string
-  themePluginDir: string
   files: Record<keyof typeof FIXTURE_FILES, string>
   cleanup(): void
 }
@@ -217,24 +195,7 @@ function writeFile(root: string, relativePath: string, content: string): void {
   writeFileSync(path, content, { mode: 0o600 })
 }
 
-function fixtureThemeManifest(): string {
-  return JSON.stringify({
-    id: FIXTURE_THEME_PLUGIN_ID,
-    name: 'UI Screenshot Review Fixture',
-    version: '0.0.0',
-    description: 'An isolated light appearance used only when no built-in light theme is available.',
-    contributes: {
-      theme: [{
-        id: 'light',
-        title: 'Quirky Light',
-        appearance: 'light',
-        colors: FIXTURE_LIGHT_COLORS
-      }]
-    }
-  }, null, 2) + '\n'
-}
-
-/** Creates a real local Git repository and a data-only public theme contribution under the disposable app home. */
+/** Creates a real local Git repository under the disposable app home. */
 export async function prepareCaptureFixtureHome(
   home: string,
   options: { timeoutMs: number; signal?: AbortSignal; env?: Record<string, string> }
@@ -243,8 +204,7 @@ export async function prepareCaptureFixtureHome(
   const env = options.env ?? createIsolatedRuntimeEnvironment(root)
   const repoPath = join(root, 'projects', 'ui-review-fixture')
   const worktreesRoot = join(root, 'worktrees')
-  const themePluginDir = join(root, 'plugins', FIXTURE_THEME_PLUGIN_ID)
-  const createdPaths = [repoPath, worktreesRoot, themePluginDir]
+  const createdPaths = [repoPath, worktreesRoot]
   let cleaned = false
   const cleanup = () => {
     if (cleaned) return
@@ -265,8 +225,6 @@ export async function prepareCaptureFixtureHome(
     }
     mkdirSync(join(root, 'projects'), { recursive: true, mode: 0o700 })
     mkdirSync(worktreesRoot, { recursive: true, mode: 0o700 })
-    mkdirSync(themePluginDir, { recursive: true, mode: 0o700 })
-    writeFile(themePluginDir, 'quirky-plugin.json', fixtureThemeManifest())
     writeFile(repoPath, 'README.md', '# UI screenshot fixture\n\nA disposable local project for renderer capture.\n')
     writeFile(repoPath, FIXTURE_FILES.source, INITIAL_SOURCE)
     writeFile(repoPath, FIXTURE_FILES.markdown, SAMPLE_MARKDOWN)
@@ -283,7 +241,7 @@ export async function prepareCaptureFixtureHome(
 
     writeFile(repoPath, FIXTURE_FILES.source, CHANGED_SOURCE)
     writeFile(repoPath, 'src/review-note.ts', 'export const reviewNote = "untracked fixture asset"\n')
-    return { home: root, repoPath, worktreesRoot, themePluginDir, files, cleanup }
+    return { home: root, repoPath, worktreesRoot, files, cleanup }
   } catch (error) {
     cleanup()
     throw errorInHome(error, root)
