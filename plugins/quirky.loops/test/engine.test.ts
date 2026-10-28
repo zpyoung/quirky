@@ -90,6 +90,7 @@ class Runtime {
       },
       async call(method, params = {}) { return await runtime.call(method, params) },
       async createFileResource() { throw new Error('not used') },
+      clients: { accept() { throw new Error('Loop engine tests must not admit remote clients') } },
       openStore(migrations) {
         for (const migration of migrations) {
           if (typeof migration === 'string') runtime.database.exec(migration)

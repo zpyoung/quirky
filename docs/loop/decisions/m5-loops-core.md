@@ -233,5 +233,27 @@
 - **Revisit if:** a condition itself times out or a cleanup barrier is never reached
 - **Source:** assumed — autonomous
 
+## D22: Preserve all four caught-up feature contracts
+- **Question:** the one roadmap catch-up brought Reviews, Tasks, Automations core and Mobile daemon changes into shared runtime/protocol files
+- **Options:** reinterpret their ownership rules for loops; preserve additive contracts and verify the merge
+- **Chose:** preserve m4-hosting-ui-reviews D5/D22/D25, m4-hosting-ui-tasks D24, m5-automations-core D1/D5/D10/D11 and sb-mobile-daemon D5/D6/D12/D17. Automations pending dispatch remains separate from loop iterations. Mobile clients.accept authorization/revocation stays additive; no Orca RPC aliases or weakening of revoked plugin capabilities. Settings/hosting navigation is unchanged.
+- **Why:** the complete four logs were read by LoopCatchupDecisions; it found no conflict with structured loops, public stores/calls, guarded sends, notification policy or shutdown ownership. The automatic merge retained both read-only store access and the new client-admission API.
+- **Evidence:** LoopCatchupDecisions completed report and read list; git merge build/roadmap result; native real CLI smoke on the caught-up source bg27 NATIVE_LOOP_CLI_SMOKE_PASS
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the required merged-tree gate exposes a shared API incompatibility
+- **Source:** locked by docs/loop/decisions/sb-mobile-daemon.md
+
+## D23: Repair remote fixture discovery and explicitly adopt hosted structured views
+- **Question:** the required affected run had206of210remote files pass, two macOS-only files pass, and four initial failed files
+- **Options:** treat the failed gate as green; weaken evaluator availability/background focus; repair the actual fixture/caller mismatches
+- **Chose:** preserve evaluator availability checks. The isolated provider rig now sets its own agent search directory and temporary Bash login PATH, so remote shells cannot drop the fixture executable. SC-69 now explicitly invokes the existing public adoptSession API before testing its hosted viewer, and asserts background registration did not auto-adopt a pane. The caught-up Mobile clients.accept member is explicit in the engine test context.
+- **Why:** CLI/safety failures were No evaluator CLI installed on the remote login PATH; the viewer test depended on the removed focus-stealing auto-adoption behavior. The scheduler failure passed the suite's automatic isolated retry (6/0), so its code is unchanged. No production contract or condition deadline was relaxed.
+- **Evidence:** first affected gate487.806seconds, stdout/stderr under /tmp/quirky-m5-loops-run.0VUATs/final-gates; repaired CLI+safety+viewer gate20pass/0fail/135assertions; engine context gate17pass/0fail/76assertions; bun test scripts68pass/0fail/564assertions; final bun run typecheck exit0 with594installs/608packages checked and no lock changes.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** authoritative land's full merged-tree suite exposes another consumer
+- **Source:** assumed — autonomous
+
 ## Progress
-Audited source checkpoint e0582785 published to early presets lane. All implementation/fix workers are now frozen; original worktrees removed, tool-only metadata preserved in named stashes. Source repairs and public safety acceptance tests are ready to commit. Targeted gate138pass/3fail was followed by the repaired engine/notification gate24pass/0fail; native real CLI smoke passes and TypeScript is clean. Next: commit repair tip and notify lane5, catch up once with build/roadmap, read incoming decisions, run required affected suite/scripts/typecheck, then authoritative queue land. No final model review was started; D18 records the night-mode skip. Native-only checks remain pending, not falsely passed.
+Ready for authoritative land under D18. Source tips95383d97/e0582785/f181908e and the one roadmap catch-up are integrated. All workers are complete; original worktrees removed; no running owned app/daemon from smoke remains. Required affected run was not falsely called green: it found three persistent fixture/caller failures, all repaired and exercised in the20/0consumer gate; scheduler passed its automatic isolated retry. Scripts68/0 and final typecheck pass; native CLI/daemon scripted Codex-protocol smoke passes on the caught-up runtime. Commit these final fixture/docs changes, detach, and run authoritative queue.ts land m5-loops-core without an outer deadline. Its full merged-tree gate is still required before the item is done. No final model-review PASS; native-only scenarios remain pending.
