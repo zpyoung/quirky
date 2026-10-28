@@ -1740,6 +1740,16 @@
       "status": "todo"
     },
     {
+      "id": "fix-flaky-terminal-features-pane",
+      "milestone": "M1",
+      "title": "Fix the flaky plugins/quirky.terminal/test/e2e-ui/features-pane.test.ts, a macOS-only test (scripts/test-on-macos.txt) that failed in 4 runs and passed when rerun alone (see <git common dir>/build-loop/flakes.log). Find the timing assumption with quirk:systematic-debugging from the logged failures, without generating CPU load on the Mac, and fix the test or the code it exposes",
+      "docs": [
+        "term-ui.md"
+      ],
+      "deps": [],
+      "status": "done"
+    },
+    {
       "id": "m7-test-triage",
       "milestone": "M7",
       "title": "End-phase test triage: run bun scripts/suite.ts packages apps plugins, bun test scripts and bun run typecheck on build/roadmap, and add one fix-test-<area>-<MMDD> item per failing package, app or plugin (naming its failing files and tests) so the lanes split the debugging; change no code",
@@ -1846,16 +1856,6 @@
       "deps": [],
       "status": "in-progress",
       "lane": 1
-    },
-    {
-      "id": "fix-flaky-terminal-features-pane",
-      "milestone": "M1",
-      "title": "Fix the flaky plugins/quirky.terminal/test/e2e-ui/features-pane.test.ts, a macOS-only test (scripts/test-on-macos.txt) that failed in 4 runs and passed when rerun alone (see <git common dir>/build-loop/flakes.log). Find the timing assumption with quirk:systematic-debugging from the logged failures, without generating CPU load on the Mac, and fix the test or the code it exposes",
-      "docs": [
-        "term-ui.md"
-      ],
-      "deps": [],
-      "status": "done"
     },
     {
       "id": "fix-flaky-pty-host-clear",
