@@ -5,7 +5,6 @@ import { DIALOG_OVERLAY_ID, messageOf, PLUGIN_ID, RESEND_CONFIRM_TITLE, SETTINGS
 import { Dialog } from './window/Dialog'
 import { HandoffDialog, reportOf, type CommandResult } from './window/model'
 import { SettingsView } from './window/SettingsView'
-import { injectHandoffStyles } from './window/styles'
 import { templatesReport, TemplatesStore } from './window/templates'
 
 const METHOD = (name: string) => `${PLUGIN_ID}/${name}`
@@ -34,7 +33,6 @@ export function activate(context: UiPluginContext): void {
   })
 
   const mountDialog: MountFunction = (element, props) => {
-    injectHandoffStyles(element.ownerDocument)
     const root = createRoot(element)
     let last = ''
     const send = () => {
@@ -54,7 +52,6 @@ export function activate(context: UiPluginContext): void {
   }
 
   const mountSettings: MountFunction = (element, props) => {
-    injectHandoffStyles(element.ownerDocument)
     Object.assign(element.style, { display: 'flex', flexDirection: 'column', flex: '1', minHeight: '0', overflow: 'auto' })
     const root = createRoot(element)
     const send = () => props.report?.(templatesReport(templates.getSnapshot()))

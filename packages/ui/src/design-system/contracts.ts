@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, HTMLAttributes, InputHTMLAttributes, ReactNode, Ref } from 'react'
+import type { ButtonHTMLAttributes, HTMLAttributes, InputHTMLAttributes, ReactNode, Ref, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react'
 
 /** Shared graphite presentation contracts; feature state and side effects stay with the caller. */
 export type UiTheme = 'dark' | 'light'
@@ -8,6 +8,8 @@ export type UiAction = { label: string; onAction: () => void; disabled?: boolean
 export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'destructive' }
 export type IconButtonProps = Omit<ButtonProps, 'children'> & { label: string; children: ReactNode }
 export type TextFieldProps = InputHTMLAttributes<HTMLInputElement> & { label: string; help?: string; error?: string; ref?: Ref<HTMLInputElement> }
+export type TextAreaProps = TextareaHTMLAttributes<HTMLTextAreaElement> & { label: string; help?: string; error?: string }
+export type SelectFieldProps = SelectHTMLAttributes<HTMLSelectElement> & { label: string; help?: string; error?: string }
 export type StatusDotProps = { status: UiStatus; label?: string }
 export type BadgeProps = { children: ReactNode; tone?: UiTone; label?: string }
 export type ListRowProps = {

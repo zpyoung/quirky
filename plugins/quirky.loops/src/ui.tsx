@@ -1,3 +1,4 @@
+import { Button, Dialog } from '@quirky/ui'
 import { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { UiPluginContext } from '@quirky/protocol'
@@ -304,17 +305,19 @@ function CloseLoopDialog({ context, dialog }: { context: UiPluginContext; dialog
     })
   }
   return (
-    <div role="presentation" style={{ position: 'fixed', inset: 0, zIndex: 10000, pointerEvents: 'auto', display: 'grid', placeItems: 'center', background: 'rgba(0,0,0,.45)' }}>
-      <section role="dialog" aria-modal="true" aria-labelledby="loop-close-title" style={{ minWidth: 320, maxWidth: 480, padding: 24, borderRadius: 12, background: 'var(--surface, #222)', color: 'var(--text, #fff)', boxShadow: '0 16px 48px rgba(0,0,0,.4)' }}>
-        <h2 id="loop-close-title">Close a running loop?</h2>
-        <p>{dialog.name}</p>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-          <button type="button" onClick={() => choose('cancel')}>Cancel</button>
-          <button type="button" onClick={() => choose('keep-running')}>Keep running</button>
-          <button type="button" onClick={() => choose('stop')}>Stop loop</button>
-        </div>
-      </section>
-    </div>
+    <Dialog
+      open
+      title="Close a running loop?"
+      onClose={() => choose('cancel')}
+      closeOnBackdrop={false}
+      actions={<>
+        <Button onClick={() => choose('cancel')}>Cancel</Button>
+        <Button onClick={() => choose('keep-running')}>Keep running</Button>
+        <Button variant="destructive" onClick={() => choose('stop')}>Stop loop</Button>
+      </>}
+    >
+      <p>{dialog.name}</p>
+    </Dialog>
   )
 }
 
