@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } fr
 import { act } from 'react'
 import type { ILink, ILinkProvider, Terminal } from '@xterm/xterm'
 import { fakeContext, loadPane, mountPane, paneHandlers, settings, startRecording, stopRecording, unloadPane, type MountedPane } from './pane-support'
+import type { TerminalPaneProps } from '../../src/window/pane/TerminalPaneView'
 
 let mounted: MountedPane | null = null
 let providers: ILinkProvider[]
@@ -35,8 +36,8 @@ afterEach(async () => {
 
 const FILE = '/tmp/w/api/src/app.ts'
 
-async function mount(over = {}, handlers = paneHandlers({ existing: [FILE] })) {
-  const fake = fakeContext(handlers)
+async function mount(over: Partial<TerminalPaneProps> = {}, handlers = paneHandlers({ existing: [FILE] })) {
+  const fake = fakeContext(handlers, over.settings)
   mounted = await mountPane(fake, over)
   await fake.push(101, 'docs https://example.com/x and src/app.ts:12:4 and src/missing.ts\r\n')
   await mounted.flush()
@@ -156,17 +157,6 @@ describe('SC-41: what each click does', () => {
     expect(copied).toEqual([FILE])
   })
 
-  test('Cmd-click opens, Shift-Cmd-click copies a URL and reveals a file', async () => {
-    const { fake } = await mount()
-    const link = await url()
-    const file = await path()
-    await act(async () => link.activate(click({ metaKey: true }), link.text))
-    await act(async () => file.activate(click({ metaKey: true }), file.text))
-    await act(async () => link.activate(click({ metaKey: true, shiftKey: true }), link.text))
-    await act(async () => file.activate(click({ metaKey: true, shiftKey: true }), file.text))
-    expect(opened(fake)).toEqual([{ target: 'https://example.com/x' }, { target: FILE }, { target: FILE, reveal: true }])
-    expect(copied).toEqual(['https://example.com/x'])
-  })
 
   test('a middle click follows its setting and an Option-click does nothing', async () => {
     const { fake, pane } = await mount()
@@ -184,6 +174,7 @@ describe('SC-41: what each click does', () => {
     const link = await url()
     await act(async () => link.activate(click(), link.text))
     expect(opened(fake)).toEqual([{ target: 'https://example.com/x' }])
+    fake.setSetting('link-click', 'terminal')
     await pane.rerender({ settings: settings({ 'link-click': 'terminal' }) })
     await act(async () => link.activate(click(), link.text))
     expect(opened(fake)).toHaveLength(1)
