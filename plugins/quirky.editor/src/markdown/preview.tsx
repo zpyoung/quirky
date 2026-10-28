@@ -19,7 +19,7 @@ type PreviewOptions = { imageUrls?: ReadonlyMap<string, string> }
 
 function SafePreview({ markdown, imageUrls }: { markdown: string } & PreviewOptions): React.JSX.Element {
   return (
-    <article className="markdown-body">
+    <article className="markdown-body markdown-body--editor">
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={MARKDOWN_PREVIEW_REHYPE_PLUGINS}

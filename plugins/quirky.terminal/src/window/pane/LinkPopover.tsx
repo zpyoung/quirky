@@ -1,24 +1,10 @@
-import { useEffect, useRef, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react'
+import { useEffect, useRef, type MouseEvent as ReactMouseEvent } from 'react'
+import { Button } from '@quirky/ui'
 
 export type PopoverItem = { label: string; run(event: ReactMouseEvent<HTMLButtonElement>): void }
 
 type Props = { x: number; y: number; items: PopoverItem[]; onClose(): void }
 
-const style: Record<string, CSSProperties> = {
-  menu: {
-    position: 'fixed',
-    zIndex: 1000,
-    minWidth: 180,
-    padding: 4,
-    borderRadius: 8,
-    border: '1px solid var(--border, #3a3d45)',
-    background: 'var(--popover, #1e2026)',
-    color: 'var(--popover-foreground, #d7dae0)',
-    boxShadow: '0 6px 20px rgba(0, 0, 0, 0.4)',
-    fontSize: 12
-  },
-  item: { display: 'block', width: '100%', padding: '5px 10px', border: 'none', borderRadius: 4, background: 'transparent', color: 'inherit', textAlign: 'left', cursor: 'pointer' }
-}
 
 /** The small action menu a plain click on a link opens at the pointer. */
 export function LinkPopover({ x, y, items, onClose }: Props) {
@@ -40,20 +26,19 @@ export function LinkPopover({ x, y, items, onClose }: Props) {
   }, [onClose])
 
   return (
-    <div ref={menu} role="menu" data-pane-link-popover style={{ ...style.menu, left: x, top: y }}>
+    <div ref={menu} role="menu" data-pane-link-popover className="tt-pane-link-popover" style={{ left: x, top: y }}>
       {items.map((item) => (
-        <button
+        <Button
           key={item.label}
-          type="button"
           role="menuitem"
-          style={style.item}
+          className="tt-pane-link-popover__item"
           onClick={(event) => {
             onClose()
             item.run(event)
           }}
         >
           {item.label}
-        </button>
+        </Button>
       ))}
     </div>
   )

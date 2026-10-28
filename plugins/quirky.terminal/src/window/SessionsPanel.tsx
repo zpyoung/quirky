@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { EmptyState, IconButton, ListRow, ToolPanelFrame } from '@quirky/ui'
 import type { UiPluginContext } from '@quirky/protocol'
 
 // inlined: plugins can't import each other
@@ -18,16 +19,25 @@ export type SessionsReport = {
 
 type Props = { context: UiPluginContext; report: (state: SessionsReport) => void }
 
-const style: Record<string, CSSProperties> = {
-  header: { alignItems: 'center' },
-  actions: { display: 'flex', gap: 2 },
-  list: { listStyle: 'none', margin: 0, padding: 0, overflowY: 'auto' },
-  row: { display: 'flex', alignItems: 'center', gap: 8, padding: '4px 10px', cursor: 'pointer' },
-  workspace: { flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
-}
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+function statusFor(state: string): 'working' | 'needs-you' | 'done' | 'idle' {
+  switch (state) {
+    case 'starting':
+    case 'running':
+    case 'working':
+      return 'working'
+    case 'waiting':
+      return 'needs-you'
+    case 'done':
+      return 'done'
+    case 'exited':
+    default:
+      return 'idle'
+  }
 }
 
 /**
@@ -115,62 +125,67 @@ export function SessionsPanel({ context, report }: Props) {
   }
 
   return (
-    <div className="scm">
-      <header className="scm-header" style={style.header}>
-        <strong>Sessions ({rows.length})</strong>
-        <span style={style.actions}>
-          <button className="icon-button" aria-label="Refresh" title="Refresh" onClick={() => void refresh()}>
-            ↻
-          </button>
-          <button
-            className="icon-button"
-            aria-label="Kill all sessions"
-            title="Kill all sessions"
-            disabled={rows.length === 0}
-            onClick={() => void killAll()}
-          >
-            ✕
-          </button>
-          <button className="icon-button" aria-label="Restart terminal host" title="Restart terminal host" onClick={() => void restart()}>
-            ⟳
-          </button>
-        </span>
-      </header>
-      {rows.length === 0 ? (
-        <p className="muted pad">No sessions.</p>
-      ) : (
-        <ul style={style.list}>
-          {rows.map((row) => (
-            <li
-              key={row.sessionId}
-              data-session={row.sessionId}
-              style={style.row}
-              tabIndex={0}
-              onClick={() => open(row)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' && event.target === event.currentTarget) open(row)
-              }}
+    <div className="tt-tool-panel-fill tt-sessions-panel">
+      <ToolPanelFrame
+        title={`Sessions (${rows.length})`}
+        actions={
+          <span className="tt-panel-actions">
+            <IconButton label="Refresh" title="Refresh" onClick={() => void refresh()}>↻</IconButton>
+            <IconButton
+              label="Kill all sessions"
+              title="Kill all sessions"
+              variant="destructive"
+              disabled={rows.length === 0}
+              onClick={() => void killAll()}
             >
-              <span className="dot dot-done" aria-hidden />
-              <span className="sessions-workspace" style={style.workspace}>
-                {row.workspace}
-              </span>
-              <span className="sessions-id muted">{row.sessionId}</span>
-              <button
-                className="icon-button"
-                aria-label={`Kill session ${row.sessionId}`}
-                title="Kill session"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  void kill(row)
+              ✕
+            </IconButton>
+            <IconButton label="Restart terminal host" title="Restart terminal host" onClick={() => void restart()}>⟳</IconButton>
+          </span>
+        }
+      >
+        {rows.length === 0 ? (
+          <EmptyState message="No sessions." action={{ label: 'Refresh', onAction: () => void refresh() }} />
+        ) : (
+          <ul className="tt-sessions-list">
+            {rows.map((row) => (
+              <li
+                key={row.sessionId}
+                data-session={row.sessionId}
+                tabIndex={0}
+                onClick={() => open(row)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && event.target === event.currentTarget) open(row)
                 }}
               >
-                ×
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+                <ListRow
+                  title={<span className="sessions-workspace">{row.workspace}</span>}
+                  description={
+                    <span className="tt-session-meta">
+                      <span className="sessions-id">{row.sessionId}</span>
+                      <span className="tt-session-state">{row.state}</span>
+                    </span>
+                  }
+                  status={statusFor(row.state)}
+                  trailing={
+                    <IconButton
+                      label={`Kill session ${row.sessionId}`}
+                      title="Kill session"
+                      variant="destructive"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        void kill(row)
+                      }}
+                    >
+                      ×
+                    </IconButton>
+                  }
+                />
+              </li>
+            ))}
+          </ul>
+        )}
+      </ToolPanelFrame>
     </div>
   )
 }

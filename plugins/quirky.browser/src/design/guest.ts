@@ -1,4 +1,5 @@
 import type { DesignGuestAction } from '../design-contract'
+import { selectionOverlayProgram } from '@quirky/ui/selection-overlay'
 
 const OWNER_ATTRIBUTE = 'data-quirky-browser-design-owner'
 const OWNER_VALUE = 'design-picker-v1'
@@ -336,22 +337,8 @@ const ARM_PROGRAM = `(function(opId, mode) {
       nearbyText: nearby.text, ancestorPath: ancestors, screenshot: null
     }
   }
-  const host = document.createElement('div')
+  const { host, shadow, surface, highlight, label } = ${selectionOverlayProgram}
   host.setAttribute(ownerAttribute, ownerValue)
-  host.style.cssText = 'position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;z-index:2147483647!important;background:transparent!important;pointer-events:auto!important;'
-  const shadow = host.attachShadow({ mode: 'closed' })
-  const style = document.createElement('style')
-  style.textContent = ':host{all:initial;contain:strict}*{box-sizing:border-box}.surface{position:fixed;inset:0;outline:none;cursor:crosshair;background:transparent;pointer-events:auto}.highlight{position:fixed;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.65);pointer-events:none}.label{position:fixed;max-width:min(560px,90vw);padding:5px 9px;border-radius:5px;background:#202124;color:#fff;font:12px/1.35 -apple-system,BlinkMacSystemFont,sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}'
-  const surface = document.createElement('div')
-  surface.className = 'surface'
-  surface.tabIndex = 0
-  const highlight = document.createElement('div')
-  highlight.className = 'highlight'
-  highlight.hidden = true
-  const label = document.createElement('div')
-  label.className = 'label'
-  label.hidden = true
-  shadow.append(style, surface, highlight, label)
   const priorFocus = document.activeElement
   const priorEditable = !!priorFocus && (['INPUT', 'TEXTAREA'].includes(priorFocus.tagName) || priorFocus.isContentEditable === true)
   const state = { owner: ownerValue, opId, mode, host, surface, highlight, label, hover: null, selection: null, expiresAt: Date.now() + 120000, priorEditable, captureHidden: false, captureVisibility: '' }

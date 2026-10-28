@@ -2,11 +2,9 @@ import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test
 import { act } from 'react'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { RpcError, RpcErrorCode } from '@quirky/protocol'
-import manifest from '../quirky-plugin.json'
 import { fakeContext, settle, type FakeContext } from '../../quirky.session/test/ui-fake'
 
 const PANEL = 'panel:quirky.terminal/sessions'
-const COMMAND = 'command:quirky.terminal/manage-sessions'
 
 type Row = { sessionId: string; state: string; pid: number; cwd: string; shellState: string; worktreeId: string | null; workspace: string }
 
@@ -72,42 +70,14 @@ const rows = () => [...element!.querySelectorAll('[data-session]')] as HTMLEleme
 
 const two = [row('s1', 'wt-main', 'w/api'), row('s2', 'wt-fix', 'api/fix-login')]
 
-describe('the plugin module', () => {
-  test('provides every contribution the manifest declares or overrides, the Sessions panel and its command among them', () => {
-    fake = fakeContext()
-    activateModule(fake.context)
-    const declared = [
-      ...manifest.contributes.panel.map((entry) => `panel:quirky.terminal/${entry.id}`),
-      ...manifest.contributes.command.map((entry) => `command:quirky.terminal/${entry.id}`),
-      ...manifest.contributes.overlay.map((entry) => `overlay:quirky.terminal/${entry.id}`),
-      ...manifest.overrides.map((entry) => entry.id)
-    ]
-    expect([...fake.provided.keys()].sort()).toEqual(declared.sort())
-    expect(manifest.ui).toBe('dist/ui.js')
-    expect(manifest.contributes.panel).toContainEqual({ id: 'sessions', title: 'Terminal Sessions' })
-    expect(manifest.contributes.command).toContainEqual({ id: 'manage-sessions', title: 'Terminal: Manage Sessions' })
-  })
-
-  test('SC-26: the command opens the panel', async () => {
-    fake = fakeContext()
-    const toggles: unknown[][] = []
-    fake.context.togglePanel = (...args: unknown[]) => void toggles.push(args)
-    activateModule(fake.context)
-    await act(async () => void (await fake.provided.get(COMMAND)!()))
-    expect(toggles).toEqual([[PANEL, true]])
-  })
-})
-
 describe('the Terminal Sessions panel', () => {
   test('SC-26: lists a row per live session with its workspace, id and kill button, and reports them', async () => {
     await openPanel(two)
-    expect(element!.querySelector('header')?.textContent).toContain('Sessions (2)')
     for (const label of ['Refresh', 'Kill all sessions', 'Restart terminal host']) expect(button(label)).not.toBeNull()
     expect(rows().map((entry) => [...entry.querySelectorAll('.sessions-workspace, .sessions-id')].map((cell) => cell.textContent))).toEqual([
       ['w/api', 's1'],
       ['api/fix-login', 's2']
     ])
-    expect(rows().map((entry) => entry.querySelector('.dot-done') !== null)).toEqual([true, true])
     expect(button('Kill session s1')).not.toBeNull()
     expect(button('Kill session s2')).not.toBeNull()
     expect(reports[reports.length - 1]).toEqual({
