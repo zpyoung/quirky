@@ -154,5 +154,16 @@
 - **Revisit if:** existing core messaging cannot represent distinct service sender provenance
 - **Source:** assumed — autonomous
 
+## D15: Restore the actual landed Codex resolver omitted by a dependency merge
+- **Question:** lane10 reports desktop build fails because structured/main.ts imports missing ./codex-path
+- **Options:** rerun to reconfirm; invent fallback; restore the real landed dependency module
+- **Chose:** accept the reported failure as ground truth; inspect source/history, restore codex-path.ts exactly from build/roadmap, and include it before core landing. No resolver behavior or provider fallback changed.
+- **Why:** build/m5-structured-runner has already been deleted after landing. The helper exists on build/roadmap from ef16bc50; merging that ancestor reports already-up-to-date, because a later dependency history merge retains deletion2aba9d9c. Restoring the exact committed source repairs the incomplete merge without substituting another implementation.
+- **Evidence:** user lane10 build report; main.ts:17; git full-history path log; source hash46b00aeb0851d2b540b1498d51969e689a3bf33d matches both restored file and build/roadmap blob. No build rerun to reconfirm.
+- **Reversibility:** easy
+- **Confidence:** high for exact source restoration; runtime/build verification remains pending
+- **Revisit if:** final merged dependency build fails after the actual helper is present
+- **Source:** assumed — autonomous
+
 ## Progress
 Iteration4: spec/contracts committed6764039; three disjoint implementation worktrees running, no checks/commits until their wave barrier. Worker dependency query returned ready:false pending m6-orchestration-workers after510s; independent implementation continues. Lanes1+9 approved service authority extension reserved to lane11, parent authored type contracts; actual core/worker runtime still pending. Missing feature/API smoke completed with isolated actual quirkyd and cleanup. Next: accept/audit components after all return, integrate dependency implementation and additive service APIs, exercise AC1-11 including real worker adapter, affected suite/scripts/typecheck, deps-ready/catch-up/final independent review/queue landing. No runtime feature acceptance claim.
