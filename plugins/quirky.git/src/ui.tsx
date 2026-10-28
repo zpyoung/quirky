@@ -7,9 +7,11 @@ import type { ScmReport } from './scm'
 import { DIFF_VIEW_ID, PANEL_ID } from './shared/view-input'
 import { commandHandlers } from './view/commands'
 import { mountDiffView } from './view/DiffWindow'
+import { subscribeHostedLayouts } from './view/hosted-tabs'
 
 /** Provides the source-control panel, the diff view, the AI defaults view and every command. The panel follows the worktree of the open view. */
 export function activate(context: UiPluginContext): void {
+  subscribeHostedLayouts(context)
   context.provide(PANEL_ID, (element: HTMLElement, props: { report?(state: unknown): void }) => {
     const root = createRoot(element)
     const report = (state: ScmReport) => props.report?.(state)

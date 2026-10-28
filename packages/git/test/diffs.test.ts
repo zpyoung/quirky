@@ -72,6 +72,24 @@ describe('diffSource sides', () => {
     expect(d).toMatchObject({ original: '', modified: 'notes\n', kind: 'text' })
   })
 
+  test('compareAgainstHead reads HEAD against the working file even with a newer staged index', async () => {
+    const dir = threeVersions()
+    const d = await diffSource(dir, { path: 'math.ts', source: 'unstaged', compareAgainstHead: true })
+    expect(d).toMatchObject({ source: 'unstaged', staged: false, original: 'v1\n', modified: 'v3\n' })
+    expect(d.modifiedHash).toBe(contentHash(new TextEncoder().encode('v3\n')))
+  })
+
+  test('compareAgainstHead rejects non-unstaged sources', async () => {
+    const dir = threeVersions()
+    await expect(diffSource(dir, { path: 'math.ts', source: 'staged', compareAgainstHead: true })).rejects.toThrow(
+      'compareAgainstHead is only available for source unstaged.'
+    )
+    await expect(diffSource(dir, { path: 'math.ts', source: 'branch', compareAgainstHead: true, mergeBase: 'a'.repeat(40), head: 'b'.repeat(40) })).rejects.toThrow(
+      'compareAgainstHead is only available for source unstaged.'
+    )
+  })
+
+
   test('an unstaged file removed from the index falls back to HEAD', async () => {
     const dir = makeRepo(fixture.scratch(), { 'a.txt': 'head\n' })
     git(dir, 'rm', '-q', '--cached', 'a.txt')

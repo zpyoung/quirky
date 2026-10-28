@@ -4,13 +4,14 @@
  * `RemoteError` with a normalised reason; git runs without prompts and under a 120 s timeout,
  * and a timeout is reported as `network`.
  */
+import { createHash } from 'node:crypto'
 import { getConfig, checkRefFormatBranch, listRemotes, upstreamOf } from './ops'
 import { RemoteError, normalizeRemoteError, type RemoteAction } from './remote-error'
 import { runGit, type GitResult } from './run'
 
 const NETWORK_TIMEOUT_MS = 120_000
 const NO_UPSTREAM = 'Branch has no upstream. Publish the branch first.'
-const FULL_SHA = /^[0-9a-f]{40}$/i
+const FULL_SHA = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i
 const text = (bytes: Uint8Array): string => new TextDecoder().decode(bytes)
 
 async function currentBranch(cwd: string): Promise<string> {
@@ -30,10 +31,29 @@ function fail(action: RemoteAction, r: GitResult): RemoteError {
   return new RemoteError(n.reason, n.message, { summary: n.summary, output: n.output })
 }
 
+/** Removes configured target URLs before Git diagnostics are normalised for callers. */
+function redactTargetUrl(bytes: Uint8Array, privateUrl: string): Uint8Array {
+  const output = text(bytes)
+    .replaceAll(privateUrl, '[configured push URL]')
+    .replace(/(?:https?|ssh|git(?:\+ssh)?):\/\/[^\s"'<>]+/giu, '[configured push URL]')
+  return new TextEncoder().encode(output)
+}
+
 /** Runs `args` as a network command for `action`; throws the normalised `RemoteError` on failure. */
-async function runRemote(cwd: string, action: RemoteAction, args: string[], env?: Record<string, string>): Promise<GitResult> {
+async function runRemote(
+  cwd: string,
+  action: RemoteAction,
+  args: string[],
+  env?: Record<string, string>,
+  privateUrl?: string
+): Promise<GitResult> {
   const r = await runGit(cwd, args, { network: true, timeoutMs: NETWORK_TIMEOUT_MS, env })
-  if (r.exitCode !== 0 || r.timedOut) throw fail(action, r)
+  if (r.exitCode !== 0 || r.timedOut) {
+    const safe = privateUrl === undefined
+      ? r
+      : { ...r, stdout: redactTargetUrl(r.stdout, privateUrl), stderr: redactTargetUrl(r.stderr, privateUrl) }
+    throw fail(action, safe)
+  }
   return r
 }
 
@@ -54,23 +74,101 @@ export async function pushTarget(cwd: string, branch: string): Promise<{ remote:
   return { remote, dest: onPushRemote ? merge!.slice('refs/heads/'.length) : branch }
 }
 
+/** A configured destination and private push-URL snapshot validated by the owning plugin. */
+export type ExactPushTarget = {
+  remote: string
+  dest: string
+  localBranch: string
+  localHead: string
+  pushUrl: string
+  pushUrlFingerprint: string
+}
+
+/** The configured push URLs for one named remote, after Git URL rewriting. */
+export async function remotePushUrls(cwd: string, remote: string): Promise<string[]> {
+  if (!(await listRemotes(cwd)).includes(remote)) return []
+  const result = await runGit(cwd, ['remote', 'get-url', '--push', '--all', remote], { readOnly: true })
+  if (result.exitCode !== 0) throw new RemoteError('failed', 'The configured push URL could not be read.')
+  return text(result.stdout).split(String.fromCharCode(10)).map((url) => url.trim()).filter(Boolean)
+}
+
+/** SHA-256 identity of a configured push URL without returning it in target reports or errors. */
+export function pushUrlFingerprint(url: string): string {
+  return createHash('sha256').update(url).digest('hex')
+}
+
+const REMOTE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/u
+const FULL_OID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i
+
+
+async function currentHead(cwd: string): Promise<string> {
+  const result = await runGit(cwd, ['rev-parse', '--verify', 'HEAD'], { readOnly: true })
+  const oid = result.exitCode === 0 ? text(result.stdout).trim() : ''
+  if (!FULL_OID.test(oid)) throw new RemoteError('failed', 'The current Git head could not be verified.')
+  return oid
+}
+
+async function exactPushTarget(cwd: string, branch: string, target: ExactPushTarget): Promise<{ remote: string; dest: string }> {
+  if (target.localBranch !== branch || target.localHead !== await currentHead(cwd)) {
+    throw new RemoteError('failed', 'The local branch or HEAD changed. Resolve the push target again before pushing.')
+  }
+  if (!REMOTE_NAME.test(target.remote) || !(await listRemotes(cwd)).includes(target.remote) ||
+    !(await checkRefFormatBranch(target.dest))) {
+    throw new RemoteError('failed', 'The configured push target is not a safe Git remote and branch.')
+  }
+  if (target.pushUrl.length === 0 || target.pushUrl.length > 4096 ||
+    target.pushUrl.includes(String.fromCharCode(0)) ||
+    target.pushUrlFingerprint !== pushUrlFingerprint(target.pushUrl)) {
+    throw new RemoteError('failed', 'The validated push URL snapshot is invalid.')
+  }
+  const urls = await remotePushUrls(cwd, target.remote)
+  if (urls.length !== 1 || urls[0] !== target.pushUrl) {
+    throw new RemoteError('failed', 'The configured push URL changed. Resolve the push target again before pushing.')
+  }
+  return { remote: target.remote, dest: target.dest }
+}
+
+async function recordPushedUpstream(cwd: string, branch: string, remote: string, dest: string, head: string): Promise<void> {
+  const remoteConfig = await runGit(cwd, ['config', '--local', `branch.${branch}.remote`, remote])
+  const mergeConfig = await runGit(cwd, ['config', '--local', `branch.${branch}.merge`, `refs/heads/${dest}`])
+  const trackingRef = await runGit(cwd, ['update-ref', `refs/remotes/${remote}/${dest}`, head])
+  if (remoteConfig.exitCode !== 0 || mergeConfig.exitCode !== 0 || trackingRef.exitCode !== 0) {
+    throw new RemoteError('failed', 'Push succeeded, but the local upstream could not be recorded.')
+  }
+}
+
 /**
- * Pushes HEAD to its push target and sets it as the upstream. With `lease` the push replaces the
- * remote branch only if it is still at `expected` (`null` means the branch must not exist), so a
- * commit pushed since the caller last looked survives; `expected` must be a full 40-hex sha.
+ * Pushes HEAD to its configured target by default. Purpose-specific callers may supply a freshly
+ * validated remote, ref and push-URL snapshot; that path sends the captured object ID to the exact
+ * URL and never resolves the remote URL again for mutation.
  */
 export async function push(
   cwd: string,
-  options: { lease?: { expected: string | null } } = {}
+  options: { lease?: { expected: string | null }; target?: ExactPushTarget } = {}
 ): Promise<{ remote: string; branch: string; upstream: string }> {
   const branch = await currentBranch(cwd)
-  const { remote, dest } = await pushTarget(cwd, branch)
   const lease = options.lease
   if (lease && lease.expected !== null && !FULL_SHA.test(lease.expected)) {
-    throw new RemoteError('failed', 'Force push needs the full 40-character commit id the remote branch is expected to be at.')
+    throw new RemoteError('failed', 'Force push needs the full commit id the remote branch is expected to be at.')
   }
+  if (options.target === undefined) {
+    const { remote, dest } = await pushTarget(cwd, branch)
+    const defaultLeaseArg = lease ? [`--force-with-lease=refs/heads/${dest}:${lease.expected ?? ''}`] : []
+    await runRemote(cwd, lease ? 'force-push' : 'push', ['push', '--set-upstream', ...defaultLeaseArg, remote, `HEAD:refs/heads/${dest}`])
+    return { remote, branch, upstream: `${remote}/${dest}` }
+  }
+
+  const target = options.target
+  const { remote, dest } = await exactPushTarget(cwd, branch, target)
   const leaseArg = lease ? [`--force-with-lease=refs/heads/${dest}:${lease.expected ?? ''}`] : []
-  await runRemote(cwd, lease ? 'force-push' : 'push', ['push', '--set-upstream', ...leaseArg, remote, `HEAD:refs/heads/${dest}`])
+  await runRemote(
+    cwd,
+    lease ? 'force-push' : 'push',
+    ['push', ...leaseArg, target.pushUrl, `${target.localHead}:refs/heads/${dest}`],
+    undefined,
+    target.pushUrl
+  )
+  await recordPushedUpstream(cwd, branch, remote, dest, target.localHead)
   return { remote, branch, upstream: `${remote}/${dest}` }
 }
 

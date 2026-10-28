@@ -27,10 +27,25 @@ export type DiffViewInput = {
   split?: boolean
   /** Exact existing destination group when the caller supplies one. */
   groupId?: string
+  /** Stable terminal hosted-tab identity, present only after the public tab API opens the view. */
+  tabId?: string
   /** Markdown diff preview renders only the modified side. */
   display?: 'source' | 'preview'
   /** The note whose card a `file` view scrolls into view once its diff has loaded. */
   noteId?: string
   /** The review a `conflicts` view resumes, or the one a `conflict-file` view returns to on close. */
   review?: ReviewSnapshot
+}
+
+/** The stable key for one diff identity; display and placement never change which file is open. */
+export function diffViewKey(input: DiffViewInput): string {
+  return `git-diff:${JSON.stringify([
+    input.worktree,
+    input.mode,
+    input.source ?? '',
+    input.path ?? '',
+    input.oldPath ?? '',
+    input.area ?? '',
+    input.commit ?? ''
+  ])}`
 }
