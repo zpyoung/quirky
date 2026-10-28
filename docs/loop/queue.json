@@ -819,9 +819,8 @@
       "deps": [
         "sb-mobile-daemon"
       ],
-      "status": "in-progress",
-      "early": true,
-      "lane": 5
+      "status": "done",
+      "early": true
     },
     {
       "id": "sb-mobile-app-panels",

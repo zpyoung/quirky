@@ -58,6 +58,7 @@ files, not this one.
 | hard | high | [m1-agent-status D4](decisions/m1-agent-status.md) | Orca's four states, its derived display states and its labels are kept as they are | locked by docs/roadmap.md |
 | hard | high | [m5-loops-core D2](decisions/m5-loops-core.md) | Native structured sessions replace Orca panes without changing focus | locked by docs/architecture.md |
 | hard | high | [m1-notifications D40](decisions/m1-notifications.md) | Approach: a daemon policy plugin that listens to producers, with markers on their records and the shell rendering | assumed — autonomous |
+| hard | high | [sb-mobile-app D2](decisions/sb-mobile-app.md) | Preserve the direct-only Quirky protocol and dependency authority | locked by docs/architecture.md |
 | hard | high | [m6-orchestration-workers D4](decisions/m6-orchestration-workers.md) | Treat absence and timeout as uncertainty, never destructive authority | locked by research/orca-features/orchestration.md |
 | hard | high | [m6-orchestration-workers D5](decisions/m6-orchestration-workers.md) | Use stable Quirky sessions with independently attested incarnations | locked by docs/loop/decisions/m6-orchestration-core.md |
 | hard | high | [sb-mobile-daemon D1](decisions/sb-mobile-daemon.md) | Ship the three claimed parts together, using Quirky's JSON-RPC API | locked by docs/architecture.md |
@@ -391,6 +392,16 @@ files, not this one.
 | medium | high | [m1-agent-status-scripting D10](decisions/m1-agent-status-scripting.md) | Rows record the evidence that decided them, and explain reads it | assumed — autonomous |
 | medium | high | [m1-agent-status-scripting D19](decisions/m1-agent-status-scripting.md) | Distinct failures are plugin errors with a machine-readable reason | assumed — autonomous |
 | medium | high | [m1-agent-status-scripting D38](decisions/m1-agent-status-scripting.md) | Catching up with build/roadmap brought m1-notifications, m2-source-control-core and m3-terminal-dock; no decision conflicts | assumed — autonomous |
+| medium | high | [sb-mobile-app D1](decisions/sb-mobile-app.md) | Build the combined phone foundation and workspace/session scope | locked by docs/loop/queue.json |
+| medium | high | [sb-mobile-app D5](decisions/sb-mobile-app.md) | Defer locked native-chat and dictation flows without inventing a replacement API | deferred: interactive native-chat and voice |
+| medium | high | [sb-mobile-app D6](decisions/sb-mobile-app.md) | Resolve Visual, API, Data and Integration gray areas from source | assumed — autonomous |
+| medium | high | [sb-mobile-app D8](decisions/sb-mobile-app.md) | Defer real workspace Sleep until reversible stop/resume exists | deferred: reversible workspace sleep prerequisite |
+| medium | high | [sb-mobile-app D10](decisions/sb-mobile-app.md) | Expose trusted live connection state without broad event subscription | assumed — autonomous |
+| medium | high | [sb-mobile-app D18](decisions/sb-mobile-app.md) | Keep launch authorization no wider than the shipped phone launcher | assumed — autonomous |
+| medium | high | [sb-mobile-app D20](decisions/sb-mobile-app.md) | Apply every incoming binding after one canonical catchup | locked by docs/loop/LOOP.md |
+| medium | high | [sb-mobile-app D21](decisions/sb-mobile-app.md) | Do not invent Browser or Markdown session tabs without a safe consumer contract | deferred: Browser and Markdown session prerequisites |
+| medium | high | [sb-mobile-app D24](decisions/sb-mobile-app.md) | Keep one grouped prerequisite follow-up, never guessed origin filters | deferred: locked and producer-dependent mobile flows |
+| medium | high | [sb-mobile-app D28](decisions/sb-mobile-app.md) | Follow canonical landing retry rules after a concurrent dependency conflict | locked by docs/loop/LOOP.md |
 | medium | high | [m6-orchestration-workers D1](decisions/m6-orchestration-workers.md) | Preserve the complete combined worker scope | locked by docs/loop/queue.json |
 | medium | high | [m6-orchestration-workers D3](decisions/m6-orchestration-workers.md) | Reuse the orchestration core rather than create a second authority store | locked by docs/loop/decisions/m6-orchestration-core.md |
 | medium | high | [m6-orchestration-workers D6](decisions/m6-orchestration-workers.md) | Keep schema-generated namespaced CLI and explicit structured fallback receipts | assumed — autonomous |
@@ -1479,6 +1490,24 @@ files, not this one.
 | easy | high | [m1-agent-status-scripting D45](decisions/m1-agent-status-scripting.md) | A later land failed on a quirky.worktree test race; this branch carries that plugin's own fix | assumed — autonomous |
 | easy | high | [m1-agent-status-scripting D46](decisions/m1-agent-status-scripting.md) | The resumed lane verifies the existing final fix batch and proceeds to land | assumed — autonomous |
 | easy | high | [m1-agent-status-scripting D47](decisions/m1-agent-status-scripting.md) | Retry landing after the protected queue tests pass unchanged | locked by docs/loop/LOOP.md |
+| easy | high | [sb-mobile-app D3](decisions/sb-mobile-app.md) | Apply unattended night-mode workflow and isolated worker attribution | locked by docs/loop/LOOP.md |
+| easy | high | [sb-mobile-app D4](decisions/sb-mobile-app.md) | Use OpenAI omp implementers and Gemini review | assumed — autonomous |
+| easy | high | [sb-mobile-app D7](decisions/sb-mobile-app.md) | Reserve the panel extension seam for lane4 after the base lands | assumed — autonomous |
+| easy | high | [sb-mobile-app D9](decisions/sb-mobile-app.md) | Keep shared delivery DTOs on the public plugin API | locked by docs/roadmap.md |
+| easy | high | [sb-mobile-app D11](decisions/sb-mobile-app.md) | Match terminal input authorization to its exact connection lease | assumed — autonomous |
+| easy | high | [sb-mobile-app D12](decisions/sb-mobile-app.md) | Reject wrong-worktree attempts and relocate only proven owned edits | assumed — autonomous |
+| easy | high | [sb-mobile-app D13](decisions/sb-mobile-app.md) | Project mobile Session results at their producer and use a safe agent catalog | assumed — autonomous |
+| easy | high | [sb-mobile-app D14](decisions/sb-mobile-app.md) | Adopt the committed safe catalog's exact installed/isDefault shape | supersedes sb-mobile-app D13 catalog field proposal |
+| easy | high | [sb-mobile-app D15](decisions/sb-mobile-app.md) | Resume the integrated source instead of repeating the implementation wave | assumed — autonomous |
+| easy | high | [sb-mobile-app D16](decisions/sb-mobile-app.md) | Verify the portable native runtime against the actual encrypted daemon and PTY | assumed — autonomous |
+| easy | high | [sb-mobile-app D17](decisions/sb-mobile-app.md) | Declare the Babel preset required by the actual Expo export | assumed — autonomous |
+| easy | high | [sb-mobile-app D19](decisions/sb-mobile-app.md) | Isolate daemon fixtures without increasing deadlines or weakening security assertions | assumed — autonomous |
+| easy | high | [sb-mobile-app D22](decisions/sb-mobile-app.md) | Skip the unstarted model review under the overdue-item rule | locked by docs/loop/LOOP.md |
+| easy | high | [sb-mobile-app D23](decisions/sb-mobile-app.md) | Separate guarded verdicts, direct visual proof and native-device obligations | assumed — autonomous |
+| easy | high | [sb-mobile-app D25](decisions/sb-mobile-app.md) | Keep unexecuted platforms and physical-device behavior explicit | deferred: platform |
+| easy | high | [sb-mobile-app D26](decisions/sb-mobile-app.md) | Close the actual affected-gate failure without pinning an incidental DTO shape | assumed — autonomous |
+| easy | high | [sb-mobile-app D27](decisions/sb-mobile-app.md) | Retain final own-gate evidence and repair invalid meta policy at its source | assumed — autonomous |
+| easy | high | [sb-mobile-app D29](decisions/sb-mobile-app.md) | Land now under the operator's build-first, end-phase testing directive | locked by docs/loop/LOOP.md Build first, test at the end; supersedes D28's test-gate requirement |
 | easy | high | [m6-orchestration-workers D2](decisions/m6-orchestration-workers.md) | Apply the current unattended night-mode workflow | locked by docs/loop/LOOP.md |
 | easy | high | [m6-orchestration-workers D8](decisions/m6-orchestration-workers.md) | Implement early against current dependency branches, not the stale preparation gate | locked by docs/loop/LOOP.md |
 | easy | high | [m6-orchestration-workers D9](decisions/m6-orchestration-workers.md) | OpenAI implementers and verified Gemini independent review | assumed — autonomous |
