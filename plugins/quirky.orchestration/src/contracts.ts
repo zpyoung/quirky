@@ -421,6 +421,7 @@ export type DispatchTransitionInput =
       nextState: 'failed'
       failureClass: 'infrastructure' | 'worker_report'
       failureReason?: string
+      terminationReason?: DispatchTerminationReason
       at: UtcTimestamp
     }
   | {
@@ -429,6 +430,7 @@ export type DispatchTransitionInput =
       nextState: 'circuit_broken'
       failureClass: 'infrastructure'
       failureReason?: string
+      terminationReason?: DispatchTerminationReason
       at: UtcTimestamp
     }
   | {
@@ -443,6 +445,7 @@ export type DispatchTransitionInput =
       nextState: 'failed'
       failureClass: 'infrastructure' | 'worker_report'
       failureReason?: string
+      terminationReason?: DispatchTerminationReason
       at: UtcTimestamp
     }
   | {
@@ -451,6 +454,7 @@ export type DispatchTransitionInput =
       nextState: 'circuit_broken'
       failureClass: 'infrastructure'
       failureReason?: string
+      terminationReason?: DispatchTerminationReason
       at: UtcTimestamp
     }
 
