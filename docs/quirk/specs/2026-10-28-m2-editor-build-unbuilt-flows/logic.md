@@ -1,9 +1,11 @@
 # Retained editor interactions and resource ownership
 
 ## Status & amendments
-Status: autonomously approved for implementation under the unattended build loop; acceptance execution remains end-phase work.
+Status: implemented with narrow isolated daemon/API and actual browser-surface smoke evidence; acceptance suites, formal review and native clipboard execution remain end-phase work.
 
 **Amendments:** 2026-10-28 — initial specification. The historical queue title is reconciled with m2-editor-complete-remaining-flows D20 before implementation: existing Save As/untitled work is preserved, and rich details/document-link/permission behavior remains owned by m7-editor-source-control-completion.
+
+**Amendments:** 2026-10-28 — three scoped components implemented against the committed contracts. New range-coordinate inputs capture React event values synchronously after an actual first-input crash demonstrated deferred currentTarget lifetime. Existing restart trust revocation is unchanged. C1-native-clipboard is handed off pending; exercised smoke boundaries and limitations are recorded in the item decisions D12–D15.
 
 ## Purpose and conceptual model
 Complete four still-unbuilt interactions in the existing built-in editor. The daemon owns selection and execution state. Mounted viewers own revocable media capabilities, not the shared document. Multiple visible splits may share a buffer without sharing resource lifetime.

@@ -470,8 +470,9 @@ export function createNotebookMethods(host: EditorServices): FeatureMethods {
     if (disposed || closingBuffers.has(bufferId) || runtimes.get(bufferId) !== state || !state.trusted) {
       error(host, 'conflict', 'The notebook was closed or its trust was revoked before the kernel could start.')
     }
-    if (state.kernel?.status === 'ready') return { state, location, result: { status: 'ready', session: state.kernel } }
-    if (state.kernel?.status === 'starting') return startSession(state.kernel)
+    const currentKernel = runtimes.get(bufferId)?.kernel
+    if (currentKernel?.status === 'ready') return { state, location, result: { status: 'ready', session: currentKernel } }
+    if (currentKernel?.status === 'starting') return startSession(currentKernel)
     const bridgePath = join(host.context.dir, 'src/notebook/kernel-bridge.py')
     if (!python.hasIpykernel) {
       return { state, location, result: { status: 'missing-ipykernel', externallyManaged: python.externallyManaged, session: new KernelSession(python, location.directory, bridgePath, host.context.dataDir) } }

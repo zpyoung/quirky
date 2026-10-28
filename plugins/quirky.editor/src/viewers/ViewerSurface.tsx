@@ -314,10 +314,10 @@ function CsvSurface({ props, sourceMode }: { props: SurfaceProps; sourceMode: bo
         <button type="button" onClick={() => void paste()} disabled={loading}>Paste</button>
         <fieldset>
           <legend>Copy rectangular range (zero-based source coordinates)</legend>
-          <label>Start row (source index) <input aria-label="Copy range start row (source index)" type="number" min="0" step="1" value={copyRange.row} onChange={(event) => setCopyRange((old) => ({ ...old, row: event.currentTarget.value }))} /></label>
-          <label>Start column (source index) <input aria-label="Copy range start column (source index)" type="number" min="0" step="1" value={copyRange.column} onChange={(event) => setCopyRange((old) => ({ ...old, column: event.currentTarget.value }))} /></label>
-          <label>End row (source index) <input aria-label="Copy range end row (source index)" type="number" min="0" step="1" value={copyRange.endRow} onChange={(event) => setCopyRange((old) => ({ ...old, endRow: event.currentTarget.value }))} /></label>
-          <label>End column (source index) <input aria-label="Copy range end column (source index)" type="number" min="0" step="1" value={copyRange.endColumn} onChange={(event) => setCopyRange((old) => ({ ...old, endColumn: event.currentTarget.value }))} /></label>
+          <label>Start row (source index) <input aria-label="Copy range start row (source index)" type="number" min="0" step="1" value={copyRange.row} onChange={(event) => { const value = event.currentTarget.value; setCopyRange((old) => ({ ...old, row: value })) }} /></label>
+          <label>Start column (source index) <input aria-label="Copy range start column (source index)" type="number" min="0" step="1" value={copyRange.column} onChange={(event) => { const value = event.currentTarget.value; setCopyRange((old) => ({ ...old, column: value })) }} /></label>
+          <label>End row (source index) <input aria-label="Copy range end row (source index)" type="number" min="0" step="1" value={copyRange.endRow} onChange={(event) => { const value = event.currentTarget.value; setCopyRange((old) => ({ ...old, endRow: value })) }} /></label>
+          <label>End column (source index) <input aria-label="Copy range end column (source index)" type="number" min="0" step="1" value={copyRange.endColumn} onChange={(event) => { const value = event.currentTarget.value; setCopyRange((old) => ({ ...old, endColumn: value })) }} /></label>
           <button type="button" onClick={copySelectedRange} disabled={loading}>Copy range</button>
         </fieldset>
       </>}

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react'
+import type { UiPluginContext } from '@quirky/protocol'
 import type { ExplorerInteraction } from '../types'
 import { activeDocument } from './activeDocument'
 import { useEditorState, worktreeFromLayout } from './editorState'
@@ -7,6 +8,7 @@ import { setEditorSetting, useEditorSettings } from './settings'
 import { importFiles } from './transfers'
 
 const MAX_EXPLORER_CHILD_LISTINGS = 20_001
+const WORKTREE_PATHS_MIME = 'application/x-quirky-worktree-paths'
 
 type ExplorerEntry = { path: string; name: string; isDirectory: boolean; isSymlink: boolean; ignored?: boolean; error?: string }
 type ExplorerListing = {
@@ -20,6 +22,7 @@ type ExplorerListing = {
 type Worktree = { id: string; path: string; name?: string }
 type SearchMatch = { line: number; column: number; matchLength: number; lineContent: string; displayColumn?: number; displayMatchLength?: number }
 type SearchFile = { path: string; relativePath: string; matches: SearchMatch[] }
+type SearchResult = { files: SearchFile[]; totalMatches: number; truncated: boolean; error: string | null; loading: boolean; requestId?: string }
 type ExplorerInteractionResult = ExplorerListing & { expanded?: string[]; interaction?: ExplorerInteraction }
 type GitStatusFile = { path: string; index: string; worktree: string }
 type GitStatusResult = { files: GitStatusFile[] }
@@ -726,7 +729,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
     const target = event.target
     const interactiveTarget = target instanceof HTMLElement &&
       target.closest('input, textarea, select, button, summary, a, [contenteditable]')
-    if (event.isComposing || event.nativeEvent.isComposing || event.keyCode === 229 ||
+    if (event.nativeEvent.isComposing || event.keyCode === 229 ||
       interactiveTarget || newItemKind !== null || renamePath !== null) return
     const queryParams = searchMode === 'names' && query.trim() !== '' ? { query } : {}
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown'].includes(event.key)) {

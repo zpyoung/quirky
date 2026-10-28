@@ -113,7 +113,7 @@
 ## D11: Isolate all smoke dependencies and retain exact component ownership
 - **Question:** Where can runtime evidence and worker edits safely live?
 - **Options:** real homes/global Python; isolated scratch and owned venv; allow workers to edit parent
-- **Chose:** scratch /tmp/quirky-lane6-editor-flows-1lss1N with fresh HOME/QUIRKY_HOME, hooks disabled and owned Python3.12 venv. uv installed ipykernel7.4 plus30 dependencies only there (cache also scratch). Three worktrees start at3ca50907. Explorer scope additionally owns window/editorState.ts type adaptation; parent retains manifest/types. Worker-reported mistaken relative-path viewer test edit in parent is being reverted only for that exact worker-authored block before absolute-path reapplication.
+- **Chose:** scratch /tmp/quirky-lane6-editor-flows-1lss1N with fresh HOME/QUIRKY_HOME, hooks disabled and owned Python3.12 venv. uv installed ipykernel7.4 plus30 dependencies only there (cache also scratch). Three worktrees started at3ca50907. Explorer scope additionally owns window/editorState.ts type adaptation; parent retains manifest/types. The worker's mistaken parent-tree viewer-test block and separator lines were removed exactly; parent diff for that file was empty at the barrier before component integration.
 - **Why:** notebook lifecycle needs a real disposable interpreter; unrelated real agent homes and parent edits must remain untouched. Parent audits component paths and initial-HEAD invariants after every worker returns.
 - **Evidence:** actual uv venv/pip output (31 packages installed); MapEditorFlows source map; BuildViewerFlows cross-worktree notification
 - **Reversibility:** easy
@@ -121,5 +121,49 @@
 - **Revisit if:** scope audit finds unresolved contamination or any non-owned process/state
 - **Source:** assumed — autonomous
 
+## D12: Keep the compiler gate authoritative and repair integration diagnostics
+- **Question:** What did the first integrated typecheck report?
+- **Options:** land with errors; fix reported integration errors without changing consumer contracts
+- **Chose:** restore the accidentally omitted UiPluginContext/SearchResult/MIME declarations, use React nativeEvent.isComposing, re-read the current runtime kernel after awaited environment discovery instead of retaining TypeScript's obsolete narrowing, and retain the restarted process ID in the authored test.
+- **Why:** first root typecheck exited2 with17diagnostics across ExplorerPanel, notebook service and notebook test. The next complete root/mobile typecheck exited0 in22.80s.
+- **Evidence:** actual compiler output artifact18; scoped source edits; successful bun run typecheck output
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** post-merge typecheck reports another contract conflict
+- **Source:** assumed — autonomous
+
+## D13: Retain narrow runtime proof without claiming end-phase acceptance
+- **Question:** What was actually exercised before landing?
+- **Options:** typecheck-only completion claim; isolated changed-path smoke with explicit limits
+- **Chose:** actual daemon/editor API smoke passed Explorer hierarchy/range contraction/state, quoted TSV copy/paste and invalid-range rejection, exact lease revocation (released404/sibling ranged206/anonymous200), and real Python idle death/event/output preservation/restart trust/new-kernel variable loss. Actual mounted browser surface showed Home/Right/Shift selection, notebook idle-death notification and enabled recovery, visible restart stopped/revoked trust while retaining outputs, range/row/column clipboard contents, and image URL200 while mounted then404 on tab switch.
+- **Why:** developer requires runtime/surface proof; these bounded smoke checks are not the deferred acceptance suites, formal review or full dogfood campaign. Existing fixture PTY isolates unrelated terminal startup; terminal behavior was not exercised.
+- **Evidence:** scratch smoke-receipt.json and surface-receipt.json; named runtime service SMOKE_READY checks4; real managed browser DOM/screenshots; owned Python3.12/ipykernel7.4. Native C1-native-clipboard remains pending.
+- **Reversibility:** easy (evidence)
+- **Confidence:** high for exercised paths only
+- **Revisit if:** end-phase acceptance finds another boundary case
+- **Source:** assumed — autonomous
+
+## D14: Capture clipboard input values synchronously before deferred state updates
+- **Question:** Why did the new range editor crash on its first real input?
+- **Options:** suppress the error boundary; capture event.currentTarget.value before scheduling the functional updater
+- **Chose:** synchronous value capture in all four new coordinate handlers, matching the adjacent Paste row/column pattern. No catch/suppression or unrelated input changes.
+- **Why:** first browser fill reproduced document-surface error Cannot read properties of null (reading value). The functional state updater read React currentTarget after dispatch. After the fix/rebundle/reload, all four actual inputs and Copy range succeeded with exact quoted TSV and no alert.
+- **Evidence:** ViewerSurface.tsx coordinate handlers; observed error boundary before fix; actual post-fix browser clipboard {text:x TAB quoted-tab-cell NEWLINE y TAB quoted-multiline-cell,source:page}. Row and column also succeeded after explicitly granting managed-browser origin clipboard permission.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** an actual input event still loses its captured value
+- **Source:** assumed — autonomous
+
+## D15: Distinguish browser permission limits from native clipboard proof
+- **Question:** Can a managed browser copy prove macOS clipboard behavior?
+- **Options:** call every failed permission/write a product copy failure; report permission handling and granted page clipboard separately
+- **Chose:** record actual browser write-permission denial as a visible error with drafts retained, then grant only the disposable origin's clipboard permissions for row/column success evidence. Clipboard helper reads altered effective permission state, so subsequent copies regranted that origin explicitly. No native clipboard/window pass is claimed.
+- **Why:** the API returned exact quoted text throughout; Chromium permission denial was surfaced rather than hidden. OS integration still requires the pending native handoff.
+- **Evidence:** browser Write permission denied alert; granted-origin row and column page clipboard contents; docs/loop/native/m2-editor-build-unbuilt-flows.json
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** nightly native clipboard run fails
+- **Source:** assumed — autonomous
+
 ## Progress
-Scope resolved and logic spec self-reviewed against retained feature flows. Shared types/schemas and spec are ready for the pre-implementer contract commit. Next: create three isolated /tmp worktrees from that commit, dispatch at most three implementers with disjoint scopes, integrate, narrow runtime smoke and typecheck, catch up build/roadmap once/read incoming decisions, commit/detach/canonical land. No acceptance, review or UI/native pass claimed.
+All three components returned and passed the scope/unchanged-HEAD barrier; commits719265bb/5f066c86/fcf24d57 merged and their worktrees/worker branches removed. Root/mobile typecheck passed after compiler integration repairs. Four isolated API runtime checks and bounded actual browser surface checks passed with the D13–D15 limits; suites/review/full dogfood remain unrun. Browser/API client closed and runtime service stop requested; its finally cleanup owns daemon/fake PTY and scratch home. Next: commit current fixes/receipt, catch up build/roadmap exactly once and read incoming decision logs, run final typecheck, commit/detach/canonical queue land. Archive receipts, remove owned scratch after land; do not claim another item.

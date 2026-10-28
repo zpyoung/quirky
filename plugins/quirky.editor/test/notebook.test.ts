@@ -421,7 +421,8 @@ describe('notebook API behavior', () => {
     await notebook(world, bufferId, 'trust')
     const restarted = record(await notebook(world, bufferId, 'start', { python }))
     expect(restarted.status).toBe('ready')
-    expect(kernelPid(record(await notebook(world, bufferId, 'state')))).not.toBe(bridgePid)
+    const restartedPid = kernelPid(record(await notebook(world, bufferId, 'state')))
+    expect(restartedPid).not.toBe(bridgePid)
     expect(record(await notebook(world, bufferId, 'state'))).toMatchObject({
       trusted: true,
       selectedPython,
