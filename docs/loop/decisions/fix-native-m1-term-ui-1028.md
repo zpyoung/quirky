@@ -88,5 +88,38 @@
 - **Revisit if:** an area repair identifies a clipboard regression or SC-37 fails its native rerun
 - **Source:** assumed — autonomous
 
+## D9: Migrate the concurrently landed editor fixture before retrying land
+- **Question:** The canonical land type gate found a new `UiPluginContext` caller missing `readClipboardText`; should the public contract be weakened?
+- **Options:** make the method optional; migrate the new typed fixture and retain the complete public contract
+- **Chose:** merge current roadmap as required by land failure routing and add the method to `plugins/quirky.editor/test/explorer-path-actions.test.tsx` without changing its Explorer behavior
+- **Why:** the first land failed safely on exactly this missing property after another lane's editor work landed. The fixture does not read the clipboard, so its existing default context now supplies an empty read result. Making the API optional would require fallback shims in every terminal consumer and would hide a missed caller migration.
+- **Evidence:** canonical land attempt 1 typecheck diagnostic TS2741 at editor fixture line 187; required roadmap retry merge; fixture method addition
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** another concurrently landed typed caller is missing the required method
+- **Source:** assumed — autonomous
+
+## D10: Preserve all twelve incoming decision sets on the required retry merge
+- **Question:** Does the retry merge change clipboard ownership or introduce a locked conflict?
+- **Options:** silently proceed; read every incoming decision log and preserve their source and native-verification boundaries
+- **Chose:** IncomingClipboardBindings read all twelve logs in full and found no binding conflict: fix-flaky-pty-host-clear, fix-flaky-quirky-worktree-create, fix-native-m2-editor-1028, fix-native-m3-accounts-1028, fix-native-m3-vault-1028, fix-native-sa-browser-agent-1028, fix-test-packages-daemon-1028, fix-test-scripts-1028, m7-terminal-owner-provisioning-and-selector-flows, m7-test-triage, sb-mobile-settings-visibility, and ui-screenshot-review
+- **Why:** editor changes own copied path values, not clipboard acquisition; Vault's no-new-bridge decision concerns its separate reachability/details defects, not terminal paste. Their native scenarios remain pending. The persisted desktop installation UUID is not clipboard authority, a phone identity, or a machine identity. No guest or daemon clipboard route was introduced.
+- **Evidence:** complete incoming logs and IncomingClipboardBindings handoff; retry merge's only missing caller was the editor fixture
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** an incoming owner identifies a concrete API or trust-boundary conflict
+- **Source:** assumed — autonomous
+
+## D11: Retain exact retry-merge verification outcomes without weakening the Explorer test
+- **Question:** Does a timing failure in the concurrently landed editor fixture justify changing this native clipboard repair?
+- **Options:** increase its deadline or suppress the failure; report the failure and isolate the exact case once without source changes
+- **Chose:** preserve all editor runtime/assertions/deadlines and record both the failed concurrent run and its successful isolated check
+- **Why:** the merged clipboard keys file passed 5/0/178 in 46.63 s, UI lint/root/mobile/desktop typing passed in 64.23 s, and scripts passed 126/0/1103 in 112.33 s. The new editor file returned 2 pass/1 fail because its row-drop case exceeded 5000 ms while other checks ran; the exact case passed alone 1/0/12 in 4.29 s. This establishes different observed outcomes, not a diagnosed root cause or a no-retry full-file pass.
+- **Evidence:** final keys/editor run raw `artifact://45`; scripts raw `artifact://46`; isolated editor case raw `artifact://48`; `docs/loop/BLOCKERS.md` concurrent editor-fixture timing receipt
+- **Reversibility:** easy
+- **Confidence:** high for exercised results, no claim about all-load stability
+- **Revisit if:** the editor repair owner identifies a consumer-visible clipboard acquisition regression
+- **Source:** assumed — autonomous
+
 ## Progress
-Implementation and scoped verification complete. Contracts f3c329fd preceded implementation b48928eb. Native SC-37 is pending with historical report/date retained. New regression failed before and passed after; full keys file 5/0/178, scripts 81/0/820, built terminal/real-PTY smoke, packaged build and post-catch-up UI lint/root/mobile/desktop typing passed. Scoped read-only review returned no findings with reduced model-family independence. Broad suite failed with 152 unique files, all already in the canonical baseline/area repair queue; exact receipts and limitations are in D8 and BLOCKERS.md, not called passing. One catch-up completed and all incoming decisions were read. All agents returned, owned browser closed, private smoke daemon/PTY home removed. Ready to commit final receipts, detach and land this one item via the canonical absolute queue script; remove owned scratch after successful landing.
+Implementation and scoped verification complete. Contracts f3c329fd preceded implementation b48928eb; receipt 4ae6f086 records the failed broad suite and existing area owners. First canonical land failed safely on a concurrently landed editor fixture's missing required context method. Required retry roadmap merge completed, all twelve incoming logs were read, and that new caller was migrated. Final merged keys 5/0/178, typecheck and scripts 126/0/1103 passed; the editor file's one concurrent timing failure passed its exact isolated check without code/deadline/assertion changes (D11). Broad suite remains explicitly failed and native SC-37 pending. All agents/checks returned, owned browser closed and private smoke home removed. Ready to commit receipts, detach and retry canonical land; remove owned scratch only after success.
