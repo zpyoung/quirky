@@ -72,6 +72,9 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const [themeEdit, setThemeEdit] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
+  const settingsCommands = plugin.model?.commands.filter((command) => command.id === `command:${command.plugin}/open-settings`) ?? []
+  const [openingCommand, setOpeningCommand] = useState<string | null>(null)
+  const [commandError, setCommandError] = useState<string | null>(null)
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -86,6 +89,17 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
     setBusy(false)
     setFieldErrors(errors)
     if (Object.keys(errors).length === 0) onClose()
+  }
+  const openPluginSettings = async (id: string) => {
+    setOpeningCommand(id)
+    setCommandError(null)
+    try {
+      await host.runCommandForResult(id)
+      onClose()
+    } catch (error) {
+      setOpeningCommand(null)
+      setCommandError(error instanceof Error ? error.message : String(error))
+    }
   }
 
   return (
@@ -124,6 +138,23 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
               </p>
             )}
           </>
+        )}
+        {settingsCommands.length > 0 && (
+          <section className="settings-plugin-actions" aria-label="Plugin settings">
+            <p className="muted">Open a plugin’s dedicated settings view.</p>
+            {settingsCommands.map((command) => (
+              <button
+                key={command.id}
+                type="button"
+                data-settings-command={command.id}
+                disabled={busy || openingCommand !== null}
+                onClick={() => void openPluginSettings(command.id)}
+              >
+                {openingCommand === command.id ? 'Opening…' : command.title}
+              </button>
+            ))}
+            {commandError && <p className="form-error" role="alert">{commandError}</p>}
+          </section>
         )}
         <div className="dialog-actions">
           <button type="button" onClick={onClose}>
