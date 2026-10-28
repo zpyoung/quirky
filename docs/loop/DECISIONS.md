@@ -201,6 +201,23 @@ files, not this one.
 | medium | high | [m2-editor D42](decisions/m2-editor.md) | Preserve approved dock hosting and daemon-owned palette state | locked by docs/loop/decisions/m3-terminal-dock.md and docs/loop/decisions/fix-flaky-pty-host-host.md |
 | medium | high | [m2-editor D44](decisions/m2-editor.md) | Retain the landed sidebar activity rail without losing editor geometry | locked by docs/loop/decisions/m2-sidebar-extras.md |
 | medium | high | [fix-flaky-pty-host-host D2](decisions/fix-flaky-pty-host-host.md) | Preserve independent cleanup ownership and isolate experiments | locked by docs/loop/decisions/fix-test-process-leaks.md |
+| medium | high | [m6-heimdall-owner D1](decisions/m6-heimdall-owner.md) | Build only the optional owner slice | locked by docs/loop/queue.json |
+| medium | high | [m6-heimdall-owner D2](decisions/m6-heimdall-owner.md) | Resolve all skill questions autonomously with source-grounded defaults | locked by docs/loop/LOOP.md |
+| medium | high | [m6-heimdall-owner D3](decisions/m6-heimdall-owner.md) | Use in-plugin owner modules and public cross-plugin calls | locked by docs/loop/decisions/m6-heimdall-core.md |
+| medium | high | [m6-heimdall-owner D7](decisions/m6-heimdall-owner.md) | Bind live owner connections to their authenticated creating plugin | assumed — autonomous |
+| medium | high | [m6-heimdall-owner D8](decisions/m6-heimdall-owner.md) | Use scoped service worker effects and separate exact approvals | assumed — autonomous |
+| medium | high | [m6-heimdall-owner D11](decisions/m6-heimdall-owner.md) | Keep local worker controls inside ordinary write-ahead owner proposals | assumed — autonomous |
+| medium | high | [m6-heimdall-owner D12](decisions/m6-heimdall-owner.md) | Preserve updated dependency authority contracts and canonical owner types | assumed — autonomous |
+| medium | high | [m6-heimdall-owner D14](decisions/m6-heimdall-owner.md) | Recheck the live runner fence at automatic owner dispatch | assumed — autonomous |
+| medium | high for exercised lifecycle boundaries | [m6-heimdall-owner D16](decisions/m6-heimdall-owner.md) | Release owner resources by authenticated plugin and watcher key before terminal persistence | assumed — autonomous |
+| medium | high for the public contract; final merged gate pending | [m6-heimdall-owner D20](decisions/m6-heimdall-owner.md) | Preserve canonical launch snapshots and the native receipt migration during serial hub integration | assumed — autonomous |
+| medium | high for canonical replay and forward receipt order; actual backend acceptance pending | [m6-heimdall-owner D23](decisions/m6-heimdall-owner.md) | Keep one public native launch snapshot while integrating the real service facade | supersedes m6-heimdall-core D25 (private launch-options table only) |
+| medium | high for integrated owner callers and types; final remote/dependency gate remains required | [m6-heimdall-owner D34](decisions/m6-heimdall-owner.md) | Preserve separate logical and transport request identities during final dependency composition | assumed — autonomous |
+| medium | high for binding inventory and partition; merged gates pending | [m6-heimdall-owner D35](decisions/m6-heimdall-owner.md) | Compose roadmap ancestry without dropping either native admission contract | locked by incoming decision logs and docs/loop/LOOP.md |
+| medium | high for the retained invariants and exercised surfaces; queue/dependency and final remote gates remain required | [m6-heimdall-owner D38](decisions/m6-heimdall-owner.md) | Consume final terminal-summary and historical-close invariants through the supported lane workflow | locked by docs/loop/LOOP.md and incoming m6-heimdall-core D35–D36 |
+| medium | high | [m6-heimdall-owner D39](decisions/m6-heimdall-owner.md) | Perform the single supported roadmap catch-up after the dependency is marked done | locked by docs/loop/LOOP.md and final incoming decision logs |
+| medium | high for the tested historical variants | [m6-heimdall-owner D41](decisions/m6-heimdall-owner.md) | Reconcile divergent version-8/9 session stores without rewriting migration history | assumed — autonomous |
+| medium | high for the reproduced publication boundary and regression | [m6-heimdall-owner D43](decisions/m6-heimdall-owner.md) | Prevent asynchronous read head-of-line blocking without bypassing command publication | assumed — autonomous |
 | medium | high | [m5-loops-ui D1](decisions/m5-loops-ui.md) | Both UI slices ship as one item | locked by docs/loop/queue.json |
 | medium | high | [m5-loops-ui D3](decisions/m5-loops-ui.md) | Keep feature logic in its plugin and grow a generic plus-menu target | locked by docs/roadmap.md |
 | medium | high | [m5-loops-ui D6](decisions/m5-loops-ui.md) | Read authoritative snapshots; never infer stop from view absence | assumed — autonomous |
@@ -533,6 +550,12 @@ files, not this one.
 | medium | high | [m1-term-daemon D24](decisions/m1-term-daemon.md) | History is rendered on read by replaying a bounded window of the log, not stored as rows | locked by docs/architecture.md |
 | medium | high | [m1-term-daemon D41](decisions/m1-term-daemon.md) | Catching up with build/roadmap (m1-providers) keeps both sides; the exit columns become migration 3 | assumed — autonomous |
 | medium | high | [m1-term-daemon D42](decisions/m1-term-daemon.md) | A second catch-up merged m1-launch-settings; the exit columns become migration 4 | assumed — autonomous |
+| medium | high | [m6-heimdall-control D1](decisions/m6-heimdall-control.md) | Ship controls and fleet together on the core plugin | locked by docs/loop/queue.json |
+| medium | high | [m6-heimdall-control D4](decisions/m6-heimdall-control.md) | Keep remote and worker authority honest | locked by docs/loop/decisions/m6-heimdall-core.md |
+| medium | high | [m6-heimdall-control D6](decisions/m6-heimdall-control.md) | Preserve conditional confirmations and unified notification ownership | locked by docs/loop/decisions/m1-notifications.md |
+| medium | high | [m6-heimdall-control D7](decisions/m6-heimdall-control.md) | Preserve typed owner config and reserve owner runtime integration | assumed — autonomous |
+| medium | high for source mapping; public runtime proof still pending core integration | [m6-heimdall-control D8](decisions/m6-heimdall-control.md) | Translate CLI creation flags from the actual source contract, not inferred payload names | locked by docs/roadmap.md |
+| medium | high for observed persistence/native/public boundaries; worker backend acceptance not yet passing | [m6-heimdall-control D12](decisions/m6-heimdall-control.md) | Compose genuine dependency authority and preserve landed persistence history | assumed — autonomous |
 | medium | high | [m3-session-info D1](decisions/m3-session-info.md) | Build the local session inspection flows, not adjacent agent extras | locked by docs/roadmap.md |
 | medium | high | [m3-session-info D5](decisions/m3-session-info.md) | Statusline consent changes only future launch overlays | locked by docs/roadmap.md |
 | medium | high | [m3-session-info D6](decisions/m3-session-info.md) | Correlate every rich value to the active provider session | assumed — autonomous |
@@ -857,6 +880,32 @@ files, not this one.
 | easy | high | [fix-flaky-pty-host-host D13](decisions/fix-flaky-pty-host-host.md) | Wait for both expected copies before checking cold-restore input | assumed — autonomous |
 | easy | high | [fix-flaky-pty-host-host D14](decisions/fix-flaky-pty-host-host.md) | Follow the incoming night-mode verification contract | locked by docs/loop/LOOP.md |
 | easy | high for attribution to the named test file; no root-cause claim about the fetch implementation | [fix-flaky-pty-host-host D15](decisions/fix-flaky-pty-host-host.md) | Attach the independent fetch failure to its existing queued repair | assumed — autonomous |
+| easy | high | [m6-heimdall-owner D4](decisions/m6-heimdall-owner.md) | OpenAI implementers and Gemini cross-family fallback | assumed — autonomous |
+| easy | high | [m6-heimdall-owner D5](decisions/m6-heimdall-owner.md) | Preserve current landed structured runner while merging early core contracts | assumed — autonomous |
+| easy | high | [m6-heimdall-owner D6](decisions/m6-heimdall-owner.md) | Limit platform verification to macOS | deferred: platform |
+| easy | high | [m6-heimdall-owner D9](decisions/m6-heimdall-owner.md) | Add a real API/CLI acceptance component without shared writes | assumed — autonomous |
+| easy | high | [m6-heimdall-owner D10](decisions/m6-heimdall-owner.md) | Correct concrete red checks and remove incidental timing assertions | assumed — autonomous |
+| easy | high | [m6-heimdall-owner D13](decisions/m6-heimdall-owner.md) | Reconcile the action that parked a watcher before applying inactivity guards | assumed — autonomous |
+| easy | high | [m6-heimdall-owner D15](decisions/m6-heimdall-owner.md) | Prove lifecycle and conversation behavior with real isolated provider processes | assumed — autonomous |
+| easy | high | [m6-heimdall-owner D17](decisions/m6-heimdall-owner.md) | Admit only canonical effective hooks owned by their declaring plugin | assumed — autonomous |
+| easy | high for exercised owner stale-report flow | [m6-heimdall-owner D18](decisions/m6-heimdall-owner.md) | Rebrief stale owner evidence and keep approval waits Held | assumed — autonomous |
+| easy | high for exercised api flows before final dependency catch-up | [m6-heimdall-owner D19](decisions/m6-heimdall-owner.md) | Preserve public schema bounds and prove owner behavior through real API and CLI effects | assumed — autonomous |
+| easy | high | [m6-heimdall-owner D21](decisions/m6-heimdall-owner.md) | Apply the aged-item rule without inventing completion evidence | locked by docs/loop/LOOP.md |
+| easy | high for the exact reported type causes; verification pending | [m6-heimdall-owner D22](decisions/m6-heimdall-owner.md) | Correct reported owner type errors without replaying the failing full check | assumed — autonomous |
+| easy | high for exercised assignment and stop receipt boundaries | [m6-heimdall-owner D24](decisions/m6-heimdall-owner.md) | Separate assignment activity from a retained process's liveness | assumed — autonomous |
+| easy | high for exercised owner paths and captured admission cause; final backend/full-project gates pending | [m6-heimdall-owner D25](decisions/m6-heimdall-owner.md) | Ground final owner evidence in actual effects and distinguish fixture failures | assumed — autonomous |
+| easy | high for the observed startup admission cause | [m6-heimdall-owner D26](decisions/m6-heimdall-owner.md) | Let driving structured input reach its existing native startup barrier | assumed — autonomous |
+| easy | high | [m6-heimdall-owner D27](decisions/m6-heimdall-owner.md) | Preserve native history and exact follow-up identity instead of incidental total turns | assumed — autonomous |
+| easy | high for native readiness and actual service message effect; full worker flow still requires core fixes | [m6-heimdall-owner D28](decisions/m6-heimdall-owner.md) | Observe real native work without changing production readiness policy | assumed — autonomous |
+| easy | high for the verified api behavior and exact ordinary schema cause | [m6-heimdall-owner D29](decisions/m6-heimdall-owner.md) | Verify abandonment through the real owner API and retain exact schema failure evidence | assumed — autonomous |
+| easy | high for exercised delivery/answer paths; exact stop awaits the core correction | [m6-heimdall-owner D30](decisions/m6-heimdall-owner.md) | Consume canonical message schemas and preserve the actual worker answer proof | assumed — autonomous |
+| easy | high | [m6-heimdall-owner D31](decisions/m6-heimdall-owner.md) | Give independent native fixture connections distinct provider identities | assumed — autonomous |
+| easy | high for exercised end-to-end flow; final dependency/catch-up gates remain required | [m6-heimdall-owner D32](decisions/m6-heimdall-owner.md) | Accept the complete real owner-worker proof only after exact target exit and sibling preservation | assumed — autonomous |
+| easy | high | [m6-heimdall-owner D33](decisions/m6-heimdall-owner.md) | Remove merge-created duplicate fake provider declarations instead of loosening activation | assumed — autonomous |
+| easy | high for the checked snapshot only | [m6-heimdall-owner D36](decisions/m6-heimdall-owner.md) | Use structural validation as declaration evidence, not a substitute runtime verdict | assumed — autonomous |
+| easy | high | [m6-heimdall-owner D37](decisions/m6-heimdall-owner.md) | Repair roadmap typing and SDK-init fixture preconditions without changing native behavior | assumed — autonomous |
+| easy | high | [m6-heimdall-owner D40](decisions/m6-heimdall-owner.md) | Remove the final merged SDK-initialization duplicate rather than fabricate a native ID | assumed — autonomous |
+| easy | high | [m6-heimdall-owner D42](decisions/m6-heimdall-owner.md) | Replace fixture source-text rewriting with input-driven typed event production | assumed — autonomous |
 | easy | high | [m5-loops-ui D4](decisions/m5-loops-ui.md) | Resolve all visual gray areas through feature defaults | locked by research/orca-features/fork-loops.md |
 | easy | high | [m5-loops-ui D5](decisions/m5-loops-ui.md) | Preserve draft text and full nested config sections | locked by research/orca-features/fork-loops.md |
 | easy | high | [m5-loops-ui D9](decisions/m5-loops-ui.md) | Autonomous spec review and full scoped work after the nightly target | locked by docs/loop/LOOP.md |
@@ -1803,6 +1852,15 @@ files, not this one.
 | easy | high | [m1-term-daemon D45](decisions/m1-term-daemon.md) | The UI pass found that a restored pane lost its old output; GROUND no longer moves the cursor | assumed — autonomous |
 | easy | high | [m1-term-daemon D46](decisions/m1-term-daemon.md) | All UI scenarios passed in the web window, across three passes | assumed — autonomous |
 | easy | high | [m1-term-daemon D47](decisions/m1-term-daemon.md) | No native-only scenarios | assumed — autonomous |
+| easy | high | [m6-heimdall-control D2](decisions/m6-heimdall-control.md) | Resolve observable gray areas with the source defaults | locked by docs/loop/LOOP.md |
+| easy | high | [m6-heimdall-control D3](decisions/m6-heimdall-control.md) | Night mode uses one combined specification and a three-component wave | assumed — autonomous |
+| easy | high | [m6-heimdall-control D5](decisions/m6-heimdall-control.md) | Verify only macOS and isolate process state | deferred: platform |
+| easy | high for exercised state boundaries; actual daemon/worker/ui remains required | [m6-heimdall-control D9](decisions/m6-heimdall-control.md) | Use one fleet selector contract and preserve concurrent kernel writes | assumed — autonomous |
+| easy | high for exercised boundary regressions; full daemon/worker/ui acceptance still pending executable dependencies | [m6-heimdall-control D10](decisions/m6-heimdall-control.md) | Validate consumed response projections without rejecting canonical service metadata | assumed — autonomous |
+| easy | high for exercised public boundaries | [m6-heimdall-control D11](decisions/m6-heimdall-control.md) | Validate commands before opening conditional deletion confirmation | assumed — autonomous |
+| easy | high for exercised surface only | [m6-heimdall-control D13](decisions/m6-heimdall-control.md) | Apply the aged-item rule without claiming an unrun dogfood campaign | locked by docs/loop/LOOP.md |
+| easy | high for the identified setup and dispatch semantics; final native acceptance not yet passing | [m6-heimdall-control D14](decisions/m6-heimdall-control.md) | Require an acknowledged dispatch, not merely a live process or completed work | assumed — autonomous |
+| easy | high for exercised blocking ask/answer/unpark/replay; overall native test remains failing at exact stop | [m6-heimdall-control D15](decisions/m6-heimdall-control.md) | Exercise a blocking Ask rather than invent a pending one-way message | locked by docs/roadmap.md |
 | easy | high | [m3-session-info D2](decisions/m3-session-info.md) | Use the existing right-column panel slot without a shortcut | locked by docs/loop/decisions/m0-ui-api.md |
 | easy | high | [m3-session-info D3](decisions/m3-session-info.md) | Keep view state in the daemon and default only Live activity open | locked by docs/roadmap.md |
 | easy | high | [m3-session-info D4](decisions/m3-session-info.md) | Show missing, waiting, refreshing, stale and error states honestly | locked by external session-info.md |
