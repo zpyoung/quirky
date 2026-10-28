@@ -176,5 +176,71 @@
 - **Revisit if:** SDK completion is implemented and verified on a run-owned native partition
 - **Source:** user ruling 2026-10-28 (lane8 clear availability)
 
+## D17: Record the remaining evidenced Native host and workspace-preview limits
+- **Question:** Can normal reload stand in for hard reload, observational load events report failures, or passive daemon resources render grant-scoped active workspace HTML?
+- **Options:** report approximate success; relax daemon HTML MIME; supported implementation where available and exact flow follow-ups for outside limits
+- **Chose:** before the operator freeze, queue.ts add created and authoritative JSON confirmed sa-browser-pane-native-host-controls (cache-bypass reload and load-failed signal) and sa-browser-pane-workspace-preview (isolated grant conversion and Back). Explicit local HTML file navigation remains implemented, including outside-worktree browsing; sourcePath is exposed only for canonical in-worktree files. Do not claim direct file browsing/editor new-tab as grant preview or normal reload as hard reload.
+- **Why:** public Native tag has no ignoreCache/reloadFromOrigin or load-failed event. Public file resources intentionally reject active HTML and sandbox responses; source workspace preview additionally needs isolated nonpersistent grant/assets and native outbound-network/permission/download policy. These are not safely supplied by weakening the passive capability.
+- **Evidence:** Native worker SDK event/control packet; SDK browser/webviewtag.ts and preload/webviewTag.ts; public file-resource allowlist/CSP; external Orca doc-preview-protocol.ts:33-65,75-151; authoritative queued records todo/deps[sa-browser-pane].
+- **Reversibility:** medium (requires supported Native/preview capabilities)
+- **Confidence:** high for the inspected public boundaries; no private implementation timing/capability claim
+- **Revisit if:** supported APIs make these exact flows reachable without weakening source security
+- **Source:** deferred: native host controls and workspace grant preview
+
+## D18: Stop creating queue follow-ups under the operator sprint ruling
+- **Question:** The operator says browser follow-up count threatens the 4am sprint; how are further unavoidable gaps recorded?
+- **Options:** keep adding dependent items under the older LOOP rule; hide gaps; freeze queue additions and finish reachable flows here
+- **Chose:** no further queue.ts add for this item. Finish reachable in-scope flows in this item; any additional unavoidable limit only in this decision log and appended BLOCKERS.md. Existing queued records remain unchanged. All3implementers informed immediately.
+- **Why:** the user's latest operator note explicitly supersedes the older requirement to add another item for every deferred flow.
+- **Evidence:** user operator interjection at the 2026-10-28T01:25Z checkpoint; three worker steering messages.
+- **Reversibility:** easy (operator may later requeue recorded gaps)
+- **Confidence:** high
+- **Revisit if:** the operator explicitly changes the follow-up freeze
+- **Source:** user ruling 2026-10-28 (operator sprint)
+
+## D19: Publish the real source checkpoint without claiming acceptance
+- **Question:** Lane8 cannot integrate its early dependent service/UI while this branch contains only contracts; can it use the assembled source before the final gate?
+- **Options:** keep source private until green; publish placeholders; checkpoint the real audited candidate with named known failures
+- **Chose:** publish the complete assembled source plus already verified Native safety fixes and new-tab menu integration, explicitly UNVERIFIED. Keep the active runtime acceptance worker isolated and merge its repair delta afterwards. Lane8 merges repairs again before its final checks.
+- **Why:** the user explicitly requested a real dependency-branch checkpoint even with known acceptance failures; no source scaffold or fake implementation is substituted.
+- **Evidence:** lane8 checkpoint user interjection; initial barrier-audit.json/assembly.json; current root compiler diagnostics artifact82; real Native unit/DOM/preload proof.
+- **Reversibility:** easy (subsequent repair commits)
+- **Confidence:** high for scope/intent, no green product claim
+- **Revisit if:** any worker or foreign source mutates the checkpoint tree during staging
+- **Source:** user ruling 2026-10-28 (early dependency source checkpoint)
+
+## D20: Preserve framework-owned DOM during Native find
+- **Question:** Does injected mark-based find leave a reactive page working?
+- **Options:** replace text nodes with marks; claim the SDK count limitation; use selection ranges without DOM replacement
+- **Chose:** real DOM Range selection and match counting; no replacement/normalization of framework text nodes. Serialize the self-contained guest program lazily. Remove constant-copy/fake-find echo tests; keep real DOM regressions.
+- **Why:** a production-adapter guest-program smoke reproduced a React mixed-text update remaining original-value suffix after find; Range-based search then showed updated-value suffix. Both real DOM find/update and next/previous/wrap/clear regressions passed.
+- **Evidence:** /tmp/sa-browser-pane.fiGLjz/find-dom-smoke.ts actual red/green output; packages/ui/test/native-browser-dom.test.ts2pass/11assertions; Native capability7pass.
+- **Reversibility:** medium (guest find implementation)
+- **Confidence:** high for DOM logic, actual WebKit/native surface remains pending nightly
+- **Revisit if:** Native nightly finds selection/scroll behavior differs from the DOM model
+- **Source:** assumed — autonomous
+
+## D21: Grow the public new-tab menu instead of substituting a pane menu
+- **Question:** Browser's New Browser Tab contribution is rejected because the public menu API only knew the pane target; where must the command appear?
+- **Options:** put it in the unrelated pane menu; hardcode Browser in Terminal; add the public tab-create target and render generic effective contributions
+- **Chose:** TERMINAL_TAB_MENU/quirky.terminal/tab through protocol types, kernel schema, daemon validation and actual plus-menu renderer. Commands receive actual worktree/workspace/group; registry changes update an open menu, disabled/overridden items stay effective-only.
+- **Why:** source discoverability requires the actual new-tab menu, and built-ins/third parties must share the same public API.
+- **Evidence:** contract commit e084312b; menu-repair-audit.json six paths/in-scope; worker owned workspace-plus14pass and menu-kind8pass, parent final broad gate still pending.
+- **Reversibility:** medium (public unstable API)
+- **Confidence:** high for the exercised registry/controller path; built UI smoke still required
+- **Revisit if:** actual plus-menu UI or wrong-group tests expose a targeting error
+- **Source:** locked by docs/roadmap.md
+
+## D22: Follow overdue night mode without inventing a review pass
+- **Question:** The 00:35Z claim passed its two-hour bound at the observed 02:36:28Z clock; should an unstarted final review or full dogfood campaign begin now?
+- **Options:** start another review campaign; call it passing; obey the deadline rule and retain required real-path verification
+- **Chose:** skip the unstarted final review/full dogfood campaign under current LOOP.md night mode, explicitly record that neither passed. Continue fixing actual acceptance/type failures, exercise the real changed UI surface, run the required affected/scripts/type gates and land. Native-only scenarios remain pending nightly.
+- **Why:** the user night rule says an overdue item lands as soon as its own tests and typecheck pass and skips unstarted review/dogfood. A skipped review is not evidence of correctness.
+- **Evidence:** current LOOP.md read via build/roadmap; actual date command02:36:28Z; no final reviewer or UI campaign was started.
+- **Reversibility:** easy (later review/native run can report actual findings)
+- **Confidence:** high
+- **Revisit if:** actual verification exposes another blocking defect; fix it rather than hiding it behind the deadline
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-Claimed 2026-10-28T00:35Z. Contract/spec commit2ab093ce; three isolated OpenAI components running under /tmp/sa-browser-pane.fiGLjz with hard disjoint scopes/journal. Parent amendments D8–D10 communicated before code acceptance. Web dogfood doctor passed. Next: wave barrier HEAD/scope audits, merge implementations, owned acceptance/build and real Watch smoke, one Gemini review/fix, affected suite/scripts/types, one catchup/decision reconciliation, commit/detach/controller land. Native-only scenarios are pending nightly; no implementation verified yet.
+Real source checkpoint requested by lane8; candidate is /tmp/sa-browser-pane.fiGLjz/wavecheck, HEAD e084312b plus staged/unstaged implementation and parent safety fixes. Original3component barrier and six-path menu repair audit passed. Native capability7pass, DOM2pass, desktop/window models12pass, desktop types/preload build passed; root typecheck initially failed26diagnostics and runtime acceptance remains active. Publish UNVERIFIED checkpoint to build/sa-browser-pane, then integrate isolated Runtime repair and finish actual UI/affected/scripts/types/catchup/controller land. Overdue night mode skips the unstarted final review/full campaign (D22); no green acceptance/land claim.
