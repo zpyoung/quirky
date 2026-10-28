@@ -153,3 +153,9 @@ Cookie and storage CRUD share the same scoped API/CLI. Dialog accept/dismiss use
 
 `paneOpen` and `pane open` accept explicit `worktree:"floating"` and an optional exact terminal `group`. The public editor owner supplies only its profile-owned floating document root; HOME and other worktrees are not inferred. Native and Watch retain their existing separate owners, profile rules and resource lifetimes. Opening a floating Browser tab does not navigate the main worktree view. Real native focus and system-webview visibility remain in the native handoff.
 
+
+## Running browser tests
+
+Run `bun scripts/suite.ts plugins/quirky.browser` for the canonical package checks. Real browser automation, extras API/CLI, cookie import, Watch and design-runtime files run on macOS with installed Chrome, as listed in `scripts/test-on-macos.txt`; the remote Linux host does not provide Chrome. These checks retain real owned browser processes rather than skipping browser scenarios or substituting mocks.
+
+The browser harness installs the public dependencies of its real plugins, including the Worktrees dependency on `quirky.cli`. It uses temporary process homes and synthetic cookie source files and cleans up the owned browser and daemon. UI import tests verify explicit discovery, file recovery, captured destination confirmation and command execution without pinning explanatory copy or button punctuation.
