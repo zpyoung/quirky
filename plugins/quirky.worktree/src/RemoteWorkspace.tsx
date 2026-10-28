@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent, type CSSProp
 import type { UiPluginContext, Worktree } from '@quirky/protocol'
 import type { RemoteCleanupPreview, RemoteWorkspaceMirror } from './remote-types'
 import { isRecord } from './loop-status'
+import { recordOf } from './values'
 
 type Props = { context: UiPluginContext; workspace: string }
 type RemoteSession = { id: string; agent: string; title: string; status: string; worktreeId: string }
@@ -225,7 +226,7 @@ export function RemoteWorkspace({ context, workspace }: Props) {
     if (!mirror) return
     await run(async () => {
       const source = change.area === 'staged' ? 'staged' : 'unstaged'
-      const value = isRecord(await context.call('quirky.worktree/remoteCall', {
+      const value = recordOf(await context.call('quirky.worktree/remoteCall', {
         workspace,
         operation: 'diff',
         path: change.path,
@@ -240,7 +241,7 @@ export function RemoteWorkspace({ context, workspace }: Props) {
 
   const createSession = async () => {
     await run(async () => {
-      const result = isRecord(await context.call('quirky.worktree/remoteCall', { workspace, operation: 'terminalCreate', title: 'Remote Shell' }))
+      const result = recordOf(await context.call('quirky.worktree/remoteCall', { workspace, operation: 'terminalCreate', title: 'Remote Shell' }))
       if (!result || typeof result.id !== 'string' || result.worktreeId !== mirror?.worktree.id) throw new Error('The remote session owner returned a session for a different or unknown workspace.')
       setSelectedSession(result.id)
       await load()
@@ -282,7 +283,7 @@ export function RemoteWorkspace({ context, workspace }: Props) {
   const previewCleanup = async () => {
     if (!mirror) return
     await run(async () => {
-      const result = isRecord(await context.call('quirky.worktree/remoteCleanupPreview', { workspace }))
+      const result = recordOf(await context.call('quirky.worktree/remoteCleanupPreview', { workspace }))
       if (
         !result ||
         typeof result.workspace !== 'string' ||

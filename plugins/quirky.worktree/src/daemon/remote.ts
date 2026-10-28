@@ -17,7 +17,7 @@ import type {
   RemoteMirrorRow,
   RemoteWorkspaceMirror
 } from '../remote-types'
-import { isRecord } from '../loop-status'
+import { recordOf } from '../values'
 
 const REMOTE_VIEW = 'view:quirky.worktree/remote'
 const MIRROR_PREFIX = 'remote_'
@@ -52,7 +52,7 @@ function optionalBoolean(context: PluginContext, value: unknown, field: string):
 }
 
 function parseIdentity(context: PluginContext, value: unknown, source: string): OwnerHostIdentity {
-  const record = isRecord(value)
+  const record = recordOf(value)
   if (!record) reject(context, 'conflict', `${source} did not return an owner host identity`)
   return {
     hostId: requiredString(context, record.hostId, `${source}.hostId`, 256),
@@ -61,7 +61,7 @@ function parseIdentity(context: PluginContext, value: unknown, source: string): 
 }
 
 function parseRuntime(context: PluginContext, value: unknown, source: string): OwnerRuntimeIdentity {
-  const record = isRecord(value)
+  const record = recordOf(value)
   if (!record) reject(context, 'conflict', `${source} did not return an owner runtime pin`)
   return {
     id: requiredString(context, record.id, `${source}.id`, 256),
@@ -72,13 +72,13 @@ function parseRuntime(context: PluginContext, value: unknown, source: string): O
 }
 
 function parseCallResult(context: PluginContext, value: unknown, source: string): OwnerCallResult {
-  const record = isRecord(value)
+  const record = recordOf(value)
   if (!record || !('result' in record)) reject(context, 'conflict', `${source} returned an incomplete authenticated runtime result`)
   return { runtime: parseRuntime(context, record.runtime, source), result: record.result }
 }
 
 function parseWorktree(context: PluginContext, value: unknown): Worktree {
-  const record = isRecord(value)
+  const record = recordOf(value)
   if (
     !record ||
     typeof record.id !== 'string' || !WORKTREE_ID.test(record.id) ||
@@ -470,7 +470,7 @@ function validateSessionList(context: PluginContext, result: unknown, worktreeId
   if (!Array.isArray(result)) reject(context, 'conflict', 'The remote session owner returned an incomplete session list.')
   const sessions: Record<string, unknown>[] = []
   for (const item of result) {
-    const session = isRecord(item)
+    const session = recordOf(item)
     if (!session || typeof session.id !== 'string' || typeof session.worktreeId !== 'string') {
       reject(context, 'conflict', 'The remote session owner returned an incomplete session identity.')
     }
@@ -576,7 +576,7 @@ async function doRemoteCall(context: PluginContext, store: PluginStore, params: 
         return await callHost(context, store, current.host, 'quirky.terminal/workspace', { workspace: worktreeId })
       case 'terminalCreate': {
         const latest = await freshMirror(context, store, current.row)
-        const session = isRecord(await callHost(context, store, latest.host, 'quirky.session/create', {
+        const session = recordOf(await callHost(context, store, latest.host, 'quirky.session/create', {
           worktree: latest.worktree.id,
           agent: 'shell',
           ...(params.title ? { title: params.title } : {})
@@ -825,14 +825,14 @@ export function registerRemoteWorkspaces(context: PluginContext, store: PluginSt
     assertKeys(context, params, ['workspace'])
     const row = requireMirror(context, store, params.workspace)
     const current = await freshMirror(context, store, row)
-    const result = isRecord(await callHost(context, store, current.host, 'quirky.worktree/cleanupPreview'))
+    const result = recordOf(await callHost(context, store, current.host, 'quirky.worktree/cleanupPreview'))
     if (!result || typeof result.generatedAt !== 'number' || !Array.isArray(result.candidates)) {
       reject(context, 'conflict', 'The canonical owner returned an incomplete cleanup preview.')
     }
-    const candidateValue = result.candidates.find((value) => isRecord(value)?.worktreeId === current.worktree.id)
+    const candidateValue = result.candidates.find((value) => recordOf(value)?.worktreeId === current.worktree.id)
     let candidate: RemoteCleanupPreview['candidate'] = null
     if (candidateValue !== undefined) {
-      const record = isRecord(candidateValue)
+      const record = recordOf(candidateValue)
       if (
         !record || typeof record.worktreeId !== 'string' || typeof record.name !== 'string' ||
         typeof record.fingerprint !== 'string' || typeof record.reason !== 'string' ||
@@ -869,7 +869,7 @@ export function registerRemoteWorkspaces(context: PluginContext, store: PluginSt
       setMirrorUnavailable(store, current.mirror.id)
       throw error
     }
-    const result = isRecord(rawResult)
+    const result = recordOf(rawResult)
     if (result?.ok !== true || !Array.isArray(result.removed) || !result.removed.includes(current.worktree.id)) {
       setMirrorUnavailable(store, current.mirror.id)
       reject(context, 'conflict', 'The canonical owner did not confirm removal of this exact remote workspace instance; refresh before acting again.')
@@ -884,10 +884,10 @@ export function registerRemoteWorkspaces(context: PluginContext, store: PluginSt
     const row = requireMirror(context, store, params.workspace)
     const current = await freshMirror(context, store, row)
     const fingerprint = requiredString(context, params.fingerprint, 'fingerprint', 128)
-    const livePreview = isRecord(await callHost(context, store, current.host, 'quirky.worktree/cleanupPreview'))
+    const livePreview = recordOf(await callHost(context, store, current.host, 'quirky.worktree/cleanupPreview'))
     if (!livePreview || !Array.isArray(livePreview.candidates)) reject(context, 'conflict', 'The canonical owner returned an incomplete cleanup preview.')
-    const candidateValue = livePreview.candidates.find((value) => isRecord(value)?.worktreeId === current.worktree.id)
-    const candidate = isRecord(candidateValue)
+    const candidateValue = livePreview.candidates.find((value) => recordOf(value)?.worktreeId === current.worktree.id)
+    const candidate = recordOf(candidateValue)
     if (!candidate || candidate.fingerprint !== fingerprint || candidate.eligible !== true) {
       reject(context, 'conflict', 'Cleanup evidence is missing, blocked or stale; refresh and review the exact remote instance again.')
     }
@@ -906,9 +906,9 @@ export function registerRemoteWorkspaces(context: PluginContext, store: PluginSt
       setMirrorUnavailable(store, current.mirror.id)
       throw error
     }
-    const result = isRecord(rawResult)
+    const result = recordOf(rawResult)
     const results = Array.isArray(result?.results) ? result.results : null
-    const outcome = results?.map(isRecord).find((item) => item?.worktreeId === current.worktree.id)
+    const outcome = results?.map(recordOf).find((item) => item?.worktreeId === current.worktree.id)
     if (!outcome || outcome.removed !== true) {
       reject(context, 'conflict', typeof outcome?.error === 'string' ? outcome.error : 'The canonical owner did not remove this exact cleanup candidate.')
     }

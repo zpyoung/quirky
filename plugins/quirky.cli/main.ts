@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import type { OwnerCliPairOffer, OwnerHostIdentity, OwnerRuntimeCallParams, OwnerRuntimeCallResult, PluginContext } from '@quirky/protocol'
+import type { OwnerCliPairOffer, OwnerHostIdentity, OwnerRuntimeCallParams, OwnerRuntimeCallResult, OwnerRuntimePin, PluginContext } from '@quirky/protocol'
 import { createMobileRpc, parseOwnerCliOffer, type MobileRpc } from '@quirky/protocol/paired-client'
 import {
   addSavedRuntimeTarget,
@@ -19,8 +19,6 @@ import {
   type ResolvedRuntimeTarget
 } from '@quirky/protocol/node'
 type Params = Record<string, unknown>
-type ExpectedOwnerRuntime = { id: string; endpoint: string; grantId: string }
-type RuntimeCallInput = OwnerRuntimeCallParams & { expectedRuntime?: ExpectedOwnerRuntime }
 
 function stringParam(context: PluginContext, params: Params, key: string, optional = false): string | undefined {
   const value = params[key]
@@ -51,7 +49,7 @@ function expectedHostParam(context: PluginContext, value: unknown): OwnerHostIde
   }
   return { hostId: value.hostId, generation: value.generation }
 }
-function isExpectedOwnerRuntime(value: unknown): value is ExpectedOwnerRuntime {
+function isExpectedOwnerRuntime(value: unknown): value is OwnerRuntimePin {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
   const candidate = value as Record<string, unknown>
   return Object.keys(candidate).length === 3 &&
@@ -60,7 +58,7 @@ function isExpectedOwnerRuntime(value: unknown): value is ExpectedOwnerRuntime {
     Object.hasOwn(candidate, 'grantId') && typeof candidate.grantId === 'string' && candidate.grantId.trim().length > 0
 }
 
-function expectedRuntimeParam(context: PluginContext, value: unknown): ExpectedOwnerRuntime | undefined {
+function expectedRuntimeParam(context: PluginContext, value: unknown): OwnerRuntimePin | undefined {
   if (value === undefined) return undefined
   if (!isExpectedOwnerRuntime(value)) {
     throw context.error('invalid-params', 'expectedRuntime must contain exactly non-empty id, endpoint, and grantId strings')
@@ -106,7 +104,7 @@ async function callOwnerRuntime(context: PluginContext, params: Params): Promise
   }
   const expectedHost = expectedHostParam(context, params.expectedHost)
   const expectedRuntime = expectedRuntimeParam(context, params.expectedRuntime)
-  const input: RuntimeCallInput = {
+  const input: OwnerRuntimeCallParams = {
     runtime: stringParam(context, params, 'runtime')!,
     method: stringParam(context, params, 'method')!,
     ...(params.params === undefined ? {} : { params: params.params as Record<string, unknown> }),

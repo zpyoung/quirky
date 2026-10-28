@@ -343,15 +343,13 @@ async function createVmRecipeWorkspace(
       throw env.fail('invalid-params', 'provisioned-root cannot create the project default terminal tabs; select defaultTabs:[] or use an orca-worktree recipe.')
     }
     if (details.hooks.setup) {
-      if (params.setup === 'skip' || (params.setup !== 'run' && details.settings.setupPolicy === 'skip-by-default')) {
+      if (params.setup === 'skip' || details.settings.setupPolicy === 'skip-by-default') {
         setup = { ran: 'skipped' }
-      } else if (details.settings.setupPolicy === 'ask' && params.setup !== 'run') {
+      } else if (details.settings.setupPolicy === 'ask') {
         throw env.fail('conflict', 'Setup decision required before attaching this provisioned-root workspace; pass setup:skip or choose an orca-worktree recipe.')
       } else {
         throw env.fail('invalid-params', 'provisioned-root cannot run the configured setup hook; choose setup:skip or an orca-worktree recipe.')
       }
-    } else if (params.setup === 'run') {
-      throw env.fail('invalid-params', 'No setup hook can run for this provisioned-root workspace.')
     }
     guestParams = {}
   }

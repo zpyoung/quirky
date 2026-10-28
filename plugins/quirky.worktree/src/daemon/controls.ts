@@ -693,7 +693,8 @@ export async function cleanupRemove(
 ): Promise<{ results: CleanupRemovalResult[] }> {
   if (params.confirmed !== true) throw env.fail('invalid-params', 'confirmed must be true after the selected cleanup rows have been reviewed')
   if (!Array.isArray(params.selection) || params.selection.length === 0 || params.selection.some((item) =>
-    !recordOf(item) || typeof item.worktreeId !== 'string' || typeof item.fingerprint !== 'string' || item.fingerprint.length === 0
+    !recordOf(item) || typeof item.worktreeId !== 'string' || typeof item.fingerprint !== 'string' || item.fingerprint.length === 0 ||
+    (item.expectedInstanceId !== undefined && (typeof item.expectedInstanceId !== 'string' || item.expectedInstanceId.length === 0))
   )) {
     throw env.fail('invalid-params', 'selection must contain worktreeId and fingerprint for each selected row')
   }
@@ -730,7 +731,11 @@ export async function cleanupRemove(
         results.push({ worktreeId: item.worktreeId, removed: false, error: 'Workspace disappeared before canonical removal.' })
         continue
       }
-      await removeWorktree(env.remove, { worktree: `id:${target.id}`, safeOnly: true }, identity)
+      await removeWorktree(env.remove, {
+        worktree: `id:${target.id}`,
+        safeOnly: true,
+        expectedInstanceId: item.expectedInstanceId ?? target.instanceId
+      }, identity)
       results.push({ worktreeId: item.worktreeId, removed: true })
     } catch (error) {
       results.push({ worktreeId: item.worktreeId, removed: false, error: messageOf(error) })

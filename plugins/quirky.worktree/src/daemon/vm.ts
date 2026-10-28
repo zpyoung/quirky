@@ -5,7 +5,8 @@ import { accessSync, chmodSync, closeSync, constants as fsConstants, fstatSync, 
 import type { Dirent } from 'node:fs'
 import { delimiter, dirname, isAbsolute, join, resolve } from 'node:path'
 import type { OwnerHostIdentity, OwnerRuntimeCallResult, PluginContext, PluginStore, RegisteredOwnerHost, Repo, Worktree, WorktreeCreateResult } from '@quirky/protocol'
-import { isVmRecord as isRecord, type VmAttachmentRequest, type VmBackendState, type VmCheckoutMode, type VmCreateOutput, type VmEnvironment, type VmEnvironmentRecipe, type VmGuestCreateParams, type VmLifecycleState, type VmOperationKind, type VmOperationState, type VmRecipeSnapshot, type VmRemoteWorkspace } from '../vm-types'
+import type { VmAttachmentRequest, VmBackendState, VmCheckoutMode, VmCreateOutput, VmEnvironment, VmEnvironmentRecipe, VmGuestCreateParams, VmLifecycleState, VmOperationKind, VmOperationState, VmRecipeSnapshot, VmRemoteWorkspace } from '../vm-types'
+import { isRecord } from '../loop-status'
 
 const VM_TIMEOUT_MS = 15 * 60_000
 const VM_DOCTOR_TIMEOUT_MS = 15_000
@@ -1178,7 +1179,7 @@ async function vmCreate(context: VmContext, store: PluginStore, service: VmServi
     try { actual = await backendState(context, service, store, rowById(store, row.id)!, createScriptReturned) } catch { /* preserve unknown if Lima cannot prove state */ }
     const message = safeFailureMessage(error, pairingCode === null ? [] : [pairingCode])
     failOperation(service, store, rowById(store, row.id)!, actual, message)
-    conflict(context, `VM creation failed; durable record ${row.id} remains ${actual}. Inspect vmShow; vmResume requires a verifiable owner binding, and vmDestroy refuses unpinned or replaced Lima instances. ${message}`)
+    return conflict(context, `VM creation failed; durable record ${row.id} remains ${actual}. Inspect vmShow; vmResume requires a verifiable owner binding, and vmDestroy refuses unpinned or replaced Lima instances. ${message}`)
   } finally {
     if (outputPath !== undefined) cleanPrivateOutput(outputPath)
   }

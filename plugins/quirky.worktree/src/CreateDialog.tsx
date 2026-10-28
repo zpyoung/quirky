@@ -900,7 +900,10 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
                 {defaultTabWarnings.map((warning) => <p className="muted" role="status" key={warning}>{warning}</p>)}
                 {recipeDiagnostics.map((diagnostic) => <p className="muted" role="status" key={`${diagnostic.index}:${diagnostic.field ?? ''}`}>{diagnostic.message}</p>)}
                 {(project?.hooks?.environmentRecipes?.length ?? 0) > 0 && (
-                  <p className="muted" role="status">Environment recipe VM lifecycle integration requires a separate runtime owner; it is not replaced by a local shell command.</p>
+                  <button type="button" onClick={() => {
+                    context.openView('view:quirky.worktree/environments', { repo: repoId })
+                    onClose()
+                  }}>Manage VM environments and review lifecycle commands</button>
                 )}
             {(setup || asksForSetup) && (
               <div className="setup-block">

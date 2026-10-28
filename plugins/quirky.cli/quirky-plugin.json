@@ -106,7 +106,7 @@
               "properties": { "id": { "type": "string" }, "endpoint": { "type": "string" }, "grantId": { "type": "string" } },
               "required": ["id", "endpoint", "grantId"],
               "additionalProperties": false
-            },
+            }
           },
           "required": ["runtime", "method"],
           "additionalProperties": false

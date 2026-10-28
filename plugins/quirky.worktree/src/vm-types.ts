@@ -10,10 +10,6 @@ export type VmAttachmentRequest =
   | { checkoutMode: 'provisioned-root'; workspaceSelector: string }
   | { checkoutMode: 'orca-worktree'; repo: string; name: string; createParams: VmGuestCreateParams }
 
-/** The one structural JSON-object guard for VM API/config/persisted-value boundaries. */
-export function isVmRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-}
 /** The parsed repo environment recipe, before applying the default checkout mode. */
 export type VmEnvironmentRecipe = {
   id: string
