@@ -21,6 +21,7 @@ describe('effectiveHooks: reading the shared file', () => {
       file: null,
       setup: null,
       archive: null,
+      issueCommand: null,
       agentStartup: 'start-immediately',
       sharedDirectories: [],
       warnings: []
@@ -40,6 +41,16 @@ describe('effectiveHooks: reading the shared file', () => {
     expect(hooks.sharedDirectories).toEqual(['node_modules', '.venv'])
     expect(hooks.warnings).toEqual([])
   })
+  test('reads the top-level issue command without an unsupported-key warning', () => {
+    const hooks = effectiveHooks(orca('issueCommand: gh issue list\n'), settings(), {})
+    expect(hooks.issueCommand).toMatchObject({
+      text: 'gh issue list',
+      source: 'shared',
+      badge: 'orca.yaml',
+      shared: { text: 'gh issue list', hash: hashScript('gh issue list'), trusted: false, changed: false }
+    })
+    expect(hooks.warnings).toEqual([])
+  })
 
   test('the project setting beats the file for the agent startup policy', () => {
     const file = quirky('setupAgentStartupPolicy: wait-for-setup\n')
@@ -47,12 +58,12 @@ describe('effectiveHooks: reading the shared file', () => {
     expect(effectiveHooks(file, settings(), {}).agentStartup).toBe('wait-for-setup')
   })
 
-  test('Orca-only keys are recognised but unsupported, and unknown keys are unrecognised', () => {
+  test('recognises issueCommand; other unsupported and unknown keys stay warned', () => {
     const hooks = effectiveHooks(orca('scripts:\n  setup: ls\nissueCommand: gh issue\ndefaultTabs: []\nenvironmentRecipes: {}\ncolour: red\n'), settings(), {})
     expect(hooks.file).toBe('orca.yaml')
     expect(hooks.setup?.text).toBe('ls')
+    expect(hooks.issueCommand?.text).toBe('gh issue')
     expect(hooks.warnings).toEqual([
-      'issueCommand is recognised but not supported yet',
       'defaultTabs is recognised but not supported yet',
       'environmentRecipes is recognised but not supported yet',
       'unrecognised key colour'
@@ -76,17 +87,19 @@ describe('effectiveHooks: reading the shared file', () => {
 
   test('values of the wrong type are ignored with a warning', () => {
     const hooks = effectiveHooks(
-      quirky('scripts:\n  setup: [a]\n  archive: 4\nsetupAgentStartupPolicy: later\nworktree:\n  sharedDirectories: nope\n'),
+      quirky('scripts:\n  setup: [a]\n  archive: 4\nsetupAgentStartupPolicy: later\nissueCommand: [bad]\nworktree:\n  sharedDirectories: nope\n'),
       settings(),
       {}
     )
     expect(hooks.setup).toBeNull()
     expect(hooks.archive).toBeNull()
+    expect(hooks.issueCommand).toBeNull()
     expect(hooks.agentStartup).toBe('start-immediately')
     expect(hooks.sharedDirectories).toEqual([])
     expect(hooks.warnings).toEqual([
       'scripts.setup must be a string',
       'scripts.archive must be a string',
+      'issueCommand must be a string',
       'setupAgentStartupPolicy must be start-immediately or wait-for-setup',
       'worktree.sharedDirectories must be a list of strings'
     ])
@@ -139,6 +152,25 @@ describe('effectiveHooks: command-source policy (SC-35)', () => {
     expect(effectiveHooks(file, settings({ archiveScript: 'echo local-archive' }), {}).archive?.text).toBe('echo local-archive')
     expect(effectiveHooks(file, settings(), {}).archive?.text).toBe('echo shared-archive')
   })
+  test('issueCommand follows the command-source policy', () => {
+    const file = quirky('issueCommand: gh issue list\n')
+    const local = settings({ issueCommand: 'gh issue create' })
+    expect(effectiveHooks(file, local, {}).issueCommand).toMatchObject({ text: 'gh issue create', source: 'local' })
+    expect(effectiveHooks(file, { ...local, commandSource: 'shared-only' }, {}).issueCommand).toMatchObject({
+      text: 'gh issue list',
+      source: 'shared',
+      badge: 'quirky.yaml'
+    })
+    expect(effectiveHooks(file, { ...local, commandSource: 'local-only' }, {}).issueCommand).toMatchObject({
+      text: 'gh issue create',
+      source: 'local'
+    })
+    expect(effectiveHooks(file, { ...local, commandSource: 'run-both' }, {}).issueCommand).toMatchObject({
+      text: 'gh issue list\ngh issue create',
+      source: 'both',
+      badge: 'quirky.yaml + local settings'
+    })
+  })
 })
 
 describe('effectiveHooks: trust (SC-32)', () => {
@@ -166,6 +198,24 @@ describe('effectiveHooks: trust (SC-32)', () => {
     const hooks = effectiveHooks(both, settings(), { setup: hashScript('a') })
     expect(hooks.setup?.shared?.trusted).toBe(true)
     expect(hooks.archive?.shared?.trusted).toBe(false)
+  })
+  test('issue trust is independent from setup and archive', () => {
+    const file = quirky('scripts:\n  setup: setup\n  archive: archive\nissueCommand: gh issue list\n')
+    const setupAndArchiveTrusted = effectiveHooks(file, settings(), {
+      setup: hashScript('setup'),
+      archive: hashScript('archive')
+    })
+    expect(setupAndArchiveTrusted.setup?.shared?.trusted).toBe(true)
+    expect(setupAndArchiveTrusted.archive?.shared?.trusted).toBe(true)
+    expect(setupAndArchiveTrusted.issueCommand?.shared).toMatchObject({
+      hash: hashScript('gh issue list'),
+      trusted: false,
+      changed: false
+    })
+    expect(effectiveHooks(file, settings(), { issue: hashScript('gh issue list') }).issueCommand?.shared).toMatchObject({
+      trusted: true,
+      changed: false
+    })
   })
 
   test('whitespace around a script does not change its hash', () => {

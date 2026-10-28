@@ -485,7 +485,7 @@ describe('the Codex runner inside the plugin', () => {
     expect(h.pty.requests.some((request) => request.type === 'create')).toBe(false)
     const ask = await waitForAsync(async () => ((await call('quirky.ask/list', { pendingOnly: true })) as { id: string }[])[0])
     await call('quirky.ask/answer', { askId: ask.id, answers: { decision: { value: 'allow', source: 'option' } } })
-    await waitFor(() => world.statusLog.some((entry) => entry.sessionId === session.id && entry.status === 'done'))
+    await waitFor(() => settledEvents().some((event) => event.sessionId === session.id && event.state === 'done'))
     expect(settledEvents().find((event) => event.sessionId === session.id && event.state === 'done')).toMatchObject({
       agent: 'codex',
       state: 'done',
