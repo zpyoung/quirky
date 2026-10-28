@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { QuirkyClient, RpcError, RpcErrorCode, type MobileTerminalState, type Session } from '@quirky/protocol'
-import { waitFor, type Harness } from '../../../packages/daemon/test/helpers'
+import { waitFor, waitForAsync, type Harness } from '../../../packages/daemon/test/helpers'
 import { groupsInOrder, paneLeaves } from '../src/layout/tree'
 import type { Workspace } from '../src/layout/types'
 import { call, createSession, startPluginHarness, TERMINAL_PLUGINS } from './support'
@@ -133,7 +133,7 @@ describe('mobile terminal driver leases through the daemon API', () => {
     await phone('phone-a', 'quirky.terminal/attach', { session: shell.id, cols: 50, rows: 20 })
 
     await call(desktop, 'quirky.mobile/testRevoke', { slot: 'phone-a' })
-    await waitFor(async () => (await terminalState()).some((terminal) => terminal.phoneFit && terminal.driver === null))
+    await waitForAsync(async () => (await terminalState()).some((terminal) => terminal.phoneFit && terminal.driver === null))
     expect(ptySize()).toEqual({ cols: 50, rows: 20 })
     expect(await terminalState()).toEqual([
       expect.objectContaining({ phoneFit: true, driver: null, cols: 50, rows: 20, desktopCols: 120, desktopRows: 35 })
@@ -147,7 +147,7 @@ describe('mobile terminal driver leases through the daemon API', () => {
     await admit('phone-a')
     const attached = await phone('phone-a', 'quirky.terminal/attach', { session: shell.id, cols: 50, rows: 20 }) as { streamId: number }
     await phone('phone-a', 'quirky.terminal/detach', { streamId: attached.streamId })
-    await waitFor(async () => (await terminalState()).some((terminal) => terminal.phoneFit && terminal.driver === null))
+    await waitForAsync(async () => (await terminalState()).some((terminal) => terminal.phoneFit && terminal.driver === null))
     expect(ptySize()).toEqual({ cols: 50, rows: 20 })
     await call(desktop, 'quirky.mobile/testDisconnect', { slot: 'phone-a' })
   })
@@ -169,7 +169,7 @@ describe('mobile terminal driver leases through the daemon API', () => {
     await phone('phone-b', 'quirky.terminal/attach', { session: other.id, cols: 58, rows: 21, claim: true })
     await call(desktop, 'quirky.mobile/testDisconnect', { slot: 'phone-a' })
     await call(desktop, 'quirky.mobile/testDisconnect', { slot: 'phone-b' })
-    await waitFor(async () => (await allTerminalState()).length === 2, 1000, 'both phone-fit holds')
+    await waitForAsync(async () => (await allTerminalState()).length === 2, 1000)
     await call(desktop, 'quirky.terminal/restoreFit', {})
     expect(ptySize(shell.id)).toEqual({ cols: 120, rows: 35 })
     expect(ptySize(other.id)).toEqual({ cols: 100, rows: 30 })
@@ -182,7 +182,7 @@ describe('mobile terminal driver leases through the daemon API', () => {
     await admit('phone-a')
     await phone('phone-a', 'quirky.terminal/attach', { session: shell.id, cols: 50, rows: 20 })
     await call(desktop, 'quirky.mobile/testDisconnect', { slot: 'phone-a' })
-    await waitFor(async () => (await terminalState()).some((terminal) => terminal.phoneFit), 1000, 'phone-fit hold')
+    await waitForAsync(async () => (await terminalState()).some((terminal) => terminal.phoneFit), 1000)
 
     await admit('phone-a-reconnect')
     await phone('phone-a-reconnect', 'quirky.terminal/attach', { session: shell.id, cols: 45, rows: 18 })
@@ -192,7 +192,7 @@ describe('mobile terminal driver leases through the daemon API', () => {
     expect((await terminalState())[0]?.driver).toMatchObject({ deviceId: 'device-a' })
 
     await call(desktop, 'quirky.mobile/testDisconnect', { slot: 'phone-a-reconnect' })
-    await waitFor(() => ptySize().cols === 120 && ptySize().rows === 35, 7000, 'configured restore')
+    await waitFor(() => ptySize().cols === 120 && ptySize().rows === 35, 7000)
     expect(await terminalState()).toEqual([])
   }, 15_000)
 
@@ -200,13 +200,13 @@ describe('mobile terminal driver leases through the daemon API', () => {
     await admit('phone-a')
     await phone('phone-a', 'quirky.terminal/attach', { session: shell.id, cols: 50, rows: 20 })
     await call(desktop, 'quirky.session/close', { session: shell.id })
-    await waitFor(async () => (await terminalState()).length === 0)
+    await waitForAsync(async () => (await terminalState()).length === 0)
   })
   test('PTY exit clears the active driver and attached streams', async () => {
     await admit('phone-a')
     await phone('phone-a', 'quirky.terminal/attach', { session: shell.id, cols: 50, rows: 20 })
     h.pty.exit(shell.id, 0)
-    await waitFor(async () => (await terminalState()).length === 0)
+    await waitForAsync(async () => (await terminalState()).length === 0)
   })
 
   test('desktop quick-command session writes are refused while a phone owns the pane', async () => {
@@ -215,6 +215,7 @@ describe('mobile terminal driver leases through the daemon API', () => {
       await call(cli, 'quirky.terminal/addQuickCommand', { label: 'Blocked', command: 'echo blocked' })
       const created = await call<{ workspace: Workspace }>(cli, 'quirky.terminal/newTab', { workspace: 'main' })
       const tab = groupsInOrder(created.workspace.root).flatMap((group) => group.tabs).at(-1)!
+      if (!('root' in tab)) throw new Error('expected a terminal tab')
       const pane = paneLeaves(tab.root)[0]!
       await admit('phone-a')
       await phone('phone-a', 'quirky.terminal/attach', { session: pane.session, cols: 50, rows: 20 })

@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import type { NetworkInterfaceInfo } from 'node:os'
 import { normalizeAdvertisedEndpoint, rankNetworkInterfaces } from '../src/daemon/network'
 
 describe('mobile network selection', () => {
@@ -13,7 +14,7 @@ describe('mobile network selection', () => {
       tailscale0: [{ address: '100.75.2.9', family: 'IPv4', internal: false, mac: 'd', netmask: '255.192.0.0', cidr: '100.75.2.9/10' }],
       utun5: [{ address: '2001:db8::1', family: 'IPv6', internal: false, mac: 'e', netmask: 'ffff:ffff:ffff:ffff::', cidr: '2001:db8::1/64', scopeid: 0 }],
       bridge0: [{ address: '172.20.0.1', family: 'IPv4', internal: false, mac: 'f', netmask: '255.255.0.0', cidr: '172.20.0.1/16' }]
-    }
+    } satisfies Record<string, NetworkInterfaceInfo[]>
     expect(rankNetworkInterfaces(interfaces).map((item) => item.address)).toEqual(['100.75.2.9', '192.168.1.5', '2001:db8::1', '172.20.0.1'])
   })
 

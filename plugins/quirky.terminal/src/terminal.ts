@@ -174,11 +174,9 @@ export class TerminalService {
     const enter = params.enter === true
     this.mobile.assertCanInput(session.id, caller)
     if (session.agent === 'shell') {
-      this.inputs.mark(session.id)
       this.input(session.id, encoder.encode(enter ? `${text}\r` : text))
       return { ok: true }
     }
-    this.inputs.mark(session.id)
     this.input(session.id, encoder.encode(`\x1b[200~${text}\x1b[201~`))
     if (enter) {
       await new Promise((resolve) => setTimeout(resolve, enterDelayMs()))
@@ -290,15 +288,15 @@ export class TerminalService {
     if (pending) for (const attachment of [...pending]) attachment.stream.close()
   }
 
-  /** Clears leases and pending/active streams when a PTY exits. */
+  /** Clears phone leases and streams on PTY exit; desktop panes retain their read-only attachment. */
   onExit = (sessionId: string): void => {
     this.mobile.sessionExited(sessionId)
     const attachments = this.bySession.get(sessionId)
     const silent = this.silent.get(sessionId)
     const pending = this.pendingBySession.get(sessionId)
-    if (attachments) for (const attachment of [...attachments]) attachment.stream.close()
-    if (silent) for (const attachment of [...silent]) attachment.stream.close()
-    if (pending) for (const attachment of [...pending]) attachment.stream.close()
+    if (attachments) for (const attachment of [...attachments]) if (attachment.mobile) attachment.stream.close()
+    if (silent) for (const attachment of [...silent]) if (attachment.mobile) attachment.stream.close()
+    if (pending) for (const attachment of [...pending]) if (attachment.mobile) attachment.stream.close()
   }
 
   /** Re-subscribes every streamed session and sends its streams the output produced while the host was unreachable. */

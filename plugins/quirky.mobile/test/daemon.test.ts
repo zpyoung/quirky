@@ -161,7 +161,8 @@ describe('mobile daemon integration', () => {
     const session = await api.callAny('quirky.session/create', { worktree: 'floating', agent: 'shell' }) as { id: string }
     await waitFor(() => harness?.pty.sessions.has(session.id), 5000)
     const waitParams = { session: session.id, until: ['exited'], timeoutMs: 5000 }
-    const pendingWaits = Array.from({ length: 16 }, () => mobile.call('quirky.agent-status/wait', waitParams))
+    const waitingPeer = mobile
+    const pendingWaits = Array.from({ length: 16 }, () => waitingPeer.call('quirky.agent-status/wait', waitParams))
     await expect(mobile.call('quirky.agent-status/wait', waitParams)).rejects.toMatchObject({ code: -32002 })
     expect(await Promise.all(pendingWaits)).toHaveLength(16)
     const attached = await mobile.call('quirky.terminal/attach', { session: session.id, cols: 70, rows: 20 }) as { streamId: number }

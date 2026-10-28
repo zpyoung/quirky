@@ -36,7 +36,7 @@ describe('mobile listener lifecycle', () => {
       expect(first.host).toBe('127.0.0.1')
       expect(first.port).not.toBe(preferredPort)
       const fallback = JSON.parse(readFileSync(join(dataDir, 'mobile-ws-fallback-port.json'), 'utf8')) as { port: number }
-      expect(fallback.port).toBe(first.port)
+      expect(first.port).toBe(fallback.port)
       expect(statSync(join(dataDir, 'mobile-ws-fallback-port.json')).mode & 0o777).toBe(0o600)
       const firstPort = first.port
       await first.stop()

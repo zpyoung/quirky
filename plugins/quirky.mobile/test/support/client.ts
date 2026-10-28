@@ -28,6 +28,13 @@ type Ready = {
   context: Context
 }
 
+type SessionSchedule = {
+  mobileToDesktop: Uint8Array
+  desktopToMobile: Uint8Array
+  sessionId: Uint8Array
+  transcriptHashB64: string
+}
+
 type Deferred<T> = { promise: Promise<T>; resolve(value: T): void; reject(reason: unknown): void }
 
 const deferred = <T>(): Deferred<T> => {
@@ -172,7 +179,7 @@ export class MobileTestClient {
   private readonly ready = deferred<void>()
   private readonly handshakeReady = deferred<void>()
   private readonly keyPair = nacl.box.keyPair()
-  private schedule?: { mobileToDesktop: Uint8Array; desktopToMobile: Uint8Array; sessionId: Uint8Array; transcriptHashB64: string }
+  private schedule?: SessionSchedule
   private inboundCounter = 0n
   private outboundCounter = 0n
   private nextId = 1
@@ -212,19 +219,14 @@ export class MobileTestClient {
           this.handshakeReady.reject(error)
           return
         }
-        if (!this.acceptReady(ready, pinnedPublicKeyB64)) {
+        const schedule = this.acceptReady(ready, pinnedPublicKeyB64)
+        if (!schedule) {
           const error = new Error('invalid E2EE ready')
           this.ready.reject(error)
           this.handshakeReady.reject(error)
           return
         }
-        const schedule = this.schedule
-        if (!schedule) {
-          const error = new Error('E2EE schedule missing')
-          this.ready.reject(error)
-          this.handshakeReady.reject(error)
-          return
-        }
+        this.schedule = schedule
         this.handshakeReady.resolve()
         if (autoAuthenticate) this.sendText(JSON.stringify({ type: 'e2ee_auth', v: 2, transcriptHashB64: schedule.transcriptHashB64, deviceToken: token }))
         return
@@ -313,33 +315,32 @@ export class MobileTestClient {
   }
 
 
-  private acceptReady(value: unknown, pinnedPublicKeyB64: string): boolean {
-    if (!exact(value, ['type', 'v', 'desktopPublicKeyB64', 'clientNonceB64', 'desktopNonceB64', 'selection', 'context'])) return false
+  private acceptReady(value: unknown, pinnedPublicKeyB64: string): SessionSchedule | null {
+    if (!exact(value, ['type', 'v', 'desktopPublicKeyB64', 'clientNonceB64', 'desktopNonceB64', 'selection', 'context'])) return null
     const ready = value as Ready
     const hello = this.hello
-    if (ready.type !== 'e2ee_ready' || ready.v !== 2 || ready.clientNonceB64 !== hello.clientNonceB64) return false
-    if (!exact(ready.selection, ['framing', 'payloadKinds']) || ready.selection.framing !== 2 || JSON.stringify(ready.selection.payloadKinds) !== '["text","binary"]') return false
-    if (!exact(ready.context, ['protocol', 'initiator', 'responder', 'transport']) || JSON.stringify(ready.context) !== JSON.stringify(hello.context)) return false
+    if (ready.type !== 'e2ee_ready' || ready.v !== 2 || ready.clientNonceB64 !== hello.clientNonceB64) return null
+    if (!exact(ready.selection, ['framing', 'payloadKinds']) || ready.selection.framing !== 2 || JSON.stringify(ready.selection.payloadKinds) !== '["text","binary"]') return null
+    if (!exact(ready.context, ['protocol', 'initiator', 'responder', 'transport']) || JSON.stringify(ready.context) !== JSON.stringify(hello.context)) return null
     const pinned = unb64(pinnedPublicKeyB64, 32)
     const desktopPublicKey = unb64(ready.desktopPublicKeyB64, 32)
     const clientNonce = unb64(hello.clientNonceB64, 32)
     const desktopNonce = unb64(ready.desktopNonceB64, 32)
-    if (!pinned || !desktopPublicKey || !clientNonce || !desktopNonce || !equal(pinned, desktopPublicKey)) return false
+    if (!pinned || !desktopPublicKey || !clientNonce || !desktopNonce || !equal(pinned, desktopPublicKey)) return null
     const rawSecret = nacl.scalarMult(this.keyPair.secretKey, desktopPublicKey)
-    if (rawSecret.every((byte) => byte === 0)) return false
+    if (rawSecret.every((byte) => byte === 0)) return null
     const sharedSecret = nacl.box.before(desktopPublicKey, this.keyPair.secretKey)
     const transcriptBytes = transcript(hello, ready, this.keyPair.publicKey, desktopPublicKey, clientNonce, desktopNonce)
     const hash = new Uint8Array(createHash('sha256').update(transcriptBytes).digest())
     const salt = createHash('sha256').update(Buffer.concat([Buffer.from('orca-mobile-e2ee/v2/salt\0'), clientNonce, desktopNonce])).digest()
     const info = Buffer.concat([Buffer.from('orca-mobile-e2ee/v2/session\0'), hash])
     const keyBytes = new Uint8Array(hkdfSync('sha256', sharedSecret, salt, info, 96))
-    this.schedule = {
+    return {
       mobileToDesktop: keyBytes.slice(0, 32),
       desktopToMobile: keyBytes.slice(32, 64),
       sessionId: keyBytes.slice(64, 96),
       transcriptHashB64: b64(hash)
     }
-    return true
   }
 
   private sendText(text: string): void {

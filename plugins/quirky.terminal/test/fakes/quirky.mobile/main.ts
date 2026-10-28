@@ -114,7 +114,7 @@ export function activate(pluginContext: PluginContext): void {
   autoRestoreFitMs = null
   phones.clear()
   context.provide('method:quirky.mobile/state', () => state())
-  context.provide('method:quirky.mobile/configure', (params) => {
+  context.provide('method:quirky.mobile/configure', (params: Record<string, unknown>) => {
     if (typeof params.autoRestoreFitMs === 'number' || params.autoRestoreFitMs === null) autoRestoreFitMs = params.autoRestoreFitMs as number | null
     return state()
   })

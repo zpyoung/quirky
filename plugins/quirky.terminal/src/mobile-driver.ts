@@ -385,6 +385,7 @@ export class MobileDriverService {
   }
 
   private registerConnection(sessionId: string, caller: PluginCaller, connection: CallerConnection): MobileConnection {
+    if (caller.role !== 'mobile') throw this.context.error('invalid-params', 'mobile terminal attach needs an authenticated phone')
     const deviceId = caller.deviceId
     if (!deviceId) throw this.context.error('invalid-params', 'mobile terminal caller has no authenticated device identity')
     let mobile = this.connections.get(connection.id)
@@ -444,9 +445,12 @@ export class MobileDriverService {
 
   private clearSession(sessionId: string): void {
     const lease = this.leases.get(sessionId)
+    let changed = lease !== undefined
     if (lease) this.deleteLease(sessionId, lease)
-    for (const mobile of this.connections.values()) mobile.sessions.delete(sessionId)
-    this.emitChanged()
+    for (const mobile of this.connections.values()) {
+      if (mobile.sessions.delete(sessionId)) changed = true
+    }
+    if (changed) this.emitChanged()
   }
 
   private deleteLease(sessionId: string, lease: Lease): void {

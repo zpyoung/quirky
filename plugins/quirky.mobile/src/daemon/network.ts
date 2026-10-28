@@ -47,7 +47,7 @@ export function rankNetworkInterfaces(interfaces: NetworkInterfaceMap = networkI
   const result: MobileNetworkInterface[] = []
   for (const [name, addresses] of Object.entries(interfaces)) {
     for (const info of addresses ?? []) {
-      const family = typeof info.family === 'number' ? (info.family === 4 ? 'IPv4' : 'IPv6') : info.family
+      const family = info.family
       if (info.internal || isLoopbackAddress(info.address) || isProxyFakeIPv4(info.address)) continue
       if (family === 'IPv4') {
         if (isIPv4LinkLocal(info.address) || isIP(info.address) !== 4) continue
