@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'bun:test'
-import { symlinkSync } from 'node:fs'
+import { mkdirSync, symlinkSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 import { makeTempDir } from '../../daemon/test/plugins/fixtures'
 import { bootWindow, closeWindows, installUiPlugin, provide, type WindowEnv } from './fixtures/window-env'
@@ -10,8 +10,11 @@ const PANEL = 'panel:acme.nav/details'
 const COMMAND = 'command:acme.nav/open-secondary'
 
 function writeNavigationPlugin(installed: string, interceptSearch = false): void {
-  symlinkSync(resolve(import.meta.dir, '../../../plugins/quirky.repo'), join(installed, 'quirky.repo'))
-  symlinkSync(resolve(import.meta.dir, '../../../plugins/quirky.worktree'), join(installed, 'quirky.worktree'))
+  mkdirSync(installed, { recursive: true })
+  // The real quirky.worktree manifest declares quirky.repo and quirky.cli dependencies.
+  for (const id of ['quirky.repo', 'quirky.worktree', 'quirky.cli']) {
+    symlinkSync(resolve(import.meta.dir, '../../../plugins', id), join(installed, id))
+  }
   installUiPlugin(
     installed,
     'acme.nav',

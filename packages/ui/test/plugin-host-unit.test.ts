@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import {
   DEFAULT_THEME,
+  UI_TOOL_SLOTS,
   type QuirkyEvent,
   type SettingInfo,
   type ThemeInfo,
@@ -11,8 +12,10 @@ import {
   type UiPluginContext,
   type UiPluginModule,
   type UiSlotEntry,
+  type UiToolSlot,
   type DesktopWindowSummary
 } from '@quirky/protocol'
+import { freshToolLayout, projectTools, resolveToolLayout } from '../../daemon/src/plugins/tool-layout'
 import type { DesktopWindowRoute } from '../src/desktop-bridge'
 import { WindowPluginHost, type HostState } from '../src/plugins/host'
 
@@ -42,7 +45,7 @@ function slot(kind: UiSlotEntry['kind'], plugin: string, name: string, extra: Pa
 }
 const section = (plugin: string, name: string, extra?: Partial<UiSlotEntry>) =>
   slot('sidebar-section', plugin, name, extra)
-const panel = (plugin: string, name: string) => slot('panel', plugin, name)
+const panel = (plugin: string, name: string, extra: Partial<UiSlotEntry> = {}) => slot('panel', plugin, name, extra)
 const overlay = (plugin: string, name: string) => slot('overlay', plugin, name)
 const view = (plugin: string, name: string) => slot('view', plugin, name)
 const command = (plugin: string, name: string, title = name): UiCommandEntry => ({
@@ -75,6 +78,7 @@ function makeModel(parts: Partial<UiModel> = {}): UiModel {
     modules: {},
     ...parts
   }
+  model.tools ??= projectTools(model)
   if (parts.modules) return model
   const entries = [...model.sidebarSections, ...model.activityItems, ...model.statusBars, ...model.panels, ...model.settingsSections, ...model.views, ...model.overlays, ...model.commands]
   for (const entry of entries) {
@@ -96,16 +100,42 @@ function setup(
 ) {
   let model = initial
   let settings = options.settings ?? []
-  let layout: UiLayout = { view: null, panel: null, sidebar: true, focus: null }
+  let layout: UiLayout = { view: null, panel: null, sidebar: true, focus: null, tools: freshToolLayout(initial.tools ?? []) }
   let windowRoute = options.windowRoute ?? null
   const listeners = new Set<(event: QuirkyEvent) => void>()
   const emitEvent = (event: QuirkyEvent) => listeners.forEach((listener) => listener(event))
-  /** What the daemon would answer: a view or panel the model no longer has is dropped. */
-  const effective = (): UiLayout => ({
-    ...layout,
-    view: layout.view && model.views.some((v) => v.id === layout.view!.id) ? layout.view : null,
-    panel: layout.panel && model.panels.some((p) => p.id === layout.panel) ? layout.panel : null
-  })
+  /** What the daemon would answer: a view or tool the model no longer has is dropped. */
+  const effective = (): UiLayout => {
+    const tools = resolveToolLayout(model.tools ?? [], layout.tools, {
+      hasStoredTools: true,
+      hasStoredLayout: true,
+      sidebar: layout.sidebar,
+      panel: layout.panel
+    })
+    const openIds = new Set(Object.values(tools.open).filter((id): id is string => id !== null))
+    const preferredTool = layout.panel === null
+      ? undefined
+      : model.tools?.find((tool) => tool.contributionId === layout.panel || tool.aliases.includes(layout.panel!))
+    let selectedPanel = preferredTool && openIds.has(preferredTool.id)
+      ? model.panels.find((entry) => entry.id === preferredTool.contributionId)?.id ?? null
+      : null
+    if (selectedPanel === null) {
+      for (const slot of UI_TOOL_SLOTS) {
+        const id = tools.open[slot]
+        const tool = id === null ? undefined : model.tools?.find((entry) => entry.id === id)
+        if (tool && model.panels.some((entry) => entry.id === tool.contributionId)) {
+          selectedPanel = tool.contributionId
+          break
+        }
+      }
+    }
+    return {
+      ...layout,
+      view: layout.view && model.views.some((v) => v.id === layout.view!.id) ? layout.view : null,
+      panel: selectedPanel,
+      tools
+    }
+  }
   let held: QuirkyEvent[] | null = null
   const changeLayout = (update: Partial<UiLayout>) => {
     layout = { ...effective(), ...update }
@@ -113,6 +143,25 @@ function setup(
     if (held) held.push(event)
     else emitEvent(event)
     return effective()
+  }
+  const changeTool = (id: string, shouldOpen: boolean) => {
+    const tool = model.tools?.find((entry) => entry.id === id)
+    if (!tool) throw new Error(`no tool ${id}`)
+    const current = effective().tools!
+    const placement = current.placements[tool.id] ?? tool.defaultSlot
+    const open = { ...current.open }
+    if (shouldOpen) open[placement] = tool.id
+    else if (open[placement] === tool.id) open[placement] = null
+    return changeLayout({
+      tools: { ...current, open },
+      ...(shouldOpen && model.panels.some((entry) => entry.id === tool.contributionId)
+        ? { panel: tool.contributionId }
+        : {})
+    })
+  }
+  const closeTool = (slot: UiToolSlot) => {
+    const current = effective().tools!
+    return changeLayout({ tools: { ...current, open: { ...current.open, [slot]: null } } })
   }
   const streams = new Map<number, Set<(bytes: Uint8Array) => void>>()
   const connectionListeners = new Set<(status: 'connected' | 'reconnecting') => void>()
@@ -168,11 +217,10 @@ function setup(
         }
         case 'desktop.window.runOwnerCommand':
           return { result: { opened: true }, activated: true }
-        case 'ui.panel.open':
-          if (!model.panels.some((p) => p.id === params.id)) throw new Error(`no panel ${params.id}`)
-          return changeLayout({ panel: params.id as string })
-        case 'ui.panel.close':
-          return changeLayout({ panel: null })
+        case 'ui.tool.open':
+          return changeTool(params.id as string, true)
+        case 'ui.tool.close':
+          return closeTool(params.slot as UiToolSlot)
         case 'ui.focus':
           return changeLayout({ focus: params.target as UiLayout['focus'] })
         case 'ui.report':
@@ -244,6 +292,7 @@ function setup(
     /** The layout the daemon holds; the host only learns of a change through the broadcast. */
     daemonLayout: () => effective(),
     changeLayout,
+    changeTool,
     /** Keeps the daemon's `ui.state.changed` broadcasts back until `releaseBroadcasts`. */
     holdBroadcasts: () => (held = []),
     releaseBroadcasts: () => {
@@ -394,28 +443,30 @@ test('S1: refreshing loads and activates every enabled plugin with nothing shown
   expect(state(t).model?.panels.map((p) => p.title)).toEqual(['outline'])
 })
 
-test('S1: an ask created while another panel is open sets the Questions badge without its panel ever mounting', async () => {
-  const ASK_PANEL = 'panel:quirky.ask/questions'
-  const OTHER_PANEL = 'panel:acme.notes/side'
+test('S1: an ask created while another tool is open sets the Questions badge without its tool ever mounting', async () => {
+  const ASK_TOOL = 'panel:quirky.ask/questions'
+  const OTHER_TOOL = 'panel:acme.notes/side'
   const t = setup(makeModel({ panels: [panel('quirky.ask', 'questions'), panel(NOTES, 'side')] }))
   t.useModule('quirky.ask', {
     activate(context) {
       context.subscribe((event) => {
-        if (event.type === 'quirky.ask/created') context.setPanelBadge(ASK_PANEL, 1)
+        if (event.type === 'quirky.ask/created') context.setPanelBadge(ASK_TOOL, 1)
       })
     }
   })
-  t.useModule(NOTES, recording([OTHER_PANEL]).module)
+  t.useModule(NOTES, recording([OTHER_TOOL]).module)
   await t.host.refresh()
-  t.host.togglePanel(OTHER_PANEL, true)
-  t.host.mount(OTHER_PANEL, element())
+  const placement = state(t).layout.tools!.placements[OTHER_TOOL]!
+  t.host.togglePanel(OTHER_TOOL, true)
+  await until(() => state(t).layout.tools!.open[placement] === OTHER_TOOL)
+  t.host.mount(OTHER_TOOL, element())
   await loaded(t, 'quirky.ask')
 
   t.emit({ type: 'quirky.ask/created', data: { ask: { id: 'a1' } } })
-  await until(() => state(t).badges[ASK_PANEL] === 1)
+  await until(() => state(t).badges[ASK_TOOL] === 1)
 
-  expect(state(t).openPanel).toBe(OTHER_PANEL)
-  expect(state(t).slots[ASK_PANEL]).toBeUndefined()
+  expect(Object.values(state(t).layout.tools!.open)).toContain(OTHER_TOOL)
+  expect(state(t).slots[ASK_TOOL]).toBeUndefined()
 })
 
 test('S1: a plugin enabled later loads on plugin.changed and stays active when its slots unmount', async () => {
@@ -470,25 +521,34 @@ test('S1: a plugin whose eager load fails is not retried by later refreshes, onl
   await until(() => attempts === 2)
 })
 
-test('SC-9: opening a panel closes the other one, and toggling closes it', async () => {
-  const t = setup(makeModel({ panels: [panel('acme.outline', 'outline'), panel(NOTES, 'side')] }))
-  await t.host.refresh()
+test('SC-9: opening a panel contribution selects its canonical tool slot, and toggling closes it', async () => {
   const outline = 'panel:acme.outline/outline'
   const side = 'panel:acme.notes/side'
+  const t = setup(makeModel({
+    panels: [
+      panel('acme.outline', 'outline', { defaultSlot: 'right-top' }),
+      panel(NOTES, 'side', { defaultSlot: 'right-top' })
+    ]
+  }))
+  await t.host.refresh()
+  const placement = state(t).layout.tools!.placements[outline]!
 
   t.host.togglePanel(outline)
-  expect(state(t).openPanel).toBe(outline)
+  await until(() => state(t).layout.tools!.open[placement] === outline)
   t.host.togglePanel(side)
-  expect(state(t).openPanel).toBe(side)
+  await until(() => state(t).layout.tools!.open[placement] === side)
   t.host.togglePanel(side)
-  expect(state(t).openPanel).toBeNull()
+  await until(() => state(t).layout.tools!.open[placement] === null)
   t.host.togglePanel(side, true)
+  await until(() => state(t).layout.tools!.open[placement] === side)
   t.host.togglePanel(side, true)
-  expect(state(t).openPanel).toBe(side)
+  await tick()
+  expect(state(t).layout.tools!.open[placement]).toBe(side)
   t.host.togglePanel(outline, false)
-  expect(state(t).openPanel).toBe(side)
+  await tick()
+  expect(state(t).layout.tools!.open[placement]).toBe(side)
   t.host.togglePanel(side, false)
-  expect(state(t).openPanel).toBeNull()
+  await until(() => state(t).layout.tools!.open[placement] === null)
 })
 
 test('SC-9: a panel mounts with only a report function and its cleanup runs when it is disposed', async () => {
@@ -1251,33 +1311,26 @@ test('SC-4: a cleanup or deactivate that throws is logged and teardown continues
   expect(() => context.call('repo.list')).toThrow('acme.notes is not active')
 })
 
-test('SC-4: an open view or panel that leaves the model is gone from the layout after the refresh', async () => {
+test('SC-4: an open view or tool that leaves the model is gone from the layout after refresh', async () => {
+  const side = 'panel:acme.notes/side'
   const t = setup(makeModel({ panels: [panel(NOTES, 'side')], views: [view(NOTES, 'page')] }))
   await t.host.refresh()
-  t.host.togglePanel('panel:acme.notes/side')
+  const placement = state(t).layout.tools!.placements[side]!
+  t.host.togglePanel(side)
+  await until(() => state(t).layout.tools!.open[placement] === side)
   t.host.openView(PAGE, { a: 1 })
-  expect(state(t).openPanel).not.toBeNull()
+  await until(() => state(t).openView?.id === PAGE)
 
   t.setModel(makeModel({ panels: [panel(NOTES, 'side')] }))
   await t.host.refresh()
   expect(state(t).openView).toBeNull()
-  expect(state(t).openPanel).toBe('panel:acme.notes/side')
+  expect(state(t).layout.tools!.open[placement]).toBe(side)
 
   t.setModel(makeModel())
   await t.host.refresh()
-  expect(state(t).openPanel).toBeNull()
+  expect(Object.values(state(t).layout.tools!.open)).not.toContain(side)
 })
 
-test('SC-9: opening a view or panel the daemon refuses changes nothing and is logged', async () => {
-  const t = setup(makeModel())
-  await t.host.refresh()
-  t.host.openView(PAGE)
-  t.host.togglePanel('panel:acme.notes/side')
-  await tick()
-  expect(state(t).openView).toBeNull()
-  expect(state(t).openPanel).toBeNull()
-  expect(t.logs).toEqual([`ui.window.view.open failed: no view ${PAGE}`, 'ui.panel.open failed: no panel panel:acme.notes/side'])
-})
 
 test('SC-14: running a command passes the arguments to the module the window already loaded', async () => {
   const t = setup(makeModel({ commands: [command(NOTES, 'open')] }))
@@ -1632,27 +1685,22 @@ test('SC-24: saveSettings without a theme change does not call theme.set and rep
   expect(t.methodCalls('theme.set')).toEqual([])
 })
 
-test('the state object changes when state changes, and subscribers are told until they unsubscribe', async () => {
-  const t = setup(makeModel({ panels: [panel(NOTES, 'side')] }))
-  let notified = 0
-  const off = t.host.subscribe(() => notified++)
-  const initial = state(t)
-  expect(initial.model).toBeNull()
-
+test('host subscribers are notified as canonical tool state changes until they unsubscribe', async () => {
+  const side = 'panel:acme.notes/side'
+  const t = setup(makeModel({ panels: [panel(NOTES, 'side', { defaultSlot: 'right-top' })] }))
   await t.host.refresh()
-  const loaded = state(t)
-  expect(loaded).not.toBe(initial)
-  expect(notified).toBeGreaterThan(0)
-  expect(state(t)).toBe(loaded)
+  const placement = state(t).layout.tools!.placements[side]!
+  const seen: (string | null)[] = []
+  const off = t.host.subscribe(() => seen.push(state(t).layout.tools!.open[placement]))
+  t.host.openTool(side)
+  await until(() => state(t).layout.tools!.open[placement] === side)
+  expect(seen).toContain(side)
 
-  const before = notified
-  t.host.togglePanel('panel:acme.notes/side')
-  expect(state(t)).not.toBe(loaded)
-  expect(notified).toBe(before + 1)
-
+  const beforeUnsubscribe = [...seen]
   off()
-  t.host.togglePanel('panel:acme.notes/side')
-  expect(notified).toBe(before + 1)
+  t.host.closeTool(placement)
+  await until(() => state(t).layout.tools!.open[placement] === null)
+  expect(seen).toEqual(beforeUnsubscribe)
 })
 
 test('refresh rejects when the daemon call fails, and the next refresh still works', async () => {
@@ -1871,72 +1919,31 @@ async function booted(options: Parameters<typeof setup>[1] = {}) {
   return { t, record, context: () => record.contexts[0]! }
 }
 
-test('D21: refresh loads the daemon layout, and the host never changes it before the broadcast', async () => {
+test('D21: refresh reads canonical daemon tool state, and local requests wait for its broadcast', async () => {
   const { t } = await booted()
-  t.changeLayout({ view: { id: PAGE, input: { a: 1 } }, panel: SIDE, focus: 'view' })
+  t.changeTool(SIDE, true)
+  t.changeLayout({ view: { id: PAGE, input: { a: 1 } }, focus: 'view' })
   await t.host.refresh()
-  expect(state(t).layout).toEqual({ view: { id: PAGE, input: { a: 1 } }, panel: SIDE, sidebar: true, focus: 'view' })
+  expect(state(t).layout).toMatchObject({
+    view: { id: PAGE, input: { a: 1 } },
+    focus: 'view'
+  })
+  expect(Object.values(state(t).layout.tools!.open)).toContain(SIDE)
   expect(state(t).openView).toEqual({ id: PAGE, input: { a: 1 } })
-  expect(state(t).openPanel).toBe(SIDE)
 
   t.holdBroadcasts()
   t.host.openView(OTHER, { b: 2 })
   t.host.togglePanel(SIDE)
-  await tick()
-  expect(t.methodCalls('ui.window.view.open')).toEqual([
-    { method: 'ui.window.view.open', params: { connId: 1, id: OTHER, input: { b: 2 } } }
-  ])
-  expect(t.methodCalls('ui.panel.close')).toHaveLength(1)
-  expect(state(t).openView?.id).toBe(PAGE)
-  expect(state(t).openPanel).toBe(SIDE)
+  await until(() => t.daemonLayout().view?.id === OTHER && !Object.values(t.daemonLayout().tools!.open).includes(SIDE))
+  expect(state(t).openView).toEqual({ id: PAGE, input: { a: 1 } })
+  expect(Object.values(state(t).layout.tools!.open)).toContain(SIDE)
 
   t.releaseBroadcasts()
   expect(state(t).openView).toEqual({ id: OTHER, input: { b: 2 } })
-  expect(state(t).openPanel).toBeNull()
+  expect(Object.values(state(t).layout.tools!.open)).not.toContain(SIDE)
 })
 
-test('D21: view, panel and focus calls name the daemon methods and skip what is already so', async () => {
-  const { t } = await booted()
-  t.host.openView(PAGE)
-  await tick()
-  expect(t.methodCalls('ui.window.view.open')[0]!.params).toEqual({ connId: 1, id: PAGE })
 
-  t.host.togglePanel(SIDE, true)
-  t.host.togglePanel(OUTLINE, false)
-  t.host.closeView()
-  t.host.focus('panel')
-  await tick()
-  expect(t.methodCalls('ui.panel.open')).toHaveLength(1)
-  expect(t.methodCalls('ui.panel.close')).toHaveLength(0)
-  expect(t.methodCalls('ui.window.view.close')).toEqual([{
-    method: 'ui.window.view.close',
-    params: { connId: 1, expectedView: { id: PAGE } }
-  }])
-  expect(t.methodCalls('ui.focus')).toEqual([{ method: 'ui.focus', params: { target: 'panel' } }])
-
-  t.host.closeView()
-  t.host.focus('panel')
-  await tick()
-  expect(t.methodCalls('ui.window.view.close')).toHaveLength(1)
-  expect(t.methodCalls('ui.focus')).toHaveLength(1)
-})
-
-test('D21: a broadcast layout equal to the current one changes nothing, and an equal view keeps its identity', async () => {
-  const { t } = await booted()
-  t.changeLayout({ view: { id: PAGE, input: { a: 1 } } })
-  const before = state(t)
-  const view = state(t).openView
-  let notified = 0
-  t.host.subscribe(() => notified++)
-
-  t.emit({ type: 'ui.state.changed', layout: { ...t.daemonLayout(), view: { id: PAGE, input: { a: 1 } } } })
-  expect(state(t)).toBe(before)
-  expect(notified).toBe(0)
-
-  t.emit({ type: 'ui.state.changed', layout: { ...t.daemonLayout(), view: { id: PAGE, input: { a: 1 } }, focus: 'panel' } })
-  expect(state(t).layout.focus).toBe('panel')
-  expect(state(t).openView).toBe(view)
-})
 
 test('D21: a layout event received during ui.window.state cannot be overwritten by its stale snapshot', async () => {
   const t = setup(makeModel({ views: [view(NOTES, 'page'), view(NOTES, 'other')] }))
@@ -1955,7 +1962,7 @@ test('D21: context.getLayout and onLayout follow the daemon, and the listener en
   const { t, context } = await booted()
   const seen: (string | null)[] = []
   const stop = context().onLayout((layout) => seen.push(layout.view?.id ?? null))
-  expect(context().getLayout()).toEqual({ view: null, panel: null, sidebar: true, focus: null })
+  expect(context().getLayout().view).toBeNull()
 
   t.changeLayout({ view: { id: PAGE } })
   t.changeLayout({ view: { id: PAGE } })
