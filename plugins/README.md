@@ -66,10 +66,11 @@ The model and effort use the agent catalog. Omit both to leave the provider defa
 Raw extra arguments are refused for structured sessions.
 
 With `quirky.accounts` enabled, creation and resume prepare the selected Claude or Codex account
-before starting the native process. Explicit provider-home configuration takes precedence;
-preparation failure refuses the launch. Prepared environment values are not saved in the launch
-snapshot. Codex resume retains the native conversation ID and records its relocated transcript
-path when account preparation moves the conversation.
+before starting the native process. Explicit provider-home configuration and trusted launch-hook
+home overrides take precedence over managed selection; the account record describes the effective
+home. Preparation failure refuses the launch. Prepared environment values are not saved in the
+launch snapshot. Codex resume retains the native conversation ID and records its relocated
+transcript path when account preparation moves the conversation.
 
 The plugin exposes `create`, `messages`, `send`, `stop`, and `resume`. Creation returns a session
 record before startup finishes; `send` waits for native startup before submitting input. Messages
@@ -291,8 +292,10 @@ unknown safety data still blocks merging.
 Project-item edits and comment updates do not prompt. Deleting a project-item
 comment uses the same kernel confirmation rule as merge; authorize it with
 `--yes` or an answered confirmation. `project-item-mutation-confirmation` previews
-that deletion without changing data. Issue-type actions currently require an
-organization-owned project; support for user-owned projects is tracked separately.
+that deletion without changing data. Issue types belong to the Issue's repository,
+not the Project containing it: user-owned Projects can edit organization-repository
+types. Personal repositories expose no organization types; unavailable or disabled
+types are refused before mutation.
 
 `gh` owns credentials. Normal requests use its ambient login or a repository's
 configured keyring-account binding; a failed binding never falls back to another
@@ -305,6 +308,10 @@ connection-owned refreshes. Use `quirky api --json` for the live method, paramet
 result, and event contracts. Fixed-cap reads report truncation, partial results, or a limit error;
 only work-item search exposes client `--page` and `--limit`.
 
+Concurrent work-item search/count reads batch within the same authenticated repository
+scope. Valid cursor pages are reused for up to two minutes within bounded caches;
+forced refresh and mutations invalidate them. A failed GraphQL alias does not discard
+another alias's successful result. Tasks' direct numbered pages remain direct requests.
 Top-level PR conversation comments use `hosting review-conversation`, not issue
 or Project mutation routes:
 
@@ -380,9 +387,12 @@ The live API catalog contains all method schemas and generated command aliases.
 slot reports are bounded summaries pointing to that method, so large comments or
 diffs do not exceed the kernel's 64-KiB report limit.
 
-Other-provider review/create/settings and in-app link routing have explicit
-prerequisite-dependent queue items; current cards and routing never claim those
-unavailable capabilities succeeded. Clipboard/system-browser/focus behavior is
+Review links use Browser's Link Routing setting and Shift+Cmd/Ctrl modifier policy.
+Each PR/Checks action carries its originating worktree, including when the two surfaces
+show different worktrees. API callers can supply `--worktree`; an omitted target is
+inferred only from an unambiguous visible Review/Checks context. Routing failures do
+not silently launch the system browser. Other-provider review/create/settings remain
+explicitly deferred. Clipboard/system-browser/focus and native guest behavior are
 handed to the native scenario run, not inferred from headless web output.
 ## GitHub Tasks
 
@@ -513,6 +523,21 @@ earlier prompt. CLI/API callers can pin the same content with
 `--trust-issue-command --trust-issue-command-hash <hash-from-error>`, or
 `--trust-setup --trust-setup-hash <hash-from-error>` for setup.
 Trust flags without a hash authorize the current call's script.
+
+## Accounts and running sessions
+
+Account selection applies to future launches. Existing Claude and Codex processes keep their old
+account until restarted. The Codex pane's **Keep old account** and **Restart** controls use the same
+revision-checked actions as Usage. A restart preserves the native conversation and focuses its new
+terminal; removing an earlier Codex account does not invalidate the current transcript locator.
+
+Display preferences and “Don't ask again” choices do not advance account-selection authority.
+A later account selection still invalidates an earlier restart choice or unspent reset offer.
+Reset retries retain the displayed account/offer scope and request ID; missing credit, changed
+offers and unknown outcomes are shown separately from confirmed redemption.
+
+Full remaining UI acceptance and native-only clipboard, browser, Keychain and OS-focus checks are
+tracked in [the completion decisions](../docs/loop/decisions/m3-accounts-remaining-flows.md).
 
 ## Heimdall fleet and controls
 

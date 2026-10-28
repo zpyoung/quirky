@@ -1,6 +1,7 @@
 import type { PluginCaller, Session, Worktree } from '@quirky/protocol'
 import type { DaemonEnv, Handler } from './env'
-import { announce, type Note } from './notes'
+import { isMarkdownShelfNote, releaseMarkdownNotes, reserveMarkdownNotes, settleMarkdownNotes } from './note-bridge'
+import { announce, listMixedNotes, type Note } from './notes'
 import { formatNotes } from './notes-format'
 import { containedPath } from './paths'
 
@@ -131,19 +132,6 @@ async function deliverToNewAgent(env: DaemonEnv, worktree: Worktree, agent: stri
   throw env.errors.reasoned('conflict', 'not-delivered', 'The agent did not receive the notes.')
 }
 
-/** The unsent notes a send of this scope would take, or the reason there are none. */
-function pickNotes(env: DaemonEnv, worktree: Worktree, scope: string, params: Record<string, any>, path: string | undefined): Note[] {
-  let inScope: Note[]
-  if (scope === 'note') {
-    const note = env.notes.get(worktree.id, params.id)
-    if (note === null) throw env.errors.reasoned('not-found', 'no-note', `There is no note ${params.id} in this worktree.`)
-    inScope = [note]
-  } else inScope = env.notes.list(worktree.id, scope === 'file' ? path : undefined)
-  if (inScope.length === 0) throw env.errors.reasoned('conflict', 'no-unsent-notes', 'There are no unsent notes.')
-  const picked = inScope.filter((note) => !env.holds.has(worktree.id, note.id))
-  if (picked.length === 0) throw env.errors.reasoned('conflict', 'all-held', 'All notes are already being sent.')
-  return picked
-}
 
 /**
  * Sends notes (one, one file's, or all) to a running agent session or to a new agent tab, as one
@@ -162,17 +150,57 @@ export function sendNotes(env: DaemonEnv): Handler {
 
     const worktree = await env.resolve(params, caller)
     const path = scope === 'file' ? (await containedPath(worktree.path, params.path)).rel : undefined
-    const picked = pickNotes(env, worktree, scope, params, path)
+    const inScope = await listMixedNotes(env, worktree, scope === 'file' ? path : undefined)
+    let selected: Note[]
+    if (scope === 'note') {
+      const note = inScope.find((item) => item.id === params.id)
+      if (!note) throw env.errors.reasoned('not-found', 'no-note', `There is no note ${params.id} in this worktree.`)
+      selected = [note]
+    } else selected = inScope
+    if (selected.length === 0) throw env.errors.reasoned('conflict', 'no-unsent-notes', 'There are no unsent notes.')
+
+    const picked = selected.filter((note) => !env.holds.has(worktree.id, note.id))
+    if (picked.length === 0) throw env.errors.reasoned('conflict', 'all-held', 'All notes are already being sent.')
     const ids = picked.map((note) => note.id)
+    const holdId = crypto.randomUUID()
+    let editorReservationAttempted = false
     env.holds.add(worktree.id, ids)
     try {
-      const text = formatNotes(picked)
-      const target = hasSession ? await deliverToSession(env, worktree, params.session, text) : await deliverToNewAgent(env, worktree, params.agent, text)
-      const { sent, kept } = env.notes.settle(worktree.id, picked)
-      return { sent, kept, target: { session: target.session }, delivery: target.delivery }
+      const markdown = picked.filter(isMarkdownShelfNote)
+      if (markdown.length > 0) editorReservationAttempted = true
+      const reservation = markdown.length === 0
+        ? { reservedNoteIds: [], unavailableNoteIds: [] }
+        : await reserveMarkdownNotes(env, worktree, holdId, markdown)
+      const reserved = new Set(reservation.reservedNoteIds)
+      const unavailable = markdown.filter((note) => !reserved.has(note.markdownSnapshot.id)).map((note) => note.id)
+      const deliverable = picked.filter((note) => !isMarkdownShelfNote(note) || reserved.has(note.markdownSnapshot.id))
+      if (deliverable.length === 0) {
+        throw env.errors.reasoned('conflict', 'all-held', 'All notes are already being sent.')
+      }
+
+      const text = formatNotes(deliverable)
+      const target = hasSession
+        ? await deliverToSession(env, worktree, params.session, text)
+        : await deliverToNewAgent(env, worktree, params.agent, text)
+      const markdownPicked = deliverable.filter(isMarkdownShelfNote)
+      const markdownSettlement = await settleMarkdownNotes(env, worktree, holdId, markdownPicked)
+      const gitPicked = deliverable.filter((note) => !isMarkdownShelfNote(note))
+      const gitSettlement = env.notes.settle(worktree.id, gitPicked)
+      const sentIds = new Set([...gitSettlement.sent, ...markdownSettlement.sent])
+      const keptIds = new Set([...gitSettlement.kept, ...markdownSettlement.kept, ...unavailable])
+      return {
+        sent: deliverable.filter((note) => sentIds.has(note.id)).map((note) => note.id),
+        kept: [...deliverable.filter((note) => keptIds.has(note.id)).map((note) => note.id), ...unavailable],
+        target: { session: target.session },
+        delivery: target.delivery
+      }
     } finally {
       env.holds.release(worktree.id, ids)
-      announce(env, worktree.id)
+      try {
+        if (editorReservationAttempted) await releaseMarkdownNotes(env, worktree, holdId)
+      } finally {
+        announce(env, worktree.id)
+      }
     }
   }
 }

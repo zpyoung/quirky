@@ -11,7 +11,7 @@ const EMPTY: readonly Note[] = []
  * keeps the last list. Shared by the Source Control panel and the diff view.
  */
 export function useNotes(context: UiPluginContext, worktree: string): readonly Note[] {
-  const [notes, setNotes] = useState<readonly Note[]>(EMPTY)
+  const [snapshot, setSnapshot] = useState<{ worktree: string; notes: readonly Note[] } | null>(null)
 
   useEffect(() => {
     let alive = true
@@ -23,13 +23,20 @@ export function useNotes(context: UiPluginContext, worktree: string): readonly N
         const result = (await context.call('quirky.git/notes', { worktree })) as { notes: Note[] }
         if (!alive || ticket !== newest) return
         known = result.notes[0]?.worktreeId ?? known
-        setNotes((prev) => (JSON.stringify(prev) === JSON.stringify(result.notes) ? prev : result.notes))
-      } catch {
-        // the panel and view still work without notes
+        setSnapshot((previous) => previous?.worktree === worktree && JSON.stringify(previous.notes) === JSON.stringify(result.notes)
+          ? previous
+          : { worktree, notes: result.notes })
+      } catch (error) {
+        if (!alive || ticket !== newest) return
+        context.toast('Failed to load notes', error instanceof Error ? error.message : String(error))
       }
     }
     void read()
     const unsubscribe = context.subscribe((event) => {
+      if (event.type === 'quirky.editor/changed') {
+        void read()
+        return
+      }
       if (event.type !== 'quirky.git/notesChanged') return
       const id = (event.data as { worktreeId?: unknown } | undefined)?.worktreeId
       // the event names the worktree by id and `worktree` may be a name, so only a known other id is skipped
@@ -42,7 +49,7 @@ export function useNotes(context: UiPluginContext, worktree: string): readonly N
     }
   }, [context, worktree])
 
-  return notes
+  return snapshot?.worktree === worktree ? snapshot.notes : EMPTY
 }
 
 /** How many notes each path carries. */

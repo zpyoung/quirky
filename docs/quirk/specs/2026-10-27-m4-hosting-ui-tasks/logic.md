@@ -89,7 +89,7 @@ Each numbered scenario is a required real-daemon API/CLI flow with behavioral as
    - **Data after:** **ViewA** override retained; **ViewB** unchanged.
 17. **SC17 — Project table projection.** View fields plus synthetic Type after Title; first two frozen; local sort ASC/DESC/server order, stable server-position tiebreak. Configure columns cannot hide Title; per-device hide/width preferences(min60); group by saved first field, option/iteration order, unassigned last, collapse, iteration dates/current badge.
    - **Screen states:** hiding Assignees does not remove its server field or change GitHub's saved view; same-valued rows keep server order.
-18. **SC18 — Inline Project fields.** Editable select/iteration/text/number/date/assignees/labels/issue type use typed update/clear and correct issue source/ambient project authorization. Repository/parent fields read-only; draft/restricted not editable. Optimistic table/board/detail patches reconcile or rollback and display partial writes accurately. Existing API limitation for user-owned project issue types is explicit, not a fake success.
+18. **SC18 — Inline Project fields.** Editable select/iteration/text/number/date/assignees/labels/issue type use typed update/clear and correct issue source/ambient project authorization. Repository/parent fields read-only; draft/restricted not editable. Optimistic table/board/detail patches reconcile or rollback and display partial writes accurately. User-owned Projects now discover/edit organization-repository issue types through the same public API, per the [parity specification](../2026-10-28-m4-hosting-api-github-parity/logic.md); preserve a saved current type before selectable choices load.
    - **Data before:** **ItemI7** Status Todo, estimate3.
    - **Walkthrough:** change Status Done; invalid numeric text; clear estimate.
    - **Data after:** **ItemI7** Status Done, estimate empty; invalid number never written.
@@ -124,7 +124,7 @@ Consumer: local developers and agents replacing Orca. Outcome: browse/edit/creat
 Alternatives: shell-owned Tasks couples all features to core; full Orca port retains Electron and remote runtime branches. Chosen plugin with focused vertical slices reuses the public API and allows replacement without a second auth/cache/merge policy.
 
 ## Industry insights
-LOOP.md explicitly replaces research swarms with feature docs, roadmap and earlier logs. The source's stale-write ownership, provider-qualified cache keys and direct page loading are correctness requirements, not optional performance embellishments. Binding dependency decisions: m4-hosting-api-github D6/D9/D17/D19/D33/D34/D38; user-project issue-type limitation must remain explicit until its queued API parity item resolves it.
+LOOP.md explicitly replaces research swarms with feature docs, roadmap and earlier logs. The source's stale-write ownership, provider-qualified cache keys and direct page loading are correctness requirements, not optional performance embellishments. Binding dependency decisions: m4-hosting-api-github D6/D9/D17/D19/D33/D34. Its historical D38 user-Project type restriction is superseded by m4-hosting-api-github-parity's content-owner capability and consumer cutover.
 
 ## Deferred ideas
 None added. Non-goals remain assigned elsewhere. Any unavailable in-scope integration is recorded under LOOP.md's explicit defer/follow-up process, never silently removed from this specification.
@@ -146,3 +146,5 @@ Project iteration reads include actual `ProjectV2IterationField.configuration` c
 Boolean setting contributions may declare `menu: "view"`. The public `SettingDeclaration`/setting schemas and manifest validator expose this optional metadata; existing declarations remain unchanged. The native shell derives checked View items from effective `setting.list` results, refetches after plugin/setting changes, and toggles through fresh `setting.get` then `setting.set`. Tasks declares its visibility switch this way, without core knowledge of a Tasks plugin ID. Standard native app/Edit/Window roles remain present. Parent owns these protocol/daemon/desktop seams and their real-daemon regression.
 
 
+
+**Amendments:** 2026-10-28 — remove the temporary user-Project type limitation after the dependent API parity cutover; type catalog capability belongs to the issue repository owner.

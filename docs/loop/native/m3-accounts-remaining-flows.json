@@ -1,0 +1,26 @@
+{
+  "item": "m3-accounts-remaining-flows",
+  "spec": "docs/quirk/specs/2026-10-28-m3-accounts-remaining-flows/logic.md",
+  "scenarios": [
+    {
+      "id": "AC3-native-login-link-cancel",
+      "title": "Launch the actual desktop app with fresh temporary HOME and QUIRKY_HOME and synthetic Claude/Codex CLI fixtures, never real accounts. Claude Copy sign-in link instead and Codex Add expose only the fixture authorize URL; Copy writes exactly that approved URL to the macOS clipboard, Open uses the system browser without changing another application's state, and Cancel kills the owned login and deletes only incomplete owned state. Do not complete real OAuth or grant credential access. Restore clipboard and stop every run-owned process.",
+      "status": "pending", "lastRun": null, "report": null, "summary": null
+    },
+    {
+      "id": "AC7-native-keychain-denial",
+      "title": "With isolated provider homes, exercise Claude scoped Keychain denial/lock with only a newly created run-owned synthetic credential service. Verify Keychain unavailable is visible, no fallback to another managed/default login occurs, and account selection remains honest. Cursor may use its documented private fixture CLI fallback. Never approve a real credential permission dialog or inspect/delete user services; record blocked if safe synthetic denial cannot be exercised. Delete only the run-owned synthetic item.",
+      "status": "pending", "lastRun": null, "report": null, "summary": null
+    },
+    {
+      "id": "AC4-AC5-native-restart-focus",
+      "title": "In an isolated real desktop window with synthetic terminal agents, switch Claude accounts under Ask/Keep/Always/Never, queue a busy session until idle and supersede a pending switch. For Codex, use the actual pane Keep old account and Restart controls. Resumed tabs get real keyboard focus; typing reaches the resumed provider, closing Usage/settings returns focus without stealing another app's focus. Prove Codex A-to-B-to-remove-A-to-C reads accumulated conversation contents under C, not only IDs/labels. Stop all owned daemons, PTYs and provider processes.",
+      "status": "pending", "lastRun": null, "report": null, "summary": null
+    },
+    {
+      "id": "AC1-native-window-refresh",
+      "title": "Run the real desktop app in fresh HOME/QUIRKY_HOME with synthetic quota sources. Minimize/unfocus, then restore after the normal freshness window: usage refresh follows genuine window visibility/focus; immediate repeated focus is debounced; manual Refresh still works. Detailed/Remaining/provider visibility persist after app restart. Never use real provider credentials or send model requests.",
+      "status": "pending", "lastRun": null, "report": null, "summary": null
+    }
+  ]
+}

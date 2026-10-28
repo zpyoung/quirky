@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { configureInput, validateAddressList } from '../src/daemon/api'
+import { configureInput, updatePreferencesInput, validateAddressList } from '../src/daemon/api'
 
 describe('mobile API input contract', () => {
   test('rejects unknown configure keys and invalid bounded machine names', () => {
@@ -16,4 +16,14 @@ describe('mobile API input contract', () => {
     expect(() => validateAddressList(Array.from({ length: 51 }, () => 'host.local'))).toThrow()
     expect(validateAddressList(['192.168.1.3'])).toEqual(['192.168.1.3'])
   })
+  test('phone preference updates cannot change desktop configuration', () => {
+    expect(updatePreferencesInput({ autoRestoreFitMs: null })).toEqual({ autoRestoreFitMs: null })
+    expect(updatePreferencesInput({ autoRestoreFitMs: 60_000 })).toEqual({ autoRestoreFitMs: 60_000 })
+    expect(updatePreferencesInput({ autoRestoreFitMs: 1_000 })).toEqual({ autoRestoreFitMs: 5_000 })
+    expect(updatePreferencesInput({ autoRestoreFitMs: 9_000_000 })).toEqual({ autoRestoreFitMs: 3_600_000 })
+    for (const input of [{}, { machineName: 'Laptop' }, { autoRestoreFitMs: '1m' }, { autoRestoreFitMs: Number.NaN }]) {
+      expect(() => updatePreferencesInput(input)).toThrow()
+    }
+  })
+
 })

@@ -295,10 +295,11 @@ export class PtyClient {
   private async establish(): Promise<void> {
     const timeoutMs = this.options.connectTimeoutMs ?? 15000
     const deadline = Date.now() + timeoutMs
+    const retiredHostIdentities = new Set<string>()
     let spawned = false
     for (;;) {
       try {
-        await this.openAndHello()
+        await this.openAndHello(retiredHostIdentities)
         return
       } catch (error) {
         if (this.closing || error instanceof PtyProtocolRefused) throw error
@@ -333,7 +334,7 @@ export class PtyClient {
     return socket
   }
 
-  private async openAndHello(): Promise<void> {
+  private async openAndHello(retiredHostIdentities: Set<string>): Promise<void> {
     const token = readFileSync(join(this.options.home, 'pty.token'), 'utf8').trim()
     const socket = await this.openSocket()
     try {
@@ -350,18 +351,21 @@ export class PtyClient {
           `quirky-pty speaks protocol ${theirs}; this quirkyd speaks ${PTY_PROTOCOL_VERSION}. Stop it or upgrade Quirky.`
         )
       }
-      if (theirs !== null) await this.retireHost(theirs, token)
+      if (theirs !== null) await this.retireHost(theirs, token, retiredHostIdentities)
       throw error
     }
   }
 
   /** Shuts down a host that speaks the older protocol `version`, so `establish` can start a current one. */
-  private async retireHost(version: number, token: string): Promise<void> {
+  private async retireHost(version: number, token: string, retiredHostIdentities: Set<string>): Promise<void> {
     const waitMs = this.options.shutdownWaitMs ?? RETIRE_WAIT_MS
     try {
       const socket = await this.openSocket()
       try {
-        await this.rawRequest('hello', { token, version })
+        const hello = (await this.rawRequest('hello', { token, version })) as PtyResults['hello']
+        const identity = JSON.stringify([token, hello.version, hello.pid])
+        if (retiredHostIdentities.has(identity)) return
+        retiredHostIdentities.add(identity)
         const stopped = await this.shutdownAndWait(waitMs)
         this.options.log?.(
           stopped

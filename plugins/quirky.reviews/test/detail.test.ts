@@ -97,6 +97,22 @@ async function refreshReview(host: ReviewHarness): Promise<void> {
 
 
 describe('review detail methods', () => {
+  test('the review page hydrates the selected pull request details without a false unavailable state', async () => {
+    const host = await bootReviews(detailGhSource, { remote: 'https://github.com/source-owner/source-repo.git' })
+    host.writeState(detailSeedState())
+    try {
+      await openReview(host)
+      await refreshReview(host)
+      const current = detailOf(await stateOf(host))
+      expect(current.details).toMatchObject({
+        item: { number: 12, kind: 'pullRequest', title: 'Fixture pull request', body: 'Fixture description', url: 'https://github.com/source-owner/source-repo/pull/12' },
+      })
+      expect(current.error).toBeNull()
+    } finally {
+      await host.cleanup()
+    }
+  }, 20_000)
+
   test('audience and grouping changes are shared daemon state', async () => {
     const host = await bootReviews(detailGhSource)
     try {
@@ -301,12 +317,18 @@ describe('review detail methods', () => {
       html_url: 'https://github.com/upstream-owner/upstream-repo/pull/12',
       url: 'https://api.github.com/repos/upstream-owner/upstream-repo/pulls/12',
     }
+    const upstreamGraph = structuredClone(seed.graphqlResponses)
+    if (!isRecord(upstreamGraph) || !isRecord(upstreamGraph.WorkItemDetails)
+      || !isRecord(upstreamGraph.WorkItemDetails.data) || !isRecord(upstreamGraph.WorkItemDetails.data.repository)
+      || !isRecord(upstreamGraph.WorkItemDetails.data.repository.pullRequest)) throw new Error('invalid detail fixture')
+    upstreamGraph.WorkItemDetails.data.repository.pullRequest.url = upstreamReview.html_url
     const host = await bootReviews(detailGhSource, {
       remote: 'https://github.com/source-owner/source-repo.git',
       upstream: 'https://github.com/upstream-owner/upstream-repo.git',
     })
     host.writeState({
       ...seed,
+      graphqlResponsesByRepo: { 'upstream-owner/upstream-repo': upstreamGraph },
       responses: {
         ...responses,
         'GET repos/upstream-owner/upstream-repo/pulls/12': upstreamReview,

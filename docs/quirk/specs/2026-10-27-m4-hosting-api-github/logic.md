@@ -24,7 +24,7 @@ Use one SHA-guarded merge method for humans and automation. Refresh state and me
 
 All GitHub portions of flows 1–7 in hosting-api.md are in scope, including account binding, rate limits, refresh pacing, stacked creation/merge, review detail/actions, issues/work items and Projects v2. Flow 8 is Bitbucket-only and excluded. Other providers, UI pages/settings cards, worktree creation from hosted items, SSH execution-host infrastructure, Windows/WSL routing, and Orca-specific star prompts are excluded. Local SSH clone remotes and aliases remain in scope. The API must not introduce connection-backed repository support that the registered-worktree API does not have.
 
-**Operator scope amendment:** land the tested core under the operator's deadline. User-owned Projects issue-type discovery/changes and distinct-query search batching/cursor reuse remain in dependent item `m4-hosting-api-github-parity`. User-owned-project type actions return an explicit unsupported error rather than claiming an empty successful implementation. Functional work-item search/pagination remains included; the deferred work is its source's cross-query batching and cursor-reuse behavior.
+**Operator scope amendment:** the core landed first under the operator's deadline. The dependent [GitHub parity specification](../2026-10-28-m4-hosting-api-github-parity/logic.md) now supplies user-owned Projects issue-type discovery/changes and distinct-query search batching/cursor reuse. Type capability follows the content repository's authenticated owner, not the Project owner; a proven personal repository has no organization types. The temporary user-Project unsupported boundary is removed. Existing work-item API/CLI shapes remain unchanged.
 
 ## Decisions Locked
 
@@ -110,3 +110,5 @@ GHES: GitHub Enterprise Server. Head SHA: the exact reviewed commit whose merge 
 Status: Required joint Codex review completed; F1 HIGH and F2 MEDIUM accepted and resolved in the specifications before implementation. Tech spec required by LOOP.md and subsystem/file-count gate.
 
 **Amendments:** 2026-10-27 — specify per-connection refresh ownership and partial-mutation invalidation after joint review. Clarify Projects cross-repository parity from original by-slug handlers. Correct provider-wire distinctions: valid omitted stack and nullable no-review decisions are not unavailable metadata; use supported branch-filter/create routes, including organization forks. Apply the existing irreversible-action consent rule to project-comment deletion without prompting for reversible project edits.
+
+**Amendments:** 2026-10-28 — cut over the two D38 deferrals to the linked parity specification; retain the original core-first ruling as historical context, not a current unsupported boundary.

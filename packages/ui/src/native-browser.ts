@@ -11,9 +11,14 @@ import {
 /** The native layer sits above host DOM; these masks keep standard overlays visible. */
 /** Plugin-owned overlay elements may opt in with `data-quirky-native-mask`; standard ARIA overlays are masked too. */
 export const NATIVE_BROWSER_DEFAULT_MASKS = ['[data-quirky-native-mask]', '[role="dialog"]', '[role="menu"]', '[role="listbox"]'] as const
+const NATIVE_BROWSER_EVALUATION_SCRIPT_MAX_BYTES = 64 * 1024
+const NATIVE_BROWSER_EVALUATION_RESULT_MAX_BYTES = 256 * 1024
+const NATIVE_BROWSER_EVALUATION_MESSAGE_MAX_BYTES = NATIVE_BROWSER_EVALUATION_RESULT_MAX_BYTES * 6 + 4096
+const NATIVE_BROWSER_EVALUATION_TIMEOUT_MS = 5000
 
 export type NativeBrowserAdapterHandle = {
   request(request: NativeBrowserRequest): Promise<NativeBrowserState>
+  evaluate(script: string): Promise<unknown>
   dispose(): Promise<void>
 }
 
@@ -39,6 +44,7 @@ type Mount = {
   disposePromise?: Promise<void>
   disposed: boolean
   generation: number
+  evaluations: Set<EvaluationCancellation>
   state: NativeBrowserState
   publicHandle: NativeBrowserHandle
 }
@@ -82,11 +88,93 @@ type Waiter = {
   resolve(state: NativeBrowserState): void
   reject(error: Error): void
 }
+type NativeBrowserEvaluationMessage =
+  | { type: 'quirky-native-browser-evaluation-result'; requestId: string; ok: true; resultJson: string }
+  | { type: 'quirky-native-browser-evaluation-result'; requestId: string; ok: false; error: string }
+
+type PendingNativeBrowserEvaluation = {
+  child: WebviewTag | null
+  documentRevision: number
+  resolve(value: unknown): void
+  reject(error: Error): void
+  timer: ReturnType<typeof setTimeout>
+}
+
+type EvaluationCancellation = { promise: Promise<never>; reject(error: Error): void }
+
+function exceedsUtf8ByteLimit(value: string, limit: number): boolean {
+  let bytes = 0
+  for (let index = 0; index < value.length; index++) {
+    const code = value.charCodeAt(index)
+    if (code <= 0x7f) bytes++
+    else if (code <= 0x7ff) bytes += 2
+    else if (code >= 0xd800 && code <= 0xdbff && index + 1 < value.length) {
+      const next = value.charCodeAt(index + 1)
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        bytes += 4
+        index++
+      } else bytes += 3
+    } else bytes += 3
+    if (bytes > limit) return true
+  }
+  return false
+}
+
 
 function installNativeBrowserPreload(): void {
   let findText = ''
   let findCurrent = 0
   let findTotal = 0
+  const NativePromise = Promise
+  const nativePromiseResolve = NativePromise.resolve
+  const nativePromiseThen = NativePromise.prototype.then
+  const nativeEval = eval
+  const nativeStringify = JSON.stringify
+  const nativeApply = Reflect.apply
+  const nativeGet = Reflect.get
+  const nativeDefineProperty = Object.defineProperty
+  const nativeString = String
+  const nativeSlice = String.prototype.slice
+  const nativeCharCodeAt = String.prototype.charCodeAt
+  const nativeIsInteger = Number.isInteger
+  const exceedsByteLimit = (value: string, limit: number): boolean => {
+    let bytes = 0
+    for (let index = 0; index < value.length; index++) {
+      const code = nativeApply(nativeCharCodeAt, value, [index]) as number
+      if (code <= 0x7f) bytes++
+      else if (code <= 0x7ff) bytes += 2
+      else if (code >= 0xd800 && code <= 0xdbff && index + 1 < value.length) {
+        const next = nativeApply(nativeCharCodeAt, value, [index + 1]) as number
+        if (next >= 0xdc00 && next <= 0xdfff) {
+          bytes += 4
+          index++
+        } else bytes += 3
+      } else bytes += 3
+      if (bytes > limit) return true
+    }
+    return false
+  }
+  const truncateUtf8ByteLimit = (value: string, limit: number): string => {
+    let bytes = 0
+    let index = 0
+    while (index < value.length) {
+      const code = nativeApply(nativeCharCodeAt, value, [index]) as number
+      let characterBytes = code <= 0x7f ? 1 : code <= 0x7ff ? 2 : 3
+      let codeUnits = 1
+      if (code >= 0xd800 && code <= 0xdbff && index + 1 < value.length) {
+        const next = nativeApply(nativeCharCodeAt, value, [index + 1]) as number
+        if (next >= 0xdc00 && next <= 0xdfff) {
+          characterBytes = 4
+          codeUnits = 2
+        }
+      }
+      if (bytes + characterBytes > limit) break
+      bytes += characterBytes
+      index += codeUnits
+    }
+    return nativeApply(nativeSlice, value, [0, index]) as string
+  }
+
   const send = () => {
     const sendToHost: unknown = Reflect.get(window, '__electrobunSendToHost')
     if (typeof sendToHost !== 'function') return
@@ -169,6 +257,77 @@ function installNativeBrowserPreload(): void {
     send()
   }
   Object.defineProperty(window, '__quirkyNativeBrowserFind', { value: find, configurable: true })
+  const sendEvaluation = (requestId: string, ok: boolean, payload: string) => {
+    const sendToHost: unknown = nativeGet(window, '__electrobunSendToHost')
+    if (typeof sendToHost !== 'function') return
+    const message = ok
+      ? { type: 'quirky-native-browser-evaluation-result', requestId, ok: true, resultJson: payload }
+      : { type: 'quirky-native-browser-evaluation-result', requestId, ok: false, error: payload }
+    const encoded = nativeStringify(message)
+    if (typeof encoded !== 'string' || exceedsByteLimit(encoded, 256 * 1024 * 6 + 4096)) {
+      const failure = { type: 'quirky-native-browser-evaluation-result', requestId, ok: false, error: 'native browser evaluation response exceeded byte limit' }
+      nativeApply(sendToHost, window, [failure])
+      return
+    }
+    nativeApply(sendToHost, window, [message])
+  }
+  const sendEvaluationError = (requestId: string, error: unknown) => {
+    let text = 'native browser guest evaluation failed'
+    try {
+      const message = error && typeof error === 'object' ? nativeGet(error, 'message') : null
+      const raw = typeof message === 'string' ? message : nativeString(error)
+      text = truncateUtf8ByteLimit(raw, 1024)
+    } catch {}
+    try { sendEvaluation(requestId, false, text) } catch {}
+  }
+  const evaluateGuest = (requestId: string, source: string, resultLimit: number) => {
+    if (typeof requestId !== 'string' || requestId.length > 128) return
+    if (
+      typeof source !== 'string' || exceedsByteLimit(source, 64 * 1024) ||
+      !nativeIsInteger(resultLimit) || resultLimit < 1 || resultLimit > 256 * 1024
+    ) {
+      sendEvaluationError(requestId, 'native browser evaluation input exceeded its limit')
+      return
+    }
+    let value: unknown
+    try {
+      value = nativeApply(nativeEval, undefined, [source])
+    } catch (error) {
+      sendEvaluationError(requestId, error)
+      return
+    }
+    let promise: Promise<unknown>
+    try {
+      promise = nativeApply(nativePromiseResolve, NativePromise, [value]) as Promise<unknown>
+      nativeApply(nativePromiseThen, promise, [
+        (result: unknown) => {
+          try {
+            const encoded = nativeStringify(result)
+            const resultJson = typeof encoded === 'string' ? encoded : 'null'
+            if (exceedsByteLimit(resultJson, resultLimit)) {
+              sendEvaluation(requestId, false, 'native browser evaluation result exceeded byte limit')
+              return
+            }
+            sendEvaluation(requestId, true, resultJson)
+          } catch (error) {
+            sendEvaluationError(requestId, error)
+          }
+        },
+        (error: unknown) => sendEvaluationError(requestId, error)
+      ])
+    } catch (error) {
+      sendEvaluationError(requestId, error)
+    }
+  }
+  try {
+    nativeDefineProperty(window, '__quirkyNativeBrowserEvaluate', {
+      value: evaluateGuest,
+      configurable: false,
+      enumerable: false,
+      writable: false
+    })
+  } catch {}
+
   const observeTitle = () => {
     const title = document.querySelector('title')
     if (title) new MutationObserver(send).observe(title, { childList: true, characterData: true, subtree: true })
@@ -187,6 +346,35 @@ let pagePreload: string | undefined
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
+function parseNativeBrowserEvaluationMessage(value: unknown): NativeBrowserEvaluationMessage | null {
+  try {
+    let message = value
+    if (typeof message === 'string') {
+      if (exceedsUtf8ByteLimit(message, NATIVE_BROWSER_EVALUATION_MESSAGE_MAX_BYTES)) return null
+      message = JSON.parse(message)
+    }
+    if (!message || typeof message !== 'object') return null
+    const read = (key: string): unknown => {
+      const descriptor = Object.getOwnPropertyDescriptor(message, key)
+      return descriptor && 'value' in descriptor ? descriptor.value : undefined
+    }
+    const type = read('type')
+    const requestId = read('requestId')
+    const ok = read('ok')
+    if (type !== 'quirky-native-browser-evaluation-result' || typeof requestId !== 'string' || requestId.length > 128) return null
+    if (ok === true) {
+      const resultJson = read('resultJson')
+      if (typeof resultJson !== 'string' || exceedsUtf8ByteLimit(resultJson, NATIVE_BROWSER_EVALUATION_RESULT_MAX_BYTES)) return null
+      return { type, requestId, ok, resultJson }
+    }
+    const error = read('error')
+    if (ok !== false || typeof error !== 'string' || exceedsUtf8ByteLimit(error, 1024)) return null
+    return { type, requestId, ok, error }
+  } catch {
+    return null
+  }
+}
+
 
 function allowedUrl(raw: string): boolean {
   let url: URL
@@ -257,6 +445,9 @@ class ElectrobunNativeBrowserMount implements NativeBrowserAdapterHandle {
   private expectedNavigation: string | null = null
   private navigationStarted = false
   private documentUrl = 'about:blank'
+  private documentRevision = 0
+  private navigationPending = false
+  private readonly pendingEvaluations = new Map<string, PendingNativeBrowserEvaluation>()
 
   constructor(
     private readonly element: HTMLElement,
@@ -373,20 +564,75 @@ class ElectrobunNativeBrowserMount implements NativeBrowserAdapterHandle {
       child.on(name, handler)
       this.eventHandlers.push([name, handler])
     }
-    listen('load-started', () => this.setState({ loading: true, error: null }))
+    listen('load-started', () => {
+      if (!this.navigationPending) {
+        this.navigationPending = true
+        this.invalidateEvaluations('native browser evaluation was cancelled by navigation')
+      }
+      this.setState({ loading: true, error: null })
+    })
     listen('load-finished', () => {
+      this.navigationPending = false
       this.setState({ loading: false })
       void this.refreshHistory()
     })
     listen('will-navigate', (event) => this.onWillNavigate(event.detail))
-    listen('did-navigate', (event) => this.onNavigation(event.detail))
-    listen('did-navigate-in-page', (event) => this.onNavigation(event.detail))
+    listen('did-navigate', (event) => this.onNavigation(event.detail, true))
+    listen('did-navigate-in-page', (event) => this.onNavigation(event.detail, true))
     listen('dom-ready', (event) => this.onNavigation(event.detail))
-    listen('host-message', (event) => this.onGuestState(event.detail))
+    listen('host-message', (event) => this.onHostMessage(event.detail))
     listen('new-window-open', (event) => this.onPopup(event.detail))
   }
 
+  private invalidateEvaluations(reason: string): void {
+    this.documentRevision++
+    for (const [requestId, pending] of this.pendingEvaluations) {
+      this.pendingEvaluations.delete(requestId)
+      clearTimeout(pending.timer)
+      pending.reject(new Error(reason))
+    }
+  }
+
+  private settleEvaluation(
+    requestId: string,
+    result: { ok: true; value: unknown } | { ok: false; error: Error }
+  ): void {
+    const pending = this.pendingEvaluations.get(requestId)
+    if (!pending) return
+    this.pendingEvaluations.delete(requestId)
+    clearTimeout(pending.timer)
+    if (this.disposed || (pending.child !== null && pending.child !== this.child)) {
+      pending.reject(new Error('native browser view is disposed'))
+      return
+    }
+    if (pending.documentRevision !== this.documentRevision || this.navigationPending) {
+      pending.reject(new Error('native browser evaluation was cancelled by navigation'))
+      return
+    }
+    if (result.ok) pending.resolve(result.value)
+    else pending.reject(result.error)
+  }
+
+  private onHostMessage(detail: unknown): void {
+    if (typeof detail === 'string' && exceedsUtf8ByteLimit(detail, NATIVE_BROWSER_EVALUATION_MESSAGE_MAX_BYTES)) return
+    const message = parseNativeBrowserEvaluationMessage(detail)
+    if (message?.ok) {
+      try {
+        this.settleEvaluation(message.requestId, { ok: true, value: JSON.parse(message.resultJson) })
+      } catch {
+        this.settleEvaluation(message.requestId, { ok: false, error: new Error('native browser evaluation returned invalid JSON') })
+      }
+    } else if (message) {
+      this.settleEvaluation(message.requestId, { ok: false, error: new Error(message.error) })
+    }
+    this.onGuestState(detail)
+  }
+
   private onWillNavigate(detail: unknown): void {
+    if (!this.navigationPending) {
+      this.navigationPending = true
+      this.invalidateEvaluations('native browser evaluation was cancelled by navigation')
+    }
     const url = eventUrl(detail)
     if (!url) return
     if (this.expectedNavigation !== null) {
@@ -400,11 +646,15 @@ class ElectrobunNativeBrowserMount implements NativeBrowserAdapterHandle {
     this.setState({ url, loading: true, error: null, findCurrent: 0, findTotal: 0 })
   }
 
-  private onNavigation(detail: unknown): void {
+  private onNavigation(detail: unknown, navigationCommit = false): void {
     const url = eventUrl(detail)
     if (!url || (this.expectedNavigation !== null && url !== this.expectedNavigation && !this.navigationStarted)) return
     if (this.expectedNavigation !== null && url !== this.expectedNavigation && this.waiter?.kind === 'navigation') {
       this.waiter.expectedUrl = url
+    }
+    if (this.navigationPending || navigationCommit || url !== this.documentUrl) {
+      this.invalidateEvaluations('native browser evaluation was cancelled by navigation')
+      this.navigationPending = false
     }
     this.expectedNavigation = null
     this.navigationStarted = false
@@ -417,16 +667,9 @@ class ElectrobunNativeBrowserMount implements NativeBrowserAdapterHandle {
     const guest = parseGuestState(detail)
     if (!guest) return
     const url = normalizeUrl(guest.url)
-    if (this.expectedNavigation !== null && url !== this.expectedNavigation) return
-    if (this.expectedNavigation === url) {
-      this.expectedNavigation = null
-      this.navigationStarted = false
-    } else if (url !== this.documentUrl) {
-      return
-    }
-    this.documentUrl = url
+    if (url !== this.documentUrl || this.navigationPending) return
     const state = this.setState({
-      url,
+      url: this.documentUrl,
       title: guest.title,
       loading: guest.loading,
       findCurrent: guest.findCurrent,
@@ -514,6 +757,55 @@ class ElectrobunNativeBrowserMount implements NativeBrowserAdapterHandle {
     await this.bridge.releaseNativeBrowserView({ viewId: this.viewId, owner: this.owner })
   }
 
+  evaluate(script: string): Promise<unknown> {
+    if (typeof script !== 'string' || exceedsUtf8ByteLimit(script, NATIVE_BROWSER_EVALUATION_SCRIPT_MAX_BYTES)) {
+      return Promise.reject(new Error('native browser evaluation script exceeded byte limit'))
+    }
+    if (this.disposed) return Promise.reject(new Error('native browser view is disposed'))
+    if (this.navigationPending) return Promise.reject(new Error('native browser evaluation is unavailable during navigation'))
+    const requestId = `${this.owner}:${crypto.randomUUID()}`
+    const { promise, resolve, reject } = Promise.withResolvers<unknown>()
+    const timer = setTimeout(() => {
+      this.settleEvaluation(requestId, { ok: false, error: new Error('native browser evaluation timed out') })
+    }, NATIVE_BROWSER_EVALUATION_TIMEOUT_MS)
+    this.pendingEvaluations.set(requestId, {
+      child: this.child,
+      documentRevision: this.documentRevision,
+      resolve,
+      reject,
+      timer
+    })
+    void this.ready.then(
+      () => {
+        try {
+          const pending = this.pendingEvaluations.get(requestId)
+          if (!pending) return
+          if (this.disposed) {
+            this.settleEvaluation(requestId, { ok: false, error: new Error('native browser view is disposed') })
+            return
+          }
+          if (pending.documentRevision !== this.documentRevision || this.navigationPending) {
+            this.settleEvaluation(requestId, { ok: false, error: new Error('native browser evaluation was cancelled by navigation') })
+            return
+          }
+          const child = this.requireChild()
+          if (pending.child !== null && pending.child !== child) {
+            this.settleEvaluation(requestId, { ok: false, error: new Error('native browser view is disposed') })
+            return
+          }
+          pending.child = child
+          child.executeJavascript(
+            `window.__quirkyNativeBrowserEvaluate?.(${JSON.stringify(requestId)},${JSON.stringify(script)},${NATIVE_BROWSER_EVALUATION_RESULT_MAX_BYTES})`
+          )
+        } catch (error) {
+          this.settleEvaluation(requestId, { ok: false, error: new Error(messageOf(error)) })
+        }
+      },
+      (error) => this.settleEvaluation(requestId, { ok: false, error: new Error(messageOf(error)) })
+    )
+    return promise
+  }
+
   async request(request: NativeBrowserRequest): Promise<NativeBrowserState> {
     await this.ready
     if (this.disposed) throw new Error('native browser view is disposed')
@@ -582,6 +874,7 @@ class ElectrobunNativeBrowserMount implements NativeBrowserAdapterHandle {
   dispose(): Promise<void> {
     if (this.disposal) return this.disposal
     this.disposed = true
+    this.invalidateEvaluations('native browser view is disposed')
     this.cancelWaiter()
     for (const cleanup of this.disposeCleanups) cleanup()
     this.disposeCleanups.clear()
@@ -603,9 +896,14 @@ export function createNativeBrowserCapability(adapter?: NativeBrowserAdapter): N
   const available = adapter !== undefined
 
   let lastDispose: Promise<void> = Promise.resolve()
+  const cancelEvaluations = (mount: Mount, reason: string) => {
+    for (const evaluation of mount.evaluations) evaluation.reject(new Error(reason))
+    mount.evaluations.clear()
+  }
   const disposeMount = (mount: Mount): Promise<void> => {
     if (mount.disposePromise) return mount.disposePromise
     mount.disposed = true
+    cancelEvaluations(mount, 'native browser handle is disposed')
     if (current === mount) current = null
     mount.disposePromise = mount.adapterHandle.dispose()
     lastDispose = mount.disposePromise
@@ -626,6 +924,7 @@ export function createNativeBrowserCapability(adapter?: NativeBrowserAdapter): N
         adapterHandle: undefined as unknown as NativeBrowserAdapterHandle,
         disposed: false,
         generation: 0,
+        evaluations: new Set(),
         state: {
           id: options.id,
           url: 'about:blank',
@@ -642,6 +941,9 @@ export function createNativeBrowserCapability(adapter?: NativeBrowserAdapter): N
       }
       const publish = (state: NativeBrowserState) => {
         if (mount.disposed || current !== mount) return
+        if (state.url !== mount.state.url) {
+          cancelEvaluations(mount, 'native browser evaluation was cancelled by navigation')
+        }
         mount.state = { ...state }
         options.onState({ ...mount.state })
       }
@@ -655,9 +957,28 @@ export function createNativeBrowserCapability(adapter?: NativeBrowserAdapter): N
           const state = await mount.adapterHandle.request(request)
           if (mount.disposed || current !== mount) throw new Error('native browser handle is disposed')
           if (generation !== mount.generation) return { ...mount.state }
+          if (state.url !== mount.state.url) {
+            cancelEvaluations(mount, 'native browser evaluation was cancelled by navigation')
+          }
           mount.state = { ...state }
           options.onState({ ...mount.state })
           return { ...mount.state }
+        },
+        evaluate: async (script) => {
+          if (mount.disposed || current !== mount) throw new Error('native browser handle is disposed')
+          if (typeof script !== 'string' || exceedsUtf8ByteLimit(script, NATIVE_BROWSER_EVALUATION_SCRIPT_MAX_BYTES)) {
+            throw new Error('native browser evaluation script exceeded byte limit')
+          }
+          const cancellation = Promise.withResolvers<never>()
+          const evaluation = { promise: cancellation.promise, reject: cancellation.reject }
+          mount.evaluations.add(evaluation)
+          try {
+            const value = await Promise.race([mount.adapterHandle.evaluate(script), evaluation.promise])
+            if (mount.disposed || current !== mount) throw new Error('native browser handle is disposed')
+            return value
+          } finally {
+            mount.evaluations.delete(evaluation)
+          }
         },
         dispose: () => {
           void disposeMount(mount).catch(() => undefined)
