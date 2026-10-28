@@ -77,5 +77,38 @@
 - **Revisit if:** Real owner API smoke identifies another unfenced credential transition.
 - **Source:** assumed — autonomous
 
+## D8: Repair compiler and declaration defects at their actual boundaries
+- **Question:** Which integration failures did the fresh compiler and structural parser establish?
+- **Options:** Cast away object errors or relax declarations; repair conversion semantics and real registrations.
+- **Chose:** Shared nullable recordOf conversion uses the existing object guard; direct service/UI response initializers no longer store boolean guard results. Remove impossible setup:run branches after preflight already rejects run; make the VM catch's never-return explicit. Remove the actual CLI JSON trailing comma and register the existing ownedIds function. Worker-local runtime pin types and the duplicate VM object guard are removed in favor of shared contracts. Keep existing worktree README as the product documentation rather than add another CLI README.
+- **Why:** Initial typecheck reported 95 diagnostics in four files, mainly real boolean/object confusion, not missing-setting symptoms. Actual parseManifest rejected CLI JSON and computeRegistry disabled its dependent worktree plugin. Structural source matching found ownedIds declared but not registered.
+- **Evidence:** first typecheck exit2/25.14s and artifact32; parser report; corrected UIlint/root/mobile/prepared-desktop typecheck exit0/32.89s. Actual parseManifest and computeRegistry then enabled CLI/worktree/repo with zero diagnostics and all15/67 method registrations matched.
+- **Reversibility:** easy
+- **Confidence:** high for observed compiler/declaration evidence; runtime scenario continues separately
+- **Revisit if:** Fresh runtime/API evidence identifies another contract mismatch.
+- **Source:** assumed — autonomous
+
+## D9: Move all executable test verification to the remote runner
+- **Question:** How does the operator's overloaded-Mac instruction change verification placement?
+- **Options:** Keep local daemon/test smoke; skip runtime evidence; run the actual API scenario remotely and tunnel its production component surface.
+- **Chose:** Every test, including the throwaway real-daemon scenario, runs through bun scripts/suite.ts on the configured 16-slot Linux test host. A temporary bun wrapper refuses any local-test fallback; no macOS exception is added. Browser inspection will use an owned SSH tunnel to the remote scenario and close afterward. Product Lima platform support remains macOS-only; Linux doctor refusal is not VM acceptance.
+- **Why:** Operator explicitly forbids local tests except the existing allowlist and packaged native checks. Static typecheck/build remains local. The first remote scenario failed at ownerPair before any feature mutation because it pinned the listener to loopback but omitted its advertised address, which selected a network interface and triggered the real widening refusal. Supply the intended explicit loopback address in the private fixture; do not weaken product exposure policy.
+- **Evidence:** operator interjection; scripts/suite.ts8–19,299–372; remote config16 slots; first remote file failed twice with listener widening refusal and both cleanup receipts; service.ts195–219 proves the default-address/exposure path.
+- **Reversibility:** easy
+- **Confidence:** high for routing and diagnosed fixture mismatch
+- **Revisit if:** Operator changes runner placement or the configured remote host becomes unavailable.
+- **Source:** locked by operator instruction; assumed — autonomous for isolated surface transport
+
+## D10: Give activation cleanup an actual per-instance owner
+- **Question:** Why did restarting the remote daemon make the still-running local VM service report deactivating?
+- **Options:** Avoid the failure by changing the fixture topology; share another cleanup map; give every plugin activation its own returned cleanup closure.
+- **Chose:** Public PluginModule.activate may return PluginActivationDisposer. PluginHost owns it on that exact attempt and invokes it once before extension revocation, including late activation disposal. Worktree variables and cleanup move into activate's closure; obsolete module-global worktree deactivate is removed. Existing plugins' static deactivate hooks remain their normal supported lifecycle.
+- **Why:** Both daemon fixtures import the same built-in module URL in one Bun process. A single releaseVm global was overwritten by the other activation, so remote shutdown stopped the local VM service. The actual API smoke reproduced it twice after all owner/removal/diff/window assertions, rather than merely exposing a compiler issue. Changing the fixture would hide source ownership.
+- **Evidence:** remote smoke bg8: VM service is deactivating from trackServiceOperation after remote restart; worktree/main.ts102–129 globals; PluginHost loadAndActivate494 and callDeactivate723 ignored activation return values.
+- **Reversibility:** medium
+- **Confidence:** high for observed root cause; scoped-disposal regression and rerun pending
+- **Revisit if:** Real multi-host teardown still crosses an activation boundary.
+- **Source:** assumed — autonomous
+
 ## Progress
 Claimed lane6 on build/m7-vm-and-owner-bound-host-workspaces from build/roadmap. Requirements, locked roadmap/architecture and predecessor decisions read; source scout returned. Combined logic/technical spec self-reviewed, shared OwnerHostIdentity/RegisteredOwnerHost and expectedHost forwarding contract prepared. Next: commit contracts/spec and dispatch disjoint CLI-owner, remote-workspace and VM components, integrate their hubs, then narrow isolated runtime smoke/typecheck, single roadmap catch-up, record disposition and canonical land.
