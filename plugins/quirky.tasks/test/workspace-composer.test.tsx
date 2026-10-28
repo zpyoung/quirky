@@ -248,3 +248,28 @@ test('rapid submit is single-flight and an older completion cannot close a newer
   expect(container.querySelector('[role="dialog"]')).not.toBeNull()
   expect(container.textContent).toContain('Newer issue')
 })
+
+test('composer Escape respects setup validation, cancels once, and restores focus', async () => {
+  const opener = document.createElement('button')
+  opener.textContent = 'Open workspace'
+  document.body.append(opener)
+  opener.focus()
+  const h = mount({ initial: request({ setup: 'inherit', setupDecisionRequired: true }) })
+  await flush()
+
+  const dialog = container.querySelector('[role="dialog"]')
+  expect(dialog).not.toBeNull()
+  expect(button('Create workspace').disabled).toBe(true)
+  expect(document.activeElement).toBe(dialog?.querySelector('button'))
+
+  await act(async () => {
+    dialog?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+  await flush()
+
+  expect(h.calls.filter((call) => call.method === 'quirky.tasks/workspaceComposerCancel')).toHaveLength(1)
+  expect(container.querySelector('[role="dialog"]')).toBeNull()
+  expect(document.activeElement).toBe(opener)
+})
