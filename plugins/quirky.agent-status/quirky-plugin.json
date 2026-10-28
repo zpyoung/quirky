@@ -112,12 +112,12 @@
       },
       {
         "id": "getOnHost",
-        "description": "Reads one status row from the exact local or paired status owner without copying it into this runtime.",
+        "description": "Reads one status row from local, an exact saved paired peer, or runtime:<saved owner selector> without copying it into this runtime.",
         "readOnly": true,
         "params": {
           "type": "object",
           "properties": {
-            "host": { "type": "string", "description": "local or an exact saved paired peer ID; omitted means local." },
+            "host": { "type": "string", "description": "local, an exact saved paired peer ID, or runtime:<saved owner selector>; omitted means local." },
             "session": { "type": "string", "description": "The session ID on that host." },
             "at": { "type": "number", "description": "The time to compute the display at, in ms since the epoch; defaults to now." }
           },
@@ -139,9 +139,19 @@
               },
               "required": ["kind", "id"]
             },
-            "result": { "description": "The exact host's status row, or null." }
+            "runtime": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "string" },
+                "name": { "type": "string" },
+                "endpoint": { "type": "string" },
+                "grantId": { "type": "string" }
+              },
+              "required": ["id", "name", "endpoint", "grantId"]
+            },
+            "result": { "description": "The selected host's status row, or null." }
           },
-          "required": ["host", "result"],
+          "required": ["result"],
           "additionalProperties": false
         }
       },
@@ -944,12 +954,12 @@
       },
       {
         "id": "hooksStatusOnHost",
-        "description": "Reads installed hook status from the exact local or paired host; remote rows remain owned and normalized by that host.",
+        "description": "Reads installed hook status from local, an exact saved paired peer, or runtime:<saved owner selector>; remote rows remain owned by that host.",
         "readOnly": true,
         "params": {
           "type": "object",
           "properties": {
-            "host": { "type": "string", "description": "local or an exact saved paired peer ID; omitted means local." }
+            "host": { "type": "string", "description": "local, an exact saved paired peer ID, or runtime:<saved owner selector>; omitted means local." }
           },
           "additionalProperties": false
         },
@@ -968,101 +978,62 @@
               },
               "required": ["kind", "id"]
             },
+            "runtime": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "string" },
+                "name": { "type": "string" },
+                "endpoint": { "type": "string" },
+                "grantId": { "type": "string" }
+              },
+              "required": ["id", "name", "endpoint", "grantId"]
+            },
             "result": { "type": "array", "items": { "type": "object", "additionalProperties": true } }
           },
-          "required": ["host", "result"],
+          "required": ["result"],
           "additionalProperties": false
         }
       },
       {
         "id": "hooksSetup",
-        "description": "Installs Quirky's hooks for detected, enabled agents, or for one named agent. Refused while the Agent status hooks setting is off.",
+        "description": "Installs hooks locally or through a saved owner runtime for detected, enabled agents, or one named agent. Refused while the Agent status hooks setting is off; paired-peer mutation is not supported.",
         "params": {
           "type": "object",
           "properties": {
             "agent": {
               "type": "string",
               "description": "The agent ID; every agent when omitted."
+            },
+            "host": {
+              "type": "string",
+              "description": "local or runtime:<saved owner selector>; omitted means local."
             }
-          }
+          },
+          "additionalProperties": false
         },
         "result": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "agent": {
-                "type": "string"
-              },
-              "status": {
-                "type": "string",
-                "enum": [
-                  "installed",
-                  "not-installed",
-                  "agent_disabled",
-                  "cli_not_found",
-                  "hooks_disabled",
-                  "error"
-                ]
-              },
-              "changed": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                },
-                "description": "The files this run wrote."
-              },
-              "note": {
-                "type": "string"
-              },
-              "message": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "agent",
-              "status",
-              "changed"
-            ]
-          }
+          "description": "Local setup entries, or {runtime, result} with the exact owner identity for runtime:<selector>."
         }
       },
       {
         "id": "hooksRemove",
-        "description": "Removes Quirky's hooks for every agent, or for one named agent.",
+        "description": "Removes Quirky hooks locally or through a saved owner runtime for every agent, or one named agent. Paired-peer mutation is not supported.",
         "params": {
           "type": "object",
           "properties": {
             "agent": {
               "type": "string",
               "description": "The agent ID; every agent when omitted."
+            },
+            "host": {
+              "type": "string",
+              "description": "local or runtime:<saved owner selector>; omitted means local."
             }
-          }
+          },
+          "additionalProperties": false
         },
         "result": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "agent": {
-                "type": "string"
-              },
-              "changed": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                },
-                "description": "The files this run changed or deleted."
-              },
-              "message": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "agent",
-              "changed"
-            ]
-          }
+          "description": "Local removal entries, or {runtime, result} with the exact owner identity for runtime:<selector>."
         }
       },
       {
@@ -1440,19 +1411,20 @@
       {
         "id": "hooks-status",
         "words": "hooks status",
-        "summary": "show whether agent status hooks are installed for each agent",
+        "summary": "show whether agent status hooks are installed on local, a paired peer or a saved owner runtime",
         "flags": {
-          "host": { "type": "string", "description": "Exact saved paired peer ID; omitted means local." }
+          "host": { "type": "string", "description": "local, an exact saved paired peer ID, or runtime:<saved owner selector>; omitted means local." }
         },
         "methods": [
           "quirky.agent-status/hooksStatus",
-          "quirky.agent-status/hooksStatusOnHost"
+          "quirky.agent-status/hooksStatusOnHost",
+          "quirky.cli/runtimeCall"
         ]
       },
       {
         "id": "hooks-setup",
         "words": "hooks setup",
-        "summary": "install agent status hooks for detected agents, or for one agent",
+        "summary": "install status hooks locally or on a saved owner runtime for detected agents, or one agent",
         "positionals": [
           {
             "name": "agent",
@@ -1460,14 +1432,18 @@
             "required": false
           }
         ],
+        "flags": {
+          "host": { "type": "string", "description": "local or runtime:<saved owner selector>; omitted means local." }
+        },
         "methods": [
-          "quirky.agent-status/hooksSetup"
+          "quirky.agent-status/hooksSetup",
+          "quirky.cli/runtimeCall"
         ]
       },
       {
         "id": "hooks-remove",
         "words": "hooks remove",
-        "summary": "remove Quirky's agent status hooks for every agent, or for one agent",
+        "summary": "remove Quirky's agent status hooks locally or on a saved owner runtime for every agent, or one agent",
         "positionals": [
           {
             "name": "agent",
@@ -1475,8 +1451,12 @@
             "required": false
           }
         ],
+        "flags": {
+          "host": { "type": "string", "description": "local or runtime:<saved owner selector>; omitted means local." }
+        },
         "methods": [
-          "quirky.agent-status/hooksRemove"
+          "quirky.agent-status/hooksRemove",
+          "quirky.cli/runtimeCall"
         ]
       },
       {

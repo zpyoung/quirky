@@ -1,5 +1,7 @@
+import { readFileSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { isReservedLaunchEnv, type ContributionInfo, type PluginCaller, type PluginContext, type QuirkyEvent } from '@quirky/protocol'
+import { isAbsolute, join, resolve } from 'node:path'
+import { isReservedLaunchEnv, type ContributionInfo, type OwnerRuntimeCallResult, type PluginCaller, type PluginContext, type QuirkyEvent } from '@quirky/protocol'
 import { isPlainObject } from './core/guards'
 import { materializeProviderEnvironment } from './core/provider-env'
 import { buildCatalog } from './core/catalog'
@@ -34,7 +36,7 @@ import {
 } from './core/types'
 import type { DiscoveryOptionInfo, ModelDiscovery } from './discovery-types'
 import { parseCodexAppServerModels, parseDiscoveredModels } from './core/discovered-models'
-import { runCodexAppServerModelProbe, runModelProbe, type ModelProbeResult } from './model-probe'
+import { runAnthropicModelsProbe, runCodexAppServerModelProbe, runModelProbe, type ModelProbeResult } from './model-probe'
 import { DeliveryRunner } from './delivery'
 import { detect, readLoginPath, searchDirs, type Detection, type SearchDirs } from './detect'
 import { Generator } from './generate'
@@ -106,6 +108,54 @@ function providerHomeOverridesOf(userEnv: Env): {
     codex: homeOverride('CODEX_HOME')
   }
 }
+type ProviderProbeEnvironment = { cwd: string; env: Record<string, string>; userEnv: Env; account: Record<string, unknown> }
+
+const MAX_CLAUDE_PROFILE_BYTES = 1024 * 1024
+const MAX_ANTHROPIC_KEY_LENGTH = 16_384
+
+function anthropicApiKey(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const key = value.trim()
+  return key !== '' && key.length <= MAX_ANTHROPIC_KEY_LENGTH && !/[\u0000-\u001f\u007f]/.test(key) ? key : null
+}
+
+function selectedAnthropicApiKey(prepared: ProviderProbeEnvironment): string | null {
+  const configured = prepared.userEnv.ANTHROPIC_API_KEY
+  if (typeof configured === 'string' && configured.trim() !== '') return anthropicApiKey(configured)
+  if (prepared.account.authKind !== 'api-key') return null
+
+  const configuredHome = prepared.env.CLAUDE_CONFIG_DIR
+  const home = configuredHome && configuredHome.trim() !== ''
+    ? isAbsolute(configuredHome) ? configuredHome : resolve(prepared.cwd, configuredHome)
+    : join(prepared.env.HOME ?? userHome(), '.claude')
+  try {
+    const path = join(home, '.claude.json')
+    if (statSync(path).size > MAX_CLAUDE_PROFILE_BYTES) return null
+    const value: unknown = JSON.parse(readFileSync(path, 'utf8'))
+    if (isPlainObject(value)) {
+      const profileKey = anthropicApiKey(value.primaryApiKey)
+      if (profileKey !== null) return profileKey
+    }
+  } catch {}
+
+  return prepared.account.source === 'default' ? anthropicApiKey(prepared.env.ANTHROPIC_API_KEY) : null
+}
+function redactOwnerAgentEnvironment(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(redactOwnerAgentEnvironment)
+  if (!isPlainObject(value)) return value
+  const safe = { ...value }
+  if (isPlainObject(safe.env)) {
+    safe.env = Object.fromEntries(Object.keys(safe.env).map((name) => [name, '[redacted]']))
+  }
+  if (Array.isArray(safe.agents)) safe.agents = safe.agents.map(redactOwnerAgentEnvironment)
+  return safe
+}
+
+function redactOwnerAgentResult(result: OwnerRuntimeCallResult): OwnerRuntimeCallResult {
+  return { ...result, result: redactOwnerAgentEnvironment(result.result) }
+}
+
+
 
 function commonOptions(models: ModelDecl[], catalog: LaunchCatalog): OptionUse[] {
   return catalog.options.flatMap<OptionUse>((option) => {
@@ -221,7 +271,9 @@ export class AgentsService {
       return this.listing(false)
     })
 
-  setEnabled = async (params: Params): Promise<AgentInfo> => {
+  setEnabled = async (params: Params): Promise<AgentInfo | OwnerRuntimeCallResult> => {
+    const runtime = this.mutationRuntime(params.host)
+    if (runtime !== null) return redactOwnerAgentResult(await this.callOwnerRuntime(runtime, 'quirky.agents/setEnabled', { agent: params.agent, enabled: params.enabled }))
     const entry = this.entryOf(params.agent as string)
     const enabled = params.enabled as boolean
     const config = this.configs.get(entry.id)
@@ -233,7 +285,9 @@ export class AgentsService {
     return this.info(entry)
   }
 
-  setDefault = async (params: Params): Promise<AgentListing> => {
+  setDefault = async (params: Params): Promise<AgentListing | OwnerRuntimeCallResult> => {
+    const runtime = this.mutationRuntime(params.host)
+    if (runtime !== null) return redactOwnerAgentResult(await this.callOwnerRuntime(runtime, 'quirky.agents/setDefault', { agent: params.agent }))
     const value = params.agent as string
     if (value !== 'auto' && value !== 'shell') {
       const entry = this.entryOf(value, 'invalid-params')
@@ -245,7 +299,15 @@ export class AgentsService {
     return this.listing(false)
   }
 
-  configure = (params: Params): AgentInfo => {
+  configure = async (params: Params): Promise<AgentInfo | OwnerRuntimeCallResult> => {
+    const runtime = this.mutationRuntime(params.host)
+    if (runtime !== null) {
+      const forwarded: Params = { agent: params.agent }
+      for (const key of ['command', 'args', 'env', 'reset'] as const) {
+        if (Object.hasOwn(params, key)) forwarded[key] = params[key]
+      }
+      return redactOwnerAgentResult(await this.callOwnerRuntime(runtime, 'quirky.agents/configure', forwarded))
+    }
     const entry = this.entryOf(params.agent as string)
     const before = this.configs.get(entry.id)
     const next: AgentConfig = { ...before }
@@ -264,7 +326,15 @@ export class AgentsService {
     return this.info(entry)
   }
 
-  setPermissions = (params: Params): { summary: PermissionSummary; changed: string[] } => {
+  setPermissions = async (params: Params): Promise<{ summary: PermissionSummary; changed: string[] } | OwnerRuntimeCallResult> => {
+    const runtime = this.mutationRuntime(params.host)
+    if (runtime !== null) {
+      const forwarded: Params = { mode: params.mode }
+      for (const key of ['agent', 'replaceCustom'] as const) {
+        if (Object.hasOwn(params, key)) forwarded[key] = params[key]
+      }
+      return this.callOwnerRuntime(runtime, 'quirky.agents/setPermissions', forwarded)
+    }
     const entries = this.catalog.agents
     const configs = this.configs.all()
     let applied: ReturnType<typeof applyPermissionMode>
@@ -285,8 +355,9 @@ export class AgentsService {
     return { summary: permissionSummary(entries, applied.configs).summary, changed: applied.changed }
   }
 
+
   /** The models and options an agent offers at the exact selected provider host. */
-  options = async (params: Params): Promise<OptionsInfo> => {
+  options = async (params: Params): Promise<OptionsInfo | OwnerRuntimeCallResult> => {
     for (const key of Object.keys(params)) {
       if (key !== 'agent' && key !== 'host' && key !== 'expectedIncarnation') {
         throw this.context.error('invalid-params', `options does not accept ${key}`)
@@ -297,12 +368,14 @@ export class AgentsService {
     }
     const host = params.host === undefined ? 'local' : params.host
     if (typeof host !== 'string' || host.trim() === '') throw this.context.error('invalid-params', 'host must be a non-empty string')
+    const runtime = this.runtimeSelector(host)
+    if (runtime !== null) return this.callOwnerRuntime(runtime, 'quirky.agents/options', { agent: params.agent })
     if (host !== 'local') return this.remoteOptions(params.agent, host)
     return optionsInfo(this.launchEntry(this.entryOf(params.agent), host), host)
   }
 
   /** Runs the provider's declared probe on the exact local owner or paired peer; never falls back. */
-  discoverModels = async (params: Params): Promise<ModelDiscovery> => {
+  discoverModels = async (params: Params): Promise<ModelDiscovery | OwnerRuntimeCallResult> => {
     for (const key of Object.keys(params)) {
       if (key !== 'agent' && key !== 'host' && key !== 'expectedIncarnation') {
         throw this.context.error('invalid-params', `discoverModels does not accept ${key}`)
@@ -320,6 +393,10 @@ export class AgentsService {
     }
     const agent = params.agent
     const host = params.host
+    const runtime = this.runtimeSelector(host)
+    if (runtime !== null) {
+      return this.callOwnerRuntime(runtime, 'quirky.agents/discoverModels', { agent, host: 'local' })
+    }
     const key = discoveryKey(agent, host)
     const running = this.discoveryJobs.get(key)
     if (running) return running
@@ -338,12 +415,20 @@ export class AgentsService {
    * configuration. Starts nothing, writes no trust record and emits no event, so it also
    * resolves for a disabled agent.
    */
-  resolveLaunch = async (params: Params): Promise<ResolvedLaunch> => {
+  resolveLaunch = async (params: Params): Promise<ResolvedLaunch | OwnerRuntimeCallResult> => {
     const host = params.host === undefined ? 'local' : params.host
     if (typeof host !== 'string' || host.trim() === '') throw this.context.error('invalid-params', 'host must be a non-empty string')
     if (host !== 'local') {
       if (typeof params.agent !== 'string' || params.agent.trim() === '') {
         throw this.context.error('invalid-params', 'agent must be a non-empty string')
+      }
+      const runtime = this.runtimeSelector(host)
+      if (runtime !== null) {
+        const forwarded: Params = { agent: params.agent }
+        for (const key of ['model', 'options', 'extraArgs', 'structured'] as const) {
+          if (Object.hasOwn(params, key)) forwarded[key] = params[key]
+        }
+        return this.callOwnerRuntime(runtime, 'quirky.agents/resolveLaunch', forwarded)
       }
       return this.remoteResolveLaunch(params.agent, host, params)
     }
@@ -376,6 +461,7 @@ export class AgentsService {
       })
     )
   }
+
 
   pick = (params: Params): { agent: string } => {
     const forAgentTab = params.forAgentTab === true
@@ -622,7 +708,7 @@ export class AgentsService {
     return this.probeLocalModels(this.entryOf(agent))
   }
 
-  private async codexProbeEnvironment(agent: string): Promise<Record<string, string>> {
+  private async preparedProviderEnvironment(agent: string): Promise<ProviderProbeEnvironment> {
     const cwd = process.cwd()
     const plan = await this.context.call('quirky.agents/plan', { agent, cwd })
     const userEnv = plannedEnvironmentOf(plan)
@@ -634,52 +720,78 @@ export class AgentsService {
     if (
       !isPlainObject(prepared) ||
       !Object.hasOwn(prepared, 'env') ||
-      !Object.hasOwn(prepared, 'account') ||
-      prepared.shellInit !== null ||
-      !(prepared.account === null || isPlainObject(prepared.account))
+      !isPlainObject(prepared.account) ||
+      (prepared.account.source !== 'managed' && prepared.account.source !== 'default' && prepared.account.source !== 'custom') ||
+      (prepared.account.authKind !== 'oauth' && prepared.account.authKind !== 'api-key' &&
+        prepared.account.authKind !== 'none' && prepared.account.authKind !== 'unknown') ||
+      prepared.shellInit !== null
     ) {
       throw new Error('quirky.accounts/prepareProviderEnv returned an invalid result')
     }
-    return materializeProviderEnvironment(process.env, [
+    return {
+      cwd,
+      env: materializeProviderEnvironment(process.env, [
+        userEnv,
+        providerEnvironmentOf(prepared.env, 'quirky.accounts/prepareProviderEnv')
+      ]),
       userEnv,
-      providerEnvironmentOf(prepared.env, 'quirky.accounts/prepareProviderEnv')
-    ])
+      account: prepared.account
+    }
+  }
+
+  private async codexProbeEnvironment(agent: string): Promise<Record<string, string>> {
+    return (await this.preparedProviderEnvironment(agent)).env
   }
 
   private async probeLocalModels(entry: AgentEntry): Promise<ModelDiscovery> {
     const catalog = entry.launchOptions
     const declaration = entry.modelDiscovery
     if (!catalog || !declaration) return this.discoveryFailure(entry.id, 'local', 'the provider does not declare model discovery')
-    if (!this.detection.installed(entry.id)) return this.discoveryFailure(entry.id, 'local', 'the provider executable is not installed')
-    const launch = tokenize(entry.launch)
-    if (!launch.ok || launch.tokens.length === 0) return this.discoveryFailure(entry.id, 'local', 'the provider launch command is invalid')
-    const executable = this.detection.resolveExecutable(launch.tokens[0]!)
-    if (!executable) return this.discoveryFailure(entry.id, 'local', 'the provider executable could not be resolved')
 
     const fingerprint = JSON.stringify({ plugin: entry.plugin, launch: entry.launch, declaration, catalog })
     let run: ModelProbeResult
-    if (declaration.protocol === 'codex-app-server') {
-      let env: Record<string, string>
+    if (declaration.protocol === 'anthropic-models') {
+      let prepared: ProviderProbeEnvironment
       try {
-        env = await this.codexProbeEnvironment(entry.id)
+        prepared = await this.preparedProviderEnvironment(entry.id)
       } catch {
-        return this.discoveryFailure(entry.id, 'local', 'the provider account environment could not be prepared')
+        return this.discoveryFailure(entry.id, 'local', 'the selected Claude account environment could not be prepared')
       }
-      try {
-        run = await runCodexAppServerModelProbe(
-          [executable, ...launch.tokens.slice(1), '-c', 'approval_policy=never', '-c', 'features.plugins=false', '-s', 'read-only', '-a', 'never', 'app-server'],
-          declaration.timeoutMs,
-          env,
-          process.cwd()
-        )
-      } catch {
-        return this.discoveryFailure(entry.id, 'local', 'the provider model probe failed')
+      const apiKey = selectedAnthropicApiKey(prepared)
+      if (apiKey === null) {
+        return this.discoveryFailure(entry.id, 'local', 'the selected Claude account has no API key for model discovery')
       }
+      run = await runAnthropicModelsProbe(apiKey, declaration.timeoutMs)
     } else {
-      try {
-        run = await runModelProbe([executable, ...launch.tokens.slice(1), ...declaration.args], declaration.timeoutMs)
-      } catch {
-        return this.discoveryFailure(entry.id, 'local', 'the provider model probe failed')
+      if (!this.detection.installed(entry.id)) return this.discoveryFailure(entry.id, 'local', 'the provider executable is not installed')
+      const launch = tokenize(entry.launch)
+      if (!launch.ok || launch.tokens.length === 0) return this.discoveryFailure(entry.id, 'local', 'the provider launch command is invalid')
+      const executable = this.detection.resolveExecutable(launch.tokens[0]!)
+      if (!executable) return this.discoveryFailure(entry.id, 'local', 'the provider executable could not be resolved')
+
+      if (declaration.protocol === 'codex-app-server') {
+        let env: Record<string, string>
+        try {
+          env = await this.codexProbeEnvironment(entry.id)
+        } catch {
+          return this.discoveryFailure(entry.id, 'local', 'the provider account environment could not be prepared')
+        }
+        try {
+          run = await runCodexAppServerModelProbe(
+            [executable, ...launch.tokens.slice(1), '-c', 'approval_policy=never', '-c', 'features.plugins=false', '-s', 'read-only', '-a', 'never', 'app-server'],
+            declaration.timeoutMs,
+            env,
+            process.cwd()
+          )
+        } catch {
+          return this.discoveryFailure(entry.id, 'local', 'the provider model probe failed')
+        }
+      } else {
+        try {
+          run = await runModelProbe([executable, ...launch.tokens.slice(1), ...declaration.args], declaration.timeoutMs)
+        } catch {
+          return this.discoveryFailure(entry.id, 'local', 'the provider model probe failed')
+        }
       }
     }
     if (!run.ok) {
@@ -789,6 +901,47 @@ export class AgentsService {
     }
     this.context.emit('modelSnapshot', result)
     return result
+  }
+
+  private runtimeSelector(host: string): string | null {
+    if (!host.startsWith('runtime:')) return null
+    const selector = host.slice('runtime:'.length)
+    if (selector === '' || selector.trim() !== selector || selector.length > 2048 || /[\u0000-\u001f\u007f]/.test(selector)) {
+      throw this.context.error('invalid-params', 'runtime host must name a saved owner target')
+    }
+    return selector
+  }
+
+  private ownerSelectorOrLocal(host: unknown, operation: string): string | null {
+    if (host === undefined || host === 'local') return null
+    if (typeof host !== 'string' || host.trim() === '') {
+      throw this.context.error('invalid-params', 'host must be local or runtime:<saved owner selector>')
+    }
+    const runtime = this.runtimeSelector(host)
+    if (runtime === null) {
+      throw this.context.error('invalid-params', `${operation} supports local or runtime:<saved owner selector> only`)
+    }
+    return runtime
+  }
+
+  private mutationRuntime(host: unknown): string | null {
+    return this.ownerSelectorOrLocal(host, 'provider configuration changes')
+  }
+
+  private async callOwnerRuntime(selector: string, method: string, params: Params): Promise<OwnerRuntimeCallResult> {
+    let value: unknown
+    try {
+      value = await this.context.call('quirky.cli/runtimeCall', { runtime: selector, method, params })
+    } catch {
+      throw this.context.error('conflict', 'The saved owner runtime is unavailable or does not authorize this provider operation.')
+    }
+    if (!isPlainObject(value) || !isPlainObject(value.runtime) ||
+      typeof value.runtime.id !== 'string' || typeof value.runtime.name !== 'string' ||
+      typeof value.runtime.endpoint !== 'string' || typeof value.runtime.grantId !== 'string' ||
+      !Object.hasOwn(value, 'result')) {
+      throw this.context.error('conflict', 'The saved owner runtime returned an invalid provider result.')
+    }
+    return value as unknown as OwnerRuntimeCallResult
   }
 
   private async remoteOptions(agent: string, host: string): Promise<OptionsInfo> {

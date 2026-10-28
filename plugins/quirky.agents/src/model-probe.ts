@@ -268,3 +268,166 @@ export async function runCodexAppServerModelProbe(
   void work
   return result
 }
+const ANTHROPIC_MODELS_URL = 'https://api.anthropic.com/v1/models'
+const ANTHROPIC_API_VERSION = '2026-10-21'
+const ANTHROPIC_PAGE_SIZE = 1000
+const MAX_ANTHROPIC_MODEL_PAGES = 32
+const MAX_ANTHROPIC_MODELS = 4096
+const ANTHROPIC_EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max'] as const
+
+type AnthropicModel = { id: string; label: string; description: null; options: { id: string; choices: string[] }[] }
+/** Lists the selected account's available Claude API models without exposing credentials or partial pages. */
+export async function runAnthropicModelsProbe(apiKey: string, timeoutMs: number): Promise<ModelProbeResult> {
+  if (apiKey.trim() === '') return { ok: false, reason: 'could-not-start' }
+
+  const controller = new AbortController()
+  const timedOut = Promise.withResolvers<ModelProbeResult>()
+  const timer = setTimeout(() => {
+    controller.abort()
+    timedOut.resolve({ ok: false, reason: 'timeout' })
+  }, timeoutMs)
+  timer.unref()
+
+  const operation = (async (): Promise<string> => {
+    const models: AnthropicModel[] = []
+    const modelIds = new Set<string>()
+    const cursors = new Set<string>()
+    let afterId: string | null = null
+
+    for (let pageNumber = 0; pageNumber < MAX_ANTHROPIC_MODEL_PAGES; pageNumber += 1) {
+      const url = new URL(ANTHROPIC_MODELS_URL)
+      url.searchParams.set('limit', String(ANTHROPIC_PAGE_SIZE))
+      if (afterId !== null) url.searchParams.set('after_id', afterId)
+      let response: Response
+      try {
+        response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            Accept: 'application/json',
+            Authorization: `Bearer ${apiKey}`,
+            'anthropic-version': ANTHROPIC_API_VERSION
+          },
+          credentials: 'omit',
+          redirect: 'error',
+          signal: controller.signal
+        })
+      } catch {
+        throw new ProbeFailure(controller.signal.aborted ? 'timeout' : 'nonzero-exit', 'Anthropic model listing request failed.')
+      }
+      if (!response.ok) {
+        try {
+          await response.body?.cancel()
+        } catch {}
+        throw new ProbeFailure('nonzero-exit', 'Anthropic model listing request failed.')
+      }
+
+      const reader = response.body?.getReader()
+      if (!reader) throw new ProbeFailure('malformed-output', 'Anthropic returned an empty model-list response.')
+      const chunks: Buffer[] = []
+      let bytes = 0
+      try {
+        for (;;) {
+          const { done, value } = await reader.read()
+          if (done) break
+          bytes += value.byteLength
+          if (bytes > MAX_OUTPUT_BYTES) {
+            await reader.cancel()
+            throw new ProbeFailure('too-much-output', 'Anthropic model-list response exceeded the output limit.')
+          }
+          chunks.push(Buffer.from(value))
+        }
+      } catch (error) {
+        if (error instanceof ProbeFailure) throw error
+        throw new ProbeFailure(controller.signal.aborted ? 'timeout' : 'malformed-output', 'Anthropic model-list response could not be read.')
+      } finally {
+        reader.releaseLock()
+      }
+
+      let page: unknown
+      try {
+        const text = new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks, bytes))
+        page = JSON.parse(text) as unknown
+      } catch {
+        throw new ProbeFailure('malformed-output', 'Anthropic returned malformed model-list data.')
+      }
+      if (!isPlainObject(page) || !Array.isArray(page.data) || typeof page.has_more !== 'boolean' ||
+        !(page.first_id === null || typeof page.first_id === 'string') ||
+        !(page.last_id === null || typeof page.last_id === 'string')) {
+        throw new ProbeFailure('malformed-output', 'Anthropic returned an invalid model-list page.')
+      }
+      if (page.data.length > ANTHROPIC_PAGE_SIZE || models.length + page.data.length > MAX_ANTHROPIC_MODELS) {
+        throw new ProbeFailure('too-much-output', 'Anthropic returned too many models.')
+      }
+
+      const pageModels: AnthropicModel[] = []
+      for (const value of page.data) {
+        if (!isPlainObject(value) || value.type !== 'model' ||
+          typeof value.id !== 'string' || value.id.trim() === '' ||
+          typeof value.display_name !== 'string' || value.display_name.trim() === '' ||
+          (value.lifecycle !== 'active' && value.lifecycle !== 'deprecated')) {
+          throw new ProbeFailure('malformed-output', 'Anthropic returned an invalid model.')
+        }
+        if (modelIds.has(value.id)) throw new ProbeFailure('malformed-output', 'Anthropic returned a duplicate model.')
+        modelIds.add(value.id)
+
+        let options: { id: string; choices: string[] }[] = []
+        if (value.capabilities !== null) {
+          if (!isPlainObject(value.capabilities) || !isPlainObject(value.capabilities.effort) ||
+            typeof value.capabilities.effort.supported !== 'boolean') {
+            throw new ProbeFailure('malformed-output', 'Anthropic returned invalid model capabilities.')
+          }
+          const effort = value.capabilities.effort
+          const choices: string[] = []
+          for (const level of ANTHROPIC_EFFORT_LEVELS) {
+            const capability = effort[level]
+            if (level === 'xhigh' && capability === null) continue
+            if (!isPlainObject(capability) || typeof capability.supported !== 'boolean') {
+              throw new ProbeFailure('malformed-output', 'Anthropic returned invalid effort capabilities.')
+            }
+            if (effort.supported && capability.supported) choices.push(level)
+          }
+          if (choices.length > 0) options = [{ id: 'effort', choices }]
+        }
+        const model = {
+          id: value.id,
+          label: value.display_name,
+          description: null,
+          options
+        }
+        pageModels.push(model)
+      }
+
+      const firstId = pageModels[0]?.id ?? null
+      const lastId = pageModels.at(-1)?.id ?? null
+      if (page.first_id !== firstId || page.last_id !== lastId ||
+        (afterId !== null && pageModels.length === 0) ||
+        (page.has_more && (lastId === null || lastId === afterId))) {
+        throw new ProbeFailure('malformed-output', 'Anthropic returned an invalid pagination cursor.')
+      }
+      models.push(...pageModels)
+      if (Buffer.byteLength(JSON.stringify({ models }), 'utf8') > MAX_OUTPUT_BYTES) {
+        throw new ProbeFailure('too-much-output', 'Anthropic model snapshot exceeded the output limit.')
+      }
+      if (!page.has_more) return JSON.stringify({ models })
+      if (pageNumber === MAX_ANTHROPIC_MODEL_PAGES - 1 || lastId === null || cursors.has(lastId)) {
+        throw new ProbeFailure('too-much-output', 'Anthropic model listing exceeded its pagination limit.')
+      }
+      cursors.add(lastId)
+      afterId = lastId
+    }
+    throw new ProbeFailure('too-much-output', 'Anthropic model listing exceeded its pagination limit.')
+  })()
+
+  const result = await Promise.race([
+    operation.then(
+      (stdout): ModelProbeResult => ({ ok: true, stdout }),
+      (error: unknown): ModelProbeResult => ({
+        ok: false,
+        reason: error instanceof ProbeFailure ? error.reason : controller.signal.aborted ? 'timeout' : 'nonzero-exit'
+      })
+    ),
+    timedOut.promise
+  ])
+  clearTimeout(timer)
+  return result
+}
