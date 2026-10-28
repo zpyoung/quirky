@@ -143,6 +143,17 @@
 - **Revisit if:** Canonical land reports an actual source conflict.
 - **Source:** locked by user ownership interjection
 
+## D14: Recover the actual controller conflict by preserving all thirteen opt-ins
+- **Question:** First canonical land exited1 because concurrent Ledger enrollment conflicted with session enrollment.
+- **Options:** Drop either area; retry unchanged; follow the required failed-land merge and union enrollment.
+- **Chose:** Required recovery merge only, retaining agents/status/session/session-info plus Browser/editor/terminal/dock/Ledger/orchestration/Heimdall/handoff/loops. Read complete incoming Ledger D1–D10, orchestration D1–D13 and Accounts completion D1–D17/receipts, including raw truncated lines. Preserve additive native TextArea/SelectField, opt-in Dialog scrollBody default false, overlay pointer boundary and strict Accounts reset envelope. No extra source edit, shared scanner exception or structured-surface rewrite.
+- **Why:** Every conflict is additive enrollment, not a competing owner. Incoming shared fields and optional dialog behavior retain existing defaults; Accounts verification does not change this item's explicit build-first title. Earlier renderer proof predates this recovery and is not relabeled as post-recovery.
+- **Evidence:** First land exit1/1.40s; exact lint conflict and union; three complete decision-log reads; recovery typecheck receipt follows.
+- **Reversibility:** easy
+- **Confidence:** high for source ownership; composed compiler gate required before retry
+- **Revisit if:** Canonical retry names another concrete integration failure.
+- **Source:** locked by docs/loop/LOOP.md failed-land recovery procedure
+
 ## Progress
 
 Ready for canonical land. Current source and all four plugin migrations complete; sole catch-up retained incoming shared-system contracts and eight-plugin lint enforcement. Final caught-up typecheck/build and isolated current-source proof passed within D12 limits; suites/review/full dogfood/golden scoring remain unrun under build-first. Every worker returned and component worktrees removed. All owned browser handles released; both exclusively owned browser services stopped. Scoped daemon/PTY cleanup printed AGENTS25_CLEANED; its lingering readline process was then explicitly stopped through the service owner. No product flow deferred or review-only follow-up added. Next: commit receipts, detach and canonical queue land; after success remove owned scratch/helper files and end exactly this item.

@@ -3,8 +3,13 @@
   "quirky.agent-status",
   "quirky.browser",
   "quirky.editor",
+  "quirky.ledger",
   "quirky.session",
   "quirky.session-info",
   "quirky.terminal",
-  "quirky.terminal-dock"
+  "quirky.terminal-dock",
+  "quirky.orchestration",
+  "quirky.heimdall",
+  "quirky.handoff",
+  "quirky.loops"
 ]

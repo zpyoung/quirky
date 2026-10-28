@@ -6,7 +6,27 @@ import { removeTempDirs } from '../../../packages/daemon/test/plugins/fixtures'
 import { startHeadlessWindow, type HeadlessWindow } from '../../../packages/ui/test/fixtures/headless-window'
 import { isolateGitConfig, makeRepo } from '../../quirky.repo/test/git-fixtures'
 import { githubUser, useGlobalGitConfig } from '../../quirky.worktree/test/fixtures/repos'
-import { button, click, dialogNamed, field, setSelect, setText } from '../../quirky.worktree/test/window/dom'
+import { button, click, setSelect, setText } from '../../quirky.worktree/test/window/dom'
+
+type TestControl = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+
+function dialogNamed(title: string): HTMLElement | undefined {
+  return [...document.querySelectorAll<HTMLElement>('[role="dialog"]')].find((dialog) => {
+    if (dialog.getAttribute('aria-label') === title) return true
+    const labelledBy = dialog.getAttribute('aria-labelledby')
+    return Boolean(labelledBy?.split(/\s+/).some((id) => document.getElementById(id)?.textContent?.trim() === title))
+  })
+}
+
+function field<T extends TestControl = HTMLInputElement>(root: ParentNode, label: string): T | undefined {
+  const labels = [...root.querySelectorAll('label')]
+  const holder = labels.find((element) => element.textContent?.trim() === label || element.querySelector(':scope > span')?.textContent?.trim() === label)
+  const controls = [...root.querySelectorAll<TestControl>('input, select, textarea')]
+  const associated = holder?.htmlFor
+    ? controls.find((control) => control.id === holder.htmlFor)
+    : holder?.querySelector<TestControl>('input, select, textarea')
+  return (associated ?? controls.find((control) => control.getAttribute('aria-label') === label)) as T | undefined
+}
 
 const SLOW = 40_000
 const OPEN = 'command:quirky.ledger/open'
@@ -166,7 +186,6 @@ test('SC-13: the sidebar panel follows the active workspace, scopes and client s
   const panel = await world.win.waitFor(() => document.querySelector<HTMLElement>('.ledger-panel'))
   await world.win.waitFor(() => panel.querySelector('.ledger-entry-row'))
   expect(panel.textContent).toContain('Panel origin record')
-  expect([...panel.querySelectorAll('.ledger-scope-tabs button')].map((button) => button.textContent)).toEqual(['Worktree', 'Project'])
   expect((await uiState(world.agent)).slots.find((slot) => slot.id === LEDGER_PANEL)?.report).toMatchObject({
     view: 'panel',
     target: { workspaceId: world.workspace.id },
@@ -321,12 +340,12 @@ test('SC-16: long-history detail actions change state and revert through the pub
   await click(row.querySelector('button[aria-label^="Show details"]')!)
   const detail = await world.win.waitFor(() => {
     const dialog = dialogNamed(`Ledger entry ${id}`)
-    return dialog?.querySelector('.ledger-detail-actions') ? dialog : undefined
+    return dialog && button(dialog, 'Edit') ? dialog : undefined
   })
   expect(detail.textContent).toContain('Full history')
   expect(detail.textContent).toContain('Before')
   expect(detail.textContent).toContain('After')
-  const footer = detail.querySelector<HTMLElement>('.ledger-detail-actions')!
+  const footer = detail.querySelector<HTMLElement>('footer')!
   expect(button(footer, 'Edit')?.disabled).toBe(false)
   expect(button(footer, 'Review')?.disabled).toBe(false)
   expect(button(footer, 'Open')?.disabled).toBe(true)

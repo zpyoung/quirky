@@ -1,5 +1,5 @@
 import { useId } from 'react'
-import type { BadgeProps, ButtonProps, IconButtonProps, StatusDotProps, TextFieldProps, UiStatus } from './contracts'
+import type { BadgeProps, ButtonProps, IconButtonProps, SelectFieldProps, StatusDotProps, TextAreaProps, TextFieldProps, UiStatus } from './contracts'
 import { classNames } from './shared'
 
 const statusClasses: Record<UiStatus, string> = {
@@ -43,6 +43,46 @@ export function TextField({ label, help, error, id: providedId, className, 'aria
         aria-describedby={descriptions || undefined}
         aria-invalid={error ? true : invalid}
       />
+      {help && <span className="ui-help-text" id={`${id}-help`}>{help}</span>}
+      {error && <span className="ui-error-text" id={`${id}-error`} role="alert">{error}</span>}
+    </div>
+  )
+}
+
+export function TextArea({ label, help, error, id: providedId, className, 'aria-describedby': describedBy, 'aria-invalid': invalid, ...props }: TextAreaProps) {
+  const generatedId = useId()
+  const id = providedId ?? generatedId
+  const descriptions = [describedBy, help ? `${id}-help` : undefined, error ? `${id}-error` : undefined].filter(Boolean).join(' ')
+  return (
+    <div className="ui-text-field">
+      <label className="ui-text-field__label" htmlFor={id}>{label}</label>
+      <textarea
+        {...props}
+        id={id}
+        className={classNames('ui-text-field__input', 'ui-text-area', className)}
+        aria-describedby={descriptions || undefined}
+        aria-invalid={error ? true : invalid}
+      />
+      {help && <span className="ui-help-text" id={`${id}-help`}>{help}</span>}
+      {error && <span className="ui-error-text" id={`${id}-error`} role="alert">{error}</span>}
+    </div>
+  )
+}
+
+export function SelectField({ label, help, error, id: providedId, className, 'aria-describedby': describedBy, 'aria-invalid': invalid, children, ...props }: SelectFieldProps) {
+  const generatedId = useId()
+  const id = providedId ?? generatedId
+  const descriptions = [describedBy, help ? `${id}-help` : undefined, error ? `${id}-error` : undefined].filter(Boolean).join(' ')
+  return (
+    <div className="ui-text-field">
+      <label className="ui-text-field__label" htmlFor={id}>{label}</label>
+      <select
+        {...props}
+        id={id}
+        className={classNames('ui-text-field__input', 'ui-select-field', className)}
+        aria-describedby={descriptions || undefined}
+        aria-invalid={error ? true : invalid}
+      >{children}</select>
       {help && <span className="ui-help-text" id={`${id}-help`}>{help}</span>}
       {error && <span className="ui-error-text" id={`${id}-error`} role="alert">{error}</span>}
     </div>
