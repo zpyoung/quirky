@@ -106,9 +106,48 @@ export function openWorktreeStore(context: PluginContext): PluginStore {
         ALTER TABLE worktrees ADD COLUMN linked_issue TEXT;
         ALTER TABLE worktrees ADD COLUMN push_target TEXT;
       `)
+    },
+    (store) => {
+      store.exec(`
+        CREATE TABLE worktree_origins (
+          worktree_id TEXT NOT NULL,
+          instance_id TEXT NOT NULL,
+          creator_kind TEXT NOT NULL CHECK (creator_kind IN ('automation', 'plugin', 'paired-device', 'client')),
+          creator_id TEXT,
+          creator_role TEXT NOT NULL,
+          PRIMARY KEY (worktree_id, instance_id)
+        );
+      `)
     }
   ])
 }
+export type WorktreeOriginCreator = {
+  creatorKind: 'automation' | 'plugin' | 'paired-device' | 'client'
+  creatorId: string | null
+  creatorRole: string
+}
+
+/** Stores kernel-derived provenance against the exact filesystem instance, never just its path-derived ID. */
+export function recordWorktreeOrigin(store: PluginStore, worktreeId: string, instanceId: string, creator: WorktreeOriginCreator): void {
+  store.run(
+    `INSERT INTO worktree_origins (worktree_id, instance_id, creator_kind, creator_id, creator_role)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(worktree_id, instance_id) DO UPDATE SET
+       creator_kind = excluded.creator_kind,
+       creator_id = excluded.creator_id,
+       creator_role = excluded.creator_role`,
+    worktreeId,
+    instanceId,
+    creator.creatorKind,
+    creator.creatorId,
+    creator.creatorRole
+  )
+}
+
+export function forgetWorktreeOrigins(store: PluginStore, worktreeId: string): void {
+  store.run('DELETE FROM worktree_origins WHERE worktree_id = ?', worktreeId)
+}
+
 
 export const rowOf = (store: PluginStore, id: string): WorktreeRow | null => store.get<WorktreeRow>('SELECT * FROM worktrees WHERE id = ?', id)
 
