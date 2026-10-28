@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
 import type { ExplorerInteraction } from '../types'
 import { activeDocument } from './activeDocument'
@@ -840,20 +840,20 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
     <section className="qe-explorer" aria-label="File Explorer">
       <header className="qe-explorer-toolbar">
         {worktrees.length > 1 && !layoutWorktree && (
-          <select aria-label="Worktree" value={worktree ?? ''} onChange={(event) => setSelectedWorktree(event.currentTarget.value)}>
+          <select className="ui-text-field__input qe-explorer-worktree" aria-label="Worktree" value={worktree ?? ''} onChange={(event) => setSelectedWorktree(event.currentTarget.value)}>
             {worktrees.map((entry) => <option key={entry.id} value={entry.id}>{entry.name ?? entry.path}</option>)}
           </select>
         )}
         <span className="qe-explorer-root" title={rootListing?.root ?? ''}>{rootListing?.root ?? 'Explorer'}</span>
-        <button type="button" title="New File" onClick={() => startNewItem('file')}>New File</button>
-        <button type="button" title="New Folder" onClick={() => startNewItem('folder')}>New Folder</button>
-        <button type="button" title="Collapse All" onClick={() => void collapseAll()}>Collapse All</button>
-        <button type="button" title="Refresh Explorer" onClick={() => void refreshExplorer()}>↻</button>
-        <button type="button" title="Undo file operation" onClick={() => void context.call('quirky.editor/history', { worktree, action: 'undo' }).then(refreshExplorer).catch((reason: unknown) => setError(messageOf(reason)))}>Undo</button>
-        <button type="button" title="Redo file operation" onClick={() => void context.call('quirky.editor/history', { worktree, action: 'redo' }).then(refreshExplorer).catch((reason: unknown) => setError(messageOf(reason)))}>Redo</button>
-        <button type="button" onClick={() => void openSourceControl()}>Source Control</button>
+        <Button title="New File" onClick={() => startNewItem('file')}>New File</Button>
+        <Button title="New Folder" onClick={() => startNewItem('folder')}>New Folder</Button>
+        <Button title="Collapse All" onClick={() => void collapseAll()}>Collapse All</Button>
+        <IconButton label="Refresh Explorer" title="Refresh Explorer" onClick={() => void refreshExplorer()}>↻</IconButton>
+        <Button title="Undo file operation" onClick={() => void context.call('quirky.editor/history', { worktree, action: 'undo' }).then(refreshExplorer).catch((reason: unknown) => setError(messageOf(reason)))}>Undo</Button>
+        <Button title="Redo file operation" onClick={() => void context.call('quirky.editor/history', { worktree, action: 'redo' }).then(refreshExplorer).catch((reason: unknown) => setError(messageOf(reason)))}>Redo</Button>
+        <Button onClick={() => void openSourceControl()}>Source Control</Button>
         <details className="qe-explorer-more-actions">
-          <summary aria-label="More Explorer Actions">More</summary>
+          <summary className="qe-disclosure-trigger" aria-label="More Explorer Actions">More</summary>
           <div className="qe-file-actions-menu">
             <label><input type="checkbox" checked={state?.explorer.showDotfiles ?? true} onChange={() => void toggleDotfiles()} />Show Dotfiles</label>
             <label><input type="checkbox" checked={settings.showGitIgnored} onChange={(event) => void setEditorSetting(context, 'showGitIgnoredFiles', event.currentTarget.checked).then(refreshExplorer).catch((reason: unknown) => setError(messageOf(reason)))} />Show Git Ignored Files</label>
@@ -866,20 +866,27 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
         </details>
       </header>
       <div className="qe-explorer-search-mode" role="group" aria-label="Explorer search mode">
-        <button type="button" aria-pressed={searchMode === 'names'} onClick={() => setSearchMode('names')}>Names</button>
-        <button type="button" aria-pressed={searchMode === 'contents'} onClick={() => setSearchMode('contents')}>Contents</button>
+        <Button aria-pressed={searchMode === 'names'} onClick={() => setSearchMode('names')}>Names</Button>
+        <Button aria-pressed={searchMode === 'contents'} onClick={() => setSearchMode('contents')}>Contents</Button>
       </div>
       <div className="qe-explorer-query">
-        <input aria-label={searchMode === 'names' ? 'Find files' : 'Search files'} placeholder={searchMode === 'names' ? 'Find files' : 'Search'} value={query} onChange={(event) => setQuery(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === 'Enter' && searchMode === 'contents') void runContentsSearch(query) }} />
-        {searchMode === 'contents' && <button type="button" onClick={() => void runContentsSearch(query)}>Search</button>}
+        <TextField
+          className="qe-explorer-search-field"
+          label={searchMode === 'names' ? 'Find files' : 'Search files'}
+          placeholder={searchMode === 'names' ? 'Find files' : 'Search'}
+          value={query}
+          onChange={(event) => setQuery(event.currentTarget.value)}
+          onKeyDown={(event) => { if (event.key === 'Enter' && searchMode === 'contents') void runContentsSearch(query) }}
+        />
+        {searchMode === 'contents' && <Button variant="primary" onClick={() => void runContentsSearch(query)}>Search</Button>}
       </div>
       {searchMode === 'contents' && (
         <div className="qe-content-search-options">
           <label><input type="checkbox" checked={caseSensitive} onChange={(event) => setCaseSensitive(event.currentTarget.checked)} />Match Case</label>
           <label><input type="checkbox" checked={wholeWord} onChange={(event) => setWholeWord(event.currentTarget.checked)} />Match Whole Word</label>
           <label><input type="checkbox" checked={useRegex} onChange={(event) => setUseRegex(event.currentTarget.checked)} />Use Regular Expression</label>
-          <input aria-label="Files to include" placeholder="files to include (e.g. *.ts, src/**)" value={includePattern} onChange={(event) => setIncludePattern(event.currentTarget.value)} />
-          <input aria-label="Files to exclude" placeholder="files to exclude (e.g. *.min.js, dist/**)" value={excludePattern} onChange={(event) => setExcludePattern(event.currentTarget.value)} />
+          <TextField label="Files to include" placeholder="files to include (e.g. *.ts, src/**)" value={includePattern} onChange={(event) => setIncludePattern(event.currentTarget.value)} />
+          <TextField label="Files to exclude" placeholder="files to exclude (e.g. *.min.js, dist/**)" value={excludePattern} onChange={(event) => setExcludePattern(event.currentTarget.value)} />
         </div>
       )}
       {error && <p className="qe-editor-error" role="alert">{error}</p>}
@@ -910,7 +917,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
               aria-expanded={entry.isDirectory ? expanded.has(entry.path) : undefined}
               aria-selected={selectedPaths.includes(entry.path)}
               data-path={entry.path}
-              style={{ paddingLeft: `${8 + depth * 16}px` }}
+              style={{ '--qe-tree-indent': `${depth}rem` } as CSSProperties}
               draggable
               onClick={(event) => onRowClick(event, entry.path, entry.isDirectory)}
               onContextMenu={() => {
@@ -945,60 +952,85 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
               }}
               onDrop={(event) => { if (entry.isDirectory) void dropOnFolder(event, entry.path).catch((reason: unknown) => setError(messageOf(reason))) }}
             >
-              <span className="qe-explorer-chevron">{entry.isDirectory ? (expanded.has(entry.path) ? '▾' : '▸') : ''}</span>
-              <span className="qe-explorer-name">{entry.name}</span>
-              {gitStatus.has(entry.path) && <span className="qe-git-status" aria-label={`Git status ${gitStatus.get(entry.path)}`}>{gitStatus.get(entry.path)}</span>}
-              {entry.isSymlink && <span title="Symbolic link">↗</span>}
-              {entry.ignored && <span aria-label="Ignored by .gitignore">⊘</span>}
-              {entry.error && <span className="qe-explorer-row-error" title={entry.error}>!</span>}
-              <details className="qe-explorer-row-actions" onClick={(event) => {
-                event.stopPropagation()
-                if (!selectedPathsRef.current.includes(entry.path)) {
-                  void enqueueInteraction({
-                    action: 'select',
-                    path: entry.path,
-                    ...(searchMode === 'names' && query.trim() !== '' ? { query } : {})
-                  })
+              <ListRow
+                title={<>
+                  <span className="qe-explorer-chevron">{entry.isDirectory ? (expanded.has(entry.path) ? '▾' : '▸') : ''}</span>
+                  <span className="qe-explorer-name">{entry.name}</span>
+                </>}
+                selected={selectedPaths.includes(entry.path)}
+                trailing={
+                  <>
+                    {gitStatus.has(entry.path) && <span className="qe-git-status" aria-label={`Git status ${gitStatus.get(entry.path)}`}>{gitStatus.get(entry.path)}</span>}
+                    {entry.isSymlink && <span title="Symbolic link">↗</span>}
+                    {entry.ignored && <span aria-label="Ignored by .gitignore">⊘</span>}
+                    {entry.error && <span className="qe-explorer-row-error" title={entry.error}>!</span>}
+                    <details className="qe-explorer-row-actions" onClick={(event) => {
+                      event.stopPropagation()
+                      if (!selectedPathsRef.current.includes(entry.path)) {
+                        void enqueueInteraction({
+                          action: 'select',
+                          path: entry.path,
+                          ...(searchMode === 'names' && query.trim() !== '' ? { query } : {})
+                        })
+                      }
+                    }}>
+                      <summary className="qe-disclosure-trigger" aria-label={`Actions for ${entry.name}`}>⋯</summary>
+                      <div className="qe-file-actions-menu">
+                        <Button onClick={() => startNewItem('file', entry.isDirectory ? entry.path : '.')}>New File</Button>
+                        <Button onClick={() => startNewItem('folder', entry.isDirectory ? entry.path : '.')}>New Folder</Button>
+                        <Button onClick={() => void copyPaths(false, [entry.path])}>Copy Path</Button>
+                        <Button onClick={() => void copyPaths(true, [entry.path])}>Copy Relative Path</Button>
+                        {!entry.isDirectory && <Button onClick={() => void duplicatePath(entry.path)}>Duplicate</Button>}
+                        <Button onClick={() => { setRenamePath(entry.path); setRenameValue(entry.path) }}>Rename</Button>
+                        <Button variant="destructive" onClick={() => void deleteSelected([entry.path])}>Delete</Button>
+                        {entry.isDirectory && <Button onClick={() => void openInTerminal(entry.path)}>Open in Terminal</Button>}
+                        {entry.isDirectory && <Button onClick={() => { setSearchMode('contents'); setIncludePattern(`${escapedGlob(entry.path)}/**`) }}>Find in Folder</Button>}
+                        {!entry.isDirectory && entry.name.toLowerCase().endsWith('.md') && <Button onClick={() => void openMarkdownPreview(entry.path)}>Open Markdown Preview</Button>}
+                      </div>
+                    </details>
+                  </>
                 }
-              }}>
-                <summary aria-label={`Actions for ${entry.name}`}>⋯</summary>
-                <div className="qe-file-actions-menu">
-                  <button type="button" onClick={() => startNewItem('file', entry.isDirectory ? entry.path : '.')} >New File</button>
-                  <button type="button" onClick={() => startNewItem('folder', entry.isDirectory ? entry.path : '.')}>New Folder</button>
-                  <button type="button" onClick={() => void copyPaths(false, [entry.path])}>Copy Path</button>
-                  <button type="button" onClick={() => void copyPaths(true, [entry.path])}>Copy Relative Path</button>
-                  {!entry.isDirectory && <button type="button" onClick={() => void duplicatePath(entry.path)}>Duplicate</button>}
-                  <button type="button" onClick={() => { setRenamePath(entry.path); setRenameValue(entry.path) }}>Rename</button>
-                  <button type="button" onClick={() => void deleteSelected([entry.path])}>Delete</button>
-                  {entry.isDirectory && <button type="button" onClick={() => void openInTerminal(entry.path)}>Open in Terminal</button>}
-                  {entry.isDirectory && <button type="button" onClick={() => { setSearchMode('contents'); setIncludePattern(`${escapedGlob(entry.path)}/**`) }}>Find in Folder</button>}
-                  {!entry.isDirectory && entry.name.toLowerCase().endsWith('.md') && <button type="button" onClick={() => void openMarkdownPreview(entry.path)}>Open Markdown Preview</button>}
-                </div>
-              </details>
+              />
             </div>
           ))}
           {newItemKind && (
             <div className="qe-explorer-inline-row">
-              <input autoFocus aria-label={newItemKind === 'file' ? 'New file name' : 'New folder name'} value={newItemName} onChange={(event) => setNewItemName(event.currentTarget.value)} onKeyDown={(event) => {
-                if (event.key === 'Enter') { event.preventDefault(); void commitNewItem() }
-                if (event.key === 'Escape') { setNewItemKind(null); setNewItemName('') }
-              }} onBlur={() => {
-                if (Date.now() - inlineOpenedAt.current < 200) return
-                if (inlineBlurTimer.current !== undefined) window.clearTimeout(inlineBlurTimer.current)
-                inlineBlurTimer.current = window.setTimeout(() => void commitNewItem(), 150)
-              }} />
-              <button type="button" disabled={itemBusy} onClick={() => void commitNewItem()}>Create</button>
-              <button type="button" onClick={() => { setNewItemKind(null); setNewItemName('') }}>Cancel</button>
+              <TextField
+                className="qe-explorer-inline-field"
+                label={newItemKind === 'file' ? 'New file name' : 'New folder name'}
+                autoFocus
+                value={newItemName}
+                onChange={(event) => setNewItemName(event.currentTarget.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') { event.preventDefault(); void commitNewItem() }
+                  if (event.key === 'Escape') { setNewItemKind(null); setNewItemName('') }
+                }}
+                onBlur={() => {
+                  if (Date.now() - inlineOpenedAt.current < 200) return
+                  if (inlineBlurTimer.current !== undefined) window.clearTimeout(inlineBlurTimer.current)
+                  inlineBlurTimer.current = window.setTimeout(() => void commitNewItem(), 150)
+                }}
+              />
+              <Button variant="primary" disabled={itemBusy} onClick={() => void commitNewItem()}>Create</Button>
+              <Button onClick={() => { setNewItemKind(null); setNewItemName('') }}>Cancel</Button>
             </div>
           )}
           {renamePath !== null && (
             <div className="qe-explorer-inline-row">
-              <input ref={renameInputRef} autoFocus aria-label="Rename file" value={renameValue} onChange={(event) => setRenameValue(event.currentTarget.value)} onKeyDown={(event) => {
-                if (event.key === 'Enter') { event.preventDefault(); void renameSelected() }
-                if (event.key === 'Escape') setRenamePath(null)
-              }} />
-              <button type="button" onClick={() => void renameSelected()}>Rename</button>
-              <button type="button" onClick={() => setRenamePath(null)}>Cancel</button>
+              <input
+                ref={renameInputRef}
+                className="ui-text-field__input qe-explorer-inline-field"
+                autoFocus
+                aria-label="Rename file"
+                value={renameValue}
+                onChange={(event) => setRenameValue(event.currentTarget.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') { event.preventDefault(); void renameSelected() }
+                  if (event.key === 'Escape') setRenamePath(null)
+                }}
+              />
+              <Button variant="primary" onClick={() => void renameSelected()}>Rename</Button>
+              <Button onClick={() => setRenamePath(null)}>Cancel</Button>
             </div>
           )}
           {filterResult?.truncated && <p className="muted">More matches may be available.</p>}
@@ -1017,10 +1049,10 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
                 const start = (match.displayColumn ?? match.column) - 1
                 const end = start + (match.displayMatchLength ?? match.matchLength)
                 return (
-                  <button key={`${match.line}:${match.column}:${index}`} type="button" onClick={() => void openFile(file.path, { preview: false, pinned: true, line: match.line, column: match.column, matchLength: match.matchLength })}>
+                  <Button key={`${match.line}:${match.column}:${index}`} onClick={() => void openFile(file.path, { preview: false, pinned: true, line: match.line, column: match.column, matchLength: match.matchLength })}>
                     <span>{match.line}:{match.column}</span>
                     <code>{match.lineContent.slice(0, start)}<mark>{match.lineContent.slice(start, end)}</mark>{match.lineContent.slice(end)}</code>
-                  </button>
+                  </Button>
                 )
               })}
             </section>
@@ -1028,10 +1060,10 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
         </div>
       )}
       <footer className="qe-explorer-footer">
-        <button type="button" onClick={() => void copyPaths(false)}>Copy Path</button>
-        <button type="button" onClick={() => void copyPaths(true)}>Copy Relative Path</button>
-        <button type="button" onClick={() => void deleteSelected()}>Delete</button>
-        <button type="button" onClick={() => { setSearchMode('contents'); setQuery(''); setIncludePattern('') }}>Search in Files</button>
+        <Button onClick={() => void copyPaths(false)}>Copy Path</Button>
+        <Button onClick={() => void copyPaths(true)}>Copy Relative Path</Button>
+        <Button variant="destructive" onClick={() => void deleteSelected()}>Delete</Button>
+        <Button onClick={() => { setSearchMode('contents'); setQuery(''); setIncludePattern('') }}>Search in Files</Button>
       </footer>
       {rootListing?.truncated && <p className="muted">More files may be available.</p>}
       {state?.explorer.expanded.length === 0 && expanded.size > 0 && <span className="sr-only">Expanded folders are open.</span>}

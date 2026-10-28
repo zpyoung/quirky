@@ -1,4 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { Button, TextField } from '@quirky/ui'
 import { defaultKeymap, history, historyKeymap, indentWithTab, isolateHistory, redo, undo } from '@codemirror/commands'
 import { css } from '@codemirror/lang-css'
 import { html } from '@codemirror/lang-html'
@@ -8,7 +9,7 @@ import { markdown } from '@codemirror/lang-markdown'
 import { python } from '@codemirror/lang-python'
 import { sql } from '@codemirror/lang-sql'
 import { yaml } from '@codemirror/lang-yaml'
-import { bracketMatching, defaultHighlightStyle, foldGutter, indentOnInput, syntaxHighlighting } from '@codemirror/language'
+import { bracketMatching, foldGutter, HighlightStyle, indentOnInput, syntaxHighlighting, tags } from '@codemirror/language'
 import { findNext, replaceAll, replaceNext, search, SearchQuery, searchKeymap, setSearchQuery } from '@codemirror/search'
 import { Compartment, EditorSelection, EditorState, Transaction, type Extension } from '@codemirror/state'
 import { EditorView, drawSelection, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from '@codemirror/view'
@@ -88,6 +89,14 @@ function languageFor(path: string): Extension {
   if (/\.(?:ya?ml)$/.test(name)) return yaml()
   return []
 }
+const editorHighlightStyle = HighlightStyle.define([
+  { tag: [tags.keyword, tags.controlKeyword, tags.definitionKeyword, tags.moduleKeyword], color: 'var(--ui-accent)' },
+  { tag: [tags.typeName, tags.className, tags.namespace], color: 'var(--ui-working)' },
+  { tag: [tags.string, tags.regexp, tags.special(tags.string)], color: 'var(--ui-working)' },
+  { tag: [tags.number, tags.bool, tags.null, tags.atom], color: 'var(--ui-needs-you)' },
+  { tag: [tags.comment, tags.lineComment, tags.blockComment, tags.docComment], color: 'var(--ui-muted)', fontStyle: 'italic' },
+  { tag: [tags.function(tags.variableName)], color: 'var(--ui-accent)' },
+])
 
 function utf8Size(text: string): number {
   let bytes = 0
@@ -118,10 +127,14 @@ function drawMinimap(view: EditorView, canvas: HTMLCanvasElement): void {
   if (!context) return
   context.setTransform(ratio, 0, 0, ratio, 0, 0)
   context.clearRect(0, 0, bounds.width, bounds.height)
+  const colors = getComputedStyle(canvas)
+  const muted = colors.getPropertyValue('--ui-muted').trim()
+  const accent = colors.getPropertyValue('--ui-accent').trim()
+  if (!muted || !accent) return
   const lineCount = view.state.doc.lines
   const rows = Math.min(lineCount, 900)
   const rowHeight = bounds.height / rows
-  context.fillStyle = getComputedStyle(canvas).getPropertyValue('--muted').trim() || '#777d88'
+  context.fillStyle = muted
   for (let row = 0; row < rows; row++) {
     const lineNumber = Math.floor((row * lineCount) / rows) + 1
     const line = view.state.doc.line(lineNumber)
@@ -132,10 +145,13 @@ function drawMinimap(view: EditorView, canvas: HTMLCanvasElement): void {
   const scrollProgress = scrollRange === 0 ? 0 : view.scrollDOM.scrollTop / scrollRange
   const viewportHeight = Math.max(7, bounds.height * view.scrollDOM.clientHeight / Math.max(1, view.scrollDOM.scrollHeight))
   const viewportTop = Math.max(0, bounds.height - viewportHeight) * scrollProgress
-  context.fillStyle = 'rgba(79, 143, 247, 0.18)'
+  context.globalAlpha = 0.18
+  context.fillStyle = accent
   context.fillRect(0, viewportTop, bounds.width, viewportHeight)
-  context.strokeStyle = 'rgba(79, 143, 247, 0.85)'
+  context.globalAlpha = 0.85
+  context.strokeStyle = accent
   context.strokeRect(0.5, viewportTop + 0.5, bounds.width - 1, Math.max(1, viewportHeight - 1))
+  context.globalAlpha = 1
 }
 
 function viewStateForTab(buffer: EditorSurfaceBuffer, tabId: string | null): Record<string, unknown> {
@@ -305,7 +321,7 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
         bracketMatching(),
         foldGutter(),
         indentOnInput(),
-        syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+        syntaxHighlighting(editorHighlightStyle, { fallback: true }),
         history(),
         search(),
         compartments.language.of(languageFor(props.buffer.relativePath)),
@@ -394,6 +410,11 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
       resizeObserver.observe(parent)
       if (canvas.current) resizeObserver.observe(canvas.current)
     }
+    let themeObserver: MutationObserver | undefined
+    if (typeof MutationObserver !== 'undefined') {
+      themeObserver = new MutationObserver(requestMinimap)
+      themeObserver.observe(parent.ownerDocument.documentElement, { attributes: true, attributeFilter: ['data-theme'], subtree: true })
+    }
     requestMinimap()
     if (props.reveal) {
       const line = editor.state.doc.line(Math.max(1, Math.min(props.reveal.line, editor.state.doc.lines)))
@@ -429,7 +450,7 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
       if (pendingView.current !== undefined) window.clearTimeout(pendingView.current)
       pendingView.current = undefined
       if (drawFrame !== 0) window.cancelAnimationFrame(drawFrame)
-      resizeObserver?.disconnect()
+      themeObserver?.disconnect()
       editor.scrollDOM.removeEventListener('scroll', schedule)
       scheduleView.current = () => {}
       drawMinimapRef.current = () => {}
@@ -515,11 +536,12 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
       {selection && (
         <div className="qe-selection-copy-hint">
           <span>{selection.fromLine === selection.toLine ? `Line ${selection.fromLine} selected` : `Lines ${selection.fromLine}–${selection.toLine} selected`}</span>
-          <button type="button" onClick={() => { void copySelectionContext().catch(reportCopyError) }}>Copy context ⌘⌥C</button>
+          <Button onClick={() => { void copySelectionContext().catch(reportCopyError) }}>Copy context ⌘⌥C</Button>
         </div>
       )}
       {searchOpen && <div className="qe-source-search" role="search" aria-label="Find in source">
         <input
+          className="ui-text-field__input qe-source-search__field"
           ref={searchInput}
           aria-label="Find in source"
           value={searchQuery}
@@ -534,13 +556,13 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
             }
           }}
         />
-        {replaceOpen && <input aria-label="Replace with" value={replaceText} onChange={(event) => setReplaceText(event.currentTarget.value)} />}
-        <button type="button" onClick={() => { try { runFind() } catch (reason) { callbacks.current.onError(reason instanceof Error ? reason.message : String(reason)) } }}>Find next</button>
+        {replaceOpen && <TextField className="qe-source-search__field" label="Replace with" value={replaceText} onChange={(event) => setReplaceText(event.currentTarget.value)} />}
+        <Button onClick={() => { try { runFind() } catch (reason) { callbacks.current.onError(reason instanceof Error ? reason.message : String(reason)) } }}>Find next</Button>
         {replaceOpen && <>
-          <button type="button" onClick={() => { try { runReplace(false) } catch (reason) { callbacks.current.onError(reason instanceof Error ? reason.message : String(reason)) } }}>Replace</button>
-          <button type="button" onClick={() => { try { runReplace(true) } catch (reason) { callbacks.current.onError(reason instanceof Error ? reason.message : String(reason)) } }}>Replace all</button>
+          <Button onClick={() => { try { runReplace(false) } catch (reason) { callbacks.current.onError(reason instanceof Error ? reason.message : String(reason)) } }}>Replace</Button>
+          <Button onClick={() => { try { runReplace(true) } catch (reason) { callbacks.current.onError(reason instanceof Error ? reason.message : String(reason)) } }}>Replace all</Button>
         </>}
-        <button type="button" aria-label="Close find" onClick={() => setSearchOpen(false)}>Close</button>
+        <Button aria-label="Close find" onClick={() => setSearchOpen(false)}>Close</Button>
       </div>}
       <div className="qe-source-editor-main">
         <div className="qe-codemirror-host" ref={host} />
@@ -558,11 +580,11 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
           >
             {contextMenu.kind === 'gutter' ? (
               <>
-                <button type="button" role="menuitem" onClick={() => void copyGutterLine(false)}>Copy Path to Line</button>
-                <button type="button" role="menuitem" onClick={() => void copyGutterLine(true)}>Copy Rel. Path to Line</button>
+                <Button role="menuitem" onClick={() => void copyGutterLine(false)}>Copy Path to Line</Button>
+                <Button role="menuitem" onClick={() => void copyGutterLine(true)}>Copy Rel. Path to Line</Button>
               </>
             ) : (
-              <button type="button" role="menuitem" disabled={!contextMenu.query} onClick={searchFromContextMenu}>Search in Files</button>
+              <Button role="menuitem" disabled={!contextMenu.query} onClick={searchFromContextMenu}>Search in Files</Button>
             )}
           </div>
         </div>
