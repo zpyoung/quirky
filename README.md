@@ -53,11 +53,17 @@ titles only. Enabling stores a local searchable copy of unredacted conversations
 characters per tool result; authenticated clients can search that copy. Disable retains it.
 **Clear search data** disables search and removes only the derived index, not original transcripts.
 
+Vault owns the **Search every agent session** tip. A successful local enable marks it seen;
+disable, clear and restart preserve that state. The tip never grants consent: when search is
+off, the full disclosure and explicit **Enable** control remain available. Read the canonical
+state with `quirky vault search-tip --json` or `quirky.vault/getSearchTip`.
+
 The same core flows are scriptable:
 
 ```sh
 quirky vault list --unlimited --json
 quirky vault search --index-status --json
+quirky vault search-tip --json
 quirky vault enable
 quirky vault search 'remembered words' --fresh --json
 quirky vault resume '<id from list>'
@@ -79,6 +85,20 @@ Advanced parity and verification obligations are tracked in
 
 `bun run test` runs the whole suite through the configured test host. Use
 `bun scripts/suite.ts <dirs>` for affected packages and `bun test <file>` for a single file.
+
+Verify shell integration with the explicit Bash 5.2/5.3 matrix. Supply two installed GNU Bash
+executables (temporary source builds are sufficient):
+
+```sh
+bun run test:bash -- /path/to/bash-5.2/bin/bash /path/to/bash-5.3/bin/bash
+```
+
+The command rejects missing or wrong versions instead of skipping coverage. Each version runs
+the real-PTY Bash cases with disposable homes. For a single runtime, set `QUIRKY_TEST_BASH` when
+running `packages/daemon/test/shell-path.test.ts`; ordinary tests still use `/bin/bash`.
+Empty, whitespace and comment input must not produce command completions, including when
+`functrace` inherits DEBUG into the prompt helpers. Real commands still report their status
+when history ignores duplicates, ignores leading spaces, or is disabled.
 
 ### Public plugin UI and grouping APIs
 

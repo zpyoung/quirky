@@ -2,6 +2,37 @@
 
 This directory holds Quirky's built-in plugins, one per subdirectory, each with a `quirky-plugin.json` manifest. The daemon finds it through `QUIRKY_BUILTIN_PLUGINS_DIR`.
 
+## Terminal dock
+
+`quirky.terminal-dock` provides an opt-in composer below recognized terminal agents.
+Open **Terminal Dock Settings** from the command palette to enable it or change
+automatic opening. Plain-shell pane menus have no composer toggle. Use
+**Mod+Shift+K** to show or hide a supported pane's dock and **Mod+Shift+P** for
+terminal passthrough.
+
+```sh
+quirky dock list --json
+quirky dock get --pane <pane-id> --json
+quirky dock toggle --pane <pane-id>
+quirky dock cancel --pane <pane-id> --interrupt
+```
+
+Drafts and attachments belong to the pane. Stop or Escape preserves newer draft
+text; cancelling a queued send restores that prompt without submitting it.
+Question cards support collapse, answer and dismissal. Dismissal hides the card,
+not the agent's pending request, so ordinary Send stays disabled until it resolves.
+
+Model and effort controls use observable session-only actions. An unrecognized
+picker or a persistent-default confirmation is refused; the dock never falls back
+to saving global Claude settings. Agent exit hooks are correlated with the lead's
+provider-session identity, not a child or another conversation. Confirmed exit
+undocks without remembering a manual close; fresh agent evidence can reopen it.
+
+The gutter is fixed at `80 + 20 × rows` pixels, with 3–15 rows and a default of five.
+File acquisition uses real daemon-readable files; removing a chip never deletes a
+caller-owned source file.
+[Behavior and acceptance scenarios](../docs/quirk/specs/2026-10-27-m3-terminal-dock/logic.md).
+
 ## Session Info
 
 `quirky.session-info` contributes the **Session Info** right-column panel and the
@@ -569,6 +600,9 @@ session and process incarnation; missing or unverifiable identity is refused.
 
 The API exposes `quirky.heimdall/fleet`, `detail`, `command` and `debugReport`.
 `fleetChanged` pushes newer snapshots; a failed refresh retains the last confirmed view.
+Fleet activity counts only live workers whose Dispatch assignment is still active. A live process
+retained after completion is not running work; `detail` and `debugReport` keep that worker visible
+and expose `assignmentActive` separately from process `state`.
 The schema-2 debug JSON includes bounded journal and trace history. Approval-request and
 terminal transitions go through `quirky.notifications`, including its enabled, focus and
 cooldown policy. Disabling that plugin silences delivery.

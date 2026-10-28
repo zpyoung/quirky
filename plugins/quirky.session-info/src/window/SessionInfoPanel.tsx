@@ -17,7 +17,7 @@ const CORE_SECTIONS: Section[] = [
   { id: 'filesTouched', title: 'Files touched' },
   { id: 'hooksAndMcp', title: 'Hooks & MCP' }
 ]
-const PANEL_STYLE = { display: 'flex', flexDirection: 'column', flex: '1', minHeight: '0', minWidth: '0', color: 'var(--text, inherit)' } as const
+const PANEL_STYLE = { display: 'flex', flexDirection: 'column', flex: '1', minHeight: '0', minWidth: '0', overflowWrap: 'anywhere', color: 'var(--text, inherit)' } as const
 const BODY_STYLE = { overflowY: 'auto', minHeight: '0', padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.65rem' } as const
 const ROW_STYLE = { display: 'grid', gridTemplateColumns: 'minmax(6rem, 0.8fr) minmax(0, 1.4fr)', gap: '0.6rem', padding: '0.2rem 0' } as const
 const BUTTON_STYLE = { font: 'inherit', color: 'inherit', cursor: 'pointer' } as const

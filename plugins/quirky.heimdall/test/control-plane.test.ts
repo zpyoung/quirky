@@ -456,6 +456,7 @@ describe('Heimdall control plane', () => {
     const worker: WatcherWorker = {
       identity: identity(),
       state: 'live',
+      assignmentActive: true,
       question: { messageId: 'question-1', body: 'Continue?' },
     }
     const h = fixture({ enrollment: { enabled: false, parkReason: 'worker-question' }, workers: [worker] })
@@ -524,7 +525,7 @@ describe('Heimdall control plane', () => {
 
   test('stop-worker requires the exact live session and process incarnation, never just a PID', async () => {
     const actual = identity()
-    const h = fixture({ workers: [{ identity: actual, state: 'live' }] })
+    const h = fixture({ workers: [{ identity: actual, state: 'live', assignmentActive: true }] })
     const control = createControlPlane(h.host)
     const pidOnly = identity({ sessionId: undefined, processIncarnation: undefined })
     const wrongIncarnation = identity({ processIncarnation: 'different-process' })
@@ -542,7 +543,7 @@ describe('Heimdall control plane', () => {
   })
 
   test('delete removes watcher history without stopping worker terminals', async () => {
-    const h = fixture({ workers: [{ identity: identity(), state: 'live' }] })
+    const h = fixture({ workers: [{ identity: identity(), state: 'live', assignmentActive: true }] })
     h.store.append(WATCHER_ID, escalation('approval-1'))
     const control = createControlPlane(h.host)
 
@@ -581,7 +582,7 @@ describe('Heimdall control plane', () => {
 
   test('returns a confirmed stop without waiting for the following watcher cycle', async () => {
     const workerIdentity = identity()
-    const h = fixture({ workers: [{ identity: workerIdentity, state: 'live' }] })
+    const h = fixture({ workers: [{ identity: workerIdentity, state: 'live', assignmentActive: true }] })
     const nextCycle = deferred<void>()
     h.host.reconcile = () => nextCycle.promise
     const control = createControlPlane(h.host)
@@ -611,7 +612,7 @@ describe('Heimdall control plane', () => {
   })
 
   test('reports an indeterminate answer when authority dispatch throws without a confirmed outcome', async () => {
-    const h = fixture({ workers: [{ identity: identity(), state: 'live', question: { messageId: 'question-1', body: 'Continue?' } }] })
+    const h = fixture({ workers: [{ identity: identity(), state: 'live', assignmentActive: true, question: { messageId: 'question-1', body: 'Continue?' } }] })
     const originalAnswer = h.host.answerQuestion
     h.host.answerQuestion = async () => {
       await originalAnswer(enrollment(), 'question-1', 'Possibly sent.')

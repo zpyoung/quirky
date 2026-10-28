@@ -99,6 +99,7 @@ Useful lifecycle commands:
 
 ```sh
 quirky loop list
+quirky loop summaries --json
 quirky loop show <loop-id>
 quirky loop iterations <loop-id>
 quirky loop pause <loop-id>
@@ -115,6 +116,10 @@ Output is human-readable by default. The standard CLI `--json` mode returns the 
 
 ## Public API
 
-The `quirky.loops` methods are `create`, `list`, `get`, `iterations`, `pause`, `resume`, `stop`, `steer`, `edit`, and `queue`. `create` accepts the shared `LoopConfig` shape: a repeat or queue prompt source, on-idle or interval pacing, optional `fresh` or `continue` session policy, done check/evaluator signals, optional caps and protected paths, and the safety booleans. If session policy is omitted, until-done defaults to `fresh`, while queue and interval default to `continue`. Until-done requires a repeat prompt with on-idle pacing; interval requires a repeat prompt with interval pacing; queue requires a non-empty seed list and a queue prompt source. Queue prompt source and pacing are independent in the API. The `queue` method takes a strict `QueueOperation` and returns the updated snapshot. The API also emits `changed` snapshots and `notification` events for the notifications policy.
+The `quirky.loops` methods are `create`, `list`, `summaries`, `get`, `iterations`, `pause`, `resume`, `stop`, `steer`, `edit`, and `queue`. `create` accepts the shared `LoopConfig` shape: a repeat or queue prompt source, on-idle or interval pacing, optional `fresh` or `continue` session policy, done check/evaluator signals, optional caps and protected paths, and the safety booleans. If session policy is omitted, until-done defaults to `fresh`, while queue and interval default to `continue`. Until-done requires a repeat prompt with on-idle pacing; interval requires a repeat prompt with interval pacing; queue requires a non-empty seed list and a queue prompt source. Queue prompt source and pacing are independent in the API. The `queue` method takes a strict `QueueOperation` and returns the updated snapshot. The API also emits `changed` snapshots and `notification` events for the notifications policy.
 
 The preset and prompt-source kind stay immutable after creation. The public `edit` method can switch `pacing` between `{"kind":"on-idle"}` and `{"kind":"interval","minutes":1,"anchor":"from-end"}` independently of the preset; changing back to on-idle wakes an eligible waiting iteration. Creation validation stays strict, and the CLI's `--every`/`--anchor` flags remain restricted to the interval preset.
+
+`summaries` takes an empty object and returns unfinished loops with identity, worktree, durable state/pause reason, completed iteration count, optional cap, and update time. It does not load or return prompts, queue contents, notes, or iteration output. Ended loops remain available through `list` and history but are omitted from summaries.
+
+The worktree sidebar uses these compact rows for loop indicators and JSON reports. Selection prefers needs-you, unverifiable, running, paused, then detached presentation; ties use the newest update and stable ID. Exact hosted-view metadata distinguishes attached from detached loops; failed reads show uncertainty rather than detachment. Unread bells retain drawing precedence. Failed summary reads make cached indicators unverifiable until fresh evidence returns.

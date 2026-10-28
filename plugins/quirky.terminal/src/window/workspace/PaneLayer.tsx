@@ -460,6 +460,7 @@ function TerminalPaneLayer({ controller, state, group, tab }: Props & { tab: Ter
         const rect = rectOf.get(leaf.id)!
         const left = px(rect.x)
         const top = px(rect.y)
+        const height = px(rect.y + rect.height) - top
         const session = sessions[leaf.session]
         const focused = focusedGroup && tab.activePane === leaf.id
         const structured = session?.kind === 'structured'
@@ -470,7 +471,7 @@ function TerminalPaneLayer({ controller, state, group, tab }: Props & { tab: Ter
             data-pane={leaf.id}
             data-session={leaf.session}
             data-active={focused ? 'true' : 'false'}
-            style={{ left, top, width: px(rect.x + rect.width) - left, height: px(rect.y + rect.height) - top }}
+            style={{ left, top, width: px(rect.x + rect.width) - left, height }}
             onMouseDownCapture={structured ? () => void controller.focusPane(leaf.id) : undefined}
             onFocus={structured ? () => void controller.focusPane(leaf.id) : undefined}
             onContextMenu={(event) => {
@@ -495,7 +496,7 @@ function TerminalPaneLayer({ controller, state, group, tab }: Props & { tab: Ter
                 interactive={leaf.exit === null && session.status !== 'exited'}
                 dragging={state.dragging}
                 terminalEpoch={state.epoch}
-                availableHeight={rect.height}
+                availableHeight={height}
                 onHandle={(handle) => controller.registerHandle(leaf.id, handle)}
                 onFocus={() => void controller.focusPane(leaf.id)}
                 onState={(report) => controller.setPaneState(leaf.id, report)}

@@ -941,7 +941,7 @@
         "fork-loops.md",
         "ledger.md"
       ],
-      "status": "in-progress",
+      "status": "done",
       "title": "Parity sweep for automations.md, fork-loops.md, ledger.md: every remaining flow in these feature docs, except the GitLab, Bitbucket, Gitea/Forgejo and Azure DevOps flows, the Objective runner and the PR sitter, which the user deferred. Find what earlier items left out or deferred, build or fix it, and record anything too large as a follow-up item",
       "deps": [
         "m5-structured-runner",
@@ -952,8 +952,7 @@
         "m5-loops-presets",
         "m5-loops-ui",
         "m5-ledger"
-      ],
-      "lane": 1
+      ]
     },
     {
       "id": "m7-sweep-orchestration",
@@ -962,7 +961,7 @@
         "orchestration.md",
         "heimdall.md"
       ],
-      "status": "in-progress",
+      "status": "done",
       "title": "Parity sweep for orchestration.md, heimdall.md: every remaining flow in these feature docs, except the GitLab, Bitbucket, Gitea/Forgejo and Azure DevOps flows, the Objective runner and the PR sitter, which the user deferred. Find what earlier items left out or deferred, build or fix it, and record anything too large as a follow-up item",
       "deps": [
         "m6-orchestration-core",
@@ -971,8 +970,7 @@
         "m6-heimdall-core",
         "m6-heimdall-control",
         "m6-heimdall-owner"
-      ],
-      "lane": 7
+      ]
     },
     {
       "id": "m4-hosting-api-github-parity",
@@ -996,9 +994,8 @@
       "deps": [
         "m3-terminal-dock"
       ],
-      "status": "in-progress",
-      "early": true,
-      "lane": 2
+      "status": "done",
+      "early": true
     },
     {
       "id": "m3-vault-parity-completion",
@@ -1034,9 +1031,8 @@
       "deps": [
         "m3-vault"
       ],
-      "status": "in-progress",
-      "early": true,
-      "lane": 8
+      "status": "done",
+      "early": true
     },
     {
       "id": "fix-bash53-shell-integration",
@@ -1046,8 +1042,7 @@
         "term-daemon.md"
       ],
       "deps": [],
-      "status": "in-progress",
-      "lane": 3
+      "status": "done"
     },
     {
       "id": "followup-m3-session-info-parity-20261027",
@@ -1060,8 +1055,7 @@
       "deps": [
         "m3-session-info"
       ],
-      "status": "in-progress",
-      "lane": 10
+      "status": "done"
     },
     {
       "id": "m2-editor-complete-remaining-flows",
@@ -1073,9 +1067,8 @@
       "deps": [
         "m2-editor"
       ],
-      "status": "in-progress",
-      "early": true,
-      "lane": 6
+      "status": "done",
+      "early": true
     },
     {
       "id": "m3-accounts-overflow-verification",
@@ -1087,8 +1080,7 @@
       "deps": [
         "m3-accounts"
       ],
-      "status": "in-progress",
-      "lane": 11
+      "status": "done"
     },
     {
       "id": "sa-browser-agent-extras",
@@ -1100,7 +1092,8 @@
       "deps": [
         "sa-browser-agent"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 5
     },
     {
       "id": "m4-hosting-ui-review-provider-parity",
@@ -1129,7 +1122,8 @@
         "sa-browser-pane",
         "sa-browser-profiles-settings"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 8
     },
     {
       "id": "sb-mobile-install-links",
@@ -1142,7 +1136,8 @@
         "sb-mobile-daemon",
         "sb-mobile-app"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 11
     },
     {
       "id": "sa-browser-pane-native-events",
@@ -1154,7 +1149,8 @@
       "deps": [
         "sa-browser-pane"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 10
     },
     {
       "id": "sa-browser-profile-import-ui",
@@ -1179,7 +1175,8 @@
       "deps": [
         "sa-browser-profiles-settings"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 1
     },
     {
       "id": "sa-browser-localhost-label-routing",
@@ -1191,7 +1188,8 @@
       "deps": [
         "sa-browser-profiles-settings"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 9
     },
     {
       "id": "sa-browser-native-profile-clear-completion",
@@ -1203,7 +1201,8 @@
       "deps": [
         "sa-browser-profiles-settings"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 3
     },
     {
       "id": "sa-browser-pane-native-host-controls",
@@ -1215,7 +1214,8 @@
       "deps": [
         "sa-browser-pane"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 6
     },
     {
       "id": "sa-browser-pane-workspace-preview",
@@ -1227,7 +1227,8 @@
       "deps": [
         "sa-browser-pane"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 7
     },
     {
       "id": "m4-hosting-ui-tasks-complete-remaining-flows",
@@ -1595,6 +1596,45 @@
       ],
       "deps": [
         "m2-editor-complete-remaining-flows"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m7-sweep-automation-completion",
+      "milestone": "M7",
+      "title": "Build the remaining unimplemented automation-domain flows inventoried in docs/quirk/specs/2026-10-28-m7-sweep-automation/logic.md: durable automation-created workspace provenance with automation/run IDs and name/title snapshots; sidebar Created by automation badge, Open automation/Open run navigation and explicit deleted/unavailable-history states; persisted Hide automation-created filtering; mobile worktree loop labels/counts/cap reasons using the actual client and compact loop summaries after sb-mobile-app lands; ledger SSH-host workspace ownership/routing/import/evidence and selected-runtime availability after public host registration-generation/execution/filesystem APIs exist, never dereference remote paths locally. Reconcile concurrently landed mobile/host/provenance implementations and existing remote automation owners before coding. Preserve structured-only background execution and explicit user exclusions. This item contains unbuilt functionality only, not a verification, review or debugging campaign.",
+      "docs": [
+        "automations.md",
+        "fork-loops.md",
+        "ledger.md"
+      ],
+      "deps": [
+        "m7-sweep-automation"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m7-orchestration-heimdall-unbuilt-flows",
+      "milestone": "M7",
+      "title": "Implement unbuilt orchestration/Heimdall flows inventoried by m7-sweep-orchestration: real remote worker placement and federation attachment/relay/mail/ask/report settlement/stop/release/output/fleet/task navigation with peer capability and incarnation fencing; generic Heimdall workspace-host epoch leases, paired-runtime fleet mirrors and owner-fenced remote controls, optional private-config shadow judgment with bounded provider calls, authoritative confirmed-workspace-removal termination without stopping workers, and public kind-owned report submission preflight before orchestration settlement. These flows lack real transport/lease/credential/lifecycle seams; do not simulate local success or infer absence/outcomes. Reuse existing m6-orchestration-idle-pointer-shutdown and m6-heimdall-host-power for their already-queued flows. Preserve core D9 gate policy and exclude user-deferred Objective runner, PR sitter and non-GitHub hosts. No verification-only work in this item; end-phase triage owns testing/debugging.",
+      "docs": [
+        "orchestration.md",
+        "heimdall.md"
+      ],
+      "deps": [
+        "m7-sweep-orchestration"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "sb-mobile-app-panels-unbuilt-flows",
+      "milestone": "Side B",
+      "title": "Implement remaining unbuilt mobile flows: native APNs/FCM token registration, leases, OS permission/sound and background tap delivery once an operator-controlled push service and entitlements exist; GitLab/Linear/Jira Tasks list/detail/mutations and linked workspace creation after provider-owned APIs land; terminal-artifact preview and conditional save with a real terminal path producer, opaque grants, grant refresh and source-aware routes.",
+      "docs": [
+        "mobile.md"
+      ],
+      "deps": [
+        "sb-mobile-app-panels"
       ],
       "status": "todo"
     }

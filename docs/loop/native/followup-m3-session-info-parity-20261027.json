@@ -1,0 +1,22 @@
+{
+  "item": "followup-m3-session-info-parity-20261027",
+  "spec": "docs/quirk/specs/2026-10-28-followup-m3-session-info-parity-20261027/logic.md",
+  "scenarios": [
+    {
+      "id": "FP-5-feedback",
+      "title": "In the actual Electrobun window with an isolated provider session ID, capture Copy ID changing immediately to Copied and returning to Copy ID after 1.5 seconds without stretching the product timer. Verify exact clipboard contents by pasting into an app field. Prior macOS delivery passed in m3-session-info SC-5; this scenario covers the uncaptured transient feedback. Restore the clipboard and close only this run's windows.",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    },
+    {
+      "id": "FP-5-denial",
+      "title": "Exercise an actual denied/unavailable clipboard permission in an isolated Electrobun window without replacing navigator.clipboard or editing production code: clicking Copy ID must show visible failure and never Copied. Do not change global permissions or user clipboard data to induce denial; if the native driver has no safe isolated permission-denial mechanism, record blocked with that exact limit, not pass. Browser-denial evidence is separate. Retain m3-session-info SC-7 and SC-9 blocked scenarios for native activation/exact input/flash/scroll and Finder-selected captured transcript reruns.",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    }
+  ]
+}

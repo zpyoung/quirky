@@ -18,6 +18,7 @@ import type {
   SearchResponse,
   SearchResults,
   SearchStatus,
+  SearchTipState,
   VaultMessage,
   VaultSession,
   ViewState,
@@ -28,6 +29,8 @@ import { WorkerRequestError, type VaultWorkerClient } from './worker-client'
 
 const SEARCH_SETTING = 'setting:quirky.vault/search-enabled'
 const SEARCH_DATABASE = 'session-search.sqlite'
+const SEARCH_TIP_ID = 'agent-session-search'
+const SEARCH_TIP_STATE = `searchTip:${SEARCH_TIP_ID}`
 const MAX_PATHS = 64
 const MAX_QUERY = 512
 const DEFAULT_LIMIT = 20
@@ -89,6 +92,7 @@ export class VaultService {
       subagents: (params) => this.actions.subagents(params),
       search: (params, caller) => this.search(params, caller),
       searchStatus: (params) => this.searchStatus(params),
+      getSearchTip: () => this.getSearchTip(),
       setSearchEnabled: (params) => this.setSearchEnabled(params),
       clearSearchIndex: () => this.clearSearchIndex(),
       getView: (_params, caller) => this.getView(caller),
@@ -244,6 +248,7 @@ export class VaultService {
     }
     return { status, hosts }
   }
+  getSearchTip = async (): Promise<SearchTipState> => this.enqueuePolicy(async () => this.readSearchTip())
 
   setSearchEnabled = async (params: Record<string, unknown>): Promise<PublicSearchStatus> => {
     if (typeof params.enabled !== 'boolean') throw this.context.error('invalid-params', 'enabled must be a boolean')
@@ -709,6 +714,29 @@ export class VaultService {
     return value
   }
 
+  private readSearchTip(): SearchTipState {
+    const stored = this.store.get<{ value: string }>('SELECT value FROM vault_state WHERE name = ?', SEARCH_TIP_STATE)
+    if (stored) {
+      try {
+        if (JSON.parse(stored.value) === true) return { id: SEARCH_TIP_ID, seen: true }
+      } catch {
+        // An invalid canonical value is equivalent to an unseen tip.
+      }
+    }
+    return { id: SEARCH_TIP_ID, seen: false }
+  }
+
+  private markSearchTipSeen(): void {
+    if (this.readSearchTip().seen) return
+    this.store.run(
+      'INSERT INTO vault_state (name, value) VALUES (?, ?) ON CONFLICT(name) DO UPDATE SET value = excluded.value',
+      SEARCH_TIP_STATE,
+      JSON.stringify(true)
+    )
+    const state: SearchTipState = { id: SEARCH_TIP_ID, seen: true }
+    this.context.emit('searchTipChanged', state)
+  }
+
   private saveHistoryDays(value: number | null): void {
     this.store.run(
       'INSERT INTO vault_state (name, value) VALUES (?, ?) ON CONFLICT(name) DO UPDATE SET value = excluded.value',
@@ -726,17 +754,26 @@ export class VaultService {
       if (previousEnabled !== enabled) {
         await this.context.call('setting.set', { id: SEARCH_SETTING, value: enabled })
       }
+      let status: SearchStatus
       try {
         await this.applySearchPolicy({ enabled, historyDays })
+        status = await this.readLocalStatus()
+        if (enabled && status.enabled) this.markSearchTipSeen()
       } catch (error) {
+        let retentionFailure = ''
         if (enabled) {
-          this.saveHistoryDays(previousHistoryDays)
+          // Turning search off must not depend on a writable ancillary plugin store.
           await this.context.call('setting.set', { id: SEARCH_SETTING, value: false }).catch(() => undefined)
           await this.applySearchPolicy({ enabled: false, historyDays: previousHistoryDays }).catch(() => undefined)
+          try {
+            this.saveHistoryDays(previousHistoryDays)
+          } catch (rollbackError) {
+            retentionFailure = `; could not restore history retention: ${messageOf(rollbackError)}`
+          }
         }
-        throw this.context.error('conflict', `could not ${enabled ? 'enable' : 'disable'} transcript search: ${messageOf(error)}`)
+        throw this.context.error('conflict', `could not ${enabled ? 'enable' : 'disable'} transcript search: ${messageOf(error)}${retentionFailure}`)
       }
-      return this.readLocalStatus()
+      return status
     })
   }
 

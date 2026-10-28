@@ -139,11 +139,19 @@ function localClipboard(text: string): Promise<void> {
   return navigator.clipboard.writeText(text)
 }
 
-function SearchDisclosure({ enabled, busy, onEnable }: { enabled: boolean; busy: boolean; onEnable(): void }) {
+const SEARCH_PRIVACY_DISCLOSURE = 'It stores full, unredacted agent conversations on this computer, including up to 3,072 characters from each tool output. Authenticated clients can search this local index through the daemon.'
+
+function SearchDisclosure({ enabled, busy, onEnable, searchTip }: { enabled: boolean; busy: boolean; onEnable(): void; searchTip: VaultSnapshot['searchTip'] }) {
   if (enabled) return null
-  return <div className="qvh-consent" data-vault-consent>
-    <p><strong>Enable full-text search?</strong> {`It stores full, unredacted agent conversations on this computer, including up to 3,072 characters from each tool output. Authenticated clients can search this local index through the daemon.`}</p>
-    <div className="qvh-consent-actions"><button type="button" className="qvh-button qvh-primary" data-vault-enable-search disabled={busy} onClick={onEnable}>Enable</button><span className="qvh-muted">Until enabled, this box filters session titles only.</span></div>
+  const promoting = searchTip?.seen === false
+  return <div className="qvh-consent" data-vault-consent {...(promoting ? { 'data-vault-search-tip': '' } : {})}>
+    {promoting
+      ? <>
+        <p><strong>Search every agent session</strong> Find any past conversation by what was said in it, then pick up where the agent left off.</p>
+        <p>{SEARCH_PRIVACY_DISCLOSURE}</p>
+      </>
+      : <p><strong>Enable full-text search?</strong> {SEARCH_PRIVACY_DISCLOSURE}</p>}
+    <div className="qvh-consent-actions"><button type="button" className="qvh-button qvh-primary" data-vault-enable-search disabled={busy} onClick={onEnable}>{promoting ? 'Turn on session search' : 'Enable'}</button><span className="qvh-muted">Until enabled, this box filters session titles only.</span></div>
   </div>
 }
 
@@ -850,7 +858,7 @@ function HistoryPanel({ context, report }: HistoryPanelProps) {
           <input ref={searchInput} className="qvh-input" type="search" aria-label="Search sessions" placeholder="Search sessions" data-vault-search value={snapshot.view.query} onChange={(event) => setQuery(event.currentTarget.value)} />
         </label>
       </div>
-      {snapshot.view.host === 'local' && !snapshot.searchStatus?.enabled ? <SearchDisclosure enabled={false} busy={snapshot.searchStatus === null} onEnable={() => void model.setSearchEnabled(true, 'local').catch((error) => context.toast('Could not enable search', `Try again. ${messageOf(error)}`))} /> : null}
+      {snapshot.view.host === 'local' && !snapshot.searchStatus?.enabled ? <SearchDisclosure enabled={false} busy={snapshot.searchStatus === null} searchTip={snapshot.searchTip} onEnable={() => void model.setSearchEnabled(true, 'local').catch((error) => context.toast('Could not enable search', `Try again. ${messageOf(error)}`))} /> : null}
       <div className="qvh-query-status" role="status" aria-live="polite" data-vault-query-status data-vault-search-error={snapshot.search.error ? 'true' : undefined}>
         {searchMessage.message}
         {searchMessage.repaired ? <span data-vault-query-repaired>{searchMessage.repaired}</span> : null}

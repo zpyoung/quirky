@@ -9,6 +9,7 @@ import type {
   SearchRequest,
   SearchResponse,
   SearchStatus,
+  SearchTipState,
   ViewState
 } from '../types'
 
@@ -35,6 +36,7 @@ export type VaultSnapshot = {
   list: VaultListState
   search: VaultSearchState
   searchStatus: SearchStatus | null
+  searchTip: SearchTipState | null
   scanProgress: { phase: 'discovering' | 'reading' | 'complete'; scannedFiles: number; parsedFiles: number; current?: string } | null
   hostOutcomes: HostOutcome[]
   repoRows: { id: string; name: string; path: string }[]
@@ -116,6 +118,7 @@ const emptySnapshot = (): VaultSnapshot => ({
   list: { result: null, loading: false, error: null },
   search: { response: null, loading: false, error: null },
   searchStatus: null,
+  searchTip: null,
   scanProgress: null,
   hostOutcomes: [],
   repoRows: [],
@@ -137,6 +140,18 @@ function searchStatusFrom(value: unknown): SearchStatus | null {
   const status = asRecord(envelope.status)
   if (!Array.isArray(envelope.hosts) || typeof status.enabled !== 'boolean' || !['closed', 'idle', 'indexing', 'current', 'degraded'].includes(String(status.phase))) return null
   return status as unknown as SearchStatus
+}
+function localSearchStatusFrom(value: unknown): SearchStatus | null {
+  const status = asRecord(value)
+  if (typeof status.enabled !== 'boolean' || !['closed', 'idle', 'indexing', 'current', 'degraded'].includes(String(status.phase))) return null
+  return status as unknown as SearchStatus
+}
+
+function searchTipFrom(value: unknown): SearchTipState | null {
+  const candidate = asRecord(value)
+  return candidate.id === 'agent-session-search' && typeof candidate.seen === 'boolean'
+    ? { id: 'agent-session-search', seen: candidate.seen }
+    : null
 }
 
 
@@ -175,6 +190,7 @@ export class VaultWindowModel {
   private listGeneration = 0
   private listToken: string | null = null
   private searchGeneration = 0
+  private searchTipGeneration = 0
   private readonly instance = Math.random().toString(36).slice(2)
   private scanStartedAt: number | null = null
 
@@ -214,6 +230,15 @@ export class VaultWindowModel {
             this.update({ searchStatus: status })
             const hosts = outcomeRows(data)
             if (hosts.length) this.update({ hostOutcomes: mergeHostOutcomes(this.snapshot.hostOutcomes, hosts) })
+          } else if (this.snapshot.view.host === 'local') {
+            const localStatus = localSearchStatusFrom(data)
+            if (localStatus) this.update({ searchStatus: localStatus })
+          }
+        } else if (event.type === 'quirky.vault/searchTipChanged') {
+          const searchTip = searchTipFrom((event as { data?: unknown }).data)
+          if (searchTip) {
+            this.searchTipGeneration += 1
+            this.update({ searchTip })
           }
         }
       }),
@@ -235,6 +260,7 @@ export class VaultWindowModel {
   }
 
   async retryView(): Promise<void> {
+    void this.refreshSearchTip()
     this.update({ list: { result: null, loading: true, error: null } })
     try {
       const view = viewOf(await this.context.call('quirky.vault/getView', {}))
@@ -354,6 +380,18 @@ export class VaultWindowModel {
     }
   }
 
+  private async refreshSearchTip(): Promise<void> {
+    const generation = ++this.searchTipGeneration
+    try {
+      const searchTip = searchTipFrom(await this.context.call('quirky.vault/getSearchTip', {}))
+      if (this.stopped || generation !== this.searchTipGeneration) return
+      if (this.snapshot.searchTip?.seen && searchTip?.seen !== true) return
+      this.update({ searchTip })
+    } catch {
+      if (this.stopped || generation !== this.searchTipGeneration || this.snapshot.searchTip?.seen) return
+      this.update({ searchTip: null })
+    }
+  }
   async refreshSearchStatus(host = this.snapshot.view.host): Promise<SearchStatus | null> {
     try {
       const response = await this.context.call('quirky.vault/searchStatus', { host })

@@ -330,17 +330,36 @@ describe('quirky.agents/generate', () => {
   })
 
   test('NA-29: an agent that ignores SIGTERM and starts a child is killed with its whole group at the time limit', async () => {
-    const t = await start({ timeoutMs: 300 })
-    await t.fake('claude', `trap '' TERM\necho $$ > "$REC.pid"\nsleep 120 &\necho $! > "$REC.child"\nwait`)
+    const t = await start({ timeoutMs: 3000 })
+    await t.fake('claude', `trap '' TERM\necho $$ > "$REC.pid"\nsleep 120 &\necho $! > "$REC.child"\necho ready > "$REC.ready"\nwait`)
     const began = Date.now()
+    let settled = false
+    const outcome = failure(t.call(A('generate'), { agent: 'claude', prompt: 'p', cwd: t.work })).then(
+      (error) => {
+        settled = true
+        return error
+      },
+      (error) => {
+        settled = true
+        throw error
+      }
+    )
 
-    const error = await failure(t.call(A('generate'), { agent: 'claude', prompt: 'p', cwd: t.work }))
+    try {
+      await waitFor(() => existsSync(join(t.rec, 'claude.ready')), 2000)
+      expect(settled).toBe(false)
+      expect(alive(pidOf(t, 'claude.pid'))).toBe(true)
+      expect(alive(pidOf(t, 'claude.child'))).toBe(true)
+    } finally {
+      await outcome
+    }
 
-    expect(error).toMatchObject({ code: RpcErrorCode.Conflict, message: 'Claude did not finish within 0.3 seconds.' })
+    const error = await outcome
+    expect(error.code).toBe(RpcErrorCode.Conflict)
     expect(reasonOf(error)).toBe('timeout')
-    expect(Date.now() - began).toBeGreaterThanOrEqual(2000)
+    expect(Date.now() - began).toBeGreaterThanOrEqual(5000)
     await gone(pidOf(t, 'claude.pid'), pidOf(t, 'claude.child'))
-  })
+  }, 15_000)
 
   test('the default limit is 60 seconds and a caller cannot ask for more', async () => {
     const t = await start()
