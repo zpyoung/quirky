@@ -563,7 +563,7 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
       identity.sessionId,
       caller.runtimeSessionId,
       creatorDispatchId,
-      input.retryOfDispatchId ?? null,
+      admission.retryOfDispatchId,
       admission.depth,
       admission.failureCount,
       generation,
@@ -603,7 +603,7 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
       task.id,
       caller.runtimeSessionId,
       this.creatorDispatchId(caller.runtimeSessionId),
-      input.retryOfDispatchId ?? null,
+      admission.retryOfDispatchId,
       admission.depth,
       admission.failureCount,
       at
@@ -736,7 +736,6 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
     )
     this.store.run(`UPDATE tasks SET status = ?, result_json = ?, completed_at = ? WHERE id = ?`, input.outcome === 'succeeded' ? 'completed' : 'failed', jsonText(result), input.outcome === 'succeeded' ? at : null, task.id)
     this.closeQuestionsForTask(task.id, at)
-    this.retireHeartbeats(dispatch.id, at)
     if (input.outcome === 'succeeded') this.promoteReadyTasks(task.run_id)
     return { status: 'accepted', task: this.getTask(task.id as TaskId), dispatch: transitioned, worker }
   }
@@ -833,7 +832,14 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
     if (!worker) fail(this.context, 'worker_port_unavailable', `supervised Dispatch ${dispatchId} has no worker record`, { dispatchId })
     return worker
   }
-  emitWorkerStatus(dispatchId: DispatchId, subject: string, body: string, high: boolean): void {
+  emitWorkerStatus(
+    dispatchId: DispatchId,
+    subject: string,
+    body: string,
+    high: boolean,
+    type: 'status' | 'escalation' = 'status',
+    payload?: JsonValue
+  ): void {
     const dispatch = this.getDispatchRecord(dispatchId)
     const fromSessionId = dispatch.assignee_session_id ?? dispatch.creator_session_id
     if (!fromSessionId) fail(this.context, 'lifecycle_conflict', `Dispatch ${dispatchId} has no session identity for a status message`)
@@ -843,7 +849,7 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
       `INSERT INTO messages (
         id, run_id, from_session_id, sender_kind, sender_id, mailbox_kind, mailbox_id,
         subject, body, type, priority, thread_id, payload_json, read, created_at, delivered_at
-      ) VALUES (?, ?, ?, 'dispatch', ?, 'run', ?, ?, ?, 'status', ?, NULL, NULL, 0, ?, NULL)`,
+      ) VALUES (?, ?, ?, 'dispatch', ?, 'run', ?, ?, ?, ?, ?, NULL, ?, 0, ?, NULL)`,
       messageId,
       dispatch.run_id,
       fromSessionId,
@@ -851,14 +857,17 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
       dispatch.run_id,
       subject,
       body,
+      type,
       high ? 'high' : 'normal',
+      payload === undefined || payload === null ? null : jsonText(payload),
       at
     )
-    this.messageCommittedListener?.({
-      mailbox: { kind: 'run', runId: dispatch.run_id as RunId },
+    const arrival = {
+      mailbox: { kind: 'run' as const, runId: dispatch.run_id as RunId },
       messageId,
-      type: 'status'
-    })
+      type
+    }
+    queueMicrotask(() => this.messageCommittedListener?.(arrival))
   }
 
   closeWorkerQuestions(dispatchId: DispatchId, at: UtcTimestamp): void {
@@ -1069,6 +1078,17 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
       retryOf = latest.id
     } else if (task.status !== 'ready') {
       return { admitted: false, reason: 'task_not_startable', failureCount: latest?.failure_count ?? 0 }
+    } else if (latest?.status === 'circuit_broken') {
+      return { admitted: false, reason: 'task_not_startable', failureCount: latest.failure_count }
+    } else if (latest?.status === 'failed') {
+      if (options.allowMissingAssignee) {
+        return { admitted: false, reason: 'task_not_startable', failureCount: latest.failure_count }
+      }
+      if (latest.failure_count >= CIRCUIT_BREAK_FAILURES) {
+        return { admitted: false, reason: 'task_not_startable', failureCount: latest.failure_count }
+      }
+      failureCount = latest.failure_count
+      retryOf = latest.id
     }
     const active = this.store.get<{ id: string }>(`SELECT id FROM dispatches WHERE task_id = ? AND status IN ('pending', 'dispatched') LIMIT 1`, task.id)
     if (active || pendingGate || unmet.length > 0 || this.hasLiveWorkerForTask(task.id as TaskId)) {
@@ -1125,11 +1145,19 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
       lastFailure = input.failureReason ?? (input.failureClass === 'worker_report' ? 'worker_report' : current.last_failure)
     }
     const completedAt = finalDispatch(nextStatus) ? input.at : null
+    const terminationReason =
+      'terminationReason' in input && input.terminationReason !== undefined
+        ? input.terminationReason
+        : current.termination_reason
     const update = this.store.run(
-      `UPDATE dispatches SET status = ?, failure_count = ?, last_failure = ?, completed_at = ?, dispatched_at = CASE WHEN ? = 'dispatched' THEN COALESCE(dispatched_at, ?) ELSE dispatched_at END WHERE id = ? AND status = ?`,
+      `UPDATE dispatches
+       SET status = ?, failure_count = ?, last_failure = ?, termination_reason = ?, completed_at = ?,
+           dispatched_at = CASE WHEN ? = 'dispatched' THEN COALESCE(dispatched_at, ?) ELSE dispatched_at END
+       WHERE id = ? AND status = ?`,
       nextStatus,
       failureCount,
       lastFailure,
+      terminationReason,
       completedAt,
       nextStatus,
       input.at,
@@ -1142,6 +1170,7 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
     }
     if (finalDispatch(nextStatus)) {
       this.closeQuestionsForDispatch(current.id, input.at)
+      this.retireHeartbeats(current.id, input.at)
       this.dispatchSettledListener?.(current.id as DispatchId)
     }
     if (updateTask && finalDispatch(nextStatus)) this.reconcileTaskAfterDispatch(current, nextStatus, input)
