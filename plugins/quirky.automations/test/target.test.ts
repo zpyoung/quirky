@@ -49,7 +49,7 @@ function delegatedContext(
   transform: (method: string, result: unknown) => unknown = (_method, result) => result
 ): AutomationDispatchContext {
   return {
-    async call(method, params) {
+    async call(method, params = {}) {
       return transform(method, await fixture.client.callAny(method, params))
     },
     subscribe: () => () => {},
@@ -170,7 +170,7 @@ describe('automation target resolver', () => {
     const { fixture, repo } = await startFixture()
     const resolver = createAutomationTargetResolver(delegatedContext(fixture))
     const missing = await errorOf(resolver.capture(definition('name:no-such-project')))
-    expect([RpcErrorCode.InvalidParams, RpcErrorCode.Conflict]).toContain(missing.code)
+    expect(missing.code === RpcErrorCode.InvalidParams || missing.code === RpcErrorCode.Conflict).toBe(true)
 
     const otherRepo = await addRepo(fixture, `other-${randomUUID()}`)
     const otherWorkspace = (await fixture.client.callAny('quirky.worktree/list', { repo: otherRepo.id }) as Worktree[])[0]!
@@ -225,7 +225,10 @@ describe('automation target resolver', () => {
     const changes: [string, (value: Repo | Worktree) => Repo | Worktree][] = [
       ['quirky.repo/resolve', (value) => ({ ...value, path: `${value.path}-moved` })],
       ['quirky.worktree/resolve', (value) => ({ ...value, path: `${value.path}-moved` })],
-      ['quirky.worktree/resolve', (value) => ({ ...value, instanceId: `${value.instanceId}-replacement` })]
+      ['quirky.worktree/resolve', (value) => {
+        if (!('instanceId' in value)) throw new Error('Expected a workspace identity from the fixture')
+        return { ...value, instanceId: `${value.instanceId}-replacement` }
+      }]
     ]
     for (const [method, replace] of changes) {
       const driftResolver = createAutomationTargetResolver(delegatedContext(fixture, (called, result) => {
