@@ -10,6 +10,7 @@ import { startFakePtyHost, type FakePtyHost } from './fixtures/fake-pty-host'
 import { makeTempHome, waitFor } from './helpers'
 
 const FAKE_HOST_MAIN = join(import.meta.dir, 'fixtures', 'fake-pty-host.ts')
+const GATED_FAKE_HOST_MAIN = join(import.meta.dir, 'fixtures', 'gated-fake-pty-host.ts')
 
 const cleanups: (() => Promise<void> | void)[] = []
 const scopes = new Map<string, ProcessScope>()
@@ -57,7 +58,10 @@ function startStoppableHost(home: string, version?: number): FakePtyHost {
   return host
 }
 
-function newClient(home: string, extra: { connectTimeoutMs?: number; shutdownWaitMs?: number } = {}): PtyClient {
+function newClient(
+  home: string,
+  extra: { hostEntry?: string; connectTimeoutMs?: number; shutdownWaitMs?: number } = {}
+): PtyClient {
   const scope = scopeFor(home)
   const client = new PtyClient({ home, hostEntry: FAKE_HOST_MAIN, log: () => {}, ...extra })
   const connect = client.connect.bind(client)
@@ -85,12 +89,16 @@ function home(): string {
 }
 
 /** A host that answers hello at `version`, then accepts shutdown without ever replying or closing. */
-function startSilentHost(dir: string, version: number): { shutdowns: () => number } {
+function startSilentHost(
+  dir: string,
+  version: number
+): { shutdowns: () => number; currentProtocolHellos: () => number } {
   mkdirSync(dir, { recursive: true })
   const path = socketPath(dir, 'pty.sock')
   rmSync(path, { force: true })
   writeFileSync(join(dir, 'pty.token'), 'tok', { mode: 0o600 })
   let shutdowns = 0
+  let currentProtocolHellos = 0
   const decoders = new WeakMap<object, PtyFrameDecoder>()
   const listener = Bun.listen<undefined>({
     unix: path,
@@ -102,6 +110,7 @@ function startSilentHost(dir: string, version: number): { shutdowns: () => numbe
           if (frame.kind !== 'json') continue
           const request = frame.message as PtyRequest
           if (request.type === 'hello') {
+            if (request.version === PTY_PROTOCOL_VERSION) currentProtocolHellos++
             const body =
               request.version === version
                 ? { id: request.id, ok: true, result: { version, pid: process.pid } }
@@ -118,7 +127,7 @@ function startSilentHost(dir: string, version: number): { shutdowns: () => numbe
     listener.stop(true)
     rmSync(path, { force: true })
   })
-  return { shutdowns: () => shutdowns }
+  return { shutdowns: () => shutdowns, currentProtocolHellos: () => currentProtocolHellos }
 }
 
 describe('protocol version handling', () => {
@@ -200,18 +209,38 @@ describe('a host that accepts shutdown but never replies or closes', () => {
     expect(client.connected).toBe(false)
   })
 
-  test('retiring an older host gives up within the wait so a current host can take over', async () => {
+  test('retries probing a silently retired host until a gated replacement starts', async () => {
     const dir = home()
+    const startMarker = join(dir, 'pty-host.start')
     const silent = startSilentHost(dir, 1)
-    const client = newClient(dir, { shutdownWaitMs: 100 })
+    const client = newClient(dir, {
+      hostEntry: GATED_FAKE_HOST_MAIN,
+      connectTimeoutMs: 5000,
+      shutdownWaitMs: 100
+    })
+    let connect: Promise<void> | undefined
 
-    const started = Date.now()
-    await client.connect()
+    try {
+      const started = Date.now()
+      connect = client.connect()
+      await waitFor(() => (silent.currentProtocolHellos() >= 4 ? true : undefined), 4000)
+      expect(silent.shutdowns()).toBe(1)
+      writeFileSync(startMarker, '')
+      await connect
 
-    expect(Date.now() - started).toBeLessThan(5000)
-    expect(silent.shutdowns()).toBe(1)
-    expect(client.connected).toBe(true)
-    expect(client.hostPid).not.toBe(process.pid)
+      expect(Date.now() - started).toBeLessThan(5000)
+      expect(silent.shutdowns()).toBe(1)
+      expect(silent.currentProtocolHellos()).toBeGreaterThanOrEqual(4)
+      expect(client.connected).toBe(true)
+      const replacementPid = Number(readFileSync(join(dir, 'pty.pid'), 'utf8'))
+      expect(replacementPid).toBeGreaterThan(0)
+      expect(client.hostPid).toBe(replacementPid)
+      expect(client.hostPid).not.toBe(process.pid)
+      expect(await client.request('list', {})).toEqual([])
+    } finally {
+      writeFileSync(startMarker, '')
+      await connect?.catch(() => {})
+    }
   })
 })
 
