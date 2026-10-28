@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { RpcErrorCode, type GitStatus, type UiPluginContext } from '@quirky/protocol'
+import { Badge, Button } from '@quirky/ui'
 import type { FixAction } from '../ai/types'
 
 export type GitHubReviewTarget = { worktree: string; branch: string; head: string }
@@ -224,11 +225,11 @@ export function GitHubReviewStatus({ context, lookup, aiEnabled = false, busy = 
     if (!aiEnabled || !onLaunch) return null
     const flows = pullRequest ? [BRANCH_FLOW, ...PR_FLOWS] : [BRANCH_FLOW]
     return (
-      <div className="scm-github-ai-source-actions">
+      <div className="ui-cluster">
         {flows.map(({ action, label }) => (
-          <button key={action} type="button" disabled={busy} onClick={() => onLaunch(action)}>
+          <Button key={action} disabled={busy} onClick={() => onLaunch(action)}>
             {label}
-          </button>
+          </Button>
         ))}
       </div>
     )
@@ -236,36 +237,47 @@ export function GitHubReviewStatus({ context, lookup, aiEnabled = false, busy = 
   if (lookup.kind === 'unsupported') return actions(false)
   if (lookup.kind === 'loading') {
     return (
-      <>
-        <p className="scm-github-review" data-scm-review-status data-state="loading" role="status">Checking for a pull request…</p>
+      <div className="ui-stack">
+        <p role="status" style={{ margin: 0 }}>
+          <Badge tone="neutral">
+            <span data-scm-review-status data-state="loading">Checking for a pull request…</span>
+          </Badge>
+        </p>
         {actions(false)}
-      </>
+      </div>
     )
   }
   if (lookup.kind === 'unavailable') {
     return (
-      <>
-        <p className="scm-github-review" data-scm-review-status data-state="unavailable" role="status">
-          GitHub pull-request lookup unavailable: {lookup.message}
+      <div className="ui-stack">
+        <p role="status" style={{ margin: 0 }}>
+          <Badge tone="needs-you">
+            <span data-scm-review-status data-state="unavailable">GitHub pull-request lookup unavailable: {lookup.message}</span>
+          </Badge>
         </p>
         {actions(false)}
-      </>
+      </div>
     )
   }
   if (lookup.kind === 'no-review') {
     return (
-      <>
-        <p className="scm-github-review" data-scm-review-status data-state="no-review" role="status">
-          No pull request is linked to this branch.
+      <div className="ui-stack">
+        <p role="status" style={{ margin: 0 }}>
+          <Badge tone="neutral">
+            <span data-scm-review-status data-state="no-review">No pull request is linked to this branch.</span>
+          </Badge>
         </p>
         {actions(false)}
-      </>
+      </div>
     )
   }
 
   const label = lookup.review.state === 'open' ? 'Open'
     : lookup.review.state === 'draft' ? 'Draft'
       : lookup.review.state === 'closed' ? 'Closed' : 'Merged'
+  const tone = lookup.review.state === 'merged' ? 'accent'
+    : lookup.review.state === 'draft' ? 'needs-you'
+      : lookup.review.state === 'closed' ? 'neutral' : 'working'
   const openReview = async () => {
     try {
       await context.call('quirky.reviews/openLink', { url: lookup.review.url })
@@ -274,14 +286,18 @@ export function GitHubReviewStatus({ context, lookup, aiEnabled = false, busy = 
     }
   }
   return (
-    <>
-      <div className="scm-github-review" data-scm-review-status data-state="found" role="status">
-        <span>Pull request #{lookup.review.number} · {label}</span>
-        <button type="button" aria-label={`Open pull request #${lookup.review.number}`} onClick={() => void openReview()}>
+    <div className="ui-stack">
+      <p className="ui-cluster" role="status" style={{ margin: 0 }}>
+        <Badge tone={tone}>
+          <span data-scm-review-status data-state="found">Pull request #{lookup.review.number} · {label}</span>
+        </Badge>
+      </p>
+      <div className="ui-cluster">
+        <Button aria-label={`Open pull request #${lookup.review.number}`} onClick={() => void openReview()}>
           Open PR #{lookup.review.number}
-        </button>
+        </Button>
+        {actions(true)}
       </div>
-      {actions(true)}
-    </>
+    </div>
   )
 }

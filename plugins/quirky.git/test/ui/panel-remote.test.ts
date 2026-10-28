@@ -31,8 +31,12 @@ const up = (ahead: number, behind: number, patchEquivalent: boolean | null = nul
   behindPatchEquivalent: patchEquivalent
 })
 
-const primary = (element: HTMLElement) => q(element, '.scm-primary') as HTMLButtonElement
+const primary = (element: HTMLElement) => q(element, '[data-git-primary]') as HTMLButtonElement
 const dialog = () => q(document.body, '[role="dialog"]')
+const dialogTitle = () => {
+  const titleId = dialog()?.getAttribute('aria-labelledby')
+  return titleId ? document.getElementById(titleId)?.textContent ?? null : null
+}
 
 async function menu(element: HTMLElement, label: string) {
   await click(byLabel(element, 'More commit and remote actions'))
@@ -144,13 +148,13 @@ describe('SC-38: a failing pre-push hook blocks the push', () => {
       })
     })
     await click(primary(element))
-    const card = q(element, '.scm-card-blocked')!
+    const card = q(element, '[role="alert"] .ui-inline-agent-card')!
     expect(card.textContent).toContain('Push blocked')
-    expect(q(card, '.scm-pill')?.textContent).toBe('Hook')
+    expect(q(card, '[aria-label="Hook"]')?.textContent).toBe('Hook')
     expect(q(element, '#commit-area-remote-error')).toBeNull()
     expect(fake.toasts).toEqual([])
     await click(buttonText(card, 'Details'))
-    expect(dialog()?.getAttribute('aria-label')).toBe('Push Failed')
+    expect(dialogTitle()).toBe('Push Failed')
     expect(q(dialog()!, 'pre')?.textContent).toBe('lint-staged failed')
     unmount()
   })
@@ -166,7 +170,7 @@ describe('force push', () => {
     const { fake, element, unmount } = await open(lease)
     expect(primary(element).textContent).toBe('Force Push')
     await click(primary(element))
-    expect(dialog()?.getAttribute('aria-label')).toBe('Force push zoe/feat to origin?')
+    expect(dialogTitle()).toBe('Force push zoe/feat to origin?')
     expect(dialog()?.textContent).toContain('This replaces the remote branch with your local commits.')
     expect(fake.called('quirky.git/forcePush')).toHaveLength(0)
     await click(buttonText(dialog()!, 'Force Push'))
@@ -231,7 +235,7 @@ describe('operations', () => {
       })
     })
     await click(buttonText(element, 'Abort merge'))
-    expect(dialog()?.getAttribute('aria-label')).toBe('Abort merge?')
+    expect(dialogTitle()).toBe('Abort merge?')
     await click(buttonText(dialog()!, 'Cancel'))
     expect(fake.called('quirky.git/abort')).toHaveLength(0)
     await click(buttonText(element, 'Abort merge'))
@@ -247,7 +251,7 @@ describe('operations', () => {
     })
     expect(element.textContent).toContain('Rebase in progress')
     await click(buttonText(element, 'Abort rebase'))
-    expect(dialog()?.getAttribute('aria-label')).toBe('Abort rebase?')
+    expect(dialogTitle()).toBe('Abort rebase?')
     expect(dialog()?.textContent).toContain('This cancels the rebase in progress and can discard conflict resolutions made during this rebase.')
     expect(qa(dialog()!, 'button').map((b) => b.textContent)).toEqual(['Cancel', 'Abort rebase'])
     unmount()

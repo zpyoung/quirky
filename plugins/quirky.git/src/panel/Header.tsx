@@ -1,7 +1,8 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
+import { Badge, Button, ContextMenu, IconButton, SectionHeader, TextField } from '@quirky/ui'
+import type { ContextMenuItem } from '@quirky/ui'
 import type { GitCompare, GitStatus } from '@quirky/protocol'
 import type { ViewMode } from './data'
-import { PopupMenu, type MenuEntry } from './Menu'
 
 const FILTER_LABEL = 'Filter files…'
 
@@ -21,9 +22,8 @@ type HeaderProps = {
 
 /** The panel's title bar: the filter toggle and the "More source control actions" menu, with the filter box under it. */
 export function Header({ filter, filterOpen, onFilterOpen, onFilter, viewMode, onViewMode, onChangeBase, onRefreshCompare, notes = 0, onNotes }: HeaderProps) {
-  const more = useRef<HTMLButtonElement>(null)
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null)
-  const entries: MenuEntry[] = [
+  const entries: ContextMenuItem[] = [
     viewMode === 'list' ? { label: 'View as tree', onSelect: () => onViewMode('tree') } : { label: 'View as list', onSelect: () => onViewMode('list') },
     { label: 'Change Base Ref…', onSelect: onChangeBase },
     { label: 'Refresh branch compare', onSelect: onRefreshCompare },
@@ -35,38 +35,37 @@ export function Header({ filter, filterOpen, onFilterOpen, onFilter, viewMode, o
   }
   return (
     <>
-      <div className="scm-header">
-        <strong>Source control</strong>
-        <span className="scm-header-actions">
-          <button
-            type="button"
-            className={`icon-button${filter.trim() !== '' ? ' active' : ''}`}
-            aria-label="Filter files by name"
-            aria-pressed={filterOpen}
-            title={filter.trim() !== '' ? `Filter: ${filter.trim()}` : 'Filter files by name'}
-            onClick={() => (filterOpen ? close() : onFilterOpen(true))}
-          >
-            {'⌕'}
-          </button>
-          <button
-            ref={more}
-            type="button"
-            className="icon-button"
-            aria-label="More source control actions"
-            aria-haspopup="menu"
-            title="More source control actions"
-            onClick={() => {
-              const box = more.current?.getBoundingClientRect()
-              setMenuAt({ x: box?.left ?? 0, y: box?.bottom ?? 0 })
-            }}
-          >
-            {'⋯'}
-          </button>
-        </span>
-      </div>
+      <SectionHeader
+        title="Source control"
+        actions={
+          <div className="ui-cluster">
+            <IconButton
+              label="Filter files by name"
+              variant={filter.trim() !== '' ? 'primary' : 'secondary'}
+              aria-pressed={filterOpen}
+              title={filter.trim() !== '' ? `Filter: ${filter.trim()}` : 'Filter files by name'}
+              onClick={() => (filterOpen ? close() : onFilterOpen(true))}
+            >
+              {'⌕'}
+            </IconButton>
+            <IconButton
+              label="More source control actions"
+              aria-haspopup="menu"
+              title="More source control actions"
+              onClick={(event) => {
+                const box = event.currentTarget.getBoundingClientRect()
+                setMenuAt({ x: box.left, y: box.bottom })
+              }}
+            >
+              {'⋯'}
+            </IconButton>
+          </div>
+        }
+      />
       {filterOpen && (
-        <div className="scm-filter">
-          <input
+        <div className="ui-cluster">
+          <TextField
+            label={FILTER_LABEL}
             type="text"
             autoFocus
             placeholder={FILTER_LABEL}
@@ -80,12 +79,12 @@ export function Header({ filter, filterOpen, onFilterOpen, onFilter, viewMode, o
               }
             }}
           />
-          <button type="button" className="icon-button" aria-label="Clear and close filter" title="Clear and close filter" onClick={close}>
+          <IconButton label="Clear and close filter" title="Clear and close filter" onClick={close}>
             {'×'}
-          </button>
+          </IconButton>
         </div>
       )}
-      {menuAt && <PopupMenu x={menuAt.x} y={menuAt.y} label="Source control actions" items={entries} onClose={() => setMenuAt(null)} />}
+      {menuAt && <ContextMenu x={menuAt.x} y={menuAt.y} label="Source control actions" items={entries} onClose={() => setMenuAt(null)} />}
     </>
   )
 }
@@ -101,32 +100,24 @@ export function BranchRow({ status, compare, onChangeBase }: BranchProps) {
   const base = compare?.base ?? null
   const ready = compare?.status === 'ready'
   return (
-    <div className="scm-branch">
-      <span className="scm-branch-name">{status.branch ?? (status.detached ? 'detached HEAD' : 'no branch')}</span>
+    <div className="ui-cluster" data-branch-row>
+      <span data-branch-name>{status.branch ?? (status.detached ? 'detached HEAD' : 'no branch')}</span>
       {base !== null && (
         <>
-          <span className="muted" aria-hidden="true">
+          <span className="ui-text-muted" aria-hidden="true">
             {'→'}
           </span>
-          <button type="button" className="scm-base" title="Change base ref" onClick={onChangeBase}>
+          <Button data-base-ref title="Change base ref" onClick={onChangeBase}>
             {base}
-          </button>
+          </Button>
         </>
       )}
-      {status.ahead > 0 && (
-        <span className="scm-ahead" title={`${status.ahead} commit(s) to push`}>
-          {`↑${status.ahead}`}
-        </span>
-      )}
-      {status.behind > 0 && (
-        <span className="scm-behind" title={`${status.behind} commit(s) to pull`}>
-          {`↓${status.behind}`}
-        </span>
-      )}
+      {status.ahead > 0 && <Badge tone="working" label={`${status.ahead} commit(s) to push`}>{`↑${status.ahead}`}</Badge>}
+      {status.behind > 0 && <Badge tone="needs-you" label={`${status.behind} commit(s) to pull`}>{`↓${status.behind}`}</Badge>}
       {ready && compare && (compare.added > 0 || compare.removed > 0) && (
-        <span className="scm-chip" title="Lines changed on this branch">
-          <span className="scm-added">{`+${compare.added}`}</span> <span className="scm-removed">{`−${compare.removed}`}</span>
-        </span>
+        <Badge tone="neutral" label="Lines changed on this branch">
+          <span style={{ color: 'var(--ui-working)' }}>{`+${compare.added}`}</span> <span style={{ color: 'var(--ui-failing)' }}>{`−${compare.removed}`}</span>
+        </Badge>
       )}
     </div>
   )
