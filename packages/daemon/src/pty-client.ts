@@ -13,7 +13,8 @@ import {
   type PtyFact,
   type PtyFrame,
   type PtyRequest,
-  type PtyResults
+  type PtyResults,
+  type PtyWriteErrorCode
 } from '@quirky/protocol'
 import { openPrivateLog, socketPath } from '@quirky/protocol/node'
 
@@ -23,6 +24,14 @@ type Pending = {
   resolve: (value: unknown) => void
   reject: (error: Error) => void
   onResult?: (result: unknown) => void
+  timer?: ReturnType<typeof setTimeout>
+}
+
+type RawRequestOptions = {
+  onResult?: (result: unknown) => void
+  timeoutMs?: number
+  onDispatch?: () => void
+  timeoutError?: () => Error
 }
 
 export type PtyClientOptions = {
@@ -33,6 +42,8 @@ export type PtyClientOptions = {
   /** Overrides how long retiring or restarting a host waits for it to stop. */
   shutdownWaitMs?: number
   log?: (message: string) => void
+  /** Deadline for an acknowledged write after it has been sent to the host; default 30 seconds. */
+  writeAcceptedTimeoutMs?: number
 }
 
 /** The host's rejection of a hello whose version it does not speak. */
@@ -40,6 +51,22 @@ const VERSION_REJECTION = /^unsupported protocol version (\d+), host speaks (\d+
 
 const RETIRE_WAIT_MS = 5000
 const RESTART_WAIT_MS = 15000
+const WRITE_ACCEPTED_TIMEOUT_MS = 30_000
+
+type PtyWriteError = Error & { code: PtyWriteErrorCode; acceptedBytes: number | null }
+
+function ptyWriteError(code: PtyWriteErrorCode, acceptedBytes: number | null, message: string): PtyWriteError {
+  return Object.assign(new Error(message), { code, acceptedBytes })
+}
+
+function isPtyWriteError(error: unknown): error is PtyWriteError {
+  if (!(error instanceof Error) || !('code' in error) || !('acceptedBytes' in error)) return false
+  const acceptedBytes = error.acceptedBytes
+  return (
+    (error.code === 'PTY_WRITE_REJECTED' || error.code === 'PTY_WRITE_UNCERTAIN') &&
+    (acceptedBytes === null || (typeof acceptedBytes === 'number' && Number.isSafeInteger(acceptedBytes) && acceptedBytes >= 0))
+  )
+}
 
 export type PtyExitDetails = { exitSignal: string | null; exitCause: ExitCause }
 
@@ -113,15 +140,45 @@ export class PtyClient {
 
   /**
    * Sends one control request. `onResult` runs synchronously while the response frame is being
-   * dispatched, before any DATA frame that follows it on the socket.
+   * dispatched, before any DATA frame that follows it on the socket. `timeoutMs` bounds the wait
+   * after dispatch; an acknowledged-write timeout reports unknown acceptance.
    */
   async request<T extends PtyRequest['type']>(
     type: T,
     params: PtyParams<T>,
-    options: { onResult?: (result: PtyResults[T]) => void } = {}
+    options: { onResult?: (result: PtyResults[T]) => void; timeoutMs?: number } = {}
   ): Promise<PtyResults[T]> {
-    await this.connect()
-    return this.rawRequest(type, params, options.onResult as ((result: unknown) => void) | undefined)
+    let dispatched = false
+    try {
+      await this.connect()
+    } catch (error) {
+      if (type === 'writeAccepted') {
+        throw ptyWriteError('PTY_WRITE_REJECTED', 0, error instanceof Error ? error.message : String(error))
+      }
+      throw error
+    }
+
+    const timeoutMs =
+      options.timeoutMs ??
+      (type === 'writeAccepted' ? (this.options.writeAcceptedTimeoutMs ?? WRITE_ACCEPTED_TIMEOUT_MS) : undefined)
+    try {
+      const result = await this.rawRequest(type, params, {
+        onResult: options.onResult as ((result: unknown) => void) | undefined,
+        timeoutMs,
+        onDispatch: type === 'writeAccepted' ? () => (dispatched = true) : undefined,
+        timeoutError:
+          type === 'writeAccepted' && timeoutMs !== undefined
+            ? () => ptyWriteError('PTY_WRITE_UNCERTAIN', null, `acknowledged PTY write timed out after ${timeoutMs}ms`)
+            : undefined
+      })
+      return result as PtyResults[T]
+    } catch (error) {
+      if (type !== 'writeAccepted' || isPtyWriteError(error)) throw error
+      const message = error instanceof Error ? error.message : String(error)
+      throw dispatched
+        ? ptyWriteError('PTY_WRITE_UNCERTAIN', null, message)
+        : ptyWriteError('PTY_WRITE_REJECTED', 0, message)
+    }
   }
 
   /**
@@ -193,17 +250,27 @@ export class PtyClient {
     return result
   }
 
-  private rawRequest(
-    type: string,
-    params: object,
-    onResult?: (result: unknown) => void
-  ): Promise<never> {
+  private rawRequest(type: string, params: object, options: RawRequestOptions = {}): Promise<unknown> {
     if (!this.socket) return Promise.reject(new Error('pty host is not connected'))
+    const frame = encodePtyJson({ id: this.nextId, type, ...params })
     const id = this.nextId++
-    return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve: resolve as (value: unknown) => void, reject, onResult })
-      this.write(encodePtyJson({ id, type, ...params }))
-    })
+    const { promise, resolve, reject } = Promise.withResolvers<unknown>()
+    const pending: Pending = { resolve, reject, onResult: options.onResult }
+    this.pending.set(id, pending)
+    if (options.timeoutMs !== undefined) {
+      pending.timer = setTimeout(() => {
+        if (!this.pending.delete(id)) return
+        reject(options.timeoutError?.() ?? new Error(`pty request timed out: ${type}`))
+      }, options.timeoutMs)
+    }
+    try {
+      options.onDispatch?.()
+      this.write(frame)
+    } catch (error) {
+      if (this.pending.delete(id)) clearTimeout(pending.timer)
+      reject(error instanceof Error ? error : new Error(String(error)))
+    }
+    return promise
   }
 
   private write(bytes: Uint8Array): void {
@@ -333,11 +400,19 @@ export class PtyClient {
       for (const handler of this.dataHandlers) handler(frame.sessionId, frame.bytes)
       return
     }
-    const message = frame.message as { id?: number; ok?: boolean; result?: unknown; error?: string } & Partial<PtyEvent>
+    const message = frame.message as {
+      id?: number
+      ok?: boolean
+      result?: unknown
+      error?: string
+      code?: unknown
+      acceptedBytes?: unknown
+    } & Partial<PtyEvent>
     if (typeof message.id === 'number') {
       const pending = this.pending.get(message.id)
       if (!pending) return
       this.pending.delete(message.id)
+      clearTimeout(pending.timer)
       if (message.ok) {
         try {
           pending.onResult?.(message.result)
@@ -345,7 +420,17 @@ export class PtyClient {
           pending.resolve(message.result)
         }
       } else {
-        pending.reject(new Error(message.error ?? 'pty request failed'))
+        const error = new Error(message.error ?? 'pty request failed')
+        if (
+          (message.code === 'PTY_WRITE_REJECTED' || message.code === 'PTY_WRITE_UNCERTAIN') &&
+          (message.acceptedBytes === null ||
+            (typeof message.acceptedBytes === 'number' &&
+              Number.isSafeInteger(message.acceptedBytes) &&
+              message.acceptedBytes >= 0))
+        ) {
+          Object.assign(error, { code: message.code, acceptedBytes: message.acceptedBytes })
+        }
+        pending.reject(error)
       }
       return
     }
@@ -372,7 +457,10 @@ export class PtyClient {
   }
 
   private failPending(error: Error): void {
-    for (const pending of this.pending.values()) pending.reject(error)
+    for (const pending of this.pending.values()) {
+      clearTimeout(pending.timer)
+      pending.reject(error)
+    }
     this.pending.clear()
   }
 

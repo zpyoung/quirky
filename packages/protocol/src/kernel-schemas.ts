@@ -108,6 +108,8 @@ const settingInfo = object(
     plugin: string(),
     type: { type: 'string', enum: ['boolean', 'number', 'string', 'enum'] },
     title: string(),
+    category: string(),
+    section: string(),
     description: string(),
     default: {},
     minimum: { type: 'number' },
@@ -165,6 +167,7 @@ const uiModel = object(
   {
     sidebarSections: listOf({ type: 'object' }),
     statusBars: listOf({ type: 'object' }),
+    activityItems: listOf({ type: 'object' }),
     panels: listOf({ type: 'object' }),
     views: listOf({ type: 'object' }),
     overlays: listOf({ type: 'object' }),
@@ -176,7 +179,7 @@ const uiModel = object(
     theme: object({ chosen: string(), active: string() }, ['chosen', 'active']),
     modules: { type: 'object', additionalProperties: true }
   },
-  ['sidebarSections', 'statusBars', 'panels', 'views', 'overlays', 'commands', 'keybindings', 'settings', 'menuItems', 'themes', 'theme', 'modules']
+  ['sidebarSections', 'statusBars', 'activityItems', 'panels', 'views', 'overlays', 'commands', 'keybindings', 'settings', 'menuItems', 'themes', 'theme', 'modules']
 )
 const apiDescription = object(
   {
@@ -195,7 +198,8 @@ const uiLayout = object(
     view: { description: 'The open view as {id, input?}, or null.' },
     panel: { description: 'The open panel ID, or null.' },
     sidebar: boolean(),
-    focus: { description: "'sidebar', 'view', 'panel' or null." }
+    focus: { description: "'sidebar', 'view', 'panel' or null." },
+    palette: { type: 'boolean', description: 'Whether the command palette is open; absent means closed.' }
   },
   ['view', 'panel', 'sidebar', 'focus']
 )
@@ -414,6 +418,11 @@ export const KERNEL_METHOD_SCHEMAS = {
     readOnly: true,
     params: noParams,
     result: uiState
+  },
+  'ui.palette.set': {
+    description: 'Opens or closes the shared command palette; omitting `open` toggles its current state.',
+    params: object({ open: { type: 'boolean', description: 'True opens, false closes; omitted toggles.' } }),
+    result: uiLayout
   },
   'ui.view.open': {
     description: 'Opens view `id` with `input` (JSON up to 64 KiB); `id` must be an effective view.',

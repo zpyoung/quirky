@@ -58,6 +58,7 @@ const urlOf = (plugin: string) => `/plugins/${plugin}/ui.js`
 function makeModel(parts: Partial<UiModel> = {}): UiModel {
   const model: UiModel = {
     sidebarSections: [],
+    activityItems: [],
     statusBars: [],
     panels: [],
     views: [],
@@ -72,7 +73,7 @@ function makeModel(parts: Partial<UiModel> = {}): UiModel {
     ...parts
   }
   if (parts.modules) return model
-  const entries = [...model.sidebarSections, ...model.statusBars, ...model.panels, ...model.views, ...model.overlays, ...model.commands]
+  const entries = [...model.sidebarSections, ...model.activityItems, ...model.statusBars, ...model.panels, ...model.views, ...model.overlays, ...model.commands]
   for (const entry of entries) {
     const module = (model.modules[entry.plugin] ??= { url: urlOf(entry.plugin), provides: [] })
     module.provides.push(entry.id)
@@ -302,20 +303,26 @@ test('SC-7: mounting a section reuses the module the window already loaded and m
   expect(cleanups).toBe(0)
 })
 
-test('SC-7: mounting a status bar loads its owning module and reports its slot mounted', async () => {
-  const t = setup(makeModel({ statusBars: [slot('status-bar', NOTES, 'usage')] }))
-  const { module, record } = recording([STATUS])
+test('SC-7: mounting a status bar and activity item loads their owning module and reports both slots mounted', async () => {
+  const activity = slot('activity-item', NOTES, 'today')
+  const t = setup(makeModel({ statusBars: [slot('status-bar', NOTES, 'usage')], activityItems: [activity] }))
+  const { module, record } = recording([STATUS, activity.id])
   t.useModule(NOTES, module)
   await t.host.refresh()
 
-  const unmount = t.host.mount(STATUS, element())
+  const unmountStatus = t.host.mount(STATUS, element())
+  const unmountActivity = t.host.mount(activity.id, element())
   await settled(t, STATUS)
+  await settled(t, activity.id)
 
   expect(state(t).slots[STATUS]).toEqual({ status: 'mounted' })
+  expect(state(t).slots[activity.id]).toEqual({ status: 'mounted' })
   expect(record.activations).toBe(1)
   expect(t.imports).toEqual([urlOf(NOTES)])
-  unmount()
+  unmountStatus()
+  unmountActivity()
   expect(state(t).slots[STATUS]).toBeUndefined()
+  expect(state(t).slots[activity.id]).toBeUndefined()
 })
 
 test('SC-7: concurrent mounts and commands share one import and one activation', async () => {
@@ -1361,30 +1368,74 @@ test('SC-16: only the active keybinding on a chord fires, and shadowed ones are 
   expect(ran).toEqual(['keys', 'sample'])
 })
 
-test('SC-17: the palette chord is never handled, even for an active keybinding', async () => {
-  const keys = [binding(NOTES, 'p', 'mod+shift+p', NEW)]
-  const t = setup(makeModel({ commands: [command(NOTES, 'new')], keybindings: keys }))
-  let runs = 0
-  t.useModule(NOTES, recording([NEW], () => () => runs++).module)
+test('a conditional dock binding beats the palette binding, while an override has no palette fallback', async () => {
+  const paletteId = 'command:quirky.palette/toggle'
+  const dockId = 'command:quirky.terminal/passthrough'
+  const dockWhen = 'terminalDockMounted && terminalFocus || terminalDockMounted && terminalDockFocus'
+  const t = setup(
+    makeModel({
+      commands: [command('quirky.palette', 'toggle'), command('quirky.terminal', 'passthrough')],
+      keybindings: [
+        binding('quirky.palette', 'toggle', 'mod+shift+p', paletteId),
+        { ...binding('quirky.terminal', 'passthrough', 'mod+shift+p', dockId), when: dockWhen }
+      ]
+    })
+  )
+  const ran: string[] = []
+  const palette = recording([paletteId], () => () => ran.push('palette'))
+  const dock = recording([dockId], () => () => ran.push('dock'))
+  t.useModule('quirky.palette', palette.module)
+  t.useModule('quirky.terminal', dock.module)
   await t.host.refresh()
-  expect(t.host.handleKey(key('KeyP', { metaKey: true, shiftKey: true }))).toBe(false)
-  await tick()
-  expect(runs).toBe(0)
+
+  const context = dock.record.contexts[0]!
+  context.setContext('terminalKeysFirst', true)
+  context.setContext('terminalFocus', true)
+  context.setContext('terminalDockMounted', true)
+  expect(t.host.handleKey(key('KeyP', { metaKey: true, shiftKey: true }))).toBe(true)
+  await until(() => ran.length === 1)
+  expect(ran).toEqual(['dock'])
+
+  context.setContext('terminalFocus', false)
+  context.setContext('terminalDockFocus', true)
+  context.setContext('terminalKeysFirst', false)
+  expect(t.host.handleKey(key('KeyP', { metaKey: true, shiftKey: true }))).toBe(true)
+  await until(() => ran.length === 2)
+  expect(ran).toEqual(['dock', 'dock'])
+
+  context.setContext('terminalDockMounted', false)
+  context.setContext('terminalDockFocus', false)
+  expect(t.host.handleKey(key('KeyP', { metaKey: true, shiftKey: true }))).toBe(true)
+  await until(() => ran.length === 3)
+  expect(ran).toEqual(['dock', 'dock', 'palette'])
 })
 
-test('G1: a plugin keybinding on the palette chord is reported shadowed by the kernel, and the chord runs nothing', async () => {
-  const shadowed: UiKeybinding = { ...binding(NOTES, 'p', 'mod+shift+p', NEW, 'shadowed'), shadowedBy: 'kernel' }
-  const t = setup(makeModel({ commands: [command(NOTES, 'new')], keybindings: [shadowed] }))
-  let runs = 0
-  t.useModule(NOTES, recording([NEW], () => () => runs++).module)
+test('a replaced palette binding dispatches only the active contribution; absence has no fallback', async () => {
+  const paletteId = 'command:quirky.palette/toggle'
+  const overrideId = 'command:acme.override/open'
+  const paletteBinding: UiKeybinding = {
+    ...binding('quirky.palette', 'toggle', 'mod+shift+p', paletteId, 'shadowed'),
+    shadowedBy: 'keybinding:acme.override/p'
+  }
+  const overrideBinding = binding('acme.override', 'p', 'mod+shift+p', overrideId)
+  const t = setup(
+    makeModel({
+      commands: [command('quirky.palette', 'toggle'), command('acme.override', 'open')],
+      keybindings: [paletteBinding, overrideBinding]
+    })
+  )
+  const ran: string[] = []
+  t.useModule('quirky.palette', recording([paletteId], () => () => ran.push('palette')).module)
+  t.useModule('acme.override', recording([overrideId], () => () => ran.push('override')).module)
   await t.host.refresh()
-  expect(state(t).model!.keybindings).toEqual([shadowed])
+  expect(t.host.handleKey(key('KeyP', { metaKey: true, shiftKey: true }))).toBe(true)
+  await until(() => ran.length === 1)
+  expect(ran).toEqual(['override'])
 
+  t.setModel(makeModel())
+  await t.host.refresh()
   expect(t.host.handleKey(key('KeyP', { metaKey: true, shiftKey: true }))).toBe(false)
-  expect(t.host.handleKey(key('KeyP', { ctrlKey: true, shiftKey: true }))).toBe(false)
-  await tick()
-  expect(runs).toBe(0)
-  expect(t.toasts).toEqual([])
+  expect(ran).toEqual(['override'])
 })
 
 test('SC-18: an unbound keybinding runs nothing and is not consumed, while a lower one that is active runs', async () => {
@@ -2473,14 +2524,6 @@ describe('the terminal-first rule', () => {
     expect(t.host.handleKey(key('KeyJ', { metaKey: true }))).toBe(false)
   })
 
-  test('the reserved palette chord is never prevented by the host', async () => {
-    const { t, context } = await withCommands(MODEL(), IDS)
-    context().setContext('terminalKeysFirst', true)
-    context().setContext('terminalFocus', true)
-    const calls = { prevented: 0 }
-    expect(t.host.handleKey({ ...key('KeyP', { metaKey: true, shiftKey: true }), preventDefault: () => calls.prevented++ })).toBe(false)
-    expect(calls.prevented).toBe(0)
-  })
 })
 
 describe('mountView', () => {

@@ -37,6 +37,7 @@ function makeContext(handlers: Record<string, Handler> = {}) {
     closeView() {},
     togglePanel() {},
     getLayout() { return { view: null, panel: null, sidebar: true, focus: null } },
+    setPalette() { throw new Error('unexpected palette mutation') },
     onLayout() { return () => {} },
     onStream() { return () => {} },
     onConnection() { return () => {} },

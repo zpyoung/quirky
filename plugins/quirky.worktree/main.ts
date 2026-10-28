@@ -16,7 +16,8 @@ import { createWorkspace, suggestName, type CreateEnv, type CreateParams, type P
 import { groupRepoId, listEverything, listGroup, listProject, type ListEnv } from './src/daemon/list'
 import { KeyedQueue } from './src/daemon/queue'
 import { deleteBranch, describeRemove, removeWorktree, type DeleteBranchParams, type InFlightRemove, type RemoveEnv, type RemoveParams } from './src/daemon/remove'
-import { setWorktree, showWorktree, type SetEnv, type SetParams } from './src/daemon/set'
+import { createGroupForWorktree, setWorktree, showWorktree, type CreateGroupParams, type SetEnv, type SetParams } from './src/daemon/set'
+import { filesystemIdentitySource } from './src/daemon/identity'
 import { openWorktreeStore, readV1Rows } from './src/daemon/store'
 
 const DEFAULT_WORKTREES_ROOT = '~/quirky/workspaces'
@@ -32,6 +33,19 @@ function isMethodNotFound(error: unknown): boolean {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+function sessionActivity(event: QuirkyEvent): { worktreeId: string; lastActivityAt: number } | null {
+  if (event.type !== 'quirky.session/changed' || !('data' in event)) return null
+  const data = event.data
+  if (typeof data !== 'object' || data === null || !('session' in data)) return null
+  const session = data.session
+  if (typeof session !== 'object' || session === null ||
+    !('worktreeId' in session) || typeof session.worktreeId !== 'string' ||
+    !('lastActivityAt' in session) || typeof session.lastActivityAt !== 'number' || !Number.isFinite(session.lastActivityAt)) {
+    return null
+  }
+  return { worktreeId: session.worktreeId, lastActivityAt: session.lastActivityAt }
 }
 
 /** git's own explanation for a failure: its stderr when it has one, else the error message. */
@@ -66,6 +80,27 @@ export async function activate(context: PluginContext): Promise<void> {
   const listRepos = async () => (await context.call('quirky.repo/list')) as Repo[]
 
   const listGroups = async () => (await context.call('quirky.repo/groupList')) as ProjectGroup[]
+
+  function releaseGroupMembership(groups: string[]): void {
+    const ids = [...new Set(groups)]
+    if (ids.length === 0) return
+    const changed: { repo_id: string; id: string }[] = []
+    store.transaction(() => {
+      for (const groupId of ids) {
+        changed.push(...store.all<{ repo_id: string; id: string }>(
+          'SELECT repo_id, id FROM worktrees WHERE project_group_id = ?',
+          groupId
+        ))
+        store.run('UPDATE worktrees SET project_group_id = NULL WHERE project_group_id = ?', groupId)
+      }
+    })
+    for (const row of changed) context.emit('changed', { repoId: row.repo_id, worktreeId: row.id })
+  }
+
+  async function reconcileDeletedGroups(): Promise<void> {
+    const deleted = (await context.call('quirky.repo/groupDeletedIds')) as string[]
+    releaseGroupMembership(deleted)
+  }
   const removing = new Set<string>()
   const pendingStarts = new Set<PendingStart>()
   releasePending = () => {
@@ -74,7 +109,7 @@ export async function activate(context: PluginContext): Promise<void> {
       start.dispose()
     }
   }
-  const listEnv: ListEnv = { store, groups: listGroups, log: context.log, removing }
+  const listEnv: ListEnv = { store, groups: listGroups, log: context.log, removing, identitySource: filesystemIdentitySource }
 
   /** The group with this ID or exact name; several of one name is a conflict. */
   async function resolveGroup(selector: string): Promise<ProjectGroup> {
@@ -102,6 +137,7 @@ export async function activate(context: PluginContext): Promise<void> {
     selector: string,
     identity: CallerIdentity
   ): Promise<{ repo: Repo | undefined; worktree: Worktree; all: Worktree[] }> {
+    await reconcileDeletedGroups()
     const repos = await listRepos()
     const all = await listEverything(listEnv, repos)
     let matches: Worktree[]
@@ -228,7 +264,16 @@ export async function activate(context: PluginContext): Promise<void> {
   }
 
   context.subscribe((event: QuirkyEvent) => {
-    if (event.type === 'quirky.repo/changed') pruneRemovedRepos().catch((error) => context.log(`could not prune worktree records: ${error}`))
+    if (event.type === 'quirky.repo/changed') {
+      pruneRemovedRepos().catch((error) => context.log(`could not prune worktree records: ${error}`))
+      reconcileDeletedGroups().catch((error) => context.log(`could not release deleted project-group memberships: ${error}`))
+    }
+    const activity = sessionActivity(event)
+    if (!activity) return
+    const row = store.get<{ repo_id: string; last_activity_at: number }>('SELECT repo_id, last_activity_at FROM worktrees WHERE id = ?', activity.worktreeId)
+    if (!row || activity.lastActivityAt <= row.last_activity_at) return
+    store.run('UPDATE worktrees SET last_activity_at = MAX(last_activity_at, ?) WHERE id = ?', activity.lastActivityAt, activity.worktreeId)
+    context.emit('changed', { repoId: row.repo_id, worktreeId: activity.worktreeId })
   })
 
   const setEnv: SetEnv = {
@@ -238,11 +283,16 @@ export async function activate(context: PluginContext): Promise<void> {
       const { worktree, all } = await findWorktree(selector, identity)
       return { worktree, all }
     },
+    resolveRepo: async (selector) => (await context.call('quirky.repo/resolve', { selector })) as Repo,
+    groups: listGroups,
+    call: (method, params) => context.call(method, params),
+    identitySource: filesystemIdentitySource,
     changed: (data) => void context.emit('changed', data)
   }
 
   const handlers: Record<string, Handler> = {
     async list(params) {
+      await reconcileDeletedGroups()
       if (params.repo === undefined && params.group === undefined) return await listEverything(listEnv, await listRepos())
       const result: Worktree[] = []
       if (params.repo !== undefined) {
@@ -259,6 +309,14 @@ export async function activate(context: PluginContext): Promise<void> {
     create: (params, caller) => createWorkspace(createEnv, params as CreateParams, identityOf(caller)),
     suggestName: (params) => suggestName(createEnv, params as { repo: string }),
     set: (params, caller) => setWorktree(setEnv, params as SetParams, identityOf(caller)),
+    createGroup: (params, caller) => createGroupForWorktree(setEnv, params as CreateGroupParams, identityOf(caller)),
+    releaseGroups(params) {
+      if (!Array.isArray(params.groups) || !params.groups.every((group) => typeof group === 'string')) {
+        throw fail('invalid-params', 'groups must be an array of group IDs')
+      }
+      releaseGroupMembership(params.groups)
+      return { ok: true }
+    },
     show: (params, caller) => showWorktree(setEnv, params as { worktree: string }, identityOf(caller)),
     remove: (params, caller) => removeWorktree(removeEnv, params as RemoveParams, identityOf(caller)),
     describeRemove: (params, caller) => describeRemove(removeEnv, params as RemoveParams, identityOf(caller)),

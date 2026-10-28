@@ -6,8 +6,10 @@ import type { DropZone } from '../../layout/tree'
 import { FLOATING_WORKSPACE, TAB_COLOR_HEX, TAB_COLORS } from '../../layout/types'
 import type { Edge, Group, GroupNode, PaneLeaf, PaneNode, Workspace } from '../../layout/types'
 import type { PaneReport, SearchOptions, TerminalPaneHandle, TerminalPaneProps } from '../pane/TerminalPaneView'
+import type { DockState } from '../dock/types'
 import { SEPARATOR, type MenuItem } from './Menu'
 import { AGENTS_VIEW_ID, TERMINAL_ONLY_MENU, filterEntries, loadMenuEntries, type MenuEntry } from './menuEntries'
+import { focusedController } from './registry'
 import {
   DEFAULT_WORKSPACE_SETTINGS,
   focusedPaneOf,
@@ -71,9 +73,12 @@ export type ControllerState = {
   dragging: boolean
   focusFlash: { pane: string; token: number } | null
   paneStates: Readonly<Record<string, PaneReport>>
+  dockStates: Readonly<Record<string, DockState>>
+  dockHosts: Readonly<Record<string, DockHostState>>
   tabDrag: { tab: string; over: TabDrop | null } | null
   paneDrag: { pane: string; target: PaneDropTarget | null } | null
 }
+type DockHostState = { mounted: boolean; focused: boolean; composerFocused: boolean }
 
 /** The slots and switches a host of the workspace can set. */
 export type WorkspaceOptions = {
@@ -100,6 +105,10 @@ export type ViewReport = {
   visibleSessions: string[]
   layout: Workspace | null
   focusedPane: string | null
+  /** Whether the active document element is inside this view's root. */
+  focused?: boolean
+  /** The window-local sequence when this view last gained focus; zero if it has never been focused. */
+  focusSequence?: number
   panes: PaneStateReport[]
   /** Mounted terminal accessory contribution IDs by pane ID. */
   mountedAccessories: Record<string, string[]>
@@ -132,8 +141,20 @@ async function writeClipboard(text: string): Promise<void> {
  */
 export class WorkspaceController {
   readonly floating: boolean
-  /** The element the view is mounted on; menus anchor to its descendants. */
-  root: HTMLElement | null = null
+  private rootElement: HTMLElement | null = null
+  private dockContextEligible: boolean | undefined
+  private dockContextMounted: boolean | undefined
+  private dockContextFocus: boolean | undefined
+  private rootWasFocused = false
+  private focusSequence = 0
+  private onRootFocusChange = () =>
+    queueMicrotask(() => {
+      const focusWithin = this.hasRootFocus()
+      if (focusWithin && !this.rootWasFocused) this.focusSequence = ++windowFocusSequence
+      this.rootWasFocused = focusWithin
+      this.updateDockContexts()
+      this.publish()
+    })
   private state: ControllerState
   private listeners = new Set<() => void>()
   private handles = new Map<string, TerminalPaneHandle>()
@@ -153,6 +174,22 @@ export class WorkspaceController {
   private mountedAccessories: Record<string, string[]> = {}
   /** Receives the view report whenever it changes. */
   onReport: ((report: ViewReport) => void) | null = null
+
+  get root(): HTMLElement | null {
+    return this.rootElement
+  }
+
+  set root(element: HTMLElement | null) {
+    if (this.rootElement === element) return
+    this.rootElement?.removeEventListener('focusin', this.onRootFocusChange, true)
+    this.rootElement?.removeEventListener('focusout', this.onRootFocusChange, true)
+    this.rootElement = element
+    this.rootElement?.addEventListener('focusin', this.onRootFocusChange, true)
+    this.rootElement?.addEventListener('focusout', this.onRootFocusChange, true)
+    this.rootWasFocused = this.hasRootFocus()
+    if (this.rootWasFocused) this.focusSequence = ++windowFocusSequence
+    this.updateDockContexts()
+  }
 
   constructor(
     readonly context: UiPluginContext,
@@ -177,6 +214,8 @@ export class WorkspaceController {
       preview: null,
       dragging: false,
       paneStates: {},
+      dockStates: {},
+      dockHosts: {},
       focusFlash: null,
       tabDrag: null,
       paneDrag: null
@@ -198,6 +237,7 @@ export class WorkspaceController {
     this.state = { ...this.state, ...patch }
     for (const listener of [...this.listeners]) listener()
     this.publish()
+    this.updateDockContexts()
   }
 
   /** The workspace's ID: the daemon's once loaded, else the selector. */
@@ -232,6 +272,13 @@ export class WorkspaceController {
     for (const unsubscribe of this.unsubscribes.splice(0)) unsubscribe()
     this.listeners.clear()
     this.handles.clear()
+    if (dockContextOwner === this) {
+      dockContextOwner = null
+      this.writeDockContextValues(false, false, false)
+    }
+    this.rootElement?.removeEventListener('focusin', this.onRootFocusChange, true)
+    this.rootElement?.removeEventListener('focusout', this.onRootFocusChange, true)
+    this.rootElement = null
     this.onReport = null
   }
 
@@ -407,6 +454,49 @@ export class WorkspaceController {
     this.set({ paneStates: { ...this.state.paneStates, [paneId]: report } })
   }
 
+  setDockState(paneId: string, dock: DockState): void {
+    const previous = this.state.dockStates[paneId]
+    if (
+      previous &&
+      previous.revision === dock.revision &&
+      previous.gutterRows === dock.gutterRows &&
+      previous.agent === dock.agent &&
+      previous.userUndocked === dock.userUndocked &&
+      previous.enabled === dock.enabled &&
+      previous.supported === dock.supported &&
+      previous.docked === dock.docked &&
+      previous.mounted === dock.mounted &&
+      previous.passthrough === dock.passthrough
+    ) {
+      return
+    }
+    this.set({ dockStates: { ...this.state.dockStates, [paneId]: dock } })
+  }
+
+  clearDockState(paneId: string): void {
+    if (!(paneId in this.state.dockStates)) return
+    const { [paneId]: _dock, ...dockStates } = this.state.dockStates
+    this.set({ dockStates })
+  }
+
+  setDockHostState(paneId: string, mounted: boolean, focused: boolean, composerFocused: boolean): void {
+    const previous = this.state.dockHosts[paneId]
+    if (previous?.mounted === mounted && previous.focused === focused && previous.composerFocused === composerFocused) return
+    this.set({ dockHosts: { ...this.state.dockHosts, [paneId]: { mounted, focused, composerFocused } } })
+  }
+
+  clearDockHostState(paneId: string): void {
+    if (!(paneId in this.state.dockHosts)) return
+    const { [paneId]: _host, ...dockHosts } = this.state.dockHosts
+    this.set({ dockHosts })
+  }
+  canFocusDock(paneId: string): boolean {
+    const document = this.root?.ownerDocument
+    // Closing a pane menu temporarily returns focus to body; retain its known owner, not a background pane.
+    const transientBodyFocus = document?.activeElement === document?.body && this.focusSequence > 0 && focusedController() === this
+    return (this.hasRootFocus() || transientBodyFocus) && this.ws !== null && focusedPaneOf(this.ws)?.leaf.id === paneId
+  }
+
   private handleOf(paneId?: string): TerminalPaneHandle | undefined {
     const target = paneId ?? (this.ws ? focusedPaneOf(this.ws)?.leaf.id : undefined)
     return target === undefined ? undefined : this.handles.get(target)
@@ -422,10 +512,14 @@ export class WorkspaceController {
     handle.scrollToBottom()
   }
 
-  /** Gives keyboard focus back to the focused pane after the layout changed under it; a text field that holds focus keeps it. */
+  /** Gives keyboard focus back to the focused pane after the layout changed under it; a text field or dock owner keeps it. */
   refocus(): void {
     const { menu, dialog, rename } = this.state
     if (menu || dialog || rename || !this.ws) return
+    const pane = focusedPaneOf(this.ws)?.leaf.id
+    const dock = pane ? this.state.dockStates[pane] : undefined
+    const host = pane ? this.state.dockHosts[pane] : undefined
+    if (dock?.enabled && dock.supported && dock.docked && dock.mounted && host?.mounted && !dock.passthrough) return
     const active = this.root?.ownerDocument.activeElement
     if (this.floating && (!active || active === this.root?.ownerDocument.body)) return
     if (active && active !== this.root?.ownerDocument.body && !this.root?.contains(active)) return
@@ -899,6 +993,18 @@ export class WorkspaceController {
       { label: 'Split Terminal Right', key: '⌘D', onSelect: () => void this.splitRight(paneId) },
       { label: 'Split Terminal Down', key: '⌘⇧D', onSelect: () => void this.splitDown(paneId) }
     ]
+    const dock = this.state.dockStates[paneId]
+    if (this.state.sessions[leaf.session]?.kind === 'terminal' && dock?.enabled && dock.supported) {
+      items.push(SEPARATOR, {
+        label: dock.docked ? 'Hide agent composer' : 'Show agent composer',
+        key: '⌘⇧K',
+        onSelect: () => {
+          void this.context
+            .executeCommand('command:quirky.terminal-dock/toggle', { pane: paneId })
+            .catch((error) => this.context.toast('Could not toggle the agent composer', messageOf(error)))
+        }
+      })
+    }
     if (split) {
       items.push(
         { label: 'Equalize Pane Sizes', onSelect: () => void this.equalize(tab.id) },
@@ -1132,7 +1238,9 @@ export class WorkspaceController {
       visibleSessions: ws ? visibleSessionsOf(ws) : [],
       layout: ws,
       focusedPane: focused?.leaf.id ?? null,
-      panes: ws ? panesReport(ws, this.state.paneStates, this.state.settings['font-size']) : [],
+      focused: this.hasRootFocus(),
+      focusSequence: this.focusSequence,
+      panes: ws ? panesReport(ws, this.state.paneStates, this.state.settings['font-size'], this.state.dockStates) : [],
       mountedAccessories: this.mountedAccessories,
       menu: menu
         ? {
@@ -1145,6 +1253,50 @@ export class WorkspaceController {
     }
   }
 
+  private hasRootFocus(): boolean {
+    const root = this.rootElement
+    const active = root?.ownerDocument.activeElement
+    return Boolean(root && active && active !== root.ownerDocument.body && root.contains(active))
+  }
+
+  private updateDockContexts(): void {
+    if (!this.hasRootFocus()) {
+      if (dockContextOwner && !dockContextOwner.hasRootFocus()) {
+        const previousOwner = dockContextOwner
+        dockContextOwner = null
+        previousOwner.writeDockContextValues(false, false, false)
+      }
+      return
+    }
+
+    if (dockContextOwner && dockContextOwner !== this) dockContextOwner.writeDockContextValues(false, false, false)
+    dockContextOwner = this
+    const pane = this.ws ? focusedPaneOf(this.ws)?.leaf.id : undefined
+    const dock = pane ? this.state.dockStates[pane] : undefined
+    const host = pane ? this.state.dockHosts[pane] : undefined
+    const eligible = Boolean(dock?.enabled && dock.supported && host?.focused)
+    const mounted = eligible && Boolean(dock?.docked && dock.mounted && host?.mounted)
+    const focused = mounted && Boolean(!dock?.passthrough && host?.composerFocused)
+    this.writeDockContextValues(eligible, mounted, focused)
+  }
+
+  private writeDockContextValues(eligible: boolean, mounted: boolean, focused: boolean): void {
+    if (this.dockContextEligible !== eligible) {
+      this.dockContextEligible = eligible
+      this.context.setContext('terminalDockEligible', eligible)
+    }
+    if (this.dockContextMounted !== mounted) {
+      this.dockContextMounted = mounted
+      this.context.setContext('terminalDockMounted', mounted)
+    }
+    if (this.dockContextFocus !== focused) {
+      this.dockContextFocus = focused
+      this.context.setContext('terminalDockFocus', focused)
+    }
+  }
+
+
+
   private publish(): void {
     if (!this.onReport || this.state.status === 'loading' || this.stopped) return
     const report = this.report()
@@ -1154,3 +1306,5 @@ export class WorkspaceController {
     this.onReport(report)
   }
 }
+let dockContextOwner: WorkspaceController | null = null
+let windowFocusSequence = 0

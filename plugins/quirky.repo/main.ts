@@ -19,7 +19,7 @@ export function activate(context: PluginContext): void {
   provide('create', (params) => createRepo(env, params as Parameters<typeof createRepo>[1]))
   provide('scan', (params) => scan(env, params as Parameters<typeof scan>[1]))
   provide('import', (params) => importRepos(env, params as Parameters<typeof importRepos>[1]))
-  provide('remove', (params) => removeRepo(env, String(params.repo)))
+  provide('remove', (params) => removeRepo(env, String(params.repo), params.expectedLedgers as { ledgerId: string; revision: number }[] | undefined))
   provide('resolve', (params) => env.resolve(String(params.selector)))
   provide('show', (params) => settings.show(env, params as Parameters<typeof settings.show>[1]))
   provide('set', (params) => settings.set(env, params as settings.SetParams))
@@ -27,7 +27,9 @@ export function activate(context: PluginContext): void {
   provide('trustHooks', (params) => settings.trustHooks(env, params as Parameters<typeof settings.trustHooks>[1]))
 
   provide('groupList', () => groups.groupList(env))
+  provide('groupDeletedIds', () => groups.groupDeletedIds(env))
   provide('groupCreate', (params) => groups.groupCreate(env, params as Parameters<typeof groups.groupCreate>[1]))
+  provide('groupSetParent', (params) => groups.groupSetParent(env, params as Parameters<typeof groups.groupSetParent>[1]))
   provide('groupRename', (params) => groups.groupRename(env, params as Parameters<typeof groups.groupRename>[1]))
   provide('groupDelete', (params) => groups.groupDelete(env, params as Parameters<typeof groups.groupDelete>[1]))
   provide('groupAdd', (params) => groups.groupAdd(env, params as Parameters<typeof groups.groupAdd>[1]))

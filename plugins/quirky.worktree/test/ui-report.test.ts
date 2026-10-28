@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import type { ProjectGroup, Repo, Session, Worktree } from '@quirky/protocol'
-import { buildReport, type ReportInput } from '../src/report'
+import { buildReport, projectSeparatorBoundaries, type ReportInput } from '../src/report'
 
 const WORKTREE_DEFAULTS = {
   kind: 'git',
@@ -15,7 +15,9 @@ const WORKTREE_DEFAULTS = {
   baseRef: null,
   keepBranch: false,
   removing: false,
-  groupId: null
+  groupId: null,
+  projectGroupId: null,
+  lastActivityAt: 0
 } as const
 
 const repo = (id: string, name: string, extra: Partial<Repo> = {}): Repo => ({
@@ -37,6 +39,7 @@ const worktree = (id: string, repoId: string, name: string, extra: Partial<Workt
   head: 'abc',
   isMain: false,
   name,
+  instanceId: id,
   ...WORKTREE_DEFAULTS,
   ...extra
 })
@@ -48,6 +51,7 @@ const group = (id: string, name: string, repoIds: string[], extra: Partial<Proje
   collapsed: false,
   order: 0,
   createdFrom: 'manual',
+  parentId: null,
   repoIds,
   ...extra
 })
@@ -77,6 +81,12 @@ const input = (extra: Partial<ReportInput>): ReportInput => ({
   pending: [],
   dialog: null,
   ...extra
+})
+
+test('separator projection excludes leading and sticky boundaries', () => {
+  const sections = ['pinned', 'group:team', 'repo:notes', 'repo:web']
+  expect(projectSeparatorBoundaries(sections, new Set(['repo:notes']), true)).toEqual(['group:team'])
+  expect(projectSeparatorBoundaries(sections, new Set(), false)).toEqual([])
 })
 
 test('SC-44: the report nests children under their parent with depth, and the primary comes first', () => {

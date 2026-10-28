@@ -14,6 +14,7 @@ import {
   termOf,
   viewReport,
   waitFor,
+  waitReady,
   waitForScreen,
   type Features
 } from './features-support'
@@ -58,15 +59,19 @@ test(
     expect((await h.json<PtySnapshot>(['terminal', 'snapshot', session])).modes.mouseTracking).toBe(true)
     expect(term.modes.mouseTrackingMode).not.toBe('none')
 
-    await h.run(session, 'echo kept-text')
+    await waitReady(h, session)
+    const commandOutput = await h.run(session, 'echo kept-text')
+    const resetMarker = commandOutput.filter((line) => /^@@\d+@@$/.test(line)).at(-1)!
     await waitForScreen(f, session, 'kept-text', (lines) => lines.includes('kept-text'))
-    const before = bufferLines(term)
+    // The shell-computed marker follows the content without appearing in the typed command.
+    await waitForScreen(f, session, resetMarker, (lines) => lines.includes(resetMarker))
     expect(await runCommand(f, 'reset-terminal')).toEqual({ ok: true })
     await waitFor('modes off in the pane', () => (term.modes.mouseTrackingMode === 'none' ? true : undefined))
     const modes = (await h.json<PtySnapshot>(['terminal', 'snapshot', session])).modes
     expect(modes).toMatchObject({ mouseTracking: false, bracketedPaste: false, applicationCursor: false })
     expect(term.modes.bracketedPasteMode).toBe(false)
-    expect(bufferLines(term)).toEqual(before)
+    expect(bufferLines(term)).toContain(resetMarker)
+    expect(bufferLines(term)).toContain('kept-text')
     expect(await h.screen(session)).toContain('kept-text')
   },
   FEATURE_MS

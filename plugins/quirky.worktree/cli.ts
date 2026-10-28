@@ -1,4 +1,4 @@
-import type { CliArgs, CliContext, CliModule, Worktree, WorktreeCreateResult, WorktreeRemoveResult } from '@quirky/protocol'
+import type { CliArgs, CliContext, CliModule, ProjectGroup, Worktree, WorktreeCreateResult, WorktreeRemoveResult } from '@quirky/protocol'
 
 const worktreeRecord = (ctx: CliContext, worktree: Worktree) =>
   ctx.format.record([
@@ -93,8 +93,11 @@ const named: CliModule['commands'] = {
     const pinned = toggle(args, ctx, 'pin', 'unpin')
     const unread = toggle(args, ctx, 'unread', 'read')
     const parent = stringFlag(args, 'parent-worktree')
+    const projectGroupId = stringFlag(args, 'project-group')
     const noParent = args.flags['no-parent'] === true
+    const noProjectGroup = args.flags['no-project-group'] === true
     if (parent !== undefined && noParent) throw ctx.usage('--parent-worktree and --no-parent cannot be used together')
+    if (projectGroupId !== undefined && noProjectGroup) throw ctx.usage('--project-group and --no-project-group cannot be used together')
     const changes: Record<string, unknown> = {
       ...(stringFlag(args, 'display-name') !== undefined ? { displayName: stringFlag(args, 'display-name') } : {}),
       ...(stringFlag(args, 'comment') !== undefined ? { comment: stringFlag(args, 'comment') } : {}),
@@ -102,15 +105,31 @@ const named: CliModule['commands'] = {
       ...(pinned !== undefined ? { pinned } : {}),
       ...(unread !== undefined ? { unread } : {}),
       ...(parent !== undefined ? { parent } : {}),
-      ...(noParent ? { noParent: true } : {})
+      ...(noParent ? { noParent: true } : {}),
+      ...(projectGroupId !== undefined ? { projectGroupId } : {}),
+      ...(noProjectGroup ? { projectGroupId: null } : {})
     }
     if (Object.keys(changes).length === 0) {
       throw ctx.usage(
-        'nothing to set; pass at least one of --display-name, --comment, --workspace-status, --pin, --unpin, --unread, --read, --parent-worktree, --no-parent'
+        'nothing to set; pass at least one of --display-name, --comment, --workspace-status, --pin, --unpin, --unread, --read, --parent-worktree, --no-parent, --project-group, --no-project-group'
       )
     }
     const updated = (await ctx.call('quirky.worktree/set', { worktree, ...changes })) as Worktree
     ctx.out.result(updated, () => worktreeRecord(ctx, updated))
+  },
+
+  async 'create-group'(args, ctx) {
+    const [selector, name] = args.positionals as [string, string]
+    const worktree = (await ctx.call('quirky.worktree/resolve', { selector })) as Worktree
+    const result = (await ctx.call('quirky.worktree/createGroup', {
+      worktree: selector,
+      name,
+      expectedInstanceId: worktree.instanceId,
+      expectedProjectGroupId: worktree.projectGroupId
+    })) as { group: ProjectGroup; worktree: Worktree; assigned: boolean; reason?: string }
+    ctx.out.result(result, () => result.assigned
+      ? `created group ${result.group.name} and moved ${result.worktree.name}`
+      : `created group ${result.group.name} but did not move ${result.worktree.name}: ${result.reason}`)
   },
 
   async show(args, ctx) {

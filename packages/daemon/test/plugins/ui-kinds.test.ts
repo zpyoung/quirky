@@ -21,19 +21,19 @@ const contributes = (kind: string, entry: Record<string, unknown>) => ({ contrib
 const errorsFor = (kind: string, entry: Record<string, unknown>) => errorsOf(contributes(kind, entry))
 const accepts = (kind: string, entry: Record<string, unknown>) => result(contributes(kind, entry)).ok
 
-describe('sidebar-section and panel entries', () => {
-  test.each(['sidebar-section', 'panel'])('%s accepts title, description and order', (kind) => {
+describe('activity-item, sidebar-section and panel entries', () => {
+  test.each(['sidebar-section', 'activity-item', 'panel'])('%s accepts title, description and order', (kind) => {
     expect(accepts(kind, { id: 'list', title: 'List', description: 'd', order: 10 })).toBe(true)
     expect(accepts(kind, { id: 'list', title: 'List', order: -1.5 })).toBe(true)
   })
 
-  test.each(['sidebar-section', 'panel'])('%s requires a non-empty title', (kind) => {
+  test.each(['sidebar-section', 'activity-item', 'panel'])('%s requires a non-empty title', (kind) => {
     expect(errorsFor(kind, { id: 'list' })).toEqual([`${kind} list: title is required`])
     expect(errorsFor(kind, { id: 'list', title: '' })).toEqual([`${kind} list: title must be a non-empty string`])
     expect(errorsFor(kind, { id: 'list', title: 3 })).toEqual([`${kind} list: title must be a non-empty string`])
   })
 
-  test.each(['sidebar-section', 'panel'])('%s order must be a finite number', (kind) => {
+  test.each(['sidebar-section', 'activity-item', 'panel'])('%s order must be a finite number', (kind) => {
     for (const order of ['high', null, true]) {
       expect(errorsFor(kind, { id: 'p', title: 'P', order })).toEqual([`${kind} p: order must be a number`])
     }
@@ -178,6 +178,18 @@ describe('setting entries', () => {
     expect(accepts('setting', setting({ type: 'number', default: 5, minimum: 1, maximum: 10 }))).toBe(true)
     expect(accepts('setting', setting({ type: 'number', default: 5, minimum: 5, maximum: 5 }))).toBe(true)
     expect(accepts('setting', setting({ type: 'enum', default: 'a', values: ['a', 'b'] }))).toBe(true)
+  })
+
+  test('category and section are optional non-empty strings', () => {
+    expect(accepts('setting', setting({ type: 'boolean', default: true, category: 'Appearance', section: 'Window & Sidebar' }))).toBe(true)
+    for (const field of ['category', 'section']) {
+      expect(errorsFor('setting', setting({ type: 'boolean', default: true, [field]: '' }))).toEqual([
+        `setting s: ${field} must be a non-empty string`,
+      ])
+      expect(errorsFor('setting', setting({ type: 'boolean', default: true, [field]: 1 }))).toEqual([
+        `setting s: ${field} must be a non-empty string`,
+      ])
+    }
   })
 
   test('type must be one of the four', () => {

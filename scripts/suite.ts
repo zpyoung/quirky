@@ -19,7 +19,7 @@
  */
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
-import { basename, dirname, isAbsolute, join } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative } from 'node:path'
 import { createProcessScope, type ProcessScope } from './test-support/process-scope'
 
 export type SuiteResult = { ok: boolean; flaky: string[] }
@@ -28,6 +28,8 @@ type Run = (cwd: string, args: string[]) => Promise<{ code: number; output: stri
 
 const TEST_FILE = /[._](test|spec)\.[cm]?[jt]sx?$/
 const RESULT_PREFIX = 'suite-result '
+const FILE_PROFILE_PREFIX = 'suite-file '
+const SLOT_BUSY = 75
 const MACOS_LIST = 'scripts/test-on-macos.txt'
 
 async function tee(stream: ReadableStream<Uint8Array>, out: NodeJS.WriteStream | null): Promise<string> {
@@ -42,7 +44,10 @@ async function tee(stream: ReadableStream<Uint8Array>, out: NodeJS.WriteStream |
   }
 }
 
-async function exec(cmd: string[], cwd: string, echo = true, stdin?: string, scope: ProcessScope = createProcessScope()): Promise<{ code: number; output: string }> {
+async function exec(cmd: string[], cwd: string, echo = true, stdin?: string, scope: ProcessScope = createProcessScope(), profileFile?: string): Promise<{ code: number; output: string }> {
+  const profile = process.env.QUIRKY_TEST_PROFILE === '1' && profileFile
+    ? { file: profileFile, began: performance.now() }
+    : undefined
   try {
     const options = {
       cwd,
@@ -54,17 +59,30 @@ async function exec(cmd: string[], cwd: string, echo = true, stdin?: string, sco
     const child = scope.spawn(cmd, options)
     const streams = Promise.all([tee(child.stdout, echo ? process.stdout : null), tee(child.stderr, echo ? process.stderr : null)])
     const code = await child.exited
+    // Bun reports wait4-style usage for the child and waited-for descendants, not guardian CPU or an all-host metric.
+    // Its CPU counters are microseconds; convert to milliseconds like the wall clock below.
+    const usage = profile ? child.resourceUsage() : undefined
     // A leaked child may still hold a pipe open. Reap the tree before waiting for EOF.
     await scope.cleanup()
     const [out, err] = await streams
+    if (profile && !(cmd[0] === 'flock' && code === SLOT_BUSY)) {
+      const file = isAbsolute(profile.file) ? relative(cwd, profile.file) : profile.file.replace(/^\.\//, '')
+      process.stdout.write(`${FILE_PROFILE_PREFIX}${JSON.stringify({
+        file,
+        wallMs: performance.now() - profile.began,
+        userCpuMs: Number(usage?.cpuTime.user ?? 0) / 1000,
+        systemCpuMs: Number(usage?.cpuTime.system ?? 0) / 1000,
+        exitCode: code
+      })}\n`)
+    }
     return { code, output: out + err }
   } finally {
     await scope.cleanup()
   }
 }
 
-const bunTest = (cwd: string, args: string[], echo = true) =>
-  exec(['bun', 'test', ...args], cwd, echo, undefined, createProcessScope())
+const bunTest = (cwd: string, args: string[], echo = true, profileFile?: string) =>
+  exec(['bun', 'test', ...args], cwd, echo, undefined, createProcessScope(), profileFile)
 const asPath = (file: string) => (isAbsolute(file) ? file : `./${file}`)
 
 /** Files with a failing test in a junit report, and how many tests failed in all. */
@@ -93,10 +111,10 @@ function recordFlakes(cwd: string, files: string[]): void {
 }
 
 /** Reruns `failed` alone, one at a time; the run passes only if every one of them now passes. */
-async function rerunAlone(cwd: string, failed: string[], flags: string[], limit: number): Promise<SuiteResult> {
+async function rerunAlone(cwd: string, failed: string[], flags: string[], limit: number, profileFiles = false): Promise<SuiteResult> {
   if (failed.length > limit) return { ok: false, flaky: [] }
   console.error(`\nrerunning ${failed.length} failing file(s) alone: ${failed.join(', ')}`)
-  for (const file of failed) if ((await bunTest(cwd, [...flags, asPath(file)])).code !== 0) return { ok: false, flaky: [] }
+  for (const file of failed) if ((await bunTest(cwd, [...flags, asPath(file)], true, profileFiles ? file : undefined)).code !== 0) return { ok: false, flaky: [] }
   console.error(`\npassed alone, so failed only under load: ${failed.join(', ')}`)
   recordFlakes(cwd, failed)
   return { ok: true, flaky: failed }
@@ -126,7 +144,7 @@ export async function runFiles(
   flags: string[],
   jobs: number,
   limit = 5,
-  run: Run = (dir, args) => bunTest(dir, args, false)
+  run: Run = (dir, args) => bunTest(dir, args, false, args.at(-1))
 ): Promise<SuiteResult> {
   const failed: string[] = []
   const queue = [...files]
@@ -143,7 +161,7 @@ export async function runFiles(
   }
   await Promise.all(Array.from({ length: Math.max(1, jobs) }, worker))
   console.log(`\n${files.length} test files: ${passed} passed, ${failed.length} failed`)
-  return failed.length === 0 ? { ok: true, flaky: [] } : rerunAlone(cwd, failed.sort(), flags, limit)
+  return failed.length === 0 ? { ok: true, flaky: [] } : rerunAlone(cwd, failed.sort(), flags, limit, true)
 }
 
 /** How many of the host's slots a run may take: all of them, or one while a land runs and this isn't it. */
@@ -195,9 +213,8 @@ function slotted(slots: number, priority: boolean, log: string): Run {
     writeFileSync(marker, '')
     process.on('exit', () => rmSync(marker, { force: true }))
   }
-  const BUSY = 75
   // a process scope starts a guardian process, so probe a slot with a bare flock before paying for one
-  const free = (lock: string) => Bun.spawnSync(['flock', '-n', '-E', String(BUSY), lock, 'true']).exitCode === 0
+  const free = (lock: string) => Bun.spawnSync(['flock', '-n', '-E', String(SLOT_BUSY), lock, 'true']).exitCode === 0
   return async (cwd, args) => {
     for (;;) {
       const usable = usableSlots(slots, priority, !priority && landRunning(dir))
@@ -206,8 +223,8 @@ function slotted(slots: number, priority: boolean, log: string): Run {
         const lock = join(dir, `${(start + i) % usable}.lock`)
         if (!free(lock)) continue
         const began = Date.now()
-        const result = await exec(['flock', '-n', '-E', String(BUSY), lock, 'bun', 'test', ...args], cwd, false, undefined, createProcessScope())
-        if (result.code === BUSY) continue
+        const result = await exec(['flock', '-n', '-E', String(SLOT_BUSY), lock, 'bun', 'test', ...args], cwd, false, undefined, createProcessScope(), args.at(-1))
+        if (result.code === SLOT_BUSY) continue
         appendFileSync(log, `${args.at(-1)?.replace(/^\.\//, '')} ${Date.now() - began}\n`)
         return result
       }
@@ -256,7 +273,8 @@ async function runRemote(cwd: string, remote: Remote, files: string[], flags: st
       return undefined
     }
     const quoted = flags.map((flag) => `'${flag.replaceAll("'", `'\\''`)}'`).join(' ')
-    const script = `export PATH="$HOME/.bun/bin:$PATH" && cd ${dir} && bun install --frozen-lockfile >/dev/null && bun scripts/suite.ts --worker --jobs ${land ? (remote.slots ?? 8) : (remote.jobs ?? 4)} --slots ${remote.slots ?? 8} --land ${land ? 1 : 0} ${quoted}`
+    const profileExport = process.env.QUIRKY_TEST_PROFILE === '1' ? 'export QUIRKY_TEST_PROFILE=1 && ' : ''
+    const script = `export PATH="$HOME/.bun/bin:$PATH" && ${profileExport}cd ${dir} && bun install --frozen-lockfile >/dev/null && bun scripts/suite.ts --worker --jobs ${land ? (remote.slots ?? 8) : (remote.jobs ?? 4)} --slots ${remote.slots ?? 8} --land ${land ? 1 : 0} ${quoted}`
     const run = await exec([...ssh, script], cwd, true, files.join('\n'))
     const line = run.output.split('\n').find((text) => text.startsWith(RESULT_PREFIX))
     return line ? (JSON.parse(line.slice(RESULT_PREFIX.length)) as SuiteResult) : undefined
@@ -278,7 +296,13 @@ async function main(argv: string[]): Promise<boolean> {
     return result.ok
   }
   const remote = remoteConfig(cwd)
-  if (!remote) return (await runSuite(cwd, argv)).ok
+  if (!remote) {
+    if (process.env.QUIRKY_TEST_PROFILE === '1') {
+      const flags = argv.filter((arg) => arg.startsWith('-'))
+      return (await runFiles(cwd, discover(cwd, argv), flags, 1)).ok
+    }
+    return (await runSuite(cwd, argv)).ok
+  }
   const flags = argv.filter((arg) => arg.startsWith('-'))
   const macos = macosOnly(join(cwd, MACOS_LIST))
   const files = discover(cwd, argv)

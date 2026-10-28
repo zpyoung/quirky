@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { base64ToBytes, encodePtyJson, PTY_PROTOCOL_VERSION, PtyFrameDecoder } from '@quirky/protocol'
+import { readSegments } from '../src/history/log'
 import type { PtyClient } from '../src/client'
 import { createScopedSession, ready, runCleanups, startProcess, tempHome, text, waitFor } from './helpers'
 
@@ -166,7 +167,10 @@ describe('quirky-pty process', () => {
     startProcess(home)
     const { client, token } = await ready(home)
     await createScopedSession(client, home, params('busy', ['/bin/sh', '-c', 'while :; do echo tick; done']))
-    await Bun.sleep(100)
+    await waitFor(async () => {
+      const { lines } = await client.request('read', { sessionId: 'busy', lines: 10 })
+      return lines.some((line) => line.trim() === 'tick')
+    }, 5000, 'busy PTY output')
 
     const order: string[] = []
     const decoder = new PtyFrameDecoder()
@@ -198,7 +202,19 @@ describe('quirky-pty process', () => {
     const one = await ready(home)
     await createScopedSession(one.client, home, params('s', ['/bin/sh', '-c', 'echo marker-before-crash; exec cat']))
     await waitFor(async () => (await one.client.request('read', { sessionId: 's', lines: 10 })).lines.join('\n').includes('marker-before-crash'), 5000, 'marker')
-    await Bun.sleep(500)
+    const sessionDir = join(home, 'sessions', 's')
+    await waitFor(() => {
+      const metaPath = join(sessionDir, 'meta.json')
+      const logPath = join(sessionDir, 'output.log')
+      if (!existsSync(metaPath) || !existsSync(logPath)) return false
+      const meta = JSON.parse(readFileSync(metaPath, 'utf8')) as { sessionId?: string; endedAt?: number | null }
+      const output = readSegments(sessionDir).segments
+        .flatMap((segment) => segment.records)
+        .filter((record) => record.kind === 'output')
+        .map((record) => text(record.bytes!))
+        .join('')
+      return meta.sessionId === 's' && meta.endedAt === null && output.includes('marker-before-crash')
+    }, 5000, 'persisted session metadata and output')
     first.kill('SIGKILL')
     await first.exited
 
