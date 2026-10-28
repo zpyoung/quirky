@@ -176,5 +176,16 @@
 - **Revisit if:** Canonical land names a concrete new conflict/type error or an end-phase case breaks these owners.
 - **Source:** locked by incoming decision logs and docs/loop/LOOP.md
 
+## D17: Register exactly one source-implementation successor
+- **Question:** Which remaining work may stay queued when this item lands?
+- **Options:** Silently omit obligations; add separate test/review/debug tasks; register one explicit product implementation remainder.
+- **Chose:** Canonical queue add registered m7-terminal-provider-host-and-worktree-remainder, status todo, depending on this item. Its title and this spec name every remaining provider/remote-grant/native/worktree/terminal/naming flow and prerequisites, including custom-status icon/avatar choices. Preserve incoming phone origins/parking/recovery/tabs and existing peer/federation/automation/native owners; do not duplicate them. No second successor.
+- **Why:** Build-first permits one successor only for genuinely unbuilt flows. Native pending scenarios and authored acceptance belong to the existing end phase, not this successor.
+- **Evidence:** Absolute canonical queue add exited0; authoritative integration queue read confirmed exact id/title/docs/dependency/status. Caught-up source merge a820291b passed D16's typecheck and actual runtime proof before this documentation-only record.
+- **Reversibility:** easy
+- **Confidence:** high for registration and observed checks only
+- **Revisit if:** The canonical merged-source gate names a conflict or type error.
+- **Source:** deferred: remaining provider, remote authorization, native, worktree and terminal implementation flows
+
 ## Progress
-Contracts740ff1b0, parent6276f05b, authority31a8ccf7, worktreeeecab33a, CLI/native35b193b5 and final integrationaafde17b are committed. The single roadmap merge's five conflicted files are resolved additively; D16 records all four incoming logs and caught-up typecheck/runtime evidence. All owned workers/services/browser and component trees stopped/removed; V6/V7/V8 homes and the V8 created checkout are absent. Native scenarios remain pending; permanent suites/reviews/dogfood unrun. Next: commit the resolved merge/docs, register the one prepared implementation-only successor, record receipt, detach and canonical land. End after this item's receipt; no new claim.
+Implementation and additive canonical catch-up are committed through a820291b. D16 records all four incoming logs, root/mobile typecheck25.09s and fresh composed daemon/PTY/CLI proof. D17's single implementation-only successor is registered. All owned workers/services/browser and component trees stopped/removed; smoke homes/checkouts are absent. Native scenarios remain pending; permanent suites/reviews/dogfood unrun. Next: commit this final receipt, detach and canonical land; on an actual named controller failure follow LOOP7.3. After success remove owned /tmp scratch, update ignored loop notes and end this one item without another claim.
