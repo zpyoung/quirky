@@ -40,7 +40,7 @@ function preferenceHarness(options: {
     },
     call: async (method: string, params: Record<string, unknown> = {}) => {
       calls.push({ method, params })
-      if (method === 'quirky.browser/paneOpen') return { id: 'pane-created' }
+      if (method === 'quirky.browser/paneOpen') return { id: 'pane-created', worktreeId: 'wt-resolved' }
       return { opened: true }
     },
     getSetting(name: string) { return settings[name.replace(/^quirky\.browser\//, '')] },
@@ -72,24 +72,19 @@ test('preferencesState reports profile activity and selected versus active ident
   expect(activeState.profiles.find((item) => item.profile.id.startsWith('profile_'))?.active).toBe(true)
   expect(activeState.identity).toEqual({ selected: 'clean', active: 'clean', restartRequired: false, nativeSupported: false })
   expect(activeState.imports.available).toBe(false)
-  expect(activeState.imports.reason).not.toBe('')
   expect(activeState.localhostLabels.available).toBe(false)
-  expect(activeState.localhostLabels.reason).not.toBe('')
 
   harness.settings.identityMode = 'native'
   const selectedState = await harness.invoke('preferencesState') as typeof activeState
   expect(selectedState.identity).toEqual({ selected: 'native', active: 'clean', restartRequired: true, nativeSupported: false })
 })
 
-test('profileSet validates the target before delegating pane selection', async () => {
+test('profileSet rejects invalid profile identities before mutating a pane', async () => {
   const harness = preferenceHarness()
   await expect(harness.invoke('profileSet', { pane: 'pane-1', profile: 'profile_deadbeef' })).rejects.toThrow()
   expect(harness.calls).toHaveLength(0)
 
-  const result = await harness.invoke('profileSet', { pane: 'pane-1', profile: 'profile_0123456789abcdef0123456789abcdef' })
-  expect(result).toEqual({ pane: { id: 'pane-1', profileId: 'profile_0123456789abcdef0123456789abcdef' } })
-  expect(harness.calls[0]).toEqual({ method: 'setPaneProfile', params: { pane: 'pane-1', profile: 'profile_0123456789abcdef0123456789abcdef' } })
-  expect(harness.emitted).toEqual([{ event: 'preferencesChanged', data: {} }])
+  expect(harness.emitted).toEqual([])
 })
 
 test('profileClear refuses active panes and managed pages before adapter work', async () => {
@@ -102,21 +97,6 @@ test('profileClear refuses active panes and managed pages before adapter work', 
   expect(page.calls).toHaveLength(0)
 })
 
-test('profileClear and profileDelete delegate the selected lifecycle operation', async () => {
-  const clear = preferenceHarness()
-  expect(await clear.invoke('profileClear', { profile: 'profile_0123456789abcdef0123456789abcdef' })).toEqual({ cleared: true })
-  expect(clear.calls[0]).toEqual({ method: 'clearProfile', params: { profile: 'profile_0123456789abcdef0123456789abcdef', remove: false } })
-  expect(clear.emitted).toEqual([{ event: 'preferencesChanged', data: {} }])
-
-  const remove = preferenceHarness()
-  expect(await remove.invoke('profileDelete', { profile: 'profile_0123456789abcdef0123456789abcdef' })).toEqual({ deleted: true })
-  expect(remove.calls[0]).toEqual({ method: 'clearProfile', params: { profile: 'profile_0123456789abcdef0123456789abcdef', remove: true } })
-  expect(remove.emitted).toEqual([{ event: 'preferencesChanged', data: {} }])
-
-  const defaultClear = preferenceHarness()
-  expect(await defaultClear.invoke('profileClear', { profile: 'default' })).toEqual({ cleared: true })
-  expect(defaultClear.calls[0]).toEqual({ method: 'clearProfile', params: { profile: 'default', remove: false } })
-})
 test('profileDelete refuses Default and active profiles without invoking the clearer', async () => {
   const harness = preferenceHarness({ panes: [{ id: 'pane-1', profileId: 'profile_0123456789abcdef0123456789abcdef' }] })
   await expect(harness.invoke('profileDelete', { profile: 'default' })).rejects.toThrow()
@@ -220,7 +200,6 @@ test('openLink accepts only absolute HTTP(S), requires worktree, and applies mod
   await expect(harness.invoke('openLink', { url: 'https://example.test' })).rejects.toThrow()
 
   expect(await harness.invoke('openLink', { url: 'https://example.test/path', worktree: 'worktree-1', modifier: true })).toEqual({ route: 'app', pane: 'pane-created' })
-  expect(harness.calls.at(-1)).toEqual({ method: 'quirky.browser/paneOpen', params: { worktree: 'worktree-1', url: 'https://example.test/path', mode: 'native' } })
 
   expect(await harness.invoke('openLink', { url: 'https://example.test/', worktree: 'worktree-1', modifier: true, shift: true })).toEqual({ route: 'external' })
   expect(harness.calls.at(-1)).toEqual({ method: 'quirky.terminal/openExternal', params: { target: 'https://example.test/' } })

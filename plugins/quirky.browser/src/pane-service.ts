@@ -823,18 +823,24 @@ export class PaneService {
     return this.copyTab(tab)
   }
 
-  private async paneClose(request: PaneRequests['paneClose'], caller: PluginCaller): Promise<{ closed: true }> {
+  private async paneClose(request: PaneRequests['paneClose'], caller: PluginCaller): Promise<true> {
     if (request.fromTab && (caller.role !== 'plugin' || caller.pluginId !== 'quirky.terminal')) {
       throw fault('invalid_argument', 'fromTab is reserved for the terminal hosted-tab close hook')
     }
     const tab = this.tabs.get(request.pane)
-    if (!tab) return { closed: true }
+    if (!tab) return true
+    if (request.fromTab && request.tabId !== tab.tabId) {
+      throw fault('invalid_argument', 'hosted-tab close identity does not match this browser pane')
+    }
+    if (!request.fromTab && request.tabId !== undefined) {
+      throw fault('invalid_argument', 'tabId is reserved for the terminal hosted-tab close hook')
+    }
     if (!request.fromTab && tab.tabId) {
       await this.context.call('quirky.terminal/closeTab', { tab: tab.tabId })
-      if (!this.tabs.has(tab.id)) return { closed: true }
+      if (!this.tabs.has(tab.id)) return true
     }
     await this.removePaneState(tab)
-    return { closed: true }
+    return true
   }
 
   private async removePaneState(tab: PaneTab): Promise<void> {

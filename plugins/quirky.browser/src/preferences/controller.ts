@@ -115,12 +115,13 @@ export const registerPreferences: RegisterPreferences = (context, adapters) => {
       }
 
       const pane = await context.call('quirky.browser/paneOpen', { worktree, url, mode: 'native' })
-      let paneId: unknown
-      if (pane && typeof pane === 'object' && !Array.isArray(pane) && 'id' in pane) paneId = pane.id
-      if (typeof paneId !== 'string' || paneId.length === 0) {
-        throw fault('browser_error', 'paneOpen did not return a pane identity')
+      if (pane === null || typeof pane !== 'object' || Array.isArray(pane) ||
+        !('id' in pane) || typeof pane.id !== 'string' || pane.id.length === 0 ||
+        !('worktreeId' in pane) || typeof pane.worktreeId !== 'string' || pane.worktreeId.length === 0) {
+        throw fault('browser_error', 'paneOpen did not return a pane and worktree identity')
       }
-      return { route: 'app', pane: paneId }
+      await context.call('ui.view.open', { id: 'view:quirky.session/worktree', input: { worktree: `id:${pane.worktreeId}` } })
+      return { route: 'app', pane: pane.id }
     }
   }
 

@@ -65,6 +65,8 @@ The automation methods are `profileList`, `profileCreate`, `tabList`, `tabShow`,
 
 Pane methods are `paneOpen`, `paneState`, `paneNavigate`, `paneControl`, `paneReport`, `paneClose`, `paneSuggestions`, `paneWatch`, `paneWatchStop`, `paneFrameAck`, `paneInput`, `paneRespond`, and `paneDownload`; they use the same Browser CLI group.
 
+`paneClose` returns boolean `true` for direct calls and terminal hosted-tab close hooks. Its `fromTab` and `tabId` fields are reserved for the terminal plugin's validated pre-close callback.
+
 Page commands support navigation, serializable JavaScript evaluation, accessibility snapshots, input fill, selector or current snapshot-reference click, and viewport PNG/JPEG screenshots. Snapshot references are page- and generation-bound; navigation, actual helper-tab switches, closure, and browser epoch loss invalidate them. `exec` is shell-free and accepts only `goto`, `eval`, `snapshot`, `fill`, `click`, and viewport `screenshot`; the documented `open` and `navigate` aliases normalize to `goto`. It cannot access arbitrary helper commands.
 
 ## Profiles and Browser settings

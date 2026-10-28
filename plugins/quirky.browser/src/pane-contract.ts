@@ -23,7 +23,7 @@ export type PaneRequests = {
   paneNavigate: { pane: string; input: string }
   paneControl: { pane: string; action: PaneCommand['action'] | 'viewport'; text?: string; forward?: boolean; level?: number; preset?: PaneViewport }
   paneReport: { pane: string; command?: string; url?: string; title?: string; loading?: boolean; error?: string | null; canGoBack?: boolean; canGoForward?: boolean; findCurrent?: number; findTotal?: number; tabId?: string }
-  paneClose: { pane: string; fromTab?: boolean }
+  paneClose: { pane: string; fromTab?: boolean; tabId?: string }
   paneSuggestions: { worktree: string; query: string }
   paneWatch: { pane: string }
   paneWatchStop: { pane: string; watchId: string }

@@ -46,6 +46,11 @@ test('profile menus API persists creation and switches only the requested hosted
     expect(preferences.profiles.find((entry) => entry.profile.id === id)?.active).toBe(true)
     const afterFailure = await call(h, 'paneState') as { tabs: PaneTab[] }
     expect(afterFailure.tabs.find((pane) => pane.id === first.id)?.profileId).toBe(id)
+    expect(await call(h, 'paneClose', { pane: first.id })).toBe(true)
+    const afterClose = await call(h, 'paneState') as { tabs: PaneTab[] }
+    expect(afterClose.tabs.map((pane) => pane.id)).toEqual([other.id])
+    const unused = await call(h, 'preferencesState') as PreferencesState
+    expect(unused.profiles.find((entry) => entry.profile.id === id)?.active).toBe(false)
     expect(h.spawnCount()).toBe(0)
   } finally { await h.cleanup() }
 })
@@ -121,7 +126,7 @@ test('Browser routing CLI opens an actual worktree hosted pane and exposes truth
   try {
     const worktree = await h.addFolderWorktree('BrowserLinks')
     await h.client.call('setting.set', { id: 'setting:quirky.browser/openLinksInApp', value: true })
-    const result = await cli(h, ['browser', 'open-link', '--url', 'https://example.test/from-markdown', '--worktree', worktree, '--json'])
+    const result = await cli(h, ['browser', 'open-link', '--url', 'https://example.test/from-markdown', '--worktree', 'name:BrowserLinks', '--json'])
     expect(result.code).toBe(0)
     const opened = JSON.parse(result.stdout) as { route: string; pane: string }
     expect(opened.route).toBe('app')
@@ -129,6 +134,8 @@ test('Browser routing CLI opens an actual worktree hosted pane and exposes truth
     const pane = state.tabs.find((item) => item.id === opened.pane)
     expect(pane).toMatchObject({ worktreeId: worktree, url: 'https://example.test/from-markdown', mode: 'native', profileId: 'default' })
     expect(typeof pane?.tabId).toBe('string')
+    const visible = await h.client.call('ui.state', {})
+    expect(visible.layout.view).toMatchObject({ id: 'view:quirky.session/worktree', input: { worktree: `id:${worktree}` } })
     await expect(call(h, 'openLink', { worktree, url: 'javascript:alert(1)' })).rejects.toThrow()
     const before = await call(h, 'preferencesState') as PreferencesState
     expect(before.imports.available).toBe(false)

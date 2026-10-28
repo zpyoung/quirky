@@ -12,7 +12,7 @@ export class ProfileLifecycle {
   private readonly pending = new Map<string, { profile: string; claimed: boolean }>()
 
   constructor(
-    private readonly context: PluginContext,
+    private readonly context: Pick<PluginContext, 'provide' | 'call' | 'error'>,
     private readonly store: BrowserStore,
     private readonly runtime: BrowserRuntime,
     private readonly listPanes: () => PaneTab[]

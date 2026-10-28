@@ -14,10 +14,11 @@ test('profile clear cannot begin while an admitted pane operation is awaiting it
   const nativeUnavailable = new Error('owned native boundary unavailable')
   let nativeCalls = 0
   // The lifecycle under test uses only these public error/command ports; no daemon or native Session is started.
-  const context = {
+  const context: Pick<PluginContext, 'provide' | 'error' | 'call'> = {
+    provide: () => {},
     error: (_kind: string, message: string) => new Error(message),
     call: async () => { nativeCalls += 1; throw nativeUnavailable }
-  } as PluginContext
+  }
   const store = new BrowserStore(root)
   const runtime = new BrowserRuntime(store, {} as never, () => {})
   const lifecycle = new ProfileLifecycle(context, store, runtime, () => [])

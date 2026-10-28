@@ -106,7 +106,6 @@ async function mountWithMenuItems(menuItems: UiMenuItemEntry[]) {
     fake,
     executed,
     element,
-    last: () => reports.at(-1),
     unmount: async () => {
       await act(async () => void (cleanup as (() => void) | undefined)?.())
       await settle()
