@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Badge, Button, SectionHeader, StatusDot } from '@quirky/ui'
 import type { JsonRecord, ReviewsSurfaceProps } from '../contracts'
 import { isRecord, parseCheckDetail, parseChecksResult, reviewContext, safeHttpUrl, type CheckDetail, type ReviewContext } from './data'
 
@@ -197,43 +198,43 @@ export function ChecksList(props: ChecksListProps) {
   }
 
   const summary = summaryLabel(rows, parsedChecks?.rollup)
-  if (owner === null) return <section className="review-checks-list" aria-label="Checks"><p>No pull request is selected.</p></section>
-  if (rows === null) return <section className="review-checks-list" aria-label="Checks">
-    <h3>Checks</h3>
+  if (owner === null) return <section className="ui-stack" aria-label="Checks"><p className="ui-text-muted">No pull request is selected.</p></section>
+  if (rows === null) return <section className="ui-stack" aria-label="Checks">
+    <SectionHeader title="Checks" />
     {props.surface === 'detail' && props.state.detail.loading || props.surface === 'checks' && props.state.checks.loading
-      ? <p role="status">Loading checks…</p>
-      : <p role="alert">Check data is unavailable.</p>}
-    <button type="button" onClick={() => void refresh()}>Retry</button>
+      ? <p role="status" className="ui-text-muted">Loading checks…</p>
+      : <p role="alert"><StatusDot status="failing" label="Error" /> Check data is unavailable.</p>}
+    <Button onClick={() => void refresh()}>Retry</Button>
   </section>
 
   const checkDetails = (checkRunId: number | null) => checkRunId === null ? null : detailMap(checksValue, checkRunId)
   const activeLoading = props.surface === 'detail' ? props.state.detail.loading : props.state.checks.loading
   const activeError = props.surface === 'detail' ? props.state.detail.error : props.state.checks.error
 
-  return <section className="review-checks-list" aria-label="Checks">
-    <header className="review-checks-toolbar">
-      <button type="button" aria-expanded={expandedSummary} onClick={() => {
+  return <section className="ui-stack" aria-label="Checks">
+    <header className="ui-cluster">
+      <Button aria-expanded={expandedSummary} onClick={() => {
         void props.context.call('quirky.reviews/detailSetChecksCollapsed', { ...viewParams(owner), collapsed: expandedSummary })
           .then(() => props.refresh()).catch((error: unknown) => setActionError(errorText(error)))
-      }}>{summary}</button>
-      <span>{checksForView.filter((check) => severity(check) === 'success').length} passing</span>
-      <span>{checksForView.filter((check) => severity(check) === 'failure').length} failing</span>
-      <span>{checksForView.filter((check) => severity(check) === 'pending').length} pending</span>
-      <span>{checksForView.filter((check) => severity(check) === 'action').length} unresolved</span>
-      <button type="button" disabled={pendingAction !== null} onClick={() => void refresh()}>{pendingAction === 'refresh' ? 'Refreshing…' : 'Refresh checks'}</button>
-      {!props.compact && <button type="button" disabled={pendingAction !== null || failedCount === 0} title={failedCount === 0 ? 'No failed checks to rerun.' : undefined} onClick={() => void rerun(true)}>Rerun failed</button>}
-      {!props.compact && <button type="button" disabled={pendingAction !== null || actionableCount === 0} title={actionableCount === 0 ? 'No actionable check or workflow run is available.' : undefined} onClick={() => void rerun(false)}>Rerun all</button>}
-      {failedCount > 0 ? <button type="button" onClick={() => void openFixDialog()}>{props.compact ? 'Fix checks' : 'Fix broken checks'}</button> : null}
+      }}>{summary}</Button>
+      <Badge tone="working">{checksForView.filter((check) => severity(check) === 'success').length} passing</Badge>
+      <Badge tone="failing">{checksForView.filter((check) => severity(check) === 'failure').length} failing</Badge>
+      <Badge>{checksForView.filter((check) => severity(check) === 'pending').length} pending</Badge>
+      <Badge tone="needs-you">{checksForView.filter((check) => severity(check) === 'action').length} unresolved</Badge>
+      <Button disabled={pendingAction !== null} onClick={() => void refresh()}>{pendingAction === 'refresh' ? 'Refreshing…' : 'Refresh checks'}</Button>
+      {!props.compact && <Button disabled={pendingAction !== null || failedCount === 0} title={failedCount === 0 ? 'No failed checks to rerun.' : undefined} onClick={() => void rerun(true)}>Rerun failed</Button>}
+      {!props.compact && <Button disabled={pendingAction !== null || actionableCount === 0} title={actionableCount === 0 ? 'No actionable check or workflow run is available.' : undefined} onClick={() => void rerun(false)}>Rerun all</Button>}
+      {failedCount > 0 ? <Button variant="primary" onClick={() => void openFixDialog()}>{props.compact ? 'Fix checks' : 'Fix broken checks'}</Button> : null}
     </header>
 
-    {actionError ? <p role="alert" className="review-error">{actionError}</p> : null}
-    {activeError ? <p role="alert" className="review-error">{activeError}</p> : null}
-    {activeLoading && checksForView.length === 0 ? <p role="status">Loading checks…</p> : null}
-    {parsedChecks?.partial === true ? <p role="status">Check data is partial{Array.isArray(parsedChecks.partialFailures) ? `: ${parsedChecks.partialFailures.join(' ')}` : '.'}</p> : null}
-    {parsedChecks?.truncated === true || checksForView.length > 100 ? <p role="status">Showing the first 100 checks.</p> : null}
-    {checksForView.length === 0 ? <p role="status">{props.surface === 'checks' ? 'No checks configured.' : 'No checks found.'}</p> : null}
+    {actionError ? <p role="alert"><StatusDot status="failing" label="Error" /> {actionError}</p> : null}
+    {activeError ? <p role="alert"><StatusDot status="failing" label="Error" /> {activeError}</p> : null}
+    {activeLoading && checksForView.length === 0 ? <p role="status" className="ui-text-muted">Loading checks…</p> : null}
+    {parsedChecks?.partial === true ? <p role="status" className="ui-text-muted">Check data is partial{Array.isArray(parsedChecks.partialFailures) ? `: ${parsedChecks.partialFailures.join(' ')}` : '.'}</p> : null}
+    {parsedChecks?.truncated === true || checksForView.length > 100 ? <p role="status" className="ui-text-muted">Showing the first 100 checks.</p> : null}
+    {checksForView.length === 0 ? <p role="status" className="ui-text-muted">{props.surface === 'checks' ? 'No checks configured.' : 'No checks found.'}</p> : null}
 
-    {expandedSummary && renderedChecks.length > 0 ? <ol className="review-check-rows">
+    {expandedSummary && renderedChecks.length > 0 ? <ol className="ui-stack" style={{ paddingInlineStart: 'var(--ui-space-24)' }}>
       {renderedChecks.map((check) => {
         const key = checkKey(check)
         const isExpanded = expanded.includes(key)
@@ -242,23 +243,25 @@ export function ChecksList(props: ChecksListProps) {
         const runIdentity = check.checkRunId ?? check.workflowRunId
         const canLoadDetails = check.checkRunId !== null && typeof owner.review?.headRefOid === 'string'
         const label = severity(check)
-        return <li key={key} className={`review-check-row review-check-${label}`}>
-          <div className="review-check-row-heading">
-            <button type="button" aria-expanded={isExpanded} aria-label={`${check.name}: ${label}`} onClick={() => void toggleExpanded(check)}>
-              <span>{label === 'failure' ? 'Failing' : label === 'action' ? 'Action required' : label === 'pending' ? 'Pending' : label === 'success' ? 'Passing' : 'Unresolved'}</span>
+        const labelText = label === 'failure' ? 'Failing' : label === 'action' ? 'Action required' : label === 'pending' ? 'Pending' : label === 'success' ? 'Passing' : 'Unresolved'
+        const tone = label === 'failure' ? 'failing' : label === 'action' ? 'needs-you' : label === 'success' ? 'working' : 'neutral'
+        return <li key={key} className="ui-stack">
+          <div className="ui-cluster" style={{ justifyContent: 'space-between' }}>
+            <Button className="ui-cluster" style={{ flex: '1 1 auto', justifyContent: 'flex-start' }} aria-expanded={isExpanded} aria-label={`${check.name}: ${label}`} onClick={() => void toggleExpanded(check)}>
+              <Badge tone={tone}>{labelText}</Badge>
               <strong>{check.name}</strong>
               <span>{check.conclusion ?? check.status}</span>
-            </button>
-            {externalUrl ? <button type="button" onClick={() => void openCheck(check)}>Open check details</button> : <span>External check link unavailable</span>}
+            </Button>
+            {externalUrl ? <Button onClick={() => void openCheck(check)}>Open check details</Button> : <span className="ui-text-muted">External check link unavailable</span>}
           </div>
-          {isExpanded ? <div className="review-check-detail">
+          {isExpanded ? <div className="ui-stack">
             {check.checkRunId === null ? <p>This status has no check-run identity or expandable job logs.</p>
-              : detail === null ? <p role="status">{activeLoading ? 'Loading check details…' : 'Check details have not been requested.'}</p>
+              : detail === null ? <p role="status" className="ui-text-muted">{activeLoading ? 'Loading check details…' : 'Check details have not been requested.'}</p>
                 : <CheckDetailView details={detail} checkRunId={check.checkRunId} workflowRunId={check.workflowRunId}
                   onCopy={(tail) => void copyTail(tail)}
                   onOpen={(url) => { if (owner === null) return; void props.context.call('quirky.reviews/openLink', { url, worktree: owner.worktree }).catch((error: unknown) => setActionError(errorText(error))) }} />}
-            {!canLoadDetails && check.checkRunId !== null ? <p role="alert">A verified pull request head is required to load check details.</p> : null}
-            {runIdentity !== null ? <p>Check run #{check.checkRunId ?? '—'} · workflow #{check.workflowRunId ?? '—'}</p> : null}
+            {!canLoadDetails && check.checkRunId !== null ? <p role="alert"><StatusDot status="failing" label="Error" /> A verified pull request head is required to load check details.</p> : null}
+            {runIdentity !== null ? <p className="ui-text-muted">Check run #{check.checkRunId ?? '—'} · workflow #{check.workflowRunId ?? '—'}</p> : null}
           </div> : null}
         </li>
       })}
@@ -272,33 +275,45 @@ function CheckDetailView(props: { details: CheckDetail; checkRunId: number; work
   const annotations = props.details.annotations.slice(0, 20)
   const jobs = props.details.jobs.slice(0, 100)
   const fullDetailsUrl = safeHttpUrl(check.detailsUrl ?? check.htmlUrl ?? check.url)
-  return <section className="review-check-full-details">
-    <header>
-      <strong>{typeof check.status === 'string' ? check.status : 'Status unavailable'}</strong>
-      {fullDetailsUrl ? <button type="button" onClick={() => props.onOpen(fullDetailsUrl)}>View full details</button> : <span>Full details link unavailable</span>}
-    </header>
-    <p>Started: {dateLabel(check.startedAt ?? check.started_at) ?? 'Unavailable'}</p>
-    <p>Completed: {dateLabel(check.completedAt ?? check.completed_at) ?? 'Unavailable'}</p>
-    <p>Check run #{props.checkRunId}{props.workflowRunId === null ? '' : ` · Workflow run #${props.workflowRunId}`}</p>
+  const status = typeof check.status === 'string' ? check.status : 'Status unavailable'
+  const outcome = String(check.conclusion ?? check.status).toLowerCase()
+  const failed = ['failure', 'error', 'cancelled', 'timed_out', 'startup_failure'].includes(outcome)
+  const dotStatus = failed ? 'failing' : ['success', 'passed'].includes(outcome) ? 'working' : 'idle'
+  return <section className="ui-stack">
+    <SectionHeader title={status} actions={<div className="ui-cluster">
+      <StatusDot status={dotStatus} label={`Check status: ${status}`} />
+      {fullDetailsUrl ? <Button onClick={() => props.onOpen(fullDetailsUrl)}>View full details</Button> : <span className="ui-text-muted">Full details link unavailable</span>}
+    </div>} />
+    <p className="ui-text-muted">Started: {dateLabel(check.startedAt ?? check.started_at) ?? 'Unavailable'}</p>
+    <p className="ui-text-muted">Completed: {dateLabel(check.completedAt ?? check.completed_at) ?? 'Unavailable'}</p>
+    <p className="ui-text-muted">Check run #{props.checkRunId}{props.workflowRunId === null ? '' : ` · Workflow run #${props.workflowRunId}`}</p>
     {output.title ? <h4>{output.title}</h4> : null}
-    {output.summary ? <pre className="review-check-output">{output.summary}</pre> : null}
-    {output.text ? <pre className="review-check-output">{output.text}</pre> : null}
-    {annotations.length > 0 ? <section><h4>Annotations ({annotations.length})</h4><ul>{annotations.map((annotation, index) => <li key={`${index}:${String(annotation.path ?? '')}`}>
-      <strong>{String(annotation.title ?? annotation.annotationLevel ?? 'Annotation')}</strong>
-      <span>{String(annotation.path ?? '')}{annotation.startLine ? `:${String(annotation.startLine)}` : ''}</span>
-      <p>{String(annotation.message ?? annotation.rawDetails ?? '')}</p>
-    </li>)}</ul></section> : null}
-    {jobs.length > 0 ? <section><h4>{jobs.some(jobIsFailed) ? 'Failed jobs' : 'Jobs'} ({jobs.length})</h4><ul>{jobs.map((job) => {
-      const id = typeof job.id === 'number' ? job.id : null
-      const tail = id === null ? null : props.details.logTails.find((item) => item.jobId === id) ?? null
-      return <li key={id ?? String(job.name ?? 'job')}>
-        <strong>{typeof job.name === 'string' ? job.name : 'Unknown job'}</strong>
-        <span>{String(job.conclusion ?? job.status ?? 'Unknown status')}</span>
-        <JobLog job={job} tail={tail?.tail ?? null} partialFailures={props.details.partialFailures} truncated={props.details.truncated} onCopy={props.onCopy} />
-      </li>
-    })}</ul></section> : null}
-    {props.details.partialFailures.length > 0 ? <p role="alert">{props.details.partialFailures.join(' ')}</p> : null}
-    {props.details.truncated ? <p role="status">Some logs or job output were omitted at the provider bounds.</p> : null}
+    {output.summary ? <pre style={{ maxWidth: '100%', overflow: 'auto', whiteSpace: 'pre-wrap' }}>{output.summary}</pre> : null}
+    {output.text ? <pre style={{ maxWidth: '100%', overflow: 'auto', whiteSpace: 'pre-wrap' }}>{output.text}</pre> : null}
+    {annotations.length > 0 ? <section className="ui-stack">
+      <SectionHeader title={`Annotations (${annotations.length})`} />
+      <ul className="ui-stack">{annotations.map((annotation, index) => <li key={`${index}:${String(annotation.path ?? '')}`}>
+        <strong>{String(annotation.title ?? annotation.annotationLevel ?? 'Annotation')}</strong>
+        <span className="ui-text-muted">{String(annotation.path ?? '')}{annotation.startLine ? `:${String(annotation.startLine)}` : ''}</span>
+        <p>{String(annotation.message ?? annotation.rawDetails ?? '')}</p>
+      </li>)}</ul>
+    </section> : null}
+    {jobs.length > 0 ? <section className="ui-stack">
+      <SectionHeader title={`${jobs.some(jobIsFailed) ? 'Failed jobs' : 'Jobs'} (${jobs.length})`} />
+      <ul className="ui-stack">{jobs.map((job) => {
+        const id = typeof job.id === 'number' ? job.id : null
+        const tail = id === null ? null : props.details.logTails.find((item) => item.jobId === id) ?? null
+        return <li className="ui-stack" key={id ?? String(job.name ?? 'job')}>
+          <div className="ui-cluster">
+            <strong>{typeof job.name === 'string' ? job.name : 'Unknown job'}</strong>
+            <Badge tone={jobIsFailed(job) ? 'failing' : 'neutral'}>{String(job.conclusion ?? job.status ?? 'Unknown status')}</Badge>
+          </div>
+          <JobLog job={job} tail={tail?.tail ?? null} partialFailures={props.details.partialFailures} truncated={props.details.truncated} onCopy={props.onCopy} />
+        </li>
+      })}</ul>
+    </section> : null}
+    {props.details.partialFailures.length > 0 ? <p role="alert"><StatusDot status="failing" label="Error" /> {props.details.partialFailures.join(' ')}</p> : null}
+    {props.details.truncated ? <p role="status" className="ui-text-muted">Some logs or job output were omitted at the provider bounds.</p> : null}
   </section>
 }
 
@@ -313,15 +328,15 @@ function JobLog(props: { job: JsonRecord; tail: string | null; partialFailures: 
     preRef.current?.querySelector('[data-last-error="true"]')?.scrollIntoView({ block: 'center' })
   }, [props.tail, lastError])
   if (props.tail === null) {
-    if (failedToLoad) return <p role="alert">Couldn’t load logs. Use Refresh to retry.</p>
+    if (failedToLoad) return <p role="alert"><StatusDot status="failing" label="Error" /> Couldn’t load logs. Use Refresh to retry.</p>
     if (failed && props.truncated) return <p>Log excerpt wasn’t requested. At most five failed-job excerpts are loaded per check.</p>
     if (!failed) return <p>Log output is not available yet.</p>
     return <p>No log output was returned.</p>
   }
   if (props.tail.length === 0) return <p>No log output was returned.</p>
   const lines = props.tail.split('\\n')
-  return <div className="review-check-log">
-    <pre ref={preRef}><code>{lines.map((line, index) => <span key={index} data-last-error={index === lastError ? 'true' : undefined}>{line}{index < lines.length - 1 ? '\\n' : ''}</span>)}</code></pre>
-    <button type="button" onClick={() => props.onCopy(props.tail as string)}>Copy log excerpt</button>
+  return <div className="ui-stack">
+    <pre ref={preRef} style={{ maxWidth: '100%', overflow: 'auto', whiteSpace: 'pre-wrap' }}><code>{lines.map((line, index) => <span key={index} data-last-error={index === lastError ? 'true' : undefined}>{line}{index < lines.length - 1 ? '\\n' : ''}</span>)}</code></pre>
+    <Button onClick={() => props.onCopy(props.tail as string)}>Copy log excerpt</Button>
   </div>
 }

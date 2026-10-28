@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent, type MouseEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type MouseEvent } from 'react'
 import type { UiLayout, UiPluginContext } from '@quirky/protocol'
+import { Badge, Button, Dialog, EmptyState, FormRow, IconButton, Menu, SectionHeader, StatusDot, TextField } from '@quirky/ui'
 import { CHECKS_PANEL, type JsonRecord, type ReviewData, type ReviewsSurfaceProps } from '../contracts'
 import { isRecord } from './data'
 import { ReviewActions } from '../detail/Actions'
@@ -423,29 +424,6 @@ function eligibilityDisabledReason(state: ReviewsSurfaceProps['state'], worktree
   return null
 }
 
-function statusBadgeStyle(state: ReviewData['state']): CSSProperties {
-  return {
-    display: 'inline-flex',
-    alignItems: 'center',
-    borderRadius: 999,
-    border: '1px solid var(--border, #2b2f3a)',
-    padding: '2px 8px',
-    color: state === 'merged' ? 'var(--accent, #4f8ff7)' : state === 'closed' ? 'var(--muted, #8a909e)' : state === 'draft' ? 'var(--amber, #f0b429)' : 'var(--green, #3fb950)',
-    fontSize: 11
-  }
-}
-
-const buttonStyle: CSSProperties = {
-  background: 'var(--bg-raised, #1d2027)',
-  color: 'var(--text, #d7dae0)',
-  border: '1px solid var(--border, #2b2f3a)',
-  borderRadius: 4,
-  padding: '4px 8px',
-  cursor: 'pointer'
-}
-
-const primaryButtonStyle: CSSProperties = { ...buttonStyle, background: 'var(--accent, #4f8ff7)', color: '#fff', borderColor: 'transparent' }
-const quietButtonStyle: CSSProperties = { ...buttonStyle, background: 'transparent' }
 
 type StackMap = { available: boolean; number?: number; position?: number; size?: number; entries: JsonRecord[]; truncated: boolean; message?: string }
 
@@ -677,10 +655,7 @@ export function ChecksAgentDialog(props: ReviewsSurfaceProps) {
   useEffect(() => {
     if (!visible) return
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault()
-        void close()
-      } else if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+      if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
         event.preventDefault()
         void submit()
       }
@@ -734,39 +709,34 @@ export function ChecksAgentDialog(props: ReviewsSurfaceProps) {
 
   if (!visible || !dialog) return null
   const title = action === 'conflicts' ? 'Resolve Review Conflicts With AI' : action === 'comments' ? 'Resolve Comments With AI' : 'Fix With AI'
-  return (
-    <div role="presentation" className="quirky-reviews-dialog-backdrop" style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(0,0,0,.55)', display: 'grid', placeItems: 'center', padding: 16 }}>
-      <section role="dialog" aria-modal="true" aria-labelledby="reviews-agent-dialog-title" style={{ width: 'min(680px, 100%)', maxHeight: '90vh', overflow: 'auto', background: 'var(--bg-raised, #1d2027)', color: 'var(--text, #d7dae0)', border: '1px solid var(--border, #2b2f3a)', borderRadius: 8, padding: 16, display: 'grid', gap: 12 }}>
-        <header>
-          <h2 id="reviews-agent-dialog-title" style={{ margin: 0, fontSize: 16 }}>{title}</h2>
-          <p className="muted" style={{ margin: '6px 0 0' }}>PR #{number} · {contextTargetLabel(state, surface)}</p>
-        </header>
-        <label style={{ display: 'grid', gap: 5 }}>
-          Agent
-          <select aria-label="Agent" value={selectedAgent} disabled={busy || loadingAgents || agents.length === 0} onChange={(event) => setAgent(event.target.value)}>
-            {agents.length === 0 && <option value="">{loadingAgents ? 'Detecting agents…' : 'No enabled agents'}</option>}
-            {agents.map((entry) => <option key={String(entry.id)} value={String(entry.id)}>{String(entry.label ?? entry.id)}</option>)}
-          </select>
-        </label>
-        <label style={{ display: 'grid', gap: 5 }}>
-          Prompt
-          <textarea ref={promptRef} aria-label="Agent prompt" rows={9} maxLength={MAX_PROMPT_LENGTH} value={prompt} disabled={busy} onChange={(event) => setPrompt(event.target.value)} />
-        </label>
-        <label style={{ display: 'grid', gap: 5 }}>
-          CLI arguments
-          <input aria-label="CLI arguments" value={args} maxLength={MAX_AGENT_ARGS_LENGTH} disabled={busy} onChange={(event) => setArgs(event.target.value)} />
-        </label>
-        <p className="muted" style={{ margin: 0 }}>Cmd/Ctrl+Enter starts the selected agent after it is ready.</p>
-        {error && <p role="alert" style={{ color: 'var(--danger, #e5534b)', margin: 0 }}>{error}</p>}
-        <footer style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-          <button type="button" style={quietButtonStyle} disabled={busy} onClick={() => void close()}>Cancel</button>
-          <button type="button" style={primaryButtonStyle} disabled={busy || loadingAgents || agents.length === 0 || selectedAgent === '' || prompt.trim() === ''} onClick={() => void submit()}>
-            {busy ? 'Starting…' : 'Start agent'}
-          </button>
-        </footer>
-      </section>
+  return <Dialog
+    open={visible}
+    title={title}
+    onClose={() => { void close() }}
+    closeOnBackdrop={false}
+    actions={<div className="ui-cluster">
+      <Button disabled={busy} onClick={() => void close()}>Cancel</Button>
+      <Button variant="primary" disabled={busy || loadingAgents || agents.length === 0 || selectedAgent === '' || prompt.trim() === ''} onClick={() => void submit()}>
+        {busy ? 'Starting…' : 'Start agent'}
+      </Button>
+    </div>}
+  >
+    <div className="ui-stack">
+      <p className="ui-text-muted">PR #{number} · {contextTargetLabel(state, surface)}</p>
+      <FormRow label="Agent" htmlFor="reviews-agent-select">
+        <select id="reviews-agent-select" className="ui-text-field__input" aria-label="Agent" value={selectedAgent} disabled={busy || loadingAgents || agents.length === 0} onChange={(event) => setAgent(event.target.value)}>
+          {agents.length === 0 && <option value="">{loadingAgents ? 'Detecting agents…' : 'No enabled agents'}</option>}
+          {agents.map((entry) => <option key={String(entry.id)} value={String(entry.id)}>{String(entry.label ?? entry.id)}</option>)}
+        </select>
+      </FormRow>
+      <FormRow label="Prompt" htmlFor="reviews-agent-prompt">
+        <textarea id="reviews-agent-prompt" className="ui-text-field__input" ref={promptRef} aria-label="Agent prompt" rows={9} maxLength={MAX_PROMPT_LENGTH} value={prompt} disabled={busy} onChange={(event) => setPrompt(event.target.value)} />
+      </FormRow>
+      <TextField id="reviews-agent-args" label="CLI arguments" aria-label="CLI arguments" value={args} maxLength={MAX_AGENT_ARGS_LENGTH} disabled={busy} onChange={(event) => setArgs(event.target.value)} />
+      <p className="ui-text-muted">Cmd/Ctrl+Enter starts the selected agent after it is ready.</p>
+      {error && <p role="alert"><StatusDot status="failing" label="Error" /> {error}</p>}
     </div>
-  )
+  </Dialog>
 }
 
 function contextTargetLabel(state: ReviewsSurfaceProps['state'], surface: 'checks' | 'detail'): string {
@@ -781,7 +751,6 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
   const [windowVisible, setWindowVisible] = useState(() => typeof document === 'undefined' || document.visibilityState === 'visible')
   const [actionError, setActionError] = useState<string | null>(null)
   const [authDiagnostics, setAuthDiagnostics] = useState<JsonRecord | null>(null)
-  const [moreOpen, setMoreOpen] = useState(false)
   const [linkOpen, setLinkOpen] = useState(false)
   const [linkNumber, setLinkNumber] = useState('')
   const [titleEditing, setTitleEditing] = useState(false)
@@ -955,7 +924,6 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
     if (isRecord(result) && result.linked === true) {
       setLinkOpen(false)
       setLinkNumber('')
-      setMoreOpen(false)
     }
   }
 
@@ -1052,10 +1020,16 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
   useEffect(() => () => dragCleanup.current?.(), [])
 
   if (!activeWorktree) {
-    return <section className="quirky-reviews-checks" style={{ padding: 12 }}><h3>No workspace selected</h3><p>Select a workspace to view checks.</p></section>
+    return <section className="ui-stack">
+      <SectionHeader title="No workspace selected" />
+      <EmptyState message="Select a workspace to view checks." />
+    </section>
   }
   if (!active || active.loading && !active.lookup && !active.review) {
-    return <section className="quirky-reviews-checks" style={{ padding: 12 }} aria-busy="true"><p>Checking pull request status…</p>{actionError && <p role="alert">{actionError}</p>}</section>
+    return <section className="ui-stack" aria-busy="true">
+      <p role="status" className="ui-text-muted">Checking pull request status…</p>
+      {actionError && <p role="alert"><Badge tone="failing">{actionError}</Badge></p>}
+    </section>
   }
   if (!currentReview) {
     const empty = selectStatus(state, activeWorktree)
@@ -1070,21 +1044,21 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
     const existingNumber = empty.existingNumber
     const busy = Boolean(active.loading)
     return (
-      <section className="quirky-reviews-checks" style={{ display: 'flex', flexDirection: 'column', minHeight: 0, maxHeight: '100%', overflow: 'hidden' }}>
-        {actionError && <p role="alert" style={{ color: 'var(--danger, #e5534b)', padding: '6px 10px', margin: 0 }}>{actionError}</p>}
-        {active.error && <p role="alert" style={{ color: 'var(--danger, #e5534b)', padding: '6px 10px', margin: 0 }}>{active.error}</p>}
-        <div style={{ padding: 12, overflow: 'auto' }}>
-          <h3 style={{ margin: '0 0 6px' }}>{empty.title}</h3>
-          <p style={{ margin: '0 0 10px' }}>{empty.message}</p>
-          {empty.action && <button type="button" style={empty.action === 'open' || empty.action === 'relink' ? primaryButtonStyle : quietButtonStyle} disabled={busy} onClick={() => void runBlockerAction(empty.action!, existingNumber)}>
+      <section className="ui-stack" style={{ minHeight: 0, maxHeight: '100%', overflow: 'hidden' }}>
+        {actionError && <p role="alert"><StatusDot status="failing" label="Error" /> {actionError}</p>}
+        {active.error && <p role="alert"><StatusDot status="failing" label="Error" /> {active.error}</p>}
+        <div className="ui-stack" style={{ padding: 'var(--ui-space-12)', overflow: 'auto' }}>
+          <EmptyState message={empty.title} />
+          <p>{empty.message}</p>
+          {empty.action && <Button variant={empty.action === 'open' || empty.action === 'relink' ? 'primary' : 'secondary'} disabled={busy} onClick={() => void runBlockerAction(empty.action!, existingNumber)}>
             {empty.action === 'open' ? `Open Review #${existingNumber ?? ''}` : empty.action === 'relink' ? `Link PR #${existingNumber ?? ''}` : empty.action === 'publish' ? 'Publish Branch' : empty.action === 'sync' ? 'Sync Branch' : empty.action === 'push' ? 'Push & Create PR' : 'Connect GitHub'}
-          </button>}
-          {reason === 'lookup_unavailable' && !eligibility && <p role="alert">The provider could not establish whether this branch has a review. No composer is available until lookup succeeds.</p>}
-          {diagnostics.length > 0 && <section aria-label="GitHub CLI diagnostics"><h4>GitHub CLI diagnostics</h4><ul>{diagnostics.map((item) => <li key={item}>{item}</li>)}</ul></section>}
-          {diagnosticError && <p role="alert">{diagnosticError}</p>}
-          {diagnosticData && <section aria-label="GitHub account status" style={{ margin: '8px 0' }}>
+          </Button>}
+          {reason === 'lookup_unavailable' && !eligibility && <p role="alert"><StatusDot status="failing" label="Error" /> The provider could not establish whether this branch has a review. No composer is available until lookup succeeds.</p>}
+          {diagnostics.length > 0 && <section className="ui-stack" aria-label="GitHub CLI diagnostics"><SectionHeader title="GitHub CLI diagnostics" /><ul className="ui-stack">{diagnostics.map((item) => <li key={item}>{item}</li>)}</ul></section>}
+          {diagnosticError && <p role="alert"><StatusDot status="failing" label="Error" /> {diagnosticError}</p>}
+          {diagnosticData && <section className="ui-stack" aria-label="GitHub account status">
             {typeof diagnosticData.requiredHost === 'string' && <p>Required host: <code>{diagnosticData.requiredHost}</code></p>}
-            {Array.isArray(diagnosticData.accounts) && diagnosticData.accounts.length > 0 && <ul>
+            {Array.isArray(diagnosticData.accounts) && diagnosticData.accounts.length > 0 && <ul className="ui-stack">
               {diagnosticData.accounts.filter(isRecord).map((account, index) => (
                 <li key={`${String(account.host ?? '')}:${String(account.user ?? index)}`}>
                   {typeof account.user === 'string' ? account.user : 'Account'}{typeof account.host === 'string' ? ` · ${account.host}` : ''}
@@ -1094,17 +1068,15 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
               ))}
             </ul>}
             {diagnosticData.ghAvailable === false && <p>GitHub CLI (gh) is unavailable. Install it, then retry.</p>}
-            <button type="button" style={quietButtonStyle} onClick={() => void copyLink('gh auth status')}>Copy gh auth status</button>
+            <Button onClick={() => void copyLink('gh auth status')}>Copy gh auth status</Button>
           </section>}
           {reason === 'authentication_required' || reason === 'auth_required' || reason === 'not_authenticated' || reason === 'scope_missing' || reason === 'gh_unavailable'
             ? <p>Check GitHub access with <code>gh auth status</code>. Sign in with <code>gh auth login</code>; no token is entered or stored here.</p>
             : null}
           {eligibility?.eligible === true && !eligible && <p>Eligibility is stale or belongs to a different branch. Refresh to confirm the current workspace.</p>}
-          {eligible && <button type="button" style={primaryButtonStyle} disabled={busy} onClick={() => void openComposer()}>Create PR</button>}
-          {!eligible && eligibility?.eligible === true && <button type="button" disabled={busy} title={eligibilityDisabledReason(state, activeWorktree) ?? undefined}>Create PR</button>}
-          <button type="button" style={quietButtonStyle} disabled={busy || retrySeconds !== null} onClick={() => void runRefresh('manual')}>
-            {retrySeconds === null ? 'Retry' : `Retry in ${retrySeconds}s`}
-          </button>
+          {eligible && <Button variant="primary" disabled={busy} onClick={() => void openComposer()}>Create PR</Button>}
+          {!eligible && eligibility?.eligible === true && <Button disabled={busy} title={eligibilityDisabledReason(state, activeWorktree) ?? undefined}>Create PR</Button>}
+          <Button disabled={busy || retrySeconds !== null} onClick={() => void runRefresh('manual')}>{retrySeconds === null ? 'Retry' : `Retry in ${retrySeconds}s`}</Button>
           {lookup?.kind === 'unavailable' && typeof lookup.message === 'string' && <p role="alert">{lookup.message}</p>}
         </div>
         <div role="separator" aria-orientation="horizontal" aria-label="Resize Checks panel" tabIndex={0}
@@ -1115,7 +1087,7 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
               void commitHeight((active.height ?? 320) + (event.key === 'ArrowUp' ? 24 : -24))
             }
           }}
-          style={{ height: 8, cursor: 'row-resize', borderTop: '1px solid var(--border, #2b2f3a)' }} />
+          style={{ height: 'var(--ui-space-8)', cursor: 'row-resize', borderTop: 'var(--ui-border-width) solid var(--ui-border)' }} />
       </section>
     )
   }
@@ -1140,24 +1112,29 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
   const queuedCount = active.queuedComments.length
   const contentHeight = dragHeight ?? active.height
 
+  const actionItems = useMemo(() => [
+    { id: 'unlink', label: 'Unlink PR from workspace', onAction: () => { void runReviewMethod('checksUnlink', { worktree: activeWorktree }) } },
+    { id: 'link-another', label: 'Link another PR', onAction: () => setLinkOpen(true) },
+  ], [activeWorktree, runReviewMethod])
+
   return (
-    <section className="quirky-reviews-checks" style={{ display: 'flex', flexDirection: 'column', minHeight: 0, maxHeight: '100%', overflow: 'hidden', color: 'var(--text, #d7dae0)' }}>
-      {active.error && <div role="alert" style={{ background: 'var(--danger, #e5534b)', color: '#fff', padding: '6px 10px' }}>{active.error}{currentReview ? ' Showing the last known review status.' : ''}</div>}
-      {actionError && <p role="alert" style={{ color: 'var(--danger, #e5534b)', padding: '4px 10px', margin: 0 }}>{actionError}</p>}
-      <header style={{ padding: '10px 12px', borderBottom: '1px solid var(--border, #2b2f3a)', display: 'grid', gap: 6 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+    <section className="ui-stack" style={{ display: 'flex', flexDirection: 'column', minHeight: 0, maxHeight: '100%', overflow: 'hidden' }}>
+      {active.error && <p role="alert"><StatusDot status="failing" label="Error" /> {active.error}{currentReview ? ' Showing the last known review status.' : ''}</p>}
+      {actionError && <p role="alert"><StatusDot status="failing" label="Error" /> {actionError}</p>}
+      <header className="ui-stack" style={{ padding: 'var(--ui-space-12)' }}>
+        <div className="ui-cluster">
           <span aria-hidden="true">PR</span>
-          <button type="button" style={quietButtonStyle} title={routing.title} onClick={(event) => void openLink(currentReview.url, event)}>#{currentReview.number}</button>
-          <span style={statusBadgeStyle(currentReview.state)}>{reviewStateName(currentReview.state)}</span>
-          <button type="button" style={quietButtonStyle} aria-label="Copy PR link" onClick={() => void copyLink(currentReview.url)}>Copy link</button>
-          <button type="button" style={quietButtonStyle} aria-label="Refresh checks" disabled={active.loading || reviewRetrySeconds !== null} title={reviewRetrySeconds === null ? 'Refresh checks' : `Retry is paused for ${reviewRetrySeconds}s`} onClick={() => void runRefresh('manual')}>{reviewRetrySeconds === null ? 'Refresh' : `Refresh paused (${reviewRetrySeconds}s)`}</button>
-          <button type="button" style={quietButtonStyle} aria-label="More PR actions" aria-expanded={moreOpen} onClick={() => setMoreOpen((value) => !value)}>⋯</button>
+          <Button title={routing.title} onClick={(event) => void openLink(currentReview.url, event)}>#{currentReview.number}</Button>
+          <Badge tone={currentReview.state === 'open' ? 'working' : currentReview.state === 'merged' ? 'accent' : 'neutral'}>{reviewStateName(currentReview.state)}</Badge>
+          <Button aria-label="Copy PR link" onClick={() => void copyLink(currentReview.url)}>Copy link</Button>
+          <Button aria-label="Refresh checks" disabled={active.loading || reviewRetrySeconds !== null} title={reviewRetrySeconds === null ? 'Refresh checks' : `Retry is paused for ${reviewRetrySeconds}s`} onClick={() => void runRefresh('manual')}>{reviewRetrySeconds === null ? 'Refresh' : `Refresh paused (${reviewRetrySeconds}s)`}</Button>
+          <Menu label="More PR actions" items={actionItems} />
         </div>
-        <div style={{ display: 'flex', alignItems: 'start', justifyContent: 'space-between', gap: 8 }}>
-          <div style={{ minWidth: 0, flex: 1 }}>
+        <div className="ui-cluster" style={{ alignItems: 'start', justifyContent: 'space-between' }}>
+          <div className="ui-stack" style={{ minWidth: 0, flex: '1 1 auto' }}>
             {editedTitle ? (
-              <div style={{ display: 'flex', gap: 5 }}>
-                <input aria-label="Pull request title" maxLength={256} value={titleInput} onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => {
+              <div className="ui-cluster">
+                <TextField id="reviews-pull-request-title" label="Pull request title" aria-label="Pull request title" maxLength={256} value={titleInput} onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => {
                   if (event.key === 'Escape') {
                     event.preventDefault()
                     cancelTitle()
@@ -1170,80 +1147,76 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
                   setTitleInput(title)
                   void runReviewMethod('checksSetTitleDraft', { worktree: activeWorktree, number: currentReview.number, title }, false)
                 }} />
-                <button type="button" aria-label="Save pull request title" disabled={active.loading || titleInput.trim() === ''} onClick={() => void saveTitle()}>✓</button>
-                <button type="button" aria-label="Cancel title edit" disabled={active.loading} onClick={cancelTitle}>×</button>
+                <IconButton label="Save pull request title" disabled={active.loading || titleInput.trim() === ''} onClick={() => void saveTitle()}>✓</IconButton>
+                <IconButton label="Cancel title edit" disabled={active.loading} onClick={cancelTitle}>×</IconButton>
               </div>
             ) : (
-              <button type="button" style={{ ...quietButtonStyle, padding: 0, border: 0, textAlign: 'left', fontSize: 14, fontWeight: 650 }} aria-label="Edit pull request title" onClick={startTitleEdit}>{currentReview.title}</button>
+              <Button className="ui-cluster" style={{ flex: '1 1 auto', justifyContent: 'flex-start' }} aria-label="Edit pull request title" onClick={startTitleEdit}>{currentReview.title}</Button>
             )}
-            <div className="muted" style={{ fontSize: 11 }}>{currentReview.baseRefName} ← {currentReview.headRefName}{reviewDate(currentReview) ? ` · ${reviewDate(currentReview)}` : ''}</div>
+            <div className="ui-text-muted">{currentReview.baseRefName} ← {currentReview.headRefName}{reviewDate(currentReview) ? ` · ${reviewDate(currentReview)}` : ''}</div>
           </div>
-          <span className="muted" title={activeWorktree}>Workspace</span>
+          <span className="ui-text-muted" title={activeWorktree}>Workspace</span>
         </div>
-        {moreOpen && <div role="menu" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          <button type="button" role="menuitem" style={quietButtonStyle} onClick={() => void runReviewMethod('checksUnlink', { worktree: activeWorktree })}>Unlink PR from workspace</button>
-          <button type="button" role="menuitem" style={quietButtonStyle} onClick={() => { setLinkOpen(true); setMoreOpen(false) }}>Link another PR</button>
-        </div>}
-        {linkOpen && <form onSubmit={(event) => void linkAnother(event)} style={{ display: 'flex', gap: 6 }}>
-          <label style={{ flex: 1 }}>Pull request number <input aria-label="Pull request number" inputMode="numeric" value={linkNumber} onChange={(event) => setLinkNumber(event.target.value)} /></label>
-          <button type="submit" style={primaryButtonStyle}>Link PR</button>
-          <button type="button" style={quietButtonStyle} onClick={() => setLinkOpen(false)}>Cancel</button>
+        {linkOpen && <form className="ui-cluster" onSubmit={(event) => void linkAnother(event)}>
+          <TextField label="Pull request number" aria-label="Pull request number" inputMode="numeric" value={linkNumber} onChange={(event) => setLinkNumber(event.target.value)} />
+          <Button variant="primary" type="submit">Link PR</Button>
+          <Button onClick={() => setLinkOpen(false)}>Cancel</Button>
         </form>}
       </header>
 
-      {stack && <section aria-label="Pull request stack" style={{ padding: '7px 12px', borderBottom: '1px solid var(--border, #2b2f3a)' }}>
+      {stack && <section className="ui-stack" aria-label="Pull request stack">
         {stack.available ? (
           <>
-            <div style={{ fontSize: 11, fontWeight: 600 }}>Stack #{stack.number} · PR #{currentReview.number} at position {stack.position} of {stack.size}</div>
-            <ol style={{ display: 'flex', gap: 8, listStyle: 'none', padding: 0, margin: '6px 0 0', alignItems: 'center', flexWrap: 'wrap' }}>
+            <strong>Stack #{stack.number} · PR #{currentReview.number} at position {stack.position} of {stack.size}</strong>
+            <ol className="ui-cluster" style={{ listStyle: 'none', padding: 0 }}>
               {stack.entries.map((entry) => (
                 <li key={String(entry.number)}>
-                  <button type="button" style={quietButtonStyle} aria-current={entry.number === currentReview.number ? 'page' : undefined} title={routing.title}
+                  <Button aria-current={entry.number === currentReview.number ? 'page' : undefined} title={routing.title}
                     disabled={typeof entry.url !== 'string'} onClick={(event) => typeof entry.url === 'string' && void openLink(entry.url, event)}>
                     #{String(entry.number)} · {String(entry.title ?? 'Pull request')}
-                  </button>
+                  </Button>
                 </li>
               ))}
             </ol>
-            {stack.truncated && <p className="muted" style={{ fontSize: 10 }}>Showing the first 100 stack members.</p>}
+            {stack.truncated && <p className="ui-text-muted">Showing the first 100 stack members.</p>}
           </>
-        ) : <p role="status" className="muted">{stack.message}</p>}
+        ) : <p role="status" className="ui-text-muted">{stack.message}</p>}
       </section>}
 
-      <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border, #2b2f3a)' }}>
+      <div className="ui-stack" style={{ padding: 'var(--ui-space-8) var(--ui-space-12)' }}>
         <ReviewActions {...props} surface="checks" />
       </div>
 
-      {(hostConflict || localConflict) && <section aria-label="Merge conflicts" style={{ padding: '8px 12px', borderBottom: '1px solid var(--border, #2b2f3a)' }}>
-        <strong>Conflicts block this PR</strong>
-        {active.conflicts?.status === 'loading' && <p>Loading conflict paths…</p>}
+      {(hostConflict || localConflict) && <section className="ui-stack" aria-label="Merge conflicts">
+        <SectionHeader title="Conflicts block this PR" />
+        {active.conflicts?.status === 'loading' && <p role="status" className="ui-text-muted">Loading conflict paths…</p>}
         {active.conflicts?.status === 'unavailable' && <p>{typeof active.conflicts.message === 'string' ? active.conflicts.message : 'Conflict paths are unavailable from the read-only preview.'}</p>}
         {active.conflicts?.available === true && active.conflicts.conflicting === false && <p>Git’s read-only preview found no conflicting paths; refresh the review metadata before merging.</p>}
-        {Array.isArray(active.conflicts?.files) && active.conflicts.files.length > 0 && <ul>{active.conflicts.files.map((file, index) => <li key={isRecord(file) && typeof file.path === 'string' ? file.path : index}>{isRecord(file) && typeof file.path === 'string' ? file.path : 'Conflicting file'}</li>)}</ul>}
-        {Array.isArray(active.conflicts?.localFiles) && active.conflicts.localFiles.length > 0 && <div><strong>Active workspace conflicts</strong><ul>{active.conflicts.localFiles.map((file, index) => <li key={isRecord(file) && typeof file.path === 'string' ? file.path : index}>{isRecord(file) && typeof file.path === 'string' ? file.path : 'Conflicting file'}</li>)}</ul></div>}
-        {active.conflicts?.truncated === true && <p className="muted">Conflict file list is truncated at 100 entries.</p>}
+        {Array.isArray(active.conflicts?.files) && active.conflicts.files.length > 0 && <ul className="ui-stack">{active.conflicts.files.map((file, index) => <li key={isRecord(file) && typeof file.path === 'string' ? file.path : index}>{isRecord(file) && typeof file.path === 'string' ? file.path : 'Conflicting file'}</li>)}</ul>}
+        {Array.isArray(active.conflicts?.localFiles) && active.conflicts.localFiles.length > 0 && <div className="ui-stack"><strong>Active workspace conflicts</strong><ul className="ui-stack">{active.conflicts.localFiles.map((file, index) => <li key={isRecord(file) && typeof file.path === 'string' ? file.path : index}>{isRecord(file) && typeof file.path === 'string' ? file.path : 'Conflicting file'}</li>)}</ul></div>}
+        {active.conflicts?.truncated === true && <p className="ui-text-muted">Conflict file list is truncated at 100 entries.</p>}
       </section>}
 
-      {(hostConflict || broken || pending || queuedCount > 0) && <section aria-label="Review triage" style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, borderBottom: '1px solid var(--border, #2b2f3a)' }}>
-        <span>{hostConflict ? 'Conflicts block this PR' : broken ? 'Failing checks' : pending ? 'Checks pending' : `${queuedCount} queued comments`}</span>
+      {(hostConflict || broken || pending || queuedCount > 0) && <section className="ui-cluster" aria-label="Review triage" style={{ justifyContent: 'space-between' }}>
+        <Badge tone={hostConflict ? 'failing' : broken ? 'failing' : pending ? 'needs-you' : 'needs-you'}>{hostConflict ? 'Conflicts block this PR' : broken ? 'Failing checks' : pending ? 'Checks pending' : `${queuedCount} queued comments`}</Badge>
         {hostConflict || localConflict ? (
-          <button type="button" style={primaryButtonStyle} onClick={() => void runReviewMethod('checksSetAgentDialog', { surface: 'checks', action: 'conflicts' })}>Resolve</button>
+          <Button variant="primary" onClick={() => void runReviewMethod('checksSetAgentDialog', { surface: 'checks', action: 'conflicts' })}>Resolve</Button>
         ) : broken ? (
-          <button type="button" style={primaryButtonStyle} onClick={() => void runReviewMethod('checksSetAgentDialog', { surface: 'checks', action: 'fix' })}>Fix</button>
+          <Button variant="primary" onClick={() => void runReviewMethod('checksSetAgentDialog', { surface: 'checks', action: 'fix' })}>Fix</Button>
         ) : queuedCount > 0 ? (
-          <button type="button" style={primaryButtonStyle} onClick={() => void runReviewMethod('checksSetAgentDialog', { surface: 'checks', action: 'comments' })}>Resolve {queuedCount} Comments With AI</button>
-        ) : <span className="muted">Orca will refresh checks while this panel stays open.</span>}
+          <Button variant="primary" onClick={() => void runReviewMethod('checksSetAgentDialog', { surface: 'checks', action: 'comments' })}>Resolve {queuedCount} Comments With AI</Button>
+        ) : <span className="ui-text-muted">Orca will refresh checks while this panel stays open.</span>}
       </section>}
 
-      <div style={{ minHeight: 0, flex: '1 1 auto', height: contentHeight, maxHeight: '72vh', overflow: 'auto', padding: 10 }}>
+      <div className="ui-stack" style={{ minHeight: 0, flex: '1 1 auto', height: contentHeight, maxHeight: '100%', overflow: 'auto', padding: 'var(--ui-space-12)' }}>
         <ChecksList {...props} surface="checks" />
         <Comments {...props} surface="checks" />
       </div>
-      {isRecord(active.conflicts) && active.conflicts.status === 'ready' && active.conflicts.truncated === true && <p className="muted">Conflict file list is truncated at 100 entries.</p>}
-      {isRecord(active.checks) && active.checks.truncated === true && <p className="muted">Showing the first 100 checks.</p>}
-      {isRecord(active.comments) && active.comments.truncated === true && <p className="muted">Showing the first 100 comments.</p>}
-      {active.error && <p role="alert" style={{ color: 'var(--danger, #e5534b)', padding: '4px 10px', margin: 0 }}>{active.error}</p>}
-      {actionError && <p role="alert" style={{ color: 'var(--danger, #e5534b)', padding: '4px 10px', margin: 0 }}>{actionError}</p>}
+      {isRecord(active.conflicts) && active.conflicts.status === 'ready' && active.conflicts.truncated === true && <p className="ui-text-muted">Conflict file list is truncated at 100 entries.</p>}
+      {isRecord(active.checks) && active.checks.truncated === true && <p className="ui-text-muted">Showing the first 100 checks.</p>}
+      {isRecord(active.comments) && active.comments.truncated === true && <p className="ui-text-muted">Showing the first 100 comments.</p>}
+      {active.error && <p role="alert"><StatusDot status="failing" label="Error" /> {active.error}</p>}
+      {actionError && <p role="alert"><StatusDot status="failing" label="Error" /> {actionError}</p>}
       <div role="separator" aria-orientation="horizontal" aria-label="Resize Checks panel" tabIndex={0}
         onMouseDown={beginResize}
         onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
@@ -1252,7 +1225,7 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
             void commitHeight((active.height ?? 320) + (event.key === 'ArrowUp' ? 24 : -24))
           }
         }}
-        style={{ height: 8, flex: '0 0 8px', cursor: 'row-resize', borderTop: '1px solid var(--border, #2b2f3a)' }} />
+        style={{ height: 'var(--ui-space-8)', flex: '0 0 var(--ui-space-8)', cursor: 'row-resize', borderTop: 'var(--ui-border-width) solid var(--ui-border)' }} />
     </section>
   )
 }

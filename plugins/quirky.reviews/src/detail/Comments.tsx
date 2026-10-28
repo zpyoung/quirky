@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Badge, Button, SectionHeader, StatusDot, Tabs, TextField } from '@quirky/ui'
 import { Markdown, MarkdownComposer } from '@quirky/plugin-tasks/markdown'
 import type { ReviewsSurfaceProps } from '../contracts'
 import { isRecord, parseCommentsResult, reviewContext, safeHttpUrl, type ReviewComment } from './data'
@@ -125,6 +126,7 @@ export function Comments(props: CommentsProps) {
   const [mentionOptions, setMentionOptions] = useState<MentionOption[]>([])
   const [mentionError, setMentionError] = useState<string | null>(null)
   const [imageUrl, setImageUrl] = useState('')
+  const [imageInsertOpen, setImageInsertOpen] = useState(false)
   const [imageError, setImageError] = useState<string | null>(null)
   const suggestionRequest = useRef(0)
   const draftRevision = useRef(Date.now() * 1000 + Math.floor(Math.random() * 1000))
@@ -342,94 +344,93 @@ export function Comments(props: CommentsProps) {
     const timestamp = displayTime(comment.createdAt)
     const queueId = comment.threadId ?? String(comment.id)
     const authorIsManuallyMarked = props.state.botOverrides.some((login) => login.toLowerCase() === (comment.author ?? '').toLowerCase())
-    return <article className="review-comment" key={`${comment.kind}:${String(comment.id)}`}>
-      <header className="review-comment-header">
+    return <article className="ui-stack" key={`${comment.kind}:${String(comment.id)}`}>
+      <header className="ui-cluster">
         <strong>{comment.author ?? 'Unknown author'}</strong>
-        {bot ? <span className="review-bot-badge">Bot</span> : null}
-        {timestamp ? <time dateTime={comment.createdAt ?? undefined}>{timestamp}</time> : null}
-        {comment.isOutdated === true ? <span>Outdated thread</span> : null}
-        {comment.state ? <span>{comment.state}</span> : null}
+        {bot ? <Badge>Bot</Badge> : null}
+        {timestamp ? <time dateTime={comment.createdAt ?? undefined} className="ui-text-muted">{timestamp}</time> : null}
+        {comment.isOutdated === true ? <Badge tone="needs-you">Outdated thread</Badge> : null}
+        {comment.state ? <Badge>{comment.state}</Badge> : null}
       </header>
-      {editingId === numericId && topLevel ? <div className="review-comment-edit">
+      {editingId === numericId && topLevel ? <div className="ui-stack">
         <MarkdownComposer value={editDraft} onChange={setEditDraft} label={`Edit comment #${numericId}`} minRows={3} disabled={pending} />
-        <button type="button" disabled={pending || editDraft.trim() === ''} onClick={() => void editComment(numericId)}>Save edit</button>
-        <button type="button" disabled={pending} onClick={() => { setEditingId(null); setEditDraft('') }}>Cancel edit</button>
-      </div> : <div className="review-comment-body"><Markdown source={comment.body} /></div>}
-      <div className="review-comment-actions">
-        {comment.threadId ? <button type="button" onClick={() => void resolveThread(comment.threadId as string, comment.isResolved !== true)}>{comment.isResolved === true ? 'Unresolve' : 'Resolve'}</button> : null}
-        {comment.kind === 'review_comment' && numericId !== null ? <button type="button" onClick={() => { setReplyTo(numericId); setDraft(data.draft) }}>Reply</button> : null}
-        {safeUrl && data.worktree ? <button type="button" onClick={() => {
+        <div className="ui-cluster">
+          <Button variant="primary" disabled={pending || editDraft.trim() === ''} onClick={() => void editComment(numericId)}>Save edit</Button>
+          <Button disabled={pending} onClick={() => { setEditingId(null); setEditDraft('') }}>Cancel edit</Button>
+        </div>
+      </div> : <div><Markdown source={comment.body} /></div>}
+      <div className="ui-cluster">
+        {comment.threadId ? <Button onClick={() => void resolveThread(comment.threadId as string, comment.isResolved !== true)}>{comment.isResolved === true ? 'Unresolve' : 'Resolve'}</Button> : null}
+        {comment.kind === 'review_comment' && numericId !== null ? <Button onClick={() => { setReplyTo(numericId); setDraft(data.draft) }}>Reply</Button> : null}
+        {safeUrl && data.worktree ? <Button onClick={() => {
           const worktree = data.worktree
           if (worktree === null) return
           void props.context.call('quirky.reviews/openLink', { url: safeUrl, worktree }).catch((error: unknown) => setActionError(errorText(error)))
-        }}>Go to comment</button> : null}
-        <button type="button" aria-pressed={data.queued.includes(queueId)} onClick={() => void setQueued(queueId, !data.queued.includes(queueId))}>{data.queued.includes(queueId) ? 'Unqueue for agent' : 'Queue for agent'}</button>
-        {comment.author ? <button type="button" onClick={() => void setBotOverride(comment.author as string, !authorIsManuallyMarked)}>{authorIsManuallyMarked ? 'Unmark author as bot' : 'Mark author as bot'}</button> : null}
+        }}>Go to comment</Button> : null}
+        <Button aria-pressed={data.queued.includes(queueId)} onClick={() => void setQueued(queueId, !data.queued.includes(queueId))}>{data.queued.includes(queueId) ? 'Unqueue for agent' : 'Queue for agent'}</Button>
+        {comment.author ? <Button onClick={() => void setBotOverride(comment.author as string, !authorIsManuallyMarked)}>{authorIsManuallyMarked ? 'Unmark author as bot' : 'Mark author as bot'}</Button> : null}
         {topLevel ? <>
-          {editingId === numericId ? null : <button type="button" onClick={() => { setEditingId(numericId); setEditDraft(comment.body) }}>Edit</button>}
-          <button type="button" disabled={pending} onClick={() => void deleteComment(numericId)}>Delete</button>
+          {editingId === numericId ? null : <Button onClick={() => { setEditingId(numericId); setEditDraft(comment.body) }}>Edit</Button>}
+          <Button variant="destructive" disabled={pending} onClick={() => void deleteComment(numericId)}>Delete</Button>
         </> : null}
       </div>
     </article>
   }
 
-  const renderThread = (thread: CommentThread) => <section className="review-comment-thread" key={thread.id}>
-    <header className="review-thread-header">
-      <strong>{thread.resolved === true ? 'Resolved thread' : 'Needs review'}</strong>
-      {thread.id.startsWith('issue_comment:') || thread.id.startsWith('review:') ? null : <span>{thread.comments.length} comments</span>}
-    </header>
+  const renderThread = (thread: CommentThread) => <section className="ui-stack" key={thread.id}>
+    <SectionHeader
+      title={thread.resolved === true ? 'Resolved thread' : 'Needs review'}
+      actions={thread.id.startsWith('issue_comment:') || thread.id.startsWith('review:') ? undefined : <Badge>{thread.comments.length} comments</Badge>}
+    />
     {thread.comments.map(renderComment)}
   </section>
 
   const content = parsed === null
-    ? data.loading ? <p role="status">Loading comments…</p> : <p role="status">{data.error ? 'Comments are unavailable.' : 'Comments have not been loaded yet.'}</p>
+    ? data.loading ? <p role="status" className="ui-text-muted">Loading comments…</p> : <p role="status" className="ui-text-muted">{data.error ? 'Comments are unavailable.' : 'Comments have not been loaded yet.'}</p>
     : data.grouping === 'timeline'
       ? timeline.length === 0
-        ? <p role="status">{emptyText}</p>
-        : <div className="review-comment-timeline">{timeline.map(renderComment)}</div>
+        ? <p role="status" className="ui-text-muted">{emptyText}</p>
+        : <div className="ui-stack">{timeline.map(renderComment)}</div>
       : allThreads.length === 0
-        ? <p role="status">{emptyText}</p>
-        : <div className="review-comment-groups">
-          {unresolvedThreads.length > 0 ? <section aria-label="Needs review">
-            <h4>Needs review</h4>
+        ? <p role="status" className="ui-text-muted">{emptyText}</p>
+        : <div className="ui-stack">
+          {unresolvedThreads.length > 0 ? <section className="ui-stack" aria-label="Needs review">
+            <SectionHeader title="Needs review" />
             {[...unresolvedThreads].sort((left, right) => right.updatedAt - left.updatedAt).map(renderThread)}
           </section> : null}
-          {resolvedThreads.length > 0 ? <section aria-label="Resolved">
-            <h4>Resolved</h4>
+          {resolvedThreads.length > 0 ? <section className="ui-stack" aria-label="Resolved">
+            <SectionHeader title="Resolved" />
             {[...resolvedThreads].sort((left, right) => right.updatedAt - left.updatedAt).map(renderThread)}
           </section> : null}
         </div>
 
-  return <section className="review-comments" aria-label="Pull request comments">
-    <header className="review-comments-heading">
-      <h3>Comments{parsed ? ` (${comments.length})` : ''}</h3>
-      <div role="group" aria-label="Comment audience">
-        {(['all', 'humans', 'bots'] as const).map((audience) => <button
-          key={audience}
-          type="button"
-          aria-pressed={data.audience === audience}
-          disabled={targetParams === null}
-          onClick={() => { if (targetParams !== null) void props.context.call('quirky.reviews/detailSetAudience', { ...targetParams, audience }).catch((error: unknown) => setActionError(errorText(error))) }}
-        >{audience === 'all' ? 'All' : audience === 'humans' ? 'Humans' : 'Bots'} ({countFor(audience)})</button>)}
-      </div>
-      <div role="group" aria-label="Comment ordering">
-        {(['grouped', 'timeline'] as const).map((grouping) => <button
-          key={grouping}
-          type="button"
-          aria-pressed={data.grouping === grouping}
-          disabled={targetParams === null}
-          onClick={() => { if (targetParams !== null) void props.context.call('quirky.reviews/detailSetGrouping', { ...targetParams, grouping }).catch((error: unknown) => setActionError(errorText(error))) }}
-        >{grouping === 'grouped' ? 'Grouped' : 'Timeline'}</button>)}
-      </div>
-    </header>
+  return <section className="ui-stack" aria-label="Pull request comments">
+    <SectionHeader
+      title={`Comments${parsed ? ` (${comments.length})` : ''}`}
+      actions={<div className="ui-cluster">
+        <Tabs label="Comment audience" items={[
+          { id: 'all', label: `All (${countFor('all')})`, disabled: targetParams === null },
+          { id: 'humans', label: `Humans (${countFor('humans')})`, disabled: targetParams === null },
+          { id: 'bots', label: `Bots (${countFor('bots')})`, disabled: targetParams === null },
+        ]} value={data.audience} onChange={(audience) => {
+          if (targetParams !== null) void props.context.call('quirky.reviews/detailSetAudience', { ...targetParams, audience }).catch((error: unknown) => setActionError(errorText(error)))
+        }} />
+        <Tabs label="Comment ordering" items={[
+          { id: 'grouped', label: 'Grouped', disabled: targetParams === null },
+          { id: 'timeline', label: 'Timeline', disabled: targetParams === null },
+        ]} value={data.grouping} onChange={(grouping) => {
+          if (targetParams !== null) void props.context.call('quirky.reviews/detailSetGrouping', { ...targetParams, grouping }).catch((error: unknown) => setActionError(errorText(error)))
+        }} />
+      </div>}
+    />
 
-    {data.error ? <p className="review-error" role="alert">{data.error} Showing the last available comments where present.</p> : null}
-    {actionError ? <p className="review-error" role="alert">{actionError}</p> : null}
-    {parsed?.partial === true ? <p className="review-partial" role="status">Showing the first 100 comments per source{Array.isArray(parsed.partialFailures) && parsed.partialFailures.length > 0 ? `; ${parsed.partialFailures.join(' ')}` : '.'}</p> : null}
+    {data.error ? <p role="alert"><StatusDot status="failing" label="Error" /> {data.error} Showing the last available comments where present.</p> : null}
+    {actionError ? <p role="alert"><StatusDot status="failing" label="Error" /> {actionError}</p> : null}
+    {parsed?.partial === true ? <p role="status" className="ui-text-muted">Showing the first 100 comments per source{Array.isArray(parsed.partialFailures) && parsed.partialFailures.length > 0 ? `; ${parsed.partialFailures.join(' ')}` : '.'}</p> : null}
 
     {content}
 
-    {number !== null ? <form className="review-comment-composer" onSubmit={(event) => { event.preventDefault(); void submit() }}>
+    {number !== null ? <form className="ui-stack" onSubmit={(event) => { event.preventDefault(); void submit() }}>
       <label htmlFor={`review-comment-${props.surface}`}>{replyTo === null ? 'Add a comment' : `Reply to comment #${replyTo}`}</label>
       <MarkdownComposer
         value={draft}
@@ -440,33 +441,27 @@ export function Comments(props: CommentsProps) {
         disabled={pending || selectedReview === null}
         onSubmit={() => void submit()}
       />
-      {mentionPrefix !== null ? <div className="review-mention-suggestions" role="listbox" aria-label="Mention suggestions">
-        {mentionOptions.length > 0 ? mentionOptions.map((option) => <button
-          key={option.login}
-          type="button"
-          role="option"
-          onClick={() => selectMention(option.login)}
-        >@{option.login}</button>) : <span>No matching participants.</span>}
-        {mentionError ? <span role="status">Some repository suggestions could not be loaded: {mentionError}</span> : null}
+      {mentionPrefix !== null ? <div className="ui-stack" role="listbox" aria-label="Mention suggestions">
+        {mentionOptions.length > 0 ? mentionOptions.map((option) => <Button key={option.login} role="option" onClick={() => selectMention(option.login)}>@{option.login}</Button>) : <span>No matching participants.</span>}
+        {mentionError ? <span role="status" className="ui-text-muted">Some repository suggestions could not be loaded: {mentionError}</span> : null}
       </div> : null}
-      <details className="review-image-insert">
-        <summary>Insert image URL</summary>
-        <label htmlFor={`review-image-${props.surface}`}>HTTP or HTTPS image URL (8 KiB maximum)</label>
-        <input id={`review-image-${props.surface}`} type="url" value={imageUrl} onChange={(event) => setImageUrl(event.currentTarget.value)} maxLength={8192} />
-        <button type="button" disabled={imageUrl.trim() === ''} onClick={insertImage}>Insert image</button>
-        {imageError ? <p role="alert">{imageError}</p> : null}
-      </details>
-      <div className="review-comment-submit">
-        {replyTo !== null ? <button type="button" disabled={pending} onClick={() => setReplyTo(null)}>Cancel reply</button> : null}
-        <button type="submit" aria-label="Send comment" disabled={pending || selectedReview === null || draft.trim() === ''}>
-          {pending ? 'Sending…' : replyTo === null ? 'Send comment' : 'Send reply'}
-        </button>
+      <div className="ui-stack">
+        <Button aria-expanded={imageInsertOpen} onClick={() => setImageInsertOpen((open) => !open)}>Insert image URL</Button>
+        {imageInsertOpen ? <div className="ui-stack">
+          <TextField id={`review-image-${props.surface}`} label="HTTP or HTTPS image URL (8 KiB maximum)" type="url" value={imageUrl} onChange={(event) => setImageUrl(event.currentTarget.value)} maxLength={8192} />
+          <Button disabled={imageUrl.trim() === ''} onClick={insertImage}>Insert image</Button>
+          {imageError ? <p role="alert"><StatusDot status="failing" label="Error" /> {imageError}</p> : null}
+        </div> : null}
+      </div>
+      <div className="ui-cluster">
+        {replyTo !== null ? <Button disabled={pending} onClick={() => setReplyTo(null)}>Cancel reply</Button> : null}
+        <Button variant="primary" type="submit" aria-label="Send comment" disabled={pending || selectedReview === null || draft.trim() === ''}>{pending ? 'Sending…' : replyTo === null ? 'Send comment' : 'Send reply'}</Button>
       </div>
     </form> : null}
 
-    {data.queued.length > 0 ? <footer className="review-queued-comments">
+    {data.queued.length > 0 ? <footer className="ui-cluster">
       <span>{data.queued.length} queued comment{data.queued.length === 1 ? '' : 's'}</span>
-      <button type="button" onClick={() => void sendQueued()}>Send {data.queued.length} queued comments to AI</button>
+      <Button variant="primary" onClick={() => void sendQueued()}>Send {data.queued.length} queued comments to AI</Button>
     </footer> : null}
   </section>
 }
