@@ -101,7 +101,6 @@ class Runtime {
       },
       getSetting: () => undefined, storedSettingValue: () => undefined,
       error(kind, message) { return Object.assign(new Error(message), { code: kind }) },
-      clients: { accept() { throw new Error('Remote transports are not part of this loop engine fixture') } },
       pty: {} as PluginContext['pty'], notify: () => undefined, launch: {} as PluginContext['launch']
     } as PluginContext
   }
