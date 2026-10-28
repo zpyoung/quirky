@@ -1409,7 +1409,6 @@
       "title": "End-phase test triage: run bun scripts/suite.ts packages apps plugins, bun test scripts and bun run typecheck on build/roadmap, and add one fix-test-<area>-<MMDD> item per failing package, app or plugin (naming its failing files and tests) so the lanes split the debugging; change no code",
       "docs": [],
       "deps": [
-        "sb-mobile-app-panels",
         "sa-browser-agent-extras",
         "m4-hosting-ui-review-browser-routing",
         "sa-browser-profile-import-ui",
