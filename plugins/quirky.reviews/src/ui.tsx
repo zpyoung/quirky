@@ -127,12 +127,11 @@ export function activate(context: UiPluginContext): void {
     return { copied: true }
   })
   context.provide('command:quirky.reviews/open-link', async (input?: unknown) => {
-    if (!record(input) || typeof input.url !== 'string') throw new Error('Select an HTTP(S) review link.')
+    if (!record(input) || typeof input.url !== 'string' || input.url.length > 8192) throw new Error('Select an HTTP(S) review link.')
     const url = new URL(input.url)
     if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) throw new Error('Select an HTTP(S) review link without credentials.')
-    const inApp = context.getSetting('quirky.browser/openLinksInApp') === true
-    if (inApp !== (input.invert === true)) throw new Error('In-app link routing requires the browser-pane feature; this review stays selected. Open the system link without the inversion modifier.')
-    await context.call('quirky.terminal/openExternal', { target: url.href })
-    return { opened: true, destination: 'system' }
+    if (typeof input.worktree !== 'string' || input.worktree.trim() === '' || input.worktree.length > 4096) throw new Error('Select a review workspace before opening its link.')
+    const invert = input.invert === true
+    return context.call('quirky.browser/openLink', { url: url.href, worktree: input.worktree, modifier: invert, shift: invert })
   })
 }

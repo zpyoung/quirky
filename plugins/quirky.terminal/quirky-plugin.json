@@ -740,6 +740,10 @@
               "additionalProperties": true,
               "description": "Parameters passed to closeMethod and closeCommand with the actual tabId added."
             },
+            "closeContext": {
+              "type": "boolean",
+              "description": "When true, guard calls receive the host-computed close reason and actual view identity/input."
+            },
             "revision": {
               "type": "integer",
               "description": "Fails with a conflict naming the current revision when the workspace is at another one."
@@ -880,7 +884,7 @@
             "options": {
               "type": "object",
               "additionalProperties": true,
-              "description": "Option picks for the model, such as {effort: \"high\"}: up to 16 entries whose values are strings or booleans. Needs `model`."
+              "description": "Up to 16 string or boolean option picks, such as {effort: \"high\"}. Without model, only the catalog's generic options apply; the native model remains unchanged."
             },
             "quickCommand": {
               "type": "string",
@@ -2810,6 +2814,8 @@
         "type": "enum",
         "title": "Terminal URL clicks",
         "description": "What clicking a link does.",
+        "category": "Browser",
+        "section": "Terminal URL clicks",
         "default": "actions",
         "values": [
           "actions",
@@ -2822,6 +2828,8 @@
         "type": "enum",
         "title": "Terminal URL middle click",
         "description": "What middle-clicking a link does.",
+        "category": "Browser",
+        "section": "Terminal URL clicks",
         "default": "open",
         "values": [
           "actions",

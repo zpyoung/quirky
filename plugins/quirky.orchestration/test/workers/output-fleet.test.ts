@@ -693,6 +693,72 @@ test('preserves fresh and stale evidence from real status rows with an optional 
     const output = createWorkerOutput(harness.core, harness.repo, harness.runtime)
     const read = await output.read({ dispatchId: dispatch.id })
     expect(read.agentLiveness).toEqual(stale ? { status: 'unverifiable', reason: 'stale_status' } : { status: 'live', reason: null })
+    const listed = await fleet.list({}, null)
+    expect(listed.workers[0]?.currentAssignment).toBe(true)
     fleet.dispose()
   }
+})
+
+test('projects task labels and exact coordinator and creator lineage across snapshot pages', async () => {
+  const firstDispatch = makeDispatch(1, 'run_1' as RunId, { creatorSessionId: 'coordinator-session' })
+  const secondDispatch = makeDispatch(2, 'run_1' as RunId, { creatorSessionId: 'parent-worker-session' })
+  const harness = makeHarness({
+    dispatches: [firstDispatch, secondDispatch],
+    coordinatorSessionId: 'run-coordinator-session',
+    taskOverrides: [
+      { id: firstDispatch.taskId, taskTitle: 'First task title', displayName: 'First agent' },
+      { id: secondDispatch.taskId, taskTitle: 'Second task title', displayName: 'Second agent' }
+    ]
+  })
+  const fleet = createWorkerFleet(harness.core, harness.repo, harness.runtime)
+
+  const first = await fleet.list({ limit: 1 }, null)
+  const second = await fleet.list({ cursor: first.page.nextCursor!, limit: 1 }, null)
+
+  expect(first.workers[0]).toMatchObject({
+    taskTitle: 'Second task title',
+    displayName: 'Second agent',
+    coordinatorSessionId: 'run-coordinator-session',
+    parentSessionId: 'parent-worker-session',
+    currentAssignment: true
+  })
+  expect(second.workers[0]).toMatchObject({
+    taskTitle: 'First task title',
+    displayName: 'First agent',
+    coordinatorSessionId: 'run-coordinator-session',
+    parentSessionId: 'coordinator-session',
+    currentAssignment: true
+  })
+  fleet.dispose()
+})
+
+test('marks replaced and missing worker identities as unverified assignments', async () => {
+  const replacedDispatch = makeDispatch()
+  const replaced = makeHarness({
+    dispatches: [replacedDispatch],
+    records: [makeRecord(replacedDispatch)],
+    resources: [makeResource(replacedDispatch)],
+    observation: {
+      status: 'identity_changed',
+      exactWorker: false,
+      reason: 'process_incarnation_changed',
+      identity: null,
+      session: null
+    }
+  })
+  const replacedFleet = createWorkerFleet(replaced.core, replaced.repo, replaced.runtime)
+  const replacedResult = await replacedFleet.list({}, null)
+  expect(replacedResult.workers[0]?.currentAssignment).toBe(false)
+  replacedFleet.dispose()
+
+  const missingDispatch = makeDispatch(2)
+  const missing = makeHarness({
+    dispatches: [missingDispatch],
+    records: [],
+    resources: [makeResource(missingDispatch, 'missing-session')]
+  })
+  const missingFleet = createWorkerFleet(missing.core, missing.repo, missing.runtime)
+  const missingResult = await missingFleet.list({}, null)
+  expect(missingResult.workers[0]?.currentAssignment).toBe(false)
+  missingFleet.dispose()
 })

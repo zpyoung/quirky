@@ -4,9 +4,12 @@ import { isAbsolute } from 'node:path'
 import type { PluginCaller, PluginContext, PluginErrorKind } from '@quirky/protocol'
 import { decodeOutput, failureMessage, sanitizeFailureDetail, stripAnsi } from './core/one-shot-output'
 import { buildOneShotCommand, extractEnvAssignments, OneShotError, planCustomCommand, shouldRetryWithoutStrictMcp, type OneShotCommand } from './core/one-shot'
+import { findOptionOccurrence, hasOption, terminatorIndex } from './core/arg-occurrence'
 import { buildLaunchPlan, PlanError } from './core/plan'
+import { resolveLaunch } from './core/resolve'
+import { SelectionError, validateSelection } from './core/selection'
 import { joinCommand, tokenize } from './core/shell'
-import type { AgentConfig, AgentEntry } from './core/types'
+import type { AgentConfig, AgentEntry, ExtraArgKind, OneShotArg, ParsedExtras, Resolution, ValidSelection } from './core/types'
 import { startOneShot, type OneShotOutcome, type OneShotRun } from './one-shot-run'
 
 type Params = Record<string, unknown>
@@ -39,6 +42,105 @@ type Target = {
 }
 
 type Job = { cancelled: boolean; run: OneShotRun | null }
+function keepFirstPrefixedConflict(tokens: string[], conflict: { flags: string[]; valuePrefix?: string }, valueFlags: string[]): string[] {
+  if (conflict.valuePrefix === undefined) return tokens
+  let rest = tokens
+  let output: string[] = []
+  let kept = false
+  for (let found = findOptionOccurrence(rest, conflict.flags, true, valueFlags); found; found = findOptionOccurrence(rest, conflict.flags, true, valueFlags)) {
+    const end = found.index + found.consumed
+    output = [...output, ...rest.slice(0, found.index)]
+    const matching = found.value?.startsWith(conflict.valuePrefix) ?? false
+    if (!matching || !kept) output = [...output, ...rest.slice(found.index, end)]
+    if (matching) kept = true
+    rest = rest.slice(end)
+  }
+  return [...output, ...rest]
+}
+function keepFirstOption(tokens: string[], aliases: string[], valueFlags: string[]): string[] {
+  const first = findOptionOccurrence(tokens, aliases, true, valueFlags)
+  if (!first) return tokens
+  const end = first.index + first.consumed
+  const output = tokens.slice(0, end)
+  let rest = tokens.slice(end)
+  for (let found = findOptionOccurrence(rest, aliases, true, valueFlags); found; found = findOptionOccurrence(rest, aliases, true, valueFlags)) {
+    output.push(...rest.slice(0, found.index))
+    rest = rest.slice(found.index + found.consumed)
+  }
+  return [...output, ...rest]
+}
+
+function oneShotSingletons(entry: AgentEntry): string[][] {
+  const groups = entry.oneShot!.singletonOptions.map((group) => [...group])
+  const conflicts = [
+    ...(entry.launchOptions?.model.conflicts ?? []),
+    ...(entry.launchOptions?.options.flatMap((option) => option.conflicts) ?? [])
+  ]
+  for (const conflict of conflicts) {
+    if (conflict.valuePrefix !== undefined || groups.some((group) => group.length === conflict.flags.length && group.every((flag) => conflict.flags.includes(flag)))) continue
+    groups.push([...conflict.flags])
+  }
+  return groups
+}
+function hasOneShotPlaceholder(args: OneShotArg[], placeholder: string): boolean {
+  return args.some((item) =>
+    typeof item === 'string' ? item.includes(placeholder) : item.args.some((part) => part.includes(placeholder))
+  )
+}
+
+function withoutModelTemplate(args: OneShotArg[], flags: string[]): OneShotArg[] {
+  const strip = (words: string[]): string[] => {
+    const result: string[] = []
+    for (let index = 0; index < words.length; index += 1) {
+      const word = words[index]!
+      if (flags.includes(word) && words[index + 1]?.includes('{model}')) {
+        index += 1
+        continue
+      }
+      if (flags.some((flag) => word.startsWith(`${flag}=`) && word.includes('{model}'))) continue
+      result.push(word)
+    }
+    return result
+  }
+  const result: OneShotArg[] = []
+  for (let index = 0; index < args.length; index += 1) {
+    const item = args[index]!
+    if (typeof item === 'string') {
+      const next = args[index + 1]
+      if (flags.includes(item) && typeof next === 'string' && next.includes('{model}')) {
+        index += 1
+        continue
+      }
+      if (flags.some((flag) => item.startsWith(`${flag}=`) && item.includes('{model}'))) continue
+      result.push(item)
+      continue
+    }
+    const nested = strip(item.args)
+    if (nested.length > 0) result.push({ ...item, args: nested })
+  }
+  return result
+}
+
+function picksNotHandledByOneShot(entry: AgentEntry, selection: ValidSelection | null, resolution: Resolution): string[] {
+  const catalog = entry.launchOptions
+  if (!catalog || !selection) return resolution.added
+  const handlesModel = catalog.composeModel === null && hasOneShotPlaceholder(entry.oneShot!.args, '{model}')
+  const handlesEffort = hasOneShotPlaceholder(entry.oneShot!.args, '{thinking}')
+  let position = 0
+  const passed: string[] = []
+  if (selection.model !== null && !resolution.shadowed.includes('model')) {
+    const count = catalog.model.flag.length
+    if (!handlesModel) passed.push(...resolution.added.slice(position, position + count))
+    position += count
+  }
+  for (const option of catalog.options) {
+    if (!Object.hasOwn(selection.values, option.id) || resolution.shadowed.includes(option.id)) continue
+    const count = option.flag?.length ?? 0
+    if (!(option.id === 'effort' && handlesEffort)) passed.push(...resolution.added.slice(position, position + count))
+    position += count
+  }
+  return [...passed, ...resolution.added.slice(position)]
+}
 
 /** `quirky.agents/generate` and `cancelGenerate`: runs one agent once and returns what it printed. */
 export class Generator {
@@ -79,7 +181,7 @@ export class Generator {
 
   private async run(params: Params, caller: PluginCaller, job: Job) {
     const prompt = params.prompt as string
-    const target = this.plan(params.agent as string, params.args as string | undefined, prompt)
+    const target = this.plan(params.agent as string, params.args as string | undefined, prompt, params.model, params.optionValues)
     target.build(true)
     const { cwd, worktreeId } = await this.workingDirectory(params, caller)
     const timeoutMs = this.timeoutOf(params)
@@ -114,13 +216,21 @@ export class Generator {
     try {
       return work()
     } catch (error) {
-      if (error instanceof PlanError || error instanceof OneShotError) throw this.deps.context.error('invalid-params', error.message)
+      if (error instanceof PlanError || error instanceof OneShotError || error instanceof SelectionError) throw this.deps.context.error('invalid-params', error.message)
       throw error
     }
   }
 
-  private plan(agent: string, userArgs: string | undefined, prompt: string): Target {
-    return agent === CUSTOM_AGENT ? this.planCustom(userArgs ?? '', prompt) : this.planAgent(agent, userArgs, prompt)
+  private plan(agent: string, userArgs: string | undefined, prompt: string, model: unknown, optionValues: unknown): Target {
+    if (agent !== CUSTOM_AGENT) return this.planAgent(agent, userArgs, prompt, model, optionValues)
+    if (model !== undefined && model !== null) throw this.deps.context.error('invalid-params', 'Custom commands do not support model or option picks.')
+    if (optionValues !== undefined) {
+      if (typeof optionValues !== 'object' || optionValues === null || Array.isArray(optionValues)) {
+        throw this.deps.context.error('invalid-params', 'Custom commands do not support model or option picks.')
+      }
+      if (Object.keys(optionValues).length > 0) throw this.deps.context.error('invalid-params', 'Custom commands do not support model or option picks.')
+    }
+    return this.planCustom(userArgs ?? '', prompt)
   }
 
   private planCustom(commandLine: string, prompt: string): Target {
@@ -137,11 +247,17 @@ export class Generator {
     }
   }
 
-  private planAgent(id: string, userArgs: string | undefined, prompt: string): Target {
+  private planAgent(id: string, userArgs: string | undefined, prompt: string, requestedModel: unknown, optionValues: unknown): Target {
     const entry = this.deps.entryOf(id)
     if (!entry) throw this.deps.context.error('invalid-params', `unknown agent: ${id}`)
     const spec = entry.oneShot
     if (!spec) throw this.refuse('invalid-params', 'cannot-generate', `${entry.label} can't generate text. Pick another agent.`)
+    const selection = this.guard(() =>
+      validateSelection(entry, {
+        model: requestedModel,
+        options: optionValues
+      })
+    )
     const config = this.deps.configOf(id)
     if (config.disabled) throw this.refuse('invalid-params', 'not-installed', `${entry.label} is disabled. Enable it in Settings.`)
     if (!this.deps.installed(id)) throw this.refuse('invalid-params', 'not-installed', `${entry.label} is not installed.`)
@@ -161,7 +277,72 @@ export class Generator {
       label: entry.label,
       command: rest,
       env: { ...launch.env, ...env },
-      build: (strictMcp) => this.guard(() => buildOneShotCommand(entry, { userArgs, prompt, strictMcp })),
+      build: (strictMcp) =>
+        this.guard(() => {
+          const parsed = tokenize(userArgs ?? '')
+          if (!parsed.ok) throw new OneShotError(`CLI arguments are invalid: ${parsed.error}`)
+          let rawTokens = parsed.tokens
+          const catalog = entry.launchOptions
+          const valueFlags = catalog?.valueFlags ?? []
+          const singletonGroups = oneShotSingletons(entry)
+          for (const group of singletonGroups) rawTokens = keepFirstOption(rawTokens, group, valueFlags)
+          if (catalog) {
+            const prefixed = [
+              ...catalog.model.conflicts,
+              ...catalog.options.flatMap((option) => option.conflicts)
+            ].filter((conflict) => conflict.valuePrefix !== undefined)
+            for (const conflict of prefixed) rawTokens = keepFirstPrefixedConflict(rawTokens, conflict, valueFlags)
+          }
+
+          const kinds = new Set<ExtraArgKind>()
+          if (catalog) {
+            if (catalog.model.conflicts.some((conflict) => hasOption(rawTokens, conflict, valueFlags))) kinds.add('model')
+            for (const option of catalog.options) {
+              if (option.conflicts.some((conflict) => hasOption(rawTokens, conflict, valueFlags))) {
+                kinds.add(option.id === 'effort' ? 'effort' : 'repeatable')
+              }
+            }
+          }
+          const extras: ParsedExtras | null = rawTokens.length === 0 ? null : { tokens: rawTokens, kinds }
+          const picks = resolveLaunch({ entry, commandTokens: [], configuredArgs: [], selection, extras, structured: false })
+          const selectedModel = selection?.model ?? undefined
+          const selectedEffort = selection?.values.effort
+          const models =
+            selectedModel !== undefined && !spec.models.some((candidate) => candidate.id === selectedModel)
+              ? [...spec.models, { id: selectedModel, label: selectedModel, thinking: typeof selectedEffort === 'string' ? selectedEffort : null }]
+              : spec.models
+          const rawModel = catalog?.model.conflicts.some((conflict) => hasOption(rawTokens, conflict, valueFlags)) ?? false
+          const rawModelUsesConfig = catalog?.model.conflicts.some(
+            (conflict) => conflict.valuePrefix !== undefined && hasOption(rawTokens, conflict, valueFlags)
+          ) ?? false
+          const rawEffort =
+            catalog?.options.find((option) => option.id === 'effort')?.conflicts.some((conflict) => hasOption(rawTokens, conflict, valueFlags)) ?? false
+          const rawEffortNeedsSuppression =
+            catalog?.options
+              .find((option) => option.id === 'effort')
+              ?.conflicts.some((conflict) => conflict.valuePrefix !== undefined && hasOption(rawTokens, conflict, valueFlags)) ?? false
+          const oneShot = {
+            ...spec,
+            ...(selectedModel === undefined ? {} : { defaultModel: selectedModel }),
+            ...(rawModelUsesConfig && catalog ? { args: withoutModelTemplate(spec.args, catalog.model.conflicts.flatMap((conflict) => conflict.flags)) } : {}),
+            models,
+            singletonOptions: singletonGroups
+          }
+          const pickedEffort = selection?.values.effort
+          const keepGenericEffort = selection?.model === null && typeof pickedEffort === 'string'
+          const suppressEffort = rawEffortNeedsSuppression || (rawModel && !rawEffort && !keepGenericEffort)
+          const userTokens = [...rawTokens.slice(0, terminatorIndex(rawTokens, valueFlags)), ...picksNotHandledByOneShot(entry, selection, picks), ...rawTokens.slice(terminatorIndex(rawTokens, valueFlags))]
+          return buildOneShotCommand(
+            { label: entry.label, oneShot },
+            {
+              userArgs: joinCommand(userTokens),
+              prompt,
+              strictMcp,
+              ...(selectedModel === undefined ? {} : { model: selectedModel }),
+              ...(suppressEffort ? { thinking: null } : typeof pickedEffort === 'string' ? { thinking: pickedEffort } : {})
+            }
+          )
+        }),
       spec
     }
   }

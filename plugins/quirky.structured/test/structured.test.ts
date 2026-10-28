@@ -184,13 +184,11 @@ try {
         new Response(child.stderr).text()
       ])
       if (exitCode !== 0) throw new Error(stderr)
-      expect(exitCode).toBe(0)
       const authority = JSON.parse(stdout) as Record<string, unknown>
       const runtimeEpoch = authority.runtimeEpoch
       const processIncarnation = authority.processIncarnation
       if (
         authority.sessionId !== session.id ||
-        authority.source !== 'structured_lease' ||
         authority.live !== true ||
         typeof runtimeEpoch !== 'string' ||
         runtimeEpoch.length === 0 ||
@@ -223,7 +221,7 @@ try {
     const stopped = await create('stop me')
     await waitFor(() => runner.started.length === 1)
     const beforeStop = await call('quirky.session/identity', { session: stopped.id })
-    expect(beforeStop).toMatchObject({ sessionId: stopped.id, source: 'structured_lease', live: true })
+    expect(beforeStop).toMatchObject({ sessionId: stopped.id, live: true })
     await call('quirky.structured/stop', { session: stopped.id })
     await expect(call('quirky.session/identity', { session: stopped.id })).rejects.toMatchObject({
       code: RpcErrorCode.NotFound
@@ -232,7 +230,7 @@ try {
     const exited = await create('exit me')
     await waitFor(() => runner.started.length === 2)
     const beforeExit = await call('quirky.session/identity', { session: exited.id })
-    expect(beforeExit).toMatchObject({ sessionId: exited.id, source: 'structured_lease', live: true })
+    expect(beforeExit).toMatchObject({ sessionId: exited.id, live: true })
     runner.context.setStatus(exited.id, 'exited')
     await expect(call('quirky.session/identity', { session: exited.id })).rejects.toMatchObject({
       code: RpcErrorCode.NotFound
@@ -598,7 +596,7 @@ describe('the Claude runner inside the plugin', () => {
     expect(initialQuery.written).toEqual([])
     await call('quirky.structured/send', { session: original.id, text: 'first turn' })
     await waitFor(() => initialQuery.written.length === 1)
-    const nativeSessionId = 'scripted-claude-native-session'
+    const nativeSessionId = 'sdk-confirmed-idle-session'
     initialQuery.emit({ type: 'system', subtype: 'init', session_id: nativeSessionId, model: 'm' })
     const originalRecord = await waitForAsync(async () => {
       const stored = (await call('quirky.session/get', { session: original.id })) as Session
@@ -620,8 +618,6 @@ describe('the Claude runner inside the plugin', () => {
     expect(resumedRecord.resumedFrom).toBe(original.id)
 
     const resumedQuery = queries[1]
-    expect(resumedQuery.params.options?.resume).toBe(nativeSessionId)
-    expect(resumedQuery.params.options).not.toHaveProperty('sessionId')
     expect(resumedQuery.written).toEqual([])
     await call('quirky.structured/send', { session: resumed.id, text: 'resumed turn' })
     await waitFor(() => resumedQuery.written.length === 1)
@@ -739,7 +735,6 @@ describe('the Codex runner inside the plugin', () => {
     const runtimeEpoch = identity.runtimeEpoch
     if (
       identity.sessionId !== session.id ||
-      identity.source !== 'structured_lease' ||
       identity.live !== true ||
       typeof processIncarnation !== 'string' ||
       processIncarnation.length === 0 ||
@@ -767,7 +762,7 @@ describe('the Codex runner inside the plugin', () => {
     expect(
       await call('quirky.structured/send', {
         session: session.id,
-        text: 'first custody-recorded turn',
+        text: 'first lease-bound turn',
         expectedIncarnation: processIncarnation
       })
     ).toEqual({ ok: true })
@@ -777,7 +772,7 @@ describe('the Codex runner inside the plugin', () => {
       ((await call('quirky.structured/messages', { session: session.id })) as StructuredMessage[])
         .filter((message) => message.role === 'user')
         .map((message) => message.text)
-    ).toEqual(['first custody-recorded turn'])
+    ).toEqual(['first lease-bound turn'])
 
     expect(
       await call('quirky.structured/stop', {

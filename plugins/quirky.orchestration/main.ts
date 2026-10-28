@@ -1,7 +1,9 @@
 import type { PluginContext } from '@quirky/protocol'
 import type { OrchestrationMethod } from './src/contracts'
 import { createOrchestration, type ComposedOrchestrationService } from './src/service'
-import { migrations } from './src/store'
+import { migrations, policyMigration } from './src/store'
+import { createSetup } from './src/setup'
+import { createTaskNavigation } from './src/navigation'
 import { verifyCaller } from './src/identity'
 import { createWorkerCore } from './src/workers/core-adapter'
 import { registerWorkers, type WorkerComponents } from './src/workers/register'
@@ -43,7 +45,7 @@ let activeService: ComposedOrchestrationService | undefined
 let activeWorkers: WorkerComponents | undefined
 
 export async function activate(context: PluginContext): Promise<void> {
-  const store = context.openStore([...migrations, ...workerMigrations, ...serviceMigrations])
+  const store = context.openStore([...migrations, ...workerMigrations, ...serviceMigrations, policyMigration])
   const service = createOrchestration(context, store)
   let workers: WorkerComponents | undefined
   try {
@@ -57,6 +59,12 @@ export async function activate(context: PluginContext): Promise<void> {
     for (const method of methods) {
       context.provide(`method:${context.pluginId}/${method}`, service.methods[method])
     }
+    const setup = createSetup(context, service.core)
+    const navigation = createTaskNavigation(context, service.core)
+    for (const [method, handler] of Object.entries(setup)) {
+      context.provide(`method:${context.pluginId}/${method}`, handler)
+    }
+    context.provide(`method:${context.pluginId}/taskTerminal`, navigation)
     for (const [method, handler] of Object.entries(workers.methods)) {
       context.provide(`method:${context.pluginId}/${method}`, handler)
     }

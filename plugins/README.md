@@ -156,22 +156,49 @@ before the first turn. Automatic idle-mailbox nudging is deferred to
 Worker placement, custody and fleet use this same core. Headless coordinators use the plugin-owned
 service APIs below; plugin metadata cannot impersonate a session.
 
-**Session and worker methods:** `runCreate`, `runUse`, `runCurrent`, `runList`, `runShow`, `taskCreate`,
+Settings → Orchestration installs the version-matched `/orchestration` skill, shows actual
+per-agent file coverage, and provides copyable supervised-work prompts. Installation is explicit;
+unsupported loaders and partial failures are reported per agent. The same setup is scriptable:
+
+```sh
+quirky orchestration skill-status --json
+quirky orchestration skill-install --json
+quirky orchestration policy-show --json
+quirky orchestration policy-set --nested-worker-max-depth 2 --json
+```
+
+Run policy changes from an unbound operator client. Session-attested, paired-device and plugin
+callers cannot change the cap, and generic settings do not expose it. The persisted integer
+defaults to 1 and governs future dispatch admission and worker preambles; lowering it does not
+stop admitted workers. This is a policy guard, not a sandbox against other holders of the user token.
+
+Terminal `task_…` links and nested sidebar rows resolve the latest exact assignment through
+`taskTerminal`; `task-terminal --task-id <id> --json` returns the same session/workspace target.
+Context-only Dispatches are navigable too. Reused, released, changed or structured-only sessions
+are refused rather than opening an unrelated terminal. Fleet rows separate task labels and
+lineage from `currentAssignment` confidence; uncertain workers remain visible without stale task
+titles. Physical input transfers existing worker custody to the user, so release retains that
+terminal instead of closing it. The setup affordance's open and dismiss actions are public UI commands.
+
+**Session, worker and setup methods:** `runCreate`, `runUse`, `runCurrent`, `runList`, `runShow`, `taskCreate`,
 `taskList`, `taskUpdate`, `dispatch`, `dispatchShow`, `send`, `check`, `reply`, `inbox`, `ask`,
 `gateCreate`, `gateResolve`, `gateList`, `requestShow`, `reset`, `workerStart`, `workerShow`,
 `workerRead`, `workerList`, `workerStop`, `workerAbandon`, `workerRelease`, `workerRetain`,
-`workerTerminalUserInput` (internal terminal-custody guard).
+`workerTerminalUserInput` (internal terminal-custody guard), `skillShow`, `skillStatus`,
+`skillInstall`, `policyShow`, `policySet`, `taskTerminal`.
 
-**CLI verbs (28):** `run-create`, `run-use`, `run-current`, `run-list`, `run-show`, `task-create`,
+**CLI verbs (34):** `run-create`, `run-use`, `run-current`, `run-list`, `run-show`, `task-create`,
 `task-list`, `task-update`, `dispatch`, `dispatch-show`, `send`, `check`, `reply`, `inbox`, `ask`,
 `gate-create`, `gate-resolve`, `gate-list`, `request-show`, `reset`, `worker-start`, `worker-show`,
-`worker-read`, `worker-list`, `worker-stop`, `worker-abandon`, `worker-release`, `worker-retain`.
+`worker-read`, `worker-list`, `worker-stop`, `worker-abandon`, `worker-release`, `worker-retain`,
+`skill-show`, `skill-status`, `skill-install`, `policy-show`, `policy-set`, `task-terminal`.
 Use `quirky api --json` for the current method and result schemas.
 
 See the [contracts](quirky.orchestration/src/contracts.ts),
 [runtime interfaces](quirky.orchestration/src/runtime-contracts.ts),
-[core behavior specification](../docs/quirk/specs/2026-10-27-m6-orchestration-core/logic.md) and
-[worker behavior specification](../docs/quirk/specs/2026-10-27-m6-orchestration-workers/logic.md).
+[core behavior specification](../docs/quirk/specs/2026-10-27-m6-orchestration-core/logic.md),
+[worker behavior specification](../docs/quirk/specs/2026-10-27-m6-orchestration-workers/logic.md) and
+[setup and UI specification](../docs/quirk/specs/2026-10-28-m6-orchestration-ui/logic.md).
 
 ## Heimdall kernel and service-owned Runs
 
@@ -264,8 +291,10 @@ unknown safety data still blocks merging.
 Project-item edits and comment updates do not prompt. Deleting a project-item
 comment uses the same kernel confirmation rule as merge; authorize it with
 `--yes` or an answered confirmation. `project-item-mutation-confirmation` previews
-that deletion without changing data. Issue-type actions currently require an
-organization-owned project; support for user-owned projects is tracked separately.
+that deletion without changing data. Issue types belong to the Issue's repository,
+not the Project containing it: user-owned Projects can edit organization-repository
+types. Personal repositories expose no organization types; unavailable or disabled
+types are refused before mutation.
 
 `gh` owns credentials. Normal requests use its ambient login or a repository's
 configured keyring-account binding; a failed binding never falls back to another
@@ -278,68 +307,10 @@ connection-owned refreshes. Use `quirky api --json` for the live method, paramet
 result, and event contracts. Fixed-cap reads report truncation, partial results, or a limit error;
 only work-item search exposes client `--page` and `--limit`.
 
-## Heimdall fleet and controls
-
-`quirky.heimdall` provides the Heimdall sidebar entry, fleet view and watcher controls.
-Kinds register their enrollment and execution hooks through the public plugin API.
-Enrollment refuses an unknown kind; kind-specific commands such as `objective` require
-that kind's public detail provider.
-
-```sh
-quirky heimdall list --json
-quirky heimdall show <watcher-id>
-quirky heimdall pause <watcher-id> --json
-quirky heimdall budget <watcher-id> --hours 2 --turns none --json
-quirky heimdall debug <watcher-id> --out /tmp/heimdall-debug.json
-```
-
-Controls use the last observed owner fence and command revision. A changed revision is
-refused, so refresh the detail before submitting another command. Results distinguish
-`applied`, `refused` and `indeterminate`; an uncertain reply is not permission to repeat
-an external effect.
-
-Pause drains the current tick before committing. Resume cannot undo Disarm and refuses
-an exhausted budget or pending worker question. A budget limit of zero is valid; `none`
-means unlimited. Objective concurrency is limited to one in folder workspaces.
-
-Deleting a watcher removes its saved history and requires confirmation unless `--yes`
-authorizes it. Worker sessions keep running. `stop-worker` instead uses the exact recorded
-session and process incarnation; missing or unverifiable identity is refused.
-
-The API exposes `quirky.heimdall/fleet`, `detail`, `command` and `debugReport`.
-`fleetChanged` pushes newer snapshots; a failed refresh retains the last confirmed view.
-The schema-2 debug JSON includes bounded journal and trace history. Approval-request and
-terminal transitions go through `quirky.notifications`, including its enabled, focus and
-cooldown policy. Disabling that plugin silences delivery.
-
-### Optional Claude owner
-
-An enrollment can set `owner: { agent: "claude", model?, effort? }` and
-`ownerInterventionCapability: "off" | "gated" | "on"` (default `"off"`).
-Without an owner, deterministic watcher behavior is unchanged. A configured owner receives
-typed deviations, including full rejected-plan and operator-edit details, in one resumable
-native conversation. Repeated evidence keys do not start duplicate turns.
-
-```sh
-quirky heimdall owner-inspect --watcher-id <watcher-id> --json
-quirky heimdall owner-ready --watcher-id <watcher-id> --report-key <issued-key> --json
-```
-
-`ownerInspect` exposes the current issued report path and key. Write the intervention JSON
-only to that private path, then submit the key through `ownerReady`; the API never accepts
-an arbitrary report path. Reports are limited to 64 KiB and reject malformed, stale or
-symlinked input. Kind-specific proposals use the registered kind's public `ownerAction`
-hook. Every proposal still requires both the owner-intervention grant and the native
-action's capability, exact approvals and current evidence.
-
-An owner that stays silent for 15 minutes receives one reminder; another 15 minutes parks
-the watcher with `owner-escalation`. Only answering that exact escalation resumes its owner
-flow. Deleting a watcher or disabling Heimdall releases its owner connection without
-stopping worker or independent sessions. Unconfirmed cleanup retains uncertainty rather
-than starting a replacement conversation.
-
-Use `quirky heimdall --help` and `quirky api --json` for the live commands and schemas.
-
+Concurrent work-item search/count reads batch within the same authenticated repository
+scope. Valid cursor pages are reused for up to two minutes within bounded caches;
+forced refresh and mutations invalidate them. A failed GraphQL alias does not discard
+another alias's successful result. Tasks' direct numbered pages remain direct requests.
 Top-level PR conversation comments use `hosting review-conversation`, not issue
 or Project mutation routes:
 
@@ -415,9 +386,12 @@ The live API catalog contains all method schemas and generated command aliases.
 slot reports are bounded summaries pointing to that method, so large comments or
 diffs do not exceed the kernel's 64-KiB report limit.
 
-Other-provider review/create/settings and in-app link routing have explicit
-prerequisite-dependent queue items; current cards and routing never claim those
-unavailable capabilities succeeded. Clipboard/system-browser/focus behavior is
+Review links use Browser's Link Routing setting and Shift+Cmd/Ctrl modifier policy.
+Each PR/Checks action carries its originating worktree, including when the two surfaces
+show different worktrees. API callers can supply `--worktree`; an omitted target is
+inferred only from an unambiguous visible Review/Checks context. Routing failures do
+not silently launch the system browser. Other-provider review/create/settings remain
+explicitly deferred. Clipboard/system-browser/focus and native guest behavior are
 handed to the native scenario run, not inferred from headless web output.
 ## GitHub Tasks
 
@@ -548,3 +522,65 @@ earlier prompt. CLI/API callers can pin the same content with
 `--trust-issue-command --trust-issue-command-hash <hash-from-error>`, or
 `--trust-setup --trust-setup-hash <hash-from-error>` for setup.
 Trust flags without a hash authorize the current call's script.
+
+## Heimdall fleet and controls
+
+`quirky.heimdall` provides the Heimdall sidebar entry, fleet view and watcher controls.
+Kinds register their enrollment and execution hooks through the public plugin API.
+Enrollment refuses an unknown kind; kind-specific commands such as `objective` require
+that kind's public detail provider.
+
+```sh
+quirky heimdall list --json
+quirky heimdall show <watcher-id>
+quirky heimdall pause <watcher-id> --json
+quirky heimdall budget <watcher-id> --hours 2 --turns none --json
+quirky heimdall debug <watcher-id> --out /tmp/heimdall-debug.json
+```
+
+Controls use the last observed owner fence and command revision. A changed revision is
+refused, so refresh the detail before submitting another command. Results distinguish
+`applied`, `refused` and `indeterminate`; an uncertain reply is not permission to repeat
+an external effect.
+
+Pause drains the current tick before committing. Resume cannot undo Disarm and refuses
+an exhausted budget or pending worker question. A budget limit of zero is valid; `none`
+means unlimited. Objective concurrency is limited to one in folder workspaces.
+
+Deleting a watcher removes its saved history and requires confirmation unless `--yes`
+authorizes it. Worker sessions keep running. `stop-worker` instead uses the exact recorded
+session and process incarnation; missing or unverifiable identity is refused.
+
+The API exposes `quirky.heimdall/fleet`, `detail`, `command` and `debugReport`.
+`fleetChanged` pushes newer snapshots; a failed refresh retains the last confirmed view.
+The schema-2 debug JSON includes bounded journal and trace history. Approval-request and
+terminal transitions go through `quirky.notifications`, including its enabled, focus and
+cooldown policy. Disabling that plugin silences delivery.
+
+### Optional Claude owner
+
+An enrollment can set `owner: { agent: "claude", model?, effort? }` and
+`ownerInterventionCapability: "off" | "gated" | "on"` (default `"off"`).
+Without an owner, deterministic watcher behavior is unchanged. A configured owner receives
+typed deviations, including full rejected-plan and operator-edit details, in one resumable
+native conversation. Repeated evidence keys do not start duplicate turns.
+
+```sh
+quirky heimdall owner-inspect --watcher-id <watcher-id> --json
+quirky heimdall owner-ready --watcher-id <watcher-id> --report-key <issued-key> --json
+```
+
+`ownerInspect` exposes the current issued report path and key. Write the intervention JSON
+only to that private path, then submit the key through `ownerReady`; the API never accepts
+an arbitrary report path. Reports are limited to 64 KiB and reject malformed, stale or
+symlinked input. Kind-specific proposals use the registered kind's public `ownerAction`
+hook. Every proposal still requires both the owner-intervention grant and the native
+action's capability, exact approvals and current evidence.
+
+An owner that stays silent for 15 minutes receives one reminder; another 15 minutes parks
+the watcher with `owner-escalation`. Only answering that exact escalation resumes its owner
+flow. Deleting a watcher or disabling Heimdall releases its owner connection without
+stopping worker or independent sessions. Unconfirmed cleanup retains uncertainty rather
+than starting a replacement conversation.
+
+Use `quirky heimdall --help` and `quirky api --json` for the live commands and schemas.

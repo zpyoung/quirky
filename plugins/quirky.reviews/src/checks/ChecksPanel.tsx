@@ -933,10 +933,11 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
   }, [context, refresh])
 
   const openLink = useCallback(async (url: string, event?: MouseEvent<HTMLButtonElement>) => {
+    if (!activeWorktree) return
     const isMac = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform)
     const invert = Boolean(event?.shiftKey && (isMac ? event.metaKey : event.ctrlKey))
-    await runReviewMethod('openLink', { url, ...(invert ? { invert: true } : {}) }, false)
-  }, [runReviewMethod])
+    await runReviewMethod('openLink', { url, worktree: activeWorktree, ...(invert ? { invert: true } : {}) }, false)
+  }, [activeWorktree, runReviewMethod])
 
   const copyLink = useCallback(async (url: string) => {
     await runReviewMethod('copyText', { text: url }, false)

@@ -586,9 +586,6 @@ Implementation wave: T1 structured/session/catalog, T2 checks plugin, T3 ask own
 - **Source:** assumed — autonomous (operator-directed verification ownership)
 
 ## Progress
-Earlier operator fast-path progress record for its original snapshot (preserved verbatim; not authority for the current merge result):
-
-Operator fast-path gate passed: bun run typecheck (including frozen install190/195,no changes) and bun test scripts (63pass,0fail,478assertions;115.68seconds), bg_58/artifact://119. Latest lock-only conflict is resolved additively; scouting stopped and no additional semantic suite was run. Commit this resolved merge and decision record, detach, and land immediately without an outer deadline. On a further conflict resolve/typecheck/retry; queue.ts land owns fresh full-suite verification.
 
 The latest incoming source snapshot records D43's pre-merge gates: 171 affected files passed with no flakes; the unchanged scripts retry passed 62 tests/460 assertions; typecheck and the scripted native daemon/CLI smoke passed. D44 records a scoped account-reconciliation review PASS. These are dependency-snapshot results, not verification of this current merge result.
 

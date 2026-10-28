@@ -63,6 +63,7 @@ await import(${JSON.stringify(native.executable)})
       const dir = join(fixture.home, 'worker-fixture')
       appendFileSync(join(dir, `${session}.requests.jsonl`), JSON.stringify({ id, args: [...args, '--json'] }) + '\n')
       const reply = join(dir, `${id}.reply.json`)
+      // The provider bridge publishes this file with an atomic rename, so existence means complete JSON.
       const result = await eventually(
         () => existsSync(reply) ? JSON.parse(readFileSync(reply, 'utf8')) as CliResult : null,
         value => value !== null,

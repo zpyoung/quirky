@@ -275,5 +275,206 @@
 - **Revisit if:** the refreshed actual native worker flow exposes another integration defect
 - **Source:** assumed — autonomous
 
+## D26: Let driving structured input reach its existing native startup barrier
+- **Question:** actual owner-worker startup failed before sending its first prompt with deferred flight_active
+- **Options:** retry a settled pointer; relax every busy check; distinguish driving worker input from idle mailbox nudges at the existing startup barrier
+- **Chose:** structuredRefusal receives the existing pointer purpose. A starting session still defers mailbox_pointer, while worker_start reaches the exact-incarnation, idempotent structured/send path, which already waits for startTasks. Keep working/waiting/exited refusals, operation receipts, payload identity and singleflight unchanged. Reserve only session/src/pointer.ts with both coordinating lanes before editing.
+- **Why:** create with deferStart reserves a real lease and schedules native initialization without a turn. Refusing starting before send prevents the driving request from reaching the serialization point that owns readiness. This is not a second pointer flight or permission to replay unknown work.
+- **Evidence:** artifact169 persisted start_failed/submitting/flight_active; read-only InitialPointerCause trace;42791478 isolated checkpoint,14public pointer tests58assertions pass. Post-fix actual native log proves initialize/thread/start/turn/start reached the real child and provider identity persisted; full owner-worker acceptance is not yet green.
+- **Reversibility:** easy
+- **Confidence:** high for the observed startup admission cause
+- **Revisit if:** initial input can reach a changed incarnation or idle mailbox input starts a busy session
+- **Source:** assumed — autonomous
+
+## D27: Preserve native history and exact follow-up identity instead of incidental total turns
+- **Question:** user reported the restart acceptance expected two turns but observed three under legitimate automatic owner work
+- **Options:** re-pin the new total; suppress automatic owner work; assert the native history contract
+- **Chose:** remove exact total/loaded-turn counters. Assert the original persisted history remains an identical prefix, native provider identity remains the same, and the explicitly sent follow-up appears exactly once. Wait for that follow-up rather than a global turn count. Retain model/effort continuity and actual process-backed resume.
+- **Why:** automatic owner turns can interleave with an independent user follow-up; losing history, changing conversation or duplicating that explicit follow-up are the consumer-visible failures.
+- **Evidence:** user scoped-suite report297pass/12fail and restart line499; no rerun to reconfirm; changed restart case1pass16assertions5.45s;42791478
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a duplicate follow-up or missing history prefix is observed
+- **Source:** assumed — autonomous
+
+## D28: Observe real native work without changing production readiness policy
+- **Question:** a deliberately silent held native fixture starts a turn but emits no assistant/tool/result evidence for the worker readiness observer
+- **Options:** relax production observation or increase timeouts; fake working state on a timer; supply input-driven native commentary while the fixture remains held
+- **Chose:** consume lane10's isolated a5489be7 heldPrefix option as d34cf720. The shared native fixture emits real assistant commentary events only after receiving turn/start and retains the in-progress turn. Pass that option through the existing worker harness in isolated1b9bb6f6, leaving defaults unchanged. Use public catalog refresh/enable after the fixture launcher exists. No producer, observer or timeout policy changes.
+- **Why:** these owner message/question/stop flows require an alive, positively started worker, not simulation of an indefinitely silent model. Actual protocol activity proves work began without manufacturing process authority.
+- **Evidence:** native logs with initialize/thread/start/turn/start and persisted provider identity; silent-mode30-second observation result; actual heldPrefix case reaches ready with exact attestation and lands owner message-worker through serviceSend. The later ordinary CLI check result remains rejected by its public schema, not counted as passing.
+- **Reversibility:** easy
+- **Confidence:** high for native readiness and actual service message effect; full worker flow still requires core fixes
+- **Revisit if:** a fixture emits work before receiving driving input
+- **Source:** assumed — autonomous
+
+## D29: Verify abandonment through the real owner API and retain exact schema failure evidence
+- **Question:** complete common-intervention API proof and the first actual worker delivery failure
+- **Options:** rely only on callback units; bypass client validation to continue; exercise the public path and preserve its accepted receipt
+- **Chose:** add an owner abandon API case proving durable disarm and an independent native child's same-conversation follow-up. Remove a response-wording assertion from the existing independent-child case. For the worker check failure, inspect the already completed receipt read-only, apply the published schema to that exact result and send the diagnosed contract omission to the core owner. Do not replace/retry the accepted mutation or bypass CLI validation.
+- **Why:** a disarm must not kill unrelated work. The actual message was delivered, but a consumer cannot use it when its sender address is not declared by the response schema; hiding validation would substitute a weaker flow.
+- **Evidence:** owner API17pass113assertions28.87s; scripts66pass517assertions123.66s; artifact202 completed check receipt; protocol.validateValue exact failure params.messages[0].sender.kind is not allowed; published sender schema has no declared properties. Core coordinator notified and given /tmp/quirky-lane12-owner-live-status.md.
+- **Reversibility:** easy
+- **Confidence:** high for the verified API behavior and exact ordinary schema cause
+- **Revisit if:** the corrected published result schema still rejects an actual attested worker delivery
+- **Source:** assumed — autonomous
+
+## D30: Consume canonical message schemas and preserve the actual worker answer proof
+- **Question:** the completed ordinary check delivery was unusable by its validating CLI, while dependency corrections arrived independently
+- **Options:** bypass decoding; locally replace the receipt; merge the core-owned canonical result correction
+- **Chose:** merge isolated26768fd4, then the current controls checkpointab953c04. Read controls D11–D15 and preserve their canonical snapshots, exact confirmation, ready-dispatch, blocking-Ask and authority decisions; no conflict. Keep actual worker start as a positive running dispatch, never equate liveness or a failed start with active work.
+- **Why:** the public schema must describe genuine Run-sender metadata without weakening backend identity. Controls' real Ask lifecycle also confirms the intended non-consuming question projection.
+- **Evidence:** post-merge owner-worker case passes16assertions through native ready/attestation, serviceSend, actual worker check body, actual blocking Ask, owner answer-worker, replay refusal and the child's exact answered body/message ID. It then waits unsuccessfully for the final stop's landed attempt; core's live-supervised task guard failure is already reported and accepted as ground truth, not a pass.
+- **Reversibility:** easy
+- **Confidence:** high for exercised delivery/answer paths; exact stop awaits the core correction
+- **Revisit if:** a canonical address projection or accepted dispatch is rejected after dependency catch-up
+- **Source:** assumed — autonomous
+
+## D31: Give independent native fixture connections distinct provider identities
+- **Question:** the full stop flow closed its exact target, but the supposed unrelated Codex sibling was already dead
+- **Options:** weaken the real connected-owner fence; use a different provider and miss same-provider bulk-stop bugs; correct the fixture's reused conversation identity
+- **Chose:** require positive sibling native startup before any intervention and compare its provider identity with the target. Keep both children on Codex. Add opt-in uniqueThreads to the shared fixture, using a fresh UUID only for new thread/start; thread/resume keeps the requested ID. Defaults remain unchanged. Make heldPrefix optional in the canonical fixture options and forward the supported options through the existing harness.
+- **Why:** the fixture always returned scripted-thread for every new process. Production correctly rejected the second connected owner. A dead-on-arrival sibling cannot prove resource isolation, and disabling that fence would create the actual bug.
+- **Evidence:** before-stop regression artifact236 reports could not start: the codex conversation already has a connected owner;83e4c51b isolated two-file correction; unchanged-default Codex12pass49assertions6.38s. No production ownership code changed.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a resumed fixture conversation changes its captured provider identity
+- **Source:** assumed — autonomous
+
+## D32: Accept the complete real owner-worker proof only after exact target exit and sibling preservation
+- **Question:** when the common worker interventions and final type boundary could be claimed verified
+- **Options:** stop at applied forwarding; accept failed-start liveness; require actual attested effects and physical cleanup
+- **Chose:** integrate582a427f as cab18805 and read core D27–D29. Preserve the canonical two-migration journal and atomic message/receipt deletion while resolving cosmetic conflicts. Verify message delivery, real blocking Ask/exact answer/replay refusal, exact stop, public exited state, target PID disappearance and a positively connected same-provider independent sibling remaining alive. Remove a redundant non-empty incarnation assertion; the exact authenticated effect and identity checks remain.
+- **Why:** logical acceptance and physical termination are separate facts. Both native connections must have genuinely started before isolation is meaningful. Core's narrow stop fence preserves public live-Task guards rather than weakening them.
+- **Evidence:** complete owner-worker case1pass20assertions22.70s; full bun run typecheck exit0 in51.66s after fixture option repair; latest standalone owner publication/scoped native cleanup smokes7.18s pass. Core D27 agrees with owner D23 canonical replay; no authority conflict.
+- **Reversibility:** easy
+- **Confidence:** high for exercised end-to-end flow; final dependency/catch-up gates remain required
+- **Revisit if:** a post-catch-up actual worker or project gate fails
+- **Source:** assumed — autonomous
+
+## D33: Remove merge-created duplicate fake provider declarations instead of loosening activation
+- **Question:** after final dependency integration, owner/native API checks returned unknown structured methods despite a clean compiler
+- **Options:** retry activation or loosen admission; add a fallback; remove duplicate fixture definitions introduced by composing independently complete provider persistence
+- **Chose:** retain one canonical fake session setProviderSession implementation and one manifest declaration. The later implementation preserves immutable session snapshot replacement and all provider-ID/transcript validation. Do not change real plugin activation, optional-owner behavior or the supported schema subset.
+- **Why:** TypeScript cannot detect duplicate JSON contribution IDs. The invalid fake session dependency prevented structured activation, causing downstream unknown-method errors rather than an owner runtime failure.
+- **Evidence:** first integrated run4pass49fail with unknown quirky.structured/create; static manifest query identified two setProviderSession IDs; after deduplication the same owner/native three files53pass258assertions45.84s. No timeout, retry or exception suppression changed.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the final manifest validator reports another duplicate or unsupported declaration
+- **Source:** assumed — autonomous
+
+## D34: Preserve separate logical and transport request identities during final dependency composition
+- **Question:** the final core report/retry checkpoint changes a shared CLI call surface and native fixture persistence
+- **Options:** keep old cached logical replays; merge all semantics blindly; integrate the exact public contract and verify the actual owner callers
+- **Chose:** merge core7f3bd35b as9aba0312, read core D30–D33 and preserve explicit logical request IDs separately from per-invocation transport IDs. Keep connection-loss resend semantics, accepted report settlement, public model mappings, canonical snapshots and receipt safety. Retain verified uniqueThreads opt-in while resolving only overlapping fixture signatures.
+- **Why:** completed logical retries must reach their durable plugin ledger without duplicating effects, and accepted attested reports must settle Worker state rather than infer completion from liveness.
+- **Evidence:** full project typecheck exits0 in40.93s after this composition; actual owner-worker case remains part of the passing53-test API/native check; canonical journal1/receipt2 and atomic message/receipt cleanup preserved. Core's real release evidence is its own, not attributed to owner verification.
+- **Reversibility:** medium
+- **Confidence:** high for integrated owner callers and types; final remote/dependency gate remains required
+- **Revisit if:** a logical replay duplicates an effect or changes another CLI method's existing transport behavior
+- **Source:** assumed — autonomous
+
+## D35: Compose roadmap ancestry without dropping either native admission contract
+- **Question:** corebd082884 brought broad landed roadmap ancestry rather than only its final two test files
+- **Options:** restore stale native/UI copies; discard landed additions; reconcile disjoint slices and read every incoming binding log
+- **Chose:** parent owns lock/guide/prior-item progress conflicts; NativeRoadmapMerge owns native production/test composition; SurfaceRoadmapMerge owns notifications/worktree conflicts; IncomingBindingRead reads the decision delta. Preserve Heimdall plus loop notification sources, public glyph/membership rows, additive automation/editor workspaces and all guide sections. Keep historical M5 progress evidence qualified, not authority for this item.
+- **Why:** landed loop D24 requires serialized startup/incarnation/idle/sequence admission, guard veto before new receipt reservation or prompt bytes, stable no-guard fingerprints and guarded payload identity. D25 requires cleanup from retained lease revokers after context revocation. These compose with owner keyed lifetimes, canonical native snapshots and durable receipts; neither side may be replaced wholesale.
+- **Evidence:** incoming core D34 and exact loops D24–D25 read; delegated binding inventory corrected to11 added and5 modified logs. Added: editor D1–47, vault D1–45, hosting reviews D1–27, hosting tasks D1–24, review filters D1–12, GitHub workspace D1–23, automations core D1–13, loops core D1–27, loop presets D1–19, browser pane D1–33, mobile daemon D1–23. Modified: sidebar extras D24–37, M5 structured Progress only, Heimdall core D34, orchestration core D36–42, workers D17–31. No unresolved authority contradiction identified.
+- **Reversibility:** medium
+- **Confidence:** high for binding inventory and partition; merged gates pending
+- **Revisit if:** merged runtime violates a retained admission, revocation, receipt or owner-resource invariant
+- **Source:** locked by incoming decision logs and docs/loop/LOOP.md
+
+## D36: Use structural validation as declaration evidence, not a substitute runtime verdict
+- **Question:** a JSON duplicate escaped a clean compiler during dependency composition
+- **Options:** infer declarations from TypeScript; run a new adversarial review campaign; validate the scoped public structure separately
+- **Chose:** plugin-validator reads the owner/structured/fake-session/kind manifests and provider/CLI registrations without edits or runtime checks. The pre-roadmap composition passes31 unique methods across four manifests, supported schema subset, exact namespaced hooks, explicit owner CLI handlers and optional-owner dependency boundaries. New roadmap composition still requires its own runtime and compiler gates.
+- **Why:** JSON contribution uniqueness is an activation invariant outside TypeScript. A static pass does not prove an attested child or an effect.
+- **Evidence:** FinalOwnerManifest read-only report:0 critical issues/0 warnings; source fake setter declared and wired once; full pre-roadmap owner/native53-test pass remains separate evidence. No unstarted final review/dogfood campaign was launched.
+- **Reversibility:** easy
+- **Confidence:** high for the checked snapshot only
+- **Revisit if:** roadmap composition changes a checked declaration or public handler
+- **Source:** assumed — autonomous
+
+## D37: Repair roadmap typing and SDK-init fixture preconditions without changing native behavior
+- **Question:** composed roadmap source exposed four type diagnostics and an idle-Claude test that expected a provider ID before the SDK supplied one
+- **Options:** cast away diagnostics or fabricate native IDs; restore stale UI/context contracts; honor the real public and SDK boundaries
+- **Chose:** preserve the Heimdall-aware workspace type through its non-null filter, remove a duplicate stdin fixture property, and provide a complete fail-closed PluginContext fixture. Keep the incoming stronger satisfies-based context when composing8ce174fb. The Claude test supplies a native ID in the SDK init event, then proves persistence and same-ID resume; remove parameter-copy assertions, never add a fabricated fresh ID.
+- **Why:** metadata-aware rows are subtypes, unsupported fixture capabilities must fail visibly, and native identity belongs to SDK initialization rather than the first queued user packet.
+- **Evidence:** initial composed gate reported4diagnostics/3files and59pass1fail; corrected gate70pass326assertions across five owner/adapter/native/guarded-send files90.65s and full typecheck exit0 in60.68s. No production native identity or readiness rule changed.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a public capability or SDK-confirmed identity cannot reach the composed fixture unchanged
+- **Source:** assumed — autonomous
+
+## D38: Consume final terminal-summary and historical-close invariants through the supported lane workflow
+- **Question:** the final core checkpoint preserves nonzero terminal counters and confirmed stopped-worker identity while its supported land runs
+- **Options:** bypass dependency readiness; infer authority from historical metadata; merge the verified checkpoint and await the queue gate
+- **Chose:** merge8ce174fb as2c713ffb and read core D35–D36. Terminal inspection uses immutable summary budgets; historical closed tuples require matching persisted resource/incarnation and positive close evidence, never reactivated authority. No-ack waiter refusal remains distinct from post-ack interruption. Keep owner/control hub ownership unchanged.
+- **Why:** lifetime counters and cleanup history must survive compaction, but neither proves live authority. This feature lands only through queue.ts after its dependency is done, not directly on integration/main and not by push or PR.
+- **Evidence:** latest own scripts68pass570assertions91.28s and final standalone owner CLI publication/native scoped cleanup3.20s pass. Core's all8 service/native report/archive/exit proof and running land are peer evidence, not an owner landing claim. Finishing-branch workflow is autonomously fixed by LOOP to the supported queue merge; no human option prompt or new review campaign.
+- **Reversibility:** medium
+- **Confidence:** high for the retained invariants and exercised surfaces; queue/dependency and final remote gates remain required
+- **Revisit if:** supported merge-result verification reports a concrete regression
+- **Source:** locked by docs/loop/LOOP.md and incoming m6-heimdall-core D35–D36
+
+## D39: Perform the single supported roadmap catch-up after the dependency is marked done
+- **Question:** the core finish e68f3025a758b3c80937f772f3b4275fd0d819cb made the owner dependency ready, exposing three final source/metadata conflicts
+- **Options:** land against an old base; directly edit integration; merge the authoritative base once and run the affected gate
+- **Chose:** after ready:true, merge build/roadmap once as b75356c4. Keep the conventional Heimdall UI React dependencies with matching lock entries, and union public background creation with owner lifetime/lifetimeKey fields. Preserve owner/control decision logs; their absence in the incoming branch tree is not an authorized reversal.
+- **Why:** controls' actual UI dependencies cannot be dropped by the core-only package manifest, and both background dispatch and optional owner resources use the same public native constructor.
+- **Evidence:** FinalCatchupBindings read all final deltas: editor-drop-open-in-place D1–D6 (blocked feasibility, no substitute path capability), automations-dispatch D1–D27 (at-most-once structured execution, immutable snapshots, per-turn cursor/background evidence), and core D37 (sprint delivery only). No contradiction with owner/native authority or receipt contracts. The updated decision index is incoming generated state, never hand-edited.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** supported land reports a further actual moving-base conflict
+- **Source:** locked by docs/loop/LOOP.md and final incoming decision logs
+
+## D40: Remove the final merged SDK-initialization duplicate rather than fabricate a native ID
+- **Question:** post-catch-up typecheck found two declarations of nativeSessionId in the resume fixture
+- **Options:** rename both and emit duplicate init events; recover a fabricated pre-init ID; retain the single SDK-producer event
+- **Chose:** remove the obsolete pre-SDK identity block and its second scheduled init. Keep the fixture's native init producer ID and known resume ID. No production resume behavior, deadline or credential check changed.
+- **Why:** the independently added fixture repairs described the same initialization twice. A compiler-clean rename would still duplicate protocol events and preserve the wrong fresh-ID assumption.
+- **Evidence:** typecheck named only the two duplicate bindings in session/test/resume.test.ts; corrected real resume file23pass90assertions3.52s; final full typecheck exits0 in65.69s. The already-uploaded remote suite snapshot predates this small repair; its result and any repaired-scope rerun are recorded separately.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the actual corrected remote resume path fails
+- **Source:** assumed — autonomous
+
+## D41: Reconcile divergent version-8/9 session stores without rewriting migration history
+- **Question:** final affected verification found an old version-8 database without background could not be seeded or upgraded through the current record writer
+- **Options:** add columns only in the fixture; renumber migrations; reconcile the actual historical schema variants idempotently
+- **Chose:** version9 ensures badges and pointer operations; version10 rechecks both and adds background only when absent. Keep migration numbers unchanged. Seed legacy fixtures with legacy-compatible SQL and exercise both version8 pointer/badge variants and the version9 background branch.
+- **Why:** the pointer branch and badges/background branch reused historical version numbers. Current writers cannot seed a schema before its columns exist, and an already-background version9 store must not add the same column twice or miss pointer operations.
+- **Evidence:** final441-file run's records failure; history7573a84b and92022b02; repaired records regressions pass in the corrective local batch. No compatibility alias, silent empty result or new deployment assumption added.
+- **Reversibility:** medium
+- **Confidence:** high for the tested historical variants
+- **Revisit if:** another deployed historical schema variant is demonstrated
+- **Source:** assumed — autonomous
+
+## D42: Replace fixture source-text rewriting with input-driven typed event production
+- **Question:** the usage-limit test pinned the textual spelling of a generated native thread declaration
+- **Options:** re-pin the new source string; remove rate-limit coverage; expose a bounded fixture event option and assert journal behavior
+- **Chose:** remove fixture-source rewriting and source-text assertions. The native fixture accepts optional rateLimitsUpdated data and emits account/rateLimits/updated only after actual turn/start input. The test verifies idle initial state and the exact raw event in the journal; remove redundant nested copies.
+- **Why:** provider event preservation is consumer-visible; the fixture's JavaScript spelling is not. Defaults and unique-thread/held-prefix behavior remain unchanged.
+- **Evidence:** final gate usage failure at original.includes(threadStart); corrected local usage cases pass with the native JSONL child, and types remain clean.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** raw rate-limit data is lost or emitted before a real input turn
+- **Source:** assumed — autonomous
+
+## D43: Prevent asynchronous read head-of-line blocking without bypassing command publication
+- **Question:** exact stop physically completed, but its CLI response and fleet detail stalled behind slow serialized projections
+- **Options:** raise deadlines or detach publication; skip only obsolete queued reads; remove the global queue from pure revision-checked reads
+- **Chose:** run fleet projections concurrently and retain publicationRevision/disposal validation before committing results. An older blocked read cannot prevent a newer terminal detail/publication; its later result must not publish stale state. Keep exact stop, persisted control result, reconciliation and awaited publication semantics.
+- **Why:** trace327 proves native stop returned in milliseconds and the command committed, while publication waited behind multiple five-second reads, including superseded revisions. Skipping stale work alone still left current readers queued and did not fix the regression.
+- **Evidence:** repeated real CLI30-second failures; bounded runtime markers and public target EXITED/PID-gone evidence; corrected fleet/control/owner-worker three files14pass75assertions53.70s, full typecheck exit0 in49.35s. Temporary markers/samplers are removed. Diagnostic cleanup briefly deleted an essential stop await; parent diff review caught and restored it before commit, and the transient failed snapshots are not passing evidence.
+- **Reversibility:** medium
+- **Confidence:** high for the reproduced publication boundary and regression
+- **Revisit if:** concurrent reads publish stale metadata or a confirmed command waits on another unrelated projection
+- **Source:** assumed — autonomous
+
 ## Progress
-Actual core facade df799424 is merged as e410f69f after canonical owner/control integration f1f29443 and assigned owner type fixes913a63a0. All implementers returned. Own runtime/gates/worker/API58tests354assertions pass, including the16th exact human-answer API case;20owner files passed scoped compiler diagnostics. Both standalone API/CLI publication and scoped native cleanup smokes pass. New inactive-live assignment regression failed before and driver/worker9tests25assertions pass after the scan guard. Actual owner-worker acceptance initially failed because its Codex launcher appeared after catalog startup; durable inspection proves refusal, fixture now refreshes/enables through public API and shares the existing process scope. Refreshed real backend run is active. Final affected suite/scripts/full typecheck not yet run; queue dependency core still pending, bg_24 awaits readiness. Next: finish actual worker flow and any concrete fixes, publish checkpoint, merge dependency corrections, await deps ready, catch up build/roadmap once/read incoming logs, required gates, commit/detach/queue land. No fake backend, unstarted review/dogfood campaign or silent scope reduction.
+- Source: complete owner checkpoints, all landed M6 dependency fixes and required direct roadmap catch-upb75356c4 are composed; resume correction55a703d6 and final migration/native-event/fleet corrective batch90121ab3 are committed. No temporary diagnostics remain.
+- Verification: broad441remote affected gate passed437files and2Macfiles and exposed four failures fixed in D40–D43. Corrected Heimdall/session/structured remote scope now54files passed,0failed,flaky:[],316.36s. Actual fleet/control/owner-worker three-file run14pass75assertions53.70s; full typecheck exit0 in49.35s; unchanged scripts68pass570assertions.
+- Owner end-to-end behavior is verified, including exact human answer, abandonment isolation, worker delivery/answer/replay, exact stop/public exit and same-provider sibling preservation. Prior standalone owner API/CLI publication and native scoped cleanup pass3.20s. Static manifest validation applies only to its checked snapshot.
+- Core is authoritatively landed; all owned jobs and agents returned. Next: commit final evidence, detach and run supported queue land; its full merge gate remains required. No additional source asks, review rounds or scope reduction.

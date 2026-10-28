@@ -175,10 +175,10 @@
           "properties": {
             "session": { "type": "string" },
             "text": { "type": "string" },
-            "requireIdle": { "type": "boolean" },
-            "expectedAfterSeq": { "type": "integer", "minimum": 0 },
             "expectedIncarnation": { "type": "string", "description": "When present, sends only to this live structured lease incarnation." },
-            "operationId": { "type": "string", "description": "Optional durable idempotency key for exact retry; reusing it with different input is refused." }
+            "operationId": { "type": "string", "description": "Optional durable idempotency key for exact retry; reusing it with different input is refused." },
+            "requireIdle": { "type": "boolean" },
+            "expectedAfterSeq": { "type": "integer", "minimum": 0 }
           },
           "required": ["session", "text"]
         },

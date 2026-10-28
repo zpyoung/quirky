@@ -570,11 +570,11 @@ describe('SC-15: the snapshot agrees with the command', () => {
             expect(occurrences(argv, effort.conflicts, catalog.valueFlags), label).toBeLessThanOrEqual(1)
 
             const picked: Record<string, string> = {}
-            if (selection) picked.model = selection.model
+            if (selection?.model != null) picked.model = selection.model
             const pickedEffort = selection?.values.effort
             if (typeof pickedEffort === 'string') picked.effort = pickedEffort
             const emitted: Record<string, boolean> = {
-              model: selection !== null && result.added.includes(selection.model),
+              model: selection?.model != null && result.added.includes(selection.model),
               effort: typeof pickedEffort === 'string' && result.added.includes(subject.effortValue(pickedEffort))
             }
             for (const id of ['model', 'effort']) {

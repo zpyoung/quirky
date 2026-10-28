@@ -1,0 +1,18 @@
+{
+  "id": "acme.owner-worker-kind",
+  "name": "Heimdall owner worker acceptance kind",
+  "version": "1.0.0",
+  "main": "main.ts",
+  "activation": "startup",
+  "dependencies": ["quirky.heimdall"],
+  "contributes": {
+    "method": [
+      { "id": "configure", "params": { "type": "object", "additionalProperties": true } },
+      { "id": "authorize", "params": { "type": "object", "additionalProperties": true } },
+      { "id": "read", "params": { "type": "object", "additionalProperties": true } },
+      { "id": "decide", "params": { "type": "object", "additionalProperties": true } },
+      { "id": "execute", "params": { "type": "object", "additionalProperties": true } },
+      { "id": "ownerAction", "params": { "type": "object", "additionalProperties": true } }
+    ]
+  }
+}

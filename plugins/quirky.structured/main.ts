@@ -901,10 +901,10 @@ export function activate(context: PluginContext): void {
       if (!isStructuredAgent(session.agent)) {
         throw context.error('conflict', `structured sessions cannot send to provider ${session.agent}`)
       }
-      const entryBeforeStart = live.get(session.id)
-      if (entryBeforeStart?.stopping) throw context.error('conflict', 'structured session is stopping')
       const refused = recipientRefusal()
       if (refused) return refused
+      const entryBeforeStart = live.get(session.id)
+      if (entryBeforeStart?.stopping) throw context.error('conflict', 'structured session is stopping')
       await startTasks.get(session.id)
       ensureActive()
       const revalidated = recipientRefusal()
@@ -1009,6 +1009,7 @@ export function activate(context: PluginContext): void {
       return await promise
     } finally {
       if (sendFlights.get(operationId) === flight) sendFlights.delete(operationId)
+
     }
   }
 
@@ -1016,7 +1017,10 @@ export function activate(context: PluginContext): void {
     const existing = stopTasks.get(sessionId)
     if (existing) return existing.promise
     const entry = live.get(sessionId)
-    if (entry?.status === 'exited') return Promise.resolve()
+    if (entry?.status === 'exited') {
+      runnerBySession.delete(sessionId)
+      return Promise.resolve()
+    }
     const identity = active ? context.launch.sessionIdentity(sessionId) : null
     const processIncarnation =
       entry?.lease && identity?.source === 'structured_lease' && identity.sessionId === sessionId
@@ -1030,10 +1034,10 @@ export function activate(context: PluginContext): void {
         await runner?.stop(sessionId)
       } finally {
         await cancelPendingAsks(sessionId)
-        if (updateStatus) setStatus(sessionId, 'exited')
-        releaseOwner(sessionId)
-        runnerBySession.delete(sessionId)
       }
+      if (updateStatus) setStatus(sessionId, 'exited')
+      releaseOwner(sessionId)
+      runnerBySession.delete(sessionId)
     })
     const flight = { processIncarnation, promise }
     stopTasks.set(sessionId, flight)
@@ -1103,6 +1107,7 @@ export function activate(context: PluginContext): void {
     }))
     return { stopped: stopped.sort(), unknown: unknown.sort() }
   }
+
   const reconcileOwnedSessions = async (): Promise<void> => {
     if (!active) return
     try {
@@ -1134,11 +1139,13 @@ export function activate(context: PluginContext): void {
     if (active && event.type === 'plugin.changed') void reconcileOwnedSessions()
   })
   const release = async (sessionId: string): Promise<void> => {
-    await stopSession(sessionId, false).catch(() => undefined)
+    try {
+      await stopSession(sessionId, false)
+    } catch {
+      // Keep the runner and provider reservation available for a later stopOwned retry.
+    }
     await startTasks.get(sessionId)
     await cancelPendingAsks(sessionId)
-    runnerBySession.delete(sessionId)
-    releaseOwner(sessionId)
   }
 
   context.subscribe(async (event) => {

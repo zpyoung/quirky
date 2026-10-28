@@ -115,6 +115,26 @@ describe('Codex app-server runner', () => {
     await starting
     expect(setup.fixture.requests()).toEqual([])
   })
+  test('includes native stderr when startup exits before initialize', async () => {
+    const script = readFileSync(setup.fixture.executable, 'utf8')
+    const pidMarker = 'const environmentLogPath = '
+    const initializeMarker = "send({ id: message.id, result: { userAgent: 'codex-fixture', platformFamily: 'unix', platformOs: 'macos' } })"
+    expect(script).toContain(pidMarker)
+    expect(script).toContain(initializeMarker)
+    writeFileSync(
+      setup.fixture.executable,
+      script
+        .replace(pidMarker, "fs.writeFileSync(logPath + '.startup-pid', String(process.pid))\nconst environmentLogPath = ")
+        .replace(initializeMarker, "process.stderr.write('fixture initialization diagnostic', () => process.exit(1))")
+    )
+
+    await expect(setup.runner.start(setup.session)).rejects.toThrow(
+      'Codex app-server stdout closed; stderr: fixture initialization diagnostic'
+    )
+    const pid = Number(readFileSync(setup.fixture.logPath + '.startup-pid', 'utf8'))
+    expect(() => process.kill(pid, 0)).toThrow()
+  })
+
 
   test('initializes before starting a thread and turn, persisting its provider ID first', async () => {
     await setup.runner.start(setup.session, 'summarize', { model: 'gpt-5.5', effort: 'high' })

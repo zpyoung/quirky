@@ -23,7 +23,7 @@ export type CodexAppServerFixture = {
  * Writes a deterministic native-protocol app-server executable under a test's temporary home.
  * The executable accepts `app-server`, speaks JSONL on stdio, and never contacts a provider.
  */
-export function createCodexAppServerFixture(home: string, options?: { heldPrefix?: string; uniqueThreads?: boolean }): CodexAppServerFixture {
+export function createCodexAppServerFixture(home: string, options?: { heldPrefix?: string; uniqueThreads?: boolean; rateLimitsUpdated?: Record<string, unknown> }): CodexAppServerFixture {
   mkdirSync(home, { recursive: true })
   const executable = join(home, 'codex-app-server-fixture')
   const logPath = join(home, 'codex-app-server.jsonl')
@@ -35,6 +35,7 @@ const logPath = ${JSON.stringify(logPath)}
 const environmentLogPath = ${JSON.stringify(environmentLogPath)}
 const heldPrefix = ${JSON.stringify(options?.heldPrefix ?? null)}
 const uniqueThreads = ${JSON.stringify(options?.uniqueThreads ?? false)}
+const rateLimitsUpdated = ${JSON.stringify(options?.rateLimitsUpdated ?? null)}
 let input = ''
 let nextTurn = 1
 let nextApproval = 1
@@ -180,6 +181,7 @@ function receive(message) {
         return
       }
       case 'turn/start':
+        if (rateLimitsUpdated) notify('account/rateLimits/updated', rateLimitsUpdated)
         startTurn(message, message.params.threadId, textInput(message.params.input))
         return
       case 'turn/steer': {

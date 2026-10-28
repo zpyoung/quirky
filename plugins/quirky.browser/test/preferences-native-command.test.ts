@@ -1,0 +1,28 @@
+import { expect, test } from 'bun:test'
+import type { UiPluginContext } from '@quirky/protocol'
+import { registerPreferencesUi } from '../src/preferences-ui'
+
+for (const available of [false, true]) {
+  test(`native clear completion unavailable (${available ? 'native host' : 'web client'}) never consumes a confirmed claim or invokes storage deletion`, async () => {
+    const handlers = new Map<string, unknown>()
+    let claims = 0
+    let clears = 0
+    // This fixture runs only the registered command; no React root, webview, or native Session is mounted.
+    const context = {
+      provide: (id: string, implementation: unknown) => handlers.set(id, implementation),
+      call: async () => { claims += 1; return { partition: 'persist:quirky-browser-default' } },
+      nativeBrowser: {
+        available,
+        clearPartitionAvailable: false,
+        mount: () => { throw new Error('Native mount must not run in this fixture') },
+        clearPartition: async () => { clears += 1 }
+      }
+    } as unknown as UiPluginContext
+    registerPreferencesUi(context)
+    const provided = handlers.get('command:quirky.browser/profileClearNative')
+    if (typeof provided !== 'function') throw new Error('Native clear command was not registered')
+    await expect(provided({ request: 'owned-confirmed-request' })).rejects.toThrow()
+    expect(claims).toBe(0)
+    expect(clears).toBe(0)
+  })
+}

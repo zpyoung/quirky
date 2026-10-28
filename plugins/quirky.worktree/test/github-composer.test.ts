@@ -143,6 +143,7 @@ function makeApp(options: AppOptions = {}) {
         throw new Error(`No GitHub work item matches ${String(reference)}`)
       }
       if (method === 'quirky.agents/list') throw new Error('agent catalog unavailable')
+      if (method === 'plugin.list') return []
       throw new Error(`unexpected UI call ${method}`)
     },
     getLayout: () => ({ view: null, panel: null, sidebar: true, focus: null }),
@@ -153,6 +154,8 @@ function makeApp(options: AppOptions = {}) {
       toasts.push({ title, body })
     },
     log() {},
+    subscribe: () => () => {},
+    onConnection: () => () => {},
     getSetting: () => undefined
   } as unknown as UiPluginContext
   return { context, calls, opened, toasts }

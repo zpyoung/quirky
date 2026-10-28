@@ -1,14 +1,14 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
+import * as taskLinks from '../../src/window/pane/task-links'
+import * as provider from '../../src/window/pane/link-provider'
 import type { ILink } from '@xterm/xterm'
 
 let Terminal: typeof import('@xterm/xterm').Terminal
-let provider: typeof import('../../src/window/pane/link-provider')
 
 beforeAll(async () => {
   GlobalRegistrator.register()
   ;({ Terminal } = await import('@xterm/xterm'))
-  provider = await import('../../src/window/pane/link-provider')
 })
 afterAll(async () => {
   await GlobalRegistrator.unregister()
@@ -131,6 +131,50 @@ describe('createFileLinkProvider', () => {
     expect(found![0]!.range.end.y).toBe(2)
   })
 })
+describe('createTaskLinkProvider', () => {
+  const handlers = () => {
+    const hovered: (string | null)[] = []
+    const activated: { event: MouseEvent; taskId: string }[] = []
+    return {
+      hovered,
+      activated,
+      value: {
+        hover: (target: string | null) => void hovered.push(target),
+        activate: (event: MouseEvent, taskId: string) => void activated.push({ event, taskId })
+      }
+    }
+  }
+
+  test('links punctuation-delimited task IDs up to 128 characters, not adjacent or overlong tokens', async () => {
+    const maximum = `task_${'a'.repeat(123)}`
+    const overlong = `task_${'b'.repeat(124)}`
+    const term = await terminalWith(`(task_ok), x-task_adjacent! task_ ${overlong}! ${maximum}.`)
+    const h = handlers()
+    const found = await linksAt(taskLinks.createTaskLinkProvider(term, h.value), 1)
+    expect(found?.map((link) => link.text)).toEqual(['task_ok', maximum])
+    expect(found?.[0]?.range).toEqual({ start: { x: 2, y: 1 }, end: { x: 8, y: 1 } })
+    found?.[0]?.hover?.(new MouseEvent('mousemove'), found[0].text)
+    found?.[0]?.leave?.(new MouseEvent('mousemove'), found[0].text)
+    found?.[0]?.activate(new MouseEvent('click'), found[0].text)
+    expect(h.hovered[0]).toContain('task_ok')
+    expect(h.hovered[1]).toBeNull()
+    expect(h.activated.map(({ taskId }) => taskId)).toEqual(['task_ok'])
+  })
+
+  test('maps the range after wide characters to xterm cells', async () => {
+    const term = await terminalWith('日本(task_wide)!')
+    const found = await linksAt(taskLinks.createTaskLinkProvider(term, handlers().value), 1)
+    expect(found?.[0]?.range).toEqual({ start: { x: 6, y: 1 }, end: { x: 14, y: 1 } })
+  })
+
+  test('maps a token across wrapped rows', async () => {
+    const term = await terminalWith(`${'x'.repeat(34)} task_wrap!`, 40)
+    const found = await linksAt(taskLinks.createTaskLinkProvider(term, handlers().value), 2)
+    expect(found?.[0]?.text).toBe('task_wrap')
+    expect(found?.[0]?.range).toEqual({ start: { x: 36, y: 1 }, end: { x: 4, y: 2 } })
+  })
+})
+
 
 describe('PathChecker', () => {
   test('asks in batches of 50 and keeps order', async () => {

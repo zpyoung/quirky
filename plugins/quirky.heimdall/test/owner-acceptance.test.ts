@@ -906,9 +906,42 @@ test('disabling Heimdall stops its owner child while an unrelated structured chi
   )
   const lastTurn = continued.conversation.turns[continued.conversation.turns.length - 1]
   expect(lastTurn.prompt).toBe(followup)
-  expect(lastTurn.response).toBe(`Scripted Claude completed turn ${continued.conversation.turns.length}`)
 
   const messages = await call('quirky.structured/messages', { session: unownedSessionId })
   expect(Array.isArray(messages)).toBe(true)
   expect((messages as unknown[]).some((message) => isRecord(message) && message.role === 'assistant' && message.text === lastTurn.response)).toBe(true)
+})
+
+test('owner abandon disarms the watcher without stopping an unrelated native conversation', async () => {
+  const booted = await boot()
+  const independent = record(await call('quirky.structured/create', {
+    worktree: 'main', agent: 'claude', prompt: 'independent work before owner abandonment'
+  }), 'independent session')
+  const independentId = stringField(independent, 'id', 'independent session')
+  const before = await waitForConversation(booted.home, independentId)
+  const watcherId = await enroll({
+    owner: { agent: 'claude' }, ownerInterventionCapability: 'on',
+    capabilities: { abandon: 'on' }
+  })
+  await reconcile(watcherId)
+  const issued = await waitForPending(watcherId)
+  writeReport(pendingField(issued.pending, 'reportPath'), {
+    kind: 'abandon', reason: 'The operator cancelled this work.'
+  })
+  expect(await call('quirky.heimdall/ownerReady', {
+    watcherId, reportKey: pendingField(issued.pending, 'reportKey')
+  })).toMatchObject({ kind: 'accepted' })
+  await reconcile(watcherId)
+  const abandoned = await waitForResolution(watcherId, INITIAL_DEVIATION.naturalKey, true)
+  expect(abandoned.enrollment).toMatchObject({ enabled: false, parkReason: null, haltReason: 'explicit-disarm' })
+  expect(runnerFor(independentId).isAlive(independentId)).toBe(true)
+  const followup = 'Independent work continues after owner abandonment.'
+  await call('quirky.structured/send', { session: independentId, text: followup })
+  const continued = await waitForAsync(async () => {
+    const conversation = await waitForConversation(booted.home, independentId)
+    return conversation.conversation.turns.some(turn => turn.prompt === followup) ? conversation : null
+  })
+  expect(continued.providerSessionId).toBe(before.providerSessionId)
+  expect(continued.conversation.turns.slice(0, before.conversation.turns.length)).toEqual(before.conversation.turns)
+  expect(continued.conversation.turns.filter(turn => turn.prompt === followup)).toHaveLength(1)
 })

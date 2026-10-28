@@ -1,5 +1,5 @@
 import { chmodSync, writeFileSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { join } from 'node:path'
 import { expect, test } from 'bun:test'
 import { QuirkyClient } from '@quirky/protocol'
 import { isDaemonAlive, readRuntime, rpcUrl, type RuntimeInfo } from '@quirky/protocol/node'
@@ -7,9 +7,6 @@ import type { RunRow, TaskRow } from '../../src/contracts'
 import type { WorkerListResult, WorkerShowResult } from '../../src/worker-contracts'
 import { eventually, startWorkerAcceptance, type WorkerAcceptance } from './acceptance-support'
 
-const ROOT = resolve(import.meta.dir, '../../../..')
-const DAEMON = join(ROOT, 'packages/daemon/src/main.ts')
-const CLI = join(ROOT, 'packages/cli/src/main.ts')
 const CONTROL = join(import.meta.dir, 'acceptance-control.ts')
 
 async function createRun(h: WorkerAcceptance): Promise<RunRow> {
@@ -46,7 +43,7 @@ process.on('SIGINT', finish)
   chmodSync(launcher, 0o755)
 }
 
-async function restartPrivateDaemon(h: WorkerAcceptance, original: RuntimeInfo): Promise<RuntimeInfo> {
+async function awaitPrivateDaemonRestart(h: WorkerAcceptance, original: RuntimeInfo): Promise<RuntimeInfo> {
   const { fixture } = h
   expect(fixture.processScope.home).toBe(fixture.home)
 
@@ -59,29 +56,19 @@ async function restartPrivateDaemon(h: WorkerAcceptance, original: RuntimeInfo):
   process.kill(current.pid, 'SIGKILL')
   await eventually(() => isDaemonAlive(current), (alive) => !alive, 'the targeted private daemon to stop')
 
-  const logPath = join(dirname(fixture.home), 'restart-daemon.log')
-  const daemon = fixture.processScope.spawn([process.execPath, DAEMON], {
-    env: {
-      HOME: fixture.userHome,
-      QUIRKY_HOME: fixture.home,
-      PATH: `${fixture.fakebin}:/usr/bin:/bin`,
-      SHELL: join(dirname(fixture.fakebin), 'shells', 'sh'),
-      QUIRKY_AGENT_SEARCH_DIRS: '',
-      QUIRKY_PORT: '0',
-      QUIRKY_TEST_AGENT_TIME_SCALE: '0.1',
-      WORKER_TEST_CLI: CLI,
-      ...fixture.processScope.env
-    },
-    stdout: Bun.file(logPath),
-    stderr: Bun.file(logPath)
-  })
-
+  let trackedPid = current.pid
   const runtime = await eventually(async () => {
-    if (daemon.exitCode !== null) throw new Error(`restarted private daemon exited ${daemon.exitCode}`)
     const next = readRuntime(fixture.home)
-    return next && next.pid !== current.pid && await isDaemonAlive(next) ? next : null
-  }, (next) => next !== null, 'a healthy new daemon epoch', 20_000)
-  if (!runtime) throw new Error('the restarted private daemon did not publish a runtime')
+    if (!next || next.pid === current.pid) return null
+    if (next.pid !== trackedPid) {
+      fixture.processScope.track(next.pid)
+      trackedPid = next.pid
+    }
+    return await isDaemonAlive(next) ? next : null
+  }, (next) => next !== null, 'the reconnecting CLI to publish a healthy daemon epoch', 20_000)
+  if (!runtime) throw new Error('the reconnecting CLI did not publish a healthy private daemon')
+
+  // connectDaemon autostarts this epoch from the pending CLI; its detached process is tracked above.
   return runtime
 }
 
@@ -132,9 +119,9 @@ test('a daemon crash while an accepted worker waits for readiness persists unkno
     const submittedBeforeCrash = accepted.submitted
     const crashedRuntime = readRuntime(h.fixture.home)
     expect(crashedRuntime?.pid).toBe(originalRuntime.pid)
-    const nextRuntime = await restartPrivateDaemon(h, originalRuntime)
+    const nextRuntime = await awaitPrivateDaemonRestart(h, originalRuntime)
 
-    // A dropped RPC connection releases the real CLI child; do not enqueue replay until its request loop is free.
+    // Let the CLI's reconnect/replay settle before enqueueing the separate exact replay.
     const interrupted = await pendingStart
     expect(interrupted.code).not.toBe(0)
 

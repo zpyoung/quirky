@@ -434,4 +434,45 @@ describe('Heimdall fleet projection', () => {
     const [detail] = await Promise.all([oldDetail, publishAfterDetailChange])
     expect(detail?.status?.state).toBe('terminal')
   })
+  test('does not let an older blocked projection hold back newer detail and fleet publication', async () => {
+    const row = enrollment('watcher')
+    const initial = inspection(row, 'watching')
+    const h = harness([{ enrollment: row, inspection: initial }])
+    const olderReadBlocked = Promise.withResolvers<void>()
+    const olderReadStarted = Promise.withResolvers<void>()
+    h.delayNextInspection('watcher', async () => {
+      olderReadStarted.resolve()
+      await olderReadBlocked.promise
+    })
+
+    const olderPublish = h.service.publish()
+    await olderReadStarted.promise
+    const terminalEnrollment = { ...row, terminalAtMs: 200, haltReason: 'objective-complete' }
+    h.enrollments.set('watcher', terminalEnrollment)
+    h.inspections.set('watcher', {
+      ...initial,
+      enrollment: terminalEnrollment,
+      status: status('terminal'),
+      summary: { watcherId: 'watcher', kind: 'objective', state: 'complete', reason: 'objective-complete', atMs: 200, budget: initial.budget }
+    })
+
+    const newerPublish = h.service.publish()
+    const newerDetail = h.service.detail({ watcherId: 'watcher' })
+    const [detail] = await Promise.all([newerDetail, newerPublish])
+
+    expect(detail?.status?.state).toBe('terminal')
+    const snapshotsBeforeOlderReadCompletes = h.emitted
+      .filter(event => event.event === 'fleetChanged')
+      .map(event => event.data as FleetSnapshot)
+    expect(snapshotsBeforeOlderReadCompletes).toHaveLength(1)
+    expect(snapshotsBeforeOlderReadCompletes[0]?.rows[0]?.status.state).toBe('terminal')
+
+    olderReadBlocked.resolve()
+    await olderPublish
+
+    const snapshots = h.emitted.filter(event => event.event === 'fleetChanged').map(event => event.data as FleetSnapshot)
+    expect(snapshots).toHaveLength(1)
+    expect(snapshots[0]?.rows[0]?.status.state).toBe('terminal')
+  })
+
 })
