@@ -10,6 +10,11 @@ function noArgs(args: CliArgs, context: CliContext): void {
 }
 
 const named: CliModule['commands'] = {
+  async 'agent-catalog'(args, context) {
+    noArgs(args, context)
+    const value = await context.call('quirky.mobile/agentCatalog', {})
+    context.out.result(value, () => JSON.stringify(value, null, 2))
+  },
   async 'notification-poll'(args, context) {
     if (args.positionals.length > 0) throw context.usage('notification-poll accepts only named flags')
     const after = args.flags.after

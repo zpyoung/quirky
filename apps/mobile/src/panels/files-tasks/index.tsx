@@ -1535,6 +1535,17 @@ function TasksPanel({ bridge }: { bridge: PanelBridge }) {
     finally { setDetailSaving(false) }
   }
 
+  const openConfirmedWorkspace = async (result: { kind: 'created' | 'resumed'; worktreeId: string; name: string }) => {
+    setWorkspaceOpen(false)
+    setWorkspaceRequest(null)
+    setWorkspaceSuccess(`Workspace ${result.kind === 'created' ? 'created' : 'opened'}${result.name ? `: ${result.name}` : ''}. It is linked to this task.`)
+    try {
+      await bridge.navigate({ kind: 'session', worktreeId: result.worktreeId })
+    } catch (cause) {
+      setWorkspaceError(`The workspace is ready, but could not be opened: ${announceError(messageOf(cause))}`)
+    }
+  }
+
   const startWorkspace = async () => {
     if (!connected || !selected || !detailTarget || stale || workspaceBusy) return
     setWorkspaceBusy(true)
@@ -1544,9 +1555,8 @@ function TasksPanel({ bridge }: { bridge: PanelBridge }) {
       const raw = await bridge.call('quirky.tasks/workspace', { target: detailTarget, action: 'start', newWorkspace: true })
       const result = classifyWorkspaceResult(raw)
       if (result.kind === 'invalid') throw new Error('The GitHub Tasks API did not return a workspace composer or created worktree.')
-      if (result.kind === 'created') {
-        setWorkspaceSuccess(`Workspace created${result.name ? `: ${result.name}` : ''}. It is linked to this task.`)
-        void loadList(true)
+      if (result.kind === 'created' || result.kind === 'resumed') {
+        await openConfirmedWorkspace(result)
         return
       }
       const request = result.request
@@ -1606,11 +1616,8 @@ function TasksPanel({ bridge }: { bridge: PanelBridge }) {
         ...(workspaceAgent ? { agent: workspaceAgent } : {}), ...(trustSetup ? { trustSetup: true } : {})
       })
       const outcome = classifyWorkspaceResult(response)
-      if (outcome.kind === 'created') {
-        setWorkspaceOpen(false)
-        setWorkspaceRequest(null)
-        setWorkspaceSuccess(`Workspace created${outcome.name ? `: ${outcome.name}` : ''}. It is linked to this task.`)
-        void loadList(true)
+      if (outcome.kind === 'created' || outcome.kind === 'resumed') {
+        await openConfirmedWorkspace(outcome)
       } else if (outcome.kind === 'composer') {
         setWorkspaceRequest(outcome.request)
         setWorkspaceError(string(outcome.request.error))
@@ -1757,6 +1764,7 @@ function TasksPanel({ bridge }: { bridge: PanelBridge }) {
         {!connected ? <p role="status" style={{ ...dangerStyle, margin: 0 }}>{disconnectedNotice} Task details are stale; writes are disabled.</p> : null}
         {detailError ? <p role="alert" style={{ ...dangerStyle, margin: 0, overflowWrap: 'anywhere' }}>{detailError}</p> : null}
         {workspaceSuccess ? <p role="status" style={{ margin: 0 }}>{workspaceSuccess}</p> : null}
+        {!workspaceOpen && workspaceError ? <p role="alert" style={{ ...dangerStyle, margin: 0, overflowWrap: 'anywhere' }}>{workspaceError}</p> : null}
         <button type="button" disabled={!connected || !detailTarget || stale || workspaceBusy} onClick={() => void startWorkspace()} style={{ ...buttonStyle, justifySelf: 'start' }}>{workspaceBusy ? 'Preparing workspace…' : 'Create Workspace In'}</button>
         {detailLoading ? <p role="status">Loading task details…</p> : null}
         {selected.kind === 'pullRequest' ? <>

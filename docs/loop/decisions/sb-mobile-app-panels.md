@@ -88,5 +88,60 @@
 - **Revisit if:** an operator-controlled push service and native app delivery credentials are configured.
 - **Source:** deferred: native background push service
 
+## D9: Respect absent non-GitHub Tasks provider prerequisites
+- **Question:** mobile.md names GitLab, Linear and Jira Tasks, but which provider contracts can a paired phone actually consume?
+- **Options:** fabricate provider rows/data; build unreviewed provider backends inside a phone component; expose truthful availability and defer each backend-dependent flow.
+- **Chose:** ship complete reachable GitHub Tasks through public tasks/hosting APIs, including available PR mutations. GitLab/Linear/Jira source selectors explain the unavailable provider. Include their query/filter/list-board/detail/comments/field edits/workspace-link flows in the one follow-up with the exact provider API prerequisite. Do not override blocked GitLab provider decisions.
+- **Why:** quirky.tasks is explicitly GitHub-backed; no quirky.linear or quirky.jira plugin exists. GitLab hosting/API/UI/workspace queue items are blocked, not ready foundations for a phone consumer. Source availability must not imply a usable backend.
+- **Evidence:** plugins/quirky.tasks manifest and src/ui.tsx provider availability; queue status and authoritative queue entries m4-hosting-api-gitlab/m4-hosting-ui-gitlab/m4-worktrees-create-from-gitlab blocked; PhoneFilesTasks inventory and handler survey.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** provider-owned public task list/detail/mutation/workspace contracts land.
+- **Source:** deferred: non-GitHub Tasks providers
+
+## D10: Require a real terminal artifact producer before exposing outside-worktree edits
+- **Question:** what does the source's Save terminal artifact action actually authorize?
+- **Options:** mislabel ordinary file Save; accept arbitrary absolute phone paths; defer the source/grant prerequisite while shipping contained file editing.
+- **Chose:** normal Files stays worktree-contained. Preserve the independent terminal-artifact flow in the one follow-up: authoritative terminal path producer, opaque grant/source route, resolve/read/preview/conditional write and grant-refresh refusal classification. Never mint outside-worktree authority merely from a phone-supplied absolute path.
+- **Why:** upstream source only exposes this action for writable nontruncated text with source terminalArtifact; it verifies the base content before overwrite and renews a refused grant. Quirky has no corresponding terminal artifact producer/API or opaque route contract. PDF export and normal editor Save are not substitutes.
+- **Evidence:** read-only upstream mobile/src/files/MobileFilePreviewScreen.tsx and mobile-file-preview-request.ts; upstream files.readTerminalArtifact/readTerminalArtifactPreview/writeTerminalArtifact/resolveTerminalPath call shapes; Quirky terminal/editor API inventory; PanelRoute currently carries contained relative paths only.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** authoritative terminal artifact grants become part of the public terminal/files API.
+- **Source:** deferred: terminal artifact authority prerequisite
+
+## D11: Keep configured environments out of phone metadata at the producer
+- **Question:** vault preparation and raw agent listing include host credentials even if a page later hides those fields.
+- **Options:** client-side redaction; recursive transport scrubbing; exact producer projections and no secret-bearing calls.
+- **Chose:** deny vault.prepareResume and agents.list to phones. History calls vault.resume directly because it already prepares server-side; VaultActions omits optional Session.launch only for mobile callers. Base commit3fc2dceb likewise projects mobile session list/get/create/resume/restore/setName. Add public quirky.mobile/agentCatalog with defaultAgent and agent id/label/installed/enabled/isDefault/resumable, no command/args/env/path. Publish module/test-only commit619876b9 for the base to cherry-pick, avoiding a child-to-base dependency cycle. Field installed matches canonical agent metadata; no available alias.
+- **Why:** real mobile-role vault acceptance reproduced the configured secret inside launch.env before the fix. Catalog inspection showed effective configured env; withholding display is too late once a page has received it. Local callers and host launch records retain the real environment.
+- **Evidence:** vault actions.ts59–90,262–280; AgentsService.info538–558; encrypted catalog regression green1test6assertions; vault regression red at secret presence then green1test5assertions; merged base Session regression and both tests3pass25assertions.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** a new phone method returns a launch plan or credential-bearing agent metadata.
+- **Source:** supersedes sb-mobile-app D13 (catalog field installed, not available); assumed — autonomous
+
+## D12: Use bounded draft transfers and authoritative workspace outcomes
+- **Question:** how to preserve1MiB file editing through64KiB mobile string limits, and how Tasks reports an already-linked workspace.
+- **Options:** silently cap edits; send an oversized request; existing bounded editor transfer. Treat every result as created; preserve resumed as an authoritative distinct outcome.
+- **Chose:** direct drafts at most48KiB; larger drafts use UTF-8 transfer begin/chunk/commit/cancel,48KiB decoded chunks and1MiB total, CAS revision and acknowledged offsets. Admit draft transfer only, not create/import/overwrite. Recognize actual Tasks resumed results, never label them created, and navigate to the authoritative worktree after completion. Keep navigation errors visible without denying that creation already succeeded.
+- **Why:** source preview cap exceeded transport string budget; existing public editor transfer already solves this without new authority. Provider fixture analysis confirmed kind:resumed on repeated start. Regression failed invalid-versus-resumed before the parser fix.
+- **Evidence:** editor manifest407–438; FilesTasks transfer implementation; activity proof source report; files-tasks model regression red then green; panel policy tests3pass19assertions; model+policy7pass81assertions.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the bridge or Tasks workspace result contract changes.
+- **Source:** assumed — autonomous
+
+## D13: Audit and integrate complete component source before surface verification
+- **Question:** worker source claims are not build or UI proof.
+- **Options:** accept reports; audit exact scopes/HEAD and run targeted checks after the wave barrier.
+- **Chose:** all three HEADs stayedeb750d27 and source paths matched declared scopes; inherited .serena remained unstaged. Parent ran Activity3tests11assertions, FilesTasks4tests61assertions, SCM+branch15tests46assertions, committed7566633c/780fb5f6/1f3564b1, merged and removed all three component trees. Removed mock resume forwarding and tautological dirty-navigation tests rather than repinning them. A real panel-entry compile then exposed escaped JSX attributes in Activity; fixed only those lines, and compilation bundled7modules successfully with React external. This is compile proof only, not a browser or native pass.
+- **Why:** model-only tests do not parse/render feature TSX. Scope audit prevents default-workspace contamination; build and actual user-surface proof remain separate gates.
+- **Evidence:** parent component audit outputs, targeted tests and commit results; TypeScript parse diagnostics; bun build apps/mobile/src/panels/index.tsx --target browser --external react --external react/jsx-runtime --external react-dom/client compiled0.33MB.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** an external worker edit appears outside its declared tree.
+- **Source:** assumed — autonomous
+
 ## Progress
-Contracts/spec committed eb750d27. Parent notification service17bbe2b7, with cancellation/CLI correction now verified5tests39assertions plus actual CLI smoke. Dependency bridge state contracts merged through53b19b61. Three independent component workers still running; parent owns shared route/auth integration only after base lands per itsD7. Native handoff written pending. Web dogfood driver ready; final affected-suite/scripts/typecheck/build/built-UI/review/land remain to execute. No whole-suite local run is planned: night-mode rule reserves it for queue land despite protocol changes.
+Feature source components merged and original trees removed. Parent safe metadata APIs and vault projection verified; scoped panel admission module written and unit-verified but not wired into shared base authorization until base lands perD7. Two isolated encrypted acceptance components exist at /tmp/quirky-panels-{git-editor-proof,activity-proof}, source-only and not yet accepted; parent must run them against final policy. Browser host helper is being authored under /tmp/quirky-panel-run.42yijv/ui against actual final PageApp and sealed RPC, no fake backend. Dependency still pending; current base through3fc2dceb merged, full native/pages/bundle still awaited. Final affected suite/scripts/typecheck/build/real UI/review/followup/land remain. No whole-suite local run: night mode reserves it for queue land.

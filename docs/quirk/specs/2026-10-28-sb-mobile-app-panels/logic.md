@@ -3,6 +3,8 @@
 ## Status & amendments
 Approved autonomously on 2026-10-28 under authoritative build/roadmap LOOP.md. Night-mode combined logic/technical spec; source-grounded self-review replaces human and separate spec review. No scope reduction is implied by dependency APIs that are currently absent.
 
+**Amendments:** 2026-10-28: D8–D10 record three independently deferred prerequisite-dependent flows under LOOP's explicit deferral rule: native APNs/FCM delivery credentials/service/entitlements; GitLab/Linear/Jira provider-owned Tasks APIs (GitLab predecessors already blocked); and terminal-artifact authority/producer/read/conditional-write grants. These remain requirements in the single completion follow-up, not completed acceptance criteria. Required public API growth that is reachable now, including guarded Git branch switching and notification-only replay, is implemented in this item rather than deferred merely for lacking a method.
+
 ## Purpose and conceptual model
 The paired phone is a consumer of the same Quirky public plugin API as desktop and CLI. Add worktree Source Control, Review, Files and Agent History routes, host Tasks and Accounts routes, and host notification subscription/settings to the existing Expo shell and desktop-delivered page bundle. Every route belongs to the selected pinned host; worktree operations always retain that worktree. No second backend or Orca-compatible RPC aliases.
 
@@ -52,7 +54,7 @@ At320px width and short keyboard viewport, Tasks Create Workspace fields/actions
 No research swarm per LOOP night mode. Evidence is external research/orca-features/mobile.md flow8, settings row Notifications, Notifications and push, verified flow8 and new Tasks clipping defects; docs/architecture.md mobile decision; sb-mobile-daemon and sb-mobile-app decision logs.
 
 ## Deferred ideas
-No unrelated feature additions. External/locked limits must get explicit decision and exactly one follow-up item before land if any independent flow is deferred.
+One completion follow-up must name native background push, non-GitHub Tasks provider operations, and authorized terminal artifact save/preview. Its prerequisite contract and exact evidence are in decisions D8–D10. No unrelated additions or claim that disabled capabilities passed.
 
 ## Glossary
 Panel route: host/worktree-scoped phone page. Bridge: native authenticated RPC proxy, no secrets in page. Reviewed: per-file review progress, not Git staging. Sent note: note whose actual target send succeeded. Push: OS delivery while backgrounded, not a socket event.

@@ -217,25 +217,25 @@ function AccountsPanel({ bridge }: { bridge: PanelBridge }) {
     setBusyProvider(null)
   }
 
-  return <main style={panel} aria-labelledby=\"activity-accounts-title\">
+  return <main style={panel} aria-labelledby="activity-accounts-title">
     <header style={header}>
       <div>
-        <h1 id=\"activity-accounts-title\" style={{ ...sectionTitle, fontSize: 21 }}>Accounts</h1>
+        <h1 id="activity-accounts-title" style={{ ...sectionTitle, fontSize: 21 }}>Accounts</h1>
         <p style={muted}>Provider accounts on {bridge.init.host.name}. Credentials stay on the desktop host.</p>
       </div>
-      <button type=\"button\" style={button} onClick={() => void load()} disabled={loading || connection.phase !== 'connected'}>Refresh</button>
+      <button type="button" style={button} onClick={() => void load()} disabled={loading || connection.phase !== 'connected'}>Refresh</button>
     </header>
-    {connection.phase !== 'connected' ? <p role=\"status\" style={errorStyle}>{connectionHint(connection)}</p> : null}
-    {hostStale ? <p role=\"status\" style={errorStyle}>Host account data is stale. Changes are disabled until the host reconnects and account data refreshes.</p> : null}
-    {accountError ? <p role=\"alert\" style={errorStyle}>{accountError}</p> : null}
-    {usageError ? <p role=\"status\" style={muted}>{usageError}</p> : null}
-    {loading && !snapshot ? <p role=\"status\" style={muted}>Loading account records and usage…</p> : null}
+    {connection.phase !== 'connected' ? <p role="status" style={errorStyle}>{connectionHint(connection)}</p> : null}
+    {hostStale ? <p role="status" style={errorStyle}>Host account data is stale. Changes are disabled until the host reconnects and account data refreshes.</p> : null}
+    {accountError ? <p role="alert" style={errorStyle}>{accountError}</p> : null}
+    {usageError ? <p role="status" style={muted}>{usageError}</p> : null}
+    {loading && !snapshot ? <p role="status" style={muted}>Loading account records and usage…</p> : null}
     {snapshot ? (['claude', 'codex'] as const).map((provider) => {
       const rows = snapshot.rows.filter((row) => row.provider === provider)
       return <section key={provider} style={card} aria-labelledby={`accounts-${provider}`}>
         <header style={header}>
           <h2 id={`accounts-${provider}`} style={sectionTitle}>{providerLabel(provider)}</h2>
-          <button type=\"button\" style={button} onClick={() => void refreshUsage(provider)} disabled={loading || busyProvider !== null || connection.phase !== 'connected'}>
+          <button type="button" style={button} onClick={() => void refreshUsage(provider)} disabled={loading || busyProvider !== null || connection.phase !== 'connected'}>
             {busyProvider === provider ? 'Refreshing…' : 'Refresh usage'}
           </button>
         </header>
@@ -725,38 +725,38 @@ function NotificationsPanel({ bridge, worktreeId }: { bridge: PanelBridge; workt
     }
   }
 
-  return <main style={panel} aria-labelledby=\"activity-notifications-title\">
+  return <main style={panel} aria-labelledby="activity-notifications-title">
     <header style={header}>
       <div>
-        <h1 id=\"activity-notifications-title\" style={{ ...sectionTitle, fontSize: 21 }}>Notifications</h1>
+        <h1 id="activity-notifications-title" style={{ ...sectionTitle, fontSize: 21 }}>Notifications</h1>
         <p style={muted}>Live alerts from {bridge.init.host.name} on this device. No background push is enabled.</p>
       </div>
     </header>
-    {connection.phase !== 'connected' ? <p role=\"status\" style={errorStyle}>{connectionHint(connection)} Alerts are paused and the current list may be stale.</p> : null}
-    <section style={card} aria-label=\"Device notification settings\">
-      {!client.ready ? <p role=\"status\" style={muted}>Loading this device’s notification settings…</p> : null}
+    {connection.phase !== 'connected' ? <p role="status" style={errorStyle}>{connectionHint(connection)} Alerts are paused and the current list may be stale.</p> : null}
+    <section style={card} aria-label="Device notification settings">
+      {!client.ready ? <p role="status" style={muted}>Loading this device’s notification settings…</p> : null}
       <PreferenceToggle
-        label=\"Enable live alerts on this device\"
+        label="Enable live alerts on this device"
         checked={client.preferences.enabled}
         disabled={!client.ready || preferenceBusy}
         onChange={(checked) => void updatePreference({ enabled: checked })}
       />
       <p style={muted}>Alerts are received only while the paired host is reachable and the app page is open.</p>
       <PreferenceToggle
-        label=\"Only when the desktop is away\"
+        label="Only when the desktop is away"
         checked={client.preferences.onlyWhenDesktopAway}
         disabled={!client.ready || preferenceBusy}
         onChange={(checked) => void updatePreference({ onlyWhenDesktopAway: checked })}
       />
       <PreferenceToggle
-        label=\"Suppress alerts for the focused workspace\"
+        label="Suppress alerts for the focused workspace"
         checked={client.preferences.suppressFocusedWorkspace}
         disabled={!focusedWorktree || !client.ready || preferenceBusy}
         onChange={(checked) => void updatePreference({ suppressFocusedWorkspace: checked })}
       />
       {!focusedWorktree ? <p style={muted}>Workspace suppression is unavailable outside a selected or last-viewed workspace.</p> : null}
       <PreferenceToggle
-        label=\"Play a sound while this page is open\"
+        label="Play a sound while this page is open"
         checked={audioSupported && client.preferences.soundWhileOpen}
         disabled={!audioSupported || !client.ready || preferenceBusy}
         onChange={(checked) => void changeSound(checked)}
@@ -764,17 +764,17 @@ function NotificationsPanel({ bridge, worktreeId }: { bridge: PanelBridge; workt
       {!audioSupported ? <p style={muted}>Foreground sound is unavailable in this browser; no sound control is enabled.</p> : null}
       {audioSupported ? <p style={muted}>The short tone needs a user gesture for this app session and never plays in the background.</p> : null}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
-        <button type=\"button\" style={button} disabled={!client.preferences.enabled || connection.phase !== 'connected' || testBusy} onClick={() => void sendTest()}>
+        <button type="button" style={button} disabled={!client.preferences.enabled || connection.phase !== 'connected' || testBusy} onClick={() => void sendTest()}>
           {testBusy ? 'Sending test…' : 'Send test event'}
         </button>
-        <span role=\"status\" style={{ ...muted, alignSelf: 'center' }}>
+        <span role="status" style={{ ...muted, alignSelf: 'center' }}>
           {!client.ready ? 'Loading' : !client.preferences.enabled ? 'Disabled on this device' : connection.phase !== 'connected' ? connectionHint(connection) : client.pollError ? `Reconnecting: ${client.pollError}` : client.connected ? 'Connected · live while open' : 'Waiting for the first host response…'}
         </span>
       </div>
-      {testMessage ? <p role=\"status\" style={testMessage.startsWith('Test event could not') || testMessage.startsWith('Foreground sound') ? errorStyle : muted}>{testMessage}</p> : null}
-      {client.storageError ? <p role=\"alert\" style={errorStyle}>{client.storageError}</p> : null}
-      {client.preferences.enabled && !client.feed.presenceAvailable ? <p role=\"status\" style={muted}>Desktop presence is unavailable. Unknown presence is treated as away, so the away-only filter cannot be guaranteed.</p> : null}
-      {(client.feed.reset || client.feed.truncated) ? <p role=\"status\" style={muted}>The host’s bounded replay history reset or was truncated. Some older alerts may be unavailable.</p> : null}
+      {testMessage ? <p role="status" style={testMessage.startsWith('Test event could not') || testMessage.startsWith('Foreground sound') ? errorStyle : muted}>{testMessage}</p> : null}
+      {client.storageError ? <p role="alert" style={errorStyle}>{client.storageError}</p> : null}
+      {client.preferences.enabled && !client.feed.presenceAvailable ? <p role="status" style={muted}>Desktop presence is unavailable. Unknown presence is treated as away, so the away-only filter cannot be guaranteed.</p> : null}
+      {(client.feed.reset || client.feed.truncated) ? <p role="status" style={muted}>The host’s bounded replay history reset or was truncated. Some older alerts may be unavailable.</p> : null}
     </section>
     <p style={muted}>{client.feed.notifications.length === 0 ? 'No alerts have been received on this device yet.' : `${client.feed.notifications.length} recent alerts are listed in the in-app notification tray across routes.`}</p>
   </main>
@@ -950,7 +950,7 @@ export function DirectNotifications({ bridge, viewedWorktree }: { bridge: PanelB
           ? 'Live while this page is open'
           : 'Connecting to host…'
   return <aside
-    aria-label=\"In-app notifications\"
+    aria-label="In-app notifications"
     style={{
       ...card,
       position: 'fixed',
@@ -965,19 +965,19 @@ export function DirectNotifications({ bridge, viewedWorktree }: { bridge: PanelB
       margin: 0
     }}
   >
-    <div aria-live=\"polite\" role=\"status\" style={muted}>{status}</div>
+    <div aria-live="polite" role="status" style={muted}>{status}</div>
     {client.preferences.enabled && !client.feed.presenceAvailable ? <p style={muted}>Desktop presence is unavailable; unknown presence is not suppressed.</p> : null}
     {(client.feed.reset || client.feed.truncated) ? <p style={muted}>Some older alerts were unavailable in the bounded replay history.</p> : null}
-    {navigationError ? <p role=\"alert\" style={errorStyle}>{navigationError}</p> : null}
-    {client.storageError ? <p role=\"status\" style={muted}>{client.storageError}</p> : null}
-    {client.feed.arrivals[0] ? <div aria-live=\"polite\" style={{ borderTop: '1px solid #374151', paddingTop: 8, marginTop: 8 }}>
+    {navigationError ? <p role="alert" style={errorStyle}>{navigationError}</p> : null}
+    {client.storageError ? <p role="status" style={muted}>{client.storageError}</p> : null}
+    {client.feed.arrivals[0] ? <div aria-live="polite" style={{ borderTop: '1px solid #374151', paddingTop: 8, marginTop: 8 }}>
       <strong>New alert: {client.feed.arrivals[0].title}</strong>
       <p style={{ margin: '4px 0', overflowWrap: 'anywhere' }}>{client.feed.arrivals[0].body}</p>
-      <button type=\"button\" style={button} disabled={!client.feed.arrivals[0].worktreeId && !client.feed.arrivals[0].sessionId} onClick={() => void openNotification(client.feed.arrivals[0]!)}>Open workspace or session</button>
+      <button type="button" style={button} disabled={!client.feed.arrivals[0].worktreeId && !client.feed.arrivals[0].sessionId} onClick={() => void openNotification(client.feed.arrivals[0]!)}>Open workspace or session</button>
     </div> : null}
     {client.feed.notifications.length > 0 ? <details>
       <summary>Recent alerts ({client.feed.notifications.length})</summary>
-      <div aria-label=\"Recent host alerts\" style={{ maxHeight: '24vh', overflowY: 'auto' }}>
+      <div aria-label="Recent host alerts" style={{ maxHeight: '24vh', overflowY: 'auto' }}>
         {client.feed.notifications.map((notification) => <NotificationRow
           key={`${client.feed.epoch}:${notification.id}`}
           notification={notification}
@@ -1002,7 +1002,7 @@ function NotificationRow({ notification, now, onOpen }: { notification: MobileNo
     <strong>{notification.title}</strong>
     <div style={muted}>{ageLabel(notification.at, now)}{notification.desktopAway === null ? ' · desktop presence unknown' : notification.desktopAway ? ' · desktop away' : ' · desktop active'}</div>
     <p style={{ marginBottom: 0, overflowWrap: 'anywhere' }}>{notification.body}</p>
-    {onOpen ? <button type=\"button\" style={{ ...button, marginTop: 8 }} disabled={!notification.worktreeId && !notification.sessionId} onClick={onOpen}>Open workspace or session</button> : null}
+    {onOpen ? <button type="button" style={{ ...button, marginTop: 8 }} disabled={!notification.worktreeId && !notification.sessionId} onClick={onOpen}>Open workspace or session</button> : null}
   </article>
 }
 function foregroundSoundSupported(): boolean {

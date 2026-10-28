@@ -410,13 +410,31 @@ Their non-secret stage, choices, devices and error state are readable through
 [the behavior spec](../docs/quirk/specs/2026-10-27-sb-mobile-daemon/logic.md)
 defines the scope and limits.
 
+Phone launcher pickers use `quirky.mobile/agentCatalog` (`quirky mobile
+agent-catalog --json`). It exposes labels, installed/enabled/default status and
+resume capability, never configured commands, arguments or environment credentials.
+Mobile Session results omit the optional launch plan before serialization.
+History resumes through `quirky.vault/resume`, which prepares on the desktop;
+the secret-bearing `prepareResume` plan is not granted to phones.
+
+Source Control's **Switch Branch** uses `quirky.git/describeSwitchBranch` followed
+by confirmed `switchBranch`. It requires an uncapped clean tree, no active merge
+or rebase, an exact available local/remote ref and no other worktree holding the
+target. Optional expected branch/HEAD values reject stale UI state. A remote ref
+creates its local tracking branch; an existing divergent local branch is never reset.
+
+```sh
+quirky git describeSwitchBranch --worktree id:<worktree> --branch feature --json
+quirky git switchBranch --worktree id:<worktree> --branch feature --expected-branch main --expected-head <oid> --yes --json
+```
+
 Paired phones subscribe to a notification-only replay feed with
 `quirky.mobile/notificationPoll`; the general daemon event catalog is not granted.
 Keep the returned `epoch` and `cursor` for reconnect catch-up. A process restart
-resets the epoch; a gap beyond the256-record window reports `truncated`.
+resets the epoch; a gap beyond the 256-record window reports `truncated`.
 Away/focused-workspace filters still advance the cursor, so suppressed records do
 not reappear after reconnect. Unknown desktop presence does not silence alerts.
-The macOS away check uses180seconds of keyboard/mouse idle or a locked console.
+The macOS away check uses 180 seconds of keyboard/mouse idle or a locked console.
 
 ```sh
 quirky mobile notification-test --json
@@ -424,7 +442,7 @@ quirky mobile notification-poll --wait-ms 0 --json
 quirky mobile notification-poll --after 12 --epoch <epoch> --only-away --json
 ```
 
-Long polls accept `waitMs` up to25000. A phone can bind its poll to a
+Long polls accept `waitMs` up to 25000. A phone can bind its poll to a
 `subscriptionId` and release that same generation with
 `quirky.mobile/notificationCancel`; a late cancellation cannot stop its replacement.
 The server takes device identity from the authenticated connection, never params.

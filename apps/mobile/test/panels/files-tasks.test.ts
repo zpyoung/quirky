@@ -40,6 +40,8 @@ test('workspace composer is not success until the plugin confirms a created work
     .toMatchObject({ kind: 'composer', requestId: 'req-1' })
   expect(classifyWorkspaceResult({ kind: 'created', worktree: { id: 'wt-1', name: 'fix-parser' } }))
     .toMatchObject({ kind: 'created', worktreeId: 'wt-1', name: 'fix-parser' })
+  expect(classifyWorkspaceResult({ kind: 'resumed', worktree: { id: 'existing-wt', name: 'linked-task' } }))
+    .toMatchObject({ kind: 'resumed', worktreeId: 'existing-wt', name: 'linked-task' })
   expect(classifyWorkspaceResult({ kind: 'created', worktree: {} }).kind).toBe('invalid')
 })
 test('file drafts switch to bounded transfers beyond the safe direct-write size', () => {

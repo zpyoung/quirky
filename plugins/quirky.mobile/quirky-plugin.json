@@ -10,6 +10,12 @@
   "contributes": {
     "method": [
       {
+        "id": "agentCatalog",
+        "description": "Read safe phone launcher labels and availability without host commands, arguments or credential environments.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": {}, "additionalProperties": false }
+      },
+      {
         "id": "notificationPoll",
         "description": "Read or long-poll the bounded notification-only replay for an authenticated phone; never exposes general daemon events.",
         "connection": true,
@@ -293,6 +299,7 @@
     ],
     "cli-command": [
       { "id": "info", "summary": "read this desktop's mobile identity", "methods": ["quirky.mobile/info"] },
+      { "id": "agent-catalog", "summary": "list phone-safe agent launcher metadata", "methods": ["quirky.mobile/agentCatalog"] },
       {
         "id": "notification-poll",
         "summary": "read notification replay with optional bounded long-poll",

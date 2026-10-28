@@ -140,7 +140,7 @@ export function taskFilterValue(query: string, filter: TaskFilter): string {
 
 
 export type WorkspaceResult =
-  | { kind: 'created'; worktreeId: string; name: string }
+  | { kind: 'created' | 'resumed'; worktreeId: string; name: string }
   | { kind: 'composer'; requestId: string; request: Record<string, unknown> }
   | { kind: 'invalid' }
 
@@ -153,10 +153,10 @@ function record(value: unknown): Record<string, unknown> | null {
 export function classifyWorkspaceResult(value: unknown): WorkspaceResult {
   const result = record(value)
   if (!result) return { kind: 'invalid' }
-  if (result.kind === 'created') {
+  if (result.kind === 'created' || result.kind === 'resumed') {
     const worktree = record(result.worktree)
     if (typeof worktree?.id !== 'string' || worktree.id.length === 0) return { kind: 'invalid' }
-    return { kind: 'created', worktreeId: worktree.id, name: typeof worktree.name === 'string' ? worktree.name : '' }
+    return { kind: result.kind, worktreeId: worktree.id, name: typeof worktree.name === 'string' ? worktree.name : '' }
   }
   if (result.kind === 'composer' && typeof result.requestId === 'string' && result.requestId.length > 0) {
     return { kind: 'composer', requestId: result.requestId, request: result }
