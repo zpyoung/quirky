@@ -511,8 +511,8 @@ worktree-contained file previews/editing, GitHub Tasks and linked workspace
 creation, Claude/Codex account usage and selection, agent-history search/resume,
 and direct foreground notification subscriptions. Host and session navigation
 uses the same validated route contract as paired-host deep links.
-Native background push, non-GitHub Tasks providers and grant-authorized terminal
-artifacts remain implementation work in `sb-mobile-app-panels-unbuilt-flows`.
+Native background push and non-GitHub Tasks providers remain separately tracked.
+Grant-authorized terminal artifacts use device/source/session-bound capabilities rather than a general path API.
 
 ```sh
 quirky mobile info --json
@@ -549,6 +549,45 @@ continues while typing is paused. Use **Take back** to restore desktop dimension
 or **Restore** after the phone leaves. The default retains phone dimensions until
 restored; Settings offers timed restoration. The corresponding APIs are
 `quirky.terminal/mobileState`, `/takeBack`, `/restoreFit` and `/claim`.
+
+Phone workspace **Sleep** uses `quirky.worktree/sleep` and `/wake` to park views while keeping
+processes and buffers. Hide sleeping uses that canonical worktree state.
+
+The separate **Stop sessions (retain history)** action uses `quirky.session/sleepWorkspace`,
+`/wakeWorkspace` and `/workspaceSleepStates`. It records recovery before stopping processes and
+preserves PTY history; unsupported agents are refused before teardown. Interrupted or wrong-filesystem-instance
+recovery stays visible as partial rather than restoring into a replacement workspace.
+
+`quirky.worktree/origins` returns caller-relative automation/other-client predicates, with `null`
+for unknown evidence. It never returns creator device IDs or guesses automation from `createdBy`.
+The phone hides only proven matches.
+
+Markdown tabs expose bounded text through `quirky.mobile/sessionTabs`, `/markdownCreate`,
+`/markdownRead`, `/markdownWrite`, `/markdownSave` and `/sessionTabAction`. Write and Save require
+the current content revision. Preview renders Markdown without executing HTML or fetching
+document-supplied images; Copy path uses a worktree-relative path.
+
+Explicit Chrome Watch uses `/browserWatchCreate`, `/browserWatchStart`, `/browserWatchFrame`,
+`/browserWatchFrameAck`, `/browserWatchStop`, `/browserWatchNavigate`, `/browserWatchControl`
+and `/browserWatchInput`. The broker checks the exact connection, workspace, tab and lease.
+Frames are bounded JPEGs, acknowledged after image load; hiding/leaving releases only the owned
+lease. Native tabs stay visible with an unavailable explanation, never an implicit engine switch.
+
+```sh
+quirky session sleep <worktree>
+quirky session wake <worktree>
+quirky session sleep-states --json
+quirky wt origins --json
+quirky mobile session-tabs --worktree <worktree> --json
+quirky mobile markdown-read --worktree <worktree> --tab-id <tab> --json
+quirky mobile markdown-write --worktree <worktree> --tab-id <tab> --text '# Note' --expected-revision 3
+quirky mobile markdown-save --worktree <worktree> --tab-id <tab> --expected-revision 4
+quirky mobile browser-watch control --worktree <worktree> --tab-id <tab> --watch-id <lease> --action reload
+```
+
+A Watch lease requires a persistent API connection: exiting its CLI process releases that
+connection's lease. Use the public API for a retained frame/input consumer. Interactive native
+chat and voice remain excluded until an authorized architecture/roadmap ruling.
 
 Trusted transport plugins can use the public
 [`PluginContext.clients.accept`](../packages/protocol/src/plugins.ts) API after
@@ -662,6 +701,32 @@ offers and unknown outcomes are shown separately from confirmed redemption.
 Full remaining UI acceptance and native-only clipboard, browser, Keychain and OS-focus checks are
 tracked in [the completion decisions](../docs/loop/decisions/m3-accounts-remaining-flows.md).
 
+## Paired daemon transport
+
+`quirky.orchestration` provides an explicit daemon-to-daemon peer listener.
+It is separate from phone pairing and does not grant an unrestricted remote API.
+Each peer pins the other daemon's fingerprint; re-pairing advances the local
+pairing revision, and a daemon restart changes its process incarnation.
+
+Use a private token file rather than putting credentials in shell history or argv:
+
+```sh
+quirky orchestration peer-listen --host 127.0.0.1 --port 0 --token-file /private/path/peer-token --json
+quirky orchestration peer-pair --id worker-host --label Worker --endpoint <peer-endpoint> --fingerprint <peer-fingerprint> --token-file /private/path/peer-token --json
+quirky orchestration peer-list --json
+quirky orchestration peer-status --peer worker-host --json
+```
+
+Configure reciprocal pairing with a unique credential for that peer relationship.
+Non-loopback listeners require HTTPS and explicit certificate/private-key files.
+Token and private-key files must be private regular files, not symlinks.
+Peer inventories expose connection metadata, never pairing secrets.
+
+Plugins route only declared federation and Heimdall remote operations through
+`quirky.orchestration/peerCall`. Peer capabilities, pinned identity, pairing revision
+and expected incarnation are checked before effects. A lost mutation response is
+an unknown outcome, not permission to retry with a fresh request ID.
+
 ## Heimdall fleet and controls
 
 `quirky.heimdall` provides the Heimdall sidebar entry, fleet view and watcher controls.
@@ -676,6 +741,18 @@ quirky heimdall pause <watcher-id> --json
 quirky heimdall budget <watcher-id> --hours 2 --turns none --json
 quirky heimdall debug <watcher-id> --out /tmp/heimdall-debug.json
 ```
+
+Paired fleet rows retain their peer label and use `<peer-id>::<watcher-id>` in CLI
+text output. Use that same selector with `show`, controls and `debug`:
+
+```sh
+quirky heimdall show worker-host::<watcher-id> --json
+quirky heimdall pause worker-host::<watcher-id> --json
+```
+
+The CLI resolves the current pairing revision and owner incarnation before a control.
+It refuses a missing, ambiguous or mismatched peer instead of falling back to a local
+watcher. Remote contact loss preserves the last confirmed fleet row as unverifiable.
 
 Controls use the last observed owner fence and command revision. A changed revision is
 refused, so refresh the detail before submitting another command. Results distinguish
@@ -698,6 +775,51 @@ and expose `assignmentActive` separately from process `state`.
 The schema-2 debug JSON includes bounded journal and trace history. Approval-request and
 terminal transitions go through `quirky.notifications`, including its enabled, focus and
 cooldown policy. Disabling that plugin silences delivery.
+
+### Workspace leases and removal
+
+The workspace host grants one current epoch lease before Heimdall executes effects.
+Git workspaces keep it under `<gitdir>/orca-heimdall/lease/epoch-N/holder.json`;
+folder workspaces use `<workspace>/.orca/heimdall/lease/epoch-N/holder.json`.
+Renewal, assertions and release require the exact current holder and epoch.
+Expired or superseded holders cannot regain authority by renewing an old epoch.
+
+A worktree-change event triggers an authoritative inventory check. Only a successful
+scoped inventory confirming removal of the enrolled worktree terminates supervision.
+An unavailable inventory or missing directory is not removal proof. Confirmed removal
+ends watcher billing and scheduling, but does not stop or release its workers.
+
+### Optional shadow judgment
+
+Judgment is disabled unless the private regular file
+`<Heimdall plugin dataDir>/judgment-access.json` explicitly enables it.
+The file must not be a symlink and must have mode `0600`. Its fields are `enabled`,
+`provider` (`typesafe` or `openrouter`) and `apiKey`; never commit the key.
+Provider answers and sanitized failure statuses are journal observations, not approval,
+dispatch or report-settlement authority.
+
+Outbound state, requests and responses are bounded. Requests have a five-second deadline
+and at most three attempts, with retries only for HTTP 429 or 529. Missing, disabled
+or invalid private configuration makes no provider request.
+
+Kinds opt in through their own `hooks.judgmentQuestions` method. It receives
+`{ enrollment, snapshot, journal }` and returns question requests with
+`id`, `questionId`, `subjectId` and `question`. Missing or empty questions also
+make no provider request; the kernel does not invent a judgment policy.
+
+### Kind-owned report admission
+
+A kind can register `hooks.submission` as a method in its own plugin namespace.
+It receives `{ submission, enrollment }` and returns `{ kind: "accepted" }` or
+`{ kind: "rejected", code, reason }`. This is distinct from action `preflight`.
+An authenticated report reaches this hook before orchestration settles its Dispatch;
+rejection leaves the assignment active.
+
+Service Run owners install their callback through
+`quirky.orchestration/serviceRegisterSubmissionPreflight` with `{ runId, method }`.
+Both Run ownership and the method namespace must match the authenticated plugin.
+A registered callback that fails is not silently accepted; a Run without a callback
+keeps ordinary orchestration behavior.
 
 ### Optional Claude owner
 

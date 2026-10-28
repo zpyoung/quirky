@@ -113,7 +113,7 @@ export function activate(context: PluginContext): void {
   context.pty.onExit((sessionId, exitCode, exit) => {
     const session = sessions.find((s) => s.id === sessionId)
     if (!session || session.status === 'exited') return
-    const restorable = exit.exitCause === 'host-restart' || exit.exitCause === 'host-lost'
+    const restorable = exit.exitCause === 'host-restart' || exit.exitCause === 'host-lost' || exit.exitCause === 'stopped'
     Object.assign(session, { status: 'exited', exitCode, exitSignal: exit.exitSignal, exitCause: exit.exitCause, restorable })
     save()
     announce(session)

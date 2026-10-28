@@ -322,6 +322,132 @@
         }
       },
       {
+        "id": "sessionTabs",
+        "description": "List safe nonterminal tabs using their actual workspace UI identities.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": { "worktree": { "type": "string" } }, "required": ["worktree"], "additionalProperties": false },
+        "result": { "type": "array", "items": { "type": "object", "properties": {
+          "tabId": { "type": "string" }, "worktreeId": { "type": "string" }, "kind": { "type": "string", "enum": ["markdown", "browser"] },
+          "browserMode": { "type": "string", "enum": ["native", "watch"] },
+          "title": { "type": "string" }, "dirty": { "type": "boolean" }
+        }, "required": ["tabId", "worktreeId", "kind", "title", "dirty"], "additionalProperties": false } }
+      },
+      {
+        "id": "markdownCreate",
+        "description": "Create a real Markdown document and workspace tab.",
+        "params": { "type": "object", "properties": { "worktree": { "type": "string" } }, "required": ["worktree"], "additionalProperties": false },
+        "result": { "type": "object", "properties": {
+          "tabId": { "type": "string" }, "worktreeId": { "type": "string" }, "title": { "type": "string" }, "relativePath": { "type": "string" }, "text": { "type": "string" },
+          "revision": { "type": "integer", "minimum": 0 }, "dirty": { "type": "boolean" }, "readOnly": { "type": "boolean" }
+        }, "required": ["tabId", "worktreeId", "title", "relativePath", "text", "revision", "dirty", "readOnly"], "additionalProperties": false }
+      },
+      {
+        "id": "markdownRead",
+        "description": "Read bounded Markdown text from an exact workspace tab.",
+        "readOnly": true,
+        "params": { "type": "object", "properties": { "worktree": { "type": "string" }, "tabId": { "type": "string" } }, "required": ["worktree", "tabId"], "additionalProperties": false },
+        "result": { "type": "object", "properties": {
+          "tabId": { "type": "string" }, "worktreeId": { "type": "string" }, "title": { "type": "string" }, "relativePath": { "type": "string" }, "text": { "type": "string" },
+          "revision": { "type": "integer", "minimum": 0 }, "dirty": { "type": "boolean" }, "readOnly": { "type": "boolean" }
+        }, "required": ["tabId", "worktreeId", "title", "relativePath", "text", "revision", "dirty", "readOnly"], "additionalProperties": false }
+      },
+      {
+        "id": "markdownWrite",
+        "description": "Update a bounded Markdown draft with an optimistic revision guard.",
+        "params": { "type": "object", "properties": {
+          "worktree": { "type": "string" }, "tabId": { "type": "string" }, "text": { "type": "string" }, "expectedRevision": { "type": "integer", "minimum": 0 }
+        }, "required": ["worktree", "tabId", "text", "expectedRevision"], "additionalProperties": false },
+        "result": { "type": "object", "properties": {
+          "tabId": { "type": "string" }, "worktreeId": { "type": "string" }, "title": { "type": "string" }, "relativePath": { "type": "string" }, "text": { "type": "string" },
+          "revision": { "type": "integer", "minimum": 0 }, "dirty": { "type": "boolean" }, "readOnly": { "type": "boolean" }
+        }, "required": ["tabId", "worktreeId", "title", "relativePath", "text", "revision", "dirty", "readOnly"], "additionalProperties": false }
+      },
+      {
+        "id": "markdownSave",
+        "description": "Save the exact current Markdown draft without overwriting a newer revision.",
+        "params": { "type": "object", "properties": {
+          "worktree": { "type": "string" }, "tabId": { "type": "string" }, "expectedRevision": { "type": "integer", "minimum": 0 }
+        }, "required": ["worktree", "tabId", "expectedRevision"], "additionalProperties": false },
+        "result": { "type": "object", "properties": {
+          "tabId": { "type": "string" }, "worktreeId": { "type": "string" }, "title": { "type": "string" }, "relativePath": { "type": "string" }, "text": { "type": "string" },
+          "revision": { "type": "integer", "minimum": 0 }, "dirty": { "type": "boolean" }, "readOnly": { "type": "boolean" }
+        }, "required": ["tabId", "worktreeId", "title", "relativePath", "text", "revision", "dirty", "readOnly"], "additionalProperties": false }
+      },
+      {
+        "id": "sessionTabAction",
+        "description": "Rename, refresh or explicitly close a workspace Markdown tab.",
+        "params": { "type": "object", "properties": {
+          "worktree": { "type": "string" }, "tabId": { "type": "string" },
+          "action": { "type": "string", "enum": ["rename", "refresh", "close"] }, "name": { "type": "string" }, "discard": { "type": "boolean" }
+        }, "required": ["worktree", "tabId", "action"], "additionalProperties": false },
+        "result": { "type": "object", "properties": { "tabId": { "type": "string" }, "closed": { "type": "boolean" } }, "required": ["tabId", "closed"], "additionalProperties": false }
+      },
+      {
+        "id": "browserWatchCreate", "connection": true,
+        "description": "Explicitly create a Chrome Watch tab; never converts a Native browser silently.",
+        "params": { "type": "object", "properties": { "worktree": { "type": "string" }, "url": { "type": "string" } }, "required": ["worktree"], "additionalProperties": false },
+        "result": { "type": "object", "properties": { "watchId": { "type": "string" }, "tab": { "type": "object", "properties": {
+          "tabId": { "type": "string" }, "worktreeId": { "type": "string" }, "kind": { "type": "string", "enum": ["browser"] }, "title": { "type": "string" }, "dirty": { "type": "boolean" }, "browserMode": { "type": "string", "enum": ["native", "watch"] }
+        }, "required": ["tabId", "worktreeId", "kind", "title", "dirty"], "additionalProperties": false } }, "required": ["tab", "watchId"], "additionalProperties": false }
+      },
+      {
+        "id": "browserWatchStart", "connection": true,
+        "description": "Start an exclusive connection-owned lease on an existing Watch tab; rejects Native tabs.",
+        "params": { "type": "object", "properties": { "worktree": { "type": "string" }, "tabId": { "type": "string" } }, "required": ["worktree", "tabId"], "additionalProperties": false },
+        "result": { "type": "object", "properties": { "watchId": { "type": "string" }, "tab": { "type": "object", "properties": {
+          "tabId": { "type": "string" }, "worktreeId": { "type": "string" }, "kind": { "type": "string", "enum": ["browser"] }, "title": { "type": "string" }, "dirty": { "type": "boolean" }, "browserMode": { "type": "string", "enum": ["native", "watch"] }
+        }, "required": ["tabId", "worktreeId", "kind", "title", "dirty"], "additionalProperties": false } }, "required": ["tab", "watchId"], "additionalProperties": false }
+      },
+      {
+        "id": "browserWatchFrame", "connection": true, "readOnly": true,
+        "description": "Read the latest bounded JPEG for the exact connection/tab/Watch lease; no generic event access.",
+        "params": { "type": "object", "properties": { "worktree": { "type": "string" }, "tabId": { "type": "string" }, "watchId": { "type": "string" } }, "required": ["worktree", "tabId", "watchId"], "additionalProperties": false },
+        "result": { "description": "MobileBrowserFrame or null before a frame arrives; producer permits only those two shapes.", "properties": {
+          "tabId": { "type": "string" }, "worktreeId": { "type": "string" }, "watchId": { "type": "string" }, "sequence": { "type": "integer", "minimum": 1 },
+          "width": { "type": "integer", "minimum": 1 }, "height": { "type": "integer", "minimum": 1 }, "mimeType": { "type": "string", "enum": ["image/jpeg"] }, "data": { "type": "string", "description": "Base64 JPEG, at most 512 KiB of encoded text." }
+        }, "required": ["tabId", "worktreeId", "watchId", "sequence", "width", "height", "mimeType", "data"], "additionalProperties": false }
+      },
+      {
+        "id": "browserWatchFrameAck", "connection": true,
+        "description": "Acknowledge only the exact current frame after the phone image has loaded.",
+        "params": { "type": "object", "properties": { "worktree": { "type": "string" }, "tabId": { "type": "string" }, "watchId": { "type": "string" }, "sequence": { "type": "integer", "minimum": 1 } }, "required": ["worktree", "tabId", "watchId", "sequence"], "additionalProperties": false },
+        "result": { "type": "object", "properties": { "acknowledged": { "type": "boolean" } }, "required": ["acknowledged"], "additionalProperties": false }
+      },
+      {
+        "id": "browserWatchStop", "connection": true,
+        "description": "Release an exact owned Watch lease without closing its page or another consumer.",
+        "params": { "type": "object", "properties": { "worktree": { "type": "string" }, "tabId": { "type": "string" }, "watchId": { "type": "string" } }, "required": ["worktree", "tabId", "watchId"], "additionalProperties": false },
+        "result": { "type": "object", "properties": { "closed": { "type": "boolean" } }, "required": ["closed"], "additionalProperties": false }
+      },
+      {
+        "id": "browserWatchNavigate", "connection": true,
+        "description": "Navigate the exact owned Watch tab using the Browser plugin's address normalization.",
+        "params": { "type": "object", "properties": { "worktree": { "type": "string" }, "tabId": { "type": "string" }, "watchId": { "type": "string" }, "input": { "type": "string" } }, "required": ["worktree", "tabId", "watchId", "input"], "additionalProperties": false },
+        "result": { "type": "object", "properties": { "tabId": { "type": "string" }, "worktreeId": { "type": "string" }, "kind": { "type": "string", "enum": ["browser"] }, "title": { "type": "string" }, "dirty": { "type": "boolean" }, "browserMode": { "type": "string", "enum": ["native", "watch"] } }, "required": ["tabId", "worktreeId", "kind", "title", "dirty"], "additionalProperties": false }
+      },
+      {
+        "id": "browserWatchControl", "connection": true,
+        "description": "Apply one closed typed navigation, find, zoom or viewport control to an owned Watch tab.",
+        "params": { "type": "object", "properties": {
+          "worktree": { "type": "string" }, "tabId": { "type": "string" }, "watchId": { "type": "string" },
+          "action": { "type": "string", "enum": ["back", "forward", "reload", "stop", "find", "zoom", "viewport"] },
+          "text": { "type": "string" }, "forward": { "type": "boolean" }, "level": { "type": "number", "minimum": -3, "maximum": 5 },
+          "preset": { "type": "string", "enum": ["default", "mobile-s", "mobile-m", "mobile-l", "tablet", "laptop", "laptop-l", "desktop"] }
+        }, "required": ["worktree", "tabId", "watchId", "action"], "additionalProperties": false },
+        "result": { "type": "object", "properties": { "tabId": { "type": "string" }, "worktreeId": { "type": "string" }, "kind": { "type": "string", "enum": ["browser"] }, "title": { "type": "string" }, "dirty": { "type": "boolean" }, "browserMode": { "type": "string", "enum": ["native", "watch"] } }, "required": ["tabId", "worktreeId", "kind", "title", "dirty"], "additionalProperties": false }
+      },
+      {
+        "id": "browserWatchInput", "connection": true,
+        "description": "Send bounded typed pointer, key, text or wheel input to an owned Watch tab; never eval/CDP.",
+        "params": { "type": "object", "properties": {
+          "worktree": { "type": "string" }, "tabId": { "type": "string" }, "watchId": { "type": "string" }, "kind": { "type": "string", "enum": ["mouse", "key", "text", "wheel"] },
+          "type": { "type": "string" }, "x": { "type": "number", "minimum": 0, "maximum": 16384 }, "y": { "type": "number", "minimum": 0, "maximum": 16384 },
+          "button": { "type": "string" }, "key": { "type": "string" }, "code": { "type": "string" }, "text": { "type": "string" }, "deltaX": { "type": "number" }, "deltaY": { "type": "number" },
+          "modifiers": { "type": "integer", "minimum": 0, "maximum": 15 }
+        }, "required": ["worktree", "tabId", "watchId", "kind"], "additionalProperties": false },
+        "result": { "type": "object", "properties": { "sent": { "type": "boolean" } }, "required": ["sent"], "additionalProperties": false }
+      },
+      {
         "id": "bundleManifest",
         "description": "Read the packaged, immutable Quirky mobile page bundle manifest.",
         "readOnly": true,
@@ -521,6 +647,40 @@
       },
       { "id": "bundle-manifest", "summary": "read the packaged Quirky mobile page bundle manifest", "methods": ["quirky.mobile/bundleManifest"] },
       { "id": "agent-catalog", "summary": "read safe mobile agent launcher metadata", "methods": ["quirky.mobile/agentCatalog"] },
+      {
+        "id": "browser-watch", "summary": "control an explicit connection-owned Chrome Watch tab",
+        "positionals": [{ "name": "operation", "description": "create, start, frame, ack, stop, navigate, control or input", "required": true }],
+        "flags": {
+          "worktree": { "type": "string", "description": "workspace selector" }, "tab-id": { "type": "string", "description": "actual browser UI tab ID" },
+          "watch-id": { "type": "string", "description": "live exact consumer lease" }, "url": { "type": "string", "description": "create-only initial address" },
+          "sequence": { "type": "number", "description": "ack-only loaded frame sequence" }, "input": { "type": "string", "description": "navigate-only address or search" },
+          "action": { "type": "string", "description": "typed Browser control action" }, "text": { "type": "string", "description": "find or typed text" },
+          "forward": { "type": "boolean", "description": "find direction" }, "level": { "type": "number", "description": "zoom level" }, "preset": { "type": "string", "description": "viewport preset" },
+          "kind": { "type": "string", "description": "mouse, key, text or wheel" }, "type": { "type": "string", "description": "typed mouse or key event" },
+          "x": { "type": "number", "description": "frame-space pointer x" }, "y": { "type": "number", "description": "frame-space pointer y" },
+          "button": { "type": "string", "description": "mouse button" }, "key": { "type": "string", "description": "key name" }, "code": { "type": "string", "description": "key code" },
+          "delta-x": { "type": "number", "description": "wheel delta x" }, "delta-y": { "type": "number", "description": "wheel delta y" }, "modifiers": { "type": "number", "description": "modifier bitmask 0–15" }
+        },
+        "methods": ["quirky.mobile/browserWatchCreate", "quirky.mobile/browserWatchStart", "quirky.mobile/browserWatchFrame", "quirky.mobile/browserWatchFrameAck", "quirky.mobile/browserWatchStop", "quirky.mobile/browserWatchNavigate", "quirky.mobile/browserWatchControl", "quirky.mobile/browserWatchInput"]
+      },
+      { "id": "session-tabs", "summary": "list safe workspace tab identities", "flags": { "worktree": { "type": "string", "description": "workspace selector" } }, "methods": ["quirky.mobile/sessionTabs"] },
+      { "id": "markdown-create", "summary": "create a real Markdown note tab", "flags": { "worktree": { "type": "string", "description": "workspace selector" } }, "methods": ["quirky.mobile/markdownCreate"] },
+      { "id": "markdown-read", "summary": "read an exact workspace Markdown tab", "flags": {
+        "worktree": { "type": "string", "description": "workspace selector" }, "tab-id": { "type": "string", "description": "actual UI tab ID" }
+      }, "methods": ["quirky.mobile/markdownRead"] },
+      { "id": "markdown-write", "summary": "update a bounded Markdown draft", "flags": {
+        "worktree": { "type": "string", "description": "workspace selector" }, "tab-id": { "type": "string", "description": "actual UI tab ID" },
+        "text": { "type": "string", "description": "complete UTF-8 draft, up to 64 KiB" }, "expected-revision": { "type": "number", "description": "revision returned by the last read" }
+      }, "methods": ["quirky.mobile/markdownWrite"] },
+      { "id": "markdown-save", "summary": "save a revision-guarded Markdown draft", "flags": {
+        "worktree": { "type": "string", "description": "workspace selector" }, "tab-id": { "type": "string", "description": "actual UI tab ID" },
+        "expected-revision": { "type": "number", "description": "revision returned by the last read or write" }
+      }, "methods": ["quirky.mobile/markdownSave"] },
+      { "id": "session-tab-action", "summary": "rename, refresh or close a Markdown tab", "flags": {
+        "worktree": { "type": "string", "description": "workspace selector" }, "tab-id": { "type": "string", "description": "actual UI tab ID" },
+        "action": { "type": "string", "description": "rename, refresh or close" }, "name": { "type": "string", "description": "rename-only new title" },
+        "discard": { "type": "boolean", "description": "close-only explicit unsaved-draft discard decision" }
+      }, "methods": ["quirky.mobile/sessionTabAction"] },
       {
         "id": "bundle-chunk",
         "summary": "read one bounded page bundle chunk",

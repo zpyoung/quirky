@@ -11,7 +11,7 @@ Options persist in the worktree plugin's SQLite store; no new global setting IDs
 - `projectOrderBy`: `manual` or `recent`; manual project order is persisted by `quirky.worktree/reorderProjects({projects:[...]})`.
 - `compact`, `showProperties`, and `showSleeping` control card layout, available branch/note/PR/issue/automation/activity properties, and sleeping visibility. Hiding rows leaves a count and a temporary reveal control.
 - `hideCliCreated`, `hideDefaultBranch`, `hideDetached`, `hideArchived`, and `filterRepoIds` filter only worktrees with authoritative local provenance/branch/project data.
-- Host and other-client filters are not offered: the public `Repo` and `Worktree` contracts have no host or client ownership identity. The plugin does not fabricate either.
+- Desktop host and other-client filters are not offered: `Repo`/`Worktree` do not provide authoritative host or stable desktop-client identity. The separate `origins` API supplies immutable automation evidence and paired-device-relative other-client evidence; desktop callers receive unknown rather than an invented client identity.
 
 Read or update options through `quirky.worktree/options({})` and `quirky.worktree/setOptions({...})`. The CLI accepts the same choices; `quirky worktree reorder --worktrees '["wt_first","wt_second"]'` still requires every non-primary sibling in that project, parent, and project-group membership.
 
@@ -86,7 +86,7 @@ Project Settings and `quirky wt project-set --shared-directories '[".env.local",
 
 Default tabs and environment recipes remain unsupported by the current public owners (`quirky.repo/hooks` reports both); create API/CLI requests are explicitly refused before creating a worktree. A prepared-checkout pool and host runs remain separate flows and are not represented by local clones or fallback execution.
 
-The public protocol `Repo` and `Worktree` have no host or other-client ownership fields, so host/other-client filtering remains unavailable. The public UI state exposes only a connected-window count and one global layout; sleep and navigation refuse multiple-window routing instead of closing or opening an unrelated window.
+Paired-phone origin filters have their own authoritative producer and consumer. They do not establish desktop-client or host identity for this sidebar. Generic per-window workspace layouts/close routes remain unavailable; sleep and navigation refuse ambiguous multiple-window routing rather than affecting an unrelated window.
 ## Issue-derived startup prompts
 
 Creating a GitHub issue worktree with an agent passes the raw issue URL through `quirky.worktree/create` to the public `quirky.session/create` API. That issue-derived prompt is left as a draft by default. `submitPrompt` can explicitly override the default; generic user-written prompts retain the session API's existing submitted default.

@@ -96,6 +96,7 @@ export function createServiceCoordinator(
       const observedAt = lastHeartbeatAt === null ? null : Date.parse(lastHeartbeatAt)
       result.push({
         dispatchId: row.id,
+        taskId: detail.dispatch.taskId,
         sessionId: identity?.sessionId ?? null,
         processIncarnation: identity?.processIncarnation ?? null,
         state,
@@ -129,6 +130,30 @@ export function createServiceCoordinator(
       const workerRows = await workersForRun(params.runId, caller)
       const questions = messages.serviceQuestions(params.runId)
       return { run, workers: workerRows, questions }
+    },
+
+    serviceRegisterSubmissionPreflight(params, principal) {
+      core.requireCoordinator(principal, params.runId)
+      const separator = params.method.indexOf('/')
+      const namespace = separator < 0 ? '' : params.method.slice(0, separator)
+      const callbackName = separator < 0 ? '' : params.method.slice(separator + 1)
+      if (namespace !== principal.pluginId || !/^[A-Za-z][A-Za-z0-9.-]*$/.test(callbackName)) {
+        fail(context, 'consumer_fenced', 'Submission preflight methods must be in the registering plugin namespace.')
+      }
+      return core.mutate('serviceRegisterSubmissionPreflight', params, principal, () => {
+        core.requireOwnedRun(principal.pluginId, params.runId)
+        core.store.run(
+          `INSERT INTO service_submission_preflights (run_id, owner_plugin_id, method, created_at)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(run_id) DO UPDATE SET owner_plugin_id = excluded.owner_plugin_id,
+             method = excluded.method, created_at = excluded.created_at`,
+          params.runId,
+          principal.pluginId,
+          params.method,
+          new Date().toISOString(),
+        )
+        return { runId: params.runId, method: params.method, registered: true as const }
+      })
     },
 
     serviceWorkerStart(params, principal): Promise<ServiceMethodResults['serviceWorkerStart']> {

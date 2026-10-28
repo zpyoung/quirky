@@ -29,7 +29,8 @@ import { birthtimeOf, groupRepoId, listProject } from './list'
 import { InvalidNameError, NoFreeNameError, branchName as joinBranch, normalizePrefix, sanitizeName, walkCandidates } from './naming'
 import { pickGeneratedName } from './names'
 import type { KeyedQueue } from './queue'
-import { insertRow } from './store'
+import { filesystemIdentitySource, instanceIdFor } from './identity'
+import { forgetWorktreeOrigins, insertRow, recordWorktreeOrigin, type WorktreeOriginCreator } from './store'
 import {
   addPushRemote,
   configurePullBranch,
@@ -569,7 +570,7 @@ type Created = {
 }
 
 /** Creates a workspace: a git worktree on a branch, or a folder workspace for a folder project or a group. */
-export async function createWorkspace(env: CreateEnv, params: CreateParams, identity: CallerIdentity): Promise<CreateResult> {
+export async function createWorkspace(env: CreateEnv, params: CreateParams, identity: CallerIdentity, origin: WorktreeOriginCreator): Promise<CreateResult> {
   params = normalizeCreateChoices(env, params)
   await preflightAgentSelection(env, params)
   if (Object.hasOwn(params, 'automationProvenance')) {
@@ -602,15 +603,15 @@ export async function createWorkspace(env: CreateEnv, params: CreateParams, iden
   const parentId = await resolveParent(env, params, identity, createdBy, 'repo' in target ? target.repo.id : groupRepoId(target.group.id))
 
   let created: Created
-  if ('group' in target) created = await createFolder(env, target, params, createdBy, parentId)
-  else if (target.repo.kind === 'folder') created = await createFolder(env, target, params, createdBy, parentId)
-  else created = await env.queue.run(target.repo.id, () => createGit(env, target.repo, params, createdBy, parentId, automationProvenance))
+  if ('group' in target) created = await createFolder(env, target, params, createdBy, parentId, origin)
+  else if (target.repo.kind === 'folder') created = await createFolder(env, target, params, createdBy, parentId, origin)
+  else created = await env.queue.run(target.repo.id, () => createGit(env, target.repo, params, createdBy, parentId, origin, automationProvenance))
 
   env.changed({ repoId: created.worktree.repoId, worktreeId: created.worktree.id })
   return finish(env, created, params)
 }
 
-async function createFolder(env: CreateEnv, target: Target, params: CreateParams, createdBy: WorktreeCreatedBy, parentId: string | null): Promise<Created> {
+async function createFolder(env: CreateEnv, target: Target, params: CreateParams, createdBy: WorktreeCreatedBy, parentId: string | null, origin: WorktreeOriginCreator): Promise<Created> {
   let hooks: EffectiveHooks | null = null
   let decision: SetupDecision = 'none'
   if ('repo' in target) {
@@ -622,6 +623,7 @@ async function createFolder(env: CreateEnv, target: Target, params: CreateParams
   const worktree = await createFolderWorkspace(env, target, {
     ...(params.name !== undefined ? { name: params.name } : {}),
     createdBy,
+    origin,
     ...(params.displayName !== undefined ? { displayName: params.displayName } : {}),
     ...(params.comment !== undefined ? { comment: params.comment } : {}),
     parentId,
@@ -676,6 +678,7 @@ async function createGit(
   params: CreateParams,
   createdBy: WorktreeCreatedBy,
   parentId: string | null,
+  origin: WorktreeOriginCreator,
   automationProvenance?: WorktreeAutomationProvenance
 ): Promise<Created> {
   const git = gitApi()
@@ -860,13 +863,17 @@ async function createGit(
     const id = worktreeIdForPath(folder)
     const displayName = params.displayName !== undefined ? params.displayName.trim() || null : source?.item.title ?? null
     const comment = params.comment ?? (source === null ? '' : `${source.item.kind === 'pullRequest' ? 'PR' : 'Issue'} #${source.item.number} — ${source.item.title}`)
+    const path = resolveRealPath(folder)
+    const identity = (env.identitySource ?? filesystemIdentitySource).stat(path)
+    const instanceId = identity === null ? undefined : instanceIdFor(identity)
     env.store.transaction(() => {
+      forgetWorktreeOrigins(env.store, id)
       env.store.run('DELETE FROM worktrees WHERE id = ?', id)
       insertRow(env.store, {
         id,
         repoId: repo.id,
         kind: 'git',
-        path: resolveRealPath(folder),
+        path,
         createdAt: Date.now(),
         createdBy,
         birthtime: birthtimeOf(folder),
@@ -879,8 +886,10 @@ async function createGit(
         linkedPR: source?.item.kind === 'pullRequest' ? source.item : null,
         linkedIssue: source?.item.kind === 'issue' ? source.item : null,
         pushTarget: pullPlan?.pushTarget ?? null,
+        ...(instanceId === undefined ? {} : { instanceId }),
         automationProvenance
       })
+      if (instanceId !== undefined) recordWorktreeOrigin(env.store, id, instanceId, origin)
       retire()
     })
     durable = true

@@ -2135,249 +2135,175 @@
             }
           },
           {
-            "id": "workerRead",
-            "description": "Read a bounded output page for one worker, including the selected source, clipping, continuation cursor and liveness evidence.",
-            "readOnly": true,
-            "params": {
-              "type": "object",
-              "properties": {
-                "dispatchId": {
-                  "type": "string",
-                  "description": "Dispatch identifier with the ctx_ prefix; the protocol schema subset cannot express string patterns."
-                },
-                "source": {
-                  "type": "string",
-                  "enum": [
-                    "auto",
-                    "transcript",
-                    "terminal"
-                  ]
-                },
-                "cursor": {
-                  "type": "string",
-                  "description": "Opaque continuation cursor."
-                },
-                "limit": {
-                  "type": "number",
-                  "description": "Maximum requested page size."
-                }
-              },
-              "required": [
-                "dispatchId"
-              ],
-              "additionalProperties": false
-            },
-            "result": {
-              "type": "object",
-              "description": "WorkerReadResult with bounded content, optional source-specific messages, cursors, clipping and liveness.",
-              "properties": {
-                "dispatchId": {
-                  "type": "string",
-                  "description": "Dispatch identifier with the ctx_ prefix; the protocol schema subset cannot express string patterns."
-                },
-                "sessionId": {
-                  "description": "Session ID associated with the output, or null. String or null; null is represented without a schema type because the protocol subset has no union types."
-                },
-                "source": {
-                  "type": "string",
-                  "enum": [
-                    "transcript",
-                    "terminal",
-                    "structured"
-                  ]
-                },
-                "archived": {
-                  "type": "boolean"
-                },
-                "sourceExact": {
-                  "type": "boolean",
-                  "description": "Whether the selected output source is exact for the observed worker identity."
-                },
-                "fallbackReason": {
-                  "description": "Reason output fell back from the requested source. One of 'provider_unsupported', 'session_not_reported', 'transcript_empty', 'transcript_missing', 'transcript_unreadable', 'transcript_parse_failed', 'remote_capability_unavailable', or null. The protocol schema subset cannot express nullable enums."
-                },
-                "content": {
-                  "type": "string",
-                  "description": "Bounded text content for the selected source."
-                },
-                "messages": {
-                  "type": "array",
-                  "description": "Optional structured output messages.",
-                  "items": {
-                    "description": "An arbitrary JSONValue message; message shape is source-specific."
-                  }
-                },
-                "contentComplete": {
-                  "type": "boolean",
-                  "description": "Whether the returned content is complete for this source/page."
-                },
-                "clipping": {
-                  "type": "object",
-                  "properties": {
-                    "clipped": {
-                      "type": "boolean"
-                    },
-                    "maxBytes": {
-                      "type": "number",
-                      "description": "Configured maximum content size in bytes."
-                    }
-                  },
-                  "required": [
-                    "clipped",
-                    "maxBytes"
-                  ],
-                  "additionalProperties": false
-                },
-                "nextCursor": {
-                  "description": "Opaque cursor for the next bounded output page, or null. String or null; null is represented without a schema type because the protocol subset has no union types."
-                },
-                "terminalLiveness": {
-                  "type": "string",
-                  "enum": [
-                    "live",
-                    "unverifiable",
-                    "exited",
-                    "missing",
-                    "unattached",
-                    "identity_changed"
-                  ]
-                },
-                "agentLiveness": {
-                  "type": "object",
-                  "properties": {
-                    "status": {
-                      "type": "string",
-                      "enum": [
-                        "live",
-                        "exited",
-                        "unverifiable"
-                      ]
-                    },
-                    "reason": {
-                      "description": "Safe liveness explanation, or null. String or null; null is represented without a schema type because the protocol subset has no union types."
-                    }
-                  },
-                  "required": [
-                    "status",
-                    "reason"
-                  ],
-                  "additionalProperties": false
-                },
-                "warnings": {
-                  "type": "array",
-                  "description": "Safe output or observation warnings.",
-                  "items": {
-                    "type": "string"
-                  }
-                },
-                "sourceIdentity": {
-                  "type": "string",
-                  "description": "Opaque identifier for the exact source snapshot."
-                }
-              },
-              "required": [
-                "dispatchId",
-                "sessionId",
-                "source",
-                "archived",
-                "sourceExact",
-                "fallbackReason",
-                "content",
-                "contentComplete",
-                "clipping",
-                "nextCursor",
-                "terminalLiveness",
-                "agentLiveness",
-                "warnings",
-                "sourceIdentity"
-              ],
-              "additionalProperties": false
-            }
-          },
-          {
-            "id": "workerList",
-            "description": "List fleet workers with projection, terminal custody, query scope, pagination and partial host errors.",
-            "readOnly": true,
-            "params": {
-              "type": "object",
-              "properties": {
-                "runId": {
-                  "type": "string",
-                  "description": "Run identifier with the run_ prefix; the protocol schema subset cannot express string patterns."
-                },
-                "terminalState": {
-                  "type": "string",
-                  "enum": [
-                    "active",
-                    "reclaimable",
-                    "retained",
-                    "release_pending",
-                    "release_unknown",
-                    "released"
-                  ]
-                },
-                "includeRemote": {
-                  "type": "boolean"
-                },
-                "cursor": {
-                  "type": "string",
-                  "description": "Opaque continuation cursor."
-                },
-                "limit": {
-                  "type": "number",
-                  "description": "Maximum requested page size."
-                }
-              },
-              "required": [],
-              "additionalProperties": false
-            },
-            "result": {
-              "type": "object",
-              "description": "WorkerListResult fleet projection, custody, scope, pagination and partial-host errors.",
-              "properties": {
-                "workers": {
-                  "type": "array",
-                  "description": "Fleet rows with worker projection and terminal custody state.",
-                  "items": {
+                  "id": "workerRead",
+                  "description": "Read a bounded output page for one worker, including the selected source, clipping, continuation cursor and liveness evidence.",
+                  "readOnly": true,
+                  "params": {
                     "type": "object",
                     "properties": {
                       "dispatchId": {
                         "type": "string",
                         "description": "Dispatch identifier with the ctx_ prefix; the protocol schema subset cannot express string patterns."
                       },
-                      "taskId": {
+                      "source": {
                         "type": "string",
-                        "description": "Task identifier with the task_ prefix; the protocol schema subset cannot express string patterns."
+                        "enum": [
+                          "auto",
+                          "transcript",
+                          "terminal"
+                        ]
                       },
-                      "taskTitle": {
-                        "type": "string"
+                      "cursor": {
+                        "type": "string",
+                        "description": "Opaque continuation cursor."
                       },
-                      "displayName": {
-                        "type": "string"
+                      "limit": {
+                        "type": "number",
+                        "description": "Maximum requested page size."
+                      }
+                    },
+                    "required": [
+                      "dispatchId"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "result": {
+                    "type": "object",
+                    "description": "WorkerReadResult with bounded content, optional source-specific messages, cursors, clipping and liveness.",
+                    "properties": {
+                      "dispatchId": {
+                        "type": "string",
+                        "description": "Dispatch identifier with the ctx_ prefix; the protocol schema subset cannot express string patterns."
                       },
-                      "coordinatorSessionId": {
-                        "description": "Coordinator session ID or null."
+                      "sessionId": {
+                        "description": "Session ID associated with the output, or null. String or null; null is represented without a schema type because the protocol subset has no union types."
                       },
-                      "parentSessionId": {
-                        "description": "Parent session ID or null."
+                      "source": {
+                        "type": "string",
+                        "enum": [
+                          "transcript",
+                          "terminal",
+                          "structured"
+                        ]
                       },
-                      "currentAssignment": {
+                      "archived": {
+                        "type": "boolean"
+                      },
+                      "sourceExact": {
                         "type": "boolean",
-                        "description": "Whether this row has current assignment evidence from its prompt and terminal resource."
+                        "description": "Whether the selected output source is exact for the observed worker identity."
                       },
+                      "fallbackReason": {
+                        "description": "Reason output fell back from the requested source. One of 'provider_unsupported', 'session_not_reported', 'transcript_empty', 'transcript_missing', 'transcript_unreadable', 'transcript_parse_failed', 'remote_capability_unavailable', or null. The protocol schema subset cannot express nullable enums."
+                      },
+                      "content": {
+                        "type": "string",
+                        "description": "Bounded text content for the selected source."
+                      },
+                      "messages": {
+                        "type": "array",
+                        "description": "Optional structured output messages.",
+                        "items": {
+                          "description": "An arbitrary JSONValue message; message shape is source-specific."
+                        }
+                      },
+                      "contentComplete": {
+                        "type": "boolean",
+                        "description": "Whether the returned content is complete for this source/page."
+                      },
+                      "clipping": {
+                        "type": "object",
+                        "properties": {
+                          "clipped": {
+                            "type": "boolean"
+                          },
+                          "maxBytes": {
+                            "type": "number",
+                            "description": "Configured maximum content size in bytes."
+                          }
+                        },
+                        "required": [
+                          "clipped",
+                          "maxBytes"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "nextCursor": {
+                        "description": "Opaque cursor for the next bounded output page, or null. String or null; null is represented without a schema type because the protocol subset has no union types."
+                      },
+                      "terminalLiveness": {
+                        "type": "string",
+                        "enum": [
+                          "live",
+                          "unverifiable",
+                          "exited",
+                          "missing",
+                          "unattached",
+                          "identity_changed"
+                        ]
+                      },
+                      "agentLiveness": {
+                        "type": "object",
+                        "properties": {
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "live",
+                              "exited",
+                              "unverifiable"
+                            ]
+                          },
+                          "reason": {
+                            "description": "Safe liveness explanation, or null. String or null; null is represented without a schema type because the protocol subset has no union types."
+                          }
+                        },
+                        "required": [
+                          "status",
+                          "reason"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "warnings": {
+                        "type": "array",
+                        "description": "Safe output or observation warnings.",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "sourceIdentity": {
+                        "type": "string",
+                        "description": "Opaque identifier for the exact source snapshot."
+                      }
+                    },
+                    "required": [
+                      "dispatchId",
+                      "sessionId",
+                      "source",
+                      "archived",
+                      "sourceExact",
+                      "fallbackReason",
+                      "content",
+                      "contentComplete",
+                      "clipping",
+                      "nextCursor",
+                      "terminalLiveness",
+                      "agentLiveness",
+                      "warnings",
+                      "sourceIdentity"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+          {
+                  "id": "workerList",
+                  "description": "List fleet workers with projection, terminal custody, query scope, pagination and partial host errors.",
+                  "readOnly": true,
+                  "params": {
+                    "type": "object",
+                    "properties": {
                       "runId": {
                         "type": "string",
                         "description": "Run identifier with the run_ prefix; the protocol schema subset cannot express string patterns."
-                      },
-                      "workerState": {
-                        "description": "Worker state string, or null when unsupervised. String or null; null is represented without a schema type because the protocol subset has no union types."
-                      },
-                      "dispatchStatus": {
-                        "type": "string",
-                        "description": "Dispatch status string."
-                      },
-                      "agentTerminalHandle": {
-                        "description": "Agent terminal handle, or null. String or null; null is represented without a schema type because the protocol subset has no union types."
                       },
                       "terminalState": {
                         "type": "string",
@@ -2390,525 +2316,599 @@
                           "released"
                         ]
                       },
-                      "resource": {
-                        "description": "TerminalResource custody record, or null.",
-                        "properties": {
-                          "id": {
-                            "type": "string"
-                          },
-                          "originDispatchId": {
-                            "type": "string",
-                            "description": "Origin dispatch identifier with the ctx_ prefix; the protocol schema subset cannot express string patterns."
-                          },
-                          "ownerDispatchId": {
-                            "type": "string",
-                            "description": "Current owner dispatch identifier with the ctx_ prefix; the protocol schema subset cannot express string patterns."
-                          },
-                          "priorOwnerDispatchIds": {
-                            "type": "array",
-                            "description": "Previous dispatch owners.",
-                            "items": {
+                      "includeRemote": {
+                        "type": "boolean"
+                      },
+                      "cursor": {
+                        "type": "string",
+                        "description": "Opaque continuation cursor."
+                      },
+                      "limit": {
+                        "type": "number",
+                        "description": "Maximum requested page size."
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                  },
+                  "result": {
+                    "type": "object",
+                    "description": "WorkerListResult fleet projection, custody, scope, pagination and partial-host errors.",
+                    "properties": {
+                      "workers": {
+                        "type": "array",
+                        "description": "Fleet rows with worker projection and terminal custody state.",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "dispatchId": {
                               "type": "string",
-                              "description": "Prior owner dispatch identifier with the ctx_ prefix; the protocol schema subset cannot express string patterns."
+                              "description": "Dispatch identifier with the ctx_ prefix; the protocol schema subset cannot express string patterns."
+                            },
+                            "taskId": {
+                              "type": "string",
+                              "description": "Task identifier with the task_ prefix; the protocol schema subset cannot express string patterns."
+                            },
+                            "taskTitle": {
+                              "type": "string"
+                            },
+                            "displayName": {
+                              "type": "string"
+                            },
+                            "coordinatorSessionId": {
+                              "description": "Coordinator session ID or null."
+                            },
+                            "parentSessionId": {
+                              "description": "Parent session ID or null."
+                            },
+                            "currentAssignment": {
+                              "type": "boolean",
+                              "description": "Whether this row has current assignment evidence from its prompt and terminal resource."
+                            },
+                            "runId": {
+                              "type": "string",
+                              "description": "Run identifier with the run_ prefix; the protocol schema subset cannot express string patterns."
+                            },
+                            "workerState": {
+                              "description": "Worker state string, or null when unsupervised. String or null; null is represented without a schema type because the protocol subset has no union types."
+                            },
+                            "dispatchStatus": {
+                              "type": "string",
+                              "description": "Dispatch status string."
+                            },
+                            "agentTerminalHandle": {
+                              "description": "Agent terminal handle, or null. String or null; null is represented without a schema type because the protocol subset has no union types."
+                            },
+                            "terminalState": {
+                              "type": "string",
+                              "enum": [
+                                "active",
+                                "reclaimable",
+                                "retained",
+                                "release_pending",
+                                "release_unknown",
+                                "released"
+                              ]
+                            },
+                            "resource": {
+                              "description": "TerminalResource custody record, or null.",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "originDispatchId": {
+                                  "type": "string",
+                                  "description": "Origin dispatch identifier with the ctx_ prefix; the protocol schema subset cannot express string patterns."
+                                },
+                                "ownerDispatchId": {
+                                  "type": "string",
+                                  "description": "Current owner dispatch identifier with the ctx_ prefix; the protocol schema subset cannot express string patterns."
+                                },
+                                "priorOwnerDispatchIds": {
+                                  "type": "array",
+                                  "description": "Previous dispatch owners.",
+                                  "items": {
+                                    "type": "string",
+                                    "description": "Prior owner dispatch identifier with the ctx_ prefix; the protocol schema subset cannot express string patterns."
+                                  }
+                                },
+                                "worktreeId": {
+                                  "type": "string"
+                                },
+                                "sessionId": {
+                                  "type": "string"
+                                },
+                                "processIncarnation": {
+                                  "type": "string",
+                                  "description": "Process incarnation; not a credential."
+                                },
+                                "ownershipState": {
+                                  "type": "string",
+                                  "enum": [
+                                    "owned",
+                                    "transferred",
+                                    "user_owned",
+                                    "external",
+                                    "released"
+                                  ]
+                                },
+                                "releaseState": {
+                                  "type": "string",
+                                  "enum": [
+                                    "not_requested",
+                                    "retained",
+                                    "requested",
+                                    "releasing",
+                                    "released",
+                                    "unknown"
+                                  ]
+                                },
+                                "retainedReason": {
+                                  "description": "Reason a terminal resource was retained. String or null; null is represented without a schema type because the protocol subset has no union types."
+                                },
+                                "releaseRequestedAt": {
+                                  "description": "UTC timestamp when release was requested. String or null; null is represented without a schema type because the protocol subset has no union types."
+                                },
+                                "releaseCompletedAt": {
+                                  "description": "UTC timestamp when release completed. String or null; null is represented without a schema type because the protocol subset has no union types."
+                                },
+                                "releaseError": {
+                                  "description": "Safe release error summary. String or null; null is represented without a schema type because the protocol subset has no union types."
+                                },
+                                "recoveryAttemptCount": {
+                                  "type": "number"
+                                },
+                                "lastRecoveryAt": {
+                                  "description": "UTC timestamp of the most recent recovery attempt. String or null; null is represented without a schema type because the protocol subset has no union types."
+                                },
+                                "archiveSource": {
+                                  "description": "Source of the archived terminal output. String or null; null is represented without a schema type because the protocol subset has no union types."
+                                },
+                                "archiveStatus": {
+                                  "description": "Archive capture status. One of 'captured', 'empty', 'unavailable', or null. The protocol schema subset cannot express nullable enums."
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "originDispatchId",
+                                "ownerDispatchId",
+                                "priorOwnerDispatchIds",
+                                "worktreeId",
+                                "sessionId",
+                                "processIncarnation",
+                                "ownershipState",
+                                "releaseState",
+                                "retainedReason",
+                                "releaseRequestedAt",
+                                "releaseCompletedAt",
+                                "releaseError",
+                                "recoveryAttemptCount",
+                                "lastRecoveryAt",
+                                "archiveSource",
+                                "archiveStatus"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "projection": {
+                              "type": "object",
+                              "description": "Worker-facing fleet projection.",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "description": "Dispatch identifier with the ctx_ prefix; the protocol schema subset cannot express string patterns."
+                                },
+                                "role": {
+                                  "type": "string",
+                                  "enum": [
+                                    "worker"
+                                  ]
+                                },
+                                "parent": {
+                                  "description": "Parent task reference, or null.",
+                                  "properties": {
+                                    "taskId": {
+                                      "type": "string",
+                                      "description": "Parent task identifier with the task_ prefix; the protocol schema subset cannot express string patterns."
+                                    }
+                                  },
+                                  "required": [
+                                    "taskId"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "provider": {
+                                  "description": "Provider details, or null.",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "model": {
+                                      "description": "Provider model, or null. String or null; null is represented without a schema type because the protocol subset has no union types."
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "model"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "host": {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "local"
+                                      ]
+                                    },
+                                    "id": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "id"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "workspace": {
+                                  "description": "Workspace projection, or null.",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "kind"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "stage": {
+                                  "type": "object",
+                                  "properties": {
+                                    "worker": {
+                                      "description": "Worker lifecycle stage, or null. String or null; null is represented without a schema type because the protocol subset has no union types."
+                                    },
+                                    "dispatch": {
+                                      "type": "string"
+                                    },
+                                    "detail": {
+                                      "type": "string"
+                                    },
+                                    "activity": {
+                                      "type": "string",
+                                      "enum": [
+                                        "working",
+                                        "blocked",
+                                        "waiting",
+                                        "done",
+                                        "unknown"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "worker",
+                                    "dispatch",
+                                    "detail",
+                                    "activity"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "outcome": {
+                                  "type": "string",
+                                  "enum": [
+                                    "in_progress",
+                                    "succeeded",
+                                    "failed",
+                                    "outcome_unknown",
+                                    "finished_unverified"
+                                  ]
+                                },
+                                "liveness": {
+                                  "type": "object",
+                                  "properties": {
+                                    "status": {
+                                      "type": "string",
+                                      "enum": [
+                                        "live",
+                                        "exited",
+                                        "unverifiable"
+                                      ]
+                                    },
+                                    "reason": {
+                                      "description": "Safe liveness explanation, or null. String or null; null is represented without a schema type because the protocol subset has no union types."
+                                    }
+                                  },
+                                  "required": [
+                                    "status",
+                                    "reason"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "evidence": {
+                                  "type": "object",
+                                  "properties": {
+                                    "durable": {
+                                      "type": "boolean"
+                                    },
+                                    "liveStatus": {
+                                      "type": "string",
+                                      "enum": [
+                                        "fresh",
+                                        "stale",
+                                        "unavailable",
+                                        "redacted_restore"
+                                      ]
+                                    },
+                                    "lastObservedAt": {
+                                      "description": "UTC observation timestamp, or null. String or null; null is represented without a schema type because the protocol subset has no union types."
+                                    }
+                                  },
+                                  "required": [
+                                    "durable",
+                                    "liveStatus",
+                                    "lastObservedAt"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "resource": {
+                                  "description": "TerminalResource custody record, or null.",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "originDispatchId": {
+                                      "type": "string",
+                                      "description": "Origin dispatch identifier with the ctx_ prefix; the protocol schema subset cannot express string patterns."
+                                    },
+                                    "ownerDispatchId": {
+                                      "type": "string",
+                                      "description": "Current owner dispatch identifier with the ctx_ prefix; the protocol schema subset cannot express string patterns."
+                                    },
+                                    "priorOwnerDispatchIds": {
+                                      "type": "array",
+                                      "description": "Previous dispatch owners.",
+                                      "items": {
+                                        "type": "string",
+                                        "description": "Prior owner dispatch identifier with the ctx_ prefix; the protocol schema subset cannot express string patterns."
+                                      }
+                                    },
+                                    "worktreeId": {
+                                      "type": "string"
+                                    },
+                                    "sessionId": {
+                                      "type": "string"
+                                    },
+                                    "processIncarnation": {
+                                      "type": "string",
+                                      "description": "Process incarnation; not a credential."
+                                    },
+                                    "ownershipState": {
+                                      "type": "string",
+                                      "enum": [
+                                        "owned",
+                                        "transferred",
+                                        "user_owned",
+                                        "external",
+                                        "released"
+                                      ]
+                                    },
+                                    "releaseState": {
+                                      "type": "string",
+                                      "enum": [
+                                        "not_requested",
+                                        "retained",
+                                        "requested",
+                                        "releasing",
+                                        "released",
+                                        "unknown"
+                                      ]
+                                    },
+                                    "retainedReason": {
+                                      "description": "Reason a terminal resource was retained. String or null; null is represented without a schema type because the protocol subset has no union types."
+                                    },
+                                    "releaseRequestedAt": {
+                                      "description": "UTC timestamp when release was requested. String or null; null is represented without a schema type because the protocol subset has no union types."
+                                    },
+                                    "releaseCompletedAt": {
+                                      "description": "UTC timestamp when release completed. String or null; null is represented without a schema type because the protocol subset has no union types."
+                                    },
+                                    "releaseError": {
+                                      "description": "Safe release error summary. String or null; null is represented without a schema type because the protocol subset has no union types."
+                                    },
+                                    "recoveryAttemptCount": {
+                                      "type": "number"
+                                    },
+                                    "lastRecoveryAt": {
+                                      "description": "UTC timestamp of the most recent recovery attempt. String or null; null is represented without a schema type because the protocol subset has no union types."
+                                    },
+                                    "archiveSource": {
+                                      "description": "Source of the archived terminal output. String or null; null is represented without a schema type because the protocol subset has no union types."
+                                    },
+                                    "archiveStatus": {
+                                      "description": "Archive capture status. One of 'captured', 'empty', 'unavailable', or null. The protocol schema subset cannot express nullable enums."
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "originDispatchId",
+                                    "ownerDispatchId",
+                                    "priorOwnerDispatchIds",
+                                    "worktreeId",
+                                    "sessionId",
+                                    "processIncarnation",
+                                    "ownershipState",
+                                    "releaseState",
+                                    "retainedReason",
+                                    "releaseRequestedAt",
+                                    "releaseCompletedAt",
+                                    "releaseError",
+                                    "recoveryAttemptCount",
+                                    "lastRecoveryAt",
+                                    "archiveSource",
+                                    "archiveStatus"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "nextAction": {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "inspect",
+                                        "release",
+                                        "recover",
+                                        "none"
+                                      ]
+                                    },
+                                    "argv": {
+                                      "type": "array",
+                                      "description": "CLI argument vector.",
+                                      "items": {
+                                        "type": "string"
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "argv"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "attention": {
+                                  "type": "object",
+                                  "properties": {
+                                    "categories": {
+                                      "type": "array",
+                                      "description": "Attention categories.",
+                                      "items": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "requiresAction": {
+                                      "type": "boolean"
+                                    }
+                                  },
+                                  "required": [
+                                    "categories",
+                                    "requiresAction"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "role",
+                                "parent",
+                                "provider",
+                                "host",
+                                "workspace",
+                                "stage",
+                                "outcome",
+                                "liveness",
+                                "evidence",
+                                "resource",
+                                "nextAction",
+                                "attention"
+                              ],
+                              "additionalProperties": false
                             }
                           },
-                          "worktreeId": {
-                            "type": "string"
-                          },
-                          "sessionId": {
-                            "type": "string"
-                          },
-                          "processIncarnation": {
-                            "type": "string",
-                            "description": "Process incarnation; not a credential."
-                          },
-                          "ownershipState": {
-                            "type": "string",
-                            "enum": [
-                              "owned",
-                              "transferred",
-                              "user_owned",
-                              "external",
-                              "released"
-                            ]
-                          },
-                          "releaseState": {
-                            "type": "string",
-                            "enum": [
-                              "not_requested",
-                              "retained",
-                              "requested",
-                              "releasing",
-                              "released",
-                              "unknown"
-                            ]
-                          },
-                          "retainedReason": {
-                            "description": "Reason a terminal resource was retained. String or null; null is represented without a schema type because the protocol subset has no union types."
-                          },
-                          "releaseRequestedAt": {
-                            "description": "UTC timestamp when release was requested. String or null; null is represented without a schema type because the protocol subset has no union types."
-                          },
-                          "releaseCompletedAt": {
-                            "description": "UTC timestamp when release completed. String or null; null is represented without a schema type because the protocol subset has no union types."
-                          },
-                          "releaseError": {
-                            "description": "Safe release error summary. String or null; null is represented without a schema type because the protocol subset has no union types."
-                          },
-                          "recoveryAttemptCount": {
-                            "type": "number"
-                          },
-                          "lastRecoveryAt": {
-                            "description": "UTC timestamp of the most recent recovery attempt. String or null; null is represented without a schema type because the protocol subset has no union types."
-                          },
-                          "archiveSource": {
-                            "description": "Source of the archived terminal output. String or null; null is represented without a schema type because the protocol subset has no union types."
-                          },
-                          "archiveStatus": {
-                            "description": "Archive capture status. One of 'captured', 'empty', 'unavailable', or null. The protocol schema subset cannot express nullable enums."
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "originDispatchId",
-                          "ownerDispatchId",
-                          "priorOwnerDispatchIds",
-                          "worktreeId",
-                          "sessionId",
-                          "processIncarnation",
-                          "ownershipState",
-                          "releaseState",
-                          "retainedReason",
-                          "releaseRequestedAt",
-                          "releaseCompletedAt",
-                          "releaseError",
-                          "recoveryAttemptCount",
-                          "lastRecoveryAt",
-                          "archiveSource",
-                          "archiveStatus"
-                        ],
-                        "additionalProperties": false
+                          "required": [
+                            "dispatchId",
+                            "taskId",
+                            "taskTitle",
+                            "displayName",
+                            "coordinatorSessionId",
+                            "parentSessionId",
+                            "currentAssignment",
+                            "runId",
+                            "workerState",
+                            "dispatchStatus",
+                            "agentTerminalHandle",
+                            "terminalState",
+                            "resource",
+                            "projection"
+                          ],
+                          "additionalProperties": false
+                        }
                       },
-                      "projection": {
+                      "scope": {
                         "type": "object",
-                        "description": "Worker-facing fleet projection.",
                         "properties": {
-                          "id": {
-                            "type": "string",
-                            "description": "Dispatch identifier with the ctx_ prefix; the protocol schema subset cannot express string patterns."
+                          "runId": {
+                            "description": "Run ID filter, or null for an all-Runs query. String or null; null is represented without a schema type because the protocol subset has no union types."
                           },
-                          "role": {
-                            "type": "string",
-                            "enum": [
-                              "worker"
-                            ]
-                          },
-                          "parent": {
-                            "description": "Parent task reference, or null.",
-                            "properties": {
-                              "taskId": {
-                                "type": "string",
-                                "description": "Parent task identifier with the task_ prefix; the protocol schema subset cannot express string patterns."
-                              }
-                            },
-                            "required": [
-                              "taskId"
-                            ],
-                            "additionalProperties": false
-                          },
-                          "provider": {
-                            "description": "Provider details, or null.",
-                            "properties": {
-                              "id": {
-                                "type": "string"
-                              },
-                              "model": {
-                                "description": "Provider model, or null. String or null; null is represented without a schema type because the protocol subset has no union types."
-                              }
-                            },
-                            "required": [
-                              "id",
-                              "model"
-                            ],
-                            "additionalProperties": false
-                          },
-                          "host": {
-                            "type": "object",
-                            "properties": {
-                              "kind": {
-                                "type": "string",
-                                "enum": [
-                                  "local"
-                                ]
-                              },
-                              "id": {
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "kind",
-                              "id"
-                            ],
-                            "additionalProperties": false
-                          },
-                          "workspace": {
-                            "description": "Workspace projection, or null.",
-                            "properties": {
-                              "id": {
-                                "type": "string"
-                              },
-                              "kind": {
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "id",
-                              "kind"
-                            ],
-                            "additionalProperties": false
-                          },
-                          "stage": {
-                            "type": "object",
-                            "properties": {
-                              "worker": {
-                                "description": "Worker lifecycle stage, or null. String or null; null is represented without a schema type because the protocol subset has no union types."
-                              },
-                              "dispatch": {
-                                "type": "string"
-                              },
-                              "detail": {
-                                "type": "string"
-                              },
-                              "activity": {
-                                "type": "string",
-                                "enum": [
-                                  "working",
-                                  "blocked",
-                                  "waiting",
-                                  "done",
-                                  "unknown"
-                                ]
-                              }
-                            },
-                            "required": [
-                              "worker",
-                              "dispatch",
-                              "detail",
-                              "activity"
-                            ],
-                            "additionalProperties": false
-                          },
-                          "outcome": {
+                          "source": {
                             "type": "string",
                             "enum": [
-                              "in_progress",
-                              "succeeded",
-                              "failed",
-                              "outcome_unknown",
-                              "finished_unverified"
+                              "flag",
+                              "bound",
+                              "all"
                             ]
-                          },
-                          "liveness": {
-                            "type": "object",
-                            "properties": {
-                              "status": {
-                                "type": "string",
-                                "enum": [
-                                  "live",
-                                  "exited",
-                                  "unverifiable"
-                                ]
-                              },
-                              "reason": {
-                                "description": "Safe liveness explanation, or null. String or null; null is represented without a schema type because the protocol subset has no union types."
-                              }
-                            },
-                            "required": [
-                              "status",
-                              "reason"
-                            ],
-                            "additionalProperties": false
-                          },
-                          "evidence": {
-                            "type": "object",
-                            "properties": {
-                              "durable": {
-                                "type": "boolean"
-                              },
-                              "liveStatus": {
-                                "type": "string",
-                                "enum": [
-                                  "fresh",
-                                  "stale",
-                                  "unavailable",
-                                  "redacted_restore"
-                                ]
-                              },
-                              "lastObservedAt": {
-                                "description": "UTC observation timestamp, or null. String or null; null is represented without a schema type because the protocol subset has no union types."
-                              }
-                            },
-                            "required": [
-                              "durable",
-                              "liveStatus",
-                              "lastObservedAt"
-                            ],
-                            "additionalProperties": false
-                          },
-                          "resource": {
-                            "description": "TerminalResource custody record, or null.",
-                            "properties": {
-                              "id": {
-                                "type": "string"
-                              },
-                              "originDispatchId": {
-                                "type": "string",
-                                "description": "Origin dispatch identifier with the ctx_ prefix; the protocol schema subset cannot express string patterns."
-                              },
-                              "ownerDispatchId": {
-                                "type": "string",
-                                "description": "Current owner dispatch identifier with the ctx_ prefix; the protocol schema subset cannot express string patterns."
-                              },
-                              "priorOwnerDispatchIds": {
-                                "type": "array",
-                                "description": "Previous dispatch owners.",
-                                "items": {
-                                  "type": "string",
-                                  "description": "Prior owner dispatch identifier with the ctx_ prefix; the protocol schema subset cannot express string patterns."
-                                }
-                              },
-                              "worktreeId": {
-                                "type": "string"
-                              },
-                              "sessionId": {
-                                "type": "string"
-                              },
-                              "processIncarnation": {
-                                "type": "string",
-                                "description": "Process incarnation; not a credential."
-                              },
-                              "ownershipState": {
-                                "type": "string",
-                                "enum": [
-                                  "owned",
-                                  "transferred",
-                                  "user_owned",
-                                  "external",
-                                  "released"
-                                ]
-                              },
-                              "releaseState": {
-                                "type": "string",
-                                "enum": [
-                                  "not_requested",
-                                  "retained",
-                                  "requested",
-                                  "releasing",
-                                  "released",
-                                  "unknown"
-                                ]
-                              },
-                              "retainedReason": {
-                                "description": "Reason a terminal resource was retained. String or null; null is represented without a schema type because the protocol subset has no union types."
-                              },
-                              "releaseRequestedAt": {
-                                "description": "UTC timestamp when release was requested. String or null; null is represented without a schema type because the protocol subset has no union types."
-                              },
-                              "releaseCompletedAt": {
-                                "description": "UTC timestamp when release completed. String or null; null is represented without a schema type because the protocol subset has no union types."
-                              },
-                              "releaseError": {
-                                "description": "Safe release error summary. String or null; null is represented without a schema type because the protocol subset has no union types."
-                              },
-                              "recoveryAttemptCount": {
-                                "type": "number"
-                              },
-                              "lastRecoveryAt": {
-                                "description": "UTC timestamp of the most recent recovery attempt. String or null; null is represented without a schema type because the protocol subset has no union types."
-                              },
-                              "archiveSource": {
-                                "description": "Source of the archived terminal output. String or null; null is represented without a schema type because the protocol subset has no union types."
-                              },
-                              "archiveStatus": {
-                                "description": "Archive capture status. One of 'captured', 'empty', 'unavailable', or null. The protocol schema subset cannot express nullable enums."
-                              }
-                            },
-                            "required": [
-                              "id",
-                              "originDispatchId",
-                              "ownerDispatchId",
-                              "priorOwnerDispatchIds",
-                              "worktreeId",
-                              "sessionId",
-                              "processIncarnation",
-                              "ownershipState",
-                              "releaseState",
-                              "retainedReason",
-                              "releaseRequestedAt",
-                              "releaseCompletedAt",
-                              "releaseError",
-                              "recoveryAttemptCount",
-                              "lastRecoveryAt",
-                              "archiveSource",
-                              "archiveStatus"
-                            ],
-                            "additionalProperties": false
-                          },
-                          "nextAction": {
-                            "type": "object",
-                            "properties": {
-                              "kind": {
-                                "type": "string",
-                                "enum": [
-                                  "inspect",
-                                  "release",
-                                  "recover",
-                                  "none"
-                                ]
-                              },
-                              "argv": {
-                                "type": "array",
-                                "description": "CLI argument vector.",
-                                "items": {
-                                  "type": "string"
-                                }
-                              }
-                            },
-                            "required": [
-                              "kind",
-                              "argv"
-                            ],
-                            "additionalProperties": false
-                          },
-                          "attention": {
-                            "type": "object",
-                            "properties": {
-                              "categories": {
-                                "type": "array",
-                                "description": "Attention categories.",
-                                "items": {
-                                  "type": "string"
-                                }
-                              },
-                              "requiresAction": {
-                                "type": "boolean"
-                              }
-                            },
-                            "required": [
-                              "categories",
-                              "requiresAction"
-                            ],
-                            "additionalProperties": false
                           }
                         },
                         "required": [
-                          "id",
-                          "role",
-                          "parent",
-                          "provider",
-                          "host",
-                          "workspace",
-                          "stage",
-                          "outcome",
-                          "liveness",
-                          "evidence",
-                          "resource",
-                          "nextAction",
-                          "attention"
+                          "runId",
+                          "source"
                         ],
                         "additionalProperties": false
-                      }
-                    },
-                    "required": [
-                      "dispatchId",
-                      "taskId",
-                      "taskTitle",
-                      "displayName",
-                      "coordinatorSessionId",
-                      "parentSessionId",
-                      "currentAssignment",
-                      "runId",
-                      "workerState",
-                      "dispatchStatus",
-                      "agentTerminalHandle",
-                      "terminalState",
-                      "resource",
-                      "projection"
-                    ],
-                    "additionalProperties": false
-                  }
-                },
-                "scope": {
-                  "type": "object",
-                  "properties": {
-                    "runId": {
-                      "description": "Run ID filter, or null for an all-Runs query. String or null; null is represented without a schema type because the protocol subset has no union types."
-                    },
-                    "source": {
-                      "type": "string",
-                      "enum": [
-                        "flag",
-                        "bound",
-                        "all"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "runId",
-                    "source"
-                  ],
-                  "additionalProperties": false
-                },
-                "page": {
-                  "type": "object",
-                  "properties": {
-                    "nextCursor": {
-                      "description": "Opaque next-page cursor, or null when the page is final. String or null; null is represented without a schema type because the protocol subset has no union types."
-                    },
-                    "snapshotId": {
-                      "type": "string"
-                    },
-                    "total": {
-                      "type": "number"
-                    }
-                  },
-                  "required": [
-                    "nextCursor",
-                    "snapshotId",
-                    "total"
-                  ],
-                  "additionalProperties": false
-                },
-                "partialHostErrors": {
-                  "type": "array",
-                  "description": "Host inventory failures that did not prevent a partial fleet result.",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "host": {
-                        "type": "string"
                       },
-                      "reason": {
-                        "type": "string"
+                      "page": {
+                        "type": "object",
+                        "properties": {
+                          "nextCursor": {
+                            "description": "Opaque next-page cursor, or null when the page is final. String or null; null is represented without a schema type because the protocol subset has no union types."
+                          },
+                          "snapshotId": {
+                            "type": "string"
+                          },
+                          "total": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "nextCursor",
+                          "snapshotId",
+                          "total"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "partialHostErrors": {
+                        "type": "array",
+                        "description": "Host inventory failures that did not prevent a partial fleet result.",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "host": {
+                              "type": "string"
+                            },
+                            "reason": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "host",
+                            "reason"
+                          ],
+                          "additionalProperties": false
+                        }
                       }
                     },
                     "required": [
-                      "host",
-                      "reason"
+                      "workers",
+                      "scope",
+                      "page",
+                      "partialHostErrors"
                     ],
                     "additionalProperties": false
                   }
-                }
-              },
-              "required": [
-                "workers",
-                "scope",
-                "page",
-                "partialHostErrors"
-              ],
-              "additionalProperties": false
-            }
-          },
+                },
           {
             "id": "workerStop",
             "description": "Request guarded worker stop and return its native lifecycle result plus mutation receipt; does not trigger a confirmation prompt.",
@@ -3615,7 +3615,7 @@
         "description": "Inspect an owned Run without consuming mail, changing generations, or inferring worker liveness from stored identity.",
         "readOnly": true,
         "params": {"type": "object", "properties": {"runId": {"type": "string"}}, "required": ["runId"], "additionalProperties": false},
-        "result": {"type": "object", "properties": {"run": {"type": "object", "properties": {"id": {"type": "string"}, "objective": {"type": "string"}, "coordinatorSessionId": {"description": "Always null for service-owned Runs."}, "coordinatorHistory": {"type": "array", "items": {"type": "string"}}, "consumerGeneration": {"type": "integer"}, "createdAt": {"type": "string"}, "updatedAt": {"type": "string"}, "serviceOwner": {"type": "object", "properties": {"pluginId": {"type": "string"}, "key": {"type": "string"}}, "required": ["pluginId", "key"]}}, "required": ["id", "objective", "coordinatorSessionId", "coordinatorHistory", "consumerGeneration", "createdAt", "updatedAt", "serviceOwner"]}, "workers": {"type": "array", "items": {"type": "object", "properties": {"dispatchId": {"type": "string"}, "assignmentActive": {"type": "boolean"}, "sessionId": {"description": "Observed worker session identity or null."}, "processIncarnation": {"description": "Observed worker process incarnation or null."}, "state": {"type": "string", "enum": ["live", "exited", "unverifiable"]}, "lastContactAtMs": {"description": "Last observed contact in epoch milliseconds or null."}}, "required": ["dispatchId", "assignmentActive", "sessionId", "processIncarnation", "state", "lastContactAtMs"]}}, "questions": {"type": "array", "items": {"type": "object", "properties": {"messageId": {"type": "string"}, "status": {"type": "string", "enum": ["pending", "answered", "closed"]}, "body": {"type": "string"}, "answerMessageId": {"description": "Answer message ID or null."}, "answerBody": {"description": "Answer body or null."}}, "required": ["messageId", "status", "body", "answerMessageId", "answerBody"]}}}, "required": ["run", "workers", "questions"]}
+        "result": {"type": "object", "properties": {"run": {"type": "object", "properties": {"id": {"type": "string"}, "objective": {"type": "string"}, "coordinatorSessionId": {"description": "Always null for service-owned Runs."}, "coordinatorHistory": {"type": "array", "items": {"type": "string"}}, "consumerGeneration": {"type": "integer"}, "createdAt": {"type": "string"}, "updatedAt": {"type": "string"}, "serviceOwner": {"type": "object", "properties": {"pluginId": {"type": "string"}, "key": {"type": "string"}}, "required": ["pluginId", "key"]}}, "required": ["id", "objective", "coordinatorSessionId", "coordinatorHistory", "consumerGeneration", "createdAt", "updatedAt", "serviceOwner"]}, "workers": {"type": "array", "items": {"type": "object", "properties": {"dispatchId": {"type": "string"}, "taskId": {"type": "string"}, "assignmentActive": {"type": "boolean"}, "sessionId": {"description": "Observed worker session identity or null."}, "processIncarnation": {"description": "Observed worker process incarnation or null."}, "state": {"type": "string", "enum": ["live", "exited", "unverifiable"]}, "lastContactAtMs": {"description": "Last observed contact in epoch milliseconds or null."}}, "required": ["dispatchId", "taskId", "assignmentActive", "sessionId", "processIncarnation", "state", "lastContactAtMs"]}}, "questions": {"type": "array", "items": {"type": "object", "properties": {"messageId": {"type": "string"}, "status": {"type": "string", "enum": ["pending", "answered", "closed"]}, "body": {"type": "string"}, "answerMessageId": {"description": "Answer message ID or null."}, "answerBody": {"description": "Answer body or null."}}, "required": ["messageId", "status", "body", "answerMessageId", "answerBody"]}}}, "required": ["run", "workers", "questions"]}
       },
       {
         "id": "serviceWorkerStart",
@@ -3652,6 +3652,56 @@
         "description": "Send normal status guidance from the Run coordinator to one exact Dispatch; it cannot report worker completion or heartbeat.",
         "params": {"type": "object", "properties": {"runId": {"type": "string"}, "dispatchId": {"type": "string"}, "body": {"type": "string"}, "requestId": {"type": "string"}, "contractVersion": {"type": "integer", "enum": [1]}}, "required": ["runId", "dispatchId", "body", "requestId", "contractVersion"], "additionalProperties": false},
         "result": {"type": "object", "properties": {"kind": {"type": "string", "enum": ["message"]}, "messages": {"type": "array", "items": {"type": "object", "description": "MessageRow.", "properties": {"id": {"type": "string"}, "runId": {"type": "string"}, "fromSessionId": {"description": "Null for a service sender."}, "sender": {"type": "object", "description": "MailboxAddress: run, dispatch, or session discriminant with its matching ID.", "properties": {"kind": {"type": "string", "enum": ["run", "dispatch", "session"]}, "runId": {"type": "string"}, "dispatchId": {"type": "string"}, "sessionId": {"type": "string"}}, "required": ["kind"], "additionalProperties": false}, "mailbox": {"type": "object", "description": "Resolved MailboxAddress: run, dispatch, or session discriminant with its matching ID.", "properties": {"kind": {"type": "string", "enum": ["run", "dispatch", "session"]}, "runId": {"type": "string"}, "dispatchId": {"type": "string"}, "sessionId": {"type": "string"}}, "required": ["kind"], "additionalProperties": false}, "subject": {"type": "string"}, "body": {"type": "string"}, "type": {"type": "string", "enum": ["status"]}, "priority": {"type": "string", "enum": ["normal"]}, "threadId": {"description": "Thread ID or null."}, "payload": {"description": "JSON value or null."}, "read": {"type": "boolean"}, "createdAt": {"type": "string"}, "deliveredAt": {"description": "Timestamp or null."}}, "required": ["id", "runId", "fromSessionId", "sender", "mailbox", "subject", "body", "type", "priority", "threadId", "payload", "read", "createdAt", "deliveredAt"], "additionalProperties": false}}, "threadId": {"description": "Thread ID or null."}, "mutation": {"type": "object", "properties": {"requestId": {"type": "string"}, "replayed": {"type": "boolean"}}, "required": ["requestId", "replayed"]}}, "required": ["kind", "messages", "threadId", "mutation"]}
+      },
+      {
+        "id": "serviceRegisterSubmissionPreflight",
+        "description": "Register a method in the authenticated service owner’s namespace to preflight worker reports for this owned Run.",
+        "params": {"type": "object", "properties": {"runId": {"type": "string"}, "method": {"type": "string"}, "requestId": {"type": "string"}, "contractVersion": {"type": "integer", "enum": [1]}}, "required": ["runId", "method", "requestId", "contractVersion"], "additionalProperties": false},
+        "result": {"type": "object", "properties": {"runId": {"type": "string"}, "method": {"type": "string"}, "registered": {"type": "boolean"}, "mutation": {"type": "object", "properties": {"requestId": {"type": "string"}, "replayed": {"type": "boolean"}}, "required": ["requestId", "replayed"]}}, "required": ["runId", "method", "registered", "mutation"]}
+      },
+      {
+        "id": "peerList",
+        "description": "List paired peers without exposing their private credentials.",
+        "readOnly": true,
+        "params": {"type": "object", "properties": {}, "additionalProperties": false},
+        "result": {"type": "object", "properties": {"peers": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "label": {"type": "string"}, "endpoint": {"type": "string"}, "fingerprint": {"type": "string"}, "pairingRevision": {"type": "integer"}}, "required": ["id", "label", "endpoint", "fingerprint", "pairingRevision"]}}}, "required": ["peers"]}
+      },
+      {
+        "id": "peerStatus",
+        "description": "Read the pinned remote daemon fingerprint, process incarnation, and capabilities.",
+        "readOnly": true,
+        "params": {"type": "object", "properties": {"peerId": {"type": "string"}, "pairingRevision": {"type": "integer"}}, "required": ["peerId"], "additionalProperties": false},
+        "result": {"type": "object", "properties": {"fingerprint": {"type": "string"}, "incarnation": {"type": "string"}, "capabilities": {"type": "array", "items": {"type": "string"}}}, "required": ["fingerprint", "incarnation", "capabilities"]}
+      },
+      {
+        "id": "peerCall",
+        "description": "Plugin-only bounded peer call through the federation method ceiling. Remote mutations require a UUID requestId and expectedIncarnation.",
+        "params": {"type": "object", "properties": {"peerId": {"type": "string"}, "pairingRevision": {"type": "integer"}, "method": {"type": "string"}, "params": {"type": "object", "additionalProperties": true}, "requestId": {"type": "string"}, "timeoutMs": {"type": "integer", "minimum": 1, "maximum": 60000}}, "required": ["peerId", "pairingRevision", "method", "params"], "additionalProperties": false},
+        "result": {"type": "object", "properties": {"peer": {"type": "object"}, "status": {"type": "object"}, "result": {}}, "required": ["peer", "status", "result"]}
+      },
+      {
+        "id": "peerListen",
+        "description": "Start the dedicated peer endpoint. token is private; non-loopback listeners require HTTPS certificate and 0600 private-key files.",
+        "params": {"type": "object", "properties": {"host": {"type": "string"}, "port": {"type": "integer", "minimum": 0, "maximum": 65535}, "token": {"type": "string", "description": "Private credential of at least 32 UTF-8 bytes, checked by the handler."}, "certificateFile": {"type": "string"}, "privateKeyFile": {"type": "string"}}, "required": ["host", "port", "token"], "additionalProperties": false},
+        "result": {"type": "object", "properties": {"endpoint": {"type": "string"}, "fingerprint": {"type": "string"}, "incarnation": {"type": "string"}, "capabilities": {"type": "array", "items": {"type": "string"}}, "host": {"type": "string"}, "port": {"type": "integer"}}, "required": ["endpoint", "fingerprint", "incarnation", "capabilities", "host", "port"]}
+      },
+      {
+        "id": "peerListenStop",
+        "description": "Stop the dedicated peer endpoint.",
+        "params": {"type": "object", "properties": {}, "additionalProperties": false},
+        "result": {"type": "object", "properties": {"stopped": {"type": "boolean"}}, "required": ["stopped"]}
+      },
+      {
+        "id": "peerPair",
+        "description": "Pair one peer using a private shared credential and an out-of-band pinned SHA-256 fingerprint.",
+        "params": {"type": "object", "properties": {"peerId": {"type": "string"}, "label": {"type": "string"}, "endpoint": {"type": "string"}, "token": {"type": "string", "description": "Private credential of at least 32 UTF-8 bytes, checked by the handler."}, "fingerprint": {"type": "string"}}, "required": ["peerId", "label", "endpoint", "token", "fingerprint"], "additionalProperties": false},
+        "result": {"type": "object", "properties": {"peer": {"type": "object", "properties": {"id": {"type": "string"}, "label": {"type": "string"}, "endpoint": {"type": "string"}, "fingerprint": {"type": "string"}, "pairingRevision": {"type": "integer"}}, "required": ["id", "label", "endpoint", "fingerprint", "pairingRevision"]}}, "required": ["peer"]}
+      },
+      {
+        "id": "peerUnpair",
+        "description": "Revoke a paired peer credential and pairing revision.",
+        "params": {"type": "object", "properties": {"peerId": {"type": "string"}, "pairingRevision": {"type": "integer"}}, "required": ["peerId"], "additionalProperties": false},
+        "result": {"type": "object", "properties": {"unpaired": {"type": "boolean"}}, "required": ["unpaired"]}
       }
         ],
     "event": [
@@ -3843,43 +3893,43 @@
             ]
           },
           {
-            "id": "worker-list",
-            "words": "worker-list",
-            "summary": "list workers and their custody state",
-            "flags": {
-              "run": {
-                "type": "string",
-                "description": "Limit to a Run ID."
-              },
-              "terminal-state": {
-                "type": "string",
-                "description": "Filter by terminal custody state.",
-                "enum": [
-                  "active",
-                  "reclaimable",
-                  "retained",
-                  "release_pending",
-                  "release_unknown",
-                  "released"
-                ]
-              },
-              "include-remote": {
-                "type": "boolean",
-                "description": "Include remote host inventory."
-              },
-              "cursor": {
-                "type": "string",
-                "description": "Opaque continuation cursor."
-              },
-              "limit": {
-                "type": "integer",
-                "description": "Maximum requested page size."
-              }
-            },
-            "methods": [
-              "quirky.orchestration/workerList"
-            ]
-          },
+                  "id": "worker-list",
+                  "words": "worker-list",
+                  "summary": "list workers and their custody state",
+                  "flags": {
+                    "run": {
+                      "type": "string",
+                      "description": "Limit to a Run ID."
+                    },
+                    "terminal-state": {
+                      "type": "string",
+                      "description": "Filter by terminal custody state.",
+                      "enum": [
+                        "active",
+                        "reclaimable",
+                        "retained",
+                        "release_pending",
+                        "release_unknown",
+                        "released"
+                      ]
+                    },
+                    "include-remote": {
+                      "type": "boolean",
+                      "description": "Include remote host inventory."
+                    },
+                    "cursor": {
+                      "type": "string",
+                      "description": "Opaque continuation cursor."
+                    },
+                    "limit": {
+                      "type": "integer",
+                      "description": "Maximum requested page size."
+                    }
+                  },
+                  "methods": [
+                    "quirky.orchestration/workerList"
+                  ]
+                },
           {
             "id": "worker-stop",
             "words": "worker-stop",
@@ -3956,6 +4006,12 @@
               "quirky.orchestration/workerRetain"
             ]
           },
+          {"id": "peer-list", "words": "peer-list", "summary": "list paired peers without private credentials", "flags": {}, "methods": ["quirky.orchestration/peerList"]},
+          {"id": "peer-status", "words": "peer-status", "summary": "inspect a pinned peer status and capabilities", "flags": {"peer": {"type": "string", "required": true, "description": "Paired peer ID."}, "pairing-revision": {"type": "integer", "description": "Optional expected pairing revision."}}, "methods": ["quirky.orchestration/peerStatus"]},
+          {"id": "peer-listen", "words": "peer-listen", "summary": "start the dedicated paired-peer endpoint", "flags": {"host": {"type": "string", "required": true, "description": "Bind address; non-loopback requires TLS."}, "port": {"type": "integer", "description": "TCP port; 0 selects an available port."}, "token-file": {"type": "string", "required": true, "description": "Private 0600 file containing the shared credential."}, "certificate-file": {"type": "string", "description": "HTTPS certificate file for non-loopback listeners."}, "private-key-file": {"type": "string", "description": "0600 HTTPS private key file for non-loopback listeners."}}, "methods": ["quirky.orchestration/peerListen"]},
+          {"id": "peer-listen-stop", "words": "peer-listen-stop", "summary": "stop the dedicated peer endpoint", "flags": {}, "methods": ["quirky.orchestration/peerListenStop"]},
+          {"id": "peer-pair", "words": "peer-pair", "summary": "pair a peer using a pinned fingerprint and private shared credential", "flags": {"id": {"type": "string", "required": true, "description": "Stable peer ID."}, "label": {"type": "string", "required": true, "description": "Human-readable peer label."}, "endpoint": {"type": "string", "required": true, "description": "Peer HTTP(S) endpoint."}, "fingerprint": {"type": "string", "required": true, "description": "Out-of-band SHA-256 fingerprint."}, "token-file": {"type": "string", "required": true, "description": "Private 0600 file containing the shared credential."}}, "methods": ["quirky.orchestration/peerPair"]},
+          {"id": "peer-unpair", "words": "peer-unpair", "summary": "revoke a paired peer credential", "flags": {"id": {"type": "string", "required": true, "description": "Paired peer ID."}, "pairing-revision": {"type": "integer", "description": "Optional expected pairing revision."}}, "methods": ["quirky.orchestration/peerUnpair"]},
           {"id": "skill-show", "words": "skill-show", "summary": "print the generated orchestration skill", "flags": {}, "methods": ["quirky.orchestration/skillShow"]},
           {"id": "skill-status", "words": "skill-status", "summary": "compare installed orchestration skill content with this build", "flags": {}, "methods": ["quirky.orchestration/skillStatus"]},
           {"id": "skill-install", "words": "skill-install", "summary": "explicitly install or update the orchestration skill", "flags": {"agents": {"type": "json", "param": "agents", "description": "Optional JSON array of detected agent IDs; omitted installs all detected supported targets."}}, "methods": ["quirky.orchestration/skillInstall"]},

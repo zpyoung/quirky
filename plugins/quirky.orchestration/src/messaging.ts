@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto'
-import type { CallerConnection, PluginCaller, PluginContext, PluginStore } from '@quirky/protocol'
+import type { CallerConnection, OrchestrationSubmission, OrchestrationSubmissionVerdict, PluginCaller, PluginContext, PluginStore } from '@quirky/protocol'
 import type {
   AskParams,
   AskHandoffIdentity,
@@ -29,11 +29,7 @@ import type {
   QuestionThreadRow,
   ReplyParams,
   ReplyResult,
-  RunId,
-  CoordinatorAuthority,
-  RuntimeCallerEvidence,
-  SendParams,
-  SendResult,
+  RunId, CoordinatorAuthority, RuntimeCallerEvidence, SendParams, SendResult,
   TaskId,
   UtcTimestamp,
   WorkerDoneReportInput,
@@ -393,10 +389,41 @@ export class OrchestrationMessages implements MessageArrivalPort {
     const threadId = input.threadId ?? (isGroup(input.to) ? `thread_${Date.now()}_${randomBytes(4).toString('hex')}` : null)
     let sender: SenderContext | null = null
     let targets: RoutedTarget[] | null = null
+    let submissionVerdict: OrchestrationSubmissionVerdict | null = null
     const beforeAccept = async (): Promise<void> => {
       const resolvedSender = this.senderContext(verified.evidence, type === 'worker_done' || type === 'heartbeat')
       sender = resolvedSender
       targets = await this.resolveTargets(input, type, resolvedSender, verified.evidence, payload)
+      if (type === 'worker_done') {
+        const parsed = this.workerDoneInput(input, payload, 'msg_preflight' as MessageId)
+        if (typeof parsed !== 'string' && parsed.dispatchId === resolvedSender.dispatchId &&
+          this.core.preflightWorkerDone(parsed, verified.evidence) === null) {
+          const dispatch = this.core.getDispatch(parsed.dispatchId)
+          submissionVerdict = await this.runSubmissionPreflight({
+            runId: dispatch.runId,
+            taskId: parsed.taskId,
+            dispatchId: parsed.dispatchId,
+            type,
+            subject: parsed.subject,
+            body: parsed.body,
+            payload: this.submissionPayload(payload),
+          })
+        }
+      } else if (type === 'status' && resolvedSender.dispatchId !== null) {
+        const active = this.activeDispatchFor(resolvedSender.sessionId)
+        if (active && active.id === resolvedSender.dispatchId) {
+          this.assertDispatchOwner(active, verified.evidence)
+          submissionVerdict = await this.runSubmissionPreflight({
+            runId: active.run_id as RunId,
+            taskId: active.task_id as TaskId,
+            dispatchId: active.id as DispatchId,
+            type,
+            subject: input.subject,
+            body: input.body ?? '',
+            payload: this.submissionPayload(payload),
+          })
+        }
+      }
     }
     const params = input as unknown as MutationRequest & Record<string, unknown>
     const result = await this.core.mutate('send', params, verified.evidence, () => {
@@ -405,9 +432,19 @@ export class OrchestrationMessages implements MessageArrivalPort {
       if (!acceptedSender || !acceptedTargets) {
         fail(this.context, 'identity_unavailable', 'message routing was not resolved before acceptance')
       }
+      if (type === 'status' && acceptedSender.dispatchId !== null) {
+        const active = this.activeDispatchFor(acceptedSender.sessionId)
+        if (!active || active.id !== acceptedSender.dispatchId) {
+          fail(this.context, 'consumer_fenced', `caller no longer owns Dispatch ${acceptedSender.dispatchId}`, {
+            dispatchId: acceptedSender.dispatchId,
+          })
+        }
+        this.assertDispatchOwner(active, verified.evidence)
+      }
       const messages: MessageRow[] = []
       let report: WorkerReportResult | null = null
       let heartbeat: HeartbeatResult | null = null
+      let lifecycleRejection: { action: 'rejected'; code: string; reason: string } | undefined
       for (const target of acceptedTargets) {
         if (type !== 'worker_done' && type !== 'heartbeat') this.assertResolvedTarget(target)
         const lifecycle = type === 'worker_done' || type === 'heartbeat'
@@ -426,10 +463,31 @@ export class OrchestrationMessages implements MessageArrivalPort {
         })
         if (type === 'worker_done') {
           const parsed = this.workerDoneInput(input, payload, row.id)
-          report = typeof parsed === 'string'
-            ? { status: 'rejected', reason: parsed, audited: true }
-            : this.core.reportWorkerDone(parsed, verified.evidence)
-          if (report.status === 'rejected') this.markRejectedReport(row.id, type, input.subject, payload, report.reason)
+          if (typeof parsed === 'string') {
+            report = { status: 'rejected', reason: parsed, audited: true }
+          } else {
+            const fence = this.core.preflightWorkerDone(parsed, verified.evidence)
+            if (fence !== null) {
+              report = fence
+            } else if (submissionVerdict?.kind === 'rejected') {
+              lifecycleRejection = {
+                action: 'rejected',
+                code: submissionVerdict.code,
+                reason: submissionVerdict.reason,
+              }
+              report = {
+                status: 'rejected',
+                reason: 'submission_preflight_rejected',
+                audited: true,
+                lifecycle: lifecycleRejection,
+              }
+            } else {
+              report = this.core.reportWorkerDone(parsed, verified.evidence)
+            }
+          }
+          if (report.status === 'rejected') {
+            this.markRejectedReport(row.id, type, input.subject, payload, report.reason, report.lifecycle)
+          }
           messages.push(this.getMessage(row.id))
         } else if (type === 'heartbeat') {
           const parsed = this.heartbeatInput(payload)
@@ -437,6 +495,14 @@ export class OrchestrationMessages implements MessageArrivalPort {
             ? { status: 'rejected', reason: parsed, lastHeartbeatAt: null }
             : this.core.recordHeartbeat(parsed, verified.evidence)
           if (heartbeat.status === 'rejected') this.store.run(`UPDATE messages SET read = 1, delivered_at = ? WHERE id = ?`, now(), row.id)
+          messages.push(this.getMessage(row.id))
+        } else if (type === 'status' && submissionVerdict?.kind === 'rejected') {
+          lifecycleRejection = {
+            action: 'rejected',
+            code: submissionVerdict.code,
+            reason: submissionVerdict.reason,
+          }
+          this.markRejectedReport(row.id, type, input.subject, payload, 'submission_preflight_rejected', lifecycleRejection)
           messages.push(this.getMessage(row.id))
         } else {
           messages.push(row)
@@ -449,7 +515,12 @@ export class OrchestrationMessages implements MessageArrivalPort {
       }
       if (report !== null) return { kind: 'worker_report' as const, messages, report, threadId }
       if (heartbeat !== null) return { kind: 'heartbeat' as const, messages, heartbeat, threadId }
-      return { kind: 'message' as const, messages, threadId }
+      return {
+        kind: 'message' as const,
+        messages,
+        threadId,
+        ...(lifecycleRejection ? { lifecycle: lifecycleRejection } : {}),
+      }
     }, { beforeAccept })
     if (!result.mutation.replayed) {
       for (const message of result.messages) {
@@ -869,6 +940,73 @@ export class OrchestrationMessages implements MessageArrivalPort {
     }
   }
 
+  private submissionPayload(payload: JsonValue | null): Record<string, unknown> | null {
+    return payload !== null && typeof payload === 'object' && !Array.isArray(payload)
+      ? payload as Record<string, unknown>
+      : null
+  }
+
+
+  private async runSubmissionPreflight(
+    submission: OrchestrationSubmission,
+  ): Promise<OrchestrationSubmissionVerdict | null> {
+    const registration = this.store.get<{ owner_plugin_id: string; method: string }>(
+      `SELECT owner_plugin_id, method FROM service_submission_preflights WHERE run_id = ?`,
+      submission.runId,
+    )
+    if (!registration) return null
+    if (!registration.method.startsWith(`${registration.owner_plugin_id}/`)) {
+      return {
+        kind: 'rejected',
+        code: 'submission_preflight_unavailable',
+        reason: 'Registered submission preflight is outside its owning plugin namespace.',
+      }
+    }
+    try {
+      this.core.requireOwnedRun(registration.owner_plugin_id, submission.runId as RunId)
+    } catch {
+      return {
+        kind: 'rejected',
+        code: 'submission_preflight_unavailable',
+        reason: 'Registered submission preflight no longer belongs to this Run owner.',
+      }
+    }
+    const { promise, reject } = Promise.withResolvers<never>()
+    const timer = setTimeout(() => reject(new Error('submission preflight timed out')), 5_000)
+    timer.unref()
+    try {
+      // This private callback receives the JSON object constructed by the authenticated send path.
+      const params = submission as unknown as Record<string, unknown>
+      const value = await Promise.race([this.context.call(registration.method, params), promise])
+      if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+        return {
+          kind: 'rejected',
+          code: 'submission_preflight_invalid_response',
+          reason: 'Registered submission preflight returned an invalid verdict.',
+        }
+      }
+      const verdict = value as Record<string, unknown>
+      if (verdict.kind === 'accepted') return null
+      if (verdict.kind === 'rejected' && typeof verdict.code === 'string' && verdict.code.length > 0 &&
+        typeof verdict.reason === 'string' && verdict.reason.length > 0) {
+        return { kind: 'rejected', code: verdict.code, reason: verdict.reason }
+      }
+      return {
+        kind: 'rejected',
+        code: 'submission_preflight_invalid_response',
+        reason: 'Registered submission preflight returned an invalid verdict.',
+      }
+    } catch {
+      return {
+        kind: 'rejected',
+        code: 'submission_preflight_unavailable',
+        reason: 'Registered submission preflight did not return an accepted verdict.',
+      }
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
   private heartbeatInput(payload: JsonValue | null): WorkerHeartbeatInput | WorkerReportRejection {
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return 'invalid_payload'
     const record = payload as Record<string, unknown>
@@ -1130,10 +1268,18 @@ export class OrchestrationMessages implements MessageArrivalPort {
     )
   }
 
-  private markRejectedReport(id: MessageId, originalType: MessageType, subject: string, payload: JsonValue | null, reason: string): void {
+  private markRejectedReport(
+    id: MessageId,
+    originalType: MessageType,
+    subject: string,
+    payload: JsonValue | null,
+    reason: string,
+    lifecycle?: { action: 'rejected'; code: string; reason: string },
+  ): void {
+    const lifecycleMarker = lifecycle === undefined ? {} : { _orcaLifecycle: lifecycle }
     const rejectionPayload = payload !== null && typeof payload === 'object' && !Array.isArray(payload)
-      ? { ...(payload as Record<string, JsonValue>), _orcaLifecycleRejection: reason }
-      : { originalPayload: payload, _orcaLifecycleRejection: reason }
+      ? { ...(payload as Record<string, JsonValue>), _orcaLifecycleRejection: reason, ...lifecycleMarker }
+      : { originalPayload: payload, _orcaLifecycleRejection: reason, ...lifecycleMarker }
     this.store.run(
       `UPDATE messages SET type = 'status', priority = 'high', subject = ?, body = ?, payload_json = ? WHERE id = ?`,
       `Rejected ${originalType}: ${subject}`,

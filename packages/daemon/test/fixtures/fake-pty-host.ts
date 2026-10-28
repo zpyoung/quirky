@@ -259,6 +259,15 @@ export function startFakePtyHost(home: string, options: FakePtyHostOptions = {})
         reply(socket, request.id, {})
         return
       }
+      case 'stopWithHistory': {
+        const session = sessions.get(request.sessionId)
+        if (!session) return fail(socket, request.id, 'no such session')
+        if (!session.info.alive && session.info.state !== 'restorable') return fail(socket, request.id, 'session cannot retain restorable history')
+        Object.assign(session.info, { state: 'restorable', alive: false, pid: 0, exitCode: null, exitSignal: 'SIGTERM', exitCause: 'stopped' })
+        for (const connection of connections) connection.write(encodePtyJson({ type: 'exit', sessionId: request.sessionId, exitCode: null, exitSignal: 'SIGTERM', exitCause: 'stopped' }))
+        reply(socket, request.id, {})
+        return
+      }
       case 'forget':
         if (!sessions.delete(request.sessionId)) return fail(socket, request.id, `unknown session: ${request.sessionId}`)
         reply(socket, request.id, {})

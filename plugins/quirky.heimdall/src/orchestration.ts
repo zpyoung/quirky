@@ -67,9 +67,21 @@ export function createOrchestrationAdapter(
     if (matches.length === 1) onWake(matches[0]!.watcherId)
   })
 
+  async function registerSubmissionPreflight(runId: string): Promise<void> {
+    if (disposed) throw new Error('orchestration adapter is disposed')
+    await context.call('quirky.orchestration/serviceRegisterSubmissionPreflight', {
+      runId,
+      method: 'quirky.heimdall/submissionPreflight'
+    })
+    if (disposed) throw new Error('submission preflight registration completed after adapter disposal')
+  }
+
   async function ensureRun(enrollment: Enrollment): Promise<string> {
     if (disposed) throw new Error('orchestration adapter is disposed')
-    if (enrollment.orchestrationRunId !== null) return enrollment.orchestrationRunId
+    if (enrollment.orchestrationRunId !== null) {
+      await registerSubmissionPreflight(enrollment.orchestrationRunId)
+      return enrollment.orchestrationRunId
+    }
     if (!enrollment.coordinator.handle || !enrollment.coordinator.paneKey) {
       throw new Error('the enrollment has no minted coordinator identity')
     }
@@ -108,6 +120,7 @@ export function createOrchestrationAdapter(
       throw new Error('run creation returned no valid run identity')
     }
     const runId = value.run.id
+    await registerSubmissionPreflight(runId)
     const current = store.get(enrollment.watcherId)
     if (!current) throw new Error('the enrollment disappeared before its orchestration run was recorded')
     if (current.orchestrationRunId !== null && current.orchestrationRunId !== runId) {
@@ -319,6 +332,10 @@ export function createOrchestrationAdapter(
 
 
   return {
+    async restore(enrollment) {
+      if (store.readOnly || disposed || enrollment.orchestrationRunId === null) return
+      await registerSubmissionPreflight(enrollment.orchestrationRunId)
+    },
     async dispatch(enrollment, attempt, request) {
       if (disposed) return { kind: 'refused', reason: 'adapter-disposed', detail: 'orchestration adapter is disposed' }
       const requestId = preparedRequestId(attempt)

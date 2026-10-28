@@ -170,6 +170,8 @@ export type PluginPty = {
   read(sessionId: string, lines: number, options?: { unwrap?: boolean }): Promise<{ lines: string[]; cols: number; rows: number; alt: boolean }>
   /** A `reason` records the exit as requested (cause `killed`) and defaults the signal to SIGKILL. */
   kill(sessionId: string, signal?: string, options?: { reason?: 'killed' }): Promise<void>
+  /** Gracefully stops the process tree while retaining history and recovery eligibility. */
+  stopWithHistory(sessionId: string): Promise<void>
   forget(sessionId: string): Promise<void>
   list(): Promise<PtySessionInfo[]>
   /** `replay` is base64 ending exactly at `offset`; see `PtySubscription`. */

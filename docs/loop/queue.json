@@ -1328,8 +1328,7 @@
       "deps": [
         "sb-mobile-app"
       ],
-      "status": "in-progress",
-      "lane": 7
+      "status": "done"
     },
     {
       "id": "m2-editor-build-unbuilt-flows",
@@ -1368,8 +1367,7 @@
       "deps": [
         "m7-sweep-orchestration"
       ],
-      "status": "in-progress",
-      "lane": 4
+      "status": "done"
     },
     {
       "id": "sb-mobile-app-panels-unbuilt-flows",
@@ -1430,8 +1428,53 @@
       "deps": [
         "m7-editor-source-control-completion"
       ],
+      "status": "done"
+    },
+    {
+      "id": "m7-terminal-runtime-native-and-worktree-parity",
+      "milestone": "M7",
+      "title": "Build the distinct unbuilt terminal-domain flows in docs/quirk/specs/2026-10-28-m7-sweep-terminal-completion/logic.md disposition ledger: caller-preserving orchestration/native-provider Ask handoff and unavailable-envelope/kernel/mobile caller migration; external installed CLI command manager/status/reveal/profile launchers and saved/one-off paired runtime selection without local fallback; public Dashboard pop-out window route; Codex/Muse transcript polling/retry, private OSC9999 and remote status/hook producers (Claude per-launch statusline already ships); authoritative nonempty model discovery/retirement, stale-choice UI and host capability gates; hosting/review/branch/conversation AI recipe composition through the canonical resolver; distinct terminal browser/Markdown/editor/handoff tab composition, Mobile Emulator tab, renderer extras and remappable shortcuts consistent with visible-only mounted views; remaining worktree PR grouping/agent-activity sort/project order/card/property/CLI-origin/default-branch/detached/other-client/host filters, external visibility inbox/policies, back-forward/keyboard/Open-in, manual reference link/unlink, custom-status board/icons/avatar/tracker/project identity, sparse/prepared-pool/keep-main/behind/host-run/issue-command-split/environment/default-tabs/model/shared-path creation choices; archived-seven-day cleanup metadata, volatile/remote-connectivity classifiers and exact per-window sleep routes; supported native notification permission/click/dismiss hooks, signed terminal-host launchd/TCC/admission/upgrade packaging and public folder-picker bridge (SDK dialog exists). Reconcile later shipped owners before coding: do NOT duplicate landed phone panels/foreground notification controls/terminal artifact grants, automation provenance/sidebar filters, Browser agent/import/routing controls, editor viewer leases, host-power/orchestration shutdown or the existing automation-remote/sidebar-extras/dock/native clipboard owners. Preserve explicit hosting/Objective/sitter exclusions and macOS scope. This is unbuilt flow implementation, not a testing/review/debug task.",
+      "docs": [
+        "ask.md",
+        "cli.md",
+        "agent-status.md",
+        "launch-settings.md",
+        "notifications.md",
+        "providers.md",
+        "term-daemon.md",
+        "term-ui.md",
+        "worktrees.md"
+      ],
+      "deps": [
+        "m7-sweep-terminal-completion"
+      ],
       "status": "in-progress",
-      "lane": 12
+      "lane": 11
+    },
+    {
+      "id": "sb-mobile-chat-voice-native-ruling",
+      "milestone": "Side B",
+      "title": "Build only remaining unbuilt phone flows after their prerequisites: interactive native-chat transcripts/attachments/queued-chat/options/background-task UI and dictation/voice models/settings require an authorized architecture/roadmap ruling plus owned public APIs; existing Native browser tab mirroring requires a supported safe Native-frame/control producer and phone-scoped identity/data path. Keep shipped terminal/ask, reversible Sleep, origin filters, Markdown and explicit Chrome Watch unchanged; do not silently convert Native tabs or override sb-mobile-app D5 and architecture background-only/roadmap dictation exclusions. See sb-mobile-app-prerequisites D3,D7,D12.",
+      "docs": [
+        "mobile.md"
+      ],
+      "deps": [
+        "sb-mobile-app-prerequisites"
+      ],
+      "status": "blocked"
+    },
+    {
+      "id": "m7-orchestration-worker-federation",
+      "milestone": "M7",
+      "title": "Implement remote worker federation over the real paired-daemon transport: worker-start --on with exact remote/new-top-level placement, home Task/Dispatch and host service-owned Run/Dispatch attachment/custody mappings; durable ordered bidirectional coordinator mail, blocking ask/reply and worker status/completion relay with home-authoritative kind preflight and settlement before host acceptance; peer capability/pair revision/fingerprint/host and process incarnation fencing; real remote show/read/output archives, fleet pagination and uncertainty, stop/release/retain and task navigation to an actual viewer. These worker flows remain unbuilt after the LOOP build-first item cutover, not externally blocked or verified. Reuse quirky.orchestration peerList/peerStatus/peerCall, private pairing/listener and owner-only serviceRegisterSubmissionPreflight, plus existing local worker lifecycle; no forged RuntimeCallerEvidence, local fallback, disconnected tables or advertised stub capabilities. Preserve core D9 and existing pointer/shutdown and host-power queue ownership; exclude Objective/PR sitter/non-GitHub. Product implementation only, not verification or debugging.",
+      "docs": [
+        "orchestration.md"
+      ],
+      "deps": [
+        "m7-orchestration-heimdall-unbuilt-flows"
+      ],
+      "status": "in-progress",
+      "lane": 5
     },
     {
       "id": "m7-test-triage",
@@ -1453,7 +1496,9 @@
         "m7-sweep-automation-completion",
         "m7-orchestration-heimdall-unbuilt-flows",
         "sb-mobile-app-panels-unbuilt-flows",
-        "m7-diff-markdown-local-images"
+        "m7-diff-markdown-local-images",
+        "m7-terminal-runtime-native-and-worktree-parity",
+        "m7-orchestration-worker-federation"
       ],
       "status": "todo"
     },
@@ -1653,27 +1698,6 @@
       ],
       "status": "todo",
       "early": true
-    },
-    {
-      "id": "m7-terminal-runtime-native-and-worktree-parity",
-      "milestone": "M7",
-      "title": "Build the distinct unbuilt terminal-domain flows in docs/quirk/specs/2026-10-28-m7-sweep-terminal-completion/logic.md disposition ledger: caller-preserving orchestration/native-provider Ask handoff and unavailable-envelope/kernel/mobile caller migration; external installed CLI command manager/status/reveal/profile launchers and saved/one-off paired runtime selection without local fallback; public Dashboard pop-out window route; Codex/Muse transcript polling/retry, private OSC9999 and remote status/hook producers (Claude per-launch statusline already ships); authoritative nonempty model discovery/retirement, stale-choice UI and host capability gates; hosting/review/branch/conversation AI recipe composition through the canonical resolver; distinct terminal browser/Markdown/editor/handoff tab composition, Mobile Emulator tab, renderer extras and remappable shortcuts consistent with visible-only mounted views; remaining worktree PR grouping/agent-activity sort/project order/card/property/CLI-origin/default-branch/detached/other-client/host filters, external visibility inbox/policies, back-forward/keyboard/Open-in, manual reference link/unlink, custom-status board/icons/avatar/tracker/project identity, sparse/prepared-pool/keep-main/behind/host-run/issue-command-split/environment/default-tabs/model/shared-path creation choices; archived-seven-day cleanup metadata, volatile/remote-connectivity classifiers and exact per-window sleep routes; supported native notification permission/click/dismiss hooks, signed terminal-host launchd/TCC/admission/upgrade packaging and public folder-picker bridge (SDK dialog exists). Reconcile later shipped owners before coding: do NOT duplicate landed phone panels/foreground notification controls/terminal artifact grants, automation provenance/sidebar filters, Browser agent/import/routing controls, editor viewer leases, host-power/orchestration shutdown or the existing automation-remote/sidebar-extras/dock/native clipboard owners. Preserve explicit hosting/Objective/sitter exclusions and macOS scope. This is unbuilt flow implementation, not a testing/review/debug task.",
-      "docs": [
-        "ask.md",
-        "cli.md",
-        "agent-status.md",
-        "launch-settings.md",
-        "notifications.md",
-        "providers.md",
-        "term-daemon.md",
-        "term-ui.md",
-        "worktrees.md"
-      ],
-      "deps": [
-        "m7-sweep-terminal-completion"
-      ],
-      "status": "in-progress",
-      "lane": 11
     }
   ]
 }

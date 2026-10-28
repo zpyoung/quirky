@@ -27,7 +27,10 @@ function adaptServiceHandler<M extends ServiceMethod>(handler: ServiceHandler<M>
 }
 
 /** Compose the semantic core once around the caller-provided plugin store. */
-export type ComposedOrchestrationService = OrchestrationService & { readonly serviceCoordinator: OrchestrationServiceCoordinator }
+export type ComposedOrchestrationService = OrchestrationService & {
+  readonly serviceCoordinator: OrchestrationServiceCoordinator
+  readonly messages: OrchestrationMessages
+}
 export function createOrchestration(context: PluginContext, store: PluginStore): ComposedOrchestrationService {
   const core = new OrchestrationCore(context, store)
   const messages = new OrchestrationMessages(context, core)
@@ -42,7 +45,8 @@ export function createOrchestration(context: PluginContext, store: PluginStore):
     serviceWorkerRelease: adaptServiceHandler<'serviceWorkerRelease'>(serviceHandlers.serviceWorkerRelease),
     serviceWorkerStop: adaptServiceHandler<'serviceWorkerStop'>(serviceHandlers.serviceWorkerStop),
     serviceReply: adaptServiceHandler<'serviceReply'>(serviceHandlers.serviceReply),
-    serviceSend: adaptServiceHandler<'serviceSend'>(serviceHandlers.serviceSend)
+    serviceSend: adaptServiceHandler<'serviceSend'>(serviceHandlers.serviceSend),
+    serviceRegisterSubmissionPreflight: adaptServiceHandler<'serviceRegisterSubmissionPreflight'>(serviceHandlers.serviceRegisterSubmissionPreflight)
   }
   let disposed = false
   const removeMessageEvent = messages.onArrival(({ messageId, type }) => {
@@ -101,6 +105,7 @@ export function createOrchestration(context: PluginContext, store: PluginStore):
 
   return {
     core,
+    messages,
     serviceCoordinator,
     methods,
     async dispose() {

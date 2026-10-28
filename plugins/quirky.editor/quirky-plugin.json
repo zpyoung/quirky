@@ -209,8 +209,8 @@
       },
       {
         "id": "save",
-        "description": "Save a draft with a content-hash baseline; overwrite is the only unguarded write.",
-        "params": { "type": "object", "properties": { "bufferId": { "type": "string" }, "trigger": { "type": "string", "enum": ["user", "autosave", "overwrite"] } }, "required": ["bufferId"], "additionalProperties": false },
+        "description": "Save a draft with a content-hash baseline. Optional expectedRevision atomically rejects stale drafts before writing; overwrite is the only unguarded disk-baseline write.",
+        "params": { "type": "object", "properties": { "bufferId": { "type": "string" }, "trigger": { "type": "string", "enum": ["user", "autosave", "overwrite"] }, "expectedRevision": { "type": "integer", "minimum": 0, "description": "Optional contentRevision compare-and-swap checked before the disk write." } }, "required": ["bufferId"], "additionalProperties": false },
         "result": {
           "type": "object",
           "properties": {
@@ -564,6 +564,35 @@
         }
       },
       {
+        "id": "markdownPreview",
+        "description": "Render detached modified Markdown with source-authorized local images and exact per-render resource release; never opens or changes editor buffers.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "action": { "type": "string", "enum": ["render", "release"] },
+            "leaseId": { "type": "string", "description": "Required 1–128 [A-Za-z0-9_-] characters, enforced by the service; unpredictable per-render identifier, normally crypto.randomUUID(). Exact idempotent release also cancels pending acquisition. Never reuse an active identifier." },
+            "worktree": { "type": "string", "description": "Required for render; explicit registered worktree id selector id:<id>. Ambient current/path/name selectors are not accepted by this resource capability." },
+            "path": { "type": "string", "description": "Required non-empty render source; authorized worktree-relative .md/.markdown/.mdx location, including absent historical files. No absolute paths, schemes, backslashes or outside-worktree traversal." },
+            "text": { "type": "string", "description": "Required for render; modified Markdown with existing 8 MiB, line and block limits. Only editor-authorized local image resources can become image URLs." }
+          },
+          "required": ["action", "leaseId"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "description": "render returns {leaseId,html,worktreeId,path}; release returns {leaseId,released}. Unknown/already released identifiers return released:false. Active duplicates, capacity, cancelled acquisition and disposed service conflict. Up to64 active leases and64 local images each; no cross-lease eviction.",
+          "properties": {
+            "leaseId": { "type": "string" },
+            "html": { "type": "string", "description": "Canonical sanitized Markdown HTML; local image sources are opaque editor-owned resources." },
+            "worktreeId": { "type": "string" },
+            "path": { "type": "string" },
+            "released": { "type": "boolean" }
+          },
+          "required": ["leaseId"],
+          "additionalProperties": false
+        }
+      },
+      {
         "id": "notes",
         "description": "Persist, format, copy and send Markdown review notes.",
         "params": {
@@ -804,7 +833,7 @@
       { "id": "open", "words": "open", "summary": "open an authorized worktree file", "positionals": [{ "name": "path", "description": "worktree-relative or authorized absolute file path", "required": true }], "method": "open" },
       { "id": "state", "words": "state", "summary": "read editor buffers and tab state", "method": "state" },
       { "id": "draft", "words": "draft", "summary": "CAS-update a buffer draft", "method": "draft" },
-      { "id": "save", "words": "save", "summary": "save a buffer with its content baseline", "method": "save" },
+      { "id": "save", "words": "save", "summary": "save a buffer with its content baseline and optional revision guard", "method": "save" },
       { "id": "close", "words": "close", "summary": "close one editor tab safely", "method": "close" },
       { "id": "can-close", "words": "can-close", "summary": "check whether an editor tab can close without a dirty prompt", "method": "canClose" },
       { "id": "reopen", "words": "reopen", "summary": "reopen the last eligible closed editor tab", "method": "reopen" },
@@ -817,6 +846,7 @@
       { "id": "read", "words": "read", "summary": "read a buffer, bounded bytes or revisioned text chunks", "method": "read" },
       { "id": "transfer", "words": "transfer", "summary": "stage and commit a bounded draft, create-file or import upload", "method": "transfer" },
       { "id": "markdown", "words": "markdown", "summary": "run a source-preserving Markdown action", "method": "markdown" },
+      { "id": "markdown-preview-resource", "words": "markdown-preview-resource", "summary": "render source-authorized detached Markdown or release its exact resource lease", "method": "markdownPreview" },
       { "id": "notes", "words": "notes", "summary": "manage Markdown review notes", "method": "notes" },
       { "id": "notebook", "words": "notebook", "summary": "inspect or operate a notebook", "method": "notebook" },
       { "id": "viewer", "words": "viewer", "summary": "inspect or operate a file viewer", "method": "viewer" },

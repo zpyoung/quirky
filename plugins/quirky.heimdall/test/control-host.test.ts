@@ -14,7 +14,7 @@ function fixture() {
   const view: ServiceRunDetail = {
     run: { id: 'run_owned', objective: 'Fixture worker', coordinatorSessionId: null, coordinatorHistory: [], consumerGeneration: 1,
       createdAt: '2026-10-27T00:00:00.000Z', updatedAt: '2026-10-27T00:00:00.000Z', serviceOwner: { pluginId: 'quirky.heimdall', key: 'watcher' } },
-    workers: [{ dispatchId: 'ctx_dispatch', sessionId: 'session', processIncarnation: 'incarnation', state: 'live', assignmentActive: true, lastContactAtMs: 0 }],
+    workers: [{ taskId: 'task_dispatch', dispatchId: 'ctx_dispatch', sessionId: 'session', processIncarnation: 'incarnation', state: 'live', assignmentActive: true, lastContactAtMs: 0 }],
     questions: [{ messageId: 'msg_question', runId: 'run_owned', dispatchId: 'ctx_dispatch', askerSessionId: 'session', status: 'pending',
       answerMessageId: null, answerBody: null, answeredByGeneration: null, createdAt: '2026-10-27T00:00:00.000Z', answeredAt: null, closedAt: null, body: 'Continue?' }]
   }

@@ -351,6 +351,7 @@ export type MutatingOrchestrationMethod =
   | 'workerRelease'
   | 'workerRetain'
   | 'reset'
+  | 'serviceRegisterSubmissionPreflight'
 
 /** Public receipt projection intentionally omits caller fingerprints and payload hashes. */
 export interface MutationReceiptRow {
@@ -546,11 +547,12 @@ export type WorkerReportRejection =
   | 'unknown_dispatch'
   | 'task_dispatch_mismatch'
   | 'sender_not_assignee'
+  | 'submission_preflight_rejected'
 
 export type WorkerReportResult =
   | { status: 'accepted'; task: TaskRow; dispatch: DispatchRow; worker: WorkerRow | null }
   | { status: 'duplicate'; task: TaskRow; dispatch: DispatchRow; worker: WorkerRow | null }
-  | { status: 'rejected'; reason: WorkerReportRejection; audited: true }
+  | { status: 'rejected'; reason: WorkerReportRejection; audited: true; lifecycle?: { action: 'rejected'; code: string; reason: string } }
 
 export type HeartbeatResult =
   | { status: 'accepted'; lastHeartbeatAt: UtcTimestamp }
@@ -743,7 +745,7 @@ export type SendParams =
   | LifecyclePayloadSendParams
 
 export type SendResult =
-  | MutationResult<{ kind: 'message'; messages: readonly MessageRow[]; threadId: ThreadId | null }>
+  | MutationResult<{ kind: 'message'; messages: readonly MessageRow[]; threadId: ThreadId | null; lifecycle?: { action: 'rejected'; code: string; reason: string } }>
   | MutationResult<{ kind: 'worker_report'; messages: readonly MessageRow[]; report: WorkerReportResult }>
   | MutationResult<{ kind: 'heartbeat'; messages: readonly MessageRow[]; heartbeat: HeartbeatResult }>
 

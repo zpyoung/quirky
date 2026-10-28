@@ -29,6 +29,7 @@ type ServiceRun = {
 type ServiceWorker = {
   assignmentActive: boolean
   dispatchId: string
+  taskId: string
   sessionId: string | null
   processIncarnation: string | null
   state: 'live' | 'exited' | 'unverifiable'
@@ -118,6 +119,7 @@ function parseRunDetail(value: unknown): ServiceRunDetail {
     if (typeof worker.assignmentActive !== 'boolean') throw new Error('worker detail is missing assignment state')
     return {
       assignmentActive: worker.assignmentActive,
+      taskId: stringField(worker, 'taskId'),
       dispatchId: stringField(worker, 'dispatchId'),
       sessionId: nullableStringField(worker, 'sessionId'),
       processIncarnation: nullableStringField(worker, 'processIncarnation'),

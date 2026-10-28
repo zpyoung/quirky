@@ -1,3 +1,4 @@
+import { MOBILE_BROWSER_METHOD_PARAMS, validMobileBrowserParams } from '@quirky/protocol'
 import { PANEL_METHOD_PARAMS, type ApiDescription } from '@quirky/protocol'
 import { assertPanelParameters } from './panel-authorization'
 
@@ -9,6 +10,7 @@ export class MobileAuthorizationError extends Error {
 }
 
 const PARAMS: Readonly<Record<string, readonly string[]>> = {
+  ...MOBILE_BROWSER_METHOD_PARAMS,
   'status.get': [],
   'quirky.mobile/api': [],
   'quirky.mobile/info': [],
@@ -18,6 +20,12 @@ const PARAMS: Readonly<Record<string, readonly string[]>> = {
   'quirky.mobile/bundleChunk': ['buildId', 'path', 'offset'],
   'quirky.mobile/bundleRange': ['buildId', 'path', 'offset', 'gzip'],
   'quirky.mobile/agentCatalog': [],
+  'quirky.mobile/sessionTabs': ['worktree'],
+  'quirky.mobile/markdownCreate': ['worktree'],
+  'quirky.mobile/markdownRead': ['worktree', 'tabId'],
+  'quirky.mobile/markdownWrite': ['worktree', 'tabId', 'text', 'expectedRevision'],
+  'quirky.mobile/markdownSave': ['worktree', 'tabId', 'expectedRevision'],
+  'quirky.mobile/sessionTabAction': ['worktree', 'tabId', 'action', 'name', 'discard'],
   'quirky.mobile/notificationPoll': ['after', 'epoch', 'waitMs', 'onlyWhenDesktopAway', 'suppressWorktree', 'subscriptionId'],
   'quirky.mobile/notificationCancel': ['subscriptionId'],
   'quirky.mobile/notificationTest': [],
@@ -25,9 +33,12 @@ const PARAMS: Readonly<Record<string, readonly string[]>> = {
   'quirky.loops/summaries': [],
   'quirky.repo/groupList': [],
   'quirky.worktree/list': ['repo'],
+  'quirky.worktree/origins': [],
   'quirky.worktree/show': ['worktree'],
   'quirky.worktree/create': ['repo', 'name', 'branchName', 'base'],
   'quirky.worktree/describeRemove': ['worktree'],
+  'quirky.worktree/sleep': ['worktree'],
+  'quirky.worktree/wake': ['worktree'],
   'quirky.worktree/remove': ['worktree', 'yes'],
   'quirky.worktree/set': ['worktree', 'pinned', 'expectedInstanceId'],
   'quirky.session/list': ['worktree'],
@@ -37,6 +48,9 @@ const PARAMS: Readonly<Record<string, readonly string[]>> = {
   'quirky.session/create': ['worktree', 'agent', 'cols', 'rows'],
   'quirky.session/setName': ['session', 'name'],
   'quirky.session/close': ['session'],
+  'quirky.session/sleepWorkspace': ['worktree'],
+  'quirky.session/wakeWorkspace': ['worktree'],
+  'quirky.session/workspaceSleepStates': [],
   'quirky.agent-status/list': ['worktree'],
   'quirky.agent-status/get': ['session', 'at'],
   'quirky.agent-status/explain': ['session', 'at'],
@@ -123,6 +137,33 @@ function validViewport(params: Record<string, unknown>): boolean {
 }
 
 function checkMethodSpecific(method: string, params: Record<string, unknown>): void {
+  if (Object.hasOwn(MOBILE_BROWSER_METHOD_PARAMS, method) && !validMobileBrowserParams(method, params)) {
+    throw new MobileAuthorizationError('invalid mobile Browser Watch parameters')
+  }
+  if (method === 'quirky.session/sleepWorkspace' || method === 'quirky.session/wakeWorkspace' ||
+    method === 'quirky.mobile/sessionTabs' || method === 'quirky.mobile/markdownCreate' ||
+    method === 'quirky.mobile/markdownRead' || method === 'quirky.mobile/markdownWrite' ||
+    method === 'quirky.mobile/markdownSave' || method === 'quirky.mobile/sessionTabAction') {
+    if (!boundedString(params.worktree)) throw new MobileAuthorizationError('invalid mobile worktree selector')
+  }
+  if (method === 'quirky.mobile/markdownRead' || method === 'quirky.mobile/markdownWrite' ||
+    method === 'quirky.mobile/markdownSave' || method === 'quirky.mobile/sessionTabAction') {
+    if (!boundedString(params.tabId, 128)) throw new MobileAuthorizationError('invalid mobile tab identity')
+  }
+  if (method === 'quirky.mobile/markdownWrite' || method === 'quirky.mobile/markdownSave') {
+    if (!Number.isSafeInteger(params.expectedRevision) || (params.expectedRevision as number) < 0) throw new MobileAuthorizationError('invalid Markdown revision')
+  }
+  if (method === 'quirky.mobile/markdownWrite' &&
+    (typeof params.text !== 'string' || Buffer.byteLength(params.text) > 64 * 1024)) throw new MobileAuthorizationError('Markdown text exceeds the mobile limit')
+  if (method === 'quirky.mobile/sessionTabAction') {
+    if (params.action === 'rename') {
+      if (!boundedString(params.name, 128) || !params.name.trim() || params.discard !== undefined) throw new MobileAuthorizationError('rename requires only a nonempty name')
+    } else if (params.action === 'close') {
+      if (params.name !== undefined || (params.discard !== undefined && typeof params.discard !== 'boolean')) throw new MobileAuthorizationError('close accepts only a discard decision')
+    } else if (params.action !== 'refresh' || params.name !== undefined || params.discard !== undefined) {
+      throw new MobileAuthorizationError('invalid mobile tab action')
+    }
+  }
   if (method === 'quirky.mobile/updatePreferences' &&
     params.autoRestoreFitMs !== null && (typeof params.autoRestoreFitMs !== 'number' || !Number.isFinite(params.autoRestoreFitMs))) {
     throw new MobileAuthorizationError('autoRestoreFitMs must be a finite number or null')
@@ -139,7 +180,8 @@ function checkMethodSpecific(method: string, params: Record<string, unknown>): v
   }
   if (method === 'quirky.worktree/list' && params.repo !== undefined && !boundedString(params.repo)) throw new MobileAuthorizationError('invalid mobile repository selector')
   if (method === 'quirky.worktree/show' || method === 'quirky.worktree/describeRemove' ||
-    method === 'quirky.worktree/remove' || method === 'quirky.worktree/set') {
+    method === 'quirky.worktree/remove' || method === 'quirky.worktree/set' ||
+    method === 'quirky.worktree/sleep' || method === 'quirky.worktree/wake') {
     if (!boundedString(params.worktree)) throw new MobileAuthorizationError('invalid mobile worktree selector')
   }
   if (method === 'quirky.worktree/create') {

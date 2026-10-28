@@ -7,7 +7,7 @@ import { resolveRealPath, worktreeIdForPath } from '../../paths'
 import { instanceIdFor, filesystemIdentitySource, type DirectoryIdentitySource } from './identity'
 import { readStockOptions } from './options'
 import { projectPreference } from './project'
-import { insertRow, metadataOf, rowOf, type WorktreeRow } from './store'
+import { forgetWorktreeOrigins, insertRow, metadataOf, rowOf, type WorktreeRow } from './store'
 
 /** What the join needs from the plugin: the store, group lookup, identity source and in-flight removes. */
 export type ListEnv = {
@@ -84,6 +84,7 @@ function rowForFolder(env: ListEnv, repoId: string, kind: 'git' | 'folder', path
   if (row && (differentBirthtime || differentInstance || row.repo_id !== repoId)) {
     // a row of a removed and re-added project is the same case: its metadata must not carry over
     if (differentBirthtime || differentInstance) env.log(`discarded the metadata of ${id}: ${path} is a different folder than the one it was recorded for`)
+    forgetWorktreeOrigins(env.store, id)
     env.store.run('DELETE FROM worktrees WHERE id = ?', id)
     row = null
   }
@@ -133,6 +134,7 @@ async function listGitProject(env: ListEnv, repo: Repo, prune: boolean): Promise
     if (prune) {
       for (const row of env.store.all<WorktreeRow>("SELECT * FROM worktrees WHERE repo_id = ? AND kind = 'git' AND group_id IS NULL", repo.id)) {
         if (registered.has(row.id) || (row.path !== null && existsSync(row.path))) continue
+        forgetWorktreeOrigins(env.store, row.id)
         env.store.run('DELETE FROM worktrees WHERE id = ?', row.id)
       }
     }

@@ -7,13 +7,13 @@
  * `<QUIRKY_HOME>/pty.token`; anything else closes the connection.
  */
 
-export const PTY_PROTOCOL_VERSION = 3
+export const PTY_PROTOCOL_VERSION = 4
 
 /** Whether the shell has printed Quirky's ready marker; `unsupported` when the shell gets no wrapper. */
 export type ShellState = 'pending' | 'ready' | 'timed_out' | 'unsupported'
 
-/** Why a session ended: the process left on its own, was killed on request, or the host went away. */
-export type ExitCause = 'exited' | 'killed' | 'host-restart' | 'host-lost'
+/** Why a session ended: it exited, was killed or reversibly stopped, or its host went away. */
+export type ExitCause = 'exited' | 'killed' | 'stopped' | 'host-restart' | 'host-lost'
 
 /**
  * Something the terminal reported out of band: a bell, a finished command, a new title or cwd, a
@@ -113,6 +113,8 @@ export type PtyRequest =
   | { id: number; type: 'resize'; sessionId: string; cols: number; rows: number }
   /** A `reason` marks the exit as requested and defaults the signal to SIGKILL. */
   | { id: number; type: 'kill'; sessionId: string; signal?: string; reason?: 'killed' }
+  /** Stops the complete process tree but retains durable history for a later restore. */
+  | { id: number; type: 'stopWithHistory'; sessionId: string }
   /** Drops a session's state and log, in memory or stored; kills it first if still alive. */
   | { id: number; type: 'forget'; sessionId: string }
   | { id: number; type: 'list' }
@@ -148,6 +150,7 @@ export type PtyResults = {
   writeAccepted: Record<string, never>
   resize: Record<string, never>
   kill: Record<string, never>
+  stopWithHistory: Record<string, never>
   forget: Record<string, never>
   list: PtySessionInfo[]
   subscribe: PtySubscription

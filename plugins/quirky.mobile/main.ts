@@ -3,8 +3,10 @@ import { MobileService, registerMobileMethods } from './src/daemon/service'
 import { registerMobileNotifications } from './src/daemon/notifications'
 import { registerMobileAgentCatalog } from './src/daemon/agent-catalog'
 import { describePairedApi } from './src/daemon/authorization'
+import { registerMobileSessionTabs } from './src/daemon/session-tabs'
 
 let service: MobileService | undefined
+let stopTabs: (() => Promise<void>) | undefined
 let stopNotifications: (() => void) | undefined
 
 export async function activate(context: PluginContext): Promise<void> {
@@ -16,14 +18,21 @@ export async function activate(context: PluginContext): Promise<void> {
   registerMobileMethods(context, active)
   registerMobileAgentCatalog(context)
   context.provide('method:quirky.mobile/api', async () => describePairedApi(await context.call('api.describe', {}) as ApiDescription))
+  stopTabs = await registerMobileSessionTabs(context)
   stopNotifications = registerMobileNotifications(context)
   await active.start()
 }
 
 export async function deactivate(): Promise<void> {
   const active = service
+  const releaseTabs = stopTabs
   service = undefined
   stopNotifications?.()
   stopNotifications = undefined
-  await active?.stop()
+  stopTabs = undefined
+  try {
+    await releaseTabs?.()
+  } finally {
+    await active?.stop()
+  }
 }

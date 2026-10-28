@@ -15,6 +15,7 @@ import type {
 } from './control-contracts'
 import type { Enrollment, Inspection, JournalEntry, RunnerStatus, TickTrace } from './contracts'
 import { fleetBucket, sortFleetRows } from './fleet-selectors'
+import { createRemoteFleetTransport } from './remote-fleet'
 
 const JOURNAL_LIMIT = 200
 const TRACE_LIMIT = 20
@@ -487,26 +488,29 @@ export function createFleetService(host: KernelControlHost, controls: ControlPla
     }
   }
 
-  return {
-    fleet: readFleet,
-    detail,
-    debugReport,
-    async publish(_watcherId?: string) {
-      if (disposed) return
-      const ticket = ++publicationRevision
-      try {
-        const snapshot = await readFleet()
-        if (!disposed && ticket === publicationRevision) emitSafely(host, 'fleetChanged', snapshot)
-      } catch (error) {
-        if (ticket === publicationRevision) {
-          host.context.log(`Heimdall fleet publish failed: ${error instanceof Error ? error.message : String(error)}`)
-        }
-      }
+  const remote = createRemoteFleetTransport(host.context, {
+    async fleet() {
+      publicationRevision++
+      return readFleet()
     },
+    detail,
+    debugReport
+  }, controls, () => host.now?.() ?? Date.now())
+
+  return {
+    fleet: remote.fleet,
+    detail: remote.detail,
+    debugReport: remote.debugReport,
+    command: remote.command,
+    localFleet: readFleet,
+    localDetail: detail,
+    localDebugReport: debugReport,
+    publish: remote.publish,
     dispose() {
       disposed = true
       publicationRevision++
       observations.clear()
+      remote.dispose()
     }
   }
 }

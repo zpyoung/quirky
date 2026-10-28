@@ -57,7 +57,7 @@ export function isSelectionWithinPreviewLimit(text: string): boolean {
   return utf8Bytes(text) <= MARKDOWN_MAX_NOTE_SELECTION_BYTES
 }
 
-function assertPreviewBounds(markdown: string): void {
+export function assertPreviewBounds(markdown: string): void {
   if (utf8Bytes(markdown) > MARKDOWN_PREVIEW_MAX_BYTES) throw new Error('This document is larger than the 8 MiB preview limit. Open source view to read it.')
   const lines = markdown.split(/\r?\n/)
   if (lines.length > MAX_PREVIEW_BLOCKS) throw new Error('This document cannot be rendered within the preview limits. Open source view to read it.')

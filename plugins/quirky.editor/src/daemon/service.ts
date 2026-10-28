@@ -82,7 +82,12 @@ type MutationResult = { path: string; buffer?: EditorBuffer; paths?: string[] }
 type HistoryResult = { undo: number; redo: number; canUndo: boolean; canRedo: boolean; operation?: Record<string, unknown> }
 type CoreStateParams = { bufferId?: string; worktree?: string }
 type DraftParams = { bufferId: string; content: string; expectedRevision: number }
-type SaveParams = { bufferId: string; trigger?: 'user' | 'autosave' | 'overwrite' }
+type SaveParams = { bufferId: string; trigger?: 'user' | 'autosave' | 'overwrite'; expectedRevision?: number }
+type SaveOutcome =
+  | { kind: 'saved'; buffer: EditorBuffer }
+  | { kind: 'skipped'; buffer: EditorBuffer }
+  | { kind: 'external'; external: 'deleted' | 'changed' }
+  | { kind: 'permission-denied' }
 type CloseParams = { bufferId: string; tabId?: string; choice?: 'save' | 'discard' | 'cancel' }
 type SaveAsParams = { bufferId: string; path: string; expectedRevision: number }
 type ViewParams = { bufferId: string; action?: string; tabId?: string; patch?: Record<string, unknown>; preview?: boolean }
@@ -187,7 +192,7 @@ export class EditorDaemon {
       resolve: (worktree, caller) => this.paths.resolve(worktree, caller),
       path: (worktreeId, path, options) => this.paths.path(worktreeId, path, options).then((authorized) => authorized.path),
       draft: (bufferId, content, expectedRevision) => this.draft(bufferId, content, expectedRevision),
-      save: (bufferId, trigger) => this.save(bufferId, trigger),
+      save: (bufferId, trigger, expectedRevision) => this.save(bufferId, trigger, expectedRevision),
       markUntitled: (bufferId, templateCreated) => this.markUntitled(bufferId, templateCreated),
       readBytes: (bufferId, offset, length) => this.readBytes(bufferId, offset, length),
       updateView: (bufferId, patch) => this.updateView(bufferId, patch),
@@ -201,7 +206,7 @@ export class EditorDaemon {
         const request = params as unknown as DraftParams
         return this.draft(request.bufferId, request.content, request.expectedRevision)
       },
-      save: (params) => this.save((params as SaveParams).bufferId, (params as SaveParams).trigger),
+      save: (params) => this.save((params as SaveParams).bufferId, (params as SaveParams).trigger, (params as SaveParams).expectedRevision),
       saveAs: (params) => this.saveAs(params as SaveAsParams),
       close: (params) => this.close(params as unknown as CloseParams),
       canClose: (params) => this.canClose(params as unknown as CloseParams),
@@ -517,13 +522,16 @@ export class EditorDaemon {
     return this.get(bufferId)
   }
 
-  async save(bufferId: string, trigger: SaveParams['trigger'] = 'user'): Promise<EditorBuffer> {
+  async save(bufferId: string, trigger: SaveParams['trigger'] = 'user', expectedRevision?: number): Promise<EditorBuffer> {
     this.assertActive()
+    if (expectedRevision !== undefined && (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0)) {
+      throw this.context.error('invalid-params', 'expectedRevision must be a non-negative safe integer.')
+    }
     const state = this.requireState(bufferId)
     const existing = state.inFlight
     if (existing !== undefined && trigger === 'autosave') return await existing
     const generation = state.generation
-    const promise = this.transferGateQueue.run([`transfer-gate:${bufferId}`], () => this.performSave(bufferId, trigger, generation))
+    const promise = this.transferGateQueue.run([`transfer-gate:${bufferId}`], () => this.performSave(bufferId, trigger, generation, expectedRevision))
     state.inFlight = promise
     try {
       return await promise
@@ -1353,8 +1361,17 @@ export class EditorDaemon {
     this.closeRequests.clear()
   }
 
-  private async performSave(bufferId: string, trigger: SaveParams['trigger'], generation: number): Promise<EditorBuffer> {
+  private assertSaveRevision(expectedRevision: number | undefined, currentRevision: number): void {
+    if (expectedRevision === undefined || expectedRevision === currentRevision) return
+    throw Object.assign(this.context.error('conflict', `stale editor content revision: expected ${expectedRevision}, current ${currentRevision}`), {
+      data: { expectedRevision, currentRevision }
+    })
+  }
+
+
+  private async performSave(bufferId: string, trigger: SaveParams['trigger'], generation: number, expectedRevision?: number): Promise<EditorBuffer> {
     const state = this.requireState(bufferId)
+    this.assertSaveRevision(expectedRevision, state.buffer.contentRevision)
     if (state.buffer.untitled) {
       if (trigger === 'autosave') return state.buffer
       throw this.context.error('invalid-params', 'Untitled Markdown documents must be saved with Save As.')
@@ -1367,12 +1384,10 @@ export class EditorDaemon {
     if (trigger === 'autosave' && (!this.autosaveEligible(state) || state.autosaveHold || !state.verified)) return state.buffer
     const path = await this.paths.path(state.buffer.worktreeId, state.buffer.relativePath, { create: true })
     const savedPath = path.path
-    const captured = state.buffer
-    const content = captured.draft ?? captured.content
-    const baseline = captured.baseline
+    const baseline = state.buffer.baseline
     if (trigger !== 'overwrite' && baseline === null) throw this.context.error('conflict', 'Cannot save because this buffer has no verified disk baseline.')
     const keys = await this.fileKeys(savedPath)
-    return await this.fileQueue.run(keys, async () => {
+    const returnEditorBuffer = await this.fileQueue.run<EditorBuffer>(keys, async () => {
       const currentState = this.requireState(bufferId)
       if (trigger === 'autosave' && (generation !== currentState.generation || !this.autosaveEligible(currentState) || currentState.autosaveHold || !currentState.verified)) return currentState.buffer
       if (currentState.buffer.path !== savedPath || (trigger !== 'overwrite' && currentState.buffer.baseline !== baseline)) {
@@ -1380,30 +1395,40 @@ export class EditorDaemon {
       }
       const diskWritable = await probeWriteAccess(savedPath)
       await this.updateDiskWritable(bufferId, diskWritable)
-      let result: 'written' | 'changed' | 'missing'
-      try {
-        result = trigger === 'overwrite'
-          ? await this.forceWrite(savedPath, content)
-          : await guardedWrite(savedPath, content, baseline!, trigger !== 'autosave')
-      } catch (error) {
-        const code = (error as NodeJS.ErrnoException | null)?.code
-        if (code === 'EACCES' || code === 'EPERM' || code === 'EROFS') {
-          await this.updateDiskWritable(bufferId, false)
-          throw this.context.error('conflict', 'The file is not writable with the current OS permissions. The draft and baseline were retained; restore write access and retry Save.')
-        }
-        throw error
-      }
-      if (result !== 'written') {
-        await this.markWriteConflict(currentState, savedPath, result === 'missing' ? 'deleted' : 'changed')
-        throw this.context.error('conflict', result === 'missing'
-          ? 'The file was deleted after it was opened. Compare, reload, or explicitly overwrite.'
-          : 'This file changed on disk since your edits. Use the banner to compare, reload, or overwrite.')
-      }
-      const hash = hashText(content)
-      this.ownWrites.set(savedPath, { hash, expiresAt: Date.now() + 3000 })
-      await this.bufferQueue.run([`buffer:${bufferId}`], async () => {
+      const outcome = await this.bufferQueue.run<SaveOutcome>([`buffer:${bufferId}`], async () => {
         const latest = this.requireState(bufferId)
-        if (latest.buffer.path !== savedPath) throw this.context.error('conflict', 'Buffer path changed during save.')
+        this.assertSaveRevision(expectedRevision, latest.buffer.contentRevision)
+        if (latest.buffer.path !== savedPath || (trigger !== 'overwrite' && latest.buffer.baseline !== baseline)) {
+          throw this.context.error('conflict', 'The editor buffer baseline changed while the save was queued; re-read state before saving.')
+        }
+        if (latest.buffer.readOnly) throw this.context.error('invalid-params', 'This file is read-only.')
+        if (latest.transferHolds.size > 0) {
+          if (trigger === 'autosave') return { kind: 'skipped', buffer: latest.buffer }
+          throw this.context.error('conflict', 'A text transfer is in progress for this buffer.')
+        }
+        if (trigger === 'autosave' && (generation !== latest.generation || !this.autosaveEligible(latest) || latest.autosaveHold || !latest.verified)) {
+          return { kind: 'skipped', buffer: latest.buffer }
+        }
+        const content = latest.buffer.draft ?? latest.buffer.content
+        const currentBaseline = latest.buffer.baseline
+        if (trigger !== 'overwrite' && currentBaseline === null) {
+          throw this.context.error('conflict', 'Cannot save because this buffer has no verified disk baseline.')
+        }
+        let writeResult: 'written' | 'changed' | 'missing'
+        try {
+          writeResult = trigger === 'overwrite'
+            ? await this.forceWrite(savedPath, content)
+            : await guardedWrite(savedPath, content, currentBaseline!, trigger !== 'autosave')
+        } catch (error) {
+          const code = (error as NodeJS.ErrnoException | null)?.code
+          if (code === 'EACCES' || code === 'EPERM' || code === 'EROFS') return { kind: 'permission-denied' }
+          throw error
+        }
+        if (writeResult !== 'written') {
+          return { kind: 'external', external: writeResult === 'missing' ? 'deleted' : 'changed' }
+        }
+        const hash = hashText(content)
+        this.ownWrites.set(savedPath, { hash, expiresAt: Date.now() + 3000 })
         const contentChanged = latest.buffer.content !== content
         const clearDraft = latest.buffer.draft === content
         const next: EditorBuffer = {
@@ -1434,11 +1459,23 @@ export class EditorDaemon {
         if (trigger === 'user' || trigger === 'overwrite') latest.autosaveHold = false
         this.persist(latest)
         this.emit()
+        return { kind: 'saved', buffer: next }
       })
+      if (outcome.kind === 'external') {
+        await this.markWriteConflict(currentState, savedPath, outcome.external)
+        throw this.context.error('conflict', outcome.external === 'deleted'
+          ? 'The file was deleted after it was opened. Compare, reload, or explicitly overwrite.'
+          : 'This file changed on disk since your edits. Use the banner to compare, reload, or overwrite.')
+      }
+      if (outcome.kind === 'permission-denied') {
+        await this.updateDiskWritable(bufferId, false)
+        throw this.context.error('conflict', 'The file is not writable with the current OS permissions. The draft and baseline were retained; restore write access and retry Save.')
+      }
       const latest = this.requireState(bufferId)
       this.scheduleAutosave(latest)
-      return latest.buffer
+      return outcome.buffer
     })
+    return returnEditorBuffer
   }
   private async updateDiskWritable(bufferId: string, diskWritable: boolean): Promise<EditorBuffer> {
     return await this.bufferQueue.run([`buffer:${bufferId}`], async () => {

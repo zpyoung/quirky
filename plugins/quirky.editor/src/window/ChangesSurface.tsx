@@ -124,20 +124,48 @@ export function ChangesSurface(props: ChangesSurfaceProps): ReactElement {
 
   useEffect(() => {
     if (display !== 'markdown-preview' || buffer.kind !== 'markdown') return
+    const leaseId = crypto.randomUUID()
     let active = true
+    const worktreeId = buffer.worktreeId
+    const path = buffer.relativePath
+    const release = () => {
+      try {
+        void context.call('quirky.editor/markdownPreview', { action: 'release', leaseId }).catch(() => {})
+      } catch {}
+    }
     setPreviewHtml(null)
     setPreviewError(null)
-    void context.call('quirky.editor/markdown', { action: 'renderPreview', text: workingText }).then((value: unknown) => {
-      if (!active) return
-      if (value === null || typeof value !== 'object' || !('html' in value) || typeof value.html !== 'string') {
+    void context.call('quirky.editor/markdownPreview', {
+      action: 'render',
+      leaseId,
+      worktree: `id:${worktreeId}`,
+      path,
+      text: workingText
+    }).then((value: unknown) => {
+      if (!active) {
+        release()
+        return
+      }
+      if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+        release()
         throw new Error('The Markdown renderer returned no sanitized HTML.')
       }
-      setPreviewHtml(value.html)
+      const response = value as Record<string, unknown>
+      if (response.leaseId !== leaseId || response.worktreeId !== worktreeId || response.path !== path ||
+        typeof response.html !== 'string') {
+        release()
+        throw new Error('The Markdown renderer returned invalid content.')
+      }
+      setPreviewHtml(response.html)
     }).catch((reason: unknown) => {
+      release()
       if (active) setPreviewError(messageOf(reason))
     })
-    return () => { active = false }
-  }, [buffer.kind, context, display, workingText])
+    return () => {
+      active = false
+      release()
+    }
+  }, [buffer.kind, buffer.worktreeId, buffer.relativePath, context, display, workingText])
 
   useEffect(() => {
     if (display !== 'source' || diff.status !== 'ready') return
@@ -205,8 +233,7 @@ export function ChangesSurface(props: ChangesSurfaceProps): ReactElement {
       </div>
       {noChanges && <div className="qe-changes-clean" role="status">No uncommitted changes.</div>}
       {display === 'markdown-preview' && buffer.kind === 'markdown' ? <>
-        <div className="qe-changes-preview-notice" role="note">Markdown preview shows modified content only; HEAD is not included. Local images are omitted in this detached preview.</div>
-        {previewError && <div className="qe-changes-preview-error" role="alert">{previewError}</div>}
+        <div className="qe-changes-preview-notice" role="note">Markdown preview shows modified content only; HEAD is not included.</div>
         {previewHtml !== null && <div className="qe-changes-markdown-preview" dangerouslySetInnerHTML={{ __html: previewHtml }} />}
         {previewHtml === null && previewError === null && <div role="status">Rendering modified Markdown…</div>}
       </> : layout === 'inline' ? (

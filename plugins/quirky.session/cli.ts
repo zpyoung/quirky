@@ -1,4 +1,4 @@
-import type { CliContext, CliModule, Session } from '@quirky/protocol'
+import type { CliContext, CliModule, Session, WorkspaceSleepState } from '@quirky/protocol'
 
 const recordRows = (session: Session): [string, string][] => [
   ['id', session.id],
@@ -16,6 +16,21 @@ const launchRows = (session: Session): [string, string][] => {
   if (typeof settings?.summary !== 'string') return []
   const args = settings.args?.value
   return [['launch', settings.summary], ...(typeof args === 'string' ? [['launch args', args] as [string, string]] : [])]
+}
+
+function sleepStateText(state: WorkspaceSleepState, ctx: CliContext): string {
+  const overview = ctx.format.record([
+    ['worktree', state.worktreeId],
+    ['state', state.state],
+    ['updated', String(state.updatedAt)]
+  ])
+  const sessions = state.sessions.length
+    ? ctx.format.table(
+        ['SESSION', 'STATE', 'ERROR'],
+        state.sessions.map((session) => [session.sessionId, session.state, session.error ?? ''])
+      )
+    : 'no sessions'
+  return `${overview}\n${sessions}`
 }
 
 type Flags = Record<string, unknown>
@@ -148,6 +163,32 @@ const named: CliModule['commands'] = {
     if (session === undefined) throw ctx.usage('missing <session>')
     const result = await ctx.call('quirky.session/close', { session })
     ctx.out.result(result, () => `closed ${session}`)
+  },
+
+  async sleep(args, ctx) {
+    const worktree = args.positionals[0]
+    if (worktree === undefined) throw ctx.usage('missing <worktree>')
+    const state = (await ctx.call('quirky.session/sleepWorkspace', { worktree })) as WorkspaceSleepState
+    ctx.out.result(state, () => sleepStateText(state, ctx))
+  },
+
+  async wake(args, ctx) {
+    const worktree = args.positionals[0]
+    if (worktree === undefined) throw ctx.usage('missing <worktree>')
+    const state = (await ctx.call('quirky.session/wakeWorkspace', { worktree })) as WorkspaceSleepState
+    ctx.out.result(state, () => sleepStateText(state, ctx))
+  },
+
+  async 'sleep-states'(_args, ctx) {
+    const states = (await ctx.call('quirky.session/workspaceSleepStates', {})) as WorkspaceSleepState[]
+    ctx.out.result(states, () =>
+      states.length
+        ? ctx.format.table(
+            ['WORKTREE', 'STATE', 'SESSIONS'],
+            states.map((state) => [state.worktreeId, state.state, String(state.sessions.length)])
+          )
+        : 'no workspace sleep states'
+    )
   },
 
   async restore(args, ctx) {

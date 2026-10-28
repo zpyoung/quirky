@@ -92,10 +92,31 @@ function parseDetail(value: unknown, ctx: CliContext, watcherId: string): Watche
   return value as unknown as WatcherDetail
 }
 
-async function detailFor(ctx: CliContext, watcherId: string): Promise<WatcherDetail> {
-  const value = await ctx.call(DETAIL_METHOD, { target: { watcherId } })
-  if (value === null) fail(ctx, `Watcher not found: ${watcherId}`)
-  return parseDetail(value, ctx, watcherId)
+async function targetFor(ctx: CliContext, selector: string): Promise<WatcherTarget> {
+  const parts = selector.split('::')
+  if (parts.length === 1) return { watcherId: selector }
+  if (parts.length !== 2 || !parts[0] || !parts[1]) usage(ctx, 'Use <watcher-id> or <peer-id>::<watcher-id>')
+  const [peerId, watcherId] = parts
+  const snapshot = parseFleet(await ctx.call(FLEET_METHOD), ctx)
+  const matches = snapshot.rows.filter((row) => row.target.connectionId === peerId && row.target.watcherId === watcherId)
+  if (matches.length !== 1) fail(ctx, `Paired watcher not found or ambiguous: ${selector}`)
+  const target = matches[0]!.target
+  if (!Number.isSafeInteger(target.pairingRevision) || (target.pairingRevision ?? 0) < 1) {
+    fail(ctx, `Paired watcher has no current pairing revision: ${selector}`)
+  }
+  return target
+}
+
+async function detailFor(ctx: CliContext, selector: string): Promise<WatcherDetail> {
+  const target = await targetFor(ctx, selector)
+  const value = await ctx.call(DETAIL_METHOD, { target })
+  if (value === null) fail(ctx, `Watcher not found: ${selector}`)
+  const detail = parseDetail(value, ctx, target.watcherId)
+  if ((detail.target.connectionId ?? null) !== (target.connectionId ?? null) ||
+    (detail.target.pairingRevision ?? null) !== (target.pairingRevision ?? null)) {
+    fail(ctx, `Watcher detail came from a different paired owner: ${selector}`)
+  }
+  return detail
 }
 
 function parseFleet(value: unknown, ctx: CliContext): FleetSnapshot {
@@ -122,7 +143,8 @@ function stateOf(detail: WatcherDetail): string {
 
 function listLine(row: FleetRow): string {
   const state = row.enrollment.paused ? 'paused' : row.status.state
-  return `${row.target.watcherId} ${row.enrollment.kind} ${state} phase ${row.phase ?? '—'} ${row.enrollment.paused ? 'paused' : 'not paused'} ${row.workspaceName} owner contact ${row.ownerContact}`
+  const selector = row.target.connectionId ? `${row.target.connectionId}::${row.target.watcherId}` : row.target.watcherId
+  return `${selector} ${row.enrollment.kind} ${state} phase ${row.phase ?? '—'} ${row.enrollment.paused ? 'paused' : 'not paused'} ${row.workspaceName} owner contact ${row.ownerContact}`
 }
 
 function listText(rows: FleetRow[]): string {
@@ -547,7 +569,8 @@ function pendingQuestion(detail: WatcherDetail, messageId: string, ctx: CliConte
 }
 
 function commandParams(request: CommandRequest): Record<string, unknown> {
-  return { target: request.target, expectedOwner: request.expectedOwner, command: request.command }
+  return { target: request.target, expectedOwner: request.expectedOwner, command: request.command,
+    ...(request.expectedIncarnation === undefined ? {} : { expectedIncarnation: request.expectedIncarnation }) }
 }
 
 async function sendCommand(watcherId: string, command: WatcherCommand, ctx: CliContext): Promise<void> {
@@ -555,6 +578,7 @@ async function sendCommand(watcherId: string, command: WatcherCommand, ctx: CliC
   const request: CommandRequest = {
     target: localTargetOf(detail),
     expectedOwner: ownerFenceOf(detail),
+    expectedIncarnation: detail.ownerIncarnation,
     command
   }
   const result = parseCommandResult(await ctx.call(COMMAND_METHOD, commandParams(request)), ctx)
@@ -581,6 +605,7 @@ async function runControl(name: ControlCommandName, args: CliArgs, ctx: CliConte
       const request: CommandRequest = {
         target: localTargetOf(detail),
         expectedOwner: ownerFenceOf(detail),
+        expectedIncarnation: detail.ownerIncarnation,
         command: { kind: 'approve', escalationId, scope: approvalScope(escalation, ctx) }
       }
       await sendPreparedRequest(request, ctx)
@@ -596,6 +621,7 @@ async function runControl(name: ControlCommandName, args: CliArgs, ctx: CliConte
       await sendPreparedRequest({
         target: localTargetOf(detail),
         expectedOwner: ownerFenceOf(detail),
+        expectedIncarnation: detail.ownerIncarnation,
         command: { kind: 'answer-question', messageId, body }
       }, ctx)
       return
@@ -610,6 +636,7 @@ async function runControl(name: ControlCommandName, args: CliArgs, ctx: CliConte
       await sendPreparedRequest({
         target: localTargetOf(detail),
         expectedOwner: ownerFenceOf(detail),
+        expectedIncarnation: detail.ownerIncarnation,
         command: { kind: 'answer-escalation', escalationId, body }
       }, ctx)
       return
@@ -630,6 +657,7 @@ async function runControl(name: ControlCommandName, args: CliArgs, ctx: CliConte
       await sendPreparedRequest({
         target: localTargetOf(detail),
         expectedOwner: ownerFenceOf(detail),
+        expectedIncarnation: detail.ownerIncarnation,
         command: { kind: 'adjust-budget', budget }
       }, ctx)
       return
@@ -642,6 +670,7 @@ async function runControl(name: ControlCommandName, args: CliArgs, ctx: CliConte
       await sendPreparedRequest({
         target: localTargetOf(detail),
         expectedOwner: ownerFenceOf(detail),
+        expectedIncarnation: detail.ownerIncarnation,
         command: { kind: 'stop-worker', identity: worker.identity }
       }, ctx)
       return
@@ -676,7 +705,8 @@ function validDebugReport(value: unknown, ctx: CliContext, watcherId: string): D
 async function debug(args: CliArgs, ctx: CliContext): Promise<void> {
   const watcherId = positional(args, 0, 'watcherId', ctx)
   requireNoExtraPositionals(args, 1, ctx)
-  const report = validDebugReport(await ctx.call(DEBUG_METHOD, { target: { watcherId } }), ctx, watcherId)
+  const target = await targetFor(ctx, watcherId)
+  const report = validDebugReport(await ctx.call(DEBUG_METHOD, { target }), ctx, target.watcherId)
   const outputPath = flagString(args, 'out', ctx)
   const bytes = `${JSON.stringify(report, null, 2)}\n`
   ctx.out.jsonLine(report)

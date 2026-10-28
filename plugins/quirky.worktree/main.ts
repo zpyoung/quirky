@@ -18,7 +18,7 @@ import { KeyedQueue } from './src/daemon/queue'
 import { deleteBranch, describeRemove, removeWorktree, type DeleteBranchParams, type InFlightRemove, type RemoveEnv, type RemoveParams } from './src/daemon/remove'
 import { createGroupForWorktree, setWorktree, showWorktree, type CreateGroupParams, type SetEnv, type SetParams } from './src/daemon/set'
 import { filesystemIdentitySource } from './src/daemon/identity'
-import { openWorktreeStore, readV1Rows } from './src/daemon/store'
+import { forgetWorktreeOrigins, openWorktreeStore, readV1Rows, type WorktreeOriginCreator } from './src/daemon/store'
 import {
   cleanupIgnore,
   cleanupPreview,
@@ -79,6 +79,16 @@ function identityOf(caller: PluginCaller, params: { cwd?: string; worktreeId?: s
   const worktreeId = params.worktreeId ?? client.worktreeId
   return { ...(cwd ? { cwd } : {}), ...(worktreeId ? { worktreeId } : {}) }
 }
+function originCreatorOf(caller: PluginCaller): WorktreeOriginCreator {
+  if (caller.role === 'plugin') {
+    return { creatorKind: 'plugin', creatorId: caller.pluginId, creatorRole: 'plugin' }
+  }
+  if (caller.role === 'mobile' && typeof caller.deviceId === 'string') {
+    return { creatorKind: 'paired-device', creatorId: caller.deviceId, creatorRole: 'mobile' }
+  }
+  return { creatorKind: 'client', creatorId: null, creatorRole: caller.role }
+}
+
 
 let releasePending: (() => void) | undefined
 
@@ -258,7 +268,14 @@ export async function activate(context: PluginContext): Promise<void> {
     const recorded = store.all<{ repo_id: string }>('SELECT DISTINCT repo_id FROM worktrees').map((row) => row.repo_id)
     for (const repoId of recorded) {
       const known = repoId.startsWith('group:') ? (liveGroups === null || liveGroups.has(repoId)) : live.has(repoId)
-      if (!known) store.run('DELETE FROM worktrees WHERE repo_id = ?', repoId)
+      if (!known) {
+        store.transaction(() => {
+          for (const row of store.all<{ id: string }>('SELECT id FROM worktrees WHERE repo_id = ?', repoId)) {
+            forgetWorktreeOrigins(store, row.id)
+          }
+          store.run('DELETE FROM worktrees WHERE repo_id = ?', repoId)
+        })
+      }
     }
   }
 
@@ -371,7 +388,49 @@ export async function activate(context: PluginContext): Promise<void> {
       if (params.group !== undefined) result.push(...listGroup(listEnv, await resolveGroup(String(params.group))))
       return result
     },
-    create: (params, caller) => createWorkspace(createEnv, params as CreateParams, identityOf(caller)),
+    async origins(_params, caller) {
+      await reconcileDeletedGroups()
+      const listedWorktrees = await listEverything(listEnv, await listRepos())
+      const listedById = new Map<string, WorktreeControl>()
+      for (const worktree of listedWorktrees) listedById.set(worktree.id, worktree)
+      const rows = store.all<{
+        id: string
+        instance_id: string
+        creator_kind: string | null
+        creator_id: string | null
+      }>(
+        `SELECT worktrees.id, worktrees.instance_id, worktree_origins.creator_kind, worktree_origins.creator_id
+         FROM worktrees
+         LEFT JOIN worktree_origins
+           ON worktree_origins.worktree_id = worktrees.id
+          AND worktree_origins.instance_id = worktrees.instance_id
+         ORDER BY worktrees.id`
+      )
+      return rows.map((row) => {
+        const knownCreator =
+          row.creator_kind === 'plugin' ||
+          row.creator_kind === 'paired-device' ||
+          row.creator_kind === 'client'
+        const listed = listedById.get(row.id)
+        const hasAutomationProvenance =
+          listed !== undefined &&
+          listed.instanceId === row.instance_id &&
+          listed.automationProvenance?.kind === 'created-by-automation'
+        const otherClient =
+          row.creator_kind === 'paired-device' &&
+          typeof row.creator_id === 'string' &&
+          caller.role === 'mobile' &&
+          typeof caller.deviceId === 'string'
+            ? row.creator_id !== caller.deviceId
+            : null
+        return {
+          worktreeId: row.id,
+          automation: hasAutomationProvenance ? true : knownCreator ? false : null,
+          otherClient
+        }
+      })
+    },
+    create: (params, caller) => createWorkspace(createEnv, params as CreateParams, identityOf(caller), originCreatorOf(caller)),
     suggestName: (params) => suggestName(createEnv, params as { repo: string }),
     set: (params, caller) => setWorktree(setEnv, params as SetParams, identityOf(caller)),
     createGroup: (params, caller) => createGroupForWorktree(setEnv, params as CreateGroupParams, identityOf(caller)),

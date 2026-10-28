@@ -8,7 +8,7 @@ import { sharedEntryProblem, symlinkedAncestor } from './carry'
 import type { BranchCleaner, BranchOutcome } from './branches'
 import { gitRunnerPath, runHookScript } from './hooks-run'
 import { birthtimeOf, joinMetadata, listEverything, type ListEnv } from './list'
-import { rowOf, type WorktreeRow } from './store'
+import { forgetWorktreeOrigins, rowOf, type WorktreeRow } from './store'
 
 /** What `quirky.worktree/remove` and `describeRemove` accept. */
 export type RemoveParams = {
@@ -299,7 +299,10 @@ async function removeOne(env: RemoveEnv, scope: Scope, target: Worktree, options
 }
 
 function dropRow(env: RemoveEnv, target: Worktree): void {
-  env.store.run('DELETE FROM worktrees WHERE id = ?', target.id)
+  env.store.transaction(() => {
+    forgetWorktreeOrigins(env.store, target.id)
+    env.store.run('DELETE FROM worktrees WHERE id = ?', target.id)
+  })
   env.changed({ repoId: target.repoId, worktreeId: target.id })
 }
 
