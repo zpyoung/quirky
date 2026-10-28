@@ -50,6 +50,7 @@ files, not this one.
 | hard | high | [m3-vault D11](decisions/m3-vault.md) | Keep current same-token authorization; do not invent desktop-only enablement | locked by docs/roadmap.md |
 | hard | high | [m1-agent-status D2](decisions/m1-agent-status.md) | The status row is keyed by Quirky session, and the session ID from the hook's environment is the pane identity | assumed — autonomous |
 | hard | high | [m1-agent-status D4](decisions/m1-agent-status.md) | Orca's four states, its derived display states and its labels are kept as they are | locked by docs/roadmap.md |
+| hard | high | [m5-loops-core D2](decisions/m5-loops-core.md) | Native structured sessions replace Orca panes without changing focus | locked by docs/architecture.md |
 | hard | high | [m1-notifications D40](decisions/m1-notifications.md) | Approach: a daemon policy plugin that listens to producers, with markers on their records and the shell rendering | assumed — autonomous |
 | hard | high | [sb-mobile-daemon D1](decisions/sb-mobile-daemon.md) | Ship the three claimed parts together, using Quirky's JSON-RPC API | locked by docs/architecture.md |
 | hard | high | [sb-mobile-daemon D6](decisions/sb-mobile-daemon.md) | Strict v2 and bounded authorization/failures | locked by mobile.md |
@@ -279,6 +280,15 @@ files, not this one.
 | medium | high | [m4-hosting-ui-tasks D19](decisions/m4-hosting-ui-tasks.md) | Share feature boundaries with the review and worktree lanes | locked by user lane coordination; assumed — autonomous (UI-library subpaths) |
 | medium | high for source causes; runtime closure pending | [m4-hosting-ui-tasks D21](decisions/m4-hosting-ui-tasks.md) | Retain behavioral tests and repair observed projection/lifecycle defects | assumed — autonomous (observed gate repairs) |
 | medium | high | [m1-agent-status D14](decisions/m1-agent-status.md) | The fold keeps a finished lead `working` while children or background work live | locked by research/orca-features/agent-status.md |
+| medium | high | [m5-loops-core D1](decisions/m5-loops-core.md) | Both engine and completion safety ship together | locked by docs/loop/queue.json |
+| medium | high | [m5-loops-core D4](decisions/m5-loops-core.md) | Plugin owns policy and durable state; public APIs own shared execution | locked by docs/roadmap.md |
+| medium | high | [m5-loops-core D5](decisions/m5-loops-core.md) | Preserve API/CLI observable defaults and reject unsupported combinations | locked by research/orca-features/fork-loops.md |
+| medium | high | [m5-loops-core D6](decisions/m5-loops-core.md) | Idle and approval gates fail closed at the structured send boundary | assumed — autonomous |
+| medium | high | [m5-loops-core D7](decisions/m5-loops-core.md) | Ordered independent evidence decides, never assistant claims alone | locked by research/orca-features/fork-loops.md |
+| medium | high | [m5-loops-core D8](decisions/m5-loops-core.md) | Snapshot/checkpoint safety preserves user git state | locked by research/orca-features/fork-loops.md |
+| medium | high | [m5-loops-core D15](decisions/m5-loops-core.md) | Structured execution owns creating-plugin cleanup after caller revocation | locked by docs/loop/decisions/m5-structured-runner.md |
+| medium | high | [m5-loops-core D20](decisions/m5-loops-core.md) | Repair concrete integration races rather than slow or weaken the fixtures | assumed — autonomous |
+| medium | high | [m5-loops-core D24](decisions/m5-loops-core.md) | Reconcile loop admission with orchestration leases and durable receipts | locked by docs/loop/decisions/m6-orchestration-core.md |
 | medium | high | [m1-notifications D5](decisions/m1-notifications.md) | A new built-in plugin, `quirky.notifications`, owns the policy; other plugins only report events | supersedes m0-core D12 |
 | medium | high | [m1-notifications D6](decisions/m1-notifications.md) | Producers emit settled and notification events; boundaries and replays still emit nothing | assumed — autonomous |
 | medium | high | [m1-notifications D7](decisions/m1-notifications.md) | The old "Notify when agents finish" switch becomes Agent Task Complete, and its value carries over | supersedes m0-core D13 |
@@ -1081,6 +1091,23 @@ files, not this one.
 | easy | high | [m1-agent-status D59](decisions/m1-agent-status.md) | Final Round 1: accept all six findings, which collapse to four defects; none stays open | assumed — autonomous |
 | easy | high | [m1-agent-status D60](decisions/m1-agent-status.md) | The UI pass: SC-34 to SC-37 all pass | assumed — autonomous |
 | easy | high | [m1-agent-status D61](decisions/m1-agent-status.md) | No native-only scenarios | assumed — autonomous |
+| easy | high | [m5-loops-core D3](decisions/m5-loops-core.md) | Use one combined spec and self-review without research swarms or human questions | locked by docs/loop/LOOP.md |
+| easy | high | [m5-loops-core D9](decisions/m5-loops-core.md) | Unknown USD stays unknown and reset resume needs explicit provider evidence | assumed — autonomous |
+| easy | high | [m5-loops-core D10](decisions/m5-loops-core.md) | Notification producers use central delivery policy | locked by docs/loop/decisions/m1-notifications.md |
+| easy | high | [m5-loops-core D11](decisions/m5-loops-core.md) | Build one width-three wave with immutable shared contracts | assumed — autonomous |
+| easy | high | [m5-loops-core D12](decisions/m5-loops-core.md) | macOS-only acceptance, isolated homes and no whole-suite competing run | deferred: platform |
+| easy | high | [m5-loops-core D13](decisions/m5-loops-core.md) | Add explicit read-only schema access without permitting downgrades | supersedes m0-daemon-api D10 (explicit read-only opt-in only; default downgrade refusal unchanged) |
+| easy | high | [m5-loops-core D14](decisions/m5-loops-core.md) | Bound structured journal reads and expose native rate-limit evidence | assumed — autonomous |
+| easy | high | [m5-loops-core D16](decisions/m5-loops-core.md) | Retain core seams for the early presets dependent | assumed — autonomous |
+| easy | high | [m5-loops-core D17](decisions/m5-loops-core.md) | Publish an audited source checkpoint while the combined gate is red | assumed — autonomous |
+| easy | high | [m5-loops-core D18](decisions/m5-loops-core.md) | Apply the night-mode completion fast path after the repair gate | locked by docs/loop/LOOP.md |
+| easy | high | [m5-loops-core D19](decisions/m5-loops-core.md) | Background structured sessions do not auto-adopt terminal panes | locked by docs/architecture.md |
+| easy | high | [m5-loops-core D21](decisions/m5-loops-core.md) | Keep condition deadlines intact and wait for actual cleanup barriers | assumed — autonomous |
+| easy | high | [m5-loops-core D22](decisions/m5-loops-core.md) | Preserve all four caught-up feature contracts | locked by docs/loop/decisions/sb-mobile-daemon.md |
+| easy | high | [m5-loops-core D23](decisions/m5-loops-core.md) | Repair remote fixture discovery and explicitly adopt hosted structured views | assumed — autonomous |
+| easy | high | [m5-loops-core D25](decisions/m5-loops-core.md) | Keep shutdown cleanup independent of revoked identity lookups | locked by docs/loop/decisions/m6-orchestration-core.md |
+| easy | high | [m5-loops-core D26](decisions/m5-loops-core.md) | Accept the recovered boundary only after remote verification | locked by docs/loop/LOOP.md |
+| easy | high | [m5-loops-core D27](decisions/m5-loops-core.md) | Isolate guardian test discovery before rerunning shared gates | locked by docs/loop/LOOP.md |
 | easy | high | [m1-notifications D1](decisions/m1-notifications.md) | Classify the item as Visual, API, CLI and Integration work, and run research phases A and B | assumed — autonomous |
 | easy | high | [m1-notifications D2](decisions/m1-notifications.md) | Skip the visual companion and the adhd offer; use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m1-notifications D3](decisions/m1-notifications.md) | Select every gray area that matters | locked by docs/loop/LOOP.md |

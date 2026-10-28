@@ -78,16 +78,28 @@ describe('adopting sessions', () => {
     expect(group!.activeTab).toBe(workspaceTabs(result.workspace).at(-1)!.id)
   })
 
-  test('shell tabs take the lowest free number, other agents and structured sessions their session title', () => {
+  test('background structured sessions never adopt a terminal pane or change its active tab', () => {
+    const ws = withTabs('interactive')
+    const result = reconcile(ws, {
+      sessions: [
+        session('interactive', { agent: 'claude', title: 'Interactive Claude' }),
+        session('background', { kind: 'structured', agent: 'codex', title: 'Background loop', createdAt: 2 })
+      ]
+    })
+    expect(result.workspace).toEqual(ws)
+    expect(sessionsOf(result.workspace)).toEqual(['interactive'])
+    expect(result.closeSessions).toEqual([])
+  })
+
+  test('shell tabs take the lowest free number and other terminal agents keep their session title', () => {
     const result = reconcile(emptyWorkspace('wt', new CounterIds(0)), {
       sessions: [
         session('s1', { createdAt: 1 }),
         session('s2', { createdAt: 2, agent: 'claude', title: 'Claude' }),
-        session('s3', { createdAt: 3, kind: 'structured', agent: 'claude', title: 'Claude 2' }),
         session('s4', { createdAt: 4 })
       ]
     })
-    expect(workspaceTabs(result.workspace).map((tab) => tab.defaultTitle)).toEqual(['Terminal 1', 'Claude', 'Claude 2', 'Terminal 2'])
+    expect(workspaceTabs(result.workspace).map((tab) => tab.defaultTitle)).toEqual(['Terminal 1', 'Claude', 'Terminal 2'])
   })
 
   test('a shell session created with its own title keeps it, and the session plugin\'s own Shell titles take the number', () => {

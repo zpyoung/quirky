@@ -231,11 +231,11 @@
       },
       {
         "id": "attention",
-        "description": "An agent, bell or program event wants attention, whatever the notification switches say; the desktop shell lights its tray dot.",
+        "description": "An agent, bell, program or loop event wants attention, whatever the notification switches say; the desktop shell lights its tray dot.",
         "data": {
           "type": "object",
           "properties": {
-            "source": { "type": "string", "enum": ["agent", "bell", "program"] },
+            "source": { "type": "string", "enum": ["agent", "bell", "program", "loop"] },
             "sessionId": { "description": "The session, or null." },
             "worktreeId": { "description": "The worktree, or null." }
           },
@@ -248,7 +248,7 @@
         "data": {
           "type": "object",
           "properties": {
-            "source": { "type": "string", "enum": ["agent", "bell", "program", "ask", "test"] },
+            "source": { "type": "string", "enum": ["agent", "bell", "program", "ask", "test", "loop"] },
             "sessionId": { "description": "The session, or null." },
             "worktreeId": { "description": "The worktree, or null." },
             "result": {
