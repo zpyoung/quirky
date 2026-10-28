@@ -4,6 +4,7 @@ import { aiRecipe, setAiRecipe } from './ai-recipes'
 import type { DaemonEnv, Handler } from './env'
 import { commit } from './commit'
 import { branches, compare, setBase } from './compare'
+import { describeSwitchBranch, switchBranch } from './branch-switch'
 import { abort, conflictFile, continueOperation, describeAbort } from './conflicts'
 import { diff, hugeFolders, ignoreFolder, reveal, save, submoduleStatus } from './files'
 import { commitFiles, history } from './history'
@@ -48,6 +49,8 @@ export function methodTable(env: DaemonEnv): Record<string, Handler> {
     mergePreview: mergePreview(env),
     setBase: setBase(env),
     branches: branches(env),
+    switchBranch: switchBranch(env),
+    describeSwitchBranch: describeSwitchBranch(env),
     history: history(env),
     commitFiles: commitFiles(env),
     notes: notes(env),

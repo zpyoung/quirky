@@ -25,6 +25,7 @@ export type PrimaryAction = { kind: PrimaryKind; label: string; enabled: boolean
 const BUSY_LABELS: Readonly<Record<GitBusyOp, string>> = {
   push: 'Push',
   'force-push': 'Force Push',
+  switch: 'Switch Branch',
   pull: 'Pull',
   'fast-forward': 'Fast-forward',
   fetch: 'Fetch',
