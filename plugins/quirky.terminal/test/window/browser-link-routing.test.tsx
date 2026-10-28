@@ -32,7 +32,7 @@ const FILE = '/tmp/w/api/src/app.ts'
 const click = (init: MouseEventInit = {}) => new MouseEvent('mouseup', { bubbles: true, cancelable: true, button: 0, ...init })
 
 async function mount(over: Partial<TerminalPaneProps> = {}, extra: Record<string, (params: Record<string, any>) => unknown> = {}) {
-  const fake = fakeContext(paneHandlers({ existing: [FILE] }, extra))
+  const fake = fakeContext(paneHandlers({ existing: [FILE] }, extra), over.settings)
   mounted = await mountPane(fake, { workspaceId: 'wt-origin', ...over })
   return { fake, pane: mounted }
 }
@@ -133,4 +133,21 @@ describe('terminal Browser routing', () => {
     expect(fake.callsTo('quirky.terminal/openExternal')).toEqual([])
     expect(fake.toasts.at(-1)).toEqual({ title: 'Could not open link', body: 'in-app route refused' })
   })
+})
+
+test('the current click setting takes effect before deferred events or React props', async () => {
+  const { fake, pane } = await mount({ settings: settings({ 'link-click': 'actions' }) }, {
+    'quirky.browser/openLink': () => ({ route: 'app', pane: 'browser-1' })
+  })
+  fake.setSetting('link-click', 'open')
+  await act(async () => activateUrl(pane))
+  await settle()
+  expect(pane.element.querySelector('[data-pane-link-popover]')).toBeNull()
+  expect(openLinkCalls(fake)).toEqual([{ url: URL, worktree: 'id:wt-origin' }])
+
+  fake.setSetting('link-click', 'terminal')
+  await act(async () => activateUrl(pane))
+  await settle()
+  expect(openLinkCalls(fake)).toEqual([{ url: URL, worktree: 'id:wt-origin' }])
+  expect(pane.element.querySelector('[data-pane-link-popover]')).toBeNull()
 })

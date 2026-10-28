@@ -1,3 +1,4 @@
+import { CHORD_PLATFORM } from '@quirky/protocol'
 import type { LinkClickSetting } from './settings'
 
 export type PathMatch = {
@@ -117,12 +118,10 @@ export type LinkPlatform = 'mac' | 'other'
 
 type ClickLike = { button: number; metaKey: boolean; shiftKey: boolean; altKey: boolean; ctrlKey: boolean }
 
-function currentLinkPlatform(): LinkPlatform {
-  return typeof navigator !== 'undefined' && /^(?:Mac|iPhone|iPad|iPod)/.test(navigator.platform) ? 'mac' : 'other'
-}
+const DEFAULT_LINK_PLATFORM: LinkPlatform = CHORD_PLATFORM === 'darwin' ? 'mac' : 'other'
 
 /** Whether a click uses this platform's direct-open modifier: Command on macOS, Control elsewhere. */
-export function hasCommandModifier(event: Pick<ClickLike, 'metaKey' | 'ctrlKey'>, platform = currentLinkPlatform()): boolean {
+export function hasCommandModifier(event: Pick<ClickLike, 'metaKey' | 'ctrlKey'>, platform = DEFAULT_LINK_PLATFORM): boolean {
   return platform === 'mac' ? event.metaKey : event.ctrlKey
 }
 
@@ -135,7 +134,7 @@ export function decideLinkClick(
   kind: LinkKind,
   event: ClickLike,
   settings: { 'link-click': LinkClickSetting; 'link-middle-click': LinkClickSetting },
-  platform = currentLinkPlatform()
+  platform = DEFAULT_LINK_PLATFORM
 ): LinkAction {
   const modifier = hasCommandModifier(event, platform)
   const otherPlatformModifier = platform === 'mac' ? event.ctrlKey : event.metaKey

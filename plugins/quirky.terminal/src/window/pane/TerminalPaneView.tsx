@@ -26,6 +26,7 @@ import { ContextLossGuard, loseWebglContext, webglBudget } from './webgl'
 
 /** The most characters a search query may have. */
 export const MAX_SEARCH_QUERY = 1000
+const LINK_CLICK_SETTING_KEYS = ['link-click', 'link-middle-click'] as const
 
 const SEARCH_DECORATIONS = {
   matchBackground: '#5c4a00',
@@ -289,6 +290,10 @@ export function TerminalPaneView(props: TerminalPaneProps) {
     const screen = screenRef.current
     if (!host || !screen) return
     const initial = latest.current.settings
+    const linkClickSettings = {
+      'link-click': initial['link-click'],
+      'link-middle-click': initial['link-middle-click']
+    }
     const colorSource = themeSource ?? host.ownerDocument.documentElement
     const colors = readTerminalColors(colorSource)
     const alpha = (settingsNow: PaneSettings) => settingsNow['background-opacity']
@@ -411,7 +416,17 @@ export function TerminalPaneView(props: TerminalPaneProps) {
     }
     const activateLink = (kind: LinkKind, target: string, event: MouseEvent, line: number | null = null, column: number | null = null) => {
       if (term.hasSelection()) return
-      const action = decideLinkClick(kind, event, latest.current.settings)
+      // The window model can update before deferred plugin events or React props.
+      for (const key of LINK_CLICK_SETTING_KEYS) {
+        linkClickSettings[key] = latest.current.settings[key]
+        try {
+          const value = context.getSetting(key)
+          if (value === 'actions' || value === 'open' || value === 'terminal') linkClickSettings[key] = value
+        } catch {
+          // A disabled setting retains the owning pane's effective default.
+        }
+      }
+      const action = decideLinkClick(kind, event, linkClickSettings)
       if (action === 'none') return
       event.preventDefault()
       if (action === 'popover') showPopover(kind, target, event)

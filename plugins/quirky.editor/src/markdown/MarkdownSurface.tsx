@@ -3,7 +3,7 @@ import { EditorContent, useEditor, type Editor } from '@tiptap/react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
-import { RpcErrorCode } from '@quirky/protocol'
+import { CHORD_PLATFORM, RpcErrorCode } from '@quirky/protocol'
 import type { SurfaceProps } from '../types'
 import type { MarkdownHeading } from './source'
 import type { MarkdownReviewNote } from './notes'
@@ -70,10 +70,6 @@ function isBrowserMethodUnavailable(error: unknown): boolean {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === RpcErrorCode.MethodNotFound
 }
 
-function hasCommandLinkModifier(event: LinkModifiers): boolean {
-  const platform = typeof navigator === 'undefined' ? '' : navigator.platform
-  return /^(?:Mac|iPhone|iPad|iPod)/.test(platform) ? event.metaKey : event.ctrlKey
-}
 
 async function openExternalTarget(
   context: SurfaceProps['context'],
@@ -89,7 +85,7 @@ async function openExternalTarget(
     await context.call('quirky.browser/openLink', {
       url: target,
       worktree: `id:${worktreeId}`,
-      ...(event && hasCommandLinkModifier(event) ? { modifier: true } : {}),
+      ...(event && (CHORD_PLATFORM === 'darwin' ? event.metaKey : event.ctrlKey) ? { modifier: true } : {}),
       ...(event?.shiftKey ? { shift: true } : {})
     })
   } catch (error) {
