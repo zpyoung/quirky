@@ -2,9 +2,9 @@
 
 ## Status & amendments
 
-Status: autonomous design approved under LOOP.md; technical specification required because the sidebar change crosses plugin boundaries. Specification review precedes implementation.
+Status: autonomous design approved under LOOP.md; technical specification required because the sidebar change crosses plugin boundaries. Combined Codex promote/refute review completed; F1's stale-needs-you ambiguity is resolved below. Same-family spec review has reduced independence; final code review uses Gemini.
 
-Amendments: 2026-10-28 — initial specification.
+Amendments: 2026-10-28 — initial specification. Codex F1: stale or disconnected summary evidence overrides every cached state to unverifiable, including needs-you; fresh needs-you still outranks unknown attachment.
 
 ## Purpose
 
@@ -29,7 +29,7 @@ Choose targeted extension of current plugins. A wholesale port of Orca would vio
 - Behavior: native and OpenClaw row menus dismiss on Escape and explicit list refresh; Escape returns focus to the menu trigger. It consumes only that menu interaction and does not open a detail, execute an action, or change list filters.
 - Presentation: unfinished loops replace the normal session glyph, not the unread bell. Needs-you outranks unverifiable, then running, paused, and detached presentation. Deterministic ties choose the newest update, then stable loop ID.
 - Information density: tooltip and accessible name show `Loop N/MAX · state`, or `Loop N · state` without a cap. N is completed iterations, matching daemon counters. Paused labels include the reason. The corresponding visible selection is exposed in the sidebar's JSON state.
-- Error state: a disconnected or failed loop read never reports cached running evidence as currently verified. Cached unfinished indicators become unverifiable; absent/disabled loop plugin restores ordinary glyphs. Empty successful reads remove obsolete loop indicators.
+- Error state: a disconnected or failed summary read overrides every cached unfinished indicator to unverifiable, including needs-you. With a fresh summary, needs-you outranks unknown attachment evidence. Absent/disabled loop plugin restores ordinary glyphs. Empty successful reads remove obsolete loop indicators.
 - Integration: structured background sessions, no automatic terminal adoption or focus changes, no private cross-plugin imports, no hidden fallback to local/terminal execution.
 - Data: snapshots and typed public method schemas remain authoritative; compact projections read only needed persistent fields. No schema migration is needed for a read-only projection.
 - Platform: macOS acceptance only. Existing pending native banner/focus/menu scenarios remain native-owned, not counted as web passes.
@@ -46,11 +46,11 @@ Before: a local OpenClaw fixture job is visible. Open its actions and press Esca
 
 ### S3: Show the most urgent loop on each worktree
 
-Before: workspace A has running and needs-you loops; workspace B has a paused capped loop. After initial sidebar hydration, A shows the needs-you loop and B shows `Loop 2/2 · paused: cap-iterations`. Changing A's highest-priority loop to ended reveals its remaining running loop. Ending all A loops restores its ordinary agent/session glyph. A loop in B never changes A's indicator. An unread workspace retains its bell while JSON still distinguishes the loop projection from the actually drawn glyph.
+Before: workspace A has attached running and needs-you loops; workspace B has an attached paused capped loop. After initial sidebar hydration, A shows the needs-you loop and B shows `Loop 2/2 · paused: cap-iterations`. Changing A's highest-priority loop to ended reveals its remaining running loop. Ending all A loops restores its ordinary agent/session glyph. A loop in B never changes A's indicator. An unread workspace retains its bell while JSON still distinguishes the loop projection from the actually drawn glyph. A running loop without a matching hosted view shows detached; a failed layout read shows unverifiable, not detached.
 
 ### S4: Preserve uncertainty and lifecycle ownership
 
-Before: the sidebar has successfully loaded unfinished loop summaries. On connection loss or failed refresh, those indicators become unverifiable. A later successful refresh restores verified state; disabling the loop plugin clears the projection and prevents a delayed older response from restoring it. Re-enabling and reconnecting hydrate again. A stale initial read cannot overwrite a newer changed event. Loading this feature never starts a provider, creates a shell/tab, adopts a background session or changes active workspace/tab.
+Before: the sidebar has successfully loaded unfinished loop summaries. On connection loss or a failed summary refresh, all cached indicators become unverifiable, including a previously needs-you loop. With fresh needs-you evidence but an unavailable attachment read, needs-you remains the presentation. A later successful summary/layout refresh restores verified state; disabling the loop plugin clears the projection and prevents a delayed older response from restoring it. Re-enabling and reconnecting hydrate again. A stale initial read cannot overwrite a newer changed event. Loading this feature never starts a provider, creates a shell/tab, adopts a background session or changes active workspace/tab.
 
 ### S5: Expose the projection through the public API and CLI
 
