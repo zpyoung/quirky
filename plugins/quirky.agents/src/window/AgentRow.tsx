@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { AgentInfo, AgentListing, PermissionMode } from '../core/types'
+import { Badge, Button, IconButton, ListRow } from '@quirky/ui'
 import { Field } from './Field'
 import { Segmented, Switch } from './controls'
 import { MODE_LABEL, replacementMode, type AgentsStore } from './model'
@@ -14,10 +15,10 @@ const envText = (env: Record<string, string>) =>
 function parseEnv(text: string): { env: Record<string, string> } | { error: string } {
   const env: Record<string, string> = {}
   for (const line of text.split('\n')) {
-    if (line.trim() === '') continue
-    const at = line.indexOf('=')
-    if (at < 1) return { error: `Environment lines are KEY=VALUE; "${line.trim()}" is not` }
-    env[line.slice(0, at).trim()] = line.slice(at + 1)
+    if (!line) continue
+    const separator = line.indexOf('=')
+    if (separator <= 0) return { error: `Invalid environment line; expected KEY=VALUE: ${line}` }
+    env[line.slice(0, separator)] = line.slice(separator + 1)
   }
   return { env }
 }
@@ -32,11 +33,11 @@ function Permissions({ info, listing, store }: { info: AgentInfo; listing: Agent
     const replacement = replacementMode(listing, hasAuto)
     return (
       <div style={s.inline}>
-        <span style={s.fieldLabel}>Permissions</span>
-        <span className="muted">Custom arguments</span>
-        <button type="button" onClick={() => void store.setPermissions(replacement, info.id, true)}>
+        <span>Permissions</span>
+        <Badge>Custom arguments</Badge>
+        <Button type="button" onClick={() => void store.setPermissions(replacement, info.id, true)}>
           Replace with {MODE_LABEL[replacement]}
-        </button>
+        </Button>
       </div>
     )
   }
@@ -45,7 +46,7 @@ function Permissions({ info, listing, store }: { info: AgentInfo; listing: Agent
     .map((value) => ({ value, label: MODE_LABEL[value] }))
   return (
     <div style={s.inline}>
-      <span style={s.fieldLabel}>Permissions</span>
+      <span>Permissions</span>
       <Segmented
         value={mode}
         options={options}
@@ -87,7 +88,7 @@ function Details({ info, listing, store }: { info: AgentInfo; listing: AgentList
           onReset={() => void store.configure(info.id, { reset: ['env'] })}
         />
       )}
-      <p style={s.hint}>Override the binary path or name, and edit the default launch arguments or environment for this agent.</p>
+      <p style={s.sectionHint}>Override the binary path or name, and edit the default launch arguments or environment for this agent.</p>
     </div>
   )
 }
@@ -100,45 +101,46 @@ export function AgentRow({ info, listing, store }: { info: AgentInfo; listing: A
   const canDefault = info.installed && info.enabled
 
   return (
-    <li data-agent={info.id} style={{ ...s.row, opacity: info.installed ? 1 : 0.75 }}>
-      <div style={s.rowMain}>
-        <div style={s.rowText}>
-          <div style={s.rowTitle}>
+    <li data-agent={info.id}>
+      <ListRow
+        title={
+          <span style={s.rowTitle}>
             <strong>{info.label}</strong>
-            {!info.enabled && <span style={s.tag}>Disabled</span>}
+            {!info.enabled && <Badge>Disabled</Badge>}
+            {isCustom(info) && <Badge>Custom</Badge>}
+          </span>
+        }
+        description={<code style={s.command}>{subtitle}</code>}
+        trailing={
+          <div style={s.rowActions}>
+            <Switch checked={info.enabled} label={`Enabled: ${info.label}`} onChange={(enabled) => void store.setEnabled(info.id, enabled)} />
+            {canDefault && (
+              <Button
+                type="button"
+                variant={info.isDefault ? 'primary' : 'secondary'}
+                aria-label={`${info.isDefault ? 'Default' : 'Set default'}: ${info.label}`}
+                onClick={() => void store.setDefault(info.isDefault ? 'auto' : info.id)}
+              >
+                {info.isDefault ? 'Default' : 'Set default'}
+              </Button>
+            )}
+            {link !== null && (
+              <a style={s.link} href={link} target="_blank" rel="noreferrer" aria-label={`${info.installed ? 'Docs' : 'Install'}: ${info.label}`}>
+                {info.installed ? 'Docs' : 'Install'}
+              </a>
+            )}
+            {info.installed && (
+              <IconButton
+                label={open ? 'Collapse agent settings' : 'Expand agent settings'}
+                aria-expanded={open}
+                onClick={() => setOpen(!open)}
+              >
+                {open ? '▴' : '▾'}
+              </IconButton>
+            )}
           </div>
-          <code style={s.command}>{subtitle}</code>
-        </div>
-        {isCustom(info) && <span style={s.tag}>Custom</span>}
-        <Switch checked={info.enabled} label={`Enabled: ${info.label}`} onChange={(enabled) => void store.setEnabled(info.id, enabled)} />
-        {canDefault && (
-          <button
-            type="button"
-            aria-label={`${info.isDefault ? 'Default' : 'Set default'}: ${info.label}`}
-            className={info.isDefault ? 'active' : undefined}
-            onClick={() => void store.setDefault(info.isDefault ? 'auto' : info.id)}
-          >
-            {info.isDefault && <span aria-hidden="true">{'✓ '}</span>}
-            {info.isDefault ? 'Default' : 'Set default'}
-          </button>
-        )}
-        {link !== null && (
-          <a style={s.link} href={link} target="_blank" rel="noreferrer" aria-label={`${info.installed ? 'Docs' : 'Install'}: ${info.label}`}>
-            {info.installed ? 'Docs' : 'Install'}
-          </a>
-        )}
-        {info.installed && (
-          <button
-            type="button"
-            className="icon-button"
-            aria-expanded={open}
-            aria-label={open ? 'Collapse agent settings' : 'Expand agent settings'}
-            onClick={() => setOpen(!open)}
-          >
-            <span aria-hidden="true">{open ? '▴' : '▾'}</span>
-          </button>
-        )}
-      </div>
+        }
+      />
       {open && info.installed && <Details info={info} listing={listing} store={store} />}
     </li>
   )

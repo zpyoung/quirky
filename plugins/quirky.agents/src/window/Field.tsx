@@ -1,4 +1,5 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useId, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react'
+import { Button, FormRow, TextField } from '@quirky/ui'
 import { s } from './styles'
 
 /**
@@ -40,19 +41,9 @@ export function Field({
     }
   }
 
-  const common = {
-    id,
-    'aria-label': label,
-    'aria-invalid': error !== null,
-    'aria-describedby': error === null ? undefined : `${id}-error`,
-    value: draft,
-    spellCheck: false,
-    style: s.mono,
-    onChange: (event: { target: { value: string } }) => {
-      setDraft(event.target.value)
-      setError(null)
-    },
-    onBlur: () => void save()
+  const onChange = (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    setDraft(event.target.value)
+    setError(null)
   }
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.key !== 'Enter') return
@@ -62,26 +53,42 @@ export function Field({
   }
 
   return (
-    <div style={s.field}>
-      <label htmlFor={id} style={s.fieldLabel}>
-        {label}
-      </label>
-      <div style={s.fieldRow}>
+    <div style={s.fieldRow}>
+      <div style={s.fieldControl}>
         {multiline ? (
-          <textarea {...common} rows={Math.max(2, draft.split('\n').length)} onKeyDown={onKeyDown} />
+          <FormRow label={label} htmlFor={id} error={error ?? undefined}>
+            <textarea
+              id={id}
+              aria-label={label}
+              value={draft}
+              spellCheck={false}
+              rows={Math.max(2, draft.split('\n').length)}
+              className="ui-text-field__input"
+              style={s.mono}
+              onChange={onChange}
+              onBlur={() => void save()}
+              onKeyDown={onKeyDown}
+            />
+          </FormRow>
         ) : (
-          <input {...common} onKeyDown={onKeyDown} />
-        )}
-        {overridden && (
-          <button type="button" className="icon-button" aria-label={`Reset ${label.toLowerCase()}`} onClick={onReset}>
-            Reset
-          </button>
+          <TextField
+            id={id}
+            label={label}
+            aria-label={label}
+            value={draft}
+            error={error ?? undefined}
+            spellCheck={false}
+            style={s.mono}
+            onChange={onChange}
+            onBlur={() => void save()}
+            onKeyDown={onKeyDown}
+          />
         )}
       </div>
-      {error !== null && (
-        <p id={`${id}-error`} className="form-error" role="alert">
-          {error}
-        </p>
+      {overridden && (
+        <Button type="button" onClick={onReset}>
+          Reset
+        </Button>
       )}
     </div>
   )

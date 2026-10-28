@@ -1,10 +1,10 @@
 import type { ReactNode } from 'react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'
+import { Button, EmptyState, ListRow, SectionHeader } from '@quirky/ui'
 import type { Context as ContextInfo, FilesTouched, Inspection, LiveActivity, PanelState, SectionId, Usage } from '../types'
 import { contextThreshold, formatCount, formatPercentage, formatTimestamp } from './format'
 import { subscribeCopyFeedback, type CopyFeedback } from './feedback'
-
 type Props = { context: UiPluginContext; report?(state: unknown): void }
 type EnableTelemetryResult = { statusline?: Inspection['statusline']; nextLaunchEffect: string }
 type Section = { id: SectionId; title: string }
@@ -17,11 +17,9 @@ const CORE_SECTIONS: Section[] = [
   { id: 'filesTouched', title: 'Files touched' },
   { id: 'hooksAndMcp', title: 'Hooks & MCP' }
 ]
-const PANEL_STYLE = { display: 'flex', flexDirection: 'column', flex: '1', minHeight: '0', minWidth: '0', overflowWrap: 'anywhere', color: 'var(--text, inherit)' } as const
-const BODY_STYLE = { overflowY: 'auto', minHeight: '0', padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.65rem' } as const
-const ROW_STYLE = { display: 'grid', gridTemplateColumns: 'minmax(6rem, 0.8fr) minmax(0, 1.4fr)', gap: '0.6rem', padding: '0.2rem 0' } as const
-const BUTTON_STYLE = { font: 'inherit', color: 'inherit', cursor: 'pointer' } as const
-const MUTED_STYLE = { color: 'var(--muted, #8a909e)' } as const
+const PANEL_STYLE = { display: 'flex', flexDirection: 'column', flex: '1', minHeight: '0', minWidth: '0', overflowY: 'auto', overflowWrap: 'anywhere' } as const
+const BODY_STYLE = { display: 'flex', flexDirection: 'column', gap: 'var(--ui-space-8)', minWidth: '0', overflowWrap: 'anywhere' } as const
+const MUTED_STYLE = { color: 'var(--ui-muted)' } as const
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -57,20 +55,21 @@ function displayLabel(value: string): string {
 }
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
-  return <div style={ROW_STYLE}><span style={MUTED_STYLE}>{label}</span><span style={{ overflowWrap: 'anywhere' }}>{children}</span></div>
+  return <ListRow title={label} description={children} />
 }
 
 function AccordionSection({ id, title, open, onToggle, children }: { id: SectionId; title: string; open: boolean; onToggle(): void; children: ReactNode }) {
   const headingId = `session-info-heading-${id}`
   const panelId = `session-info-section-${id}`
   return (
-    <section style={{ borderBottom: '1px solid var(--border, #2b2f3a)' }}>
-      <h2 style={{ margin: 0, fontSize: '0.9rem' }}>
-        <button id={headingId} type="button" aria-label={title} aria-expanded={open} aria-controls={panelId} onClick={onToggle} style={{ ...BUTTON_STYLE, width: '100%', display: 'flex', justifyContent: 'space-between', padding: '0.7rem 0.25rem', border: 0, background: 'transparent', textAlign: 'left', fontWeight: 600 }}>
-          <span>{title}</span><span aria-hidden="true">{open ? '−' : '+'}</span>
-        </button>
+    <section style={{ borderBottom: 'var(--ui-border-width) solid var(--ui-border)', minWidth: '0' }}>
+      <h2 style={{ margin: '0' }}>
+        <Button id={headingId} aria-label={title} aria-expanded={open} aria-controls={panelId} onClick={onToggle} style={{ display: 'flex', justifyContent: 'space-between', textAlign: 'left', width: '100%' }}>
+          <span style={{ flex: '1', overflowWrap: 'anywhere' }}>{title}</span>
+          <span aria-hidden="true">{open ? '−' : '+'}</span>
+        </Button>
       </h2>
-      <div id={panelId} role="region" aria-labelledby={headingId} hidden={!open} style={{ padding: '0 0.25rem 0.75rem' }}>{children}</div>
+      <div id={panelId} role="region" aria-labelledby={headingId} hidden={!open} style={{ paddingBottom: 'var(--ui-space-8)', minWidth: '0' }}>{children}</div>
     </section>
   )
 }
@@ -93,21 +92,21 @@ function IdentityContent({ state, copied, action }: { state: PanelState; copied:
     { label: 'Branch', value: displayValue(identity.branch) }
   ]
   const buttons = [
-    ...(identity.providerSessionId ? [<button key="copy" type="button" aria-label="Copy ID" style={BUTTON_STYLE} onClick={() => void action('copy-id', state.session)}>{copied?.session === state.session && copied.kind === 'id' ? 'Copied' : 'Copy ID'}</button>] : []),
-    <button key="history" type="button" aria-label="Open history" style={BUTTON_STYLE} onClick={() => void action('open-history', state.session)}>Open history</button>,
+    ...(identity.providerSessionId ? [<Button key="copy" aria-label="Copy ID" onClick={() => void action('copy-id', state.session)}>{copied?.session === state.session && copied.kind === 'id' ? 'Copied' : 'Copy ID'}</Button>] : []),
+    <Button key="history" aria-label="Open history" onClick={() => void action('open-history', state.session)}>Open history</Button>,
     ...(identity.providerSessionId ? [
-      <button key="vault" type="button" aria-label="Open Vault" style={BUTTON_STYLE} onClick={() => void action('open-vault', state.session)}>Open Vault</button>
+      <Button key="vault" aria-label="Open Vault" onClick={() => void action('open-vault', state.session)}>Open Vault</Button>
     ] : []),
-    ...(state.pane === null ? [] : [<button key="focus" type="button" aria-label="Focus pane" style={BUTTON_STYLE} onClick={() => void action('focus-pane', state.session)}>Focus pane</button>]),
+    ...(state.pane === null ? [] : [<Button key="focus" aria-label="Focus pane" onClick={() => void action('focus-pane', state.session)}>Focus pane</Button>]),
     ...(identity.transcriptPath ? [
-      <button key="transcript" type="button" aria-label="Open transcript" style={BUTTON_STYLE} onClick={() => void action('open-transcript', state.session)}>Open transcript</button>,
-      <button key="reveal" type="button" aria-label="Reveal transcript" style={BUTTON_STYLE} onClick={() => void action('reveal-transcript', state.session)}>Reveal transcript</button>
+      <Button key="transcript" aria-label="Open transcript" onClick={() => void action('open-transcript', state.session)}>Open transcript</Button>,
+      <Button key="reveal" aria-label="Reveal transcript" onClick={() => void action('reveal-transcript', state.session)}>Reveal transcript</Button>
     ] : [])
   ]
   return (
     <div>
       {rows.filter((row) => row.value !== null).map((row) => <Row key={row.label} label={row.label}>{row.value}</Row>)}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem', paddingTop: '0.55rem' }}>{buttons}</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--ui-space-4)', paddingTop: 'var(--ui-space-8)' }}>{buttons}</div>
     </div>
   )
 }
@@ -127,7 +126,7 @@ function UsageContent({ usage, busy, onRetry }: { usage: Usage; busy: boolean; o
       {values.filter(([, value]) => value !== undefined).map(([label, value]) => <Row key={label} label={label}>{formatCount(value) ?? value}</Row>)}
       {usage.error && <p role="alert">{usage.error}</p>}
       {usage.freshness === 'fresh' && timestamp && <p style={MUTED_STYLE}>As of {timestamp}</p>}
-      {canRetry && <button type="button" aria-label="Retry usage" onClick={onRetry} disabled={refreshing} style={BUTTON_STYLE}>Retry</button>}
+      {canRetry && <Button aria-label="Retry usage" onClick={onRetry} disabled={refreshing}>Retry</Button>}
     </div>
   )
 }
@@ -212,28 +211,32 @@ function InspectionContent({
   return (
     <div>
       {busy && <p role="status">Inspecting Hooks & MCP…</p>}
-      {error && <p role="alert">Could not inspect Hooks & MCP: {error}</p>}
-      {inspection?.error && <p role="alert">{inspection.error}</p>}
-      {inspection?.hooks && <><h3>Hooks</h3><Row label="Status">{displayLabel(inspection.hooks.state)}</Row>{inspection.hooks.detail && <p>{inspection.hooks.detail}</p>}</>}
+      {error && <p role="alert" style={{ overflowWrap: 'anywhere' }}>Could not inspect Hooks & MCP: {error}</p>}
+      {inspection?.error && <p role="alert" style={{ overflowWrap: 'anywhere' }}>{inspection.error}</p>}
+      {inspection?.hooks && <>
+        <SectionHeader title="Hooks" />
+        <Row label="Status">{displayLabel(inspection.hooks.state)}</Row>
+        {inspection.hooks.detail && <p style={{ overflowWrap: 'anywhere' }}>{inspection.hooks.detail}</p>}
+      </>}
       {statuslineLabel && <>
-        <h3>Statusline · {statuslineLabel}</h3>
-        {statusline?.detail && <p>{statusline.detail}</p>}
+        <SectionHeader title={`Statusline · ${statuslineLabel}`} />
+        {statusline?.detail && <p style={{ overflowWrap: 'anywhere' }}>{statusline.detail}</p>}
         <p>Telemetry preference changes apply on the next launch; the running session is unchanged.</p>
         {needsConsent && <>
           <p>Quirky preserves your existing statusline command when you consent to chaining.</p>
-          <button type="button" aria-label="Enable session telemetry" onClick={onEnable} disabled={enableBusy} style={BUTTON_STYLE}>{enableBusy ? 'Updating…' : 'Enable session telemetry'}</button>
+          <Button aria-label="Enable session telemetry" onClick={onEnable} disabled={enableBusy}>{enableBusy ? 'Updating…' : 'Enable session telemetry'}</Button>
         </>}
-        {enabled && <button type="button" aria-label="Disable session telemetry" onClick={onDisable} disabled={enableBusy} style={BUTTON_STYLE}>{enableBusy ? 'Updating…' : 'Disable session telemetry'}</button>}
+        {enabled && <Button aria-label="Disable session telemetry" onClick={onDisable} disabled={enableBusy}>{enableBusy ? 'Updating…' : 'Disable session telemetry'}</Button>}
       </>}
-      {nextLaunchEffect && <p role="status">{nextLaunchEffect}</p>}
+      {nextLaunchEffect && <p role="status" style={{ overflowWrap: 'anywhere' }}>{nextLaunchEffect}</p>}
       {inspection && <>
-        <h3>Configured MCP servers</h3>
-        {inspection.mcp.length === 0 ? <p style={MUTED_STYLE}>No configured servers found.</p> : <ul>
-          {inspection.mcp.map((server) => <li key={server.name}><strong>{server.name}</strong> · {server.transport} · {displayLabel(server.state)}</li>)}
+        <SectionHeader title="Configured MCP servers" />
+        {inspection.mcp.length === 0 ? <p style={MUTED_STYLE}>No configured servers found.</p> : <ul style={{ display: 'flex', flexDirection: 'column', gap: 'var(--ui-space-4)', listStyle: 'none', margin: '0', minWidth: '0', padding: '0' }}>
+          {inspection.mcp.map((server) => <li key={server.name}><ListRow title={server.name} description={`${server.transport} · ${displayLabel(server.state)}`} /></li>)}
         </ul>}
         {formatTimestamp(inspection.updatedAt) && <p style={MUTED_STYLE}>As of {formatTimestamp(inspection.updatedAt)}</p>}
       </>}
-      <button type="button" aria-label="Retry" onClick={onRetry} disabled={busy} style={BUTTON_STYLE}>Retry</button>
+      <Button aria-label="Retry" onClick={onRetry} disabled={busy}>Retry</Button>
     </div>
   )
 }
@@ -477,38 +480,42 @@ export function SessionInfoPanel({ context, report }: Props) {
 
   return (
     <main aria-label="Session Info" style={PANEL_STYLE}>
-      <header style={{ padding: '0.8rem 0.9rem', borderBottom: '1px solid var(--border, #2b2f3a)' }}>
-        <h1 style={{ margin: 0, fontSize: '1rem' }}>Session Info</h1>
-        {info && <p style={{ margin: '0.35rem 0 0', fontWeight: 600 }}>{headerModel}</p>}
-        {info && contextPercentage !== null && contextBand !== null && <div data-context-threshold={contextBand} style={{ marginTop: '0.55rem' }}>
-          <strong>{contextPercentage}% context used</strong>
-          <div role="progressbar" aria-label="Context used" aria-valuemin={0} aria-valuemax={100} aria-valuenow={contextPercentage} style={{ height: '0.3rem', marginTop: '0.25rem', background: 'var(--bg-active, #2d3240)', borderRadius: '999px', overflow: 'hidden' }}>
-            <div style={{ width: `${contextPercentage}%`, height: '100%', background: contextBand === 'danger' ? 'var(--danger, #e5534b)' : contextBand === 'strong' ? 'var(--accent, #4f8ff7)' : 'var(--muted, #8a909e)' }} />
-          </div>
-          {formatTimestamp(info.context?.updatedAt) && <small style={MUTED_STYLE}>As of {formatTimestamp(info.context?.updatedAt)}</small>}
-        </div>}
-      </header>
-      {loading && !projection && <p role="status" style={{ padding: '0.9rem' }}>Loading session info…</p>}
-      {loading && projection && <p role="status" style={{ padding: '0.35rem 0.9rem', margin: 0, ...MUTED_STYLE }}>Refreshing session info…</p>}
-      {loadError && <div role="alert" style={{ padding: '0.75rem' }}><p>Could not load session info: {loadError}</p><button type="button" aria-label="Retry" style={BUTTON_STYLE} onClick={() => void retry()}>Retry</button></div>}
-      {!loading && !loadError && projection?.info === null && <div style={{ padding: '0.9rem' }}><h2 style={{ margin: '0 0 0.35rem', fontSize: '1rem' }}>No agent session</h2><p style={{ margin: 0 }}>Focus a terminal pane with an agent session to inspect it here.</p></div>}
-      {projection && info && <div style={BODY_STYLE}>
-        {actionError && <p role="alert">{actionError}</p>}
-        {CORE_SECTIONS.filter(({ id }) => {
-          if (id === 'identity' || id === 'liveActivity') return true
-          if (id === 'usage') return info?.usage !== undefined
-          if (id === 'context') return info?.context !== undefined
-          if (id === 'filesTouched') return info?.filesTouched !== undefined
-          return hasHooksSection
-        }).map(({ id, title }) => <AccordionSection key={id} id={id} title={title} open={openSections.includes(id)} onToggle={() => toggle(id)}>
-          {id === 'identity' && <IdentityContent state={projection} copied={copied} action={runAction} />}
-          {id === 'usage' && info.usage && <UsageContent usage={info.usage} busy={retryBusy || inspectionBusy} onRetry={() => void retry()} />}
-          {id === 'liveActivity' && <LiveActivityContent activity={info.liveActivity} />}
-          {id === 'context' && info.context && <ContextContent detail={info.context} />}
-          {id === 'filesTouched' && info.filesTouched && <FilesContent files={info.filesTouched} />}
-          {id === 'hooksAndMcp' && <InspectionContent inspection={info.hooksAndMcp} busy={inspectionBusy} error={inspectionError} nextLaunchEffect={nextLaunchEffect} enableBusy={enableBusy} onRetry={() => void retry()} onEnable={() => void setTelemetry(true)} onDisable={() => void setTelemetry(false)} />}
-        </AccordionSection>)}
-      </div>}
+        <div style={{ ...BODY_STYLE, padding: 'var(--ui-space-8)' }}>
+          {info && <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--ui-space-4)', minWidth: '0', paddingBottom: 'var(--ui-space-8)', borderBottom: 'var(--ui-border-width) solid var(--ui-border)' }}>
+            <strong style={{ overflowWrap: 'anywhere' }}>{headerModel}</strong>
+            {contextPercentage !== null && contextBand !== null && <div data-context-threshold={contextBand}>
+              <strong>{contextPercentage}% context used</strong>
+              <div role="progressbar" aria-label="Context used" aria-valuemin={0} aria-valuemax={100} aria-valuenow={contextPercentage} style={{ height: 'var(--ui-space-4)', marginTop: 'var(--ui-space-4)', background: 'var(--ui-selected)', borderRadius: 'var(--ui-radius-mark)', overflow: 'hidden' }}>
+                <div style={{ width: `${contextPercentage}%`, height: '100%', background: contextBand === 'danger' ? 'var(--ui-failing)' : contextBand === 'strong' ? 'var(--ui-accent)' : 'var(--ui-muted)' }} />
+              </div>
+              {formatTimestamp(info.context?.updatedAt) && <small style={MUTED_STYLE}>As of {formatTimestamp(info.context?.updatedAt)}</small>}
+            </div>}
+          </div>}
+          {loading && !projection && <p role="status">Loading session info…</p>}
+          {loading && projection && <p role="status" style={MUTED_STYLE}>Refreshing session info…</p>}
+          {loadError && <div role="alert" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--ui-space-8)', minWidth: '0', overflowWrap: 'anywhere' }}>
+            <p>Could not load session info: {loadError}</p>
+            <Button aria-label="Retry" onClick={() => void retry()}>Retry</Button>
+          </div>}
+          {!loading && !loadError && projection?.info === null && <EmptyState message="No agent session. Focus a terminal pane with an agent session to inspect it here." />}
+          {projection && info && <div style={BODY_STYLE}>
+            {actionError && <p role="alert" style={{ overflowWrap: 'anywhere' }}>{actionError}</p>}
+            {CORE_SECTIONS.filter(({ id }) => {
+              if (id === 'identity' || id === 'liveActivity') return true
+              if (id === 'usage') return info?.usage !== undefined
+              if (id === 'context') return info?.context !== undefined
+              if (id === 'filesTouched') return info?.filesTouched !== undefined
+              return hasHooksSection
+            }).map(({ id, title }) => <AccordionSection key={id} id={id} title={title} open={openSections.includes(id)} onToggle={() => toggle(id)}>
+              {id === 'identity' && <IdentityContent state={projection} copied={copied} action={runAction} />}
+              {id === 'usage' && info.usage && <UsageContent usage={info.usage} busy={retryBusy || inspectionBusy} onRetry={() => void retry()} />}
+              {id === 'liveActivity' && <LiveActivityContent activity={info.liveActivity} />}
+              {id === 'context' && info.context && <ContextContent detail={info.context} />}
+              {id === 'filesTouched' && info.filesTouched && <FilesContent files={info.filesTouched} />}
+              {id === 'hooksAndMcp' && <InspectionContent inspection={info.hooksAndMcp} busy={inspectionBusy} error={inspectionError} nextLaunchEffect={nextLaunchEffect} enableBusy={enableBusy} onRetry={() => void retry()} onEnable={() => void setTelemetry(true)} onDisable={() => void setTelemetry(false)} />}
+            </AccordionSection>)}
+          </div>}
+        </div>
     </main>
   )
 }
