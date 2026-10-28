@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { GitOperation } from '@quirky/protocol'
+import { Badge, Button, EmptyState, InlineAgentCard } from '@quirky/ui'
 import { FixSplitButton, type FixButtonProps } from '../ai/FixSplitButton'
 
 type OperationName = Exclude<GitOperation, 'none'>
@@ -29,30 +30,36 @@ type OperationProps = {
 export function OperationCard({ operation, unresolved, busy, onReview, onContinue, onAbort, fix }: OperationProps) {
   const title = OPERATION_TITLES[operation]
   const abort = operation === 'cherry-pick' ? null : (
-    <button type="button" disabled={busy} onClick={onAbort}>{`Abort ${operation}`}</button>
+    <Button disabled={busy} onClick={onAbort}>{`Abort ${operation}`}</Button>
   )
   if (unresolved > 0) {
     return (
-      <div className="scm-card scm-card-conflict" role="status">
-        <strong>{`${title} conflicts: ${unresolved} unresolved`}</strong>
-        <p className="muted">Resolved files move back to normal changes after they leave the live conflict state.</p>
-        <div className="scm-card-actions">
-          {fix && <FixSplitButton {...fix} />}
-          <button type="button" onClick={onReview}>
-            Review conflicts
-          </button>
-          {abort}
-        </div>
+      <div role="status">
+        <InlineAgentCard
+          title={`${title} conflicts: ${unresolved} unresolved`}
+          status="needs-you"
+          description={
+            <div className="ui-stack">
+              <p>Resolved files move back to normal changes after they leave the live conflict state.</p>
+              <div className="ui-cluster">
+                {fix && <FixSplitButton {...fix} />}
+                {abort}
+              </div>
+            </div>
+          }
+          action={{ label: 'Review conflicts', onAction: onReview }}
+        />
       </div>
     )
   }
   return (
-    <div className="scm-card" role="status">
-      <strong>{`${title} in progress`}</strong>
-      <div className="scm-card-actions">
-        <button type="button" className="primary" disabled={busy} onClick={onContinue}>{`Continue ${operation}`}</button>
-        {abort}
-      </div>
+    <div role="status">
+      <InlineAgentCard
+        title={`${title} in progress`}
+        status="working"
+        description={abort}
+        action={{ label: `Continue ${operation}`, onAction: onContinue, disabled: busy }}
+      />
     </div>
   )
 }
@@ -75,16 +82,17 @@ export function HugeBanner({ onStageAll, onRetry }: { onStageAll(): void; onRetr
     }
   }
   return (
-    <div className="scm-card scm-card-warning" role="status">
-      <strong>Too many changes detected. Only the first 1000 are shown.</strong>
-      <div className="scm-card-actions">
-        <button type="button" onClick={onStageAll}>
-          Stage All
-        </button>
-        <button type="button" disabled={retrying} onClick={() => void retry()}>
-          {slow ? <span className="scm-spinner" aria-label="Refreshing" /> : 'Retry'}
-        </button>
-      </div>
+    <div role="status">
+      <InlineAgentCard
+        title="Too many changes detected. Only the first 1000 are shown."
+        status="needs-you"
+        description={
+          <Button disabled={retrying} onClick={() => void retry()}>
+            {slow ? <span role="status" aria-label="Refreshing">◌</span> : 'Retry'}
+          </Button>
+        }
+        action={{ label: 'Stage All', onAction: onStageAll }}
+      />
     </div>
   )
 }
@@ -102,22 +110,25 @@ type BlockedProps = {
 /** The card for a commit or push a hook refused, with the hook's summary and a Details button. */
 export function BlockedCard({ title, pill, summary, onDetails, fix }: BlockedProps) {
   return (
-    <div className="scm-card scm-card-blocked" role="alert">
-      <div className="scm-card-head">
-        <strong>{title}</strong>
-        <span className="scm-pill">{pill}</span>
-      </div>
-      <p className="scm-summary">{summary}</p>
-      {(fix || onDetails) && (
-        <div className="scm-card-actions">
-          {fix && <FixSplitButton {...fix} />}
-          {onDetails && (
-            <button type="button" onClick={onDetails}>
-              Details
-            </button>
-          )}
-        </div>
-      )}
+    <div role="alert">
+      <InlineAgentCard
+        title={title}
+        status="failing"
+        description={
+          <div className="ui-stack">
+            <div className="ui-cluster">
+              <Badge tone="failing" label={pill}>{pill}</Badge>
+              <span>{summary}</span>
+            </div>
+            {(fix || onDetails) && (
+              <div className="ui-cluster">
+                {fix && <FixSplitButton {...fix} />}
+                {onDetails && <Button onClick={onDetails}>Details</Button>}
+              </div>
+            )}
+          </div>
+        }
+      />
     </div>
   )
 }
@@ -130,30 +141,38 @@ type UnavailableProps = {
   onRetry(): void
 }
 
-/** Why branch compare cannot run, with Change base ref and Retry. */
 export function CompareUnavailable({ message, standalone, onChangeBase, onRetry }: UnavailableProps) {
-  return (
-    <div className={standalone ? 'scm-card' : 'scm-note'} role="status">
-      {standalone && <strong>Branch compare unavailable</strong>}
-      <p className="muted">{message}</p>
-      <div className="scm-card-actions">
-        <button type="button" onClick={onChangeBase}>
-          Change base ref
-        </button>
-        <button type="button" onClick={onRetry}>
-          Retry
-        </button>
+  const controls = (
+    <div className="ui-cluster">
+      <Button onClick={onChangeBase}>Change base ref</Button>
+      <Button onClick={onRetry}>Retry</Button>
+    </div>
+  )
+  if (!standalone) {
+    return (
+      <div className="ui-stack" role="status">
+        <p>{message}</p>
+        {controls}
       </div>
+    )
+  }
+  return (
+    <div role="status">
+      <InlineAgentCard
+        title="Branch compare unavailable"
+        status="failing"
+        description={
+          <div className="ui-stack">
+            <p>{message}</p>
+            {controls}
+          </div>
+        }
+      />
     </div>
   )
 }
 
 /** The clean-workspace message. */
-export function CleanState({ base }: { base: string | null }) {
-  return (
-    <div className="scm-empty">
-      <strong>No changes on this branch</strong>
-      <p className="muted">{`This workspace is clean and this branch has no changes ahead of ${base ?? 'its base'}`}</p>
-    </div>
-  )
+export function CleanState({ onOpenTerminal }: { onOpenTerminal(): void }) {
+  return <EmptyState message="No changes" action={{ label: 'Open terminal', onAction: onOpenTerminal }} />
 }

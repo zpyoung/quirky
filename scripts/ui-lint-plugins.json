@@ -1,6 +1,9 @@
 [
   "quirky.browser",
+  "quirky.checks",
   "quirky.editor",
+  "quirky.git",
+  "quirky.reviews",
   "quirky.ledger",
   "quirky.terminal",
   "quirky.terminal-dock",

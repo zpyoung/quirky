@@ -1,5 +1,6 @@
 import { useRef, useState, type MutableRefObject } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
+import { IconButton, StatusDot } from '@quirky/ui'
 import { messageOf } from '../panel/format'
 import { generators, hasCustomCommand, useAgents } from './agents'
 import { GenerateDialog } from './GenerateDialog'
@@ -84,27 +85,23 @@ export function CommitSparkle({ context, worktree, staged, message, committing, 
   }
 
   return (
-    <span className="scm-ai-spark">
-      <button
-        type="button"
-        className="icon-button scm-ai-sparkle"
-        aria-label="Generate commit message with AI"
+    <span className="ui-cluster">
+      <IconButton
+        label="Generate commit message with AI"
         title={state.title}
         disabled={state.disabled}
         onClick={() => void start()}
       >
-        {generating ? <span className="scm-spinner" aria-hidden="true" /> : <SparkleIcon />}
-      </button>
+        {generating ? <StatusDot status="working" label="Generating commit message" /> : <SparkleIcon />}
+      </IconButton>
       {generating && (
-        <button
-          type="button"
-          className="icon-button scm-ai-stop"
-          aria-label="Stop generating commit message"
+        <IconButton
+          label="Stop generating commit message"
           title="Generating commit message. Click to stop."
           onClick={() => void stop()}
         >
-          <span className="scm-ai-stop-square" aria-hidden="true" />
-        </button>
+          <span aria-hidden="true">■</span>
+        </IconButton>
       )}
       {dialog && (
         <GenerateDialog

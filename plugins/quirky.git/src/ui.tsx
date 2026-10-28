@@ -1,3 +1,5 @@
+import '@quirky/ui/styles.css'
+
 import { createRoot } from 'react-dom/client'
 import type { UiPluginContext } from '@quirky/protocol'
 import { mountAiSettings } from './ai/AiSettingsView'

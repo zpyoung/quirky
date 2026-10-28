@@ -423,8 +423,13 @@ export const byLabel = (root: ParentNode, label: string): HTMLElement | null => 
 export const byText = (root: ParentNode, selector: string, text: string): HTMLElement | undefined =>
   qa(root, selector).find((el) => el.textContent === text)
 export const buttonText = (root: ParentNode, text: string) => byText(root, 'button', text) as HTMLButtonElement | undefined
-/** The row button of a file: its main button, found by the path in its title. */
+/** The selected file's shared list-row button, found by its stable row path. */
 export const rowOf = (root: ParentNode, path: string, section?: string): HTMLElement | null =>
-  root.querySelector<HTMLElement>(`${section ? `[data-section="${section}"] ` : ''}.scm-row-main[title="${path}"]`)
+  root.querySelector<HTMLElement>(`${section ? `[data-section="${section}"] ` : ''}[data-row-path="${path}"] button[aria-pressed]`)
+export const rowContainerOf = (root: ParentNode, path: string, section?: string): HTMLElement | null =>
+  rowOf(root, path, section)?.parentElement ?? null
 
-export const sectionHeadings = (root: ParentNode): string[] => qa(root, '.scm-section-title').map((el) => el.textContent ?? '')
+export const sectionHeadings = (root: ParentNode): string[] => qa(root, '[data-section] .ui-section-header__title').map((el) => el.textContent ?? '')
+export const noticesOf = (root: ParentNode): HTMLElement[] =>
+  qa(root, '[aria-label="Source control notices"] > [role="status"], [aria-label="Source control notices"] > [role="alert"]')
+export const noticeOf = (root: ParentNode): HTMLElement | null => noticesOf(root)[0] ?? null

@@ -321,6 +321,7 @@
         "@codemirror/view": "^6.43.15",
         "@quirky/git": "workspace:*",
         "@quirky/protocol": "workspace:*",
+        "@quirky/ui": "workspace:*",
         "react": "19.2.0",
         "react-dom": "19.2.0",
       },
@@ -469,6 +470,7 @@
       "dependencies": {
         "@quirky/plugin-tasks": "workspace:*",
         "@quirky/protocol": "workspace:*",
+        "@quirky/ui": "workspace:*",
         "react": "19.2.0",
         "react-dom": "19.2.0",
       },

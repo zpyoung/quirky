@@ -14,13 +14,18 @@ export const byLabel = (label: string, root: ParentNode = document): HTMLButtonE
   root.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)
 
 export const dialogNamed = (title: string): HTMLElement | undefined =>
-  qa('[role="dialog"]').find((d) => d.getAttribute('aria-label') === title)
+  qa('[role="dialog"]').find((dialog) => {
+    const titleId = dialog.getAttribute('aria-labelledby')
+    return titleId !== null && document.getElementById(titleId)?.textContent === title
+  })
 
 /** The panel's row button for `path` (the main button of the row), optionally within a section. */
 export const rowOf = (path: string, section?: string): HTMLElement | null =>
-  q(`${section ? `[data-section="${section}"] ` : ''}.scm-row-main[title="${path}"]`)
+  q(`${section ? `[data-section="${section}"] ` : ''}[data-row-path="${path}"] button[aria-pressed]`)
 
-export const sectionHeadings = (): string[] => qa('.scm-section-title').map((el) => text(el))
+export const rowContainerOf = (path: string, section?: string): HTMLElement | null => rowOf(path, section)?.parentElement ?? null
+
+export const sectionHeadings = (): string[] => qa('[data-section] .ui-section-header__title').map((el) => text(el))
 
 export async function click(element: Element | null | undefined, init: MouseEventInit = {}): Promise<void> {
   if (!element) throw new Error('nothing to click')
@@ -40,7 +45,7 @@ export async function type(control: HTMLInputElement | HTMLTextAreaElement, valu
   await settle()
 }
 
-export const primary = (): HTMLButtonElement => q('.scm-primary') as HTMLButtonElement
+export const primary = (): HTMLButtonElement => q('[data-git-primary]') as HTMLButtonElement
 export const messageBox = (): HTMLTextAreaElement => q('textarea[aria-label="Commit message"]') as HTMLTextAreaElement
 
 /** What the primary button shows now: label, enabled and title. */

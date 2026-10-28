@@ -148,7 +148,7 @@ test('NA-33: AI Fix on the Commit blocked card opens a Claude tab with the failu
   expect(text(fix)).toBe('AI Fix')
   expect(fix?.title).toBe('Fix commit failure with AI')
   await click(byLabel('Choose an agent for this commit failure', card))
-  expect(qa('[role="menu"] button').map(text)).toEqual(['Customize launch...'])
+  expect(qa('[role="menu"] [role="menuitem"]').map(text)).toEqual(['Customize launch...'])
   await click(buttonText('Customize launch...'))
   const launch = await w.win.waitFor(() => dialogNamed('Fix Commit Failure With AI'))
   const picker = await w.win.waitFor(() => byLabel('Agent', launch))
