@@ -105,9 +105,14 @@ function isTaskRow(value: unknown): value is TaskRow {
 }
 
 function isTaskListRow(value: unknown): value is TaskListRow {
-  return isTaskRow(value) && (value.dispatchId === undefined || (isString(value.dispatchId) && value.dispatchId.startsWith('ctx_'))) &&
-    (value.assigneeSessionId === undefined || isString(value.assigneeSessionId)) &&
-    (value.specTruncated === undefined || value.specTruncated === true)
+  if (!isObject(value)) return false
+  const dispatchId = value.dispatchId
+  const assigneeSessionId = value.assigneeSessionId
+  const specTruncated = value.specTruncated
+  return isTaskRow(value) &&
+    (dispatchId === undefined || (isString(dispatchId) && dispatchId.startsWith('ctx_'))) &&
+    (assigneeSessionId === undefined || isString(assigneeSessionId)) &&
+    (specTruncated === undefined || specTruncated === true)
 }
 
 function isDispatchRow(value: unknown): value is DispatchRow {
@@ -137,7 +142,7 @@ function isMailboxAddress(value: unknown): boolean {
 
 function isMessageRow(value: unknown): value is MessageRow {
   return isObject(value) && hasId(value, 'id', 'msg_') && hasId(value, 'runId', 'run_') &&
-    hasString(value, 'fromSessionId') && isMailboxAddress(value.sender) && isMailboxAddress(value.mailbox) &&
+    isStringOrNull(value.fromSessionId) && isMailboxAddress(value.sender) && isMailboxAddress(value.mailbox) &&
     hasString(value, 'subject') && hasString(value, 'body') && isOneOf(value.type, MESSAGE_TYPES) &&
     isOneOf(value.priority, MESSAGE_PRIORITIES) && isStringOrNull(value.threadId) &&
     (value.payload === null || isJsonValue(value.payload)) && isBoolean(value.read) &&
