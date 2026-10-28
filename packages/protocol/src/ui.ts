@@ -94,12 +94,14 @@ export type UiCommandEntry = {
 
 /** The menu a `menu-item` contribution may target. */
 export const TERMINAL_PANE_MENU = 'quirky.terminal/pane'
+/** The tab-strip plus menu; contributions receive the workspace and group as command arguments. */
+export const TERMINAL_PLUS_MENU = 'quirky.terminal/plus'
 
-/** A row a plugin adds to a window menu; `command` is a full command ID run with `{ session }`. */
+/** A row a plugin adds to a window menu; `command` is a full command ID run with that menu's context. */
 export type UiMenuItemEntry = {
   id: string
   plugin: string
-  menu: typeof TERMINAL_PANE_MENU
+  menu: typeof TERMINAL_PANE_MENU | typeof TERMINAL_PLUS_MENU
   title: string
   command: string
   /** `agent: 'any'` shows the row only on a pane whose session runs an agent other than the shell. */

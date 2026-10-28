@@ -91,6 +91,8 @@ export type WorkspaceOptions = {
   paneMenuExtras?: (pane: PaneLeaf) => MenuItem[]
   /** Rows other plugins contribute to the pane menu, shown right after the Quick Commands row. */
   paneMenuContributions?: (pane: PaneLeaf, session: Session | undefined) => MenuItem[]
+  /** Static rows other plugins add after agent entries in the plus menu; omitted while searching. */
+  plusMenuContributions?: (group: Group) => MenuItem[]
   /** Menus beyond `tab`, `pane`, `plus` and `actions`, opened by `openMenu(kind, target)`. */
   extraMenus?: Record<string, (target: string | null) => MenuItem[]>
   /** The element carrying the theme's custom properties; defaults to the mount element. */
@@ -1090,6 +1092,10 @@ export class WorkspaceController {
           if (title.toLowerCase().includes(needle)) rows.push({ label: title, onSelect: () => void this.activateTab(tab.id) })
         }
       }
+    }
+    if (needle === '' && group) {
+      const contributed = this.options.plusMenuContributions?.(group) ?? []
+      if (contributed.length > 0) rows.push(SEPARATOR, ...contributed)
     }
     return rows
   }

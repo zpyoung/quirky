@@ -1,4 +1,4 @@
-import { TERMINAL_PANE_MENU, type Session, type UiMenuItemEntry, type UiModel, type UiPluginContext } from '@quirky/protocol'
+import { TERMINAL_PANE_MENU, TERMINAL_PLUS_MENU, type Session, type UiMenuItemEntry, type UiModel, type UiPluginContext } from '@quirky/protocol'
 import { findGroup } from '../layout/tree'
 import type { FloatingState, PaneLeaf, QuickCommand, Workspace } from '../layout/types'
 import { FLOATING_WORKSPACE } from '../layout/types'
@@ -448,6 +448,25 @@ export function paneMenuContributions(context: UiPluginContext, source: MenuCont
       label: item.title,
       onSelect: () =>
         void context.executeCommand(item.command, { session: pane.session }).catch((error: unknown) => {
+          context.toast(item.title, error instanceof Error ? error.message : String(error))
+        })
+    }))
+}
+
+/** The terminal strip's generic plus-menu rows, given the workspace and group a new item should use. */
+export function plusMenuContributions(
+  context: UiPluginContext,
+  source: MenuContributionSource,
+  workspace: string,
+  group: string
+): MenuItem[] {
+  return source
+    .items()
+    .filter((item) => item.menu === TERMINAL_PLUS_MENU && item.when === undefined)
+    .map((item) => ({
+      label: item.title,
+      onSelect: () =>
+        void context.executeCommand(item.command, { workspace, group }).catch((error: unknown) => {
           context.toast(item.title, error instanceof Error ? error.message : String(error))
         })
     }))

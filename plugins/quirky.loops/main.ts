@@ -1,6 +1,6 @@
 import type { MethodHandler, PluginCaller, PluginContext } from '@quirky/protocol'
 import { LoopService } from './src/service'
-import type { LoopConfig, LoopConfigPatch, LoopCreateInput, LoopPreset, QueueOperation } from './src/types'
+import type { LoopConfig, LoopConfigPatch, LoopCreateInput, LoopPreset, LoopSnapshot, QueueOperation } from './src/types'
 
 let service: LoopService | undefined
 
@@ -234,8 +234,36 @@ function loopId(params: Record<string, unknown>, context: PluginContext): string
   return requiredString(params.loopId, 'loopId', context)
 }
 
+function tabById(node: unknown, tabId: string): Record<string, unknown> | null {
+  if (!isRecord(node)) return null
+  if (node.kind === 'split') return tabById(node.first, tabId) ?? tabById(node.second, tabId)
+  if (node.kind !== 'group' || !Array.isArray(node.tabs)) return null
+  const tab = node.tabs.find((candidate) => isRecord(candidate) && candidate.id === tabId)
+  return isRecord(tab) ? tab : null
+}
+
+async function isBoundLoopView(context: PluginContext, loop: LoopSnapshot, tabId: string): Promise<boolean> {
+  const result = await context.call('quirky.terminal/workspace', { workspace: loop.worktreeId }) as unknown
+  if (!isRecord(result) || !isRecord(result.workspace)) return false
+  const tab = tabById(result.workspace.root, tabId)
+  return tab !== null &&
+    tab.kind === 'view' &&
+    tab.viewId === 'view:quirky.loops/loop' &&
+    tab.key === loop.id &&
+    tab.closeMethod === 'quirky.loops/viewCloseGuard' &&
+    isRecord(tab.closeParams) &&
+    tab.closeParams.loopId === loop.id &&
+    isRecord(tab.input) &&
+    tab.input.loopId === loop.id
+}
+
+function isLiveLoop(loop: LoopSnapshot): boolean {
+  return loop.state === 'running' || loop.state === 'needs-you'
+}
+
 export async function activate(context: PluginContext): Promise<void> {
   const active = new LoopService(context)
+  const authorizedViewCloses = new Set<string>()
   service = active
   try {
     await active.start()
@@ -314,7 +342,49 @@ export async function activate(context: PluginContext): Promise<void> {
     queue: (params) => {
       onlyKeys(params, ['loopId', 'op'], 'queue', context)
       return active.queue(loopId(params, context), validateQueueOperation(params.op, context))
-    }
+    },
+    viewCloseGuard: async (params, caller: PluginCaller) => {
+      onlyKeys(params, ['loopId', 'tabId', 'closeReason', 'closeViewId', 'closeViewKey', 'closeViewInput'], 'viewCloseGuard', context)
+      if (caller.role !== 'plugin' || caller.pluginId !== 'quirky.terminal') return false
+      const id = loopId(params, context)
+      requiredString(params.tabId, 'tabId', context)
+      const reason = params.closeReason
+      if (reason !== undefined && reason !== 'single' && reason !== 'bulk' && reason !== 'replacement') {
+        invalid(context, 'closeReason must be single, bulk, or replacement')
+      }
+      if (params.closeViewId !== undefined && params.closeViewId !== 'view:quirky.loops/loop') return true
+      if (params.closeViewId === 'view:quirky.loops/loop' && (
+        params.closeViewKey !== id ||
+        !isRecord(params.closeViewInput) ||
+        params.closeViewInput.loopId !== id
+      )) return false
+      const loop = active.get(id)
+      if (!isLiveLoop(loop)) return true
+      if (reason === 'bulk' || reason === 'replacement') return true
+      return authorizedViewCloses.delete(JSON.stringify([id, params.tabId]))
+    },
+    closeView: async (params) => {
+      onlyKeys(params, ['loopId', 'tabId', 'choice'], 'closeView', context)
+      const id = loopId(params, context)
+      const tabId = requiredString(params.tabId, 'tabId', context)
+      if (params.choice !== 'cancel' && params.choice !== 'keep-running' && params.choice !== 'stop') {
+        invalid(context, 'choice must be cancel, keep-running, or stop')
+      }
+      const loop = active.get(id)
+      if (!(await isBoundLoopView(context, loop, tabId))) {
+        throw context.error('not-found', `no hosted loop tab ${tabId} for ${id}`)
+      }
+      if (params.choice === 'cancel') return { closed: false }
+      if (params.choice === 'stop' && isLiveLoop(loop)) await active.stop(id, true)
+      const authorization = JSON.stringify([id, tabId])
+      authorizedViewCloses.add(authorization)
+      try {
+        await context.call('quirky.terminal/closeTab', { tab: tabId })
+        return { closed: true }
+      } finally {
+        authorizedViewCloses.delete(authorization)
+      }
+    },
   }
   for (const [name, handler] of Object.entries(handlers)) context.provide(`method:${context.pluginId}/${name}`, handler)
 }
