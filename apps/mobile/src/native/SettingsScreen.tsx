@@ -137,9 +137,9 @@ export function SettingsScreen(props: {
         <Section title="Terminal links">
           <View style={uiStyles.row}>
             <ActionButton title="Open on phone" secondary={preferences.terminalLinkMode !== 'phone'} onPress={() => void updateLocal({ terminalLinkMode: 'phone' })} />
-            <Text style={uiStyles.muted}>Open on desktop · unavailable</Text>
+            <ActionButton title="Chrome Watch on desktop" secondary={preferences.terminalLinkMode !== 'desktop'} onPress={() => void updateLocal({ terminalLinkMode: 'desktop' })} />
           </View>
-          <Text style={uiStyles.muted}>Terminal links open in the phone browser. Desktop browser links require the separately deferred mobile browser integration.</Text>
+          <Text style={uiStyles.muted}>Terminal links open on your phone or in a new Chrome Watch page in the current workspace, based on this setting.</Text>
         </Section>
         <Section title="Quick terminal shortcuts">
           {preferences.shortcuts.map((shortcut) => (
