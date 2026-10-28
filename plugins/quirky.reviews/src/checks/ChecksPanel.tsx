@@ -16,6 +16,8 @@ const UNCHANGED_BACKOFF_CAP_MS = 120_000
 const ELIGIBILITY_MAX_AGE_MS = 5 * 60_000
 const MIN_HEIGHT = 160
 const MAX_HEIGHT = 800
+const MAX_PROMPT_LENGTH = 32_000
+const MAX_AGENT_ARGS_LENGTH = 2_000
 
 let visibleCandidateGeneration = 0
 
@@ -118,7 +120,7 @@ export function installChecksPolling(initialTarget: ChecksPollingTarget, runtime
   const report = (candidates: JsonRecord[]) => {
     const sequence = ++reportSequence
     void runtime.report(candidates).catch((error: unknown) => {
-      if (!disposed && sequence === reportSequence) runtime.onError(errorMessage(error, 'Could not report Checks panel visibility.'))
+      if (!disposed && sequence === reportSequence) runtime.onError(messageOf(error, 'Could not report Checks panel visibility.'))
     })
   }
 
@@ -160,7 +162,7 @@ export function installChecksPolling(initialTarget: ChecksPollingTarget, runtime
     } catch (error) {
       policy.failures += 1
       policy.delayMs = Math.min(FAILURE_BACKOFF_CAP_MS, Math.max(OPEN_REFRESH_MS, OPEN_REFRESH_MS * 2 ** Math.min(policy.failures - 1, 4)))
-      if (!disposed) runtime.onError(errorMessage(error, 'Checks refresh failed.'))
+      if (!disposed) runtime.onError(messageOf(error, 'Checks refresh failed.'))
     } finally {
       inFlight = false
       if (!disposed && visible) schedule()
@@ -172,7 +174,7 @@ export function installChecksPolling(initialTarget: ChecksPollingTarget, runtime
     visible = nextVisible
     if (!nextVisible) {
       clearTimer()
-      if (inFlight) void runtime.invalidate(target.worktree).catch((error: unknown) => runtime.onError(errorMessage(error, 'Could not invalidate hidden Checks work.')))
+      if (inFlight) void runtime.invalidate(target.worktree).catch((error: unknown) => runtime.onError(messageOf(error, 'Could not invalidate hidden Checks work.')))
       if (lastReportedVisible) report([])
       lastReportedVisible = false
       return
@@ -201,7 +203,7 @@ export function installChecksPolling(initialTarget: ChecksPollingTarget, runtime
       target = next
       resetPolicy(next)
       if (identityChanged) {
-        if (inFlight) void runtime.invalidate(previous.worktree).catch((error: unknown) => runtime.onError(errorMessage(error, 'Could not invalidate stale Checks work.')))
+        if (inFlight) void runtime.invalidate(previous.worktree).catch((error: unknown) => runtime.onError(messageOf(error, 'Could not invalidate stale Checks work.')))
         if (visible) report([target.candidate])
       }
       if (visible) {
@@ -231,8 +233,8 @@ export function installChecksPolling(initialTarget: ChecksPollingTarget, runtime
   }
 }
 
-function messageOf(error: unknown): string {
-  return error instanceof Error && error.message.trim() !== '' ? error.message : 'The review action failed.'
+function messageOf(error: unknown, fallback = 'The review action failed.'): string {
+  return error instanceof Error && error.message.trim() !== '' ? error.message : fallback
 }
 
 function layoutWorktree(layout: UiLayout): string | null {
@@ -293,13 +295,14 @@ function pollTarget(state: ReviewsSurfaceProps['state'], worktree: string | null
   const branch = git && typeof git.branch === 'string' ? git.branch : null
   const localHead = git && typeof git.head === 'string' ? git.head : null
   const review = checks.review
+  const reviewNumber = review?.number
   const headOid = review?.headRefOid ?? null
   const provider = review?.provider ?? 'github'
   const candidate: JsonRecord = {
     worktree,
     active: true,
     ...(branch ? { branch } : {}),
-    ...(positiveInteger(review?.number) ? { number: review.number } : {}),
+    ...(positiveInteger(reviewNumber) ? { number: reviewNumber } : {}),
     ...(localHead ? { headOid: localHead } : {})
   }
   return {
@@ -543,7 +546,7 @@ function selectStatus(state: ReviewsSurfaceProps['state'], activeWorktree: strin
     return { title: copy.title, message: copy.message, ...(copy.action ? { action: copy.action } : {}), ...(existing ? { existingNumber: existing } : {}) }
   }
   if (lookup?.kind === 'unavailable' || (reason === 'lookup_unavailable' && eligibility?.eligible !== true)) {
-    return { title: 'Pull request details unavailable', message: typeof lookup.message === 'string' ? lookup.message : copy.message }
+    return { title: 'Pull request details unavailable', message: lookup !== null && typeof lookup.message === 'string' ? lookup.message : copy.message }
   }
   if (reason === 'no_upstream' || reason === 'branch_behind' || reason === 'branch_ahead' || reason === 'needs_push' || reason === 'needs_sync') {
     return { title: copy.title, message: copy.message, ...(copy.action ? { action: copy.action } : {}) }
@@ -556,6 +559,9 @@ function selectStatus(state: ReviewsSurfaceProps['state'], activeWorktree: strin
 function positiveNumber(value: string): number | null {
   const number = Number(value)
   return Number.isSafeInteger(number) && number > 0 ? number : null
+}
+function positiveInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0
 }
 
 function presentationError(result: unknown): string | null {
