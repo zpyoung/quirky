@@ -5,6 +5,26 @@
   "main": "main.ts",
   "activation": "startup",
   "contributes": {
+    "method": [
+      {
+        "id": "explain",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": { "session": { "type": "string" } },
+          "required": ["session"]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "session": { "type": "string" },
+            "state": { "type": "string" },
+            "screen": { "type": "object", "additionalProperties": true }
+          },
+          "required": ["session", "state", "screen"]
+        }
+      }
+    ],
     "launch-hook": [{ "id": "agent-hooks", "agents": ["claude", "codex"] }]
   }
 }

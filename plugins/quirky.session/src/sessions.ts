@@ -17,6 +17,7 @@ import {
   type SessionStatus
 } from '@quirky/protocol'
 import type { SessionRecords } from './records'
+import { SessionPointers, type SessionIdentity, type SessionPointerResult } from './pointer'
 
 /** The workspace id of the synthetic worktree for sessions that belong to no repository. */
 const FLOATING = 'floating'
@@ -285,14 +286,37 @@ function identityOf(caller: PluginCaller): { cwd?: string; worktreeId?: string }
 
 /** Session lifecycle: records, launch, close, status and reconciliation with the PTY host. */
 export class SessionService {
+  private readonly pointers: SessionPointers
+
   constructor(
     private readonly context: PluginContext,
     private readonly records: SessionRecords
-  ) {}
+  ) {
+    this.pointers = new SessionPointers(context, records)
+  }
 
   private readonly restoring = new Map<string, Promise<Session>>()
   /** Exit details that arrived while a restore was spawning; a key is present for the whole spawn. */
   private readonly restoreExits = new Map<string, SessionExit | null>()
+  private readonly sessionLocks = new Map<string, Promise<void>>()
+
+  private async withSessionLock<T>(sessionId: string, work: () => Promise<T>): Promise<T> {
+    const previous = this.sessionLocks.get(sessionId) ?? Promise.resolve()
+    let release!: () => void
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const queued = previous.then(() => held)
+    this.sessionLocks.set(sessionId, queued)
+    await previous
+    try {
+      return await work()
+    } finally {
+      release()
+      if (this.sessionLocks.get(sessionId) === queued) this.sessionLocks.delete(sessionId)
+    }
+  }
+
 
   list = async (params: Record<string, unknown>, caller: PluginCaller): Promise<Session[]> => {
     if (params.worktree === undefined) return this.records.list()
@@ -300,6 +324,11 @@ export class SessionService {
   }
 
   get = (params: Record<string, unknown>): Session => this.require(params.session as string)
+
+  identity = (params: Record<string, unknown>): SessionIdentity => this.pointers.identity(this.require(params.session as string))
+
+  pointer = (params: Record<string, unknown>): Promise<SessionPointerResult> =>
+    this.pointers.pointer(this.require(params.session as string), params)
 
   /**
    * Starts a terminal session. The record exists (as `starting`) while launch hooks run, so a
@@ -524,18 +553,58 @@ export class SessionService {
    * has forgotten it or reports it unknown; any other failure leaves the record in place, since
    * the process may still be running.
    */
-  close = async (params: Record<string, unknown>): Promise<{ ok: true }> => {
+  close = async (params: Record<string, unknown>) => {
     const session = this.require(params.session as string)
-    if (session.kind === 'terminal') {
-      try {
-        await this.context.pty.forget(session.id)
-      } catch (error) {
-        if (!isUnknownSession(error)) throw new Error(`could not close session ${session.id}: ${messageOf(error)}`)
-      }
+    const expectedIncarnation = params.expectedIncarnation
+    if (expectedIncarnation !== undefined && typeof expectedIncarnation !== 'string') {
+      throw this.context.error('invalid-params', 'expectedIncarnation must be a string')
     }
-    this.records.delete(session.id)
-    this.context.emit('removed', { sessionId: session.id })
-    return { ok: true }
+    return this.withSessionLock(session.id, async () => {
+      const current = this.records.get(session.id)
+      if (!current) {
+        if (expectedIncarnation !== undefined) return { ok: false as const, reason: 'recipient_gone' as const }
+        throw this.context.error('not-found', `no such session: ${session.id}`)
+      }
+      const identity = this.context.launch.sessionIdentity(current.id)
+      if (typeof expectedIncarnation === 'string') {
+        if (!identity) return { ok: false as const, reason: 'recipient_gone' as const }
+        if (
+          identity.sessionId !== current.id ||
+          identity.processIncarnation !== expectedIncarnation ||
+          (current.kind === 'structured' ? identity.source !== 'structured_lease' : identity.source === 'structured_lease')
+        ) {
+          return { ok: false as const, reason: 'recipient_changed' as const }
+        }
+      }
+      if (current.kind === 'terminal') {
+        try {
+          await this.context.pty.forget(current.id)
+        } catch (error) {
+          if (!isUnknownSession(error)) throw new Error(`could not close session ${current.id}: ${messageOf(error)}`)
+          if (expectedIncarnation !== undefined) return { ok: false as const, reason: 'recipient_gone' as const }
+        }
+      } else if (identity) {
+        const incarnation = expectedIncarnation ?? identity.processIncarnation
+        const stopped = await this.context.call('quirky.structured/stop', {
+          session: current.id,
+          expectedIncarnation: incarnation
+        })
+        if (!isPlainObject(stopped) || stopped.ok !== true || stopped.closed !== true) {
+          return {
+            ok: false as const,
+            reason: isPlainObject(stopped) && stopped.reason === 'recipient_changed' ? 'recipient_changed' as const : 'recipient_gone' as const
+          }
+        }
+        if (stopped.processIncarnation !== incarnation) {
+          return { ok: false as const, reason: 'recipient_changed' as const }
+        }
+      }
+      this.records.delete(current.id)
+      this.context.emit('removed', { sessionId: current.id })
+      return typeof expectedIncarnation === 'string'
+        ? { ok: true as const, closed: true as const, sessionId: current.id, processIncarnation: expectedIncarnation }
+        : { ok: true as const }
+    })
   }
 
   setStatus = (params: Record<string, unknown>): Session => {
@@ -626,14 +695,18 @@ export class SessionService {
    */
   restore = async (params: Record<string, unknown>): Promise<Session> => {
     const session = this.require(params.session as string)
-    if (session.status !== 'exited') return session
-    if (!session.restorable) {
-      const why = session.exitCause === 'killed' ? 'was killed' : 'ended normally'
-      throw this.context.error('conflict', `session ${session.id} ${why} and can't be restored`)
-    }
     const pending = this.restoring.get(session.id)
     if (pending) return pending
-    const restoring = this.startRestore(session).finally(() => this.restoring.delete(session.id))
+    const restoring = this.withSessionLock(session.id, async () => {
+      const current = this.records.get(session.id)
+      if (!current) throw this.context.error('not-found', `no such session: ${session.id}`)
+      if (current.status !== 'exited') return current
+      if (!current.restorable) {
+        const why = current.exitCause === 'killed' ? 'was killed' : 'ended normally'
+        throw this.context.error('conflict', `session ${current.id} ${why} and can't be restored`)
+      }
+      return this.startRestore(current)
+    }).finally(() => this.restoring.delete(session.id))
     this.restoring.set(session.id, restoring)
     return restoring
   }
@@ -836,31 +909,50 @@ export class SessionService {
       if (!this.records.get(session.id)) throw closedWhileStarting()
       spec = await build(additions)
       if (!this.records.get(session.id)) throw closedWhileStarting()
-      await this.context.pty.spawn(session.id, {
-        argv: spec.argv,
-        cwd: session.cwd,
-        env: this.context.launch.env({
-          sessionId: session.id,
-          worktreeId: session.worktreeId,
-          agent: session.agent,
-          envPatch: spec.envPatch,
-          ...(session.agent === 'shell' && spec.shellInit !== undefined ? { shellInit: spec.shellInit } : {})
-        }),
-        cols: (params.cols as number | undefined) ?? 80,
-        rows: (params.rows as number | undefined) ?? 24,
-        shellReady: session.agent === 'shell' && this.context.launch.shellReady()
+      return await this.withSessionLock(session.id, async () => {
+        if (!this.records.get(session.id)) throw closedWhileStarting()
+        await this.context.pty.spawn(session.id, {
+          argv: spec.argv,
+          cwd: session.cwd,
+          env: this.context.launch.env({
+            sessionId: session.id,
+            worktreeId: session.worktreeId,
+            agent: session.agent,
+            envPatch: spec.envPatch,
+            ...(session.agent === 'shell' && spec.shellInit !== undefined ? { shellInit: spec.shellInit } : {})
+          }),
+          cols: (params.cols as number | undefined) ?? 80,
+          rows: (params.rows as number | undefined) ?? 24,
+          shellReady: session.agent === 'shell' && this.context.launch.shellReady()
+        })
+        if (!this.records.get(session.id)) {
+          await this.context.pty.forget(session.id).catch(() => {})
+          throw closedWhileStarting()
+        }
+        const current = this.records.get(session.id) as Session
+        const keepsSaved = current.providerSession !== null || spec.providerSession === null
+        const stored = {
+          launch: spec.launch,
+          launchSettings: spec.launchSettings,
+          promptDelivery: spec.promptDelivery,
+          ...(keepsSaved ? {} : { providerSession: spec.providerSession })
+        }
+        if (current.status === 'exited') {
+          const promptDelivery = spec.promptDelivery === 'pending' ? 'not-delivered' : spec.promptDelivery
+          return { session: this.records.update(session.id, { ...stored, promptDelivery }) as Session, paste: null }
+        }
+        if (current.status !== 'starting') {
+          return { session: this.records.update(session.id, stored) as Session, paste: spec.paste }
+        }
+        const running = this.records.update(session.id, { ...stored, status: 'running' }) as Session
+        return { session: this.publish(running), paste: spec.paste }
       })
-      if (!this.records.get(session.id)) {
-        await this.context.pty.forget(session.id).catch(() => {})
-        throw closedWhileStarting()
-      }
     } catch (error) {
       const restored = this.records.transaction(() => {
         this.records.delete(session.id)
         const taken = name !== null && this.records.byName(name).length > 0
         return released.flatMap((holder) => {
           const now = this.records.get(holder.id)
-          // a holder renamed, or a name taken by someone else, since the release keeps what it has
           if (!now || now.name !== null || taken) return []
           return this.records.update(holder.id, { name }) ?? []
         })
@@ -869,22 +961,6 @@ export class SessionService {
       if (isRpcError(error)) throw error
       throw new Error(`could not start ${session.agent}: ${messageOf(error)}`)
     }
-    const current = this.records.get(session.id) as Session
-    // a provider session saved during spawn is newer than the one the launch started with
-    const keepsSaved = current.providerSession !== null || spec.providerSession === null
-    const stored = {
-      launch: spec.launch,
-      launchSettings: spec.launchSettings,
-      promptDelivery: spec.promptDelivery,
-      ...(keepsSaved ? {} : { providerSession: spec.providerSession })
-    }
-    if (current.status === 'exited') {
-      const promptDelivery = spec.promptDelivery === 'pending' ? 'not-delivered' : spec.promptDelivery
-      return { session: this.records.update(session.id, { ...stored, promptDelivery }) as Session, paste: null }
-    }
-    if (current.status !== 'starting') return { session: this.records.update(session.id, stored) as Session, paste: spec.paste }
-    const running = this.records.update(session.id, { ...stored, status: 'running' }) as Session
-    return { session: this.publish(running), paste: spec.paste }
   }
 
   /** Starts the paste of a launch's prompt; with `wait`, returns the session once that settles. */

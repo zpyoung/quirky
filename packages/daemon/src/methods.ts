@@ -21,6 +21,7 @@ import type { LayoutService } from './plugins/layout'
 import type { Scheduler } from './plugins/scheduler'
 import type { UiService } from './plugins/ui-service'
 import type { Core } from './service'
+import type { RuntimeSessionAuthority } from './session-authority'
 import type { ClientConn } from './types'
 
 type Params = Record<string, unknown>
@@ -146,6 +147,8 @@ export type HandlerServices = {
   layout: LayoutService
   distros: DistroService
   install: PluginInstallDeps
+  /** Validates a launch-scoped session token against live kernel process evidence. */
+  sessionAuthority?: RuntimeSessionAuthority
   /** Stops the daemon process; called after `daemon.stop` has replied. */
   stopDaemon: () => void
 }
@@ -160,7 +163,7 @@ export function createHandlers(
 ): Handlers {
   const { layout, distros } = services
   return {
-    'client.hello': (params, conn) => {
+    'client.hello': async (params, conn) => {
       const role = params.role
       if (typeof role !== 'string' || !ROLES.includes(role as ClientRole)) {
         throw invalidParams(`role must be one of ${ROLES.join(', ')}`)
@@ -174,7 +177,9 @@ export function createHandlers(
       conn.name = name
       conn.cwd = optStr(params, 'cwd')
       conn.sessionId = optStr(params, 'sessionId')
+      conn.sessionToken = optStr(params, 'sessionToken')
       conn.worktreeId = optStr(params, 'worktreeId')
+      await services.sessionAuthority?.resolveForConnection(conn)
       return { protocolVersion: PROTOCOL_VERSION, daemonVersion: core.status().daemonVersion }
     },
     'events.subscribe': (_params, conn) => {

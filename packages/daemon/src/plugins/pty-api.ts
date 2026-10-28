@@ -1,5 +1,6 @@
 import type { ExitCause, PluginPty, PtyFact } from '@quirky/protocol'
 import type { PtyClient } from '../pty-client'
+import type { RuntimeSessionAuthority } from '../session-authority'
 
 type DataListener = (sessionId: string, bytes: Uint8Array) => void
 type ExitListener = (
@@ -78,7 +79,8 @@ function fanoutFor(pty: PtyClient, log: (message: string) => void): Fanout {
 export function createPtyApi(
   pty: PtyClient,
   pluginId: string,
-  log: (message: string) => void = () => {}
+  log: (message: string) => void = () => {},
+  sessionAuthority?: RuntimeSessionAuthority
 ): { api: PluginPty; revoke(): void } {
   const fanout = fanoutFor(pty, log)
   const removers = new Set<() => void>()
@@ -113,7 +115,9 @@ export function createPtyApi(
     },
     async spawn(sessionId, { argv, cwd, env, cols, rows, shellReady, restore }) {
       live()
-      return pty.request('create', { sessionId, argv, cwd, env, cols, rows, shellReady, restore })
+      const result = await pty.request('create', { sessionId, argv, cwd, env, cols, rows, shellReady, restore })
+      await sessionAuthority?.bindTerminalProcess(sessionId, env, result.pid).catch(() => undefined)
+      return result
     },
     write(sessionId, data) {
       live()
@@ -137,10 +141,12 @@ export function createPtyApi(
         ...(signal === undefined ? {} : { signal }),
         ...(options?.reason === undefined ? {} : { reason: options.reason })
       })
+      sessionAuthority?.revokeTerminal(sessionId)
     },
     async forget(sessionId) {
       live()
       await pty.request('forget', { sessionId })
+      sessionAuthority?.revokeTerminal(sessionId)
     },
     async list() {
       live()

@@ -18,6 +18,7 @@ import { PluginHost } from './plugins/host'
 import { createPluginRuntime, type PluginRuntime } from './plugins/runtime'
 import { buildUiModel } from './plugins/ui-model'
 import { PtyClient } from './pty-client'
+import { RuntimeSessionAuthority } from './session-authority'
 import { createRpcHandler } from './rpc-handler'
 import { startServer } from './server'
 import { startSocketServer } from './socket-server'
@@ -130,6 +131,7 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
     connectTimeoutMs: options.ptyConnectTimeoutMs,
     log
   })
+  const sessionAuthority = new RuntimeSessionAuthority(store, pty)
   let port = 0
   // the core and the host are built before the runtime that serves them, so they reach it late-bound
   let lateRuntime: PluginRuntime | undefined
@@ -170,6 +172,7 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
     plugins,
     core,
     store,
+    sessionAuthority,
     log,
     launchHookTimeoutMs: options.launchHookTimeoutMs ?? 5000,
     schedulerRecheckMs: options.schedulerRecheckMs ?? 60_000,
@@ -186,6 +189,7 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
 
   try {
     await pty.connect()
+    await sessionAuthority.restoreLiveTerminalIdentities()
   } catch (error) {
     log(`pty host unavailable at startup: ${(error as Error).message}`)
   }

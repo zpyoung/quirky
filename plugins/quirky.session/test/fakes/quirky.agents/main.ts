@@ -8,7 +8,8 @@ const CATALOG: Record<string, Catalog> = {
   opencode: { label: 'OpenCode', resumable: true, canFork: false, paste: false },
   gemini: { label: 'Gemini', resumable: true, canFork: false, paste: false },
   aider: { label: 'Aider', resumable: false, canFork: false, paste: false },
-  goose: { label: 'Goose', resumable: true, canFork: false, paste: true }
+  goose: { label: 'Goose', resumable: true, canFork: false, paste: true },
+  cursor: { label: 'Cursor', resumable: false, canFork: false, paste: false }
 }
 
 export type FakeAgentsState = {
