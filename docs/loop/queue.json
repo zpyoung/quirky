@@ -860,8 +860,7 @@
       "deps": [
         "m3-accounts"
       ],
-      "status": "in-progress",
-      "lane": 9
+      "status": "done"
     },
     {
       "id": "m7-sweep-terminal",

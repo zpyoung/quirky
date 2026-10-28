@@ -180,6 +180,10 @@ files, not this one.
 | medium | high | [m0-scripting D9](decisions/m0-scripting.md) | One command table drives parsing, validation, help, suggestions and the catalog | locked by research/orca-features/cli.md |
 | medium | high | [m0-scripting D15](decisions/m0-scripting.md) | Under `--json`, errors are a JSON document on stdout, and the exit codes stay 0, 1 and 2 | assumed — autonomous |
 | medium | high | [m0-scripting D17](decisions/m0-scripting.md) | `quirky api --json` returns one versioned catalog of methods, events, UI commands and CLI commands | assumed — autonomous |
+| medium | high | [m3-accounts-remaining-flows D2](decisions/m3-accounts-remaining-flows.md) | Resolve every unattended gray area with feature requirements and conservative defaults | locked by accounts.md and docs/loop/LOOP.md |
+| medium (authority semantics) | high | [m3-accounts-remaining-flows D5](decisions/m3-accounts-remaining-flows.md) | Preferences do not change account-selection authority | assumed — autonomous |
+| medium | high | [m3-accounts-remaining-flows D7](decisions/m3-accounts-remaining-flows.md) | Trusted hook home overrides are effective custom homes | supersedes m3-accounts D31 (S1 remains unconfirmed there; this item supplies executable disposition) |
+| medium | high | [m3-accounts-remaining-flows D16](decisions/m3-accounts-remaining-flows.md) | Preserve incoming launch, service and browser boundaries | locked by incoming decision logs |
 | medium (acceptance scope) | high | [m2-sidebar-extras D1](decisions/m2-sidebar-extras.md) | Implement the four M2 sidebar additions; leave review filters for M4 | locked by docs/roadmap.md |
 | medium | high | [m2-sidebar-extras D5](decisions/m2-sidebar-extras.md) | Activity windows are a visibility filter, not a new workspace list | locked by research/orca-features/sidebar-extras.md |
 | medium | high | [m2-sidebar-extras D6](decisions/m2-sidebar-extras.md) | Preserve recency, validate custom days, and do not let another client's preferences overwrite this client | locked by research/orca-features/sidebar-extras.md |
@@ -852,6 +856,22 @@ files, not this one.
 | easy | high | [m0-scripting D38](decisions/m0-scripting.md) | Final round 1: fix three findings, two of which share a cause | assumed — autonomous |
 | easy | high | [m0-scripting D39](decisions/m0-scripting.md) | The final review loop ends after the closure round passes on all three lenses | locked by docs/loop/LOOP.md |
 | easy | high | [m0-scripting D40](decisions/m0-scripting.md) | Every scenario has a named test through the CLI or the daemon API, and the item's one CLI defect belongs to m0-cli-core | locked by docs/loop/LOOP.md |
+| easy | high | [m3-accounts-remaining-flows D1](decisions/m3-accounts-remaining-flows.md) | Complete existing public flows, not a parallel Accounts implementation | locked by docs/loop/LOOP.md and queue item |
+| easy | high | [m3-accounts-remaining-flows D3](decisions/m3-accounts-remaining-flows.md) | Preserve inherited metadata and use isolated component worktrees | assumed — autonomous |
+| easy | high | [m3-accounts-remaining-flows D4](decisions/m3-accounts-remaining-flows.md) | Native-only observations remain explicit pending handoffs | locked by docs/loop/LOOP.md |
+| easy | high | [m3-accounts-remaining-flows D6](decisions/m3-accounts-remaining-flows.md) | Promote pending usage reloads when account state changes | assumed — autonomous |
+| easy (fixture) | high for the named external-boundary/runtime proof; no real-provider or os-focus pass claimed | [m3-accounts-remaining-flows D8](decisions/m3-accounts-remaining-flows.md) | Native continuation requires actual accumulated bytes | locked by original m3-accounts D24 and logic AC12 |
+| easy | high | [m3-accounts-remaining-flows D9](decisions/m3-accounts-remaining-flows.md) | Respect the night cutoff and carry all unfinished user acceptance in one item | deferred: complete user-surface acceptance under docs/loop/LOOP.md night cutoff |
+| easy | high for named observations only | [m3-accounts-remaining-flows D10](decisions/m3-accounts-remaining-flows.md) | Distinguish verified gates, UI proof and driver limits | assumed — autonomous |
+| easy | high | [m3-accounts-remaining-flows D11](decisions/m3-accounts-remaining-flows.md) | Keep Accounts popovers below public modal overlays | assumed — autonomous |
+| easy | high | [m3-accounts-remaining-flows D12](decisions/m3-accounts-remaining-flows.md) | Preserve scope attribution and unknown metadata | assumed — autonomous |
+| easy | high for the recorded execution; reduced review independence remains a limit | [m3-accounts-remaining-flows D13](decisions/m3-accounts-remaining-flows.md) | Preserve formal review results, including reduced independence and isolation failure | assumed — autonomous |
+| easy | high | [m3-accounts-remaining-flows D14](decisions/m3-accounts-remaining-flows.md) | A successful action can have a superseded display snapshot | assumed — autonomous |
+| easy | high | [m3-accounts-remaining-flows D15](decisions/m3-accounts-remaining-flows.md) | Confirmation text wraps independently of status-bar chip layout | assumed — autonomous |
+| easy | high for these observed results; the queue full-merge verifier remains authoritative for landing | [m3-accounts-remaining-flows D17](decisions/m3-accounts-remaining-flows.md) | Land the verified merge, not an on-time or full-parity claim | assumed — autonomous |
+| easy | high for observed results; root cause remains unknown | [m3-accounts-remaining-flows D18](decisions/m3-accounts-remaining-flows.md) | Keep the full verifier after an intermittent script timeout | assumed — autonomous; preserves m3-accounts D35's no-waiver precedent |
+| easy | high | [m3-accounts-remaining-flows D19](decisions/m3-accounts-remaining-flows.md) | Preserve both guides during required land-conflict recovery | locked by incoming decision logs and LOOP land-failure protocol |
+| easy | high for observed executions; historical timeout cause remains unknown | [m3-accounts-remaining-flows D20](decisions/m3-accounts-remaining-flows.md) | Diagnose the guardian path without guessing or changing the gate | assumed — autonomous |
 | easy | high | [m2-sidebar-extras D2](decisions/m2-sidebar-extras.md) | Resolve decisions autonomously; skip human-only offers | locked by docs/loop/LOOP.md |
 | easy | high | [m2-sidebar-extras D3](decisions/m2-sidebar-extras.md) | Research Visual, Organization, API, CLI and Data concerns before design | assumed — autonomous |
 | easy | high | [m2-sidebar-extras D4](decisions/m2-sidebar-extras.md) | Select the material gray areas across all five domains | assumed — autonomous |
