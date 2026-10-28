@@ -220,5 +220,27 @@
 - **Revisit if:** an exercised check or actual surface smoke identifies a blocker; fix it before landing.
 - **Source:** locked by docs/loop/LOOP.md Night mode
 
+## D21: Verify the packaged surface and keep its report bounded
+- **Question:** do compiled assets, large provider content, shared Tasks navigation and the PR rail work through the actual daemon and browser?
+- **Options:** infer UI success from source tests; exercise the packaged surface and record tool limits separately.
+- **Chose:** built and ran the packaged daemon/CLI/PTY/plugin resources under an owned temporary home. Observed Conversation, Checks and Files; the public Tasks Start opened its real global composer without replacing the PR view. Hosting settings loaded actual fixture diagnostics/accounts/budgets. Window reports contain applied-state summaries plus the full state method, not entire comments/diffs. Corrected the actual review-page-content grid selector, added the required compact Conversation Checks card and exposed disclosure through detailSetChecksCollapsed.
+- **Why:** full state exceeded112KiB while the kernel caps reports at64KiB. A guessed CSS selector left the rail below the conversation. Disclosure must be both visible and scriptable, not local-only state.
+- **Evidence:** first packaged smoke:113KiB state,337-byte report, all three tabs, global composer and loaded budgets; zero browser console errors. Huge-conversation and budget screenshot calls timed out and are tool limits, not passed dogfood goals. Final packaged build passed; UI hash0d381abd880ef4de4a3b24085ac092421ec2ed978345068c866a6e8521ad4ed0. Actual browser click collapsed rows and public state became true; public API expanded them again. Screenshot and measured grid972px/300px prove the rail beside the conversation. Final state113161bytes, console errors0. Both owned tabs/clients/services closed, services exited0 and temporary homes were removed. No native or full-dogfood pass claimed.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** large provider state overflows reports or visible disclosure diverges from the public state.
+- **Source:** locked by hosting-ui.md scriptable-state and PR-page requirements
+
+## D22: Preserve the incoming worktree lifecycle and finish the night-mode gates
+- **Question:** how should the final Tasks/roadmap merges preserve independently owned source and earlier binding decisions?
+- **Options:** choose one side of shared additions; combine independent contracts and run the affected checks.
+- **Chose:** merged the current Tasks branch including ac5fbb70, then one roadmap catch-up. Kept both Tasks/Reviews/worktree README sections and both participant/source hosting imports. Read the incoming worktree decisions D1–D23: content-pinned script approval, fresh canonical source resolution, background terminal splitting and canonical agent listing remain intact.
+- **Why:** the Reviews header delegates creation to that existing public lifecycle; it must not duplicate creation or weaken trust. The only README conflicts were independent additions.
+- **Evidence:** merge46c68a08 and catch-upf0ec3300; final typecheck exit0 in23.38seconds; scripts68pass/0fail/562assertions in104.76seconds; packaged build exit0. Affected runner remains in progress, so no full-gate or landing claim yet.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** an exercised gate identifies a concrete consumer incompatibility.
+- **Source:** locked by incoming m4-worktrees-create-from-github decisions; locked by docs/loop/LOOP.md Night mode
+
 ## Progress
-All three source components and scoped retries merged after barrier audits; original component/gate worktrees removed. Public plugin has67 methods/67 aliases; descriptors and command args aligned. Own Review source no longer appeared in the latest whole-repo compiler diagnostics;69 remaining errors were in pending Tasks/shared-read source and were sent to its owner. Focused detail lag, generation, auth/eligibility/workspace and actual real-PTY delivery paths have exercised evidence; full affected runner/scripts/typecheck and built-surface smoke still pending. Full Tasks parent runtime/helper checkpoint is required before final integration/land. Unstarted full final-review/dogfood rounds are explicitly skipped under D20, not claimed passing. Roadmap catch-up still not run; finish reachable gates, merge the dependency when ready, catch up once and land through queue.ts.
+All three components and scoped fixes merged; all implementer/gate worktrees removed. Public plugin declares68methods/68aliases. The own four-file Reviews suite passed with no retries, including actual real-PTY delivery. Final integrated typecheck, scripts and packaged build passed; the affected package runner is still active. Actual packaged surface smoke and public collapse/expand verification passed within D21's stated limits; owned browser/daemon resources are stopped. Full unstarted review/dogfood remain skipped under D20. Tasks and roadmap catch-up completed; next await affected-suite output, fix concrete failures only, confirm dependency readiness and commit/detach/queue.ts land in the same turn. Never claim another item in this iteration.
