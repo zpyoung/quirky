@@ -99,5 +99,60 @@
 - **Revisit if:** final source or caught-up shell invalidates a tested interaction.
 - **Source:** assumed — autonomous
 
+## D10: Compose incoming owner authority without changing sidebar presentation ownership
+- **Question:** whether the required catch-up changes the parity contract or needs a conflicting cutover?
+- **Options:** keep the old integration snapshot; merge and preserve authenticated identity and canonical selector ownership.
+- **Chose:** one catch-up at9624e2a, no conflicts. Read every decision and Progress in four incoming logs (40 decisions: PTY4, terminal-pane4, owner-provisioning17, screenshot-review15). Preserve exact owner-qualified navigation/create, positive-evidence-only other-client filtering, unknown-origin retention and hooks authority. Do not restore caller-invented ownership, use layout as liveness, or duplicate the screenshot-review/shell owners.
+- **Why:** incoming decisions are compatible and strengthen canonical identity boundaries.
+- **Evidence:** SidebarIncomingDecisions handoff; docs/loop/decisions/{fix-flaky-pty-host-manager,fix-flaky-terminal-features-pane,m7-terminal-owner-provisioning-and-selector-flows,ui-screenshot-review}.md; actual caught-up root/mobile/desktop typecheck, UI lint and build exited0 in47.94s.
+- **Reversibility:** medium.
+- **Confidence:** high.
+- **Revisit if:** later integration changes the public contribution or owner contract.
+- **Source:** locked by docs/loop/LOOP.md
+
+## D11: Treat the red affected gate as a stop, not review evidence
+- **Question:** how to proceed when the post-catch-up affected gate fails?
+- **Options:** review anyway; suppress failures; repair demonstrated causes and capture full remaining evidence.
+- **Chose:** no final reviewers were dispatched. The shared prepass failed60files with18pass/42fail, and its bounded output retained only the tail. Known failures: window-navigation fixture explicitly links real session and also requests a fake session symlink (EEXIST before all10 assertions); ui-report pins the entire pending-row copy and rejects new additive fields. A scoped fixer owns only these two files: use a genuine session+agents closure and preserve consumer navigation/session-survival assertions; delete the incidental whole-row pin and retain pending/removing outcomes. Full remaining failures are not yet attributed; preserve complete output on the next gate instead of inferring causes.
+- **Why:** neither fixture collision nor copied implementation shape is a reason to change production behavior, weaken safety assertions or call the gate green.
+- **Evidence:** /tmp/quirky-sidebar-followup.e9Wt3N/final-review/prepass.json; window-navigation.test.ts23-28; ui-report.test.ts197-224; actual prepass115.40s exit1. Lane8 notification accepted input only, not proven delivered.
+- **Reversibility:** easy.
+- **Confidence:** high for known causes; remaining failures unclassified.
+- **Revisit if:** the focused corrected files expose a real owner-contract defect.
+- **Source:** assumed — autonomous
+
+## D12: Complete project-scoped folder row actions rather than substitute the project header
+- **Question:** is hiding invalid worktree membership enough for SC-06?
+- **Options:** use project-header navigation as a substitute; implement the required project actions on the folder row itself.
+- **Chose:** folder/worktree-owned-by-folder rows get New Group from Project, Move project to group, and Remove project from group when grouped, reusing the existing project group dialog and canonical repo mutation. Unknown owners fail closed. Preserve workspace membership/metadata and Git execution ownership.
+- **Why:** source feature row48 explicitly names project-scoped row actions. The real guarded notes-row menu has only Move project to group; the separate project-header action does not satisfy that path.
+- **Evidence:** research/orca-features/sidebar-extras.md48; Menu.tsx199-236,247-258; guarded run20261028T212309-540d obs-5 screenshot/tree.
+- **Reversibility:** easy.
+- **Confidence:** high.
+- **Revisit if:** a binding source changes folder-row interaction scope.
+- **Source:** locked by research/orca-features/sidebar-extras.md
+
+## D13: Keep production API boundaries distinct from isolated fixture seeding
+- **Question:** should the plugin validator's private-SQL test finding change production or replace real API evidence with fixture responses?
+- **Options:** add privileged test APIs; replace canonical producers with mocked responses; retain isolated test setup and public subject dispatch.
+- **Chose:** reject the validator's Major public-API-only violation label. It cites only run-owned test database seeding/corruption injection, not shipped plugin imports/calls. Production sidebar consumes public APIs only. Timestamp fixtures and deliberately failed providers are followed by real daemon public projection calls; no privileged runtime test endpoint ships. Retain the test coupling as a maintenance risk, not a claim of plugin sandboxing or private production access.
+- **Why:** deterministic corruption/expiry setup cannot be expressed by a legitimate production mutation; adding one would expand privileges merely for tests. Replacing canonical producers with response echoes would weaken the actual boundary proof.
+- **Evidence:** SidebarPluginValidation handoff; plugins/quirky.sidebar-extras/test/activity.test.ts isolated harness homes; unchanged src/daemon/projection.ts public context.call and pty API.
+- **Reversibility:** easy.
+- **Confidence:** high.
+- **Revisit if:** fixture paths stop being run-owned, or shipped source imports a private plugin store.
+- **Source:** assumed — autonomous
+
+## D14: Attribute and adopt only the two misplaced fixture edits
+- **Question:** why did the first corrected gate-file run still execute old source?
+- **Options:** blindly restore parent files; assume worker claims; trace checkout identity and exact content.
+- **Chose:** stop and re-plan the gate correction after the worker confirmed its initial relative edits landed in the parent checkout rather than its assigned tree. Preserve the two attributed parent test edits; do not restore user state. The worker reapplied identical fixes to its assigned tree, then stopped. SHA256 pairs for both files match exactly. Parent owns their integration commit; discard only the duplicate run-owned tree after that commit. No production source or unrelated user files changed.
+- **Why:** directory intent is not a write boundary. Actual parent source and the worker's explicit attribution identify the safe correction; a passing report or scope declaration alone does not.
+- **Evidence:** history://SidebarGateFixtures initial relative edit and later absolute reads; actual parent status; matching SHA2562080b1e7… for window-navigation and72c329e8… for ui-report; parent two-file corrected suite passed without retry27.71s. The earlier old-source run is not represented as testing the fix.
+- **Reversibility:** easy.
+- **Confidence:** high.
+- **Revisit if:** future worker changes appear outside their assigned absolute paths.
+- **Source:** assumed — autonomous
+
 ## Progress
-Runtime component six-file suite passes; renderer two-file suite passes on its current source. Final review of source identified immediate mode-change preview cleanup and mutation-time owner guard still to tighten; worker is preparing that boundary. Parent has not committed either component while a sibling is active. Next: finish boundary red/green, authoritative scope/HEAD audit, commit and merge components/remove their trees, catch up/read decisions, affected checks+build, guarded web, bounded final review, dependency-ready/land. Scratch fixture is prepared, not started; no web campaign pass claimed.
+Components eb4b4657/23453d9d accepted, merged and original trees removed; final immediate-preview red27/1 then two-file green. Caught up9624e2a; types/UIlint/build pass. Live real web service and SidebarWebUser guarded campaign; parent browser smoke settled all fixtures with zero errors then closed. Broad gate red18/42, no reviewers dispatched. Additional folder-action test-prep and two-file incoming-fixture repair returned; parent targeted checks running. Finish red/green folder correction, audit/merge correction trees, capture full remaining gate failures, then final review only after green. Dependency triage still pending; no final UI/suite/item completion claim.
