@@ -77,5 +77,38 @@
 - **Revisit if:** a supported native shell fails to propagate OS appearance changes.
 - **Source:** deferred: platform
 
+## D8: Preserve the existing theme API while superseding the old default palette
+- **Question:** How does the approved redesign compose with earlier UI API decisions?
+- **Options:** replace theme APIs; retain persistence/events and change built-in appearance data.
+- **Chose:** Keep m0-ui-api D20's theme.list/theme.set, chosen-theme retention and live updates; the approved redesign supersedes the historical m0 tech spec's Quirky Dark default color literals. The logical default's reported appearance is the dark fallback; a window resolves system appearance locally.
+- **Why:** Plugin/distro selection and missing-theme fallback remain intact; the approved graphite/system-following requirement changes only built-in appearance.
+- **Evidence:** docs/loop/decisions/m0-ui-api.md D19–D20; docs/quirk/specs/2026-10-26-m0-ui-api/tech.md historical theme contract; approved redesign lines91–115.
+- **Reversibility:** medium.
+- **Confidence:** high.
+- **Revisit if:** the API needs per-window resolved appearance reporting rather than a logical chosen-theme list.
+- **Source:** supersedes m0-ui-api D19
+
+## D9: Run only the published UI lint gate, never a substitute scanner
+- **Question:** Is landing blocked by the independent tokens lane's unfinished UI lint implementation?
+- **Options:** invent a temporary lint rule; wait for an unrelated lane; run the canonical gate when available.
+- **Chose:** Run `bun scripts/ui-lint.ts` if the final roadmap merge publishes it; otherwise land terminal-only source without claiming lint passed. Lane5 explicitly directed not to wait for its unlanded gate. Its initial plugin enforcement list is empty; packages/ui is enforced.
+- **Why:** The gate's implementation belongs to ui-tokens-and-components. A second scanner would diverge and its absence is not an unbuilt terminal flow.
+- **Evidence:** lane5 coordination interjection: contracts c4961ba5, fixed command and scripts/ui-lint-plugins.json=[], scanner not yet runnable, no passing claim; explicit instruction not to wait.
+- **Reversibility:** easy.
+- **Confidence:** high.
+- **Revisit if:** the canonical gate lands before this item and reports a violation in this source.
+- **Source:** assumed — autonomous
+
+## D10: Minimal live surface proof, not an end-phase campaign
+- **Question:** Which verification was actually exercised?
+- **Options:** claim complete suite/review coverage; record only observed commands and browser transitions.
+- **Chose:** Record the exact minimal proof. `bun run typecheck` passed root, mobile and desktop; `bun packages/ui/build.ts` built the actual window and25 plugin UI modules. Fresh isolated HOME/QUIRKY_HOME real daemon+PTY smoke used hooks=false before startup. Source CLI listed built-ins, set light/readback, reset default. The actual browser Settings dialog saved app dark under light system preference, then terminal-only light while shell stayed dark. Reset via daemon API and system light→dark updated the same xterm DOM instance; colored real shell output stayed visible. No browser errors observed. Browser closed and owned daemon/PTY cleanup finished with service exit0.
+- **Why:** This proves the changed surface minimally without running prohibited suites, review rounds or a full dogfood campaign. Initial smoke-host URL used an absent runtime.host field; browser used loopback and actual runtime.port. Initial emulation used an unsupported nested option; corrected to colorScheme. The first Save selector hit an unrelated plugin button; the owning .dialog-actions submit saved successfully. These were fixture/driver mistakes, not production fixes.
+- **Evidence:** typecheck exit0/27.44s; UI build output; terminal-theme-smoke readiness and exit0; actual screenshot captures light, dark pin and terminal-light/shell-dark; actual theme.list and setting.get readbacks.
+- **Reversibility:** easy.
+- **Confidence:** high.
+- **Revisit if:** end-phase tests or the canonical screenshot review find a regression. All acceptance tests were authored, not run; no full-suite/native/system-OS-cycle/review claim.
+- **Source:** assumed — autonomous
+
 ## Progress
-Claimed after canonical wait returned ui-terminal-theme. Approved parent spec read and slice self-reviewed. Shared contracts/data committed before two implementers; next integrate disjoint app appearance and terminal palette work, minimal surface smoke, typecheck/UI lint, catch up once and land. No test/review campaign passed or claimed.
+Both disjoint components audited and merged: AppTheme1a6e6f37 and TerminalPaletted7b9c4a2; component worktrees removed. Exact test cases authored, obsolete palette/wording/order copies removed rather than repinned. Public README/API descriptions updated. Source root+mobile+desktop typecheck and minimal actual browser+daemon/PTY proof observed (D10); owned processes/browser finished. Next: one roadmap catch-up, read incoming decisions, final typecheck plus canonical lint only if published, commit/detach/canonical queue land. No follow-up needed; every scoped flow implemented. No suites or review/dogfood campaign run.
