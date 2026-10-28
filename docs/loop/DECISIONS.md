@@ -435,6 +435,9 @@ files, not this one.
 | medium | high | [m4-worktrees-create-from-github D16](decisions/m4-worktrees-create-from-github.md) | Bind one-time UI approval to the shared script content that was shown | assumed — autonomous; locked by m1-worktrees D22 (content-specific shared-script trust) |
 | medium | high | [m4-worktrees-create-from-github D22](decisions/m4-worktrees-create-from-github.md) | Combine the controller-reported editor-tab guard with background command splitting | locked by docs/loop/LOOP.md step7 recovery; supersedes this item D17 (fixture bounds) |
 | medium | high | [m7-sweep-hosting D1](decisions/m7-sweep-hosting.md) | Sweep all remaining GitHub flows and preserve the explicit exclusions | locked by docs/roadmap.md; locked by item title |
+| medium | high | [m4-hosting-api-github-parity D3](decisions/m4-hosting-api-github-parity.md) | Content repository ownership determines issue-type capability | locked by docs/loop/decisions/m4-hosting-api-github.md |
+| medium | high | [m4-hosting-api-github-parity D4](decisions/m4-hosting-api-github-parity.md) | Preserve all existing public contracts and safety checks | locked by docs/quirk/specs/2026-10-27-m4-hosting-api-github/tech.md |
+| medium | high | [m4-hosting-api-github-parity D6](decisions/m4-hosting-api-github-parity.md) | Bounded page/cursor reuse preserves freshness and failure isolation | locked by hosting-api.md |
 | medium | high | [m5-structured-runner D1](decisions/m5-structured-runner.md) | Build the shared background seams, not the downstream products | locked by docs/roadmap.md |
 | medium | high | [m5-structured-runner D3](decisions/m5-structured-runner.md) | Native provider runners share the existing structured journal and ask path | locked by docs/architecture.md |
 | medium | high | [m5-structured-runner D4](decisions/m5-structured-runner.md) | Resume creates a new session in the original directory, replaying original structured options | assumed — autonomous |
@@ -527,6 +530,8 @@ files, not this one.
 | medium | high | [m6-orchestration-ui D5](decisions/m6-orchestration-ui.md) | Preserve uncertainty, identity and terminal ownership | locked by research/orca-features/orchestration.md |
 | medium | high | [m6-orchestration-ui D8](decisions/m6-orchestration-ui.md) | Resolve navigation in one public daemon operation, including context-only Dispatches | locked by research/orca-features/orchestration.md |
 | medium | high | [m6-orchestration-ui D15](decisions/m6-orchestration-ui.md) | Compose canonical service migrations and routing before retrying the land | assumed — autonomous |
+| medium | high | [fix-flaky-daemon-pty-client D2](decisions/fix-flaky-daemon-pty-client.md) | Retain the locked older-retire/newer-refuse upgrade policy | locked by docs/loop/decisions/m1-term-daemon.md |
+| medium | high | [fix-flaky-daemon-pty-client D6](decisions/fix-flaky-daemon-pty-client.md) | Catch up once and retain incoming Hosting policy unchanged | locked by docs/loop/LOOP.md |
 | medium | high | [m5-automations-dispatch D2](decisions/m5-automations-dispatch.md) | Preserve raw-argument refusal and defer that incompatible flow | deferred: raw extra agent arguments |
 | medium | high | [m5-automations-dispatch D3](decisions/m5-automations-dispatch.md) | Capture local registry identity and fail closed for remote host flows | deferred: remote host generation and execution |
 | medium | high | [m5-automations-dispatch D5](decisions/m5-automations-dispatch.md) | Prefer public existing seams to duplicate runners | assumed — autonomous |
@@ -1561,6 +1566,24 @@ files, not this one.
 | easy | high for traced fixture boundary and observed route | [m7-sweep-hosting D10](decisions/m7-sweep-hosting.md) | Repair the missing provider read rather than suppress its UI error | assumed — autonomous; locked by LOOP.md isolated-state/evidence requirements |
 | easy | high for recorded ownership and evidence bounds | [m7-sweep-hosting D11](decisions/m7-sweep-hosting.md) | Retain the larger remaining acceptance under its already-queued owners | deferred: larger existing Tasks/API/review-routing acceptance, authorized by item title |
 | easy | high for exercised checks and runtime paths; no exhaustive parity/native guarantee | [m7-sweep-hosting D12](decisions/m7-sweep-hosting.md) | Use the final composed checks and retain actual UI/tool bounds | locked by docs/loop/LOOP.md verification and normal landing procedure |
+| easy | high | [m4-hosting-api-github-parity D1](decisions/m4-hosting-api-github-parity.md) | Finish exactly the predecessor's two deferred flows and their existing consumer | locked by docs/loop/decisions/m4-hosting-api-github.md |
+| easy | high | [m4-hosting-api-github-parity D2](decisions/m4-hosting-api-github-parity.md) | Resolve all design questions autonomously and use one combined spec | locked by docs/loop/LOOP.md |
+| easy | high | [m4-hosting-api-github-parity D5](decisions/m4-hosting-api-github-parity.md) | Use one hosting-local coordinator over the existing runner | assumed — autonomous |
+| easy | high | [m4-hosting-api-github-parity D7](decisions/m4-hosting-api-github-parity.md) | Use native omp implementers with Gemini review because Opus is unavailable | assumed — autonomous |
+| easy | high | [m4-hosting-api-github-parity D8](decisions/m4-hosting-api-github-parity.md) | Run one wave of three disjoint vertical components | assumed — autonomous |
+| easy | high | [m4-hosting-api-github-parity D9](decisions/m4-hosting-api-github-parity.md) | Verify public API, actual CLI and one web user scenario | locked by docs/loop/LOOP.md |
+| easy | high | [m4-hosting-api-github-parity D10](decisions/m4-hosting-api-github-parity.md) | Retain the macOS-only support boundary | deferred: platform |
+| easy | high | [m4-hosting-api-github-parity D11](decisions/m4-hosting-api-github-parity.md) | Consume coordinated committed implementations instead of duplicate rewriting | supersedes m4-hosting-api-github-parity D8 (local production implementation ownership) |
+| easy | high | [m4-hosting-api-github-parity D12](decisions/m4-hosting-api-github-parity.md) | Keep source query-document limits rather than add a speculative variable ceiling | supersedes m4-hosting-api-github-parity D5 (batch-size interpretation only) |
+| easy | high | [m4-hosting-api-github-parity D13](decisions/m4-hosting-api-github-parity.md) | Preserve independent regression evidence and repair provider fixtures, not assertions | assumed — autonomous |
+| easy | high | [m4-hosting-api-github-parity D14](decisions/m4-hosting-api-github-parity.md) | Accept lane8's observed selector regression as ground truth | assumed — autonomous |
+| easy | high | [m4-hosting-api-github-parity D15](decisions/m4-hosting-api-github-parity.md) | Consume the saved-selector fix and retain the guarded UI partial verdict | locked by docs/loop/LOOP.md |
+| easy | high | [m4-hosting-api-github-parity D16](decisions/m4-hosting-api-github-parity.md) | Route the unchanged numbered-page completeness finding to its active sweep owner | assumed — autonomous |
+| easy | high | [m4-hosting-api-github-parity D17](decisions/m4-hosting-api-github-parity.md) | Keep lane8's fresh U01 PASS distinct from lane6's tool-limited run | assumed — autonomous |
+| easy | high | [m4-hosting-api-github-parity D18](decisions/m4-hosting-api-github-parity.md) | Accept the exercised affected gate without relabeling earlier failures | locked by docs/loop/LOOP.md |
+| easy | high | [m4-hosting-api-github-parity D19](decisions/m4-hosting-api-github-parity.md) | Reject C1 after the exact pending-overlap API experiment disproves its premise | assumed — autonomous |
+| easy | high | [m4-hosting-api-github-parity D20](decisions/m4-hosting-api-github-parity.md) | Reconcile only the advancing canonical fixture conflicts and retain all incoming authority rules | locked by docs/loop/LOOP.md |
+| easy | high | [m4-hosting-api-github-parity D21](decisions/m4-hosting-api-github-parity.md) | Remove the duplicate fixture binding and prove the corrected consumer path remotely | assumed — autonomous |
 | easy | high | [m5-structured-runner D2](decisions/m5-structured-runner.md) | Classify API, CLI and integration; resolve every relevant gray area autonomously | locked by docs/loop/LOOP.md |
 | easy | high | [m5-structured-runner D6](decisions/m5-structured-runner.md) | Reuse launch resolution unchanged; reject structured raw arguments | locked by docs/loop/decisions/m1-launch-settings.md |
 | easy | high | [m5-structured-runner D8](decisions/m5-structured-runner.md) | Checks preserve bounded tails and terminate process groups | locked by research/orca-features/automations.md and fork-loops.md |
@@ -1781,6 +1804,13 @@ files, not this one.
 | easy | high | [m6-orchestration-ui D11](decisions/m6-orchestration-ui.md) | Preserve sidebar workspace layout and isolate actual UI proof | assumed — autonomous |
 | easy | high | [m6-orchestration-ui D12](decisions/m6-orchestration-ui.md) | Keep catch-up and review provenance explicit | assumed — autonomous |
 | easy | high | [m6-orchestration-ui D14](decisions/m6-orchestration-ui.md) | Keep guarded dogfood limits separate from actual isolated-browser proof | assumed — autonomous |
+| easy | high | [fix-flaky-daemon-pty-client D1](decisions/fix-flaky-daemon-pty-client.md) | Diagnose retirement before changing the shutdown-count assertion | assumed — autonomous |
+| easy | high | [fix-flaky-daemon-pty-client D3](decisions/fix-flaky-daemon-pty-client.md) | Use Gemini for the final cross-family review because Claude reviewers are unavailable | assumed — autonomous |
+| easy | high | [fix-flaky-daemon-pty-client D4](decisions/fix-flaky-daemon-pty-client.md) | Deduplicate retirement by authenticated incarnation within each establishment attempt | assumed — autonomous |
+| easy | high | [fix-flaky-daemon-pty-client D5](decisions/fix-flaky-daemon-pty-client.md) | Verify the internal race through a real daemon API and replacement PTY, without UI or native claims | assumed — autonomous |
+| easy | high for the observed review result; bounded to this repair | [fix-flaky-daemon-pty-client D7](decisions/fix-flaky-daemon-pty-client.md) | Accept the substantive Gemini review without treating its timing estimate as evidence | assumed — autonomous |
+| easy | high for observed failure and independent compiler result; no claimed root cause for the hook timeout | [fix-flaky-daemon-pty-client D8](decisions/fix-flaky-daemon-pty-client.md) | Retain the scripts hook failure and run recovery without changing infrastructure | assumed — autonomous |
+| easy | high for retained outcomes; no claim that scripts currently pass | [fix-flaky-daemon-pty-client D9](decisions/fix-flaky-daemon-pty-client.md) | Let the canonical merged gate decide landing; do not relax protected scripts | assumed — autonomous |
 | easy | high | [m5-automations-dispatch D4](decisions/m5-automations-dispatch.md) | Resolve every relevant gray area autonomously | locked by docs/loop/LOOP.md |
 | easy | high | [m5-automations-dispatch D7](decisions/m5-automations-dispatch.md) | Explicit setup defaults to skip and never grants hook trust | assumed — autonomous |
 | easy | high | [m5-automations-dispatch D9](decisions/m5-automations-dispatch.md) | Use OpenAI implementers and reachable Gemini cross-family review | locked by docs/loop/LOOP.md |
@@ -1929,7 +1959,8 @@ files, not this one.
 | easy | high for exercised public boundaries | [m6-heimdall-control D11](decisions/m6-heimdall-control.md) | Validate commands before opening conditional deletion confirmation | assumed — autonomous |
 | easy | high for exercised surface only | [m6-heimdall-control D13](decisions/m6-heimdall-control.md) | Apply the aged-item rule without claiming an unrun dogfood campaign | locked by docs/loop/LOOP.md |
 | easy | high for the identified setup and dispatch semantics; final native acceptance not yet passing | [m6-heimdall-control D14](decisions/m6-heimdall-control.md) | Require an acknowledged dispatch, not merely a live process or completed work | assumed — autonomous |
-| easy | high for exercised blocking ask/answer/unpark/replay; overall native test remains failing at exact stop | [m6-heimdall-control D15](decisions/m6-heimdall-control.md) | Exercise a blocking Ask rather than invent a pending one-way message | locked by docs/roadmap.md |
+| easy | high for the exercised complete native worker-control flow | [m6-heimdall-control D15](decisions/m6-heimdall-control.md) | Exercise a blocking Ask rather than invent a pending one-way message | locked by docs/roadmap.md |
+| easy | high | [m6-heimdall-control D16](decisions/m6-heimdall-control.md) | Verify observable settlement rather than incidental exit metadata or callback timing | assumed — autonomous |
 | easy | high | [m3-session-info D2](decisions/m3-session-info.md) | Use the existing right-column panel slot without a shortcut | locked by docs/loop/decisions/m0-ui-api.md |
 | easy | high | [m3-session-info D3](decisions/m3-session-info.md) | Keep view state in the daemon and default only Live activity open | locked by docs/roadmap.md |
 | easy | high | [m3-session-info D4](decisions/m3-session-info.md) | Show missing, waiting, refreshing, stale and error states honestly | locked by external session-info.md |
