@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 if (process.argv.slice(2).includes('--version') || process.argv.slice(2).includes('-v')) {
@@ -46,7 +46,10 @@ async function drainRequests(cli: string): Promise<void> {
         child.exited
       ])
       children.delete(child)
-      writeFileSync(join(root, `${request.id}.reply.json`), JSON.stringify({ code, stdout, stderr }))
+      const reply = join(root, `${request.id}.reply.json`)
+      const staging = `${reply}.pending`
+      writeFileSync(staging, JSON.stringify({ code, stdout, stderr }))
+      renameSync(staging, reply)
       appendFileSync(join(root, `${session}.events.jsonl`), JSON.stringify({ type: 'cli', id: request.id, code }) + '\n')
     }
   } catch (error) {
