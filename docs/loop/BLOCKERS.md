@@ -242,3 +242,11 @@ Registration update: `bun scripts/build-loop/queue.ts add /tmp/quirky-session-in
 - **First failure:** SC-20's existing remote-tracking base refresh timed out at the wait in `create.test.ts:367`; quirkyd logged that it could not refresh origin/main in the background.
 - **Isolated retry:** a different case, “a remote base that moves after the hooks were read does not change the commit checked out”, failed `git fetch -q origin` with `cannot lock ref refs/remotes/origin/main: is at 5549f0f4044fc0bd6207c2f67aa3ace59af0f97c but expected f85218387be054f4435ae642b09ba319f631971a`.
 - **Evidence:** `bun run test`, remote snapshot `runs/1793142204136-90736`, artifact://51. No worktree implementation or test was edited in the PTY item, and this failure was not suppressed. The corrected PTY package separately passed two complete 14-file remote runs with no flaky reruns.
+
+## sa-browser-pane: deferred native page-event interception
+
+- **Owner:** queued `sa-browser-pane-native-events`, dependent on `sa-browser-pane`; authoritative queue add confirmed on 2026-10-28.
+- **Flows:** Native system-webview JavaScript alert/confirm/prompt/beforeunload overlays and fail-closed responses; basic-auth and loopback-only certificate prompts; controlled collision-safe download destination/cancel/shelf actions; opener/postbody-preserving OAuth popups and external-app launch interception.
+- **Outside limit:** pinned public Electrobun SDK exposes native navigation/find/zoom, popup URL metadata and download notifications, but not the synchronous dialog/auth/certificate response handles, native download destination/cancel controls or opener-preserving popup ownership these flows require.
+- **Evidence:** installed `apps/desktop/.hutch/devkit/api/sdks/main/core/BrowserView.ts:44-218,309-374`, `api/preload/webviewTag.ts:12-26,361-402`, `api/sdks/main/events/webviewEvents.ts:1-38`; BrowserNativeHost/BrowserPaneMap public API surveys. These are supported API limitations, not evidence that private native callbacks do not exist.
+- **Unblock:** a supported SDK capability supplying those controls, without private FFI/pointers, global TLS bypass, asynchronous fake synchronous dialogs, or silently replacing native human browsing with Chrome. Reachable Chrome Watch page-event behavior remains owned by this pane item and is not cleared by this deferral.

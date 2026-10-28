@@ -77,5 +77,60 @@
 - **Revisit if:** native nightly identifies actual runtime failures
 - **Source:** deferred: platform
 
+## D8: Bound Watch transport with renderer acknowledgment and daemon-owned tab lifecycle
+- **Question:** Can generic broadcast events bound slow-reader memory, and do CLI pane operations open/close the real hosted tab?
+- **Options:** unbounded event pushes/UI-only tab creation; generic stream rewrite; one outstanding frame with explicit ACK and daemon-owned hosted tabs
+- **Chose:** paneFrameAck validates pane/watchId/sequence; retain only outstanding plus latest frame, expire stalled leases. paneOpen owns public openViewTab; paneClose uses fromTab preclose flag to avoid reentrant terminal queue while ordinary API closes the actual tab.
+- **Why:** public events do not persist but transport can buffer; renderer ACK supplies real backpressure. UI-only hosted creation would break API/CLI equivalence, and preclose callback queue reentry deadlocks.
+- **Evidence:** packages/daemon/src/plugins/events.ts:28-40; packages/daemon/src/service.ts:74-82; plugins/quirky.terminal/src/layout/service.ts:452-510; amended shared pane contract and logic spec.
+- **Reversibility:** medium (public lease and lifecycle contracts)
+- **Confidence:** high
+- **Revisit if:** backpressure or close-race acceptance exposes stale/duplicate state
+- **Source:** assumed — autonomous
+
+## D9: Use supported native tag geometry with a narrow trusted zoom bridge
+- **Question:** The native BrowserView lacks public bounds/navigation controls, while its custom tag omits the optional views-loader creation flag; does the core require private FFI or an engine change?
+- **Options:** private FFI resize; Chrome replacement; unavailable-only scaffold; supported sandboxed tag plus public tag-owned BrowserView zoom
+- **Chose:** supported tag for geometry/navigation/lifetime, synchronous allow-only safe-protocol rules, default appData=false, sandbox=true, and trusted host bridge restricted to tag-owned view zoom. Guest state/find reports remain untrusted display data. Remove self-selected views=false construction constraint; deny internal views/appdata navigation instead.
+- **Why:** the SDK's public custom element is its maintained geometry/navigation API; its packaged public-asset loader flag conveys no daemon token or privileged RPC. Native browser architecture remains unchanged. No private pointer/FFI calls or fake successful unavailable mount.
+- **Evidence:** installed SDK BrowserView.ts, preload/webviewTag.ts, public browser/webviewtag.ts; BrowserNativeHost feasibility packet; amended logic Public native capability contract.
+- **Reversibility:** medium (public host adapter)
+- **Confidence:** medium until native nightly surface verification; unsafe navigation-rule behavior would block this adapter
+- **Revisit if:** actual SDK rules fail to deny internal protocols or guest content can access the trusted bridge
+- **Source:** assumed — autonomous
+
+## D10: Keep build and fixture conventions without a second entry point
+- **Question:** Which exact entry/harness paths are required for a runnable component?
+- **Options:** change generic build discovery; root ui.tsx shim; conventional src/ui.tsx and fixture dependency expansion
+- **Chose:** UI owns src/ui.tsx, excluded explicitly from Runtime scope; Runtime owns existing browser harness.ts and automation.test.ts only where terminal dependency/acceptance requires it. No root UI alias or build-loop changes.
+- **Why:** packages/ui/build.ts discovers src/ui.tsx; real hosted panes require terminal plugin in the isolated API harness.
+- **Evidence:** BrowserPaneUi entry discovery and BrowserPaneRuntime harness packet; packages/ui/build.ts; plugins/quirky.browser/test/harness.ts:71-94.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the barrier detects a genuine additional public API dependency
+- **Source:** assumed — autonomous
+
+## D11: Integrate lane8's explicit profile-isolation contract without overlapping feature ownership
+- **Question:** The early dependent sa-browser-profiles-settings needs pane identity/profile switching and native clearing; which contract and paths are shared?
+- **Options:** ignore profile selection; duplicate preference implementations; coordinated pane/profile seam with lane8-owned API/menu
+- **Chose:** PaneTab.profileId/partition and paneOpen.profile; exact stable persist:quirky-browser-${profileId}, IDs default or profile_[0-9a-f]{32}, assigned before native creation. Public nativeBrowser.clearPartition uses supported Session.clearStorageData(all), unavailable web rejects. BrowserService.setPaneProfile validates existence, preserves pane/tab/URL and retires old Watch generation; UI remounts native on profile change. Lane8 owns src/preferences/**, src/preferences-window/**, profileSet registration and clear/delete guarded command. Menu props {context,pane,onError} after Browser menu/before History; no missing-component import here.
+- **Why:** the user specifically requires real profile isolation and coordinated independent slices, not silent fallback or competing registrations. Actual native clear/isolation is pending nightly; tests never call the real native Session.
+- **Evidence:** user interjections 2026-10-28 lane8 contracts; BrowserPaneRuntime seam acknowledgment; BrowserPaneUi insertion packet; BrowserStore.validProfileId existing grammar.
+- **Reversibility:** medium (profile/native data boundary)
+- **Confidence:** high for agreed contract, native behavior pending nightly
+- **Revisit if:** supported SDK partition semantics or profile deletion prerequisites differ from the agreed public behavior
+- **Source:** user ruling 2026-10-28 (lane8 coordination)
+
+## D12: Queue the unsupported Native event flows before landing
+- **Question:** How is D5's partial-flow deferral made durable without blocking the core pane?
+- **Options:** hide unsupported controls; block all browser work; record exact limits and dependent follow-up
+- **Chose:** queue.ts add created sa-browser-pane-native-events (todo, deps[sa-browser-pane]); BLOCKERS.md names native script/auth/cert response, controlled downloads, OAuth opener/postbody and external launch interception prerequisites. Watch equivalents remain this item's acceptance.
+- **Why:** public SDK capability is an external limit for these Native flows, while native pane basics and exact-page Watch remain independently useful. No unavailable operation is reported passing.
+- **Evidence:** exact queue.ts add exited0; authoritative build/roadmap queue JSON confirmed the new item; docs/loop/BLOCKERS.md sa-browser-pane entry; D5 SDK evidence.
+- **Reversibility:** easy (follow-up can consume a supported SDK upgrade)
+- **Confidence:** high for queue persistence and inspected public API limits
+- **Revisit if:** a supported hook makes one of these flows reachable before the follow-up is claimed
+- **Source:** deferred: native page-event interception
+
 ## Progress
-Claimed 2026-10-28T00:35Z. Design/self-review complete; source, roadmap/architecture locks and all sa-browser-agent decisions read. Shared native/browser-pane types and single combined spec ready for contract commit. Next:3 isolated implementers, barrier/scope acceptance, real Watch/web smoke, one review/fix batch, required affected/scripts/typecheck, one roadmap catchup/reconciliation and controller land. No implementation claimed verified yet.
+Claimed 2026-10-28T00:35Z. Contract/spec commit2ab093ce; three isolated OpenAI components running under /tmp/sa-browser-pane.fiGLjz with hard disjoint scopes/journal. Parent amendments D8–D10 communicated before code acceptance. Web dogfood doctor passed. Next: wave barrier HEAD/scope audits, merge implementations, owned acceptance/build and real Watch smoke, one Gemini review/fix, affected suite/scripts/types, one catchup/decision reconciliation, commit/detach/controller land. Native-only scenarios are pending nightly; no implementation verified yet.
