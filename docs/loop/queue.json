@@ -1442,6 +1442,19 @@
       "docs": [],
       "deps": [],
       "status": "todo"
+    },
+    {
+      "id": "m5-automations-ui-remote-authorities",
+      "milestone": "M5",
+      "title": "Complete automation UI remote Host selection, authority-preserving host moves, remote list/history availability and SSH/runtime OpenClaw controls after the public host registration-generation/execution/capability APIs land in m5-automations-dispatch-remote-and-args; retain captured-owner fencing and no local fallback",
+      "docs": [
+        "automations.md"
+      ],
+      "deps": [
+        "m5-automations-ui",
+        "m5-automations-dispatch-remote-and-args"
+      ],
+      "status": "todo"
     }
   ]
 }
