@@ -1520,7 +1520,8 @@
       "deps": [
         "m7-terminal-provider-host-and-worktree-remainder"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 12
     },
     {
       "id": "m7-test-triage",
