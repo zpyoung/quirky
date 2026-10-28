@@ -28,6 +28,17 @@ const roadmapView = {
   fields: { nodes: [{ __typename: 'ProjectV2Field', id: 'TITLE', name: 'Title', dataType: 'TITLE' }, ...fields] },
   groupByFields: { nodes: [] }, verticalGroupByFields: { nodes: [] }, sortByFields: { nodes: [] }
 }
+export const USER_PROJECT_ISSUE_TYPES_SCENARIO = {
+  id: 'U01',
+  projectId: 'PVT_U01',
+  itemId: 'PVTI_U01_7',
+  projectUrl: 'https://github.com/users/pat/projects/4',
+  projectTitle: 'U01 User project: org-repo issue types',
+  itemTitle: 'U01 Task: change type from Task to Bug',
+  repository: 'org-repo/test-repo',
+  issueNumber: 7
+} as const
+
 
 function baseProjectFixture(): ProjectFixtureState {
   return {
@@ -66,6 +77,7 @@ function baseProjectFixture(): ProjectFixtureState {
         }
       },
       projectFields: {},
+      repositories: { 'test-owner/test-repo': { ownerType: 'Organization' } },
       issues: {
         'test-owner/test-repo/7': { nodeId: 'ISSUE_NODE_7', number: 7, title: 'Improve project table', body: 'Project issue context', state: 'open', html_url: 'https://github.com/test-owner/test-repo/issues/7', user: { login: 'project-fixture' }, labels: [], assignees: [] },
         'test-owner/test-repo/9': { nodeId: 'ISSUE_NODE_9', number: 9, title: 'Undated project issue', body: '', state: 'open', html_url: 'https://github.com/test-owner/test-repo/issues/9', user: { login: 'project-fixture' }, labels: [], assignees: [] }
@@ -96,6 +108,77 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export function seedProjectsState(overrides: Record<string, unknown> = {}): ProjectFixtureState {
   return deepMerge(baseProjectFixture(), overrides)
 }
+
+/** Build the reusable U01 user-owned Project with organization-owned issue fixture. */
+export function seedUserProjectIssueTypesState(): ProjectFixtureState {
+  const state = seedProjectsState()
+  state.resources = {
+    projectId: USER_PROJECT_ISSUE_TYPES_SCENARIO.projectId,
+    projectViews: {
+      'user/pat/4': {
+        projectId: USER_PROJECT_ISSUE_TYPES_SCENARIO.projectId,
+        owner: 'pat',
+        ownerType: 'User',
+        number: 4,
+        title: USER_PROJECT_ISSUE_TYPES_SCENARIO.projectTitle,
+        url: USER_PROJECT_ISSUE_TYPES_SCENARIO.projectUrl,
+        views: [tableView, boardView, roadmapView]
+      }
+    },
+    projectItems: {
+      [`${USER_PROJECT_ISSUE_TYPES_SCENARIO.projectId}/${USER_PROJECT_ISSUE_TYPES_SCENARIO.itemId}`]: {
+        id: USER_PROJECT_ISSUE_TYPES_SCENARIO.itemId,
+        projectId: USER_PROJECT_ISSUE_TYPES_SCENARIO.projectId,
+        projectNumber: 4,
+        owner: 'pat',
+        ownerType: 'User',
+        kind: 'issue',
+        number: USER_PROJECT_ISSUE_TYPES_SCENARIO.issueNumber,
+        title: USER_PROJECT_ISSUE_TYPES_SCENARIO.itemTitle,
+        body: 'Organization-repository issue in a user-owned Project.',
+        state: 'open',
+        url: `https://github.com/${USER_PROJECT_ISSUE_TYPES_SCENARIO.repository}/issues/${USER_PROJECT_ISSUE_TYPES_SCENARIO.issueNumber}`,
+        repository: USER_PROJECT_ISSUE_TYPES_SCENARIO.repository,
+        issueType: { id: 'TYPE_TASK', name: 'Task', isEnabled: true },
+        fieldValues: {
+          PVTF_STATUS: { singleSelectOptionId: 'OPT_TODO' },
+          PVTF_START: { date: '2026-01-01' },
+          PVTF_TARGET: { date: '2026-01-14' },
+          PVTF_ESTIMATE: { number: 3 },
+          PVTF_NOTES: { text: 'U01 fixture' }
+        }
+      }
+    },
+    projectFields: {},
+    repositories: {
+      [USER_PROJECT_ISSUE_TYPES_SCENARIO.repository]: { ownerType: 'Organization' }
+    },
+    issues: {
+      [`${USER_PROJECT_ISSUE_TYPES_SCENARIO.repository}/${USER_PROJECT_ISSUE_TYPES_SCENARIO.issueNumber}`]: {
+        nodeId: 'ISSUE_NODE_U01_7',
+        owner: 'org-repo',
+        number: USER_PROJECT_ISSUE_TYPES_SCENARIO.issueNumber,
+        title: USER_PROJECT_ISSUE_TYPES_SCENARIO.itemTitle,
+        body: 'Organization-repository issue in a user-owned Project.',
+        state: 'open',
+        html_url: `https://github.com/${USER_PROJECT_ISSUE_TYPES_SCENARIO.repository}/issues/${USER_PROJECT_ISSUE_TYPES_SCENARIO.issueNumber}`,
+        issueType: { id: 'TYPE_TASK', name: 'Task', isEnabled: true },
+        user: { login: 'project-fixture' },
+        labels: [],
+        assignees: []
+      }
+    },
+    issueTypes: {
+      'org-repo': [
+        { id: 'TYPE_BUG', name: 'Bug', description: 'A defect to fix.', isEnabled: true },
+        { id: 'TYPE_TASK', name: 'Task', description: 'A piece of work.', isEnabled: true },
+        { id: 'TYPE_ARCHIVED', name: 'Archived', description: 'No longer selectable.', isEnabled: false }
+      ]
+    }
+  }
+  return state
+}
+
 
 /** Mutate a seed to model a host response, auth failure, item edit, or project layout change. */
 export function setProjectScenario(state: ProjectFixtureState, change: Record<string, unknown>): ProjectFixtureState {
@@ -159,6 +242,7 @@ const projectViews = resources.projectViews && typeof resources.projectViews ===
 const projectItems = resources.projectItems && typeof resources.projectItems === 'object' ? resources.projectItems : {}
 const projectFields = resources.projectFields && typeof resources.projectFields === 'object' ? resources.projectFields : (resources.projectFields = {})
 const issues = resources.issues && typeof resources.issues === 'object' ? resources.issues : (resources.issues = {})
+const repositories = resources.repositories && typeof resources.repositories === 'object' ? resources.repositories : {}
 const issueTypes = resources.issueTypes && typeof resources.issueTypes === 'object' ? resources.issueTypes : {}
 const variable = (name) => variables[name]
 const ownerKindFromQuery = (source) => source.includes('organization(login:') ? 'organization' : 'user'
@@ -332,13 +416,28 @@ if (query.includes('query ProjectItemContext')) {
   emit({ data: { project: { id: projectId, owner: { __typename: item.ownerType ?? 'Organization', login: item.owner ?? 'test-owner' } }, item: { id: itemId, project: { id: projectId }, type: item.kind === 'pullRequest' ? 'PULL_REQUEST' : item.kind === 'draft' ? 'DRAFT_ISSUE' : 'ISSUE', content: { __typename: item.kind === 'pullRequest' ? 'PullRequest' : item.kind === 'draft' ? 'DraftIssue' : 'Issue', number: item.number, url: item.url } } } })
 }
 if (query.includes('query OrganizationIssueTypes')) {
-  const owner = variable('owner')
   const repoOwner = variable('repoOwner')
   const repo = variable('repo')
   const number = Number(variable('number'))
-  const issue = issues[repoOwner + '/' + repo + '/' + number]
+  const repositoryIdentity = repoOwner + '/' + repo
+  const repositoryOwnerType = repositories[repositoryIdentity]?.ownerType === 'User' ? 'User' : 'Organization'
+  const issue = issues[repositoryIdentity + '/' + number]
   if (!issue) fail('HTTP 404: Issue not found')
-  emit({ data: { repository: { issue: { id: issue.nodeId ?? 'ISSUE_NODE_' + number } }, organization: { issueTypes: { nodes: issueTypes[owner] ?? [], pageInfo: { hasNextPage: false } } } } })
+  const repositoryOwner = repositoryOwnerType === 'Organization'
+    ? {
+        __typename: 'Organization',
+        login: repoOwner,
+        issueTypes: { nodes: issueTypes[repoOwner] ?? [], pageInfo: { hasNextPage: false } }
+      }
+    : { __typename: 'User', login: repoOwner }
+  emit({
+    data: {
+      repository: {
+        owner: repositoryOwner,
+        issue: { id: issue.nodeId ?? 'ISSUE_NODE_' + number }
+      }
+    }
+  })
 }
 if (query.includes('mutation SetProjectField') || query.includes('mutation ClearProjectField')) {
   const input = variables.input ?? variables
@@ -352,11 +451,15 @@ if (query.includes('mutation SetProjectField') || query.includes('mutation Clear
 if (query.includes('mutation SetIssueType')) {
   const input = variables.input ?? variables
   const typeId = input.issueTypeId
-  for (const issue of Object.values(issues)) {
+  for (const [issueKey, issue] of Object.entries(issues)) {
     if (!issue || issue.nodeId !== input.issueId) continue
     const owner = issue.owner ?? 'test-owner'
     const issueType = (issueTypes[owner] ?? []).find((candidate) => candidate.id === typeId) ?? null
     issue.issueType = issueType
+    const repositoryIdentity = issueKey.slice(0, issueKey.lastIndexOf('/'))
+    for (const item of Object.values(projectItems)) {
+      if (item?.kind === 'issue' && item.repository === repositoryIdentity && Number(item.number) === Number(issue.number)) item.issueType = issueType
+    }
     save()
     emit({ data: { updateIssueIssueType: { issue: { id: input.issueId, issueType } } } })
   }
