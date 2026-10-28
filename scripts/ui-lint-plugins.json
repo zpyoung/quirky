@@ -1,6 +1,11 @@
 [
   "quirky.browser",
   "quirky.editor",
+  "quirky.handoff",
+  "quirky.heimdall",
+  "quirky.ledger",
+  "quirky.loops",
+  "quirky.orchestration",
   "quirky.repo",
   "quirky.terminal",
   "quirky.terminal-dock",

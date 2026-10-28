@@ -179,8 +179,7 @@ test('SC-13: the sidebar panel follows the active workspace, scopes and client s
   const panel = await world.win.waitFor(() => document.querySelector<HTMLElement>('[aria-label="Ledger panel"]'))
   await world.win.waitFor(() => panel.querySelector('ul li'))
   expect(panel.textContent).toContain('Panel origin record')
-  expect(button(panel, 'Worktree')).toBeDefined()
-  expect(button(panel, 'Project')).toBeDefined()
+
   expect((await uiState(world.agent)).slots.find((slot) => slot.id === LEDGER_PANEL)?.report).toMatchObject({
     view: 'panel',
     target: { workspaceId: world.workspace.id },
@@ -337,7 +336,7 @@ test('SC-16: long-history detail actions change state and revert through the pub
   await click(row.querySelector('button[aria-label^="Show details"]')!)
   const detail = await world.win.waitFor(() => {
     const dialog = dialogNamed(`Ledger entry ${id}`)
-    return dialog?.querySelector('footer') ? dialog : undefined
+    return dialog && button(dialog, 'Edit') ? dialog : undefined
   })
   expect(detail.textContent).toContain('Full history')
   expect(detail.textContent).toContain('Before')

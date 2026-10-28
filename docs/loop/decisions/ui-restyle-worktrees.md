@@ -156,5 +156,16 @@
 
 Recovery verification: merge541e682f passed fresh `bun run typecheck && bun packages/ui/build.ts` exit0/33.05s, including the combined UI lint registry, root/mobile/prepared-desktop typing and11host/vendor files/25plugin UI modules. This is current compiled-source evidence, not a new suite or browser/native acceptance claim.
 
+## D15: Compose native shared fields and fixed-footer dialogs without losing worktree semantics
+- **Question:** the second actual controller refusal requires composing Ledger and orchestration shared UI changes
+- **Options:** discard new shared fields/scrolling; discard worktree progress/wide/focus; union independent shared contracts and retain semantic test coverage
+- **Chose:** required merge of roadmap046ba28fc5adc8d5c837d5df65688c6fcf43f91a; preserve TextArea/SelectField and input ref types, StatusDot progress, Dialog wide sizing/top-stack focus and optional scrollBody together. Keep incoming backdrop pointer-event ownership and all11plugin lint enrollments. Read ui-restyle-ledger D1–D10/Progress and ui-restyle-orchestration D1–D13/Progress fully, including raw omitted receipts. Reassign only the parent Ledger test file to the existing test implementer: shared semantic DOM helpers replace duplicate locals, copy-only button assertions stay deleted, Edit-action readiness replaces footer-structure readiness. No worker checks/commits.
+- **Why:** fields, scrolling and worktree focus/sizing are independent capabilities. Ledger fixed actions must remain accessible; orchestration overlays need explicit pointer-events. The conflict is composition, not permission for aliases, style copies, changed record authority or test campaigns.
+- **Evidence:** second canonical land exit1/1.09s; five exact conflicted files; declared disjoint parent/child scopes and returned Ledger no-conflicts receipt; incoming full decision logs
+- **Reversibility:** medium
+- **Confidence:** high for the explicit union; fresh compiler and scoped current-source proof remain next
+- **Revisit if:** the composed compiler or actual modal/menu boundary fails
+- **Source:** locked by docs/loop/LOOP.md failed-land retry procedure
+
 ## Progress
-Ready for authoritative landing retry: required recovery541e682f preserves TextField refs and StatusDot progress; fresh full typecheck/UIlint and actual UI build passed33.05s. Earlier source/browser evidence and its limits remain D9–D13; all workers, checks and owned runtimes are stopped, all four component worktrees removed. Commit this receipt, detach and retry canonical queue land; await actual success before removing owned scratch and ending this one-item iteration.
+Second required recovery D15 is resolved with all shared field/dialog/progress and semantic test contracts retained. No worker remains active. Next: commit this recovery, run fresh typecheck/UI build and minimal current-source proof using the already-installed stable testing headless shell identified by the incoming orchestration owner, then detach/retry authoritative land. Earlier browser-isolation and validation limits remain explicit; do not launch branded Chrome or touch unrelated user Library state.

@@ -1,11 +1,12 @@
 import { useEffect, useSyncExternalStore } from 'react'
+import { Button, Dialog as SharedDialog, ListRow, SectionHeader, TextArea, TextField } from '@quirky/ui'
 import { TEMPLATE_BODY_MAX, TEMPLATE_NAME_MAX } from '../core/template'
 import { BODY_COUNTER, SETTINGS_SUBTITLE, VARIABLES_HINT } from './copy'
 import { canSaveEditor, type TemplatesStore } from './templates'
 
 function EditorDialog({ store }: { store: TemplatesStore }) {
   const { editor } = useSyncExternalStore(store.subscribe, store.getSnapshot)
-
+  const title = editor === null || editor.id === null ? 'Add template' : 'Edit template'
   useEffect(() => {
     if (!editor) return
     const onKey = (event: KeyboardEvent) => {
@@ -17,45 +18,44 @@ function EditorDialog({ store }: { store: TemplatesStore }) {
     return () => window.removeEventListener('keydown', onKey, true)
   }, [editor !== null, store])
 
-  if (!editor) return null
   return (
-    <div className="overlay hf-overlay">
-      <div className="dialog dialog-wide" role="dialog" aria-label={editor.id === null ? 'Add template' : 'Edit template'}>
-        <h2>{editor.id === null ? 'Add template' : 'Edit template'}</h2>
-        <div className="form">
-          <label>
-            <span>Name</span>
-            <input
-              type="text"
-              aria-label="Name"
-              maxLength={TEMPLATE_NAME_MAX}
-              value={editor.name}
-              onChange={(event) => store.setEditor({ name: event.target.value })}
-            />
-          </label>
-          <label>
-            <span>Instructions</span>
-            <textarea
-              aria-label="Instructions"
-              rows={8}
-              maxLength={TEMPLATE_BODY_MAX}
-              value={editor.body}
-              onChange={(event) => store.setEditor({ body: event.target.value })}
-            />
-          </label>
-          <small className="muted hf-counter">{BODY_COUNTER(editor.body.length, TEMPLATE_BODY_MAX)}</small>
-          <small className="muted">{VARIABLES_HINT}</small>
-        </div>
-        <div className="dialog-actions">
-          <button type="button" onClick={() => store.closeEditor()}>
-            Cancel
-          </button>
-          <button type="button" className="primary" disabled={!canSaveEditor(editor)} onClick={() => void store.saveEditor()}>
+    <SharedDialog
+      open={editor !== null}
+      title={title}
+      closeOnBackdrop={false}
+      onClose={() => store.closeEditor()}
+      actions={(
+        <>
+          <Button type="button" onClick={() => store.closeEditor()}>Cancel</Button>
+          <Button type="button" variant="primary" disabled={!editor || !canSaveEditor(editor)} onClick={() => void store.saveEditor()}>
             Save template
-          </button>
+          </Button>
+        </>
+      )}
+    >
+      {editor && (
+        <div className="ui-stack">
+          <TextField
+            label="Name"
+            aria-label="Name"
+            type="text"
+            maxLength={TEMPLATE_NAME_MAX}
+            value={editor.name}
+            onChange={(event) => store.setEditor({ name: event.target.value })}
+          />
+          <TextArea
+            label="Instructions"
+            aria-label="Instructions"
+            rows={8}
+            maxLength={TEMPLATE_BODY_MAX}
+            value={editor.body}
+            onChange={(event) => store.setEditor({ body: event.target.value })}
+          />
+          <small className="ui-text-muted">{BODY_COUNTER(editor.body.length, TEMPLATE_BODY_MAX)}</small>
+          <small className="ui-text-muted">{VARIABLES_HINT}</small>
         </div>
-      </div>
-    </div>
+      )}
+    </SharedDialog>
   )
 }
 
@@ -63,43 +63,45 @@ function EditorDialog({ store }: { store: TemplatesStore }) {
 export function SettingsView({ store }: { store: TemplatesStore }) {
   const { templates, custom, limit, warning } = useSyncExternalStore(store.subscribe, store.getSnapshot)
   return (
-    <div className="hf-settings">
-      <header>
-        <h1>Session handoff</h1>
-        <p className="muted">{SETTINGS_SUBTITLE}</p>
-      </header>
+    <div className="ui-stack" style={{ padding: 'var(--ui-space-16)' }}>
+      <div className="ui-stack">
+        <SectionHeader title="Session handoff" />
+        <p className="ui-text-muted">{SETTINGS_SUBTITLE}</p>
+      </div>
       {warning !== null && (
-        <p className="hf-warning" role="status">
-          {warning}
-        </p>
+        <div role="status">
+          <ListRow title={warning} status="needs-you" />
+        </div>
       )}
-      <ul className="hf-templates">
+      <div role="list" className="ui-stack">
         {templates.map((template) => (
-          <li key={template.id} data-template={template.id}>
-            <div className="hf-template-text">
-              <div className="hf-template-name">{template.name}</div>
-              <div className="muted hf-template-body">{template.body}</div>
-            </div>
-            <div className="hf-template-actions">
-              <button type="button" aria-label={`Edit ${template.name}`} onClick={() => store.editExisting(template.id)}>
-                Edit
-              </button>
-              <button type="button" aria-label={`Remove ${template.name}`} onClick={() => void store.remove(template.id)}>
-                Remove
-              </button>
-            </div>
-          </li>
+          <div key={template.id} role="listitem" data-template={template.id}>
+            <ListRow
+              title={template.name}
+              description={template.body}
+              trailing={(
+                <div className="ui-cluster">
+                  <Button type="button" aria-label={`Edit ${template.name}`} onClick={() => store.editExisting(template.id)}>
+                    Edit
+                  </Button>
+                  <Button type="button" variant="destructive" aria-label={`Remove ${template.name}`} onClick={() => void store.remove(template.id)}>
+                    Remove
+                  </Button>
+                </div>
+              )}
+            />
+          </div>
         ))}
-      </ul>
-      <div className="hf-settings-foot">
-        <span className="muted">{`${templates.length} of ${limit} templates`}</span>
-        <div className="hf-template-actions">
-          <button type="button" disabled={!custom} onClick={() => void store.reset()}>
+      </div>
+      <div className="ui-cluster" style={{ justifyContent: 'space-between' }}>
+        <span className="ui-text-muted">{`${templates.length} of ${limit} templates`}</span>
+        <div className="ui-cluster">
+          <Button type="button" disabled={!custom} onClick={() => void store.reset()}>
             Reset to defaults
-          </button>
-          <button type="button" className="primary" disabled={templates.length >= limit} onClick={() => store.editNew()}>
+          </Button>
+          <Button type="button" variant="primary" disabled={templates.length >= limit} onClick={() => store.editNew()}>
             Add template
-          </button>
+          </Button>
         </div>
       </div>
       <EditorDialog store={store} />
