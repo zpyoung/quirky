@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ProjectGroup, Repo, Worktree, WorktreeStatus } from '@quirky/protocol'
+import type { WorktreeStatusDefinition } from './parity-types'
 import type { DialogState } from './report'
 
 export const PRIMARY_DELETE_TIP = 'the primary worktree cannot be deleted; remove the project instead'
@@ -113,7 +114,7 @@ export function ContextMenu({ x, y, label, items, onClose }: Props) {
 
 /** What a workspace's menu items do; the dialog-opening ones are implemented by the section. */
 export type WorkspaceMenuHandlers = {
-  setStatus(worktree: Worktree, status: WorktreeStatus): void
+  setStatus(worktree: Worktree, status: string): void
   setPinned(worktree: Worktree, pinned: boolean): void
   setUnread(worktree: Worktree, unread: boolean): void
   removeParent(worktree: Worktree): void
@@ -123,6 +124,8 @@ export type WorkspaceMenuHandlers = {
   setMembership(worktree: Worktree, group: ProjectGroup | null): void
   moveProject(repo: Repo, group: ProjectGroup | null): void
   setSleeping(worktree: Worktree, sleeping: boolean, withDescendants: boolean): void
+  openIn(worktree: Worktree, target: 'terminal' | 'changes'): void
+  archive(worktree: Worktree, archived: boolean): void
 }
 
 /** The items of a workspace card's menu, in order. */
@@ -131,7 +134,12 @@ export function workspaceMenu(
   descendants: number,
   groups: ProjectGroup[],
   repo: Repo | undefined,
-  on: WorkspaceMenuHandlers
+  on: WorkspaceMenuHandlers,
+  statuses: readonly WorktreeStatusDefinition[] = Object.entries(STATUS_LABELS).map(([id, label]) => ({
+    id,
+    label,
+    color: '#777777'
+  }))
 ): MenuItem[] {
   const del: MenuItem = worktree.isMain
     ? { label: 'Delete', disabled: true, title: PRIMARY_DELETE_TIP }
@@ -152,12 +160,27 @@ export function workspaceMenu(
   const items: MenuItem[] = [
     { label: 'Update…', onSelect: () => on.openDialog({ kind: 'update', worktreeId: worktree.id }) },
     {
+      label: 'archivedAt' in worktree && (worktree as Worktree & { archivedAt: number | null }).archivedAt !== null ? 'Unarchive' : 'Archive',
+      disabled: worktree.isMain || worktree.kind !== 'git',
+      onSelect: () => on.archive(
+        worktree,
+        !('archivedAt' in worktree) || (worktree as Worktree & { archivedAt: number | null }).archivedAt === null
+      )
+    },
+    {
       label: 'Move to Status',
-      submenu: (Object.keys(STATUS_LABELS) as WorktreeStatus[]).map((status) => ({
-        label: STATUS_LABELS[status],
-        current: worktree.status === status,
-        onSelect: () => on.setStatus(worktree, status)
+      submenu: statuses.map((status) => ({
+        label: status.label,
+        current: worktree.status === status.id,
+        onSelect: () => on.setStatus(worktree, status.id)
       }))
+    },
+    {
+      label: 'Open in',
+      submenu: [
+        { label: 'Terminal', onSelect: () => on.openIn(worktree, 'terminal') },
+        { label: 'Changes', onSelect: () => on.openIn(worktree, 'changes') }
+      ]
     },
     { label: 'Copy Path', onSelect: () => on.copy(worktree.path) },
     { label: 'Copy Worktree Name', onSelect: () => on.copy(worktree.name) },

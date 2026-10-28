@@ -2,6 +2,7 @@ import { Database } from 'bun:sqlite'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import type { GitHubWorktreeLink, PluginContext, PluginStore, ProjectGroup, Worktree, WorktreeAutomationProvenance, WorktreeCreatedBy, WorktreePushTarget, WorktreeStatus } from '@quirky/protocol'
+import type { WorktreeReference } from '../parity-types'
 import type { WorktreeControl } from '../control-types'
 
 /** One `worktrees` row: Quirky's metadata for a workspace, keyed by the workspace ID. */
@@ -35,10 +36,11 @@ export type WorktreeRow = {
   sleep_changed_at: number
   cleanup_ignored_fingerprint: string | null
   cleanup_ignored_at: number | null
+  references_json: string
+  archived_at: number | null
   automation_provenance?: string | null
 }
 
-export const STATUSES: readonly WorktreeStatus[] = ['todo', 'in-progress', 'in-review', 'done']
 
 /** Rows of `table` in the v1 `<home>/quirky.db`, or none when it is missing or unreadable. */
 export function readV1Rows<T>(home: string, table: string, log: (message: string) => void): T[] {
@@ -123,6 +125,23 @@ export function openWorktreeStore(context: PluginContext): PluginStore {
         ALTER TABLE worktrees ADD COLUMN cleanup_ignored_at INTEGER;
         ALTER TABLE worktrees ADD COLUMN automation_provenance TEXT;
       `)
+    },
+    (store) => {
+      store.exec(`
+        ALTER TABLE worktrees ADD COLUMN references_json TEXT NOT NULL DEFAULT '[]';
+        ALTER TABLE worktrees ADD COLUMN archived_at INTEGER;
+        CREATE TABLE project_preferences (
+          repo_id TEXT PRIMARY KEY,
+          external_visibility TEXT,
+          external_inbox_suppressed INTEGER NOT NULL DEFAULT 0,
+          icon TEXT,
+          color TEXT,
+          tracker_project TEXT
+        );
+      `)
+    },
+    (store) => {
+      store.exec("ALTER TABLE project_preferences ADD COLUMN shared_directories TEXT NOT NULL DEFAULT '[]'")
     }
   ])
 }
@@ -211,6 +230,26 @@ function storedJson(value: string | null): unknown {
     return null
   }
 }
+function storedReferences(value: string | null): WorktreeReference[] {
+  const decoded = storedJson(value)
+  if (!Array.isArray(decoded)) return []
+  return decoded.flatMap((item) => {
+    const record = recordOf(item)
+    if (
+      typeof record?.id !== 'string' || record.id === '' ||
+      typeof record.url !== 'string' ||
+      typeof record.label !== 'string' ||
+      typeof record.createdAt !== 'number' || !Number.isFinite(record.createdAt)
+    ) return []
+    try {
+      const url = new URL(record.url)
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') return []
+    } catch {
+      return []
+    }
+    return [{ id: record.id, url: record.url, label: record.label, createdAt: record.createdAt }]
+  })
+}
 
 function storedLink(value: string | null): GitHubWorktreeLink | null {
   const record = recordOf(storedJson(value))
@@ -268,15 +307,17 @@ function storedAutomationProvenance(value: string | null | undefined): WorktreeA
 export function metadataOf(row: WorktreeRow): Pick<
   Worktree,
   'displayName' | 'comment' | 'status' | 'pinned' | 'unread' | 'parentId' | 'createdAt' | 'createdBy' | 'baseRef' | 'keepBranch' | 'projectGroupId' | 'lastActivityAt' | 'instanceId' | 'linkedPR' | 'linkedIssue' | 'pushTarget' | 'automationProvenance'
-> & Pick<WorktreeControl, 'manualOrder' | 'sleeping' | 'sleepChangedAt'> {
+> & Pick<WorktreeControl, 'manualOrder' | 'sleeping' | 'sleepChangedAt' | 'references' | 'archivedAt' | 'cleanupContext'> {
   const linkedPR = storedLink(row.linked_pr)
   const linkedIssue = storedLink(row.linked_issue)
   const pushTarget = storedPushTarget(row.push_target)
   const automationProvenance = storedAutomationProvenance(row.automation_provenance)
+  const references = storedReferences(row.references_json)
+  const archivedAt = row.archived_at
   return {
     displayName: row.display_name,
     comment: row.comment,
-    status: STATUSES.includes(row.status as WorktreeStatus) ? (row.status as WorktreeStatus) : 'in-progress',
+    status: row.status ? row.status as WorktreeStatus : 'in-progress',
     pinned: row.pinned !== 0,
     unread: row.unread !== 0,
     parentId: row.parent_id,
@@ -293,6 +334,9 @@ export function metadataOf(row: WorktreeRow): Pick<
     manualOrder: row.manual_order,
     sleeping: row.sleeping !== 0,
     sleepChangedAt: row.sleep_changed_at === 0 ? null : row.sleep_changed_at,
+    references,
+    archivedAt,
+    cleanupContext: { archivedAt, volatile: null, remoteConnected: null },
     ...(automationProvenance === null ? {} : { automationProvenance })
   }
 }

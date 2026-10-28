@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import type { HookScript, ProjectSettings, Repo, RepoDetails, UiPluginContext } from '@quirky/protocol'
-import { messageOf } from './actions'
+import { FolderPickerUnavailableError, messageOf, pickNativeFolder } from './actions'
 import { Dialog } from './Dialog'
 import { repoLabel } from './report'
+import type { ExternalVisibility, WorktreeProjectIdentity } from './parity-types'
+import { parseSharedDirectoriesText } from './shared-paths'
 
 type Props = { context: UiPluginContext; repo: Repo; onClose(): void }
 
@@ -22,8 +24,13 @@ const SOURCES: { value: string; label: string }[] = [
 /** The editable fields, as the form holds them: text fields never null. */
 type Form = {
   displayName: string
+  icon: string
+  color: string
+  trackerProject: string
+  externalVisibility: ExternalVisibility
   defaultBase: string
   worktreeLocation: string
+  sharedDirectories: string
   setupScript: string
   setupPolicy: ProjectSettings['setupPolicy']
   waitForSetup: boolean
@@ -32,12 +39,23 @@ type Form = {
   commandSource: string
 }
 
-function toForm(details: RepoDetails): Form {
+type ProjectMetadata = {
+  identity: WorktreeProjectIdentity
+  externalVisibility: ExternalVisibility
+  sharedDirectories: string[]
+}
+
+function toForm(details: RepoDetails, project: ProjectMetadata): Form {
   const { settings, repo } = details
   return {
     displayName: repo.displayName ?? '',
+    icon: project.identity.icon ?? '',
+    color: project.identity.color ?? '',
+    trackerProject: project.identity.trackerProject ?? '',
+    externalVisibility: project.externalVisibility,
     defaultBase: settings.defaultBase ?? '',
     worktreeLocation: settings.worktreeLocation ?? '',
+    sharedDirectories: project.sharedDirectories.join('\n'),
     setupScript: settings.setupScript,
     setupPolicy: settings.setupPolicy,
     waitForSetup: settings.agentStartup === 'wait-for-setup',
@@ -93,20 +111,21 @@ export function ProjectSettingsDialog({ context, repo, onClose }: Props) {
 
   useEffect(() => {
     let live = true
-    context
-      .call('quirky.repo/show', { repo: repo.id })
-      .then((result) => {
-        if (!live) return
-        const loaded = result as RepoDetails
-        setDetails(loaded)
-        setInitial(toForm(loaded))
-        setForm(toForm(loaded))
-      })
-      .catch((error: unknown) => {
-        if (!live) return
-        context.toast('Could not load project settings', messageOf(error))
-        close.current()
-      })
+    Promise.all([
+      context.call('quirky.repo/show', { repo: repo.id }),
+      context.call('quirky.worktree/projectMetadata', { repo: repo.id })
+    ]).then(([result, projectResult]) => {
+      if (!live) return
+      const loaded = result as RepoDetails
+      const project = projectResult as ProjectMetadata
+      setDetails(loaded)
+      setInitial(toForm(loaded, project))
+      setForm(toForm(loaded, project))
+    }).catch((error: unknown) => {
+      if (!live) return
+      context.toast('Could not load project settings', messageOf(error))
+      close.current()
+    })
     return () => {
       live = false
     }
@@ -126,14 +145,49 @@ export function ProjectSettingsDialog({ context, repo, onClose }: Props) {
 
   const set = <K extends keyof Form>(key: K, value: Form[K]) => setForm((prev) => (prev ? { ...prev, [key]: value } : prev))
 
+  const browseLocation = async () => {
+    if (!form) return
+    try {
+      const selected = await pickNativeFolder(context, 'Choose worktree location', form.worktreeLocation.trim() || repo.path)
+      if (selected !== null) set('worktreeLocation', selected)
+    } catch (error) {
+      context.toast(
+        error instanceof FolderPickerUnavailableError ? 'Native folder picker unavailable' : 'Could not choose worktree location',
+        messageOf(error)
+      )
+    }
+  }
+
   const save = async (event: FormEvent) => {
     event.preventDefault()
     if (!form || !initial || !details) return
+    let sharedDirectories: string[]
+    try {
+      sharedDirectories = parseSharedDirectoriesText(form.sharedDirectories)
+    } catch (error) {
+      context.toast('Invalid shared directories', messageOf(error))
+      return
+    }
     const patch = changes(initial, form)
-    if (Object.keys(patch).length === 0) return onClose()
+    const identityChanged = form.icon !== initial.icon || form.color !== initial.color || form.trackerProject !== initial.trackerProject ||
+      form.externalVisibility !== initial.externalVisibility
+    const sharedDirectoriesChanged = JSON.stringify(sharedDirectories) !== JSON.stringify(parseSharedDirectoriesText(initial.sharedDirectories))
+    if (Object.keys(patch).length === 0 && !identityChanged && !sharedDirectoriesChanged) return onClose()
     setBusy(true)
     try {
-      await context.call('quirky.repo/set', { repo: repo.id, ...patch })
+      if (Object.keys(patch).length > 0) await context.call('quirky.repo/set', { repo: repo.id, ...patch })
+      if (identityChanged || sharedDirectoriesChanged) await context.call('quirky.worktree/setProjectMetadata', {
+        repo: repo.id,
+        ...(identityChanged ? {
+          identity: {
+            icon: form.icon.trim() || null,
+            color: form.color.trim() || null,
+            trackerProject: form.trackerProject.trim() || null
+          },
+          externalVisibility: form.externalVisibility
+        } : {}),
+        ...(sharedDirectoriesChanged ? { sharedDirectories } : {})
+      })
       onClose()
     } catch (error) {
       context.toast('Could not save project settings', messageOf(error))
@@ -152,6 +206,26 @@ export function ProjectSettingsDialog({ context, repo, onClose }: Props) {
             <input autoFocus value={form.displayName} onChange={(event) => set('displayName', event.target.value)} placeholder={repo.name} />
           </label>
           <label>
+            <span>Project icon</span>
+            <input value={form.icon} onChange={(event) => set('icon', event.target.value)} maxLength={32} placeholder="Emoji or symbol" />
+          </label>
+          <label>
+            <span>Project color</span>
+            <input value={form.color} onChange={(event) => set('color', event.target.value)} placeholder="#RRGGBB" />
+          </label>
+          <label>
+            <span>Tracker project</span>
+            <input value={form.trackerProject} onChange={(event) => set('trackerProject', event.target.value)} maxLength={200} placeholder="APP" />
+          </label>
+          <label>
+            <span>External worktrees</span>
+            <select value={form.externalVisibility} onChange={(event) => set('externalVisibility', event.target.value as ExternalVisibility)}>
+              <option value="inherit">Use global default</option>
+              <option value="show">Show</option>
+              <option value="hide">Hide</option>
+            </select>
+          </label>
+          <label>
             <span>Default Worktree Base</span>
             <input value={form.defaultBase} onChange={(event) => set('defaultBase', event.target.value)} placeholder="Default branch" />
           </label>
@@ -159,6 +233,21 @@ export function ProjectSettingsDialog({ context, repo, onClose }: Props) {
             <span>Worktree Location</span>
             <input value={form.worktreeLocation} onChange={(event) => set('worktreeLocation', event.target.value)} placeholder="Global worktrees folder" />
           </label>
+          <button type="button" disabled={busy} onClick={() => void browseLocation()}>
+            Browse worktree location
+          </button>
+          {repo.kind === 'git' && (
+            <label>
+              <span>Shared directories</span>
+              <textarea
+                rows={3}
+                value={form.sharedDirectories}
+                onChange={(event) => set('sharedDirectories', event.target.value)}
+                placeholder=".env.local&#10;config/private"
+              />
+              <small className="muted">Ignored relative directories linked from the primary checkout into each new worktree. One path per line.</small>
+            </label>
+          )}
           <label>
             <span>Setup Script</span>
             <textarea rows={3} value={form.setupScript} onChange={(event) => set('setupScript', event.target.value)} placeholder="Runs in each new workspace (local)" />

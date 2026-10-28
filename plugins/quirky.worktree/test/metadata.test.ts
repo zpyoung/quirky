@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { join } from 'node:path'
+import { mkdirSync, readlinkSync, writeFileSync } from 'node:fs'
 import { RpcErrorCode, type Repo, type Worktree, type WorktreeCreateResult } from '@quirky/protocol'
 import { waitFor } from '../../../packages/daemon/test/helpers'
 import { call, failure, git, isolateGitConfig } from '../../quirky.repo/test/git-fixtures'
@@ -253,6 +253,49 @@ describe('create records its metadata', () => {
     await call(client, 'quirky.worktree/remove', { worktree: first.id, yes: true })
     const second = await createWt(client, { repo: repo.id, name: 'again' })
     expect(second).toMatchObject({ id: first.id, displayName: null, status: 'in-progress' })
+  })
+})
+describe('per-project shared directories', () => {
+  test('project metadata saves validated paths and the CLI can update them', async () => {
+    const { client, repo } = await start()
+    const saved = await call(client, 'quirky.worktree/setProjectMetadata', {
+      repo: repo.id,
+      sharedDirectories: ['.env.local', 'config/private']
+    }) as { sharedDirectories: string[] }
+    expect(saved.sharedDirectories).toEqual(['.env.local', 'config/private'])
+    const refused = await failure(call(client, 'quirky.worktree/setProjectMetadata', {
+      repo: repo.id,
+      sharedDirectories: ['../outside']
+    }))
+    expect(refused.code).toBe(RpcErrorCode.InvalidParams)
+    expect((await call(client, 'quirky.worktree/projectMetadata', { repo: repo.id })).sharedDirectories)
+      .toEqual(['.env.local', 'config/private'])
+
+    const { ctx } = testCliContext(client)
+    await commands['project-set']!({
+      positionals: [repo.id],
+      flags: { 'shared-directories': '["vendor","private/data"]' }
+    }, ctx)
+    expect((await call(client, 'quirky.worktree/projectMetadata', { repo: repo.id })).sharedDirectories)
+      .toEqual(['vendor', 'private/data'])
+  })
+  test('saved project shared directories are linked by the existing carry owner', async () => {
+    const { client, repo, repoDir } = await start()
+    writeFileSync(join(repoDir, '.gitignore'), 'private-cache/\n')
+    mkdirSync(join(repoDir, 'private-cache'), { recursive: true })
+    writeFileSync(join(repoDir, 'private-cache', 'settings.json'), '{}\n')
+    git(repoDir, 'add', '.gitignore')
+    git(repoDir, 'commit', '-q', '-m', 'ignore shared project cache')
+    await call(client, 'quirky.worktree/setProjectMetadata', {
+      repo: repo.id,
+      sharedDirectories: ['private-cache']
+    })
+
+    const result = await call(client, 'quirky.worktree/create', { repo: repo.id, name: 'shared-cache' }) as WorktreeCreateResult & {
+      creationReceipt: { sharedDirectories: string[] }
+    }
+    expect(readlinkSync(join(result.worktree.path, 'private-cache'))).toBe(join(repoDir, 'private-cache'))
+    expect(result.creationReceipt.sharedDirectories).toEqual(['private-cache'])
   })
 })
 

@@ -2,7 +2,7 @@ import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import type { AgentDisplayState, AgentStatusSummary, ProjectGroup, QuirkyEvent, Repo, Session, UiLayout, UiPluginContext, Worktree } from '@quirky/protocol'
 import { RpcErrorCode } from '@quirky/protocol'
-import type { CleanupCandidate, CleanupRemovalResult, StockWorktreeOptions } from '../src/control-types'
+import { DEFAULT_STOCK_OPTIONS, type CleanupCandidate, type CleanupRemovalResult, type StockWorktreeOptions } from '../src/control-types'
 
 const SLOT = 'sidebar-section:quirky.worktree/worktrees'
 const COMMAND = 'command:quirky.worktree/new-worktree'
@@ -129,6 +129,8 @@ type World = {
   options: StockWorktreeOptions
   cleanupCandidates: CleanupCandidate[]
   cleanupResults: CleanupRemovalResult[]
+  folderPickResult: { cancelled: boolean; paths: string[] }
+  folderPickFailure: Error | null
 }
 
 function setup(layout: UiLayout = { view: null, panel: null, sidebar: true, focus: null }) {
@@ -146,12 +148,14 @@ function setup(layout: UiLayout = { view: null, panel: null, sidebar: true, focu
     changedFiles: 0,
     confirmDelete: true,
     keptBranch: null,
-    options: { groupBy: 'project', sortBy: 'recent', compact: false, showBranch: true, showComment: true, showSleeping: true },
+    options: { ...DEFAULT_STOCK_OPTIONS, filterRepoIds: [], showProperties: [...DEFAULT_STOCK_OPTIONS.showProperties] },
     cleanupCandidates: [
       { worktreeId: 'w2', name: 'fix-login', fingerprint: 'fix-fingerprint', reason: 'idle-clean', ignored: false, eligible: true, blockers: [] },
       { worktreeId: 'w1', name: 'main', fingerprint: 'main-fingerprint', reason: 'idle-clean', ignored: false, eligible: false, blockers: [{ code: 'main-worktree', detail: 'Primary worktrees cannot be deleted.' }] }
     ],
-    cleanupResults: [{ worktreeId: 'w2', removed: true }]
+    cleanupResults: [{ worktreeId: 'w2', removed: true }],
+    folderPickResult: { cancelled: true, paths: [] },
+    folderPickFailure: null
   }
   const calls: Call[] = []
   const confirmed: { title: string; body?: string }[] = []
@@ -172,6 +176,22 @@ function setup(layout: UiLayout = { view: null, panel: null, sidebar: true, focu
     async call(method: string, params: Record<string, unknown> = {}) {
       calls.push({ method, params })
       switch (method) {
+        case 'quirky.agents/options':
+          return {
+            agent: params.agent,
+            label: 'Claude',
+            supported: true,
+            models: [{
+              id: 'catalog-model',
+              label: 'Catalog model',
+              description: null,
+              options: [{ id: 'effort', label: 'Effort', type: 'select', choices: [{ value: 'high', label: 'High' }] }]
+            }],
+            unlisted: 'refuse',
+            unlistedOptions: [],
+            structured: false,
+            extraArgs: { supported: false, allowed: null, placeholder: null, message: null }
+          }
         case 'quirky.repo/list':
           return [...world.repos]
         case 'quirky.repo/groupList':
@@ -183,6 +203,43 @@ function setup(layout: UiLayout = { view: null, panel: null, sidebar: true, focu
         }
         case 'quirky.worktree/list':
           return [...world.worktrees]
+        case 'quirky.worktree/projectOrder':
+          return world.repos.map((repo) => repo.id)
+        case 'quirky.worktree/statusDefinitions':
+          return [
+            { id: 'todo', label: 'To do', color: '#8b8b8b' },
+            { id: 'in-progress', label: 'In progress', color: '#3478c5' },
+            { id: 'in-review', label: 'In review', color: '#a57de8' },
+            { id: 'done', label: 'Done', color: '#48a878' },
+            { id: 'blocked', label: 'Blocked', color: '#d05a55' }
+          ]
+        case 'quirky.worktree/projectMetadataList':
+          return world.repos.map((repo) => ({
+            repoId: repo.id,
+            identity: { displayName: repo.displayName, icon: null, color: null, trackerProject: null },
+            externalVisibility: 'inherit',
+            effectiveExternalVisibility: 'hide',
+            externalInboxSuppressed: false,
+            sharedDirectories: []
+          }))
+        case 'quirky.worktree/projectMetadata': {
+          const repo = world.repos.find((item) => item.id === params.repo)
+          if (!repo) throw new RpcLike('project not found', RpcErrorCode.NotFound)
+          return { repoId: repo.id, identity: { displayName: repo.displayName, icon: null, color: null, trackerProject: null }, externalVisibility: 'inherit', effectiveExternalVisibility: 'hide', externalInboxSuppressed: false, sharedDirectories: [] }
+        }
+        case 'quirky.worktree/setProjectMetadata':
+          return { repoId: String(params.repo), identity: { displayName: null, icon: null, color: null, trackerProject: null }, externalVisibility: 'inherit', effectiveExternalVisibility: 'hide', externalInboxSuppressed: false, sharedDirectories: [] }
+        case 'quirky.worktree/reorderProjects':
+          return { ok: true }
+        case 'quirky.worktree/navigate':
+        case 'quirky.worktree/openIn': {
+          const id = params.target === 'changes' ? 'view:quirky.git/diff' : SESSION_VIEW
+          const input = params.target === 'changes' ? { worktree: params.worktree, mode: 'combined', area: 'all' } : { worktree: params.worktree }
+          opened.push({ id, input })
+          current = { ...current, view: { id, input } }
+          for (const listener of layoutListeners) listener(current)
+          return { worktreeId: params.worktree, target: params.target ?? 'terminal' }
+        }
         case 'quirky.worktree/options':
           return { ...world.options }
         case 'quirky.worktree/setOptions':
@@ -250,6 +307,9 @@ function setup(layout: UiLayout = { view: null, panel: null, sidebar: true, focu
           await world.createGate
           if (world.createFailures.length > 0) throw world.createFailures.shift()
           return { worktree: wt('w9', String(params.repo), String(params.name)), warnings: [], setup: { ran: 'none' }, ...world.createExtra }
+        case 'desktop.folder.pick':
+          if (world.folderPickFailure) throw world.folderPickFailure
+          return world.folderPickResult
         case 'quirky.repo/trustHooks':
           return {}
         case 'quirky.worktree/suggestName':
@@ -379,6 +439,12 @@ const typeInto = (input: HTMLInputElement, value: string) =>
   act(async () => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value)
     input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+const selectInto = (select: HTMLSelectElement, value: string) =>
+  act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(select, value)
+    select.dispatchEvent(new Event('change', { bubbles: true }))
+    await Promise.resolve()
   })
 
 test('the module provides the declared sidebar slot and the new-worktree command', () => {
@@ -634,7 +700,7 @@ test('SC-43: Move to Status, Pin and Mark Unread call set; the current values re
   await h.mountInto(host)
   await contextMenu(rowOf('fix-login', 'api').querySelector('.worktree-main')!)
   await click(itemNamed('Move to Status'))
-  expect(itemLabels().slice(2, 6)).toEqual(['Todo', 'In progress', 'In review', 'Done'])
+  expect(itemLabels()).toEqual(expect.arrayContaining(['Todo', 'In progress', 'In review', 'Done']))
   await click(itemNamed('In review'))
   expect(menu()).toBeNull()
   await contextMenu(rowOf('fix-login', 'api').querySelector('.worktree-main')!)
@@ -821,6 +887,25 @@ test('the Add project button opens a dialog whose Add submits the trimmed path',
   expect(h.callsTo('quirky.repo/add')).toEqual([{ path: '/r/new' }])
   expect(document.querySelector('[role="dialog"]')).toBeNull()
 })
+test('Add project Browse uses the native picker and cancellation preserves the typed path', async () => {
+  const h = setup()
+  await h.mountInto(host)
+  await click(host.querySelector('button.add-project')!)
+  const input = document.querySelector('[role="dialog"] input') as HTMLInputElement
+  await typeInto(input, '/draft/path')
+  await click(dialogButton('Browse'))
+  expect(input.value).toBe('/draft/path')
+  expect(h.callsTo('desktop.folder.pick')).toEqual([{ title: 'Choose project folder', startingFolder: '/draft/path', multiple: false }])
+
+  h.world.folderPickResult = { cancelled: false, paths: ['/selected/project'] }
+  await click(dialogButton('Browse'))
+  expect(input.value).toBe('/selected/project')
+
+  h.world.folderPickFailure = new RpcLike('method not found', RpcErrorCode.MethodNotFound)
+  await click(dialogButton('Browse'))
+  expect(input.value).toBe('/selected/project')
+  expect(h.toasts.at(-1)?.title).toBe('Native folder picker unavailable')
+})
 
 const dialogField = (label: string) => {
   const holder = [...document.querySelectorAll('[role="dialog"] label')].find((l) => l.querySelector(':scope > span')?.textContent === label)
@@ -828,6 +913,33 @@ const dialogField = (label: string) => {
 }
 const projectChosen = () => (dialogField('Project') as unknown as HTMLSelectElement).selectedOptions[0]!.textContent
 
+test('the new-worktree dialog forwards catalog model options, sparse paths and keep-main', async () => {
+  const h = setup()
+  await h.mountInto(host)
+  await click(host.querySelector('button[aria-label=\"New worktree in api\"]')!)
+  await selectInto(dialogField('Agent') as unknown as HTMLSelectElement, 'claude')
+  await typeInto(dialogField('Model')!, 'catalog-model')
+  await selectInto(dialogField('Effort') as unknown as HTMLSelectElement, 'high')
+  await act(async () => {
+    const sparsePaths = dialogField('Sparse checkout paths') as unknown as HTMLTextAreaElement
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(sparsePaths, 'src\ndocs')
+    sparsePaths.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  const keepMain = [...document.querySelectorAll('[role=\"dialog\"] label')]
+    .find((label) => label.textContent?.includes('Fast-forward primary'))?.querySelector('input') as HTMLInputElement
+  await click(keepMain)
+  await click(document.querySelector('[role=\"dialog\"] button[type=\"submit\"]')!)
+
+  expect(h.callsTo('quirky.worktree/create')).toEqual([{
+    repo: 'r1',
+    agent: 'claude',
+    model: 'catalog-model',
+    options: { effort: 'high' },
+    sparsePaths: ['src', 'docs'],
+    keepMain: true,
+    createdBy: 'window'
+  }])
+})
 test('the new-worktree dialog creates a worktree through a pending row and opens it', async () => {
   const h = setup()
   let release: () => void = () => {}
@@ -1157,7 +1269,7 @@ describe('agent status glyphs', () => {
 })
 test('stock worktree controls persist options, reveal sleeping rows and wake without replacing the session', async () => {
   const h = setup()
-  h.world.options = { groupBy: 'status', sortBy: 'name', compact: false, showBranch: true, showComment: true, showSleeping: false }
+  h.world.options = { ...DEFAULT_STOCK_OPTIONS, groupBy: 'status', sortBy: 'name', showSleeping: false, filterRepoIds: [], showProperties: [...DEFAULT_STOCK_OPTIONS.showProperties] }
   h.world.worktrees[1] = { ...h.world.worktrees[1]!, comment: 'keep this note', sleeping: true } as Worktree
   const unmount = await h.mountInto(host)
 
@@ -1180,8 +1292,8 @@ test('stock worktree controls persist options, reveal sleeping rows and wake wit
   expect(rowOf('fix-login', 'api').querySelector('.worktree-branch')?.textContent).toBe('fix-login')
   expect(rowOf('fix-login', 'api').querySelector('.worktree-comment')?.textContent).toBe('keep this note')
   await click(host.querySelector('input[aria-label="Compact cards"]')!)
-  await click(host.querySelector('input[aria-label="Show branch"]')!)
-  await click(host.querySelector('input[aria-label="Show comment"]')!)
+  await click(host.querySelector('input[aria-label="Show Branch"]')!)
+  await click(host.querySelector('input[aria-label="Show Notes"]')!)
   expect(rowOf('fix-login', 'api').querySelector('.worktree-branch')).toBeNull()
   expect(rowOf('fix-login', 'api').querySelector('.worktree-comment')).toBeNull()
   await contextMenu(rowOf('fix-login', 'api'))
@@ -1190,6 +1302,46 @@ test('stock worktree controls persist options, reveal sleeping rows and wake wit
   await contextMenu(rowOf('fix-login', 'api'))
   expect(itemLabels()).toContain('Sleep')
   expect(itemLabels()).not.toContain('Wake')
+  await unmount()
+})
+test('PR grouping, CLI-origin filtering and filtered-row reveal change the workspace list', async () => {
+  const h = setup()
+  h.world.worktrees[1] = {
+    ...h.world.worktrees[1]!,
+    createdBy: 'cli',
+    linkedPR: {
+      provider: 'github',
+      kind: 'pullRequest',
+      number: 42,
+      title: 'Add route',
+      url: 'https://github.com/acme/app/pull/42',
+      repository: { host: 'github.com', owner: 'acme', repo: 'app' }
+    }
+  }
+  const unmount = await h.mountInto(host)
+  await click(host.querySelector('button[aria-label="Workspace options"]')!)
+  const group = host.querySelector('select[aria-label="Group by"]') as HTMLSelectElement
+  await act(async () => {
+    group.value = 'pr'
+    group.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+  expect([...host.querySelectorAll('.worktree-status-lane h3')].map((node) => node.textContent)).toContain('PR #42 · Add route')
+  expect(rowOf('fix-login', 'api').querySelector('a[aria-label="Pull request #42: Add route"]')).not.toBeNull()
+
+  await click(host.querySelector('input[aria-label="Hide CLI-created worktrees"]')!)
+  expect(rowOf('fix-login', 'api')).toBeNull()
+  await click(host.querySelector('button[aria-label="Show 1 filtered worktree"]')!)
+  expect(rowOf('fix-login', 'api')).not.toBeNull()
+  await unmount()
+})
+test('workspace board renders project-defined status labels for matching worktrees', async () => {
+  const h = setup()
+  h.world.worktrees[1] = { ...h.world.worktrees[1]!, status: 'blocked' as Worktree['status'] }
+  const unmount = await h.mountInto(host)
+  await click([...host.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Workspace board')!)
+  const board = host.querySelector('section[aria-label="Workspace board"]')!
+  expect([...board.querySelectorAll('h3')].map((heading) => heading.textContent)).toContain('Blocked')
+  expect(board.querySelector('select[aria-label="Move fix-login to status"]')).not.toBeNull()
   await unmount()
 })
 

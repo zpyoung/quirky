@@ -5,6 +5,8 @@ import type { WorktreeControl } from '../control-types'
 import { gitApi } from '@quirky/git'
 import { resolveRealPath, worktreeIdForPath } from '../../paths'
 import { instanceIdFor, filesystemIdentitySource, type DirectoryIdentitySource } from './identity'
+import { readStockOptions } from './options'
+import { projectPreference } from './project'
 import { insertRow, metadataOf, rowOf, type WorktreeRow } from './store'
 
 /** What the join needs from the plugin: the store, group lookup, identity source and in-flight removes. */
@@ -37,12 +39,25 @@ export function birthtimeOf(path: string): number | null {
  * `name` is the display name, else the branch for a primary checkout, the given name for a
  * non-primary folder workspace and the folder name for everything else.
  */
-export function joinMetadata(facts: Facts, row: WorktreeRow, removing: boolean): WorktreeControl {
+export function joinMetadata(facts: Facts, row: WorktreeRow, removing: boolean, store: PluginStore): WorktreeControl {
   const folderName = basename(facts.path)
   const name =
     row.display_name ||
     (facts.isMain ? (facts.branch ?? folderName) : facts.kind === 'folder' ? (row.name ?? folderName) : folderName)
-  return { ...facts, name, ...metadataOf(row), removing }
+  const metadata = metadataOf(row)
+  const preference = projectPreference(store, facts.repoId)
+  const globalVisibility = readStockOptions(store).externalVisibilityDefault
+  const externalVisibility = preference.externalVisibility === 'inherit' ? globalVisibility : preference.externalVisibility
+  const isExternalWorktree = facts.kind === 'git' && !facts.isMain && metadata.createdBy === 'external'
+  return {
+    ...facts,
+    name,
+    ...metadata,
+    externalVisibility,
+    externalVisible: !isExternalWorktree || externalVisibility === 'show',
+    externalInboxSuppressed: preference.externalInboxSuppressed,
+    removing
+  }
 }
 
 /** Primary first, then oldest first, then by ID so the order is total. */
@@ -113,7 +128,7 @@ async function listGitProject(env: ListEnv, repo: Repo, prune: boolean): Promise
         kind: 'git',
         groupId: null
       }
-      result.push(joinMetadata(facts, row, env.removing.has(id)))
+      result.push(joinMetadata(facts, row, env.removing.has(id), env.store))
     }
     if (prune) {
       for (const row of env.store.all<WorktreeRow>("SELECT * FROM worktrees WHERE repo_id = ? AND kind = 'git' AND group_id IS NULL", repo.id)) {
@@ -132,16 +147,15 @@ function listFolderProject(env: ListEnv, repo: Repo): WorktreeControl[] {
     const primaryId = worktreeIdForPath(repo.path)
     const primary = rowForFolder(env, repo.id, 'folder', path, primaryId, repo.addedAt)
     const result = [
-      joinMetadata({ id: primaryId, repoId: repo.id, path, branch: null, head: '', isMain: true, kind: 'folder', groupId: null }, primary, env.removing.has(primaryId))
+      joinMetadata({ id: primaryId, repoId: repo.id, path, branch: null, head: '', isMain: true, kind: 'folder', groupId: null }, primary, env.removing.has(primaryId), env.store)
     ]
     for (const row of env.store.all<WorktreeRow>("SELECT * FROM worktrees WHERE repo_id = ? AND kind = 'folder' AND id != ?", repo.id, primaryId)) {
       const rowPath = row.path ?? path
       const metadata = rowForFolder(env, repo.id, 'folder', rowPath, row.id, row.created_at ?? repo.addedAt)
       const facts: Facts = { id: row.id, repoId: repo.id, path: rowPath, branch: null, head: '', isMain: false, kind: 'folder', groupId: null }
-      result.push(joinMetadata(facts, metadata, env.removing.has(row.id)))
+      result.push(joinMetadata(facts, metadata, env.removing.has(row.id), env.store))
     }
     return result.sort(compare)
-  })
 }
 
 /**
@@ -163,7 +177,8 @@ export function listGroup(env: ListEnv, group: ProjectGroup): WorktreeControl[] 
         return joinMetadata(
           { id: row.id, repoId: groupRepoId(group.id), path, branch: null, head: '', isMain: false, kind: 'folder', groupId: group.id },
           metadata,
-          env.removing.has(row.id)
+          env.removing.has(row.id),
+          env.store
         )
       })
       .sort(compare)

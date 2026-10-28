@@ -121,6 +121,19 @@ function setup() {
         case 'quirky.repo/list': return [repo]
         case 'quirky.repo/groupList': return [] as ProjectGroup[]
         case 'quirky.worktree/list': return [...world.worktrees]
+        case 'quirky.worktree/projectOrder': return [repo.id]
+        case 'quirky.worktree/statusDefinitions': return [
+          { id: 'todo', label: 'To do', color: '#8b8b8b' },
+          { id: 'in-progress', label: 'In progress', color: '#3478c5' },
+          { id: 'in-review', label: 'In review', color: '#a57de8' },
+          { id: 'done', label: 'Done', color: '#48a878' }
+        ]
+        case 'quirky.worktree/projectMetadataList': return [{ repoId: repo.id, identity: { displayName: null, icon: null, color: null, trackerProject: null }, externalVisibility: 'inherit', effectiveExternalVisibility: 'hide', externalInboxSuppressed: false, sharedDirectories: [] }]
+        case 'quirky.worktree/navigate':
+        case 'quirky.worktree/openIn':
+          layout = { ...layout, view: { id: params.target === 'changes' ? 'view:quirky.git/diff' : 'view:quirky.session/worktree', input: { worktree: params.worktree } } }
+          for (const listener of layoutListeners) listener(layout)
+          return { worktreeId: params.worktree, target: params.target ?? 'terminal' }
         case 'quirky.session/list': return [] as Session[]
         case 'quirky.heimdall/fleet': throw new RpcLike('not enabled', RpcErrorCode.MethodNotFound)
         case 'quirky.sidebar-extras/state': return state()

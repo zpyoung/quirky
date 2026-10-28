@@ -439,6 +439,9 @@ function makeFingerprint(worktree: WorktreeControl, evidence: unknown[]): string
     worktree.pinned,
     worktree.parentId,
     worktree.projectGroupId,
+    worktree.archivedAt,
+    worktree.cleanupContext.volatile,
+    worktree.cleanupContext.remoteConnected,
     activityDay,
     evidence
   ])
@@ -477,7 +480,8 @@ async function buildCleanupSnapshot(env: ControlEnv): Promise<Snapshot> {
   const candidates: CleanupCandidate[] = []
   for (const worktree of worktrees) {
     const lastActivity = Math.max(worktree.lastActivityAt, worktree.createdAt)
-    if (lastActivity <= 0 || generatedAt - lastActivity < CLEANUP_IDLE_MS) continue
+    const archivedEligible = worktree.archivedAt !== null && generatedAt - worktree.archivedAt >= 7 * DAY_MS
+    if (!archivedEligible && (lastActivity <= 0 || generatedAt - lastActivity < CLEANUP_IDLE_MS)) continue
     const blockers: CleanupBlocker[] = []
     const fingerprintEvidence: unknown[] = []
     addWorktreeActivityBlockers(worktree, blockers)
@@ -502,7 +506,7 @@ async function buildCleanupSnapshot(env: ControlEnv): Promise<Snapshot> {
       worktreeId: worktree.id,
       name: worktree.name,
       fingerprint,
-      reason: 'idle-clean',
+      reason: archivedEligible ? 'archived-7day' : 'idle-clean',
       ignored,
       eligible: blockers.length === 0,
       blockers

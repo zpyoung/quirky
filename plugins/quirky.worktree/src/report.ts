@@ -3,6 +3,7 @@ import type { MembershipTarget } from './membership'
 import type { AgentDisplayState, GitHubWorktreeLink, ProjectGroup, Repo, Session, Worktree, WorktreeAutomationProvenance, WorktreePushTarget, WorktreeStatus } from '@quirky/protocol'
 import { worktreeGlyph, worktreeStatus, type DisplayStatus } from './status'
 import type { StockWorktreeOptions } from './control-types'
+import type { WorktreeStatusDefinition } from './parity-types'
 import type { LoopReport, LoopStatusSnapshot } from './loop-status'
 
 /** A create the window has sent and not yet seen finish; shown as a pending row under its project. */
@@ -338,6 +339,11 @@ export type WorktreesReport = {
   stockHiddenIds?: string[]
   stockHiddenCount?: number
   revealSleeping?: boolean
+  stockFilteredHiddenIds?: string[]
+  stockFilteredHiddenCount?: number
+  revealFiltered?: boolean
+  projectOrder?: string[]
+  statusDefinitions?: WorktreeStatusDefinition[]
 }
 
 export type ReportInput = {

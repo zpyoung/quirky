@@ -432,6 +432,39 @@ function setup(
           return { removalPreview: [...world.ledgerPreview] }
         case 'quirky.worktree/list':
           return [...world.worktrees]
+        case 'quirky.worktree/projectOrder':
+          return world.repos.map((repo) => repo.id)
+        case 'quirky.worktree/statusDefinitions':
+          return [
+            { id: 'todo', label: 'To do', color: '#8b8b8b' },
+            { id: 'in-progress', label: 'In progress', color: '#3478c5' },
+            { id: 'in-review', label: 'In review', color: '#a57de8' },
+            { id: 'done', label: 'Done', color: '#48a878' }
+          ]
+        case 'quirky.worktree/projectMetadataList':
+          return world.repos.map((repo) => ({
+            repoId: repo.id,
+            identity: { displayName: repo.displayName, icon: null, color: null, trackerProject: null },
+            externalVisibility: 'inherit',
+            effectiveExternalVisibility: 'hide',
+            externalInboxSuppressed: false,
+            sharedDirectories: []
+          }))
+        case 'quirky.worktree/navigate':
+        case 'quirky.worktree/openIn': {
+          const next: UiLayout = {
+            ...current,
+            view: {
+              id: params.target === 'changes' ? 'view:quirky.git/diff' : 'view:quirky.session/worktree',
+              input: params.target === 'changes'
+                ? { worktree: params.worktree, mode: 'combined', area: 'all' }
+                : { worktree: params.worktree }
+            }
+          }
+          current = next
+          for (const listener of layoutListeners) listener(next)
+          return { worktreeId: params.worktree, target: params.target ?? 'terminal' }
+        }
         case 'quirky.session/list':
           return [...world.sessions]
         case 'quirky.sidebar-extras/state':
