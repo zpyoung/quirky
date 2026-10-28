@@ -7,14 +7,16 @@
   "quirky.checks",
   "quirky.editor",
   "quirky.git",
-  "quirky.reviews",
+  "quirky.handoff",
+  "quirky.heimdall",
   "quirky.ledger",
+  "quirky.loops",
+  "quirky.orchestration",
+  "quirky.repo",
+  "quirky.reviews",
   "quirky.session",
   "quirky.session-info",
   "quirky.terminal",
   "quirky.terminal-dock",
-  "quirky.orchestration",
-  "quirky.heimdall",
-  "quirky.handoff",
-  "quirky.loops"
+  "quirky.worktree"
 ]

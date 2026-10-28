@@ -4,6 +4,8 @@ import type { ReactNode } from 'react'
 export type ContextMenuItem = {
   id?: string
   label: string
+  /** A disabled action may explain its refusal through the native tooltip. */
+  title?: string
   key?: string | null
   enabled?: boolean
   separator?: boolean
@@ -14,7 +16,6 @@ export type ContextMenuItem = {
   onSelect?: () => void
   /** Noninteractive group caption; unlike a separator this carries readable content. */
   heading?: boolean
-  title?: string
   icon?: ReactNode
   detail?: string
   badge?: string | number
