@@ -28,7 +28,7 @@ function findExecutable(): { path: string | null; identity: string | null; error
   const startedAt = performance.now()
   let located: string | null
   try {
-    located = Bun.which('openclaw')
+    located = Bun.which('openclaw', { PATH: process.env.PATH ?? '' })
   } catch (error) {
     return { path: null, identity: null, error: `Could not check for the OpenClaw CLI: ${error instanceof Error ? error.message : String(error)}` }
   }

@@ -100,7 +100,7 @@ function navigation(page: AutomationNavigation['page'], patch: Partial<Automatio
     host: 'all',
     status: 'all',
     lastRun: 'all',
-    agent: 'all',
+    agent: '',
     sort: 'name',
     direction: 'asc',
     runQuery: '',
@@ -196,7 +196,7 @@ async function settle(): Promise<void> {
 
 function buttonByText(container: HTMLElement, text: string): HTMLButtonElement {
   const button = [...container.querySelectorAll('button')].find((candidate) => candidate.textContent?.trim() === text)
-  if (!(button instanceof HTMLButtonElement)) throw new Error(`Missing button: ${text}`)
+  if (!(button instanceof HTMLButtonElement)) throw new Error(`Missing button: ${text}; controls: ${[...container.querySelectorAll('button')].map(candidate => candidate.textContent?.trim()).join(' | ')}`)
   return button
 }
 
@@ -302,4 +302,17 @@ test('an older history response cannot overwrite the newly selected automation',
   expect(historyRows(page.container)).toHaveLength(1)
   expect(historyRows(page.container)[0]?.textContent).toContain('History 000')
   expect(historyRows(page.container).some((row) => row.textContent?.includes('History 025'))).toBe(false)
+})
+
+test('the native list keeps every matching definition browsable beyond one hundred rows', async () => {
+  const definitions = Array.from({ length: 125 }, (_, index) => definition(`Definition ${String(index).padStart(3, '0')}`, `automation-${index}`))
+  const rig = makeContext(definitions[0]!, [])
+  const call = rig.context.call
+  rig.context.call = async (method, params) => method === `${API}list` ? definitions : call(method, params)
+  const { container } = await mountPage(rig.context, 'list')
+  await settle()
+  const rows = [...container.querySelectorAll('table[aria-label="Automation list"] tbody tr')]
+  expect(rows).toHaveLength(125)
+  expect(rows[0]?.getAttribute('data-row-key')).toBe('native:automation-0')
+  expect(rows.at(-1)?.getAttribute('data-row-key')).toBe('native:automation-124')
 })

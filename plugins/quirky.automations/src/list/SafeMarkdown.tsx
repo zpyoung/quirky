@@ -68,11 +68,13 @@ export function parseSafeMarkdownBlocks(markdown: string): MarkdownBlock[] {
 }
 
 function inlineElement(token: SafeInlineToken, key: number) {
-  if (token.type === 'text') return createElement(Fragment, { key }, token.value)
-  if (token.type === 'strong') return createElement('strong', { key }, token.value)
-  if (token.type === 'emphasis') return createElement('em', { key }, token.value)
-  if (token.type === 'code') return createElement('code', { key }, token.value)
-  return createElement('a', { key, href: token.href, rel: 'noreferrer' }, token.value)
+  switch (token.type) {
+    case 'text': return createElement(Fragment, { key }, token.value)
+    case 'strong': return createElement('strong', { key }, token.value)
+    case 'emphasis': return createElement('em', { key }, token.value)
+    case 'code': return createElement('code', { key }, token.value)
+    case 'link': return createElement('a', { key, href: token.href, rel: 'noreferrer' }, token.value)
+  }
 }
 
 function inline(text: string) {

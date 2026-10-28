@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type ComponentType } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { MountFunction, UiPluginContext } from '@quirky/protocol'
 import { API, AUTOMATIONS_VIEW, AUTOMATIONS_SETTINGS_VIEW, type AutomationUiState } from './ui-contracts'
@@ -111,7 +111,7 @@ function AutomationSidebar({ context, report }: SurfaceProps) {
 }
 
 export function activate(context: UiPluginContext): void {
-  const mount = (Component: typeof AutomationApp): MountFunction => (element, props) => {
+  const mount = (Component: ComponentType<SurfaceProps>): MountFunction => (element, props) => {
     Object.assign(element.style, { display: 'flex', flex: '1', minWidth: '0', minHeight: '0', overflow: 'hidden' })
     const root = createRoot(element)
     root.render(<Component context={context} report={props.report} />)

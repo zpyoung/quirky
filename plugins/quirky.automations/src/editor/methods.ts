@@ -15,7 +15,7 @@ import type {
 type ObjectValue = Record<string, unknown>
 type Project = { id: string; name: string; path: string; kind: string }
 type Workspace = { id: string; repoId: string; name: string; path: string; isMain: boolean }
-type Agent = { id: string; label: string; enabled: boolean; installed: boolean; isDefault: boolean }
+type Agent = { id: AutomationDraft['agentId']; label: string; enabled: boolean; installed: boolean; isDefault: boolean }
 type AgentCatalog = { agents: Agent[]; defaultAgent: string | null }
 type EditorCatalog = { data: AutomationEditorData; agents: AgentCatalog }
 type RepoDetails = { repo: Project; defaultBase: string | null }

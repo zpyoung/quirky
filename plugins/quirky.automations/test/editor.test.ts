@@ -225,6 +225,7 @@ describe('automation editor methods', () => {
     await f.invoke('openEditor', {})
     await f.invoke('patchDraft', { patch: { prompt: 'Run the scheduled review.' } })
     const key = f.state.editor?.creationKey
+    if (!key) throw new Error('The open editor must retain a creation key')
     const [first, second] = await Promise.all([
       f.invoke('saveEditor', {}),
       f.invoke('saveEditor', {})

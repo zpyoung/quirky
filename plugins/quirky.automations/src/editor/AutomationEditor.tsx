@@ -693,7 +693,7 @@ export function AutomationEditor(props: EditorProps) {
         return false
       }
       const setup = hooks.setup
-      if (!setup.text.trim()) {
+      if (typeof setup.text !== 'string' || !setup.text.trim()) {
         setSetupWarning('No setup hook is available at the selected revision; setup will be skipped.')
         return false
       }

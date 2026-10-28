@@ -189,7 +189,7 @@ function parseExternalDate(value: string | null): number | null {
 }
 
 function buildListRows(data: FetchState): AutomationListRow[] {
-  const nativeRows = data.definitions.map((definition) => {
+  const nativeRows = data.definitions.map<AutomationListRow>((definition) => {
     const project = data.editorData?.projects.find((candidate) => candidate.id === definition.projectId)
     const hostId = project?.hostId ?? 'unknown'
     const latest = data.lastRuns[definition.id] ?? null
@@ -201,7 +201,7 @@ function buildListRows(data: FetchState): AutomationListRow[] {
       lastRunRead: data.nativeError !== null || data.lastRunErrors.includes(definition.id) ? 'unavailable' : data.lastRunsLoaded ? 'available' : 'loading'
     }
   })
-  const externalRows = data.managers.flatMap((manager) => manager.jobs.map((job) => ({
+  const externalRows = data.managers.flatMap((manager) => manager.jobs.map<AutomationListRow>((job) => ({
     key: `external:${manager.id}:${job.id}`, id: job.id, kind: 'external' as const,
     name: job.name || job.id, projectName: 'OpenClaw', hostId: manager.hostId || 'unknown', hostName: manager.label || 'Unknown host',
     prompt: job.promptPreview, agentId: null, agentName: null, enabled: job.enabled, lastRunAt: parseExternalDate(job.lastRunAt), lastStatus: job.lastStatus,
@@ -636,7 +636,7 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
         if (current.automationId !== id) return current
         const hasOlderLoaded = current.runs.length > page.runs.length
         const merged = hasOlderLoaded ? appendRunPage(page.runs, { runs: current.runs, nextCursor: current.cursor }) : { runs: page.runs, nextCursor: page.nextCursor }
-        return { ...current, ...merged, loaded: true, loading: false, error: null }
+        return { ...current, runs: merged.runs, cursor: merged.nextCursor, loaded: true, loading: false, error: null }
       })
     }).catch((error: unknown) => {
       if (cancelled || historyRequestGeneration.current !== requestGeneration || historySelection.current !== selection) return
@@ -1011,7 +1011,8 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
       setHistory((current) => {
         if (!mounted.current || historyRequestGeneration.current !== requestGeneration || historySelection.current !== selection
           || current.automationId !== automationId || current.cursor !== cursor) return current
-        return { ...current, ...appendRunPage(current.runs, page), loaded: true, loading: false, error: null }
+        const next = appendRunPage(current.runs, page)
+        return { ...current, runs: next.runs, cursor: next.nextCursor, loaded: true, loading: false, error: null }
       })
     } catch (error) {
       if (!mounted.current || historyRequestGeneration.current !== requestGeneration || historySelection.current !== selection) return
@@ -1161,7 +1162,6 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
     const lastRunFilterPending = navigation.lastRun !== 'all' && data.nativeLoaded && !data.lastRunsLoaded
     const lastRunFilterUnavailable = navigation.lastRun !== 'all' && (data.nativeError !== null || data.externalError !== null || data.lastRunErrors.length > 0 || externalUnavailable)
     const noFiltersMatch = data.nativeLoaded && data.externalLoaded && sortedRows.length === 0 && !hasLoadedEmpty && !lastRunFilterPending && !lastRunFilterUnavailable && (!externalUnavailable || nativeRows.length > 0)
-    const visibleRows = sortedRows.slice(0, 100)
     const localHost = data.editorData?.hosts.find((host) => host.id === 'local')
     const canCreateLocally = localHost?.available === true
     const latestStatus = (row: AutomationListRow) => {
@@ -1237,7 +1237,7 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
         <th scope="col">Schedule</th><th scope="col">Project</th><th scope="col">Host</th><th scope="col">Next run</th>
         <th scope="col" aria-sort={navigation.sort === 'lastRun' ? (navigation.direction === 'asc' ? 'ascending' : 'descending') : 'none'}><button className="sort-button" type="button" onClick={() => void navigate(toggleListSort(navigation.sort as ListSort, navigation.direction as SortDirection, 'lastRun'))}>Last run{navigation.sort === 'lastRun' ? navigation.direction === 'asc' ? ' ↑' : ' ↓' : ''}</button></th>
         <th scope="col">Status</th><th scope="col">Agent / usage</th><th scope="col">Actions</th></tr></thead><tbody>
-        {visibleRows.map((row) => {
+        {sortedRows.map((row) => {
           const definition = row.kind === 'native' ? data.definitions.find((candidate) => candidate.id === row.id) : null
           const latest = row.kind === 'native' ? data.lastRuns[row.id] : null
           const manager = row.kind === 'external' ? data.managers.find((candidate) => candidate.jobs.some((job) => job.id === row.id)) : null
@@ -1256,7 +1256,6 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
           </tr>
         })}
       </tbody></table></div>}
-      {sortedRows.length > 100 && <p className="auto-muted">Showing the first 100 rows. Refine search or filters to narrow the list.</p>}
       {data.nativeLoaded && data.externalLoaded && sortedRows.length === 0 && !hasLoadedEmpty && !noFiltersMatch && !lastRunFilterPending && !lastRunFilterUnavailable && (!externalUnavailable || nativeRows.length > 0) && <div className="auto-info">No automations match the current view.</div>}
       {actionError && <div className="auto-error" role="alert">{actionError}</div>}
       {busyAction && <div className="auto-info" role="status">Working: {busyAction}</div>}
