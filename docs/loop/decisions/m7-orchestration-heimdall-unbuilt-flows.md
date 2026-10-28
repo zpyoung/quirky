@@ -154,5 +154,16 @@
 - **Revisit if:** native end-phase or federation implementation demonstrates a conflicting authority seam.
 - **Source:** assumed — autonomous
 
+## D15: Register exactly one implementation follow-up and preserve final gate evidence
+- **Question:** Which remaining work may stay queued when the amended item lands?
+- **Options:** separate verification/debug items; one product implementation item for the genuinely unbuilt remote workers.
+- **Chose:** Canonical queue add registered `m7-orchestration-worker-federation`, status todo, depending on this item. Its title names remote placement/attachment, durable mail/ask/report home settlement, lifecycle/output/fleet/navigation and exact peer/process authority; no verification-only work or new external blocker. No second follow-up.
+- **Why:** D11 records the allowed flow cutover without pretending peer transport is worker federation. Final source merge d3dd29e5 passed root+mobile `bun run typecheck` in24.09s, after all source/fixture composition.
+- **Evidence:** Canonical absolute queue add exit0 and authoritative queue JSON entry; final typecheck output bg7; D12–D14 runtime/evidence limits.
+- **Reversibility:** medium
+- **Confidence:** high for registration and exercised checks only.
+- **Revisit if:** the controller's merged-source typecheck rejects this branch.
+- **Source:** deferred: remote worker federation
+
 ## Progress
-All source components and parent integration are complete for the amended shipping scope; all component worktrees removed. One roadmap catch-up resolved additively and all incoming decisions read. Final typecheck and actual isolated filesystem/API/CLI/shipped-view smoke evidence are recorded above; no suites, paid-provider call, full UI campaign or final code review ran. All owned daemon fixtures and browser tabs stopped. D11's single implementation follow-up is prepared but not yet added. Next: commit resolved catch-up, final typecheck, add that one follow-up, detach and canonical queue land. Inherited .serena/ untouched. The prescribed two-hour target was exceeded; no on-time completion claim.
+Ready for canonical land: source merge d3dd29e5, final root/mobile typecheck exit0 in24.09s, one implementation-only worker-federation follow-up registered. One roadmap catch-up composed additively; all incoming decisions read. Filesystem epoch and actual isolated two-daemon API/CLI/shipped-view evidence recorded above; no suites, paid-provider call, full UI campaign or final code review ran. Every owned daemon fixture, browser tab and implementer is finished; component worktrees removed. Next: commit this evidence, detach, absolute canonical queue land, record actual receipt in ignored loop notes, remove owned scratch and end this one-item turn. Inherited .serena/ untouched. The prescribed two-hour target was exceeded; no on-time completion claim.
