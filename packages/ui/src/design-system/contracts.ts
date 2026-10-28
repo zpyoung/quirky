@@ -18,6 +18,8 @@ export type ListRowProps = {
   trailing?: ReactNode
   selected?: boolean
   disabled?: boolean
+  mainTitle?: string
+  mainLabel?: string
   onClick?: () => void
 }
 export type SectionHeaderProps = { title: string; actions?: ReactNode }
@@ -41,7 +43,7 @@ export type MenuProps = {
   onClose?: () => void
 }
 export type ToastProps = { title: string; description?: ReactNode; status?: UiStatus; action?: UiAction; onDismiss: () => void; durationMs?: number }
-export type DialogProps = { open: boolean; title: string; children: ReactNode; actions?: ReactNode; onClose: () => void; variant?: 'dialog' | 'sheet'; closeOnBackdrop?: boolean }
+export type DialogProps = { open: boolean; title: string; children: ReactNode; actions?: ReactNode; onClose: () => void; variant?: 'dialog' | 'sheet'; size?: 'default' | 'wide'; closeOnBackdrop?: boolean }
 export type EmptyStateProps = { message: string; action?: UiAction; icon?: ReactNode }
 export type FormRowProps = { label: string; htmlFor: string; help?: string; error?: string; children: ReactNode }
 export type ToolPanelFrameProps = { title: string; actions?: ReactNode; onMinimize?: () => void; children: ReactNode }
