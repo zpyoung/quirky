@@ -32,11 +32,40 @@ Methods are under `quirky.automations/`:
 - `run({ id, expectedOwner? })` persists a manual row and dispatches it. `runs` reads history with an optional `automationId`, limit, and cursor. Run outputs include `dispatchState` when dispatch has begun.
 - `target({ id })` inspects the captured target and current availability. `dispatch({ runId })` explicitly dispatches a pending run; repeated or nonpending dispatch returns the current row without relaunching it.
 - `schedule` inspects a schedule in an explicit IANA timezone. `tick` evaluates due work using the daemon's current time; the plugin reconciles dispatcher state before its immediate startup tick and evaluates every 60 seconds.
-- Run lifecycle writes belong to the dispatcher. The core-only `claim` and `updateRun` handoff methods have been removed; callers request `dispatch` and read `runs` instead.
 
 Definition edits preserve omitted fields. Nullable fields can be cleared with `null`. Changing a schedule resets `dtstart` to the current time unless the API supplies a new `dtstart`; changing the timezone recomputes the cursor without changing the anchor. Pausing and resuming do not move the cursor. The `changed` event is emitted only after a durable definition or run mutation.
 
 Run history retains the 100 newest final rows per automation and preserves every active row. Retention ties use scheduled occurrence time before ID, while history paging uses timestamp and ID. Run numbers remain monotonic after pruning. Occurrence metadata keeps at most 100 final keys plus active keys; a durable pruned-through watermark prevents replay without retaining deleted run snapshots. API pages default to 100 rows and clamp limits to 1–100, with stable timestamp-and-ID cursors and legacy numeric offsets.
+
+## UI and retained editor
+
+Open **Automations** from the sidebar, Settings, or `quirky automations open`. The page retains its search, host/status/agent filters, sort, selection, and editor draft in the daemon session. Closing returns to the preceding view. Hiding the sidebar shortcut does not remove the Settings entry.
+
+**New Automation** opens a two-pane editor with four templates, project/workspace selection, structured agent model/options, preset or custom-cron schedule, timezone, grace, precheck, and setup choice. Reuse selects an existing worktree; New run selects a fresh session. Raw agent arguments are disabled because structured sessions reject them. Setup remains skipped unless explicitly selected and trusted; an uninspectable branch or hook fails closed to skip.
+
+Saved definitions and background-run evidence refresh without replacing the mounted page or losing search focus. Details show schedule/target/prompt, truthful usage coverage, and paged run history. The Runs dashboard excludes future occurrences from its 24-hour and seven-day counts. Run details prefer saved output, then precheck output, error, and usage diagnostics. **View run** explicitly selects the recorded structured session, including a background session not yet adopted into a tab; it never creates a replacement shell. Missing or wrong-worktree selections show an error rather than silently falling back. Native startup failures retain bounded child stderr so an external interpreter or library failure remains diagnosable.
+
+The UI commands are scriptable:
+
+| Command | Input |
+| --- | --- |
+| `automations ui-state` | Current navigation and retained draft |
+| `automations navigate --patch '<json>'` | Partial navigation object, such as `{"page":"runs","runStatus":"failed"}` |
+| `automations editor-data` | Available local projects, workspaces, and agents, plus read errors |
+| `automations editor-open` | Optional `--id` or `--template` |
+| `automations editor-patch --patch '<json>'` | Partial draft; optional `--template` |
+| `automations editor-save` | Validate and save the retained draft |
+| `automations editor-cancel` | Discard the draft without changing its definition |
+| `automations settings` / `automations close` | Open settings / restore the preceding view |
+
+Delete confirms removing the definition and its history, never its workspaces. **Don't ask again** changes the public `ask-before-delete` setting. API/CLI deletion still follows the kernel's explicit `--yes` authorization convention.
+
+## External OpenClaw jobs
+
+OpenClaw rows come from the local user's `~/.openclaw/cron/jobs.json`; they are not native definitions. Discovery shows unreadable files and missing CLI capability separately from an empty list. The reader bounds file size, nesting, token count, and job count.
+
+`quirky automations external list --json` returns the jobs and a captured owner. Pass that owner to `external action --owner '<json>' --job-id <id> --action pause|resume|run|delete`. Actions validate the current owner and job ID before invoking a fixed `openclaw cron` argv; delete requires confirmation. A changed jobs file or executable requires a refreshed owner. Commands have a 30-second deadline and bounded output; errors remain visible. SSH/runtime authorities are refused rather than redirected to the local CLI.
+
 
 ## CLI
 

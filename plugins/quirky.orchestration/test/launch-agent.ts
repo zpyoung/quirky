@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { CliProcess, CliResult } from './fixture'
 
@@ -24,7 +24,7 @@ const children = new Set<CliProcess>()
 let consumed = 0
 let running = false
 
-async function drainRequests(): Promise<void> {
+async function drainRequests(cli: string): Promise<void> {
   if (running || !existsSync(requests)) return
   const lines = readFileSync(requests, 'utf8').split('\n').filter(Boolean)
   if (consumed >= lines.length) return
@@ -49,8 +49,10 @@ async function drainRequests(): Promise<void> {
         child.exited
       ])
       children.delete(child)
-      const reply: CliResult = { code, stdout, stderr }
-      writeFileSync(join(root, `${request.id}.reply.json`), JSON.stringify(reply))
+      const reply = join(root, `${request.id}.reply.json`)
+      const staging = `${reply}.pending`
+      writeFileSync(staging, JSON.stringify({ code, stdout, stderr }))
+      renameSync(staging, reply)
       appendFileSync(join(root, `${session}.events.jsonl`), JSON.stringify({ type: 'cli', id: request.id, code }) + '\n')
     }
   } catch (error) {
@@ -64,7 +66,7 @@ async function drainRequests(): Promise<void> {
 }
 
 // The launched provider polls its per-session JSONL bridge so each real CLI child inherits that launch environment.
-const poll = setInterval(() => void drainRequests(), 20)
+const poll = setInterval(() => void drainRequests(cli), 20)
 async function stop(): Promise<void> {
   clearInterval(poll)
   const active = [...children]

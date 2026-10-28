@@ -5,12 +5,12 @@ import type {
   TaskTransitionInput, UtcTimestamp, WorkerOutcome, WorkerTransitionInput,
 } from '../../src/contracts'
 import type {
-  CoordinatorEvidence, TerminalResource, WorkerArchive, WorkerCore, WorkerLifecycle, WorkerPlacement, WorkerRecord,
-  WorkerRepository, WorkerRuntime, WorkerSetup, WorkerStartParams, WorkerStarter,
+  CoordinatorEvidence, ServiceCoordinatorEvidence, TerminalResource, WorkerArchive, WorkerCore, WorkerLifecycle,
+  WorkerPlacement, WorkerRecord, WorkerRepository, WorkerRuntime, WorkerSetup, WorkerStartParams, WorkerStarter,
   WorkerStartReceipt, WorkerUserInputParams, TurnStart,
 } from '../../src/worker-contracts'
-import type { SessionIdentity } from '../../src/runtime-contracts'
 import type { DurableMutationOptions, WorkerLifecyclePort } from '../../src/worker-integration'
+import type { SessionIdentity } from '../../src/runtime-contracts'
 import { createWorkerStarter } from '../../src/workers/start'
 
 const RUN_ID = 'run_test' as RunId
@@ -21,6 +21,10 @@ const NOW = '2026-10-27T12:00:00.000Z' as UtcTimestamp
 
 function error(code: string, message: string): Error & { code: string } {
   return Object.assign(new Error(message), { code })
+}
+
+function isServiceCoordinator(evidence: CoordinatorEvidence): evidence is ServiceCoordinatorEvidence {
+  return 'kind' in evidence && evidence.kind === 'service'
 }
 
 function cloneMap<K, V>(map: Map<K, V>): Map<K, V> {
@@ -80,6 +84,7 @@ export function makeWorkerStartHarness(): WorkerStartHarness {
   const setupSessions = new Map<string, Session>()
   const setupListeners = new Set<(event: QuirkyEvent) => void | Promise<void>>()
   const setupStatuses: WorkerStartHarness['setupStatuses'] = []
+  const closeQuestionCalls: DispatchId[] = []
   let latestPhysicalInput: { session: string; expectedIncarnation: string; at: number } | null = null
   const archives = new Map<DispatchId, WorkerArchive>()
   const receipts = new Map<string, { fingerprint: string; state: 'pending' | 'completed'; result?: object; checkpoint?: unknown }>()
@@ -165,13 +170,12 @@ export function makeWorkerStartHarness(): WorkerStartHarness {
     addObservation: () => undefined,
   }
 
-  const sessionCaller = (evidence: CoordinatorEvidence): RuntimeCallerEvidence => {
-    if ('kind' in evidence) throw error('consumer_fenced', 'service evidence is unsupported by the session worker-start fixture')
-    return evidence
-  }
   const requireCoordinator = (evidence: CoordinatorEvidence, requestedRunId?: RunId): RunRow => {
-    const callerEvidence = sessionCaller(evidence)
-    if (!callerEvidence.runtimeOwned || !callerEvidence.live || callerEvidence.callerSessionId !== run.coordinatorSessionId || (requestedRunId && requestedRunId !== run.id)) {
+    if (isServiceCoordinator(evidence)) {
+      if (evidence.runId !== run.id || (requestedRunId && requestedRunId !== run.id)) throw error('consumer_fenced', 'service is not bound to this Run')
+      return run
+    }
+    if (!evidence.runtimeOwned || !evidence.live || evidence.callerSessionId !== run.coordinatorSessionId || (requestedRunId && requestedRunId !== run.id)) {
       throw error('consumer_fenced', 'worker-start requires the coordinator terminal currently bound to the Task Run.')
     }
     return run
@@ -207,6 +211,33 @@ export function makeWorkerStartHarness(): WorkerStartHarness {
       terminationReason: 'terminationReason' in input ? input.terminationReason ?? current.terminationReason : current.terminationReason,
     }
     dispatches.set(input.dispatchId, updated)
+    return updated
+  }
+  const blockTaskForWorkerStop = ({ taskId, dispatchId, at }: { taskId: TaskId; dispatchId: DispatchId; at: UtcTimestamp }): TaskRow => {
+    const task = tasks.get(taskId)
+    const dispatch = dispatches.get(dispatchId)
+    const worker = repository.get(dispatchId)
+    if (!task || !dispatch || task.runId !== dispatch.runId || dispatch.taskId !== taskId ||
+      (dispatch.status !== 'pending' && dispatch.status !== 'dispatched') ||
+      !worker || (worker.state !== 'stopping' && !(worker.state === 'stop_unknown' && worker.stage === 'stopping'))) {
+      throw error('task_not_startable', 'The Task does not have the exact active worker stop fence.')
+    }
+    const hasIdentity = worker.sessionId !== null || worker.processIncarnation !== null ||
+      worker.processRuntimeEpoch !== null || dispatch.assigneeSessionId !== null
+    if (hasIdentity && (!worker.sessionId || !worker.processIncarnation || !worker.processRuntimeEpoch ||
+      dispatch.assigneeSessionId !== worker.sessionId)) {
+      throw error('task_not_startable', 'The active worker stop fence no longer matches its process identity.')
+    }
+    const activeSibling = [...dispatches.values()].some(candidate =>
+      candidate.id !== dispatchId && candidate.taskId === taskId &&
+      (candidate.status === 'pending' || candidate.status === 'dispatched')
+    )
+    if (activeSibling || (task.status !== 'dispatched' && task.status !== 'blocked')) {
+      throw error('task_not_startable', 'The Task has another active attempt or is no longer dispatched.')
+    }
+    if (task.status === 'blocked') return task
+    const updated: TaskRow = { ...task, status: 'blocked' }
+    tasks.set(taskId, updated)
     return updated
   }
 
@@ -259,7 +290,7 @@ export function makeWorkerStartHarness(): WorkerStartHarness {
       const title = input.taskTitle?.trim() || 'New worker task'
       const task: TaskRow = {
         id, runId: input.runId ?? run.id, parentTaskId: input.parentTaskId ?? null,
-        dependencyTaskIds: input.dependencyTaskIds ?? [], createdBySessionId: sessionCaller(evidence).callerSessionId,
+        dependencyTaskIds: input.dependencyTaskIds ?? [], createdBySessionId: isServiceCoordinator(evidence) ? null : evidence.callerSessionId,
         taskTitle: title, displayName: input.displayName?.trim() || title, spec: input.spec,
         status: 'ready', result: null, createdAt: NOW, completedAt: null,
       }
@@ -285,7 +316,7 @@ export function makeWorkerStartHarness(): WorkerStartHarness {
       const dispatchId = `ctx_test_${++sequence}` as DispatchId
       const dispatch: DispatchRow = {
         id: dispatchId, runId: input.runId, taskId: input.taskId, contractVersion: 1, status: 'pending',
-        assigneeSessionId: null, creatorSessionId: sessionCaller(evidence).callerSessionId,
+        assigneeSessionId: null, creatorSessionId: isServiceCoordinator(evidence) ? null : evidence.callerSessionId,
         creatorDispatchId: null, retryOfDispatchId: input.retryOfDispatchId ?? null, depth: 0,
         failureCount: lineage.at(-1)?.failureCount ?? 0, lastFailure: null, terminationReason: null,
         consumerGeneration: 1, createdAt: NOW, dispatchedAt: null, completedAt: null, lastHeartbeatAt: null,
@@ -294,25 +325,12 @@ export function makeWorkerStartHarness(): WorkerStartHarness {
       tasks.set(task.id, { ...task, status: 'dispatched' })
       return dispatch
     },
-    attachDispatchAuthority: (dispatchId, identity, evidence) => {
-      requireCoordinator(evidence)
-      const current = dispatches.get(dispatchId)
-      if (!identity.live || !current || current.status !== 'pending' || current.assigneeSessionId !== null) {
-        throw error('lifecycle_conflict', `Dispatch ${dispatchId} is not awaiting authority attachment`)
-      }
-      if ([...dispatches.values()].some(dispatch => dispatch.id !== dispatchId &&
-        dispatch.assigneeSessionId === identity.sessionId && (dispatch.status === 'pending' || dispatch.status === 'dispatched'))) {
-        throw error('task_not_startable', `Session ${identity.sessionId} already owns an active Dispatch`)
-      }
-      const updated = { ...current, assigneeSessionId: identity.sessionId, consumerGeneration: current.consumerGeneration + 1 }
-      dispatches.set(dispatchId, updated)
-      return updated
-    },
     attachWorkerAuthority: (dispatchId, identity, evidence) => {
       requireCoordinator(evidence)
       const current = dispatches.get(dispatchId)
       const worker = repository.get(dispatchId)
-      if (!worker || worker.processIncarnation !== identity.processIncarnation || worker.processRuntimeEpoch !== identity.runtimeEpoch) {
+      if (!identity.live || !worker || worker.sessionId !== identity.sessionId ||
+        worker.processIncarnation !== identity.processIncarnation || worker.processRuntimeEpoch !== identity.runtimeEpoch) {
         throw error('worker_identity_changed', `Dispatch ${dispatchId} identity does not match its custody record`)
       }
       if (!current || current.status !== 'pending') throw error('lifecycle_conflict', `Dispatch ${dispatchId} cannot attach`)
@@ -323,7 +341,7 @@ export function makeWorkerStartHarness(): WorkerStartHarness {
     mutate: async <T extends object>(
       method: MutatingOrchestrationMethod,
       params: MutationRequest & Record<string, unknown>,
-      evidence: RuntimeCallerEvidence,
+      evidence: CoordinatorEvidence,
       operation: (store: PluginStore) => T,
       options?: DurableMutationOptions<T>,
     ) =>
@@ -335,7 +353,6 @@ export function makeWorkerStartHarness(): WorkerStartHarness {
       operation: (store: PluginStore) => T,
       options?: DurableMutationOptions<T>,
     ) => {
-      sessionCaller(evidence)
       const key = `${params.requestId}`
       const fingerprint = JSON.stringify(params)
       const prior = receipts.get(key)
@@ -360,7 +377,7 @@ export function makeWorkerStartHarness(): WorkerStartHarness {
       }
     },
     emitWorkerStatus: (dispatchId, subject, body, high) => { setupStatuses.push({ dispatchId, subject, body, high }) },
-    closeWorkerQuestions: () => undefined,
+    closeWorkerQuestions: (dispatchId, _at) => { closeQuestionCalls.push(dispatchId) },
     listDispatches: runId => [...dispatches.values()].filter(dispatch => runId === undefined || dispatch.runId === runId),
     boundRunId: evidence => evidence.callerSessionId === run.coordinatorSessionId ? run.id : null,
     attentionFor: () => ({ guidance: false, input: false, approval: false, rootCompletion: false }),
@@ -390,6 +407,7 @@ export function makeWorkerStartHarness(): WorkerStartHarness {
       }
     },
     transitionTask,
+    blockTaskForWorkerStop,
     transitionDispatch,
     transitionWorker: input => {
       const record = repository.get(input.dispatchId)
@@ -397,7 +415,7 @@ export function makeWorkerStartHarness(): WorkerStartHarness {
       const updated = repository.update(input.dispatchId, { state: input.nextState }, input.expectedState)
       return updated
     },
-    reportWorkerDone: (input, evidence) => {
+    reportWorkerDone: (input, evidence) => store.transaction(() => {
       const dispatch = dispatches.get(input.dispatchId)
       if (!dispatch) return { status: 'rejected', reason: 'unknown_dispatch', audited: true }
       const task = tasks.get(input.taskId)
@@ -414,7 +432,7 @@ export function makeWorkerStartHarness(): WorkerStartHarness {
       }
       const latest = [...dispatches.values()]
         .filter(candidate => candidate.taskId === dispatch.taskId)
-        .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
+        .sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id))
         .at(-1)
       if (latest?.id !== dispatch.id) return { status: 'rejected', reason: 'stale_dispatch', audited: true }
       if (dispatch.status === 'completed' || dispatch.status === 'failed' || dispatch.status === 'circuit_broken') {
@@ -462,7 +480,7 @@ export function makeWorkerStartHarness(): WorkerStartHarness {
         at: NOW,
       })
       return { status: 'accepted', task: settledTask, dispatch: settledDispatch, worker: repository.get(dispatch.id) }
-    },
+    }),
     recordHeartbeat: (input, evidence) => {
       const dispatch = dispatches.get(input.dispatchId)
       if (!dispatch) return { status: 'rejected', reason: 'unknown_dispatch', lastHeartbeatAt: null }
@@ -517,12 +535,24 @@ export function makeWorkerStartHarness(): WorkerStartHarness {
       if (!record || !dispatch || dispatch.assigneeSessionId !== input.caller.runtimeSessionId ||
         record.processIncarnation !== input.caller.attestation.processIncarnation ||
         record.processRuntimeEpoch !== input.caller.attestation.runtimeEpoch ||
-        !['starting', 'start_unknown', 'ready', 'failed'].includes(record.state)) return null
+        record.state === 'stopping' || (record.state === 'stop_unknown' && record.stage === 'stopping') ||
+        record.state === 'stopped' || record.state === 'abandoned') return null
+      let current = record
+      if (current.state === 'starting') {
+        core.transitionWorker({ dispatchId: input.dispatchId, expectedState: 'starting', nextState: 'ready' })
+      } else if (current.state === 'start_unknown') {
+        core.transitionWorker({ dispatchId: input.dispatchId, expectedState: 'start_unknown', nextState: 'ready' })
+      } else if (current.state === 'stop_unknown') {
+        core.transitionWorker({ dispatchId: input.dispatchId, expectedState: 'stop_unknown', nextState: 'ready' })
+      }
+      current = repository.get(input.dispatchId)!
+      if (current.state !== 'ready') return null
+      core.transitionWorker({ dispatchId: input.dispatchId, expectedState: 'ready', nextState: input.outcome })
       return repository.update(input.dispatchId, {
-        state: input.outcome === 'succeeded' ? 'succeeded' : 'failed',
         stage: 'settled',
-        receipt: record.receipt ? { ...record.receipt, state: 'ready', stage: 'settled', workerOutcome: input.outcome } : null,
-      }, record.state)
+        lastError: null,
+        receipt: current.receipt ? { ...current.receipt, state: 'ready', stage: 'settled', workerOutcome: input.outcome } : null,
+      }, input.outcome)
     },
     recordHeartbeat: (_store, input) => {
       const record = records.get(input.dispatchId)

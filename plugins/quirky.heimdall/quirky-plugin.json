@@ -1,0 +1,126 @@
+{
+  "id": "quirky.heimdall",
+  "name": "Heimdall",
+  "version": "0.1.0",
+  "description": "Durable, per-workspace watcher supervision.",
+  "main": "main.ts",
+  "activation": "startup",
+  "dependencies": ["quirky.orchestration"],
+  "contributes": {
+    "method": [
+      {
+        "id": "registerKind",
+        "description": "Registers a kind descriptor whose hook methods belong to the authenticated calling plugin.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "displayName": { "type": "string" },
+            "enrollmentPayloadSchema": { "type": "object", "additionalProperties": true },
+            "hooks": {
+              "type": "object",
+              "properties": {
+                "authorize": { "type": "string" },
+                "read": { "type": "string" },
+                "decide": { "type": "string" },
+                "execute": { "type": "string" },
+                "validate": { "type": "string" },
+                "undo": { "type": "string" },
+                "describeEnrollment": { "type": "string" },
+                "describeSnapshot": { "type": "string" },
+                "resolveOutcome": { "type": "string" },
+                "preflight": { "type": "string" },
+                "pace": { "type": "string" },
+                "stop": { "type": "string" },
+                "reconcile": { "type": "string" }
+              },
+              "required": ["authorize", "read", "decide", "execute"],
+              "additionalProperties": false
+            },
+            "concurrency": {
+              "type": "object",
+              "properties": {
+                "parallelActions": { "type": "boolean" },
+                "drainOnBudget": { "type": "boolean" }
+              },
+              "additionalProperties": false
+            },
+            "pluginId": { "type": "string" }
+          },
+          "required": ["id", "displayName", "enrollmentPayloadSchema", "hooks"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "registered": { "type": "boolean" },
+            "kind": { "type": "string" }
+          },
+          "required": ["registered", "kind"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "enroll",
+        "description": "Authorizes and durably enrolls a watcher, then schedules its first reconciliation immediately.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "kind": { "type": "string" },
+            "kindPayload": {},
+            "capabilities": { "type": "object", "additionalProperties": true },
+            "budget": { "type": "object", "additionalProperties": true },
+            "owner": {
+              "description": "Claude owner configuration, or null for no owner; the kernel validates the nullable value.",
+              "properties": {
+                "agent": { "type": "string", "enum": ["claude"] },
+                "model": { "type": "string" },
+                "effort": { "type": "string" }
+              },
+              "required": ["agent"],
+              "additionalProperties": false
+            },
+            "ownerInterventionCapability": { "type": "string", "enum": ["off", "gated", "on"] }
+          },
+          "required": ["kind", "kindPayload"],
+          "additionalProperties": false
+        },
+        "result": { "type": "object", "additionalProperties": true }
+      },
+      {
+        "id": "inspect",
+        "description": "Reads all watcher inspections or one watcher by ID without mutating or scheduling.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": { "watcherId": { "type": "string" } },
+          "additionalProperties": false
+        },
+        "result": { "type": "array", "items": { "type": "object", "additionalProperties": true } }
+      },
+      {
+        "id": "reconcile",
+        "description": "Runs one serialized reconciliation pulse for a watcher.",
+        "params": {
+          "type": "object",
+          "properties": { "watcherId": { "type": "string" } },
+          "required": ["watcherId"],
+          "additionalProperties": false
+        },
+        "result": { "type": "object", "additionalProperties": true }
+      }
+    ],
+    "event": [
+      {
+        "id": "changed",
+        "description": "A watcher’s persisted supervision state changed.",
+        "data": {
+          "type": "object",
+          "properties": { "watcherId": { "type": "string" } },
+          "required": ["watcherId"],
+          "additionalProperties": false
+        }
+      }
+    ]
+  }
+}

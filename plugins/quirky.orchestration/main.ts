@@ -1,12 +1,14 @@
 import type { PluginContext } from '@quirky/protocol'
 import type { OrchestrationMethod } from './src/contracts'
-import { createOrchestration } from './src/service'
-import { migrations } from './src/store'
-import type { OrchestrationService } from './src/surface-contracts'
+import { createOrchestration, type ComposedOrchestrationService } from './src/service'
+import { migrations, policyMigration } from './src/store'
+import { createSetup } from './src/setup'
+import { createTaskNavigation } from './src/navigation'
 import { verifyCaller } from './src/identity'
 import { createWorkerCore } from './src/workers/core-adapter'
 import { registerWorkers, type WorkerComponents } from './src/workers/register'
 import { workerMigrations } from './src/workers/store'
+import { serviceMigrations } from './src/services/migrations'
 
 const methods = [
   'runCreate',
@@ -28,26 +30,41 @@ const methods = [
   'gateResolve',
   'gateList',
   'requestShow',
-  'reset'
+  'reset',
+  'serviceRunCreate',
+  'serviceRunShow',
+  'serviceWorkerStart',
+  'serviceCheck',
+  'serviceWorkerRelease',
+  'serviceWorkerStop',
+  'serviceReply',
+  'serviceSend'
 ] as const satisfies readonly OrchestrationMethod[]
 
-let activeService: OrchestrationService | undefined
+let activeService: ComposedOrchestrationService | undefined
 let activeWorkers: WorkerComponents | undefined
 
 export async function activate(context: PluginContext): Promise<void> {
-  const store = context.openStore([...migrations, ...workerMigrations])
+  const store = context.openStore([...migrations, ...workerMigrations, ...serviceMigrations, policyMigration])
   const service = createOrchestration(context, store)
   let workers: WorkerComponents | undefined
   try {
-    const workerCore = createWorkerCore(service.core)
+    const workerCore = createWorkerCore(service.core, service.serviceCoordinator)
     workers = registerWorkers(
       workerCore,
       async (caller, aliases) => (await verifyCaller(context, caller, aliases)).evidence,
       (listener) => context.pty.onUserInput(listener)
     )
+    service.serviceCoordinator.bindWorkers(workers)
     for (const method of methods) {
       context.provide(`method:${context.pluginId}/${method}`, service.methods[method])
     }
+    const setup = createSetup(context, service.core)
+    const navigation = createTaskNavigation(context, service.core)
+    for (const [method, handler] of Object.entries(setup)) {
+      context.provide(`method:${context.pluginId}/${method}`, handler)
+    }
+    context.provide(`method:${context.pluginId}/taskTerminal`, navigation)
     for (const [method, handler] of Object.entries(workers.methods)) {
       context.provide(`method:${context.pluginId}/${method}`, handler)
     }

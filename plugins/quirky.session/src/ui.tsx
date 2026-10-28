@@ -113,7 +113,7 @@ export function activate(context: UiPluginContext): void {
     Object.assign(element.style, { display: 'flex', flexDirection: 'column', flex: '1', minHeight: '0' })
     const root = createRoot(element)
     root.render(<StructuredSession context={context} id={structuredSessionId(input)} />)
-    return () => root.unmount()
+    return () => queueMicrotask(() => root.unmount())
   }
 
   const selectTab = (index: number) => {

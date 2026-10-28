@@ -1,8 +1,7 @@
-import type { AcceptedWorkerCheckpoint, DispatchId, DispatchRow, DispatchStatus, DispatchTransitionInput, JsonValue, ResetMode, RuntimeCallerEvidence, TaskRow, UtcTimestamp, WorkerRow, WorkerState, WorkerTransitionInput } from '../contracts'
+import type { DispatchId, DispatchRow, DispatchStatus, DispatchTransitionInput, JsonValue, MutationCheckpoint, ResetMode, RuntimeCallerEvidence, TaskRow, UtcTimestamp, WorkerRow, WorkerState, WorkerTransitionInput } from '../contracts'
 import type { PluginStore } from '@quirky/protocol'
-import { isServiceCoordinatorEvidence } from '../worker-contracts'
 import type {
-  CoordinatorEvidence, TerminalResource, WorkerArchive, WorkerControlParams, WorkerControlResult, WorkerCore,
+  CoordinatorEvidence, ServiceCoordinatorEvidence, TerminalResource, WorkerArchive, WorkerControlParams, WorkerControlResult, WorkerCore,
   WorkerLifecycle, WorkerObservation, WorkerOutput, WorkerRecord, WorkerRepository, WorkerRuntime,
   WorkerUserInputParams
 } from '../worker-contracts'
@@ -37,6 +36,10 @@ function isExactCaller(record: WorkerRecord, dispatch: DispatchRow, caller: Runt
     caller.runtimeSessionId === dispatch.assigneeSessionId &&
     caller.attestation.runtimeEpoch === record.processRuntimeEpoch &&
     caller.attestation.processIncarnation === record.processIncarnation
+}
+
+function isServiceCoordinator(caller: CoordinatorEvidence): caller is ServiceCoordinatorEvidence {
+  return 'kind' in caller && caller.kind === 'service'
 }
 function observationEvidence(observation: WorkerObservation): JsonValue {
   return {
@@ -128,6 +131,16 @@ export function createWorkerLifecycle(
     }
     core.requireCoordinator(caller, dispatch.runId)
   }
+  const acceptedWorkerControlCheckpoint = (dispatchId: DispatchId): MutationCheckpoint => {
+    const dispatch = core.getDispatch(dispatchId)
+    return {
+      state: 'accepted',
+      accepted: true,
+      runId: dispatch.runId,
+      taskId: dispatch.taskId,
+      dispatchId: dispatch.id,
+    }
+  }
 
   const updateState = (dispatchId: DispatchId, expectedState: WorkerState, nextState: WorkerState): WorkerRecord => {
     if (!canChangeWorkerState(expectedState, nextState)) {
@@ -178,6 +191,17 @@ export function createWorkerLifecycle(
     if (task.status !== nextState) core.transitionTask({ taskId: task.id, expectedState: task.status, nextState, at: utcNow() })
   }
 
+  const setTaskAfterStopFence = (dispatch: DispatchRow): void => {
+    const task = core.getTask(dispatch.taskId)
+    const nextState = otherActiveAttempt(task.id, dispatch.id) ? 'dispatched' : 'blocked'
+    if (task.status === nextState) return
+    if (nextState === 'blocked') {
+      core.blockTaskForWorkerStop({ taskId: task.id, dispatchId: dispatch.id, at: utcNow() })
+    } else {
+      core.transitionTask({ taskId: task.id, expectedState: task.status, nextState, at: utcNow() })
+    }
+  }
+
   const setControlDispatchFence = (dispatch: DispatchRow, reason: 'stopped' | 'abandoned'): void => {
     transitionDispatchFailure(dispatch, 'worker_report', reason)
     setTaskAfterFence(dispatch, true)
@@ -212,11 +236,6 @@ export function createWorkerLifecycle(
     processAction: WorkerControlResult['processAction'],
     extra: Partial<WorkerControlResult> = {}
   ): WorkerControlResult => ({ dispatchId, state, processAction, ...extra })
-
-  const controlCheckpoint = (accepted: WorkerControlResult): AcceptedWorkerCheckpoint => {
-    const dispatch = core.getDispatch(accepted.dispatchId)
-    return { state: 'accepted', accepted: true, runId: dispatch.runId, taskId: dispatch.taskId, dispatchId: dispatch.id }
-  }
 
   const markResourceRetained = (resource: TerminalResource, reason: string): TerminalResource => {
     if (resource.ownershipState !== 'owned' || resource.releaseState === 'releasing' || resource.releaseState === 'released') return resource
@@ -508,7 +527,7 @@ export function createWorkerLifecycle(
       const dispatch = core.getDispatch(params.dispatchId)
       authorizeControl(params, caller, dispatch)
       const resource = repo.resource(params.dispatchId)
-      const serviceCaller = 'kind' in caller && caller.kind === 'service'
+      const serviceCaller = isServiceCoordinator(caller)
       if (serviceCaller && !params.expectedIdentity) {
         throw core.context.error('invalid-params', 'Service worker-stop requires the exact expected terminal identity.')
       }
@@ -560,7 +579,7 @@ export function createWorkerLifecycle(
       } else if (current.state === 'stop_unknown') {
         current = repo.update(params.dispatchId, { runtimeEpoch: runtime.epoch, stage: 'stopping', updatedAt: utcNow() }, 'stop_unknown')
       }
-      setTaskAfterFence(dispatch, true)
+      setTaskAfterStopFence(dispatch)
       return {
         shouldAttempt: true,
         result: controlResult(params.dispatchId, current.state, 'unknown')
@@ -714,7 +733,7 @@ export function createWorkerLifecycle(
       updateState(params.dispatchId, worker.state, 'abandoned')
       updateStage(params.dispatchId, 'abandoned', {
         stage: 'abandoned',
-        lastError: `${worker.lastError ? `${worker.lastError}\\n` : ''}Abandoned by ${isServiceCoordinatorEvidence(caller) ? caller.pluginId : caller.callerSessionId}.`
+        lastError: `${worker.lastError ? `${worker.lastError}\\n` : ''}Abandoned by ${isServiceCoordinator(caller) ? caller.pluginId : caller.callerSessionId}.`
       })
       setControlDispatchFence(dispatch, 'abandoned')
       const resource = repo.resource(params.dispatchId)
@@ -820,24 +839,30 @@ export function createWorkerLifecycle(
     if (!worker || !isExactCaller(worker, dispatch, input.caller)) return null
     if (worker.state === 'stopping' || (worker.state === 'stop_unknown' && worker.stage === 'stopping') ||
       worker.state === 'stopped' || worker.state === 'abandoned') return null
-    if (worker.state === 'starting' || worker.state === 'start_unknown' || worker.state === 'stop_unknown') {
-      const ready = updateState(dispatch.id, worker.state, 'ready')
-      repo.addObservation(dispatch.id, 'completion_report', {
-        outcome: input.outcome,
-        at: input.at,
-        processIncarnation: worker.processIncarnation
-      })
-      return ready
+
+    let current = worker
+    if (current.state === 'starting' || current.state === 'start_unknown' || current.state === 'stop_unknown') {
+      current = updateState(dispatch.id, current.state, 'ready')
     }
-    if (worker.state === 'ready' || worker.state === input.outcome) {
-      repo.addObservation(dispatch.id, 'completion_report', {
-        outcome: input.outcome,
-        at: input.at,
-        processIncarnation: worker.processIncarnation
-      })
-      return worker
+    if (current.state === 'ready') {
+      current = updateState(dispatch.id, 'ready', input.outcome)
+      const receipt = current.receipt ? {
+        ...current.receipt,
+        state: 'ready' as const,
+        stage: 'settled',
+        workerOutcome: input.outcome,
+      } : null
+      current = updateStage(dispatch.id, input.outcome, { stage: 'settled', lastError: null, receipt })
+    } else if (current.state !== input.outcome) {
+      return null
     }
-    return null
+
+    repo.addObservation(dispatch.id, 'completion_report', {
+      outcome: input.outcome,
+      at: input.at,
+      processIncarnation: current.processIncarnation
+    })
+    return current
   }
 
   const recordHeartbeat: WorkerLifecyclePort['recordHeartbeat'] = (store, input) => {
@@ -976,7 +1001,7 @@ export function createWorkerLifecycle(
         return prepared.result
       },
       {
-        acceptedCheckpoint: controlCheckpoint,
+        acceptedCheckpoint: accepted => acceptedWorkerControlCheckpoint(accepted.dispatchId),
         afterCommit: (accepted) => attempt.shouldAttempt ? coalesceStopEffect(params.dispatchId) : accepted
       }
     ))
@@ -1006,7 +1031,7 @@ export function createWorkerLifecycle(
           : controlResult(params.dispatchId, 'release_pending', 'none')
       },
       {
-        acceptedCheckpoint: controlCheckpoint,
+        acceptedCheckpoint: accepted => acceptedWorkerControlCheckpoint(accepted.dispatchId),
         afterCommit: (accepted) => {
           const preparation = attempt.preparation
           if (!preparation) return accepted
