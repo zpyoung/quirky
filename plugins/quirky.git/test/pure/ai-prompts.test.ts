@@ -3,7 +3,9 @@ import type { GitStatusEntry } from '@quirky/protocol'
 import {
   PUSH_FAILURE_PROMPT_FILE_LIMIT,
   STAGED_DIFF_BYTE_BUDGET,
+  buildBranchNamePrompt,
   buildBranchSummaryPrompt,
+  buildConversationNamePrompt,
   buildCommitMessagePrompt,
   buildFixCommitFailurePrompt,
   buildFixPushFailurePrompt,
@@ -502,5 +504,52 @@ describe('buildResolveConflictsPrompt', () => {
     const prompt = buildResolveConflictsPrompt({ conflictOperation: 'merge', entries, worktreePath: null })
     for (const [kind, label] of Object.entries(kinds)) expect(prompt).toContain(`- "${kind}.ts" (${label})`)
     expect(prompt).toContain('- "plain.ts" (Conflict)')
+  })
+})
+describe('name prompts', () => {
+  test('branchName uses exact branch comparison and captured work prompt as naming context', () => {
+    const prompt = buildBranchNamePrompt({
+      worktreePath: '/repo/feat',
+      branch: 'zoe/feat',
+      compare: {
+        status: 'ready',
+        base: 'main',
+        baseSource: 'project',
+        message: null,
+        baseOid: 'base',
+        headOid: 'head',
+        mergeBase: 'merge',
+        ahead: 1,
+        behind: 0,
+        entries: [{ path: 'feature.ts', status: 'added', added: 1, removed: 0, binary: false }],
+        added: 1,
+        removed: 0
+      },
+      changes: [{ path: 'feature.ts', status: 'modified', area: 'staged' }],
+      workPrompt: 'Keep the public metadata in one canonical repository owner.'
+    })
+    expect(prompt).toContain('Branch: "zoe/feat"')
+    expect(prompt).toContain('"feature.ts"')
+    expect(prompt).toContain('Keep the public metadata in one canonical repository owner.')
+    expect(prompt).toContain('git check-ref-format --branch')
+    expect(prompt).toContain('Return exactly one branch name')
+    expect(prompt).not.toContain('Summarize the current branch')
+  })
+
+  test('conversationName uses captured user and assistant messages and asks only for a title', () => {
+    const prompt = buildConversationNamePrompt({
+      worktreePath: '/repo/feat',
+      session: 'session-exact',
+      agent: 'codex',
+      messages: [
+        { role: 'user', text: 'Move metadata into one owner.' },
+        { role: 'assistant', text: 'I will inspect how the owner is persisted.' }
+      ]
+    })
+    expect(prompt).toContain('session-exact')
+    expect(prompt).toContain('Move metadata into one owner.')
+    expect(prompt).toContain('I will inspect how the owner is persisted.')
+    expect(prompt).toContain('Return only one concise conversation title')
+    expect(prompt).not.toContain('Draft a reply')
   })
 })

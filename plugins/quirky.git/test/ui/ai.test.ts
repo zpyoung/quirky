@@ -66,6 +66,7 @@ function aiFake(configure: (fake: Fake) => void = () => {}): Fake {
   fake.settings['ai-enabled'] = true
   fake.status = statusOf([entry('util.ts', 'staged')])
   fake.on('quirky.agents/list', () => AGENTS)
+  fake.on('quirky.session/list', () => [])
   fake.on('quirky.agents/options', (params) => ({
     agent: params.agent,
     label: params.agent === 'codex' ? 'Codex' : 'Claude',
@@ -736,7 +737,9 @@ describe('NA-40: the Source Control AI defaults view', () => {
     'branchSummary',
     'pullRequestDetails',
     'pullRequestReview',
-    'reviewConversation'
+    'reviewConversation',
+    'branchName',
+    'conversationName'
   ]
 
   async function openSettings(configure: (f: Fake) => void = () => {}) {
@@ -765,7 +768,9 @@ describe('NA-40: the Source Control AI defaults view', () => {
       ['branchSummary', 'Branch summary'],
       ['pullRequestDetails', 'Pull request details'],
       ['pullRequestReview', 'Pull request review'],
-      ['reviewConversation', 'Review conversation']
+      ['reviewConversation', 'Review conversation'],
+      ['branchName', 'Branch name'],
+      ['conversationName', 'Conversation name']
     ])
     expect(fake.called('quirky.git/aiRecipe').map((c) => c.params)).toEqual(ACTIONS.map((action) => ({ worktree: 'feat', action })))
     expect([...inSection(element, 'commitMessage', 'Commit message agent').options].map((o) => o.textContent)).toEqual(['Default agent', 'Claude', 'Codex', 'Custom command'])
@@ -775,6 +780,44 @@ describe('NA-40: the Source Control AI defaults view', () => {
       expect(section(element, action).textContent).toContain('CLI arguments')
       expect(section(element, action).textContent).toContain('Command template')
     }
+    unmount()
+  })
+  test('name actions use distinct recipes and retain the last candidate when a later generation fails', async () => {
+    let failName = false
+    const { fake, element, unmount } = await openSettings((f) => {
+      f.on('quirky.session/list', () => [{
+        id: 'captured-session',
+        kind: 'structured',
+        worktreeId: 'feat',
+        title: 'Move metadata',
+        status: 'done',
+        lastActivityAt: 10
+      }])
+      f.on('quirky.git/aiName', (params) => {
+        if (failName) throw new Error('provider unavailable')
+        return { action: params.action, name: params.action === 'branchName' ? 'feature/metadata-owner' : 'Metadata owner conversation', agent: 'codex' }
+      })
+    })
+    await click(buttonText(section(element, 'branchName'), 'Generate branch name'))
+    expect(fake.called('quirky.git/aiName').at(-1)?.params).toMatchObject({ worktree: 'feat', action: 'branchName' })
+    expect(section(element, 'branchName').textContent).toContain('feature/metadata-owner')
+
+    const selectedSession = inSection(element, 'conversationName', 'Captured conversation') as HTMLSelectElement
+    await act(async () => {
+      selectedSession.value = 'captured-session'
+      selectedSession.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    await click(buttonText(section(element, 'conversationName'), 'Generate conversation name'))
+    expect(fake.called('quirky.git/aiName').at(-1)?.params).toMatchObject({
+      worktree: 'feat', action: 'conversationName', session: 'captured-session'
+    })
+    expect(section(element, 'conversationName').textContent).toContain('Metadata owner conversation')
+
+    failName = true
+    await click(buttonText(section(element, 'conversationName'), 'Generate conversation name'))
+    expect(section(element, 'conversationName').textContent).toContain('Metadata owner conversation')
+    expect(section(element, 'conversationName').textContent).toContain('provider unavailable')
+    expect(fake.called('quirky.git/aiName')).toHaveLength(3)
     unmount()
   })
   test('the current hosted branch exposes named AI source actions without launching or posting yet', async () => {

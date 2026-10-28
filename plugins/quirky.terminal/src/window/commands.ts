@@ -211,11 +211,8 @@ async function forkAgentSessionCommand(context: UiPluginContext, raw: unknown): 
 /** Opens an owner-provided document picker without losing the plus menu's exact destination group. */
 function documentPicker(context: UiPluginContext, command: string): CommandHandler {
   return on(context, 'group', (controller, args) => {
-    if (controller.workspaceId === FLOATING_WORKSPACE) {
-      throw new Error('Markdown and editor files require an authorized worktree; the floating workspace has no document root')
-    }
     const group = textArg(args, 'group') ?? controller.getSnapshot().workspace?.activeGroup
-    return context.executeCommand(command, { worktree: `id:${controller.workspaceId}`, ...(group === undefined ? {} : { group }) })
+    return context.executeCommand(command, { worktree: controller.workspaceId === FLOATING_WORKSPACE ? FLOATING_WORKSPACE : `id:${controller.workspaceId}`, ...(group === undefined ? {} : { group }) })
   })
 }
 

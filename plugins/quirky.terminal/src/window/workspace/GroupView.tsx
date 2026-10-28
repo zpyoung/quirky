@@ -118,7 +118,7 @@ function TabItem({ controller, state, group, tab, index, others, now }: Common &
           <CollapseIcon />
         </button>
       ) : null}
-      {tab.color !== 'none' ? <span className="qt-color" data-color={tab.color} style={{ background: TAB_COLOR_HEX[tab.color] }} title={tab.color} /> : null}
+      {tab.color !== 'none' ? <span className="qt-color" data-color={tab.color} style={{ background: tab.color.startsWith('#') ? tab.color : TAB_COLOR_HEX[tab.color as keyof typeof TAB_COLOR_HEX] }} title={tab.color} /> : null}
       {tab.pinned ? (
         <span className="qt-pin" role="img" aria-label="Pinned">
           <PinIcon />

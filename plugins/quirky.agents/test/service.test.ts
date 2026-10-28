@@ -1051,6 +1051,35 @@ describe('provider-owned model discovery', () => {
       rmSync(modelPath, { force: true })
     }
   }, 30_000)
+  test('Codex discovery refuses to run under a raw inherited home when account preparation is unavailable', async () => {
+    const previousCodexHome = process.env.CODEX_HOME
+    const inheritedCodexHome = mkdtempSync('/tmp/qag-codex-home-')
+    process.env.CODEX_HOME = inheritedCodexHome
+    let t: Fixture | undefined
+    try {
+      t = await start({ installed: ['codex'] })
+      const marker = join(t.userHome, 'raw-codex-probe-ran')
+      const executable = join(t.bin, 'codex')
+      writeFileSync(executable, `#!/usr/bin/env node
+require('node:fs').writeFileSync(${JSON.stringify(marker)}, process.env.CODEX_HOME ?? '')
+`)
+      chmodSync(executable, 0o755)
+
+      const discovered = await t.call(A('discoverModels'), { agent: 'codex', host: 'local' })
+      expect(discovered).toMatchObject({ status: 'unavailable', authoritative: false, models: [] })
+      expect(discovered.reason).toContain('account environment could not be prepared')
+      expect(existsSync(marker)).toBe(false)
+    } finally {
+      if (t) {
+        try { await t.h.cleanup() } catch {}
+        const index = fixtures.indexOf(t)
+        if (index >= 0) fixtures.splice(index, 1)
+      }
+      rmSync(inheritedCodexHome, { recursive: true, force: true })
+      if (previousCodexHome === undefined) delete process.env.CODEX_HOME
+      else process.env.CODEX_HOME = previousCodexHome
+    }
+  }, 30_000)
 })
 
 describe('launch settings', () => {

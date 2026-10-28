@@ -3,7 +3,7 @@ import { parseStoredFloating, type StoredFloating } from '../floating'
 import { normalizeQuickCommands } from '../quick-commands/normalize'
 import { importMigrations } from '../scrollback'
 import type { IdSource } from './tree'
-import { TAB_COLORS } from './types'
+import { isTabColor } from './types'
 import type { ClosedTab, GroupNode, PaneNode, QuickCommand, Tab, Workspace } from './types'
 
 /** The plugin store's one migration list: the v1 import table first, then the layout tables. */
@@ -49,7 +49,7 @@ function isTab(value: unknown): value is Tab {
   if (
     !isRecord(value) ||
     !isString(value.id) ||
-    !(TAB_COLORS as readonly unknown[]).includes(value.color) ||
+    !isTabColor(value.color) ||
     typeof value.pinned !== 'boolean' ||
     !isString(value.createdAt)
   ) {
@@ -108,7 +108,7 @@ function isClosedTab(value: unknown): value is ClosedTab {
     isRecord(value) &&
     isNullableString(value.title) &&
     isString(value.defaultTitle) &&
-    isString(value.color) &&
+    isTabColor(value.color) &&
     isString(value.cwd) &&
     isString(value.agent) &&
     isString(value.closedAt)

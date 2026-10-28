@@ -28,6 +28,7 @@ export function activate(context: PluginContext): void {
     uiState: () => accounts.uiState(),
     setUiState: (params) => accounts.setUiState(params),
     prepare: (params) => accounts.prepare(params),
+    prepareProviderEnv: (params) => accounts.prepareProviderEnv(params),
     restart: (params) => accounts.restart(params),
     keep: (params) => accounts.keep(params),
     ingestClaude: (params) => accounts.ingestClaude(params),

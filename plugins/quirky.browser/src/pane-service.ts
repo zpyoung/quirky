@@ -482,6 +482,13 @@ export class PaneService {
   }
 
   private async worktreeInfo(id: string): Promise<Worktree> {
+    if (id === 'floating') {
+      const root = objectValue(await this.context.call('quirky.editor/documentRoot', { worktree: 'floating' }))
+      if (root?.id !== 'floating' || typeof root.path !== 'string' || !isAbsolute(root.path)) {
+        throw fault('browser_tab_not_found', 'the editor-owned floating document root is unavailable')
+      }
+      return { id: 'floating', name: 'Floating workspace', path: root.path }
+    }
     const worktrees = await this.listWorktrees()
     const match = worktrees.find((worktree) => worktree.id === id)
     if (!match) throw fault('browser_tab_not_found', `worktree ${id} no longer exists`)
@@ -652,6 +659,7 @@ export class PaneService {
       }
       const hosted = objectValue(await this.context.call('quirky.terminal/openViewTab', {
         workspace: worktreeId,
+        ...(request.group === undefined ? {} : { group: request.group }),
         viewId: 'view:quirky.browser/page',
         key: `browser:${tab.id}`,
         title: 'Browser',

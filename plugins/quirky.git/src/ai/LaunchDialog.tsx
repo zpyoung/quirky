@@ -136,6 +136,7 @@ function LaunchForm({ context, action, preview, agents, onClose, start }: FormPr
         </label>
         <LaunchOptionsEditor
           context={context}
+          host="local"
           agent={agent}
           value={launchOptions}
           args={args}

@@ -1,3 +1,4 @@
+import type { WindowCommandRequest, WindowRoute, WindowRouteState, WindowViewCloseRequest, WindowViewOpenRequest } from './window-routes'
 import type { ApiDescription } from './catalog'
 import type { DistroInfo, DistroInspection, PluginInspection } from './distro'
 import type { ContributionInfo, JobInfo, JobRun, PluginEvent, PluginInfo } from './plugins'
@@ -116,6 +117,16 @@ export type Methods = {
 
   /** The layout, the connected windows and what each slot reports. */
   'ui.state': { params: Record<string, never>; result: UiState }
+  /** Returns this request's own connection identity only when its authenticated role is `ui`. */
+  'ui.window.self': { params: Record<string, never>; result: WindowRoute }
+  /** Reads exactly one live window's effective layout and reports; stale connection IDs refuse. */
+  'ui.window.state': { params: WindowRoute; result: WindowRouteState }
+  /** Opens a view only in the exact live target window. */
+  'ui.window.view.open': { params: WindowViewOpenRequest; result: UiLayout }
+  /** Clears only the exact target's view, comparing expectedView when supplied. */
+  'ui.window.view.close': { params: WindowViewCloseRequest; result: UiLayout }
+  /** Runs a declared command only in the exact live target window. */
+  'ui.window.command.run': { params: WindowCommandRequest; result: { result: unknown } }
   /** Opens or closes the shared command palette; omitted `open` toggles its current state. */
   'ui.palette.set': { params: { open?: boolean }; result: UiLayout }
   'ui.view.open': { params: { id: string; input?: unknown }; result: UiLayout }

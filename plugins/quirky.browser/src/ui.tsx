@@ -39,6 +39,7 @@ function retainOpenDesignPages(value: unknown): void {
 
 function worktreeFrom(context: UiPluginContext, args: CommandArgs): string | null {
   if (typeof args.worktree === 'string' && args.worktree !== '') return args.worktree
+  if (args.workspace === 'floating') return 'floating'
   const layout = context.getLayout()
   const input = layout.view?.input
   if (typeof input !== 'object' || input === null || Array.isArray(input)) return null
@@ -59,13 +60,14 @@ async function openBrowserTab(context: UiPluginContext, raw: unknown): Promise<u
     return { ok: false, reason: message }
   }
   const params: Record<string, unknown> = { worktree }
-  for (const name of ['url', 'page', 'mode', 'profile'] as const) {
+  for (const name of ['url', 'page', 'mode', 'profile', 'group'] as const) {
     if (typeof args[name] === 'string' && args[name] !== '') params[name] = args[name]
   }
   try {
     const pane = await context.call('quirky.browser/paneOpen', params) as PaneTab
     const workspace = pane.worktreeId.startsWith('id:') ? pane.worktreeId : `id:${pane.worktreeId}`
-    context.openView(WORKTREE_VIEW, { worktree: workspace })
+    if (pane.worktreeId === 'floating') await context.call('quirky.terminal/setFloating', { open: true })
+    else context.openView(WORKTREE_VIEW, { worktree: workspace })
     return { pane: pane.id, tabId: pane.tabId }
   } catch (error) {
     const message = problem(error)

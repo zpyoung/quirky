@@ -19,6 +19,15 @@ export class FolderPickerUnavailableError extends Error {
     this.name = 'FolderPickerUnavailableError'
   }
 }
+/** Returns this plugin call's exact kernel UI connection, never the focused window's identity. */
+export async function currentWindowId(context: UiPluginContext): Promise<number> {
+  const value = await context.call('ui.window.self', {})
+  if (typeof value === 'object' && value !== null && !Array.isArray(value) && 'connId' in value) {
+    const connId = value.connId
+    if (typeof connId === 'number' && Number.isSafeInteger(connId) && connId > 0) return connId
+  }
+  throw new Error('ui.window.self returned an invalid connection identity.')
+}
 
 /** Calls the shell-owned native folder picker, returning null on cancellation. */
 export async function pickNativeFolder(context: UiPluginContext, title: string, startingFolder?: string): Promise<string | null> {
@@ -178,6 +187,7 @@ export async function createWorkspace(
   fields: Record<string, unknown>,
   hooks: CreateHooks
 ): Promise<WorktreeCreateResult | typeof SETUP_CHOICE_NEEDED | null> {
+  const window = await currentWindowId(context)
   const viewAtSubmit = JSON.stringify(context.getLayout().view)
   const choices: { trustSetup?: true; trustSetupHash?: string; trustIssueCommand?: true; trustIssueCommandHash?: string; setup?: 'skip'; issueCommand?: 'skip' } = {}
   let attempt = fields
@@ -186,7 +196,7 @@ export async function createWorkspace(
       const result = (await context.call('quirky.worktree/create', { ...attempt, createdBy: 'window' })) as WorktreeCreateResult
       if (JSON.stringify(context.getLayout().view) === viewAtSubmit) {
         try {
-          await context.call('quirky.worktree/navigate', { worktree: result.worktree.id })
+          await context.call('quirky.worktree/navigate', { worktree: result.worktree.id, window })
         } catch (error) {
           context.toast('Created worktree but could not open it', messageOf(error))
         }
@@ -305,7 +315,9 @@ export async function setWorkspaceSleeping(
   const params = { worktree: worktreeId, ...(withDescendants ? { withDescendants: true } : {}) }
   try {
     if (sleeping) {
-      const preview = await context.call('quirky.worktree/sleepPreview', params) as {
+      const window = await currentWindowId(context)
+      const selectedParams = { ...params, window }
+      const preview = await context.call('quirky.worktree/sleepPreview', selectedParams) as {
         worktrees: Array<{ name: string; allowed: boolean; blockers: Array<{ detail: string }> }>
       }
       const blocked = preview.worktrees.filter((row) => !row.allowed)
@@ -313,8 +325,10 @@ export async function setWorkspaceSleeping(
         context.toast('Could not sleep workspace', blocked.map((row) => `${row.name}: ${row.blockers.map((blocker) => blocker.detail).join(' ')}`).join(' '))
         return false
       }
+      await context.call('quirky.worktree/sleep', selectedParams)
+    } else {
+      await context.call('quirky.worktree/wake', params)
     }
-    await context.call(`quirky.worktree/${sleeping ? 'sleep' : 'wake'}`, params)
     return true
   } catch (error) {
     context.toast(`Could not ${sleeping ? 'sleep' : 'wake'} workspace`, messageOf(error))

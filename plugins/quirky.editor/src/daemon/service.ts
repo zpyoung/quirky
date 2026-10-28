@@ -200,6 +200,7 @@ export class EditorDaemon {
       onClose: (listener) => this.onClose(listener)
     }
     this.methods = {
+      documentRoot: (params, caller) => this.paths.resolve(params.worktree as string | undefined, caller),
       open: (params, caller) => this.open(params as unknown as EditorOpenParams, caller),
       state: (params, caller) => this.state(params as CoreStateParams, caller),
       draft: (params) => {

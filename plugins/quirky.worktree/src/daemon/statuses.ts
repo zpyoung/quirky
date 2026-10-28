@@ -1,4 +1,5 @@
 import type { PluginStore } from '@quirky/protocol'
+import { isSafeIcon } from '../safe-icon'
 import type { WorktreeStatusDefinition } from '../parity-types'
 
 const STATUS_KEY = 'worktree-status-definitions'
@@ -19,7 +20,8 @@ export function readStatusDefinitions(store: PluginStore): WorktreeStatusDefinit
       if (typeof item !== 'object' || item === null || Array.isArray(item)) return []
       const status = item as Record<string, unknown>
       if (typeof status.id !== 'string' || typeof status.label !== 'string' || typeof status.color !== 'string') return []
-      return [{ id: status.id, label: status.label, color: status.color }]
+      const icon = typeof status.icon === 'string' && isSafeIcon(status.icon) ? status.icon.trim() : ''
+      return [{ id: status.id, label: status.label, color: status.color, ...(icon ? { icon } : {}) }]
     })
   } catch {
     return DEFAULT_WORKTREE_STATUSES.map((status) => ({ ...status }))
@@ -40,17 +42,26 @@ export function setStatusDefinitions(
     if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) throw fail('invalid-params', 'each status must be an object')
     const status = raw as Record<string, unknown>
     const keys = Object.keys(status)
-    if (keys.some((key) => key !== 'id' && key !== 'label' && key !== 'color') || keys.length !== 3) {
-      throw fail('invalid-params', 'each status must contain only id, label, and color')
+    if (keys.some((key) => key !== 'id' && key !== 'label' && key !== 'color' && key !== 'icon') ||
+      !Object.hasOwn(status, 'id') || !Object.hasOwn(status, 'label') || !Object.hasOwn(status, 'color')) {
+      throw fail('invalid-params', 'each status must contain only id, label, color, and optional icon')
     }
     if (
       typeof status.id !== 'string' || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(status.id) ||
       typeof status.label !== 'string' || status.label.trim() === '' || status.label.length > 50 ||
       typeof status.color !== 'string' || !/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(status.color)
     ) throw fail('invalid-params', 'status IDs, labels, or colors are invalid')
+    if (status.icon !== undefined && (typeof status.icon !== 'string' || !isSafeIcon(status.icon))) {
+      throw fail('invalid-params', 'status icon must be a safe plain-text emoji or symbol; URLs, markup, and control characters are not allowed')
+    }
     if (ids.has(status.id)) throw fail('invalid-params', `duplicate status ID "${status.id}"`)
     ids.add(status.id)
-    statuses.push({ id: status.id, label: status.label.trim(), color: status.color.toLowerCase() })
+    statuses.push({
+      id: status.id,
+      label: status.label.trim(),
+      color: status.color.toLowerCase(),
+      ...(typeof status.icon === 'string' && status.icon.trim() ? { icon: status.icon.trim() } : {})
+    })
   }
   for (const builtin of DEFAULT_WORKTREE_STATUSES) {
     if (!ids.has(builtin.id)) throw fail('invalid-params', `statuses must retain built-in status "${builtin.id}"`)

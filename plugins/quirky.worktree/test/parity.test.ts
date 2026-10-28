@@ -140,9 +140,12 @@ describe('workspace references and custom statuses', () => {
       { id: 'in-progress', label: 'In progress', color: '#3478c5' },
       { id: 'in-review', label: 'In review', color: '#a57de8' },
       { id: 'done', label: 'Done', color: '#48a878' },
-      { id: 'blocked', label: 'Blocked', color: '#d05a55' }
+      { id: 'blocked', label: 'Blocked', color: '#d05a55', icon: '🚧' }
     ]
     expect(await call(w.t.client, 'quirky.worktree/setStatusDefinitions', { statuses })).toEqual(statuses)
+    await expect(call(w.t.client, 'quirky.worktree/setStatusDefinitions', {
+      statuses: [...statuses.slice(0, 4), { id: 'blocked', label: 'Blocked', color: '#d05a55', icon: '<svg onload=alert(1)>' }]
+    })).rejects.toThrow(/icon/i)
     expect(await call(w.t.client, 'quirky.worktree/set', { worktree: worktree.id, status: 'blocked' })).toMatchObject({ status: 'blocked' })
     await w.t.restart()
     expect(await call(w.t.client, 'quirky.worktree/statusDefinitions')).toEqual(statuses)

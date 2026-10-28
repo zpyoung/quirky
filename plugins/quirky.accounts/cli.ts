@@ -195,6 +195,25 @@ export const commands: CliModule['commands'] = {
     output(context, result)
   },
 
+  async prepareProviderEnv(args, context) {
+    const result = await context.call('quirky.accounts/prepareProviderEnv', {
+      agent: stringFlag(args, context, 'agent'),
+      cwd: stringFlag(args, context, 'cwd'),
+      homeOverrides: objectFlag(args, context, 'home-overrides', true)
+    })
+    if (typeof result === 'object' && result !== null && !Array.isArray(result)) {
+      const record = result as Record<string, unknown>
+      const env = typeof record.env === 'object' && record.env !== null ? Object.keys(record.env) : []
+      output(context, {
+        account: record.account,
+        shellInit: record.shellInit !== null,
+        environmentKeys: env
+      })
+      return
+    }
+    output(context, result)
+  },
+
   async restart(args, context) {
     output(context, await context.call('quirky.accounts/restart', {
       sessions: stringListFlag(args, context, 'session'),

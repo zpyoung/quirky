@@ -486,6 +486,11 @@ export class BrowserService {
       if (!allowNoScope) throw fault('invalid_argument', 'worktree all is only valid for read-only list operations')
       return 'all'
     }
+    if (selector === 'floating' || selector === 'id:floating') {
+      // Explicit floating scope is an owned terminal destination, never ambient cwd inference.
+      await this.context.call('quirky.terminal/workspace', { workspace: 'floating' })
+      return 'floating'
+    }
     const worktrees = await this.listWorktrees()
     if (selector === undefined) {
       if (cwd !== undefined) return this.worktreeContaining(worktrees, canonicalPath(cwd)).id

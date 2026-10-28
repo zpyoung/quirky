@@ -1,5 +1,5 @@
 import type { CliArgs, CliContext } from '@quirky/protocol'
-import { TAB_COLORS } from '../layout/types'
+import { isTabColor, TAB_COLORS } from '../layout/types'
 import type { Workspace } from '../layout/types'
 import { atMost, positional, showWorkspace, stringFlag, stringFlags, workspaceParam, type Handler } from './shared'
 import { renderWorkspace } from './text'
@@ -59,7 +59,7 @@ export const workspaceCommands: Record<string, Handler> = {
 
   async 'tab-new'(args, ctx) {
     atMost(args, ctx, 0)
-    showWorkspace(ctx, await call(ctx, 'newTab', { ...workspaceParam(args, ctx), ...stringFlags(args, ['agent', 'cwd', 'title']) }))
+    showWorkspace(ctx, await call(ctx, 'newTab', { ...workspaceParam(args, ctx), ...stringFlags(args, ['agent', 'cwd', 'title', 'command']) }))
   },
 
   async 'tab-close'(args, ctx) {
@@ -80,7 +80,7 @@ export const workspaceCommands: Record<string, Handler> = {
     atMost(args, ctx, 2)
     const tab = positional(args, ctx, 0, 'tab')
     const color = positional(args, ctx, 1, 'color')
-    if (!(TAB_COLORS as readonly string[]).includes(color)) throw ctx.usage(`<color> must be one of ${TAB_COLORS.join(', ')}, got "${color}"`)
+    if (!isTabColor(color)) throw ctx.usage(`<color> must be #rgb/#rrggbb or one of ${TAB_COLORS.join(', ')}, got "${color}"`)
     showWorkspace(ctx, await call(ctx, 'setTabColor', { tab, color }))
   },
 

@@ -1,5 +1,6 @@
 import type { PluginStore, Repo } from '@quirky/protocol'
 import type { ExternalVisibility, WorktreeProjectIdentity } from '../parity-types'
+import { isSafeIcon } from '../safe-icon'
 import { normalizeSharedDirectories } from '../shared-paths'
 type PreferenceRow = {
   repo_id: string
@@ -13,7 +14,7 @@ type PreferenceRow = {
 
 type ProjectEnv = {
   store: PluginStore
-  fail(kind: 'invalid-params' | 'not-found', message: string): Error
+  fail(kind: 'invalid-params' | 'not-found' | 'conflict', message: string): Error
   call(method: string, params: Record<string, unknown>): Promise<unknown>
   resolveRepo(selector: string): Promise<Repo>
 }
@@ -44,7 +45,7 @@ export function projectPreference(store: PluginStore, repoId: string) {
   return {
     externalVisibility,
     externalInboxSuppressed: row?.external_inbox_suppressed === 1,
-    icon: row?.icon ?? null,
+    icon: row?.icon !== null && row?.icon !== undefined && isSafeIcon(row.icon) ? row.icon.trim() || null : null,
     color: row?.color ?? null,
     trackerProject: row?.tracker_project ?? null,
     sharedDirectories
@@ -110,9 +111,11 @@ function identityOf(value: unknown, fail: ProjectEnv['fail']): Partial<WorktreeP
     if (key === 'color' && entry !== null && !/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(entry as string)) {
       throw fail('invalid-params', 'color must be a #RGB or #RRGGBB value')
     }
-    if (entry !== null && (entry as string).length > (key === 'icon' ? 32 : 200)) {
-      throw fail('invalid-params', `${key} is too long`)
+    if (key === 'icon' && entry !== null && !isSafeIcon(entry as string)) {
+      throw fail('invalid-params', 'icon must be a safe plain-text emoji or symbol; URLs, markup, and control characters are not allowed')
     }
+    const maximum = key === 'icon' ? 32 : key === 'trackerProject' ? 2048 : 200
+    if (entry !== null && (entry as string).length > maximum) throw fail('invalid-params', `${key} is too long`)
     result[key] = entry === null ? null : (entry as string).trim() || null
   }
   return result
@@ -121,6 +124,36 @@ function identityOf(value: unknown, fail: ProjectEnv['fail']): Partial<WorktreeP
 export async function getProjectMetadata(env: ProjectEnv, selector: string, globalExternalVisibility: 'show' | 'hide') {
   const repo = await env.resolveRepo(selector)
   return projectMetadata(env.store, repo, globalExternalVisibility)
+}
+function recordOf(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : null
+}
+
+async function resolveTrackerProject(env: ProjectEnv, repo: Repo, input: string): Promise<string> {
+  let requested: URL
+  try {
+    requested = new URL(input)
+  } catch {
+    throw env.fail('invalid-params', 'trackerProject must be an HTTPS URL to a real provider project')
+  }
+  if (requested.protocol !== 'https:' || requested.username || requested.password || requested.search || requested.hash) {
+    throw env.fail('invalid-params', 'trackerProject must be a credential-free HTTPS provider project URL')
+  }
+  const resolved = recordOf(await env.call('quirky.hosting/projectRef', { worktree: repo.path, input }))
+  if (typeof resolved?.id !== 'string' || resolved.id.trim() === '' || typeof resolved.url !== 'string') {
+    throw env.fail('conflict', 'The tracker provider returned an incomplete project identity; no default was saved.')
+  }
+  let canonical: URL
+  try {
+    canonical = new URL(resolved.url)
+  } catch {
+    throw env.fail('conflict', 'The tracker provider returned an invalid project URL; no default was saved.')
+  }
+  if (canonical.protocol !== 'https:' || canonical.username || canonical.password || canonical.search || canonical.hash ||
+    canonical.host.toLowerCase() !== requested.host.toLowerCase()) {
+    throw env.fail('conflict', 'The tracker provider returned an unsafe or mismatched project identity; no default was saved.')
+  }
+  return canonical.href
 }
 
 export async function setProjectMetadata(
@@ -145,6 +178,14 @@ export async function setProjectMetadata(
       throw env.fail('invalid-params', error instanceof Error ? error.message : String(error))
     }
   }
+  let trackerProject: string | null | undefined = identity?.trackerProject
+  if (identity?.trackerProject !== undefined) {
+    const current = projectPreference(env.store, repo.id).trackerProject
+    if (identity.trackerProject === current) trackerProject = current
+    else if (identity.trackerProject === null) trackerProject = null
+    else if (repo.kind !== 'git') throw env.fail('invalid-params', 'tracker project defaults require a Git project with an authenticated provider')
+    else trackerProject = await resolveTrackerProject(env, repo, identity.trackerProject)
+  }
   if (identity && Object.hasOwn(identity, 'displayName')) {
     await env.call('quirky.repo/set', { repo: repo.id, displayName: identity.displayName ?? '' })
   }
@@ -152,7 +193,7 @@ export async function setProjectMetadata(
     writePreference(env.store, repo.id, {
       ...(identity?.icon === undefined ? {} : { icon: identity.icon }),
       ...(identity?.color === undefined ? {} : { color: identity.color }),
-      ...(identity?.trackerProject === undefined ? {} : { tracker_project: identity.trackerProject }),
+      ...(identity?.trackerProject === undefined ? {} : { tracker_project: trackerProject ?? null }),
       ...(sharedDirectories === undefined ? {} : { shared_directories: JSON.stringify(sharedDirectories) })
     })
   }

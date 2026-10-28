@@ -622,6 +622,7 @@ describe('SC-23: inside a worktree, one positional is the name and the caller be
 describe('SC-24: a CLI create opens the new worktree only with --activate (CLI)', () => {
   test('the first create leaves the view alone; the second opens the new worktree\'s session view', async () => {
     await startApi('real')
+    await w!.t.connectAs({}, 'ui')
     const view = async () => viewOf(await call(w!.client, 'ui.state'))
     await cli(['api', 'quiet'])
     expect(await view()).toBeFalsy()

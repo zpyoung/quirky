@@ -6,13 +6,37 @@ import type { HookKind } from './store'
 /** The shared hooks file as read from the repo: `quirky.yaml` wins over `orca.yaml`. */
 export type HooksFile = { name: 'quirky.yaml' | 'orca.yaml'; text: string }
 
+export type DefaultTabTemplate = { title?: string; color?: string; command?: string }
+export type EnvironmentRecipe = {
+  id: string
+  name: string
+  create: string
+  checkoutMode?: 'orca-worktree' | 'provisioned-root'
+  description?: string
+  suspend?: string
+  resume?: string
+  destroy?: string
+  destroyDisabled?: true
+}
+export type EnvironmentRecipeDiagnostic = { index: number; field?: string; message: string }
+export type ScriptTrust = { text: string; hash: string; trusted: boolean; changed: boolean }
+export type EffectiveRepoHooks = EffectiveHooks & {
+  defaultTabs?: DefaultTabTemplate[]
+  defaultTabsTrust?: ScriptTrust | null
+  environmentRecipes?: EnvironmentRecipe[]
+  environmentRecipeDiagnostics?: EnvironmentRecipeDiagnostic[]
+  defaultTabsRunCommands?: boolean
+}
+
 /** The hash the user approved for each shared script kind, when they have. */
 export type TrustedHashes = Partial<Record<HookKind, string>>
 
 const FILE_NAMES = ['quirky.yaml', 'orca.yaml'] as const
-const UNSUPPORTED_KEYS = ['defaultTabs', 'environmentRecipes']
-const KNOWN_KEYS = ['scripts', 'setupAgentStartupPolicy', 'worktree', 'issueCommand', ...UNSUPPORTED_KEYS]
+const KNOWN_KEYS = ['scripts', 'setupAgentStartupPolicy', 'worktree', 'issueCommand', 'defaultTabs', 'environmentRecipes']
 const STARTUP_POLICIES = ['start-immediately', 'wait-for-setup']
+const DEFAULT_TAB_COLOR_RE = /^#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?$/
+const RECIPE_ID_RE = /^[a-z0-9][a-z0-9._-]{0,63}$/
+const MAX_CONFIG_ITEMS = 100
 
 /** The identity of a script for trust: sha256 of its text without surrounding whitespace, as hex. */
 export function hashScript(text: string): string {
@@ -42,6 +66,9 @@ type SharedHooks = {
   issueCommand: string | null
   agentStartup: 'start-immediately' | 'wait-for-setup' | null
   sharedDirectories: string[]
+  defaultTabs: DefaultTabTemplate[]
+  environmentRecipes: EnvironmentRecipe[]
+  environmentRecipeDiagnostics: EnvironmentRecipeDiagnostic[]
   warnings: string[]
 }
 
@@ -55,10 +82,129 @@ function scriptOf(value: unknown, label: string, warnings: string[]): string | n
   }
   return value.trim() === '' ? null : value.trim()
 }
+function textField(record: Record<string, unknown>, key: string, maximum: number): string | undefined {
+  const value = record[key]
+  if (typeof value !== 'string') return undefined
+  const text = value.trim()
+  return text.length > 0 && text.length <= maximum ? text : undefined
+}
+
+function parseDefaultTabs(value: unknown, warnings: string[]): DefaultTabTemplate[] {
+  if (value === undefined || value === null) return []
+  if (!Array.isArray(value) || value.length > MAX_CONFIG_ITEMS) {
+    warnings.push(`defaultTabs must be a list of at most ${MAX_CONFIG_ITEMS} entries`)
+    return []
+  }
+  const tabs: DefaultTabTemplate[] = []
+  for (const [index, item] of value.entries()) {
+    if (!isRecord(item)) {
+      warnings.push(`defaultTabs[${index + 1}] must be a mapping`)
+      continue
+    }
+    const title = textField(item, 'title', 200)
+    const command = textField(item, 'command', 4096)
+    const rawColor = textField(item, 'color', 7)
+    const color = rawColor && DEFAULT_TAB_COLOR_RE.test(rawColor) ? rawColor : undefined
+    if (item.title !== undefined && title === undefined) warnings.push(`defaultTabs[${index + 1}].title must be a non-empty string of at most 200 characters`)
+    if (item.command !== undefined && command === undefined) warnings.push(`defaultTabs[${index + 1}].command must be a non-empty string of at most 4096 characters`)
+    if (item.color !== undefined && color === undefined) warnings.push(`defaultTabs[${index + 1}].color must be a #RGB or #RRGGBB value`)
+    if (!title && !command && !color) continue
+    tabs.push({ ...(title ? { title } : {}), ...(color ? { color } : {}), ...(command ? { command } : {}) })
+  }
+  return tabs
+}
+
+function parseEnvironmentRecipes(value: unknown): { recipes: EnvironmentRecipe[]; diagnostics: EnvironmentRecipeDiagnostic[] } {
+  const diagnostics: EnvironmentRecipeDiagnostic[] = []
+  if (value === undefined || value === null) return { recipes: [], diagnostics }
+  if (!Array.isArray(value)) {
+    diagnostics.push({ index: 0, message: 'environmentRecipes must be a list.' })
+    return { recipes: [], diagnostics }
+  }
+  if (value.length > MAX_CONFIG_ITEMS) {
+    diagnostics.push({ index: MAX_CONFIG_ITEMS, message: `At most ${MAX_CONFIG_ITEMS} environment recipes are supported.` })
+    return { recipes: [], diagnostics }
+  }
+  const seen = new Set<string>()
+  const recipes: EnvironmentRecipe[] = []
+  for (const [index, raw] of value.entries()) {
+    const invalid = (field: string, message: string) => diagnostics.push({ index, field, message })
+    if (!isRecord(raw)) {
+      invalid('recipe', 'Recipe entry must be a mapping.')
+      continue
+    }
+    const id = textField(raw, 'id', 64)
+    const name = textField(raw, 'name', 200)
+    const create = textField(raw, 'create', 4096) ?? textField(raw, 'command', 4096)
+    if (!id) {
+      invalid('id', 'Recipe id is required.')
+      continue
+    }
+    if (!RECIPE_ID_RE.test(id)) {
+      invalid('id', `Invalid recipe id "${id}".`)
+      continue
+    }
+    if (seen.has(id)) {
+      invalid('id', `Duplicate recipe id "${id}".`)
+      continue
+    }
+    if (!name) {
+      invalid('name', `Recipe "${id}" is missing name.`)
+      continue
+    }
+    if (!create) {
+      invalid('create', `Recipe "${id}" is missing create.`)
+      continue
+    }
+    const checkoutMode = textField(raw, 'checkoutMode', 32)
+    if (checkoutMode !== undefined && checkoutMode !== 'orca-worktree' && checkoutMode !== 'provisioned-root') {
+      invalid('checkoutMode', `Recipe "${id}" checkoutMode must be "orca-worktree" or "provisioned-root".`)
+      continue
+    }
+    const destroyValue = textField(raw, 'destroy', 4096) ?? textField(raw, 'cleanup', 4096)
+    const description = textField(raw, 'description', 2048)
+    const suspend = textField(raw, 'suspend', 4096)
+    const resume = textField(raw, 'resume', 4096)
+    seen.add(id)
+    recipes.push({
+      id,
+      name,
+      create,
+      ...(checkoutMode ? { checkoutMode } : {}),
+      ...(description ? { description } : {}),
+      ...(suspend ? { suspend } : {}),
+      ...(resume ? { resume } : {}),
+      ...(destroyValue && destroyValue !== 'none' ? { destroy: destroyValue } : {}),
+      ...(destroyValue === 'none' ? { destroyDisabled: true } : {})
+    })
+  }
+  return { recipes, diagnostics }
+}
+
+function defaultTabTrustText(setup: string | null, tabs: DefaultTabTemplate[]): string {
+  const lineBreak = String.fromCharCode(10)
+  const commands = tabs.flatMap((tab, index) => {
+    const command = tab.command?.trim()
+    if (!command) return []
+    const label = tab.title ? ` ${tab.title}` : ''
+    return [[`# defaultTabs[${index + 1}]${label}`, command].join(lineBreak)]
+  })
+  return [setup?.trim(), ...commands].filter((part): part is string => Boolean(part)).join(`${lineBreak}${lineBreak}`)
+}
 
 /** What a hooks file says; a file that doesn't parse or isn't a mapping says nothing, with a warning. */
 function parseShared(file: HooksFile): SharedHooks {
-  const shared: SharedHooks = { setup: null, archive: null, issueCommand: null, agentStartup: null, sharedDirectories: [], warnings: [] }
+  const shared: SharedHooks = {
+    setup: null,
+    archive: null,
+    issueCommand: null,
+    agentStartup: null,
+    sharedDirectories: [],
+    defaultTabs: [],
+    environmentRecipes: [],
+    environmentRecipeDiagnostics: [],
+    warnings: []
+  }
   let document: unknown
   try {
     document = Bun.YAML.parse(file.text)
@@ -90,9 +236,12 @@ function parseShared(file: HooksFile): SharedHooks {
     if (Array.isArray(directories) && directories.every((entry) => typeof entry === 'string')) shared.sharedDirectories = directories
     else shared.warnings.push('worktree.sharedDirectories must be a list of strings')
   }
+  shared.defaultTabs = parseDefaultTabs(document.defaultTabs, shared.warnings)
+  const recipes = parseEnvironmentRecipes(document.environmentRecipes)
+  shared.environmentRecipes = recipes.recipes
+  shared.environmentRecipeDiagnostics = recipes.diagnostics
   for (const key of Object.keys(document)) {
-    if (UNSUPPORTED_KEYS.includes(key)) shared.warnings.push(`${key} is recognised but not supported yet`)
-    else if (!KNOWN_KEYS.includes(key)) shared.warnings.push(`unrecognised key ${key}`)
+    if (!KNOWN_KEYS.includes(key)) shared.warnings.push(`unrecognised key ${key}`)
   }
   return shared
 }
@@ -114,29 +263,50 @@ function mergeScript(file: HooksFile | null, shared: string | null, local: strin
 }
 
 /**
- * The setup, archive and issue-command hooks that apply to a project: the shared file merged with
- * the project's local scripts by its command-source policy, with the trust state of each shared script.
- * A script that fails to parse or is the wrong type is ignored with a warning, never an error.
+ * The setup, archive and issue-command hooks that apply to a project, together with the shared
+ * default terminal tabs and VM recipe declarations from its hooks file.
  */
-export function effectiveHooks(file: HooksFile | null, settings: ProjectSettings, trusted: TrustedHashes): EffectiveHooks {
+export function effectiveHooks(file: HooksFile | null, settings: ProjectSettings, trusted: TrustedHashes): EffectiveRepoHooks {
   const shared = file ? parseShared(file) : null
   const local = (text: string) => (text.trim() === '' ? null : text.trim())
+  const commandSource = settings.commandSource ?? (settings.setupScript.trim() ? 'local-only' : 'shared-only')
+  const defaultTabsRunCommands = commandSource !== 'local-only'
+  const tabCommands = shared?.defaultTabs.some((tab) => Boolean(tab.command?.trim())) === true
+  const trustText = defaultTabsRunCommands && tabCommands
+    ? defaultTabTrustText(shared?.setup ?? null, shared?.defaultTabs ?? [])
+    : ''
+  const defaultTabsTrust = trustText === '' ? null : {
+    text: trustText,
+    hash: hashScript(trustText),
+    trusted: trusted.setup === hashScript(trustText),
+    changed: trusted.setup !== undefined && trusted.setup !== hashScript(trustText)
+  }
+  const baseSetup = mergeScript(file, shared?.setup ?? null, local(settings.setupScript), settings.commandSource, trusted.setup)
+  const setup = baseSetup?.shared && defaultTabsTrust
+    ? { ...baseSetup, shared: defaultTabsTrust }
+    : baseSetup
   return {
     file: file?.name ?? null,
-    setup: mergeScript(file, shared?.setup ?? null, local(settings.setupScript), settings.commandSource, trusted.setup),
+    setup,
     archive: mergeScript(file, shared?.archive ?? null, local(settings.archiveScript), settings.commandSource, trusted.archive),
     issueCommand: mergeScript(file, shared?.issueCommand ?? null, local(settings.issueCommand ?? ''), settings.commandSource, trusted.issue),
     agentStartup: settings.agentStartup ?? shared?.agentStartup ?? 'start-immediately',
     sharedDirectories: shared?.sharedDirectories ?? [],
-    warnings: shared?.warnings ?? []
+    warnings: shared?.warnings ?? [],
+    ...(shared?.defaultTabs.length ? { defaultTabs: shared.defaultTabs } : {}),
+    defaultTabsRunCommands,
+    defaultTabsTrust,
+    ...(shared?.environmentRecipes.length ? { environmentRecipes: shared.environmentRecipes } : {}),
+    environmentRecipeDiagnostics: shared?.environmentRecipeDiagnostics ?? []
   }
 }
 
 /** The shared script text of each kind in `file`, for recording trust; empty when it has none. */
 export function sharedScripts(file: HooksFile | null): Partial<Record<HookKind, string>> {
   const shared = file ? parseShared(file) : null
+  const setupTrustText = shared ? defaultTabTrustText(shared.setup, shared.defaultTabs) : ''
   return {
-    ...(shared?.setup ? { setup: shared.setup } : {}),
+    ...(setupTrustText ? { setup: setupTrustText } : {}),
     ...(shared?.archive ? { archive: shared.archive } : {}),
     ...(shared?.issueCommand ? { issue: shared.issueCommand } : {})
   }

@@ -1,10 +1,11 @@
+import { isPlainObject } from './core/guards'
 const MAX_OUTPUT_BYTES = 256 * 1024
 const DRAIN_GRACE_MS = 250
 const KILL_GRACE_MS = 250
 const GROUP_POLL_MS = 20
 
 type Child = ReturnType<typeof Bun.spawn>
-export type ModelProbeResult = { ok: true; stdout: string } | { ok: false; reason: 'timeout' | 'too-much-output' | 'could-not-start' | 'nonzero-exit' | 'output-not-closed' }
+export type ModelProbeResult = { ok: true; stdout: string } | { ok: false; reason: 'timeout' | 'too-much-output' | 'could-not-start' | 'nonzero-exit' | 'output-not-closed' | 'malformed-output' }
 type ProbeRace = { kind: 'exit'; code: number | null } | { kind: 'timeout' } | { kind: 'too-much-output' }
 
 function signalGroup(child: Child, signal: NodeJS.Signals): void {
@@ -102,4 +103,168 @@ export async function runModelProbe(argv: string[], timeoutMs: number): Promise<
   await terminateGroup(child)
   if (drained.stdout === null || first.code !== 0) return { ok: false, reason: 'nonzero-exit' }
   return { ok: true, stdout: drained.stdout }
+}
+const MAX_CODEX_MODEL_PAGES = 32
+const MAX_CODEX_MODELS = 4096
+const CODEX_MODEL_PAGE_SIZE = 100
+
+class ProbeFailure extends Error {
+  constructor(readonly reason: Extract<ModelProbeResult, { ok: false }>['reason'], message: string) {
+    super(message)
+  }
+}
+
+
+/** Queries Codex's real stdio app-server `model/list` API using an account-prepared environment. */
+export async function runCodexAppServerModelProbe(
+  argv: string[],
+  timeoutMs: number,
+  env: Record<string, string>,
+  cwd: string
+): Promise<ModelProbeResult> {
+  let child: Child
+  try {
+    const options = { cwd, env, stdin: 'pipe', stdout: 'pipe', stderr: 'ignore', detached: true } as const
+    child = Bun.spawn(argv, options as unknown as Bun.SpawnOptions.OptionsObject<'pipe', 'pipe', 'ignore'>)
+  } catch {
+    return { ok: false, reason: 'could-not-start' }
+  }
+
+  const stdin = child.stdin as Bun.FileSink
+  const stdout = child.stdout as ReadableStream<Uint8Array>
+  const send = async (message: Record<string, unknown>): Promise<void> => {
+    stdin.write(`${JSON.stringify(message)}\n`)
+    await stdin.flush()
+  }
+  const reader = stdout.getReader()
+  const decoder = new TextDecoder('utf-8', { fatal: true })
+  const timeout = Promise.withResolvers<ModelProbeResult>()
+  let timeoutTimer: ReturnType<typeof setTimeout> | undefined
+  let buffer = ''
+  let outputBytes = 0
+  let settled = false
+
+  const readMessage = async (): Promise<Record<string, unknown>> => {
+    for (;;) {
+      const newline = buffer.indexOf('\n')
+      if (newline >= 0) {
+        let frame = buffer.slice(0, newline)
+        buffer = buffer.slice(newline + 1)
+        if (frame.endsWith('\r')) frame = frame.slice(0, -1)
+        if (frame === '' || Buffer.byteLength(frame, 'utf8') > MAX_OUTPUT_BYTES) {
+          throw new ProbeFailure('malformed-output', 'Codex app-server returned an invalid frame.')
+        }
+        let value: unknown
+        try {
+          value = JSON.parse(frame) as unknown
+        } catch {
+          throw new ProbeFailure('malformed-output', 'Codex app-server returned malformed JSON.')
+        }
+        if (!isPlainObject(value)) throw new ProbeFailure('malformed-output', 'Codex app-server returned a non-object message.')
+        return value
+      }
+      const { done, value } = await reader.read()
+      if (done) {
+        buffer += decoder.decode()
+        throw new ProbeFailure(buffer === '' ? 'output-not-closed' : 'malformed-output', 'Codex app-server closed before completing its response.')
+      }
+      outputBytes += value.byteLength
+      if (outputBytes > MAX_OUTPUT_BYTES) throw new ProbeFailure('too-much-output', 'Codex app-server exceeded the output limit.')
+      try {
+        buffer += decoder.decode(value, { stream: true })
+      } catch {
+        throw new ProbeFailure('malformed-output', 'Codex app-server returned invalid UTF-8.')
+      }
+      if (Buffer.byteLength(buffer, 'utf8') > MAX_OUTPUT_BYTES) {
+        throw new ProbeFailure('too-much-output', 'Codex app-server exceeded the output limit.')
+      }
+    }
+  }
+
+  const request = async (id: number, method: string, params: Record<string, unknown>): Promise<unknown> => {
+    await send({ id, method, params })
+    for (;;) {
+      const message = await readMessage()
+      if (Object.hasOwn(message, 'method')) {
+        if (typeof message.method !== 'string' || Object.hasOwn(message, 'id')) {
+          throw new ProbeFailure('malformed-output', 'Codex app-server sent an unsupported request.')
+        }
+        continue
+      }
+      if (message.id !== id || Object.hasOwn(message, 'result') === Object.hasOwn(message, 'error')) {
+        throw new ProbeFailure('malformed-output', 'Codex app-server returned an unmatched response.')
+      }
+      if (Object.hasOwn(message, 'error')) throw new ProbeFailure('nonzero-exit', `Codex app-server rejected ${method}.`)
+      return message.result
+    }
+  }
+
+  const operation = async (): Promise<string> => {
+    const initialized = await request(1, 'initialize', {
+      clientInfo: { name: 'quirky_model_discovery', title: 'Quirky model discovery', version: '0.1.0' }
+    })
+    if (!isPlainObject(initialized)) throw new ProbeFailure('malformed-output', 'Codex app-server initialization response was invalid.')
+    await send({ method: 'initialized', params: {} })
+
+    const data: unknown[] = []
+    let cursor: string | null = null
+    for (let page = 0; page < MAX_CODEX_MODEL_PAGES; page += 1) {
+      const result = await request(2 + page, 'model/list', {
+        includeHidden: false,
+        limit: CODEX_MODEL_PAGE_SIZE,
+        ...(cursor === null ? {} : { cursor })
+      })
+      if (!isPlainObject(result) || !Array.isArray(result.data)) {
+        throw new ProbeFailure('malformed-output', 'Codex app-server returned an invalid model/list page.')
+      }
+      const nextCursor = result.nextCursor
+      if (!(nextCursor === null || typeof nextCursor === 'string')) {
+        throw new ProbeFailure('malformed-output', 'Codex app-server returned an invalid model-list cursor.')
+      }
+      if (data.length + result.data.length > MAX_CODEX_MODELS) {
+        throw new ProbeFailure('too-much-output', 'Codex app-server returned too many models.')
+      }
+      data.push(...result.data)
+      if (result.nextCursor === null) return JSON.stringify({ data, nextCursor: null })
+      if (nextCursor === '' || nextCursor === cursor) {
+        throw new ProbeFailure('malformed-output', 'Codex app-server returned an invalid model-list cursor.')
+      }
+      cursor = nextCursor
+    }
+    throw new ProbeFailure('too-much-output', 'Codex app-server model listing exceeded the page limit.')
+  }
+
+  const work = operation().then(
+    (stdout) => {
+      settled = true
+      timeout.resolve({ ok: true, stdout })
+    },
+    (error: unknown) => {
+      settled = true
+      timeout.resolve({
+        ok: false,
+        reason: error instanceof ProbeFailure ? error.reason : 'malformed-output'
+      })
+    }
+  )
+  timeoutTimer = setTimeout(() => {
+    if (settled) return
+    settled = true
+    timeout.resolve({ ok: false, reason: 'timeout' })
+  }, timeoutMs)
+  timeoutTimer.unref()
+  void child.exited.then((code) => {
+    if (settled) return
+    settled = true
+    timeout.resolve({ ok: false, reason: code === 0 ? 'output-not-closed' : 'nonzero-exit' })
+  })
+
+  const result = await timeout.promise
+  clearTimeout(timeoutTimer)
+  const closing = Promise.resolve(stdin.end()).catch(() => undefined)
+  await Promise.race([closing, Bun.sleep(DRAIN_GRACE_MS)])
+  await terminateGroup(child)
+  await cancelReader(reader)
+  void work
+  return result
 }

@@ -7,7 +7,7 @@ import { builtinsDir, makeTempHome, startHarness, type Harness } from '../../../
 import { makeTempDir, removeTempDirs } from '../../../packages/daemon/test/plugins/fixtures'
 import { startHeadlessWindow, type HeadlessWindow } from '../../../packages/ui/test/fixtures/headless-window'
 import { failure, isolateGitConfig, makeRepo } from '../../quirky.repo/test/git-fixtures'
-
+import { button, click, setText } from './window/dom'
 const SIDEBAR = 'sidebar-section:quirky.worktree/worktrees'
 const SESSION_VIEW = 'view:quirky.session/worktree'
 const NEW_WORKTREE = 'command:quirky.worktree/new-worktree'
@@ -274,4 +274,31 @@ test('SC-62: Mod+N and the API open the create dialog on the right project', asy
     return next?.dialog ? next : undefined
   })
   expect(second.dialog).toEqual({ kind: 'create', repoId: web!.id })
+}, SLOW)
+
+test('workspace status icon/avatar controls persist safe plain text and render on the board', async () => {
+  const { win, agent } = await boot()
+  const edit = await win.waitFor(() => button(document, 'Edit workspace statuses'))
+  await click(edit)
+  const dialog = await win.waitFor(() => document.querySelector<HTMLElement>('[role="dialog"]')?.getAttribute('aria-label') === 'Workspace statuses'
+    ? document.querySelector<HTMLElement>('[role="dialog"]')
+    : undefined)
+  const icon = dialog?.querySelector<HTMLInputElement>('input[aria-label="Status icon 3"]')
+  if (!dialog || !icon) throw new Error('status editor did not expose the in-review icon control')
+  await setText(icon, '🧪')
+  await click(button(dialog, 'Save statuses')!)
+  await win.waitFor(() => document.querySelector('[role="dialog"]') === null)
+
+  const statuses = await agent.callAny('quirky.worktree/statusDefinitions', {}) as Array<{ id: string; icon?: string }>
+  expect(statuses.find((status) => status.id === 'in-review')?.icon).toBe('🧪')
+  const board = await win.waitFor(() => button(document, 'Workspace board'))
+  await click(board)
+  const lane = await win.waitFor(() => [...document.querySelectorAll<HTMLElement>('.worktree-board-column')]
+    .find((column) => column.querySelector('h3')?.textContent?.includes('In review')))
+  expect(lane.querySelector('h3')?.textContent).toContain('🧪')
+  await expect(agent.callAny('quirky.worktree/setStatusDefinitions', {
+    statuses: statuses.map((status) => status.id === 'in-review'
+      ? { ...status, label: 'In review', color: '#a57de8', icon: '<svg onload=alert(1)>' }
+      : { ...status, label: status.id, color: '#888888' })
+  })).rejects.toThrow(/icon/i)
 }, SLOW)

@@ -369,6 +369,22 @@ describe('agents options', () => {
     expect(JSON.parse(json.lines[0]!)).toEqual(await client.callAny('quirky.agents/options', { agent: 'codex' }))
   })
 
+  test('discover-models requires an exact host and reports the provider result as JSON', async () => {
+    const { client } = await start()
+    const missingHost = testCliContext(client)
+    expect(await failure(run('discoverModels', missingHost.ctx, ['codex'])))
+      .toMatchObject({ message: 'missing --host', kind: 'usage' })
+
+    const json = testCliContext(client, { json: true })
+    await run('discoverModels', json.ctx, ['codex'], { host: 'local' })
+    expect(JSON.parse(json.lines[0]!)).toMatchObject({
+      agent: 'codex',
+      host: 'local',
+      authoritative: false,
+      status: 'unavailable'
+    })
+  })
+
   test('needs an agent and refuses an unknown one', async () => {
     const { client } = await start()
     const { ctx } = testCliContext(client)

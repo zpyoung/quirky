@@ -18,7 +18,7 @@ export const PANE_METHODS = ['paneOpen', 'paneState', 'paneNavigate', 'paneContr
 export type PaneMethod = typeof PANE_METHODS[number]
 /** Every method below is declared by the built-in manifest and generated CLI. */
 export type PaneRequests = {
-  paneOpen: { worktree: string; url?: string; page?: string; mode?: PaneMode; profile?: string; consumer?: string }
+  paneOpen: { worktree: string; group?: string; url?: string; page?: string; mode?: PaneMode; profile?: string; consumer?: string }
   paneState: { worktree?: string }
   paneNavigate: { pane: string; input: string; consumer?: string }
   paneControl: { pane: string; action: PaneCommand['action'] | 'viewport'; text?: string; forward?: boolean; level?: number; preset?: PaneViewport; consumer?: string }

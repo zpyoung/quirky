@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { MountFunction, UiPluginContext } from '@quirky/protocol'
+import { isRecord } from '../daemon/validation'
 import { messageOf } from '../panel/format'
 import { worktreeOf } from '../scm'
 import { SESSIONS_VIEW_ID } from '../shared/view-input'
@@ -8,7 +9,7 @@ import { generators, isUsable, useAgents, type AgentList } from './agents'
 import { useDraft } from './useDraft'
 import type { RecipeLaunchOptions } from '../daemon/recipe-options'
 import { LaunchOptionsEditor } from './LaunchOptionsEditor'
-import { CUSTOM_AGENT, DEFAULT_TEMPLATE, type AiAction, type Recipe } from './types'
+import { CUSTOM_AGENT, DEFAULT_TEMPLATE, type AiAction, type NameAction, type Recipe } from './types'
 
 const ACTIONS: ReadonlyArray<{ action: AiAction; title: string }> = [
   { action: 'commitMessage', title: 'Commit message' },
@@ -18,7 +19,9 @@ const ACTIONS: ReadonlyArray<{ action: AiAction; title: string }> = [
   { action: 'branchSummary', title: 'Branch summary' },
   { action: 'pullRequestDetails', title: 'Pull request details' },
   { action: 'pullRequestReview', title: 'Pull request review' },
-  { action: 'reviewConversation', title: 'Review conversation' }
+  { action: 'reviewConversation', title: 'Review conversation' },
+  { action: 'branchName', title: 'Branch name' },
+  { action: 'conversationName', title: 'Conversation name' }
 ]
 
 const SETTING = (name: string) => `setting:quirky.git/${name}`
@@ -96,8 +99,100 @@ type SectionProps = {
   onRecipe(recipe: Recipe): void
 }
 
+type NameSessionChoice = { id: string; label: string }
+
+function nameSessionChoices(value: unknown, worktree: string): NameSessionChoice[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((item): NameSessionChoice[] => {
+    if (!isRecord(item) || item.kind !== 'structured' || item.worktreeId !== worktree || typeof item.id !== 'string') return []
+    return [{ id: item.id, label: typeof item.title === 'string' && item.title !== '' ? item.title : item.id }]
+  })
+}
+
+function NameActionControls({ context, worktree, action, agent, args, template, launchOptions }: {
+  context: UiPluginContext
+  worktree: string
+  action: NameAction
+  agent: string
+  args: string
+  template: string
+  launchOptions: RecipeLaunchOptions | null
+}) {
+  const [sessions, setSessions] = useState<NameSessionChoice[]>([])
+  const [session, setSession] = useState('')
+  const [sessionError, setSessionError] = useState<string | null>(null)
+  const [name, setName] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [working, setWorking] = useState(false)
+  useEffect(() => {
+    let alive = true
+    setSession('')
+    setName('')
+    void context.call('quirky.session/list', { worktree }).then((value) => {
+      if (alive) {
+        setSessions(nameSessionChoices(value, worktree))
+        setSessionError(null)
+      }
+    }).catch((reason: unknown) => {
+      if (alive) setSessionError(messageOf(reason))
+    })
+    return () => { alive = false }
+  }, [context, worktree, action])
+
+  const generate = async () => {
+    setWorking(true)
+    setError(null)
+    try {
+      const result = await context.call('quirky.git/aiName', {
+        worktree,
+        action,
+        ...(agent === '' ? {} : { agent }),
+        args,
+        template,
+        launchOptions,
+        ...(session === '' ? {} : { session })
+      })
+      if (!isRecord(result) || typeof result.name !== 'string') throw new Error('Name generation returned invalid data.')
+      setName(result.name)
+    } catch (reason) {
+      setError(messageOf(reason))
+    } finally {
+      setWorking(false)
+    }
+  }
+
+  return (
+    <div className="scm-ai-name-action">
+      <label>
+        {action === 'conversationName' ? 'Captured conversation' : 'Work prompt conversation (optional)'}
+        <select aria-label={action === 'conversationName' ? 'Captured conversation' : 'Work prompt conversation (optional)'} value={session} onChange={(event) => {
+          setSession(event.target.value)
+          setName('')
+        }}>
+          <option value="">{action === 'conversationName' ? 'Select a conversation' : 'Use Git changes only'}</option>
+          {sessions.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+        </select>
+      </label>
+      {sessionError && <p className="form-error" role="alert">{sessionError}</p>}
+      <button type="button" disabled={working || agent === '' || (action === 'conversationName' && session === '')} onClick={() => void generate()}>
+        {working ? 'Generating name…' : action === 'branchName' ? 'Generate branch name' : 'Generate conversation name'}
+      </button>
+      {name !== '' && (
+        <label>
+          Suggested name
+          <input aria-label="Suggested name" readOnly value={name} />
+        </label>
+      )}
+      {error && <p className="form-error" role="alert">{error}</p>}
+    </div>
+  )
+}
+
 function ActionSection({ context, worktree, action, title, recipe, agents, onRecipe }: SectionProps) {
-  const choices = agents === null ? [] : action === 'commitMessage' ? generators(agents) : agents.agents.filter(isUsable)
+  const choices = agents === null ? [] :
+    action === 'commitMessage' || action === 'branchName' || action === 'conversationName'
+      ? generators(agents)
+      : agents.agents.filter(isUsable)
   const fallback = agents === null ? '' : choices.find((choice) => choice.id === agents.defaultAgent)?.id ?? choices[0]?.id ?? ''
   const persist = async (fields: { agent?: string; args?: string; template?: string; launchOptions?: RecipeLaunchOptions | null }) => {
     try {
@@ -142,6 +237,7 @@ function ActionSection({ context, worktree, action, title, recipe, agents, onRec
       </label>
       <LaunchOptionsEditor
         key={`${action}:${provider}`}
+        host="local"
         context={context}
         agent={provider}
         value={optionValue}
@@ -166,6 +262,12 @@ function ActionSection({ context, worktree, action, title, recipe, agents, onRec
           onChange={(event) => changeTemplate(event.target.value)}
         />
       </div>
+      {action === 'branchName' && (
+        <NameActionControls context={context} worktree={worktree} action="branchName" agent={provider} args={args} template={template} launchOptions={optionValue} />
+      )}
+      {action === 'conversationName' && (
+        <NameActionControls context={context} worktree={worktree} action="conversationName" agent={provider} args={args} template={template} launchOptions={optionValue} />
+      )}
     </section>
   )
 }

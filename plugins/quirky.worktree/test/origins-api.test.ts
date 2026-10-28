@@ -95,6 +95,20 @@ describe('quirky.worktree/origins public API', () => {
     })).rejects.toMatchObject({ code: RpcErrorCode.InvalidParams })
     expect(JSON.stringify(origins)).not.toContain('paired-device-id')
   })
+  test('desktop identity remains unknown across client connections, windows and restart', async () => {
+    const { fixture, repoId } = await start()
+    const desktop = await fixture.connectAs({}, 'desktop')
+    const secondWindow = await fixture.connectAs({}, 'ui')
+    const created = await desktop.callAny('quirky.worktree/create', { repo: repoId, name: 'desktop-owner' }) as WorktreeCreateResult
+    const desktopView = await desktop.callAny('quirky.worktree/origins', {}) as WorkspaceOriginView[]
+    const otherWindowView = await secondWindow.callAny('quirky.worktree/origins', {}) as WorkspaceOriginView[]
+    expect(originFor(desktopView, created.worktree.id)?.otherClient).toBeNull()
+    expect(originFor(otherWindowView, created.worktree.id)?.otherClient).toBeNull()
+
+    await fixture.restart()
+    const restarted = await fixture.client.callAny('quirky.worktree/origins', {}) as WorkspaceOriginView[]
+    expect(originFor(restarted, created.worktree.id)?.otherClient).toBeNull()
+  })
 
   test('the actual automation producer is distinguished from generic API and its origin persists across restart', async () => {
     const { fixture, repoId } = await start({ automation: true })

@@ -603,18 +603,37 @@
                     "type": "string"
                   }
                 },
-                "warnings": {
+                "warnings": { "type": "array", "items": { "type": "string" } },
+                "defaultTabs": {
                   "type": "array",
                   "items": {
-                    "type": "string"
+                    "type": "object",
+                    "properties": { "title": { "type": "string" }, "color": { "type": "string" }, "command": { "type": "string" } },
+                    "additionalProperties": false
                   }
+                },
+                "defaultTabsTrust": { "description": "The shared setup and default-tab command hash, trusted through the setup approval." },
+                "defaultTabsRunCommands": { "type": "boolean", "description": "False when the project command-source policy is local-only." },
+                "environmentRecipes": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": { "type": "string" }, "name": { "type": "string" }, "create": { "type": "string" },
+                      "checkoutMode": { "type": "string", "enum": ["orca-worktree", "provisioned-root"] },
+                      "description": { "type": "string" }, "suspend": { "type": "string" }, "resume": { "type": "string" },
+                      "destroy": { "type": "string" }, "destroyDisabled": { "type": "boolean" }
+                    },
+                    "required": ["id", "name", "create"],
+                    "additionalProperties": false
+                  }
+                },
+                "environmentRecipeDiagnostics": {
+                  "type": "array",
+                  "items": { "type": "object", "properties": { "index": { "type": "integer" }, "field": { "type": "string" }, "message": { "type": "string" } }, "required": ["index", "message"] }
                 }
               },
-              "required": [
-                "agentStartup",
-                "sharedDirectories",
-                "warnings"
-              ]
+              "required": ["agentStartup", "sharedDirectories", "warnings", "defaultTabsTrust", "defaultTabsRunCommands", "environmentRecipeDiagnostics"]
             }
           },
           "required": [
@@ -801,18 +820,21 @@
                     "type": "string"
                   }
                 },
-                "warnings": {
+                "warnings": { "type": "array", "items": { "type": "string" } },
+                "defaultTabs": {
                   "type": "array",
                   "items": {
-                    "type": "string"
+                    "type": "object",
+                    "properties": { "title": { "type": "string" }, "color": { "type": "string" }, "command": { "type": "string" } },
+                    "additionalProperties": false
                   }
-                }
+                },
+                "defaultTabsTrust": { "description": "The shared setup and default-tab command hash, trusted through the setup approval." },
+                "defaultTabsRunCommands": { "type": "boolean" },
+                "environmentRecipes": { "type": "array", "items": { "type": "object" } },
+                "environmentRecipeDiagnostics": { "type": "array", "items": { "type": "object" } }
               },
-              "required": [
-                "agentStartup",
-                "sharedDirectories",
-                "warnings"
-              ]
+              "required": ["agentStartup", "sharedDirectories", "warnings", "defaultTabsTrust", "defaultTabsRunCommands", "environmentRecipeDiagnostics"]
             }
           },
           "required": [
@@ -870,18 +892,21 @@
                 "type": "string"
               }
             },
-            "warnings": {
+            "warnings": { "type": "array", "items": { "type": "string" } },
+            "defaultTabs": {
               "type": "array",
               "items": {
-                "type": "string"
+                "type": "object",
+                "properties": { "title": { "type": "string" }, "color": { "type": "string" }, "command": { "type": "string" } },
+                "additionalProperties": false
               }
-            }
+            },
+            "defaultTabsTrust": { "description": "The shared setup and default-tab command hash, trusted through the setup approval." },
+            "defaultTabsRunCommands": { "type": "boolean" },
+            "environmentRecipes": { "type": "array", "items": { "type": "object" } },
+            "environmentRecipeDiagnostics": { "type": "array", "items": { "type": "object" } }
           },
-          "required": [
-            "agentStartup",
-            "sharedDirectories",
-            "warnings"
-          ]
+          "required": ["agentStartup", "sharedDirectories", "warnings", "defaultTabsTrust", "defaultTabsRunCommands", "environmentRecipeDiagnostics"]
         }
       },
       {

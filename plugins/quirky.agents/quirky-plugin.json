@@ -345,7 +345,7 @@
       },
       {
         "id": "options",
-        "description": "The models and launch options an agent offers, and the extra arguments it accepts.",
+        "description": "The models and launch options offered by an agent on the exact selected provider host.",
         "readOnly": true,
         "params": {
           "type": "object",
@@ -353,7 +353,9 @@
             "agent": {
               "type": "string",
               "description": "The agent ID."
-            }
+            },
+            "host": { "type": "string", "description": "Exact provider host ID; omitted means local." },
+            "expectedIncarnation": { "type": "string", "description": "Internal paired-peer target incarnation fence." }
           },
           "required": [
             "agent"
@@ -365,6 +367,7 @@
             "agent": {
               "type": "string"
             },
+            "host": { "type": "string", "description": "The exact provider host used for this catalog." },
             "label": {
               "type": "string"
             },
@@ -499,6 +502,7 @@
           },
           "required": [
             "agent",
+            "host",
             "label",
             "supported",
             "discoverable",
@@ -512,7 +516,7 @@
       },
       {
         "id": "discoverModels",
-        "description": "Runs the provider-owned bounded model probe for one exact host. Only nonempty valid local results are authoritative.",
+        "description": "Runs the provider-owned bounded model probe on local or one exact authenticated paired host. Only nonempty valid snapshots are authoritative.",
         "readOnly": true,
         "params": {
           "type": "object",
@@ -523,8 +527,9 @@
             },
             "host": {
               "type": "string",
-              "description": "The exact target host identity; only local is probed."
-            }
+              "description": "Exact provider host identity: local or a saved paired peer ID."
+            },
+            "expectedIncarnation": { "type": "string", "description": "Internal paired-peer target incarnation fence." }
           },
           "required": [
             "agent",
@@ -594,6 +599,20 @@
                 ]
               }
             },
+            "unlisted": { "type": "string", "enum": ["accept", "refuse"] },
+            "unlistedOptions": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "label": { "type": "string" },
+                  "type": { "type": "string", "enum": ["select", "boolean"] },
+                  "choices": {}
+                },
+                "required": ["id", "label", "type", "choices"]
+              }
+            },
             "reason": {
               "type": "string"
             }
@@ -604,7 +623,9 @@
             "observedAt",
             "status",
             "authoritative",
-            "models"
+            "models",
+            "unlisted",
+            "unlistedOptions"
           ]
         }
       },
@@ -1448,6 +1469,8 @@
               "type": "string",
               "description": "The agent ID."
             },
+            "host": { "type": "string", "description": "Exact provider host ID; omitted means local." },
+            "expectedIncarnation": { "type": "string", "description": "Internal paired-peer target incarnation fence." },
             "model": {
               "type": "string",
               "description": "Model to launch the agent with (1 to 128 characters). Checked against the agent's catalog."
@@ -2031,8 +2054,25 @@
       {
         "id": "changed",
         "description": "The catalog, detection, an agent's configuration or a setting changed in a way that alters list.",
+        "data": { "type": "object" }
+      },
+      {
+        "id": "modelSnapshot",
+        "description": "An authoritative nonempty provider model snapshot for one exact local or authenticated paired host.",
         "data": {
-          "type": "object"
+          "type": "object",
+          "properties": {
+            "agent": { "type": "string" },
+            "host": { "type": "string" },
+            "observedAt": { "type": "number" },
+            "status": { "type": "string", "enum": ["available"] },
+            "authoritative": { "type": "boolean" },
+            "models": { "type": "array", "items": { "type": "object" } },
+            "unlisted": { "type": "string", "enum": ["refuse"] },
+            "unlistedOptions": { "type": "array", "items": { "type": "object" } }
+          },
+          "required": ["agent", "host", "observedAt", "status", "authoritative", "models", "unlisted", "unlistedOptions"],
+          "additionalProperties": false
         }
       }
     ],
@@ -2319,6 +2359,7 @@
         "windows": {
           "inputRecordPasteNewline": "alt-enter"
         },
+        "modelDiscovery": { "protocol": "codex-app-server", "timeoutMs": 8000 },
         "launchOptions": {
           "model": {
             "flag": [
@@ -4341,9 +4382,24 @@
             "required": true
           }
         ],
+        "flags": {
+          "host": { "type": "string", "description": "Exact provider host ID; omitted means local." }
+        },
         "methods": [
           "quirky.agents/options"
         ]
+      },
+      {
+        "id": "discover-models",
+        "words": "discover-models",
+        "summary": "refresh the provider-owned model list on one exact provider host",
+        "positionals": [
+          { "name": "agent", "description": "the agent ID", "required": true }
+        ],
+        "flags": {
+          "host": { "type": "string", "required": true, "description": "local or an exact saved paired peer ID." }
+        },
+        "methods": ["quirky.agents/discoverModels"]
       },
       {
         "id": "refresh",
@@ -4517,6 +4573,10 @@
           }
         ],
         "flags": {
+          "host": {
+            "type": "string",
+            "description": "Exact provider host ID; omitted means local."
+          },
           "model": {
             "type": "string",
             "description": "model to launch the agent with"

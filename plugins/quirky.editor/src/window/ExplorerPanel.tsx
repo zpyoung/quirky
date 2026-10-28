@@ -206,7 +206,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
       return
     }
     let cancelled = false
-    context.call('quirky.worktree/resolve', { selector: worktree }).then((value) => {
+    context.call('quirky.editor/documentRoot', { worktree }).then((value) => {
       if (cancelled) return
       const resolved = value as { id?: unknown; path?: unknown }
       if (typeof resolved.id !== 'string' || typeof resolved.path !== 'string') {
@@ -466,7 +466,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
 
   const resolveWorktreeRoot = useCallback(async (requestedWorktree: string): Promise<string | null> => {
     if (worktreeRootSelectorRef.current === requestedWorktree && worktreeRootRef.current !== null) return worktreeRootRef.current
-    const value = await context.call('quirky.worktree/resolve', { selector: requestedWorktree })
+    const value = await context.call('quirky.editor/documentRoot', { worktree: requestedWorktree })
     if (currentWorktree.current !== requestedWorktree) return null
     const resolved = value as { id?: unknown; path?: unknown }
     if (typeof resolved.id !== 'string' || typeof resolved.path !== 'string') throw new Error('The selected worktree could not be resolved.')

@@ -6,6 +6,11 @@ export type LinkClickSetting = 'actions' | 'open' | 'terminal'
 /** The terminal settings a pane reads, keyed by their setting IDs in the manifest. */
 export type PaneSettings = {
   'font-family': string
+  'theme-mode': 'inherit' | 'system' | 'dark' | 'light'
+  'theme-dark': 'default' | 'tango' | 'custom'
+  'theme-light': 'default' | 'tango' | 'custom'
+  'theme-custom-dark': string
+  'theme-custom-light': string
   'font-size': number
   'font-weight': number
   'font-weight-bold': number
@@ -38,6 +43,11 @@ export type PaneSettings = {
 /** Orca's defaults, which are also the manifest defaults. */
 export const DEFAULT_PANE_SETTINGS: PaneSettings = {
   'font-family': 'SF Mono',
+  'theme-mode': 'inherit',
+  'theme-dark': 'default',
+  'theme-light': 'default',
+  'theme-custom-dark': '{}',
+  'theme-custom-light': '{}',
   'font-size': 14,
   'font-weight': 500,
   'font-weight-bold': 700,

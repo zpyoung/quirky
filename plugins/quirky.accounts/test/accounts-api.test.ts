@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { existsSync, readFileSync, mkdirSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { RpcErrorCode } from '@quirky/protocol'
 import { commands } from '../cli'
@@ -120,6 +120,148 @@ describe('quirky.accounts lifecycle API and CLI', () => {
     await commands.sessionHome({ positionals: [], flags: { session: sessionId } }, cli.ctx)
     expect(cli.lines).toEqual([expected])
   })
+  test('prepareProviderEnv resolves the selected Codex home without creating a session identity', async () => {
+    const h = await startAccounts()
+    const selected = await addCodex(h, 'probe@example.test')
+    const homeOverrides = {
+      claude: { value: null, source: 'absent' },
+      codex: { value: null, source: 'absent' }
+    }
+    const prepared = await call<AccountPrepareResult>(h.client, 'quirky.accounts/prepareProviderEnv', {
+      agent: 'codex',
+      cwd: h.userHome,
+      homeOverrides
+    })
+    expect(prepared).toEqual({
+      env: { CODEX_HOME: h.managedHome('codex', selected.id) },
+      shellInit: null,
+      account: { provider: 'codex', id: selected.id, label: selected.label, source: 'managed' }
+    })
+    const systemDefault = await call<AccountPrepareResult>(h.client, 'quirky.accounts/prepareProviderEnv', {
+      agent: 'codex',
+      cwd: h.userHome,
+      homeOverrides: {
+        claude: { value: null, source: 'absent' },
+        codex: { value: null, source: 'explicit' }
+      }
+    })
+    expect(systemDefault).toMatchObject({
+      env: { CODEX_HOME: null },
+      shellInit: null,
+      account: { provider: 'codex', id: null, source: 'default' }
+    })
+    const customHome = await call<AccountPrepareResult>(h.client, 'quirky.accounts/prepareProviderEnv', {
+      agent: 'codex',
+      cwd: h.userHome,
+      homeOverrides: {
+        claude: { value: null, source: 'absent' },
+        codex: { value: join(h.userHome, 'custom-codex-home'), source: 'explicit' }
+      }
+    })
+    expect(customHome).toMatchObject({
+      env: {},
+      shellInit: null,
+      account: { provider: 'codex', id: null, source: 'custom' }
+    })
+    expect(await call<SessionHomeResult>(h.client, 'quirky.accounts/sessionHome', { session: 'codex-model-probe' }))
+      .toEqual({ provider: null, home: null })
+
+    const cli = testCli(h.client)
+    await commands.prepareProviderEnv({
+      positionals: [],
+      flags: { agent: 'codex', cwd: h.userHome, 'home-overrides': homeOverrides }
+    }, cli.ctx)
+    expect(cli.lines[0]).toEqual({
+      account: prepared.account,
+      shellInit: false,
+      environmentKeys: ['CODEX_HOME']
+    })
+    for (const extra of [{ sessionId: 'fake-session' }, { worktreeId: 'fake-worktree' }, { resume: {} }]) {
+      await expect(h.client.callAny('quirky.accounts/prepareProviderEnv', {
+        agent: 'codex', cwd: h.userHome, homeOverrides, ...extra
+      })).rejects.toMatchObject({ code: RpcErrorCode.InvalidParams })
+    }
+  })
+
+  test('Codex app-server discovery uses the selected account, and failures preserve its model snapshot', async () => {
+    const h = await startAccounts({ plugins: ['quirky.agents'] })
+    const selected = await addCodex(h, 'probe@example.test')
+    const codexHome = h.managedHome('codex', selected.id)
+    const modelsPath = join(codexHome, 'models.json')
+    const requestLog = join(h.userHome, 'codex-app-server.jsonl')
+    const probeEnvironment = join(h.userHome, 'probe-environment.json')
+    writeFileSync(modelsPath, JSON.stringify({
+      data: [{ id: 'account-owned-model', displayName: 'Account owned model', supportedReasoningEfforts: [{ reasoningEffort: 'low', description: 'Low' }] }],
+      nextCursor: null
+    }))
+    writeFileSync(join(h.fakeBin, 'codex'), `#!/usr/bin/env node
+const fs = require('node:fs')
+const path = require('node:path')
+let input = ''
+process.stdin.setEncoding('utf8')
+process.stdin.on('data', chunk => {
+  input += chunk
+  for (;;) {
+    const end = input.indexOf('\\n')
+    if (end < 0) break
+    const line = input.slice(0, end)
+    input = input.slice(end + 1)
+    if (!line) continue
+    const request = JSON.parse(line)
+    fs.appendFileSync(path.join(process.env.HOME, 'codex-app-server.jsonl'), JSON.stringify(request) + '\\n')
+    if (request.method === 'initialize') {
+      process.stdout.write(JSON.stringify({ id: request.id, result: {} }) + '\\n')
+    } else if (request.method === 'model/list') {
+      if (fs.existsSync(path.join(process.env.HOME, 'codex-app-server-fail'))) process.exit(9)
+      const source = fs.readFileSync(path.join(process.env.CODEX_HOME, 'models.json'), 'utf8')
+      const models = source === 'malformed' ? { data: null, nextCursor: null } : JSON.parse(source)
+      fs.writeFileSync(path.join(process.env.HOME, 'probe-environment.json'), JSON.stringify({ codexHome: process.env.CODEX_HOME ?? null, args: process.argv.slice(2) }))
+      process.stdout.write(JSON.stringify({ id: request.id, result: models }) + '\\n')
+    }
+  }
+})
+`)
+    const discover = () => call<any>(h.client, 'quirky.agents/discoverModels', { agent: 'codex', host: 'local' })
+    const listedModels = async () => (await call<any>(h.client, 'quirky.agents/options', { agent: 'codex', host: 'local' })).models.map(
+      (model: { id: string }) => model.id
+    )
+    const discovered = await discover()
+    expect(discovered).toMatchObject({
+      agent: 'codex',
+      host: 'local',
+      authoritative: true,
+      models: [{ id: 'account-owned-model', label: 'Account owned model', options: [{ id: 'effort', choices: ['low'] }] }]
+    })
+    expect(JSON.parse(readFileSync(probeEnvironment, 'utf8'))).toEqual({
+      codexHome,
+      args: ['-c', 'approval_policy=never', '-c', 'features.plugins=false', '-s', 'read-only', '-a', 'never', 'app-server']
+    })
+    expect(readFileSync(requestLog, 'utf8').trim().split('\n').map((line) => JSON.parse(line).method))
+      .toEqual(['initialize', 'initialized', 'model/list'])
+    expect(await listedModels()).toEqual(['account-owned-model'])
+    expect(await call<any>(h.client, 'quirky.agents/resolveLaunch', {
+      agent: 'codex', host: 'local', model: 'account-owned-model', options: { effort: 'low' }
+    })).toMatchObject({ structured: { model: 'account-owned-model', effort: 'low' } })
+
+    writeFileSync(modelsPath, JSON.stringify({ data: [], nextCursor: null }))
+    expect(await discover()).toMatchObject({ status: 'available', authoritative: false, models: [] })
+    expect(await listedModels()).toEqual(['account-owned-model'])
+
+    writeFileSync(modelsPath, 'malformed')
+    expect(await discover()).toMatchObject({ status: 'unavailable', authoritative: false, models: [] })
+    expect(await listedModels()).toEqual(['account-owned-model'])
+
+    writeFileSync(join(h.userHome, 'codex-app-server-fail'), 'fail')
+    expect(await discover()).toMatchObject({ status: 'unavailable', authoritative: false, models: [] })
+    expect(await listedModels()).toEqual(['account-owned-model'])
+
+    rmSync(join(codexHome, 'auth.json'), { force: true })
+    expect(await discover()).toMatchObject({ status: 'unavailable', authoritative: false, models: [] })
+    expect(await listedModels()).toEqual(['account-owned-model'])
+    expect(await call<SessionHomeResult>(h.client, 'quirky.accounts/sessionHome', { session: 'codex-model-probe' }))
+      .toEqual({ provider: null, home: null })
+  }, 30_000)
+
 
   test('Claude add remains unselected, duplicate identity is rejected, and default auth/config stay byte-identical', async () => {
     const h = await startAccounts()

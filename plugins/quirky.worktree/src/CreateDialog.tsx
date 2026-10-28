@@ -95,7 +95,14 @@ type Props = {
   hooks: CreateHooks
 }
 
-type Project = { settings: ProjectSettings | null; hooks: EffectiveHooks | null }
+type DefaultTabTemplate = { title?: string; color?: string; command?: string }
+type CreateHooksInfo = EffectiveHooks & {
+  defaultTabs?: DefaultTabTemplate[]
+  environmentRecipes?: Array<{ id: string; name: string; create: string }>
+  environmentRecipeDiagnostics?: Array<{ index: number; field?: string; message: string }>
+}
+type Project = { settings: ProjectSettings | null; hooks: CreateHooksInfo | null }
+type HostChoice = { id: string; label: string; available: boolean; capabilities: string[] }
 type Mode = 'smart' | 'github' | 'branch' | 'name'
 type SearchState = {
   repoId: string
@@ -131,11 +138,27 @@ function parseBranchRefs(value: unknown): BranchRef[] {
   return value.refs.filter(isBranchRef)
 }
 
+function hostChoicesOf(value: unknown): HostChoice[] {
+  if (typeof value !== 'object' || value === null || Array.isArray(value) || !('hosts' in value) || !Array.isArray(value.hosts)) {
+    throw new Error('The authenticated peer owner returned an invalid host list.')
+  }
+  const hosts: HostChoice[] = []
+  for (const raw of value.hosts) {
+    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) throw new Error('The authenticated peer owner returned an invalid host entry.')
+    const host = raw as Record<string, unknown>
+    if (typeof host.id !== 'string' || typeof host.label !== 'string' || typeof host.available !== 'boolean' ||
+      !Array.isArray(host.capabilities) || !host.capabilities.every((capability) => typeof capability === 'string')) {
+      throw new Error('The authenticated peer owner returned incomplete host identity evidence.')
+    }
+    hosts.push({ id: host.id, label: host.label, available: host.available, capabilities: host.capabilities })
+  }
+  return hosts
+}
 /** The project facts the form depends on; a project that can't report them (a folder) simply has no setup. */
 async function loadProject(context: UiPluginContext, repoId: string): Promise<Project> {
   const [details, hooks] = await Promise.all([
     context.call('quirky.repo/show', { repo: repoId }).catch(() => null) as Promise<RepoDetails | null>,
-    context.call('quirky.repo/hooks', { repo: repoId }).catch(() => null) as Promise<EffectiveHooks | null>
+    context.call('quirky.repo/hooks', { repo: repoId }).catch(() => null) as Promise<CreateHooksInfo | null>
   ])
   return { settings: details?.settings ?? null, hooks }
 }
@@ -175,6 +198,10 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
   const [placeholder, setPlaceholder] = useState('')
   const [suggestion, setSuggestion] = useState(0)
   const [project, setProject] = useState<Project | null>(null)
+  const [selectedDefaultTabs, setSelectedDefaultTabs] = useState<string[]>([])
+  const [hostChoices, setHostChoices] = useState<HostChoice[]>([])
+  const [selectedHost, setSelectedHost] = useState('')
+  const [hostError, setHostError] = useState('')
   const [search, setSearch] = useState<SearchState | null>(null)
   const [branchSearch, setBranchSearch] = useState<BranchSearchState | null>(null)
   const [selectedSource, setSelectedSource] = useState<SelectedSource | null>(null)
@@ -192,6 +219,8 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
     sourceRequest.current += 1
     searchRequest.current += 1
     branchRequest.current += 1
+    setSelectedDefaultTabs([])
+    setSelectedHost('')
     setProject(null)
     setSetupChoice(null)
     setModel('')
@@ -214,11 +243,35 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
       if (!live) return
       setProject(loaded)
       if (!baseEdited.current) setBase(loaded.settings?.defaultBase ?? '')
+      setSelectedDefaultTabs(loaded.hooks?.defaultTabs?.map((_, index) => String(index + 1)) ?? [])
     })
     return () => {
       live = false
     }
   }, [context, repoId, repo?.kind])
+  useEffect(() => {
+    let live = true
+    setHostChoices([])
+    setHostError('')
+    void context.call('quirky.worktree/availableHosts', {}).then((value: unknown) => {
+      if (live) setHostChoices(hostChoicesOf(value))
+    }).catch((error: unknown) => {
+      if (live) setHostError(messageOf(error))
+    })
+    return () => { live = false }
+  }, [context, repoId])
+  useEffect(() => {
+    if (!repo || folder || !project || selectedHost !== '' || sparsePathsText.trim() !== '' || selectedSource !== null ||
+      mode === 'github' || (mode === 'branch' && branch.trim() !== '') || isGitHubWorktreeReference(smartInput.trim()) ||
+      (project.hooks?.environmentRecipes?.length ?? 0) > 0) return
+    const timer = setTimeout(() => {
+      void context.call('quirky.worktree/prefetchCreate', {
+        repo: repo.id,
+        ...(base.trim() === '' ? {} : { base: base.trim() })
+      }).catch((error: unknown) => context.log(`could not prefetch a worktree base for ${repo.id}: ${messageOf(error)}`))
+    }, 200)
+    return () => clearTimeout(timer)
+  }, [context, repo, folder, project, selectedHost, sparsePathsText, selectedSource, mode, branch, smartInput, base])
 
   useEffect(() => {
     let live = true
@@ -399,9 +452,10 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
     : [])
   const sparsePaths = sparsePathsText.split(/\r?\n/).map((path) => path.trim()).filter(Boolean)
   const launchSelectionRequested = model.trim() !== '' || Object.keys(launchPicks).length > 0
-  const unsupportedCreateWarnings = project?.hooks?.warnings.filter((warning) =>
-    warning.startsWith('defaultTabs') || warning.startsWith('environmentRecipes')
-  ) ?? []
+  const defaultTabWarnings = project?.hooks?.warnings.filter((warning) => warning.startsWith('defaultTabs')) ?? []
+  const recipeDiagnostics = project?.hooks?.environmentRecipeDiagnostics ?? []
+  const selectedHostState = hostChoices.find((host) => host.id === selectedHost)
+  const selectedHostUnavailable = selectedHost !== '' && selectedHostState?.available !== true
   const currentSearch = search && mode === 'github' && search.repoId === repoId && search.primaryId === (primary?.id ?? '') && search.query === query.trim() ? search : null
   const currentBranchSearch = branchSearch && mode === 'branch' && branchSearch.repoId === repoId && branchSearch.primaryId === (primary?.id ?? '') && branchSearch.query === branch.trim() ? branchSearch : null
   const issuePromptIsDerived = source?.item.kind === 'issue' && prompt.trim() === ''
@@ -410,7 +464,7 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
   const showBase = !folder && (source ? source.item.kind === 'issue' : mode !== 'github' && !fromBranch && !explicitSmartReference)
   const showBranchName = !folder && !isPullRequest && !fromBranch && (source ? source.item.kind === 'issue' : mode !== 'github' && !explicitSmartReference)
   const blocked = !repo || busy || (asksForSetup && setupChoice === null) || sourceBusy || unsupportedFolderReference ||
-    (mode === 'github' && source === null) || (explicitSmartReference && source === null) ||
+    (mode === 'github' && source === null) || (explicitSmartReference && source === null) || selectedHostUnavailable ||
     (launchSelectionRequested && (!agentOptionsCatalog?.supported || agentOptionsState?.status !== 'ready'))
 
   const fields = (): Record<string, unknown> => {
@@ -432,7 +486,9 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
       ...(branchName.trim() && !fromBranch && !isPullRequest && showBranchName ? { branchName: branchName.trim() } : {}),
       ...(parent ? { parent } : {}),
       ...(note.trim() ? { comment: note.trim() } : {}),
-      ...(asksForSetup && setupChoice ? { setup: setupChoice } : {})
+      ...(asksForSetup && setupChoice ? { setup: setupChoice } : {}),
+      ...(project?.hooks?.defaultTabs?.length ? { defaultTabs: selectedDefaultTabs } : {}),
+      ...(selectedHost ? { host: selectedHost } : {})
     }
   }
 
@@ -767,6 +823,19 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
               <span>Display name</span>
               <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
             </label>
+            <label>
+              <span>Target peer</span>
+              <select value={selectedHost} onChange={(event) => setSelectedHost(event.target.value)}>
+                <option value="">Current execution context (default)</option>
+                {hostChoices.map((host) => (
+                  <option key={host.id} value={host.id} disabled={!host.available}>
+                    {host.label} {host.available ? '— available' : '— unavailable'}
+                  </option>
+                ))}
+              </select>
+              <small className="muted">Remote selections use exact authenticated peer IDs and never fall back locally. This runtime has no remote worktree-create owner.</small>
+              {hostError && <small role="status">Remote host discovery is unavailable: {hostError}</small>}
+            </label>
             {showBranchName && (
               <label>
                 <span>Branch name</span>
@@ -806,11 +875,33 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
                 </label>
               </>
             )}
-            {unsupportedCreateWarnings.length > 0 && (
-              <p className="muted" role="status">
-                Default tabs and environment recipes are unsupported by the current public owners and will be refused before creation.
-              </p>
-            )}
+                {project?.hooks?.defaultTabs?.length ? (
+                  <fieldset className="form-group">
+                    <legend>Default terminal tabs</legend>
+                    {project?.hooks?.defaultTabs?.map((tab, index) => {
+                      const selector = String(index + 1)
+                      return (
+                        <label className="check-row" key={selector}>
+                          <input
+                            type="checkbox"
+                            checked={selectedDefaultTabs.includes(selector)}
+                            onChange={(event) => setSelectedDefaultTabs((current) => event.target.checked
+                              ? [...current, selector]
+                              : current.filter((value) => value !== selector))}
+                          />
+                          <span>{tab.title ?? `Tab ${index + 1}`}</span>
+                          {tab.command && <small className="muted">{tab.command}</small>}
+                        </label>
+                      )
+                    })}
+                    <small className="muted">Commands run as shell-only background tabs after the shared setup trust choice.</small>
+                  </fieldset>
+                ) : null}
+                {defaultTabWarnings.map((warning) => <p className="muted" role="status" key={warning}>{warning}</p>)}
+                {recipeDiagnostics.map((diagnostic) => <p className="muted" role="status" key={`${diagnostic.index}:${diagnostic.field ?? ''}`}>{diagnostic.message}</p>)}
+                {(project?.hooks?.environmentRecipes?.length ?? 0) > 0 && (
+                  <p className="muted" role="status">Environment recipe VM lifecycle integration requires a separate runtime owner; it is not replaced by a local shell command.</p>
+                )}
             {(setup || asksForSetup) && (
               <div className="setup-block">
                 <div className="setup-heading">

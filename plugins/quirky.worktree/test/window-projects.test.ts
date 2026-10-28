@@ -401,6 +401,7 @@ test('SC-60: Project Settings shows what repo set stored, and saving a change sh
   expect(dialog.textContent).toContain('echo shared-setup')
   expect(dialog.textContent).toContain('quirky.yaml')
 
+  await setText(field(dialog, 'Project icon')!, '🧭')
   await setText(field(dialog, 'Display Name')!, 'Api service')
   await setText(field(dialog, 'Default Worktree Base')!, '')
   await setText(field<HTMLTextAreaElement>(dialog, 'Archive Script')!, 'echo bye')
@@ -422,6 +423,22 @@ test('SC-60: Project Settings shows what repo set stored, and saving a change sh
     archiveScript: 'echo bye'
   })
   await w.win.waitFor(() => projectSection('Api service'))
+  const metadata = await w.agent.callAny('quirky.worktree/projectMetadata', { repo: repo.id }) as { identity: { icon: string | null } }
+  expect(metadata.identity.icon).toBe('🧭')
+  await expect(w.agent.callAny('quirky.worktree/setProjectMetadata', {
+    repo: repo.id,
+    identity: { icon: '<svg onload=alert(1)>' }
+  })).rejects.toThrow(/icon/i)
+  expect((await w.agent.callAny('quirky.worktree/projectMetadata', { repo: repo.id }) as { identity: { icon: string | null } }).identity.icon).toBe('🧭')
+  await expect(w.agent.callAny('quirky.worktree/setProjectMetadata', {
+    repo: repo.id,
+    identity: { icon: 'javascript:alert(1)' }
+  })).rejects.toThrow(/icon/i)
+  await expect(w.agent.callAny('quirky.worktree/setProjectMetadata', {
+    repo: repo.id,
+    identity: { trackerProject: 'javascript:alert(1)' }
+  })).rejects.toThrow(/HTTPS/i)
+  expect((await w.agent.callAny('quirky.worktree/projectMetadata', { repo: repo.id }) as { identity: { trackerProject: string | null } }).identity.trackerProject).toBeNull()
 }, SLOW)
 
 async function dirtyAndLocked(w: World) {

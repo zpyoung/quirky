@@ -8,7 +8,8 @@ const LAYOUT = { view: null, panel: null, sidebar: true, focus: null }
 
 function reply(method: string): unknown {
   if (method === 'ui.contributions') return MODEL
-  if (method === 'ui.state') return { windows: [], layout: LAYOUT, slots: [] }
+  if (method === 'ui.window.self') return { connId: 1 }
+  if (method === 'ui.window.state') return { connId: 1, windows: [], layout: LAYOUT, slots: [], toasts: [] }
   if (method === 'setting.list') return []
   return { ok: true }
 }

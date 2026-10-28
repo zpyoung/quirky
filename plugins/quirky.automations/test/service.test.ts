@@ -195,4 +195,130 @@ describe('automation scheduler service', () => {
     await expect(fixture.service.edit({ id: created.id, runContext: oversized })).rejects.toThrow()
   })
 
+  test('retires a stale model only for its captured owner, agent and provider host, retaining valid options', async () => {
+    const now = Date.parse('2026-10-27T08:00:00.000Z')
+    const fixture = makeFixture(now)
+    const owner = (repoId: string) => ({
+      kind: 'local' as const,
+      repoId,
+      repoPath: `/repos/${repoId}`,
+      workspaceId: null,
+      workspacePath: null,
+      workspaceInstanceId: null
+    })
+    const runContext = (projectId: string, hostId = 'local') => ({
+      kind: 'workspace-run',
+      projectId,
+      hostId,
+      repoId: projectId,
+      path: `/repos/${projectId}`
+    })
+    fixture.store.insert(definition('stale-local-codex', now, {
+      projectId: 'stale-local-codex',
+      owner: owner('stale-local-codex'),
+      runContext: runContext('stale-local-codex'),
+      launchOverrides: { model: 'removed-model', optionValues: { effort: 'high', obsolete: 'x' } }
+    }))
+    fixture.store.insert(definition('other-agent', now, {
+      agentId: 'claude',
+      projectId: 'other-agent',
+      owner: owner('other-agent'),
+      runContext: runContext('other-agent'),
+      launchOverrides: { model: 'removed-model', optionValues: { effort: 'high' } }
+    }))
+    fixture.store.insert(definition('unknown-host', now, {
+      projectId: 'unknown-host',
+      owner: null,
+      runContext: runContext('unknown-host', 'host-a'),
+      launchOverrides: { model: 'removed-model', optionValues: { effort: 'high' } }
+    }))
+    fixture.store.insert(definition('stale-remote-codex', now, {
+      projectId: 'stale-remote-codex',
+      owner: owner('stale-remote-codex'),
+      runContext: runContext('stale-remote-codex', 'host-a'),
+      launchOverrides: { model: 'removed-model', optionValues: { effort: 'high' } }
+    }))
+    fixture.store.insert(definition('other-remote-host', now, {
+      projectId: 'other-remote-host',
+      owner: owner('other-remote-host'),
+      runContext: runContext('other-remote-host', 'host-b'),
+      launchOverrides: { model: 'removed-model', optionValues: { effort: 'high' } }
+    }))
+    fixture.store.insert(definition('still-valid', now, {
+      projectId: 'still-valid',
+      owner: owner('still-valid'),
+      runContext: runContext('still-valid'),
+      launchOverrides: { model: 'current-model', optionValues: { effort: 'high' } }
+    }))
+
+    const failed = {
+      agent: 'codex',
+      host: 'local',
+      observedAt: now,
+      status: 'available',
+      authoritative: false,
+      models: [],
+      unlisted: 'refuse',
+      unlistedOptions: []
+    }
+    await fixture.service.modelSnapshot(failed)
+    await fixture.service.modelSnapshot({ ...failed, host: 'host-a', authoritative: true })
+    expect(fixture.store.get('stale-local-codex')?.launchOverrides)
+      .toEqual({ model: 'removed-model', optionValues: { effort: 'high', obsolete: 'x' } })
+    expect(fixture.store.get('stale-remote-codex')?.launchOverrides)
+      .toEqual({ model: 'removed-model', optionValues: { effort: 'high' } })
+
+    await fixture.service.modelSnapshot({
+      agent: 'codex',
+      host: 'local',
+      observedAt: now + 1,
+      status: 'available',
+      authoritative: true,
+      models: [{
+        id: 'current-model',
+        label: 'Current model',
+        description: null,
+        options: [{ id: 'effort', choices: ['high'] }]
+      }],
+      unlisted: 'refuse',
+      unlistedOptions: [{
+        id: 'effort',
+        label: 'Effort',
+        type: 'select',
+        choices: [{ value: 'high', label: 'High' }]
+      }]
+    })
+    expect(fixture.store.get('stale-local-codex')?.launchOverrides).toEqual({ optionValues: { effort: 'high' } })
+    expect(fixture.store.get('other-agent')?.launchOverrides).toEqual({ model: 'removed-model', optionValues: { effort: 'high' } })
+    expect(fixture.store.get('unknown-host')?.launchOverrides).toEqual({ model: 'removed-model', optionValues: { effort: 'high' } })
+    expect(fixture.store.get('still-valid')?.launchOverrides).toEqual({ model: 'current-model', optionValues: { effort: 'high' } })
+    expect(fixture.store.get('stale-remote-codex')?.launchOverrides)
+      .toEqual({ model: 'removed-model', optionValues: { effort: 'high' } })
+    expect(fixture.store.get('other-remote-host')?.launchOverrides)
+      .toEqual({ model: 'removed-model', optionValues: { effort: 'high' } })
+
+    await fixture.service.modelSnapshot({
+      agent: 'codex',
+      host: 'host-a',
+      observedAt: now + 2,
+      status: 'available',
+      authoritative: true,
+      models: [{
+        id: 'current-model',
+        label: 'Current model',
+        description: null,
+        options: [{ id: 'effort', choices: ['high'] }]
+      }],
+      unlisted: 'refuse',
+      unlistedOptions: [{
+        id: 'effort',
+        label: 'Effort',
+        type: 'select',
+        choices: [{ value: 'high', label: 'High' }]
+      }]
+    })
+    expect(fixture.store.get('stale-remote-codex')?.launchOverrides).toEqual({ optionValues: { effort: 'high' } })
+    expect(fixture.store.get('other-remote-host')?.launchOverrides)
+      .toEqual({ model: 'removed-model', optionValues: { effort: 'high' } })
+  })
 })

@@ -18,6 +18,7 @@ import type { CallerIdentity } from '../../selector'
 import { listGroup, listProject, type ListEnv } from './list'
 import { removeWorktree, type RemoveEnv } from './remove'
 import { rowOf } from './store'
+import { closeWindowView, selectWindow, type SelectedWindow } from './window'
 
 const DAY_MS = 24 * 60 * 60 * 1_000
 const CLEANUP_IDLE_MS = 30 * DAY_MS
@@ -26,6 +27,8 @@ const LIVE_SESSION_STATUSES: Record<string, true> = { starting: true, running: t
 type PublicCall = (method: string, params?: Record<string, unknown>) => Promise<unknown>
 type SessionEvidence = { sessions: Record<string, unknown>[] | null; error: string | null; malformed: boolean }
 type ReadEvidence = { value: unknown; error: string | null }
+type WindowLayoutEvidence = { connId: number; layout: Record<string, unknown> }
+type WindowEvidence = { layouts: WindowLayoutEvidence[] | null; connIds: number[]; error: string | null; malformed: boolean }
 export type ControlEnv = {
   list: ListEnv
   remove: RemoveEnv
@@ -37,7 +40,7 @@ export type ControlEnv = {
   changed(data: { repoId: string; worktreeId: string }): void
 }
 
-type SleepParams = { worktree: string; withDescendants?: boolean }
+type SleepParams = { worktree: string; withDescendants?: boolean; window?: unknown }
 type CleanupRemoveParams = { selection: CleanupSelection[]; confirmed: boolean }
 type Snapshot = { generatedAt: number; candidates: CleanupCandidate[]; worktrees: WorktreeControl[] }
 
@@ -76,6 +79,85 @@ async function readSessions(call: PublicCall): Promise<SessionEvidence> {
     sessions.push(record)
   }
   return { sessions, error: null, malformed }
+}
+type VolatileEvidence = { value: boolean | null; evidence: unknown; detail: string | null }
+
+function collectPaneSessions(value: unknown, sessionIds: string[]): boolean {
+  const node = recordOf(value)
+  if (!node) return false
+  if (node.kind === 'pane') {
+    if (typeof node.session !== 'string' || node.session === '') return false
+    sessionIds.push(node.session)
+    return true
+  }
+  if (node.kind !== 'split') return false
+  return collectPaneSessions(node.first, sessionIds) && collectPaneSessions(node.second, sessionIds)
+}
+
+function collectWorkspaceSessions(value: unknown, sessionIds: string[]): boolean {
+  const node = recordOf(value)
+  if (!node) return false
+  if (node.kind === 'split') {
+    return collectWorkspaceSessions(node.first, sessionIds) && collectWorkspaceSessions(node.second, sessionIds)
+  }
+  if (node.kind !== 'group' || !Array.isArray(node.tabs)) return false
+  for (const raw of node.tabs) {
+    const tab = recordOf(raw)
+    if (!tab) return false
+    if (tab.kind === 'view') continue
+    if (!collectPaneSessions(tab.root, sessionIds)) return false
+  }
+  return true
+}
+
+async function terminalVolatileEvidence(call: PublicCall, worktreeId: string, sessions: SessionEvidence): Promise<VolatileEvidence> {
+  const terminal = await readPublic(call, 'quirky.terminal/workspace', { workspace: worktreeId })
+  if (terminal.error !== null) {
+    return { value: null, evidence: ['terminal-workspace-error', terminal.error], detail: terminal.error }
+  }
+  const response = recordOf(terminal.value)
+  const workspace = recordOf(response?.workspace)
+  const sessionIds: string[] = []
+  if (!workspace || workspace.id !== worktreeId || !collectWorkspaceSessions(workspace.root, sessionIds)) {
+    return { value: null, evidence: ['terminal-workspace-malformed'], detail: 'The terminal owner returned incomplete workspace or pane/session bindings.' }
+  }
+  if (sessions.sessions === null || sessions.malformed) {
+    return { value: null, evidence: ['session-evidence-unknown', sessions.error, sessions.malformed], detail: 'The public session inventory is incomplete.' }
+  }
+  const byId = new Map<string, Record<string, unknown>>()
+  for (const session of sessions.sessions) {
+    if (typeof session.id !== 'string' || byId.has(session.id)) {
+      return { value: null, evidence: ['duplicate-session-id'], detail: 'The public session inventory had duplicate process identities.' }
+    }
+    byId.set(session.id, session)
+  }
+  const bound = new Set(sessionIds)
+  let live = false
+  const sessionFacts: unknown[] = []
+  for (const session of sessions.sessions) {
+    if (session.worktreeId !== worktreeId) continue
+    if (typeof session.status !== 'string') {
+      return { value: null, evidence: ['session-status-unknown', session.id], detail: 'A workspace session had no runtime status.' }
+    }
+    sessionFacts.push([session.id, session.status, bound.has(session.id as string)])
+    if (session.status === 'exited') continue
+    if (LIVE_SESSION_STATUSES[session.status] !== true) {
+      return { value: null, evidence: ['session-status-unknown', session.id, session.status], detail: `Session ${String(session.id)} has an unknown runtime status.` }
+    }
+    live = true
+  }
+  for (const id of bound) {
+    const session = byId.get(id)
+    if (!session || session.worktreeId !== worktreeId || typeof session.status !== 'string') {
+      return { value: null, evidence: ['pane-session-unknown', id], detail: `Terminal pane session ${id} is not bound to a complete live session record.` }
+    }
+    if (session.status !== 'exited') live = true
+  }
+  return {
+    value: live,
+    evidence: ['terminal-workspace', workspace.id, workspace.revision ?? null, [...bound].sort(), sessionFacts],
+    detail: null
+  }
 }
 
 function sessionBlockers(
@@ -134,46 +216,49 @@ async function sleepTargets(env: ControlEnv, params: SleepParams, identity: Call
   if (params.withDescendants !== undefined && typeof params.withDescendants !== 'boolean') {
     throw env.fail('invalid-params', 'withDescendants must be a boolean')
   }
+  if (params.window !== undefined && (typeof params.window !== 'number' || !Number.isSafeInteger(params.window) || params.window < 1)) {
+    throw env.fail('invalid-params', 'window must be a positive live UI connection ID')
+  }
   const { worktree, all } = await env.find(params.worktree, identity)
   return params.withDescendants === true ? [worktree, ...descendantsOf(all, worktree.id)] : [worktree]
 }
 
-type SleepInspection = { preview: WorktreeSleepPreview; closeView: boolean }
+type SleepInspection = { preview: WorktreeSleepPreview; closeView: boolean; selected: SelectedWindow | null }
 
-async function inspectSleep(env: ControlEnv, targets: WorktreeControl[]): Promise<SleepInspection> {
-  const evidence = await readUiState(env)
+async function inspectSleep(env: ControlEnv, targets: WorktreeControl[], window?: unknown): Promise<SleepInspection> {
   const blockersById = new Map(targets.map((worktree) => [worktree.id, [] as CleanupBlocker[]]))
+  let selected: SelectedWindow | null = null
   let closeView = false
-  if (evidence.error !== null) {
-    for (const blockers of blockersById.values()) {
-      addBlocker(blockers, 'ui-view-unknown', `Could not inspect the visible workspace view before sleep: ${evidence.error}.`)
-    }
-  } else {
-    const state = recordOf(evidence.value)
+  let noConnectedWindow = false
+  if (window === undefined) {
+    const stateEvidence = await readPublic(env.call, 'ui.state')
+    const state = recordOf(stateEvidence.value)
     const layout = recordOf(state?.layout)
-    if (!Array.isArray(state?.windows) || !layout || !('view' in layout)) {
+    noConnectedWindow = stateEvidence.error === null && Array.isArray(state?.windows) &&
+      state.windows.length === 0 && layout?.view === null
+  }
+  if (!noConnectedWindow) {
+    try {
+      selected = await selectWindow(env, window)
+    } catch (error) {
+      const message = messageOf(error)
+      const code = /multiple windows|ambiguous/i.test(message) ? 'ui-view-ambiguous' : 'ui-view-unknown'
+      for (const blockers of blockersById.values()) addBlocker(blockers, code, `Could not inspect the selected workspace view before sleep: ${message}.`)
+    }
+  }
+  if (selected?.view !== null && selected !== null) {
+    const view = recordOf(selected.view)
+    const input = recordOf(view?.input)
+    if (!view || (view.id === 'view:quirky.session/worktree' && !input)) {
       for (const blockers of blockersById.values()) {
-        addBlocker(blockers, 'ui-view-unknown', 'Canonical UI state did not include per-window visibility evidence.')
+        addBlocker(blockers, 'ui-view-unknown', 'The open workspace view does not expose its exact worktree identity.')
       }
-    } else if (state.windows.length > 1) {
-      for (const blockers of blockersById.values()) {
-        addBlocker(blockers, 'ui-view-ambiguous', 'Multiple windows are connected, but the public API exposes no per-window view close route.')
-      }
-    } else if (layout.view !== null) {
-      const view = recordOf(layout.view)
-      const input = recordOf(view?.input)
-      if (!view || (view.id === 'view:quirky.session/worktree' && !input)) {
-        for (const blockers of blockersById.values()) {
-          addBlocker(blockers, 'ui-view-unknown', 'The open workspace view does not expose its exact worktree identity.')
-        }
-      } else {
-        const activeId = typeof input?.worktree === 'string' ? input.worktree : null
-        const activePath = typeof input?.path === 'string' ? input.path : null
-        const activeTarget = targets.find((worktree) =>
-          activeId === worktree.id || (activePath !== null && pathIsWithin(worktree.path, activePath))
-        )
-        if (activeTarget) closeView = true
-      }
+    } else {
+      const activeId = typeof input?.worktree === 'string' ? input.worktree : null
+      const activePath = typeof input?.path === 'string' ? input.path : null
+      closeView = targets.some((worktree) =>
+        activeId === worktree.id || (activePath !== null && pathIsWithin(worktree.path, activePath))
+      )
     }
   }
   return {
@@ -189,7 +274,8 @@ async function inspectSleep(env: ControlEnv, targets: WorktreeControl[]): Promis
         }
       })
     },
-    closeView
+    closeView,
+    selected
   }
 }
 
@@ -199,19 +285,21 @@ export async function previewSleep(
   identity: CallerIdentity
 ): Promise<WorktreeSleepPreview> {
   const targets = await sleepTargets(env, params, identity)
-  return (await inspectSleep(env, targets)).preview
+  return (await inspectSleep(env, targets, params.window)).preview
 }
 
 async function setSleepState(env: ControlEnv, params: SleepParams, identity: CallerIdentity, sleeping: boolean): Promise<{ worktrees: WorktreeSleepState[] }> {
   const targets = await sleepTargets(env, params, identity)
   if (sleeping) {
-    const inspection = await inspectSleep(env, targets)
+    const inspection = await inspectSleep(env, targets, params.window)
     const blocked = inspection.preview.worktrees.filter((row) => !row.allowed)
     if (blocked.length > 0) {
       const detail = blocked.map((row) => `${row.name}: ${row.blockers.map((blocker) => blocker.detail).join(' ')}`).join(' ')
       throw env.fail('conflict', `Could not sleep the selected workspace subtree. ${detail}`, { reason: 'sleep-view-unsafe', worktrees: blocked })
     }
-    if (inspection.closeView) await env.call('ui.view.close')
+    if (inspection.closeView && inspection.selected?.view) {
+      await closeWindowView(env, { ...inspection.selected, view: inspection.selected.view })
+    }
   }
   const changedAt = Date.now()
   env.store.transaction(() => {
@@ -231,8 +319,30 @@ export function wakeWorktree(env: ControlEnv, params: SleepParams, identity: Cal
   return setSleepState(env, params, identity, false)
 }
 
-async function readUiState(env: ControlEnv): Promise<ReadEvidence> {
-  return readPublic(env.call, 'ui.state')
+async function readWindowEvidence(call: PublicCall): Promise<WindowEvidence> {
+  const publicState = await readPublic(call, 'ui.state')
+  if (publicState.error !== null) return { layouts: null, connIds: [], error: publicState.error, malformed: false }
+  const state = recordOf(publicState.value)
+  if (!Array.isArray(state?.windows)) return { layouts: null, connIds: [], error: null, malformed: true }
+  const connIds: number[] = []
+  const layouts: WindowLayoutEvidence[] = []
+  for (const raw of state.windows) {
+    const window = recordOf(raw)
+    if (!window || typeof window.connId !== 'number' || !Number.isSafeInteger(window.connId) || window.connId < 1) {
+      return { layouts: null, connIds, error: null, malformed: true }
+    }
+    const connId = window.connId
+    connIds.push(connId)
+    const selected = await readPublic(call, 'ui.window.state', { connId })
+    if (selected.error !== null) return { layouts: null, connIds, error: selected.error, malformed: false }
+    const selectedState = recordOf(selected.value)
+    const layout = recordOf(selectedState?.layout)
+    if (selectedState?.connId !== connId || !layout || !('view' in layout)) {
+      return { layouts: null, connIds, error: null, malformed: true }
+    }
+    layouts.push({ connId, layout })
+  }
+  return { layouts, connIds, error: null, malformed: false }
 }
 
 async function readEditorState(env: ControlEnv): Promise<ReadEvidence> {
@@ -251,30 +361,42 @@ function pathIsWithin(root: string, candidate: string): boolean {
 
 function addActiveBlockers(
   worktree: WorktreeControl,
-  ui: ReadEvidence,
+  ui: WindowEvidence,
   sidebar: ReadEvidence,
+  knownWorkspaceIds: ReadonlySet<string>,
   blockers: CleanupBlocker[]
 ): unknown[] {
   const identityParts: unknown[] = []
   if (ui.error !== null) {
     addBlocker(blockers, 'active-workspace-unknown', `Could not read canonical UI state: ${ui.error}.`)
+    identityParts.push(['ui-state-error', ui.error, ui.connIds])
+  } else if (ui.layouts === null) {
+    addBlocker(blockers, 'active-workspace-unknown', 'Canonical UI state did not include valid per-window layouts.')
+    identityParts.push(['window-identities', ui.connIds, 'malformed', ui.malformed])
   } else {
-    const state = recordOf(ui.value)
-    const windows = state?.windows
-    const layout = recordOf(state?.layout)
-    if (!Array.isArray(windows) || !layout) {
-      addBlocker(blockers, 'active-workspace-unknown', 'Canonical UI state did not include connected windows and a layout.')
-    } else {
-      if (windows.length > 1) {
-        addBlocker(blockers, 'active-workspace-unknown', 'Other connected windows may still have this workspace open; their individual layouts are not exposed.')
+    identityParts.push(['window-identities', ui.connIds])
+    for (const window of ui.layouts) {
+      if (window.layout.view === null || window.layout.view === undefined) {
+        identityParts.push([window.connId, null])
+        continue
       }
-      const view = recordOf(layout.view)
+      const view = recordOf(window.layout.view)
       const input = recordOf(view?.input)
-      const activeId = typeof input?.worktree === 'string' ? input.worktree : null
-      const activePath = typeof input?.path === 'string' ? input.path : null
-      const active = activeId === worktree.id || (activePath !== null && pathIsWithin(worktree.path, activePath))
-      identityParts.push(activeId, activePath, windows.length)
-      if (active) addBlocker(blockers, 'active-workspace', 'This workspace is the current UI view.')
+      if (!view || !input) {
+        addBlocker(blockers, 'active-workspace-unknown', `UI connection ${window.connId} has a view without exact workspace input.`)
+        identityParts.push([window.connId, 'view-input-unknown'])
+        continue
+      }
+      const activeId = typeof input.worktree === 'string' ? input.worktree : null
+      const activePath = typeof input.path === 'string' ? input.path : null
+      identityParts.push([window.connId, view.id ?? null, activeId, activePath])
+      if ((activeId !== null && !knownWorkspaceIds.has(activeId)) ||
+        (activeId === null && (activePath === null || !isAbsolute(activePath)))) {
+        addBlocker(blockers, 'active-workspace-unknown', `UI connection ${window.connId} has no resolved canonical workspace owner.`)
+      }
+      if (activeId === worktree.id || (activePath !== null && pathIsWithin(worktree.path, activePath))) {
+        addBlocker(blockers, 'active-workspace', `This workspace is open in UI connection ${window.connId}.`)
+      }
     }
   }
   if (sidebar.error !== null) {
@@ -428,7 +550,7 @@ async function gitBlockers(
 function makeFingerprint(worktree: WorktreeControl, evidence: unknown[]): string {
   const activityDay = Math.floor(Math.max(worktree.lastActivityAt, worktree.createdAt) / DAY_MS)
   const value = JSON.stringify([
-    1,
+    2,
     worktree.id,
     worktree.instanceId,
     worktree.branch,
@@ -469,11 +591,12 @@ async function buildCleanupSnapshot(env: ControlEnv): Promise<Snapshot> {
   }))
   const groups = await env.list.groups()
   const worktrees = [...projectWorktrees.flat(), ...groups.flatMap((group) => listGroup(env.list, group))]
+  const knownWorkspaceIds = new Set(worktrees.map((worktree) => worktree.id))
   const repoById = new Map(repos.map((repo) => [repo.id, repo]))
   const childrenById = new Set(worktrees.flatMap((worktree) => worktree.parentId ? [worktree.parentId] : []))
   const [sessionEvidence, ui, editor, sidebar] = await Promise.all([
     readSessions(env.call),
-    readUiState(env),
+    readWindowEvidence(env.call),
     readEditorState(env),
     readSidebarState(env)
   ])
@@ -486,12 +609,29 @@ async function buildCleanupSnapshot(env: ControlEnv): Promise<Snapshot> {
     const fingerprintEvidence: unknown[] = []
     addWorktreeActivityBlockers(worktree, blockers)
     if (childrenById.has(worktree.id)) addBlocker(blockers, 'has-descendants', 'Remove eligible child workspaces first; cleanup never expands a selection to unselected descendants.')
-    fingerprintEvidence.push(sessionBlockers(worktree.id, sessionEvidence).map((blocker) => [blocker.code, blocker.detail]))
-    for (const blocker of sessionBlockers(worktree.id, sessionEvidence)) addBlocker(blockers, blocker.code, blocker.detail)
-    fingerprintEvidence.push(addActiveBlockers(worktree, ui, sidebar, blockers))
+    const sessionBlockerList = sessionBlockers(worktree.id, sessionEvidence)
+    fingerprintEvidence.push(sessionBlockerList.map((blocker) => [blocker.code, blocker.detail]))
+    for (const blocker of sessionBlockerList) addBlocker(blockers, blocker.code, blocker.detail)
+    const terminal = await terminalVolatileEvidence(env.call, worktree.id, sessionEvidence)
+    const repository = repoById.get(worktree.repoId)
+    const remoteConnected = repository ? false : null
+    worktree.cleanupContext = {
+      ...worktree.cleanupContext,
+      volatile: terminal.value,
+      remoteConnected
+    }
+    fingerprintEvidence.push(terminal.evidence)
+    fingerprintEvidence.push(['remote-execution-context', repository?.id ?? null, repository?.path ?? null, remoteConnected])
+    if (terminal.value !== false) {
+      addBlocker(blockers, 'volatile-local-context', terminal.detail ?? 'Live terminal context remains bound to this workspace.')
+    }
+    if (worktree.cleanupContext.remoteConnected === null) {
+      addBlocker(blockers, 'remote-context-unknown', 'The worktree has no authoritative local repo or remote-host connectivity evidence.')
+    }
+    fingerprintEvidence.push(addActiveBlockers(worktree, ui, sidebar, knownWorkspaceIds, blockers))
     fingerprintEvidence.push(addEditorBlockers(worktree, editor, blockers))
     if (worktree.kind === 'git') {
-      fingerprintEvidence.push(await gitBlockers(env, worktree, repoById.get(worktree.repoId), blockers))
+      fingerprintEvidence.push(await gitBlockers(env, worktree, repository, blockers))
     } else {
       fingerprintEvidence.push('folder-workspace')
     }

@@ -68,7 +68,7 @@ function readSessionRow(value: unknown): OrchestrationSession {
   return { id, worktreeId, cwd }
 }
 
-export async function startOrchestrationFixture(): Promise<OrchestrationFixture> {
+export async function startOrchestrationFixture(options: { additionalBuiltins?: string[] } = {}): Promise<OrchestrationFixture> {
   const root = mkdtempSync(join(tmpdir(), 'quirky-orchestration-'))
   const home = join(root, 'quirky-home')
   const userHome = join(root, 'cli-homes')
@@ -81,13 +81,14 @@ export async function startOrchestrationFixture(): Promise<OrchestrationFixture>
   mkdirSync(userHome, { recursive: true, mode: 0o700 })
   mkdirSync(builtinPluginsDir, { recursive: true, mode: 0o700 })
   writeFileSync(join(builtinPluginsDir, '.test-local-builtins'), '')
-  for (const id of TESTED_BUILTINS) {
+  for (const id of new Set([...TESTED_BUILTINS, ...(options.additionalBuiltins ?? [])])) {
     symlinkSync(resolve(PLUGIN_ROOT, '../' + id), join(builtinPluginsDir, id))
   }
   const isolatedEnvKeys = [
     'HOME',
     'QUIRKY_HOME',
     'PATH',
+    'QUIRKY_AGENT_SEARCH_DIRS',
     'ZDOTDIR',
     'ENV',
     'BASH_ENV',

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import {
   formatContributionId,
   RpcErrorCode,
@@ -12,7 +13,7 @@ import {
 import { expandHome, resolveRealPath, worktreeIdForPath } from './paths'
 import { SelectorSyntaxError, matchWorktrees, type CallerIdentity } from './selector'
 import { BranchCleaner } from './src/daemon/branches'
-import { createWorkspace, suggestName, type CreateEnv, type CreateParams, type PendingStart } from './src/daemon/create'
+import { createWorkspace, prefetchWorktreeCreateBase, suggestName, type CreateEnv, type CreateParams, type PendingStart } from './src/daemon/create'
 import { groupRepoId, listEverything, listGroup, listProject, type ListEnv } from './src/daemon/list'
 import { KeyedQueue } from './src/daemon/queue'
 import { deleteBranch, describeRemove, removeWorktree, type DeleteBranchParams, type InFlightRemove, type RemoveEnv, type RemoveParams } from './src/daemon/remove'
@@ -35,6 +36,8 @@ import { getProjectMetadata, projectMetadata, setExternalInboxSuppressed, setPro
 import { archiveWorktree, linkReference, listReferences, unlinkReference, type RecordEnv } from './src/daemon/records'
 import { readStatusDefinitions, setStatusDefinitions } from './src/daemon/statuses'
 import { navigate, navigationHistoryMove, navigationIndex, navigationState, navigationStep, openIn } from './src/daemon/navigation'
+import { availableHosts } from './src/daemon/hosts'
+import { cleanupExpiredPreparedCheckouts, cleanupPreparedCheckouts, PREPARATION_TTL_MS } from './src/daemon/prepared'
 import type { CleanupSelection, WorktreeControl } from './src/control-types'
 
 const DEFAULT_WORKTREES_ROOT = '~/quirky/workspaces'
@@ -90,21 +93,57 @@ function originCreatorOf(caller: PluginCaller): WorktreeOriginCreator {
 }
 
 
+let releasePrepared: (() => Promise<void>) | undefined
 let releasePending: (() => void) | undefined
+let preparedExpiryTimer: ReturnType<typeof setTimeout> | undefined
+let preparedExpiryTask: Promise<void> | undefined
+let preparedExpiryActive = false
 
-/** Drops the agent starts still waiting for a Setup terminal; they do not survive a daemon stop. */
-export function deactivate(): void {
+/** Releases pending starts and the exact locked preparations owned by this plugin instance. */
+export async function deactivate(): Promise<void> {
   releasePending?.()
   releasePending = undefined
+  preparedExpiryActive = false
+  clearTimeout(preparedExpiryTimer)
+  preparedExpiryTimer = undefined
+  await preparedExpiryTask
+  preparedExpiryTask = undefined
+  const cleanup = releasePrepared
+  releasePrepared = undefined
+  await cleanup?.()
 }
 
 export async function activate(context: PluginContext): Promise<void> {
   const store = openWorktreeStore(context)
+  const preparationOwnerId = randomUUID()
+  preparedExpiryActive = true
 
   const fail = (kind: ErrorKind, message: string, data?: unknown) =>
     data === undefined ? context.error(kind, message) : Object.assign(context.error(kind, message), { data })
 
   const listRepos = async () => (await context.call('quirky.repo/list')) as Repo[]
+  const preparedEnv = { store, ownerId: preparationOwnerId, log: context.log }
+  let preparedPoolQueue: KeyedQueue | undefined
+  const armPreparedExpiry = (): void => {
+    const queue = preparedPoolQueue
+    if (!preparedExpiryActive || preparedExpiryTask || !queue) return
+    clearTimeout(preparedExpiryTimer)
+    preparedExpiryTimer = undefined
+    const first = store.get<{ created_at: number | null }>('SELECT MIN(created_at) AS created_at FROM prepared_worktrees')
+    if (typeof first?.created_at !== 'number') return
+    const remaining = first.created_at + PREPARATION_TTL_MS - Date.now()
+    const delay = Math.max(remaining, remaining <= 0 ? 60_000 : 0)
+    preparedExpiryTimer = setTimeout(() => {
+      preparedExpiryTimer = undefined
+      preparedExpiryTask = listRepos()
+        .then((repos) => queue.run('prepared-worktree-pool', () => cleanupExpiredPreparedCheckouts(preparedEnv, repos)))
+        .catch((error: unknown) => context.log(`could not expire prepared worktrees: ${errorMessage(error)}`))
+        .finally(() => {
+          preparedExpiryTask = undefined
+          if (preparedExpiryActive) armPreparedExpiry()
+        })
+    }, delay)
+  }
 
   const listGroups = async () => (await context.call('quirky.repo/groupList')) as ProjectGroup[]
 
@@ -206,6 +245,8 @@ export async function activate(context: PluginContext): Promise<void> {
     return errors
   }
 
+  const poolQueue = new KeyedQueue()
+  preparedPoolQueue = poolQueue
   const createEnv: CreateEnv = {
     ...listEnv,
     fail,
@@ -214,6 +255,7 @@ export async function activate(context: PluginContext): Promise<void> {
     subscribe: (listener) => context.subscribe(listener),
     getSetting: (name) => context.getSetting(name),
     dataDir: context.dataDir,
+    preparationOwnerId,
     worktreesRoot,
     worktreeDirName,
     resolveRepo: async (selector) => (await context.call('quirky.repo/resolve', { selector })) as Repo,
@@ -222,10 +264,20 @@ export async function activate(context: PluginContext): Promise<void> {
       const { worktree, all } = await findWorktree(selector, identity)
       return { worktree, all }
     },
-    queue: new KeyedQueue(),
+    queue: poolQueue,
     suggestions: new Map(),
     pending: pendingStarts
   }
+  releasePrepared = async () => {
+    try {
+      const repos = await listRepos()
+      await poolQueue.run('prepared-worktree-pool', () => cleanupPreparedCheckouts(preparedEnv, repos))
+    } catch (error) {
+      context.log(`could not clean prepared worktrees during deactivation: ${errorMessage(error)}`)
+    }
+  }
+  await releasePrepared()
+  armPreparedExpiry()
 
   const removeEnv: RemoveEnv = {
     ...listEnv,
@@ -416,13 +468,11 @@ export async function activate(context: PluginContext): Promise<void> {
           listed !== undefined &&
           listed.instanceId === row.instance_id &&
           listed.automationProvenance?.kind === 'created-by-automation'
-        const otherClient =
-          row.creator_kind === 'paired-device' &&
-          typeof row.creator_id === 'string' &&
-          caller.role === 'mobile' &&
-          typeof caller.deviceId === 'string'
-            ? row.creator_id !== caller.deviceId
-            : null
+        let otherClient: boolean | null = null
+        if (row.creator_kind === 'paired-device' && typeof row.creator_id === 'string' &&
+          caller.role === 'mobile' && typeof caller.deviceId === 'string') {
+          otherClient = row.creator_id !== caller.deviceId
+        }
         return {
           worktreeId: row.id,
           automation: hasAutomationProvenance ? true : knownCreator ? false : null,
@@ -430,7 +480,21 @@ export async function activate(context: PluginContext): Promise<void> {
         }
       })
     },
-    create: (params, caller) => createWorkspace(createEnv, params as CreateParams, identityOf(caller), originCreatorOf(caller)),
+    availableHosts: () => availableHosts((method, params) => context.call(method, params), fail),
+    async create(params, caller) {
+      try {
+        return await createWorkspace(createEnv, params as CreateParams, identityOf(caller), originCreatorOf(caller))
+      } finally {
+        armPreparedExpiry()
+      }
+    },
+    async prefetchCreate(params) {
+      try {
+        return await prefetchWorktreeCreateBase(createEnv, params as { repo: string; base?: string })
+      } finally {
+        armPreparedExpiry()
+      }
+    },
     suggestName: (params) => suggestName(createEnv, params as { repo: string }),
     set: (params, caller) => setWorktree(setEnv, params as SetParams, identityOf(caller)),
     createGroup: (params, caller) => createGroupForWorktree(setEnv, params as CreateGroupParams, identityOf(caller)),
@@ -448,16 +512,16 @@ export async function activate(context: PluginContext): Promise<void> {
     async resolve(params, caller) {
       return (await findWorktree(String(params.selector), identityOf(caller, params))).worktree
     },
-    navigate: (params, caller) => navigate(navigationEnv, params as { worktree: string; target?: unknown }, identityOf(caller)),
-    openIn: (params, caller) => openIn(navigationEnv, params as { worktree: string; target: unknown }, identityOf(caller)),
-    navigationState: () => navigationState(store),
-    navigationBack: () => navigationHistoryMove(navigationEnv, 'back'),
-    navigationForward: () => navigationHistoryMove(navigationEnv, 'forward'),
+    navigate: (params, caller) => navigate(navigationEnv, params as { worktree: string; target?: unknown; window?: unknown }, identityOf(caller)),
+    openIn: (params, caller) => openIn(navigationEnv, params as { worktree: string; target: unknown; window?: unknown }, identityOf(caller)),
+    navigationState: (params) => navigationState(navigationEnv, params.window),
+    navigationBack: (params) => navigationHistoryMove(navigationEnv, 'back', params.window),
+    navigationForward: (params) => navigationHistoryMove(navigationEnv, 'forward', params.window),
     navigationMove(params) {
       if (params.direction !== 'previous' && params.direction !== 'next') throw fail('invalid-params', 'direction must be previous or next')
-      return navigationStep(navigationEnv, params.direction)
+      return navigationStep(navigationEnv, params.direction, params.window)
     },
-    navigationIndex: (params) => navigationIndex(navigationEnv, params.index),
+    navigationIndex: (params) => navigationIndex(navigationEnv, params.index, params.window),
     projectMetadata(params) {
       if (params.repo === undefined) throw fail('invalid-params', 'repo is required')
       return getProjectMetadata(projectEnv, String(params.repo), readStockOptions(store).externalVisibilityDefault)
@@ -534,8 +598,8 @@ export async function activate(context: PluginContext): Promise<void> {
       }
       return result
     },
-    sleepPreview: (params, caller) => previewSleep(controlEnv, params as { worktree: string; withDescendants?: boolean }, identityOf(caller)),
-    sleep: (params, caller) => sleepWorktree(controlEnv, params as { worktree: string; withDescendants?: boolean }, identityOf(caller)),
+    sleepPreview: (params, caller) => previewSleep(controlEnv, params as { worktree: string; withDescendants?: boolean; window?: unknown }, identityOf(caller)),
+    sleep: (params, caller) => sleepWorktree(controlEnv, params as { worktree: string; withDescendants?: boolean; window?: unknown }, identityOf(caller)),
     wake: (params, caller) => wakeWorktree(controlEnv, params as { worktree: string; withDescendants?: boolean }, identityOf(caller)),
     cleanupPreview: () => cleanupPreview(controlEnv),
     cleanupIgnore: (params) => cleanupIgnore(controlEnv, params as { worktreeId: string; fingerprint: string }),

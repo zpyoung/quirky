@@ -1,5 +1,7 @@
 import { homedir } from 'node:os'
 import { isReservedLaunchEnv, type ContributionInfo, type PluginCaller, type PluginContext, type QuirkyEvent } from '@quirky/protocol'
+import { isPlainObject } from './core/guards'
+import { materializeProviderEnvironment } from './core/provider-env'
 import { buildCatalog } from './core/catalog'
 import { extrasSummary, parseExtraArgs } from './core/extras'
 import { agentPermissionMode, applyPermissionMode, effectiveArgs, effectiveEnv, PermissionError, permissionSummary } from './core/permissions'
@@ -21,6 +23,7 @@ import {
   type LaunchPlan,
   type LaunchRecord,
   type ModelDecl,
+  type LaunchCatalog,
   type OptionDecl,
   type OptionUse,
   type ParsedExtras,
@@ -29,9 +32,9 @@ import {
   type Resolution,
   type ValidSelection
 } from './core/types'
-import type { ModelDiscovery } from './discovery-types'
-import { parseDiscoveredModels } from './core/discovered-models'
-import { runModelProbe, type ModelProbeResult } from './model-probe'
+import type { DiscoveryOptionInfo, ModelDiscovery } from './discovery-types'
+import { parseCodexAppServerModels, parseDiscoveredModels } from './core/discovered-models'
+import { runCodexAppServerModelProbe, runModelProbe, type ModelProbeResult } from './model-probe'
 import { DeliveryRunner } from './delivery'
 import { detect, readLoginPath, searchDirs, type Detection, type SearchDirs } from './detect'
 import { Generator } from './generate'
@@ -42,11 +45,12 @@ type Params = Record<string, unknown>
 type Env = Record<string, string | null>
 type Resettable = 'command' | 'args' | 'env'
 
-type OptionInfo = { id: string; label: string; type: 'select' | 'boolean'; choices: { value: string; label: string }[] | null }
+type OptionInfo = DiscoveryOptionInfo
 
-/** What `quirky.agents/options` reports for one agent. */
+/** What `quirky.agents/options` reports for one exact provider host. */
 type OptionsInfo = {
   agent: string
+  host: string
   label: string
   supported: boolean
   discoverable: boolean
@@ -56,8 +60,65 @@ type OptionsInfo = {
   structured: boolean
   extraArgs: ReturnType<typeof extrasSummary>
 }
+type DiscoveredCatalog = { models: ModelDecl[]; unlistedOptions: OptionUse[]; observedAt: number }
+type PairedPeer = { id: string; fingerprint: string; pairingRevision: number }
+type PairedPeerStatus = { fingerprint: string; incarnation: string; capabilities: string[] }
+type PeerAuthority = { peer: PairedPeer; status: PairedPeerStatus }
+type PeerCallReply = { peer: PairedPeer; status: PairedPeerStatus; result: unknown }
+
 /** What `quirky.agents/resolveLaunch` reports: the pick's effect on the launch, `args` shell-quoted. */
 type ResolvedLaunch = Omit<Resolution, 'args'> & { args: string }
+
+const discoveryKey = (agent: string, host: string): string => JSON.stringify([agent, host])
+const normalizedFingerprint = (value: string): string => value.replaceAll(':', '').toLowerCase()
+
+
+function providerEnvironmentOf(value: unknown, source: string): Env {
+  if (!isPlainObject(value)) throw new Error(`${source} returned an invalid environment`)
+  const env: Env = {}
+  for (const [name, entry] of Object.entries(value)) {
+    if (!(entry === null || typeof entry === 'string')) throw new Error(`${source} returned an invalid environment`)
+    env[name] = entry
+  }
+  return env
+}
+
+function plannedEnvironmentOf(value: unknown): Env {
+  if (!isPlainObject(value) || !isPlainObject(value.record) || !Object.hasOwn(value.record, 'env')) {
+    throw new Error('quirky.agents/plan returned an invalid launch record')
+  }
+  return providerEnvironmentOf(value.record.env, 'quirky.agents/plan')
+}
+
+function providerHomeOverridesOf(userEnv: Env): {
+  claude: { value: string | null; source: 'explicit' | 'inherited' | 'absent' }
+  codex: { value: string | null; source: 'explicit' | 'inherited' | 'absent' }
+} {
+  const homeOverride = (name: string) => {
+    if (Object.hasOwn(userEnv, name)) return { value: userEnv[name] ?? null, source: 'explicit' as const }
+    const inherited = process.env[name]
+    return inherited === undefined
+      ? { value: null, source: 'absent' as const }
+      : { value: inherited, source: 'inherited' as const }
+  }
+  return {
+    claude: homeOverride('CLAUDE_CONFIG_DIR'),
+    codex: homeOverride('CODEX_HOME')
+  }
+}
+
+function commonOptions(models: ModelDecl[], catalog: LaunchCatalog): OptionUse[] {
+  return catalog.options.flatMap<OptionUse>((option) => {
+    const uses = models.map((model) => model.options.find((use) => use.id === option.id))
+    const declaredUses = uses.filter((use): use is OptionUse => use !== undefined)
+    if (declaredUses.length !== models.length) return []
+    if (option.type === 'boolean') return [{ id: option.id, choices: null }]
+    const choices = option.choices?.filter(({ value }) =>
+      declaredUses.every((use) => use.choices === null || use.choices.includes(value))
+    ).map(({ value }) => value) ?? []
+    return choices.length === 0 ? [] : [{ id: option.id, choices }]
+  })
+}
 
 const SETTING_PREFIX = 'setting:quirky.agents/'
 const DEFAULT_SETTING = 'default-agent'
@@ -79,11 +140,12 @@ function optionInfo(decls: OptionDecl[], use: OptionUse): OptionInfo {
   return { id: decl.id, label: decl.label, type: decl.type, choices: choices ? choices.map(({ value, label }) => ({ value, label })) : null }
 }
 
-function optionsInfo(entry: AgentEntry): OptionsInfo {
+function optionsInfo(entry: AgentEntry, host: string): OptionsInfo {
   const catalog = entry.launchOptions
   const info = (uses: OptionUse[]) => uses.map((use) => optionInfo(catalog!.options, use))
   return {
     agent: entry.id,
+    host,
     label: entry.label,
     supported: catalog !== null,
     discoverable: entry.modelDiscovery !== null,
@@ -108,7 +170,7 @@ export class AgentsService {
   private readonly generator: Generator
   private readonly goneListeners = new Set<(sessionId: string) => void>()
   private readonly reportedProblems = new Set<string>()
-  private readonly discoveredModels = new Map<string, ModelDecl[]>()
+  private readonly discoveredModels = new Map<string, DiscoveredCatalog>()
   private readonly discoveryJobs = new Map<string, Promise<ModelDiscovery>>()
   private known: { default: unknown; trust: unknown }
   private queue: Promise<void> = Promise.resolve()
@@ -223,22 +285,45 @@ export class AgentsService {
     return { summary: permissionSummary(entries, applied.configs).summary, changed: applied.changed }
   }
 
-  /** The models and options an agent offers at launch, and the extra arguments it accepts. */
-  options = (params: Params): OptionsInfo => optionsInfo(this.launchEntry(this.entryOf(params.agent as string)))
+  /** The models and options an agent offers at the exact selected provider host. */
+  options = async (params: Params): Promise<OptionsInfo> => {
+    for (const key of Object.keys(params)) {
+      if (key !== 'agent' && key !== 'host' && key !== 'expectedIncarnation') {
+        throw this.context.error('invalid-params', `options does not accept ${key}`)
+      }
+    }
+    if (typeof params.agent !== 'string' || params.agent.trim() === '') {
+      throw this.context.error('invalid-params', 'agent must be a non-empty string')
+    }
+    const host = params.host === undefined ? 'local' : params.host
+    if (typeof host !== 'string' || host.trim() === '') throw this.context.error('invalid-params', 'host must be a non-empty string')
+    if (host !== 'local') return this.remoteOptions(params.agent, host)
+    return optionsInfo(this.launchEntry(this.entryOf(params.agent), host), host)
+  }
 
-  /** Runs only the provider command declared by its contribution; no caller model list is accepted. */
+  /** Runs the provider's declared probe on the exact local owner or paired peer; never falls back. */
   discoverModels = async (params: Params): Promise<ModelDiscovery> => {
     for (const key of Object.keys(params)) {
-      if (key !== 'agent' && key !== 'host') throw this.context.error('invalid-params', `discoverModels does not accept ${key}`)
+      if (key !== 'agent' && key !== 'host' && key !== 'expectedIncarnation') {
+        throw this.context.error('invalid-params', `discoverModels does not accept ${key}`)
+      }
     }
-    if (typeof params.agent !== 'string' || params.agent.trim() === '') throw this.context.error('invalid-params', 'agent must be a non-empty string')
-    if (typeof params.host !== 'string' || params.host.trim() === '') throw this.context.error('invalid-params', 'host must be a non-empty string')
-    const entry = this.entryOf(params.agent)
+    if (typeof params.agent !== 'string' || params.agent.trim() === '') {
+      throw this.context.error('invalid-params', 'agent must be a non-empty string')
+    }
+    if (typeof params.host !== 'string' || params.host.trim() === '') {
+      throw this.context.error('invalid-params', 'host must be a non-empty string')
+    }
+    if (params.expectedIncarnation !== undefined &&
+      (typeof params.expectedIncarnation !== 'string' || params.expectedIncarnation === '')) {
+      throw this.context.error('invalid-params', 'expectedIncarnation must be a non-empty string')
+    }
+    const agent = params.agent
     const host = params.host
-    const key = JSON.stringify([entry.id, host])
+    const key = discoveryKey(agent, host)
     const running = this.discoveryJobs.get(key)
     if (running) return running
-    const job = this.probeModels(entry, host)
+    const job = this.probeModels(agent, host)
     this.discoveryJobs.set(key, job)
     try {
       return await job
@@ -253,8 +338,16 @@ export class AgentsService {
    * configuration. Starts nothing, writes no trust record and emits no event, so it also
    * resolves for a disabled agent.
    */
-  resolveLaunch = (params: Params): ResolvedLaunch => {
-    const entry = this.launchEntry(this.entryOf(params.agent as string))
+  resolveLaunch = async (params: Params): Promise<ResolvedLaunch> => {
+    const host = params.host === undefined ? 'local' : params.host
+    if (typeof host !== 'string' || host.trim() === '') throw this.context.error('invalid-params', 'host must be a non-empty string')
+    if (host !== 'local') {
+      if (typeof params.agent !== 'string' || params.agent.trim() === '') {
+        throw this.context.error('invalid-params', 'agent must be a non-empty string')
+      }
+      return this.remoteResolveLaunch(params.agent, host, params)
+    }
+    const entry = this.launchEntry(this.entryOf(params.agent as string), host)
     const config = this.configs.get(entry.id)
     const structured = params.structured === true
     return this.guard(() => {
@@ -495,32 +588,99 @@ export class AgentsService {
     return entry
   }
 
-  private launchEntry(entry: AgentEntry): AgentEntry {
-    const models = this.discoveredModels.get(entry.id)
-    if (!entry.launchOptions || !models) return entry
-    return { ...entry, launchOptions: { ...entry.launchOptions, models, unlisted: 'refuse', unlistedOptions: [] } }
+  private launchEntry(entry: AgentEntry, host = 'local'): AgentEntry {
+    const catalog = entry.launchOptions
+    const discovered = this.discoveredModels.get(discoveryKey(entry.id, host))
+    if (!catalog || !discovered) return entry
+    return {
+      ...entry,
+      launchOptions: {
+        ...catalog,
+        models: discovered.models,
+        unlisted: 'refuse',
+        unlistedOptions: discovered.unlistedOptions
+      }
+    }
   }
 
   private discoveryFailure(agent: string, host: string, reason: string, status: ModelDiscovery['status'] = 'unavailable'): ModelDiscovery {
-    return { agent, host, observedAt: Date.now(), status, authoritative: false, models: [], reason }
+    return {
+      agent,
+      host,
+      observedAt: Date.now(),
+      status,
+      authoritative: false,
+      models: [],
+      unlisted: 'refuse',
+      unlistedOptions: [],
+      reason
+    }
   }
 
-  private async probeModels(entry: AgentEntry, host: string): Promise<ModelDiscovery> {
+  private async probeModels(agent: string, host: string): Promise<ModelDiscovery> {
+    if (host !== 'local') return this.probeRemoteModels(agent, host)
+    return this.probeLocalModels(this.entryOf(agent))
+  }
+
+  private async codexProbeEnvironment(agent: string): Promise<Record<string, string>> {
+    const cwd = process.cwd()
+    const plan = await this.context.call('quirky.agents/plan', { agent, cwd })
+    const userEnv = plannedEnvironmentOf(plan)
+    const prepared = await this.context.call('quirky.accounts/prepareProviderEnv', {
+      agent,
+      cwd,
+      homeOverrides: providerHomeOverridesOf(userEnv)
+    })
+    if (
+      !isPlainObject(prepared) ||
+      !Object.hasOwn(prepared, 'env') ||
+      !Object.hasOwn(prepared, 'account') ||
+      prepared.shellInit !== null ||
+      !(prepared.account === null || isPlainObject(prepared.account))
+    ) {
+      throw new Error('quirky.accounts/prepareProviderEnv returned an invalid result')
+    }
+    return materializeProviderEnvironment(process.env, [
+      userEnv,
+      providerEnvironmentOf(prepared.env, 'quirky.accounts/prepareProviderEnv')
+    ])
+  }
+
+  private async probeLocalModels(entry: AgentEntry): Promise<ModelDiscovery> {
     const catalog = entry.launchOptions
     const declaration = entry.modelDiscovery
-    if (!catalog || !declaration) return this.discoveryFailure(entry.id, host, 'the provider does not declare model discovery')
-    if (!this.detection.installed(entry.id)) return this.discoveryFailure(entry.id, host, 'the provider executable is not installed')
+    if (!catalog || !declaration) return this.discoveryFailure(entry.id, 'local', 'the provider does not declare model discovery')
+    if (!this.detection.installed(entry.id)) return this.discoveryFailure(entry.id, 'local', 'the provider executable is not installed')
     const launch = tokenize(entry.launch)
-    if (!launch.ok || launch.tokens.length === 0) return this.discoveryFailure(entry.id, host, 'the provider launch command is invalid')
+    if (!launch.ok || launch.tokens.length === 0) return this.discoveryFailure(entry.id, 'local', 'the provider launch command is invalid')
     const executable = this.detection.resolveExecutable(launch.tokens[0]!)
-    if (!executable) return this.discoveryFailure(entry.id, host, 'the provider executable could not be resolved')
+    if (!executable) return this.discoveryFailure(entry.id, 'local', 'the provider executable could not be resolved')
 
     const fingerprint = JSON.stringify({ plugin: entry.plugin, launch: entry.launch, declaration, catalog })
     let run: ModelProbeResult
-    try {
-      run = await runModelProbe([executable, ...launch.tokens.slice(1), ...declaration.args], declaration.timeoutMs)
-    } catch {
-      return this.discoveryFailure(entry.id, host, 'the provider model probe failed')
+    if (declaration.protocol === 'codex-app-server') {
+      let env: Record<string, string>
+      try {
+        env = await this.codexProbeEnvironment(entry.id)
+      } catch {
+        return this.discoveryFailure(entry.id, 'local', 'the provider account environment could not be prepared')
+      }
+      try {
+        run = await runCodexAppServerModelProbe(
+          [executable, ...launch.tokens.slice(1), '-c', 'approval_policy=never', '-c', 'features.plugins=false', '-s', 'read-only', '-a', 'never', 'app-server'],
+          declaration.timeoutMs,
+          env,
+          process.cwd()
+        )
+      } catch {
+        return this.discoveryFailure(entry.id, 'local', 'the provider model probe failed')
+      }
+    } else {
+      try {
+        run = await runModelProbe([executable, ...launch.tokens.slice(1), ...declaration.args], declaration.timeoutMs)
+      } catch {
+        return this.discoveryFailure(entry.id, 'local', 'the provider model probe failed')
+      }
     }
     if (!run.ok) {
       const reasons: Record<typeof run.reason, string> = {
@@ -528,27 +688,222 @@ export class AgentsService {
         'too-much-output': 'the provider model probe exceeded its output limit',
         'could-not-start': 'the provider model probe could not start',
         'nonzero-exit': 'the provider model probe exited unsuccessfully',
-        'output-not-closed': 'the provider model probe output did not close'
+        'output-not-closed': 'the provider model probe output did not close',
+        'malformed-output': 'the provider returned malformed model data'
       }
-      return this.discoveryFailure(entry.id, host, reasons[run.reason])
+      return this.discoveryFailure(entry.id, 'local', reasons[run.reason])
     }
     let models: ModelDecl[]
     try {
-      models = parseDiscoveredModels(run.stdout, catalog)
+      models = declaration.protocol === 'codex-app-server'
+        ? parseCodexAppServerModels(run.stdout, catalog)
+        : parseDiscoveredModels(run.stdout, catalog)
     } catch {
-      return this.discoveryFailure(entry.id, host, 'the provider returned malformed model data')
+      return this.discoveryFailure(entry.id, 'local', 'the provider returned malformed model data')
     }
     const current = this.catalog.agents.find((candidate) => candidate.id === entry.id)
     const currentFingerprint = current
       ? JSON.stringify({ plugin: current.plugin, launch: current.launch, declaration: current.modelDiscovery, catalog: current.launchOptions })
       : null
-    if (currentFingerprint !== fingerprint) return this.discoveryFailure(entry.id, host, 'the provider declaration changed during discovery')
-    if (models.length === 0) return this.discoveryFailure(entry.id, host, 'the provider returned no models', 'available')
-    if (JSON.stringify(this.discoveredModels.get(entry.id) ?? null) !== JSON.stringify(models)) {
-      this.discoveredModels.set(entry.id, models)
+    if (currentFingerprint !== fingerprint) {
+      return this.discoveryFailure(entry.id, 'local', 'the provider declaration changed during discovery')
+    }
+    if (models.length === 0) return this.discoveryFailure(entry.id, 'local', 'the provider returned no models', 'available')
+
+    const observedAt = Date.now()
+    const unlistedOptions = commonOptions(models, catalog)
+    const discovered: DiscoveredCatalog = { models, unlistedOptions, observedAt }
+    const key = discoveryKey(entry.id, 'local')
+    if (JSON.stringify(this.discoveredModels.get(key) ?? null) !== JSON.stringify(discovered)) {
+      this.discoveredModels.set(key, discovered)
       this.changed()
     }
-    return { agent: entry.id, host, observedAt: Date.now(), status: 'available', authoritative: true, models }
+    const result: ModelDiscovery = {
+      agent: entry.id,
+      host: 'local',
+      observedAt,
+      status: 'available',
+      authoritative: true,
+      models,
+      unlisted: 'refuse',
+      unlistedOptions: unlistedOptions.map((use) => optionInfo(catalog.options, use))
+    }
+    this.context.emit('modelSnapshot', result)
+    return result
+  }
+
+  private async probeRemoteModels(agent: string, host: string): Promise<ModelDiscovery> {
+    let raw: unknown
+    try {
+      raw = await this.callExactPeer(host, 'quirky.agents/discoverModels', { agent, host: 'local' })
+    } catch {
+      return this.discoveryFailure(agent, host, 'the exact paired provider host is unavailable or unsupported')
+    }
+    if (!isPlainObject(raw) || raw.agent !== agent || raw.host !== 'local' ||
+      raw.authoritative !== true || raw.status !== 'available' || typeof raw.observedAt !== 'number' ||
+      !Number.isFinite(raw.observedAt) || raw.unlisted !== 'refuse' ||
+      !Array.isArray(raw.models) || raw.models.length === 0 || !Array.isArray(raw.unlistedOptions)) {
+      return this.discoveryFailure(agent, host, 'the exact paired provider host returned no authoritative model snapshot')
+    }
+    const models: ModelDecl[] = []
+    for (const item of raw.models) {
+      if (!isPlainObject(item) || typeof item.id !== 'string' || item.id.trim() === '' ||
+        typeof item.label !== 'string' || item.label.trim() === '' ||
+        !(item.description === null || typeof item.description === 'string') || !Array.isArray(item.options)) {
+        return this.discoveryFailure(agent, host, 'the exact paired provider host returned malformed model data')
+      }
+      const options: OptionUse[] = []
+      for (const use of item.options) {
+        if (!isPlainObject(use) || typeof use.id !== 'string' ||
+          !(use.choices === null || (Array.isArray(use.choices) && use.choices.every((choice) => typeof choice === 'string')))) {
+          return this.discoveryFailure(agent, host, 'the exact paired provider host returned malformed model data')
+        }
+        options.push({ id: use.id, choices: use.choices as string[] | null })
+      }
+      models.push({ id: item.id, label: item.label, description: item.description, options })
+    }
+    const unlistedOptions: DiscoveryOptionInfo[] = []
+    for (const option of raw.unlistedOptions) {
+      if (!isPlainObject(option) || typeof option.id !== 'string' || typeof option.label !== 'string' ||
+        (option.type !== 'select' && option.type !== 'boolean') ||
+        !(option.choices === null || (Array.isArray(option.choices) && option.choices.every((choice) =>
+          isPlainObject(choice) && typeof choice.value === 'string' && typeof choice.label === 'string')))) {
+        return this.discoveryFailure(agent, host, 'the exact paired provider host returned malformed model options')
+      }
+      unlistedOptions.push({
+        id: option.id,
+        label: option.label,
+        type: option.type,
+        choices: option.choices as DiscoveryOptionInfo['choices']
+      })
+    }
+    const result: ModelDiscovery = {
+      agent,
+      host,
+      observedAt: raw.observedAt,
+      status: 'available',
+      authoritative: true,
+      models,
+      unlisted: 'refuse',
+      unlistedOptions
+    }
+    this.context.emit('modelSnapshot', result)
+    return result
+  }
+
+  private async remoteOptions(agent: string, host: string): Promise<OptionsInfo> {
+    let raw: unknown
+    try {
+      raw = await this.callExactPeer(host, 'quirky.agents/options', { agent })
+    } catch {
+      throw this.context.error('conflict', 'The exact paired provider host is unavailable or unsupported.')
+    }
+    if (!isPlainObject(raw) || raw.agent !== agent || raw.host !== 'local' ||
+      typeof raw.label !== 'string' || typeof raw.supported !== 'boolean' || typeof raw.discoverable !== 'boolean' ||
+      !Array.isArray(raw.models) || (raw.unlisted !== 'accept' && raw.unlisted !== 'refuse') ||
+      !Array.isArray(raw.unlistedOptions) || typeof raw.structured !== 'boolean' ||
+      !isPlainObject(raw.extraArgs)) {
+      throw this.context.error('conflict', 'The exact paired provider host returned invalid launch options.')
+    }
+    return { ...raw, host } as unknown as OptionsInfo
+  }
+
+  private async remoteResolveLaunch(agent: string, host: string, params: Params): Promise<ResolvedLaunch> {
+    const forwarded: Params = { agent }
+    for (const key of ['model', 'options', 'extraArgs', 'structured'] as const) {
+      if (Object.hasOwn(params, key)) forwarded[key] = params[key]
+    }
+    let raw: unknown
+    try {
+      raw = await this.callExactPeer(host, 'quirky.agents/resolveLaunch', forwarded)
+    } catch {
+      throw this.context.error('conflict', 'The exact paired provider host is unavailable or could not resolve this launch.')
+    }
+    if (!isPlainObject(raw) || !Array.isArray(raw.added) || typeof raw.args !== 'string' ||
+      !isPlainObject(raw.structured) || !Array.isArray(raw.shadowed)) {
+      throw this.context.error('conflict', 'The exact paired provider host returned an invalid launch resolution.')
+    }
+    return raw as unknown as ResolvedLaunch
+  }
+
+  private async callExactPeer(host: string, method: string, params: Params): Promise<unknown> {
+    let peersValue: unknown
+    try {
+      peersValue = await this.context.call('quirky.orchestration/peerList', {})
+    } catch {
+      throw this.context.error('conflict', 'Paired provider-host authority is unavailable.')
+    }
+    if (!isPlainObject(peersValue) || !Array.isArray(peersValue.peers)) {
+      throw this.context.error('conflict', 'Paired provider-host authority returned an invalid roster.')
+    }
+    const peerValue = peersValue.peers.find((peer) => isPlainObject(peer) && peer.id === host)
+    if (!isPlainObject(peerValue) || typeof peerValue.id !== 'string' ||
+      typeof peerValue.fingerprint !== 'string' || typeof peerValue.pairingRevision !== 'number' ||
+      !Number.isSafeInteger(peerValue.pairingRevision)) {
+      throw this.context.error('conflict', `No exact paired host matches ${host}.`)
+    }
+    const peer: PairedPeer = {
+      id: peerValue.id,
+      fingerprint: normalizedFingerprint(peerValue.fingerprint),
+      pairingRevision: peerValue.pairingRevision
+    }
+    let statusValue: unknown
+    try {
+      statusValue = await this.context.call('quirky.orchestration/peerStatus', {
+        peerId: peer.id,
+        pairingRevision: peer.pairingRevision
+      })
+    } catch {
+      throw this.context.error('conflict', 'The exact paired provider host is unavailable.')
+    }
+    if (!isPlainObject(statusValue) || typeof statusValue.fingerprint !== 'string' ||
+      typeof statusValue.incarnation !== 'string' || statusValue.incarnation === '' ||
+      !Array.isArray(statusValue.capabilities) ||
+      !statusValue.capabilities.every((capability) => typeof capability === 'string') ||
+      normalizedFingerprint(statusValue.fingerprint) !== peer.fingerprint ||
+      !statusValue.capabilities.includes(method)) {
+      throw this.context.error('conflict', `The exact paired host does not advertise ${method}.`)
+    }
+    const status: PairedPeerStatus = {
+      fingerprint: normalizedFingerprint(statusValue.fingerprint),
+      incarnation: statusValue.incarnation,
+      capabilities: statusValue.capabilities as string[]
+    }
+    let replyValue: unknown
+    try {
+      replyValue = await this.context.call('quirky.orchestration/peerCall', {
+        peerId: peer.id,
+        pairingRevision: peer.pairingRevision,
+        method,
+        params: { ...params, expectedIncarnation: status.incarnation },
+        timeoutMs: 15_000
+      })
+    } catch {
+      throw this.context.error('conflict', 'The exact paired provider host could not complete the request.')
+    }
+    if (!isPlainObject(replyValue) || !isPlainObject(replyValue.peer) || !isPlainObject(replyValue.status) ||
+      replyValue.peer.id !== peer.id || replyValue.peer.pairingRevision !== peer.pairingRevision ||
+      typeof replyValue.peer.fingerprint !== 'string' ||
+      normalizedFingerprint(replyValue.peer.fingerprint) !== peer.fingerprint ||
+      replyValue.status.incarnation !== status.incarnation ||
+      typeof replyValue.status.fingerprint !== 'string' ||
+      normalizedFingerprint(replyValue.status.fingerprint) !== peer.fingerprint) {
+      throw this.context.error('conflict', 'The paired provider-host identity changed during the request.')
+    }
+    let currentValue: unknown
+    try {
+      currentValue = await this.context.call('quirky.orchestration/peerList', {})
+    } catch {
+      throw this.context.error('conflict', 'Paired provider-host authority changed during the request.')
+    }
+    const currentPeer = isPlainObject(currentValue) && Array.isArray(currentValue.peers)
+      ? currentValue.peers.find((candidate) => isPlainObject(candidate) && candidate.id === host)
+      : undefined
+    if (!isPlainObject(currentPeer) || currentPeer.pairingRevision !== peer.pairingRevision ||
+      typeof currentPeer.fingerprint !== 'string' || normalizedFingerprint(currentPeer.fingerprint) !== peer.fingerprint) {
+      throw this.context.error('conflict', 'The paired provider-host identity changed during the request.')
+    }
+    return replyValue.result
   }
 
   private guard<T>(work: () => T): T {
