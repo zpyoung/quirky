@@ -46,7 +46,7 @@ function fixture(): ExternalFixture {
 
   const envFixture: ExternalFixture = {
     async start() {
-      const plugin = await startPluginHarness({ plugins: ['quirky.automations'], fakeSession: false, fakeAsk: true, home: quirkyHome })
+      const plugin = await startPluginHarness({ plugins: ['quirky.repo', 'quirky.worktree', 'quirky.agents', 'quirky.checks', 'quirky.structured', 'quirky.session', 'quirky.automations'], fakeSession: false, fakeAsk: true, home: quirkyHome })
       fixtures.push(plugin)
       return plugin
     },

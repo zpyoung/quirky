@@ -40,9 +40,9 @@ describe('automation list model', () => {
       row({ key: 'native:b', id: 'b', name: 'Beta', hostId: 'remote', enabled: false, prompt: 'Check deployment', agentId: 'codex', agentName: 'Codex' })
     ]
 
-    expect(filterListRows(rows, { query: 'release', host: 'local', status: 'enabled', lastRun: 'all', agent: '' }).map(({ id }) => id)).toEqual(['a'])
-    expect(filterListRows(rows, { query: 'codex', host: 'all', status: 'all', lastRun: 'all', agent: '' }).map(({ id }) => id)).toEqual(['b'])
-    expect(filterListRows(rows, { query: '', host: 'remote', status: 'paused', lastRun: 'all', agent: '' }).map(({ id }) => id)).toEqual(['b'])
+    expect(filterListRows(rows, { query: 'release', host: 'local', status: 'enabled', lastRun: 'all', agent: '' }).rows.map(({ id }) => id)).toEqual(['a'])
+    expect(filterListRows(rows, { query: 'codex', host: 'all', status: 'all', lastRun: 'all', agent: '' }).rows.map(({ id }) => id)).toEqual(['b'])
+    expect(filterListRows(rows, { query: '', host: 'remote', status: 'paused', lastRun: 'all', agent: '' }).rows.map(({ id }) => id)).toEqual(['b'])
   })
   test('does not treat a recorded status with a missing timestamp as never run', () => {
     const result = filterListRows([row({ lastRunAt: null, lastStatus: 'completed' })], {
@@ -65,7 +65,7 @@ describe('automation list model', () => {
       row({ key: 'native:skipped', id: 'skipped', lastStatus: 'skipped_unavailable', lastRunAt: 2 }),
       row({ key: 'external:failed', id: 'external', kind: 'external', lastStatus: 'failed', lastRunAt: 3 })
     ]
-    expect(filterListRows(rows, { query: '', host: 'all', status: 'all', lastRun: 'failed', agent: '' }).map(({ id }) => id))
+    expect(filterListRows(rows, { query: '', host: 'all', status: 'all', lastRun: 'failed', agent: '' }).rows.map(({ id }) => id))
       .toEqual(['native-failed', 'external'])
   })
   test('owner comparison rejects local workspace replacement and missing-owner drift', () => {

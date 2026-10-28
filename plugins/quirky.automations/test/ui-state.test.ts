@@ -7,7 +7,7 @@ import { runCli } from '../../../packages/cli/test/fixtures/fake-daemon'
 const fixtures: PluginHarness[] = []
 afterEach(async () => { for (const fixture of fixtures.splice(0).reverse()) await fixture.cleanup() })
 async function boot() {
-  const fixture = await startPluginHarness({ plugins: ['quirky.automations'], fakeSession: false })
+  const fixture = await startPluginHarness({ plugins: ['quirky.repo', 'quirky.worktree', 'quirky.ask', 'quirky.agents', 'quirky.checks', 'quirky.structured', 'quirky.session', 'quirky.automations'], fakeSession: false })
   fixtures.push(fixture)
   return fixture
 }

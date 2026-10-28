@@ -9,7 +9,7 @@ const homes: string[] = []
 async function start() {
   const home = makeTempHome('qa-automation-list-api-')
   homes.push(home)
-  const fixture = await startPluginHarness({ plugins: ['quirky.automations'], fakeSession: false, home })
+  const fixture = await startPluginHarness({ plugins: ['quirky.repo', 'quirky.worktree', 'quirky.ask', 'quirky.agents', 'quirky.checks', 'quirky.structured', 'quirky.session', 'quirky.automations'], fakeSession: false, home })
   fixtures.push(fixture)
   return fixture
 }

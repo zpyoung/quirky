@@ -1,11 +1,19 @@
-import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test'
-import { act, createElement } from 'react'
-import { createRoot, type Root } from 'react-dom/client'
+import { afterAll, afterEach, expect, test } from 'bun:test'
+import type { Root } from 'react-dom/client'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'
-import { AutomationsPage } from '../src/list/AutomationsPage'
 import { API, type AutomationNavigation, type AutomationSurfaceProps } from '../src/ui-contracts'
 import type { AutomationDefinition, AutomationRun, AutomationRunsPage } from '../types'
+
+const actGlobal = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+const previousActEnvironment = actGlobal.IS_REACT_ACT_ENVIRONMENT
+GlobalRegistrator.register()
+actGlobal.IS_REACT_ACT_ENVIRONMENT = true
+
+// React reads DOM and act support during module initialization, so these imports must follow registration.
+const { act, createElement } = await import('react')
+const { createRoot } = await import('react-dom/client')
+const { AutomationsPage } = await import('../src/list/AutomationsPage')
 
 const AUTOMATION_ID = 'automation-1'
 const RUN_ID = 'run-background'
@@ -181,7 +189,8 @@ async function mountPage(context: UiPluginContext, page: AutomationNavigation['p
 
 async function settle(): Promise<void> {
   await act(async () => {
-    for (let index = 0; index < 8; index++) await Promise.resolve()
+    await Promise.resolve()
+    await Promise.resolve()
   })
 }
 
@@ -198,12 +207,14 @@ function historyRows(container: HTMLElement): HTMLTableRowElement[] {
 async function clickButton(container: HTMLElement, text: string): Promise<void> {
   await act(async () => {
     buttonByText(container, text).click()
-    await Promise.resolve()
   })
 }
 
-beforeAll(() => GlobalRegistrator.register())
-afterAll(() => GlobalRegistrator.unregister())
+afterAll(async () => {
+  await GlobalRegistrator.unregister()
+  if (previousActEnvironment === undefined) delete actGlobal.IS_REACT_ACT_ENVIRONMENT
+  else actGlobal.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment
+})
 afterEach(async () => {
   await act(async () => {
     for (const { root, container } of mounted.splice(0)) {

@@ -88,5 +88,38 @@
 - **Revisit if:** UI report size bounds require narrower summaries
 - **Source:** locked by docs/roadmap.md
 
+## D9: Preserve explicit setup consent and background-only structured sessions
+- **Question:** How does the editor follow the final dispatch and background contracts?
+- **Options:** project-policy auto-run and terminal auto-adoption; explicit skip/run with immutable hook inspection and background sessions
+- **Chose:** setup starts skipped; choosing run requires inspected trusted hooks at an immutable workspace head. Missing OID, unreadable hooks, or declined trust saves skip with a visible warning. Native runs use Session.background and explicit View run routes to view:quirky.session/worktree with worktree/session identity.
+- **Why:** An unattended run cannot pause for trust or steal the active tab. The public branch picker exposes names, not arbitrary branch OIDs; guessing an immutable revision would authorize the wrong script.
+- **Evidence:** editor methods setupDecisionForSave; m5-automations-dispatch D7,D15,D16,D18; authoritative lane7 source959f4eb8 and follow-up a8783ed2
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** a public immutable branch resolution API permits safe inspection of every branch
+- **Source:** locked by docs/loop/decisions/m5-automations-dispatch.md
+
+## D10: Keep navigation inputs stable and invalidate data through native change events
+- **Question:** Why would typing lose focus, newly saved data stay stale, and older history become unreachable?
+- **Options:** force remount to refresh; keep the surface mounted and refresh its actual data
+- **Chose:** uiNavigate updates daemon state and opens the view only when outside Automations, without changing its input. The page subscribes to native changed events with coalesced reloads and selection-safe fetches. History advances a bounded 100-row window with backward offsets.
+- **Why:** PluginSlot remounts when input changes; using a revision in input destroys focus and transient state. UI state refresh alone does not reload definitions/evidence. Appending pages without advancing the render window hides rows beyond100.
+- **Evidence:** AutomationPluginValidation findings1-3; packages/ui/src/plugins/PluginSlot.tsx:30-41; src/state.ts and src/list/AutomationsPage.tsx; rendered list-ui regressions
+- **Reversibility:** easy
+- **Confidence:** high for traced causes; final verification recorded below
+- **Revisit if:** native events become granular enough to invalidate less data
+- **Source:** assumed — autonomous
+
+## D11: Separate actual native-process proof from incomplete test-gate results
+- **Question:** Which results can be claimed after the first integrated gate?
+- **Options:** infer all green from worker returns; record exact independent results and repair owning failures
+- **Chose:** first affected run passed170remote files plus2macOS files, failed9remote files, no flaky reruns; scripts/typecheck/build did not execute because the gate stopped. Repair missing test dependency closure, explicit valid-prompt setup, incorrect test result-shape consumption, rendered paging tests, and session wire assertions at their boundaries.
+- **Why:** The separate actual daemon/CLI smoke exited0 in4.81seconds and proved editor create, captured local owner, name-only edit anchor, paused manual native Codex completion/output/session, OpenClaw pause/readback, unsafe-ID refusal, CLI navigation, and deletion retaining the workspace. That is positive runtime evidence, not clearance of failed tests.
+- **Evidence:** bg2 affected gate, artifact38; bg3 JSON ok:true, native run dd4f9875-63fd-409d-a9c1-28f8e58db283, session s_108bba1be648; temporary process scope cleaned its owned home
+- **Reversibility:** easy
+- **Confidence:** high for those exercised paths only
+- **Revisit if:** owning reruns or visible UI dogfood contradict the smoke
+- **Source:** assumed — autonomous
+
 ## Progress
-Step5 active: spec/shared contracts committed331fc251; dispatch contracts imported. Three isolated implementers own editor, list/runs and external jobs; parent owns UI state, registration, CLI and shared UI surfaces. No check/build/runtime result claimed. Next: audit the complete component diffs at barrier, integrate executable dispatch, then final affected gates and actual isolated runtime/web smoke.
+Step6 active. All three isolated components audited/merged and worktrees removed. Final background/evidence runtime integrated; dispatcher-only run lifecycle retained, no obsolete result mutation API. Actual isolated daemon/CLI smoke passed; the first affected gate has nine owning failures under repair, not a green result. Next: consume repair results and lane7 session semantic repair, rerun only failed/affected files, run scripts/typecheck/build, one visible web dogfood and one cross-family review/fix batch, then catch up once and land.

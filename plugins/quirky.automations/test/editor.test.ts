@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { rmSync } from 'node:fs'
-import type { PluginContext } from '@quirky/protocol'
+import { RpcErrorCode, type PluginContext, type PluginErrorKind } from '@quirky/protocol'
 import { openPluginStore } from '../../../packages/daemon/src/plugins/stores'
 import { makeTempHome } from '../../../packages/daemon/test/helpers'
 import { createAutomationService, type AutomationServiceContext } from '../service'
@@ -11,6 +11,11 @@ import { editorMethods } from '../src/editor/methods'
 
 const fixtures: { cleanup(): void }[] = []
 const temporaryHomes: string[] = []
+const pluginErrorCodes: Record<PluginErrorKind, number> = {
+  'invalid-params': RpcErrorCode.InvalidParams,
+  'not-found': RpcErrorCode.NotFound,
+  conflict: RpcErrorCode.Conflict
+}
 
 afterEach(() => {
   for (const fixture of fixtures.splice(0)) fixture.cleanup()
@@ -150,7 +155,7 @@ function makeFixture(options: FixtureOptions = {}) {
       }
       throw new Error(`Unexpected public dependency call ${method}`)
     },
-    error: (_kind: string, message: string) => new Error(message),
+    error: (kind: PluginErrorKind, message: string) => Object.assign(new Error(message), { code: pluginErrorCodes[kind] }),
     log: () => {}
   } as unknown as PluginContext
   const state: AutomationUiState = {
@@ -211,12 +216,14 @@ describe('automation editor methods', () => {
     expect(f.state.editor?.draft).toMatchObject({
       projectId: 'repo-1', workspaceMode: 'existing', workspaceId: 'wt-active'
     })
+    await f.invoke('patchDraft', { patch: { prompt: 'Run the scheduled review.' } })
     const saved = await f.invoke('saveEditor') as { enabled: boolean; projectId: string; workspaceId: string }
     expect(saved).toMatchObject({ enabled: true, projectId: 'repo-1', workspaceId: 'wt-active' })
   })
   test('reuses the creation key for overlapping pending saves', async () => {
     const f = fixture()
     await f.invoke('openEditor', {})
+    await f.invoke('patchDraft', { patch: { prompt: 'Run the scheduled review.' } })
     const key = f.state.editor?.creationKey
     const [first, second] = await Promise.all([
       f.invoke('saveEditor', {}),
@@ -274,8 +281,8 @@ describe('automation editor methods', () => {
   test('retains an invalid cron draft after save validation fails', async () => {
     const f = fixture()
     await f.invoke('openEditor')
-    await f.invoke('patchDraft', { patch: { rrule: '0 0 31 2 *' } })
-    await expect(f.invoke('saveEditor')).rejects.toThrow('Enter a valid advanced schedule before saving.')
+    await f.invoke('patchDraft', { patch: { rrule: '0 0 31 2 *', prompt: 'Run the scheduled review.' } })
+    await expect(f.invoke('saveEditor')).rejects.toMatchObject({ code: RpcErrorCode.InvalidParams })
     expect(f.state.editor?.draft.rrule).toBe('0 0 31 2 *')
     expect(f.service.list({})).toEqual([])
   })
@@ -284,7 +291,7 @@ describe('automation editor methods', () => {
     const f = fixture()
     await f.invoke('openEditor')
     await f.invoke('patchDraft', { patch: { prompt: '  ' } })
-    await expect(f.invoke('saveEditor')).rejects.toThrow('Choose a run location and enter a prompt before saving.')
+    await expect(f.invoke('saveEditor')).rejects.toMatchObject({ code: RpcErrorCode.InvalidParams })
     expect(f.state.editor?.draft.prompt).toBe('  ')
     expect(f.service.list({})).toEqual([])
   })
@@ -292,8 +299,9 @@ describe('automation editor methods', () => {
   test('refuses a workspace removed after the editor opened and keeps the draft', async () => {
     const f = fixture()
     await f.invoke('openEditor')
+    await f.invoke('patchDraft', { patch: { prompt: 'Run the scheduled review.' } })
     f.worktrees.splice(0, 1)
-    await expect(f.invoke('saveEditor')).rejects.toThrow('Choose an available workspace before saving.')
+    await expect(f.invoke('saveEditor')).rejects.toMatchObject({ code: RpcErrorCode.InvalidParams })
     expect(f.state.editor?.draft.workspaceId).toBe('wt-active')
     expect(f.service.list({})).toEqual([])
   })
@@ -301,6 +309,7 @@ describe('automation editor methods', () => {
   test('name-only edit preserves schedule anchor and sends the captured owner fence', async () => {
     const f = fixture()
     await f.invoke('openEditor')
+    await f.invoke('patchDraft', { patch: { prompt: 'Run the scheduled review.' } })
     const created = await f.invoke('saveEditor') as { id: string; dtstart: number }
     const owner = {
       kind: 'local', repoId: 'repo-1', repoPath: '/work/quirky', workspaceId: 'wt-active',
@@ -320,6 +329,7 @@ describe('automation editor methods', () => {
   test('rejects a name edit after the captured local owner changes', async () => {
     const f = fixture()
     await f.invoke('openEditor', {})
+    await f.invoke('patchDraft', { patch: { prompt: 'Run the scheduled review.' } })
     const created = await f.invoke('saveEditor', {}) as { id: string; name: string; dtstart: number }
     const owner = {
       kind: 'local', repoId: 'repo-1', repoPath: '/work/quirky', workspaceId: 'wt-active',
@@ -331,7 +341,7 @@ describe('automation editor methods', () => {
     await f.invoke('patchDraft', { patch: { name: 'Stale edit' } })
     store.update(created.id, { owner: { ...owner, workspaceInstanceId: 'instance-replaced' } })
 
-    await expect(f.invoke('saveEditor', {})).rejects.toThrow('The workspace owner changed.')
+    await expect(f.invoke('saveEditor', {})).rejects.toMatchObject({ code: RpcErrorCode.Conflict })
     expect(f.state.editor?.draft.name).toBe('Stale edit')
     expect(f.service.show({ id: created.id }).name).toBe(created.name)
   })
@@ -340,7 +350,7 @@ describe('automation editor methods', () => {
   test('skips setup if hooks cannot be inspected, even when consent was requested', async () => {
     const f = fixture({ unreadableHooks: true })
     await f.invoke('openEditor')
-    await f.invoke('patchDraft', { patch: { workspaceMode: 'new_per_run', setupDecision: 'run' } })
+    await f.invoke('patchDraft', { patch: { workspaceMode: 'new_per_run', setupDecision: 'run', prompt: 'Run the scheduled review.' } })
     const saved = await f.invoke('saveEditor', { trustSetup: true }) as { setupDecision?: string }
     expect(saved.setupDecision).toBe('skip')
     expect(f.trustCalls).toBe(0)
