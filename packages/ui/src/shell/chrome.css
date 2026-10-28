@@ -1,0 +1,211 @@
+.shell-titlebar {
+  align-items: center;
+  background: var(--ui-rail);
+  border-bottom: var(--ui-border-width) solid var(--ui-border);
+  color: var(--ui-text);
+  display: flex;
+  gap: var(--ui-space-12);
+  min-height: var(--ui-row-double);
+  padding: var(--ui-space-6) var(--ui-space-12);
+}
+
+.shell-titlebar__breadcrumb {
+  align-items: baseline;
+  display: flex;
+  flex: 1 1 auto;
+  gap: var(--ui-space-8);
+  min-width: 0;
+}
+
+.shell-titlebar__project,
+.shell-titlebar__worktree {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shell-titlebar__project,
+.shell-titlebar__separator,
+.shell-titlebar__error {
+  color: var(--ui-muted);
+}
+
+.shell-titlebar__search kbd {
+  color: var(--ui-muted);
+  font: inherit;
+  margin-inline-start: var(--ui-space-4);
+}
+
+.shell-statusbar {
+  align-items: center;
+  background: var(--ui-rail);
+  border-top: var(--ui-border-width) solid var(--ui-border);
+  color: var(--ui-muted);
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  font-size: var(--ui-font-label);
+  gap: var(--ui-space-8) var(--ui-space-16);
+  justify-content: space-between;
+  min-height: var(--ui-row-single);
+  padding: var(--ui-space-4) var(--ui-space-12);
+}
+
+.shell-statusbar__summary,
+.shell-statusbar__metric,
+.shell-statusbar__plugins {
+  align-items: center;
+  display: flex;
+  flex-wrap: nowrap;
+  min-width: 0;
+  gap: var(--ui-space-6);
+}
+
+.shell-statusbar__branch {
+  color: var(--ui-text);
+  font-family: var(--ui-font-mono);
+}
+
+.shell-statusbar__unknown {
+  color: var(--ui-muted);
+}
+
+.shell-inbox {
+  color: var(--ui-text);
+  display: flex;
+  flex-direction: column;
+  gap: var(--ui-space-8);
+  min-height: 0;
+  overflow: auto;
+  padding: var(--ui-space-12);
+}
+
+.shell-inbox__list {
+  display: grid;
+  gap: var(--ui-space-8);
+  min-width: 0;
+}
+
+.shell-inbox__ask {
+  background: var(--ui-surface);
+  border: var(--ui-border-width) solid var(--ui-border);
+  border-radius: var(--ui-radius-control);
+  display: grid;
+  gap: var(--ui-space-8);
+  min-width: 0;
+  padding: var(--ui-space-12);
+}
+
+.shell-inbox__ask-header {
+  align-items: flex-start;
+  display: flex;
+  gap: var(--ui-space-8);
+  justify-content: space-between;
+}
+
+.shell-inbox__ask-header h3,
+.shell-inbox__ask p,
+.shell-inbox__question p {
+  margin: 0;
+}
+
+.shell-inbox__context,
+.shell-inbox__queued,
+.shell-inbox__handoff,
+.shell-inbox__optional {
+  color: var(--ui-muted);
+  font-size: var(--ui-font-label);
+}
+
+.shell-inbox__question {
+  border: var(--ui-border-width) solid var(--ui-border);
+  border-radius: var(--ui-radius-control);
+  display: grid;
+  gap: var(--ui-space-8);
+  min-width: 0;
+  padding: var(--ui-space-8);
+}
+
+.shell-inbox__question legend {
+  color: var(--ui-text);
+  font-size: var(--ui-font-body);
+  font-weight: 600;
+  padding-inline: var(--ui-space-4);
+}
+
+.shell-inbox__question h4 {
+  margin: 0;
+}
+
+.shell-inbox__options,
+.shell-inbox__confirm,
+.shell-inbox__actions {
+  display: grid;
+  gap: var(--ui-space-6);
+}
+
+.shell-inbox__actions {
+  grid-auto-flow: column;
+  justify-content: end;
+}
+
+.shell-inbox__error {
+  color: var(--ui-failing);
+}
+
+.shell-attention-toasts {
+  display: grid;
+  gap: var(--ui-space-8);
+  inline-size: max-content;
+  inset-block-end: var(--ui-space-12);
+  inset-inline-end: var(--ui-space-12);
+  max-inline-size: calc(100vw - var(--ui-space-24));
+  position: fixed;
+  z-index: 20;
+}
+
+.shell-attention-toast__description {
+  display: grid;
+  gap: var(--ui-space-8);
+}
+
+.shell-attention-toast__description p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.shell-attention-toast__description .ui-button {
+  justify-self: start;
+}
+.shell-main-header {
+  align-items: center;
+  gap: var(--ui-space-8);
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.shell-main-header .ui-tabs {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: auto;
+}
+
+.shell-palette-list {
+  display: grid;
+  gap: var(--ui-space-4);
+  list-style: none;
+  margin: 0;
+  overflow: auto;
+  padding: 0;
+}
+
+.shell-legacy-toast__description {
+  display: grid;
+  gap: var(--ui-space-6);
+}
+
+.shell-legacy-toast__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ui-space-4);
+}

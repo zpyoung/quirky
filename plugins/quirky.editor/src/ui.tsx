@@ -629,11 +629,10 @@ function commandHandlers(context: UiPluginContext): Record<string, (args?: unkno
 function configureExplorerPanel(context: UiPluginContext): void {
   try {
     const width = context.getSetting('editorSidebarWidth')
-    const activityBarPosition = context.getSetting('activityBarPosition')
-    if (typeof width !== 'number' || (activityBarPosition !== 'top' && activityBarPosition !== 'side')) {
-      throw new Error('Editor panel settings are missing or have invalid types.')
+    if (typeof width !== 'number') {
+      throw new Error('Editor panel width is missing or has an invalid type.')
     }
-    void context.call('ui.panel.configure', { id: EXPLORER_PANEL, width, activityBarPosition }).catch((reason: unknown) => {
+    void context.call('ui.panel.configure', { id: EXPLORER_PANEL, width }).catch((reason: unknown) => {
       context.toast('Unable to configure Explorer layout', reason instanceof Error ? reason.message : String(reason))
     })
   } catch (reason) {
@@ -669,7 +668,7 @@ export function activate(context: UiPluginContext): void {
 
   configureExplorerPanel(context)
   const unsubscribe = context.subscribe((event) => {
-    if (event.type === 'setting.changed' && (event.id === 'setting:quirky.editor/editorSidebarWidth' || event.id === 'setting:quirky.editor/activityBarPosition')) {
+    if (event.type === 'setting.changed' && event.id === 'setting:quirky.editor/editorSidebarWidth') {
       configureExplorerPanel(context)
     }
   })

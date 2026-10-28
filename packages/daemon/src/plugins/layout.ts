@@ -1,6 +1,7 @@
 import { isAbsolute } from 'node:path'
 import {
   DESKTOP_AWAY_MS,
+  UI_TOOL_SLOTS,
   parseContributionId,
   validateValue,
   type DesktopShellAction,
@@ -26,6 +27,9 @@ import {
   type UiSlotState,
   type UiState,
   type UiToastState,
+  type UiToolEntry,
+  type UiToolLayout,
+  type UiToolSlot,
   type UiWindowInfo,
   type WindowRoute,
   type WindowRouteState,
@@ -34,6 +38,7 @@ import { conflict, invalidParams, notFound } from '../errors'
 import type { Store } from '../store'
 import type { ClientConn } from '../types'
 import type { PluginHost } from './host'
+import { isRecord, resolveToolLayout, TOOL_SIZE_FIELDS, validToolSize } from './tool-layout'
 
 const LAYOUT_KEY = 'layout'
 const MAX_JSON_LENGTH = 64 * 1024
@@ -42,7 +47,6 @@ const TOAST_DISMISS = 'ui.toast.dismiss'
 const FOCUS_TARGETS = ['sidebar', 'view', 'panel'] as const
 const PANEL_WIDTH_MIN = 220
 const PANEL_WIDTH_MAX = 4096
-const ACTIVITY_BAR_POSITIONS = ['top', 'side'] as const
 
 const DEFAULT_LAYOUT: UiLayout = { view: null, panel: null, sidebar: true, focus: null }
 
@@ -68,7 +72,7 @@ export type LayoutServiceOptions = {
 type Report = { state: unknown; order: number }
 
 type ToastReport = { toasts: UiToastState[]; order: number }
-type WindowLayoutOverride = { view: UiLayout['view']; focus?: UiLayout['focus'] }
+type WindowLayoutOverride = { view: UiLayout['view']; viewTabs: NonNullable<UiLayout['viewTabs']>; focus?: UiLayout['focus'] }
 
 type PendingCommand = {
   conn: ClientConn
@@ -88,6 +92,7 @@ type PendingDesktopRequest = {
 type AuxiliaryWindowRoute = {
   windowId: string
   view: string | null
+  viewTabs: ViewTab[]
   input?: unknown
   title?: string
   ownerShell: DesktopWindowOwner
@@ -103,9 +108,6 @@ const DEFAULT_DESKTOP_CAPABILITIES: NativeDesktopCapabilities = {
 
 const unanswered = () => conflict('the window did not answer')
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-}
 
 function nativeResultMatches(action: DesktopShellAction, value: unknown): value is DesktopShellResult {
   if (!isRecord(value)) return false
@@ -150,34 +152,66 @@ function sameValue(a: unknown, b: unknown): boolean {
   return keys.length === Object.keys(right).length && keys.every((key) => key in right && sameValue(left[key], right[key]))
 }
 
+type OpenView = NonNullable<UiLayout['view']>
+type ViewTab = NonNullable<UiLayout['viewTabs']>[number]
+
+function viewTabOpened(tabs: ViewTab[], view: OpenView): ViewTab[] {
+  const index = tabs.findIndex((tab) => tab.id === view.id)
+  const next = [...tabs]
+  if (index === -1) next.push(view)
+  else next[index] = view
+  return next
+}
+
+function viewTabClosed(tabs: ViewTab[], view: OpenView | null): ViewTab[] {
+  return view === null ? tabs : tabs.filter((tab) => tab.id !== view.id)
+}
+
+function lastViewTab(tabs: ViewTab[]): OpenView | null {
+  return tabs[tabs.length - 1] ?? null
+}
+
+function focusTargetOfTool(tool: UiToolEntry): 'sidebar' | 'view' | 'panel' | undefined {
+  const kind = parseContributionId(tool.contributionId ?? '')?.kind
+  if (kind === 'sidebar-section') return 'sidebar'
+  if (kind === 'view') return 'view'
+  if (kind === 'panel') return 'panel'
+  return undefined
+}
+
 function readStored(value: unknown): UiLayout {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return { ...DEFAULT_LAYOUT }
-  const stored = value as Record<string, unknown>
-  const view = stored.view as { id?: unknown; input?: unknown } | null | undefined
+  if (!isRecord(value)) return { ...DEFAULT_LAYOUT }
+  const stored = value
+  const view = stored.view
   const storedWidths = stored.panelWidths
   const panelWidths: Record<string, number> = {}
   let hasPanelWidths = false
-  if (typeof storedWidths === 'object' && storedWidths !== null && !Array.isArray(storedWidths)) {
-    const widths = storedWidths as Record<string, unknown>
-    for (const id in widths) {
-      if (!Object.hasOwn(widths, id)) continue
-      const width = widths[id]
+  if (isRecord(storedWidths)) {
+    for (const id in storedWidths) {
+      if (!Object.hasOwn(storedWidths, id)) continue
+      const width = storedWidths[id]
       if (parseContributionId(id)?.kind !== 'panel' || !isPanelWidth(width)) continue
       panelWidths[id] = width
       hasPanelWidths = true
     }
   }
-  const activityBarPosition = ACTIVITY_BAR_POSITIONS.find((position) => position === stored.activityBarPosition)
+  const viewTabs = new Map<string, NonNullable<UiLayout['viewTabs']>[number]>()
+  if (Array.isArray(stored.viewTabs)) {
+    for (const tab of stored.viewTabs) {
+      if (!isRecord(tab) || typeof tab.id !== 'string') continue
+      viewTabs.set(tab.id, { id: tab.id, ...(tab.input !== undefined ? { input: tab.input } : {}) })
+    }
+  }
   return {
     view:
-      view && typeof view === 'object' && typeof view.id === 'string'
+      isRecord(view) && typeof view.id === 'string'
         ? { id: view.id, ...(view.input !== undefined ? { input: view.input } : {}) }
         : null,
+    viewTabs: [...viewTabs.values()],
     panel: typeof stored.panel === 'string' ? stored.panel : null,
     sidebar: typeof stored.sidebar === 'boolean' ? stored.sidebar : true,
     focus: FOCUS_TARGETS.find((target) => target === stored.focus) ?? null,
     ...(hasPanelWidths ? { panelWidths } : {}),
-    ...(activityBarPosition ? { activityBarPosition } : {}),
     ...(stored.palette === true ? { palette: true } : {})
   }
 }
@@ -221,6 +255,7 @@ export class LayoutService {
   windowSelf(conn: ClientConn): WindowRoute {
     const target = this.requireWindowById(conn.id)
     if (target !== conn) throw conflict('the calling UI connection is no longer live')
+    this.windowViewFor(target.id)
     return {
       connId: target.id,
       ...(target.desktopClientId === undefined ? {} : { desktopClientId: target.desktopClientId })
@@ -238,12 +273,19 @@ export class LayoutService {
     const model = this.options.ui.contributions()
     const windows = this.windows()
     const routeViewId = connId === undefined ? undefined : this.auxiliaryView(connId)?.view ?? undefined
+    const toolIds = new Set(layout.tools ? Object.values(layout.tools.open).filter((id): id is string => id !== null) : [])
+    const shownToolBodies = new Set(
+      (model.tools ?? [])
+        .filter((tool) => toolIds.has(tool.id) && tool.contributionId !== null)
+        .map((tool) => tool.contributionId!)
+    )
+    const activeViews = new Set([layout.view?.id, routeViewId].filter((id): id is string => id !== undefined))
     const slots: UiSlotState[] = [
-      ...model.activityItems.map((entry) => ({ entry, shown: () => true })),
-      ...model.sidebarSections.map((entry) => ({ entry, shown: () => layout.sidebar })),
+      ...model.activityItems.map((entry) => ({ entry, shown: () => shownToolBodies.has(entry.id) })),
+      ...model.sidebarSections.map((entry) => ({ entry, shown: () => shownToolBodies.has(entry.id) })),
       ...model.statusBars.map((entry) => ({ entry, shown: () => true })),
-      ...model.panels.map((entry) => ({ entry, shown: () => layout.panel === entry.id })),
-      ...model.views.map((entry) => ({ entry, shown: () => layout.view?.id === entry.id || routeViewId === entry.id })),
+      ...model.panels.map((entry) => ({ entry, shown: () => shownToolBodies.has(entry.id) })),
+      ...model.views.map((entry) => ({ entry, shown: () => shownToolBodies.has(entry.id) || activeViews.has(entry.id) })),
       ...model.overlays.map((entry) => ({ entry, shown: (report?: Report) => overlayShown(report) }))
     ].map(({ entry, shown }) => {
       const report = this.reportFor(entry.id, connId, fallbackReports)
@@ -269,14 +311,23 @@ export class LayoutService {
     if (windows.length === 1) return this.openWindowView(windows[0]!.id, id, input)
     this.requireSlot(id, 'view')
     if (jsonLength(input) > MAX_JSON_LENGTH) throw invalidParams('input is over 64 KiB')
-    return this.change((layout) => ({ ...layout, view: { id, ...(input !== undefined ? { input } : {}) } }))
+    const view = { id, ...(input !== undefined ? { input } : {}) }
+    return this.change((layout) => ({ ...layout, view, viewTabs: viewTabOpened(layout.viewTabs ?? [], view) }))
   }
 
   closeView(): UiLayout {
     const windows = this.openWindows()
     if (windows.length > 1) throw conflict('multiple Quirky windows are open; specify connId')
     if (windows.length === 1) return this.closeWindowView(windows[0]!.id)
-    return this.change((layout) => ({ ...layout, view: null, focus: layout.focus === 'view' ? null : layout.focus }))
+    return this.change((layout) => {
+      const viewTabs = viewTabClosed(layout.viewTabs ?? [], layout.view)
+      return {
+        ...layout,
+        view: layout.view === null ? null : lastViewTab(viewTabs),
+        viewTabs,
+        focus: layout.view !== null && layout.focus === 'view' ? null : layout.focus
+      }
+    })
   }
 
   /** Opens a view only in the exact live UI connection. */
@@ -288,17 +339,20 @@ export class LayoutService {
     const auxiliary = this.auxiliaryView(target.id)
     if (auxiliary) {
       auxiliary.view = id
+      auxiliary.viewTabs = viewTabOpened(auxiliary.viewTabs, view)
       if (input === undefined) delete auxiliary.input
       else auxiliary.input = input
       this.options.sendTo(target, { type: 'desktop.window.changed', windows: [this.auxiliaryWindowSummary(auxiliary)] })
       return this.windowLayout(target.id)
     }
+
+    const previous = this.windowViewFor(target.id)
+    const viewTabs = viewTabOpened(previous.viewTabs, view)
     if (this.openWindows().length === 1) {
       this.windowViews.delete(target.id)
-      return this.change((layout) => ({ ...layout, view }))
+      return this.change((layout) => ({ ...layout, view, viewTabs }))
     }
-    const previous = this.windowViews.get(target.id)
-    this.windowViews.set(target.id, { view, ...(previous?.focus === undefined ? {} : { focus: previous.focus }) })
+    this.windowViews.set(target.id, { ...previous, view, viewTabs })
     const next = this.windowLayout(target.id)
     this.options.sendTo(target, { type: 'ui.state.changed', layout: next })
     return next
@@ -307,64 +361,192 @@ export class LayoutService {
   /** Closes the exact live window's current view only if `expectedView` still matches in full. */
   closeWindowView(connId: number, expectedView?: NonNullable<UiLayout['view']>): UiLayout {
     const target = this.requireWindowById(connId)
-    const current = this.windowLayout(target.id).view
+    const currentLayout = this.windowLayout(target.id)
+    const current = currentLayout.view
     if (expectedView !== undefined && !sameValue(current, expectedView)) {
       throw conflict('the window view changed before it could be closed')
     }
     const auxiliary = this.auxiliaryView(target.id)
     if (auxiliary) {
-      auxiliary.view = null
-      delete auxiliary.input
+      const viewTabs = viewTabClosed(auxiliary.viewTabs, current)
+      const view = current === null ? null : lastViewTab(viewTabs)
+      auxiliary.viewTabs = viewTabs
+      auxiliary.view = view?.id ?? null
+      if (view?.input === undefined) delete auxiliary.input
+      else auxiliary.input = view.input
       this.options.sendTo(target, { type: 'desktop.window.changed', windows: [this.auxiliaryWindowSummary(auxiliary)] })
       return this.windowLayout(target.id)
     }
+
+    const previous = this.windowViewFor(target.id)
+    const viewTabs = viewTabClosed(previous.viewTabs, current)
+    const view = current === null ? null : lastViewTab(viewTabs)
+    const focus = current !== null && currentLayout.focus === 'view' ? null : previous.focus
     if (this.openWindows().length === 1) {
       this.windowViews.delete(target.id)
-      return this.change((layout) => ({ ...layout, view: null, focus: layout.focus === 'view' ? null : layout.focus }))
+      return this.change((layout) => ({
+        ...layout,
+        view,
+        viewTabs,
+        focus: current !== null && currentLayout.focus === 'view' ? null : layout.focus
+      }))
     }
-    const previous = this.windowViews.get(target.id)
-    const focus = current !== null && this.windowLayout(target.id).focus === 'view' ? null : previous?.focus
-    this.windowViews.set(target.id, { view: null, ...(focus === undefined ? {} : { focus }) })
+    this.windowViews.set(target.id, { view, viewTabs, ...(focus === undefined ? {} : { focus }) })
     const next = this.windowLayout(target.id)
     this.options.sendTo(target, { type: 'ui.state.changed', layout: next })
     return next
   }
 
-  /** Opens an effective panel. NotFound for an unknown ID, InvalidParams for another kind. */
+  /** Opens the tool that hosts an effective panel, retaining the legacy panel field as a projection. */
   openPanel(id: string): UiLayout {
     this.requireSlot(id, 'panel')
-    return this.change((layout) => ({ ...layout, panel: id }))
+    const tool = this.toolForContribution(id)
+    if (!tool) throw notFound(`no tool for panel ${id}`)
+    return this.change((layout) => {
+      const slot = layout.tools!.placements[tool.id]!
+      const tools = { ...layout.tools!, open: { ...layout.tools!.open, [slot]: tool.id } }
+      return { ...layout, tools, panel: id }
+    })
   }
 
-  /** Configures the desired width for an effective panel and/or the global activity-bar position. */
-  configurePanel(id: string, width?: number, activityBarPosition?: 'top' | 'side'): UiLayout {
+  /** Configures the desired width for an effective panel. */
+  configurePanel(id: string, width?: number): UiLayout {
     if (typeof id !== 'string' || id.length === 0) throw invalidParams('id must be a non-empty string')
-    if (width === undefined && activityBarPosition === undefined) {
-      throw invalidParams('width or activityBarPosition must be provided')
-    }
-    if (width !== undefined && !isPanelWidth(width)) {
+    if (width === undefined) throw invalidParams('width must be provided')
+    if (!isPanelWidth(width)) {
       throw invalidParams(`width must be an integer from ${PANEL_WIDTH_MIN} to ${PANEL_WIDTH_MAX}`)
     }
-    if (activityBarPosition !== undefined && !ACTIVITY_BAR_POSITIONS.includes(activityBarPosition)) {
-      throw invalidParams('activityBarPosition must be top or side')
-    }
     this.requireSlot(id, 'panel')
+    if (!this.toolForContribution(id)) throw notFound(`no tool for panel ${id}`)
     return this.change((layout) => ({
       ...layout,
-      ...(width === undefined ? {} : { panelWidths: { ...layout.panelWidths, [id]: width } }),
-      ...(activityBarPosition === undefined ? {} : { activityBarPosition })
+      panelWidths: { ...layout.panelWidths, [id]: width }
     }))
   }
 
   closePanel(): UiLayout {
-    return this.change((layout) => ({ ...layout, panel: null, focus: layout.focus === 'panel' ? null : layout.focus }))
+    return this.change((layout) => {
+      const panelTool = layout.panel === null ? undefined : this.toolForContribution(layout.panel)
+      const slot = panelTool ? layout.tools!.placements[panelTool.id] : undefined
+      const open = { ...layout.tools!.open }
+      if (slot && open[slot] === panelTool?.id) open[slot] = null
+      const tools = { ...layout.tools!, open }
+      const panel = this.panelForOpen(tools, null)
+      return {
+        ...layout,
+        tools,
+        panel,
+        focus: layout.focus === 'panel' && panel === null ? null : layout.focus
+      }
+    })
   }
 
   setSidebar(visible: boolean): UiLayout {
+    return this.change((layout) => {
+      const worktrees = this.options.ui.contributions().tools?.find(({ id }) => id === 'sidebar-section:quirky.worktree/worktrees')
+      const open = { ...layout.tools!.open }
+      let actualVisible = false
+      if (worktrees) {
+        const slot = layout.tools!.placements[worktrees.id]!
+        if (visible) open[slot] = worktrees.id
+        else if (open[slot] === worktrees.id) open[slot] = null
+        actualVisible = open[slot] === worktrees.id
+      }
+      const tools = { ...layout.tools!, open }
+      return {
+        ...layout,
+        tools,
+        sidebar: actualVisible,
+        panel: this.panelForOpen(tools, layout.panel),
+        focus: !actualVisible && layout.focus === 'sidebar' ? null : layout.focus
+      }
+    })
+  }
+
+  openTool(id: string): UiLayout {
+    const tool = this.requireTool(id)
+    return this.change((layout) => {
+      const slot = layout.tools!.placements[id]!
+      const open = { ...layout.tools!.open, [slot]: id }
+      const tools = { ...layout.tools!, open }
+      const panel = this.panelForOpen(
+        tools,
+        parseContributionId(tool.contributionId ?? '')?.kind === 'panel' ? tool.contributionId : layout.panel
+      )
+      const isWorktrees = id === 'sidebar-section:quirky.worktree/worktrees'
+      return {
+        ...layout,
+        tools,
+        panel,
+        ...(isWorktrees ? { sidebar: true } : {})
+      }
+    })
+  }
+
+  closeTool(slot: UiToolSlot): UiLayout {
+    this.requireToolSlot(slot)
+    return this.change((layout) => {
+      const closed = layout.tools!.open[slot]
+      const open = { ...layout.tools!.open, [slot]: null }
+      const tools = { ...layout.tools!, open }
+      const panel = this.panelForOpen(tools, layout.panel)
+      const closedTool = closed === null ? undefined : this.options.ui.contributions().tools?.find(({ id }) => id === closed)
+      const focusTarget = closedTool ? focusTargetOfTool(closedTool) : undefined
+      return {
+        ...layout,
+        tools,
+        panel,
+        ...(closed === 'sidebar-section:quirky.worktree/worktrees' ? { sidebar: false } : {}),
+        focus: focusTarget !== undefined && layout.focus === focusTarget &&
+          (focusTarget !== 'panel' || panel === null)
+          ? null
+          : layout.focus
+      }
+    })
+  }
+
+  moveTool(id: string, slot: UiToolSlot): UiLayout {
+    const tool = this.requireTool(id)
+    this.requireToolSlot(slot)
+    return this.change((layout) => {
+      const previousSlot = layout.tools!.placements[id]!
+      const wasOpen = layout.tools!.open[previousSlot] === id
+      const open = { ...layout.tools!.open }
+      if (wasOpen) {
+        open[previousSlot] = null
+        open[slot] = id
+      }
+      const tools = {
+        ...layout.tools!,
+        placements: { ...layout.tools!.placements, [id]: slot },
+        open
+      }
+      const panel = this.panelForOpen(
+        tools,
+        wasOpen && parseContributionId(tool.contributionId ?? '')?.kind === 'panel' ? tool.contributionId : layout.panel
+      )
+      return { ...layout, tools, panel }
+    })
+  }
+
+  resizeTools(patch: unknown): UiLayout {
+    if (!isRecord(patch)) throw invalidParams('resize params must be an object')
+    const keys = Object.keys(patch)
+    if (keys.length === 0) throw invalidParams('at least one tool size field must be provided')
+    const sizes: Partial<UiToolLayout['sizes']> = {}
+    for (const key of keys) {
+      if (!(TOOL_SIZE_FIELDS as readonly string[]).includes(key)) {
+        throw invalidParams(`unexpected tool size field ${key}`)
+      }
+      const sizeKey = key as keyof UiToolLayout['sizes']
+      if (!validToolSize(sizeKey, patch[key])) {
+        throw invalidParams(`${key} is outside its valid geometry range`)
+      }
+      sizes[sizeKey] = patch[key]
+    }
     return this.change((layout) => ({
       ...layout,
-      sidebar: visible,
-      focus: !visible && layout.focus === 'sidebar' ? null : layout.focus
+      tools: { ...layout.tools!, sizes: { ...layout.tools!.sizes, ...sizes } }
     }))
   }
 
@@ -523,12 +705,18 @@ export class LayoutService {
     if (request.view !== null) {
       this.requireSlot(request.view, 'view')
       if (jsonLength(request.input) > MAX_JSON_LENGTH) throw invalidParams('input is over 64 KiB')
+      const view = { id: request.view, ...(request.input !== undefined ? { input: request.input } : {}) }
+      route.viewTabs = viewTabOpened(route.viewTabs, view)
       route.view = request.view
       if (request.input === undefined) delete route.input
       else route.input = request.input
     } else {
-      route.view = null
-      delete route.input
+      const current = route.view === null ? null : { id: route.view, ...(route.input === undefined ? {} : { input: route.input }) }
+      route.viewTabs = viewTabClosed(route.viewTabs, current)
+      const view = current === null ? null : lastViewTab(route.viewTabs)
+      route.view = view?.id ?? null
+      if (view?.input === undefined) delete route.input
+      else route.input = view.input
     }
     if (request.title !== undefined) route.title = request.title
     this.announceDesktopWindows()
@@ -638,6 +826,7 @@ export class LayoutService {
       this.auxiliaryWindows.set(result.windowId, {
         windowId: result.windowId,
         view: request.view,
+        viewTabs: [{ id: request.view, ...(request.input === undefined ? {} : { input: request.input }) }],
         ...(request.input === undefined ? {} : { input: request.input }),
         ...(request.title === undefined ? {} : { title: request.title }),
         ownerShell: { connId: conn.id, ...(conn.name ? { name: conn.name } : {}) },
@@ -811,22 +1000,65 @@ export class LayoutService {
     return [...this.auxiliaryWindows.values()].find((route) => route.rendererConnId === connId)
   }
 
+  private windowViewFor(connId: number): WindowLayoutOverride {
+    const existing = this.windowViews.get(connId)
+    if (existing) return existing
+
+    const windows = this.openWindows()
+    const persisted = this.layout()
+    const firstWindow = windows.reduce<ClientConn | undefined>(
+      (first, conn) => (first === undefined || conn.id < first.id ? conn : first),
+      undefined
+    )
+    const anotherOwnsView = [...this.windowViews].some(([id, override]) => id !== connId && override.view !== null)
+    const usePersistedView = windows.length <= 1 || (firstWindow?.id === connId && !anotherOwnsView)
+    const override = usePersistedView
+      ? { view: persisted.view, viewTabs: persisted.viewTabs ?? [] }
+      : { view: null, viewTabs: [] }
+    this.windowViews.set(connId, override)
+    return override
+  }
+
   private windowLayout(connId: number): UiLayout {
     const layout = this.layout()
     const auxiliary = this.auxiliaryView(connId)
     if (auxiliary) {
-      const view = auxiliary.view !== null && this.options.ui.contributions().views.some((entry) => entry.id === auxiliary.view)
-        ? { id: auxiliary.view, ...(auxiliary.input === undefined ? {} : { input: auxiliary.input }) }
-        : null
-      return { ...layout, view }
+      const model = this.options.ui.contributions()
+      const effectiveViews = new Set(model.views.map((entry) => entry.id))
+      const viewTabs = auxiliary.viewTabs.filter((tab) => effectiveViews.has(tab.id))
+      let view =
+        auxiliary.view !== null && effectiveViews.has(auxiliary.view)
+          ? viewTabs.find((tab) => tab.id === auxiliary.view) ??
+            { id: auxiliary.view, ...(auxiliary.input === undefined ? {} : { input: auxiliary.input }) }
+          : null
+      if (view === null && auxiliary.view !== null) view = lastViewTab(viewTabs)
+      if (view !== null && !viewTabs.some((tab) => tab.id === view!.id)) viewTabs.push(view)
+      auxiliary.viewTabs = viewTabs
+      auxiliary.view = view?.id ?? null
+      if (view?.input === undefined) delete auxiliary.input
+      else auxiliary.input = view.input
+      const auxiliaryLayout: UiLayout = {
+        ...layout,
+        view,
+        viewTabs,
+        panel: null,
+        sidebar: false,
+        focus: view === null ? null : 'view'
+      }
+      delete auxiliaryLayout.tools
+      delete auxiliaryLayout.panelWidths
+      delete auxiliaryLayout.palette
+      return auxiliaryLayout
     }
-    const override = this.windowViews.get(connId)
-    if (!override) return layout
-    const view =
-      override.view && this.options.ui.contributions().views.some((entry) => entry.id === override.view!.id)
-        ? override.view
-        : null
-    return { ...layout, view, ...(override.focus === undefined ? {} : { focus: override.focus }) }
+    const override = this.windowViewFor(connId)
+    const effectiveViews = new Set(this.options.ui.contributions().views.map((entry) => entry.id))
+    const viewTabs = override.viewTabs.filter((tab) => effectiveViews.has(tab.id))
+    let view = override.view !== null && effectiveViews.has(override.view.id) ? override.view : null
+    if (view === null && override.view !== null) view = lastViewTab(viewTabs)
+    if (view !== null && !viewTabs.some((tab) => tab.id === view!.id)) viewTabs.push(view)
+    const nextOverride = { ...override, view, viewTabs }
+    if (!sameValue(override, nextOverride)) this.windowViews.set(connId, nextOverride)
+    return { ...layout, view, viewTabs, ...(override.focus === undefined ? {} : { focus: override.focus }) }
   }
 
 
@@ -905,15 +1137,35 @@ export class LayoutService {
   }
 
 
-  /** The stored layout with a view or panel that is no longer effective dropped. */
+  /** The stored layout normalized against the current effective tool and view contributions. */
   private layout(): UiLayout {
-    const stored = readStored(this.options.store.getUiState(LAYOUT_KEY))
+    const raw = this.options.store.getUiState(LAYOUT_KEY)
+    const stored = readStored(raw)
     const model = this.options.ui.contributions()
-    return {
+    const hasStoredTools = isRecord(raw) && Object.hasOwn(raw, 'tools')
+    const tools = resolveToolLayout(model.tools ?? [], hasStoredTools && isRecord(raw) ? raw.tools : undefined, {
+      hasStoredTools,
+      hasStoredLayout: isRecord(raw),
+      sidebar: stored.sidebar,
+      panel: stored.panel
+    })
+    const effectiveViews = new Set(model.views.map((view) => view.id))
+    let view = stored.view !== null && effectiveViews.has(stored.view.id) ? stored.view : null
+    const viewTabs = (stored.viewTabs ?? []).filter((tab) => effectiveViews.has(tab.id))
+    if (view === null && stored.view !== null) view = lastViewTab(viewTabs)
+    if (view !== null && !viewTabs.some((tab) => tab.id === view!.id)) viewTabs.push(view)
+    const worktrees = model.tools?.find(({ id }) => id === 'sidebar-section:quirky.worktree/worktrees')
+    const sidebar = worktrees !== undefined && Object.values(tools.open).includes(worktrees.id)
+    const layout: UiLayout = {
       ...stored,
-      view: stored.view && model.views.some((view) => view.id === stored.view!.id) ? stored.view : null,
-      panel: stored.panel !== null && model.panels.some((panel) => panel.id === stored.panel) ? stored.panel : null
+      view,
+      viewTabs,
+      panel: this.panelForOpen(tools, stored.panel),
+      sidebar,
+      tools
     }
+    if (!sameValue(raw, layout)) this.options.store.setUiState(LAYOUT_KEY, layout)
+    return layout
   }
 
   private requireSlot(id: string, kind: 'view' | 'panel'): void {
@@ -922,6 +1174,39 @@ export class LayoutService {
     const model = this.options.ui.contributions()
     const effective = kind === 'view' ? model.views : model.panels
     if (!effective.some((entry) => entry.id === id)) throw notFound(`no ${kind} ${id}`)
+  }
+
+  private toolForContribution(id: string): UiToolEntry | undefined {
+    return this.options.ui.contributions().tools?.find((tool) => tool.contributionId === id || tool.aliases.includes(id))
+  }
+
+  private requireTool(id: string): UiToolEntry {
+    const tool = this.options.ui.contributions().tools?.find((entry) => entry.id === id)
+    if (!tool) throw notFound(`no UI tool ${id}`)
+    return tool
+  }
+
+  private requireToolSlot(slot: unknown): asserts slot is UiToolSlot {
+    if (typeof slot !== 'string' || !(UI_TOOL_SLOTS as readonly string[]).includes(slot)) {
+      throw invalidParams(`slot must be one of ${UI_TOOL_SLOTS.join(', ')}`)
+    }
+  }
+
+  private panelForOpen(tools: UiToolLayout, preferred: string | null): string | null {
+    const model = this.options.ui.contributions()
+    const openIds = new Set(Object.values(tools.open).filter((id): id is string => id !== null))
+    if (preferred !== null) {
+      const tool = model.tools?.find((entry) => entry.contributionId === preferred || entry.aliases.includes(preferred))
+      if (tool && openIds.has(tool.id) && parseContributionId(tool.contributionId ?? '')?.kind === 'panel') {
+        return tool.contributionId
+      }
+    }
+    for (const slot of UI_TOOL_SLOTS) {
+      const id = tools.open[slot]
+      const tool = id === null ? undefined : model.tools?.find((entry) => entry.id === id)
+      if (tool && parseContributionId(tool.contributionId ?? '')?.kind === 'panel') return tool.contributionId
+    }
+    return null
   }
 
   private publishGlobalLayout(layout: UiLayout): void {

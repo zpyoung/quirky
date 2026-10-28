@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent } from 'react'
 import type { ProjectGroup, Repo, Session, UiPluginContext, Worktree } from '@quirky/protocol'
+import { Badge, StatusDot as NeedsYouStatusDot } from '@quirky/ui'
 import { DEFAULT_STOCK_OPTIONS, type StockWorktreeOptions, type WorktreeControl } from './control-types'
 import type { HeimdallWorktreeStatus } from './useTree'
 import { resolveMembershipTarget, type MembershipTarget } from './membership'
@@ -11,6 +12,7 @@ import { StatusDot, UnreadBell } from './StatusDot'
 import { worktreeGlyph } from './status'
 import { OrchestrationRows, type OrchestrationWorkerRow } from './OrchestrationRows'
 import { useOrchestrationRows } from './useOrchestrationRows'
+import { useWorktreeAttention } from './useWorktreeAttention'
 import { LoopGlyph } from './LoopGlyph'
 import type { LoopProjection } from './loop-status'
 
@@ -97,6 +99,7 @@ type CardProps = {
   childCount: number
   collapsed: boolean
   sessions: Session[] | null
+  pendingAskCount: number | null
   orchestrationWorkers: readonly OrchestrationWorkerRow[]
   loop?: LoopProjection
   now: number
@@ -120,6 +123,7 @@ function WorktreeCard({
   childCount,
   collapsed,
   sessions,
+  pendingAskCount,
   orchestrationWorkers,
   loop,
   now,
@@ -136,6 +140,8 @@ function WorktreeCard({
   onDragEnd
 }: CardProps) {
   const sleeping = 'sleeping' in worktree && worktree.sleeping === true
+  const needsYou = pendingAskCount !== null && pendingAskCount > 0
+  const attentionLabel = needsYou ? `${pendingAskCount} pending ${pendingAskCount === 1 ? 'question' : 'questions'}` : ''
   const open = async () => {
     try {
       await context.call('quirky.worktree/navigate', { worktree: worktree.id })
@@ -197,9 +203,15 @@ function WorktreeCard({
       }}
     >
       <button className="worktree-main" style={options.compact ? { paddingBlock: 2 } : undefined} onClick={() => void open()} title={worktree.path} aria-label={`${sleeping ? 'Wake and open' : 'Open'} ${worktree.name}`}>
-        {worktree.unread ? <UnreadBell /> : loop ? <LoopGlyph label={loop.label} /> : options.showProperties.includes('activity') ? <StatusDot glyph={sessions === null ? null : worktreeGlyph(sessions, worktree.id, now)} /> : null}
+        {worktree.unread ? <UnreadBell /> : loop ? <LoopGlyph label={loop.label} /> : null}
+        {needsYou
+          ? <NeedsYouStatusDot status="needs-you" label={attentionLabel} />
+          : !worktree.unread && !loop && options.showProperties.includes('activity')
+            ? <StatusDot glyph={sessions === null ? null : worktreeGlyph(sessions, worktree.id, now)} />
+            : null}
         {heimdall && <HeimdallGlyph status={heimdall} now={now} />}
         <span className={worktree.unread ? 'worktree-name worktree-name-unread' : 'worktree-name'}>{worktree.name}</span>
+        {needsYou && <Badge tone="needs-you" label={attentionLabel}>{pendingAskCount}</Badge>}
         {repoName && <span className="tag tag-repo">{repoName}</span>}
         {worktree.isMain && <span className="tag tag-primary">primary</span>}
         {worktree.status !== 'in-progress' && <span className="tag tag-status">{statusLabel}</span>}
@@ -313,6 +325,7 @@ export function Tree({
   loopsByWorktree = EMPTY_LOOP_PROJECTIONS
 }: TreeProps) {
   const orchestrationWorkers = useOrchestrationRows(context)
+  const pendingAsksByWorktree = useWorktreeAttention(context)
   const [menu, setMenu] = useState<OpenMenu | null>(null)
   const [dropPreview, setDropPreview] = useState<MembershipTarget | null>(null)
   const [stickySections, setStickySections] = useState<ReadonlySet<string>>(new Set())
@@ -505,6 +518,7 @@ export function Tree({
             depth={row.depth}
             childCount={row.childCount}
             collapsed={folded.has(worktree.id)}
+            pendingAskCount={pendingAsksByWorktree === null ? null : pendingAsksByWorktree.get(worktree.id) ?? 0}
             sessions={sessions}
             orchestrationWorkers={worktree.pinned ? [] : orchestrationWorkers}
             loop={loopsByWorktree.get(worktree.id)}
@@ -794,6 +808,7 @@ export function Tree({
                   depth={0}
                   childCount={0}
                   collapsed={false}
+                  pendingAskCount={pendingAsksByWorktree === null ? null : pendingAsksByWorktree.get(worktree.id) ?? 0}
                   sessions={sessions}
                   orchestrationWorkers={orchestrationWorkers}
                   loop={loopsByWorktree.get(worktree.id)}
