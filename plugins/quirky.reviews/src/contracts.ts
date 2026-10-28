@@ -1,4 +1,4 @@
-import type { MethodHandler, PluginCaller, PluginContext, UiLayout, UiPluginContext, Worktree } from '@quirky/protocol'
+import type { MethodHandler, PluginCaller, PluginContext, Schema, UiLayout, UiPluginContext, Worktree } from '@quirky/protocol'
 
 export const REVIEW_VIEW = 'view:quirky.reviews/review'
 export const CHECKS_PANEL = 'panel:quirky.reviews/checks'
@@ -50,7 +50,7 @@ export type ReviewsState = {
 }
 export type MethodSpec = {
   id: string; description?: string; readOnly?: boolean; destructive?: boolean; confirm?: string; describe?: string
-  params: JsonRecord; result: JsonRecord
+  params: Schema; result: Schema
 }
 export type ReviewsEnv = {
   context: PluginContext

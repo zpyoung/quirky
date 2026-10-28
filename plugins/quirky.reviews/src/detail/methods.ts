@@ -1,4 +1,4 @@
-import type { MethodHandler } from '@quirky/protocol'
+import type { MethodHandler, Schema } from '@quirky/protocol'
 import {
   REVIEW_VIEW,
   type JsonRecord,
@@ -27,30 +27,30 @@ import {
   type ReviewStackResult,
 } from './data'
 
-const tabs = ['conversation', 'checks', 'files'] as const
-const audiences = ['all', 'humans', 'bots'] as const
-const groupings = ['grouped', 'timeline'] as const
-const mergeMethods = ['squash', 'merge', 'rebase'] as const
-const reactions = ['+1', '-1', 'laugh', 'confused', 'heart', 'hooray', 'rocket', 'eyes'] as const
-const sourceShape = {
+const tabs = ['conversation', 'checks', 'files']
+const audiences = ['all', 'humans', 'bots']
+const groupings = ['grouped', 'timeline']
+const mergeMethods = ['squash', 'merge', 'rebase']
+const reactions = ['+1', '-1', 'laugh', 'confused', 'heart', 'hooray', 'rocket', 'eyes']
+const sourceShape: Schema = {
   type: 'object',
   properties: { host: { type: 'string' }, owner: { type: 'string' }, repo: { type: 'string' } },
   required: ['host', 'owner', 'repo'],
   additionalProperties: false,
 }
-const surfaceShape = { type: 'string', enum: ['detail', 'checks'] }
-const numberShape = { type: 'integer', minimum: 1 }
-const stringShape = { type: 'string' }
-const strictObject = (properties: JsonRecord, required: string[] = []): JsonRecord => {
+const surfaceShape: Schema = { type: 'string', enum: ['detail', 'checks'] }
+const numberShape: Schema = { type: 'integer', minimum: 1 }
+const stringShape: Schema = { type: 'string' }
+const strictObject = (properties: Record<string, Schema>, required: string[] = []): Schema => {
   const requiredProperties = new Set(required)
   if (Object.hasOwn(properties, 'worktree')) requiredProperties.add('worktree')
   if (Object.hasOwn(properties, 'number')) requiredProperties.add('number')
   return { type: 'object', properties, required: [...requiredProperties], additionalProperties: false }
 }
-const arrayOfStrings = { type: 'array', items: { type: 'string' } }
+const arrayOfStrings: Schema = { type: 'array', items: { type: 'string' } }
 const targetIdentity = { worktree: stringShape, number: numberShape, prRepo: sourceShape }
-const draftIdentity = { ...targetIdentity, generation: { type: 'integer', minimum: 0 } }
-const surfaceNumber = { surface: surfaceShape, ...targetIdentity }
+const draftIdentity = { ...targetIdentity, generation: { type: 'integer', minimum: 0 } } satisfies Record<string, Schema>
+const surfaceNumber = { surface: surfaceShape, ...targetIdentity } satisfies Record<string, Schema>
 const emptyResult = strictObject({ ok: { type: 'boolean' } }, ['ok'])
 
 const callResult = strictObject({
@@ -107,8 +107,8 @@ export const detailSpecs: (MethodSpec & { description: string })[] = [
   {
     id: 'detailSetBodyDraft',
     description: 'Save the pull request description draft.',
-    params: strictObject({ ...draftIdentity, body: { anyOf: [{ type: 'string' }, { type: 'null' }] }, draftVersion: { type: 'integer', minimum: 0 } }, ['body', 'generation']),
-    result: strictObject({ body: { anyOf: [{ type: 'string' }, { type: 'null' }] }, draftVersion: { type: 'integer', minimum: 0 }, applied: { type: 'boolean' } }, ['body', 'draftVersion', 'applied']),
+    params: strictObject({ ...draftIdentity, body: { description: 'String or null.' }, draftVersion: { type: 'integer', minimum: 0 } }, ['body', 'generation']),
+    result: strictObject({ body: { description: 'String or null.' }, draftVersion: { type: 'integer', minimum: 0 }, applied: { type: 'boolean' } }, ['body', 'draftVersion', 'applied']),
   },
   {
     id: 'detailSetFilesView',
@@ -116,11 +116,11 @@ export const detailSpecs: (MethodSpec & { description: string })[] = [
     params: strictObject({ ...targetIdentity,
       fileFilter: stringShape,
       diffMode: { type: 'string', enum: ['inline', 'side-by-side'] },
-      selectedFile: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+      selectedFile: { description: 'String or null.' },
       collapsedFiles: arrayOfStrings,
       treeVisible: { type: 'boolean' },
     }, ['fileFilter', 'diffMode', 'selectedFile', 'collapsedFiles', 'treeVisible']),
-    result: strictObject({ fileFilter: stringShape, diffMode: { type: 'string', enum: ['inline', 'side-by-side'] }, selectedFile: { anyOf: [{ type: 'string' }, { type: 'null' }] }, collapsedFiles: arrayOfStrings, treeVisible: { type: 'boolean' } }, ['fileFilter', 'diffMode', 'selectedFile', 'collapsedFiles', 'treeVisible']),
+    result: strictObject({ fileFilter: stringShape, diffMode: { type: 'string', enum: ['inline', 'side-by-side'] }, selectedFile: { description: 'String or null.' }, collapsedFiles: arrayOfStrings, treeVisible: { type: 'boolean' } }, ['fileFilter', 'diffMode', 'selectedFile', 'collapsedFiles', 'treeVisible']),
   },
   {
     id: 'detailQueueComment',
@@ -138,7 +138,7 @@ export const detailSpecs: (MethodSpec & { description: string })[] = [
     id: 'detailPostComment',
     description: 'Post a pull request conversation comment or review reply.',
     params: strictObject({ ...surfaceNumber, body: stringShape, replyToId: numberShape }, ['surface', 'number', 'body']),
-    result: strictObject({ number: numberShape, comment: strictObject({ id: numberShape, kind: { type: 'string', enum: ['issue_comment', 'review_comment'] }, body: stringShape, author: { anyOf: [{ type: 'string' }, { type: 'null' }] }, createdAt: { anyOf: [{ type: 'string' }, { type: 'null' }] }, url: { anyOf: [{ type: 'string' }, { type: 'null' }] } }, ['id', 'kind', 'body', 'author', 'createdAt', 'url']) }, ['number', 'comment']),
+    result: strictObject({ number: numberShape, comment: strictObject({ id: numberShape, kind: { type: 'string', enum: ['issue_comment', 'review_comment'] }, body: stringShape, author: { description: 'String or null.' }, createdAt: { description: 'String or null.' }, url: { description: 'String or null.' } }, ['id', 'kind', 'body', 'author', 'createdAt', 'url']) }, ['number', 'comment']),
   },
   {
     id: 'detailEditComment',
@@ -175,13 +175,13 @@ export const detailSpecs: (MethodSpec & { description: string })[] = [
   {
     id: 'detailUpdateReviewers',
     description: 'Add or remove requested reviewers.',
-    params: strictObject({ ...surfaceNumber, action: { type: 'string', enum: ['add', 'remove'] }, logins: { type: 'array', minItems: 1, maxItems: 15, items: { type: 'string', minLength: 1, maxLength: 39 } } }, ['surface', 'number', 'action', 'logins']),
+    params: strictObject({ ...surfaceNumber, action: { type: 'string', enum: ['add', 'remove'] }, logins: { type: 'array', description: '1–15 reviewer logins; each login is 1–39 characters.', items: { type: 'string', description: 'Reviewer login of 1–39 characters.' } } }, ['surface', 'number', 'action', 'logins']),
     result: strictObject({ number: numberShape, reviewers: arrayOfStrings, updated: { type: 'boolean' } }, ['number', 'reviewers', 'updated']),
   },
   {
     id: 'detailUpdateAssignees',
     description: 'Add, remove, or replace pull request assignees.',
-    params: strictObject({ ...surfaceNumber, action: { type: 'string', enum: ['add', 'remove', 'set'] }, logins: { type: 'array', maxItems: 100, items: { type: 'string', minLength: 1, maxLength: 256 } } }, ['surface', 'number', 'action', 'logins']),
+    params: strictObject({ ...surfaceNumber, action: { type: 'string', enum: ['add', 'remove', 'set'] }, logins: { type: 'array', description: 'At most 100 assignees; each login is 1–256 characters.', items: { type: 'string', description: 'Assignee login of 1–256 characters.' } } }, ['surface', 'number', 'action', 'logins']),
     result: strictObject({ number: numberShape, assignees: arrayOfStrings }, ['number', 'assignees']),
   },
   {
@@ -212,20 +212,20 @@ export const detailSpecs: (MethodSpec & { description: string })[] = [
     destructive: true,
     confirm: 'Confirm {action} for pull request #{number} using {method}?',
     describe: 'detailMergeConfirmation',
-    params: strictObject({ ...surfaceNumber, expectedHead: { type: 'string', pattern: '^(?:[a-fA-F0-9]{40}|[a-fA-F0-9]{64})$' }, method: { type: 'string', enum: mergeMethods }, action: { type: 'string', enum: ['direct', 'queue'] } }, ['surface', 'number', 'expectedHead', 'method', 'action']),
+    params: strictObject({ ...surfaceNumber, expectedHead: { type: 'string', description: 'A 40- or 64-character hexadecimal commit SHA.' }, method: { type: 'string', enum: mergeMethods }, action: { type: 'string', enum: ['direct', 'queue'] } }, ['surface', 'number', 'expectedHead', 'method', 'action']),
     result: strictObject({ number: numberShape, state: { type: 'string', enum: ['merged', 'enqueued', 'pending'] }, head: stringShape, operationId: stringShape }, ['number', 'state', 'head']),
   },
   {
     id: 'detailMergeConfirmation',
     description: 'Describe the exact pull request or stack membership before a merge confirmation.',
     readOnly: true,
-    params: strictObject({ ...surfaceNumber, expectedHead: { type: 'string', pattern: '^(?:[a-fA-F0-9]{40}|[a-fA-F0-9]{64})$' }, method: { type: 'string', enum: mergeMethods }, action: { type: 'string', enum: ['direct', 'queue'] } }, ['surface', 'number', 'expectedHead', 'method', 'action']),
+    params: strictObject({ ...surfaceNumber, expectedHead: { type: 'string', description: 'A 40- or 64-character hexadecimal commit SHA.' }, method: { type: 'string', enum: mergeMethods }, action: { type: 'string', enum: ['direct', 'queue'] } }, ['surface', 'number', 'expectedHead', 'method', 'action']),
     result: { type: 'string' },
   },
   {
     id: 'detailSetAutoMerge',
     description: 'Enable or disable auto-merge with an expected-head guard.',
-    params: strictObject({ ...surfaceNumber, expectedHead: { type: 'string', pattern: '^(?:[a-fA-F0-9]{40}|[a-fA-F0-9]{64})$' }, enabled: { type: 'boolean' }, method: { type: 'string', enum: mergeMethods } }, ['surface', 'number', 'expectedHead', 'enabled']),
+    params: strictObject({ ...surfaceNumber, expectedHead: { type: 'string', description: 'A 40- or 64-character hexadecimal commit SHA.' }, enabled: { type: 'boolean' }, method: { type: 'string', enum: mergeMethods } }, ['surface', 'number', 'expectedHead', 'enabled']),
     result: strictObject({ number: numberShape, enabled: { type: 'boolean' }, state: stringShape }, ['number', 'enabled', 'state']),
   },
   {
@@ -238,12 +238,21 @@ export const detailSpecs: (MethodSpec & { description: string })[] = [
     id: 'detailRefreshChecks',
     description: 'Refresh checks for a pull request without cache.',
     params: strictObject({ ...surfaceNumber }, ['surface', 'number']),
-    result: strictObject({ surface: surfaceShape, number: numberShape, headSha: { anyOf: [{ type: 'string' }, { type: 'null' }] }, checks: { type: 'array', items: strictObject({ kind: { type: 'string' }, name: stringShape, status: stringShape, conclusion: { anyOf: [{ type: 'string' }, { type: 'null' }] }, url: { anyOf: [{ type: 'string' }, { type: 'null' }] }, checkRunId: { anyOf: [{ type: 'integer' }, { type: 'null' }] }, workflowRunId: { anyOf: [{ type: 'integer' }, { type: 'null' }] }, suiteId: { anyOf: [{ type: 'integer' }, { type: 'null' }] } }, ['kind', 'name', 'status', 'conclusion', 'url', 'checkRunId', 'workflowRunId', 'suiteId']) }, ['surface', 'number', 'headSha', 'checks']),
+    result: strictObject({
+      surface: surfaceShape, number: numberShape, headSha: { description: 'Commit SHA or null.' },
+      checks: { type: 'array', items: strictObject({
+        kind: { type: 'string' }, name: stringShape, status: stringShape,
+        conclusion: { description: 'String or null.' }, url: { description: 'String or null.' },
+        checkRunId: { description: 'Positive integer or null.' },
+        workflowRunId: { description: 'Positive integer or null.' },
+        suiteId: { description: 'Positive integer or null.' }
+      }, ['kind', 'name', 'status', 'conclusion', 'url', 'checkRunId', 'workflowRunId', 'suiteId']) }
+    }, ['surface', 'number', 'headSha', 'checks']),
   },
   {
     id: 'detailLoadCheckDetails',
     description: 'Load bounded details and logs for one current check run.',
-    params: strictObject({ ...surfaceNumber, expectedHead: { type: 'string', pattern: '^(?:[a-fA-F0-9]{40}|[a-fA-F0-9]{64})$' }, checkRunId: numberShape, workflowRunId: numberShape, jobName: { type: 'string', maxLength: 200 } }, ['surface', 'number', 'expectedHead', 'checkRunId']),
+    params: strictObject({ ...surfaceNumber, expectedHead: { type: 'string', description: 'A 40- or 64-character hexadecimal commit SHA.' }, checkRunId: numberShape, workflowRunId: numberShape, jobName: { type: 'string', description: 'Job name, at most 200 characters.' } }, ['surface', 'number', 'expectedHead', 'checkRunId']),
     result: strictObject({ surface: surfaceShape, number: numberShape, checkRunId: numberShape, details: { type: 'object', additionalProperties: true } }, ['surface', 'number', 'checkRunId', 'details']),
   },
   {
@@ -261,8 +270,8 @@ export const detailSpecs: (MethodSpec & { description: string })[] = [
   {
     id: 'detailInlineComment',
     description: 'Add a current-head inline or range review comment.',
-    params: strictObject({ ...surfaceNumber, expectedHead: { type: 'string', pattern: '^(?:[a-fA-F0-9]{40}|[a-fA-F0-9]{64})$' }, path: stringShape, line: { type: 'integer', minimum: 1 }, startLine: { type: 'integer', minimum: 1 }, body: stringShape }, ['surface', 'number', 'expectedHead', 'path', 'line', 'body']),
-    result: strictObject({ number: numberShape, comment: strictObject({ id: numberShape, path: stringShape, line: { type: 'integer', minimum: 1 }, startLine: { anyOf: [{ type: 'integer', minimum: 1 }, { type: 'null' }] }, body: stringShape }, ['id', 'path', 'line', 'startLine', 'body']) }, ['number', 'comment']),
+    params: strictObject({ ...surfaceNumber, expectedHead: { type: 'string', description: 'A 40- or 64-character hexadecimal commit SHA.' }, path: stringShape, line: { type: 'integer', minimum: 1 }, startLine: { type: 'integer', minimum: 1 }, body: stringShape }, ['surface', 'number', 'expectedHead', 'path', 'line', 'body']),
+    result: strictObject({ number: numberShape, comment: strictObject({ id: numberShape, path: stringShape, line: { type: 'integer', minimum: 1 }, startLine: { description: 'An integer of at least 1, or null.' }, body: stringShape }, ['id', 'path', 'line', 'startLine', 'body']) }, ['number', 'comment']),
   },
 ]
 

@@ -1,4 +1,4 @@
-import type { PluginCaller, Worktree } from '@quirky/protocol'
+import type { PluginCaller, Schema, Worktree } from '@quirky/protocol'
 import { isRecord } from './data'
 import {
   REVIEW_VIEW,
@@ -1550,15 +1550,15 @@ async function openReview(env: ReviewsEnv, params: Record<string, unknown>, call
   return { opened: true, worktree: worktree.id, number, tab, prRepo: review.prRepo }
 }
 
-const objectSchema = (properties: Record<string, unknown>, required: string[] = []): JsonRecord => ({
+const objectSchema = (properties: Record<string, Schema>, required: string[] = []): Schema => ({
   type: 'object',
   properties,
   ...(required.length > 0 ? { required } : {}),
   additionalProperties: false
 })
-const stringSchema: JsonRecord = { type: 'string' }
-const worktreeProperty = { type: 'string', description: 'Worktree selector (ID, name, branch, or path); omitted to resolve the caller workspace.' }
-const repoSchema: JsonRecord = objectSchema({ host: stringSchema, owner: stringSchema, repo: stringSchema }, ['host', 'owner', 'repo'])
+const stringSchema: Schema = { type: 'string' }
+const worktreeProperty: Schema = { type: 'string', description: 'Worktree selector (ID, name, branch, or path); omitted to resolve the caller workspace.' }
+const repoSchema = objectSchema({ host: stringSchema, owner: stringSchema, repo: stringSchema }, ['host', 'owner', 'repo'])
 
 export const checksSpecs: MethodSpec[] = [
   {
@@ -1607,7 +1607,7 @@ export const checksSpecs: MethodSpec[] = [
   {
     id: 'checksSetTitleDraft',
     description: 'Set the bounded inline pull request title draft for an exact review target.',
-    params: objectSchema({ worktree: worktreeProperty, number: { type: 'integer', minimum: 1 }, title: { type: 'string', maxLength: MAX_TITLE_LENGTH } }, ['worktree', 'number', 'title']),
+    params: objectSchema({ worktree: worktreeProperty, number: { type: 'integer', minimum: 1 }, title: { type: 'string', description: `At most ${MAX_TITLE_LENGTH} characters.` } }, ['worktree', 'number', 'title']),
     result: objectSchema({ titleDraft: stringSchema }, ['titleDraft'])
   },
   {
@@ -1619,7 +1619,7 @@ export const checksSpecs: MethodSpec[] = [
   {
     id: 'checksSaveTitle',
     description: 'Save and read back a review title for the exact current PR head.',
-    params: objectSchema({ worktree: { ...worktreeProperty, description: 'Workspace containing the active review.' }, number: { type: 'integer', minimum: 1 }, expectedHead: stringSchema, title: { type: 'string', maxLength: MAX_TITLE_LENGTH } }, ['worktree', 'number', 'expectedHead', 'title']),
+    params: objectSchema({ worktree: { ...worktreeProperty, description: 'Workspace containing the active review.' }, number: { type: 'integer', minimum: 1 }, expectedHead: stringSchema, title: { type: 'string', description: `At most ${MAX_TITLE_LENGTH} characters.` } }, ['worktree', 'number', 'expectedHead', 'title']),
     result: objectSchema({ updated: { type: 'boolean' }, number: { type: 'integer' }, title: stringSchema, stale: { type: 'boolean' }, error: stringSchema }, ['updated', 'number', 'title'])
   },
   {
@@ -1631,16 +1631,16 @@ export const checksSpecs: MethodSpec[] = [
       worktree: worktreeProperty,
       number: { type: 'integer', minimum: 1 },
       prRepo: repoSchema,
-      prompt: { type: 'string', maxLength: MAX_PROMPT_LENGTH },
-      agent: { type: 'string', maxLength: 128 },
-      args: { type: 'string', maxLength: MAX_AGENT_ARGS_LENGTH }
+      prompt: { type: 'string', description: `At most ${MAX_PROMPT_LENGTH} characters.` },
+      agent: { type: 'string', description: 'At most 128 characters.' },
+      args: { type: 'string', description: `At most ${MAX_AGENT_ARGS_LENGTH} characters.` }
     }, ['action']),
-    result: objectSchema({ agentDialog: { anyOf: [{ type: 'object', additionalProperties: true }, { type: 'null' }] } }, ['agentDialog'])
+    result: objectSchema({ agentDialog: { description: 'An agent dialog object or null.' } }, ['agentDialog'])
   },
   {
     id: 'checksLaunchAgent',
     description: 'Start the selected/default real agent, deliver the edited triage prompt once after readiness, and only then resolve selected supported threads.',
-    params: objectSchema({ worktree: { ...worktreeProperty, description: 'Workspace containing the review.' }, agent: stringSchema, args: { type: 'string', maxLength: MAX_AGENT_ARGS_LENGTH } }, ['worktree']),
+    params: objectSchema({ worktree: { ...worktreeProperty, description: 'Workspace containing the review.' }, agent: stringSchema, args: { type: 'string', description: `At most ${MAX_AGENT_ARGS_LENGTH} characters.` } }, ['worktree']),
     result: objectSchema({ delivered: { type: 'boolean' }, sessionId: stringSchema, agent: stringSchema, resolved: { type: 'array', items: stringSchema }, replied: { type: 'array', items: stringSchema }, unresolved: { type: 'array', items: stringSchema }, error: stringSchema }, ['delivered'])
   },
   {

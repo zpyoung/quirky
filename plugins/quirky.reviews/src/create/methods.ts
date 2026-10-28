@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import type { PluginCaller } from '@quirky/protocol'
+import type { PluginCaller, Schema } from '@quirky/protocol'
 import { CREATE_VIEW, REVIEW_VIEW, SETTINGS_VIEW, type CreationDefaults, type CreationState, type JsonRecord, type MethodSpec, type ReviewMethodTable, type ReviewsEnv } from '../contracts'
 import { isRecord } from './guards'
 
@@ -10,21 +10,21 @@ const MAX_DIFF_BYTES = 64 * 1024
 const MAX_FILE_SIDE_BYTES = 12 * 1024
 const MAX_GENERATED_BYTES = 64 * 1024
 
-const objectSchema = (properties: JsonRecord, required: string[] = []): JsonRecord => ({
+const objectSchema = (properties: Record<string, Schema>, required: string[] = []): Schema => ({
   type: 'object', properties, required, additionalProperties: false
 })
-const stringSchema: JsonRecord = { type: 'string' }
-const worktreeSchema = { type: 'string', minLength: 1, description: 'Exact registered worktree id.' }
+const stringSchema: Schema = { type: 'string' }
+const worktreeSchema: Schema = { type: 'string', description: 'Exact registered worktree id; must not be empty.' }
 const defaultsSchema = objectSchema({
   draft: { type: 'boolean' },
   useTemplate: { type: 'boolean' },
   generateDetailsOnOpen: { type: 'boolean' },
   openAfterCreate: { type: 'boolean' }
 }, [...DEFAULT_KEYS])
-const defaultScopeSchema = { type: 'string', enum: ['global', 'repository'] }
+const defaultScopeSchema: Schema = { type: 'string', enum: ['global', 'repository'] }
 const reviewSchema = objectSchema({
   number: { type: 'integer', minimum: 1 },
-  url: { type: 'string', format: 'uri' },
+  url: { type: 'string', description: 'URI of the pull request.' },
   existing: { type: 'boolean' }
 }, ['number', 'url'])
 const accountSchema = objectSchema({
@@ -35,12 +35,12 @@ const accountSchema = objectSchema({
   bindable: { type: 'boolean' },
   scopes: { type: 'array', items: stringSchema }
 }, ['host', 'user', 'source', 'active', 'scopes'])
-const nullableAccountSchema = { oneOf: [accountSchema, { type: 'null' }] }
-const configAccountSchema = {
-  oneOf: [
-    objectSchema({ host: stringSchema, user: stringSchema }, ['host', 'user']),
-    { type: 'null' }
-  ]
+const nullableAccountSchema: Schema = { description: 'An account object or null.' }
+const configAccountSchema: Schema = {
+  description: 'An object with host and user properties, or null.',
+  properties: { host: stringSchema, user: stringSchema },
+  required: ['host', 'user'],
+  additionalProperties: false
 }
 const hostingConfigurationSchema = objectSchema({
   worktreeId: stringSchema,

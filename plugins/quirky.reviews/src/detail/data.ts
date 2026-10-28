@@ -124,7 +124,7 @@ function parseComment(value: unknown): ReviewComment | null {
       || !Number.isSafeInteger(raw.count) || raw.count < 0 || typeof raw.viewerHasReacted !== 'boolean') return null
     reactions.push({ content: raw.content, count: raw.count, viewerHasReacted: raw.viewerHasReacted })
   }
-  if (value.isBot !== undefined && typeof value.isBot !== 'boolean') return null
+  if (value.isBot !== undefined && value.isBot !== null && typeof value.isBot !== 'boolean') return null
   if (value.url !== undefined && !nullableString(value.url)) return null
   const comment: ReviewComment = {
     kind: value.kind as ReviewComment['kind'],
@@ -142,7 +142,7 @@ function parseComment(value: unknown): ReviewComment | null {
     reactionSubjectId: value.reactionSubjectId,
     reactions,
   }
-  if (value.isBot !== undefined) comment.isBot = value.isBot
+  if (typeof value.isBot === 'boolean') comment.isBot = value.isBot
   if (value.url !== undefined) comment.url = value.url
   return comment
 }

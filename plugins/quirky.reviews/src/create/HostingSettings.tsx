@@ -562,7 +562,7 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
               <dt>{name}</dt>
               <dd><span style={{ color }}>{budgetLabel(bucket)}</span> · {bucket.remaining} / {bucket.limit} remaining · {resetLabel(bucket.resetAt)}</dd>
             </div>
-          )}
+          })}
         </dl>
         <small>Updated {new Date(budget.fetchedAt).toLocaleTimeString()}. Refreshes every 60 seconds while this settings view is visible.</small>
       </>}
