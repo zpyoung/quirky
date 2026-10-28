@@ -85,13 +85,29 @@ test('mobile Watch uses real worktree tab identity, bounded frames and connectio
   }
   expect(await call(first, 'quirky.browser/eval', { page: pane.page, expression: 'document.querySelector("#result").textContent' }))
     .toMatchObject({ value: 'clicked' })
-  await call(first, 'quirky.mobile/browserWatchInput', {
-    worktree, tabId: created.tab.tabId, watchId: created.watchId, kind: 'mouse', type: 'mousePressed', x: 45, y: 16, button: 'left'
+  const { value: inputPoint } = await call<{ value: { x: number; y: number; scale: number } }>(first, 'quirky.browser/eval', {
+    page: pane.page,
+    expression: '(() => { const rect = document.querySelector("#text").getBoundingClientRect(); return {x: rect.x + rect.width / 2, y: rect.y + rect.height / 2, scale: visualViewport.scale}; })()'
   })
-  await call(first, 'quirky.mobile/browserWatchInput', {
-    worktree, tabId: created.tab.tabId, watchId: created.watchId, kind: 'mouse', type: 'mouseReleased', x: 45, y: 16, button: 'left'
-  })
-
+  const inputX = inputPoint.x * inputPoint.scale
+  const inputY = inputPoint.y * inputPoint.scale
+  expect(inputX).toBeGreaterThanOrEqual(0)
+  expect(inputX).toBeLessThan(frame.width)
+  expect(inputY).toBeGreaterThanOrEqual(0)
+  expect(inputY).toBeLessThan(frame.height)
+  for (const type of ['mousePressed', 'mouseReleased']) {
+    await call(first, 'quirky.mobile/browserWatchInput', {
+      worktree, tabId: created.tab.tabId, watchId: created.watchId,
+      kind: 'mouse', type, x: inputX, y: inputY, button: 'left'
+    })
+  }
+  const selectAllModifier = process.platform === 'darwin' ? 4 : 2
+  for (const type of ['keyDown', 'keyUp']) {
+    await call(first, 'quirky.mobile/browserWatchInput', {
+      worktree, tabId: created.tab.tabId, watchId: created.watchId,
+      kind: 'key', type, key: 'a', code: 'KeyA', modifiers: selectAllModifier
+    })
+  }
   expect(await call(first, 'quirky.mobile/browserWatchInput', {
     worktree, tabId: created.tab.tabId, watchId: created.watchId, kind: 'text', text: 'phone-owned-input'
   })).toMatchObject({ sent: true })
