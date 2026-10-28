@@ -276,7 +276,7 @@ function setup(layout: UiLayout = { view: null, panel: null, sidebar: true, focu
           const target = world.worktrees.find((worktree) => worktree.id === params.worktree)!
           const sleeping = method === 'quirky.worktree/sleep'
           world.worktrees = world.worktrees.map((worktree) =>
-            worktree.id === target.id ? { ...worktree, sleeping } as Worktree : worktree
+            worktree.id === target.id ? { ...worktree, sleeping } : worktree
           )
           return { worktrees: [{ worktreeId: target.id, sleeping, changedAt: Date.now() }] }
         }
@@ -1300,7 +1300,7 @@ describe('agent status glyphs', () => {
 test('stock worktree controls persist options, reveal sleeping rows and wake without replacing the session', async () => {
   const h = setup()
   h.world.options = { ...DEFAULT_STOCK_OPTIONS, groupBy: 'status', sortBy: 'name', showSleeping: false, filterRepoIds: [], showProperties: [...DEFAULT_STOCK_OPTIONS.showProperties] }
-  h.world.worktrees[1] = { ...h.world.worktrees[1]!, comment: 'keep this note', sleeping: true } as Worktree
+  h.world.worktrees[1] = { ...h.world.worktrees[1]!, comment: 'keep this note', sleeping: true }
   const unmount = await h.mountInto(host)
 
   expect([...host.querySelectorAll('li.worktree .worktree-name')].map((node) => node.textContent)).not.toContain('fix-login')

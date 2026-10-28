@@ -136,7 +136,7 @@ test('restart removes only the exact owned preparation and preserves a foreign l
   mkdirSync(join(w.root, '.quirky-preparing'), { recursive: true })
   git(w.dir, 'worktree', 'add', '--detach', '--no-checkout', '--lock', '--reason', 'foreign-owner', foreignPath, 'origin/main')
   await w.t.restart()
-  await w.t.client.callAny('quirky.worktree/list')
+  await w.t.client.callAny('quirky.worktree/list', {})
   const registrations = git(w.dir, 'worktree', 'list', '--porcelain')
   expect(registrations).toContain(foreignPath)
   expect(registrations).not.toContain(preparedPath)

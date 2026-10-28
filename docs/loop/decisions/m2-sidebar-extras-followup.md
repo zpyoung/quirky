@@ -154,5 +154,104 @@
 - **Revisit if:** future worker changes appear outside their assigned absolute paths.
 - **Source:** assumed — autonomous
 
+## D15: Migrate isolated fixtures to the canonical CLI dependency
+- **Question:** why did the complete caught-up affected gate fail across forty files?
+- **Options:** weaken the production dependency; invent an automatic dependency resolver; update explicit test plugin sets.
+- **Chose:** preserve `quirky.worktree`'s required repo+CLI dependencies and update the existing isolated fixture lists and default harness set. Keep tests that intentionally omit optional providers explicit. Use real agents/session/terminal owners for terminal-layout integration instead of conflicting real+fake session links.
+- **Why:** the missing `quirky.cli` prevented worktree activation, so its settings/methods were absent. A successful fixture must exercise the shipped dependency contract.
+- **Evidence:** acceptance-full.log's forty-file failure set; quirky.worktree/quirky-plugin.json12-15; accepted fixture components f676dd4e and3e453bfb. Corrected API gate reached32/36 passing files, then the final four passed without retry18.99s.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the canonical plugin dependency changes.
+- **Source:** locked by docs/loop/decisions/m7-terminal-owner-provisioning-and-selector-flows.md
+
+## D16: Restore the declared ownedIds producer rather than weaken repo-removal callers
+- **Question:** why did real repo removal remain blocked after fixture dependency repair?
+- **Options:** ignore the owner query failure; change callers; register the existing canonical producer.
+- **Chose:** restore `ownedIds` in the worktree handler map. Its implementation and public declaration already existed; the map omitted it. Preserve its recorded+listed+primary ownership union and every repo/session/filesystem removal assertion.
+- **Why:** consumers correctly refused deletion when the declared producer was missing.
+- **Evidence:** main.ts306-310 and431-433; actual failed RPCs saying `did not provide method:quirky.worktree/ownedIds`; root window-projects remote file passed69.11s after7d19f1d0. Fresh real daemon startup independently proved all five API workspaces and excluded a foreign folder owner (`OWNERSHIP_API_OK`).
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the public ownership-query contract changes.
+- **Source:** assumed — autonomous
+
+## D17: Give tracker resolution a canonical worktree selector
+- **Question:** why did valid tracker metadata still fail through the real provider path?
+- **Options:** loosen the selector parser; skip provider validation; qualify the already canonical repo path.
+- **Chose:** pass `path:${repo.path}` to `quirky.hosting/projectRef`. Keep credential-free HTTPS validation and provider approval. The test provider returns a fixed canonical project record; trailing-slash input must persist the provider's canonical URL and survive restart.
+- **Why:** a bare absolute path is not the public worktree selector contract. It was being interpreted as an ID/name/branch and failed before provider resolution.
+- **Evidence:** src/daemon/project.ts142; hosting/src/env.ts133-150; selector.ts41-65; f676dd4e; final four-file remote gate18.99s exit0. No real provider-account campaign is claimed.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the public selector contract changes.
+- **Source:** locked by docs/loop/decisions/m7-terminal-owner-provisioning-and-selector-flows.md
+
+## D18: Verify consumer outcomes instead of re-pinning fixture encodings
+- **Question:** how should caught-up rendering, consent and persistence tests adapt?
+- **Options:** repin every changed label/default/payload; remove meaningful safety checks; migrate faithful fixtures and retain behavior.
+- **Chose:** provide canonical WorktreeControl facts and authenticated window/origin read models; select Name when a scenario intends a name rather than Smart input; emit real-shaped change events after fixture mutations. Remove incidental label/heading/default/command-inventory/old-envelope/warning-count pins. Keep creation, setup trust, model choice, pending-focus, filesystem, metadata and session-survival outcomes. Reorder is consumed through real public navigation after restart, not its numeric storage encoding. Forged desktop identity is rejected without creating a workspace. Nested Git fixture paths create/reuse their actual parents.
+- **Why:** fixture copies are not a reason to weaken production owner checks or preserve an obsolete encoding.
+- **Evidence:** f676dd4e and3e453bfb; corrected four-file API gate passed; seven renderer files passed under the configured retry policy. window-create SC-33 failed the broad run and passed its isolated retry, so this is not a zero-flake claim.
+- **Reversibility:** easy
+- **Confidence:** high for observed outcomes
+- **Revisit if:** a replacement fixture stops exercising the real consumer contract.
+- **Source:** assumed — autonomous
+
+## D19: Activate the lazy feature before asserting prepared-pool restart cleanup
+- **Question:** does the retained preparation after daemon restart require bypassing revoked plugin authority?
+- **Options:** cache repo authority and mutate after revocation; weaken the foreign-lock assertion; drive the lazy feature through its public API.
+- **Chose:** after restart call `quirky.worktree/list`, then keep the existing assertion that its exact owned preparation is gone and a foreign locked registration survives. No production lifecycle or cached-authority fallback was added.
+- **Why:** absent activation metadata defaults to lazy; restart alone does not import/activate worktree. Its activation already performs fresh-owner cleanup. Calls after deactivation remain revoked.
+- **Evidence:** packages/daemon/src/plugins/host.ts374,400-403; worktree/main.ts275-284; prepared-create.test.ts restart scenario; that file passed in the corrected API run. Deactivation still emits the observed revocation warning; that warning is not represented as successful cleanup.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the feature's activation contract changes.
+- **Source:** locked by docs/loop/decisions/m0-core.md
+
+## D20: Preserve guarded UI failures and verify their actual corrections
+- **Question:** how to close the first campaign without falsely claiming every goal passed?
+- **Options:** relabel partial/fail results; stop the item; complete the remaining reachable checks and retain original evidence.
+- **Chose:** retain initial run20261028T212309-540d (one pass, two fails, six partials). The parent did not authorize a scope reduction. Fixed missing folder-row project actions and verified-empty ledger disclosure; fresh closure run20261028T221749-dbd2 passed both. Its screenshots show cancel/create/project removal, empty-ledger assurance only after verification, cancel preservation and deletion of only run-created state. Menu occlusion/hover visibility findings stay recorded rather than becoming zero-findings claims.
+- **Why:** project-header navigation is not a substitute for a required row action, and an absent ledger message is not a successful empty preview.
+- **Evidence:** guarded reports and obs-5/obs-66 in the initial run; closure obs-3,9,10,14,17,19,21,22,24,25; commits472c7889 andb9bdc8fe. Both closure goals passed with no windows kept open.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** final UI checks reproduce either corrected behavior.
+- **Source:** assumed — autonomous
+
+## D21: Offload every file test and close completed UI fixtures
+- **Question:** how does the operator's overloaded-Mac instruction change verification?
+- **Options:** continue direct local test commands; route all files through the canonical remote suite.
+- **Chose:** every test, including scripts and single files, uses `bun scripts/suite.ts`; only its macOS-only list and packaged native checks run here. Updated the active tech contract and acceptance runner. Run local guarded browser fixtures serially and close each after its checks.
+- **Why:** the operator explicitly reported load260 and reserved local testing for the listed exceptions. No machine-load confirmation was run.
+- **Evidence:** operator interjection; all exercised file-test commands in this run use suite.ts. Initial retained failed-run browser was explicitly closed without rewriting verdicts. Initial, closure and filter fixture services exited0 after `WEB_FIXTURE_CLEANED`; guarded closure/filter reports list no kept windows.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the operator changes routing.
+- **Source:** locked by operator instruction in this conversation
+
+## D22: Report the real-clock observation limit without changing the timer to force a pass
+- **Question:** does the quiet-aging campaign prove the strict sixty-second UI bound?
+- **Options:** call an after-deadline screenshot a pass; shorten the production timer just for the check; report the actual timing and retain deterministic schedule coverage.
+- **Chose:** custom/hidden recovery passed in run20261028T224401-6209; the complete Live-only exception toggle passed in supplemental run20261028T230705-ed8a. Quiet aging remains a tool-observation partial: visible before cutoff and at+43.885s, absent with hidden count3→4 at+61.130s. The final observation landed1.130s after the required deadline; artifact timestamps cannot recover a within-deadline bound. Do not claim strict wall-clock success or a demonstrated app violation. Keep the real sixty-second scheduler and the deterministic no-store-event regression.
+- **Why:** the row actually aged out without a user/store mutation, but a late sample cannot establish when it disappeared. LOOP.md permits a recorded tool-limited partial; it does not permit fabricated timing.
+- **Evidence:** filter run obs-46/47/48, events.jsonl and exact cutoff receipt quiet-fixture.json; observation48 PNG/tree timestamps are after the deadline; remote `quiet activity aging refreshes at sixty seconds without store events` regression passed.
+- **Reversibility:** easy
+- **Confidence:** high about the observation limit
+- **Revisit if:** precise timing evidence demonstrates a scheduler failure rather than sampling overhead.
+- **Source:** assumed — autonomous
+
+## D23: Keep missing-group membership recoverable with no rendered targets
+- **Question:** can a Git worktree clear a missing/foreign group when the available group list is empty?
+- **Options:** require creating another group first; hide removal with the Add submenu; keep removal conditional only on held membership and eligibility.
+- **Chose:** move Remove worktree from group outside the non-empty target-list guard, retaining Git/worktree+Git/repo eligibility. Extend the existing canonical createGroup acceptance through a non-null-membership restart before clearing it. The UI fixture checks CAS guards but does not persist those request-only fields as domain metadata; no payload-forwarding assertion substitutes for state/placement outcomes.
+- **Why:** missing/unrendered group membership must remain stored and fall back to its repo, but the user must still be able to remove it.
+- **Evidence:** focused UI regression first failed with missing Remove at1189 while the non-null restart file passed; the source correction exposed a fixture-only guard-field leak, corrected without weakening metadata preservation. Final two-file remote verification passed without retry11.86s; component6298bf91 is merged and its tree removed.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** missing-group recovery changes execution ownership or any unrelated metadata.
+- **Source:** locked by research/orca-features/sidebar-extras.md
+
 ## Progress
-Components eb4b4657/23453d9d accepted, merged and original trees removed; final immediate-preview red27/1 then two-file green. Caught up9624e2a; types/UIlint/build pass. Live real web service and SidebarWebUser guarded campaign; parent browser smoke settled all fixtures with zero errors then closed. Broad gate red18/42, no reviewers dispatched. Additional folder-action test-prep and two-file incoming-fixture repair returned; parent targeted checks running. Finish red/green folder correction, audit/merge correction trees, capture full remaining gate failures, then final review only after green. Dependency triage still pending; no final UI/suite/item completion claim.
+Source and fixture corrections through38bf690 plus6298bf91 are integrated; canonical provider7d19f1d0, tracker componentf676dd4e and renderer component3e453bfb remain. Three integration-only test typing errors were corrected without runtime fallbacks; root/mobile/desktop compilation and UI build passed31.69s after the correction (UI lint had already passed). Guarded membership/drag/group closures, custom/hidden and complete Live exception checks have evidence; quiet timing is the explicit D22 tool partial. All completed browser/daemon fixtures are closed. Remaining: dirty/separators/public-item UI on one fresh fixture, combined remote affected/scripts gate plus final build, bounded three-lens final review and accepted fix batch if needed, final docs/progress and canonical land. Dependency readiness is true; no global completion claim.
