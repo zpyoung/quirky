@@ -1,0 +1,114 @@
+# m5-automations-dispatch decisions
+
+## D1: Use daemon structured execution, never a hidden terminal
+- **Question:** Which launch surface implements the feature doc's background runs?
+- **Options:** Orca renderer/hidden PTY; existing daemon structured runners
+- **Chose:** structured Claude/Codex through public APIs, no PTY/tab/focus mutation
+- **Why:** The locked architecture explicitly includes automations in structured background agents.
+- **Evidence:** docs/architecture.md:175-178,302-303; docs/loop/decisions/m5-structured-runner.md D3
+- **Reversibility:** hard
+- **Confidence:** high
+- **Revisit if:** architecture decision is explicitly superseded
+- **Source:** locked by docs/architecture.md
+
+## D2: Preserve raw-argument refusal and defer that incompatible flow
+- **Question:** Can automation extras bypass structured runner's raw-args refusal?
+- **Options:** silently map partial argv; implement terminal fallback; preserve binding refusal
+- **Chose:** reject nonblank raw arguments before mutation; structured model/effort remain supported; one dependent follow-up names raw-args decision and remote flows
+- **Why:** D6 binds downstream consumers to native options and explicitly refuses extras. No shell fallback or misleading partial support.
+- **Evidence:** docs/loop/decisions/m5-structured-runner.md D6; plugins/quirky.structured/main.ts:480-486
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** binding structured extras decision changes
+- **Source:** deferred: raw extra agent arguments
+
+## D3: Capture local registry identity and fail closed for remote host flows
+- **Question:** How to implement host fencing without a public host registration/execution API?
+- **Options:** trust client runContext; infer remote host locally; capture local repo/workspace identity and refuse remote
+- **Chose:** authoritative local repo/path/workspace instance capture; re-resolve every launch; remote SSH/runtime pin/re-pin/re-adoption deferred until public host execution and registration generations exist
+- **Why:** Scout found no public host registration/generation API. Remote records must never switch to local execution. Explicit selector moves recapture; ordinary edits preserve orphans.
+- **Evidence:** MapDispatchApis scout; quirky.repo/resolve and quirky.worktree/resolve schemas; automations.md Execution target, owner, and host fencing
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** public remote target methods land
+- **Source:** deferred: remote host generation and execution
+
+## D4: Resolve every relevant gray area autonomously
+- **Question:** Brainstorming domain, defaults, purpose, success criteria and ambiguities
+- **Options:** wait for a person; accept recommended defaults
+- **Chose:** API/CLI/Data/Integration; resolve response shape, typed conflicts, auth, pagination, output/flags, exit truth, data mapping, idempotency, conflict handling and retry policy; preserve existing automation CLI/JSON shape; daemon auth; no automatic provider retry; each refused manual run visible; scheduled repeats fold
+- **Why:** Nobody is watching. Feature doc, roadmap and earlier decisions define observable behavior. Purpose: unattended scheduled/manual agent work, consumer: CLI/API and later UI; success: native process executes one persisted run with truthful final evidence.
+- **Evidence:** combined logic.md AC1-AC9; authoritative LOOP.md Answering a skill's questions
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a documented consumer flow contradicts the chosen defaults
+- **Source:** locked by docs/loop/LOOP.md
+
+## D5: Prefer public existing seams to duplicate runners
+- **Question:** Which architecture and alternatives are viable?
+- **Options:** public structured/check/worktree APIs; renderer launcher; private provider/check code imports
+- **Chose:** automation policy composes the public APIs; three disjoint target/execution/integration components
+- **Why:** Headless independence, public-plugin constraint, existing setup trust and process cleanup remain authoritative. No new workflow abstraction.
+- **Evidence:** docs/roadmap.md:19-20,47-53,204-208; logic.md Technical decisions
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** an essential execution primitive is absent
+- **Source:** assumed — autonomous
+
+## D6: Claim durably and recheck before side effects
+- **Question:** Concurrency, edits, deletion, duplicate dispatch and restart semantics
+- **Options:** optimistic unclaimed launch; one durable claim and per-id lane
+- **Chose:** persisted pending-to-dispatching, semantic definition/destination snapshots excluding scheduler bookkeeping; recheck after awaited preparation; ambiguous crash never relaunches; final rows cannot be overwritten
+- **Why:** A queued record is not a successful agent; at-most-once launch is safer than duplicate unattended work.
+- **Evidence:** automations.md Dispatch and Edge cases; m5-automations-core D1,D5,D10
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** a durable external launch transaction becomes available
+- **Source:** assumed — autonomous
+
+## D7: Explicit setup defaults to skip and never grants hook trust
+- **Question:** Can a scheduled new workspace pause for setup consent?
+- **Options:** auto-trust hooks; wait for interactive consent; preserve explicit skip/run and fail closed
+- **Chose:** default skip; run uses worktree's existing trust enforcement without confirmation; setup failure prevents agent launch
+- **Why:** Unattended execution must neither hang on a person nor silently run untrusted scripts.
+- **Evidence:** automations.md Workspace policy and create step7; quirky.worktree/create trustSetupHash schema
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a save-time setup consent flow is introduced by the UI item
+- **Source:** assumed — autonomous
+
+## D8: Per-turn cursor controls reuse, completion and usage
+- **Question:** How to avoid stale done evidence or attributing the same session's usage repeatedly?
+- **Options:** session-wide done/usage; post-cursor structured journal evidence
+- **Chose:** reuse only live done same-provider/workspace sessions owned by newest completed run; claim lane; snapshot cursor before send; only newer result/working evidence counts; immutable actual launch snapshot; native usage/cost only, otherwise explicit unavailable
+- **Why:** A structured result can arrive before the launch acknowledgement. Durable journal replay avoids event-loss races and provider-wide totals cannot prove a run's spend.
+- **Evidence:** automations.md Session reuse, completion and Usage attribution; structured/messages API
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** providers add normalized turn usage APIs
+- **Source:** assumed — autonomous
+
+## D9: Use OpenAI implementers and reachable Gemini cross-family review
+- **Question:** SDD preflight pairing and workflow
+- **Options:** omp task + opus; omp task + sonnet; omp task + Gemini
+- **Chose:** IMPLEMENTER=omp-task, AUTHOR_FAMILY=openai, REVIEWER_ALIAS=gemini high. One wave of three disjoint components, cap3; no successor/checkpoint. One final C/S/X promote/refute round and one blocker-fix batch.
+- **Why:** Actual pi-watch --check rejected opus/sonnet; Gemini resolves google/gemini-3.1-pro-preview:high. Night mode requires contracts before implementers, one combined spec, no research swarm/spec review, one catch-up, affected suite/scripts/typecheck once. Run journal outside repo at /tmp/quirky-automations-dispatch-lane7.aKM80C.
+- **Evidence:** iteration7 preflight output; bun1.4.0; RUN_BASE c6385407e1a7ae653a47223b3bb51dbaab5605b0
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** reviewer dispatch fails
+- **Source:** locked by docs/loop/LOOP.md
+
+## D10: Preserve unrelated files and validate macOS only
+- **Question:** Dirty-tree handling and platform claims
+- **Options:** stash/delete/commit inherited files; preserve them and isolate workers
+- **Chose:** leave inherited .serena/, test-migrated.test.ts and test.ts untouched/unstaged; isolated component worktrees. Test homes isolate HOME and QUIRKY_HOME. Linux/Windows validation deferred.
+- **Why:** Unrelated changes belong to the user; LOOP platforms are locked. No baseline full-suite rerun; final landing owns it.
+- **Evidence:** initial git status; m5-automations-core D8; LOOP.md Platforms and Tests
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** platform-specific support is requested
+- **Source:** deferred: platform
+
+## Progress
+Design and self-reviewed combined spec written. Shared dispatch-contract.ts committed before implementers. Next: implement three disjoint components, own-file behavioral tests, actual isolated daemon/CLI/native-process smoke, one affected gate and review, catch-up and queue land. Only this item this iteration. No human asks. Follow-up for the two explicitly constrained flows must be added once immediately before land.
