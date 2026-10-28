@@ -338,5 +338,27 @@
 - **Revisit if:** pending cancellation steals focus, wheel leaks to the host, or toolbar S remains silent.
 - **Source:** assumed — autonomous
 
+## D31: Translate macOS editing commands, not just DOM key events
+- **Question:** Was ordinary Watch copy merely a headless clipboard limitation?
+- **Options:** label it a tool limitation; inspect actual selection and repair keyboard translation.
+- **Chose:** repair standard macOS Meta editing through CDP commands, preserving the existing input API and exact-target guard.
+- **Why:** after the guarded cmd+a/c sequence, public read-only eval reported MacIntel, active INPUT and selection8:8 in “Normal copy text”. A WindowsVK-only probe then delivered keyCode65/metaKey=true/defaultPrevented=false but still left selection10:10. Delivering a DOM keydown did not invoke macOS editing defaults.
+- **Evidence:** Official CDP Input schema exposes editing commands. Standard Meta selectAll/copy/cut/paste/undo/redo bindings on keyDown made a fresh-home public probe select0:10 and paste correctly between two owned inputs. The permanent public Watch regression passed1test/2expectations in isolation. No clipboard permission grant, DOM fixture special case, API expansion or host clipboard bridge was added.
+- **Reversibility:** medium
+- **Confidence:** actual selection and same-guest paste proved; final host UI copy rerun remains required.
+- **Revisit if:** ordinary copy arms the picker or platform editing diverges.
+- **Source:** assumed — autonomous; CDP Input.dispatchKeyEvent commands contract
+
+## D32: Keep the final verification boundary honest
+- **Question:** What passed, and what still needs integration verification?
+- **Options:** hide a timeout behind an isolated pass; retain both outcomes and run the required merge-result gate.
+- **Chose:** retain the full-file timeout, the isolated new regression pass and the earlier complete pane/browser passes separately. Canonical land must verify the actual merge result; no all-green claim precedes it.
+- **Why:** the final keyboard worker's full pane.test.ts invocation emitted one daemon line and hit its3600s tool deadline (reported3884.51s), without a test result. Its later isolated regression passed, and no matching fresh-home processes remained. The timed-out invocation is not passing evidence.
+- **Evidence:** Before the keyboard repair, the clean8db98e52 gate passed9remote+3Mac Browser files, scripts68/0/570, typecheck and full28-plugin/20-UI-module build; broader unchanged importers had144remote and other Mac passes from the initial affected run. Gate tree941becc9615c861c78802ee9396111b99a66544d is archived separately.
+- **Reversibility:** easy
+- **Confidence:** exact observed outcomes; final integration result pending.
+- **Revisit if:** canonical land reproduces the timeout or any named failure.
+- **Source:** assumed — autonomous; locked by LOOP.md verification/land contract
+
 ## Progress
-Authoritative pane/helper landed and build/roadmap merged; incoming locks inspected. bg43 merged typecheck and latest20-module UI build passed. Old daemon/PTY fixtures stopped; current owned BrowserDesignFinalRuntime22297 uses fresh /tmp/qdesign-Lqhva8 with only recording fake OMP on runtimePATH. Guarded final regression20261028T070420-ee9d proved first Grab copy/full frame and actual stale-target Send refusal with note retained. A second copy produced identical visible Copied state and then no-hover feedback; its clipboard outcome is under diagnosis, since successful automatic rearm also clears hover. RepeatedGrabRepair owns isolated diagnosis; no speculative repair. Run2's three passing flows and partials remain recorded. Final affected suite/scripts/types/build must bind a clean committed tree, then queue-controlled land. Unstarted review skipped under D20; no newqueue. Stop owned runtime and archive/remove scratch after complete verification/land.
+Dependency readiness is true; authoritative roadmap merged and locks inspected. All original component branches are integrated. Clean8db98e52 browser/scripts/types/full-build gate passed; reports prove Annotate, all7Draw tools, lifetime, actual Send success/refusal, repeated coordinate copy, immediateS and menu PNG. The fresh-toolbar S repair showed actual No element hovered; native wheel emitted no console error and kept host layout fixed, though its guard classification remained partial. Ordinary-copy diagnosis exposed missing macOS editing defaults; D31 repair and isolated public regression passed, but a full-file timeout remains explicitly recorded in D32. Old UI runtimes are stopped. Next: commit keyboard repair, typecheck/build, bounded original normal-copy UI rerun, then canonical merge-result land gate. No unstarted review/newqueue. Archive reports/gates, restore preserved untracked .serena metadata, and remove owned temporary homes only after all owned processes stop.

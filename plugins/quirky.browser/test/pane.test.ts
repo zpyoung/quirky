@@ -27,6 +27,7 @@ function startPageServer() {
         })
       }
       if (path === '/page') return new Response(`<!doctype html><title>Pane fixture</title><body style="margin:0"><input id="text" value=""><button id="button">Button</button><p>needle needle needle</p></body>`, { headers: { 'content-type': 'text/html; charset=utf-8' } })
+      if (path === '/keyboard') return new Response('<!doctype html><title>Keyboard fixture</title><body style="margin:0"><input id="source" value=""><input id="target" value=""></body>', { headers: { 'content-type': 'text/html; charset=utf-8' } })
       if (path === '/reload') {
         const count = ++reloadRequestCount
         return new Response(`<!doctype html><title>Reload fixture ${count}</title><body><input id="text"><main id="request">${count}</main></body>`, {
@@ -236,6 +237,65 @@ test('Watch leases deliver acknowledged latest frames and typed input/find/zoom/
       })
       expect(ended).toContain('closed')
       await expect(call(h, 'paneFrameAck', { pane: pane.id, watchId: resumed.watchId, sequence: 1 })).rejects.toBeInstanceOf(Error)
+    } finally {
+      unsubscribe()
+    }
+  } finally {
+    fixture.stop()
+    await h.cleanup()
+  }
+}, 90_000)
+
+test('Watch keyboard shortcuts select and copy/paste between owned inputs', async () => {
+  const h = await startBrowserHarness()
+  const fixture = startPageServer()
+  const events: QuirkyEvent[] = []
+  try {
+    const worktree = await h.addFolderWorktree('pane-watch-keyboard')
+    await h.client.call('events.subscribe', {})
+    const unsubscribe = h.client.onEvent((event) => events.push(event))
+    try {
+      const page = await createAgentPage(h, worktree, `${fixture.url}keyboard`)
+      const pane = await call(h, 'paneOpen', { worktree: `id:${worktree}`, mode: 'watch', page: page.browserPageId }) as { id: string }
+      const watch = await call(h, 'paneWatch', { pane: pane.id }) as { watchId: string }
+      let acknowledgedSequence = 0
+      const acknowledgeNextFrame = async () => {
+        const frame = await waitFor(() => events.map(paneFrame).find((candidate) =>
+          candidate?.watchId === watch.watchId &&
+          typeof candidate.sequence === 'number' &&
+          candidate.sequence > acknowledgedSequence
+        ))
+        const sequence = frame.sequence as number
+        await call(h, 'paneFrameAck', { pane: pane.id, watchId: watch.watchId, sequence })
+        acknowledgedSequence = sequence
+      }
+      const pressMetaKey = async (key: string, code: string) => {
+        await call(h, 'paneInput', { pane: pane.id, kind: 'key', type: 'keyDown', key, code, modifiers: 4 })
+        await call(h, 'paneInput', { pane: pane.id, kind: 'key', type: 'keyUp', key, code, modifiers: 4 })
+      }
+      await acknowledgeNextFrame()
+
+      await call(h, 'paneInput', { pane: pane.id, kind: 'mouse', type: 'mousePressed', x: 45, y: 16, button: 'left' })
+      await call(h, 'paneInput', { pane: pane.id, kind: 'mouse', type: 'mouseReleased', x: 45, y: 16, button: 'left' })
+      await call(h, 'paneInput', { pane: pane.id, kind: 'text', text: 'watch clipboard' })
+      await acknowledgeNextFrame()
+
+      await pressMetaKey('a', 'KeyA')
+      expect(await call(h, 'eval', {
+        page: page.browserPageId,
+        expression: "(() => { const input = document.querySelector('#source'); return input.value + ':' + input.selectionStart + ':' + input.selectionEnd })()"
+      })).toEqual({ value: 'watch clipboard:0:15' })
+      await acknowledgeNextFrame()
+
+      await pressMetaKey('c', 'KeyC')
+      await call(h, 'paneInput', { pane: pane.id, kind: 'mouse', type: 'mousePressed', x: 220, y: 16, button: 'left' })
+      await call(h, 'paneInput', { pane: pane.id, kind: 'mouse', type: 'mouseReleased', x: 220, y: 16, button: 'left' })
+      await pressMetaKey('v', 'KeyV')
+      expect(await call(h, 'eval', {
+        page: page.browserPageId,
+        expression: "document.querySelector('#target').value"
+      })).toEqual({ value: 'watch clipboard' })
+      await acknowledgeNextFrame()
     } finally {
       unsubscribe()
     }
