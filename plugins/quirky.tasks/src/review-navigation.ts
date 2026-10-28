@@ -1,4 +1,12 @@
-export type ReviewTarget = { worktree: string; number: number; tab?: 'conversation' | 'checks' | 'files' }
+export type ReviewTarget = {
+  worktree: string
+  number: number
+  tab?: 'conversation' | 'checks' | 'files'
+  url?: string
+  host?: string
+  owner?: string
+  repo?: string
+}
 
 /** Public cross-plugin navigation; the reviews owner captures and restores the prior Tasks view. */
 export async function openReview(context: { call(method: string, params?: Record<string, unknown>): Promise<unknown> }, target: ReviewTarget): Promise<unknown> {

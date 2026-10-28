@@ -1242,6 +1242,23 @@
               "type": "boolean",
               "description": "Only accepted after an explicit composer approval to run this untrusted setup once."
             },
+            "trustSetupHash": {
+              "type": "string",
+              "description": "Creator-issued hash of the displayed shared setup; required with composer one-time setup approval."
+            },
+            "issueCommand": {
+              "type": "string",
+              "enum": ["run", "skip", "inherit"],
+              "description": "Issue command choice independent of repository setup."
+            },
+            "trustIssueCommand": {
+              "type": "boolean",
+              "description": "One-time approval of the displayed shared issue command in the active composer."
+            },
+            "trustIssueCommandHash": {
+              "type": "string",
+              "description": "Creator-issued hash pinning one-time issue-command approval."
+            },
             "composerRequestId": {
               "type": "string",
               "description": "Active daemon-held composer request required when submitting the visible form."
@@ -1305,6 +1322,19 @@
               "items": {}
             },
             "agent": {},
+            "agentSessionId": {
+              "type": "string"
+            },
+            "agentPending": {
+              "type": "boolean",
+              "description": "Agent launch is waiting for repository setup, not confirmed delivery."
+            },
+            "promptDelivery": {
+              "description": "Observed public session promptDelivery; pending, unconfirmed and not-delivered are not delivered."
+            },
+            "issueCommand": {
+              "description": "Independent issue-command choice in a composer or canonical execution outcome after creation."
+            },
             "error": {
               "type": "string"
             }
