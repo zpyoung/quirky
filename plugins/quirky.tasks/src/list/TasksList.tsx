@@ -130,6 +130,11 @@ function rowKey(item: Pick<ListItem, 'worktree' | 'kind' | 'number' | 'url'>): s
 function rowTarget(item: ListItem): ItemTarget {
   return { worktree: item.worktree, kind: item.kind, number: item.number, url: item.url }
 }
+function assigneeChoiceKey(item: ListItem, source: ListSource): string {
+  const identity = source.issueRepository
+  if (!identity?.host || !identity.owner || !identity.repo) return `${item.repoId}\u0000${item.url}`
+  return `${item.repoId}\u0000${identity.host.toLowerCase()}/${identity.owner.toLowerCase()}/${identity.repo.toLowerCase()}`
+}
 
 function stop(event: { stopPropagation(): void }): void {
   event.stopPropagation()
@@ -427,6 +432,9 @@ export function TasksList({ context, state, refresh }: TasksSurfaceProps) {
   const fetchGeneration = useRef(0)
   const latestKey = useRef('')
   const mutationGenerations = useRef(new Map<string, number>())
+  const viewKey = useRef('')
+  const viewGeneration = useRef(0)
+  const checkReadGenerations = useRef(new Map<string, number>())
   const mergeReadGenerations = useRef(new Map<string, number>())
   const mergeReadOwners = useRef(new Map<string, string>())
   const mutationInFlight = useRef(new Set<string>())
@@ -441,6 +449,15 @@ export function TasksList({ context, state, refresh }: TasksSurfaceProps) {
   const selectedRepos = result?.repositories.filter((repo) => selectedRepoIds.includes(repo.id)) ?? []
   const filterRepoId = selectedRepos.length === 1 ? selectedRepos[0]!.id : null
   const currentKey = `${navigation.source}\u0000${mode}\u0000${navigation.repoIds === null ? '*' : navigation.repoIds.join(',')}\u0000${navigation.query}\u0000${navigation.page}`
+  if (viewKey.current !== currentKey) {
+    viewKey.current = currentKey
+    viewGeneration.current += 1
+  }
+  const currentViewGeneration = viewGeneration.current
+  const invalidateViewGeneration = () => {
+    viewKey.current = currentKey
+    viewGeneration.current += 1
+  }
   latestKey.current = currentKey
   const visibleResult = resultKey === currentKey ? result : null
   const filters = filtersFromQuery(navigation.query)
@@ -473,6 +490,8 @@ export function TasksList({ context, state, refresh }: TasksSurfaceProps) {
     const key = currentKey
     if (navigation.mode === 'projects') return
     const generation = ++fetchGeneration.current
+    const ownerGeneration = viewGeneration.current
+    const ownsRequest = () => generation === fetchGeneration.current && latestKey.current === key && viewGeneration.current === ownerGeneration
     if (deliberate) {
       setOptimistic((previous) => Object.fromEntries(Object.entries(previous).filter(([, pending]) => !pending.keepVisible)))
       checkTriggered.current.clear()
@@ -482,16 +501,16 @@ export function TasksList({ context, state, refresh }: TasksSurfaceProps) {
     if (noCache) setRefreshing(true)
     try {
       const loaded = await fetchList(noCache)
-      if (generation !== fetchGeneration.current || latestKey.current !== key) return
+      if (!ownsRequest()) return
       setResult(loaded)
       setResultKey(key)
       setError(null)
     } catch (cause) {
-      if (generation !== fetchGeneration.current || latestKey.current !== key) return
+      if (!ownsRequest()) return
       setError(errorMessage(cause))
       if (resultKey !== key) setResult(null)
     } finally {
-      if (generation === fetchGeneration.current && latestKey.current === key) {
+      if (ownsRequest()) {
         setLoading(false)
         setRefreshing(false)
       }
@@ -501,6 +520,12 @@ export function TasksList({ context, state, refresh }: TasksSurfaceProps) {
   useEffect(() => {
     void loadList()
   }, [loadList])
+  useEffect(() => {
+    checkTriggered.current.clear()
+    setChecks({})
+    setChecksLoading({})
+    setMergeLoading({})
+  }, [currentKey])
 
   useEffect(() => {
     clearTimeout(searchTimer.current)
@@ -632,16 +657,18 @@ export function TasksList({ context, state, refresh }: TasksSurfaceProps) {
     setResultKey(currentKeyAtCall)
   }
 
-  const startQuietAdoption = (item: ListItem, generation: number, patch: Partial<ListItem>, key: string) => {
+  const startQuietAdoption = (item: ListItem, generation: number, patch: Partial<ListItem>, key: string, ownerGeneration: number) => {
+    const ownsView = () => viewGeneration.current === ownerGeneration && latestKey.current === key
+    const ownsMutation = () => mutationGenerations.current.get(rowKey(item)) === generation && ownsView()
     const run = async () => {
       for (const delay of quietAdoptionDelays) {
         const { promise, resolve } = Promise.withResolvers<void>()
         setTimeout(resolve, delay)
         await promise
-        if (mutationGenerations.current.get(rowKey(item)) !== generation || latestKey.current !== key) return
+        if (!ownsMutation()) return
         try {
           const fresh = await fetchList(true)
-          if (mutationGenerations.current.get(rowKey(item)) !== generation || latestKey.current !== key) return
+          if (!ownsMutation()) return
           const current = fresh.items.find((candidate) => rowKey(candidate) === rowKey(item))
           if (current && samePatch(current, patch)) {
             setOptimistic((previous) => {
@@ -654,13 +681,12 @@ export function TasksList({ context, state, refresh }: TasksSurfaceProps) {
           }
           updateListResult(fresh, key)
         } catch (cause) {
-          if (mutationGenerations.current.get(rowKey(item)) === generation && latestKey.current === key) setError(errorMessage(cause))
+          if (ownsMutation()) setError(errorMessage(cause))
         }
       }
     }
     void run()
   }
-
   const mutate = async (item: ListItem, action: Record<string, unknown>, patch: Partial<ListItem>, keepVisible = false): Promise<unknown> => {
     const key = rowKey(item)
     const generation = (mutationGenerations.current.get(key) ?? 0) + 1
@@ -669,21 +695,49 @@ export function TasksList({ context, state, refresh }: TasksSurfaceProps) {
     mergeReadOwners.current.delete(key)
     mutationInFlight.current.add(key)
     const contextKey = currentKey
+    const ownerGeneration = currentViewGeneration
+    const prior = optimistic[key]
+    const baseItem = prior?.item ?? item
+    const cumulativePatch = { ...(prior?.patch ?? {}), ...patch }
+    const cumulativeKeepVisible = keepVisible || prior?.keepVisible === true
+    const ownsView = () => viewGeneration.current === ownerGeneration && latestKey.current === contextKey
     fetchGeneration.current += 1
     setMergeLoading((previous) => ({ ...previous, [key]: false }))
     setBusy(key, true)
-    setOptimistic((previous) => ({ ...previous, [key]: { item, patch, generation, keepVisible } }))
+    setOptimistic((previous) => {
+      const current = previous[key]
+      return {
+        ...previous,
+        [key]: {
+          item: current?.item ?? baseItem,
+          patch: { ...(current?.patch ?? prior?.patch ?? {}), ...patch },
+          generation,
+          keepVisible: keepVisible || current?.keepVisible === true || prior?.keepVisible === true
+        }
+      }
+    })
     try {
       const result = await context.call('quirky.tasks/row', { target: rowTarget(item), ...action, ...(action.action === 'merge' ? { yes: true } : {}) })
-      if (mutationGenerations.current.get(key) !== generation) return result
+      if (mutationGenerations.current.get(key) !== generation || !ownsView()) return result
       const response = object(result)
       const confirmedPatch = action.action === 'issueStatus'
         ? absolutePatch(response?.item)
         : action.action === 'merge' && response?.kind === 'merged'
           ? { state: 'merged' as const }
           : {}
-      const finalPatch = Object.keys(confirmedPatch).length > 0 ? { ...patch, ...confirmedPatch } : patch
-      setOptimistic((previous) => ({ ...previous, [key]: { item, patch: finalPatch, generation, keepVisible } }))
+      const finalPatch = { ...cumulativePatch, ...confirmedPatch }
+      setOptimistic((previous) => {
+        const current = previous[key]
+        return {
+          ...previous,
+          [key]: {
+            item: current?.item ?? baseItem,
+            patch: { ...(current?.patch ?? cumulativePatch), ...confirmedPatch },
+            generation,
+            keepVisible: current?.keepVisible === true || cumulativeKeepVisible
+          }
+        }
+      })
       if (action.action === 'merge' && response?.kind === 'merged') {
         setMergeMetadata((previous) => {
           const current = previous[key]
@@ -727,16 +781,25 @@ export function TasksList({ context, state, refresh }: TasksSurfaceProps) {
         }
       }
       setError(null)
-      startQuietAdoption(item, generation, finalPatch, contextKey)
-      void refresh().catch((cause) => setError(errorMessage(cause)))
+      startQuietAdoption(baseItem, generation, finalPatch, contextKey, ownerGeneration)
+      void refresh().catch((cause) => { if (ownsView()) setError(errorMessage(cause)) })
       return result
     } catch (cause) {
-      if (mutationGenerations.current.get(key) === generation) {
-        setOptimistic((previous) => {
-          const next = { ...previous }
-          delete next[key]
-          return next
-        })
+      if (mutationGenerations.current.get(key) === generation && ownsView()) {
+        if (prior && Object.keys(prior.patch).length > 0) {
+          setOptimistic((previous) => {
+            if (previous[key]?.generation !== generation) return previous
+            return { ...previous, [key]: { ...prior, generation } }
+          })
+          startQuietAdoption(prior.item, generation, prior.patch, contextKey, ownerGeneration)
+        } else {
+          setOptimistic((previous) => {
+            if (previous[key]?.generation !== generation) return previous
+            const next = { ...previous }
+            delete next[key]
+            return next
+          })
+        }
         setError(errorMessage(cause))
       }
       throw cause
@@ -744,30 +807,49 @@ export function TasksList({ context, state, refresh }: TasksSurfaceProps) {
       if (mutationGenerations.current.get(key) === generation) {
         mutationInFlight.current.delete(key)
         setBusy(key, false)
+        if (!ownsView()) {
+          setOptimistic((previous) => {
+            if (previous[key]?.generation !== generation) return previous
+            const next = { ...previous }
+            delete next[key]
+            return next
+          })
+        }
       }
     }
   }
+
 
   const loadChecks = useCallback(async (item: ListItem) => {
     const key = rowKey(item)
     if (checkTriggered.current.has(key)) return
     checkTriggered.current.add(key)
+    const owner = currentKey
+    const ownerGeneration = currentViewGeneration
+    const requestGeneration = (checkReadGenerations.current.get(key) ?? 0) + 1
+    checkReadGenerations.current.set(key, requestGeneration)
+    const ownsRead = () => checkReadGenerations.current.get(key) === requestGeneration
+      && viewGeneration.current === ownerGeneration
+      && latestKey.current === owner
     setChecksLoading((previous) => ({ ...previous, [key]: true }))
     try {
       const value = await context.call('quirky.tasks/checks', { target: rowTarget(item) })
+      if (!ownsRead()) return
       const parsed = checkResult(value)
       if (parsed) setChecks((previous) => ({ ...previous, [key]: parsed }))
       else setChecks((previous) => ({ ...previous, [key]: { rollup: 'unknown', checks: [], partial: true, partialFailures: ['Invalid check result.'] } }))
     } catch (cause) {
-      setError(errorMessage(cause))
-      checkTriggered.current.delete(key)
+      if (ownsRead()) {
+        setError(errorMessage(cause))
+        checkTriggered.current.delete(key)
+      }
     } finally {
-      setChecksLoading((previous) => ({ ...previous, [key]: false }))
+      if (ownsRead()) setChecksLoading((previous) => ({ ...previous, [key]: false }))
     }
-  }, [context])
+  }, [context, currentKey, currentViewGeneration])
   const loadMergeMetadata = useCallback(async (item: ListItem) => {
     const key = rowKey(item)
-    const owner = currentKey
+    const owner = `${currentViewGeneration}\u0000${currentKey}`
     if (mergeMetadataRef.current[key] || mutationInFlight.current.has(key) || mergeReadOwners.current.get(key) === owner) return
     const generation = (mergeReadGenerations.current.get(key) ?? 0) + 1
     mergeReadGenerations.current.set(key, generation)
@@ -775,7 +857,8 @@ export function TasksList({ context, state, refresh }: TasksSurfaceProps) {
     const mutationGeneration = mutationGenerations.current.get(key) ?? 0
     const ownsRead = () => mergeReadGenerations.current.get(key) === generation
       && mergeReadOwners.current.get(key) === owner
-      && latestKey.current === owner
+      && viewGeneration.current === currentViewGeneration
+      && latestKey.current === currentKey
       && (mutationGenerations.current.get(key) ?? 0) === mutationGeneration
       && !mutationInFlight.current.has(key)
     setMergeLoading((previous) => ({ ...previous, [key]: true }))
@@ -802,10 +885,12 @@ export function TasksList({ context, state, refresh }: TasksSurfaceProps) {
     } finally {
       if (mergeReadGenerations.current.get(key) === generation) {
         mergeReadOwners.current.delete(key)
-        setMergeLoading((previous) => ({ ...previous, [key]: false }))
+        if (viewGeneration.current === currentViewGeneration && latestKey.current === currentKey) {
+          setMergeLoading((previous) => ({ ...previous, [key]: false }))
+        }
       }
     }
-  }, [context, currentKey])
+  }, [context, currentKey, currentViewGeneration])
 
   useEffect(() => {
     if (mode !== 'prs') return
@@ -930,17 +1015,24 @@ export function TasksList({ context, state, refresh }: TasksSurfaceProps) {
 
   const openAssignees = async (item: ListItem) => {
     const key = rowKey(item)
+    const choicesKey = assigneeChoiceKey(item, parseSource(visibleResult?.sources[item.repoId]))
     setAssigneesFor((current) => current === key ? null : key)
     setAssigneeDraft([...item.assignees])
-    if (assigneeChoices[item.repoId]) return
+    if (Object.hasOwn(assigneeChoices, choicesKey)) return
+    const ownerKey = currentKey
+    const ownerGeneration = viewGeneration.current
+    const ownsRead = () => viewGeneration.current === ownerGeneration && latestKey.current === ownerKey
     try {
       const result = object(await context.call('quirky.tasks/options', { repoId: item.repoId, kind: 'assignees' }))
+      if (!ownsRead()) return
       const values = Array.isArray(result?.assignees) ? result.assignees.flatMap((entry) => {
         const value = object(entry)
         return typeof value?.login === 'string' ? [value.login] : []
       }) : []
-      setAssigneeChoices((previous) => ({ ...previous, [item.repoId]: values }))
+      setAssigneeChoices((previous) => ({ ...previous, [choicesKey]: values }))
     } catch (cause) {
+      if (!ownsRead()) return
+      setAssigneeChoices((previous) => ({ ...previous, [choicesKey]: [] }))
       setError(errorMessage(cause))
     }
   }
@@ -956,6 +1048,9 @@ export function TasksList({ context, state, refresh }: TasksSurfaceProps) {
   const openReviewers = async (item: ListItem) => {
     const key = rowKey(item)
     const opening = reviewersFor !== key
+    const ownerKey = currentKey
+    const ownerGeneration = viewGeneration.current
+    const ownsRead = () => viewGeneration.current === ownerGeneration && latestKey.current === ownerKey
     setReviewersFor(opening ? key : null)
     if (!opening) return
     setReviewerText('')
@@ -974,6 +1069,7 @@ export function TasksList({ context, state, refresh }: TasksSurfaceProps) {
     }
     try {
       const result = object(await context.call('quirky.tasks/options', { kind: 'reviewers', target: rowTarget(item) }))
+      if (!ownsRead()) return
       setReviewerOptions((previous) => ({
         ...previous,
         [key]: {
@@ -984,7 +1080,7 @@ export function TasksList({ context, state, refresh }: TasksSurfaceProps) {
         }
       }))
     } catch (cause) {
-      setError(errorMessage(cause))
+      if (ownsRead()) setError(errorMessage(cause))
     }
   }
 
@@ -1057,10 +1153,17 @@ export function TasksList({ context, state, refresh }: TasksSurfaceProps) {
       number: 1,
       url: `https://${candidate.host}/${candidate.owner}/${candidate.repo}/issues/1`
     }
+    invalidateViewGeneration()
+    setAssigneeChoices({})
     try {
       await context.call('quirky.tasks/row', { target, action: 'issueSource', preference })
+      invalidateViewGeneration()
+      setAssigneeChoices({})
       await loadList(true)
     } catch (cause) {
+      invalidateViewGeneration()
+      setAssigneeChoices({})
+      await loadList(true)
       setError(errorMessage(cause))
     }
   }
@@ -1275,6 +1378,7 @@ export function TasksList({ context, state, refresh }: TasksSurfaceProps) {
             <tbody>
               {tableRows.map((item) => {
                 const key = rowKey(item)
+                const assigneeSourceKey = assigneeChoiceKey(item, parseSource(visibleResult?.sources[item.repoId]))
                 const busy = busyRows[key] === true
                 const when = relativeTime(item.updatedAt)
                 const linked = object(item.linkedWorkspace)
@@ -1337,8 +1441,14 @@ export function TasksList({ context, state, refresh }: TasksSurfaceProps) {
                       <>
                         <td onClick={stop} onKeyDown={stop} style={{ padding: 8 }}>
                           <button type="button" aria-haspopup="dialog" aria-expanded={isAssigneesOpen} onClick={() => void openAssignees(item)}>{item.assignees.join(', ') || 'Assign issue'}</button>
-                          {isAssigneesOpen ? <div role="dialog" aria-label="Assign issue" style={{ position: 'absolute', zIndex: 20, padding: 10, background: 'var(--surface, #222)', border: '1px solid var(--border, #555)' }}>
+                          {isAssigneesOpen ? <div role="dialog" aria-label="Assign issue" style={{ position: 'absolute', zIndex: 20, display: 'grid', gap: 6, padding: 10, background: 'var(--surface, #222)', border: '1px solid var(--border, #555)' }}>
                             <strong>Assign issue</strong>
+                            {!Object.hasOwn(assigneeChoices, assigneeSourceKey) ? <span role="status">Loading assignable users…</span> : null}
+                            {[...new Set([...item.assignees, ...(assigneeChoices[assigneeSourceKey] ?? [])])].map((login) => <label key={login} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                              <input type="checkbox" checked={assigneeDraft.includes(login)} disabled={busy} onChange={(event) => toggleAssignee(login, event.currentTarget.checked)} />
+                              {login}
+                            </label>)}
+                            {Object.hasOwn(assigneeChoices, assigneeSourceKey) && assigneeChoices[assigneeSourceKey]?.length === 0 && item.assignees.length === 0 ? <span role="status">No assignable users.</span> : null}
                             <button type="button" onClick={() => void saveAssignees(item)} disabled={busy}>Save assignees</button>
                             <button type="button" onClick={() => setAssigneesFor(null)}>Cancel</button>
                           </div> : null}
