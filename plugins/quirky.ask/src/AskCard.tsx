@@ -55,6 +55,28 @@ export function AskCard({ ask, context, onResolved }: Props) {
       setBusy(false)
     }
   }
+  const openDelegatedQuestion = async () => {
+    if (!ask.sessionId) {
+      context.toast('Could not open delegated question', 'The exact delegated session is unavailable.')
+      return
+    }
+    setBusy(true)
+    try {
+      let worktreeId = ask.worktreeId
+      if (!worktreeId) {
+        const session = await context.call('quirky.session/get', { session: ask.sessionId })
+        if (typeof session !== 'object' || session === null || !('worktreeId' in session) || typeof session.worktreeId !== 'string') {
+          throw new Error('The delegated session has no worktree view.')
+        }
+        worktreeId = session.worktreeId
+      }
+      context.openView('view:quirky.session/worktree', { worktree: worktreeId, session: ask.sessionId })
+    } catch (error) {
+      context.toast('Could not open delegated question', error instanceof Error ? error.message : String(error))
+    } finally {
+      setBusy(false)
+    }
+  }
 
   const submit = () => {
     const submission = buildSubmission(ask.spec, drafts)
@@ -71,31 +93,55 @@ export function AskCard({ ask, context, onResolved }: Props) {
   return (
     <article className="ask-card" aria-label={ask.spec.title ?? 'Question'}>
       <h3>{ask.spec.title ?? ASK_FALLBACK_TITLE}</h3>
-      {ask.spec.questions.map((question) => (
-        <fieldset key={question.id} data-question={question.id}>
-          <legend>
-            {question.header && <strong style={{ display: 'block' }}>{question.header}</strong>}
-            <span data-question-text style={{ display: 'block', whiteSpace: 'pre-wrap', fontWeight: question.header ? 400 : undefined }}>
-              {question.question}
-            </span>
-          </legend>
-          {!question.required && <small className="muted">(optional)</small>}
-          <QuestionField question={question} draft={drafts[question.id]!} onChange={(draft) => change(question.id, draft)} />
-          {errors[question.id] && (
-            <p role="alert" style={{ color: 'var(--danger)', margin: '4px 0 0' }}>
-              {errors[question.id]}
-            </p>
-          )}
-        </fieldset>
-      ))}
-      <div className="dialog-actions">
-        <button disabled={busy} onClick={() => void dismiss()}>
-          Dismiss
-        </button>
-        <button className="primary" disabled={busy} onClick={() => void submit()}>
-          Submit
-        </button>
-      </div>
+      {ask.handoff ? (
+        <>
+          <p>This is a delegated question. Open its session to answer the exact coordinator question.</p>
+          {ask.spec.questions.map((question) => (
+            <fieldset key={question.id} data-question={question.id}>
+              <legend>{question.header ?? question.question}</legend>
+              {question.header && <p>{question.question}</p>}
+              {(question.type === 'select' || question.type === 'multiselect') && (
+                <ul>
+                  {question.options.map((option) => <li key={option.value}>{option.label}</li>)}
+                </ul>
+              )}
+            </fieldset>
+          ))}
+          <div className="dialog-actions">
+            <button className="primary" disabled={busy} onClick={() => void openDelegatedQuestion()}>
+              Open delegated question
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          {ask.spec.questions.map((question) => (
+            <fieldset key={question.id} data-question={question.id}>
+              <legend>
+                {question.header && <strong style={{ display: 'block' }}>{question.header}</strong>}
+                <span data-question-text style={{ display: 'block', whiteSpace: 'pre-wrap', fontWeight: question.header ? 400 : undefined }}>
+                  {question.question}
+                </span>
+              </legend>
+              {!question.required && <small className="muted">(optional)</small>}
+              <QuestionField question={question} draft={drafts[question.id]!} onChange={(draft) => change(question.id, draft)} />
+              {errors[question.id] && (
+                <p role="alert" style={{ color: 'var(--danger)', margin: '4px 0 0' }}>
+                  {errors[question.id]}
+                </p>
+              )}
+            </fieldset>
+          ))}
+          <div className="dialog-actions">
+            <button disabled={busy} onClick={() => void dismiss()}>
+              Dismiss
+            </button>
+            <button className="primary" disabled={busy} onClick={() => void submit()}>
+              Submit
+            </button>
+          </div>
+        </>
+      )}
     </article>
   )
 }
