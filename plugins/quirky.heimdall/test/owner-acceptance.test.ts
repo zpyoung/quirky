@@ -661,6 +661,52 @@ test('the generated owner-ready CLI accepts an issued file and translated kind a
   expect(publications).toEqual([{ evidenceKey, contentIdentity: 'owner-fixture-snapshot-1', note: 'publish checked package' }])
 })
 
+test('an owner human question parks until its exact escalation is answered in the same native conversation', async () => {
+  const booted = await boot()
+  const watcherId = await enroll({
+    owner: { agent: 'claude' }, ownerInterventionCapability: 'on',
+    capabilities: { 'ask-human': 'on' }
+  })
+  await reconcile(watcherId)
+  const issued = await waitForPending(watcherId)
+  const sessionId = stringField(issued.owner, 'sessionId', 'issued owner')
+  const before = await waitForConversation(booted.home, sessionId)
+  writeReport(pendingField(issued.pending, 'reportPath'), {
+    kind: 'ask-human', question: 'Which verified result should be kept?'
+  })
+  expect(await call('quirky.heimdall/ownerReady', {
+    watcherId, reportKey: pendingField(issued.pending, 'reportKey')
+  })).toMatchObject({ kind: 'accepted' })
+  await reconcile(watcherId)
+  const parked = await waitForAsync(async () => {
+    const current = await ownerInspect(watcherId)
+    return isRecord(current.pending) && current.pending.phase === 'parked' ? current : null
+  })
+  const pending = record(parked.pending, 'parked owner')
+  const escalationId = pendingField(pending, 'escalationId')
+  const detail = () => call('quirky.heimdall/detail', { target: { watcherId } }).then(value => record(value, 'watcher detail'))
+  const current = await detail()
+  expect(current.enrollment).toMatchObject({ enabled: false, parkReason: 'owner-escalation' })
+  const answer = (id: string, body: string, view: JsonRecord) => call('quirky.heimdall/command', {
+    target: view.target, expectedOwner: view.ownerFence,
+    command: { kind: 'answer-escalation', escalationId: id, body }
+  })
+  expect(await answer('not-the-owner-escalation', 'Wrong target.', current)).toMatchObject({ kind: 'refused' })
+  expect(readScriptedConversation(scriptedConversationPath(booted.home, before.providerSessionId)).turns).toEqual(before.conversation.turns)
+  expect((await detail()).enrollment).toMatchObject({ enabled: false, parkReason: 'owner-escalation' })
+  const reply = 'Keep the result from the first verified run.'
+  expect(await answer(escalationId, reply, await detail())).toMatchObject({ kind: 'applied' })
+  const resumed = await waitForPending(watcherId)
+  expect(resumed.owner.sessionId).toBe(sessionId)
+  expect(resumed.pending.reportKey).not.toBe(issued.pending.reportKey)
+  const conversation = await waitForConversation(booted.home, sessionId, 2)
+  expect(conversation.providerSessionId).toBe(before.providerSessionId)
+  expect(conversation.conversation.turns.at(-1)?.prompt).toContain(reply)
+  expect((await detail()).enrollment).toMatchObject({ enabled: true, parkReason: null })
+  expect(await answer(escalationId, 'Replay must not send.', await detail())).toMatchObject({ kind: 'refused' })
+  expect(readScriptedConversation(scriptedConversationPath(booted.home, before.providerSessionId)).turns).toEqual(conversation.conversation.turns)
+})
+
 test('a report accepted for stale content is held and reissued in the same provider conversation', async () => {
   const booted = await boot()
   const watcherId = await enroll({

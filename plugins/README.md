@@ -196,5 +196,31 @@ The schema-2 debug JSON includes bounded journal and trace history. Approval-req
 terminal transitions go through `quirky.notifications`, including its enabled, focus and
 cooldown policy. Disabling that plugin silences delivery.
 
+### Optional Claude owner
+
+An enrollment can set `owner: { agent: "claude", model?, effort? }` and
+`ownerInterventionCapability: "off" | "gated" | "on"` (default `"off"`).
+Without an owner, deterministic watcher behavior is unchanged. A configured owner receives
+typed deviations, including full rejected-plan and operator-edit details, in one resumable
+native conversation. Repeated evidence keys do not start duplicate turns.
+
+```sh
+quirky heimdall owner-inspect --watcher-id <watcher-id> --json
+quirky heimdall owner-ready --watcher-id <watcher-id> --report-key <issued-key> --json
+```
+
+`ownerInspect` exposes the current issued report path and key. Write the intervention JSON
+only to that private path, then submit the key through `ownerReady`; the API never accepts
+an arbitrary report path. Reports are limited to 64 KiB and reject malformed, stale or
+symlinked input. Kind-specific proposals use the registered kind's public `ownerAction`
+hook. Every proposal still requires both the owner-intervention grant and the native
+action's capability, exact approvals and current evidence.
+
+An owner that stays silent for 15 minutes receives one reminder; another 15 minutes parks
+the watcher with `owner-escalation`. Only answering that exact escalation resumes its owner
+flow. Deleting a watcher or disabling Heimdall releases its owner connection without
+stopping worker or independent sessions. Unconfirmed cleanup retains uncertainty rather
+than starting a replacement conversation.
+
 Use `quirky heimdall --help` and `quirky api --json` for the live commands and schemas.
 
