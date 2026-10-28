@@ -1,0 +1,45 @@
+{
+  "expo": {
+    "name": "Quirky",
+    "slug": "quirky-mobile",
+    "version": "1.0.0",
+    "scheme": "quirky",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "dev.quirky.mobile",
+      "infoPlist": {
+        "NSLocalNetworkUsageDescription": "Quirky connects directly to your paired desktop over local Wi-Fi or your private Tailscale network using an end-to-end encrypted connection.",
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true,
+          "NSExceptionDomains": {
+            "ts.net": {
+              "NSIncludesSubdomains": true,
+              "NSExceptionAllowsInsecureHTTPLoads": true
+            }
+          }
+        }
+      }
+    },
+    "android": {
+      "package": "dev.quirky.mobile",
+      "permissions": ["CAMERA", "INTERNET"],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": false,
+          "category": ["BROWSABLE", "DEFAULT"],
+          "data": [{ "scheme": "quirky", "host": "pair" }]
+        }
+      ]
+    },
+    "plugins": [
+      ["expo-camera", { "cameraPermission": "Allow Quirky to scan a desktop pairing QR code.", "microphonePermission": false }],
+      ["expo-secure-store", { "faceIDPermission": "Allow Quirky to access saved desktop credentials." }],
+      "expo-notifications",
+      ["expo-build-properties", { "android": { "usesCleartextTraffic": true } }]
+    ]
+  }
+}

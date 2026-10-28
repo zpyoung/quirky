@@ -69,3 +69,18 @@ export type MobileTerminalState = {
   desktopCols: number | null
   desktopRows: number | null
 }
+
+/** Page-delivery DTOs shared by the mobile plugin and the Expo companion. */
+export type MobilePageGrant = 'rpc' | 'terminal' | 'storage' | 'navigate' | 'clipboard.read' | 'clipboard.write' | 'externalLink' | 'haptics'
+export type MobileBundleAsset = { path: string; bytes: number; sha256: string; contentType: string }
+export type MobileBundleRoute = { kind: 'workspaces' | 'session'; path: string; grants: MobilePageGrant[] }
+export type MobileBundleManifest = {
+  v: 1
+  shellVersion: 1
+  buildId: string
+  assets: MobileBundleAsset[]
+  totalBytes: number
+  routes: MobileBundleRoute[]
+}
+export type MobileBundleManifestResult = { manifest: MobileBundleManifest; chunkBytes: number; rangeBytes: number }
+export type MobileBundleReadResult = { buildId: string; path: string; offset: number; data: string; encoding: 'identity' | 'gzip'; eof: boolean; sha256: string }
