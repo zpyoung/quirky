@@ -1,0 +1,1010 @@
+.quirky-tasks-issue,
+.quirky-tasks-projects {
+  box-sizing: border-box;
+  color: var(--ui-text);
+  font-family: inherit;
+  font-size: var(--ui-font-body);
+  min-width: 0;
+}
+
+.quirky-tasks-issue {
+  display: grid;
+  gap: var(--ui-space-16);
+  margin-inline: auto;
+  max-width: var(--compat-px-720);
+  padding: var(--ui-space-16);
+  width: 100%;
+}
+
+.quirky-tasks-issue--empty {
+  align-content: center;
+  min-height: var(--compat-px-320);
+}
+
+.quirky-tasks-issue__toolbar,
+.quirky-tasks-issue__summary-heading,
+.quirky-tasks-issue__section-heading,
+.quirky-tasks-issue__workspace,
+.quirky-tasks-issue__field-row,
+.quirky-tasks-issue__labels,
+.quirky-tasks-issue__assignees,
+.quirky-tasks-issue__edit-actions,
+.quirky-tasks-issue__comment-meta,
+.quirky-tasks-issue__inline-form,
+.quirky-tasks-projects__toolbar,
+.quirky-tasks-projects__actions,
+.quirky-tasks-projects__query,
+.quirky-tasks-projects__choose-view-heading,
+.quirky-tasks-projects__view-choices,
+.quirky-tasks-projects__choice-row,
+.quirky-tasks-projects__item-actions,
+.quirky-tasks-project-guidance__form,
+.quirky-tasks-project-roadmap__toolbar,
+.quirky-tasks-project-roadmap__item,
+.quirky-tasks-project-roadmap__ticks {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ui-space-8);
+}
+
+.quirky-tasks-issue__toolbar {
+  border-bottom: var(--ui-border-width) solid var(--ui-border);
+  padding-bottom: var(--ui-space-12);
+}
+
+.quirky-tasks-issue__context {
+  color: var(--ui-muted);
+  margin-inline-end: auto;
+}
+
+.quirky-tasks-issue__summary,
+.quirky-tasks-issue__section,
+.quirky-tasks-issue__error-panel,
+.quirky-tasks-issue__workspace,
+.quirky-tasks-issue__comment,
+.quirky-tasks-issue__partial-failures {
+  border: var(--ui-border-width) solid var(--ui-border);
+  border-radius: var(--ui-radius-control);
+}
+
+.quirky-tasks-issue__summary,
+.quirky-tasks-issue__section,
+.quirky-tasks-issue__partial-failures {
+  display: grid;
+  gap: var(--ui-space-12);
+  padding: var(--ui-space-12);
+}
+
+.quirky-tasks-issue__summary-heading {
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.quirky-tasks-issue__title-group {
+  flex: 1 1 var(--compat-px-280);
+  min-width: 0;
+}
+
+.quirky-tasks-issue__title,
+.quirky-tasks-issue__section-title {
+  font-size: var(--ui-font-title);
+  line-height: 1.3;
+  margin: 0;
+}
+
+.quirky-tasks-issue__meta {
+  align-items: center;
+  color: var(--ui-muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ui-space-8);
+  margin-top: var(--ui-space-8);
+}
+
+.quirky-tasks-issue__actions,
+.quirky-tasks-projects__actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ui-space-8);
+}
+
+.quirky-tasks-issue__workspace {
+  justify-content: space-between;
+  padding: var(--ui-space-8);
+}
+
+.quirky-tasks-issue__status,
+.quirky-tasks-issue__muted {
+  color: var(--ui-muted);
+  margin: 0;
+}
+
+.quirky-tasks-issue__error,
+.quirky-tasks-issue__error-panel,
+.quirky-tasks-projects__field-error {
+  color: var(--ui-failing);
+}
+
+.quirky-tasks-issue__error {
+  margin: 0;
+}
+
+.quirky-tasks-issue__error-panel {
+  align-items: center;
+  border-color: var(--ui-failing);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ui-space-8);
+  padding: var(--ui-space-12);
+}
+
+.quirky-tasks-issue__section-heading {
+  justify-content: space-between;
+}
+
+.quirky-tasks-issue__field-row {
+  align-items: flex-start;
+}
+
+.quirky-tasks-issue__field {
+  display: grid;
+  flex: 0 1 var(--compat-px-180);
+  gap: var(--ui-space-4);
+}
+
+.quirky-tasks-issue__inline-form {
+  align-items: flex-end;
+}
+
+.quirky-tasks-issue__labels,
+.quirky-tasks-issue__assignees {
+  align-items: flex-end;
+}
+
+.quirky-tasks-issue__labels {
+  flex: 1 1 var(--compat-px-320);
+}
+
+.quirky-tasks-issue__labels > .ui-text-field,
+.quirky-tasks-issue__assignees > .ui-text-field {
+  flex: 0 1 var(--compat-px-180);
+  min-width: 0;
+}
+
+.quirky-tasks-issue__assignee-section {
+  display: grid;
+  flex: 1 1 var(--compat-px-280);
+  gap: var(--ui-space-6);
+  min-width: 0;
+}
+
+.quirky-tasks-issue__assignee {
+  align-items: center;
+  border: var(--ui-border-width) solid var(--ui-border);
+  border-radius: var(--ui-radius-mark);
+  display: inline-flex;
+  gap: var(--ui-space-4);
+  padding: var(--ui-space-4) var(--ui-space-8);
+}
+
+.quirky-tasks-issue__activity-event {
+  border-inline-start: var(--ui-focus-width) solid var(--ui-border);
+  padding-inline-start: var(--ui-space-8);
+}
+
+.quirky-tasks-issue__activity-event p {
+  margin: 0 0 var(--ui-space-4);
+}
+
+.quirky-tasks-issue__comment-meta {
+  margin-bottom: var(--ui-space-6);
+}
+
+.quirky-tasks-issue__markdown {
+  overflow-wrap: anywhere;
+}
+
+.quirky-tasks-issue__partial-failures {
+  align-content: start;
+}
+
+.quirky-tasks-issue__partial-failures p {
+  margin: 0;
+}
+
+.quirky-tasks-new-issue {
+  display: grid;
+  gap: var(--ui-space-12);
+  min-width: 0;
+}
+
+.quirky-tasks-new-issue__destination,
+.quirky-tasks-new-issue__status,
+.quirky-tasks-new-issue__error,
+.quirky-tasks-new-issue__description > p {
+  margin: 0;
+}
+
+.quirky-tasks-new-issue__destination,
+.quirky-tasks-new-issue__status {
+  color: var(--ui-muted);
+}
+
+.quirky-tasks-new-issue__description {
+  display: grid;
+  gap: var(--ui-space-6);
+}
+
+.quirky-tasks-new-issue__description > p {
+  font-weight: 600;
+}
+
+.quirky-tasks-new-issue__collections {
+  display: grid;
+  gap: var(--ui-space-12);
+  grid-template-columns: repeat(auto-fit, minmax(var(--compat-px-220), 1fr));
+}
+
+.quirky-tasks-new-issue__fieldset,
+.quirky-tasks-projects__columns {
+  border: var(--ui-border-width) solid var(--ui-border);
+  border-radius: var(--ui-radius-control);
+  min-width: 0;
+  padding: var(--ui-space-12);
+}
+
+.quirky-tasks-new-issue__fieldset {
+  display: grid;
+  gap: var(--ui-space-8);
+}
+
+.quirky-tasks-new-issue__choices {
+  display: grid;
+  gap: var(--ui-space-6);
+  max-height: var(--compat-px-160);
+  overflow: auto;
+}
+
+.quirky-tasks-new-issue__choice {
+  align-items: center;
+  display: flex;
+  gap: var(--ui-space-8);
+}
+
+.quirky-tasks-new-issue__fieldset input[type='checkbox'],
+.quirky-tasks-issue__assignee input[type='checkbox'],
+.quirky-tasks-projects__column-option input[type='checkbox'] {
+  accent-color: var(--ui-accent);
+}
+
+.quirky-tasks-new-issue__add {
+  justify-self: start;
+}
+
+.quirky-tasks-new-issue__error,
+.quirky-tasks-projects__field-error {
+  color: var(--ui-failing);
+}
+
+.quirky-tasks-new-issue__actions {
+  align-items: center;
+  border-top: var(--ui-border-width) solid var(--ui-border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ui-space-8);
+  padding-top: var(--ui-space-12);
+  width: 100%;
+}
+
+.quirky-tasks-new-issue__actions .ui-text-muted {
+  color: var(--ui-muted);
+  margin-inline-end: auto;
+}
+
+.quirky-tasks-control {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.quirky-tasks-markdown {
+  color: var(--ui-text);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.quirky-tasks-markdown :is(h1, h2, h3, h4, h5, h6) {
+  font-size: var(--ui-font-title);
+  margin-block: var(--ui-space-12) var(--ui-space-6);
+}
+
+.quirky-tasks-markdown :is(p, ul, ol, blockquote, pre, table) {
+  margin-block: var(--ui-space-8);
+}
+
+.quirky-tasks-markdown blockquote {
+  border-inline-start: var(--ui-focus-width) solid var(--ui-border);
+  color: var(--ui-muted);
+  margin-inline: 0;
+  padding-inline-start: var(--ui-space-12);
+}
+
+.quirky-tasks-markdown pre,
+.quirky-tasks-markdown code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.quirky-tasks-markdown pre {
+  background: var(--ui-rail);
+  border-radius: var(--ui-radius-mark);
+  overflow: auto;
+  padding: var(--ui-space-12);
+}
+
+.quirky-tasks-markdown a {
+  color: var(--ui-accent);
+  overflow-wrap: anywhere;
+}
+
+.quirky-tasks-markdown-image {
+  height: auto;
+  max-width: 100%;
+}
+
+.quirky-tasks-markdown-composer {
+  display: grid;
+  gap: var(--ui-space-8);
+  min-width: 0;
+}
+
+.quirky-tasks-markdown-composer__tabbar {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ui-space-8);
+}
+
+.quirky-tasks-markdown-composer__tabbar .ui-tabs {
+  flex: 1 1 auto;
+}
+
+.quirky-tasks-markdown-composer__textarea {
+  background: var(--ui-surface);
+  border: var(--ui-border-width) solid var(--ui-border);
+  border-radius: var(--ui-radius-control);
+  box-sizing: border-box;
+  color: var(--ui-text);
+  font: inherit;
+  min-width: 0;
+  padding: var(--ui-space-12);
+  resize: vertical;
+  width: 100%;
+}
+
+.quirky-tasks-markdown-composer__image-input {
+  align-items: flex-end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ui-space-8);
+}
+
+.quirky-tasks-markdown-composer__image-input .ui-text-field {
+  flex: 1 1 var(--compat-px-220);
+  min-width: 0;
+}
+
+
+.quirky-tasks-markdown-composer__hint {
+  color: var(--ui-muted);
+  margin: 0;
+}
+
+.quirky-tasks-markdown-composer__image-toggle {
+  margin-inline-start: auto;
+}
+
+.quirky-tasks-markdown-composer__error {
+  color: var(--ui-failing);
+  margin: 0;
+}
+
+.quirky-tasks-markdown-composer__preview {
+  border: var(--ui-border-width) solid var(--ui-border);
+  border-radius: var(--ui-radius-control);
+  min-height: var(--compat-px-60);
+  overflow-wrap: anywhere;
+  padding: var(--ui-space-12);
+}
+
+.quirky-tasks-projects {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ui-space-12);
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  padding: var(--ui-space-12);
+  width: 100%;
+}
+
+.quirky-tasks-projects--empty {
+  align-items: stretch;
+  justify-content: flex-start;
+}
+
+.quirky-tasks-projects__toolbar {
+  min-height: var(--ui-row-single);
+}
+
+.quirky-tasks-projects__toolbar-spacer,
+.quirky-tasks-project-roadmap__toolbar-spacer {
+  margin-inline-start: auto;
+}
+
+.quirky-tasks-projects__empty-state {
+  border: var(--ui-border-width) dashed var(--ui-border);
+  border-radius: var(--ui-radius-control);
+  color: var(--ui-muted);
+  padding: var(--ui-space-24);
+  text-align: center;
+}
+
+.quirky-tasks-project-picker {
+  display: grid;
+  gap: var(--ui-space-12);
+  min-width: 0;
+}
+
+.quirky-tasks-project-picker__add {
+  align-items: flex-end;
+  border-top: var(--ui-border-width) solid var(--ui-border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ui-space-8);
+  padding-top: var(--ui-space-12);
+}
+
+.quirky-tasks-project-picker__add .ui-text-field {
+  flex: 1 1 var(--compat-px-280);
+  min-width: 0;
+}
+
+.quirky-tasks-projects__choice-section {
+  display: grid;
+  gap: var(--ui-space-8);
+}
+
+.quirky-tasks-projects__choice-row {
+  align-items: center;
+}
+
+.quirky-tasks-projects__choice {
+  flex: 1 1 var(--compat-px-220);
+  justify-content: flex-start;
+  min-width: 0;
+  text-align: left;
+}
+
+.quirky-tasks-projects__choice[aria-pressed='true'] {
+  border-color: var(--ui-accent);
+}
+
+.quirky-tasks-projects__choice-meta {
+  color: var(--ui-muted);
+  margin-inline-start: var(--ui-space-8);
+}
+
+.quirky-tasks-projects__auth-help {
+  border: var(--ui-border-width) solid var(--ui-needs-you);
+  border-radius: var(--ui-radius-control);
+  display: grid;
+  gap: var(--ui-space-12);
+  padding: var(--ui-space-16);
+}
+
+.quirky-tasks-projects__command {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  width: 100%;
+}
+
+.quirky-tasks-projects__query {
+  align-items: flex-end;
+}
+
+.quirky-tasks-projects__query .ui-text-field {
+  flex: 1 1 var(--compat-px-240);
+  max-width: var(--compat-px-520);
+  min-width: 0;
+}
+
+.quirky-tasks-projects__search-input--dirty {
+  border-color: var(--ui-needs-you);
+}
+
+.quirky-tasks-projects__warning {
+  color: var(--ui-needs-you);
+}
+
+.quirky-tasks-projects__columns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ui-space-12);
+}
+
+.quirky-tasks-projects__column-option {
+  align-items: center;
+  display: grid;
+  gap: var(--ui-space-6);
+  grid-template-columns: auto 1fr;
+  min-width: var(--compat-px-160);
+}
+
+.quirky-tasks-projects__column-option input[type='range'] {
+  grid-column: 1 / -1;
+  max-width: 100%;
+}
+
+.quirky-tasks-projects__choose-view {
+  border: var(--ui-border-width) solid var(--ui-border);
+  border-radius: var(--ui-radius-control);
+  display: grid;
+  gap: var(--ui-space-12);
+  padding: var(--ui-space-16);
+}
+
+.quirky-tasks-projects__choose-view-heading {
+  align-items: center;
+}
+
+.quirky-tasks-projects__view-choices {
+  align-items: center;
+}
+
+.quirky-tasks-projects__skeletons {
+  display: grid;
+  gap: var(--ui-space-8);
+}
+
+.quirky-tasks-projects__skeleton {
+  background: var(--ui-rail);
+  border-radius: var(--ui-radius-mark);
+  height: var(--compat-px-30);
+}
+
+.quirky-tasks-projects__table-scroll {
+  border: var(--ui-border-width) solid var(--ui-border);
+  border-radius: var(--ui-radius-control);
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.quirky-tasks-projects__item-actions {
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+}
+
+.quirky-tasks-projects__error-card {
+  border: var(--ui-border-width) solid var(--ui-failing);
+  border-radius: var(--ui-radius-control);
+  display: grid;
+  gap: var(--ui-space-12);
+  padding: var(--ui-space-16);
+}
+
+.quirky-tasks-project-guidance {
+  display: grid;
+  gap: var(--ui-space-12);
+  min-width: 0;
+}
+
+.quirky-tasks-project-guidance > p {
+  margin: 0;
+}
+
+.quirky-tasks-project-guidance__form {
+  align-items: flex-end;
+}
+
+.quirky-tasks-project-guidance__form .ui-text-field {
+  flex: 1 1 var(--compat-px-280);
+  min-width: 0;
+}
+
+.quirky-tasks-project-preview {
+  display: grid;
+  gap: var(--ui-space-8);
+  max-height: var(--compat-px-520);
+  min-width: 0;
+  overflow: auto;
+}
+
+.quirky-tasks-project-preview__title {
+  font-size: var(--ui-font-title);
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.quirky-tasks-project-preview__meta {
+  color: var(--ui-muted);
+  margin: 0;
+}
+
+.quirky-tasks-project-preview__comments {
+  border-top: var(--ui-border-width) solid var(--ui-border);
+  display: grid;
+  gap: var(--ui-space-8);
+  padding-top: var(--ui-space-8);
+}
+
+.quirky-tasks-project-preview__comments h3 {
+  font-size: var(--ui-font-body);
+  margin: 0;
+}
+
+.quirky-tasks-project-preview__comment {
+  border-top: var(--ui-border-width) solid var(--ui-border);
+  display: grid;
+  gap: var(--ui-space-6);
+  padding-top: var(--ui-space-8);
+}
+
+.quirky-tasks-project-preview__comment p {
+  margin: 0;
+}
+
+.quirky-tasks-project-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  color: var(--ui-text);
+  table-layout: fixed;
+  width: max-content;
+}
+
+.quirky-tasks-project-table__actions-column {
+  width: var(--compat-px-170);
+}
+
+.quirky-tasks-project-table th,
+.quirky-tasks-project-table__cell {
+  border-bottom: var(--ui-border-width) solid var(--ui-border);
+  box-sizing: border-box;
+  padding: var(--ui-space-8);
+  text-align: left;
+}
+
+.quirky-tasks-project-table thead th {
+  background: var(--ui-surface);
+  position: sticky;
+  top: 0;
+  z-index: 4;
+}
+
+.quirky-tasks-project-table .quirky-tasks-project-table__sticky {
+  background: var(--ui-surface);
+  position: sticky;
+}
+
+.quirky-tasks-project-table thead .quirky-tasks-project-table__sticky {
+  z-index: 5;
+}
+
+.quirky-tasks-project-table tbody .quirky-tasks-project-table__sticky {
+  z-index: 2;
+}
+
+.quirky-tasks-project-table__sort,
+.quirky-tasks-project-table__group-toggle,
+.quirky-tasks-project-table__title,
+.quirky-tasks-projects__inline-trigger,
+.quirky-tasks-project-board__card-title,
+.quirky-tasks-project-roadmap__item-title {
+  background: var(--ui-transparent);
+  border-color: var(--ui-transparent);
+  color: var(--ui-text);
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+}
+
+.quirky-tasks-project-table__group {
+  background: var(--ui-rail);
+  border-bottom: var(--ui-border-width) solid var(--ui-border);
+  padding: var(--ui-space-6) var(--ui-space-8);
+  text-align: left;
+}
+
+.quirky-tasks-project-table__group-toggle {
+  font-weight: 600;
+}
+
+.quirky-tasks-project-table__row:hover {
+  background: var(--ui-selected);
+}
+
+.quirky-tasks-project-table__cell {
+  max-width: var(--compat-px-720);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quirky-tasks-project-table__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
+}
+
+.quirky-tasks-project-table__actions-heading,
+.quirky-tasks-project-table__actions {
+  background: var(--ui-rail);
+  position: sticky;
+  right: 0;
+  text-align: right;
+  z-index: 2;
+}
+
+.quirky-tasks-project-table__actions-heading {
+  top: 0;
+  z-index: 6;
+}
+
+.quirky-tasks-project-table__actions {
+  padding: var(--ui-space-4);
+}
+
+.quirky-tasks-project-table__type-cell {
+  display: grid;
+  gap: var(--ui-space-4);
+}
+
+.quirky-tasks-projects__field-action {
+  padding: 0;
+}
+
+.quirky-tasks-projects__multi-select {
+  max-width: var(--compat-px-220);
+}
+
+.quirky-tasks-projects__inline-trigger {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quirky-tasks-projects__inline-editor {
+  align-items: center;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--ui-space-4);
+  min-width: 0;
+}
+
+.quirky-tasks-projects__inline-input {
+  width: calc(var(--compat-px-136) + var(--compat-px-4));
+}
+
+.quirky-tasks-project-board__fallback {
+  display: grid;
+  gap: var(--ui-space-12);
+  padding: var(--ui-space-16);
+}
+
+.quirky-tasks-project-board {
+  display: flex;
+  gap: var(--ui-space-12);
+  min-height: 0;
+  overflow-x: auto;
+  padding: var(--ui-space-12);
+}
+
+.quirky-tasks-project-board__column {
+  background: var(--ui-rail);
+  border: var(--ui-border-width) solid var(--ui-border);
+  border-radius: var(--ui-radius-control);
+  display: flex;
+  flex: 0 0 calc(var(--compat-px-240) + var(--compat-px-32));
+  flex-direction: column;
+  gap: var(--ui-space-8);
+  min-width: 0;
+  padding: var(--ui-space-8);
+}
+
+.quirky-tasks-project-board__column--readonly {
+  border-style: dashed;
+}
+
+.quirky-tasks-project-board__column-title {
+  font-size: var(--ui-font-body);
+  margin: 0;
+}
+
+.quirky-tasks-project-board__card {
+  background: var(--ui-surface);
+  border: var(--ui-border-width) solid var(--ui-border);
+  border-radius: var(--ui-radius-control);
+  display: grid;
+  gap: var(--ui-space-8);
+  min-width: 0;
+  padding: var(--ui-space-8);
+}
+
+.quirky-tasks-project-board__card--readonly {
+  border-style: dashed;
+}
+
+.quirky-tasks-project-board__card-title {
+  overflow-wrap: anywhere;
+}
+
+.quirky-tasks-project-board__card-meta,
+.quirky-tasks-project-board__move {
+  color: var(--ui-muted);
+}
+
+.quirky-tasks-project-board__assignees {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ui-space-4);
+}
+
+.quirky-tasks-project-board__avatar {
+  align-items: center;
+  border: var(--ui-border-width) solid var(--ui-border);
+  border-radius: var(--compat-px-999);
+  display: inline-flex;
+  flex: 0 0 var(--compat-px-24);
+  font-size: var(--ui-font-label);
+  height: var(--compat-px-24);
+  justify-content: center;
+  overflow: hidden;
+  width: var(--compat-px-24);
+}
+
+.quirky-tasks-project-board__avatar img {
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.quirky-tasks-project-board__move {
+  display: grid;
+  gap: var(--ui-space-4);
+}
+
+.quirky-tasks-project-roadmap__fallback {
+  display: grid;
+  gap: var(--ui-space-8);
+  padding: var(--ui-space-16);
+}
+
+.quirky-tasks-project-roadmap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ui-space-8);
+  min-height: 0;
+  padding: var(--ui-space-8);
+}
+
+.quirky-tasks-project-roadmap__toolbar {
+  flex-wrap: nowrap;
+}
+
+.quirky-tasks-project-roadmap__scroller {
+  border: var(--ui-border-width) solid var(--ui-border);
+  border-radius: var(--ui-radius-control);
+  min-height: 0;
+  overflow: auto;
+}
+
+.quirky-tasks-project-roadmap__track {
+  min-width: calc(var(--compat-px-280) + var(--ui-space-16) + var(--ui-space-4) + var(--roadmap-total-width));
+  width: calc(var(--compat-px-280) + var(--ui-space-16) + var(--ui-space-4) + var(--roadmap-total-width));
+}
+
+.quirky-tasks-project-roadmap__grid {
+  display: grid;
+  grid-template-columns: calc(var(--compat-px-280) + var(--ui-space-16) + var(--ui-space-4)) var(--roadmap-total-width);
+}
+
+.quirky-tasks-project-roadmap__grid--header {
+  background: var(--ui-surface);
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
+
+.quirky-tasks-project-roadmap__item-heading,
+.quirky-tasks-project-roadmap__item {
+  background: var(--ui-surface);
+  left: 0;
+  position: sticky;
+  z-index: 1;
+}
+
+.quirky-tasks-project-roadmap__item-heading {
+  border-bottom: var(--ui-border-width) solid var(--ui-border);
+  padding: var(--ui-space-8);
+  z-index: 4;
+}
+
+.quirky-tasks-project-roadmap__ticks {
+  border-bottom: var(--ui-border-width) solid var(--ui-border);
+  flex-wrap: nowrap;
+}
+
+.quirky-tasks-project-roadmap__tick {
+  border-inline-start: var(--ui-border-width) solid var(--ui-border);
+  box-sizing: border-box;
+  color: var(--ui-muted);
+  flex: 0 0 auto;
+  padding: var(--ui-space-6);
+}
+
+.quirky-tasks-project-roadmap__row {
+  border-bottom: var(--ui-border-width) solid var(--ui-border);
+  min-height: var(--compat-px-38);
+}
+
+.quirky-tasks-project-roadmap__item {
+  align-items: center;
+  gap: var(--ui-space-6);
+  overflow: hidden;
+  padding: var(--ui-space-6);
+}
+
+.quirky-tasks-project-roadmap__item-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quirky-tasks-project-roadmap__timeline {
+  background-image: repeating-linear-gradient(
+    to right,
+    transparent 0 calc(var(--roadmap-tick-width) - var(--ui-border-width)),
+    var(--ui-border) calc(var(--roadmap-tick-width) - var(--ui-border-width)) var(--roadmap-tick-width)
+  );
+  min-height: var(--compat-px-38);
+  position: relative;
+  width: var(--roadmap-total-width);
+}
+
+.quirky-tasks-project-roadmap__today,
+.quirky-tasks-project-roadmap__marker,
+.quirky-tasks-project-roadmap__range {
+  position: absolute;
+  z-index: 2;
+}
+
+.quirky-tasks-project-roadmap__today {
+  border-inline-start: var(--ui-focus-width) solid var(--ui-needs-you);
+  bottom: 0;
+  top: 0;
+  z-index: 1;
+}
+
+.quirky-tasks-project-roadmap__marker {
+  background: var(--ui-accent);
+  border-radius: var(--ui-radius-mark);
+  height: var(--compat-px-20);
+  top: var(--ui-space-8);
+  width: var(--compat-px-12);
+}
+
+.quirky-tasks-project-roadmap__range {
+  background: var(--ui-accent);
+  border-radius: var(--ui-radius-control);
+  height: var(--compat-px-16);
+  top: var(--ui-space-12);
+}
+
+.quirky-tasks-project-roadmap__undated ul {
+  display: grid;
+  gap: var(--ui-space-8);
+  padding-inline-start: var(--compat-px-24);
+}
+
