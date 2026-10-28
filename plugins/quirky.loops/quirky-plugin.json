@@ -115,6 +115,41 @@
         "result": { "type": "array", "items": { "type": "object", "description": "A complete LoopSnapshot.", "additionalProperties": true } }
       },
       {
+        "id": "summaries",
+        "description": "Returns compact summaries of unfinished loops.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        },
+        "result": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string" },
+              "worktreeId": { "type": "string" },
+              "state": { "type": "string", "enum": ["running", "needs-you", "paused"] },
+              "pauseReason": { "description": "PauseReason scalar or null." },
+              "iterationsCompleted": { "type": "integer" },
+              "maxIterations": { "description": "Integer cap or null when uncapped." },
+              "updatedAt": { "type": "number" }
+            },
+            "required": [
+              "id",
+              "worktreeId",
+              "state",
+              "pauseReason",
+              "iterationsCompleted",
+              "maxIterations",
+              "updatedAt"
+            ]
+          }
+        }
+      },
+      {
         "id": "get",
         "description": "Returns one complete durable loop snapshot.",
         "readOnly": true,
@@ -506,6 +541,12 @@
         "summary": "list durable loops",
         "flags": { "worktree": { "type": "string", "description": "filter by worktree selector" } },
         "methods": ["quirky.loops/list"]
+      },
+      {
+        "id": "summaries",
+        "words": "summaries",
+        "summary": "list compact summaries of unfinished loops",
+        "methods": ["quirky.loops/summaries"]
       },
       {
         "id": "show",

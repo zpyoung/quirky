@@ -3,6 +3,8 @@
 ## Status & amendments
 Approved autonomously under the unattended night-mode loop. Technical specification is included below. **Amendments:** 2026-10-27: binding-decision review clarifies conditional daemon delete confirmation, non-consuming owner inspection, worktree-owned public glyph integration, and sole-notifier event routing (D6); no feature scope removed.
 
+**Amendments:** 2026-10-28 — the M7 sweep preserves required assignment activity in worker detail/debug and defines Activity as live process plus active assignment. Retained live processes remain inspectable but do not count as running work. Regression source is written; execution belongs to the operator's end-phase testing directive.
+
 ## Purpose and conceptual model
 Operators need one truthful view of durable watchers and safe controls over their owning kernel. A fleet row is a last-confirmed snapshot, not proof of remote execution. An owner fence identifies the enrollment authority and command revision. A command either applied at a known time, was refused for a specific reason, or has an indeterminate result; a lost reply never means success or safe retry.
 

@@ -1,0 +1,22 @@
+{
+  "item": "m4-hosting-ui-review-browser-routing",
+  "spec": "docs/quirk/specs/2026-10-28-m4-hosting-ui-review-browser-routing/logic.md",
+  "scenarios": [
+    {
+      "id": "N1",
+      "title": "Preflight BEFORE clicking any review link: require proven run-owned native Default storage root because Browser openLink selects Default; HOME/QUIRKY_HOME alone and UUID switching after creation do not prove isolation. Otherwise record blocked before the click. With supported isolation and owned provider fixture PR12 in stack42 with member7, open Checks for W and detail for a different workspace. Activate Checks #12, stack #7 and detail Open on host with Link Routing on. Confirm actual native pane shows each exact URL, source workspace and intended active tab, with no unrelated workspace/focus theft. Never authenticate or mutate a real forge.",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    },
+    {
+      "id": "N2",
+      "title": "Preflight BOTH native root isolation and explicit run-owned isolated system-browser opener/session; otherwise mark blocked BEFORE any app/system routing click. Under owned forge fixtures, exercise all three review controls with Link Routing on/off and inversion on/off. On macOS Shift+Cmd chooses system when inversion is off and flips the configured destination when on; Shift+Ctrl, Shift alone and Cmd alone follow normal routing. Observe actual app/system URL delivery and truthful live destination tooltip after settings changes. With Browser unavailable, app-request failure stays visible and never launches a system browser. No real user's browser session, Keychain or native Default root may be touched.",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    }
+  ]
+}

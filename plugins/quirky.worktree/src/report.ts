@@ -2,6 +2,7 @@ import type { ActivityPreferences } from './useSidebarActivity'
 import type { MembershipTarget } from './membership'
 import type { AgentDisplayState, GitHubWorktreeLink, ProjectGroup, Repo, Session, Worktree, WorktreePushTarget, WorktreeStatus } from '@quirky/protocol'
 import { worktreeGlyph, worktreeStatus, type DisplayStatus } from './status'
+import type { LoopReport, LoopStatusSnapshot } from './loop-status'
 
 /** A create the window has sent and not yet seen finish; shown as a pending row under its project. */
 export type PendingCreate = { repoId: string; name: string }
@@ -277,6 +278,7 @@ export type WorkspaceReport = {
   linkedPR?: GitHubWorktreeLink
   linkedIssue?: GitHubWorktreeLink
   pushTarget?: WorktreePushTarget
+  loop?: LoopReport
 }
 
 export type ProjectReport = { id: string; name: string; kind: 'git' | 'folder'; worktrees: WorkspaceReport[] }
@@ -301,6 +303,7 @@ export type WorktreesReport = {
   groupParents: Record<string, string | null>
   separators: SeparatorReport
   dropPreview: DropPreviewReport | null
+  loops?: { status: LoopStatusSnapshot['status']; error: string | null }
 }
 
 export type ReportInput = {
@@ -321,6 +324,7 @@ export type ReportInput = {
   dropPreview?: DropPreviewReport | null
   /** The clock the agent glyph's staleness is judged against; defaults to the current time. */
   now?: number
+  loopStatus?: LoopStatusSnapshot
 }
 
 /** The report for what the section shows, in tree order. */
@@ -330,6 +334,7 @@ export function buildReport(input: ReportInput): WorktreesReport {
   const model = buildTreeModel(input.repos, input.groups, input.worktrees, input.pending, input.visibleIds)
   const workspace = ({ worktree, depth, repoName }: TreeRow): WorkspaceReport => {
     const glyph = sessions === null ? null : worktreeGlyph(sessions, worktree.id, now)
+    const loop = input.loopStatus?.byWorktree.get(worktree.id)
     return {
       id: worktree.id,
       name: worktree.name,
@@ -349,7 +354,18 @@ export function buildReport(input: ReportInput): WorktreesReport {
       depth,
       pending: false,
       removing: worktree.removing,
-      selected: worktree.id === selectedId
+      selected: worktree.id === selectedId,
+      ...(loop ? {
+        loop: {
+          id: loop.id,
+          state: loop.state,
+          pauseReason: loop.pauseReason,
+          presentation: loop.presentation,
+          iterationsCompleted: loop.iterationsCompleted,
+          maxIterations: loop.maxIterations,
+          label: loop.label
+        }
+      } : {})
     }
   }
   const project = ({ repo, rows, pending }: ProjectNode): ProjectReport => ({
@@ -402,6 +418,7 @@ export function buildReport(input: ReportInput): WorktreesReport {
     groupDepths: Object.fromEntries(groups.map(({ group, depth }) => [group.id, depth])),
     groupParents: Object.fromEntries(groups.map(({ group, parentId }) => [group.id, parentId])),
     separators: input.separators ?? { enabled: true, eligibleBoundaries: [] },
-    dropPreview: input.dropPreview ?? null
+    dropPreview: input.dropPreview ?? null,
+    ...(input.loopStatus ? { loops: { status: input.loopStatus.status, error: input.loopStatus.error } } : {})
   }
 }

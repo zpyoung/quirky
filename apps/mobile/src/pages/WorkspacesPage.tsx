@@ -446,6 +446,11 @@ export function WorkspacesPage({ bridge, connected, onNavigate, onReport }: Prop
         <button className="qp-icon-button" type="button" aria-label="Floating Workspace" title="Create a terminal in the real Floating workspace" disabled={!canMutate || !bridge.init.grants.includes('terminal')} onClick={() => void openFloating()}>↗</button>
       </header>
       <div className="qp-content">
+        <nav className="qp-tabs" aria-label="Host pages">
+          <button className="qp-tab" type="button" aria-label="Open host tasks" onClick={() => void onNavigate({ kind: 'tasks' })}>Tasks</button>
+          <button className="qp-tab" type="button" aria-label="Open host accounts" onClick={() => void onNavigate({ kind: 'accounts' })}>Accounts</button>
+          <button className="qp-tab" type="button" aria-label="Open host notifications" onClick={() => void onNavigate({ kind: 'notifications' })}>Notifications</button>
+        </nav>
         <div className="qp-workspace-layout" data-sidebar-collapsed={preferences.sidebarCollapsed} style={sidebarStyle}>
           <aside className={`qp-sidebar${preferences.sidebarCollapsed ? ' qp-sidebar--collapsed' : ''}`} aria-label="Projects">
             <div className="qp-sidebar__heading">Projects</div>

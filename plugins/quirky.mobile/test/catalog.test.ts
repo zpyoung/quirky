@@ -32,7 +32,7 @@ test('phone launcher catalog exposes availability without configured commands or
   const search = join(root, 'agents')
   for (const dir of [home, user, search]) mkdirSync(dir)
   writeFileSync(join(search, 'claude'), '#!/bin/sh\nexit 0\n', { mode: 0o700 })
-  const patch = { HOME: user, QUIRKY_HOME: home, QUIRKY_MOBILE_PORT: '0', QUIRKY_AGENT_SEARCH_DIRS: search }
+  const patch = { HOME: user, QUIRKY_HOME: home, QUIRKY_MOBILE_PORT: '0', QUIRKY_MOBILE_HOST: '127.0.0.1', QUIRKY_AGENT_SEARCH_DIRS: search, CODEX_HOME: join(user, '.codex'), CLAUDE_CONFIG_DIR: join(user, '.claude') }
   environment = new Map(Object.keys(patch).map(key => [key, process.env[key]]))
   Object.assign(process.env, patch)
   harness = await startHarness({ home, builtinPluginsDir: makeBuiltinDir(home, { real: ['quirky.mobile', 'quirky.agents'], fakes: [] }) })

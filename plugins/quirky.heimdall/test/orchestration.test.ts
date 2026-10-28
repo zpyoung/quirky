@@ -4,6 +4,7 @@ import { budgetUsage } from '../src/budget'
 import { createRunner } from '../src/runner'
 import type { Attempt, Enrollment, JournalAppend, JournalEntry, KernelStore, KindRegistry, WatcherKind, WorkerRequest } from '../src/contracts'
 import { createOrchestrationAdapter, orchestrationRequestIdForAttemptFingerprint } from '../src/orchestration'
+import { HostPowerService } from '../../../packages/daemon/src/host-power'
 
 describe('Heimdall orchestration adapter', () => {
   test('maps the SHA-256 dispatch identity to a stable UUIDv8 mutation request', () => {
@@ -364,6 +365,7 @@ function makeContext(
     workerEntrypoint: () => { throw new Error('workerEntrypoint is unsupported in the orchestration fixture') },
     dataDir: '/tmp/heimdall-data',
     home: '/tmp/quirky-home',
+    hostPower: new HostPowerService(() => {}, null).forPlugin('quirky.heimdall', () => false),
     createFileResource: () => { throw new Error('unexpected file resource request') },
     clients: { accept: () => { throw new Error('unexpected remote client admission') } },
     call,

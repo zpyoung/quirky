@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { PluginStore, StoreMigration } from '@quirky/protocol'
-import type { IterationDetail, LoopSnapshot, LoopState, PauseReason, QueueItem, QueueOperation } from './types'
+import type { IterationDetail, LoopSnapshot, LoopState, LoopSummary, PauseReason, QueueItem, QueueOperation } from './types'
 
 import { applyQueueOperation, claimNextQueueItem, settleQueueClaim, type QueueClaim } from './queue'
 const CREATE_SCHEMA = `
@@ -82,6 +82,16 @@ type LoopRow = {
   notes_path: string; warnings_json: string; journal_cursor: number; pause_requested: number; stop_requested: number;
   stop_now: number; needs_resume: number; resume_native: number; skipped_ticks: number;
 }
+type SummaryRow = {
+  id: string
+  worktree_id: string
+  state: LoopSummary['state']
+  pause_reason: PauseReason | null
+  iterations_completed: number
+  max_iterations: number | null
+  updated_at: number
+}
+
 
 type IterationRow = { detail_json: string }
 type QueueStateRow = { loop_id: string; items_json: string }
@@ -282,6 +292,25 @@ export class LoopStore {
       loopFromRow(row, this.recent(row.id, RECENT_LIMIT), queueItems.get(row.id) ?? [])
     )
   }
+  listSummaries(): LoopSummary[] {
+    const rows = this.store.all<SummaryRow>(
+      `SELECT id, worktree_id, state, pause_reason, iterations_completed,
+              json_extract(config_json, '$.caps.maxIterations') AS max_iterations, updated_at
+       FROM loops
+       WHERE state IN ('running', 'needs-you', 'paused')
+       ORDER BY updated_at DESC, id ASC`
+    )
+    return rows.map((row) => ({
+      id: row.id,
+      worktreeId: row.worktree_id,
+      state: row.state,
+      pauseReason: row.pause_reason,
+      iterationsCompleted: row.iterations_completed,
+      maxIterations: row.max_iterations,
+      updatedAt: row.updated_at
+    }))
+  }
+
 
   saveLoop(snapshot: LoopSnapshot, requests?: LoopRequests): void {
     this.requireWritable()

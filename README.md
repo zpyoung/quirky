@@ -86,6 +86,20 @@ Advanced parity and verification obligations are tracked in
 `bun run test` runs the whole suite through the configured test host. Use
 `bun scripts/suite.ts <dirs>` for affected packages and `bun test <file>` for a single file.
 
+Verify shell integration with the explicit Bash 5.2/5.3 matrix. Supply two installed GNU Bash
+executables (temporary source builds are sufficient):
+
+```sh
+bun run test:bash -- /path/to/bash-5.2/bin/bash /path/to/bash-5.3/bin/bash
+```
+
+The command rejects missing or wrong versions instead of skipping coverage. Each version runs
+the real-PTY Bash cases with disposable homes. For a single runtime, set `QUIRKY_TEST_BASH` when
+running `packages/daemon/test/shell-path.test.ts`; ordinary tests still use `/bin/bash`.
+Empty, whitespace and comment input must not produce command completions, including when
+`functrace` inherits DEBUG into the prompt helpers. Real commands still report their status
+when history ignores duplicates, ignores leading spaces, or is disabled.
+
 ### Public plugin UI and grouping APIs
 
 UI plugins can declare an `activity-item` contribution beside the right sidebar. It mounts even

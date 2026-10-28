@@ -22,7 +22,13 @@ import {
 } from '@quirky/protocol'
 import { socketPath as resolveSocketPath } from '@quirky/protocol/node'
 
-type ConnState = { decoder: PtyFrameDecoder; authed: boolean }
+type ConnState = {
+  decoder: PtyFrameDecoder
+  authed: boolean
+  outQueue: Uint8Array[]
+  closed: boolean
+  endWhenDrained: boolean
+}
 type AcceptedWriteHandler = (sessionId: string, bytes: Uint8Array) => void | Promise<void>
 
 export type FakeSession = {
@@ -58,6 +64,8 @@ export type FakePtyHost = {
 
 export type FakePtyHostOptions = {
   onShutdown?: () => void
+  /** Observes requests after the fixture has recorded them. */
+  onRequest?: (request: PtyRequest) => void
   /** The protocol version the host speaks; a hello for any other version is rejected like the real host does. */
   version?: number
 }
@@ -91,8 +99,44 @@ export function startFakePtyHost(home: string, options: FakePtyHostOptions = {})
   let writeAcceptedHandler: AcceptedWriteHandler | undefined
   const failures = new Map<PtyRequest['type'], string>()
 
+  function flush(socket: Socket<ConnState>) {
+    const state = socket.data
+    if (state.closed) return
+    while (state.outQueue.length > 0) {
+      const head = state.outQueue[0]
+      const written = socket.write(head)
+      if (written < head.length) {
+        state.outQueue[0] = head.subarray(Math.max(written, 0))
+        return
+      }
+      state.outQueue.shift()
+    }
+    if (state.endWhenDrained) {
+      state.endWhenDrained = false
+      socket.end()
+    }
+  }
+
+  function write(socket: Socket<ConnState>, bytes: Uint8Array) {
+    if (socket.data.closed) return
+    socket.data.outQueue.push(bytes)
+    flush(socket)
+  }
+
+  function endAfterWrites(socket: Socket<ConnState>) {
+    socket.data.endWhenDrained = true
+    flush(socket)
+  }
+
+  function endConnection(socket: Socket<ConnState>) {
+    socket.data.closed = true
+    socket.data.endWhenDrained = false
+    socket.data.outQueue.length = 0
+    socket.end()
+  }
+
   function reply(socket: Socket<ConnState>, id: number, result: unknown) {
-    socket.write(encodePtyJson({ id, ok: true, result }))
+    write(socket, encodePtyJson({ id, ok: true, result }))
   }
   function fail(socket: Socket<ConnState>, id: number, error: unknown) {
     const message = error instanceof Error ? error.message : String(error)
@@ -103,23 +147,24 @@ export function startFakePtyHost(home: string, options: FakePtyHostOptions = {})
         (code === 'PTY_WRITE_REJECTED' || code === 'PTY_WRITE_UNCERTAIN') &&
         (acceptedBytes === null || (typeof acceptedBytes === 'number' && Number.isSafeInteger(acceptedBytes) && acceptedBytes >= 0))
       ) {
-        socket.write(encodePtyJson({ id, ok: false, error: message, code: code as PtyWriteErrorCode, acceptedBytes }))
+        write(socket, encodePtyJson({ id, ok: false, error: message, code: code as PtyWriteErrorCode, acceptedBytes }))
         return
       }
     }
-    socket.write(encodePtyJson({ id, ok: false, error: message }))
+    write(socket, encodePtyJson({ id, ok: false, error: message }))
   }
 
   function handle(socket: Socket<ConnState>, request: PtyRequest) {
     requests.push(request)
+    options.onRequest?.(request)
     if (!socket.data.authed) {
       if (request.type !== 'hello' || request.token !== token) {
-        socket.end()
+        endConnection(socket)
         return
       }
       if (request.version !== version) {
         fail(socket, request.id, `unsupported protocol version ${request.version}, host speaks ${version}`)
-        socket.end()
+        endAfterWrites(socket)
         return
       }
       socket.data.authed = true
@@ -269,8 +314,17 @@ export function startFakePtyHost(home: string, options: FakePtyHostOptions = {})
     unix: socketPath,
     socket: {
       open(socket) {
-        socket.data = { decoder: new PtyFrameDecoder(), authed: false }
+        socket.data = {
+          decoder: new PtyFrameDecoder(),
+          authed: false,
+          outQueue: [],
+          closed: false,
+          endWhenDrained: false
+        }
         connections.add(socket)
+      },
+      drain(socket) {
+        flush(socket)
       },
       data(socket, chunk) {
         for (const frame of socket.data.decoder.push(new Uint8Array(chunk))) {
@@ -282,6 +336,9 @@ export function startFakePtyHost(home: string, options: FakePtyHostOptions = {})
         }
       },
       close(socket) {
+        socket.data.closed = true
+        socket.data.endWhenDrained = false
+        socket.data.outQueue.length = 0
         connections.delete(socket)
         for (const session of sessions.values()) session.subscribers.delete(socket)
       }
@@ -299,7 +356,7 @@ export function startFakePtyHost(home: string, options: FakePtyHostOptions = {})
       if (!session) throw new Error(`fake pty: no session ${sessionId}`)
       const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : data
       for (const byte of bytes) session.buffer.push(byte)
-      for (const subscriber of session.subscribers) subscriber.write(encodePtyData(sessionId, bytes))
+      for (const subscriber of session.subscribers) write(subscriber, encodePtyData(sessionId, bytes))
     },
     exit(sessionId, exitCode, extra = {}) {
       const exitSignal = extra.exitSignal ?? null
@@ -313,14 +370,14 @@ export function startFakePtyHost(home: string, options: FakePtyHostOptions = {})
         session.info.exitCause = exitCause
       }
       for (const socket of connections) {
-        socket.write(encodePtyJson({ type: 'exit', sessionId, exitCode, exitSignal, exitCause }))
+        write(socket, encodePtyJson({ type: 'exit', sessionId, exitCode, exitSignal, exitCause }))
       }
     },
     fact(sessionId, fact) {
-      for (const socket of connections) socket.write(encodePtyJson({ type: 'fact', sessionId, fact }))
+      for (const socket of connections) write(socket, encodePtyJson({ type: 'fact', sessionId, fact }))
     },
     dropConnections() {
-      for (const socket of [...connections]) socket.end()
+      for (const socket of [...connections]) endConnection(socket)
     },
     setReadResult(result) {
       readResult = result
@@ -339,7 +396,7 @@ export function startFakePtyHost(home: string, options: FakePtyHostOptions = {})
       else failures.set(type, error)
     },
     stop() {
-      for (const socket of [...connections]) socket.end()
+      for (const socket of [...connections]) endConnection(socket)
       listener.stop(true)
       rmSync(socketPath, { force: true })
     }

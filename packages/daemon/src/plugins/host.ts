@@ -33,7 +33,7 @@ type ExtensionMembers = Pick<
   | 'launch'
   | 'createFileResource'
 > &
-  Partial<Pick<PluginContext, 'storedSettingValue' | 'clients'>>
+  Partial<Pick<PluginContext, 'storedSettingValue' | 'clients' | 'hostPower'>>
 
 /** The daemon-side half of a plugin's context, created and torn down per activation attempt. */
 export type ContextExtension = {
@@ -542,9 +542,10 @@ export class PluginHost {
           throw new Error(`${id}: context.${member} is not available`)
         }
       })
-    const defaults: Omit<ExtensionMembers, 'storedSettingValue' | 'clients'> & Pick<PluginContext, 'storedSettingValue' | 'workerEntrypoint' | 'clients'> = {
+    const defaults: Omit<ExtensionMembers, 'storedSettingValue' | 'clients' | 'hostPower'> & Pick<PluginContext, 'storedSettingValue' | 'workerEntrypoint' | 'clients' | 'hostPower'> = {
       dataDir: '',
       clients: unavailableObject<PluginContext['clients']>('clients'),
+      hostPower: unavailableObject<PluginContext['hostPower']>('hostPower'),
       home: '',
       pty: unavailableObject<PluginContext['pty']>('pty'),
       launch: unavailableObject<PluginContext['launch']>('launch'),
@@ -585,6 +586,7 @@ export class PluginHost {
       ...defaults,
       ...created,
       clients: created?.clients ?? defaults.clients,
+      hostPower: created?.hostPower ?? defaults.hostPower,
       log: (message) => {
         for (const line of String(message).split(/\r\n|\r|\n/)) this.options.log(`${id}: ${line}`)
       },

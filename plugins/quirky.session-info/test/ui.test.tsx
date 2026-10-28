@@ -380,6 +380,7 @@ describe('Session Info routed actions and views', () => {
     expect(fake.opened.at(-1)).toEqual({ id: 'view:quirky.session-info/history', input: { query: 'provider-1' } })
     panel.unmount()
   })
+
   test('focuses the exact pane, opens transcript read-only, and reveals only the recorded path', async () => {
     const fake = makeContext({
       'quirky.session-info/get': () => state(info()),
