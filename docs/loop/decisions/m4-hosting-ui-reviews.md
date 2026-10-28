@@ -253,5 +253,16 @@
 - **Revisit if:** a behavioral safety/CLI contract fails after removing the incidental snapshots.
 - **Source:** assumed — autonomous; locked by engineering test policy
 
+## D24: Close named dependency failures without changing production semantics
+- **Question:** do the imported Tasks repairs close the actual failed consumer cases?
+- **Options:** alter normalized provider casing/display names; remove incidental pins while preserving failure rollup and canonical source linkage.
+- **Chose:** integrated the dependency owner's final list test repair. The issue test passes after the flat public read-parameter repair; list preserves actual failing rollup, requested workspace folder and persisted exact source/repository identity. No Reviews production change was needed. Read the complete incoming Tasks D1–D23 contracts; its separate unexercised-parity completion item is not relabeled as Reviews verification.
+- **Why:** provider check casing and workspace display labels are not the requested-folder contract. The previous failures were observed and repaired, never ignored or counted as passing.
+- **Evidence:** initial247-file run243pass/4fail; both repaired Git files passed2/2 without retries; corrected Tasks issue file passed in the two-file follow-through; final corrected Tasks list file passed1/1 without retries in201.53seconds. Final post-merge typecheck passed21.74seconds. This is cumulative named-file closure, not a fabricated single-run247/247 report.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** canonical dependency readiness or queue-owned merged verification reports another concrete failure.
+- **Source:** assumed — autonomous; locked by sourced-worktree and provider-normalization contracts
+
 ## Progress
-Final typecheck, scripts and packaged build passed; actual packaged surface and public collapse/expand passed within D21's limits, with all owned UI resources cleaned. The affected runner passed243/247files, including all Reviews files; both repaired Git files now pass with no retries. Tasks published a new source checkpoint cd6493e7; next merge it, verify the named remaining failures plus types, obtain dependency readiness, commit/detach/queue.ts land and wait. Full unstarted review/dogfood remain skipped under D20. All source components/worktrees are settled; no second item this iteration.
+All named affected-gate failures are closed with D23/D24 evidence. Typecheck, scripts and packaged build passed; actual packaged surface and public disclosure controls passed within D21's stated limits. All implementers, browser/daemon resources and component worktrees are cleaned. Tasks is still the canonical pending dependency; wait in this turn for queue.ts deps ready:true, perform required post-dependency roadmap integration/affected checks, then commit/detach/queue.ts land. No new final review/dogfood campaign or second item.
