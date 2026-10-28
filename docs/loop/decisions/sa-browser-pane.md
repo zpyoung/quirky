@@ -331,5 +331,49 @@
 - **Revisit if:** a deferred find/UI scenario exposes rendered-text boundary differences.
 - **Source:** assumed — autonomous, preserving operator's no-weakened-tests rule.
 
+## D31: Preserve the terminal creation menu's typed management footer
+- **Question:** Why did the controller's SC-22 fail after adding Browser to the public new-tab menu?
+- **Options:** re-pin or remove the footer assertion; hardcode Browser ordering; insert generic contributions before the typed manage entry.
+- **Chose:** insert contributed rows immediately before MenuEntry.kind=manage, or append if the filtered menu has no management entry. Retain the existing SC-22 footer assertion and generic command/worktree/group dispatch.
+- **Why:** the public contribution had been appended after Agent settings, violating the existing terminal menu footer. The fix uses entry kind, not displayed label or Browser-specific knowledge.
+- **Evidence:** first controller land: all5Mac-only files passed, including Browser automation and pane; remote630files624passed6failed. workspace-tabs.test.ts SC-22 expected the management footer last and observed New Browser Tab.
+- **Reversibility:** easy (menu composition).
+- **Confidence:** high for the source cause; fresh affected proof follows.
+- **Revisit if:** filtered or overridden contributed rows appear twice or target the wrong group.
+- **Source:** assumed — autonomous blocking landing repair.
+
+## D32: Hold the real post-body submit boundary deterministically in the cancellation fixture
+- **Question:** How can the real-PTY cancellation test avoid losing its500ms window while the test process is descheduled?
+- **Options:** raise the production delay or deadlines; weaken cancellation results; inject a private fixture hook after the unchanged real delay.
+- **Chose:** optional internal beforeSubmit hook in the send engine/service activation. Normal activation supplies none and retains the real500ms cancellable delay. The test-only built-in overlay signals a run-owned file after the actual body write/delay, then awaits AbortSignal cancellation before Enter. The test watches that signal without polling and preserves accepted/cancelled outcomes, absent queued-body bytes and absent delayed Enter.
+- **Why:** an external process cannot fake the daemon's clock, and two cancellation round trips can outlive a fixed delay under suite load. Holding the exact protocol boundary tests the cancellation invariant instead of scheduler speed.
+- **Evidence:** first controller SC-21 reported no queued/active send after the first-body signal; src/send.ts unchanged cancellableDelay(500) plus optional hook; isolated fixture main and fs.watch signal.
+- **Reversibility:** easy (internal injected dependency only).
+- **Confidence:** high for the synchronization design; fresh runtime proof follows.
+- **Revisit if:** ordinary activation changes delay/behavior, a hook leaks to production RPC, or fixture cleanup leaves a pending process/watcher.
+- **Source:** assumed — autonomous blocking landing repair.
+
+## D33: Reject global harness monkeypatches and incidental prose pins
+- **Question:** Can a fixture safely patch E2eHarness.prototype.daemonEnv through shared pending globals, or require provisional notice prose to predict later transcript confirmation?
+- **Options:** retain hidden global coupling; widen production environment switches; explicit per-harness built-in directory factory and actual effect assertions.
+- **Chose:** remove the proposed prototype patch/WeakMap/pending flag. Add optional E2eOptions.builtinPluginsDir(home) to the existing isolated harness and resolve it once per instance. Remove only the old negative notice regex; retain actual transcript effort, visible screen, session-only interaction, settings-file sentinel and draft assertions.
+- **Why:** concurrent harnesses must not inherit another test's gated plugin. A provisional “not confirmed” notice is not proof the later independently verified effect failed. Neither change relaxes production send safety or suppresses an error.
+- **Evidence:** scoped six-file Dock writer diff; parent replaced private prototype access with the explicit test-harness field. Initial fixture check also caught and corrected a missing template-array comma, not a product timeout.
+- **Reversibility:** easy (test fixture construction).
+- **Confidence:** high for isolation and assertion intent; source/type/runtime gates follow.
+- **Revisit if:** simultaneous ordinary/gated harnesses share plugin roots or an effect regression no longer fails the retained assertions.
+- **Source:** assumed — autonomous, preserving test isolation and consumer-visible invariants.
+
+## D34: Wait for agent readiness, not the former two-row menu size
+- **Question:** Why did the corrected footer expose a second SC-22 failure with no Claude row?
+- **Options:** remove the agent assertion; inflate a timeout; wait for the actual detected agent required by the scenario.
+- **Chose:** SC-22 waits for a Claude menu row, not items.length>2. All existing first-row/key/footer/agent and dispatch assertions remain unchanged. Public contributions can legitimately make the initial Terminal/Settings fallback contain three rows before asynchronous agent discovery finishes.
+- **Why:** the count predicate became true early after adding Browser; it did not represent loaded agents. Fresh SC-22 passes through the real renderer/daemon in the remote fixture.
+- **Evidence:** first scoped run showed correct footer but zero Claude rows; corrected SC-22 remote file passes18.97seconds. Deterministic Dock send/defect files both pass in80.95seconds, flaky[]; typecheck after per-instance fixture plumbing passes44.90seconds.
+- **Reversibility:** easy (test readiness predicate).
+- **Confidence:** high for exercised readiness and cancellation boundaries.
+- **Revisit if:** agent discovery itself never returns the fixture's configured Claude; retain the existing finite bound and fail.
+- **Source:** assumed — autonomous, preserving all consumer assertions.
+
 ## Progress
-Ready for normal controller landing: final current-tree typecheck passed in74.09seconds. Core API/CLI lifecycle smoke and real three-page Chrome create/switch smoke passed. New lifecycle and menu regression files passed remotely. Initial broad affected run passed339/340remote files and2/3Mac files; its failed old Browser declaration/Chrome paths were repaired and separately verified: automation file exit0, pane file3pass/70assertions. Scripts68pass/564assertions. All consumer-visible assertions remain, with only obsolete catalog-copy equality removed under the test policy. Full UI/review/native remain deliberately unverified under D23, with exact already-added follow-up ownership. Commit final evidence, detach and invoke canonical queue.ts land; no full merged-verification claim before its result. Deferred source/tests remain in22d17dfd; five worker checkouts removed, no agents or owned runtime processes running.
+Ready to retry canonical land. First merged gate had all5Mac files green and6remote failures; no merged success or on-time claim. Deterministic repairs now pass: Dock send/defect2files, menu SC-22, generic menu unit file; current-source typecheck after fixture plumbing passes. Existing full workspace-tabs run had15passing cases and a premature agent-readiness predicate, now corrected and its exact case verified; no false single-run whole-file pass. Git SC-29 scout found insufficient evidence for a source change, so no speculative timeout/CSS fix. Daemon lock/loops-store five-second failures remain unchanged for the normal configured full-gate retry. All303incoming m5-loops-core decisions read: no Browser conflict; structured background registration stays non-adopting, explicit paneOpen remains valid. No agents or smoke processes running. Commit these exact repairs/docs, detach and retry queue.ts land; wait for its full merged verdict before ending this one item.

@@ -315,3 +315,13 @@ Registration update: `bun scripts/build-loop/queue.ts add /tmp/quirky-session-in
 - **Acceptance limits:** the operator skipped review; Native nightly remains pending. No broad UI acceptance or Watch transport/input/find/zoom/viewport acceptance is claimed here, and none of the deferred flows is reported passing.
 - **Parent landing:** parent owns the final affected suite (`bun scripts/suite.ts plugins/quirky.browser packages/ui packages/protocol apps/desktop`), scripts (`bun test scripts`) and typecheck (`bun run typecheck`) gates, followed by controller `queue.ts land`.
 - **Precise lane8 boundary:** cross-lane pane/profile composition and visible integration acceptance is assigned to this item's already-added `sa-browser-pane-native-host-controls`, alongside the deferred base-pane UI. Lane8 retains its own profiles/settings implementation and focused queued subflows; this deferred composition is not a new gate for lane8. This clarifies the owner list above under the operator's “follow-ups this item already added” ruling, without editing queue titles or adding items.
+
+## sa-browser-pane: first merged-gate evidence and preserved verification limits
+
+- First normal controller land rejected: all five Mac-only files passed, including Browser automation and pane tests; remote630files624passed6failed exceeded the configured isolated-retry limit, so no remote retries occurred.
+- Concrete Browser integration defects were repaired without relaxing consumer assertions: terminal contributions now precede the typed management footer; SC-22 waits for actual detected-agent readiness rather than a count that Browser legitimately changes.
+- Dock cancellation now holds the real post-body/pre-Enter boundary through an injected fixture-only hook after the unchanged500ms delay. Explicit per-harness built-in overlays replace the proposed shared prototype monkeypatch. Cancellation/PTY bytes and actual effort/transcript/sentinel/draft assertions remain. Only an incidental negative notice-prose pin was deleted.
+- Fresh scoped proof: Dock send/defect files2/2pass, no retries; exact terminal SC-22 passes; menu unit file passes; typecheck passes after fixture plumbing. This is not a claim that a single post-fix630-file run passed.
+- Unchanged failures still awaiting the normal merged retry: Git remote SC-29 wait (five possible predicates; available stack does not identify one), daemon lock five-second test bound, incoming loops-store five-second bound. No speculative producer change, timeout increase or waived assertion was used for these.
+- Operator's45-minute target was not met; the first controller verification alone took1800.57seconds after source submission. No on-time or authoritative landed claim is inferred from a submitted command.
+

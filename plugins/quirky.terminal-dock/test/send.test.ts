@@ -1,9 +1,12 @@
 import { afterEach, expect, test } from 'bun:test'
 import type { DockState, SendResult } from '../src/types'
-import { enableDock, inputBytes, launchFakeClaude, paneOf, startDockE2E, waitForTuiInput, type DockHarness } from './support'
+import { enableDock, inputBytes, launchFakeClaude, paneOf, startDockE2E, waitForDockBeforeEnter, waitForTuiInput, type DockHarness, type DockSubmitWait } from './support'
 
 let harness: DockHarness | undefined
+let beforeEnter: DockSubmitWait | undefined
 afterEach(async () => {
+  beforeEnter?.dispose()
+  beforeEnter = undefined
   await harness?.cleanup()
   harness = undefined
 })
@@ -43,14 +46,17 @@ test(
 test(
   'SC-21: cancelling one queued send never writes it, and cancelling the current send suppresses delayed Enter',
   async () => {
-    harness = await startDockE2E()
+    harness = await startDockE2E({ holdBeforeEnter: true })
     const session = await launchFakeClaude(harness)
     await enableDock(harness)
     const pane = await paneOf(harness, session.id)
+    const beforeEnterWait = waitForDockBeforeEnter(harness)
+    beforeEnter = beforeEnterWait
 
     const first = harness.call('quirky.terminal-dock/send', { pane, id: 'current', text: 'first-body' }) as Promise<SendResult>
     const queued = harness.call('quirky.terminal-dock/send', { pane, id: 'queued', text: 'never-write' }) as Promise<SendResult>
     await waitForTuiInput(harness, (input) => input.indexOf(Buffer.from('first-body')) >= 0)
+    await beforeEnterWait.reached
 
     await harness.call('quirky.terminal-dock/cancel', { pane, send: 'queued' })
     await harness.call('quirky.terminal-dock/cancel', { pane, send: 'current' })

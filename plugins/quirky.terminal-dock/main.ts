@@ -1,12 +1,12 @@
 import type { PluginContext } from '@quirky/protocol'
 import { createProviderBridge } from './src/providers'
-import { DockService } from './src/service'
+import { DockService, type DockServiceTestHooks } from './src/service'
 import { DockStore, migrations } from './src/store'
 
 let service: DockService | undefined
 
-export async function activate(context: PluginContext): Promise<void> {
-  const active = new DockService(context, new DockStore(context.openStore(migrations)), createProviderBridge(context))
+export async function activate(context: PluginContext, testHooks?: DockServiceTestHooks): Promise<void> {
+  const active = new DockService(context, new DockStore(context.openStore(migrations)), createProviderBridge(context), testHooks)
   service = active
   for (const [name, handler] of Object.entries(active.methods)) {
     context.provide(`method:${context.pluginId}/${name}`, handler)
