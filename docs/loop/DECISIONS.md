@@ -111,6 +111,7 @@ files, not this one.
 | hard | high | [m5-ledger D8](decisions/m5-ledger.md) | Keep imports replay-safe and evidence advisory | locked by external research/orca-features/ledger.md |
 | hard | high | [m7-orchestration-worker-federation D2](decisions/m7-orchestration-worker-federation.md) | Reuse one store and real paired transport with distinct remote authority | assumed — autonomous |
 | hard | high | [m7-orchestration-worker-federation D4](decisions/m7-orchestration-worker-federation.md) | Commit home verdict before host report acceptance | locked by docs/loop/decisions/m6-orchestration-core.md |
+| hard (public state contract) | high | [ui-shell-slots D2](decisions/ui-shell-slots.md) | Keep per-user tool layout in the canonical daemon store | locked by docs/architecture.md |
 | hard | high | [m0-ui-api D4](decisions/m0-ui-api.md) | The seven UI kinds are `view`, `panel`, `sidebar-section`, `command`, `keybinding`, `setting` and `theme` | assumed — autonomous |
 | hard | high | [m0-ui-api D29](decisions/m0-ui-api.md) | Choose declared slots with lazily imported modules that mount into host elements | assumed — autonomous |
 | hard | high | [m0-registry D12](decisions/m0-registry.md) | Every contribution is declared in the manifest, and code can only provide declared ones | assumed — autonomous |
@@ -185,6 +186,7 @@ files, not this one.
 | medium | medium | [m0-daemon-api D15](decisions/m0-daemon-api.md) | Jobs run on a fixed delay, at least one second apart, never overlapping | assumed — autonomous |
 | medium | medium | [m0-daemon-api D19](decisions/m0-daemon-api.md) | Launch hooks are a sequential pipeline in contribution-ID order | assumed — autonomous |
 | medium | medium | [m0-daemon-api D20](decisions/m0-daemon-api.md) | Launch hooks change only environment variables and agent arguments | assumed — autonomous |
+| medium | medium | [ui-shell-slots D5](decisions/ui-shell-slots.md) | Retain exact-window and plugin-internal view behavior | assumed — autonomous |
 | medium | medium | [m0-ui-api D7](decisions/m0-ui-api.md) | The window shares its React with plugin UI modules through bare imports | assumed — autonomous |
 | medium | medium | [m0-ui-api D10](decisions/m0-ui-api.md) | Slot locations: sidebar sections under the repo list, panels in the right column, views in the main area | assumed — autonomous |
 | medium | medium | [m0-ui-api D17](decisions/m0-ui-api.md) | Settings have one scope, the user's | assumed — autonomous |
@@ -647,6 +649,12 @@ files, not this one.
 | medium (authorization/ledger ordering) | high | [m3-accounts D18](decisions/m3-accounts.md) | Bridge dispatcher authorization once and reserve reset scope before validation | assumed — autonomous |
 | medium (platform adapters) | high | [m3-accounts D21](decisions/m3-accounts.md) | Non-macOS account adapters remain explicit platform work | deferred: platform |
 | medium | high at the daemon/filesystem boundary; strengthened real-pty fixture smoke still required | [m3-accounts D24](decisions/m3-accounts.md) | Preserve real native conversation data across profile changes | assumed — autonomous |
+| medium (visible shell layout) | high | [ui-shell-slots D1](decisions/ui-shell-slots.md) | Follow the approved shell row without restyling feature interiors | locked by docs/quirk/specs/2026-10-28-ui-redesign/logic.md |
+| medium (projection can change without changing plugin ids) | high | [ui-shell-slots D3](decisions/ui-shell-slots.md) | Project effective legacy contributions into tools and preserve original IDs | assumed — autonomous |
+| medium | high | [ui-shell-slots D4](decisions/ui-shell-slots.md) | Use durable pending asks as actionable Inbox authority | locked by docs/quirk/specs/2026-10-28-ui-redesign/logic.md |
+| medium (old preference ceases to be effective) | high | [ui-shell-slots D9](decisions/ui-shell-slots.md) | Remove the obsolete top/side activity-bar preference at cutover | supersedes m2-editor D11 (activity-position clause only), under the approved redesign |
+| medium (public location semantics) | high | [ui-shell-slots D11](decisions/ui-shell-slots.md) | Repair observed shell composition defects at their real owners | assumed — autonomous |
+| medium | high | [ui-shell-slots D15](decisions/ui-shell-slots.md) | Compose the sole roadmap catch-up without weakening window identity | assumed — autonomous |
 | medium | high | [m0-ui-api D5](decisions/m0-ui-api.md) | Plugin UI code is one ES module named by a manifest `ui` field, loaded in the window only when needed | assumed — autonomous |
 | medium | high | [m0-ui-api D8](decisions/m0-ui-api.md) | The daemon resolves UI contributions into one model the window and agents read | assumed — autonomous |
 | medium | high | [m0-ui-api D12](decisions/m0-ui-api.md) | Keybindings are `mod+shift+k` chords that must include a modifier, or a function key | deferred: platform |
@@ -961,6 +969,7 @@ files, not this one.
 | easy | medium | [m7-sweep-hosting D8](decisions/m7-sweep-hosting.md) | Keep model findings, autonomous rulings and protocol limits separate | assumed — autonomous |
 | easy | medium | [m5-structured-runner D30](decisions/m5-structured-runner.md) | Diagnose the scripts fixture timeout without weakening its assertion or budget | assumed — autonomous |
 | easy (before dispatch) | medium (large account domain, contract integration risk) | [m3-accounts D13](decisions/m3-accounts.md) | Execute one four-component wave with disjoint scopes | assumed — autonomous |
+| easy | medium | [ui-shell-slots D8](decisions/ui-shell-slots.md) | Bound dimensions and use opaque same-window drag state | assumed — autonomous |
 | easy | medium | [m0-ui-api D11](decisions/m0-ui-api.md) | Commands run in the window, from a command palette or a keybinding | assumed — autonomous |
 | easy | medium | [m0-ui-api D14](decisions/m0-ui-api.md) | No `when` clauses yet | assumed — autonomous |
 | easy | medium | [m0-ui-api D20](decisions/m0-ui-api.md) | The active theme is chosen through `theme.list` and `theme.set`, and applies live | assumed — autonomous |
@@ -2291,6 +2300,12 @@ files, not this one.
 | easy | high | [m3-accounts D33](decisions/m3-accounts.md) | Retain proof and unexpected local state while cleaning owned worktrees | locked by docs/loop/LOOP.md |
 | easy | high | [m3-accounts D34](decisions/m3-accounts.md) | Install the merged workspace graph before typechecking it | assumed — autonomous |
 | easy | high for the observed load-sensitive result | [m3-accounts D35](decisions/m3-accounts.md) | Preserve protected script assertions after an isolated passing rerun | locked by docs/loop/LOOP.md |
+| easy | high | [ui-shell-slots D6](decisions/ui-shell-slots.md) | Reuse only the shared system and inherited theme resolver | locked by docs/quirk/specs/2026-10-28-ui-redesign/logic.md |
+| easy | high | [ui-shell-slots D7](decisions/ui-shell-slots.md) | Execute one combined spec and three disjoint source components | locked by docs/loop/LOOP.md |
+| easy (component path sets remain independently committable) | high | [ui-shell-slots D10](decisions/ui-shell-slots.md) | Recover two misplaced source slices through explicit parent ownership | assumed — autonomous |
+| easy | high | [ui-shell-slots D12](decisions/ui-shell-slots.md) | Record focused runtime proof without claiming the end-phase suite or visual score | locked by docs/loop/LOOP.md |
+| easy | high | [ui-shell-slots D13](decisions/ui-shell-slots.md) | Preserve exact-window evidence limits and peer test repairs | assumed — autonomous |
+| easy | high | [ui-shell-slots D14](decisions/ui-shell-slots.md) | Keep platform and capture claims bounded to this Mac | deferred: platform |
 | easy | high | [m0-ui-api D1](decisions/m0-ui-api.md) | Classify the item as an API and Visual design, and run both research phases | assumed — autonomous |
 | easy | high | [m0-ui-api D2](decisions/m0-ui-api.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m0-ui-api D3](decisions/m0-ui-api.md) | Select every gray area that matters for the UI plugin API | assumed — autonomous |

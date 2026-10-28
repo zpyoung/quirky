@@ -1554,8 +1554,7 @@
       "deps": [
         "ui-tokens-and-components"
       ],
-      "status": "in-progress",
-      "lane": 9
+      "status": "done"
     },
     {
       "id": "m7-vm-and-owner-bound-host-workspaces",
