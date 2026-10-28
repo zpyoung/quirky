@@ -1,0 +1,231 @@
+{
+  "contributes": {
+    "method": [
+      {
+        "id": "projects",
+        "description": "Discover accessible Projects with an in-memory bounded browse cache and explicit partial failures.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": { "type": "string", "minLength": 1, "maxLength": 4096 },
+            "host": { "type": "string", "minLength": 1, "maxLength": 255 },
+            "refresh": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "projects": { "type": "array", "items": { "type": "object" } },
+            "partialFailures": { "type": "array", "items": { "type": "object" } },
+            "truncated": { "type": "boolean" },
+            "cache": { "type": "object", "properties": { "hit": { "type": "boolean" }, "refreshed": { "type": "boolean" }, "ageMs": { "type": "integer", "minimum": 0 }, "ttlMs": { "type": "integer", "minimum": 1 }, "entryCount": { "type": "integer", "minimum": 0, "maximum": 32 }, "capacity": { "type": "integer", "minimum": 32, "maximum": 32 } }, "required": ["hit", "refreshed", "ageMs", "ttlMs", "entryCount", "capacity"] }
+          },
+          "required": ["projects", "partialFailures", "truncated", "cache"]
+        }
+      },
+      {
+        "id": "projectSelect",
+        "description": "Resolve, add, select, clear, pin, or unpin a project and persist recent selections.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "action": { "type": "string", "enum": ["resolve", "add", "select", "clear", "pin", "unpin"] },
+            "input": { "type": "string", "minLength": 1, "maxLength": 2048 },
+            "project": { "type": "object", "properties": { "id": { "type": "string", "minLength": 1, "maxLength": 256 }, "owner": { "type": "string", "minLength": 1, "maxLength": 256 }, "ownerType": { "type": "string", "enum": ["user", "organization"] }, "number": { "type": "integer", "minimum": 1 }, "url": { "type": "string", "minLength": 1, "maxLength": 2048 }, "host": { "type": "string", "minLength": 1, "maxLength": 255 }, "title": { "type": "string", "maxLength": 4096 }, "viewId": { "type": "string", "minLength": 1, "maxLength": 256 }, "viewNumber": { "type": "integer", "minimum": 1 } }, "required": ["id", "owner", "ownerType", "number", "url"], "additionalProperties": false },
+            "owner": { "type": "string", "minLength": 1, "maxLength": 256 },
+            "ownerType": { "type": "string", "enum": ["user", "organization"] },
+            "projectNumber": { "type": "integer", "minimum": 1 },
+            "viewNumber": { "type": "integer", "minimum": 1 },
+            "host": { "type": "string", "minLength": 1, "maxLength": 255 },
+            "worktree": { "type": "string", "minLength": 1, "maxLength": 4096 }
+          },
+          "required": ["action"],
+          "additionalProperties": false
+        },
+        "result": { "type": "object" }
+      },
+      {
+        "id": "projectView",
+        "description": "List project views, persist a selected view, or load/refresh its bounded table with per-view query overrides.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "action": { "type": "string", "enum": ["list", "select", "load", "refresh"] },
+            "project": { "type": "object", "properties": { "id": { "type": "string", "minLength": 1, "maxLength": 256 }, "owner": { "type": "string", "minLength": 1, "maxLength": 256 }, "ownerType": { "type": "string", "enum": ["user", "organization"] }, "number": { "type": "integer", "minimum": 1 }, "url": { "type": "string", "minLength": 1, "maxLength": 2048 }, "host": { "type": "string", "minLength": 1, "maxLength": 255 }, "title": { "type": "string", "maxLength": 4096 }, "viewId": { "type": "string", "minLength": 1, "maxLength": 256 }, "viewNumber": { "type": "integer", "minimum": 1 } }, "required": ["id", "owner", "ownerType", "number", "url"], "additionalProperties": false },
+            "input": { "type": "string", "minLength": 1, "maxLength": 2048 },
+            "owner": { "type": "string", "minLength": 1, "maxLength": 256 },
+            "ownerType": { "type": "string", "enum": ["user", "organization"] },
+            "projectNumber": { "type": "integer", "minimum": 1 },
+            "viewId": { "type": "string", "minLength": 1, "maxLength": 256 },
+            "viewNumber": { "type": "integer", "minimum": 1 },
+            "viewName": { "type": "string", "minLength": 1, "maxLength": 256 },
+            "query": { "type": "string", "maxLength": 8192 },
+            "clearQueryOverride": { "type": "boolean" },
+            "host": { "type": "string", "minLength": 1, "maxLength": 255 },
+            "worktree": { "type": "string", "minLength": 1, "maxLength": 4096 }
+          },
+          "required": ["action"],
+          "additionalProperties": false
+        },
+        "result": { "type": "object" }
+      },
+      {
+        "id": "projectEdit",
+        "description": "Set/clear a typed project field, edit issue or pull-request fields, or change issue type through public hosting methods.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "action": { "type": "string", "enum": ["field", "issue", "issueType"] },
+            "worktree": { "type": "string", "minLength": 1, "maxLength": 4096 },
+            "host": { "type": "string", "minLength": 1, "maxLength": 255 },
+            "projectId": { "type": "string", "minLength": 1, "maxLength": 256 },
+            "itemId": { "type": "string", "minLength": 1, "maxLength": 256 },
+            "fieldId": { "type": "string", "minLength": 1, "maxLength": 256 },
+            "value": { "type": "object", "maxProperties": 1, "properties": { "text": { "type": "string", "maxLength": 8192 }, "number": { "type": "number" }, "date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" }, "singleSelectOptionId": { "type": "string", "minLength": 1, "maxLength": 256 }, "iterationId": { "type": "string", "minLength": 1, "maxLength": 256 }, "multiSelectOptionIds": { "type": "array", "maxItems": 100, "items": { "type": "string", "minLength": 1, "maxLength": 256 } } }, "additionalProperties": false },
+            "clear": { "type": "boolean" },
+            "number": { "type": "integer", "minimum": 1 },
+            "kind": { "type": "string", "enum": ["issue", "pullRequest"] },
+            "title": { "type": "string", "minLength": 1, "maxLength": 256 },
+            "body": { "type": "string", "maxLength": 65536 },
+            "state": { "type": "string", "enum": ["open", "closed"] },
+            "stateReason": { "type": "string", "enum": ["completed", "not_planned"] },
+            "labels": { "type": "array", "maxItems": 100, "items": { "type": "string", "minLength": 1, "maxLength": 256 } },
+            "assignees": { "type": "array", "maxItems": 100, "items": { "type": "string", "minLength": 1, "maxLength": 256 } },
+            "addLabels": { "type": "array", "maxItems": 100, "items": { "type": "string", "minLength": 1, "maxLength": 256 } },
+            "removeLabels": { "type": "array", "maxItems": 100, "items": { "type": "string", "minLength": 1, "maxLength": 256 } },
+            "addAssignees": { "type": "array", "maxItems": 100, "items": { "type": "string", "minLength": 1, "maxLength": 256 } },
+            "removeAssignees": { "type": "array", "maxItems": 100, "items": { "type": "string", "minLength": 1, "maxLength": 256 } },
+            "issueTypeId": { "type": "string", "minLength": 1, "maxLength": 256 },
+            "issueTypeName": { "type": "string", "minLength": 1, "maxLength": 256 }
+          },
+          "required": ["action", "projectId", "itemId"],
+          "additionalProperties": false
+        },
+        "result": { "type": "object" }
+      },
+      {
+        "id": "projectPreferences",
+        "description": "Read durable project preferences or atomically patch bounded project pins, recents, views, queries, columns, widths, and roadmap zoom.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "action": { "type": "string", "enum": ["read", "update"] },
+            "patch": {
+              "type": "object",
+              "properties": {
+                "pinned": { "type": "array", "maxItems": 50, "items": { "type": "object", "properties": { "id": { "type": "string", "minLength": 1, "maxLength": 256 }, "owner": { "type": "string", "minLength": 1, "maxLength": 256 }, "ownerType": { "type": "string", "enum": ["user", "organization"] }, "number": { "type": "integer", "minimum": 1 }, "url": { "type": "string", "minLength": 1, "maxLength": 2048 }, "host": { "type": "string", "minLength": 1, "maxLength": 255 }, "title": { "type": "string", "maxLength": 4096 }, "viewId": { "type": "string", "minLength": 1, "maxLength": 256 }, "viewNumber": { "type": "integer", "minimum": 1 } }, "required": ["id", "owner", "ownerType", "number", "url"], "additionalProperties": false } },
+                "recent": { "type": "array", "maxItems": 10, "items": { "type": "object", "properties": { "id": { "type": "string", "minLength": 1, "maxLength": 256 }, "owner": { "type": "string", "minLength": 1, "maxLength": 256 }, "ownerType": { "type": "string", "enum": ["user", "organization"] }, "number": { "type": "integer", "minimum": 1 }, "url": { "type": "string", "minLength": 1, "maxLength": 2048 }, "host": { "type": "string", "minLength": 1, "maxLength": 255 }, "title": { "type": "string", "maxLength": 4096 }, "viewId": { "type": "string", "minLength": 1, "maxLength": 256 }, "viewNumber": { "type": "integer", "minimum": 1 } }, "required": ["id", "owner", "ownerType", "number", "url"], "additionalProperties": false } },
+                "lastViewByProject": { "type": "object", "maxProperties": 100, "additionalProperties": { "type": "string", "minLength": 1, "maxLength": 256 } },
+                "queryByView": { "type": "object", "maxProperties": 100, "additionalProperties": { "type": "string", "maxLength": 8192 } },
+                "hiddenColumns": { "type": "object", "maxProperties": 100, "additionalProperties": { "type": "array", "maxItems": 100, "items": { "type": "string", "minLength": 1, "maxLength": 256 } } },
+                "columnWidths": { "type": "object", "maxProperties": 100, "additionalProperties": { "type": "object", "maxProperties": 100, "additionalProperties": { "type": "integer", "minimum": 60, "maximum": 1200 } } },
+                "roadmapZoom": { "type": "string", "enum": ["month", "quarter", "year"] }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        "result": { "type": "object" }
+      }
+    ],
+    "cli": [
+      {
+        "id": "projects",
+        "words": "projects",
+        "summary": "discover Projects using an explicit or selected local Git repository",
+        "method": "quirky.tasks/projects",
+        "methods": ["quirky.tasks/projects"],
+        "flags": {
+          "worktree": { "type": "string", "description": "Registered local Git worktree path." },
+          "host": { "type": "string", "description": "Optional trusted GitHub hostname." },
+          "refresh": { "type": "boolean", "description": "Bypass the bounded in-memory browse cache." }
+        }
+      },
+      {
+        "id": "project-select",
+        "words": "project-select",
+        "summary": "resolve, add, select, clear, pin, or unpin a project",
+        "method": "quirky.tasks/projectSelect",
+        "methods": ["quirky.tasks/projectSelect"],
+        "flags": {
+          "action": { "type": "string", "required": true, "enum": ["resolve", "add", "select", "clear", "pin", "unpin"], "description": "Project selection action." },
+          "input": { "type": "string", "description": "Project URL or owner/number reference." },
+          "project": { "type": "json", "description": "Resolved ProjectTarget JSON object." },
+          "owner": { "type": "string", "description": "Project owner login, paired with --project-number." },
+          "owner-type": { "type": "string", "enum": ["user", "organization"], "description": "Expected project owner type." },
+          "project-number": { "type": "integer", "description": "Project number, paired with --owner." },
+          "view-number": { "type": "integer", "description": "Optional selected view number." },
+          "host": { "type": "string", "description": "Optional trusted GitHub hostname." },
+          "worktree": { "type": "string", "description": "Registered local Git worktree path." }
+        }
+      },
+      {
+        "id": "project-view",
+        "words": "project-view",
+        "summary": "list, select, load, or refresh a project view",
+        "method": "quirky.tasks/projectView",
+        "methods": ["quirky.tasks/projectView"],
+        "flags": {
+          "action": { "type": "string", "required": true, "enum": ["list", "select", "load", "refresh"], "description": "Project view action." },
+          "project": { "type": "json", "description": "Resolved ProjectTarget JSON object; omit to use the selected project." },
+          "input": { "type": "string", "description": "Project URL or owner/number reference." },
+          "owner": { "type": "string", "description": "Project owner login, paired with --project-number." },
+          "owner-type": { "type": "string", "enum": ["user", "organization"], "description": "Expected project owner type." },
+          "project-number": { "type": "integer", "description": "Project number, paired with --owner." },
+          "view-id": { "type": "string", "description": "Saved project view ID." },
+          "view-number": { "type": "integer", "description": "Saved project view number." },
+          "view-name": { "type": "string", "description": "Saved project view name." },
+          "query": { "type": "string", "description": "Optional per-view query override, limited to 8192 UTF-8 bytes." },
+          "clear-query-override": { "type": "boolean", "description": "Remove the stored query override and use the saved GitHub filter." },
+          "host": { "type": "string", "description": "Optional trusted GitHub hostname." },
+          "worktree": { "type": "string", "description": "Registered local Git worktree path." }
+        }
+      },
+      {
+        "id": "project-edit",
+        "words": "project-edit",
+        "summary": "set or clear project fields and edit issue fields or issue type",
+        "method": "quirky.tasks/projectEdit",
+        "methods": ["quirky.tasks/projectEdit"],
+        "flags": {
+          "action": { "type": "string", "required": true, "enum": ["field", "issue", "issueType"], "description": "Edit action." },
+          "worktree": { "type": "string", "description": "Registered local Git worktree path." },
+          "host": { "type": "string", "description": "Optional trusted GitHub hostname." },
+          "project-id": { "type": "string", "required": true, "description": "Exact Projects v2 project ID." },
+          "item-id": { "type": "string", "required": true, "description": "Exact Projects v2 item ID." },
+          "field-id": { "type": "string", "description": "Exact project field ID for action field." },
+          "value": { "type": "json", "description": "One bounded typed field value object." },
+          "clear": { "type": "boolean", "description": "Clear the field for action field; omit or false to set value." },
+          "number": { "type": "integer", "description": "Exact issue or pull-request number." },
+          "kind": { "type": "string", "enum": ["issue", "pullRequest"], "description": "Exact project item kind." },
+          "title": { "type": "string", "description": "Issue or pull-request title, limited to 256 UTF-8 bytes." },
+          "body": { "type": "string", "description": "Issue or pull-request body, limited to 65536 UTF-8 bytes." },
+          "state": { "type": "string", "enum": ["open", "closed"], "description": "Issue or pull-request state." },
+          "state-reason": { "type": "string", "enum": ["completed", "not_planned"], "description": "Closed issue state reason." },
+          "labels": { "type": "json", "description": "Replace up to 100 issue labels." },
+          "assignees": { "type": "json", "description": "Replace up to 100 issue assignees." },
+          "add-labels": { "type": "json", "description": "Add up to 100 issue labels." },
+          "remove-labels": { "type": "json", "description": "Remove up to 100 issue labels." },
+          "add-assignees": { "type": "json", "description": "Add up to 100 issue assignees." },
+          "remove-assignees": { "type": "json", "description": "Remove up to 100 issue assignees." },
+          "issue-type-id": { "type": "string", "description": "Issue type ID for action issueType." },
+          "issue-type-name": { "type": "string", "description": "Issue type name for action issueType." }
+        }
+      },
+      {
+        "id": "project-preferences",
+        "words": "project-preferences",
+        "summary": "read or atomically update bounded durable project preferences",
+        "method": "quirky.tasks/projectPreferences",
+        "methods": ["quirky.tasks/projectPreferences"],
+        "flags": {
+          "action": { "type": "string", "enum": ["read", "update"], "description": "Read preferences, or apply a patch; with no patch the action defaults to read." },
+          "patch": { "type": "json", "description": "Bounded JSON patch of pins, recents, last views, queries, hidden columns, widths, and roadmap zoom." }
+        }
+      }
+    ]
+  }
+}
