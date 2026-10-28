@@ -14,6 +14,7 @@ import type { PaneViewport } from '../pane-contract'
 import { BrowserStore } from '../profiles/store'
 import type { BrowserIdentityMode } from '../preferences/contract'
 import { identityModeFromSetting, userAgentForIdentity } from '../preferences/identity'
+import { findWatchOccurrences } from './find'
 
 
 export type RuntimeBinding = {
@@ -92,7 +93,7 @@ export type PaneControlResult = {
   title?: string
   canGoBack?: boolean
   canGoForward?: boolean
-  found?: boolean
+  current?: number
   total?: number
 }
 
@@ -474,51 +475,64 @@ export class BrowserRuntime {
         await execution.cdp.send('Page.stopLoading', {}, sessionId)
       } else if (control.action === 'find') {
         const text = control.text ?? ''
-        if (text.length === 0) {
-          await execution.cdp.send('Runtime.evaluate', {
-            expression: 'window.getSelection()?.removeAllRanges(); true',
-            returnByValue: true
-          }, sessionId)
-          return { found: false, total: 0 }
-        }
-        await execution.cdp.send('DOM.enable', {}, sessionId)
-        const search = safeRecord(await execution.cdp.send('DOM.performSearch', { query: text, includeUserAgentShadowDOM: false }, sessionId), {
+        const current = typeof control.findCurrent === 'number' &&
+          Number.isSafeInteger(control.findCurrent) && control.findCurrent > 0
+          ? control.findCurrent
+          : 0
+        const expression = `(${findWatchOccurrences.toString()})(${JSON.stringify(text)}, ${control.forward !== false}, ${current})`
+        const evaluated = safeRecord(await execution.cdp.send('Runtime.evaluate', {
+          expression,
+          returnByValue: true
+        }, sessionId), {
           type: 'object',
-          properties: { searchId: { type: 'string' }, resultCount: { type: 'integer' } },
-          required: ['searchId', 'resultCount'],
-          additionalProperties: true
-        }, 'find result')
-        const backward = control.forward === false
-        const expression = `(() => { const q = ${JSON.stringify(text)}; return window.find(q, false, ${backward}, true, false, true, false); })()`
-        try {
-          const evaluated = safeRecord(await execution.cdp.send('Runtime.evaluate', {
-            expression,
-            returnByValue: true
-          }, sessionId), {
-            type: 'object',
-            properties: {
-              result: {
-                type: 'object',
-                properties: { type: { type: 'string' }, value: { type: 'boolean' } },
-                required: ['type', 'value'],
-                additionalProperties: true
+          properties: {
+            result: {
+              type: 'object',
+              properties: {
+                type: { type: 'string' },
+                value: {
+                  type: 'object',
+                  properties: {
+                    current: { type: 'integer' },
+                    total: { type: 'integer' }
+                  },
+                  required: ['current', 'total'],
+                  additionalProperties: true
+                }
               },
-              exceptionDetails: {}
+              required: ['type', 'value'],
+              additionalProperties: true
             },
-            required: ['result'],
-            additionalProperties: true
-          }, 'find evaluation')
-          if (evaluated.exceptionDetails !== undefined) throw fault('browser_error', 'page find failed')
-          const remote = safeRecord(evaluated.result, {
-            type: 'object',
-            properties: { type: { type: 'string' }, value: { type: 'boolean' } },
-            required: ['type', 'value'],
-            additionalProperties: true
-          }, 'find evaluation result')
-          return { found: remote.value === true, total: search.resultCount as number }
-        } finally {
-          await execution.cdp.send('DOM.discardSearchResults', { searchId: search.searchId }, sessionId).catch(() => {})
-        }
+            exceptionDetails: {}
+          },
+          required: ['result'],
+          additionalProperties: true
+        }, 'find evaluation')
+        if (evaluated.exceptionDetails !== undefined) throw fault('browser_error', 'page find failed')
+        const remote = safeRecord(evaluated.result, {
+          type: 'object',
+          properties: {
+            type: { type: 'string' },
+            value: {
+              type: 'object',
+              properties: {
+                current: { type: 'integer' },
+                total: { type: 'integer' }
+              },
+              required: ['current', 'total'],
+              additionalProperties: true
+            }
+          },
+          required: ['type', 'value'],
+          additionalProperties: true
+        }, 'find evaluation result')
+        const result = safeRecord(remote.value, {
+          type: 'object',
+          properties: { current: { type: 'integer' }, total: { type: 'integer' } },
+          required: ['current', 'total'],
+          additionalProperties: true
+        }, 'page find result')
+        return { current: result.current as number, total: result.total as number }
       } else if (control.action === 'zoom') {
         if (typeof control.level !== 'number' || !Number.isFinite(control.level)) throw fault('invalid_argument', 'zoom level must be finite')
         const level = Math.max(-3, Math.min(5, Math.round(control.level * 2) / 2))

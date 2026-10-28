@@ -196,11 +196,39 @@ test('Watch leases deliver acknowledged latest frames and typed input/find/zoom/
       expect(await call(h, 'eval', { page: first.browserPageId, expression: 'document.querySelector("#text").value' })).toEqual({ value: 'only-the-watched-page' })
       expect(await call(h, 'eval', { page: second.browserPageId, expression: 'document.querySelector("#text").value' })).toEqual({ value: '' })
 
+      await call(h, 'eval', {
+        page: first.browserPageId,
+        expression: 'window.__watchFindTextNode = document.querySelector("p").firstChild; true'
+      })
       const find = await call(h, 'paneControl', { pane: pane.id, action: 'find', text: 'needle' }) as { find: { current: number; total: number } }
       expect(find.find.total).toBe(3)
       expect(find.find.current).toBe(1)
+      expect(await call(h, 'eval', {
+        page: first.browserPageId,
+        expression: 'window.__watchFindTextNode === document.querySelector("p").firstChild && window.getSelection()?.toString() === "needle" && window.getSelection()?.getRangeAt(0).startOffset === 0'
+      })).toEqual({ value: true })
+      expect(await call(h, 'eval', {
+        page: second.browserPageId,
+        expression: 'window.getSelection()?.rangeCount === 0'
+      })).toEqual({ value: true })
       const nextFind = await call(h, 'paneControl', { pane: pane.id, action: 'find', text: 'needle', forward: true }) as { find: { current: number; total: number } }
-      expect(nextFind.find.current).toBe(2)
+      expect(nextFind.find).toMatchObject({ current: 2, total: 3 })
+      const previousFind = await call(h, 'paneControl', { pane: pane.id, action: 'find', text: 'needle', forward: false }) as { find: { current: number; total: number } }
+      expect(previousFind.find).toMatchObject({ current: 1, total: 3 })
+      const previousWrap = await call(h, 'paneControl', { pane: pane.id, action: 'find', text: 'needle', forward: false }) as { find: { current: number; total: number } }
+      expect(previousWrap.find).toMatchObject({ current: 3, total: 3 })
+      const nextWrap = await call(h, 'paneControl', { pane: pane.id, action: 'find', text: 'needle', forward: true }) as { find: { current: number; total: number } }
+      expect(nextWrap.find).toMatchObject({ current: 1, total: 3 })
+      const advanceBeforeChange = await call(h, 'paneControl', { pane: pane.id, action: 'find', text: 'needle', forward: true }) as { find: { current: number; total: number } }
+      expect(advanceBeforeChange.find).toMatchObject({ current: 2, total: 3 })
+      const changedFind = await call(h, 'paneControl', { pane: pane.id, action: 'find', text: 'dle' }) as { find: { current: number; total: number } }
+      expect(changedFind.find).toMatchObject({ current: 1, total: 3 })
+      const clearedFind = await call(h, 'paneControl', { pane: pane.id, action: 'find', text: '' }) as { find: { current: number; total: number } }
+      expect(clearedFind.find).toMatchObject({ current: 0, total: 0 })
+      expect(await call(h, 'eval', {
+        page: first.browserPageId,
+        expression: 'window.__watchFindTextNode === document.querySelector("p").firstChild && window.getSelection()?.rangeCount === 0'
+      })).toEqual({ value: true })
       const zoom = await call(h, 'paneControl', { pane: pane.id, action: 'zoom', level: 1 }) as { zoom: number }
       expect(zoom.zoom).toBe(1)
       const viewport = await call(h, 'paneControl', { pane: pane.id, action: 'viewport', preset: 'mobile-m' }) as { viewport: string }

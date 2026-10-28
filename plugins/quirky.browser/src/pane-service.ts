@@ -745,11 +745,13 @@ export class PaneService {
         const result = await this.runtime.paneControl(this.pageFor(tab), {
           action: 'find', text, forward: changed ? true : request.forward ?? true, findCurrent: changed ? 0 : tab.find.current
         })
-        tab.find = {
-          text,
-          current: result.total && result.found ? changed ? 1 : ((tab.find.current - 1 + (request.forward === false ? result.total - 1 : 1)) % result.total) + 1 : 0,
-          total: result.total ?? 0
+        const { current, total } = result
+        if (typeof current !== 'number' || typeof total !== 'number' ||
+          !Number.isSafeInteger(current) || !Number.isSafeInteger(total) ||
+          current < 0 || total < 0 || current > total || (total === 0 ? current !== 0 : current === 0)) {
+          throw fault('browser_error', 'find did not return a valid selected occurrence')
         }
+        tab.find = { text, current, total }
         tab.command = null
         tab.error = null
       } else {
