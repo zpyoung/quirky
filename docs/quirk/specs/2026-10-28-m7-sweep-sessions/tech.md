@@ -67,3 +67,11 @@ Built-web guarded campaign covers A1/A3 initial repairs plus each feature's cont
 
 ## Non-goals
 See [logic exclusions](logic.md#scope-and-non-goals). No plugin restyle/new shell; new UI redesign items retain ownership. This item repairs existing behavior, preserving original visuals until those owners cut over. No verification-only queue follow-up.
+
+## Observed end-phase repair scopes
+Supports the dated [logic amendments](logic.md#status--amendments), not a broader redesign.
+
+- Accounts CLI repair owns `plugins/quirky.accounts/cli.ts`, direct command-key consumer in `plugins/quirky.accounts/test/accounts-api.test.ts`, and new `plugins/quirky.accounts/test/sweep-cli.test.ts`. Existing stable manifest IDs and public words are unchanged. Match all13 kebab-case IDs with implementation keys; no camelCase aliases.
+- Discovery diagnostic owns `plugins/quirky.agents/src/service.ts` only for the proven direct-process executable resolution root. `plugins/quirky.agents/src/detect.ts:106-134` distinguishes `locate().path` from `resolveExecutable()`, which deliberately returns null for on-login-PATH commands because shell launches need no override. Direct model probes need the located path for both cases. Preserve current provider-account environment and nonempty snapshot contracts. Existing provider discovery/API tests supply the regression; unknown login-timeout cause does not justify a speculative timeout/retry change.
+- Vault sweep repair owns the actual failure paths in `plugins/quirky.vault/src/**` and `plugins/quirky.vault/test/**`, plus removal of the incidental catalog-list pin in `plugins/quirky.handoff/test/service-drafts.test.ts`. Fix only traced SC08 error/retry, SC15/16 paging, real-host contribution and Gemini setup/readiness failures; preserve every meaningful scope, redaction, source-preservation and generation assertion.
+- Canonical `fix-test-ask-1028` remains lane12-owned. Consume its existing public-list exact-ID envelope fix at the single integration catch-up. No duplicate read endpoint, connection weakening, borrowed client or confirmation bypass is permitted here.

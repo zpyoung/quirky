@@ -19,8 +19,8 @@ afterEach(async () => {
   for (const rig of rigs.splice(0).reverse()) await rig.cleanup()
 })
 
-async function start(): Promise<VaultRig> {
-  const rig = await VaultRig.start()
+async function start(options: { isolateVaultPlugin?: boolean } = {}): Promise<VaultRig> {
+  const rig = await VaultRig.start(options)
   rigs.push(rig)
   return rig
 }
@@ -520,7 +520,7 @@ describe('vault public acceptance flows', () => {
   })
 
   test('real host contributions preserve identity, expose partial availability, redact remote paths, and fail honestly', async () => {
-    const remote = await start()
+    const remote = await start({ isolateVaultPlugin: true })
     await remote.call('setSearchEnabled', { enabled: true })
     const remoteSearch = results(await remote.call<SearchResponse>('search', {
       query: 'vault-fixture-claude-marker', freshness: 'wait-until-current', filters: { agents: ['claude'] }

@@ -210,12 +210,18 @@ describe('Gemini cwd recovery through the daemon API', () => {
     await writeProjectMarker(sourceHome, slug, markerRoot)
     await writeProjectRegistry(sourceHome, { [registryRoot]: slug })
 
+    const fixtures: GeminiFixture[] = []
     for (const format of ['json', 'jsonl'] as const) {
-      const fixture = await writeGeminiSession(sourceHome, slug, format, {
+      fixtures.push(await writeGeminiSession(sourceHome, slug, format, {
         projectRoot: registryRoot,
         cwd: explicitRoot
-      })
-      const listed = await sessionById(client, fixture.sessionId)
+      }))
+    }
+
+    const listedSessions = await listGemini(client)
+    for (const fixture of fixtures) {
+      const listed = listedSessions.find((session) => session.sessionId === fixture.sessionId)
+      if (!listed) throw new Error(`Gemini session ${fixture.sessionId} was not listed`)
       expectGeminiSession(listed, fixture, explicitRoot)
     }
   })

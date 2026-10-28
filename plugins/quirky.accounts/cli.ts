@@ -99,7 +99,7 @@ export const commands: CliModule['commands'] = {
     output(context, await context.call('quirky.accounts/refresh', { ...(provider === undefined ? {} : { provider }), force: true }))
   },
 
-  async inactiveUsage(args, context) {
+  async 'inactive-usage'(args, context) {
     output(context, await context.call('quirky.accounts/inactiveUsage', { provider: stringFlag(args, context, 'provider') }))
   },
 
@@ -116,15 +116,15 @@ export const commands: CliModule['commands'] = {
     }))
   },
 
-  async loginStatus(args, context) {
+  async 'login-status'(args, context) {
     output(context, await context.call('quirky.accounts/loginStatus', { id: stringFlag(args, context, 'id') }))
   },
 
-  async sessionHome(args, context) {
+  async 'session-home'(args, context) {
     output(context, await context.call('quirky.accounts/sessionHome', { session: stringFlag(args, context, 'session') }))
   },
 
-  async cancelLogin(args, context) {
+  async 'cancel-login'(args, context) {
     output(context, await context.call('quirky.accounts/cancelLogin', { id: stringFlag(args, context, 'id') }))
   },
 
@@ -145,7 +145,7 @@ export const commands: CliModule['commands'] = {
     }))
   },
 
-  async describeRemove(args, context) {
+  async 'describe-remove'(args, context) {
     output(context, await context.call('quirky.accounts/describeRemove', {
       provider: stringFlag(args, context, 'provider'),
       accountId: stringFlag(args, context, 'account-id')
@@ -162,11 +162,11 @@ export const commands: CliModule['commands'] = {
     output(context, await context.call('quirky.accounts/setPreferences', patch))
   },
 
-  async uiState(_args, context) {
+  async 'ui-state'(_args, context) {
     output(context, await context.call('quirky.accounts/uiState'))
   },
 
-  async uiStateSet(args, context) {
+  async 'ui-state-set'(args, context) {
     output(context, await context.call('quirky.accounts/setUiState', objectFlag(args, context, 'patch', true) ?? {}))
   },
 
@@ -228,7 +228,7 @@ export const commands: CliModule['commands'] = {
     }))
   },
 
-  async ingestClaude(args, context) {
+  async 'ingest-claude'(args, context) {
     const payloadFile = stringFlag(args, context, 'payload-file')
     let payload: unknown
     try {
@@ -244,11 +244,11 @@ export const commands: CliModule['commands'] = {
     }))
   },
 
-  async credentialStatus(_args, context) {
+  async 'credential-status'(_args, context) {
     output(context, await context.call('quirky.accounts/credentialStatus'))
   },
 
-  async credentialSet(args, context) {
+  async 'credential-set'(args, context) {
     const value = await secretFromInput(args, context)
     const status = await context.call('quirky.accounts/setCredential', {
       provider: stringFlag(args, context, 'provider'),
@@ -258,14 +258,14 @@ export const commands: CliModule['commands'] = {
     output(context, status)
   },
 
-  async credentialClear(args, context) {
+  async 'credential-clear'(args, context) {
     output(context, await context.call('quirky.accounts/clearCredential', {
       provider: stringFlag(args, context, 'provider'),
       kind: stringFlag(args, context, 'kind')
     }))
   },
 
-  async resetCredit(args, context) {
+  async 'reset-credit'(args, context) {
     const expectedScope = resetScope(args, context)
     output(context, await context.call('quirky.accounts/consumeResetCredit', {
       idempotencyKey: stringFlag(args, context, 'idempotency-key'),
@@ -273,7 +273,7 @@ export const commands: CliModule['commands'] = {
     }))
   },
 
-  async describeReset(args, context) {
+  async 'describe-reset'(args, context) {
     const expectedScope = resetScope(args, context)
     output(context, await context.call('quirky.accounts/describeReset', {
       idempotencyKey: stringFlag(args, context, 'idempotency-key'),

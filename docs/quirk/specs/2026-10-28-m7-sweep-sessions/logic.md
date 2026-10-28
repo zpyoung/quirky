@@ -76,3 +76,7 @@ Status: Approved autonomously per LOOP.md. Tech spec required: crosses public UI
 **Amendments:** 2026-10-28 — Initial sweep contract. Historical Vault/Dock failures are classified using their later fixes, not repeated as current missing implementation. Normal end-phase verification applies because triage is claimed.
 
 **Amendments:** 2026-10-28 — Correct phase interpretation before implementation: triage claim ends build-first shortcuts as well as test suppression. Author sibling tech.md and run the required combined specification review.
+
+**Amendments:** 2026-10-28 — Actual generated CLI smoke found stable manifest command IDs did not match Accounts' module exports. Extend the existing A3/A5 scripting acceptance to require the declared `login-status`, `cancel-login`, profile, credential, UI-state and reset/describe commands to dispatch through their unchanged catalog IDs. Migrate implementation keys and direct consumers without aliases.
+
+**Amendments:** 2026-10-28 — Valid provider model discovery failed because the direct-spawn path used a shell-override-only executable resolver. Discovery must use the actual located executable whether it is on the login PATH or an install directory; retain account preparation, nonempty-authority and failure snapshot fences. Kernel confirmation failure is owned by the user's canonical lane12 fix through existing Ask list, not a new API on this branch.

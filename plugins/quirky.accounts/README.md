@@ -7,5 +7,19 @@
 The returned `env` is an environment patch, not credentials. String values are applied; `null` means delete that variable from the child environment. The CLI command reports the resolved account and environment variable names without printing environment values:
 
 ```sh
-orca accounts prepare-provider-env --agent codex --cwd "$PWD" --home-overrides '{"claude":{"value":null,"source":"absent"},"codex":{"value":null,"source":"absent"}}'
+quirky accounts prepare-provider-env --agent codex --cwd "$PWD" --home-overrides '{"claude":{"value":null,"source":"absent"},"codex":{"value":null,"source":"absent"}}'
+```
+
+## Usage and sign-in controls
+
+The Usage status bar measures the rendered chip container, gaps and overflow-button widths. It keeps an exact visible prefix and a `+N` button for the omitted providers; the button's tooltip names that suffix. Compact, Detailed, Remaining and badge-only changes remeasure, and hidden measurement elements do not enlarge the status bar.
+
+Codex's **Open** sign-in action invokes the existing public `quirky.terminal/openExternal` method with the validated displayed authorize URL. It does not rely on a webview pop-up or complete/select the account; invocation failures leave Copy and Cancel available. Actual system-browser and OAuth completion are separate from an accepted opener call.
+
+Declared CLI commands dispatch by their existing stable IDs, including `login-status`, `cancel-login`, `session-home`, `inactive-usage`, `ui-state`, `credential-status` and `reset-credit`:
+
+```sh
+quirky accounts add --provider codex --json
+quirky accounts login-status --id <pending-login-id> --json
+quirky accounts cancel-login --id <pending-login-id> --json
 ```

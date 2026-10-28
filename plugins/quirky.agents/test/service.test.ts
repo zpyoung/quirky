@@ -975,6 +975,7 @@ describe('provider-owned model discovery', () => {
       plugins: [agentManifest('fixture.provider', [{
         id: providerId,
         label: 'Fixture provider',
+        prompt: 'argv',
         detect: providerId,
         launchOptions: {
           model: { flag: ['--model', '{value}'] },

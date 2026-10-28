@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { QuirkyClient, type QuirkyEvent } from '@quirky/protocol'
@@ -27,7 +27,7 @@ export class VaultRig {
     private readonly previousSourceHome: string | undefined
   ) {}
 
-  static async start(): Promise<VaultRig> {
+  static async start(options: { isolateVaultPlugin?: boolean } = {}): Promise<VaultRig> {
     const home = mkdtempSync(join(tmpdir(), 'qv-home-'))
     const sourceHome = mkdtempSync(join(tmpdir(), 'qv-source-'))
     const previousSourceHome = process.env[SOURCE_HOME_ENV]
@@ -35,7 +35,15 @@ export class VaultRig {
     const fixture = await writeEveryAgentFixture(sourceHome, { cwdRoot: join(sourceHome, 'workspaces') })
     const builtinPluginsDir = join(home, 'builtins')
     mkdirSync(builtinPluginsDir, { recursive: true })
-    for (const id of PLUGIN_IDS) symlinkSync(join(PLUGINS_ROOT, id), join(builtinPluginsDir, id), 'dir')
+    for (const id of PLUGIN_IDS) {
+      const source = join(PLUGINS_ROOT, id)
+      if (options.isolateVaultPlugin && id === 'quirky.vault') {
+        // In-process daemons share Bun's module cache; isolate the plugin's module-level service.
+        cpSync(source, join(builtinPluginsDir, id), { recursive: true })
+      } else {
+        symlinkSync(source, join(builtinPluginsDir, id), 'dir')
+      }
+    }
     const h = await startHarness({ home, builtinPluginsDir })
     const connected = await h.connectWithEvents('cli')
     return new VaultRig(h, connected.client, connected.events, home, sourceHome, fixture.expected, fixture.paths, builtinPluginsDir, previousSourceHome)

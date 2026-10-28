@@ -653,7 +653,7 @@ export class AgentsService {
     if (!this.detection.installed(entry.id)) return this.discoveryFailure(entry.id, 'local', 'the provider executable is not installed')
     const launch = tokenize(entry.launch)
     if (!launch.ok || launch.tokens.length === 0) return this.discoveryFailure(entry.id, 'local', 'the provider launch command is invalid')
-    const executable = this.detection.resolveExecutable(launch.tokens[0]!)
+    const executable = this.detection.locate(launch.tokens[0]!)?.path
     if (!executable) return this.discoveryFailure(entry.id, 'local', 'the provider executable could not be resolved')
 
     const fingerprint = JSON.stringify({ plugin: entry.plugin, launch: entry.launch, declaration, catalog })
