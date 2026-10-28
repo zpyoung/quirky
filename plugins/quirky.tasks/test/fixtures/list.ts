@@ -161,7 +161,7 @@ if (args[0] === 'api') {
   const endpoint = args.find((part) => typeof part === 'string' && (part.startsWith('repos/') || part.startsWith('search/'))) ?? ''
   const methodIndex = args.findIndex((part) => part === '--method' || part === '-X')
   const method = methodIndex >= 0 ? String(args[methodIndex + 1] ?? 'GET').toUpperCase() : 'GET'
-  if (args[1] === 'graphql') {
+  if (args.includes('graphql')) {
     const query = typeof graphqlVariables.query === 'string' ? graphqlVariables.query : ''
     const search = typeof graphqlVariables.search === 'string' ? graphqlVariables.search : ''
     const first = Number(graphqlVariables.first ?? 100)

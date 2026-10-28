@@ -277,31 +277,22 @@ async function listWork(env: TasksEnv, params: Record<string, unknown>): Promise
     })
     items.push(...repoListItems)
     const errors = object(response?.errors)
-    const activeError = errors?.[kind === 'issue' ? 'issues' : 'prs'] ?? errors?.list
-    if (activeError !== undefined) failures.push(errorFailure(repo.id, activeError, 'list', kind === 'issue' ? 'issues' : 'prs'))
-    const countError = errors?.count
+    let providerFailed = false
+    if (errors) {
+      for (const [sourceName, error] of Object.entries(errors)) {
+        providerFailed = true
+        failures.push({ ...errorFailure(repo.id, error, 'list'), source: sourceName })
+      }
+    }
     const totalCount = response?.totalCount
     const countKnown = typeof totalCount === 'number' && Number.isSafeInteger(totalCount) && totalCount >= 0
     if (countKnown) {
       pageCounts.push(Math.ceil(totalCount / perRepo))
     } else {
-      failures.push(countError === undefined
-        ? { repoId: repo.id, stage: 'count', message: 'GitHub did not provide a total count for this page.' }
-        : errorFailure(repo.id, countError, 'count', kind === 'issue' ? 'issues' : 'prs'))
-      if (response?.hasNextPage === true || repoListItems.length >= perRepo) pageCounts.push(page + 1)
-    }
-    if (Array.isArray(response?.partialFailures)) {
-      for (const partial of response.partialFailures) {
-        const failure = object(partial)
-        if (typeof partial === 'string') failures.push({ repoId: repo.id, stage: 'list', source: kind === 'issue' ? 'issues' : 'prs', message: partial })
-        else if (failure && typeof failure.message === 'string') failures.push({
-          repoId: repo.id,
-          stage: failure.stage === 'count' ? 'count' : 'list',
-          source: typeof failure.source === 'string' ? failure.source : kind === 'issue' ? 'issues' : 'prs',
-          message: failure.message,
-          ...(typeof failure.reason === 'string' ? { reason: failure.reason } : {})
-        })
+      if (!providerFailed || repoListItems.length > 0) {
+        failures.push({ repoId: repo.id, stage: 'count', message: 'GitHub did not provide a total count for this page.' })
       }
+      if (response?.hasNextPage === true || repoListItems.length >= perRepo) pageCounts.push(page + 1)
     }
   }))
   sortItems(items)
