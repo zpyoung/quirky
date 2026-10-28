@@ -494,8 +494,7 @@
       "deps": [
         "m4-hosting-api-github"
       ],
-      "status": "in-progress",
-      "lane": 6
+      "status": "done"
     },
     {
       "id": "m4-hosting-ui-reviews",
@@ -508,9 +507,8 @@
         "m4-hosting-api-github",
         "m4-hosting-ui-tasks"
       ],
-      "status": "in-progress",
-      "early": true,
-      "lane": 5
+      "status": "done",
+      "early": true
     },
     {
       "id": "m4-hosting-ui-gitlab",
@@ -616,9 +614,8 @@
         "m5-structured-runner",
         "m1-worktrees"
       ],
-      "status": "in-progress",
-      "early": true,
-      "lane": 7
+      "status": "done",
+      "early": true
     },
     {
       "id": "m5-loops-core",
@@ -644,8 +641,9 @@
       "deps": [
         "sa-browser-pane"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 3
     },
     {
       "id": "m5-automations-dispatch",
@@ -657,8 +655,9 @@
       "deps": [
         "m5-automations-core"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 7
     },
     {
       "id": "m5-automations-ui",
@@ -670,8 +669,9 @@
       "deps": [
         "m5-automations-core"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 6
     },
     {
       "id": "m5-loops-presets",
@@ -683,8 +683,9 @@
       "deps": [
         "m5-loops-core"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 5
     },
     {
       "id": "m5-loops-ui",
@@ -818,8 +819,7 @@
         "m1-term-daemon",
         "m1-agent-status"
       ],
-      "status": "in-progress",
-      "lane": 3
+      "status": "done"
     },
     {
       "id": "sb-mobile-app",
@@ -1377,6 +1377,18 @@
       ],
       "deps": [
         "m6-heimdall-core"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m6-orchestration-idle-pointer-shutdown",
+      "milestone": "M6",
+      "title": "Restore automatic idle mailbox nudges with bounded shutdown: preserve the intact AC9 scheduler acceptance from checkpoint/m6-core-idle-pointer; current source hangs in daemon teardown. Explicit safe session/pointer and all durable mail/check/ask/gate flows remain shipped.",
+      "docs": [
+        "orchestration.md"
+      ],
+      "deps": [
+        "m6-orchestration-core"
       ],
       "status": "todo"
     }

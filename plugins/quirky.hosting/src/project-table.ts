@@ -51,6 +51,7 @@ const PROJECT_ITEMS_QUERY_WITH_PARENT = `query ProjectItems($owner: String!, $nu
               ... on ProjectV2ItemFieldNumberValue { number field { __typename ... on ProjectV2FieldCommon { id name } } }
               ... on ProjectV2ItemFieldDateValue { date field { __typename ... on ProjectV2FieldCommon { id name } } }
               ... on ProjectV2ItemFieldSingleSelectValue { name optionId field { __typename ... on ProjectV2FieldCommon { id name } } }
+              ... on ProjectV2ItemFieldIterationValue { title startDate duration iterationId field { __typename ... on ProjectV2FieldCommon { id name } } }
               ... on ProjectV2ItemFieldMultiSelectValue { options { id name } field { __typename ... on ProjectV2FieldCommon { id name } } }
               ... on ProjectV2ItemFieldLabelValue { labels(first: 10) { nodes { name color } } field { __typename ... on ProjectV2FieldCommon { id name } } }
               ... on ProjectV2ItemFieldUserValue { users(first: 5) { nodes { login name avatarUrl } } field { __typename ... on ProjectV2FieldCommon { id name } } }
@@ -93,6 +94,7 @@ const PROJECT_ITEMS_QUERY_WITH_PARENT = `query ProjectItems($owner: String!, $nu
               ... on ProjectV2ItemFieldNumberValue { number field { __typename ... on ProjectV2FieldCommon { id name } } }
               ... on ProjectV2ItemFieldDateValue { date field { __typename ... on ProjectV2FieldCommon { id name } } }
               ... on ProjectV2ItemFieldSingleSelectValue { name optionId field { __typename ... on ProjectV2FieldCommon { id name } } }
+              ... on ProjectV2ItemFieldIterationValue { title startDate duration iterationId field { __typename ... on ProjectV2FieldCommon { id name } } }
               ... on ProjectV2ItemFieldMultiSelectValue { options { id name } field { __typename ... on ProjectV2FieldCommon { id name } } }
               ... on ProjectV2ItemFieldLabelValue { labels(first: 10) { nodes { name color } } field { __typename ... on ProjectV2FieldCommon { id name } } }
               ... on ProjectV2ItemFieldUserValue { users(first: 5) { nodes { login name avatarUrl } } field { __typename ... on ProjectV2FieldCommon { id name } } }
@@ -173,6 +175,16 @@ function normalizeFieldValue(value: unknown): Record<string, unknown> | null {
     })
   }
   if (raw.optionId !== undefined) contentValue = raw.optionId
+  if (raw.__typename === 'ProjectV2ItemFieldIterationValue') {
+    const iterationId = nonEmptyString(raw.iterationId)
+    if (iterationId === null) return null
+    contentValue = {
+      iterationId,
+      title: typeof raw.title === 'string' ? raw.title : '',
+      ...(typeof raw.startDate === 'string' ? { startDate: raw.startDate } : {}),
+      ...(typeof raw.duration === 'number' && Number.isFinite(raw.duration) && raw.duration > 0 ? { duration: raw.duration } : {})
+    }
+  }
   if (raw.__typename === 'ProjectV2ItemFieldLabelValue') contentValue = normalizeProjectLabels(raw.labels)
   if (raw.__typename === 'ProjectV2ItemFieldUserValue') contentValue = normalizeProjectUsers(raw.users)
   return {
@@ -368,6 +380,8 @@ async function getProjectTable(env: HostingEnv, params: Record<string, unknown>,
   const projectNumber = positiveParam(env, params, 'projectNumber') ?? 0
   const queryOverride = boundedText(env, params, 'queryOverride', { maxBytes: 8192 })
   const scope = await env.resolve(params, caller)
+  if (params.noCache !== undefined && typeof params.noCache !== 'boolean') throw env.invalid('validation_error', 'noCache must be a boolean.')
+  if (params.noCache === true) env.invalidate(scope)
   const { host, identity } = resolveProjectHost(env, scope, params.host)
   const cacheKey = env.cacheKey(scope, `project-views:${host}:${kind}:${owner.toLowerCase()}:${projectNumber}`)
   const viewResult = await env.cache(cacheKey, 60_000, () => loadProjectViews(env, scope, identity, owner, kind, projectNumber))

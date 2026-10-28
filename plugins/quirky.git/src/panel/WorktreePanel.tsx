@@ -158,6 +158,24 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   const [launch, setLaunch] = useState<FixAction | null>(null)
   const [menu, setMenu] = useState<{ x: number; y: number; item: RowItem } | null>(null)
   const [submodules, setSubmodules] = useState<Record<string, SubmoduleState>>({})
+  const createIntent = useRef(0)
+  const activeCreateIntent = useRef<number | null>(null)
+  const activeWorktree = useRef(worktree)
+  if (activeWorktree.current !== worktree) {
+    activeWorktree.current = worktree
+    createIntent.current += 1
+  }
+  const [creatingReview, setCreatingReview] = useState(false)
+  const [createReviewError, setCreateReviewError] = useState<string | null>(null)
+  useEffect(() => {
+    activeCreateIntent.current = null
+    setCreatingReview(false)
+    setCreateReviewError(null)
+    return () => {
+      createIntent.current += 1
+      activeCreateIntent.current = null
+    }
+  }, [worktree])
 
   const viewMode = settings.viewMode
   const filtering = applyFilter([], filter).state !== 'inactive'
@@ -586,6 +604,118 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
         return abort()
     }
   }
+  const cancelCreateReview = () => {
+    createIntent.current += 1
+    activeCreateIntent.current = null
+    setCreatingReview(false)
+    setCreateReviewError('The remaining Create PR steps were cancelled. Any commit or push already running may still finish on this worktree.')
+  }
+
+  const exactStatus = async (target: string, expectedBranch: string, expectedHead?: string): Promise<GitStatus> => {
+    const value = await context.call('quirky.git/status', { worktree: target })
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new Error('Git returned an invalid worktree status.')
+    const candidate = value as Record<string, unknown>
+    const upstream = candidate.upstreamStatus
+    if ((candidate.branch !== null && typeof candidate.branch !== 'string') ||
+      (candidate.head !== null && typeof candidate.head !== 'string') || !Array.isArray(candidate.entries) ||
+      !candidate.entries.every((entry: unknown) => typeof entry === 'object' && entry !== null && !Array.isArray(entry) &&
+        typeof (entry as Record<string, unknown>).path === 'string' &&
+        ['conflicts', 'staged', 'unstaged', 'untracked'].includes(String((entry as Record<string, unknown>).area))) ||
+      (candidate.operation !== 'none' && candidate.operation !== 'merge' && candidate.operation !== 'rebase' && candidate.operation !== 'cherry-pick') ||
+      typeof candidate.capped !== 'boolean' ||
+      typeof upstream !== 'object' || upstream === null || Array.isArray(upstream)) {
+      throw new Error('Git returned an incomplete worktree status.')
+    }
+    const upstreamStatus = upstream as Record<string, unknown>
+    if (typeof upstreamStatus.hasUpstream !== 'boolean' || !Number.isSafeInteger(upstreamStatus.ahead) ||
+      !Number.isSafeInteger(upstreamStatus.behind)) throw new Error('Git returned an incomplete upstream status.')
+    const resolved = candidate as unknown as GitStatus
+    if (resolved.branch !== expectedBranch || (expectedHead !== undefined && resolved.head !== expectedHead)) {
+      throw new Error('The branch or HEAD changed during the Create PR chain. Start the action again for the current branch.')
+    }
+    return resolved
+  }
+
+  const createReview = async () => {
+    if (activeCreateIntent.current !== null || !status || !status.branch || !status.head) return
+    const target = worktree
+    const branch = status.branch
+    const initialHead = status.head
+    const intent = ++createIntent.current
+    activeCreateIntent.current = intent
+    const stillCurrent = () => createIntent.current === intent && activeWorktree.current === target
+    setCreatingReview(true)
+    setCreateReviewError(null)
+    try {
+      if (unresolved > 0 || entries.some((entry) => entry.area === 'conflicts')) {
+        throw new Error('Resolve conflicts before creating a pull request.')
+      }
+      let fresh = await exactStatus(target, branch, initialHead)
+      if (!stillCurrent()) return
+      if (fresh.operation !== 'none') throw new Error('Finish the active Git operation before creating a pull request.')
+      let committed = false
+      let expectedHead = initialHead
+      if (fresh.entries.length > 0) {
+        if (message.trim() === '') throw new Error(MESSAGE_REQUIRED)
+        if (fresh.entries.some((entry) => entry.area === 'unstaged' || entry.area === 'untracked')) {
+          if (!(await stageAll())) return
+          if (!stillCurrent()) return
+          fresh = await exactStatus(target, branch, initialHead)
+          if (fresh.entries.some((entry) => entry.area !== 'staged')) {
+            throw new Error('New or unresolved changes appeared while staging. Review Source Control and try again.')
+          }
+        }
+        fresh = await exactStatus(target, branch, initialHead)
+        if (fresh.entries.length === 0 || fresh.entries.some((entry) => entry.area !== 'staged')) {
+          throw new Error('Stage the intended changes before committing and creating a pull request.')
+        }
+        if (!stillCurrent()) return
+        if (!(await doCommit())) return
+        if (!stillCurrent()) return
+        committed = true
+        fresh = await exactStatus(target, branch)
+        if (fresh.head === null) throw new Error('The branch head is unavailable after the commit.')
+        expectedHead = fresh.head
+        if (fresh.entries.length > 0) throw new Error('New changes appeared after the commit. Review Source Control before creating a pull request.')
+      }
+
+      let needsPush = committed || !fresh.upstreamStatus.hasUpstream || fresh.upstreamStatus.ahead > 0
+      if (fresh.upstreamStatus.behind > 0) throw new Error('Sync this branch with its upstream before creating a pull request.')
+      if (needsPush) {
+        fresh = await exactStatus(target, branch, expectedHead)
+        if (fresh.entries.length > 0) throw new Error('Commit or stage the current changes before pushing this branch.')
+        if (!stillCurrent()) return
+        if (!(await remote('push'))) return
+        if (!stillCurrent()) return
+        fresh = await exactStatus(target, branch, expectedHead)
+        if (fresh.entries.length > 0) throw new Error('New changes appeared after pushing. Review Source Control before creating a pull request.')
+        if (!fresh.upstreamStatus.hasUpstream || fresh.upstreamStatus.ahead > 0) {
+          throw new Error('The branch is still not fully pushed. Resolve the push state before creating a pull request.')
+        }
+        needsPush = false
+      }
+      if (!stillCurrent()) return
+      fresh = await exactStatus(target, branch, expectedHead)
+      if (fresh.entries.length > 0) throw new Error('Commit or discard local changes before creating a pull request.')
+      if (fresh.upstreamStatus.behind > 0) throw new Error('Sync this branch with its upstream before creating a pull request.')
+      if (needsPush || fresh.upstreamStatus.ahead > 0 || !fresh.upstreamStatus.hasUpstream) {
+        throw new Error('Push this branch before creating a pull request.')
+      }
+      if (!stillCurrent()) return
+      await context.call('quirky.reviews/createOpen', { worktree: target })
+    } catch (error) {
+      if (stillCurrent()) {
+        const text = messageOf(error)
+        setCreateReviewError(text)
+        context.toast('Could not create pull request', text)
+      }
+    } finally {
+      if (activeCreateIntent.current === intent) {
+        activeCreateIntent.current = null
+        setCreatingReview(false)
+      }
+    }
+  }
 
   const onPrimary = () => {
     switch (primary.kind) {
@@ -608,7 +738,21 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   const busy = status?.busy ?? null
   const spinner = committing ? 'primary' : busy === null ? null : OWN_BUTTON.has(busy) ? 'primary' : 'chevron'
   const reason = commitDisabledReason(ladder)
-  const locked = committing || busy !== null || (reason !== null && reason !== MESSAGE_REQUIRED)
+  const locked = committing || busy !== null || creatingReview || (reason !== null && reason !== MESSAGE_REQUIRED)
+  const reviewNeedsPush = status !== null && (!status.upstreamStatus.hasUpstream || status.upstreamStatus.ahead > 0)
+  const reviewBlocker = status === null ? 'Wait for Source Control status.'
+    : !status.branch ? 'Check out a branch before creating a pull request.'
+      : !status.head ? 'Create a commit before creating a pull request.'
+        : unresolved > 0 || entries.some((entry) => entry.area === 'conflicts') ? 'Resolve conflicts before creating a pull request.'
+          : entries.length > 0 && message.trim() === '' ? MESSAGE_REQUIRED
+            : null
+  const reviewActionDisabled = creatingReview || committing || busy !== null || reviewBlocker !== null
+  const reviewActionLabel = creatingReview ? 'Preparing pull request…'
+    : entries.length > 0 ? 'Commit, push & Create PR'
+      : reviewNeedsPush ? 'Push & Create PR'
+        : 'Create PR'
+  const panelPrimary = creatingReview ? { ...primary, enabled: false, title: 'Create PR is in progress.' } : primary
+  const panelMenu = creatingReview ? menuRows.map((item) => ({ ...item, enabled: false, title: 'Create PR is in progress.' })) : menuRows
 
   const selected = selection.selected
   const selectedEntries = entries.filter((e) => selected.includes(e.path))
@@ -766,8 +910,8 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
             message={message}
             onMessage={setMessage}
             locked={locked}
-            primary={primary}
-            menu={menuRows}
+            primary={panelPrimary}
+            menu={panelMenu}
             spinner={spinner}
             remoteError={remoteError}
             onPrimary={onPrimary}
@@ -804,6 +948,14 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
                 fix={fixFor('fixPushFailure')}
               />
             )}
+            <div className="scm-create-review">
+              <button type="button" disabled={reviewActionDisabled} title={reviewBlocker ?? undefined} onClick={() => void createReview()}>
+                {reviewActionLabel}
+              </button>
+              {creatingReview && <button type="button" onClick={cancelCreateReview}>Cancel remaining steps</button>}
+              {creatingReview && <small>Commit and push finish only on this worktree; the composer opens after both succeed.</small>}
+              {createReviewError && <p role="alert">{createReviewError}</p>}
+            </div>
           </CommitArea>
         )}
         {tooLarge && (

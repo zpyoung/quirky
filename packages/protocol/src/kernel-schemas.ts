@@ -115,6 +115,7 @@ const settingInfo = object(
     minimum: { type: 'number' },
     maximum: { type: 'number' },
     values: strings,
+    menu: { type: 'string', enum: ['view'], description: 'A boolean setting exposed in the native View menu.' },
     value: { description: 'The current value.' },
     stored: object({ value: {}, valid: boolean() }, ['value', 'valid'])
   },

@@ -161,6 +161,13 @@ export function createHandlers(
   const { layout, distros } = services
   return {
     'client.hello': (params, conn) => {
+      if (conn.deviceId !== undefined) {
+        const version = int(params, 'protocolVersion', 0)
+        if (version !== PROTOCOL_VERSION) {
+          throw conflict(`protocol version mismatch: daemon speaks ${PROTOCOL_VERSION}, client ${version}`)
+        }
+        return { protocolVersion: PROTOCOL_VERSION, daemonVersion: core.status().daemonVersion }
+      }
       const role = params.role
       if (typeof role !== 'string' || !ROLES.includes(role as ClientRole)) {
         throw invalidParams(`role must be one of ${ROLES.join(', ')}`)

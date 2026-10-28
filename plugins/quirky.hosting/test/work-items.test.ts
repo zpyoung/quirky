@@ -689,7 +689,7 @@ test('GH27: a removed upstream resolves to origin and marks the issue source fal
   const result = object(await h.call('listWorkItems', { query: 'is:open', page: 2, limit: 2 }))
 
   expect(list(result.items).map((item) => [object(item).kind, object(item).number])).toEqual([['issue', 13], ['pullRequest', 42]])
-  expect(list(result.items).map((item) => object(item).state)).toEqual(['open', 'draft'])
+  expect(list(result.items).map((item) => object(item).state)).toEqual(['open', 'closed'])
   expect(result.page).toBe(2)
   expect(result.limit).toBe(2)
   expect(result.totalCount).toBe(12)

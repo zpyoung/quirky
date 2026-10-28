@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { usePluginHost, usePluginState } from '../context'
+import { useConnection, usePluginHost, usePluginState } from '../context'
 import { settingsGroups, themePicker, type SettingField } from '../plugins/settingsGroups'
 import { changedSettings, draftOf, type DraftValue } from '../plugins/settingsDraft'
 import { PluginSlot } from '../plugins/PluginSlot'
@@ -67,6 +67,8 @@ function PluginField({
 export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const host = usePluginHost()
   const plugin = usePluginState()
+  const connection = useConnection()
+  const settingsViews = (plugin.model?.views ?? []).filter((view) => view.settings === true)
   const groups = settingsGroups(plugin.settings)
   const settingsSections = plugin.model?.settingsSections ?? []
   const themes = themePicker(plugin.model?.themes ?? [], plugin.model?.theme.chosen ?? 'default')
@@ -74,6 +76,10 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const [themeEdit, setThemeEdit] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
+  const [navigationError, setNavigationError] = useState<string | null>(null)
+  const settingsCommands = plugin.model?.commands.filter((command) => command.id === `command:${command.plugin}/open-settings`) ?? []
+  const [openingCommand, setOpeningCommand] = useState<string | null>(null)
+  const [commandError, setCommandError] = useState<string | null>(null)
 
   const renderFields = (fields: SettingField[]) =>
     fields.map((field) => (
@@ -100,11 +106,40 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
     setFieldErrors(errors)
     if (Object.keys(errors).length === 0) onClose()
   }
+  const openPluginSettings = async (id: string) => {
+    setOpeningCommand(id)
+    setCommandError(null)
+    try {
+      await host.runCommandForResult(id)
+      onClose()
+    } catch (error) {
+      setOpeningCommand(null)
+      setCommandError(error instanceof Error ? error.message : String(error))
+    }
+  }
 
   return (
     <Dialog title="Settings" onClose={onClose}>
       <form className="form" onSubmit={submit}>
-        {groups.length === 0 && settingsSections.length === 0 && themes.options.length <= 1 && <p className="muted pad">No settings to change.</p>}
+        {groups.length === 0 && settingsViews.length === 0 && settingsSections.length === 0 && themes.options.length <= 1 && <p className="muted pad">No settings to change.</p>}
+        {settingsViews.length > 0 && (
+          <fieldset className="settings-group">
+            <legend>Plugin settings</legend>
+            {settingsViews.map((view) => (
+              <button key={view.id} type="button" disabled={busy || view.module === null}
+                title={view.module === null ? 'This settings view has no active UI module.' : view.title}
+                onClick={async () => {
+                  setBusy(true)
+                  setNavigationError(null)
+                  try { await connection.callAny('ui.view.open', { id: view.id }); onClose() }
+                  catch (error) { setNavigationError(error instanceof Error ? error.message : 'Could not open plugin settings.') }
+                  finally { setBusy(false) }
+                }}
+              >{view.title}</button>
+            ))}
+            {navigationError && <p className="form-error" role="alert">{navigationError}</p>}
+          </fieldset>
+        )}
         {groups.map((group) =>
           group.kind === 'plugin' ? (
             <fieldset key={`plugin:${group.plugin}`} className="settings-group">
@@ -155,6 +190,23 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
               </p>
             )}
           </>
+        )}
+        {settingsCommands.length > 0 && (
+          <section className="settings-plugin-actions" aria-label="Plugin settings">
+            <p className="muted">Open a plugin’s dedicated settings view.</p>
+            {settingsCommands.map((command) => (
+              <button
+                key={command.id}
+                type="button"
+                data-settings-command={command.id}
+                disabled={busy || openingCommand !== null}
+                onClick={() => void openPluginSettings(command.id)}
+              >
+                {openingCommand === command.id ? 'Opening…' : command.title}
+              </button>
+            ))}
+            {commandError && <p className="form-error" role="alert">{commandError}</p>}
+          </section>
         )}
         <div className="dialog-actions">
           <button type="button" onClick={onClose}>
