@@ -24,6 +24,7 @@ type FakeCalls = {
   resumes: { params: Record<string, unknown>; session: string }[]
   gets: string[]
   stops: string[]
+  ownedStops: { key: string; stopped: string[]; unknown: string[] }[]
 }
 type Fixture = {
   root: string
@@ -46,6 +47,10 @@ type Fixture = {
   delayNextSend: () => { entered: Promise<void>; release: () => void }
   setDispatchAllowed: (allowed: boolean) => void
   restart: () => OwnerController
+  addWatcher: (watcherId: string) => OwnerEnrollment
+  removeWatcher: (watcherId: string) => void
+  createIndependentSession: () => Promise<string>
+  setNextOwnedStopReply: (reply: unknown) => void
 }
 
 let testHome = ''
@@ -92,11 +97,17 @@ function makeFixture(): Fixture {
     createdAtMs: currentTime, terminalAtMs: null, parkReason: null, haltReason: null,
     owner: { agent: 'claude', model: 'claude-sonnet-4', effort: 'high' }, ownerInterventionCapability: 'on'
   }
+  const enrollments = new Map<string, OwnerEnrollment>([[enrollment.watcherId, enrollment]])
+  const registrations = [{
+    id: 'fixture', displayName: 'Fixture', enrollmentPayloadSchema: { type: 'object' },
+    hooks: { authorize: 'fixture/authorize', read: 'fixture/read', decide: 'fixture/decide', execute: 'fixture/execute' },
+    pluginId: 'fixture-plugin'
+  }]
   const journalByWatcher = new Map<string, JournalEntry[]>()
   const store = {
     readOnly: false,
-    get: (id: string) => id === enrollment.watcherId ? enrollment as Enrollment : null,
-    list: () => [enrollment as Enrollment],
+    get: (id: string) => enrollments.get(id) as Enrollment | undefined ?? null,
+    list: () => [...enrollments.values()] as Enrollment[],
     live: () => null,
     save: () => undefined,
     transaction: <T>(work: () => T): T => work(),
@@ -114,19 +125,21 @@ function makeFixture(): Fixture {
     retain: () => undefined,
     terminal: () => undefined,
     summary: () => null,
-    registrations: () => [],
-    saveRegistration: () => undefined,
+    registrations: () => registrations,
     close: () => undefined
   } as unknown as KernelStore
 
   let sessionCounter = 0
   const sessions = new Map<string, Session>()
   const conversation = new Map<string, string[]>()
+  const ownerKeyBySession = new Map<string, string>()
   let loseCreateReply = false
   let loseSendReply = false
   let dispatchAllowed = true
   let sendGate: { signalEntered: () => void; wait: Promise<void> } | null = null
-  const calls: FakeCalls = { creates: [], sends: [], resumes: [], gets: [], stops: [] }
+  let nextOwnedStopReply: unknown
+  let hasNextOwnedStopReply = false
+  const calls: FakeCalls = { creates: [], sends: [], resumes: [], gets: [], stops: [], ownedStops: [] }
   const session = (values: Partial<Session> = {}): Session => {
     sessionCounter += 1
     const id = `owner-session-${sessionCounter}`
@@ -144,6 +157,9 @@ function makeFixture(): Fixture {
         sessions.set(created.id, created)
         conversation.set(created.id, [String(params.prompt)])
         calls.creates.push({ params, session: created.id })
+        if (params.lifetime === 'plugin' && typeof params.lifetimeKey === 'string') {
+          ownerKeyBySession.set(created.id, params.lifetimeKey)
+        }
         if (loseCreateReply) {
           loseCreateReply = false
           throw new Error('create completed but its reply was lost')
@@ -180,6 +196,9 @@ function makeFixture(): Fixture {
         if (!old?.providerSession?.id) throw new Error(`session ${oldId} has no native identity`)
         const resumed = session({ resumedFrom: oldId, providerSession: old.providerSession })
         sessions.set(resumed.id, resumed)
+        if (params.lifetime === 'plugin' && typeof params.lifetimeKey === 'string') {
+          ownerKeyBySession.set(resumed.id, params.lifetimeKey)
+        }
         conversation.set(resumed.id, [...(conversation.get(oldId) ?? []), String(params.prompt ?? '')])
         calls.resumes.push({ params, session: resumed.id })
         return resumed
@@ -190,6 +209,28 @@ function makeFixture(): Fixture {
         const found = sessions.get(sessionId)
         if (found) sessions.set(sessionId, { ...found, status: 'exited', exitCode: 0 })
         return { ok: true }
+      }
+      if (method === 'quirky.structured/stopOwned') {
+        const key = String(params.key)
+        const stopped: string[] = []
+        const unknown: string[] = []
+        for (const [sessionId, ownerKey] of ownerKeyBySession) {
+          if (ownerKey !== key) continue
+          const existing = sessions.get(sessionId)
+          if (!existing) {
+            unknown.push(sessionId)
+          } else if (existing.status !== 'exited') {
+            sessions.set(sessionId, { ...existing, status: 'exited', exitCode: 0 })
+            stopped.push(sessionId)
+            ownerKeyBySession.delete(sessionId)
+          }
+        }
+        calls.ownedStops.push({ key, stopped, unknown })
+        if (hasNextOwnedStopReply) {
+          hasNextOwnedStopReply = false
+          return nextOwnedStopReply
+        }
+        return { stopped, unknown }
       }
       throw new Error(`unexpected structured API call: ${method}`)
     }
@@ -213,6 +254,22 @@ function makeFixture(): Fixture {
   const fixture: Fixture = {
     root, reportDirectory, enrollment, store, calls, controller, controllers: [controller], now, setNow,
     snapshot, applyCalls, applyResults, wakeCalls, parks,
+    addWatcher: (watcherId) => {
+      const next = { ...enrollment, watcherId, coordinator: { ...enrollment.coordinator } }
+      enrollments.set(watcherId, next)
+      return next
+    },
+    removeWatcher: (watcherId) => {
+      enrollments.delete(watcherId)
+      journalByWatcher.delete(watcherId)
+    },
+    createIndependentSession: async () => {
+      const created = await context.call('quirky.structured/create', {
+        agent: 'claude', worktree: 'id:worktree-1', prompt: 'independent structured session'
+      })
+      if (!created || typeof created !== 'object' || !('id' in created) || typeof created.id !== 'string') throw new Error('independent session was not created')
+      return created.id
+    },
     setDispatchAllowed: (allowed) => { dispatchAllowed = allowed },
     loseNextCreateReply: () => { loseCreateReply = true },
     delayNextSend: () => {
@@ -230,7 +287,11 @@ function makeFixture(): Fixture {
       const next = createOwnerController(host)
       fixture.controllers.push(next)
       return next
-    }
+    },
+    setNextOwnedStopReply: (reply) => {
+      nextOwnedStopReply = reply
+      hasNextOwnedStopReply = true
+    },
   }
   fixtures.push(fixture)
   return fixture
@@ -363,6 +424,77 @@ describe('owner runtime journal and conversation', () => {
     expect(prompt).toContain(`quirky heimdall owner-ready --watcher-id ${fixture.enrollment.watcherId} --report-key ${pending.reportKey}`)
   })
 
+  test('captures bounded issue-time snapshot, enrollment, hooks, budget, attempts, approvals, and domain evidence', async () => {
+    const fixture = makeFixture()
+    fixture.snapshot.world = { branch: 'main', source: 'grounded-world', huge: '界'.repeat(40_000) }
+    fixture.store.append(fixture.enrollment.watcherId, {
+      class: 'fact', origin: 'owner', kind: 'interval-open', resolved: false,
+      eventId: 'budget-active', atMs: fixture.now() - 2_000, intervalId: 'budget-active', cause: 'worker-dispatched'
+    })
+    fixture.store.append(fixture.enrollment.watcherId, {
+      class: 'fact', origin: 'owner', kind: 'attempt', resolved: false,
+      eventId: 'attempt-running', atMs: fixture.now(), attemptId: 'attempt-live', state: 'running',
+      action: { kind: 'dispatch', contentIdentity: 'tree:initial' }, dispatchId: 'dispatch-live'
+    })
+    fixture.store.append(fixture.enrollment.watcherId, {
+      class: 'fact', origin: 'owner', kind: 'attempt', resolved: true,
+      eventId: 'attempt-settled', atMs: fixture.now(), attemptId: 'attempt-done', state: 'settled'
+    })
+    fixture.store.append(fixture.enrollment.watcherId, {
+      class: 'fact', origin: 'owner', kind: 'approval', resolved: false,
+      eventId: 'approval-latest', atMs: fixture.now(), status: 'approved',
+      approvalScope: { actionKind: 'dispatch', contentIdentity: 'tree:initial', evidenceKey: 'evidence:1' }
+    })
+    fixture.store.append(fixture.enrollment.watcherId, {
+      class: 'fact', origin: 'owner', kind: 'evidence', resolved: true,
+      eventId: 'recent-domain', atMs: fixture.now(), evidenceKind: 'domain-check', payload: { conclusion: 'world-source' }
+    })
+    fixture.store.append(fixture.enrollment.watcherId, {
+      class: 'fact', origin: 'owner', kind: 'owner-state', resolved: false,
+      eventId: 'recursive-owner-state', state: { secret: 'must-not-enter-brief' }
+    })
+    fixture.store.append(fixture.enrollment.watcherId, {
+      class: 'fact', origin: 'owner', kind: 'owner-report-issued', resolved: false,
+      eventId: 'recursive-owner-report', reportKey: 'must-not-enter-brief'
+    })
+
+    await issue(fixture, { ...deviation('check:grounded'), dispatchId: 'dispatch-live', messageId: 'message-live', trigger: 'idle' })
+    const prompt = String(fixture.calls.creates[0]?.params.prompt)
+    expect(Buffer.byteLength(prompt, 'utf8')).toBeLessThanOrEqual(OWNER_BRIEF_MAX_STATE_BYTES)
+    expect(prompt).toContain('"activeMs":2000')
+    expect(prompt).toContain('"turns":0')
+    expect(prompt).toContain('grounded-world')
+    expect(prompt).toContain('branch')
+    expect(prompt).toContain('fixture/read')
+    expect(prompt).toContain('fixture-plugin')
+    expect(prompt).toContain('attempt-live')
+    expect(prompt).not.toContain('attempt-done')
+    expect(prompt).toContain('approval-latest')
+    expect(prompt).toContain('world-source')
+    expect(prompt).toContain('dispatch-live')
+    expect(prompt).toContain('message-live')
+    expect(prompt).toContain('[truncated')
+    expect(prompt).not.toContain('must-not-enter-brief')
+
+    await fixture.controller.shutdown()
+    fixture.snapshot.world = { branch: 'later-world' }
+    const restarted = fixture.restart()
+    await restarted.step(fixture.enrollment, fixture.snapshot, [])
+    const resumedPrompt = String(fixture.calls.resumes[0]?.params.prompt)
+    expect(resumedPrompt).toContain('grounded-world')
+    expect(resumedPrompt).not.toContain('later-world')
+    expect(Buffer.byteLength(resumedPrompt, 'utf8')).toBeLessThanOrEqual(OWNER_BRIEF_MAX_STATE_BYTES)
+  })
+
+  test('an unowned watcher with no owner state does not persist bookkeeping or activate a provider', async () => {
+    const fixture = makeFixture()
+    fixture.enrollment.owner = null
+    await fixture.controller.step(fixture.enrollment, fixture.snapshot, [deviation('check:unowned')])
+    expect(fixture.calls.creates).toHaveLength(0)
+    expect(fixture.calls.resumes).toHaveLength(0)
+    expect(fixture.store.journal(fixture.enrollment.watcherId).some((entry) => entry.kind === 'owner-state')).toBe(false)
+  })
+
   test('rejects stale and replayed report identities without rereading an issued report', async () => {
     const fixture = makeFixture()
     await issue(fixture)
@@ -444,6 +576,19 @@ describe('owner runtime journal and conversation', () => {
     expect(uncertain.applyCalls).toHaveLength(1)
   })
 
+  test('cleared applied and refused reports request the next tick at the current host time', async () => {
+    for (const result of [{ kind: 'applied' }, { kind: 'refused', reason: 'not accepted' }] as const) {
+      const fixture = makeFixture()
+      await issue(fixture, deviation(`check:${result.kind}`))
+      const key = fixture.controller.inspect(fixture.enrollment.watcherId).pending!.reportKey
+      await writeReport(fixture, { kind: 'continue' })
+      await fixture.controller.ready(fixture.enrollment.watcherId, key)
+      fixture.applyResults.push(result)
+      const applied = await fixture.controller.step(fixture.enrollment, fixture.snapshot, [])
+      expect(applied.nextCheckAtMs).toBe(fixture.now())
+    }
+  })
+
   test('resumes the persisted native conversation after restart without creating another owner', async () => {
     const fixture = makeFixture()
     await issue(fixture, deviation('check:restart'))
@@ -457,6 +602,76 @@ describe('owner runtime journal and conversation', () => {
     expect(pending.reportKey).not.toBe(old.reportKey)
     expect(pending.contentIdentity).toBe(fixture.snapshot.contentIdentity)
     expect(fixture.calls.resumes[0]?.params.prompt).toContain(pending.reportPath)
+    expect(fixture.calls.ownedStops).toHaveLength(0)
+    expect(fixture.calls.resumes[0]?.params).toMatchObject({ lifetime: 'plugin', lifetimeKey: fixture.enrollment.watcherId })
+  })
+
+  test('owner config changes release the old conversation before issuing a fresh snapshot-bound turn', async () => {
+    const fixture = makeFixture()
+    await issue(fixture, deviation('check:config-change'))
+    const oldPending = fixture.controller.inspect(fixture.enrollment.watcherId).pending!
+    const oldSession = fixture.controller.inspect(fixture.enrollment.watcherId).sessionId!
+    const freshSnapshot = { ...fixture.snapshot, contentIdentity: 'tree:after-config-change', observedAtMs: fixture.now() }
+    fixture.enrollment.owner = { agent: 'claude', model: 'claude-opus-4', effort: 'low' }
+    await fixture.controller.step(fixture.enrollment, freshSnapshot, [])
+    const current = fixture.controller.inspect(fixture.enrollment.watcherId).pending!
+    expect(current.deviation.naturalKey).toBe('check:config-change')
+    expect(current.reportKey).not.toBe(oldPending.reportKey)
+    expect(current.contentIdentity).toBe(freshSnapshot.contentIdentity)
+    expect(fixture.controller.inspect(fixture.enrollment.watcherId).sessionId).not.toBe(oldSession)
+    expect(fixture.calls.creates).toHaveLength(2)
+    expect(fixture.calls.resumes).toHaveLength(0)
+    expect(fixture.calls.ownedStops).toEqual([{ key: fixture.enrollment.watcherId, stopped: [oldSession], unknown: [] }])
+    expect(await Bun.file(oldPending.reportPath).exists()).toBe(false)
+    expect(fixture.store.journal(fixture.enrollment.watcherId).some((entry) =>
+      entry.kind === 'owner-reset' && entry.reason === 'config-changed'
+    )).toBe(true)
+    expect(await fixture.controller.ready(fixture.enrollment.watcherId, oldPending.reportKey)).toMatchObject({ kind: 'refused' })
+    expect(fixture.controller.inspect(fixture.enrollment.watcherId).pending?.reportKey).toBe(current.reportKey)
+  })
+
+  test('records config change after a parent-confirmed release before creating the replacement', async () => {
+    const fixture = makeFixture()
+    await issue(fixture, deviation('check:released-config-change'))
+    const oldPending = fixture.controller.inspect(fixture.enrollment.watcherId).pending!
+    const oldSession = fixture.controller.inspect(fixture.enrollment.watcherId).sessionId!
+    await fixture.controller.release(fixture.enrollment.watcherId)
+    fixture.enrollment.owner = { agent: 'claude', model: 'claude-opus-4', effort: 'low' }
+    const freshSnapshot = { ...fixture.snapshot, contentIdentity: 'tree:parent-released-config' }
+
+    await fixture.controller.step(fixture.enrollment, freshSnapshot, [])
+    const current = fixture.controller.inspect(fixture.enrollment.watcherId).pending!
+    expect(fixture.calls.ownedStops).toHaveLength(1)
+    expect(fixture.calls.ownedStops[0]?.stopped).toContain(oldSession)
+    expect(fixture.calls.creates).toHaveLength(2)
+    expect(fixture.calls.resumes).toHaveLength(0)
+    expect(current.contentIdentity).toBe(freshSnapshot.contentIdentity)
+    expect(current.reportKey).not.toBe(oldPending.reportKey)
+    expect(await Bun.file(oldPending.reportPath).exists()).toBe(false)
+    expect(fixture.store.journal(fixture.enrollment.watcherId).some((entry) =>
+      entry.kind === 'owner-reset' && entry.reason === 'config-changed'
+    )).toBe(true)
+  })
+
+  test('owner removal releases the existing conversation and re-addition creates fresh unresolved work', async () => {
+    const fixture = makeFixture()
+    await issue(fixture, deviation('check:remove-readd'))
+    const oldPending = fixture.controller.inspect(fixture.enrollment.watcherId).pending!
+    const oldSession = fixture.controller.inspect(fixture.enrollment.watcherId).sessionId!
+    fixture.enrollment.owner = null
+    await fixture.controller.step(fixture.enrollment, fixture.snapshot, [])
+    expect(fixture.calls.ownedStops).toEqual([{ key: fixture.enrollment.watcherId, stopped: [oldSession], unknown: [] }])
+    expect(fixture.controller.inspect(fixture.enrollment.watcherId)).toMatchObject({ sessionId: null, pending: null })
+    expect(await Bun.file(oldPending.reportPath).exists()).toBe(false)
+
+    fixture.enrollment.owner = { agent: 'claude', model: 'claude-sonnet-4', effort: 'high' }
+    await fixture.controller.step(fixture.enrollment, fixture.snapshot, [deviation('check:remove-readd')])
+    const next = fixture.controller.inspect(fixture.enrollment.watcherId).pending!
+    expect(fixture.calls.creates).toHaveLength(2)
+    expect(fixture.controller.inspect(fixture.enrollment.watcherId).sessionId).not.toBe(oldSession)
+    expect(next.reportKey).not.toBe(oldPending.reportKey)
+    expect(await fixture.controller.ready(fixture.enrollment.watcherId, oldPending.reportKey)).toMatchObject({ kind: 'refused' })
+    expect(fixture.controller.inspect(fixture.enrollment.watcherId).pending?.reportKey).toBe(next.reportKey)
   })
 
   test('records ambiguous create and send outcomes without blindly retrying', async () => {
@@ -583,6 +798,118 @@ describe('owner runtime journal and conversation', () => {
     expect(await fixture.controller.ready(fixture.enrollment.watcherId, before.reportKey)).toMatchObject({ kind: 'refused' })
   })
 
+  test('releasing one watcher closes only its owner turn and preserves another watcher and independent sessions', async () => {
+    const fixture = makeFixture()
+    const independentSession = await fixture.createIndependentSession()
+    await issue(fixture, deviation('check:release-one'))
+    const firstPending = fixture.controller.inspect(fixture.enrollment.watcherId).pending!
+    const firstSession = fixture.controller.inspect(fixture.enrollment.watcherId).sessionId!
+    const firstInterval = fixture.store.journal(fixture.enrollment.watcherId)
+      .filter((entry) => entry.kind === 'interval-open').at(-1)?.intervalId
+
+    const second = fixture.addWatcher('watcher-2')
+    await fixture.controller.step(second, fixture.snapshot, [deviation('check:release-two')])
+    const secondPending = fixture.controller.inspect(second.watcherId).pending!
+    const secondSession = fixture.controller.inspect(second.watcherId).sessionId!
+
+    await fixture.controller.release(fixture.enrollment.watcherId)
+    expect(fixture.calls.ownedStops).toEqual([{ key: fixture.enrollment.watcherId, stopped: [firstSession], unknown: [] }])
+    expect(fixture.calls.stops).toEqual([])
+    expect(fixture.calls.ownedStops[0]?.stopped).not.toContain(secondSession)
+    expect(fixture.calls.ownedStops[0]?.stopped).not.toContain(independentSession)
+    expect(await Bun.file(firstPending.reportPath).exists()).toBe(false)
+    expect(await Bun.file(secondPending.reportPath).exists()).toBe(true)
+    expect(fixture.controller.inspect(fixture.enrollment.watcherId)).toMatchObject({ sessionId: null, pending: null })
+    expect(fixture.controller.inspect(second.watcherId).pending).toMatchObject({ reportKey: secondPending.reportKey, phase: 'waiting' })
+    expect(fixture.store.journal(fixture.enrollment.watcherId).filter((entry) => entry.kind === 'interval-close').at(-1)).toMatchObject({
+      intervalId: firstInterval, reason: 'settled'
+    })
+    expect(fixture.store.journal(second.watcherId).some((entry) => entry.kind === 'interval-close')).toBe(false)
+    const firstJournalSize = fixture.store.journal(fixture.enrollment.watcherId).length
+    expect(await fixture.controller.ready(fixture.enrollment.watcherId, firstPending.reportKey)).toMatchObject({ kind: 'refused' })
+    expect(fixture.store.journal(fixture.enrollment.watcherId)).toHaveLength(firstJournalSize)
+    await fixture.controller.release(fixture.enrollment.watcherId)
+    expect(fixture.calls.ownedStops).toHaveLength(1)
+
+    await writeFile(secondPending.reportPath, JSON.stringify({ kind: 'continue' }), 'utf8')
+    expect(await fixture.controller.ready(second.watcherId, secondPending.reportKey)).toEqual({ kind: 'accepted' })
+  })
+
+  test('release uses cached inventory after enrollment and journal removal without writing to the removed watcher', async () => {
+    const fixture = makeFixture()
+    await issue(fixture, deviation('check:removed'))
+    const pending = fixture.controller.inspect(fixture.enrollment.watcherId).pending!
+    const sessionId = fixture.controller.inspect(fixture.enrollment.watcherId).sessionId!
+    fixture.removeWatcher(fixture.enrollment.watcherId)
+    expect(fixture.store.journal(fixture.enrollment.watcherId)).toHaveLength(0)
+    await fixture.controller.release(fixture.enrollment.watcherId)
+    expect(fixture.calls.ownedStops).toEqual([{ key: fixture.enrollment.watcherId, stopped: [sessionId], unknown: [] }])
+    expect(await Bun.file(pending.reportPath).exists()).toBe(false)
+    expect(fixture.store.journal(fixture.enrollment.watcherId)).toHaveLength(0)
+    expect(fixture.controller.inspect(fixture.enrollment.watcherId)).toMatchObject({ sessionId: null, pending: null })
+    await fixture.controller.release(fixture.enrollment.watcherId)
+    expect(fixture.calls.ownedStops).toHaveLength(1)
+  })
+
+  test('release stops an ambiguously created owner through its lifetime key without a returned session ID', async () => {
+    const fixture = makeFixture()
+    fixture.loseNextCreateReply()
+    await issue(fixture, deviation('check:release-lost-create'))
+    const createdSession = fixture.calls.creates[0]?.session
+    expect(createdSession).toBeTruthy()
+    expect(fixture.controller.inspect(fixture.enrollment.watcherId)).toMatchObject({ sessionId: null, pending: { phase: 'indeterminate' } })
+
+    await fixture.controller.release(fixture.enrollment.watcherId)
+    expect(fixture.calls.ownedStops).toEqual([{ key: fixture.enrollment.watcherId, stopped: [createdSession!], unknown: [] }])
+    expect(fixture.calls.stops).toEqual([])
+    expect(fixture.controller.inspect(fixture.enrollment.watcherId)).toMatchObject({ sessionId: null, pending: null })
+  })
+
+  test('unknown or malformed keyed release results remain uncertain and block replacement owners', async () => {
+    for (const stopReply of [
+      { stopped: [], unknown: ['unrecognized-owner-session'] },
+      { stopped: 'malformed', unknown: [] }
+    ]) {
+      const fixture = makeFixture()
+      await issue(fixture, deviation('check:release-uncertain'))
+      fixture.setNextOwnedStopReply(stopReply)
+      await fixture.controller.release(fixture.enrollment.watcherId)
+      const state = fixture.controller.inspect(fixture.enrollment.watcherId) as unknown as Record<string, unknown>
+      expect(state.releaseUncertain).toBe(true)
+      expect(fixture.store.journal(fixture.enrollment.watcherId).some((entry) =>
+        entry.kind === 'owner-error' && entry.operation === 'release-owner' && entry.uncertainty === true
+      )).toBe(true)
+      fixture.enrollment.owner = { agent: 'claude', model: 'claude-opus-4', effort: 'low' }
+      await fixture.controller.step(fixture.enrollment, fixture.snapshot, [])
+      expect(fixture.calls.creates).toHaveLength(1)
+    }
+  })
+
+  test('release is bounded during a hung owner call and the late result cannot write state', async () => {
+    const fixture = makeFixture()
+    await issue(fixture, deviation('check:release-hung'))
+    const pending = fixture.controller.inspect(fixture.enrollment.watcherId).pending!
+    const sessionId = fixture.controller.inspect(fixture.enrollment.watcherId).sessionId!
+    fixture.setNow(10_000 + 900_000)
+    const delayed = fixture.delayNextSend()
+    const tick = fixture.controller.step(fixture.enrollment, fixture.snapshot, [])
+    await delayed.entered
+    const timeout = Promise.withResolvers<never>()
+    const watchdog = setTimeout(() => timeout.reject(new Error('watcher release did not respect its deadline')), 2_500)
+    try {
+      await Promise.race([fixture.controller.release(fixture.enrollment.watcherId), timeout.promise])
+      expect(fixture.calls.ownedStops.some((result) => result.key === fixture.enrollment.watcherId && result.stopped.includes(sessionId))).toBe(true)
+      expect(await Bun.file(pending.reportPath).exists()).toBe(false)
+      const journal = structuredClone(fixture.store.journal(fixture.enrollment.watcherId))
+      delayed.release()
+      await tick
+      expect(fixture.store.journal(fixture.enrollment.watcherId)).toEqual(journal)
+    } finally {
+      clearTimeout(watchdog)
+      delayed.release()
+      await tick
+    }
+  })
   test('shutdown removes issued reports and fences later work', async () => {
     const fixture = makeFixture()
     await issue(fixture, deviation('check:shutdown'))
