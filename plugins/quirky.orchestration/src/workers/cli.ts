@@ -4,7 +4,7 @@ import type { MutationResult } from '../contracts'
 import type { WorkerControlResult, WorkerListResult, WorkerReadResult, WorkerShowResult, WorkerStartReceipt } from '../worker-contracts'
 
 const START_FLAGS: Record<string, string> = {
-  task: 'taskId', spec: 'spec', worktree: 'worktree', agent: 'agent', terminal: 'terminal', mode: 'mode',
+  task: 'taskId', spec: 'spec', worktree: 'worktree', on: 'on', agent: 'agent', terminal: 'terminal', mode: 'mode',
   'task-title': 'taskTitle', parent: 'parentTaskId', model: 'model', effort: 'effort', name: 'name', repo: 'repo',
   'base-branch': 'baseBranch', 'display-name': 'displayName', comment: 'comment', setup: 'setup',
   'retry-of': 'retryOfDispatchId', 'timeout-ms': 'timeoutMs', run: 'runId', from: 'from',

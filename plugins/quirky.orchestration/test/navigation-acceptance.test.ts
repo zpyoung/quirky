@@ -1,7 +1,8 @@
 import { afterEach, expect, test } from 'bun:test'
 import type { MutationResult, RunRow, TaskRow, DispatchRow } from '../src/contracts'
-import type { WorkerShowResult, WorkerStartReceipt } from '../src/worker-contracts'
+import type { WorkerReadResult, WorkerShowResult, WorkerStartReceipt } from '../src/worker-contracts'
 import { eventually, startWorkerAcceptance, type WorkerAcceptance } from './workers/acceptance-support'
+import { createHomeRun, pairDaemons, startRemote } from './federation-surface-support'
 
 let harness: WorkerAcceptance | undefined
 afterEach(async () => { await harness?.cleanup(); harness = undefined })
@@ -36,3 +37,32 @@ test('task-terminal resolves a live supervised worker and rejects its released t
   const empty = await h.callAs<MutationResult<{ task: TaskRow }>>(h.coordinator.id, 'task-create', ['--spec', 'No dispatch yet'])
   await expect(h.fixture.call('quirky.orchestration/taskTerminal', { taskId: empty.task.id })).rejects.toMatchObject({ data: { reason: 'terminal_not_found' } })
 }, 90_000)
+
+test('task-terminal routes a remote Dispatch to its read-only output view instead of a local terminal', async () => {
+  const paired = await pairDaemons()
+  try {
+    await createHomeRun(paired)
+    const receipt = await startRemote(paired, 'Remain available for remote output navigation.')
+    const target = await paired.home.fixture.call('quirky.orchestration/taskTerminal', { taskId: receipt.taskId }) as {
+      kind: string; taskId: string; dispatchId: string; viewId: string; input: { dispatchId: string }
+    }
+
+    expect(target).toEqual({
+      kind: 'remote_output',
+      taskId: receipt.taskId,
+      dispatchId: receipt.dispatchId,
+      viewId: 'view:quirky.orchestration/remote-worker-output',
+      input: { dispatchId: receipt.dispatchId }
+    })
+    const output = await paired.home.fixture.call('quirky.orchestration/workerRead', {
+      dispatchId: target.input.dispatchId, source: 'terminal'
+    }) as WorkerReadResult
+    expect(output.dispatchId).toBe(receipt.dispatchId)
+    expect(output.sourceExact).toBe(true)
+    expect(output.remote).toMatchObject({ peerId: paired.peerId, hostDispatchId: expect.any(String) })
+    expect((await paired.home.fixture.call('quirky.session/list', {}) as Array<{ id: string }>).map(({ id }) => id))
+      .not.toContain(output.sessionId)
+  } finally {
+    await paired.cleanup()
+  }
+}, 120_000)

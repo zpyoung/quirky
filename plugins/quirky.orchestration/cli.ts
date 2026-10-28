@@ -19,6 +19,7 @@ import type {
   TaskRow,
   WorkerRow,
 } from './src/contracts'
+import type { WorkerReadResult } from './src/worker-contracts'
 import { workerCommands } from './src/workers/cli'
 import { peerCommands } from './src/peers-cli'
 import type { OrchestrationPolicy, OrchestrationSkillStatus } from './src/ui-contracts'
@@ -960,8 +961,26 @@ export const commands: CliModule['commands'] = {
   'task-terminal': async (args, context) => {
     const taskId = stringFlag(args, context, 'task-id')
     const target = await context.call('quirky.orchestration/taskTerminal', { taskId })
-    if (!isObject(target) || !isString(target.taskId) || !isString(target.dispatchId) ||
-      !isString(target.sessionId) || !isString(target.worktreeId)) {
+    if (!isObject(target) || !isString(target.taskId) || !isString(target.dispatchId)) {
+      throw context.fail('The runtime returned an invalid task navigation target.')
+    }
+    if (target.kind === 'remote_output') {
+      if (target.viewId !== 'view:quirky.orchestration/remote-worker-output' || !isObject(target.input) ||
+        target.input.dispatchId !== target.dispatchId) {
+        throw context.fail('The runtime returned an invalid remote output view target.')
+      }
+      const read = await context.call('quirky.orchestration/workerRead', { dispatchId: target.dispatchId }) as WorkerReadResult
+      if (!isObject(read) || read.dispatchId !== target.dispatchId || !isObject(read.remote) || !isString(read.remote.peerId)) {
+        throw context.fail('The runtime did not return exact remote worker output provenance.')
+      }
+      output(context, { target, output: read }, [
+        `Task ${target.taskId} remote output on ${read.remote.peerId} (Dispatch ${target.dispatchId})`,
+        `Source: ${read.source}; exact=${read.sourceExact}; archived=${read.archived}; liveness=${read.agentLiveness.status}`,
+        read.content
+      ].join('\n'))
+      return
+    }
+    if (!isString(target.sessionId) || !isString(target.worktreeId)) {
       throw context.fail('The runtime returned an invalid task terminal target.')
     }
     output(context, target, `Task ${target.taskId} is assigned to session ${target.sessionId} in workspace ${target.worktreeId} (Dispatch ${target.dispatchId}).`)
