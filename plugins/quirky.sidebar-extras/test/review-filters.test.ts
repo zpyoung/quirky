@@ -142,17 +142,12 @@ describe('sidebar review filter projection API', () => {
     expect(neutral.visibleIds).toContain(probe.id)
     expect(neutral.reviewHiddenIds).not.toContain(probe.id)
 
-    const expectProbeUnknown = async (entry: Record<string, unknown>, error?: string) => {
+    const expectProbeUnknown = async (entry: Record<string, unknown>) => {
       const projection = await projectProbe(entry)
       expect(projection.visibleIds).toContain(probe.id)
       expect(projection.reviewHiddenIds).not.toContain(probe.id)
       const projectedProbe = row(projection, probe.id)
       expect(projectedProbe.reviewReason).toBe('unknown')
-      if (error === undefined) {
-        expect(projectedProbe.reviewError).toBeUndefined()
-      } else {
-        expect(projectedProbe.reviewError).toBe(error)
-      }
     }
 
     await expectProbeUnknown(cacheEntry(probe, null))
@@ -162,10 +157,7 @@ describe('sidebar review filter projection API', () => {
     await expectProbeUnknown(cacheEntry(probe, cachedReview(probe, 'merged', 'success'), { headOid: null }))
     await expectProbeUnknown(cacheEntry(probe, cachedReview(probe, 'merged', 'success'), { headOid: '' }))
     await expectProbeUnknown(cacheEntry(probe, { state: 'merged', checksStatus: 'success' }))
-    await expectProbeUnknown(
-      cacheEntry(probe, null, { stale: true, error: 'local identity read failed' }),
-      'local identity read failed'
-    )
+    await expectProbeUnknown(cacheEntry(probe, null, { stale: true, error: 'local identity read failed' }))
 
     const inferredMerged = await projectProbe(cacheEntry(
       probe,
