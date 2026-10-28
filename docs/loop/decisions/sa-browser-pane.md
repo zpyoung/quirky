@@ -245,7 +245,7 @@
 ## D23: Narrow the overdue landing to API/CLI pane lifecycle and navigation
 - **Question:** Which acceptance remains current, and how are the other flows handed off without creating more queue items?
 - **Options:** retain the original full UI/native matrix; drop the unfinished flows; ship API/CLI pane lifecycle and navigation with precise ownership in existing follow-ups.
-- **Chose:** Current acceptance is pane lifecycle and navigation through the schema-declared API and generated CLI, using the committed `build/sa-browser-pane` and `/tmp/sa-browser-pane.fiGLjz` trees. Preserve implementation and tests; this scope cut does not authorize deleting them or weakening tests. No new queue records; existing follow-up titles remain unchanged, and this decision plus BLOCKERS.md extend their handoff scope. `sa-browser-pane-native-host-controls` owns Watch screencast transport/input/find/zoom/viewport acceptance plus remaining base-pane UI scenarios, hard-reload, and load-error. `sa-browser-pane-native-events` owns dialogs/auth/cert/download/popups/OAuth/external events. `sa-browser-pane-workspace-preview` owns grant document preview/UI. Lane8's `sa-browser-profiles-settings` owns profile integration and corresponding UI/settings scenarios; `sa-browser-profile-import-ui`, `sa-browser-native-profile-clear-completion`, `sa-browser-native-identity`, and `sa-browser-localhost-label-routing` retain their exact existing subflow handoffs. `m7-sweep-browser-mobile` remains the final parity audit, not a replacement for these mappings. Review was skipped by the operator; Native nightly remains pending; no broad UI acceptance is claimed.
+- **Chose:** Current acceptance is pane lifecycle and navigation through the schema-declared API and generated CLI, using the committed build/sa-browser-pane and preserved repair trees. Preserve implementation and tests; no new queue records or title edits. sa-browser-pane-native-host-controls owns Watch screencast/input/find/zoom/viewport acceptance, remaining base-pane UI/hard-reload/load-error scenarios, AND cross-lane pane/profile integration acceptance against lane8's profile feature. sa-browser-pane-native-events owns dialogs/auth/cert/download/popups/OAuth/external events. sa-browser-pane-workspace-preview owns grant document preview/UI. Lane8's sa-browser-profiles-settings retains its own profile/settings implementation; the deferred pane/profile composition is assigned to this item's already-added native-host-controls follow-up, not made a new gate for lane8. Existing profile-import-ui, native-profile-clear-completion, native-identity and localhost-label-routing subflow handoffs remain exact. m7-sweep-browser-mobile is the final parity audit, not a substitute. Review skipped; Native nightly pending; no broad UI acceptance claim.
 - **Why:** the latest operator ruling narrows this overdue landing while preserving every remaining flow with its existing owner; full UI/native parity is not silently implied.
 - **Evidence:** latest operator instruction; existing follow-up records in docs/loop/queue.json and pane blocker entries; preserved candidate paths named by the operator.
 - **Reversibility:** medium (residual acceptance remains with existing follow-ups)
@@ -276,5 +276,60 @@
 - **Revisit if:** a deferred owner needs the intact prompt-TTL/profile/screencast/page-event acceptance work.
 - **Source:** latest operator ruling for sa-browser-pane.
 
+## D26: Challenge only newly created CDP targets, never probe unrelated old pages
+- **Question:** Why do real automation and Watch tests hang before a fresh page operation begins?
+- **Options:** raise deadlines or waive tests; guess by URL/order; restrict candidates to targets created by tab_new and retain the exact challenge.
+- **Chose:** snapshot target IDs before tab_new; exclude those IDs from candidate debugger attachments. Still require exactly one matching random scriptParsed challenge and preserve the exact helper tab/session/target mapping. No navigation replay, guessed target, lowered assertion or timeout change. Removed temporary boundary logs after the experiment.
+- **Why:** a bounded real Chrome reproduction stalled while enabling Debugger on an old target, before onOperation. After candidate restriction, the same real sequence created about:blank, First and Events pages in5.54seconds. Old pages' debugger readiness is unrelated to identity of a fresh tab.
+- **Evidence:** temporary identity traces at pre/post native tab_new, Target.getTargets/attachToTarget, Debugger.enable/disable, challenge evaluate and detach; CHROME_IDENTITY_DIAGNOSTIC_OK output for three sequential same-profile pages.
+- **Reversibility:** medium (trusted page-binding algorithm).
+- **Confidence:** high for the reproduced stall and corrected sequence; broader regression results are recorded separately.
+- **Revisit if:** candidate creation races or a missing/ambiguous challenge appears; fail closed, never use URL/order matching.
+- **Source:** assumed — autonomous blocking verification repair.
+
+## D27: Preserve assertions while correcting test prerequisites and interception lifetime
+- **Question:** Which remaining failures came from fixtures versus real retained Watch behavior?
+- **Options:** weaken assertions/deadlines; retain broken fixtures; repair exact prerequisites and runtime request ownership.
+- **Chose:** canonicalize the macOS /var fixture root before exact path comparisons. Trigger a real page repaint before expecting the next damage-driven screencast frame. Retain all existing frame, targeting, prompt, auth, TLS and download assertions. Resume Fetch.requestPaused on its exact session outside the profile FIFO, install handlers before enabling interception, and disable interception/certificate overrides when Watch stops.
+- **Why:** /var is a symlink to /private/var, static CDP pages need not emit repeated frames, and auth interception also pauses ordinary requests. Leaving those requests paused or keeping interception enabled after unwatch strands navigation. The API/CLI lifecycle regression independently checks actual hosted tab removal, same-worktree fallback, cross-worktree retention, stale report rejection and terminal-origin close without queue deadlock.
+- **Evidence:** first macOS pane failure path output and90second stalls; preserved repair checkpoint22d17dfd; new lifecycle regression remote pass; initial affected run339/340remote files passed, with only old invalid Browser manifest failing remotely.
+- **Reversibility:** easy (fixtures) / medium (interception lifecycle).
+- **Confidence:** high for the observed prerequisites and exact-session repair; no full UI or native parity claim.
+- **Revisit if:** repaired Chrome regression files or controller full suite expose another concrete failure.
+- **Source:** assumed — autonomous, preserving operator's no-weakened-tests rule.
+
+## D28: Resume the exact owned headless target before helper selection
+- **Question:** Why does switching back to an existing managed page still fail after fresh binding is repaired?
+- **Options:** retry the mutation; guess another helper tab; bring the already-bound headless target forward before one helper switch.
+- **Chose:** Page.bringToFront on the exact existing binding session before tab_switch. Keep unsupported native app-window focus rejected; this operates only inside the owned headless Chrome. Preserve a redacted helper error detail rather than discard the actual failing CDP command.
+- **Why:** the bounded reproduction returned “CDP command timed out: Page.enable” from the helper while selecting a background tab. The exact-target resume then created three pages and switched through all three successfully in6.45seconds, with no retry or retarget.
+- **Evidence:** actual three-page create/switch diagnostic, BEFORE_SWITCH/AFTER_SWITCH pairs and CHROME_IDENTITY_DIAGNOSTIC_OK; runtime/driver.ts exact session call.
+- **Reversibility:** medium (headless helper selection).
+- **Confidence:** high for the reproduced command boundary and corrected sequence; no OS focus claim.
+- **Revisit if:** headless switching still stalls or any unrelated target is selected.
+- **Source:** assumed — autonomous blocking verification repair.
+
+## D29: Correct exact event/path consumers, not their behavioral assertions
+- **Question:** Why did the retained Watch regressions still fail after real Chrome could create and select pages?
+- **Options:** skip deferred tests; accept arbitrary events/files; use the actual protocol type and canonical owned path.
+- **Chose:** the frame fixture consumes quirky.browser/paneFrame, matching PluginEvents.emit and production UI, not the contribution ID event:quirky.browser/paneFrame. Canonicalize a regular non-symlink download source before its exact staging-root containment check. Keep byte-content/collision, frame/backpressure and same-page targeting assertions. Delete only the obsolete copied catalog-array equality checks, as required for wiring/copy tests; real API/CLI execution and unsupported-command rejection remain.
+- **Why:** contribution IDs are not event-stream types; /var and /private/var denote the same owned staging directory. The old catalog copy forbade every newly added pane method without testing consumer behavior.
+- **Evidence:** packages/daemon/src/plugins/events.ts:28–41; production BrowserPaneWindow subscriptions; failing frame wait and download-completion wait; original actual catalog diff showing13 added pane methods.
+- **Reversibility:** easy (fixtures) / medium (canonical file boundary).
+- **Confidence:** high for inspected contracts; final regression verdict recorded separately.
+- **Revisit if:** a malformed/unowned event or symlink download artifact is accepted.
+- **Source:** assumed — autonomous, preserving consumer-visible assertions.
+
+## D30: Count text occurrences and test filename safety independently of Chrome's rewriting
+- **Question:** Why did retained Watch find report1 for three occurrences, and why did the collision fixture miss its existing file?
+- **Options:** lower expected counts or re-pin Chrome's rewritten name; repair occurrence counting and exercise collision/safety as separate real downloads.
+- **Chose:** count non-overlapping case-insensitive rendered text occurrences while retaining real window.find selection. DOM.performSearch counted matching DOM nodes, not occurrences. Use a literal safe.txt attachment for the unchanged safe (1).txt collision/content assertion; independently download the malicious ../../unsafe.txt header and assert its actual canonical parent is the owned Downloads directory, bytes match, and the pre-existing safe.txt is unchanged. Supply explicit yes for the destructive page-close test.
+- **Why:** one text node contains all three matches. Chrome rewrites malicious header names before suggesting a filename; the resulting spelling is not a Quirky collision contract. Both collision and malicious-path safety remain exercised without lowering assertions, raising deadlines or skipping tests.
+- **Evidence:** red find total1 and Chrome-suggested _.._safe.txt; corrected real macOS pane file passes3 tests/70 assertions in24seconds. Existing automation file passes exit0 in40.41seconds after exact-target resume; source lifecycle CLI smoke and three-page create/switch smoke also pass.
+- **Reversibility:** medium (find counting) / easy (fixture composition).
+- **Confidence:** high for exercised count, selection/next and collision/path invariants; no full UI/native claim.
+- **Revisit if:** a deferred find/UI scenario exposes rendered-text boundary differences.
+- **Source:** assumed — autonomous, preserving operator's no-weakened-tests rule.
+
 ## Progress
-Current source is on build/sa-browser-pane, caught up through merge5cd99ee1. All iteration4 agents returned and type-repair scopes were audited. Real source CLI lifecycle smoke passed; scripts passed68 tests/564 assertions. First typecheck exposed10 actual diagnostics, repaired without suppressions; final typecheck and targeted lifecycle/menu/pane checks are running. The broad affected run captured the earlier invalid manifest/type state and is not claimed green. Native/full UI/review remain unverified and explicitly assigned under D23. Finish exact gate failures without weakening tests, commit, detach and invoke the canonical queue.ts land for this one item. Full deferred source/test checkpoint:22d17dfd.
+Ready for normal controller landing: final current-tree typecheck passed in74.09seconds. Core API/CLI lifecycle smoke and real three-page Chrome create/switch smoke passed. New lifecycle and menu regression files passed remotely. Initial broad affected run passed339/340remote files and2/3Mac files; its failed old Browser declaration/Chrome paths were repaired and separately verified: automation file exit0, pane file3pass/70assertions. Scripts68pass/564assertions. All consumer-visible assertions remain, with only obsolete catalog-copy equality removed under the test policy. Full UI/review/native remain deliberately unverified under D23, with exact already-added follow-up ownership. Commit final evidence, detach and invoke canonical queue.ts land; no full merged-verification claim before its result. Deferred source/tests remain in22d17dfd; five worker checkouts removed, no agents or owned runtime processes running.
