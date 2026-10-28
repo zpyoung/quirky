@@ -918,3 +918,16 @@ first, host-adjacent, sticky and nested boundaries without changing row geometry
 
 [Completion contracts and acceptance scenarios](../docs/quirk/specs/2026-10-28-m7-editor-source-control-completion/logic.md).
 
+## Saved CLI runtimes
+
+`quirky cli runtime add --name <name> --code <pairing-offer>` saves a paired
+target in the private `QUIRKY_HOME` store (mode `0600`). Treat the offer as a
+credential even when its token is encoded in a pairing URL. Add, list, show and
+status return only credential-free summaries; using a saved target resolves its
+private offer for the encrypted connection. Malformed offers are rejected before
+the runtime store is created.
+
+Remove a saved target with `quirky cli runtime remove --selector <id> --yes`.
+Removal prevents new connections through that saved selector; it does not revoke
+the remote device grant or terminate an already established connection.
+
