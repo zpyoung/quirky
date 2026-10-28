@@ -19,7 +19,7 @@ const AUTO_RESTORE_OPTIONS = [
   { value: '1800000', label: 'After 30 minutes' }
 ] as const
 
-export function MobileSettings({ context }: { context: UiPluginContext }) {
+export function MobileSettings({ context, report }: { context: UiPluginContext; report?(state: unknown): void }) {
   const mobile = useMobileState(context)
   const [machineName, setMachineName] = useState('')
   const [selectedAddress, setSelectedAddress] = useState('')
@@ -27,6 +27,17 @@ export function MobileSettings({ context }: { context: UiPluginContext }) {
   const [busy, setBusy] = useState(false)
   const [offerVisible, setOfferVisible] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
+
+  useEffect(() => {
+    report?.({
+      machineName, address: selectedAddress, busy,
+      autoRestoreFitMs: mobile.state?.autoRestoreFitMs ?? null,
+      showMobileButton: mobile.state?.showMobileButton ?? true,
+      pairingAvailable: offer?.available ?? false,
+      devices: mobile.state?.devices ?? [],
+      error: actionError ?? mobile.error
+    })
+  }, [report, machineName, selectedAddress, busy, offer?.available, mobile.state, actionError, mobile.error])
 
   useEffect(() => {
     if (mobile.state) setMachineName(mobile.state.machineName)

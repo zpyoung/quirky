@@ -269,8 +269,8 @@ export class MobileStore {
   private createInitialIdentity(): void {
     try {
       const pair = nacl.box.keyPair()
-      const publicKeyB64 = encodeBase64(pair.publicKey)
-      writeSecureAtomic(this.identityPath, JSON.stringify({ v: 1, publicKeyB64, secretKeyB64: encodeBase64(pair.secretKey) }))
+      const publicKeyB64 = Buffer.from(pair.publicKey).toString('base64')
+      writeSecureAtomic(this.identityPath, JSON.stringify({ v: 1, publicKeyB64, secretKeyB64: Buffer.from(pair.secretKey).toString('base64') }))
       this.identityValue = { publicKeyB64, secretKey: pair.secretKey }
       this.identityAvailable = true
     } catch {
@@ -286,7 +286,7 @@ export class MobileStore {
       const secretKey = decodeCanonicalBase64(raw.secretKeyB64, 32)
       if (!publicKey || !secretKey) throw new Error('invalid key encoding')
       const derived = nacl.box.keyPair.fromSecretKey(secretKey).publicKey
-      if (!equalBytes(publicKey, derived)) throw new Error('identity key mismatch')
+      if (!timingSafeEqual(publicKey, derived)) throw new Error('identity key mismatch')
       this.identityValue = { publicKeyB64: raw.publicKeyB64, secretKey }
       this.identityAvailable = true
     } catch {

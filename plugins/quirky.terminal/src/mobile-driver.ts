@@ -58,12 +58,12 @@ export class MobileDriverService {
     const mobile = this.registerConnection(sessionId, caller, connection)
     let lease = this.leases.get(sessionId)
     if (!lease) {
-      const snapshot = await this.context.pty.snapshot(sessionId).catch(() => null)
+      const dimensions = (await this.context.pty.list()).find((session) => session.sessionId === sessionId)
       if (this.connections.get(connection.id) !== mobile || (mobile.sessions.get(sessionId) ?? 0) === 0) {
         throw this.context.error('conflict', 'mobile connection closed while attaching')
       }
-      const desktopCols = snapshot && Number.isInteger(snapshot.cols) && snapshot.cols > 0 ? snapshot.cols : null
-      const desktopRows = snapshot && Number.isInteger(snapshot.rows) && snapshot.rows > 0 ? snapshot.rows : null
+      const desktopCols = dimensions && Number.isInteger(dimensions.cols) && dimensions.cols > 0 ? dimensions.cols : null
+      const desktopRows = dimensions && Number.isInteger(dimensions.rows) && dimensions.rows > 0 ? dimensions.rows : null
       lease = {
         driver: null,
         phoneFit: false,

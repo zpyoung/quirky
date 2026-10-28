@@ -1,5 +1,5 @@
 import WebSocket from 'ws'
-import { createServer } from 'node:http'
+import { createServer, request } from 'node:http'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -173,12 +173,21 @@ describe('mobile listener lifecycle', () => {
       }
       for (let index = 0; index < MAX_MOBILE_WEBSOCKETS; index++) await openAccepted()
 
-      const refused = new WebSocket(`ws://127.0.0.1:${transport.port}/rpc`)
-      const rejected = Promise.withResolvers<Error>()
-      refused.once('error', rejected.resolve)
-      refused.once('open', () => rejected.reject(new Error('the 129th socket was accepted')))
-      expect((await rejected.promise).message).toContain('503')
-      refused.terminate()
+      const rejected = Promise.withResolvers<number>()
+      const refused = request(`http://127.0.0.1:${transport.port}/rpc`, {
+        headers: {
+          connection: 'Upgrade',
+          upgrade: 'websocket',
+          'sec-websocket-version': '13',
+          'sec-websocket-key': Buffer.alloc(16, 7).toString('base64')
+        }
+      }, (response) => {
+        rejected.resolve(response.statusCode ?? 0)
+        response.resume()
+      })
+      refused.once('error', rejected.reject)
+      refused.end()
+      expect(await rejected.promise).toBe(503)
 
       const closedClients = clients.map((socket) => {
         const closed = Promise.withResolvers<void>()

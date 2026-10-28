@@ -63,13 +63,13 @@ export function activate(context: UiPluginContext): void {
 
   context.provide(MOBILE_PAGE_ID, (element: HTMLElement, props: MountProps) => {
     const root = createRoot(element)
-    root.render(<MobilePage context={context} input={props.input} />)
+    root.render(<MobilePage context={context} input={props.input} report={props.report} />)
     return () => root.unmount()
   })
 
-  context.provide(MOBILE_SETTINGS_ID, (element: HTMLElement) => {
+  context.provide(MOBILE_SETTINGS_ID, (element: HTMLElement, props: MountProps) => {
     const root = createRoot(element)
-    root.render(<MobileSettings context={context} />)
+    root.render(<MobileSettings context={context} report={props.report} />)
     return () => root.unmount()
   })
 

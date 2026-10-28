@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { candidatePorts, normalizeAdvertisedEndpoint, rankNetworkInterfaces } from '../src/daemon/network'
+import { normalizeAdvertisedEndpoint, rankNetworkInterfaces } from '../src/daemon/network'
 
 describe('mobile network selection', () => {
   test('ranks Tailscale before IPv4 and IPv6 and filters loopback, link-local, and fake proxy ranges', () => {
@@ -29,11 +29,5 @@ describe('mobile network selection', () => {
     for (const value of ['0.0.0.0', '::', '[::]:0', 'box.local:0', 'box.local:65536', 'ws://user:pass@box.local', 'user@box.local', 'box.local/path', 'box.local?token=x', 'http://', 'https://0.0.0.0:6768']) {
       expect(normalizeAdvertisedEndpoint(value, 6768)).toBeNull()
     }
-  })
-
-  test('tries persisted fallback, preferred port, its 31-port ladder, then ephemeral', () => {
-    expect(candidatePorts(6768, 6770)).toEqual([6770, 6768, ...Array.from({ length: 31 }, (_, index) => 6769 + index), 0])
-    expect(candidatePorts(0, undefined)).toEqual([0])
-    expect(candidatePorts(6768, 6768)).toEqual([6768, ...Array.from({ length: 31 }, (_, index) => 6769 + index), 0])
   })
 })

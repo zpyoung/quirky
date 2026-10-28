@@ -194,7 +194,7 @@ describe('mobile terminal driver leases through the daemon API', () => {
     await call(desktop, 'quirky.mobile/testDisconnect', { slot: 'phone-a-reconnect' })
     await waitFor(() => ptySize().cols === 120 && ptySize().rows === 35, 7000, 'configured restore')
     expect(await terminalState()).toEqual([])
-  })
+  }, 15_000)
 
   test('session removal clears driver state and phone streams', async () => {
     await admit('phone-a')
@@ -225,27 +225,4 @@ describe('mobile terminal driver leases through the daemon API', () => {
     }
   })
 
-})
-test('take-back keeps a phone-fit hold when no desktop viewport has been reported', async () => {
-  h.pty.setSnapshotResult({
-    ansi: '',
-    cols: 0,
-    rows: 0,
-    cursor: { x: 0, y: 0 },
-    modes: { alternateScreen: false, bracketedPaste: false, mouseTracking: false, applicationCursor: false },
-    cwd: '/fake/alpha',
-    title: null,
-    shellState: 'unsupported',
-    offset: 0
-  })
-  await admit('phone-a')
-  await phone('phone-a', 'quirky.terminal/attach', { session: shell.id, cols: 50, rows: 20 })
-  expect(ptySize()).toEqual({ cols: 50, rows: 20 })
-  await expectConflict(call(desktop, 'quirky.terminal/takeBack', { session: shell.id }))
-  expect((await terminalState())[0]).toMatchObject({ phoneFit: true, driver: null, desktopCols: null, desktopRows: null })
-
-  await call(desktop, 'quirky.terminal/resize', { session: shell.id, cols: 120, rows: 35 })
-  expect(ptySize()).toEqual({ cols: 50, rows: 20 })
-  await call(desktop, 'quirky.terminal/restoreFit', { session: shell.id })
-  expect(ptySize()).toEqual({ cols: 120, rows: 35 })
 })

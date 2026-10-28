@@ -6,7 +6,7 @@ import { configureInput, openInput, pairInput, revokeInput, type MobileConfigure
 import { bestNetworkAddress, endpointHost, isLoopbackHost, normalizeAdvertisedEndpoint, rankNetworkInterfaces } from './network'
 import { createPairingResult } from './pairing'
 import { MobileStore, MobileStoreError, type AuthenticationResult, type MobileDeviceRecord } from './storage'
-import { MobileTransport, type MobilePeer } from './transport'
+import { MAX_MOBILE_INBOUND_FRAME_BYTES, MobileTransport, type MobilePeer } from './transport'
 import { DesktopMobileE2EEV2Session, MAX_MOBILE_BINARY_BYTES, MAX_MOBILE_TEXT_BYTES } from '../crypto/e2ee-v2'
 
 const AUTH_TIMEOUT_MS = 10_000
@@ -218,6 +218,10 @@ export class MobileService {
 
   private async onMessage(state: ConnectionState, bytes: Buffer, binary: boolean): Promise<void> {
     if (state.cleaned || this.stopped) return
+    if (bytes.byteLength > MAX_MOBILE_INBOUND_FRAME_BYTES) {
+      this.cleanupConnection(state, 1009, 'Inbound frame too large', false)
+      return
+    }
     if (!state.channel) {
       const secretKey = this.store.secretKey
       if (binary || !this.store.identityAvailable || !secretKey) {

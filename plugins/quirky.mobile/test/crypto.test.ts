@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import { describe, expect, test } from 'bun:test'
+import nacl from 'tweetnacl'
 import type { MobileE2EEV2Context, MobileE2EEV2Hello, MobileE2EEV2Ready } from '../src/crypto/e2ee-v2'
 import {
   DesktopMobileE2EEV2Session,

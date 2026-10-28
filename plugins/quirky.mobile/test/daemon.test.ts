@@ -171,8 +171,6 @@ describe('mobile daemon integration', () => {
     const marker = 'mobile-encrypted-terminal-output'
     harness.pty.emit(session.id, marker)
     await waitFor(() => mobile!.binaryFrames.some((frame) => Buffer.from(frame).includes(Buffer.from(marker))), 5000)
-    harness.pty.setHistoryResult({ lines: ['x'.repeat(4 * 1024 * 1024 + 100)], cursor: null })
-    await expect(mobile.call('quirky.terminal/history', { session: session.id, lines: 1 })).rejects.toMatchObject({ code: -32005 })
     await mobile.call('quirky.terminal/detach', { streamId: attached.streamId })
     await api.callAny('quirky.mobile/pair', { address: '192.0.2.17', rotate: true })
     const pairedAfterRotate = await api.callAny('quirky.mobile/devices', {}) as { deviceId: string }[]
@@ -203,6 +201,32 @@ describe('mobile daemon integration', () => {
     await reconnect.close()
     mobile = undefined
   }, 60_000)
+  test('returns a request-scoped reply_too_large error and keeps the sealed session usable', async () => {
+    const home = makeTempHome('quirky-mobile-reply-')
+    const producer = join(home, 'plugins', 'acme.large-reply')
+    mkdirSync(producer, { recursive: true })
+    writeFileSync(join(producer, 'quirky-plugin.json'), JSON.stringify({
+      id: 'acme.large-reply', name: 'Large reply producer', version: '0.1.0', main: 'main.ts',
+      overrides: [{
+        id: 'method:quirky.terminal/history', readOnly: true,
+        params: { type: 'object', properties: { session: { type: 'string' }, lines: { type: 'integer' } }, required: ['session'], additionalProperties: false }
+      }]
+    }))
+    writeFileSync(join(producer, 'main.ts'), `
+      export function activate(context) {
+        context.provide('method:quirky.terminal/history', () => ({ lines: ['x'.repeat(4 * 1024 * 1024 + 100)], cursor: null }))
+      }
+    `)
+    harness = await boot(home)
+    const api = await harness.connect('cli')
+    const result = await api.callAny('quirky.mobile/pair', { address: '127.0.0.1' }) as { pairingUrl: string; endpoint: string }
+    const offer = JSON.parse(Buffer.from(new URL(result.pairingUrl).searchParams.get('code')!, 'base64url').toString()) as { publicKeyB64: string; deviceToken: string }
+    mobile = MobileTestClient.connect(result.endpoint, offer.publicKeyB64, offer.deviceToken)
+    await mobile.authenticated
+    await expect(mobile.call('quirky.terminal/history', { session: 'large-reply', lines: 1 })).rejects.toMatchObject({ code: -32005 })
+    await expect(mobile.call('status.get')).resolves.toMatchObject({ daemonVersion: expect.any(String) })
+  })
+
   test('fails pairing closed when the persistent identity is corrupt', async () => {
     const home = makeTempHome('quirky-mobile-key-')
     const dataDir = join(home, 'plugin-data', 'quirky.mobile')

@@ -258,6 +258,10 @@ export class MobileTransport {
     socket.on('pong', () => { state.lastPongAt = Date.now() })
     socket.on('close', () => this.releasePeer(state))
     socket.on('error', () => this.releasePeer(state))
+    socket.on('message', (data: WebSocket.RawData) => {
+      const bytes = Array.isArray(data) ? data.reduce((size, part) => size + part.byteLength, 0) : data.byteLength
+      if (bytes > MAX_MOBILE_INBOUND_FRAME_BYTES) this.closePeer(state, 1009, 'Inbound frame too large', false)
+    })
     try {
       this.options.onConnection(peer)
     } catch {

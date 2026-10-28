@@ -6,7 +6,6 @@
   "main": "main.ts",
   "ui": "dist/ui.js",
   "cli": "cli.ts",
-  "cliAliases": ["mobile"],
   "activation": "startup",
   "contributes": {
     "method": [
@@ -263,7 +262,7 @@
       {
         "id": "revoke",
         "summary": "revoke a paired mobile device immediately",
-        "positionals": [{ "name": "deviceId", "description": "the paired device UUID", "required": true }],
+        "positionals": [{ "name": "device", "description": "the paired device UUID", "required": true }],
         "methods": ["quirky.mobile/revoke"]
       },
       {

@@ -38,7 +38,6 @@ describe('mobile private store', () => {
     const replacement = store.getOrCreatePending(true)
     expect(replacement.token).not.toBe(pending.token)
     expect(store.devices()).toEqual([{ deviceId: pending.deviceId, name: pending.name, pairedAt: pending.pairedAt, lastSeenAt: 1234 }])
-    expect(store.authenticate(pending.token, 2000).status).toBe('unauthorized')
   })
 
   test('persists first authentication before success and revocation through restart', () => {

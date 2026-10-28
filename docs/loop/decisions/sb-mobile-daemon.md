@@ -110,5 +110,71 @@
 - **Revisit if:** these platforms enter the build matrix.
 - **Source:** deferred: platform
 
+## D11: Reject contaminated attempts and restart from attributed snapshots
+- **Question:** how to handle unsandboxed worker edits outside their assigned worktrees and an omitted CLI helper path.
+- **Options:** silently absorb changes; stop, attribute, restore only owned mutations, and explicitly re-plan.
+- **Chose:** stopped desktop after relative edit headers targeted parent terminal.ts and SettingsDialog.tsx; transport also acknowledged its initial parent package edit. Surgical inverse edits restored exact original snapshots09A7/7B40/1B5F. Removed this run's generated Serena scaffolds. Fresh desktop and transport snapshots preceded absolute-path-only retries. Explicitly added mobile/cli.ts to transport scope because it is the existing custom-CLI convention and no other component owns it. No contaminated attempt was committed.
+- **Why:** tool cwd is independent from a worker's Bash cwd; prompt-only path boundaries failed. Final audit proved all three HEADs stayed5ca8c58, every final path belonged to the corrected component and main remained clean before integration.
+- **Evidence:** /tmp/quirky-mobile.gBnEmU/boundary-incident.json, desktop-restart-snapshot.json, transport-before-replan.json, transport-restart-snapshot.json and wave-final-audit.json.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** another unsandboxed tool writes outside its declared tree.
+- **Source:** assumed — autonomous
+
+## D12: Keep terminal input on Quirky JSON-RPC, not Orca's inbound binary opcodes
+- **Question:** whether the generic client-admission API needs a binary input dispatcher.
+- **Options:** invent a binary command dispatcher; preserve existing Quirky JSON-RPC input and sealed binary output.
+- **Chose:** authenticate binary frames cryptographically but close1003 for unsupported application input; terminal write/send remain JSON-RPC with immutable caller identity. Output streams stay sealed binary. Deny raw backend agent-status/send and agents/deliver to phones because they bypass terminal ownership.
+- **Why:** architecture locks a phone fork onto Quirky's API, not an Orca RPC/opcode compatibility layer. Existing local server ignores inbound binary. Trusted plugin backend sends remain unchanged; desktop/user input is lease-checked.
+- **Evidence:** docs/architecture.md:298-301; packages/daemon/src/server.ts:120-122; mobile authorization tests and live encrypted smoke.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** the phone fork has a measured need for a public binary command consumer.
+- **Source:** locked by docs/architecture.md
+
+## D13: Defer signed phone installation links rather than advertise an incompatible app
+- **Question:** which real installation URL/QR the desktop can present before the Quirky phone fork is distributed.
+- **Options:** use Orca store links; invent a Quirky download; show accurate unavailable distribution and queue the missing flow.
+- **Chose:** preserve platform/channel/install stages but state compatible builds are unavailable. Follow-up sb-mobile-install-links depends on this item and sb-mobile-app and must wire real signed iOS/Android artifacts and install QRs when distribution URLs exist.
+- **Why:** the existing Orca app speaks an incompatible RPC contract and cannot pair with this daemon. No compatible signed artifact or supported distribution URL is present in repo/context.
+- **Evidence:** docs/loop/queue.json sb-mobile-app; mobile.md desktop install flow; architecture.md Mobile decision.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a compatible companion build is published.
+- **Source:** deferred: companion installation
+
+## D14: Correct implementation and fixture failures without pinning incidental tests
+- **Question:** what the first actual acceptance runs proved and how to fix their roots.
+- **Options:** weaken gates; repair real defects and retain consumer-visible regressions only.
+- **Chose:** repaired missing key-encoding/equality definitions, invalid self CLI alias/camel-case positional declaration, outbound queue retransmission and duplicate-auth races; explicitly enforce1MiB because Bun's ws compatibility path accepted a larger payload despite maxPayload. Read PTY dimensions through metadata, not a redundant full-screen snapshot. Give the real two-window timer test its15s budget. Remove contradictory paired-token invalidation assertion and mock UI/manifest/default-list wiring tests; actual daemon/API/CLI tests and actual UI dogfood own those flows. Oversized reply test uses a real plugin method producer, not a multi-MiB fake-PTY single-write response.
+- **Why:** observed runs failed19 then4 then1 paths; source tracing identified causes. A protocol-size guard must be tested at its actual boundary, and a viewport read needs dimensions rather than screen-copy work.
+- **Evidence:** iteration3 artifacts33,36,43; capacity trace passed1/1 after explicit payload guard; corrected targeted lifecycle/storage/reply/lease run18pass0fail110assertions (artifact48).
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** platform ws behavior changes or a consumer regression reproduces.
+- **Source:** assumed — autonomous
+
+## D15: Publish non-secret view state and support declarative page input
+- **Question:** how agents observe and drive Mobile's stage, platform/channel and address without DOM-private state.
+- **Options:** private React-only state; use existing ui.view.open input and ui.state slot reports.
+- **Chose:** Mobile page input accepts stage/platform/channel/address; entering pair through that API also generates its offer. Page/settings report choices, status, errors and device labels, never QR URLs/tokens. Existing configure/pair/devices/revoke APIs back controls.
+- **Why:** locked roadmap makes layout readable and UI actions scriptable; this reuses existing slot and view APIs.
+- **Evidence:** docs/roadmap.md:31-38; MobilePage.tsx, MobileSettings.tsx and ui.tsx.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the public window-control API changes.
+- **Source:** locked by docs/roadmap.md
+
+## D16: Verify against a real isolated daemon and PTY before desktop dogfood
+- **Question:** what constitutes smoke proof beyond fake-PTY tests.
+- **Options:** test claims alone; actual CLI, encrypted independent peer and real shell/PTY.
+- **Chose:** live temporary-home daemon and actual PTY backend. Observed CLI state/devices, pinned-key v2 auth, denied daemon.stop, phone shell input/sealed binary output, rejected desktop typing, take-back, explicit reclaim, retained fit/restore and revoke/reconnect rejection. Corrected the throwaway probe's expectation: mobileState intentionally omits normal desktop-fit terminals, so take-back verification reads actual PTY metadata as well. Packaged build exits0,16 plugins.
+- **Why:** fake transports cannot prove actual PTY and encrypted stream behavior.
+- **Evidence:** /tmp/quirky-mobile.gBnEmU/live-smoke.ts; actual success output bg15; build output bg14; owned runtime MobileIteration3C.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** final review changes these exercised paths.
+- **Source:** assumed — autonomous
+
 ## Progress
 Claimed sb-mobile-daemon on lane 3. New build/sb-mobile-daemon branches from current integration. Read authoritative loop, full relevant feature doc, architecture and roadmap locks. Repository-seam scout running. Next: finish autonomous design/spec and shared contracts, commit, dispatch at most three isolated implementers.
