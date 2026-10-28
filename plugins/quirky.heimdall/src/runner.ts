@@ -33,6 +33,10 @@ import { actionFingerprint, gateAction } from './gate'
 import { FULL_RESYNC_INTERVAL_MS, pacingDelay } from './pacing'
 import { gateOwnerAction } from './owner/gate'
 import { isCoordinatorSeatLostError } from './worker-evidence'
+import { createWorkspaceLease, WORKSPACE_LEASE_RENEWAL_MS, WorkspaceLeaseLostError } from './lease'
+import type { WorkspaceKind, WorkspaceLeaseAuthority, WorkspaceLeaseClaim } from './lease'
+import { shadowJudgment } from './judgment'
+import { terminalizeRemovedEnrollment, workspaceKindForEnrollment } from './workspace-lifecycle'
 
 const MAX_ACTIONS_PER_TICK = 32
 const DEFAULT_SHUTDOWN_MS = 1_500
@@ -76,6 +80,9 @@ function unresolvedAttempt(attempt: Attempt): boolean {
 
 function hasUnresolvedAttempts(journal: JournalEntry[]): boolean {
   return latestAttempts(journal).some(unresolvedAttempt)
+}
+function hasRunningWorkers(journal: JournalEntry[]): boolean {
+  return latestAttempts(journal).some((attempt) => attempt.state === 'running' && typeof attempt.dispatchId === 'string')
 }
 function hasUnresolvedExternalAttempt(journal: JournalEntry[], ignoreAttemptId?: string): boolean {
   return latestAttempts(journal).some((attempt) =>
@@ -147,13 +154,19 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
   let recoveringThisTick = false
   let ownerWakePending = false
   const lastWorkerProofAtMs = new Map<string, number>()
+  const leaseHolderId = `process-${process.pid}-${randomUUID()}`
+  let leaseAuthority: WorkspaceLeaseAuthority | null = null
+  let leaseKind: WorkspaceKind | null = null
+  let leaseClaim: WorkspaceLeaseClaim | null = null
+  let leaseRenewTimer: Timer | null = null
+  let leaseFenced = false
 
   function changed(): void {
     try { options.onChanged?.(watcherId) } catch { /* Observers cannot change runner outcomes. */ }
   }
 
   function isCurrent(version: number): boolean {
-    return !stopped && !suspended && version === lifecycleVersion &&
+    return !stopped && !suspended && !leaseFenced && version === lifecycleVersion &&
       (tickControlGeneration === null || tickControlGeneration === controlGeneration)
   }
 
@@ -204,9 +217,112 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
     if (budgetTimer !== null) clearInterval(budgetTimer)
     budgetTimer = null
   }
+  function clearLeaseRenewal(): void {
+    if (leaseRenewTimer !== null) clearTimeout(leaseRenewTimer)
+    leaseRenewTimer = null
+  }
+
+  function fenceOnLeaseLoss(reason: 'lease-lost' | 'lease-unverifiable'): void {
+    if (leaseFenced || stopped) return
+    leaseFenced = true
+    lifecycleVersion += 1
+    activeAbort?.abort()
+    clearScheduledTimer()
+    clearBudgetTimer()
+    clearLeaseRenewal()
+    closeIntervalsForLifecycle('contact-lost', now())
+    updateStatus('unreachable', reason, reason === 'lease-lost'
+      ? 'This runner no longer holds the current workspace epoch.'
+      : 'The current workspace lease could not be verified.')
+  }
+
+  function armLeaseRenewal(): void {
+    clearLeaseRenewal()
+    if (!leaseClaim || !leaseAuthority || stopped || suspended || leaseFenced) return
+    leaseRenewTimer = setTimeout(() => {
+      leaseRenewTimer = null
+      if (!leaseClaim || !leaseAuthority || stopped || suspended || leaseFenced) return
+      if (!leaseAuthority.renew(leaseClaim)) {
+        fenceOnLeaseLoss('lease-lost')
+        return
+      }
+      armLeaseRenewal()
+    }, WORKSPACE_LEASE_RENEWAL_MS)
+    ;(leaseRenewTimer as unknown as { unref?: () => void }).unref?.()
+  }
+
+  function releaseWorkspaceLease(fenceOnFailure = true): boolean {
+    clearLeaseRenewal()
+    if (!leaseClaim || !leaseAuthority) return true
+    const claim = leaseClaim
+    const released = leaseAuthority.release(claim)
+    if (released) leaseClaim = null
+    else if (fenceOnFailure && !stopped && !leaseFenced) fenceOnLeaseLoss('lease-lost')
+    return released
+  }
+
+  async function acquireWorkspaceLease(current: Enrollment, version: number): Promise<'acquired' | 'held' | 'unverifiable' | 'fenced'> {
+    const workspaceKind = await workspaceKindForEnrollment(options.context, current)
+    if (!isCurrent(version)) return 'fenced'
+    if (!workspaceKind) {
+      if (leaseClaim) {
+        fenceOnLeaseLoss('lease-unverifiable')
+        return 'fenced'
+      }
+      return 'unverifiable'
+    }
+    if (leaseKind !== null && leaseKind !== workspaceKind) {
+      if (leaseClaim) fenceOnLeaseLoss('lease-unverifiable')
+      return leaseClaim ? 'fenced' : 'unverifiable'
+    }
+    if (!leaseAuthority) {
+      try {
+        leaseAuthority = createWorkspaceLease({
+          workspacePath: current.workspacePath,
+          workspaceKind,
+          holderId: leaseHolderId
+        })
+        leaseKind = workspaceKind
+      } catch {
+        return 'unverifiable'
+      }
+    }
+    const result = leaseAuthority.acquire()
+    if (result.kind === 'acquired') {
+      leaseClaim = { holderId: result.holderId, epoch: result.epoch }
+      armLeaseRenewal()
+      return 'acquired'
+    }
+    if (result.kind === 'held') {
+      if (leaseClaim) {
+        fenceOnLeaseLoss('lease-lost')
+        return 'fenced'
+      }
+      return 'held'
+    }
+    if (leaseClaim) {
+      fenceOnLeaseLoss('lease-unverifiable')
+      return 'fenced'
+    }
+    return 'unverifiable'
+  }
+
+  function assertWorkspaceLease(version: number): void {
+    if (!isCurrent(version)) throw new WorkspaceLeaseLostError()
+    if (!leaseClaim || !leaseAuthority) {
+      fenceOnLeaseLoss('lease-unverifiable')
+      throw new WorkspaceLeaseLostError()
+    }
+    try {
+      leaseAuthority.assertHeld(leaseClaim)
+    } catch {
+      fenceOnLeaseLoss('lease-lost')
+      throw new WorkspaceLeaseLostError()
+    }
+  }
 
   function schedule(delayMs: number): void {
-    if (stopped || suspended || store.readOnly || controlPendingCount > 0 || statusValue.state === 'terminal') return
+    if (stopped || suspended || leaseFenced || store.readOnly || controlPendingCount > 0 || statusValue.state === 'terminal') return
     clearScheduledTimer()
     const delay = Math.max(0, delayMs)
     const nextPulseAtMs = now() + delay
@@ -893,6 +1009,39 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
     trace.snapshot = summary as Json
     return snapshot
   }
+  async function observeShadowJudgment(
+    kind: WatcherKind,
+    current: Enrollment,
+    snapshot: Snapshot,
+    version: number
+  ): Promise<void> {
+    if (current.executionHostId !== 'local' || current.schedulerOwner !== 'daemon' || !isCurrent(version)) return
+    assertWorkspaceLease(version)
+    const observation = await shadowJudgment({
+      dataDir: options.context.dataDir,
+      state: snapshot.world,
+      questions: () => kind.judgmentQuestions
+        ? kind.judgmentQuestions(current, snapshot, store.journal(watcherId))
+        : []
+    })
+    if (!isCurrent(version) || observation.status === 'disabled' || observation.status === 'skipped') return
+    const identity = hash(JSON.stringify([snapshot.contentIdentity, observation]))
+    appendEntry({
+      kind: 'judgment-shadow',
+      class: 'observation',
+      origin: 'owner',
+      resolved: true,
+      eventId: `judgment-shadow:${watcherId}:${identity}`,
+      status: observation.status,
+      ...(observation.status === 'observed'
+        ? { provider: observation.provider, result: observation.result }
+        : {
+            ...(observation.provider ? { provider: observation.provider } : {}),
+            reason: observation.reason,
+            ...(observation.statusCode === undefined ? {} : { statusCode: observation.statusCode })
+          })
+    }, version, { idempotent: true })
+  }
 
   async function evaluateStop(
     kind: WatcherKind,
@@ -937,11 +1086,12 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
       attempt.requestId && attempt.workerRequest && !attempt.dispatchId && unresolvedAttempt(attempt)
     )
     for (const attempt of attempts) {
-      if (!isCurrent(version)) return false
+      if (!isCurrent(version) || controlPendingCount > 0) return false
       const latestEnrollment = store.get(watcherId)
       if (!latestEnrollment || latestEnrollment.terminalAtMs !== null) return false
       const latestAttempt = latestAttempts(store.journal(watcherId)).find((candidate) => candidate.attemptId === attempt.attemptId)
       if (!latestAttempt || !unresolvedAttempt(latestAttempt)) continue
+      assertWorkspaceLease(version)
       const result = await orchestration.recover(latestEnrollment, latestAttempt)
       if (!isCurrent(version) || result === null) continue
       if (result.kind === 'indeterminate' && result.reason === 'coordinator-seat-lost') {
@@ -1041,7 +1191,9 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
       }
       const settled = latestAttempts(store.journal(watcherId)).find((candidate) => candidate.attemptId === attempt.attemptId)
       const latestEnrollment = store.get(watcherId)
-      if (settled?.state === 'settled' && settled.effect === effect && latestEnrollment && isCurrent(version)) {
+      if (settled?.state === 'settled' && settled.effect === effect && latestEnrollment &&
+        isCurrent(version) && controlPendingCount === 0) {
+        assertWorkspaceLease(version)
         await orchestration.release(latestEnrollment, message.dispatchId)
       }
       return true
@@ -1134,18 +1286,19 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
   }
 
   async function drainMailbox(current: Enrollment, version: number): Promise<void> {
-    if (!isCurrent(version)) return
+    if (!isCurrent(version) || controlPendingCount > 0) return
     const messages = await orchestration.mailbox(current)
-    if (!isCurrent(version) || messages.length === 0) return
+    if (!isCurrent(version) || controlPendingCount > 0 || messages.length === 0) return
     const handledMessages: WorkerMessage[] = []
     for (const message of messages) {
-      if (!isCurrent(version)) return
+      if (!isCurrent(version) || controlPendingCount > 0) return
       const handled = await resolveWorkerMessage(message, version)
-      if (!isCurrent(version)) return
+      if (!isCurrent(version) || controlPendingCount > 0) return
       if (handled) handledMessages.push(message)
     }
     const latest = store.get(watcherId)
-    if (latest && isCurrent(version) && handledMessages.length > 0) {
+    if (latest && isCurrent(version) && controlPendingCount === 0 && handledMessages.length > 0) {
+      assertWorkspaceLease(version)
       await orchestration.acknowledge(latest, handledMessages)
     }
   }
@@ -1197,7 +1350,7 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
   }
 
   async function runTick(): Promise<void> {
-    if (stopped || suspended || controlPendingCount > 0 || store.readOnly) return
+    if (stopped || suspended || leaseFenced || controlPendingCount > 0 || store.readOnly) return
     clearScheduledTimer()
     const version = lifecycleVersion
     const controlVersion = controlGeneration
@@ -1217,10 +1370,12 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
     let stopPredicateFired = false
     let stopDeviation: Deviation | undefined
     let ownerProposal: KernelAction | undefined
+    let leaseRetryDelay: number | null = null
     let ownerCheckAtMs: number | undefined
     const ownerCanDispatch = () => isCurrent(version) && controlPendingCount === 0
     const reconcileOwner = async (candidate: Enrollment, observed: Snapshot, deviation?: Deviation) => {
-      if (!options.owner) return undefined
+      if (!options.owner || controlPendingCount > 0) return undefined
+      assertWorkspaceLease(version)
       const result = await options.owner.step(candidate, observed, deviation, ownerCanDispatch)
       if (result.nextCheckAtMs !== undefined) ownerCheckAtMs = Math.min(ownerCheckAtMs ?? Infinity, result.nextCheckAtMs)
       return result
@@ -1244,6 +1399,25 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
         trace.exitPath = 'kind-unavailable'
         updateStatus('unreachable', 'kind-unavailable', current.kind)
         tier = 'idle'
+        return
+      }
+      const leaseState = await acquireWorkspaceLease(current, version)
+      if (leaseState === 'fenced' || !isCurrent(version)) {
+        trace.exitPath = leaseFenced ? 'lease-lost' : 'suspended'
+        return
+      }
+      if (leaseState === 'held') {
+        closeIntervalsForLifecycle('contact-lost', now())
+        updateStatus('held', 'lease-held')
+        trace.exitPath = 'lease-held'
+        leaseRetryDelay = 15_000
+        return
+      }
+      if (leaseState === 'unverifiable') {
+        closeIntervalsForLifecycle('contact-lost', now())
+        updateStatus('unreachable', 'lease-unverifiable')
+        trace.exitPath = 'lease-unverifiable'
+        leaseRetryDelay = 30_000
         return
       }
 
@@ -1274,6 +1448,8 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
 
       current = store.get(watcherId)
       if (!current || !isCurrent(version)) { trace.exitPath = 'not-current'; return }
+      await observeShadowJudgment(kind, current, snapshot, version)
+      if (!isCurrent(version)) { trace.exitPath = 'suspended'; return }
       await drainMailbox(current, version)
       if (!isCurrent(version)) { trace.exitPath = 'suspended'; return }
       current = store.get(watcherId)
@@ -1282,12 +1458,16 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
       current = store.get(watcherId)
       if (!current) { trace.exitPath = 'not-current'; return }
 
-      if (kind.reconcile && await kind.reconcile(current, snapshot, store.journal(watcherId))) {
+      if (kind.reconcile && controlPendingCount === 0) {
+        assertWorkspaceLease(version)
+        const reconciled = await kind.reconcile(current, snapshot, store.journal(watcherId))
         if (!isCurrent(version)) { trace.exitPath = 'suspended'; return }
-        current = store.get(watcherId)
-        if (!current) { trace.exitPath = 'not-current'; return }
-        snapshot = await readSnapshot(kind, current, trace, version, true)
-        if (!snapshot || !isCurrent(version)) { trace.exitPath = 'suspended'; return }
+        if (reconciled) {
+          current = store.get(watcherId)
+          if (!current) { trace.exitPath = 'not-current'; return }
+          snapshot = await readSnapshot(kind, current, trace, version, true)
+          if (!snapshot || !isCurrent(version)) { trace.exitPath = 'suspended'; return }
+        }
       }
       reconcileParkedFromJournal(version)
       current = store.get(watcherId)
@@ -1330,8 +1510,10 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
           gateHeld = true
           updateStatus('held', 'stop-predicate-deferred', `${stopResult.state}: ${stopResult.reason}`)
         } else {
-          await options.owner?.onTerminal?.(watcherId)
-          if (!isCurrent(version)) { trace.exitPath = 'suspended'; return }
+          if (options.owner?.onTerminal && controlPendingCount === 0) {
+            assertWorkspaceLease(version)
+            await options.owner.onTerminal(watcherId)
+          }
           terminalSummary = saveTerminal(current, stopResult, trace, version)
           if (!terminalSummary) trace.exitPath = 'not-current'
           return
@@ -1593,6 +1775,7 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
             }
             let dispatchResult: DispatchResult
             try {
+              assertWorkspaceLease(version)
               dispatchResult = await orchestration.dispatch(latestEnrollment, prepared, request)
             } catch (error) {
               dispatchResult = {
@@ -1624,6 +1807,7 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
         let executionError: unknown
         let executeFailed = false
         try {
+          assertWorkspaceLease(version)
           result = ownerAction && options.owner
             ? await options.owner.execute(selectedAction, executeContext)
             : await kind.execute(selectedAction, executeContext)
@@ -1763,8 +1947,10 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
             updateStatus('held', 'stop-predicate-deferred', `${stopResult.state}: ${stopResult.reason}`)
             break
           }
-          await options.owner?.onTerminal?.(watcherId)
-          if (!isCurrent(version)) { trace.exitPath = 'suspended'; break }
+          if (options.owner?.onTerminal && controlPendingCount === 0) {
+            assertWorkspaceLease(version)
+            await options.owner.onTerminal(watcherId)
+          }
           terminalSummary = saveTerminal(current, stopResult, trace, version)
           break
         }
@@ -1824,8 +2010,8 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
         return
       }
       trace.durationMs = Math.max(0, now() - startedAtMs)
-      const currentNow = store.get(watcherId)
-      const journalNow = store.journal(watcherId)
+      let currentNow = store.get(watcherId)
+      let journalNow = store.journal(watcherId)
       trace.pinned = hasUnresolvedAttempts(journalNow)
       trace.budget = currentNow ? budgetWithPolicy(currentNow, journalNow, now()) : trace.budget
       if (!terminalSummary && !failed && snapshot && kind) {
@@ -1849,6 +2035,14 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
         scheduledDelay = scheduledDelay === null ? ownerDelay : Math.min(scheduledDelay, ownerDelay)
       }
       if (ownerWakePending && !terminalSummary) scheduledDelay = 0
+      if (terminalSummary) releaseWorkspaceLease(false)
+      else if (leaseClaim && !hasRunningWorkers(journalNow) && !releaseWorkspaceLease()) trace.exitPath = 'lease-lost'
+      if (leaseRetryDelay !== null) scheduledDelay = leaseRetryDelay
+      if (leaseFenced) scheduledDelay = null
+      currentNow = store.get(watcherId)
+      journalNow = store.journal(watcherId)
+      trace.pinned = hasUnresolvedAttempts(journalNow)
+      trace.budget = currentNow ? budgetWithPolicy(currentNow, journalNow, now()) : trace.budget
       ownerWakePending = false
       trace.pacing = { tier, delayMs: scheduledDelay }
       trace.runner = {
@@ -1879,6 +2073,7 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
         stopped = true
         clearScheduledTimer()
         clearBudgetTimer()
+        clearLeaseRenewal()
         statusValue = { ...statusValue, state: 'terminal', nextPulseAtMs: null }
       } else if (isCurrent(version) && canSchedule(currentNow, journalNow) && scheduledDelay !== null) {
         schedule(scheduledDelay)
@@ -1891,7 +2086,7 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
   }
 
   function pulse(): Promise<void> {
-    if (stopped || suspended || store.readOnly) return Promise.resolve()
+    if (stopped || suspended || leaseFenced || store.readOnly) return Promise.resolve()
     if (activePulse) {
       if (controlPendingCount === 0) pulseAgain = true
       return activePulse
@@ -1906,7 +2101,7 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
           pulseAgain = false
           await runTick()
           await Promise.resolve()
-          if (!pulseAgain || stopped || suspended) break
+          if (!pulseAgain || stopped || suspended || leaseFenced) break
         }
       } catch (error) {
         if (!stopped && !suspended) {
@@ -1940,6 +2135,7 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
     suspended = true
     lifecycleVersion += 1
     activeAbort?.abort()
+    clearLeaseRenewal()
     clearScheduledTimer()
     clearBudgetTimer()
     closeIntervalsForLifecycle('contact-lost', now())
@@ -1948,7 +2144,7 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
   }
 
   function resume(): void {
-    if (stopped || !suspended) return
+    if (stopped || !suspended || leaseFenced) return
     suspended = false
     lifecycleVersion += 1
     recoveryPending = true
@@ -1958,6 +2154,37 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
     schedule(0)
   }
 
+  async function terminateWorkspaceRemoved(): Promise<void> {
+    if (stopped || store.readOnly) return
+    clearScheduledTimer()
+    activeAbort?.abort()
+    await withControl(async () => {
+      const current = store.get(watcherId)
+      if (!current || current.terminalAtMs !== null) return
+      if (options.owner?.onTerminal) {
+        try { await options.owner.onTerminal(watcherId) } catch { /* Removal termination cannot be blocked by owner cleanup. */ }
+      }
+      closeIntervalsForLifecycle('contact-lost', now())
+      const summary = terminalizeRemovedEnrollment(store, current, now)
+      if (!summary) return
+      enrollment = store.get(watcherId)
+      stopped = true
+      suspended = false
+      lifecycleVersion += 1
+      clearScheduledTimer()
+      clearBudgetTimer()
+      clearLeaseRenewal()
+      releaseWorkspaceLease(false)
+      statusValue = {
+        ...statusValue,
+        state: 'terminal',
+        reason: 'workspace-removed',
+        detail: undefined,
+        nextPulseAtMs: null
+      }
+      changed()
+    }, true)
+  }
   async function shutdown(deadlineMs = DEFAULT_SHUTDOWN_MS): Promise<void> {
     if (stopped) return
     stopped = true
@@ -1965,6 +2192,8 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
     lifecycleVersion += 1
     activeAbort?.abort()
     clearScheduledTimer()
+    clearLeaseRenewal()
+    releaseWorkspaceLease(false)
     clearBudgetTimer()
     closeIntervalsForLifecycle('shutdown', now())
     statusValue = { ...statusValue, state: 'disabled', reason: 'shutdown', nextPulseAtMs: null }
@@ -1988,6 +2217,7 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
     schedule,
     suspend,
     resume,
+    terminateWorkspaceRemoved,
     shutdown,
     withControl
   }
