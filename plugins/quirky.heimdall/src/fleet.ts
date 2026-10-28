@@ -27,11 +27,10 @@ type Observation = {
 type NotificationEvent = {
   watcherId: string
   worktreeId?: string | null
-  kind: 'approval-requested' | 'terminal'
-  actionKind?: string
-  state?: string
-  reason?: string
-}
+} & (
+  | { kind: 'approval-requested'; actionKind: string }
+  | { kind: 'terminal'; state: string; reason: string }
+)
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -271,13 +270,13 @@ function transitionEvents(row: FleetRow, previous: Observation | undefined, summ
   }
   if (previous.status.state !== 'terminal' && row.status.state === 'terminal') {
     const state = nonEmptyString(summary?.state) ?? 'terminal'
-    const reason = nonEmptyString(summary?.reason) ?? nonEmptyString(row.status.reason) ?? nonEmptyString(row.enrollment.haltReason)
+    const reason = summary?.reason ?? row.status.reason ?? row.enrollment.haltReason ?? ''
     events.push({
       watcherId: row.target.watcherId,
       ...worktreePart(row.enrollment),
       kind: 'terminal',
       state,
-      ...(reason === null ? {} : { reason })
+      reason
     })
   }
   return events

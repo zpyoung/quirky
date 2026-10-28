@@ -358,6 +358,21 @@ describe('Heimdall fleet projection', () => {
     }])
   })
 
+  test('a terminal transition without an explanation still supplies the notification consumer contract', async () => {
+    const row = enrollment('watcher')
+    const initial = inspection(row, 'watching')
+    const h = harness([{ enrollment: row, inspection: initial }])
+    await h.service.publish()
+    h.inspections.set('watcher', {
+      ...initial, status: status('terminal'),
+      summary: { watcherId: 'watcher', kind: 'objective', state: 'complete', reason: '', atMs: 200, budget: initial.budget }
+    })
+    await h.service.publish()
+    expect(h.emitted.filter(event => event.event === 'notification').map(event => event.data)).toEqual([
+      { watcherId: 'watcher', kind: 'terminal', state: 'complete', reason: '' }
+    ])
+  })
+
   test('does not infer a transition across an inspection failure', async () => {
     const row = enrollment('watcher')
     const initial = inspection(row, 'watching')

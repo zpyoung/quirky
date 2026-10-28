@@ -7,14 +7,25 @@ interface ServiceWorkerView { dispatchId: string; sessionId: string | null; proc
 interface ServiceQuestionView { messageId: string; dispatchId: string; body: string; status: 'pending' | 'answered' | 'closed' }
 interface ServiceRunView { run: { id: string }; workers: ServiceWorkerView[]; questions: ServiceQuestionView[] }
 const runViewSchema: Schema = {
-  type: 'object', required: ['run', 'workers', 'questions'], properties: {
-    run: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } },
-    workers: { type: 'array', items: { type: 'object', required: ['dispatchId', 'sessionId', 'processIncarnation', 'state', 'lastContactAtMs'], properties: {
-      dispatchId: { type: 'string' }, state: { type: 'string', enum: ['live', 'exited', 'unverifiable'] }
+  type: 'object', additionalProperties: true, required: ['run', 'workers', 'questions'], properties: {
+    run: { type: 'object', additionalProperties: true, required: ['id'], properties: { id: { type: 'string' } } },
+    workers: { type: 'array', items: { type: 'object', additionalProperties: true, required: ['dispatchId', 'sessionId', 'processIncarnation', 'state', 'lastContactAtMs'], properties: {
+      dispatchId: { type: 'string' }, sessionId: {}, processIncarnation: {}, lastContactAtMs: {}, state: { type: 'string', enum: ['live', 'exited', 'unverifiable'] }
     } } },
-    questions: { type: 'array', items: { type: 'object', required: ['messageId', 'dispatchId', 'body', 'status'], properties: {
+    questions: { type: 'array', items: { type: 'object', additionalProperties: true, required: ['messageId', 'dispatchId', 'body', 'status'], properties: {
       messageId: { type: 'string' }, dispatchId: { type: 'string' }, body: { type: 'string' }, status: { type: 'string', enum: ['pending', 'answered', 'closed'] }
     } } }
+  }
+}
+const questionReplySchema: Schema = {
+  type: 'object', additionalProperties: true, required: ['kind', 'messageId', 'duplicate'],
+  properties: { kind: { type: 'string' }, messageId: { type: 'string' }, duplicate: { type: 'boolean' } }
+}
+const workerStopSchema: Schema = {
+  type: 'object', additionalProperties: true, required: ['dispatchId', 'state', 'processAction'],
+  properties: {
+    dispatchId: { type: 'string' }, state: { type: 'string' }, processAction: { type: 'string' },
+    alreadySettled: { type: 'boolean' }, lastError: { type: 'string' }, warning: { type: 'string' }
   }
 }
 function parseResponse<T>(schema: Schema, value: unknown): T {
@@ -114,12 +125,11 @@ export function createControlHost(context: PluginContext, kernel: OperatorKernel
         if (question.status !== 'pending') return { kind: 'refused', reason: 'question-already-answered', detail: 'The worker question is already answered or closed' }
         const worker = view?.workers.find(item => item.dispatchId === question.dispatchId)
         if (!worker || worker.state !== 'live' || !worker.sessionId || !worker.processIncarnation) return refused('The exact worker question owner is not live and verifiable')
-        const result = parseResponse<{ kind: string; duplicate?: boolean }>({
-          type: 'object', required: ['kind'], properties: { kind: { type: 'string' }, duplicate: { type: 'boolean' } }
-        }, await context.call('quirky.orchestration/serviceReply', {
-          runId: enrollment.orchestrationRunId, messageId, body, requestId: requestId(enrollment, 'answer-question', [messageId, body]), contractVersion: 1
-        }))
-        if (result.kind !== 'question_answer') return { kind: 'indeterminate', detail: 'Owner service did not confirm an answer to the exact question' }
+        const result = parseResponse<{ kind: string; messageId: string; duplicate: boolean }>(questionReplySchema,
+          await context.call('quirky.orchestration/serviceReply', {
+            runId: enrollment.orchestrationRunId, messageId, body, requestId: requestId(enrollment, 'answer-question', [messageId, body]), contractVersion: 1
+          }))
+        if (result.kind !== 'question_answer' || result.messageId !== messageId) return { kind: 'indeterminate', detail: 'Owner service did not confirm an answer to the exact question' }
         if (result.duplicate) return { kind: 'refused', reason: 'question-already-answered', detail: 'The worker question is already answered' }
         return applied()
       } catch (error) { return authorityFailure(error) }
@@ -138,15 +148,13 @@ export function createControlHost(context: PluginContext, kernel: OperatorKernel
         const view = await show(enrollment)
         const worker = view?.workers.find(item => item.dispatchId === identity.dispatchId)
         if (!worker || worker.sessionId !== identity.sessionId || worker.processIncarnation !== identity.processIncarnation || worker.state === 'unverifiable') return refused('The exact worker process is no longer verifiable')
-        const result = parseResponse<{ state: string; processAction: string; alreadySettled?: boolean; lastError?: string; warning?: string }>({
-          type: 'object', required: ['state', 'processAction'], properties: {
-            state: { type: 'string' }, processAction: { type: 'string' }, alreadySettled: { type: 'boolean' }, lastError: { type: 'string' }, warning: { type: 'string' }
-          }
-        }, await context.call('quirky.orchestration/serviceWorkerStop', {
-          runId: enrollment.orchestrationRunId, dispatchId: identity.dispatchId,
-          expectedIdentity: { sessionId: identity.sessionId, processIncarnation: identity.processIncarnation },
-          requestId: requestId(enrollment, 'stop-worker', identity), contractVersion: 1
-        }))
+        const result = parseResponse<{ dispatchId: string; state: string; processAction: string; alreadySettled?: boolean; lastError?: string; warning?: string }>(workerStopSchema,
+          await context.call('quirky.orchestration/serviceWorkerStop', {
+            runId: enrollment.orchestrationRunId, dispatchId: identity.dispatchId,
+            expectedIdentity: { sessionId: identity.sessionId, processIncarnation: identity.processIncarnation },
+            requestId: requestId(enrollment, 'stop-worker', identity), contractVersion: 1
+          }))
+        if (result.dispatchId !== identity.dispatchId) return { kind: 'indeterminate', detail: 'Owner service did not confirm the exact worker stop' }
         if (result.processAction === 'unknown' || result.state === 'stop_unknown') return { kind: 'indeterminate', detail: result.lastError ?? result.warning ?? 'Worker stop outcome is unknown' }
         if (result.processAction === 'closed_agent_terminal' || (result.alreadySettled && ['stopped', 'succeeded', 'failed'].includes(result.state))) return applied()
         return refused(result.warning ?? result.lastError ?? 'The worker owner refused to stop this process')
