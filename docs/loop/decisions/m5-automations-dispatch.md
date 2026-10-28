@@ -110,5 +110,27 @@
 - **Revisit if:** platform-specific support is requested
 - **Source:** deferred: platform
 
+## D11: Checks owns cancellation after its caller context is revoked
+- **Question:** Can automation dispose cancel an active precheck through a revoked context?
+- **Options:** rely on best-effort caller cleanup; let the checks service cancel checks whose registered creator becomes inactive
+- **Chose:** record the registered creating-plugin identity, reconcile on plugin.changed, and abort only that owner's checks; direct client checks remain independent
+- **Why:** The kernel revokes context.call before deactivate. A real-process API regression left the owned check alive until its three-second observation failed. After service-owned cancellation the same regression passes and the unrelated client check remains alive. Check-ID reservation stays after the asynchronous owner lookup to retain uniqueness.
+- **Evidence:** plugins/quirky.checks/test/owner.test.ts; initial0pass1fail waitFor timeout, then1pass0fail; quirky.ask/main.ts existing ownership precedent
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** kernel introduces an explicit caller-lifetime cancellation signal
+- **Source:** assumed — autonomous
+
+## D12: Coordinate UI through additive public contracts, not shared edits
+- **Question:** Lane6 started the automation UI concurrently from the landed core
+- **Options:** duplicate runtime policy in UI; share committed types and public target/dispatch methods
+- **Chose:** send contract commit cb9e08b01a41d5e5d0bbe5a14c1804e944aa6786 and exact API/owner shapes; lane6 merged it into parent and three UI component trees. Preserve additive UI registration/main and manifest contributions on integration.
+- **Why:** Lane6 owns UI/editor/list/details/runs/OpenClaw and accepts structured-only execution, raw-argument refusal, owner snapshots and setup skip/no auto-consent. This lane owns runtime service/types/store policy. Executable integration hash will be sent after the source barrier.
+- **Evidence:** lane6 interjections; accepted terminal-send request6ae237bf-0445-4de5-9ed0-44a6840847be; lane6 contract331fc251
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** either API contract changes
+- **Source:** assumed — autonomous
+
 ## Progress
 Design and self-reviewed combined spec written. Shared dispatch-contract.ts committed before implementers. Next: implement three disjoint components, own-file behavioral tests, actual isolated daemon/CLI/native-process smoke, one affected gate and review, catch-up and queue land. Only this item this iteration. No human asks. Follow-up for the two explicitly constrained flows must be added once immediately before land.
