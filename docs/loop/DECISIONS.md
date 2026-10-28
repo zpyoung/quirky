@@ -72,6 +72,7 @@ files, not this one.
 | hard | high | [m4-hosting-api-github D9](decisions/m4-hosting-api-github.md) | Share one head-guarded destructive merge seam before the sitter exists | locked by docs/roadmap.md |
 | hard | high | [m0-daemon-api D7](decisions/m0-daemon-api.md) | The four kinds are `method`, `event`, `job` and `launch-hook` | assumed — autonomous |
 | hard | high | [m0-daemon-api D13](decisions/m0-daemon-api.md) | Choose declared contributions with provided implementations | supersedes nothing; extends m0-registry D23 |
+| hard (architecture) | high | [sa-browser-native-identity D4](decisions/sa-browser-native-identity.md) | Preserve the native engine and truthful capability state | locked by docs/architecture.md |
 | hard | high | [m5-automations-ui D4](decisions/m5-automations-ui.md) | Honor structured sessions and existing scheduling fixes | locked by docs/architecture.md |
 | hard for deployed migration order | high | [m5-automations-ui D14](decisions/m5-automations-ui.md) | Preserve canonical pointer migration9 and append background as migration10 | locked by docs/loop/decisions/m6-orchestration-core.md |
 | hard for migration order; medium otherwise | high for contract reconciliation | [m5-automations-ui D22](decisions/m5-automations-ui.md) | Reconcile final dispatch landing without weakening canonical session contracts | locked by docs/loop/decisions/m5-automations-dispatch.md D31-D34 |
@@ -502,6 +503,8 @@ files, not this one.
 | medium | high | [m7-sweep-editor-source-control D14](decisions/m7-sweep-editor-source-control.md) | Keep cross-owner settlement limits explicit | assumed — autonomous |
 | medium | high | [m7-sweep-editor-source-control D15](decisions/m7-sweep-editor-source-control.md) | Preserve the single catch-up's routing and exact-session contracts | locked by docs/loop/decisions/m5-automations-ui.md, docs/loop/decisions/m6-orchestration-ui.md and docs/loop/decisions/sa-browser-profiles-settings.md |
 | medium | high | [m7-sweep-editor-source-control D18](decisions/m7-sweep-editor-source-control.md) | Preserve the five repair-merge logs and Git recipe source precedence | locked by docs/loop/decisions/m5-loops-ui.md, docs/loop/decisions/m6-heimdall-control.md, docs/loop/decisions/m6-heimdall-owner.md, docs/loop/decisions/m7-sweep-hosting.md and docs/loop/decisions/m7-sweep-terminal.md |
+| medium (acceptance scope) | high | [sa-browser-native-identity D2](decisions/sa-browser-native-identity.md) | Own only the deferred human Native identity flow | locked by docs/loop/decisions/sa-browser-profiles-settings.md |
+| medium (observable lifecycle) | high | [sa-browser-native-identity D3](decisions/sa-browser-native-identity.md) | Reuse the setting and preserve its restart boundary | locked by docs/loop/decisions/sa-browser-profiles-settings.md |
 | medium | high | [m5-automations-ui D1](decisions/m5-automations-ui.md) | Build the complete union of the three assigned UI and external-job slices | locked by docs/loop/LOOP.md |
 | medium | high | [m5-automations-ui D2](decisions/m5-automations-ui.md) | Use the existing plugin and public daemon-owned UI conventions | locked by docs/roadmap.md |
 | medium | high | [m5-automations-ui D7](decisions/m5-automations-ui.md) | Consume dispatch authority rather than inventing remote ownership | locked by docs/loop/decisions/m5-automations-dispatch.md |
@@ -1831,6 +1834,10 @@ files, not this one.
 | easy | high | [m7-sweep-editor-source-control D13](decisions/m7-sweep-editor-source-control.md) | Preserve truthful review and user-flow evidence under the aged-item rule | locked by docs/loop/LOOP.md |
 | easy | high | [m7-sweep-editor-source-control D16](decisions/m7-sweep-editor-source-control.md) | Observe the published and visible primary state in one polling boundary | assumed — autonomous |
 | easy | high for observed checks; medium for load attribution | [m7-sweep-editor-source-control D17](decisions/m7-sweep-editor-source-control.md) | Repair the landing gate through the prescribed merge path, not protected-script edits | assumed — autonomous |
+| easy (workflow) | high | [sa-browser-native-identity D1](decisions/sa-browser-native-identity.md) | Apply unattended build-first feasibility rules | locked by docs/loop/LOOP.md |
+| easy when supported api exists | high for this installed/pinned public sdk; no claim about all versions or private native capabilities | [sa-browser-native-identity D5](decisions/sa-browser-native-identity.md) | The installed public SDK still lacks the prerequisite | assumed — autonomous |
+| easy (reopen this item when supported api lands) | high | [sa-browser-native-identity D6](decisions/sa-browser-native-identity.md) | Block the sole flow instead of landing a scaffold or duplicate follow-up | assumed — autonomous |
+| easy (platform evidence can be added) | high for limits, no cross-platform behavior claim | [sa-browser-native-identity D7](decisions/sa-browser-native-identity.md) | Defer non-macOS native work without inferring parity | deferred: platform |
 | easy | high | [m5-automations-ui D3](decisions/m5-automations-ui.md) | Prefer feature-document layout, explicit status, and capability-aware controls | locked by automations.md |
 | easy | high | [m5-automations-ui D5](decisions/m5-automations-ui.md) | Use night-mode workflow and verified cross-family review fallback | assumed — autonomous |
 | easy | high | [m5-automations-ui D6](decisions/m5-automations-ui.md) | Validate macOS only and preserve external-manager safety on other platforms | deferred: platform |

@@ -1172,8 +1172,7 @@
       "deps": [
         "sa-browser-profiles-settings"
       ],
-      "status": "in-progress",
-      "lane": 1
+      "status": "blocked"
     },
     {
       "id": "sa-browser-localhost-label-routing",
