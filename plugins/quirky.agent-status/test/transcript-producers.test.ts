@@ -164,7 +164,7 @@ describe('captured provider status producers', () => {
     expect(rig.events.some((event) => JSON.stringify(event).includes('Stale question?'))).toBe(false)
     const afterReplacement = await rig.row(codexSession.id) as StoredView
     expect(afterReplacement.prompt).toBe('Next turn')
-    expect(afterReplacement.question).not.toContain('Stale question?')
+    expect(afterReplacement.question).toBeUndefined()
     expect(afterReplacement.detail).not.toContain('Stale question?')
   }, 20_000)
   test('private OSC status facts are fenced to the provider turn as well as the session', async () => {
@@ -219,7 +219,7 @@ describe('captured provider status producers', () => {
     await rig.settle()
     const row = await rig.row(codexSession.id) as StoredView
     expect(row.prompt).toBe('Second turn')
-    expect(row.question).not.toContain('stale-turn')
+    expect(row.question).toBeUndefined()
     expect(row.detail).not.toContain('Stale turn question?')
   }, 20_000)
   test('Codex and Muse child hooks update the lead fold without completing on silence', async () => {
