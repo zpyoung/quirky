@@ -132,5 +132,16 @@
 - **Source:** assumed — autonomous
 
 
+## D13: Recover misplaced worker edits before resuming the same component
+- **Question:** integration worker used relative edit headers for protocol/ui.ts and daemon/ui-kinds.ts; target files remained unchanged while parent files changed.
+- **Options:** accept cross-worktree writes; discard unknown changes; attribute exact two-file delta and relocate it.
+- **Chose:** worker stopped; parent read both source/target ranges and diff. Only intended plus-menu additions present. Moved exact protocol additions and corrected validator into target; restored parent hashes2840/71AE exactly. Reauthorized same component with absolute/tmp headers and revised baseline. Added layout/store.ts to its scope explicitly for durable closeContext validation.
+- **Why:** unsandboxed tools do not enforce component boundaries. Original validator edit omitted the required initial if branch; correction in target preserves missing-menu validation. No source scope violation is committed and no user's source changes are discarded.
+- **Evidence:** LoopUiIntegration STOP result; parent exact git diff; edit response target hashes1A2E/053A and parent original hashes2840/71AE; reviewer P2 trust contract.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** another misplaced edit occurs; stop that writer before checks.
+- **Source:** assumed — autonomous
+
 ## Progress
-Claimed m5-loops-ui, merged committed core and presets dependencies. Structured conflict resolution preserved both existing orchestration authority/pointer/close and incoming loops guards/paging/owner cleanup; unverified merge source, not a completion claim. Logic/tech/shared component contracts ready; spec reviewer active. Next: finish spec review, commit contracts/specs, dispatch three isolated implementers, integrate+verify, merge dependency tips/readiness, catch up roadmap/read decisions, final review/fix, UI proof and authoritative land. Do not end while workers/jobs run; no second item.
+Reviewed specs/contracts committed9c99a8f7; P2 close-context blocker resolved, prescribed Codex spec closure remaining blockers[] (reduced independence, not runtime proof). Three disjoint implementers active: LoopSetup in/tmp/quirky-loops-ui-setup, LoopRail in/tmp/quirky-loops-ui-rail, LoopUiIntegration in/tmp/quirky-loops-ui-integration, each baseline9c99a8f7 and no commits. Parent baseline launched daemon proved missing loop UI command (LOOP_UI_MISSING_SURFACE_REPRODUCED) and cleaned (LOOP_UI_BEFORE_CLEANUP_OK), exit0. Web dogfood doctor ready. Scratch/tmp/quirky-loops-ui.Xnoash has journal/wave/goals/before.ts/serve.ts; serve is prepared but not run. Dependency-ready command running; no ready claim yet. Next: wait for every writer, HEAD/scope audit and integrate, own runtime/API/visual proof and required gates, dependency latest tips/readiness, one roadmap catchup/read decisions, final cross-family review+blocking fixes and authoritative land. Do not end while workers/jobs run; no second item.
