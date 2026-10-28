@@ -916,6 +916,64 @@ test('SC-4: a section that leaves is cleaned up and dropped, its plugin deactiva
   expect(() => record.contexts[0].call('repo.list')).toThrow('acme.notes is not active')
 })
 
+test('SC-4: a departed section releases its mount before publishing the replacement model', async () => {
+  const t = setup(makeModel({ sidebarSections: [section(NOTES, 'list')] }))
+  let cleanupModel: HostState['model']
+  const { module } = recording([LIST], () => () => () => {
+    cleanupModel = state(t).model
+  })
+  t.useModule(NOTES, module)
+  await t.host.refresh()
+  t.host.mount(LIST, element())
+  await settled(t, LIST)
+  const previousModel = state(t).model
+
+  t.setModel(makeModel())
+  await t.host.refresh()
+
+  expect(cleanupModel).toBe(previousModel)
+  expect(state(t).model).not.toBe(previousModel)
+})
+
+test('SC-4: a deferred mount disposal cancels late mounts and cleans up after the plugin root', async () => {
+  const t = setup(makeModel({ sidebarSections: [section(NOTES, 'list')] }))
+  const release = gate()
+  const order: string[] = []
+  let mounts = 0
+  const module = recording([LIST], () => () => {
+    mounts++
+    return () => order.push('root')
+  }).module
+  t.useModule(NOTES, async () => {
+    await release.opened
+    return module
+  })
+  await t.host.refresh()
+
+  const unmountWhileLoading = t.host.mount(LIST, element(), undefined, {
+    deferCleanup: true,
+    afterCleanup: () => order.push('element')
+  })
+  await tick()
+  unmountWhileLoading()
+  release.open()
+  await until(() => state(t).plugins[NOTES]?.state === 'active')
+  await until(() => state(t).slots[LIST] === undefined)
+  expect(mounts).toBe(0)
+  expect(order).toEqual(['element'])
+
+  const unmount = t.host.mount(LIST, element(), undefined, {
+    deferCleanup: true,
+    afterCleanup: () => order.push('element')
+  })
+  await settled(t, LIST)
+  expect(mounts).toBe(1)
+  unmount()
+  expect(order).toEqual(['element'])
+  await until(() => state(t).slots[LIST] === undefined)
+  expect(order).toEqual(['element', 'root', 'element'])
+})
+
 test('SC-4: re-enabling mounts the section again without importing the module again', async () => {
   const t = setup(makeModel({ sidebarSections: [section(NOTES, 'list')] }))
   const { module, record } = recording([LIST])
