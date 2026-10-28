@@ -64,14 +64,20 @@ The existing `sidebar-section:quirky.worktree/worktrees` remains the only mount.
 
 DO NOT CHANGE: daemon/API/CLI files, feature algorithms/hooks/state authorities, plugin manifest contribution IDs, real user homes or protected loop scripts. Preserve stable data-worktree-id/instance identity, controller/report behavior and every existing destructive/trust callback. No fake agent data or hardcoded working state.
 
+2026-10-28 shared presentation extensions, committed before use:
+
+- `MenuItem` adds optional `submenu`, `title`, `current` and optional `onAction` for submenu/disabled entries; `MenuProps` adds optional pointer `position: { x, y }` and `onClose`. Context mode opens immediately without a trigger, clamps to viewport, preserves keyboard/submenu/disabled semantics and calls `onClose` once on dismissal. Ordinary trigger menus keep their contract. Worktree ContextMenu becomes data mapping only.
+- `ListRow` adds `mainTitle`, `mainLabel`, optional `progress` and `compact`; its existing single shared dot renders progress and compact rows retain their activity description. `StatusDot` accepts finite percentage progress with 0–100 clamping.
+- `SectionHeader` accepts standard header attributes plus `titleTooltip`, preserving context/drop targets and true hidden state.
+- `Dialog` gains `size: default|wide`; shared top-dialog focus ownership replaces the local wrapper. Remove the obsolete plugin Dialog implementation and import the shared component directly.
+- Parent removes obsolete worktree-only rules in `packages/ui/src/styles.css`; semantic/data hooks may remain but no longer depend on plugin-specific CSS.
+
 ### Ownership and wave
 
 One wave, three independent components, no semantic dependency or scope overlap. OpenAI task implementers; parent owns shared stylesheet/layout additions and integration. No cross-family backend is probed because build-first prohibits review rounds. Parent leaves inherited `.serena/` untouched.
 
 - Tree slice: `Tree.tsx`, `Menu.tsx`, `StatusDot.tsx`, `LoopGlyph.tsx`, `WorktreeBoard.tsx`, `OrchestrationRows.tsx` under `plugins/quirky.worktree/src/`.
 - Dialog slice: all existing `*Dialog.tsx`, `GroupDialogs.tsx`, and `Dialog.tsx` under that same directory. No files in the tree or panel slices.
-
-2026-10-28 shared Menu extension: the existing implementation lacks context positioning and submenus needed by shipped worktree actions. `MenuItem` adds optional `submenu`, `title`, `current` and optional `onAction` for submenu/disabled entries; `MenuProps` adds optional pointer `position: { x, y }` and `onClose`. Context mode opens immediately without a trigger, clamps to viewport, preserves keyboard/submenu/disabled semantics and calls `onClose` on dismissal. Ordinary trigger menus keep their contract. The parent owns this shared implementation; worktree ContextMenu becomes data mapping only.
 - Panel slice: `WorktreesSection.tsx`, `StockOptions.tsx`, `ActivityFilters.tsx`, `ExternalInbox.tsx`, `Notices.tsx`, `ledger.tsx`, `ui.tsx` under that directory.
 - Parent: `packages/ui/src/design-system/components.css`, any necessary shared presentation contracts/implementation, lint plugin registry, README/decision/spec documentation and regression coverage only where a consumer-visible edge changes.
 

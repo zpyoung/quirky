@@ -49,16 +49,23 @@ const focusableSelector = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(',')
 
-export function Dialog({ open, title, children, actions, onClose, variant = 'dialog', closeOnBackdrop = true }: DialogProps) {
+/** Only the top open dialog owns focus; project/trust dialogs may be siblings. */
+const dialogStack: HTMLElement[] = []
+
+export function Dialog({ open, title, children, actions, onClose, variant = 'dialog', size = 'default', closeOnBackdrop = true }: DialogProps) {
   const dialogRef = useRef<HTMLElement | null>(null)
   const titleId = useId()
 
   useEffect(() => {
     if (!open) return
+    const element = dialogRef.current
+    if (!element) return
+    dialogStack.push(element)
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
     const firstFocusable = dialogRef.current?.querySelector<HTMLElement>(focusableSelector)
     ;(firstFocusable ?? dialogRef.current)?.focus()
     const keepFocusInside = (event: FocusEvent) => {
+      if (dialogStack[dialogStack.length - 1] !== element) return
       if (!(event.target instanceof Node)) return
       const dialog = dialogRef.current
       if (dialog?.contains(event.target)) return
@@ -67,13 +74,20 @@ export function Dialog({ open, title, children, actions, onClose, variant = 'dia
     document.addEventListener('focusin', keepFocusInside)
     return () => {
       document.removeEventListener('focusin', keepFocusInside)
+      const index = dialogStack.indexOf(element)
+      if (index >= 0) dialogStack.splice(index, 1)
       if (opener?.isConnected) opener.focus()
+      const parent = dialogStack[dialogStack.length - 1]
+      if (parent && !parent.contains(document.activeElement)) {
+        ;(parent.querySelector<HTMLElement>(focusableSelector) ?? parent).focus()
+      }
     }
   }, [open])
 
   if (!open) return null
 
   const onDialogKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
+    if (dialogStack[dialogStack.length - 1] !== dialogRef.current) return
     if (event.key === 'Escape' && !event.defaultPrevented) {
       event.preventDefault()
       onClose()
@@ -102,12 +116,12 @@ export function Dialog({ open, title, children, actions, onClose, variant = 'dia
     <div
       className={classNames('ui-dialog-backdrop', variant === 'sheet' && 'ui-dialog-backdrop--sheet')}
       onClick={(event) => {
-        if (closeOnBackdrop && event.target === event.currentTarget) onClose()
+        if (closeOnBackdrop && event.target === event.currentTarget && dialogStack[dialogStack.length - 1] === dialogRef.current) onClose()
       }}
     >
       <section
         ref={dialogRef}
-        className={classNames('ui-dialog', variant === 'sheet' && 'ui-dialog--sheet')}
+        className={classNames('ui-dialog', variant === 'sheet' && 'ui-dialog--sheet', size === 'wide' && 'ui-dialog--wide')}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}

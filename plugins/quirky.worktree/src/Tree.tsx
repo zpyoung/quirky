@@ -214,6 +214,15 @@ function WorktreeCard({
   const linkedPR = worktree.linkedPR
   const linkedIssue = worktree.linkedIssue
   const statusLabel = statusDefinitions.find((status) => status.id === worktree.status)?.label ?? worktree.status
+  const description = [
+    options.showProperties.includes('activity') ? activity : null,
+    worktree.status !== 'in-progress' ? statusLabel : null,
+    sleeping && glyph ? 'Sleeping' : null,
+    archivedAt !== null && glyph ? 'Archived' : null,
+    repoName,
+    options.showBranch && options.showProperties.includes('branch') ? worktree.branch : null,
+    options.showComment && options.showProperties.includes('notes') ? worktree.comment : null,
+  ].filter(Boolean).join(' · ')
   const className = [
     'worktree',
     'ui-tree-item',
@@ -278,7 +287,7 @@ function WorktreeCard({
             {heimdall && <HeimdallGlyph status={heimdall} now={now} />}
           </span>
         }
-        description={<span className="ui-text-ellipsis" title={activity}>{activity}</span>}
+        description={description ? <span className="ui-text-ellipsis" title={description}>{description}</span> : undefined}
         status={rowStatus}
         progress={progress}
         selected={selected}
@@ -289,18 +298,22 @@ function WorktreeCard({
         trailing={
           <span className="ui-cluster">
             {needsYou && <Badge tone="needs-you" label={attentionLabel}>{pendingAskCount}</Badge>}
-            {repoName && <Badge>{repoName}</Badge>}
             {worktree.isMain && <Badge tone="accent">Primary</Badge>}
-            {worktree.status !== 'in-progress' && <Badge>{statusLabel}</Badge>}
-            {sleeping && <Badge>Sleeping</Badge>}
-            {archivedAt !== null && <Badge>Archived</Badge>}
-            {worktree.removing && <Badge tone="needs-you">Deleting…</Badge>}
-            {options.showBranch && options.showProperties.includes('branch') && worktree.branch && (
-              <span className="ui-text-mono ui-text-muted" title={worktree.branch}>{worktree.branch}</span>
-            )}
-            {options.showComment && options.showProperties.includes('notes') && worktree.comment && (
-              <span className="ui-text-muted ui-text-ellipsis" title={worktree.comment}>{worktree.comment}</span>
-            )}
+            <IconButton
+              className="worktree-menu"
+              label={`Actions for ${worktree.name}`}
+              aria-haspopup="menu"
+              onClick={(event) => {
+                const box = event.currentTarget.getBoundingClientRect()
+                onMenu(worktree, box.left, box.bottom)
+              }}
+            >
+              ⋯
+            </IconButton>
+          </span>
+        }
+      />
+      <div className="ui-cluster ui-row-details">
             {options.showProperties.includes('pullRequest') && linkedPR && (
               <a
                 href={linkedPR.url}
@@ -338,20 +351,7 @@ function WorktreeCard({
                 {plural(childCount)}
               </Button>
             )}
-            <IconButton
-              className="worktree-menu"
-              label={`Actions for ${worktree.name}`}
-              aria-haspopup="menu"
-              onClick={(event) => {
-                const box = event.currentTarget.getBoundingClientRect()
-                onMenu(worktree, box.left, box.bottom)
-              }}
-            >
-              ⋯
-            </IconButton>
-          </span>
-        }
-      />
+      </div>
       {options.showProperties.includes('automation') && provenance && automationExpanded && (
         <section className="automation-detail ui-stack ui-panel-content" role="group" aria-label="Automation details">
           <SectionHeader title="Automation" />

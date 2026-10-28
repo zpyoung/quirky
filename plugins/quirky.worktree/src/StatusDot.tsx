@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Badge, StatusDot as UiStatusDot, type UiStatus } from '@quirky/ui'
+import { Badge, type UiStatus } from '@quirky/ui'
 import type { AgentDisplayState } from '@quirky/protocol'
-import type { DisplayStatus, WorktreeGlyph } from './status'
+import type { DisplayStatus } from './status'
 
 const TICK_MS = 60_000
 
@@ -39,22 +39,6 @@ export function semanticStatus(value: AgentDisplayState | DisplayStatus): UiStat
   }
 }
 
-/** A worktree's status dot uses shared semantic colors, with the agent's real progress when present. */
-export function StatusDot({ glyph }: { glyph: WorktreeGlyph | null }) {
-  if (!glyph) return <UiStatusDot status="idle" label="Idle" />
-  if (glyph.kind === 'agent') {
-    return (
-      <span title={glyph.label}>
-        <UiStatusDot
-          status={semanticStatus(glyph.display)}
-          label={glyph.label}
-          progress={glyph.percent ?? undefined}
-        />
-      </span>
-    )
-  }
-  return <UiStatusDot status={semanticStatus(glyph.status)} label={glyph.status} />
-}
 
 /** A worktree's glyph for unread activity, styled as a shared badge. */
 export function UnreadBell() {

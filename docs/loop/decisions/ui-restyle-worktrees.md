@@ -77,5 +77,38 @@
 - **Revisit if:** supported platform policy expands
 - **Source:** deferred: platform
 
+## D8: Extend the actual shared components and remove obsolete local implementations
+- **Question:** shared contracts cannot initially express shipped context menus, accessible row actions, compact/progress rows and wide stacked dialogs
+- **Options:** local CSS/components; remove feature details; additive shared presentation contracts
+- **Chose:** committed contracts before use: Menu context position/submenus/current/title, ListRow accessible label/path/progress/compact, StatusDot progress, SectionHeader standard attributes/tooltips, Dialog wide sizing. Parent implements shared layout utilities and top-dialog focus. Delete the plugin Dialog implementation, unused local StatusDot adapter, and obsolete worktree-specific central CSS.
+- **Why:** preserves real consumer behavior without a second UI convention or compatibility shim. Canonical lint is unchanged; both named plugins opt in.
+- **Evidence:** shared contract commits f3c0a3cc/adc4c111/015eb0c5/32b9fe40/cfd5d952/15937556; item logic technical contracts; packages/ui/src/design-system and plugins/quirky.worktree/src
+- **Reversibility:** medium (additive public component props)
+- **Confidence:** high
+- **Revisit if:** another area needs incompatible interaction semantics
+- **Source:** assumed — autonomous
+
+## D9: Repair observed layout and focus failures at their owners
+- **Question:** minimum live smoke exposed long-branch row starvation, growing context menus and disabled-opener focus restoration
+- **Options:** hide overflowing controls; shorten fixture strings; fix row composition and shared interaction geometry
+- **Chose:** optional metadata joins the ellipsized secondary line with full tooltip; trailing chrome is bounded to attention/primary/menu, with extra actionable details below the row. Shared Menu observes its rendered size and window resize before clamping. Shared Dialog restores focus into the remaining parent when its opener is disabled.
+- **Why:** a real long branch made a264px row scroll456px and its main action0px wide; after repair row/scroll are264px and main218.65625px. Expanded submenu bottom724.78125 exceeded600; atomic post-fix page read+screenshot shows bottom600. First trust cancellation kept the composer but lost focus to body; final real headless renderer proves2dialogs/topfocus →1dialog/parentfocus →0dialogs through Escape, with no cancelled worktree created.
+- **Evidence:** actual isolated daemon/Git/Chromium smoke; lane evidence runtime.json, dark.png, light.png and stacked-trust-light.png; packages/ui/src/design-system/navigation.tsx/overlays.tsx; Tree.tsx
+- **Reversibility:** easy
+- **Confidence:** high for exercised paths
+- **Revisit if:** end-phase real layout acceptance finds another unbounded field or nested focus transition
+- **Source:** assumed — autonomous
+
+## D10: Report exact build-first verification, not screenshot approval
+- **Question:** which evidence supports this presentation cutover under the explicit build-first override?
+- **Options:** claim all acceptance/model score; run prohibited suites/review campaigns; retain focused compiler/runtime evidence and limits
+- **Chose:** initial full UIlint/root/mobile/prepared-desktop typecheck and actual UI build passed42.39s/11host-vendor files/25plugin modules. Subsequent UI builds include row/menu/focus fixes. Actual public API+browser paths cover default placement, real name/activity and pending count, status submenu mutation, metadata Save with branch/path retained, repo Cancel unchanged, UI Name create, primary deletion disabled, both themes, Ask removal without selection change and nested trust cancellation. Authored shared interaction regressions and migrate existing consumer tests; do not run suites or model visual scoring.
+- **Why:** evidence must not turn capture or a compiler pass into visual approval. Initial lint rejected transparent border; remove the unnecessary border, not its rule. Compiler identified a dropped Notices actions import; restore it. No daemon API, CLI, persisted feature schema or native behavior changed.
+- **Evidence:** observed compiler/build output; lane UI evidence; initial component/import audit; authoritative build-first contract
+- **Reversibility:** easy
+- **Confidence:** high within the named paths
+- **Revisit if:** final visual review or the end phase rejects an appearance or behavior
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-Design/spec/contracts ready for commit. No source implementation yet. Existing public API/component signatures remain authoritative; parent will add only shared generic layout where needed. Next: commit spec/contracts, create three isolated component worktrees, dispatch disjoint tree/dialog/panel slices, integrate at barrier and run typecheck plus minimal real-surface smoke. No suites/reviews are claimed.
+All three source components audited at the all-writer barrier, integrated as f22f86c9/fd28584a/98e42ed9 under8de9061, and their external worktrees removed. Parent shared-source fixes and minimum actual runtime proof are in D8–D10. PanelRestyle is migrating affected behavior-test selectors in one isolated tests worktree, without checks/commits. Next: finish that barrier, update receipts, commit, perform the sole roadmap catch-up/read incoming decisions, run final typecheck, close owned browser/runtime, detach and canonical land. Suites, formal reviews and screenshot-model approval remain unrun by policy.

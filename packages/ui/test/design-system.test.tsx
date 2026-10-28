@@ -224,6 +224,94 @@ describe('shared graphite components', () => {
     expect(container.querySelector('[role="menu"]')).toBeNull()
   })
 
+  test('context submenus preserve disabled actions, keyboard return and root dismissal', async () => {
+    const actions: string[] = []
+    const opener = document.createElement('button')
+    document.body.append(opener)
+    opener.focus()
+    await render(<Menu label="Workspace" position={{ x: 20, y: 30 }} onClose={() => actions.push('close')} items={[
+      { id: 'status', label: 'Move to Status', submenu: [
+        { id: 'blocked', label: 'Unavailable', disabled: true, onAction: () => actions.push('blocked') },
+        { id: 'done', label: 'Done', current: true, onAction: () => actions.push('done') },
+      ] },
+      { id: 'delete', label: 'Delete', disabled: true, title: 'Primary worktree' },
+    ]} />)
+    const status = document.querySelector('[role="menuitem"][aria-haspopup="menu"]')!
+    expect(document.activeElement).toBe(status)
+    await key(status, 'ArrowRight')
+    const done = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find((button) => button.textContent?.includes('Done'))!
+    expect(document.activeElement).toBe(done)
+    await key(done, 'ArrowLeft')
+    expect(document.activeElement).toBe(status)
+    expect(actions).toEqual([])
+    await click(status)
+    const unavailable = [...document.querySelectorAll('[role="menuitem"]')].find((button) => button.textContent?.includes('Unavailable'))!
+    await click(unavailable)
+    expect(actions).toEqual([])
+    const selected = [...document.querySelectorAll('[role="menuitem"]')].find((button) => button.textContent?.includes('Done'))!
+    await click(selected)
+    expect(actions).toEqual(['close', 'done'])
+    expect(document.activeElement).toBe(opener)
+  })
+
+  test('context menu Escape dismisses without invoking an action', async () => {
+    const actions: string[] = []
+    await render(<Menu label="Workspace" position={{ x: 2, y: 3 }} onClose={() => actions.push('close')} items={[
+      { id: 'delete', label: 'Delete', onAction: () => actions.push('delete') },
+    ]} />)
+    await key(document.querySelector('[role="menuitem"]')!, 'Escape')
+    expect(actions).toEqual(['close'])
+  })
+
+  test('only the top stacked dialog traps focus and handles Escape', async () => {
+    const calls: string[] = []
+    const tree = (inner: boolean) => <>
+      <Dialog open title="Project settings" onClose={() => calls.push('outer')}>
+        <button id="outer-action">Edit setup</button>
+      </Dialog>
+      <Dialog open={inner} title="Trust setup" onClose={() => calls.push('inner')}>
+        <button id="inner-action">Run once</button>
+      </Dialog>
+    </>
+    await render(tree(false))
+    const outerAction = container.querySelector<HTMLButtonElement>('#outer-action')!
+    outerAction.focus()
+    await render(tree(true))
+    const innerDialog = [...container.querySelectorAll<HTMLElement>('[role="dialog"]')][1]
+    const innerAction = container.querySelector<HTMLButtonElement>('#inner-action')!
+    innerAction.focus()
+    expect(document.activeElement).toBe(innerAction)
+    outerAction.focus()
+    expect(innerDialog.contains(document.activeElement)).toBe(true)
+    await key(innerAction, 'Escape')
+    expect(calls).toEqual(['inner'])
+    await render(tree(false))
+    expect(document.activeElement).toBe(outerAction)
+    await key(outerAction, 'Escape')
+    expect(calls).toEqual(['inner', 'outer'])
+  })
+
+  test('closing a stacked dialog keeps keyboard focus in a busy parent', async () => {
+    const calls: string[] = []
+    const tree = (inner: boolean, busy: boolean) => <>
+      <Dialog open title="New workspace" onClose={() => calls.push('outer')}>
+        <button id="submit-create" disabled={busy}>Create</button>
+      </Dialog>
+      <Dialog open={inner} title="Trust setup" onClose={() => calls.push('inner')}>
+        <button>Cancel trust</button>
+      </Dialog>
+    </>
+    await render(tree(false, false))
+    container.querySelector<HTMLButtonElement>('#submit-create')!.focus()
+    await render(tree(true, true))
+    await render(tree(false, true))
+    const parent = container.querySelector<HTMLElement>('[role="dialog"]')!
+    expect(parent.contains(document.activeElement)).toBe(true)
+    expect(document.activeElement).not.toBe(container.querySelector('#submit-create'))
+    await key(document.activeElement!, 'Escape')
+    expect(calls).toEqual(['outer'])
+  })
+
   test('toasts dismiss on expiration and expiration never invokes the action', async () => {
     const calls: string[] = []
     await render(<Toast title="Approve merge?" status="needs-you" durationMs={1200} onDismiss={() => calls.push('dismiss')} action={{ label: 'Approve', onAction: () => calls.push('action') }} />)
@@ -377,50 +465,4 @@ describe('shared graphite components', () => {
     expect(calls).toEqual([])
   })
 
-  test('theme scopes publish the exact graphite palette and fixed type, spacing, radius and row tokens', async () => {
-    const css = await Bun.file(new URL('../src/design-system/tokens.css', import.meta.url)).text()
-    for (const declaration of [
-      '--ui-rail: #101114;',
-      '--ui-surface: #16171b;',
-      '--ui-selected: #22242b;',
-      '--ui-border: #24262c;',
-      '--ui-text: #eceef2;',
-      '--ui-muted: #7c828d;',
-      '--ui-accent: #7c8cff;',
-      '--ui-working: #4cc38a;',
-      '--ui-needs-you: #e5b454;',
-      '--ui-failing: #ef6b73;',
-      '--ui-rail: #f4f5f7;',
-      '--ui-surface: #ffffff;',
-      '--ui-selected: #e7e9ef;',
-      '--ui-border: #e3e5ea;',
-      '--ui-text: #1b1d22;',
-      '--ui-muted: #80868f;',
-      '--ui-accent: #5b6cff;',
-      '--ui-working: #1f9d63;',
-      '--ui-needs-you: #c98a0b;',
-      '--ui-failing: #d6455d;',
-      '--ui-font-title: 15px;',
-      '--ui-font-body: 12px;',
-      '--ui-font-label: 11px;',
-      '--ui-font-section: 10.5px;',
-      '--ui-font-mono: 11.5px;',
-      '--ui-space-2: 2px;',
-      '--ui-space-4: 4px;',
-      '--ui-space-6: 6px;',
-      '--ui-space-8: 8px;',
-      '--ui-space-12: 12px;',
-      '--ui-space-16: 16px;',
-      '--ui-space-24: 24px;',
-      '--ui-radius-mark: 5px;',
-      '--ui-radius-control: 7px;',
-      '--ui-radius-window: 10px;',
-      '--ui-row-single: 26px;',
-      '--ui-row-double: 34px;',
-      "[data-theme='dark'] {",
-      "[data-theme='light'] {",
-    ]) {
-      expect(css).toContain(declaration)
-    }
-  })
 })

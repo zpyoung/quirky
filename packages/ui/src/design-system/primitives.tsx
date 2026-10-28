@@ -1,4 +1,5 @@
 import { useId } from 'react'
+import type { CSSProperties } from 'react'
 import type { BadgeProps, ButtonProps, IconButtonProps, StatusDotProps, TextFieldProps, UiStatus } from './contracts'
 import { classNames } from './shared'
 
@@ -57,10 +58,12 @@ export function Badge({ children, tone = 'neutral', label }: BadgeProps) {
   )
 }
 
-export function StatusDot({ status, label }: StatusDotProps) {
+export function StatusDot({ status, label, progress }: StatusDotProps) {
+  const percent = progress !== undefined && Number.isFinite(progress) ? Math.min(100, Math.max(0, progress)) : undefined
   return (
     <span
-      className={classNames('ui-status-dot', statusClasses[status])}
+      className={classNames('ui-status-dot', statusClasses[status], percent !== undefined && 'ui-status-dot--progress')}
+      style={percent !== undefined ? { '--ui-dot-progress': `${percent}%` } as CSSProperties : undefined}
       role={label ? 'img' : undefined}
       aria-label={label}
       aria-hidden={label ? undefined : true}
