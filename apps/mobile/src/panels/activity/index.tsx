@@ -39,6 +39,7 @@ const header: CSSProperties = { display: 'flex', alignItems: 'center', justifyCo
 const sectionTitle: CSSProperties = { margin: 0, fontSize: 17 }
 type NotificationClientState = {
   ready: boolean
+  trayVisible: boolean
   preferences: MobileNotificationPreferences
   feed: NotificationFeedState
   connection: MobileConnectionState | null
@@ -64,6 +65,7 @@ function notificationClientStore(hostId: string): NotificationClientStore {
   const store: NotificationClientStore = {
     snapshot: {
       ready: false,
+      trayVisible: false,
       preferences: DEFAULT_NOTIFICATION_PREFERENCES,
       feed: createNotificationFeedState(),
       connection: null,
@@ -680,7 +682,7 @@ function NotificationsPanel({ bridge, worktreeId }: { bridge: PanelBridge; workt
     setPreferenceBusy(true)
     try {
       await bridge.storage.set(`mobile.activity.notifications.v1:${hostId}:preferences`, JSON.stringify(next))
-      updateNotificationClient(hostId, { preferences: next, storageError: null })
+      updateNotificationClient(hostId, { preferences: next, storageError: null, ...(next.enabled ? {} : { trayVisible: false }) })
       return true
     } catch (caught) {
       updateNotificationClient(hostId, { storageError: `Device notification preferences could not be saved: ${errorMessage(caught)}` })
@@ -767,6 +769,7 @@ function NotificationsPanel({ bridge, worktreeId }: { bridge: PanelBridge; workt
         <button type="button" style={button} disabled={!client.preferences.enabled || connection.phase !== 'connected' || testBusy} onClick={() => void sendTest()}>
           {testBusy ? 'Sending test…' : 'Send test event'}
         </button>
+        <button type="button" style={button} disabled={!client.ready || client.feed.notifications.length === 0} onClick={() => updateNotificationClient(hostId, { trayVisible: true })}>View recent alerts</button>
         <span role="status" style={{ ...muted, alignSelf: 'center' }}>
           {!client.ready ? 'Loading' : !client.preferences.enabled ? 'Disabled on this device' : connection.phase !== 'connected' ? connectionHint(connection) : client.pollError ? `Reconnecting: ${client.pollError}` : client.connected ? 'Connected · live while open' : 'Waiting for the first host response…'}
         </span>
@@ -873,7 +876,7 @@ export function DirectNotifications({ bridge, viewedWorktree }: { bridge: PanelB
           if (!batch) throw new Error('The host returned an invalid notification replay response.')
           const next = applyNotificationBatch(feedRef.current, batch)
           feedRef.current = next
-          updateNotificationClient(hostId, { feed: next, connected: true, pollError: null })
+          updateNotificationClient(hostId, { feed: next, connected: true, pollError: null, trayVisible: next.arrivals.length > 0 || notificationClientStore(hostId).snapshot.trayVisible })
           failures = 0
           try {
             await bridge.storage.set(checkpointKey, notificationCheckpoint(next))
@@ -939,7 +942,7 @@ export function DirectNotifications({ bridge, viewedWorktree }: { bridge: PanelB
     }
   }
 
-  if (!client.ready || (!client.preferences.enabled && client.feed.notifications.length === 0)) return null
+  if (!client.ready || !client.trayVisible) return null
   const status = !client.preferences.enabled
     ? 'Disabled on this device'
     : connection.phase !== 'connected'
@@ -965,17 +968,16 @@ export function DirectNotifications({ bridge, viewedWorktree }: { bridge: PanelB
       margin: 0
     }}
   >
+    <div style={header}>
+      <strong>In-app alerts</strong>
+      <button type="button" style={button} aria-label="Dismiss in-app alerts" onClick={() => updateNotificationClient(hostId, { trayVisible: false })}>Dismiss</button>
+    </div>
     <div aria-live="polite" role="status" style={muted}>{status}</div>
     {client.preferences.enabled && !client.feed.presenceAvailable ? <p style={muted}>Desktop presence is unavailable; unknown presence is not suppressed.</p> : null}
     {(client.feed.reset || client.feed.truncated) ? <p style={muted}>Some older alerts were unavailable in the bounded replay history.</p> : null}
     {navigationError ? <p role="alert" style={errorStyle}>{navigationError}</p> : null}
     {client.storageError ? <p role="status" style={muted}>{client.storageError}</p> : null}
-    {client.feed.arrivals[0] ? <div aria-live="polite" style={{ borderTop: '1px solid #374151', paddingTop: 8, marginTop: 8 }}>
-      <strong>New alert: {client.feed.arrivals[0].title}</strong>
-      <p style={{ margin: '4px 0', overflowWrap: 'anywhere' }}>{client.feed.arrivals[0].body}</p>
-      <button type="button" style={button} disabled={!client.feed.arrivals[0].worktreeId && !client.feed.arrivals[0].sessionId} onClick={() => void openNotification(client.feed.arrivals[0]!)}>Open workspace or session</button>
-    </div> : null}
-    {client.feed.notifications.length > 0 ? <details>
+    {client.feed.notifications.length > 0 ? <details open>
       <summary>Recent alerts ({client.feed.notifications.length})</summary>
       <div aria-label="Recent host alerts" style={{ maxHeight: '24vh', overflowY: 'auto' }}>
         {client.feed.notifications.map((notification) => <NotificationRow

@@ -425,8 +425,13 @@ export class VaultService {
     const filters = { ...(request.filters ?? {}) }
     if (filters.agents === undefined && enabledAgents.length !== HISTORY_AGENTS.length) filters.agents = enabledAgents
     if (filters.sort === undefined) filters.sort = view.searchSort
-    if (scopePaths !== undefined) filters.scopePaths = scopePaths
-    return { ...request, host: 'local', filters }
+    const local = { ...request, host: 'local', filters }
+    if (scopePaths !== undefined) {
+      filters.scopePaths = scopePaths
+      // The worker accepts resolved paths, not the public opaque scope selector.
+      delete local.within
+    }
+    return local
   }
 
   private remoteSearchRequest(request: SearchRequest, view: ViewState, remoteWithin?: { worktree?: string; repo?: string }): SearchRequest {
