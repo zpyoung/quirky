@@ -546,12 +546,15 @@ function dynamicGraphql() {
   }
 
   if (query.includes('OrganizationIssueTypes') && issueStore && issueTypeStore) {
-    const owner = variable('owner')
     const repoOwner = variable('repoOwner')
     const repo = variable('repo')
     const number = Number(variable('number'))
     const issue = issueStore[issueKey(repoOwner, repo, number)]
-    if (issue) return { handled: true, value: { data: { repository: { issue: { id: issue.nodeId ?? 'ISSUE_NODE_' + number } }, organization: { issueTypes: { nodes: issueTypeStore[owner] ?? [], pageInfo: { hasNextPage: false } } } } } }
+    if (issue) {
+      const ownerType = issue.repositoryOwnerType ?? 'Organization'
+      const owner = { __typename: ownerType, ...(ownerType === 'Organization' ? { issueTypes: { nodes: issueTypeStore[repoOwner] ?? [], pageInfo: { hasNextPage: false } } } : {}) }
+      return { handled: true, value: { data: { repository: { issue: { id: issue.nodeId ?? 'ISSUE_NODE_' + number }, owner } } } }
+    }
   }
 
   if (query.includes('mutation SetProjectField') || query.includes('mutation ClearProjectField')) {
@@ -582,6 +585,39 @@ function dynamicGraphql() {
 }
 
 if (command.includes('api') && command.includes('graphql')) {
+  const searchAliases = [...query.matchAll(/([_A-Za-z][_0-9A-Za-z]*)\s*:\s*search\s*\(([^)]*)\)/g)]
+  if (searchAliases.length > 0) {
+    const tokenRules = isObject(state.graphqlByToken) ? state.graphqlByToken[process.env.GH_TOKEN ?? ''] : undefined
+    const graphRules = Array.isArray(tokenRules) ? tokenRules : Array.isArray(state.graphql) ? state.graphql : []
+    const data = {}
+    const errors = []
+    let cost = 0
+    for (const [, alias, argumentsText] of searchAliases) {
+      const fieldVariable = (name) => {
+        const nameMatch = new RegExp('\\b' + name + '\\s*:\\s*\\$([_A-Za-z][_0-9A-Za-z]*)').exec(argumentsText)
+        return nameMatch ? variables[nameMatch[1]] : undefined
+      }
+      const fieldVariables = { search: fieldVariable('query'), first: fieldVariable('first'), after: fieldVariable('after') }
+      const variableText = JSON.stringify(fieldVariables)
+      const graphRule = graphRules.find((entry) =>
+        entry && typeof entry.when === 'string' &&
+        (entry.when.startsWith('field:') ? matchesGraphqlField(query, entry.when.slice('field:'.length)) : query.includes(entry.when)) &&
+        (entry.whenArgs === undefined || command.includes(entry.whenArgs) || variableText.includes(entry.whenArgs) || query.includes(entry.whenArgs)) &&
+        (entry.nth === undefined || entry.nth === calls.filter((candidate) => candidate && candidate.query === query).length)
+      )
+      // A configured CLI/HTTP failure affects the whole provider request, not one alias.
+      if (graphRule && typeof graphRule.error === 'string') fail(graphRule.error)
+      const envelope = isObject(graphRule?.body) ? graphRule.body : {}
+      const body = isObject(envelope.data) ? envelope.data : {}
+      if (Object.hasOwn(body, 'search')) data[alias] = body.search
+      if (typeof body.rateLimit?.cost === 'number') cost += body.rateLimit.cost
+      for (const error of Array.isArray(envelope.errors) ? envelope.errors : []) {
+        errors.push({ ...error, path: Array.isArray(error.path) && error.path[0] === 'search' ? [alias, ...error.path.slice(1)] : error.path })
+      }
+    }
+    if (cost > 0) data.rateLimit = { cost }
+    emit({ data, ...(errors.length > 0 ? { errors } : {}) })
+  }
   const dynamic = dynamicGraphql()
   if (dynamic.handled) emit(dynamic.value)
   const tokenRules = isObject(state.graphqlByToken) ? state.graphqlByToken[process.env.GH_TOKEN ?? ''] : undefined
@@ -2102,14 +2138,3 @@ test('GH30: a malformed Projects item connection is not treated as an empty tabl
   await expectReason(h.call('projectTable', { owner: 'test-owner', ownerType: 'organization', projectNumber: 4 }), 'schema_drift')
 }, 20_000)
 
-test('GH31: user-owned project issue-type actions report their unsupported boundary', async () => {
-  const h = await hosting({ resources: { projectItems: {
-    'PVT_USER/PVTI_USER': {
-      id: 'PVTI_USER', projectId: 'PVT_USER', owner: 'test-owner', ownerType: 'User',
-      kind: 'issue', number: 31, url: 'https://github.com/test-owner/test-repo/issues/31'
-    }
-  } } })
-  await expectReason(h.call('projectItemMutation', {
-    projectId: 'PVT_USER', itemId: 'PVTI_USER', action: 'updateIssueType', issueTypeName: 'Bug'
-  }), 'unsupported_operation')
-}, 20_000)

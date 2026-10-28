@@ -1,0 +1,22 @@
+{
+  "item": "m7-sweep-hosting",
+  "spec": "docs/quirk/specs/2026-10-28-m7-sweep-hosting/logic.md",
+  "scenarios": [
+    {
+      "id": "N1",
+      "title": "Owned isolated hosting fixture only: open a PR detail and a Checks panel for different worktrees, click each HTTP review link and verify Browser reveals the exact originating worktree/tab; do not authenticate or mutate any real forge. Native guest verification uses only fresh run-owned UUID Browser partitions, never shared Default without native storage-root isolation proof.",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    },
+    {
+      "id": "N2",
+      "title": "Owned fixture only: verify configured system versus in-app review links and Shift+Cmd-click under both invert-setting values; confirm exact URL and originating workspace, and no second launch on Browser failure. Real system browser delivery requires an explicitly isolated run-owned system opener/session, otherwise record blocked rather than touching the user's browser.",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    }
+  ]
+}
