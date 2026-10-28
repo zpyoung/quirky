@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'bun:test'
-import type { MobilePageBridge, MobilePageInit, MobileRpc } from '../../../apps/mobile/src/contracts'
+import type { MobileCallOptions, MobilePageBridge, MobilePageInit, MobileRpc } from '../../../apps/mobile/src/contracts'
 import { createMobileRpc } from '@quirky/protocol/paired-client'
 import { createBridgeHost, type PageBridgeHost } from '../../../apps/mobile/src/shell/bridge-host'
 import { PAGE_BUNDLE_ROUTES } from '../../../apps/mobile/src/shell/generation'
@@ -38,7 +38,7 @@ function observeRpc(inner: MobileRpc): ObservedRpc {
   }
   const rpc: MobileRpc = {
     get state() { return inner.state },
-    async call<T>(method: string, params: Record<string, unknown> = {}, options) {
+    async call<T>(method: string, params: Record<string, unknown> = {}, options?: MobileCallOptions) {
       try {
         const value = await inner.call<T>(method, params, options)
         record(method, { kind: 'result', value })
