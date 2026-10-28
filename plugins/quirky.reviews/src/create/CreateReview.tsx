@@ -100,6 +100,9 @@ export function CreateReview(props: ReviewsSurfaceProps) {
   const baseMissing = base.trim() === ''
   const baseAvailable = creation.bases.includes(base)
   const baseIsHead = base.trim() !== '' && creation.head.trim() !== '' && base.toLowerCase() === creation.head.toLowerCase()
+  const stackLookupError = eligibility && typeof eligibility.stackLookupError === 'string' && eligibility.stackLookupError !== ''
+    ? eligibility.stackLookupError
+    : null
   const confirmedAt = eligibility && typeof eligibility.confirmedAt === 'number' ? eligibility.confirmedAt : Number.NaN
   const eligibilityStale = !Number.isFinite(confirmedAt) || Date.now() - confirmedAt > 5 * 60_000
   const generationRunning = creation.generating
@@ -300,7 +303,7 @@ export function CreateReview(props: ReviewsSurfaceProps) {
           <input type="checkbox" checked={stackEnabled} onChange={(event) => void createStack(event.target.checked)} />
           Create pull request in stack with #{stackParentNumber}
         </label>}
-        {stackSupported && stackParentNumber === null && eligibility?.stackLookupError && <small role="status">Stack capability could not be confirmed: {String(eligibility.stackLookupError)}</small>}
+        {stackSupported && stackParentNumber === null && stackLookupError !== null && <small role="status">Stack capability could not be confirmed: {stackLookupError}</small>}
         {!stackSupported && <small>Stacked pull requests are available only for supported GitHub.com repositories.</small>}
       </fieldset>
 

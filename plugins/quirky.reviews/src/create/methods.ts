@@ -81,7 +81,17 @@ export const createSpecs: MethodSpec[] = [
   { id: 'hostingSettingsRefresh', readOnly: true, description: 'refresh the daemon-owned hosting settings snapshot for an exact repository', params: objectSchema({ worktree: worktreeSchema, forceBudget: { type: 'boolean' } }, ['worktree']), result: objectSchema({ worktree: stringSchema, refreshed: { type: 'boolean' }, stale: { type: 'boolean' }, fetchedAt: { type: 'number' }, error: stringSchema }, ['worktree', 'refreshed', 'fetchedAt']) },
 ]
 
-type Eligibility = JsonRecord & { eligible: boolean; defaultBase: string | null; head: string | null; blockers: Array<{ reason: string; nextAction: string; message: string }> }
+type Eligibility = JsonRecord & {
+  eligible: boolean
+  defaultBase: string | null
+  head: string | null
+  title: string
+  body: string
+  blockers: Array<{ reason: string; nextAction: string; message: string }>
+  confirmedAt: number
+  worktreeId: string
+  headOid: string
+}
 type ReviewIdentity = { number: number; url: string; title?: string; body?: string; state?: string }
 type StackInfo = { supported: boolean; parentNumber: number | null; error: string | null; enabled: boolean }
 type ExactContext = { id: string; branch: string; head: string; repoId: string }
@@ -408,26 +418,38 @@ function parseBranchRefs(env: ReviewsEnv, value: unknown): string[] {
 }
 
 function parseEligibility(env: ReviewsEnv, value: unknown, worktree: ExactContext, confirmedAt = Date.now()): Eligibility {
-  if (!isRecord(value) || typeof value.eligible !== 'boolean' || (value.defaultBase !== null && typeof value.defaultBase !== 'string') ||
-    (value.head !== null && typeof value.head !== 'string') || typeof value.title !== 'string' || typeof value.body !== 'string' ||
-    !Array.isArray(value.blockers)) {
+  if (!isRecord(value)) throw env.invalid('invalid_response', 'Hosting returned an invalid pull-request eligibility response.')
+  const eligible = value.eligible
+  const defaultBase = value.defaultBase
+  const head = value.head
+  const title = value.title
+  const body = value.body
+  const rawBlockers = value.blockers
+  if (typeof eligible !== 'boolean' || (defaultBase !== null && typeof defaultBase !== 'string') ||
+    (head !== null && typeof head !== 'string') || typeof title !== 'string' || typeof body !== 'string' ||
+    !Array.isArray(rawBlockers)) {
     throw env.invalid('invalid_response', 'Hosting returned an invalid pull-request eligibility response.')
   }
   const blockers: Array<{ reason: string; nextAction: string; message: string }> = []
-  for (const item of value.blockers) {
+  for (const item of rawBlockers) {
     if (!isRecord(item) || typeof item.reason !== 'string' || typeof item.nextAction !== 'string' || typeof item.message !== 'string') {
       throw env.invalid('invalid_response', 'Hosting returned an invalid eligibility blocker.')
     }
     blockers.push({ reason: item.reason, nextAction: item.nextAction, message: item.message })
   }
-  if (value.head !== worktree.branch) throw env.invalid('head_changed', 'The current branch changed while review eligibility was being checked.')
+  if (head !== worktree.branch) throw env.invalid('head_changed', 'The current branch changed while review eligibility was being checked.')
   return {
     ...value,
+    eligible,
+    defaultBase,
+    head,
+    title,
+    body,
     blockers,
     confirmedAt,
     worktreeId: worktree.id,
     headOid: worktree.head
-  } as Eligibility
+  }
 }
 
 function eligibilityBlocker(value: Eligibility): { reason: string; message: string } | null {
@@ -1108,10 +1130,6 @@ export function createMethods(env: ReviewsEnv): ReviewMethodTable {
           const partialReview = parseMinimalReview(data.createdReview)
           if (!partialReview) throw error
           return await publishReview(env, worktree, generation, partialReview, 'partial', errorText(error))
-        }
-        if (errorReason(error) === 'already_exists') {
-          const lookup = parseReviewLookup(env, await env.call('quirky.hosting/forBranch', { worktree: worktree.id, branch: worktree.branch, headOid: worktree.head, active: true }))
-          if (lookup.kind === 'found') return await publishReview(env, worktree, generation, lookup.review, 'already_exists')
         }
         throw error
       }
