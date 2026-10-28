@@ -313,10 +313,10 @@ describe('safe cleanup preview and removal', () => {
     git(w.repoDir, 'worktree', 'lock', '--reason', 'cleanup test lock', locked.path)
     commitFiles(unpushed.path, { 'unpublished.txt': 'not pushed\n' })
     const ui = await w.t.h.connect('ui')
-    await ui.callAny('ui.view.open', { id: 'view:quirky.session/worktree', input: { worktree: active.id } })
+    await ui.callAny('ui.view.open', { id: 'view:quirky.session/worktree', input: { worktree: `id:${active.id}` } })
     const secondUi = await w.t.h.connect('ui')
     const otherWindowView = await create(w, 'other-window-view')
-    await secondUi.callAny('ui.view.open', { id: 'view:quirky.session/worktree', input: { worktree: otherWindowView.id } })
+    await secondUi.callAny('ui.view.open', { id: 'view:quirky.session/worktree', input: { worktree: `name:${otherWindowView.name}` } })
     const opened = await call(w.t.client, 'quirky.editor/open', { worktree: editor.id, path: 'a.txt' }) as { id: string; contentRevision: number }
     await call(w.t.client, 'quirky.editor/draft', { bufferId: opened.id, content: 'unsaved draft\n', expectedRevision: opened.contentRevision })
     await call(w.t.client, 'quirky.sidebar-extras/activate', { worktree: visible.id })
@@ -334,6 +334,9 @@ describe('safe cleanup preview and removal', () => {
     expect(codes(candidateFor(preview.candidates, locked))).toContain('locked')
     expect(codes(candidateFor(preview.candidates, unpushed))).toContain('unpushed-commits')
     expect(codes(candidateFor(preview.candidates, active))).toContain('active-workspace')
+    expect(codes(candidateFor(preview.candidates, active))).not.toContain('active-workspace-unknown')
+    expect(codes(candidateFor(preview.candidates, otherWindowView))).toContain('active-workspace')
+    expect(codes(candidateFor(preview.candidates, otherWindowView))).not.toContain('active-workspace-unknown')
     expect(codes(candidateFor(preview.candidates, editor))).toContain('dirty-editor-buffer')
     expect(codes(candidateFor(preview.candidates, visible))).toContain('recent-visible-context')
     expect(codes(candidateFor(preview.candidates, running))).toContain('running-terminal')
@@ -357,6 +360,30 @@ describe('safe cleanup preview and removal', () => {
     }) as { results: CleanupRemovalResult[] }
     expect(result.results[0]).toMatchObject({ worktreeId: worktree.id, removed: false })
     expect(result.results[0]?.error).toMatch(/active workspace|stale/i)
+    expect(realpathSync(worktree.path)).toBe(worktree.path)
+  })
+
+  test('cleanup refuses removal while a workspace view owner is unresolved', async () => {
+    const w = await start()
+    world = w
+    const worktree = await create(w, 'unresolved-view-owner')
+    ageRows(w, [worktree])
+    const ui = await w.t.h.connect('ui')
+    await ui.callAny('ui.view.open', {
+      id: 'view:quirky.session/worktree',
+      input: { worktree: 'id:wt_missing' }
+    })
+
+    const preview = await call(w.t.client, 'quirky.worktree/cleanupPreview') as { candidates: CleanupCandidate[] }
+    const candidate = candidateFor(preview.candidates, worktree)
+    expect(candidate.eligible).toBe(false)
+    expect(codes(candidate)).toContain('active-workspace-unknown')
+    const result = await call(w.t.client, 'quirky.worktree/cleanupRemove', {
+      selection: [{ worktreeId: worktree.id, fingerprint: candidate.fingerprint }],
+      confirmed: true
+    }) as { results: CleanupRemovalResult[] }
+    expect(result.results[0]).toMatchObject({ worktreeId: worktree.id, removed: false })
+    expect(result.results[0]?.error).toContain('active-workspace-unknown')
     expect(realpathSync(worktree.path)).toBe(worktree.path)
   })
 

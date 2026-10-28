@@ -10,7 +10,8 @@
     "wt"
   ],
   "dependencies": [
-    "quirky.repo"
+    "quirky.repo",
+    "quirky.cli"
   ],
   "contributes": {
     "method": [
@@ -218,7 +219,7 @@
       },
       {
         "id": "origins",
-        "description": "Caller-relative durable creation evidence for each workspace. Unknown historical and external origins remain null.",
+        "description": "Caller-relative durable creation evidence for each current workspace instance. Known desktop clients and paired phones are compared only to a matching authenticated caller; unknown historical and external origins remain null.",
         "readOnly": true,
         "params": {
           "type": "object",
@@ -232,7 +233,7 @@
             "properties": {
               "worktreeId": { "type": "string" },
               "automation": { "description": "True only for validated immutable live-dispatch automationProvenance on this filesystem instance; false for known ordinary creation; null when no creation evidence is available." },
-              "otherClient": { "description": "True or false only when the authenticated creator and this caller are distinguishable by stable paired-device IDs; otherwise null." }
+              "otherClient": { "description": "True or false only for a known authenticated UI-installation comparison or the existing paired-phone comparison; null for unknown and cross-origin creators. Only the comparison is exposed, never a client ID or machine identity." }
             },
             "required": ["worktreeId", "automation", "otherClient"]
           }
@@ -280,9 +281,13 @@
               "type": "string",
               "description": "A group ID or exact name: creates a folder workspace on its parent folder."
             },
+            "requireGitRepository": {
+              "type": "boolean",
+              "description": "Refuse folder and group targets before mutation; owner-runtime creation requires a genuine Git repository."
+            },
             "host": {
               "type": "string",
-              "description": "Exact authenticated peer ID, never a label. The selected peer is revalidated; remote worktree create currently refuses before any local fallback."
+              "description": "Exact authenticated peer ID, never a label. A mobile or federation peer is not owner-cli authority and does not authorize remote worktree creation."
             },
             "name": {
               "type": "string",
@@ -698,6 +703,38 @@
             "setup",
             "creationReceipt"
           ]
+        }
+      },
+      {
+        "id": "createRemote",
+        "description": "Create through a separately saved owner-cli runtime target. The canonical remote create result and runtime identity are returned without a local registration or local UI activation.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "runtime": { "type": "string", "description": "Saved owner target in runtime:<selector> form; runtimeCall rejects unknown and phone-scoped targets." },
+            "repo": { "type": "string", "description": "Explicit remote Git repository selector, resolved only on the selected runtime." }
+          },
+          "required": ["runtime", "repo"],
+          "additionalProperties": true
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "runtime": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "string" },
+                "name": { "type": "string" },
+                "endpoint": { "type": "string" },
+                "grantId": { "type": "string" }
+              },
+              "required": ["id", "name", "endpoint", "grantId"],
+              "additionalProperties": false
+            },
+            "result": { "type": "object", "description": "Exact result from quirky.worktree/create on the selected runtime; not a local worktree mirror." }
+          },
+          "required": ["runtime", "result"],
+          "additionalProperties": false
         }
       },
       {
@@ -1756,7 +1793,7 @@
       },
       {
         "id": "options",
-        "description": "Read persisted worktree grouping, sorting, card properties, filters and external-worktree defaults.",
+        "description": "Read persisted worktree grouping, sorting, card properties, filters including caller-relative other-client hiding, and external-worktree defaults.",
         "readOnly": true,
         "params": { "type": "object", "properties": {}, "additionalProperties": false },
         "result": {
@@ -1773,17 +1810,18 @@
             "hideDefaultBranch": { "type": "boolean" },
             "hideDetached": { "type": "boolean" },
             "hideArchived": { "type": "boolean" },
+            "hideOtherClients": { "type": "boolean", "description": "Hide only worktrees with a known different authenticated desktop installation; unknown origins remain visible." },
             "filterRepoIds": { "type": "array", "items": { "type": "string" } },
             "showProperties": { "type": "array", "items": { "type": "string", "enum": ["branch", "notes", "pullRequest", "issue", "automation", "activity"] } },
             "externalVisibilityDefault": { "type": "string", "enum": ["show", "hide"] }
           },
-          "required": ["groupBy", "sortBy", "projectOrderBy", "compact", "showBranch", "showComment", "showSleeping", "hideCliCreated", "hideDefaultBranch", "hideDetached", "hideArchived", "filterRepoIds", "showProperties", "externalVisibilityDefault"],
+          "required": ["groupBy", "sortBy", "projectOrderBy", "compact", "showBranch", "showComment", "showSleeping", "hideCliCreated", "hideDefaultBranch", "hideDetached", "hideArchived", "hideOtherClients", "filterRepoIds", "showProperties", "externalVisibilityDefault"],
           "additionalProperties": false
         }
       },
       {
         "id": "setOptions",
-        "description": "Persist a patch to worktree grouping, sorting, card properties, filters and external-worktree defaults.",
+        "description": "Persist a patch to worktree grouping, sorting, card properties, filters including caller-relative other-client hiding, and external-worktree defaults.",
         "params": {
           "type": "object",
           "properties": {
@@ -1798,6 +1836,7 @@
             "hideDefaultBranch": { "type": "boolean" },
             "hideDetached": { "type": "boolean" },
             "hideArchived": { "type": "boolean" },
+            "hideOtherClients": { "type": "boolean", "description": "Hide only worktrees with a known different authenticated desktop installation; unknown origins remain visible." },
             "filterRepoIds": { "type": "array", "items": { "type": "string" } },
             "showProperties": { "type": "array", "items": { "type": "string", "enum": ["branch", "notes", "pullRequest", "issue", "automation", "activity"] } },
             "externalVisibilityDefault": { "type": "string", "enum": ["show", "hide"] }
@@ -1818,11 +1857,12 @@
             "hideDefaultBranch": { "type": "boolean" },
             "hideDetached": { "type": "boolean" },
             "hideArchived": { "type": "boolean" },
+            "hideOtherClients": { "type": "boolean" },
             "filterRepoIds": { "type": "array", "items": { "type": "string" } },
             "showProperties": { "type": "array", "items": { "type": "string", "enum": ["branch", "notes", "pullRequest", "issue", "automation", "activity"] } },
             "externalVisibilityDefault": { "type": "string", "enum": ["show", "hide"] }
           },
-          "required": ["groupBy", "sortBy", "projectOrderBy", "compact", "showBranch", "showComment", "showSleeping", "hideCliCreated", "hideDefaultBranch", "hideDetached", "hideArchived", "filterRepoIds", "showProperties", "externalVisibilityDefault"],
+          "required": ["groupBy", "sortBy", "projectOrderBy", "compact", "showBranch", "showComment", "showSleeping", "hideCliCreated", "hideDefaultBranch", "hideDetached", "hideArchived", "hideOtherClients", "filterRepoIds", "showProperties", "externalVisibilityDefault"],
           "additionalProperties": false
         }
       },
@@ -2152,6 +2192,7 @@
                 "hideDefaultBranch": { "type": "boolean" },
                 "hideDetached": { "type": "boolean" },
                 "hideArchived": { "type": "boolean" },
+                "hideOtherClients": { "type": "boolean" },
                 "filterRepoIds": { "type": "array", "items": { "type": "string" } },
                 "showProperties": { "type": "array", "items": { "type": "string" } },
                 "externalVisibilityDefault": { "type": "string", "enum": ["show", "hide"] }
@@ -2281,7 +2322,7 @@
       },
       {
         "id": "create",
-        "summary": "create a worktree from a name, branch or GitHub item",
+        "summary": "create a worktree locally or on a saved owner runtime",
         "positionals": [
           {
             "name": "repo",
@@ -2406,11 +2447,13 @@
           "keep-main": { "type": "boolean", "description": "fast-forward the clean primary checkout only when it exactly matches the selected remote base and is strictly behind" },
           "environment-recipe": { "type": "string", "description": "recipe ID from quirky.yaml; VM lifecycle execution requires a separate authoritative runtime owner and is explicitly refused when unavailable" },
           "default-tabs": { "type": "json", "description": "JSON array of one-based defaultTabs template indexes; omitted selects all configured tabs" },
-          "host": { "type": "string", "description": "exact authenticated peer ID; remote worktree creation currently refuses before local fallback" },
+          "on-runtime": { "type": "string", "description": "saved owner target in runtime:<selector> form; returns a remote result and never activates its path locally" },
+          "host": { "type": "string", "description": "authenticated peer ID for existing peer selection; it is not owner-cli authority for remote worktree creation" },
           "window": { "type": "integer", "description": "exact UI connection ID used only with --activate" }
         },
         "methods": [
-          "quirky.worktree/create"
+          "quirky.worktree/create",
+          "quirky.worktree/createRemote"
         ]
       },
       {
@@ -2565,7 +2608,7 @@
       },
       {
         "id": "options",
-        "summary": "read or persist worktree grouping, sorting, properties and filters",
+        "summary": "read or persist worktree grouping, sorting, properties and caller-relative other-client filters",
         "flags": {
           "group-by": { "type": "string", "description": "project, status, PR or none", "enum": ["project", "status", "pr", "none"] },
           "sort-by": { "type": "string", "description": "recent, agent-activity, name, project or manual", "enum": ["recent", "agent-activity", "name", "project", "manual"] },
@@ -2586,6 +2629,8 @@
           "show-detached": { "type": "boolean", "description": "show detached Git worktrees" },
           "hide-archived": { "type": "boolean", "description": "hide archived worktrees" },
           "show-archived": { "type": "boolean", "description": "show archived worktrees" },
+          "hide-other-clients": { "type": "boolean", "description": "hide only worktrees with a known different authenticated desktop installation" },
+          "show-other-clients": { "type": "boolean", "description": "show worktrees from all known authenticated desktop installations" },
           "external-visibility-default": { "type": "string", "description": "default external visibility: show or hide", "enum": ["show", "hide"] },
           "filter-repo-ids": { "type": "json", "description": "JSON array of project IDs; [] shows all projects" },
           "show-properties": { "type": "json", "description": "JSON array of branch, notes, pullRequest, issue, automation, activity" }

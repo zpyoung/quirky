@@ -1520,8 +1520,7 @@
       "deps": [
         "m7-terminal-provider-host-and-worktree-remainder"
       ],
-      "status": "in-progress",
-      "lane": 12
+      "status": "done"
     },
     {
       "id": "ui-tokens-and-components",
@@ -1545,8 +1544,7 @@
       "title": "UI redesign: a command that launches Quirky on a temporary QUIRKY_HOME with fixture worktrees, captures every tool and view in dark and light, and has a separate reviewer model score each capture against the golden screens in the spec, failing below a set score. Follow docs/quirk/specs/2026-10-28-ui-redesign/logic.md (approved). Use only the shared components and tokens; the UI lint check must pass. Build-first mode applies: typecheck gates the land.",
       "docs": [],
       "deps": [],
-      "status": "in-progress",
-      "lane": 6
+      "status": "done"
     },
     {
       "id": "ui-shell-slots",
@@ -1572,7 +1570,8 @@
       "deps": [
         "m7-terminal-owner-provisioning-and-selector-flows"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 6
     },
     {
       "id": "ui-restyle-terminal",
@@ -1740,6 +1739,26 @@
       "status": "todo"
     },
     {
+      "id": "fix-flaky-terminal-features-pane",
+      "milestone": "M1",
+      "title": "Fix the flaky plugins/quirky.terminal/test/e2e-ui/features-pane.test.ts, a macOS-only test (scripts/test-on-macos.txt) that failed in 4 runs and passed when rerun alone (see <git common dir>/build-loop/flakes.log). Find the timing assumption with quirk:systematic-debugging from the logged failures, without generating CPU load on the Mac, and fix the test or the code it exposes",
+      "docs": [
+        "term-ui.md"
+      ],
+      "deps": [],
+      "status": "done"
+    },
+    {
+      "id": "fix-flaky-pty-host-manager",
+      "milestone": "M1",
+      "title": "Fix the flaky packages/pty-host/test/manager.test.ts: it failed under load in 4 full-suite runs, and on the new 16-core test host its 'attach > raw mode replays the hot tail and joins the live stream at the offset' test failed even alone ('timed out waiting for echo and cat output' after 5 s). Find out with quirk:systematic-debugging whether the wait is too short or the attach misses output written between the replay and the live subscription, reproduce it under CPU load, and fix the code or the test",
+      "docs": [
+        "term-daemon.md"
+      ],
+      "deps": [],
+      "status": "done"
+    },
+    {
       "id": "m7-test-triage",
       "milestone": "M7",
       "title": "End-phase test triage: run bun scripts/suite.ts packages apps plugins, bun test scripts and bun run typecheck on build/roadmap, and add one fix-test-<area>-<MMDD> item per failing package, app or plugin (naming its failing files and tests) so the lanes split the debugging; change no code",
@@ -1811,17 +1830,6 @@
       "lane": 7
     },
     {
-      "id": "fix-flaky-pty-host-manager",
-      "milestone": "M1",
-      "title": "Fix the flaky packages/pty-host/test/manager.test.ts: it failed under load in 4 full-suite runs, and on the new 16-core test host its 'attach > raw mode replays the hot tail and joins the live stream at the offset' test failed even alone ('timed out waiting for echo and cat output' after 5 s). Find out with quirk:systematic-debugging whether the wait is too short or the attach misses output written between the replay and the live subscription, reproduce it under CPU load, and fix the code or the test",
-      "docs": [
-        "term-daemon.md"
-      ],
-      "deps": [],
-      "status": "in-progress",
-      "lane": 10
-    },
-    {
       "id": "m2-sidebar-extras-followup",
       "milestone": "M7",
       "title": "Complete sidebar-extras deferred parity and verification: audit all 17 spec scenarios, guarded web flows, quiet aging/runtime freshness/corrupt-preference edges, and nonblocking findings recorded in m2-sidebar-extras decisions",
@@ -1848,17 +1856,6 @@
       "lane": 1
     },
     {
-      "id": "fix-flaky-terminal-features-pane",
-      "milestone": "M1",
-      "title": "Fix the flaky plugins/quirky.terminal/test/e2e-ui/features-pane.test.ts, a macOS-only test (scripts/test-on-macos.txt) that failed in 4 runs and passed when rerun alone (see <git common dir>/build-loop/flakes.log). Find the timing assumption with quirk:systematic-debugging from the logged failures, without generating CPU load on the Mac, and fix the test or the code it exposes",
-      "docs": [
-        "term-ui.md"
-      ],
-      "deps": [],
-      "status": "in-progress",
-      "lane": 5
-    },
-    {
       "id": "fix-flaky-pty-host-clear",
       "milestone": "M1",
       "title": "Fix the flaky packages/pty-host/test/clear.test.ts: it failed 3 times in full-suite runs today (15:28, 22:47, 23:11 UTC). Find out with quirk:systematic-debugging whether a wait is too short under load or the clear races with output, reproduce it under CPU load on the test host, and fix the code or the test",
@@ -1866,7 +1863,8 @@
         "term-daemon.md"
       ],
       "deps": [],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 11
     },
     {
       "id": "sb-mobile-settings-visibility",
@@ -1878,7 +1876,8 @@
       "deps": [
         "sb-mobile-daemon"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 2
     },
     {
       "id": "fix-native-m1-term-ui-1028",
@@ -1886,7 +1885,8 @@
       "title": "Fix the native-only failures in m1-term-ui from the 2026-10-28 run: SC-37",
       "docs": [],
       "deps": [],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 5
     },
     {
       "id": "fix-native-m2-editor-1028",
@@ -1894,7 +1894,8 @@
       "title": "Fix the native-only failures in m2-editor from the 2026-10-28 run: SC-9-native",
       "docs": [],
       "deps": [],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 10
     },
     {
       "id": "fix-native-m3-accounts-1028",
@@ -1902,7 +1903,8 @@
       "title": "Fix the native-only failures in m3-accounts from the 2026-10-28 run: AC6-AC7-native-link",
       "docs": [],
       "deps": [],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 12
     },
     {
       "id": "fix-native-m3-vault-1028",

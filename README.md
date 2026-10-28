@@ -48,6 +48,41 @@ Signed distribution is tracked separately. Actual camera, secure-store,
 WebView and keyboard checks remain in the [base native handoff](docs/loop/native/sb-mobile-app.json)
 and [workspace/tab handoff](docs/loop/native/sb-mobile-app-prerequisites.json).
 
+## Owner CLI access to another runtime
+
+An **owner CLI grant gives full daemon access**, unlike the narrower phone companion grant.
+Create it on the target runtime only for a client you trust with the same access as your local
+CLI. It uses the existing pinned-key E2EE listener; no relay or second transport is required.
+
+```sh
+quirky mobile owner-pair --name 'My remote CLI' --address <reachable-address> --confirm --json
+quirky cli runtime add --name remote --code '<offer from owner-pair>' --json
+quirky --runtime remote api --json
+quirky cli runtime call --target remote --method quirky.mobile/state --arguments '{}' --json
+quirky --pairing-code '<offer from owner-pair>' mobile state --json
+quirky mobile owner-grants --json
+quirky mobile owner-revoke '<grant id>' --confirm --json
+```
+
+The offer is a secret. Save it only in the private runtime registry or another secure store;
+grant and saved-runtime listings omit credentials. Revoking a grant closes its live connections
+and rejects future calls. A phone offer cannot grant owner access, even if its client changes
+the offer's scope or claims another role.
+
+An explicit saved runtime or one-off pairing code never falls back to the local daemon.
+`quirky.cli/runtimeCall` lets a local plugin call an exact saved **owner** target and returns
+the safe runtime identity with the remote result. A disconnected mutation is not automatically
+replayed when its outcome is uncertain. Existing saved phone targets keep phone authorization.
+
+Workspace navigation and Sleep resolve `id:`, `name:`, `branch:` and absolute `path:` selectors
+to their actual workspace owner before changing lifecycle state. Unknown or ambiguous workspace
+views refuse the operation. Exact-window routing and compare-and-close preserve other windows
+and a view selected concurrently.
+
+The first-party UI stores a durable installation UUID and binds it to its authenticated connection.
+It is not a machine or OS identity. Clearing browser storage creates a new installation identity;
+old workspace origins remain unchanged, and absent origin evidence stays unknown.
+
 ## Agent Session History
 
 Open **Agent Session History** to browse agent-owned transcripts and resume a session in a
