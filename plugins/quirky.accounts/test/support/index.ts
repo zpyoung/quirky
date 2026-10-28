@@ -249,7 +249,9 @@ export async function startAccounts(options: AccountsOptions = {}): Promise<Acco
   executable(join(fakeBin, 'security'), fakeSecurity)
   symlinkSync(PLUGIN_DIR, join(builtinPluginsDir, 'quirky.accounts'))
   symlinkSync(resolve(PLUGIN_DIR, '../quirky.ask'), join(builtinPluginsDir, 'quirky.ask'))
-  for (const plugin of options.plugins ?? []) {
+  const requestedPlugins = new Set(options.plugins ?? [])
+  if (requestedPlugins.has('quirky.worktree')) requestedPlugins.add('quirky.cli')
+  for (const plugin of requestedPlugins) {
     symlinkSync(resolve(PLUGIN_DIR, `../${plugin}`), join(builtinPluginsDir, plugin))
   }
   process.env.HOME = userHome

@@ -897,6 +897,7 @@ export class AccountService {
     for (const record of records) {
       if (record.source === 'custom') continue
       const session = byId.get(record.sessionId)
+      if (session && session.kind !== 'terminal') continue
       if (!session && !record.error) continue
       if (session?.status === 'exited' && !record.error) continue
       const selectedId = getActiveAccountId(this.store, record.provider)
