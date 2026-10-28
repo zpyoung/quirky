@@ -1844,7 +1844,8 @@
         "worktrees.md"
       ],
       "deps": [],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 1
     },
     {
       "id": "fix-flaky-terminal-features-pane",
