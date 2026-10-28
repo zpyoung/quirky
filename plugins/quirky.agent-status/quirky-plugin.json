@@ -2,12 +2,14 @@
   "id": "quirky.agent-status",
   "name": "Agent status",
   "version": "0.1.0",
-  "description": "Turns agent hooks into a status row per session, the session's status and finish notifications.",
+  "description": "Turns agent hooks into live status rows and durable per-session Activity threads.",
   "main": "main.ts",
+  "ui": "dist/ui.js",
   "cli": "cli.ts",
   "activation": "startup",
   "dependencies": [
-    "quirky.session"
+    "quirky.session",
+    "quirky.worktree"
   ],
   "contributes": {
     "method": [
@@ -991,6 +993,90 @@
             ]
           }
         }
+      },
+      {
+        "id": "activity",
+        "description": "Retained terminal Activity snapshots, attention-ordered and optionally filtered by worktree, text or unread state.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": { "type": "string", "description": "Only threads in this exact worktree ID." },
+            "text": { "type": "string", "description": "Case-insensitive substring of prompt, provider, session or workspace text." },
+            "unreadOnly": { "type": "boolean", "description": "Only threads whose current turn has not been acknowledged." }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "threads": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "sessionId": { "type": "string" },
+                  "worktreeId": { "type": "string" },
+                  "worktreeName": { "type": "string" },
+                  "sessionName": { "type": "string" },
+                  "agent": { "type": "string" },
+                  "turn": { "type": "string", "description": "Stable token for this turn; use it when acknowledging." },
+                  "turnStartedAt": { "type": "number" },
+                  "updatedAt": { "type": "number" },
+                  "display": { "type": "string", "enum": ["waiting", "blocked", "permission", "failed", "unconfirmed", "working", "monitoring", "interrupted", "unverifiable", "done", "idle"] },
+                  "label": { "type": "string" },
+                  "prompt": { "type": "string" },
+                  "detail": { "type": "string" },
+                  "children": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": { "type": "string" },
+                        "kind": { "type": "string", "enum": ["agent", "shell", "cron"] },
+                        "state": { "type": "string", "enum": ["working", "waiting", "done"] }
+                      },
+                      "required": ["id", "kind", "state"]
+                    }
+                  },
+                  "unread": { "type": "boolean" },
+                  "live": { "type": "boolean", "description": "Whether the exact terminal session remains available." }
+                },
+                "required": ["sessionId", "worktreeId", "worktreeName", "sessionName", "agent", "turn", "turnStartedAt", "updatedAt", "display", "label", "prompt", "detail", "children", "unread", "live"]
+              }
+            }
+          },
+          "required": ["threads"]
+        }
+      },
+      {
+        "id": "acknowledge",
+        "description": "Acknowledges a specific Activity turn, or all current turns; an old token cannot acknowledge a newer turn.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": { "type": "string", "description": "Session ID for a turn-scoped acknowledgment." },
+            "turn": { "type": "string", "description": "The observed turn token; if omitted, acknowledges the session's current turn." },
+            "all": { "type": "boolean", "description": "Acknowledge all current Activity threads. Cannot be combined with session or turn." }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": { "acknowledged": { "type": "integer" } },
+          "required": ["acknowledged"]
+        }
+      },
+      {
+        "id": "clearCompleted",
+        "description": "Hides terminal Activity entries (done, failed or interrupted) without deleting sessions, status rows or transcripts.",
+        "params": {
+          "type": "object",
+          "properties": { "worktree": { "type": "string", "description": "Only terminal entries from this exact worktree ID." } }
+        },
+        "result": {
+          "type": "object",
+          "properties": { "cleared": { "type": "integer" } },
+          "required": ["cleared"]
+        }
       }
     ],
     "launch-hook": [
@@ -1038,6 +1124,21 @@
           "required": [
             "sessionId"
           ]
+        }
+      },
+      {
+        "id": "activityChanged",
+        "description": "Activity acknowledgment or clear markers changed without changing agent status rows.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "sessionIds": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "The session IDs whose Activity receipts or clear markers changed."
+            }
+          },
+          "required": ["sessionIds"]
         }
       },
       {
@@ -1233,6 +1334,73 @@
         "methods": [
           "quirky.agent-status/hooksRemove"
         ]
+      },
+      {
+        "id": "activity",
+        "words": "activity",
+        "summary": "list retained Activity threads by attention order",
+        "flags": {
+          "worktree": { "type": "string", "description": "only threads in this worktree ID" },
+          "text": { "type": "string", "description": "filter prompt, provider, session and workspace text" },
+          "unread-only": { "type": "boolean", "description": "show only unread turns" }
+        },
+        "methods": ["quirky.agent-status/activity"]
+      },
+      {
+        "id": "acknowledge",
+        "words": "acknowledge",
+        "summary": "mark one Activity turn read, or all current turns",
+        "positionals": [
+          { "name": "session", "description": "the exact session ID", "required": false }
+        ],
+        "flags": {
+          "turn": { "type": "string", "description": "the observed turn token" },
+          "all": { "type": "boolean", "description": "acknowledge all current Activity threads; do not combine with a session or turn" }
+        },
+        "methods": ["quirky.agent-status/acknowledge"]
+      },
+      {
+        "id": "clear-completed",
+        "words": "clear-completed",
+        "summary": "hide terminal Activity threads without deleting sessions or transcripts",
+        "flags": {
+          "worktree": { "type": "string", "description": "only hide terminal threads in this worktree ID" }
+        },
+        "methods": ["quirky.agent-status/clearCompleted"]
+      }
+    ],
+    "view": [
+      { "id": "activity", "title": "Activity" }
+    ],
+    "sidebar-section": [
+      { "id": "activity", "title": "Activity", "order": 5 }
+    ],
+    "command": [
+      {
+        "id": "openActivity",
+        "title": "Open Activity",
+        "args": {
+          "type": "object",
+          "properties": {
+            "worktree": { "type": "string" },
+            "text": { "type": "string" },
+            "unreadOnly": { "type": "boolean" },
+            "group": { "type": "string", "enum": ["status", "worktree", "provider", "none"] }
+          }
+        }
+      },
+      {
+        "id": "openActivityThread",
+        "title": "Open Activity thread",
+        "args": {
+          "type": "object",
+          "properties": {
+            "sessionId": { "type": "string" },
+            "worktreeId": { "type": "string" },
+            "turn": { "type": "string" }
+          },
+          "required": ["sessionId", "worktreeId", "turn"]
+        }
       }
     ]
   }
