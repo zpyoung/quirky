@@ -683,8 +683,9 @@
       "deps": [
         "m5-loops-core"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 5
     },
     {
       "id": "m5-loops-ui",
