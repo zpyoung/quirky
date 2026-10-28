@@ -315,7 +315,7 @@ export class BrowserExtraActions {
   private async drag(execution: PageExecution, params: Record<string, unknown>) {
     const from = stringParam(params, 'from')
     const to = stringParam(params, 'to')
-    await this.callHelper(execution, 'drag', { from: this.resolveElement(execution, from), to: this.resolveElement(execution, to) })
+    await this.callHelper(execution, 'drag', { source: this.resolveElement(execution, from), target: this.resolveElement(execution, to) })
     return { dragged: { from, to } }
   }
 
