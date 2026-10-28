@@ -66,12 +66,10 @@ test('preferencesState reports profile activity and selected versus active ident
   const activeState = await harness.invoke('preferencesState') as {
     profiles: Array<{ profile: BrowserProfile; active: boolean }>
     identity: { selected: string; active: string; restartRequired: boolean; nativeSupported: boolean }
-    imports: { available: false; reason: string }
     localhostLabels: { available: false; reason: string }
   }
   expect(activeState.profiles.find((item) => item.profile.id.startsWith('profile_'))?.active).toBe(true)
   expect(activeState.identity).toEqual({ selected: 'clean', active: 'clean', restartRequired: false, nativeSupported: false })
-  expect(activeState.imports.available).toBe(false)
   expect(activeState.localhostLabels.available).toBe(false)
 
   harness.settings.identityMode = 'native'

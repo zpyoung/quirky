@@ -4,7 +4,7 @@ import { isValidProfileId, type BrowserProfile } from '../profiles/store'
 import type { PreferencesAdapters, PreferencesState, RegisterPreferences } from './contract'
 import { identityModeFromSetting } from './identity'
 
-const IMPORTS_UNAVAILABLE = 'Cookie import is available through the Browser API and CLI; discovery and import controls are supplied by the profile import UI integration.'
+const IMPORT_DESTINATION = 'Cookies are imported into the selected managed Chrome profile for agents and Watch, not the Native system webview.'
 const LOCALHOST_LABELS_UNAVAILABLE = 'Localhost worktree labels are unavailable because no faithful reachable-host mapping is available.'
 
 type Handler = (params: Record<string, unknown>) => unknown | Promise<unknown>
@@ -55,7 +55,7 @@ export const registerPreferences: RegisterPreferences = (context, adapters) => {
         restartRequired: selectedIdentity !== activeIdentity,
         nativeSupported: false
       },
-      imports: { available: false, reason: IMPORTS_UNAVAILABLE },
+      imports: { available: true, destination: 'managed-chrome', nativeSupported: false, reason: IMPORT_DESTINATION },
       localhostLabels: { available: false, reason: LOCALHOST_LABELS_UNAVAILABLE }
     }
   }

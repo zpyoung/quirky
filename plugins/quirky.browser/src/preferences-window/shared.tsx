@@ -17,6 +17,18 @@ export const BROWSER_SETTING_IDS = {
 } as const
 
 export const BROWSER_SETTINGS_COMMAND = 'command:quirky.browser/browserSettings'
+const PROFILE_SOURCE_LABELS: Readonly<Record<string, string>> = {
+  chrome: 'Google Chrome',
+  edge: 'Microsoft Edge',
+  arc: 'Arc',
+  chromium: 'Brave',
+  comet: 'Comet',
+  helium: 'Helium',
+  firefox: 'Firefox',
+  safari: 'Safari',
+  json: 'JSON file/data',
+  file: 'File'
+}
 
 type SearchEngine = 'google' | 'duckduckgo' | 'bing' | 'kagi'
 type IdentityMode = 'clean' | 'native'
@@ -103,7 +115,7 @@ function isProfileUsage(value: unknown): value is ProfileUsage {
 function isPreferencesState(value: unknown): value is PreferencesState {
   if (!isRecord(value) || !Array.isArray(value.profiles) || !value.profiles.every(isProfileUsage)) return false
   if (!isRecord(value.identity) || (value.identity.selected !== 'clean' && value.identity.selected !== 'native') || (value.identity.active !== 'clean' && value.identity.active !== 'native') || typeof value.identity.restartRequired !== 'boolean' || value.identity.nativeSupported !== false) return false
-  if (!isRecord(value.imports) || value.imports.available !== false || typeof value.imports.reason !== 'string') return false
+  if (!isRecord(value.imports) || value.imports.available !== true || value.imports.destination !== 'managed-chrome' || value.imports.nativeSupported !== false || typeof value.imports.reason !== 'string') return false
   if (!isRecord(value.localhostLabels) || value.localhostLabels.available !== false || typeof value.localhostLabels.reason !== 'string') return false
   return true
 }
@@ -211,41 +223,14 @@ export function ProfileCreator({ context, onCreated, onCancel, onError }: {
   </div>
 }
 
-export function ImportDetails({ context, imports, loadError, onHideHint, onError }: {
-  context: UiPluginContext
-  imports: PreferencesState['imports'] | null
-  loadError?: string | null
-  onHideHint(): void
-  onError(message: string): void
-}) {
-  const [error, setError] = useState<string | null>(null)
-  const openSettings = async () => {
-    setError(null)
-    try {
-      await context.executeCommand(BROWSER_SETTINGS_COMMAND)
-    } catch (cause) {
-      const message = errorMessage(cause)
-      setError(message)
-      onError(message)
-    }
-  }
-  return <section aria-label="Cookie import details">
-    <h3>Import Cookies</h3>
-    {imports ? <p>Cookie import is unavailable: {imports.reason}</p> : loadError ? <p role="alert">Cookie import availability could not be loaded: {loadError}</p> : <p>Loading cookie import availability…</p>}
-    <p>Google logins are not imported. Sign in to Google directly in Quirky.</p>
-    {error && <p role="alert">{error}</p>}
-    <button type="button" onClick={() => void openSettings()}>Browser Settings</button>
-    <button type="button" onClick={onHideHint}>Hide Hint</button>
-  </section>
-}
 
 export function profileSourceLabel(profile: BrowserProfile): string | null {
   if ('sourceLabel' in profile && typeof profile.sourceLabel === 'string' && profile.sourceLabel.trim()) return profile.sourceLabel
   if (!('source' in profile)) return null
   const source: unknown = profile.source
-  if (typeof source === 'string' && source.trim()) return `Imported from ${source}`
+  if (typeof source === 'string' && source.trim()) return `Imported from ${PROFILE_SOURCE_LABELS[source] ?? source}`
   if (!isRecord(source) || typeof source.browserFamily !== 'string') return null
-  const family = source.browserFamily.charAt(0).toUpperCase() + source.browserFamily.slice(1)
+  const family = PROFILE_SOURCE_LABELS[source.browserFamily] ?? source.browserFamily.charAt(0).toUpperCase() + source.browserFamily.slice(1)
   const profileName = typeof source.profileName === 'string' && source.profileName.trim() ? ` (${source.profileName})` : ''
   return `Imported from ${family}${profileName}`
 }

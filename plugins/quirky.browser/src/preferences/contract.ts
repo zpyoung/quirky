@@ -7,7 +7,7 @@ export type ProfileUsage = { profile: BrowserProfile; active: boolean }
 export type PreferencesState = {
   profiles: ProfileUsage[]
   identity: { selected: BrowserIdentityMode; active: BrowserIdentityMode; restartRequired: boolean; nativeSupported: false }
-  imports: { available: false; reason: string }
+  imports: { available: true; destination: 'managed-chrome'; nativeSupported: false; reason: string }
   localhostLabels: { available: false; reason: string }
 }
 export type PreferencesAdapters = {
@@ -19,6 +19,15 @@ export type PreferencesAdapters = {
 }
 export type PreferencesController = { deactivate(): void }
 export type BrowserPreferencesProps = { context: UiPluginContext; pane?: PaneTab; onError(message: string): void }
+export type CookieImportPanelProps = {
+  context: UiPluginContext
+  imports: PreferencesState['imports'] | null
+  destination: { id: string; label: string }
+  loadError?: string | null
+  onHideHint?(): void
+  onError(message: string): void
+  onImported(): Promise<void>
+}
 export type BrowserLinkRequest = { url: string; worktree: string; shift?: boolean; modifier?: boolean }
 export type BrowserLinkResult = { route: 'app' | 'external'; pane?: string }
 export type RegisterPreferences = (context: PluginContext, adapters: PreferencesAdapters) => PreferencesController

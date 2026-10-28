@@ -127,7 +127,7 @@ Chrome identity is `clean` by default; it removes embedding/headless user-agent 
 
 ### Explicit capability limits
 
-- **Cookie import UI:** the engine is available through API/CLI; menus/file selection/source badges/toasts remain with the existing dependent `sa-browser-profile-import-ui`. Current menus do not fabricate those flows. Imports affect managed Chrome/Watch credentials, not the separate Native WKWebView engine. Hide Hint persists and can be reversed in Settings.
+- **Cookie import destination:** menu, toolbar hint and per-profile Settings import controls update the selected managed Chrome/Watch profile, not the separate Native WKWebView engine. Hide Hint persists and can be reversed in Settings.
 - **Native clear/removal:** `profileClear`/`profileDelete` and their `tab profile clear|delete` CLI commands require confirmation and refuse active profiles. Current SDK has no deletion completion acknowledgement; native capability rejects before invocation, preserving Chrome data/profile metadata. Successful native clear/removal is **not shipped**. `sa-browser-native-profile-clear-completion` owns the missing barrier; the one-use desktop claim command cannot bypass ordinary destructive confirmation.
 - **Native identity and localhost labels:** no supported native UA override or faithful worktree-host routing capability is available. Settings state the limits rather than store working-looking no-ops. Exact follow-ups: `sa-browser-native-identity`, `sa-browser-localhost-label-routing`.
 - **Native test state:** `QUIRKY_HOME` alone does not prove WKWebView storage-root isolation. Native nightly scenarios must use newly created UUID profiles only; never clear/use shared Default without independent native-root proof. Web checks cannot prove native storage isolation or deletion.
@@ -136,6 +136,12 @@ Chrome identity is `clean` by default; it removes embedding/headless user-agent 
 ## Cookie import and credential safety
 
 `detectBrowsers` inspects installed source cookie files only when explicitly requested. Import supports detected macOS Chromium-family profiles, Firefox SQLite, Safari binarycookies, explicit daemon-local JSON files, and explicit API JSON cookie arrays. Sources are read-only; destination data stays inside the selected managed profile. Chromium source decryption uses the selected browser's Safe Storage key only on explicit import. Tests inject synthetic roots/keys and never read the user's browser or Keychain.
+
+Open **Import Cookies** in the Browser menu or beside a Settings profile to detect source browsers. Expanding the toolbar **Import browser data** hint offers the same controls for that pane's profile. Detection does not run on startup or ordinary profile listing. Multiple source profiles appear as named choices; empty or denied discovery still leaves **From File** available.
+
+**From File** opens an Import Cookies dialog and a JSON file chooser. The selected file's bytes are sent as the existing JSON API source, not as a guessed daemon-side path. Invalid JSON, a non-array or an empty array reports an error without starting an import. A replacement confirmation names the captured destination; changing a pane's selected profile does not retarget an accepted job.
+
+The controls show queued/running progress, then the actual imported/skipped/Google/partition counts and engine warnings. Success and failure produce toasts; successful imports refresh source badges in Settings and the Browser menu. Closing the control stops UI polling without cancelling the daemon-owned job; its state remains available through `importGet`/`importList` until daemon shutdown.
 
 `importCookies` performs a confirmed one-shot import. `importStart` returns a tracked job ID; `importGet` and `importList` expose its state and actual summary. Import methods require ordinary destructive confirmation or `--yes`. Summaries include imported/skipped counts and domain/decryption/partition warnings, never credential values.
 

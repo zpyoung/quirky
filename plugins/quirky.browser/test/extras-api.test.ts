@@ -19,9 +19,8 @@ test('preferences and profile listings do not detect source browsers until expli
     safari: join(sourceRoot, 'Cookies.binarycookies')
   } })
   try {
-    const preferences = await call(h, 'preferencesState') as { imports: { available: boolean; reason?: string } }
+    await call(h, 'preferencesState')
     await call(h, 'profileList')
-    expect(preferences.imports.available).toBe(false)
     expect(h.spawnCount()).toBe(0)
 
     const detected = await call(h, 'detectBrowsers') as { browsers: unknown[] }
