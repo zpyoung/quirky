@@ -110,6 +110,50 @@
 - **Revisit if:** Linux/Windows becomes a supported build target.
 - **Source:** deferred: platform
 
+## D11: Consume coordinated committed implementations instead of duplicate rewriting
+- **Question:** lane8 reports its m7-sweep-hosting branch already implements both exact API gaps and the Tasks guards; which tree owns implementation?
+- **Options:** continue independent production rewrites; copy foreign uncommitted changes; consume isolated committed changes and add only missing verification.
+- **Chose:** cherry-picked -x9cc24e68 andeafde4d7 as aae21422/98a52de5. Local agents remain tests-only on separate scopes; parent reconciles canonical fixture updates when lane8 commits them. No production rewrite started locally.
+- **Why:** user coordination explicitly prioritizes reuse and avoiding colliding source. Incoming code authenticates repository.owner and removes all three UI owner guards, with8 search and3 type regressions reported passed by lane8. Those reports are not relabeled parent-observed checks.
+- **Evidence:** user coordination interjection; git show stats/source for both exact commits; cherry-pick output; /tmp/quirky-lane8-hosting-parity-reply.md.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** independent acceptance reveals a gap or canonical lane8 changes conflict.
+- **Source:** supersedes m4-hosting-api-github-parity D8 (local production implementation ownership)
+
+## D12: Keep source query-document limits rather than add a speculative variable ceiling
+- **Question:** should the new spec count serialized variables against the12000-character batching bound?
+- **Options:** a new combined body ceiling; source document ceiling plus the existing runner body bound.
+- **Chose:** document <=12000 characters and runner <=8192 UTF-8 document bytes, with existing request-body limits unchanged. Amend the logic source before any corrective implementation.
+- **Why:** hosting-api.md names query characters, while the consumed implementation uses variables and honors the stricter current runner document ceiling. Lowering the variable-body limit would invent a new constraint rather than deliver parity.
+- **Evidence:** item-search.ts MAX_BATCH_QUERY_CHARACTERS/MAX_EXECUTABLE_QUERY_BYTES and splitBatches; runtime-runner.ts:481-484; hosting-api.md:304.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** GitHub or the public API defines a combined request-size requirement.
+- **Source:** supersedes m4-hosting-api-github-parity D5 (batch-size interpretation only)
+
+## D13: Preserve independent regression evidence and repair provider fixtures, not assertions
+- **Question:** how to interpret the first integrated5-file run (52pass11fail), and which fixes are justified?
+- **Options:** weaken assertions or increase timeouts; repeat the whole run unchanged; fix the demonstrated cursor defect and protocol-fixture mismatches.
+- **Chose:** keep the assertions and original bounds. A repeated cursor returned100 rows with50 unique identities; reject previously seen continuation cursors before appending a block, then use the existing REST fallback. Repair alias-aware rule routing, authenticated nested repository.owner, mixed-owner Project view/item fixture lookup and issue-store readback. The isolated account test must return real --user capability help and always await its released pending request.
+- **Why:** old-source GH34 was independently red (0pass4fail) and the Tasks user-project regression was red on unsupported_operation. Consumed source clears that boundary, but fixtures still described the old wire shape. Missing fixtures are not grounds to change the provider contract. The Tasks selection20s timeout remains disclosed; no product/test deadline is raised.
+- **Evidence:** old-source test outputs; integrated run artifact://39 (435.84s); parity-search-regressions.test.ts:168-171; current fetchGraphqlSearch previously appended repeated results; committed6867676f compatibility diff; ConsumerFixtureRepair root-cause report.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** owning-file checks still fail after the scoped repairs.
+- **Source:** assumed — autonomous
+
+## D14: Accept lane8's observed selector regression as ground truth
+- **Question:** lane8 reports a successful Bug write becomes a blank select after Board→Table; reproduce it here or consume its committed fix?
+- **Options:** repeat the known broken scenario; rewrite the same UI fix; await the isolated committed correction and verify closure once.
+- **Chose:** do not rerun to confirm the reported failure. Lane8 owns the tiny selector patch; consume its committed SHA when supplied, then exercise U01 including Board→Table and retained visible Bug.
+- **Why:** user-reported observation is ground truth and duplicate source rewrites risk conflicts. Unloaded choices must not hide the saved current value.
+- **Evidence:** lane8 user interjection (screenshot observation11, red); coordination reply /tmp/quirky-lane8-hosting-parity-reply.md.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the committed fix does not close the actual U01 scenario.
+- **Source:** assumed — autonomous
+
 ## Progress
 
-Scope and self-reviewed combined spec complete. Commit the unchanged public contracts/spec and decision log, then create three component worktrees and dispatch the one implementation wave. Scratch /tmp/quirky-lane6-parity-tekogA. No implementation or behavioral check run yet; no review clearance claimed.
+Consumed production and independent test commits through36601fba. Actual generated CLI type discovery/case-insensitive name change/provider readback and search/count passed. Packaged macOS build passed22UI modules29plugins; nonfatal missing icon/release-base warnings are not packaging-artwork proof. First integrated5-file regression run52pass11fail; minimal repeated-cursor source guard applied, two disjoint fixture repair agents dispatched with no checks/commits (consumer fixture returned, hosting fixture pending). Await lane8 committed selector fix before U01. Next run affected owning checks, actual web flow, affected suites/scripts/typecheck, catch up and land. No review clearance claimed.

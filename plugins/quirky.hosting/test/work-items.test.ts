@@ -114,7 +114,7 @@ function matchesGraphqlField(source, field) {
   const withoutComments = source.replace(/#[^\n\r]*/g, '')
   const withoutStrings = withoutComments.replace(/"(?:\\.|[^"\\])*"/g, '""')
   if (!/^[_A-Za-z][_0-9A-Za-z]*$/.test(field)) return false
-  return new RegExp('(?:^|[\\s{])(?:[A-Za-z_][A-Za-z0-9_]*\\s*:\\s*)?' + field + '\\s*(?=[({])').test(withoutStrings)
+  return new RegExp('(?:^|[\\s{])(?:[A-Za-z_][A-Za-z0-9_]*\\s*:\\s*)?' + field + '\\s*(?=[({}\\s]|$)').test(withoutStrings)
 }
 const responses = Array.isArray(state.responses) ? state.responses : []
 const rule = responses.find((entry) => {
@@ -578,7 +578,10 @@ function dynamicGraphql() {
     if (repositoryFieldRequested && repositoryKey !== null) {
       data.repository = {}
       if (repositoryOwnerRequested) {
-        data.repository.owner = repositoryOwnerMetadata
+        data.repository.owner = { __typename: repositoryOwnerType }
+        if (matchesGraphqlField(query, 'login') && typeof repositoryOwnerLogin === 'string') {
+          data.repository.owner.login = repositoryOwnerLogin
+        }
         call.repositoryOwnerType = repositoryOwnerType
       }
       if (matchesGraphqlField(query, 'issue')) {
@@ -589,16 +592,16 @@ function dynamicGraphql() {
     }
     if (issueTypeConnectionRequested) {
       call.issueTypeConnection = true
-      if (repositoryOwnerType !== 'User') {
+      if (repositoryOwnerType === 'Organization') {
         const catalogOwner = typeof repositoryOwnerLogin === 'string' ? repositoryOwnerLogin : variable('owner')
         const catalog = issueTypeStore?.[catalogOwner] ?? []
         const cursor = variable('cursor') ?? variable('after')
-        let page = { nodes: Array.isArray(catalog) ? catalog : [], pageInfo: { hasNextPage: false } }
+        let page = { nodes: Array.isArray(catalog) ? catalog : [], pageInfo: { endCursor: null, hasNextPage: false } }
         if (isObject(catalog) && isObject(catalog.pages)) {
           const pageKey = typeof cursor === 'string' && cursor.length > 0 ? cursor : 'start'
           if (isObject(catalog.pages[pageKey])) page = catalog.pages[pageKey]
         }
-        data.organization = { issueTypes: page }
+        if (isObject(data.repository) && isObject(data.repository.owner)) data.repository.owner.issueTypes = page
       }
     }
     return { handled: true, value: { data } }
@@ -639,6 +642,39 @@ function dynamicGraphql() {
 }
 
 if (command.includes('api') && command.includes('graphql')) {
+  const searchAliases = [...query.matchAll(/([_A-Za-z][_0-9A-Za-z]*)\s*:\s*search\s*\(([^)]*)\)/g)]
+  if (searchAliases.length > 0) {
+    const tokenRules = isObject(state.graphqlByToken) ? state.graphqlByToken[process.env.GH_TOKEN ?? ''] : undefined
+    const graphRules = Array.isArray(tokenRules) ? tokenRules : Array.isArray(state.graphql) ? state.graphql : []
+    const data = {}
+    const errors = []
+    let cost = 0
+    for (const [, alias, argumentsText] of searchAliases) {
+      const fieldVariable = (name) => {
+        const nameMatch = new RegExp('\\b' + name + '\\s*:\\s*\\$([_A-Za-z][_0-9A-Za-z]*)').exec(argumentsText)
+        return nameMatch ? variables[nameMatch[1]] : undefined
+      }
+      const fieldVariables = { search: fieldVariable('query'), first: fieldVariable('first'), after: fieldVariable('after') }
+      const variableText = JSON.stringify(fieldVariables)
+      const graphRule = graphRules.find((entry) =>
+        entry && typeof entry.when === 'string' &&
+        (entry.when.startsWith('field:') ? matchesGraphqlField(query, entry.when.slice('field:'.length)) : query.includes(entry.when)) &&
+        (entry.whenArgs === undefined || command.includes(entry.whenArgs) || variableText.includes(entry.whenArgs) || query.includes(entry.whenArgs)) &&
+        (entry.nth === undefined || entry.nth === calls.filter((candidate) => candidate && candidate.query === query).length)
+      )
+      // A configured CLI/HTTP failure affects the whole provider request, not one alias.
+      if (graphRule && typeof graphRule.error === 'string') fail(graphRule.error)
+      const envelope = isObject(graphRule?.body) ? graphRule.body : {}
+      const body = isObject(envelope.data) ? envelope.data : {}
+      if (Object.hasOwn(body, 'search')) data[alias] = body.search
+      if (typeof body.rateLimit?.cost === 'number') cost += body.rateLimit.cost
+      for (const error of Array.isArray(envelope.errors) ? envelope.errors : []) {
+        errors.push({ ...error, path: Array.isArray(error.path) && error.path[0] === 'search' ? [alias, ...error.path.slice(1)] : error.path })
+      }
+    }
+    if (cost > 0) data.rateLimit = { cost }
+    emit({ data, ...(errors.length > 0 ? { errors } : {}) })
+  }
   const dynamic = dynamicGraphql()
   if (dynamic.handled) emit(dynamic.value)
   const tokenRules = isObject(state.graphqlByToken) ? state.graphqlByToken[process.env.GH_TOKEN ?? ''] : undefined

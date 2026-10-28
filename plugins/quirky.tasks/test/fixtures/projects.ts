@@ -274,6 +274,7 @@ function fieldConfig(project, fieldId) {
 }
 function itemGraphNode(item) {
   const kind = item.kind === 'pullRequest' ? 'PullRequest' : item.kind === 'draft' ? 'DraftIssue' : 'Issue'
+  const issue = issues[(item.repository ?? '') + '/' + item.number]
   const content = {
     __typename: kind,
     ...(kind === 'DraftIssue' ? {} : { number: Number(item.number), [kind === 'PullRequest' ? 'pullRequestState' : 'issueState']: String(item.state ?? 'open').toUpperCase(), isDraft: item.isDraft === true }),
@@ -281,7 +282,7 @@ function itemGraphNode(item) {
     repository: { nameWithOwner: item.repository ?? null },
     labels: { nodes: (item.labels ?? []).map((entry) => typeof entry === 'string' ? { name: entry, color: '' } : entry) },
     assignees: { nodes: (item.assignees ?? []).map((entry) => typeof entry === 'string' ? { login: entry, name: null, avatarUrl: null } : entry) },
-    ...(kind === 'Issue' ? { stateReason: item.stateReason ?? null, issueType: item.issueType ?? null, ...(item.parent ? { parent: item.parent } : {}) } : {}),
+    ...(kind === 'Issue' ? { stateReason: issue?.stateReason ?? item.stateReason ?? null, issueType: issue?.issueType ?? item.issueType ?? null, ...(item.parent ? { parent: item.parent } : {}) } : {}),
     ...(kind === 'PullRequest' ? { headRefName: item.headRefName ?? null, baseRefName: item.baseRefName ?? null } : {})
   }
   const parent = projectViews[projectKey(item.ownerType === 'User' ? 'user' : 'organization', item.owner, item.projectNumber)]
@@ -343,7 +344,8 @@ if (query.includes('query ProjectOwner')) {
 if (query.includes('query ProjectViews')) {
   const owner = variable('owner')
   const number = Number(variable('number'))
-  const kind = ownerKindFromQuery(query)
+  const requestedKind = ownerKindFromQuery(query)
+  const kind = !getProject(requestedKind, owner, number) && query.includes('user(login:') ? 'user' : requestedKind
   const project = getProject(kind, owner, number)
   if (!project) fail('HTTP 404: Project not found')
   const views = (project.views ?? []).map((view) => ({
@@ -358,7 +360,8 @@ if (query.includes('query ProjectViews')) {
 if (query.includes('query ProjectItems')) {
   const owner = variable('owner')
   const number = Number(variable('number'))
-  const kind = ownerKindFromQuery(query)
+  const requestedKind = ownerKindFromQuery(query)
+  const kind = !getProject(requestedKind, owner, number) && query.includes('user(login:') ? 'user' : requestedKind
   const project = getProject(kind, owner, number)
   if (!project) fail('HTTP 404: Project not found')
   const items = matchingItems(owner, number).map(itemGraphNode)

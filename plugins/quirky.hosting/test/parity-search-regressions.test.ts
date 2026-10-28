@@ -204,7 +204,11 @@ test('whole-call GraphQL failures fall back to REST or remain explicit partial f
 }, 30_000)
 
 test('ambient and explicitly bound accounts do not share an in-flight search batch', async () => {
-  const host = await bootHosting(searchBatchFixture)
+  const accountSelectionFixture = searchBatchFixture.replace(
+    "if (args.includes('auth') && args.includes('token')) {\n  process.stdout.write('fixture-search-batch-token')\n  process.exit(0)\n}",
+    "if (args.includes('auth') && args.includes('token')) {\n  process.stdout.write(args.includes('--help') ? 'gh auth token --user USER' : 'fixture-search-batch-token')\n  process.exit(0)\n}"
+  )
+  const host = await bootHosting(accountSelectionFixture)
   hosts.push(host)
   const query = 'account-scope-isolation'
   const issueSearch = searchExpression(query, 'issue')
@@ -235,9 +239,12 @@ test('ambient and explicitly bound accounts do not share an in-flight search bat
     const ambient = object(await ambientPromise)
     expect(ambient.count).toBe(42)
   } finally {
-    const released = object(host.readState())
-    released.releaseHeldSearches = true
-    host.writeState(released)
-    await ambientPromise.catch(() => undefined)
+    try {
+      const released = object(host.readState())
+      released.releaseHeldSearches = true
+      host.writeState(released)
+    } finally {
+      await ambientPromise.catch(() => undefined)
+    }
   }
 }, 30_000)
