@@ -183,10 +183,6 @@ export class LoopDriver {
     return this.runPromise ?? Promise.resolve()
   }
 
-  waitForFinish(): Promise<void> {
-    return this.runPromise ?? Promise.resolve()
-  }
-
   wake(): void {
     for (const resolve of this.wakeWaiters) resolve()
     this.wakeWaiters.clear()

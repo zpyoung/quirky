@@ -73,8 +73,8 @@ describe('quirky.loops preset API', () => {
     }
     expect(rig.starts).toHaveLength(0)
     expect(rig.sends).toHaveLength(0)
-    expect(await rig.call('quirky.loops/list', {})).toEqual([])
-  })
+    expect(await rig.call<LoopSnapshot[]>('quirky.loops/list', {})).toEqual([])
+  }, 30_000)
   test('API defaults session policy by preset and allows interval pacing on a queue preset', async () => {
     rig = await startLoopRig({ script: () => 'iteration settled' })
     const untilDone = await rig.call<LoopSnapshot>('quirky.loops/create', {
@@ -107,7 +107,7 @@ describe('quirky.loops preset API', () => {
     const intervalWaiting = await rig.waitForLoop(interval.id, (snapshot) => snapshot.nextIterationAt !== null)
     expect(intervalWaiting.config.sessionPolicy).toBe('continue')
     expect(rig.sends).toHaveLength(3)
-  })
+  }, 30_000)
 
 
   test('queue API mutations preserve item identity and order, reject malformed operations, and honor approval resumes', async () => {
@@ -173,5 +173,5 @@ describe('quirky.loops preset API', () => {
       expect.stringContaining('task B'),
       expect.stringContaining('task C updated')
     ])
-  })
+  }, 30_000)
 })

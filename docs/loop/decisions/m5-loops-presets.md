@@ -88,5 +88,60 @@
 - **Revisit if:** another cross-worktree write occurs
 - **Source:** assumed — autonomous
 
+## D9: Merge audited core repairs without treating the dependency as landed
+- **Question:** early dependency published source twice while its own required gate was still pending
+- **Options:** wait idle until landing; copy live worker trees; merge pinned audited checkpoints and preserve later fixes
+- **Chose:** merge audited e0582785, then stable repair f181908e in parent. Read core D13-D21 and notify runtime owner of exact delta: section replacement, finished-only public history, resume handoff, deferred settled/own-prompt races, shutdown cancellation, approval/time/cost safety and terminal non-adoption. Core still must reach queue done before this item lands.
+- **Why:** early rules explicitly permit branch-dependent implementation; a source audit is not a green test gate. Read-only newer-schema access, bounded journal paging, central notifications and creating-plugin cleanup remain binding.
+- **Evidence:** lane2 priority handoffs; core decisions D13-D21; own merges; native core smoke/typecheck reported by lane2, not substituted for presets verification
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** later dependency fixes change a seam
+- **Source:** locked by docs/loop/LOOP.md
+
+## D10: Clarify API defaults and preserve real queue lifecycle in acceptance tests
+- **Question:** raw API config defaults/queue pacing and test drafts that assumed empty creation or replayed done rows
+- **Options:** weaken runtime to fit drafts; correct tests against feature semantics before implementation
+- **Chose:** optional raw sessionPolicy normalizes to preset default, explicit values strict; queue API may explicitly combine interval pacing while CLI every/anchor remain interval-only. Queue creation requires nonempty seeds; empty queue tests remove done rows after creation. Ask-before-next requires one resume per actual pending task, and moving done rows never replays them without repeat reset. Active attempt timing uses snapshot or finished history after stop.
+- **Why:** Config shape separates prompt source from pacing; CLI has narrower flag combinations. Original feature requires nonempty seeds and done/in-flight/pending identity. A test is not authority over these invariants.
+- **Evidence:** fork-loops.md Config shape, CLI combinations, Queue editor, decideNext; initial parent test review corrections sent to both owners; logic amendments
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** authoritative feature contract differs
+- **Source:** locked by research/orca-features/fork-loops.md
+
+## D11: Keep queue writes explicit and skip reads constant-time
+- **Question:** stale driver snapshots can overwrite concurrent queue mutations, and summing all attempt keys makes each snapshot grow with loop age
+- **Options:** persist full snapshot queue on every phase; explicit queue transaction and scalar skip accounting
+- **Chose:** dedicated durable queue JSON row, explicit seed/mutate/claim/settle only; generic phase/config loop writes never overwrite queueItems. Claim plus attempt creation and exact-id settlement plus totals share transactions. Skipped ticks increment a stored scalar once per ended attempt, deduplicated by current attempt state/key, not by polling or summing all history.
+- **Why:** driver snapshots cross awaits while API edits remain live. Long-running loops must not turn each get/phase into O(total attempts) work. Queue policy clones only changed arrays/rows and trusts the store's dense order.
+- **Evidence:** core LoopStore/writeLoop and LoopDriver async shape; queue.ts policy17pass/43assertions; runtime-owner storage handoff and parent invariant messages
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** an actual concurrent mutation is lost or skip totals double-count
+- **Source:** assumed — autonomous
+
+## D12: Repair merge/type errors and give fixture watchdogs coherent outer budgets
+- **Question:** first integrated checks found eight compiler diagnostics and multi-turn tests killed by Bun's5second outer guard before their10second condition wait
+- **Options:** weaken assertions/production waits; repair exact compile errors and outer fixture configuration
+- **Chose:** remove the duplicate waitForFinish method introduced by merging the same core repair twice; retain both decision and pacing imports; preserve core section-replacement semantics and preset scalar-column omission. Restore missing CLI test type imports, type empty-list API results, and supply the newly required unused client transport fixture as a throwing boundary. Normal new integration tests get30second outer budgets; five-turn repeat gets60; intentional real-minute tests retain100/90seconds. No condition/production timeout or behavior assertion changes.
+- **Why:** native actual queue delivery passed; the failed API CRUD case passed in isolation4.78seconds/13assertions with a30second outer guard. Initial runtime file16pass/3fail had only five-second watchdog failures, including successful real-minute positive-skip and due-send tests. TypeScript is now clean after these exact repairs.
+- **Evidence:** initial compiler artifact69; API/CLI artifact67; runtime16/3 artifact70; isolated API command; subsequent typecheck exit0/38.85seconds. Fixture-only fixer HEAD/scope audit passed; only test closers changed beyond named parent type repairs.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a condition itself times out or fresh required gates find an assertion failure
+- **Source:** assumed — autonomous
+
+## D13: Actual native executable smoke proves the shipped preset path
+- **Question:** API harness tests alone do not prove native provider execution or executable CLI dispatch
+- **Options:** accept scripted in-process runner only; run real source CLI plus real daemon and native protocol subprocess fixture
+- **Chose:** run prepared isolated smoke with source daemon/CLI and executable Codex app-server fixture, no provider credentials or real homes. Observed A then C after real queue add/edit/move/remove, single resume, same continued session, completed exhaustion; interval first prompt then future epoch deadline, no early resend, immediate stop. Exactly3native turn/start requests; all children reaped and home removed.
+- **Why:** exercises real parser/catalog/RPC/plugin/store/structured-runner/native JSONL transport, not mock forwarding. No UI surface is added, so no UI/native-focus pass is claimed; core's separate native handoff remains intact.
+- **Evidence:** /tmp/quirky-presets-lane5-7uwItkNC/native-smoke.json ok:true, three assertion groups, homeRemoved:true; actual command exit0/19.63seconds
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** final affected or landing gate regresses native lifecycle
+- **Source:** assumed — autonomous
+
 ## Progress
-Claimed exactly m5-loops-presets; parent checkpoint625ca116. Merged committed core95383d97 contracts; core code still in-flight on lane2 and must not be copied from worker trees. Combined spec/types committed1915c799. Independent pacing module verified10pass/0fail/11assertions and merged625ca116; own component removed after inherited metadata preservation. Runtime worker implements pure queue policy in isolated component after D8 replan; core-dependent runtime/surface integration remains pending audited source. Native executable daemon/CLI smoke prepared but UNRUN in scratch. Then own gates, dependency readiness, one roadmap catchup/read incoming decisions, review/land. No second item; no whole-queue completion claim.
+Runtime edaae57f and public surface a82b5a8d audited and merged; component worktrees removed after preserving inherited metadata in named stashes. Core/preset merge resolved preserving both intents, then duplicate method and fixture type issues fixed. Pure decision/queue/pacing55pass/0fail/98assertions. Actual executable native smoke PASSED (D13). TypeScript clean after D12. Corrected three-file API/CLI/runtime test run is currently in progress; final affected runner/scripts and dependency readiness/catchup still pending. Reviewer criteria prepared but no review started or PASS claimed. No second item; no whole-queue completion claim.
