@@ -69,7 +69,7 @@ export function startFixtureServer(): FixtureServer {
 }
 
 function createTestPluginDir(builtinPluginsDir: string): void {
-  for (const id of ['quirky.repo', 'quirky.worktree']) symlinkSync(join(PLUGINS, id), join(builtinPluginsDir, id))
+  for (const id of ['quirky.repo', 'quirky.worktree', 'quirky.agents', 'quirky.session', 'quirky.terminal', 'quirky.editor']) symlinkSync(join(PLUGINS, id), join(builtinPluginsDir, id))
   const pluginDir = join(builtinPluginsDir, 'quirky.browser')
   mkdirSync(pluginDir, { recursive: true })
   for (const name of ['quirky-plugin.json', 'package.json']) {
@@ -107,6 +107,7 @@ export async function startBrowserHarness(extra: Partial<BrowserTestOverrides> =
     },
     chromeArguments: ['--use-mock-keychain'],
     chromePath: null,
+    downloadDirectory: join(home, 'Downloads'),
     ...extra
   }
   setBrowserTestOverrides(home, overrides)

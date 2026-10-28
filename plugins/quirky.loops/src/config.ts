@@ -1,4 +1,4 @@
-import type { LoopConfig, LoopConfigPatch } from './types'
+import type { LoopConfig, LoopConfigPatch, LoopPreset } from './types'
 
 const objectOf = (value: unknown, path: string): Record<string, unknown> => {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new TypeError(`${path} must be an object`)
@@ -67,19 +67,43 @@ function normalizeCaps(value: unknown): LoopConfig['caps'] {
   }
 }
 
-export function normalizeLoopConfig(value: unknown): LoopConfig {
+export function normalizeLoopConfig(value: unknown, preset: LoopPreset = 'until-done'): LoopConfig {
   const config = objectOf(value, 'config')
   onlyKeys(config, ['promptSource', 'pacing', 'sessionPolicy', 'done', 'caps', 'noProgress', 'protectedPaths', 'checkpointCommits', 'askBeforeNext', 'resumeAtLimitReset'], 'config')
+
   const promptSource = objectOf(config.promptSource, 'config.promptSource')
-  onlyKeys(promptSource, ['kind', 'body'], 'config.promptSource')
-  if (promptSource.kind !== 'repeat') throw new TypeError('config.promptSource.kind must be repeat; only until-done loops are supported')
-  const body = text(promptSource.body, 'config.promptSource.body', true)
+  let normalizedPromptSource: LoopConfig['promptSource']
+  if (promptSource.kind === 'repeat') {
+    onlyKeys(promptSource, ['kind', 'body'], 'config.promptSource')
+    normalizedPromptSource = { kind: 'repeat', body: text(promptSource.body, 'config.promptSource.body', true) }
+  } else if (promptSource.kind === 'queue') {
+    onlyKeys(promptSource, ['kind', 'repeatQueue'], 'config.promptSource')
+    normalizedPromptSource = {
+      kind: 'queue',
+      repeatQueue: bool(promptSource.repeatQueue, 'config.promptSource.repeatQueue'),
+    }
+  } else {
+    throw new TypeError('config.promptSource.kind must be repeat or queue')
+  }
 
   const pacing = objectOf(config.pacing, 'config.pacing')
-  onlyKeys(pacing, ['kind'], 'config.pacing')
-  if (pacing.kind !== 'on-idle') throw new TypeError('config.pacing.kind must be on-idle; only until-done loops are supported')
+  let normalizedPacing: LoopConfig['pacing']
+  if (pacing.kind === 'on-idle') {
+    onlyKeys(pacing, ['kind'], 'config.pacing')
+    normalizedPacing = { kind: 'on-idle' }
+  } else if (pacing.kind === 'interval') {
+    onlyKeys(pacing, ['kind', 'minutes', 'anchor'], 'config.pacing')
+    const minutes = positive(pacing.minutes, 'config.pacing.minutes', true)
+    const anchor = pacing.anchor
+    if (anchor !== 'from-end' && anchor !== 'wall-clock') {
+      throw new TypeError('config.pacing.anchor must be from-end or wall-clock')
+    }
+    normalizedPacing = { kind: 'interval', minutes, anchor }
+  } else {
+    throw new TypeError('config.pacing.kind must be on-idle or interval')
+  }
 
-  const sessionPolicy = config.sessionPolicy === undefined ? 'fresh' : config.sessionPolicy
+  const sessionPolicy = config.sessionPolicy === undefined ? (preset === 'until-done' ? 'fresh' : 'continue') : config.sessionPolicy
   if (sessionPolicy !== 'fresh' && sessionPolicy !== 'continue') throw new TypeError('config.sessionPolicy must be fresh or continue')
 
   const rawDone = config.done === undefined ? {} : config.done
@@ -99,8 +123,8 @@ export function normalizeLoopConfig(value: unknown): LoopConfig {
   }
 
   return {
-    promptSource: { kind: 'repeat', body },
-    pacing: { kind: 'on-idle' },
+    promptSource: normalizedPromptSource,
+    pacing: normalizedPacing,
     sessionPolicy,
     done,
     caps,

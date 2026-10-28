@@ -1,5 +1,6 @@
 import { act } from 'react'
 import { RpcError, RpcErrorCode, type QuirkyEvent, type UiLayout, type UiPluginContext } from '@quirky/protocol'
+import { createNativeBrowserCapability } from '../../../packages/ui/src/native-browser'
 
 type Handler = (params: Record<string, any>) => unknown
 
@@ -65,6 +66,7 @@ export function fakeContext(handlers: Record<string, Handler> = {}, settings: Re
 
   const context: UiPluginContext = {
     pluginId: 'quirky.terminal',
+    nativeBrowser: createNativeBrowserCapability(),
     log() {},
     provide(id, implementation) {
       provided.set(id, implementation as (...args: any[]) => any)
