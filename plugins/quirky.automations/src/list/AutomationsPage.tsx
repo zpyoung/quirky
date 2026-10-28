@@ -445,6 +445,7 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
   const loadGeneration = useRef(0)
   const dashboardGeneration = useRef(0)
   const rowElements = useRef(new Map<string, HTMLTableRowElement>())
+  const rowMenuTriggerElements = useRef(new Map<string, HTMLButtonElement>())
   const historyElements = useRef(new Map<string, HTMLTableRowElement>())
   const reloadPromise = useRef<Promise<void> | null>(null)
   const reloadAgain = useRef(false)
@@ -759,7 +760,7 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
   const dashboardResult = useMemo(() => filterDashboardRows(data.dashboardRuns, data.definitions, data.editorData, navigation), [data.dashboardRuns, data.definitions, data.editorData, navigation])
   const dashboardMetrics: DashboardMetrics = useMemo(() => summarizeDashboardRuns(data.dashboardRuns, Date.now()), [data.dashboardRuns])
   const reportState = useMemo(() => ({
-    kind: 'automation-page', page: navigation.page,
+    kind: 'automation-page', page: navigation.page, openMenuKey,
     loading: { native: data.nativeLoading, external: data.externalLoading, latestRuns: data.nativeLoaded && !data.lastRunsLoaded, detail: detailState.loading, history: history.loading, usageHistory: detailUsage.loading, runDetails: runDetail.loading, dashboard: data.dashboardLoading },
     busy: busyAction ?? (refreshing ? 'refresh' : rerunPending ? 'rerun' : null),
     errors: { native: reportText(data.nativeError), editorData: reportText(data.editorError), external: reportText(data.externalError), latestRuns: reportIds(data.lastRunErrors), action: reportText(actionError), detail: reportText(detailState.error), history: reportText(history.error), usageHistory: reportText(detailUsage.error), runDetails: reportText(runDetail.error), runOpen: reportText(runOpenError) },
@@ -776,7 +777,7 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
     external: { loaded: data.externalLoaded, unavailableManagerIds: reportIds(data.managers.filter((manager) => manager.status === 'unavailable').map((manager) => manager.id)) },
     settingsLinkAvailable: showSettingsLink,
     listHistory: { loaded: data.lastRunsLoaded, unavailableAutomationIds: reportIds(data.lastRunErrors) }
-  }), [actionError, busyAction, data.dashboardErrors.length, data.dashboardLoaded, data.dashboardLoading, data.dashboardRuns.length, data.definitions, data.editorError, data.externalError, data.externalLoaded, data.externalLoading, data.lastRunErrors, data.lastRunsLoaded, data.managers, data.nativeError, data.nativeLoaded, data.nativeLoading, dashboardMetrics, dashboardResult.runs, deleteDialog, detailState.error, detailState.loading, detailUsage.error, detailUsage.loading, detailUsage.runs.length, history.cursor, history.error, history.loading, history.runs.length, historyStarts, navigation, refreshing, rerunPending, runDetail.error, runDetail.loading, runOpenError, runOpenTarget, selectedHistoryIndex, selectedRowKey, showSettingsLink, sortedRows, targetChecks])
+  }), [actionError, busyAction, data.dashboardErrors.length, data.dashboardLoaded, data.dashboardLoading, data.dashboardRuns.length, data.definitions, data.editorError, data.externalError, data.externalLoaded, data.externalLoading, data.lastRunErrors, data.lastRunsLoaded, data.managers, data.nativeError, data.nativeLoaded, data.nativeLoading, dashboardMetrics, dashboardResult.runs, deleteDialog, detailState.error, detailState.loading, detailUsage.error, detailUsage.loading, detailUsage.runs.length, history.cursor, history.error, history.loading, history.runs.length, historyStarts, navigation, openMenuKey, refreshing, rerunPending, runDetail.error, runDetail.loading, runOpenError, runOpenTarget, selectedHistoryIndex, selectedRowKey, showSettingsLink, sortedRows, targetChecks])
 
   useEffect(() => { report?.(reportState) }, [report, reportState])
 
@@ -790,6 +791,7 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
   }, [props.context])
 
   const refreshAll = useCallback(async () => {
+    setOpenMenuKey(null)
     setRefreshing(true)
     setActionError(null)
     try {
@@ -1054,7 +1056,15 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
 
   useEffect(() => {
     function keydown(event: globalThis.KeyboardEvent) {
-      if (deleteDialog || isEditableTarget(event.target)) return
+      if (deleteDialog) return
+      if (event.key === 'Escape' && openMenuKey !== null) {
+        event.preventDefault()
+        event.stopPropagation()
+        rowMenuTriggerElements.current.get(openMenuKey)?.focus()
+        setOpenMenuKey(null)
+        return
+      }
+      if (isEditableTarget(event.target)) return
       if (navigation.page === 'detail' && event.key === 'Escape') {
         event.preventDefault()
         void navigate({ page: 'list', automationId: null, runId: null, tab: 'overview' })
@@ -1072,7 +1082,7 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
     }
     window.addEventListener('keydown', keydown)
     return () => window.removeEventListener('keydown', keydown)
-  }, [deleteDialog, navigation.automationId, navigation.page, navigation.tab, navigate])
+  }, [deleteDialog, navigation.automationId, navigation.page, navigation.tab, navigate, openMenuKey])
 
   const runPage = useCallback((run: AutomationRun) => {
     setSelectedHistoryIndex(0)
@@ -1124,7 +1134,7 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
       const mutationDisabled = busyAction !== null || !definition
       const runDisabled = mutationDisabled || target?.available !== true
       return <div className="auto-row-menu" onClick={(event) => event.stopPropagation()}>
-        <button type="button" aria-label="Automation actions" aria-haspopup="menu" aria-expanded={openMenuKey === row.key} onClick={() => {
+        <button ref={(element) => { if (element) rowMenuTriggerElements.current.set(row.key, element); else rowMenuTriggerElements.current.delete(row.key) }} type="button" aria-label="Automation actions" aria-haspopup="menu" aria-expanded={openMenuKey === row.key} onClick={() => {
           const opening = openMenuKey !== row.key
           setOpenMenuKey(opening ? row.key : null)
           if (opening) void targetForMenu(row.id)
@@ -1144,7 +1154,7 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
     const job = manager?.jobs.find((candidate) => candidate.id === row.id)
     const manageable = manager !== undefined && canManageExternal(manager)
     return <div className="auto-row-menu" onClick={(event) => event.stopPropagation()}>
-      <button type="button" aria-label="External automation actions" aria-haspopup="menu" aria-expanded={openMenuKey === row.key} onClick={() => setOpenMenuKey(openMenuKey === row.key ? null : row.key)}>•••</button>
+      <button ref={(element) => { if (element) rowMenuTriggerElements.current.set(row.key, element); else rowMenuTriggerElements.current.delete(row.key) }} type="button" aria-label="External automation actions" aria-haspopup="menu" aria-expanded={openMenuKey === row.key} onClick={() => setOpenMenuKey(openMenuKey === row.key ? null : row.key)}>•••</button>
       {openMenuKey === row.key && <div role="menu" className="auto-row-menu-panel">
         {!manageable && <span className="auto-cell-sub" role="note">{manager?.error ?? 'This OpenClaw host is unavailable or cannot be managed here.'}</span>}
         {job && manager && <>
