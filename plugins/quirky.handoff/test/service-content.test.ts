@@ -225,7 +225,7 @@ describe('SC-18: open editor tabs come from the editor when it runs', () => {
     expect(result.brief).not.toContain('## Open editor tabs')
   })
 
-  test('(b) an editor reporting documents gets them listed relative to the worktree', async () => {
+  test('(b) a fake editor reports open tabs relative to the worktree', async () => {
     rig = await HandoffRig.start({ editor: ['src/a.ts', 'README.md'] })
     const { id } = await readable()
     const result = await preview({ source: { session: id }, controls: {} })
@@ -233,6 +233,44 @@ describe('SC-18: open editor tabs come from the editor when it runs', () => {
     expect(result.brief).not.toContain('/outside/the/worktree.ts')
     const off = await preview({ source: { session: id }, controls: { include: { repoState: true, diffBodies: false, openEditorTabs: false } } })
     expect(off.brief).not.toContain('## Open editor tabs')
+  })
+
+  test('(c) the real editor lists open tabs, deduplicates buffers and omits closed edits', async () => {
+    rig = await HandoffRig.start({ realEditor: true })
+    const { id } = await readable()
+    const worktree = rig.worktrees.w!
+    const activePath = 'src/active.ts'
+    const closedPath = 'src/closed.ts'
+    rig.writeFile(join(worktree.path, activePath))
+    rig.writeFile(join(worktree.path, closedPath))
+
+    const active = await rig.call('quirky.editor/open', {
+      worktree: worktree.id,
+      path: activePath,
+      mode: 'source',
+      focus: false
+    }) as { id: string }
+    const previewTab = await rig.call('quirky.editor/open', {
+      worktree: worktree.id,
+      path: activePath,
+      mode: 'preview',
+      focus: false
+    }) as { id: string }
+    expect(previewTab.id).toBe(active.id)
+
+    const closed = await rig.call('quirky.editor/open', {
+      worktree: worktree.id,
+      path: closedPath,
+      mode: 'source',
+      focus: false
+    }) as { id: string; openedTabId: string }
+    const opened = await preview({ source: { session: id }, controls: {} })
+    expect(opened.brief).toContain('## Open editor tabs\nsrc/active.ts\nsrc/closed.ts')
+
+    expect(await rig.call('quirky.editor/close', { bufferId: closed.id, tabId: closed.openedTabId })).toEqual({ closed: true })
+    const afterClose = await preview({ source: { session: id }, controls: {} })
+    expect(afterClose.brief).toContain('## Open editor tabs\nsrc/active.ts')
+    expect(afterClose.brief).not.toContain('src/closed.ts')
   })
 })
 

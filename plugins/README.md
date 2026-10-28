@@ -53,10 +53,11 @@ ordering is unchanged. See the public
 
 ## Background structured sessions
 
-`quirky.structured` runs Claude through its Agent SDK and Codex through `codex app-server` over
-stdio JSONL. Neither allocates a PTY. Start a background session from a registered worktree:
+`quirky.structured` runs Claude through its Agent SDK and Codex through the native `codex app-server`
+over stdio JSONL. Both run without a PTY. Start either provider in a registered worktree:
 
 ```sh
+quirky session new --background --agent claude --prompt "Review this repository" --json
 quirky session new --background --agent codex --prompt "Review this repository" \
   --model gpt-5.5 --effort high --json
 ```
@@ -92,6 +93,24 @@ ID with `quirky structured send --session <id> --text <prompt>`.
 Codex stop bounds its final pipe cleanup even when an independently detached child retains an
 output descriptor. Its process group is the execution ownership boundary; it does not adopt
 independently detached services.
+
+## Orchestration
+
+`quirky.orchestration` provides durable Runs, Tasks, context-only Dispatches, mail, questions,
+decision gates and worker lifecycle operations. The manifest declares 29 API methods and 28
+generated CLI verbs under `quirky orchestration`.
+
+**Methods (29):** `runCreate`, `runUse`, `runCurrent`, `runList`, `runShow`, `taskCreate`,
+`taskList`, `taskUpdate`, `dispatch`, `dispatchShow`, `send`, `check`, `reply`, `inbox`, `ask`,
+`gateCreate`, `gateResolve`, `gateList`, `requestShow`, `reset`, `workerStart`, `workerShow`,
+`workerRead`, `workerList`, `workerStop`, `workerAbandon`, `workerRelease`, `workerRetain`,
+`workerTerminalUserInput` (internal terminal-custody guard).
+
+**CLI verbs (28):** `run-create`, `run-use`, `run-current`, `run-list`, `run-show`, `task-create`,
+`task-list`, `task-update`, `dispatch`, `dispatch-show`, `send`, `check`, `reply`, `inbox`, `ask`,
+`gate-create`, `gate-resolve`, `gate-list`, `request-show`, `reset`, `worker-start`, `worker-show`,
+`worker-read`, `worker-list`, `worker-stop`, `worker-abandon`, `worker-release`, `worker-retain`.
+Use `quirky api --json` for the current method and result schemas.
 
 ## Shared checks
 

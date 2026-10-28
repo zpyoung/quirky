@@ -235,6 +235,12 @@ export function createHandlers(
     'ui.view.open': (params) => layout.openView(str(params, 'id'), params.input),
     'ui.view.close': () => layout.closeView(),
     'ui.panel.open': (params) => layout.openPanel(str(params, 'id')),
+    'ui.panel.configure': (params) =>
+      layout.configurePanel(
+        str(params, 'id'),
+        params.width as number | undefined,
+        params.activityBarPosition as 'top' | 'side' | undefined
+      ),
     'ui.panel.close': () => layout.closePanel(),
     'ui.sidebar.set': (params) => {
       const visible = optBool(params, 'visible')

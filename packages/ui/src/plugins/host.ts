@@ -82,6 +82,13 @@ type Session = {
   violation: string | null
   revoked: boolean
 }
+type CommandDragCapability = {
+  readonly token: string
+  readonly owner: Session
+  readonly command: string
+  readonly args: Record<string, unknown>
+  dispose(): void
+}
 
 type Runtime = {
   module?: UiPluginModule
@@ -134,7 +141,7 @@ function messageOf(error: unknown): string {
 }
 
 function findSlot(model: UiModel, id: string): UiSlotEntry | undefined {
-  return [...model.sidebarSections, ...model.statusBars, ...model.panels, ...model.views, ...model.overlays].find((entry) => entry.id === id)
+  return [...model.sidebarSections, ...model.activityItems, ...model.statusBars, ...model.panels, ...model.settingsSections, ...model.views, ...model.overlays].find((entry) => entry.id === id)
 }
 
 /** Context keys the kernel gives meaning to: with both true, terminal keys go to the terminal first. */
@@ -195,11 +202,14 @@ export class WindowPluginHost {
   private readonly unsubscribeActivity: (() => void) | undefined
   private lastInputAt: number | null = null
   private lastActivityReportAt: number | null = null
+
   private refreshChain: Promise<unknown> = Promise.resolve()
+  /** Events are newer than any `ui.state` snapshot whose request was already in flight. */
+  private layoutEventVersion = 0
   /** `setting.changed` values seen while a refresh fetches; they are newer than that refresh's snapshot. */
   private settingsSeenDuringFetch: Map<string, boolean | number | string> | null = null
   private stopped = false
-
+  private commandDrag: CommandDragCapability | null = null
   constructor(private readonly deps: HostDeps) {
     this.unsubscribeEvents = deps.onEvent((event) => this.handleEvent(event))
     this.unsubscribeFocus = deps.windowFocus?.subscribe((focused) => this.reportFocus(focused))
@@ -330,6 +340,11 @@ export class WindowPluginHost {
     else if (this.state.layout.panel === id) this.layoutCall('ui.panel.close', {})
   }
 
+  /** Configures one panel's desired geometry through the daemon's public layout API. */
+  configurePanel(id: string, options: { width?: number; activityBarPosition?: 'top' | 'side' }): void {
+    this.layoutCall('ui.panel.configure', { id, ...options })
+  }
+
   /** Opens or closes the shared palette; omitted `open` toggles its daemon-owned state. */
   setPalette(open?: boolean): void {
     this.layoutCall('ui.palette.set', open === undefined ? {} : { open })
@@ -369,6 +384,7 @@ export class WindowPluginHost {
   /** Stops listening to the daemon, cleans up every mount and deactivates every active plugin. */
   stop(): void {
     this.stopped = true
+    this.commandDrag?.dispose()
     this.unsubscribeEvents()
     this.unsubscribeFocus?.()
     this.unsubscribeActivity?.()
@@ -385,9 +401,10 @@ export class WindowPluginHost {
     let model: UiModel
     let snapshot: SettingInfo[]
     try {
-      // applied as soon as it arrives, so a `ui.state.changed` that follows it on the wire is newer
+      // A daemon snapshot can arrive after a concurrent state event even when it captured older state.
+      const layoutVersion = this.layoutEventVersion
       const layout = (this.deps.call('ui.state', {}) as Promise<UiState>).then((state) => {
-        if (!this.stopped) this.setLayout(state.layout)
+        if (!this.stopped && layoutVersion === this.layoutEventVersion) this.setLayout(state.layout)
       })
       const [fetchedModel, fetchedSettings] = await Promise.all([
         this.deps.call('ui.contributions', {}) as Promise<UiModel>,
@@ -784,6 +801,28 @@ export class WindowPluginHost {
       executeCommand: live(async (id: string, args?: unknown) => {
         await this.invokeCommand(this.requireCommand(id), args)
       }),
+      createCommandDrag: live((command: string, args?: Record<string, unknown>) => {
+        const snapshot = structuredClone(args ?? {})
+        const token = crypto.randomUUID()
+        this.commandDrag?.dispose()
+        let entry!: CommandDragCapability
+        const dispose = track(() => {
+          if (this.commandDrag === entry) this.commandDrag = null
+        })
+        entry = { token, owner: session, command, args: snapshot, dispose }
+        this.commandDrag = entry
+        return token
+      }),
+      consumeCommandDrag: live((token: string) => {
+        const entry = this.commandDrag
+        if (!entry || entry.token !== token || entry.owner.revoked) return null
+        entry.dispose()
+        return { command: entry.command, args: entry.args }
+      }),
+      cancelCommandDrag: live((token: string) => {
+        const entry = this.commandDrag
+        if (entry?.token === token && entry.owner === session) entry.dispose()
+      }),
       openView: live((id: string, input?: unknown) => this.openView(id, input)),
       closeView: live(() => this.closeView()),
       togglePanel: live((id: string, open?: boolean) => this.togglePanel(id, open)),
@@ -867,7 +906,10 @@ export class WindowPluginHost {
   }
 
   private handleEvent(event: QuirkyEvent): void {
-    if (event.type === 'ui.state.changed') this.setLayout(event.layout)
+    if (event.type === 'ui.state.changed') {
+      this.layoutEventVersion++
+      this.setLayout(event.layout)
+    }
     if (event.type === 'ui.command.request') void this.answerCommand(event.requestId, event.id, event.args)
     if (event.type === 'setting.changed') this.applySetting(event.id, event.value)
     if (event.type === 'plugin.changed' || event.type === 'theme.changed') {

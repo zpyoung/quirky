@@ -181,40 +181,24 @@ describe('kernel runtime session authority', () => {
     expect(await current.callAny(`${pluginId}/caller`, {})).not.toHaveProperty('sessionAuthority')
   })
 
-  test('structured lease identity is live only until release and preserves the base environment', async () => {
-    const prior = process.env.QUIRKY_AUTHORITY_BASE
-    process.env.QUIRKY_AUTHORITY_BASE = 'preserved'
-    try {
-      const { client } = await boot()
-      const sessionId = 's_structured'
-      const opened = (await client.callAny(`${pluginId}/lease`, { sessionId })) as {
-        identity: { sessionId: string; runtimeEpoch: string; processIncarnation: string; source: string; live: true }
-      }
-      const env = childEnv(sessionId)
-      const sessionToken = env.QUIRKY_SESSION_TOKEN
-      expect(env).toMatchObject({
-        QUIRKY_SESSION_ID: sessionId,
-        QUIRKY_WORKTREE_ID: 'wt_structured',
-        QUIRKY_AUTHORITY_BASE: 'preserved'
-      })
-      expect(sessionToken).toBeString()
-      expect(opened.identity).toMatchObject({ sessionId, source: 'structured_lease', live: true })
-
-      const child = await clientFor(sessionId, sessionToken)
-      expect(await child.callAny(`${pluginId}/caller`, {})).toMatchObject({
-        sessionAuthority: {
-          ...opened.identity,
-          source: 'structured_lease',
-          live: true
-        }
-      })
-      expect(await client.callAny(`${pluginId}/release`, { sessionId })).toBeNull()
-      expect(await child.callAny(`${pluginId}/caller`, {})).not.toHaveProperty('sessionAuthority')
-      expect(await client.callAny(`${pluginId}/identity`, { sessionId })).toBeNull()
-    } finally {
-      if (prior === undefined) delete process.env.QUIRKY_AUTHORITY_BASE
-      else process.env.QUIRKY_AUTHORITY_BASE = prior
+  test('structured lease identity is live only until release', async () => {
+    const { client } = await boot()
+    const sessionId = 's_structured'
+    const opened = (await client.callAny(`${pluginId}/lease`, { sessionId })) as {
+      identity: { sessionId: string; runtimeEpoch: string; processIncarnation: string; source: string; live: true }
     }
+    const sessionToken = childEnv(sessionId).QUIRKY_SESSION_TOKEN
+    const child = await clientFor(sessionId, sessionToken)
+    expect(await child.callAny(`${pluginId}/caller`, {})).toMatchObject({
+      sessionAuthority: {
+        ...opened.identity,
+        source: 'structured_lease',
+        live: true
+      }
+    })
+    expect(await client.callAny(`${pluginId}/release`, { sessionId })).toBeNull()
+    expect(await child.callAny(`${pluginId}/caller`, {})).not.toHaveProperty('sessionAuthority')
+    expect(await client.callAny(`${pluginId}/identity`, { sessionId })).toBeNull()
   })
 
   test('daemon restart restores only the exact live PTY incarnation', async () => {

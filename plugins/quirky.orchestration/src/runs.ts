@@ -8,6 +8,7 @@ import type {
   JsonValue,
   MutationCheckpoint,
   MutationReceiptRow,
+  MutatingOrchestrationMethod,
   OrchestrationMethod,
   RequestShowResult,
   RequestShowParams,
@@ -31,6 +32,8 @@ import { OrchestrationCore, type ReceiptRecord } from './core'
 import { fail } from './errors'
 import { callerSessionId, targetIdentity, verifyCaller } from './identity'
 import type { SessionIdentity, SessionPointerResult } from './runtime-contracts'
+type DispatchAcceptance = { dispatch: DispatchRow; dryRun: false; preamble?: string }
+
 const PAGE_DEFAULT = 100
 const PAGE_MAX = 100
 type RunTaskMethod = Exclude<
@@ -268,7 +271,7 @@ export function runTaskMethods(
               taskId: accepted.dispatch.taskId,
               dispatchId: accepted.dispatch.id
             }),
-            async afterCommit(accepted: { dispatch: DispatchRow }): Promise<{ dispatch: DispatchRow; dryRun: false; preamble?: string }> {
+            async afterCommit(accepted: DispatchAcceptance): Promise<DispatchAcceptance> {
               const recipient = identity
               if (!injectionText || !recipient) fail(context, 'operation_unknown', 'Dispatch was accepted but its injection preamble or recipient was not recorded')
               const sent = (await context.call('quirky.session/pointer', {

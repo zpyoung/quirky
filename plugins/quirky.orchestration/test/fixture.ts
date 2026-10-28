@@ -15,7 +15,9 @@ const TESTED_BUILTINS = [
   'quirky.agents',
   'quirky.worktree',
   'quirky.repo',
-  'quirky.agent-status'
+  'quirky.agent-status',
+  'quirky.structured',
+  'quirky.ask'
 ] as const
 const LAUNCH_AGENT_MAIN = join(import.meta.dir, 'launch-agent.ts')
 const FAKE_CLAUDE = `#!${process.execPath}

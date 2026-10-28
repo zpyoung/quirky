@@ -51,6 +51,8 @@ export type ContributionInfo = {
 export type PluginContext = {
   readonly pluginId: string
   readonly dir: string
+  /** Absolute file URL for a worker entrypoint declared by name in `workers`; throws for undeclared names. */
+  workerEntrypoint(name: string): string
   /** The plugin's private data directory, `<home>/plugin-data/<pluginId>`; it exists (mode 0700). */
   readonly dataDir: string
   /** Writes to the daemon log, prefixed with the plugin ID. */
@@ -63,6 +65,12 @@ export type PluginContext = {
   subscribe(listener: (event: QuirkyEvent) => void | Promise<void>): () => void
   /** Invokes a daemon or plugin method as this plugin. */
   call(method: string, params?: Record<string, unknown>): Promise<unknown>
+  /** Creates a same-origin opaque capability URL for an authorized local file. */
+  createFileResource(options: {
+    path: string
+    contentType: string
+    disposition?: 'inline' | 'attachment'
+  }): Promise<{ url: string; revoke(): void }>
   /** Opens this plugin's private SQLite store, applying any migrations it has not yet run. */
   openStore(migrations: StoreMigration[]): PluginStore
   /** The current value of a setting: a short name in this plugin's own namespace, or a full setting ID. */
@@ -399,6 +407,8 @@ export type PluginManifest = {
   ui?: string
   /** Relative path of the CLI module. */
   cli?: string
+  /** Worker name to root-relative entrypoint, bundled and rewritten to its packaged path by the desktop bundler. */
+  workers?: Record<string, string>
   /** Extra words that reach this plugin's CLI group. */
   cliAliases?: string[]
   /** Defaults to `lazy`. */

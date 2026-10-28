@@ -219,7 +219,7 @@ export function sessionMigrations(home: string): StoreMigration[] {
         );
         CREATE INDEX IF NOT EXISTS session_pointer_operations_updated_at ON session_pointer_operations(updated_at)
       `)
-    }
+    },
   ]
 }
 

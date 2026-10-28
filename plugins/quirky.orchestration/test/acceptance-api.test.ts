@@ -10,6 +10,7 @@ import type {
   GateRow,
   InboxResult,
   MessageRow,
+  RequestShowResult,
   RunRow,
   SendResult,
   TaskRow
@@ -1046,14 +1047,26 @@ describe('quirky.orchestration daemon API acceptance', () => {
     expect((await call<{ gates: GateRow[] }>(coordinator, GATE_LIST, { runId: run.id, taskId: b.task.id, status: 'resolved' })).gates).toHaveLength(1)
   }, 30_000)
 
+  test('an unsupported mutation contract leaves the bound Run and durable ledger unchanged', async () => {
+    const coordinator = await fixture.createParty('coordinator')
+    const valid = await createRun(coordinator, 'valid contract before rejection')
+    const requestId = crypto.randomUUID()
+    await expect(call(coordinator, RUN, {
+      requestId,
+      contractVersion: 2,
+      objective: 'unsupported contract version'
+    })).rejects.toBeInstanceOf(Error)
+    const listed = await call<{ runs: RunRow[] }>(coordinator, RUN_LIST, { limit: 100 })
+    expect(listed.runs).toEqual([valid.run])
+    const current = await call<{ run: RunRow | null }>(coordinator, RUN_CURRENT)
+    expect(current.run?.id).toBe(valid.run.id)
+    const receipt = await call<RequestShowResult>(coordinator, REQUEST_SHOW, { requestId })
+    expect(receipt).toEqual({ requestId, state: 'absent', interpretation: 'absence_does_not_prove_no_effect' })
+  })
+
   test('AC12 durable receipts join concurrent retries, fence mismatched requests, and survive reconnect/restart', async () => {
     const coordinator = await fixture.createParty('coordinator')
     const requestId = crypto.randomUUID()
-    await expectReason(call(coordinator, RUN, {
-      requestId: crypto.randomUUID(),
-      contractVersion: 2,
-      objective: 'unsupported contract version'
-    }), 'invalid_argument')
     const params = { ...mutation(requestId), objective: 'single durable operation' }
     const [first, concurrent] = await Promise.all([
       call<RunMutation>(coordinator, RUN, params),

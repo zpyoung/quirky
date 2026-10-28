@@ -1,3 +1,5 @@
+import type { CallOptions } from './client'
+
 /** What a plugin CLI command receives: positionals in order and flags by name. */
 export type CliArgs = { positionals: string[]; flags: Record<string, unknown> }
 
@@ -5,8 +7,8 @@ export type CliArgs = { positionals: string[]; flags: Record<string, unknown> }
 export type CliContext = {
   /** The request-ID base for deterministic per-invocation operation IDs. */
   requestBase: string
-  /** Calls a daemon method through the link: request IDs, `--yes` and confirmations apply. */
-  call(method: string, params?: Record<string, unknown>, options?: { timeoutMs?: number }): Promise<unknown>
+  /** Calls through the link; requestId selects transport replay identity independently of plugin params. */
+  call(method: string, params?: Record<string, unknown>, options?: CallOptions): Promise<unknown>
   out: {
     json: boolean
     /** Prints `value` as JSON under `--json`, else the text. */

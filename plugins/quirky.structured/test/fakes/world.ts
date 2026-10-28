@@ -13,7 +13,10 @@ const WORKTREE_DEFAULTS = {
   baseRef: null,
   keepBranch: false,
   removing: false,
-  groupId: null
+  groupId: null,
+  projectGroupId: null,
+  lastActivityAt: 0,
+  instanceId: 'instance:wt_1'
 } as const
 
 type PluginCtx = { error(kind: 'invalid-params' | 'not-found' | 'conflict', message: string): Error }
@@ -71,7 +74,7 @@ export class FakeWorld {
         kind: params.kind,
         agent: params.agent,
         worktreeId: this.worktree.id,
-        cwd: this.worktree.path,
+        cwd: params.cwd ?? this.worktree.path,
         title: params.title,
         status: 'starting',
         createdAt: now,
@@ -79,9 +82,17 @@ export class FakeWorld {
         exitCode: null,
         exitSignal: null,
         exitCause: null,
-        restorable: false
+        restorable: false,
+        launchSettings: params.launchSettings ?? null,
+        providerSession: null,
+        resumedFrom: params.resumedFrom ?? null
       }
       this.sessions.set(session.id, session)
+      return session
+    },
+    setProviderSession: (params: { session: string; id: string; transcriptPath?: string | null }, context: PluginCtx) => {
+      const session = this.require(params.session, context)
+      session.providerSession = { id: params.id, transcriptPath: params.transcriptPath ?? null }
       return session
     },
     setStatus: (params: any, context: PluginCtx) => {

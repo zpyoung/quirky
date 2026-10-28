@@ -486,7 +486,7 @@ export class OrchestrationMessages {
     const params = input as unknown as MutationRequest & Record<string, unknown>
     let resolvedSnapshot: ConsumerMailbox | null = null
     const wait = input.wait === true
-    return this.core.mutate(
+    return this.core.mutate<CheckCoreResult>(
       'check',
       params,
       verified.evidence,
@@ -900,26 +900,6 @@ export class OrchestrationMessages {
     return targets
   }
 
-  private senderContext(caller: RuntimeCallerEvidence): SenderContext {
-    const sessionId = caller.runtimeSessionId
-    const bound = this.core.getBoundRun(sessionId)
-    const active = this.core.store.get<{ id: string; run_id: string }>(
-      `SELECT id, run_id FROM dispatches WHERE assignee_session_id = ? AND status IN ('pending', 'dispatched') ORDER BY depth DESC, created_at DESC, id DESC LIMIT 1`,
-      sessionId
-    )
-    const sender: MailboxAddress = bound
-      ? { kind: 'run', runId: bound.id }
-      : active
-        ? { kind: 'dispatch', dispatchId: active.id as MessageRow['sender'] extends { kind: 'dispatch'; dispatchId: infer D } ? D : never }
-        : { kind: 'session', sessionId }
-    return {
-      sessionId,
-      runId: bound?.id ?? (active?.run_id as RunId | undefined) ?? null,
-      coordinatorRunId: bound?.id ?? null,
-      dispatchId: active?.id ?? null,
-      sender
-    }
-  }
 
   private messageSender(type: MessageType, payload: JsonValue | null, sender: SenderContext): MailboxAddress {
     if ((type === 'worker_done' || type === 'heartbeat') && payload !== null && typeof payload === 'object' && !Array.isArray(payload)) {

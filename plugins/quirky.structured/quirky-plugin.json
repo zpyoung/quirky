@@ -2,7 +2,7 @@
   "id": "quirky.structured",
   "name": "Structured sessions",
   "version": "0.1.0",
-  "description": "Native Claude and Codex sessions without a terminal: journaled messages and permission prompts as asks.",
+  "description": "Background native Claude and Codex sessions without terminals: journaled messages and permission prompts as asks.",
   "main": "main.ts",
   "activation": "lazy",
   "dependencies": ["quirky.session", "quirky.ask", "quirky.agents"],
@@ -15,7 +15,7 @@
           "type": "object",
           "properties": {
             "worktree": { "type": "string", "description": "A worktree selector; defaults to the caller's worktree." },
-            "agent": { "type": "string", "description": "The agent to run." },
+            "agent": { "type": "string", "enum": ["claude", "codex"], "description": "The structured provider to run." },
             "prompt": { "type": "string" },
             "deferStart": { "type": "boolean", "description": "Reserve the live structured session and lease without sending an initial turn." },
             "title": { "type": "string", "description": "Optional session title." },

@@ -96,6 +96,10 @@ function createAndImportV1(home: string): StoreMigration {
   }
 }
 
+function createLaunchOptionsTable(): StoreMigration {
+  return (store) => store.exec(CREATE_LAUNCH_OPTIONS_TABLE)
+}
+
 /** The migrations of the plugin's store, for `context.openStore`. */
 export function journalMigrations(home: string): StoreMigration[] {
   return [
@@ -186,6 +190,7 @@ export class Journal {
       operationId
     )
   }
+
   /** Stores a message under the next `seq` of its session. */
   append(input: { sessionId: string; role: StructuredRole; text: string; data?: unknown; at: number }): StructuredMessage {
     const seq = this.store.transaction(() => {
@@ -225,6 +230,9 @@ export class Journal {
 
   /** Drops the session's journal. */
   remove(sessionId: string): void {
-    this.store.run('DELETE FROM structured_messages WHERE session_id = ?', sessionId)
+    this.store.transaction(() => {
+      this.store.run('DELETE FROM structured_messages WHERE session_id = ?', sessionId)
+      this.store.run('DELETE FROM structured_launch_options WHERE session_id = ?', sessionId)
+    })
   }
 }

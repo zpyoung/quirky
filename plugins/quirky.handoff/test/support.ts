@@ -41,9 +41,8 @@ const STRICT_AGENT = {
 const BLIND_AGENT = { ...STRICT_AGENT, id: 'blind-bot', label: 'Blind Bot', detect: 'blind-bot', blindPaste: true }
 
 /**
- * A plugin that stands in for the editor: `quirky.editor/state` answers with the given
- * documents, each joined onto the asked worktree's path unless it is absolute, plus one document
- * outside the worktree that a brief must leave out.
+ * A plugin that stands in for the editor: `quirky.editor/state` returns buffers and open-tab
+ * mappings, including one tab outside the requested worktree for root-filter coverage.
  */
 export function fakeEditor(documents: string[]): { manifest: object; files: Record<string, string> } {
   return {
@@ -66,12 +65,26 @@ export function fakeEditor(documents: string[]): { manifest: object; files: Reco
       }
     },
     files: {
-      'main.ts': `import { join } from 'node:path'
+      'main.ts': `import { isAbsolute, join, relative } from 'node:path'
 export function activate(context) {
   context.provide('method:quirky.editor/state', async (params) => {
     const worktree = await context.call('quirky.worktree/show', { worktree: params.worktree })
-    const documents = ${JSON.stringify(documents)}.map((path) => (path.startsWith('/') ? path : join(worktree.path, path)))
-    return { documents: [...documents, '/outside/the/worktree.ts'] }
+    const buffers = ${JSON.stringify(documents)}.map((requestedPath, index) => {
+      const path = isAbsolute(requestedPath) ? requestedPath : join(worktree.path, requestedPath)
+      return { id: \`fake-buffer-\${index}\`, path, relativePath: relative(worktree.path, path) }
+    })
+    const outsidePath = '/outside/the/worktree.ts'
+    buffers.push({
+      id: 'fake-outside-buffer',
+      path: outsidePath,
+      relativePath: relative(worktree.path, outsidePath)
+    })
+    const tabs = buffers.map((buffer, index) => ({
+      tabId: \`fake-tab-\${index}\`,
+      bufferId: buffer.id,
+      mode: 'edit'
+    }))
+    return { buffers, tabs }
   })
 }
 `
@@ -100,6 +113,7 @@ export function gitStatus(entries: GitStatusEntry[], extra: Partial<GitStatus> =
 
 export type RigOptions = {
   editor?: string[]
+  realEditor?: boolean
   agentsInstalled?: string[]
   /** Multiplies the agents' delivery waits and the handoff's watch window; defaults to 0.05. */
   timeScale?: number
@@ -151,12 +165,14 @@ export class HandoffRig {
     const builtin = join(home, 'builtin')
     mkdirSync(builtin)
     for (const name of readdirSync(PLUGINS_ROOT)) {
-      if (name.startsWith('quirky.')) symlinkSync(join(PLUGINS_ROOT, name), join(builtin, name))
+      if (name.startsWith('quirky.') && name !== 'quirky.editor') symlinkSync(join(PLUGINS_ROOT, name), join(builtin, name))
     }
     if (options.editor) {
       const editor = fakeEditor(options.editor)
       const dir = writePlugin(join(home, 'editor-src'), editor.manifest, editor.files)
       symlinkSync(dir, join(builtin, 'quirky.editor'))
+    } else if (options.realEditor) {
+      symlinkSync(join(PLUGINS_ROOT, 'quirky.editor'), join(builtin, 'quirky.editor'))
     }
 
     const bots = writePlugin(join(home, 'bots-src'), { id: 'acme.bots', name: 'Bots', version: '1.0.0', contributes: { agent: [STRICT_AGENT, BLIND_AGENT] } })

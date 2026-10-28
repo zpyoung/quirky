@@ -150,6 +150,7 @@ class ClaudeRunner implements StructuredRunner {
     const startup = { stopped: false }
     this.starting.set(session.id, startup)
     try {
+      // Load this provider only when the runtime provider registry selects Claude, not for Codex sessions.
       const query = this.deps.query ?? (await import('@anthropic-ai/claude-agent-sdk')).query
       if (startup.stopped) return
       const pathToClaudeCodeExecutable = await this.context.resolveClaudePath()

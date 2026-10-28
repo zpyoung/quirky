@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { pathsFromDrop } from '../../src/window/pane/drop'
+import { pathsFromDrop, readWorktreePathsDrop, resolveWorktreeDropPaths, WORKTREE_PATHS_MIME } from '../../src/window/pane/drop'
 import { KittyFlags } from '../../src/window/pane/kitty'
 import { OSC52_MAX_BASE64, createOsc52Base64, createOsc52Provider, createOsc52QueryGuard } from '../../src/window/pane/osc52'
 import { trimGutter } from '../../src/window/pane/selection'
@@ -51,6 +51,21 @@ describe('pathsFromDrop', () => {
 
   test('refuses a path with control characters', () => {
     expect(pathsFromDrop({ files: [{ path: '/tmp/a\nb' }], getData: () => '' })).toEqual([])
+  })
+
+  test('reads editor row paths only with an explicit worktree owner', () => {
+    const payload = JSON.stringify({ worktreeId: 'wt_main', paths: ['src/a b.ts', 'nested/c.ts'] })
+    const transfer = { files: [], getData: (type: string) => type === WORKTREE_PATHS_MIME ? payload : '' }
+    expect(readWorktreePathsDrop(transfer)).toEqual({ kind: 'valid', worktreeId: 'wt_main', paths: ['src/a b.ts', 'nested/c.ts'] })
+    expect(resolveWorktreeDropPaths('/repo', ['src/a b.ts', 'nested/c.ts'])).toEqual(['/repo/src/a b.ts', '/repo/nested/c.ts'])
+  })
+
+  test('rejects malformed, absolute and traversing editor row paths', () => {
+    const malformed = { files: [], getData: (type: string) => type === WORKTREE_PATHS_MIME ? '{' : '' }
+    expect(readWorktreePathsDrop(malformed)).toEqual({ kind: 'invalid' })
+    expect(resolveWorktreeDropPaths('/repo', ['../../outside.txt'])).toBeNull()
+    expect(resolveWorktreeDropPaths('/repo', ['/etc/passwd'])).toBeNull()
+    expect(resolveWorktreeDropPaths('/repo', ['safe.txt', '../escape.txt'])).toBeNull()
   })
 })
 

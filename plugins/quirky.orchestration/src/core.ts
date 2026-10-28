@@ -203,7 +203,7 @@ function fingerprint(sessionId: string): string {
   return createHash('sha256').update(`quirky-orchestration-caller\0${sessionId}`).digest('hex')
 }
 
-function requestDigest(method: string, params: Record<string, unknown>): string {
+function requestDigest(method: string, params: MutationRequest): string {
   const { requestId: _requestId, ...payload } = params
   return createHash('sha256').update(canonical({ method, params: payload })).digest('hex')
 }
@@ -836,7 +836,7 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
 
   async mutate<T extends object>(
     method: MutatingOrchestrationMethod,
-    params: MutationRequest & Record<string, unknown>,
+    params: MutationRequest,
     caller: RuntimeCallerEvidence,
     operation: (store: PluginStore) => T,
     options: DurableMutationOptions<T> = {}
@@ -974,7 +974,7 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
 
   private async performMutation<T extends object>(
     method: MutatingOrchestrationMethod,
-    params: MutationRequest & Record<string, unknown>,
+    params: MutationRequest,
     callerFingerprint: string,
     payloadHash: string,
     operation: (store: PluginStore) => T,

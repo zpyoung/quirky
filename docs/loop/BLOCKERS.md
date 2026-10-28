@@ -24,6 +24,29 @@ The item landed with these low-severity findings from the like-a-user pass and t
 - **LOW, narrow tab area:** with the Quick Commands side panel open at 1280 px, the header buttons wrap and Questions overlaps the Worktree title, and a third tab shrinks to a dot under the + and quick-command buttons. Found in runs/20261027T100045-4ea7 (obs-37, obs-52, obs-54).
 - **LOW, test fragility:** the final fix batch's worker reported that the quick-commands window tests sharing `plugins/quirky.terminal/test/window/qc-support.tsx` depend on the order the test files run in. The gate has never failed on it.
 
+## m2-editor: open review findings
+
+The user authorized a core-flow landing and a dependent completion item under the 2026-10-27 operator deadline (m2-editor D25). These are not claims that every original SC-1–22 scenario is complete.
+
+- **MEDIUM — rich details/toggle serialization, `plugins/quirky.editor/src/markdown/service.ts:138,217-221`:** actual `<details>` content, including empty details, and `details`/`collapsibleHeading` inserts cannot yet be losslessly round-tripped by the rich editor. The current contract fails closed to Source or rejects the edit without changing the draft; sanitized preview and math remain supported. Complete the rich representation and byte-preservation tests before enabling it.
+- **MEDIUM — document-link insertion, `plugins/quirky.editor/src/markdown/DocumentLink.ts:1`:** the SC-13 RPC trace reaches `insert:documentLink` after the core formatting/table/math/emoji cases pass, then rejects parsing safely. Relative-link resolution/navigation remains separate. Finish the custom-node insertion/serialization round trip and its UI completion path.
+- **MEDIUM — untitled creation and Save As, `plugins/quirky.editor/src/daemon/service.ts:284`:** public creation currently produces named files, not untitled buffers. Retarget is therefore not published as a supported Markdown action. Add a real untitled creation/lifetime path before exposing Save As/retarget; closing a named file must not delete it.
+- **LOW — filesystem permission UX, `plugins/quirky.editor/src/daemon/service.ts:284`:** the current read-only capability is not a tested policy for Unix mode bits/ACLs. The chmod-only annotation expectation was removed rather than redefining permissions through a test. Specify and verify permission-aware indicators and annotation/save behavior.
+- **MEDIUM — return from rendered Preview, `plugins/quirky.editor/src/window/DocumentSurface.tsx:813`:** the visible Rich Editor control did not leave the separate Preview tab on two observed attempts. The original edit tab remains an alternate route. Evidence: browser run `20261027T195525-588b`, F35, obs-65–67.
+- **MEDIUM — own-draft warning, `plugins/quirky.editor/src/window/SourceEditor.tsx:450-452` and `plugins/quirky.editor/src/window/DocumentSurface.tsx:285-286`:** a single-window edit/undo can show the newer-shared-draft warning. Local text was preserved and saved edits survived reopening; the observed warning path is not established to be a second writer. Distinguish own asynchronous acknowledgments from genuine peer conflicts. Evidence: the same run, F34/F36 and obs-53/59/62/63.
+- **HIGH — verification configuration incident, `docs/loop/decisions/m2-editor.md:234-243` (D22):** an early in-process smoke inherited the real HOME and the hook installer logged writes to six real configuration paths. No trustworthy before-image was available, so a blind uninstall/restore was not attempted. Future runs now preseed hooks off and isolate HOME/QUIRKY_HOME, including remote test children. Reconcile the six paths against an independent baseline if one becomes available; do not assume generic Quirky markers identify this run.
+
+### Completion-flow acceptance
+
+The dependent item must finish the following end-to-end verification, which was not completed in this landing pass:
+
+- **SC-3–6:** mixed close-all save failures; Compare/Keep/Reload/Overwrite dialogs; autosave holds through unmount/restart; deleted-file recovery and inactive atomic-replacement UI. Daemon safety paths have integration coverage; the complete GUI sequence remains to run.
+- **SC-7–11:** Explorer keyboard/range selection, ignored/symlink states, create/rename/move/duplicate/delete with undo/redo, path copy, web import/collision and terminal drag; quick-open recency/line targeting and regex/filter/truncation search UI. Core open/save/quick-open/search were observed; the exhaustive variants were not.
+- **SC-13–15:** slash/IME/table keyboard controls, rich math/Mermaid/emoji/image paste/drop, document-link completion, TOC/frontmatter controls, template creation and PDF export dialogs, and successful review-note delivery through the GUI. API coverage is not a substitute for these renderer interactions.
+- **SC-17–18:** successful consent-mediated install/venv and PEP-668/ensurepip guidance in a disposable environment; GUI kernel choice/trust, rich output sanitization and unexpected-kernel-death recovery. Real kernel execution, trust revocation and process cleanup were exercised through the API; package installation was not performed.
+- **SC-19–22:** full CSV clipboard/row/column/large-page workflows; PDF search/page-width and codec/default-app/audio/video seeking; every rebound shortcut, copy-context, and disable/remount lifecycle across focused groups. Basic viewer rendering/save is a separate smoke gate, not proof of this matrix.
+
+Physical Finder import remains a pending native SC-9 scenario. Open-in-place belongs only to the operator-owned `m4-editor-drop-open-in-place`; this entry does not add another such item.
 ## m3-terminal-dock: blocked
 
 - **Stopped at:** LOOP.md step 3 (brainstorming/feature-scope feasibility), before approving logic/tech specifications or starting implementation.
@@ -211,3 +234,26 @@ Registration update: `bun scripts/build-loop/queue.ts add /tmp/quirky-session-in
 - **Bootstrap proof:** an owned isolated checkout with Accounts node_modules deliberately removed passed the new `bun run typecheck` in 30.62 seconds, restoring dependency resolution. Product behavior is unchanged; prior consumer tests and fresh real-PTY content smoke remain applicable. The next authoritative landing must verify the final merge result.
 
 - **Protected script load sensitivity:** the next local scripts run had 59 pass/3 five-second timeouts in the Git-based lanes fixture. The unchanged affected file then passed alone: 23 tests/60 assertions; the self-contained current-tree typecheck also passed. No timeout cap/assertion or protected infrastructure file was changed. Preserve this as runner reliability evidence, not a hidden green full-scripts claim.
+
+## m3-vault: remaining worktree gate timing
+
+- **LOW — background fetch/setup-gate test race** (`plugins/quirky.worktree/test/create.test.ts:367`, `:395`). A land run saw the background-refresh wait time out and a ref-lock conflict when the setup-gate test moved its remote base. The focused remote file first reproduced the ref-lock conflict, then its required isolated retry passed all40 cases140 assertions and returned ok with the file marked flaky. No worktree implementation, assertions, timeouts or retry policy were changed in the vault item.
+
+## m3-vault: SC-21 archived handoff bridge detail
+
+- **LOW — archived Vault handoff capability is not declared by the installed owner** (`plugins/quirky.vault/src/actions.ts:204-220`, `plugins/quirky.handoff/quirky-plugin.json:19-153`, `plugins/quirky.handoff/src/ui.tsx:68-77`). Vault looks for an effective handoff contribution; the current owner declares archived-source prepare plus a live-session-only open command, but no matching handoff contribution. The existing m3-vault-parity-completion item already names the unfinished enabled SC-21 flow; its implementation must reconcile that public archived-source contract, not substitute a live Quirky session ID or fake availability. Core scope retains the honest unavailable result.
+## fix-flaky-quirky-worktree-create: additional remote gate evidence
+
+- **Severity:** medium; existing queued item `fix-flaky-quirky-worktree-create` owns this file.
+- **Observed while verifying fix-flaky-pty-host-host:** the full remote run passed 454 of 455 files plus both macOS-only files. The sole failed file was `plugins/quirky.worktree/test/create.test.ts`.
+- **First failure:** SC-20's existing remote-tracking base refresh timed out at the wait in `create.test.ts:367`; quirkyd logged that it could not refresh origin/main in the background.
+- **Isolated retry:** a different case, “a remote base that moves after the hooks were read does not change the commit checked out”, failed `git fetch -q origin` with `cannot lock ref refs/remotes/origin/main: is at 5549f0f4044fc0bd6207c2f67aa3ace59af0f97c but expected f85218387be054f4435ae642b09ba319f631971a`.
+- **Evidence:** `bun run test`, remote snapshot `runs/1793142204136-90736`, artifact://51. No worktree implementation or test was edited in the PTY item, and this failure was not suppressed. The corrected PTY package separately passed two complete 14-file remote runs with no flaky reruns.
+
+## m3-vault: terminal input timing during affected verification
+
+- **LOW — shell readiness can advance during CLI round trips** (`plugins/quirky.terminal/test/e2e.test.ts:144`). The macOS SC-2 case expected pending after two CLI sends but observed ready under load; its configured isolated retry passed all23 cases169 assertions. The256 remote files and both macOS files returned a passing runner result. No terminal state, test deadline, assertion or retry rule was changed in this item.
+
+## m3-vault: search input readiness during editor catch-up
+
+- **LOW — search input queried before its mount settled** (`plugins/quirky.terminal/test/e2e-ui/features-search.test.ts:179`). The affected editor/terminal/UI/Vault run passed131/132 remote files initially; SC-73 passed a null input to typeInto. Its configured isolated retry passed all5 cases52 assertions, and all3macOS files passed. No producer behavior, assertion, delay or retry rule was changed; this adds evidence to the already-recorded search readiness finding.
