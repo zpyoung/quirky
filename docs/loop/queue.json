@@ -1256,6 +1256,18 @@
         "sb-mobile-app"
       ],
       "status": "todo"
+    },
+    {
+      "id": "sa-browser-pane-native-events",
+      "milestone": "Side A",
+      "title": "Complete native system-webview browser page-event flows: JS alert/confirm/prompt/beforeunload overlays with120s fail-closed responses; basic-auth and loopback-only certificate prompts; collision-safe download destination/progress/cancel/open/reveal shelf; opener/postbody-preserving OAuth popup windows and external-app launch interception. Blocked by pinned public Electrobun SDK missing synchronous dialog/auth/cert responders, native download destination/cancel APIs and opener-preserving popup interception; resume when supported hooks exist without private FFI, a Chrome-only human-browser replacement or fake JS dialogs.",
+      "docs": [
+        "browser.md"
+      ],
+      "deps": [
+        "sa-browser-pane"
+      ],
+      "status": "todo"
     }
   ]
 }
