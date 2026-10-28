@@ -113,6 +113,7 @@ export function createOwnerDriver(options: DriverOptions): OwnerKernelPort & { c
       if (entry.kind === 'owner-worker-progress' || entry.kind === 'mailbox-observed' || entry.kind === 'escalation' && typeof entry.messageId === 'string') progressByWorker.set(entry.dispatchId, entry)
     }
     for (const worker of owned.workers) {
+      if (!worker.assignmentActive) continue
       const attempt = attempts.get(worker.dispatchId)
       if (!attempt || attempt.state === 'settled') continue
       let contact: WorkerActivity['contact'] = worker.state === 'live' ? 'live' : worker.state === 'exited' ? 'exited' : 'unverifiable'

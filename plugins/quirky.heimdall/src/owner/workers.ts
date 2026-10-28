@@ -1,14 +1,10 @@
 import type { PluginContext } from '@quirky/protocol'
-import type { ExecuteResult, KernelStore } from '../contracts'
+import type { ExecuteResult, KernelStore, KernelWorkerObservation } from '../contracts'
 import type { OwnerEnrollment, OwnerIntervention } from './contracts'
 
 type WorkerIntervention = Extract<OwnerIntervention, { dispatchId: string }>
-export interface OwnedWorker {
-  dispatchId: string; sessionId: string | null; processIncarnation: string | null
-  state: 'live' | 'exited' | 'unverifiable'; lastContactAtMs: number | null
-}
 interface OwnedQuestion { messageId: string; dispatchId: string; status: string; body?: string }
-export interface OwnedRunSnapshot { run: { id: string }; workers: OwnedWorker[]; questions: OwnedQuestion[] }
+export interface OwnedRunSnapshot { run: { id: string }; workers: KernelWorkerObservation[]; questions: OwnedQuestion[] }
 
 /** Authentication is performed by the orchestration service using this plugin's caller identity. */
 export async function readOwnedRun(context: PluginContext, enrollment: OwnerEnrollment): Promise<OwnedRunSnapshot | null> {
@@ -31,13 +27,16 @@ export async function executeWorkerIntervention(
   if (!worker || !dispatched) return { effect: 'not-landed', reason: 'worker-not-owned' }
   const common = { runId: enrollment.orchestrationRunId!, requestId: attemptId, contractVersion: 1 }
   if (intervention.kind === 'stop-worker') {
-    if (worker.state !== 'live' || !worker.sessionId || !worker.processIncarnation) return { effect: 'not-landed', reason: 'worker-unverifiable' }
+    if (worker.state === 'unverifiable' || !worker.sessionId || !worker.processIncarnation) return { effect: 'not-landed', reason: 'worker-unverifiable' }
     const result = await context.call('quirky.orchestration/serviceWorkerStop', {
       ...common, dispatchId: worker.dispatchId,
       expectedIdentity: { sessionId: worker.sessionId, processIncarnation: worker.processIncarnation },
-    }) as { processAction: string; state: string; lastError?: string }
-    if (result.processAction === 'unknown') return { effect: 'indeterminate', reason: result.lastError ?? 'worker-stop-unknown' }
-    if (result.processAction !== 'closed_agent_terminal' && !['stopped', 'released'].includes(result.state)) return { effect: 'not-landed', reason: result.lastError ?? 'worker-stop-refused' }
+    }) as { dispatchId: string; processAction: string; state: string; alreadySettled?: boolean; lastError?: string; warning?: string }
+    if (result.dispatchId !== worker.dispatchId) return { effect: 'indeterminate', reason: result.lastError ?? result.warning ?? 'worker-stop-dispatch-mismatch' }
+    if (result.processAction === 'unknown' || result.state === 'stop_unknown') return { effect: 'indeterminate', reason: result.lastError ?? result.warning ?? 'worker-stop-unknown' }
+    if (result.processAction !== 'closed_agent_terminal' && !(result.alreadySettled && ['stopped', 'succeeded', 'failed'].includes(result.state))) {
+      return { effect: 'not-landed', reason: result.lastError ?? result.warning ?? 'worker-stop-refused' }
+    }
     return { effect: 'landed', reason: 'worker-stopped' }
   }
   if (intervention.kind === 'answer-worker') {
