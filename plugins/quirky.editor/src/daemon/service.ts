@@ -1,6 +1,6 @@
 import { constants } from 'node:fs'
-import { copyFile, lstat, mkdir, open as openFile, readFile, readdir, realpath, rename, rm, rmdir, stat, symlink, unlink, writeFile } from 'node:fs/promises'
-import { basename, dirname, extname, join, relative, resolve as resolvePath, sep } from 'node:path'
+import { copyFile, link, lstat, mkdir, open as openFile, readFile, readdir, realpath, rename, rm, rmdir, stat, symlink, unlink, writeFile } from 'node:fs/promises'
+import { basename, dirname, extname, isAbsolute, join, relative, resolve as resolvePath, sep } from 'node:path'
 import { homedir } from 'node:os'
 import { randomUUID } from 'node:crypto'
 import type { MethodHandler, PluginCaller, PluginContext, PluginStore, QuirkyEvent } from '@quirky/protocol'
@@ -83,6 +83,7 @@ type CoreStateParams = { bufferId?: string; worktree?: string }
 type DraftParams = { bufferId: string; content: string; expectedRevision: number }
 type SaveParams = { bufferId: string; trigger?: 'user' | 'autosave' | 'overwrite' }
 type CloseParams = { bufferId: string; tabId?: string; choice?: 'save' | 'discard' | 'cancel' }
+type SaveAsParams = { bufferId: string; path: string; expectedRevision: number }
 type ViewParams = { bufferId: string; action?: string; tabId?: string; patch?: Record<string, unknown>; preview?: boolean }
 type MutateParams = {
   worktree?: string
@@ -164,7 +165,12 @@ export class EditorDaemon {
         draftLength: buffer.draft === null ? null : buffer.draft.length,
         diskContentBytes: buffer.diskContent === null ? null : Buffer.byteLength(buffer.diskContent, 'utf8'),
         diskContentLength: buffer.diskContent === null ? null : buffer.diskContent.length,
-        diskSignature: null
+        diskSignature: null,
+        placeholderHash: null,
+        placeholderDev: null,
+        placeholderIno: null,
+        placeholderTemplate: false,
+        placeholderEdited: false
       }
       const state: PrivateBuffer = { ...metrics, buffer, autosaveHold: hold, verified: false, generation: 0, transferHolds: new Set() }
       this.buffers.set(buffer.id, state)
@@ -181,6 +187,7 @@ export class EditorDaemon {
       path: (worktreeId, path, options) => this.paths.path(worktreeId, path, options).then((authorized) => authorized.path),
       draft: (bufferId, content, expectedRevision) => this.draft(bufferId, content, expectedRevision),
       save: (bufferId, trigger) => this.save(bufferId, trigger),
+      markUntitled: (bufferId, templateCreated) => this.markUntitled(bufferId, templateCreated),
       readBytes: (bufferId, offset, length) => this.readBytes(bufferId, offset, length),
       updateView: (bufferId, patch) => this.updateView(bufferId, patch),
       emit: () => this.emit(),
@@ -194,6 +201,7 @@ export class EditorDaemon {
         return this.draft(request.bufferId, request.content, request.expectedRevision)
       },
       save: (params) => this.save((params as SaveParams).bufferId, (params as SaveParams).trigger),
+      saveAs: (params) => this.saveAs(params as SaveAsParams),
       close: (params) => this.close(params as unknown as CloseParams),
       canClose: (params) => this.canClose(params as unknown as CloseParams),
       reopen: (params, caller) => this.reopen(params as { worktree?: string; focus?: boolean }, caller),
@@ -296,6 +304,11 @@ export class EditorDaemon {
         diskContentBytes: null,
         diskContentLength: null,
         diskSignature: null,
+        placeholderHash: null,
+        placeholderDev: null,
+        placeholderIno: null,
+        placeholderTemplate: false,
+        placeholderEdited: false,
         autosaveHold: false,
         verified: true,
         generation: 0,
@@ -423,6 +436,44 @@ export class EditorDaemon {
   async draft(bufferId: string, content: string, expectedRevision: number): Promise<EditorBuffer> {
     return await this.updateDraft(bufferId, content, expectedRevision)
   }
+  async markUntitled(bufferId: string, templateCreated: boolean): Promise<EditorBuffer> {
+    if (typeof templateCreated !== 'boolean') throw this.context.error('invalid-params', 'templateCreated must be a boolean.')
+    const initial = this.requireState(bufferId)
+    const original = initial.buffer
+    if (original.kind !== 'markdown' || original.untitled || original.dirty || original.draft !== null || original.baseline === null) {
+      throw this.context.error('conflict', 'Only a clean Markdown file with a verified baseline can become an untitled placeholder.')
+    }
+    const path = original.path
+    const keys = await this.fileKeys(path)
+    return await this.fileQueue.run(keys, async () => {
+      const snapshot = await this.tryReadSnapshot(path)
+      if (snapshot === null || snapshot.hash !== original.baseline) {
+        throw this.context.error('conflict', 'The Markdown placeholder changed before it could be marked untitled.')
+      }
+      const before = await lstat(path)
+      if (!before.isFile() || before.isSymbolicLink()) {
+        throw this.context.error('conflict', 'The Markdown placeholder is no longer a regular file.')
+      }
+      const after = await lstat(path)
+      if (before.dev !== after.dev || before.ino !== after.ino) {
+        throw this.context.error('conflict', 'The Markdown placeholder was replaced before it could be marked untitled.')
+      }
+      return await this.bufferQueue.run([`buffer:${bufferId}`], async () => {
+        const current = this.requireState(bufferId)
+        if (current.buffer.path !== path || current.buffer.untitled || current.buffer.kind !== 'markdown' ||
+          current.buffer.baseline !== snapshot.hash || current.buffer.dirty || current.buffer.draft !== null) {
+          throw this.context.error('conflict', 'The Markdown buffer changed before it could be marked untitled.')
+        }
+        current.placeholderHash = snapshot.hash
+        current.placeholderDev = after.dev
+        current.placeholderIno = after.ino
+        current.placeholderTemplate = templateCreated
+        current.placeholderEdited = false
+        this.commit(current, { ...current.buffer, untitled: true, revision: current.buffer.revision + 1 }, false)
+        return current.buffer
+      })
+    })
+  }
 
   private async updateDraft(bufferId: string, content: string, expectedRevision: number, transferId?: string): Promise<EditorBuffer> {
     this.assertActive()
@@ -440,6 +491,7 @@ export class EditorDaemon {
         })
       }
       const changed = (current.draft ?? current.content) !== content
+      if (changed && current.untitled) state.placeholderEdited = true
       const next: EditorBuffer = {
         ...current,
         draft: content === current.content ? null : content,
@@ -470,6 +522,211 @@ export class EditorDaemon {
       const current = this.buffers.get(bufferId)
       if (current?.inFlight === promise) current.inFlight = undefined
     }
+  }
+  async saveAs(params: SaveAsParams): Promise<EditorBuffer> {
+    this.assertActive()
+    if (typeof params.bufferId !== 'string' || params.bufferId.length === 0) {
+      throw this.context.error('invalid-params', 'bufferId is required.')
+    }
+    if (typeof params.path !== 'string' || params.path.length === 0 || params.path.includes('\0') ||
+      params.path.endsWith('/') || params.path.includes('\\') || isAbsolute(params.path) || params.path.split('/').includes('..') ||
+      !['.md', '.markdown', '.mdx'].includes(extname(params.path).toLowerCase())) {
+      throw this.context.error('invalid-params', 'Save As requires an authorized worktree-relative Markdown path without traversal.')
+    }
+    if (!Number.isSafeInteger(params.expectedRevision) || params.expectedRevision < 0) {
+      throw this.context.error('invalid-params', 'expectedRevision must be a non-negative safe integer.')
+    }
+    const initial = this.requireState(params.bufferId)
+    const original = initial.buffer
+    if (original.kind !== 'markdown' || !original.untitled || initial.placeholderHash === null ||
+      initial.placeholderDev === null || initial.placeholderIno === null) {
+      throw this.context.error('invalid-params', 'Only an untitled Markdown buffer can be saved to a new path.')
+    }
+    if (params.expectedRevision !== original.contentRevision) {
+      throw Object.assign(this.context.error('conflict', `stale editor content revision: expected ${params.expectedRevision}, current ${original.contentRevision}`), {
+        data: { expectedRevision: params.expectedRevision, currentRevision: original.contentRevision }
+      })
+    }
+    if (initial.transferHolds.size > 0) throw this.context.error('conflict', 'A text transfer is in progress for this buffer.')
+    const destination = await this.paths.path(original.worktreeId, params.path, { create: true })
+    const sourcePath = original.path
+    const sourceKeys = await this.fileKeys(sourcePath)
+    const destinationKeys = await this.fileKeys(destination.path)
+    const fileKeys = [...new Set([...sourceKeys, ...destinationKeys])]
+
+    return await this.fileQueue.run(fileKeys, async () => await this.bufferQueue.run([`buffer:${params.bufferId}`], async () => {
+      const current = this.requireState(params.bufferId)
+      const currentBuffer = current.buffer
+      if (currentBuffer.path !== sourcePath || !currentBuffer.untitled || currentBuffer.kind !== 'markdown' ||
+        current.placeholderHash === null || current.placeholderDev === null || current.placeholderIno === null) {
+        throw this.context.error('conflict', 'The untitled buffer changed before Save As could complete.')
+      }
+      if (params.expectedRevision !== currentBuffer.contentRevision) {
+        throw Object.assign(this.context.error('conflict', `stale editor content revision: expected ${params.expectedRevision}, current ${currentBuffer.contentRevision}`), {
+          data: { expectedRevision: params.expectedRevision, currentRevision: currentBuffer.contentRevision }
+        })
+      }
+      if (current.transferHolds.size > 0) throw this.context.error('conflict', 'A text transfer is in progress for this buffer.')
+      const authorized = await this.paths.path(currentBuffer.worktreeId, params.path, { create: true })
+      if (authorized.path !== destination.path) throw this.context.error('conflict', 'The Save As destination changed while it was being authorized.')
+      await mkdir(dirname(destination.path), { recursive: true })
+      const reauthorized = await this.paths.path(currentBuffer.worktreeId, params.path, { create: true })
+      if (reauthorized.path !== destination.path) throw this.context.error('conflict', 'The Save As destination changed while it was being prepared.')
+
+      const content = currentBuffer.draft ?? currentBuffer.content
+      const contentBytes = Buffer.byteLength(content, 'utf8')
+      if (contentBytes > MAX_TEXT_FILE_BYTES) throw this.context.error('invalid-params', `file exceeds the ${MAX_TEXT_FILE_BYTES}-byte save limit`)
+      const contentHash = hashText(content)
+      const stagePath = join(dirname(destination.path), `.${basename(destination.path)}.${randomUUID()}.tmp`)
+      let stageIdentity: { dev: number; ino: number } | null = null
+      let destinationIdentity: { dev: number; ino: number } | null = null
+      const oldPlaceholder = {
+        hash: current.placeholderHash!,
+        dev: current.placeholderDev!,
+        ino: current.placeholderIno!
+      }
+      let nextBuffer: EditorBuffer
+      const nextMetrics: BufferMetrics = {
+        contentBytes,
+        contentLength: content.length,
+        draftBytes: null,
+        draftLength: null,
+        diskContentBytes: null,
+        diskContentLength: null,
+        diskSignature: null,
+        placeholderHash: null,
+        placeholderDev: null,
+        placeholderIno: null,
+        placeholderTemplate: false,
+        placeholderEdited: false
+      }
+      try {
+        const staged = await openFile(stagePath, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW ?? 0), 0o600)
+        try {
+          const info = await staged.stat()
+          stageIdentity = { dev: info.dev, ino: info.ino }
+          await staged.writeFile(content, 'utf8')
+          await staged.sync()
+        } finally {
+          await staged.close()
+        }
+        const stagedSnapshot = await readSnapshot(stagePath)
+        const stagedInfo = await lstat(stagePath)
+        if (stageIdentity === null || stagedInfo.dev !== stageIdentity.dev || stagedInfo.ino !== stageIdentity.ino ||
+          stagedSnapshot.hash !== contentHash) {
+          throw this.context.error('conflict', 'The staged Save As file changed before it could be installed.')
+        }
+        try {
+          await link(stagePath, destination.path)
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException | null)?.code === 'EEXIST') {
+            throw this.context.error('conflict', `Destination already exists: ${destination.relativePath}`)
+          }
+          throw error
+        }
+        destinationIdentity = { dev: stagedInfo.dev, ino: stagedInfo.ino }
+        const installedInfo = await lstat(destination.path)
+        const installedSnapshot = await readSnapshot(destination.path)
+        if (installedInfo.dev !== destinationIdentity.dev || installedInfo.ino !== destinationIdentity.ino ||
+          installedSnapshot.hash !== contentHash) {
+          throw this.context.error('conflict', 'The Save As destination changed before it could be committed.')
+        }
+        await unlink(stagePath)
+        stageIdentity = null
+
+        nextBuffer = {
+          ...currentBuffer,
+          path: destination.path,
+          relativePath: destination.relativePath,
+          name: basename(destination.path),
+          content,
+          draft: null,
+          baseline: contentHash,
+          size: contentBytes,
+          dirty: false,
+          external: null,
+          diskContent: null,
+          untitled: false,
+          error: null,
+          revision: currentBuffer.revision + 1,
+          contentRevision: currentBuffer.contentRevision + Number(currentBuffer.content !== content || currentBuffer.draft !== null)
+        }
+        this.store.transaction(() => {
+          saveBuffer(this.store, nextBuffer, false, nextMetrics)
+          const rows = this.store.all<{ id: string; payload: string }>(
+            'SELECT id, payload FROM editor_notes WHERE buffer_id = ?',
+            params.bufferId
+          )
+          for (const row of rows) {
+            let note: unknown
+            try {
+              note = JSON.parse(row.payload)
+            } catch {
+              throw this.context.error('conflict', `Markdown note ${row.id} could not be retargeted safely.`)
+            }
+            if (note === null || typeof note !== 'object' || Array.isArray(note) || typeof (note as Record<string, unknown>).filePath !== 'string') {
+              throw this.context.error('conflict', `Markdown note ${row.id} has no safe file path to retarget.`)
+            }
+            const updatedPayload = { ...(note as Record<string, unknown>), filePath: destination.relativePath }
+            const result = this.store.run(
+              'UPDATE editor_notes SET payload = ? WHERE id = ? AND buffer_id = ? AND payload = ?',
+              JSON.stringify(updatedPayload),
+              row.id,
+              params.bufferId,
+              row.payload
+            )
+            if (result.changes === 0) throw this.context.error('conflict', `Markdown note ${row.id} changed while Save As was committing.`)
+          }
+        })
+      } catch (error) {
+        if (destinationIdentity !== null) {
+          await this.unlinkIfMatches(destination.path, contentHash, destinationIdentity.dev, destinationIdentity.ino)
+        }
+        if (stageIdentity !== null) {
+          await this.unlinkIfMatches(stagePath, contentHash, stageIdentity.dev, stageIdentity.ino)
+        }
+        throw error
+      }
+
+      current.buffer = nextBuffer
+      current.contentBytes = nextMetrics.contentBytes
+      current.contentLength = nextMetrics.contentLength
+      current.draftBytes = null
+      current.draftLength = null
+      current.diskContentBytes = null
+      current.diskContentLength = null
+      current.diskSignature = null
+      current.placeholderHash = null
+      current.placeholderDev = null
+      current.placeholderIno = null
+      current.placeholderTemplate = false
+      current.placeholderEdited = false
+      current.autosaveHold = false
+      current.verified = true
+      this.cancelAutosave(current)
+      this.pathIndex.delete(this.pathKey(currentBuffer.worktreeId, sourcePath))
+      this.pathIndex.set(this.pathKey(currentBuffer.worktreeId, destination.path), params.bufferId)
+      this.ownWrites.set(destination.path, { hash: contentHash, expiresAt: Date.now() + 3000 })
+      const tabs = this.tabsForBuffer(params.bufferId)
+      if (tabs.length > 0) {
+        const result = await this.context.call('quirky.terminal/rekeyViewTabs', {
+          workspace: `id:${currentBuffer.worktreeId}`,
+          viewId: EDITOR_DOCUMENT_VIEW,
+          changes: tabs.map((tab) => ({
+            tab: tab.tabId,
+            key: tab.key,
+            input: { bufferId: params.bufferId, mode: tab.inputMode },
+            title: nextBuffer.name,
+            preview: tab.preview
+          }))
+        }) as { workspace?: TerminalWorkspace }
+        if (result.workspace !== undefined) this.syncWorkspaceValue(currentBuffer.worktreeId, result.workspace)
+      }
+      await this.unlinkIfMatches(sourcePath, oldPlaceholder.hash, oldPlaceholder.dev, oldPlaceholder.ino)
+      this.inventory.invalidate(currentBuffer.root)
+      this.emit()
+      return current.buffer
+    }))
   }
 
   async readBytes(bufferId: string, offset: number, length: number): Promise<{ data: string; eof: boolean; size: number }> {
@@ -594,7 +851,10 @@ export class EditorDaemon {
       for (const listener of this.closeListeners) listener(params.bufferId)
     }
     const remaining = [...this.tabs.values()].some((tab) => tab.bufferId === params.bufferId)
-    if (!remaining && !state.buffer.dirty) this.removeBuffer(params.bufferId)
+    if (!remaining && !state.buffer.dirty) {
+      await this.cleanupClosedPlaceholder(params.bufferId)
+      this.removeBuffer(params.bufferId)
+    }
     else {
       const current = this.buffers.get(params.bufferId)
       if (current !== undefined) {
@@ -604,6 +864,33 @@ export class EditorDaemon {
     }
     this.emit()
     return { closed: true }
+  }
+  private async cleanupClosedPlaceholder(bufferId: string): Promise<void> {
+    const initial = this.buffers.get(bufferId)
+    if (initial === undefined) return
+    const buffer = initial.buffer
+    const emptyHash = hashText('')
+    if (!buffer.untitled || buffer.kind !== 'markdown' || buffer.dirty || buffer.draft !== null || buffer.content !== '' ||
+      initial.placeholderHash !== emptyHash || initial.placeholderDev === null || initial.placeholderIno === null ||
+      initial.placeholderTemplate || initial.placeholderEdited || this.store.get('SELECT 1 FROM editor_notes WHERE buffer_id = ? LIMIT 1', bufferId)) {
+      return
+    }
+    const path = buffer.path
+    const hash = initial.placeholderHash
+    const dev = initial.placeholderDev
+    const ino = initial.placeholderIno
+    const keys = await this.fileKeys(path)
+    await this.fileQueue.run(keys, async () => await this.bufferQueue.run([`buffer:${bufferId}`], async () => {
+      const current = this.buffers.get(bufferId)
+      if (current === undefined || current.buffer.path !== path || !current.buffer.untitled || current.buffer.kind !== 'markdown' ||
+        current.buffer.dirty || current.buffer.draft !== null || current.buffer.content !== '' ||
+        current.placeholderHash !== hash || current.placeholderDev !== dev || current.placeholderIno !== ino ||
+        current.placeholderTemplate || current.placeholderEdited ||
+        this.store.get('SELECT 1 FROM editor_notes WHERE buffer_id = ? LIMIT 1', bufferId)) {
+        return
+      }
+      await this.unlinkIfMatches(path, hash, dev, ino)
+    }))
   }
 
   canClose(params: CloseParams): boolean {
@@ -643,6 +930,7 @@ export class EditorDaemon {
     const action = params.action ?? 'update'
     if (action === 'update') return await this.applyViewPatch(params.bufferId, params.patch ?? {}, params.tabId)
     if (action === 'promote') return await this.promoteBuffer(params.bufferId, params.tabId)
+    if (action === 'returnToEdit') return await this.returnPreviewToEdit(params.bufferId, params.tabId, params.patch ?? {})
     if (action === 'pin') return await this.pinBuffer(params.bufferId, params.tabId)
     if (action === 'compare') return await this.compareDisk(params.bufferId)
     if (action === 'keep') return await this.keepDisk(params.bufferId)
@@ -1057,6 +1345,10 @@ export class EditorDaemon {
 
   private async performSave(bufferId: string, trigger: SaveParams['trigger'], generation: number): Promise<EditorBuffer> {
     const state = this.requireState(bufferId)
+    if (state.buffer.untitled) {
+      if (trigger === 'autosave') return state.buffer
+      throw this.context.error('invalid-params', 'Untitled Markdown documents must be saved with Save As.')
+    }
     if (state.buffer.readOnly) throw this.context.error('invalid-params', 'This file is read-only.')
     if (state.transferHolds.size > 0) {
       if (trigger === 'autosave') return state.buffer
@@ -1204,6 +1496,45 @@ export class EditorDaemon {
     })
     if (mode !== undefined && result.modeChanged) await this.updateTabModes(bufferId, mode)
     return this.get(bufferId)
+  }
+  private async returnPreviewToEdit(bufferId: string, requestedTabId: string | undefined, patch: Record<string, unknown>): Promise<EditorBuffer> {
+    const invalid = Object.keys(patch).find((key) => key !== 'mode')
+    if (invalid !== undefined) throw this.context.error('invalid-params', `returnToEdit patch cannot change ${invalid}.`)
+    const mode = patch.mode
+    if (mode !== 'source' && mode !== 'rich') throw this.context.error('invalid-params', 'returnToEdit requires mode source or rich.')
+    const state = this.requireState(bufferId)
+    if (state.buffer.kind !== 'markdown') throw this.context.error('invalid-params', 'Only a Markdown Preview tab can return to an editor.')
+    const target = requestedTabId === undefined
+      ? this.tabsForBuffer(bufferId).find((tab) => tab.inputMode === 'preview')
+      : this.tabs.get(requestedTabId)
+    if (target === undefined || target.bufferId !== bufferId) {
+      throw this.context.error('not-found', `editor preview tab not found for buffer ${bufferId}`)
+    }
+    await this.viewPatch(bufferId, { mode }, target.tabId)
+    const current = this.requireState(bufferId)
+    const mapping = this.tabs.get(target.tabId)
+    if (mapping === undefined || mapping.bufferId !== bufferId) {
+      throw this.context.error('conflict', 'The preview tab changed before it could return to the editor.')
+    }
+    if (mapping.inputMode === 'preview') {
+      const result = await this.context.call('quirky.terminal/rekeyViewTabs', {
+        workspace: `id:${mapping.worktreeId}`,
+        viewId: EDITOR_DOCUMENT_VIEW,
+        changes: [{
+          tab: mapping.tabId,
+          key: mapping.key,
+          input: { bufferId, mode },
+          title: current.buffer.name,
+          preview: false
+        }]
+      }) as { workspace?: TerminalWorkspace }
+      if (result.workspace !== undefined) this.syncWorkspaceValue(mapping.worktreeId, result.workspace)
+    }
+    const fresh = this.requireState(bufferId)
+    fresh.buffer = { ...fresh.buffer, ...this.bufferTabSummary(bufferId), revision: fresh.buffer.revision + 1 }
+    this.persist(fresh)
+    this.emit()
+    return fresh.buffer
   }
   private async updateTabModes(bufferId: string, mode: EditorMode): Promise<void> {
     if (mode === 'preview') return
@@ -1838,9 +2169,24 @@ export class EditorDaemon {
       const suffix = relative(oldPath, previous.path)
       const path = suffix === '' ? newPath : join(newPath, suffix)
       const relativePath = relative(worktree.path, path)
+      const placeholderWasRenamed = previous.path === oldPath && previous.untitled
       this.pathIndex.delete(this.pathKey(worktree.id, previous.path))
       this.pathIndex.set(this.pathKey(worktree.id, path), previous.id)
-      state.buffer = { ...previous, path, relativePath, name: basename(path), revision: previous.revision + 1 }
+      if (placeholderWasRenamed) {
+        state.placeholderHash = null
+        state.placeholderDev = null
+        state.placeholderIno = null
+        state.placeholderTemplate = false
+        state.placeholderEdited = false
+      }
+      state.buffer = {
+        ...previous,
+        path,
+        relativePath,
+        name: basename(path),
+        ...(placeholderWasRenamed ? { untitled: false } : {}),
+        revision: previous.revision + 1
+      }
       this.persist(state)
       const mappings = this.tabsForBuffer(previous.id)
       if (mappings.length > 0) {
@@ -2010,6 +2356,20 @@ export class EditorDaemon {
     }
     return keys
   }
+  private async unlinkIfMatches(path: string, expectedHash: string, expectedDev: number, expectedIno: number): Promise<boolean> {
+    try {
+      const before = await lstat(path)
+      if (before.isSymbolicLink() || !before.isFile() || before.dev !== expectedDev || before.ino !== expectedIno) return false
+      const snapshot = await this.tryReadSnapshot(path)
+      if (snapshot === null || snapshot.hash !== expectedHash) return false
+      const after = await lstat(path)
+      if (after.isSymbolicLink() || !after.isFile() || after.dev !== expectedDev || after.ino !== expectedIno) return false
+      await unlink(path)
+      return true
+    } catch {
+      return false
+    }
+  }
 
   private async forceWrite(path: string, content: string): Promise<'written' | 'missing'> {
     const bytes = Buffer.from(content, 'utf8')
@@ -2087,7 +2447,7 @@ export class EditorDaemon {
   }
 
   private autosaveEligible(state: PrivateBuffer): boolean {
-    return state.buffer.dirty && state.buffer.draft !== null && !state.buffer.readOnly && state.buffer.external === null && state.buffer.baseline !== null && state.transferHolds.size === 0
+    return !state.buffer.untitled && state.buffer.dirty && state.buffer.draft !== null && !state.buffer.readOnly && state.buffer.external === null && state.buffer.baseline !== null && state.transferHolds.size === 0
   }
 
   private commit(state: PrivateBuffer, buffer: EditorBuffer, contentMutation: boolean): void {
@@ -2118,7 +2478,12 @@ export class EditorDaemon {
       draftLength: state.draftLength,
       diskContentBytes: state.diskContentBytes,
       diskContentLength: state.diskContentLength,
-      diskSignature: state.diskSignature
+      diskSignature: state.diskSignature,
+      placeholderHash: state.placeholderHash,
+      placeholderDev: state.placeholderDev,
+      placeholderIno: state.placeholderIno,
+      placeholderTemplate: state.placeholderTemplate,
+      placeholderEdited: state.placeholderEdited
     })
   }
 

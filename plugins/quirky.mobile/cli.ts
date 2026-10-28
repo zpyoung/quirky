@@ -9,7 +9,23 @@ function noArgs(args: CliArgs, context: CliContext): void {
   if (args.positionals.length > 0 || Object.keys(args.flags).length > 0) throw context.usage('this command takes no arguments')
 }
 
-const named: CliModule['commands'] = {
+function bundleReadArgs(args: CliArgs, context: CliContext, withGzip: boolean): { buildId: string; path: string; offset: number; gzip?: boolean } {
+  const allowed = withGzip ? ['build-id', 'path', 'offset', 'gzip'] : ['build-id', 'path', 'offset']
+  if (args.positionals.length > 0 || Object.keys(args.flags).some((key) => !allowed.includes(key))) throw context.usage('bundle reads accept only --build-id, --path, --offset, and range-only --gzip')
+  const buildId = stringFlag(args, 'build-id')
+  const path = stringFlag(args, 'path')
+  const offset = args.flags.offset
+  if (buildId === undefined || !/^[0-9a-f]{64}$/.test(buildId) || path === undefined || !Number.isSafeInteger(offset) || (offset as number) < 0) throw context.usage('bundle reads require --build-id, --path, and a non-negative integer --offset')
+  if (withGzip && args.flags.gzip !== undefined && typeof args.flags.gzip !== 'boolean') throw context.usage('--gzip must be boolean')
+  return {
+    buildId,
+    path,
+    offset: offset as number,
+    ...(withGzip && args.flags.gzip === true ? { gzip: true } : {})
+  }
+}
+
+export const commands: CliModule['commands'] = {
   async info(args, context) {
     noArgs(args, context)
     const value = await context.call('quirky.mobile/info', {})
@@ -75,21 +91,33 @@ const named: CliModule['commands'] = {
     })
     context.out.result(value, () => JSON.stringify(value, null, 2))
   },
+  async 'bundle-manifest'(args, context) {
+    noArgs(args, context)
+    const value = await context.call('quirky.mobile/bundleManifest', {})
+    context.out.result(value, () => JSON.stringify(value, null, 2))
+  },
+  async 'agent-catalog'(args, context) {
+    noArgs(args, context)
+    const value = await context.call('quirky.mobile/agentCatalog', {})
+    context.out.result(value, () => JSON.stringify(value, null, 2))
+  },
+  async 'bundle-chunk'(args, context) {
+    const value = await context.call('quirky.mobile/bundleChunk', bundleReadArgs(args, context, false))
+    context.out.result(value, () => JSON.stringify(value, null, 2))
+  },
+  async 'bundle-range'(args, context) {
+    const value = await context.call('quirky.mobile/bundleRange', bundleReadArgs(args, context, true))
+    context.out.result(value, () => JSON.stringify(value, null, 2))
+  },
   async open(args, context) {
     if (args.positionals.length > 0 || Object.keys(args.flags).some((key) => key !== 'settings')) throw context.usage('usage: mobile open [--settings]')
     if (args.flags.settings !== undefined && typeof args.flags.settings !== 'boolean') throw context.usage('--settings must be boolean')
     const value = await context.call('quirky.mobile/open', { ...(args.flags.settings === undefined ? {} : { settings: args.flags.settings }) })
     context.out.result(value, () => 'opened Mobile')
   },
-  async openSettings(args, context) {
+  async 'open-settings'(args, context) {
     noArgs(args, context)
     const value = await context.call('quirky.mobile/open', { settings: true })
     context.out.result(value, () => 'opened Mobile settings')
   }
-}
-
-/** CLI names and method aliases share the same implementation. */
-export const commands: CliModule['commands'] = {
-  ...named,
-  ...Object.fromEntries(Object.entries(named).map(([name, run]) => [`cli-command:quirky.mobile/${name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`, run]))
 }

@@ -11,6 +11,58 @@
   "contributes": {
     "method": [
       {
+        "id": "saveAs",
+        "description": "Save an untitled Markdown buffer to a new authorized relative path, preserving its buffer and tab identity. Never replaces an existing destination.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "bufferId": { "type": "string" },
+            "path": { "type": "string" },
+            "expectedRevision": { "type": "integer", "minimum": 0 }
+          },
+          "required": ["bufferId", "path", "expectedRevision"],
+          "additionalProperties": false
+        },
+        "result": { "type": "object", "description": "The saved and retargeted editor buffer info; untitled is false. A stale revision, existing destination or non-untitled buffer fails without losing either file." }
+      },
+      {
+        "id": "workspaceNotes",
+        "description": "Read Markdown review notes across a worktree, reserve/release delivery snapshots, or settle exact delivered/cleared snapshots. Canonical notes remain editor-owned.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": { "type": "string" },
+            "action": { "type": "string", "enum": ["list", "reserve", "release", "settle"] },
+            "path": { "type": "string", "description": "Optional worktree-relative path filter for list." },
+            "snapshots": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "description": "Exact note returned by list; every persisted field must still match before reservation or deletion.",
+                "properties": {
+                  "id": { "type": "string" }, "bufferId": { "type": "string" },
+                  "worktreeId": { "type": "string" }, "filePath": { "type": "string" },
+                  "source": { "type": "string", "enum": ["markdown"] },
+                  "selectedText": { "type": "string" },
+                  "startLine": { "type": "integer", "minimum": 1 },
+                  "endLine": { "type": "integer", "minimum": 1 },
+                  "lineNumber": { "type": "integer", "minimum": 1 },
+                  "body": { "type": "string" }, "createdAt": { "type": "number" },
+                  "updatedAt": { "type": "number" }, "sentAt": { "type": "number" },
+                  "side": { "type": "string", "enum": ["modified"] }
+                },
+                "required": ["id", "bufferId", "worktreeId", "filePath", "source", "lineNumber", "body", "createdAt", "side"],
+                "additionalProperties": false
+              }
+            },
+            "holdId": { "type": "string", "description": "Required unique delivery identifier for reserve/release. When supplied to settle, only snapshots reserved by this identifier can be deleted." }
+          },
+          "required": ["action"],
+          "additionalProperties": false
+        },
+        "result": { "type": "object", "description": "list returns {notes: MarkdownReviewNote[]}; reserve returns {reservedNoteIds,unavailableNoteIds}; release returns {releasedNoteIds}; settle returns {deletedNoteIds,retainedNoteIds}. ID lists contain strings. Changed snapshots survive; another worktree is never modified. A reservation is shared with Markdown-rail sends and released in finally on every outcome." }
+      },
+      {
         "id": "open",
         "description": "Open an authorized worktree file in an editor tab.",
         "params": {
@@ -212,7 +264,7 @@
           "type": "object",
           "properties": {
             "bufferId": { "type": "string" },
-            "action": { "type": "string", "enum": ["update", "reload", "keep", "undoReload", "compare", "promote", "pin", "reveal"], "description": "Optional; defaults to update. update applies patch/preview state; promote, pin, reveal, compare, reload, keep and undoReload select their named operation and need no patch." },
+            "action": { "type": "string", "enum": ["update", "reload", "keep", "undoReload", "compare", "promote", "returnToEdit", "pin", "reveal"], "description": "Optional; defaults to update. returnToEdit converts the specified Preview tab to an editable Markdown surface and requires patch.mode source or rich. update applies patch/preview state; promote, pin, reveal, compare, reload, keep and undoReload select their named operation." },
             "tabId": { "type": "string" },
             "patch": {
               "type": "object",
@@ -450,7 +502,7 @@
             "bufferId": { "type": "string", "description": "Required for every action except new and templates." },
             "expectedRevision": { "type": "integer", "minimum": 0, "description": "Required for apply, format, insert, replace, link edit/remove and importImage operations that write content." },
             "worktree": { "type": "string", "description": "Optional worktree selector for new and templates." },
-            "action": { "type": "string", "enum": ["capabilities", "format", "insert", "apply", "links", "documents", "toc", "frontmatter", "search", "replace", "templates", "new", "importImage", "exportPdf"], "description": "apply requires expectedRevision and text. format requires expectedRevision, format and selection; insert requires expectedRevision and format, with selection optional. links uses operation; edit/remove require selection and expectedRevision, and all link operations except remove require target. search requires query; replace requires expectedRevision, non-empty query (at most 2 KiB UTF-8) and text. importImage requires expectedRevision and either name+data, an authorized path, or the native chooser; exportPdf requires rich/preview mode and source at most 600 KiB UTF-8, with an optional destination path. new creates named files; untitled creation and Save As are not exposed in this release. new/templates use worktree and optional title/template/query; other buffer actions require bufferId." },
+            "action": { "type": "string", "enum": ["capabilities", "format", "insert", "apply", "links", "documents", "toc", "frontmatter", "search", "replace", "templates", "new", "importImage", "exportPdf"], "description": "apply requires expectedRevision and text. format requires expectedRevision, format and selection; insert requires expectedRevision and format, with selection optional. links uses operation; edit/remove require selection and expectedRevision, and all link operations except remove require target. search requires query; replace requires expectedRevision, non-empty query (at most 2 KiB UTF-8) and text. importImage requires expectedRevision and either name+data, an authorized path, or the native chooser; exportPdf requires rich/preview mode and source at most 600 KiB UTF-8, with an optional destination path. new creates a collision-safe untitled Markdown placeholder and opens it in an edit tab; Save As is the separate saveAs method with a required bufferId, relative path and expectedRevision. new/templates use worktree and optional title/template/query; other buffer actions require bufferId." },
             "query": { "type": "string", "description": "Search, template or document query. replace and documents queries are limited to 2 KiB UTF-8; replace also requires a non-empty query." },
             "text": { "type": "string", "description": "Required by apply and replace; resulting rich apply/format/insert content is limited to 1 MiB UTF-8. Also supplies optional replacement text, code or image alt text for relevant formats." },
             "format": { "type": "string", "enum": ["body", "heading1", "heading2", "heading3", "heading4", "heading5", "bold", "italic", "strike", "inlineCode", "bulletList", "orderedList", "taskList", "quote", "link", "image", "codeBlock", "divider", "table", "mermaid", "inlineMath", "blockMath", "emoji", "tableRowAbove", "tableRowBelow", "tableRowDelete", "tableColumnLeft", "tableColumnRight", "tableColumnDelete", "tableDelete", "codeLanguage", "indentCode", "outdentCode", "copyCode"], "description": "Required for format/insert; insert accepts insertion formats only. Details, collapsible headings and custom document-link insertion are not published until their rich round trips are supported; use Source for those constructs." },
@@ -476,7 +528,7 @@
           "additionalProperties": false
         },
         "result": {
-          "description": "Action-dependent object union. new returns {buffer: full editor-buffer snapshot, path, template:string|null, templateCreated}; expanded templates are limited to 256 KiB. templates returns up to 100 {relativePath,name,title} entries plus total/truncated. capabilities returns bufferId/mode, rich and preview eligibility/reasons/byte limits (600 KiB rich, 1 MiB openAnyway, 8 MiB preview), optional canonicalText and sanitized preview data, and frontMatter either null or {text,startLine,endLine,lineCount,visible}; releaseImages returns {bufferId,released:true}. apply/format/insert edits return a buffer snapshot with change/source-preservation fields; format=copyCode returns {text,contentRevision}. links resolution returns {target,href:string|null,safe,resolved:string|null,ambiguous,kind,anchor:string|null,missing?}; link edits return an edit result. documents returns up to 20,000 {relativePath,name,title} entries with an 8 MiB aggregate path budget, total and truncated. toc returns {headings,count,visible}; frontmatter returns {visible,text,startLine/endLine nullable,readOnly}. search returns {query,matches,total,truncated,activeIndex} with at most 10,000 matches; replace returns {replacements,changed,buffer} and source-preservation data when changed. importImage returns {buffer,relativePath,mimeType,size,inserted} or {cancelled:true}; exportPdf returns exported path/details with valid:true,cancelled:false or {cancelled:true}. Nested buffers are full editor-buffer snapshots documented on open's result."
+          "description": "Action-dependent object union. new returns {buffer: full editor-buffer snapshot, path, template:string|null, templateCreated}; its buffer is untitled:true and uses an owned collision-safe placeholder. Save As is quirky.editor/saveAs. Expanded templates are limited to 256 KiB. templates returns up to 100 {relativePath,name,title} entries plus total/truncated. capabilities returns bufferId/mode, rich and preview eligibility/reasons/byte limits (600 KiB rich, 1 MiB openAnyway, 8 MiB preview), optional canonicalText and sanitized preview data, and frontMatter either null or {text,startLine,endLine,lineCount,visible}; releaseImages returns {bufferId,released:true}. apply/format/insert edits return a buffer snapshot with change/source-preservation fields; format=copyCode returns {text,contentRevision}. links resolution returns {target,href:string|null,safe,resolved:string|null,ambiguous,kind,anchor:string|null,missing?}; link edits return an edit result. documents returns up to 20,000 {relativePath,name,title} entries with an 8 MiB aggregate path budget, total and truncated. toc returns {headings,count,visible}; frontmatter returns {visible,text,startLine/endLine nullable,readOnly}. search returns {query,matches,total,truncated,activeIndex} with at most 10,000 matches; replace returns {replacements,changed,buffer} and source-preservation data when changed. importImage returns {buffer,relativePath,mimeType,size,inserted} or {cancelled:true}; exportPdf returns exported path/details with valid:true,cancelled:false or {cancelled:true}. Nested buffers are full editor-buffer snapshots documented on open's result."
         }
       },
       {
@@ -672,7 +724,7 @@
       { "id": "open", "title": "Open File", "description": "Open an authorized worktree-relative file.", "args": { "type": "object", "properties": { "worktree": { "type": "string" }, "path": { "type": "string" }, "focus": { "type": "boolean" }, "preview": { "type": "boolean" } }, "required": ["path"], "additionalProperties": false } },
       { "id": "quick-open", "title": "Go to File", "description": "Open Quick Open." },
       { "id": "search", "title": "Search Files", "description": "Search file contents." },
-      { "id": "save", "title": "Save File", "description": "Save the focused editor draft." },
+      { "id": "save", "title": "Save File", "description": "Save the focused editor draft; untitled Markdown opens the relative-path Save As dialog." },
       { "id": "close", "title": "Close Editor Tab", "description": "Close the focused editor tab after its dirty-close decision." },
       { "id": "close-all", "title": "Close All Editor Tabs", "description": "Close editor tabs with per-buffer dirty decisions." },
       { "id": "reopen", "title": "Reopen Closed Editor Tab", "description": "Reopen the last eligible closed editor tab." },

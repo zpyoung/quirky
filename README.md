@@ -22,6 +22,24 @@ logs and cleanup.
 
 Inside any Quirky terminal, the `quirky` command is on PATH: try `quirky status` or `quirky help`.
 
+## Phone companion
+
+`apps/mobile` contains the Expo companion for direct LAN or tailnet connections. It pairs with
+`quirky mobile pair --address <reachable-desktop-address>` by scanning the QR, opening the
+`quirky://pair` link, or pasting the code. Pairing pins the desktop key; bearer credentials stay
+in the phone's secure store. No relay or cloud account is used.
+
+Build the desktop normally to include its verified workspace/session page bundle. For an iOS
+development build, run `bun run --filter '@quirky/mobile' ios` with Xcode configured. The custom
+page-origin module requires a native development build, not Expo Go. To check the portable
+client and page code, use `bun run typecheck:mobile` and `bun run build:mobile-pages`.
+
+The companion opens workspaces, drives terminal sessions under an explicit input lease, and
+answers agent questions. Interactive native chat, dictation, reversible workspace Sleep, and
+filters requiring unavailable client provenance are not supported. Other mobile panels and
+signed distribution are tracked separately. Actual camera, secure-store, WebView and keyboard
+checks remain in [the native scenario handoff](docs/loop/native/sb-mobile-app.json).
+
 ## Agent Session History
 
 Open **Agent Session History** to browse agent-owned transcripts and resume a session in a
@@ -115,6 +133,25 @@ for that remaining acceptance target.
 The root TypeScript configuration resolves both public `@quirky/protocol` entries directly to
 workspace source, so newly added plugins do not need generated per-plugin links for typechecking.
 Keep those mappings aligned with `packages/protocol/package.json` exports.
+
+## Editor documents and shared review notes
+
+New Markdown documents use collision-safe untitled placeholders. Save opens a relative-path
+Save As dialog; cancelling keeps the draft. The public `quirky.editor/saveAs` method accepts
+`bufferId`, `path` and `expectedRevision`, refuses existing destinations and preserves the
+buffer and tab identities. Closing an untouched blank placeholder removes only that owned file;
+template-created, edited and externally changed files are retained.
+
+Source Control's Notes shelf includes both diff notes and Markdown review notes, including notes
+whose editor tab has closed. `quirky git notes --worktree <id> --json` lists the same notes.
+Copy, scoped clear and send use the canonical owner stores; confirmed sends remove only unchanged
+snapshots, and concurrent edits survive. A shared delivery reservation prevents a Markdown note
+from being sent simultaneously from its editor rail and Source Control.
+
+Source Control resolves GitHub review state for the current branch and HEAD before offering
+review creation, then hands the guarded preparation result to the existing Reviews composer.
+The [parity sweep specification](docs/quirk/specs/2026-10-28-m7-sweep-editor-source-control/logic.md)
+records the implemented flows and the remaining editor/hosted-target completion work.
 
 ## Docs
 
