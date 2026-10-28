@@ -1759,6 +1759,34 @@
       "status": "done"
     },
     {
+      "id": "fix-flaky-quirky-worktree-create",
+      "milestone": "M1",
+      "title": "Fix the flaky plugins/quirky.worktree/test/create.test.ts: it failed under load in 5 full-suite runs and passed when rerun alone (see <git common dir>/build-loop/flakes.log). Find the timing assumption with quirk:systematic-debugging, reproducing on the test host with bun scripts/suite.ts plugins/quirky.worktree (never generate CPU load on the Mac), and fix the test or the code it exposes",
+      "docs": [
+        "worktrees.md"
+      ],
+      "deps": [],
+      "status": "done"
+    },
+    {
+      "id": "fix-flaky-pty-host-clear",
+      "milestone": "M1",
+      "title": "Fix the flaky packages/pty-host/test/clear.test.ts: it failed 3 times in full-suite runs today (15:28, 22:47, 23:11 UTC). Find out with quirk:systematic-debugging whether a wait is too short under load or the clear races with output, reproduce it under CPU load on the test host, and fix the code or the test",
+      "docs": [
+        "term-daemon.md"
+      ],
+      "deps": [],
+      "status": "done"
+    },
+    {
+      "id": "fix-native-m3-accounts-1028",
+      "milestone": "M3",
+      "title": "Fix the native-only failures in m3-accounts from the 2026-10-28 run: AC6-AC7-native-link",
+      "docs": [],
+      "deps": [],
+      "status": "done"
+    },
+    {
       "id": "m7-test-triage",
       "milestone": "M7",
       "title": "End-phase test triage: run bun scripts/suite.ts packages apps plugins, bun test scripts and bun run typecheck on build/roadmap, and add one fix-test-<area>-<MMDD> item per failing package, app or plugin (naming its failing files and tests) so the lanes split the debugging; change no code",
@@ -1845,26 +1873,6 @@
       "lane": 4
     },
     {
-      "id": "fix-flaky-quirky-worktree-create",
-      "milestone": "M1",
-      "title": "Fix the flaky plugins/quirky.worktree/test/create.test.ts: it failed under load in 5 full-suite runs and passed when rerun alone (see <git common dir>/build-loop/flakes.log). Find the timing assumption with quirk:systematic-debugging, reproducing on the test host with bun scripts/suite.ts plugins/quirky.worktree (never generate CPU load on the Mac), and fix the test or the code it exposes",
-      "docs": [
-        "worktrees.md"
-      ],
-      "deps": [],
-      "status": "done"
-    },
-    {
-      "id": "fix-flaky-pty-host-clear",
-      "milestone": "M1",
-      "title": "Fix the flaky packages/pty-host/test/clear.test.ts: it failed 3 times in full-suite runs today (15:28, 22:47, 23:11 UTC). Find out with quirk:systematic-debugging whether a wait is too short under load or the clear races with output, reproduce it under CPU load on the test host, and fix the code or the test",
-      "docs": [
-        "term-daemon.md"
-      ],
-      "deps": [],
-      "status": "done"
-    },
-    {
       "id": "sb-mobile-settings-visibility",
       "milestone": "Side B",
       "title": "Recheck Settings > Mobile paired-device revoke visibility at 1280x720: guarded scroll/PageDown could not reach the clipped button; diagnose host overflow versus driver targeting and fix only reproduced app clipping (Mobile-page revoke path already works)",
@@ -1894,14 +1902,6 @@
       "deps": [],
       "status": "in-progress",
       "lane": 10
-    },
-    {
-      "id": "fix-native-m3-accounts-1028",
-      "milestone": "M3",
-      "title": "Fix the native-only failures in m3-accounts from the 2026-10-28 run: AC6-AC7-native-link",
-      "docs": [],
-      "deps": [],
-      "status": "done"
     },
     {
       "id": "fix-native-m3-vault-1028",
