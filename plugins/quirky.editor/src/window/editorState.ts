@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
-import type { EditorBufferInfo } from '../types'
+import type { EditorBufferInfo, ExplorerInteraction } from '../types'
 
 export type EditorTab = { tabId: string; bufferId: string; mode: 'edit' | 'preview'; group?: string }
-export type ExplorerState = { worktreeId: string; showDotfiles: boolean; expanded: string[] }
+export type ExplorerState = { worktreeId: string; showDotfiles: boolean; expanded: string[] } & Partial<ExplorerInteraction>
 export type EditorSearchState = {
   worktreeId: string
   query: string
