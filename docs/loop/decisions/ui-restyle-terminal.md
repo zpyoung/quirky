@@ -121,5 +121,27 @@
 - **Revisit if:** a consumer-visible boundary lacks behavioral coverage in the end phase
 - **Source:** assumed — autonomous
 
+## D12: Compose one roadmap catch-up and retain incoming state authorities
+- **Question:** which concurrently landed decisions and source affect the final composed item?
+- **Options:** repeat catch-up merges, restore old shell assumptions, or merge once and preserve all four incoming decision logs
+- **Chose:** one clean roadmap merge after5ac68881; read fix-test-agent-status-1028, fix-test-apps-mobile-1028, fix-test-ask-1028 and fix-test-packages-ui-1028 completely, including untruncated Progress. Retain canonical active-view input identity/tool focus, exact-window ambiguity refusal, filtered Ask snapshot/one-use consent, OSC turn ownership and remote-test policy
+- **Why:** incoming MainArea/ToolShell fixes preserve the same draft/focus behavior required by this restyle. No source conflict or decision contradiction. Mobile/provider/Ask contracts are not altered by terminal styling
+- **Evidence:** clean49file merge; incoming decision logs D1–D8/D1–D18/D1–D12/D1–D20 respectively; final full UIlint/root/mobile/prepared-desktop typecheck exit0/35.28s and UI build11host/25plugin modules
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** canonical merge-result typecheck reports a concrete composition conflict
+- **Source:** locked by incoming decision logs and docs/loop/LOOP.md
+
+## D13: Keep the merged headless GPU observation separate from successful presentation proof
+- **Question:** what did a fresh rebuilt post-merge renderer actually prove?
+- **Options:** claim auto-mode paint from search state, suppress the GPU path globally, or record the observed limitation and diagnose through its existing public preference
+- **Chose:** retain the auto-mode blank/partial glyph capture and unproven cause in BLOCKERS. In the disposable fixture only, set the existing gpu-acceleration preference off; DOM rendering exposed both exact real PTY markers. Preserve the production default/guards unchanged. Final merged composer draft remained identical after opening Sessions and using Refresh; private browser errors empty
+- **Why:** search state1/3 established parsed buffer data, not pixels. The initial driver expected earlier1/2 but this shell buffer contained an additional echoed marker; that wait mismatch is not a failed search algorithm. The preference isolation shows different renderer outcomes, not a diagnosed cause, a native pass or a reason to weaken the product. Explicit build-first leaves debugging/visual acceptance to the end phase
+- **Evidence:** final private CDP origin guarded; merged-headless-auto-renderer.webp and merged-dark-dom-renderer.png under lane notes evidence; actual xterm-rows text with both markers; final draft merged-draft-survives-tool-focus before/after tool focus and Refresh. New runtime service exit0; cleanup marker confirmed separately
+- **Reversibility:** easy
+- **Confidence:** high for observations, low for cause
+- **Revisit if:** end-phase GPU/native/visual verification establishes a product defect or capture limitation
+- **Source:** locked by docs/loop/LOOP.md build-first verification boundary
+
 ## Progress
-All source components returned, were audited against disjoint scopes and integrated: b4e49d0d workspace, dbbbcae8 tools, 9f892f89 composer, plus 3eb6d51f explicit menu test consumers using the same workspace implementer. All4external worktrees removed; inherited parent .serena untouched. Parent integration repairs and user README update complete. Pre-catch-up full typecheck/UI lint passed32.71s; actual UI build and minimum isolated browser/daemon/PTY proof completed (D7–D10). No tests/suites/scoring review/full dogfood/native acceptance run. Both owned runtime services finished, dedicated browser released/stopped. Next commit integration, merge build/roadmap once, read incoming decisions, rerun final typecheck and land through canonical queue.
+Ready to land. Three source components plus the same workspace implementer's test-consumer continuation are integrated; all4worktrees removed. Integration commit5ac68881 and the sole clean roadmap catch-up are complete; all4incoming decision logs read fully. Final caught-up typecheck/UI lint passed35.28s and UI build emitted11host/25plugin modules. Both-theme scoped surface proof and the fresh merged draft/tool composition proof are recorded with the headless GPU limitation in D13/BLOCKERS. Tests/suites/scoring review/full dogfood/native acceptance remain unrun under explicit build-first. All workers and checks returned; both private browser services stopped, both daemon/PTY scopes exited0 with cleanup; inherited .serena unchanged. Next commit this receipt, detach, canonical queue land and await its authoritative result; remove only owned scratch afterward.
