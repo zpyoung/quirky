@@ -53,6 +53,8 @@ export function NewIssueDialog(props: TasksSurfaceProps) {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [draftError, setDraftError] = useState('')
+  const [newLabel, setNewLabel] = useState('')
+  const [newAssignee, setNewAssignee] = useState('')
   const draftRef = useRef(draft)
   const stateDraft = useRef(props.state.issueDraft)
   stateDraft.current = props.state.issueDraft
@@ -116,7 +118,10 @@ export function NewIssueDialog(props: TasksSurfaceProps) {
       const raw = record(value)
       const sources = array(raw?.sources).flatMap((value) => {
         const source = record(value)
-        return (source?.id === 'origin' || source?.id === 'upstream') && typeof source.label === 'string' ? [{ id: source.id, label: source.label }] : []
+        if (!source) return []
+        const id = source.id
+        if ((id !== 'origin' && id !== 'upstream') || typeof source.label !== 'string') return []
+        return [{ id, label: source.label }]
       })
       setSourceChoices({
         ...defaultChoices('source'),
@@ -286,7 +291,7 @@ export function NewIssueDialog(props: TasksSurfaceProps) {
   const titleMissing = draft.title.trim().length === 0
 
   return <div role="dialog" aria-modal="true" aria-labelledby="new-issue-title" onKeyDown={(event) => {
-    if ((event.metaKey || event.ctrlKey) && event.key === 'Enter' && !event.isComposing) {
+    if ((event.metaKey || event.ctrlKey) && event.key === 'Enter' && !event.nativeEvent.isComposing) {
       event.preventDefault()
       void createIssue()
     }

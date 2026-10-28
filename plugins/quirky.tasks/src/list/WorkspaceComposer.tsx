@@ -18,6 +18,7 @@ type ComposerRequest = {
 }
 type WorkspaceComposerState = { open: boolean; request: ComposerRequest | null; busy: boolean; error: string | null }
 type WorkspaceComposerProps = TasksSurfaceProps & { report?(state: WorkspaceComposerState): void }
+type AgentOption = { id: string; label: string; isDefault: boolean }
 
 function object(value: unknown): Record<string, unknown> | null {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return null

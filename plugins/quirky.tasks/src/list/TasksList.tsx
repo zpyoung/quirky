@@ -23,6 +23,7 @@ type ListSource = { status?: string; reason?: string; message?: string; origin?:
 type CheckResult = { rollup: string; checks: Record<string, unknown>[]; partial: boolean; partialFailures: string[] }
 type MergeMetadata = { review: Record<string, unknown>; mergeMetadataKnown: boolean; mergeQueueRequired: boolean | null; autoMergeAllowed: boolean | null; mergeEligible: boolean; queueEligible: boolean; autoMergeEnabled: boolean; autoMergeEnableEligible: boolean; directMethods: string[]; queueMethods: string[] }
 type ReviewerOptions = { recentlyActive: string[]; suggestions: string[] }
+type Preset = { id: string; label: string; query: string }
 
 function object(value: unknown): Record<string, unknown> | null {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
@@ -1213,7 +1214,7 @@ export function TasksList({ context, state, refresh }: TasksSurfaceProps) {
               {statusOptions.map((value) => <option key={value} value={value}>{value === 'any' ? 'Any state' : value[0]!.toUpperCase() + value.slice(1)}</option>)}
             </select>
           </label>
-          {kind === 'prs' ? <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={filters.draftOnly} onChange={(event) => setFilter('status', [...(filters.status ? [`is:${filters.status}`] : []), ...(event.currentTarget.checked ? ['is:open', 'is:draft'] : [])])} />Draft only</label> : null}
+          {kind === 'pullRequest' ? <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={filters.draftOnly} onChange={(event) => setFilter('status', [...(filters.status ? [`is:${filters.status}`] : []), ...(event.currentTarget.checked ? ['is:open', 'is:draft'] : [])])} />Draft only</label> : null}
           <label>
             <span>Author</span>
             <input list="tasks-authors" value={filterAuthorText || filters.author} onChange={(event) => setFilterAuthorText(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); setFilter('author', filterAuthorText ? [`author:${filterAuthorText}`] : []) } }} onBlur={() => { if (filterAuthorText) setFilter('author', [`author:${filterAuthorText}`]) }} placeholder="Filter or type a login…" />
@@ -1233,7 +1234,7 @@ export function TasksList({ context, state, refresh }: TasksSurfaceProps) {
               {[...new Set([...repoAssignees, ...tableRows.flatMap((item) => item.assignees)])].sort().map((value) => <option key={value} value={value}>{value}</option>)}
             </select>
           </label>
-          {kind === 'prs' ? (
+          {kind === 'pullRequest' ? (
             <>
               <label>
                 <span>Review from</span>
@@ -1327,7 +1328,7 @@ export function TasksList({ context, state, refresh }: TasksSurfaceProps) {
                         <span>{item.author ?? 'unknown author'}</span>
                         {mergedSelectedCount ? <span>{item.repoName}</span> : null}
                         {item.labels.slice(0, 3).map((label) => <span key={label}>#{label}</span>)}
-                        {kind === 'prs' && (additions !== undefined || deletions !== undefined || changedFiles !== undefined) ? <span>{additions !== undefined ? `+${additions}` : ''}{additions !== undefined && deletions !== undefined ? ' ' : ''}{deletions !== undefined ? `−${deletions}` : ''}{(additions !== undefined || deletions !== undefined) && changedFiles !== undefined ? ' ' : ''}{changedFiles !== undefined ? `${changedFiles} files` : ''}</span> : null}
+                        {kind === 'pullRequest' && (additions !== undefined || deletions !== undefined || changedFiles !== undefined) ? <span>{additions !== undefined ? `+${additions}` : ''}{additions !== undefined && deletions !== undefined ? ' ' : ''}{deletions !== undefined ? `−${deletions}` : ''}{(additions !== undefined || deletions !== undefined) && changedFiles !== undefined ? ' ' : ''}{changedFiles !== undefined ? `${changedFiles} files` : ''}</span> : null}
                         {linked && typeof linked.name === 'string' ? <span>▰ {linked.name}</span> : null}
                         {optimistic[key]?.keepVisible ? <span role="status">Pending refresh</span> : null}
                       </div>
