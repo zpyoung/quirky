@@ -5,7 +5,6 @@ import type {
   AutomationDefinition,
   AutomationPrecheck,
   AutomationRun,
-  AutomationRunPatch,
   AutomationRunsPage,
   ScheduleDescription
 } from './types'
@@ -34,13 +33,8 @@ const MAX_PRECHECK_LENGTH = 4096
 const MAX_MODEL_LENGTH = 128
 const MAX_OPTION_COUNT = 16
 const MAX_OPTION_VALUE_LENGTH = 128
-const MAX_OUTPUT_BYTES = 256 * 1024
 const MAX_JSON_RECORD_BYTES = 64 * 1024
 const MAX_SAFE_GRACE_MINUTES = Math.floor(Number.MAX_SAFE_INTEGER / 60_000)
-const RUN_STATUSES: Record<AutomationRun['status'], true> = {
-  pending: true, dispatching: true, dispatched: true, completed: true, skipped_precheck: true,
-  skipped_missed: true, skipped_unavailable: true, skipped_needs_interactive_auth: true, dispatch_failed: true
-}
 
 type Params = Record<string, unknown>
 type RunReason = 'definition' | 'run'
@@ -67,8 +61,6 @@ export type AutomationService = {
   target(params: Params): Promise<AutomationTargetResolution>
   dispatch(params: Params): Promise<AutomationRun>
   tick(): Promise<ServiceResult>
-  claim(params: Params): Promise<AutomationRun>
-  updateRun(params: Params): Promise<AutomationRun>
   start(): Promise<void>
   dispose(): void
 }
@@ -79,29 +71,6 @@ function isPlainRecord(value: unknown): value is Params {
   return prototype === Object.prototype || prototype === null
 }
 
-function byteLength(value: string): number {
-  return Buffer.byteLength(value, 'utf8')
-}
-function utf8PrefixLength(value: string, maximumBytes: number): number {
-  let bytes = 0
-  let end = 0
-  while (end < value.length) {
-    const first = value.charCodeAt(end)
-    let sequenceBytes = first <= 0x7f ? 1 : first <= 0x7ff ? 2 : 3
-    let codeUnits = 1
-    if (first >= 0xd800 && first <= 0xdbff && end + 1 < value.length) {
-      const second = value.charCodeAt(end + 1)
-      if (second >= 0xdc00 && second <= 0xdfff) {
-        sequenceBytes = 4
-        codeUnits = 2
-      }
-    }
-    if (bytes + sequenceBytes > maximumBytes) break
-    bytes += sequenceBytes
-    end += codeUnits
-  }
-  return end
-}
 
 function errorKind(value: unknown): value is AutomationStoreError {
   return value instanceof AutomationStoreError
@@ -438,54 +407,6 @@ function throwNotFound(context: AutomationServiceContext, kind: string, id: stri
   throw context.error('not-found', `${kind} ${id} was not found.`)
 }
 
-function outputSnapshot(context: AutomationServiceContext, value: unknown): AutomationRunPatch['outputSnapshot'] {
-  if (value === null) return null
-  const object = objectOrNull(context, value, 'patch.outputSnapshot')
-  if (object === null) return null
-  checkFields(context, object, ['format', 'content', 'capturedAt', 'truncated'], 'patch.outputSnapshot')
-  if (object.format !== 'plain_text') throw context.error('invalid-params', 'patch.outputSnapshot.format must be plain_text.')
-  if (typeof object.content !== 'string') throw context.error('invalid-params', 'patch.outputSnapshot.content must be a string.')
-  const capturedAt = epoch(context, object.capturedAt, 'patch.outputSnapshot.capturedAt')
-  const truncated = optionalBoolean(context, object.truncated, 'patch.outputSnapshot.truncated')
-  let content = object.content
-  let wasTruncated = truncated ?? false
-  if (byteLength(content) > MAX_OUTPUT_BYTES) {
-    content = content.slice(0, utf8PrefixLength(content, MAX_OUTPUT_BYTES))
-    wasTruncated = true
-  }
-  return { format: 'plain_text', content, capturedAt, truncated: wasTruncated }
-}
-
-function runPatch(context: AutomationServiceContext, value: unknown): AutomationRunPatch {
-  const patch = checkRecord(context, value, 'patch')
-  checkFields(context, patch, [
-    'status', 'workspaceId', 'workspaceDisplayName', 'sessionId', 'launchSettings', 'outputSnapshot', 'precheckResult', 'usage', 'error'
-  ], 'patch')
-  const result: AutomationRunPatch = {}
-  if (patch.status !== undefined) {
-    if (typeof patch.status !== 'string' || !Object.hasOwn(RUN_STATUSES, patch.status)) {
-      throw context.error('invalid-params', 'patch.status is not a supported run status.')
-    }
-    result.status = patch.status as AutomationRun['status']
-  }
-  if (patch.workspaceId !== undefined) result.workspaceId = nullableString(context, patch.workspaceId, 'patch.workspaceId', MAX_ID_LENGTH)
-  if (patch.workspaceDisplayName !== undefined) result.workspaceDisplayName = nullableString(context, patch.workspaceDisplayName, 'patch.workspaceDisplayName', MAX_NAME_LENGTH)
-  if (patch.sessionId !== undefined) result.sessionId = nullableString(context, patch.sessionId, 'patch.sessionId', MAX_ID_LENGTH)
-  if (patch.launchSettings !== undefined) result.launchSettings = normalizedContext(context, patch.launchSettings, 'patch.launchSettings')
-  if (patch.outputSnapshot !== undefined) result.outputSnapshot = outputSnapshot(context, patch.outputSnapshot)
-  for (const name of ['precheckResult', 'usage'] as const) {
-    if (patch[name] !== undefined) result[name] = normalizedContext(context, patch[name], `patch.${name}`)
-  }
-  if (patch.error !== undefined) {
-    if (patch.error === null) result.error = null
-    else {
-      if (typeof patch.error !== 'string') throw context.error('invalid-params', 'patch.error must be a string or null.')
-      if (patch.error.length > MAX_PROMPT_LENGTH) throw context.error('invalid-params', `patch.error must be at most ${MAX_PROMPT_LENGTH} characters.`)
-      result.error = patch.error
-    }
-  }
-  return result
-}
 
 function inspection(context: AutomationServiceContext, params: unknown, now: () => number): ScheduleInspection {
   const object = checkRecord(context, params, 'schedule')
@@ -860,45 +781,6 @@ export function createAutomationService(
     }
   }
 
-  const claim = (params: Params) => handleAsyncError(context, async () => {
-    const object = checkRecord(context, params, 'claim')
-    checkFields(context, object, ['runId'], 'claim')
-    const runId = requiredString(context, object.runId, 'claim.runId')
-    const existing = store.getRun(runId)
-    if (!existing) throwNotFound(context, 'Run', runId)
-    if (dispatcher) {
-      const claimed = await dispatcher.dispatch(runId)
-      const current = store.getRun(runId)
-      if (!current) throwNotFound(context, 'Run', runId)
-      return current ?? claimed!
-    }
-    return runInLane(lanes, existing.automationId, () => {
-      const current = store.getRun(runId)
-      if (!current) throwNotFound(context, 'Run', runId)
-      const now = clock()
-      const run = database.transaction(() => store.claimRun(runId, now))
-      mutationEvent(context, 'run', current.automationId, { runId: run.id, action: 'claimed' })
-      return run
-    })
-  })
-
-  const updateRun = (params: Params) => handleAsyncError(context, async () => {
-    const object = checkRecord(context, params, 'updateRun')
-    checkFields(context, object, ['runId', 'patch'], 'updateRun')
-    const runId = requiredString(context, object.runId, 'updateRun.runId')
-    if (dispatcher) throw context.error('conflict', 'Run lifecycle evidence is owned by the automation dispatcher.')
-    const patch = runPatch(context, object.patch)
-    const existing = store.getRun(runId)
-    if (!existing) throwNotFound(context, 'Run', runId)
-    return runInLane(lanes, existing.automationId, () => {
-      const current = store.getRun(runId)
-      if (!current) throwNotFound(context, 'Run', runId)
-      const now = clock()
-      const run = database.transaction(() => store.updateRun(runId, patch, now))
-      mutationEvent(context, 'run', current.automationId, { runId: run.id, action: 'updated' })
-      return run
-    })
-  })
 
   const service: AutomationService = {
     list,
@@ -912,8 +794,6 @@ export function createAutomationService(
     target,
     dispatch,
     tick,
-    claim,
-    updateRun,
     async start() {
       if (started || disposed) return
       started = true

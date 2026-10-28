@@ -288,7 +288,7 @@ describe('automations API', () => {
     expect(await call(fixture, 'quirky.automations/dispatch', { runId: first.id })).toEqual(first)
     await expect(call(fixture, 'quirky.automations/updateRun', {
       runId: first.id, patch: { status: 'completed' }
-    })).rejects.toMatchObject({ code: RpcErrorCode.Conflict })
+    })).rejects.toMatchObject({ code: RpcErrorCode.MethodNotFound })
     const second = await call(fixture, 'quirky.automations/run', {
       id: definition.id, expectedOwner: definition.owner
     }) as AutomationRun

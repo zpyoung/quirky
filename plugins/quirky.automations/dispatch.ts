@@ -19,7 +19,7 @@ const OBSERVATION_INTERVAL_MS = 1_000
 const OBSERVATION_DEADLINE_MS = 6 * 60 * 60 * 1_000
 const SETUP_POLL_INTERVAL_MS = 1_000
 const MAX_OUTPUT_BYTES = 256 * 1024
-const MAX_PRECHECK_OUTPUT_BYTES = 8 * 1024
+const MAX_PRECHECK_OUTPUT_CHARS = 4_000
 
 type RecordValue = Record<string, unknown>
 type Snapshot = { definition: string; target: string }
@@ -34,14 +34,14 @@ type SetupResult = { ok: true } | { ok: false; error: string } | { ok: null }
 type CheckEvidence = {
   command: string
   startedAt: number
-  finishedAt: number
+  completedAt: number
   ran: boolean
   pass: boolean
   exitCode: number | null
   timedOut: boolean
   aborted: boolean
-  stdoutTail: string
-  stderrTail: string
+  stdout: string
+  stderr: string
   stdoutTruncated: boolean
   stderrTruncated: boolean
   durationMs: number
@@ -118,44 +118,44 @@ function newWorkspaceName(definition: AutomationDefinition, run: AutomationRun, 
   return `auto-${slug}-${stamp}-${run.id}`
 }
 
-function checkEvidence(command: string, startedAt: number, finishedAt: number, value: unknown): CheckEvidence {
+function checkEvidence(command: string, startedAt: number, completedAt: number, value: unknown): CheckEvidence {
   const result = record(value) ?? {}
-  const stdout = outputPrefix(typeof result.stdoutTail === 'string' ? result.stdoutTail : '', MAX_PRECHECK_OUTPUT_BYTES)
-  const stderr = outputPrefix(typeof result.stderrTail === 'string' ? result.stderrTail : '', MAX_PRECHECK_OUTPUT_BYTES)
-  const pass = result.pass === true && result.ran === true && result.timedOut !== true && result.aborted !== true && result.error === undefined
+  const stdout = typeof result.stdoutTail === 'string' ? result.stdoutTail : ''
+  const stderr = typeof result.stderrTail === 'string' ? result.stderrTail : ''
+  const pass = result.pass === true && result.ran === true && result.exitCode === 0 && result.timedOut !== true && result.aborted !== true && result.error === undefined
   return {
     command,
     startedAt,
-    finishedAt,
+    completedAt,
     ran: result.ran === true,
     pass,
     exitCode: typeof result.exitCode === 'number' ? result.exitCode : null,
     timedOut: result.timedOut === true,
     aborted: result.aborted === true,
-    stdoutTail: stdout.text,
-    stderrTail: stderr.text,
-    stdoutTruncated: result.stdoutTruncated === true || stdout.truncated,
-    stderrTruncated: result.stderrTruncated === true || stderr.truncated,
-    durationMs: typeof result.durationMs === 'number' && Number.isFinite(result.durationMs) ? result.durationMs : Math.max(0, finishedAt - startedAt),
+    stdout: stdout.slice(-MAX_PRECHECK_OUTPUT_CHARS),
+    stderr: stderr.slice(-MAX_PRECHECK_OUTPUT_CHARS),
+    stdoutTruncated: result.stdoutTruncated === true || stdout.length > MAX_PRECHECK_OUTPUT_CHARS,
+    stderrTruncated: result.stderrTruncated === true || stderr.length > MAX_PRECHECK_OUTPUT_CHARS,
+    durationMs: typeof result.durationMs === 'number' && Number.isFinite(result.durationMs) ? result.durationMs : Math.max(0, completedAt - startedAt),
     ...(typeof result.error === 'string' ? { error: result.error.slice(0, 2_000) } : {})
   }
 }
 
-function parsePrecheckError(command: string, startedAt: number, finishedAt: number, error: unknown): CheckEvidence {
+function parsePrecheckError(command: string, startedAt: number, completedAt: number, error: unknown): CheckEvidence {
   return {
     command,
     startedAt,
-    finishedAt,
+    completedAt,
     ran: false,
     pass: false,
     exitCode: null,
     timedOut: false,
     aborted: false,
-    stdoutTail: '',
-    stderrTail: '',
+    stdout: '',
+    stderr: '',
     stdoutTruncated: false,
     stderrTruncated: false,
-    durationMs: Math.max(0, finishedAt - startedAt),
+    durationMs: Math.max(0, completedAt - startedAt),
     error: messageOf(error).slice(0, 2_000)
   }
 }
@@ -213,12 +213,16 @@ function providerError(message: StructuredMessage, data: RecordValue | null): st
   return message.text || 'Provider result did not report successful completion.'
 }
 
-function latestOutput(messages: StructuredMessage[], cursor: number, result: ProviderResult): { content: string; truncated: boolean } {
+function latestOutput(messages: StructuredMessage[], cursor: number, result: ProviderResult | null): { content: string; truncated: boolean } | null {
   let latest: string | null = null
+  let diagnostic: string | null = null
   for (const message of messages) {
-    if (message.seq > cursor && message.role === 'assistant') latest = message.text
+    if (message.seq <= cursor) continue
+    if (message.role === 'assistant') latest = message.text
+    if (message.role === 'system') diagnostic = message.text
   }
-  const chosen = latest ?? result.message.text
+  const chosen = latest ?? result?.message.text ?? diagnostic
+  if (chosen === null) return null
   const output = outputPrefix(chosen, MAX_OUTPUT_BYTES)
   return { content: output.text, truncated: output.truncated }
 }
@@ -236,7 +240,7 @@ function firstNumber(source: RecordValue | null, ...names: string[]): number | u
   return undefined
 }
 
-function claudeUsage(data: RecordValue | null): RecordValue | null {
+function claudeUsage(data: RecordValue | null, baseline: number | null): RecordValue | null {
   const raw = record(data?.usage)
   const usage: RecordValue = { provider: 'claude' }
   const input = firstNumber(raw, 'input_tokens')
@@ -244,12 +248,15 @@ function claudeUsage(data: RecordValue | null): RecordValue | null {
   const cached = firstNumber(raw, 'cache_read_input_tokens')
   const cacheWrite = firstNumber(raw, 'cache_creation_input_tokens')
   const cost = firstNumber(data, 'total_cost_usd')
+  const turnCost = cost !== undefined && baseline !== null && cost >= baseline ? cost - baseline : undefined
   if (input !== undefined) usage.inputTokens = input
   if (output !== undefined) usage.outputTokens = output
-  if (cached !== undefined) usage.cachedInputTokens = cached
-  if (cacheWrite !== undefined) usage.cacheCreationInputTokens = cacheWrite
-  usage.totalCostUsd = cost ?? null
-  if (cost === undefined) usage.costUnavailableReason = 'Claude result did not include total_cost_usd.'
+  if (cached !== undefined) usage.cacheReadTokens = cached
+  if (cacheWrite !== undefined) usage.cacheWriteTokens = cacheWrite
+  if (input !== undefined && output !== undefined) usage.totalTokens = input + output + (cached ?? 0) + (cacheWrite ?? 0)
+  usage.tokenScope = 'main_agent'
+  usage.estimatedCostUsd = turnCost ?? null
+  if (turnCost === undefined) usage.costUnavailableReason = 'Claude cumulative cost could not be isolated to this turn.'
   if (input === undefined && output === undefined && cached === undefined && cacheWrite === undefined) {
     usage.tokensUnavailableReason = 'Claude result did not include token usage.'
   }
@@ -272,9 +279,10 @@ function codexUsage(messages: StructuredMessage[]): RecordValue | null {
   const reasoning = firstNumber(selected, 'reasoningOutputTokens', 'reasoning_output_tokens')
   if (input !== undefined) usage.inputTokens = input
   if (output !== undefined) usage.outputTokens = output
-  if (cached !== undefined) usage.cachedInputTokens = cached
+  if (cached !== undefined) usage.cacheReadTokens = cached
   if (reasoning !== undefined) usage.reasoningOutputTokens = reasoning
-  usage.totalCostUsd = null
+  if (input !== undefined && output !== undefined) usage.totalTokens = input + output
+  usage.estimatedCostUsd = null
   usage.costUnavailableReason = 'Codex does not report per-turn cost.'
   if (input === undefined && output === undefined && cached === undefined && reasoning === undefined) {
     usage.tokensUnavailableReason = 'Codex did not report per-turn token usage.'
@@ -286,23 +294,37 @@ function mergeUsage(existing: Record<string, unknown> | null | undefined, collec
   if (collected === null) return existing ?? null
   const current = record(existing) ?? {}
   const merged: Record<string, unknown> = { ...collected }
-  for (const key of ['inputTokens', 'outputTokens', 'cachedInputTokens', 'cacheCreationInputTokens', 'reasoningOutputTokens', 'totalCostUsd'] as const) {
+  for (const key of ['inputTokens', 'outputTokens', 'cacheReadTokens', 'cacheWriteTokens', 'reasoningOutputTokens', 'totalTokens', 'estimatedCostUsd'] as const) {
     if ((merged[key] === null || merged[key] === undefined) && typeof current[key] === 'number') merged[key] = current[key]
   }
-  if (typeof merged.totalCostUsd === 'number') delete merged.costUnavailableReason
-  const tokenFields = ['inputTokens', 'outputTokens', 'cachedInputTokens', 'cacheCreationInputTokens', 'reasoningOutputTokens']
+  if (typeof merged.estimatedCostUsd === 'number') delete merged.costUnavailableReason
+  const tokenFields = ['inputTokens', 'outputTokens', 'cacheReadTokens', 'cacheWriteTokens', 'reasoningOutputTokens']
   if (tokenFields.some((key) => typeof current[key] === 'number' || typeof merged[key] === 'number')) {
     delete merged.tokensUnavailableReason
   }
   return merged
 }
 
-function collectedUsage(run: AutomationRun, messages: StructuredMessage[], result: ProviderResult, agentId: string): Record<string, unknown> | null {
+function collectedUsage(run: AutomationRun, messages: StructuredMessage[], result: ProviderResult, agentId: string, session: Session, collectedAt: number): Record<string, unknown> | null {
+  if (!result.success) return run.usage ?? null
   const data = record(result.message.data)
   const collected = agentId === 'claude'
-    ? claudeUsage(data)
+    ? claudeUsage(data, run.dispatchState?.reused ? run.dispatchState.claudeCostBaseline ?? null : 0)
     : codexUsage(messages.filter((message) => message.seq > (run.dispatchState?.messageCursor ?? 0)))
-  return mergeUsage(run.usage, collected)
+  const usage = mergeUsage(run.usage, collected)
+  if (!usage) return null
+  const measured = ['inputTokens', 'outputTokens', 'cacheReadTokens', 'cacheWriteTokens', 'reasoningOutputTokens', 'estimatedCostUsd']
+    .some((field) => typeof usage[field] === 'number')
+  usage.status = measured ? 'known' : 'unavailable'
+  if (!measured) usage.unavailableReason = 'native_usage_missing'
+  else delete usage.unavailableReason
+  const model = record(record(run.launchSettings?.options)?.model)?.value
+  usage.model = typeof model === 'string' ? model : null
+  usage.providerSessionId = session.providerSession?.id ?? null
+  usage.attribution = 'structured_turn'
+  usage.collectedAt = collectedAt
+  if (typeof usage.estimatedCostUsd === 'number') usage.estimatedCostSource = 'api_equivalent'
+  return usage
 }
 
 function runsFor(store: AutomationDispatchHooks['store'], automationId?: string): AutomationRun[] {
@@ -373,7 +395,14 @@ export function createAutomationDispatcher(context: AutomationDispatchContext, h
     const current = hooks.store.getRun(runId)
     if (!current || !hooks.store.get(current.automationId)) return null
     if (finalStatus(current.status)) return current
-    const completed = update(runId, { ...patch, status, error })
+    const usage = patch.usage ?? current.usage ?? {
+      status: 'unavailable',
+      provider: current.launchSettings?.agent ?? hooks.store.get(current.automationId)?.agentId,
+      estimatedCostUsd: null,
+      unavailableReason: status === 'completed' ? 'native_usage_missing' : 'run_not_finished',
+      collectedAt: hooks.clock()
+    }
+    const completed = update(runId, { ...patch, status, error, usage })
     if (!completed || finalStatus(completed.status)) stopObserving(runId)
     return completed
   }
@@ -529,11 +558,21 @@ export function createAutomationDispatcher(context: AutomationDispatchContext, h
         session.worktreeId !== workspaceId || session.agent !== verifyResult.definition.agentId) return { kind: 'not-eligible' }
 
       const cursor = beforeMessages.reduce((maximum, message) => Math.max(maximum, message.seq), 0)
+      let claudeCostBaseline: number | null = null
+      if (session.agent === 'claude') {
+        for (let index = beforeMessages.length - 1; index >= 0; index--) {
+          const message = beforeMessages[index]!
+          if (message.seq > cursor || message.role !== 'result') continue
+          claudeCostBaseline = numeric(record(message.data)?.total_cost_usd) ?? null
+          break
+        }
+      }
       const state: AutomationRunDispatchState = {
         messageCursor: cursor,
         reused: true,
         observedWorking: false,
-        observationStartedAt: hooks.clock()
+        observationStartedAt: hooks.clock(),
+        ...(session.agent === 'claude' ? { claudeCostBaseline } : {})
       }
       const beforeSend = persistDispatching(runId, {
         sessionId,
@@ -598,9 +637,9 @@ export function createAutomationDispatcher(context: AutomationDispatchContext, h
           return
         }
         const providerResult = postCursorResult(messages, afterRead.dispatchState!.messageCursor, agentId)
-        const output = providerResult ? latestOutput(messages, afterRead.dispatchState!.messageCursor, providerResult) : null
+        const output = latestOutput(messages, afterRead.dispatchState!.messageCursor, providerResult)
         if (providerResult) {
-          const usage = collectedUsage(afterRead, messages, providerResult, agentId)
+          const usage = collectedUsage(afterRead, messages, providerResult, agentId, session, hooks.clock())
           const outputSnapshot = output ? {
             format: 'plain_text' as const,
             content: output.content,
@@ -823,6 +862,7 @@ export function createAutomationDispatcher(context: AutomationDispatchContext, h
       agent: definition.agentId,
       prompt: definition.prompt,
       ...(model === undefined ? {} : { model }),
+      background: true,
       ...(effort === undefined ? {} : { options: { effort } })
     }
     if (current.status !== 'dispatching' || disposed) return hooks.store.getRun(runId)

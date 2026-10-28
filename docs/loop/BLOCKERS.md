@@ -235,6 +235,11 @@ Registration update: `bun scripts/build-loop/queue.ts add /tmp/quirky-session-in
 
 - **Protected script load sensitivity:** the next local scripts run had 59 pass/3 five-second timeouts in the Git-based lanes fixture. The unchanged affected file then passed alone: 23 tests/60 assertions; the self-contained current-tree typecheck also passed. No timeout cap/assertion or protected infrastructure file was changed. Preserve this as runner reliability evidence, not a hidden green full-scripts claim.
 
+## m4-hosting-ui-reviews: prerequisite-dependent flow deferrals
+
+- **Other providers:** currently blocked canonical GitLab and Bitbucket/Gitea/Azure API items do not provide usable review/create/settings methods. Follow-up `m4-hosting-ui-review-provider-parity` depends on both APIs and this item, and owns hosting-ui.md sections10–12 provider-specific MR/PR labels, actions, composer and cards. GitHub core is not blocked by those APIs; unavailable cards must never claim provider success.
+- **In-app review links:** the public human-browser view and Link Routing setting do not exist yet. Follow-up `m4-hosting-ui-review-browser-routing` depends on `sa-browser-pane`, `sa-browser-profiles-settings` and this item. Current review URLs use canonical system opening; requesting unavailable in-app routing explicitly refuses rather than silently substituting system destination. Native tests cover only the shipped system-delivery behavior.
+- Both follow-ups were registered through normal `queue.ts add`; no shared queue or index file was edited manually. These are explicit prerequisite deferrals under LOOP.md, not a blanket claim of full hosting-ui parity.
 ## m3-vault: remaining worktree gate timing
 
 - **LOW — background fetch/setup-gate test race** (`plugins/quirky.worktree/test/create.test.ts:367`, `:395`). A land run saw the background-refresh wait time out and a ref-lock conflict when the setup-gate test moved its remote base. The focused remote file first reproduced the ref-lock conflict, then its required isolated retry passed all40 cases140 assertions and returned ok with the file marked flaky. No worktree implementation, assertions, timeouts or retry policy were changed in the vault item.

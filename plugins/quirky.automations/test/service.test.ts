@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { Database } from 'bun:sqlite'
 import type { PluginStore, StoreMigration, StoreValue } from '@quirky/protocol'
-import type { AutomationDefinition, AutomationRun } from '../types'
+import type { AutomationDefinition } from '../types'
 import { createAutomationService, type AutomationService, type AutomationServiceContext } from '../service'
 import { createAutomationStore, migrations } from '../store'
 
@@ -182,80 +182,8 @@ describe('automation scheduler service', () => {
     await fixture.service.tick()
     expect(fixture.service.runs({ automationId: 'due-on-start', limit: 10 }).runs).toHaveLength(1)
   })
-  test('standalone core handoff records bounded result evidence and final transitions', async () => {
-    const fixture = makeFixture(Date.parse('2026-10-27T08:00:00.000Z'))
-    const created = await fixture.service.create({
-      name: 'Core handoff', prompt: 'Check', agentId: 'codex', projectId: 'repo', timezone: 'UTC',
-      rrule: 'FREQ=DAILY;BYHOUR=9;BYMINUTE=0', enabled: false
-    })
-    const pending = await fixture.service.run({ id: created.id })
-    const claimed = await fixture.service.claim({ runId: pending.id })
-    expect(claimed).toMatchObject({ status: 'dispatching', startedAt: expect.any(Number) })
 
-    const dispatched = await fixture.service.updateRun({
-      runId: pending.id,
-      patch: {
-        status: 'dispatched',
-        outputSnapshot: { format: 'plain_text', content: `${'é'.repeat(131_071)}🙂tail`, capturedAt: Date.now(), truncated: false }
-      }
-    })
-    expect(dispatched.status).toBe('dispatched')
-    expect(dispatched.dispatchedAt).toBeDefined()
-    expect(new TextEncoder().encode(dispatched.outputSnapshot?.content ?? '').byteLength).toBeLessThanOrEqual(262_144)
-    expect(dispatched.outputSnapshot?.truncated).toBe(true)
-    expect(dispatched.outputSnapshot?.content).toBe('é'.repeat(131_071))
-
-    const completed = await fixture.service.updateRun({ runId: pending.id, patch: { status: 'completed' } })
-    expect(completed.completedAt).toBeDefined()
-    await expect(fixture.service.updateRun({ runId: pending.id, patch: { status: 'pending' } })).rejects.toThrow()
-  })
-
-  test('standalone core retention preserves active rows and advances run numbers after pruning', async () => {
-    const fixture = makeFixture(Date.parse('2026-10-27T08:00:00.000Z'))
-    const created = await fixture.service.create({
-      name: 'Core retention', prompt: 'Check', agentId: 'codex', projectId: 'repo', timezone: 'UTC',
-      rrule: 'FREQ=DAILY;BYHOUR=9;BYMINUTE=0', enabled: false
-    })
-    const finalizedIds = new Set<string>()
-    for (let number = 0; number < 101; number++) {
-      const run = await fixture.service.run({ id: created.id })
-      finalizedIds.add(run.id)
-      await fixture.service.updateRun({ runId: run.id, patch: { status: 'dispatch_failed', error: 'Dispatch refused before launch' } })
-    }
-    const active: AutomationRun[] = []
-    for (const status of ['pending', 'dispatching', 'dispatched'] as const) {
-      let run = await fixture.service.run({ id: created.id })
-      if (status !== 'pending') run = await fixture.service.claim({ runId: run.id })
-      if (status === 'dispatched') {
-        run = await fixture.service.updateRun({
-          runId: run.id, patch: { status, sessionId: 'recorded-structured-session' }
-        })
-      }
-      active.push(run)
-    }
-    const history: AutomationRun[] = []
-    const seenCursors = new Set<string>()
-    let cursor: string | undefined
-    do {
-      const page = fixture.service.runs({ automationId: created.id, limit: 17, ...(cursor === undefined ? {} : { cursor }) })
-      history.push(...page.runs)
-      cursor = page.nextCursor ?? undefined
-      if (cursor !== undefined) {
-        expect(seenCursors.has(cursor)).toBe(false)
-        seenCursors.add(cursor)
-      }
-    } while (cursor !== undefined)
-    const retainedIds = new Set(history.map((run) => run.id))
-    expect(history).toHaveLength(103)
-    expect(retainedIds.size).toBe(103)
-    expect(history.filter((run) => finalizedIds.has(run.id))).toHaveLength(100)
-    expect(history.filter((run) => active.some((candidate) => candidate.id === run.id))).toEqual(expect.arrayContaining(active))
-    const next = await fixture.service.run({ id: created.id })
-    expect(next.runNumber).toBe(105)
-    expect(() => fixture.service.runs({ automationId: created.id, cursor: 'not-a-cursor' })).toThrow()
-  })
-
-  test('standalone core metadata keeps exact JSON byte bounds and rejects oversized run evidence', async () => {
+  test('definition metadata keeps exact JSON byte bounds and rejects oversized edits', async () => {
     const fixture = makeFixture(Date.parse('2026-10-27T08:00:00.000Z'))
     const atLimit = { text: 'x'.repeat(64 * 1024 - 11) }
     expect(Buffer.byteLength(JSON.stringify(atLimit))).toBe(64 * 1024)
@@ -263,12 +191,8 @@ describe('automation scheduler service', () => {
       name: 'Core bounds', prompt: 'Check', agentId: 'codex', projectId: 'repo', timezone: 'UTC',
       rrule: 'FREQ=DAILY;BYHOUR=9;BYMINUTE=0', enabled: false, sourceContext: atLimit
     })
-    const run = await fixture.service.run({ id: created.id })
     const oversized = { text: atLimit.text + 'x' }
     await expect(fixture.service.edit({ id: created.id, runContext: oversized })).rejects.toThrow()
-    for (const field of ['launchSettings', 'usage'] as const) {
-      await expect(fixture.service.updateRun({ runId: run.id, patch: { [field]: oversized } })).rejects.toThrow()
-    }
   })
 
 })

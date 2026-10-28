@@ -15,6 +15,10 @@
           "type": "object",
           "properties": {
             "worktree": { "type": "string", "description": "A worktree selector; defaults to the caller's worktree." },
+            "background": {
+              "type": "boolean",
+              "description": "When true, prevents automatic terminal tab adoption; explicit viewing remains possible."
+            },
             "agent": { "type": "string", "enum": ["claude", "codex"], "description": "The structured provider to run." },
             "prompt": { "type": "string" },
             "model": { "type": "string", "description": "A model ID from the agent's catalog, 1 to 128 characters." },
@@ -42,7 +46,11 @@
             "exitCode": { "description": "The exit code, or null while the process is alive." },
             "exitSignal": { "description": "The signal that ended the process, or null." },
             "exitCause": { "description": "Why the session ended (exited, killed, host-restart or host-lost), or null while it is alive." },
-            "restorable": { "type": "boolean", "description": "True when the session ended with the PTY host and can be restored." }
+            "restorable": { "type": "boolean", "description": "True when the session ended with the PTY host and can be restored." },
+            "background": {
+              "type": "boolean",
+              "description": "True when automatic terminal tab adoption is disabled; explicit viewing remains possible."
+            }
           },
           "required": ["id", "kind", "agent", "worktreeId", "cwd", "title", "status", "createdAt", "lastActivityAt", "exitCode"]
         }
@@ -99,6 +107,7 @@
             "createdAt": { "type": "number" },
             "lastActivityAt": { "type": "number" },
             "exitCode": { "description": "The exit code, or null while the process is alive." },
+            "background": { "type": "boolean", "description": "True when automatic terminal tab adoption is disabled; explicit viewing remains possible." },
             "launchSettings": { "description": "The original catalog launch snapshot." },
             "providerSession": { "description": "The native provider conversation identity." },
             "resumedFrom": { "type": "string", "description": "The Quirky session this record resumes." }

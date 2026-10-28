@@ -84,6 +84,10 @@
                 "type": "boolean",
                 "description": "True when the session ended with the PTY host and can be restored."
               },
+              "background": {
+                "type": "boolean",
+                "description": "True when automatic terminal tab adoption is disabled; explicit viewing remains possible."
+              },
               "launch": {
                 "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
               },
@@ -199,6 +203,10 @@
             "restorable": {
               "type": "boolean",
               "description": "True when the session ended with the PTY host and can be restored."
+            },
+            "background": {
+              "type": "boolean",
+              "description": "True when automatic terminal tab adoption is disabled; explicit viewing remains possible."
             },
             "launch": {
               "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
@@ -364,6 +372,10 @@
               "type": "boolean",
               "description": "True when the session ended with the PTY host and can be restored."
             },
+            "background": {
+              "type": "boolean",
+              "description": "True when automatic terminal tab adoption is disabled; explicit viewing remains possible."
+            },
             "launch": {
               "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
             },
@@ -493,6 +505,10 @@
             "restorable": {
               "type": "boolean",
               "description": "True when the session ended with the PTY host and can be restored."
+            },
+            "background": {
+              "type": "boolean",
+              "description": "True when automatic terminal tab adoption is disabled; explicit viewing remains possible."
             },
             "launch": {
               "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
@@ -634,6 +650,10 @@
               "type": "boolean",
               "description": "True when the session ended with the PTY host and can be restored."
             },
+            "background": {
+              "type": "boolean",
+              "description": "True when automatic terminal tab adoption is disabled; explicit viewing remains possible."
+            },
             "launch": {
               "description": "The actual planner record that was launched."
             },
@@ -747,6 +767,10 @@
             "restorable": {
               "type": "boolean",
               "description": "True when the session ended with the PTY host and can be restored."
+            },
+            "background": {
+              "type": "boolean",
+              "description": "True when automatic terminal tab adoption is disabled; explicit viewing remains possible."
             },
             "launch": {
               "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
@@ -871,6 +895,10 @@
               "type": "boolean",
               "description": "True when the session ended with the PTY host and can be restored."
             },
+            "background": {
+              "type": "boolean",
+              "description": "True when automatic terminal tab adoption is disabled; explicit viewing remains possible."
+            },
             "launch": {
               "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
             },
@@ -916,7 +944,7 @@
       },
       {
         "id": "register",
-        "description": "Records a session that runs without a terminal; `title` is the base title, numbered when taken in the worktree.",
+        "description": "Records a session that runs without a terminal; `title` is the base title, numbered when taken in the worktree. `background: true` prevents automatic terminal tab adoption but still permits explicit viewing.",
         "params": {
           "type": "object",
           "properties": {
@@ -949,6 +977,10 @@
               "type": "object",
               "additionalProperties": true,
               "description": "What the launch applied ({agent, options, args, summary}); stored on the session."
+            },
+            "background": {
+              "type": "boolean",
+              "description": "When true, prevents automatic terminal tab adoption; explicit viewing remains possible."
             }
           },
           "required": [
@@ -1012,6 +1044,10 @@
             "restorable": {
               "type": "boolean",
               "description": "True when the session ended with the PTY host and can be restored."
+            },
+            "background": {
+              "type": "boolean",
+              "description": "True when automatic terminal tab adoption is disabled; explicit viewing remains possible."
             },
             "launch": {
               "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
@@ -1119,6 +1155,10 @@
             "restorable": {
               "type": "boolean",
               "description": "True when the session ended with the PTY host and can be restored."
+            },
+            "background": {
+              "type": "boolean",
+              "description": "True when automatic terminal tab adoption is disabled; explicit viewing remains possible."
             },
             "launch": {
               "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
@@ -1282,6 +1322,10 @@
               "type": "boolean",
               "description": "True when the session ended with the PTY host and can be restored."
             },
+            "background": {
+              "type": "boolean",
+              "description": "True when automatic terminal tab adoption is disabled; explicit viewing remains possible."
+            },
             "launch": {
               "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
             },
@@ -1399,6 +1443,10 @@
             "restorable": {
               "type": "boolean",
               "description": "True when the session ended with the PTY host and can be restored."
+            },
+            "background": {
+              "type": "boolean",
+              "description": "True when automatic terminal tab adoption is disabled; explicit viewing remains possible."
             },
             "launch": {
               "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
@@ -1523,6 +1571,10 @@
                   "type": "boolean",
                   "description": "True when the session ended with the PTY host and can be restored."
                 },
+                "background": {
+                  "type": "boolean",
+                  "description": "True when automatic terminal tab adoption is disabled; explicit viewing remains possible."
+                },
                 "launch": {
                   "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
                 },
@@ -1631,6 +1683,10 @@
                 "restorable": {
                   "type": "boolean",
                   "description": "True when the session ended with the PTY host and can be restored."
+                },
+                "background": {
+                  "type": "boolean",
+                  "description": "True when automatic terminal tab adoption is disabled; explicit viewing remains possible."
                 },
                 "launch": {
                   "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
