@@ -106,7 +106,7 @@
           "properties": {
             "badge": {
               "type": "integer",
-              "description": "Unread worktrees plus pending asks."
+              "description": "Unread worktrees plus surfaced pending ask heads; queued and resolved asks are excluded."
             },
             "label": {
               "type": "string",
@@ -135,7 +135,7 @@
                 "required": ["id", "worktreeId", "reason"]
               }
             },
-            "pendingAsks": { "type": "integer" },
+            "pendingAsks": { "type": "integer", "description": "Surfaced pending ask heads; queued and resolved asks are excluded." },
             "sound": {
               "type": "object",
               "properties": {
@@ -231,11 +231,11 @@
       },
       {
         "id": "attention",
-        "description": "An agent, bell, program, loop or Heimdall event wants attention, whatever the notification switches say; the desktop shell lights its tray dot.",
+        "description": "An agent, bell, program, surfaced ask, loop or Heimdall event wants attention, whatever the notification switches say; the desktop shell lights its tray dot.",
         "data": {
           "type": "object",
           "properties": {
-            "source": { "type": "string", "enum": ["agent", "bell", "program", "heimdall", "loop"] },
+            "source": { "type": "string", "enum": ["agent", "bell", "program", "ask", "heimdall", "loop"] },
             "sessionId": { "description": "The session, or null." },
             "worktreeId": { "description": "The worktree, or null." }
           },

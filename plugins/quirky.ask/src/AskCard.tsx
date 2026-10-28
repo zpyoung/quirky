@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Ask, UiPluginContext } from '@quirky/protocol'
+import type { Ask, AskEnvelope, UiPluginContext } from '@quirky/protocol'
 import { buildSubmission, draftsToPartial, initialDraftFor, type QuestionDraft } from './core/submission'
 import { QuestionField } from './QuestionField'
 import { ASK_FALLBACK_TITLE } from './store'
 
-type Props = { ask: Ask; context: UiPluginContext; onResolved(askId: string): void }
+type Props = { ask: Ask; context: UiPluginContext; onResolved(askId: string, envelope: AskEnvelope): void }
 type Drafts = Record<string, QuestionDraft>
 
 const SAVE_DELAY_MS = 500
@@ -46,8 +46,8 @@ export function AskCard({ ask, context, onResolved }: Props) {
     const hadPendingSave = cancelSave()
     setBusy(true)
     try {
-      await context.call(method, params)
-      onResolved(ask.id)
+      const envelope = (await context.call(method, params)) as AskEnvelope
+      onResolved(ask.id, envelope)
     } catch (error) {
       if (hadPendingSave) scheduleSave()
       context.toast(failure, error instanceof Error ? error.message : String(error))
