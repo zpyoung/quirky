@@ -608,19 +608,6 @@
       "lane": 8
     },
     {
-      "id": "sa-browser-design-mode",
-      "milestone": "Side A",
-      "title": "Scope: all of the parts below together; a \"Not ...\" note in one part excludes only what no other part here covers. Part 1: Browser design mode: Grab page element only (browser.md section 3 'Grab page element', 'In-guest extraction', 'The payload', 'Safety layer', 'Screenshot', 'Text shape 1: Grab copy'): armed picker overlay, payload extraction, C and S shortcuts, right-click menu, budgets and redaction, clipboard text and image. Not annotate or draw Part 2: Browser design mode: Annotate page element only (browser.md section 3 'Annotate page element', 'Text shape 2: Annotation Markdown', 'Delivery'): annotation popover with Change and Question intent, tray with edit, delete and copy, 20-per-page cap, Markdown generation, Send notes to a running or new agent. Not grab or draw Part 3: Browser design mode: Draw on screenshot only (browser.md section 3 'Draw on screenshot'): frozen screenshot canvas with pen, highlighter, arrow, rectangle, ellipse, text and eraser, color and size, undo, redo, clear, Copy Markup as PNG to the clipboard. Not grab or annotate",
-      "docs": [
-        "browser.md"
-      ],
-      "deps": [
-        "sa-browser-pane"
-      ],
-      "status": "todo",
-      "early": true
-    },
-    {
       "id": "m5-automations-core",
       "milestone": "M5",
       "title": "Automations core: definitions, schedules and scheduler (automations.md 'Data model', 'Schedules', 'The scheduler tick', 'Storage and retention', 'Run statuses', 'CLI' and Run now, Pause, Edit, Delete behaviour): RRULE subset and cron dialect with DST, occurrence math and labels, 60 s tick with missed-run grace and per-automation lane, run records and retention, `quirky automations` list, show, create, edit, remove, run, runs with paging. Not target resolution, dispatch, UI or OpenClaw",
@@ -630,6 +617,32 @@
       "deps": [
         "m5-structured-runner",
         "m1-worktrees"
+      ],
+      "status": "todo",
+      "early": true
+    },
+    {
+      "id": "m5-loops-core",
+      "milestone": "M5",
+      "title": "Scope: all of the parts below together; a \"Not ...\" note in one part excludes only what no other part here covers. Part 1: Loops core: Until done engine (fork-loops.md 'RPC methods', 'Config shape', 'Persistence', 'Creating a loop', 'The iteration cycle', 'Detecting that an iteration is finished', 'Session policy and pane lifecycle', 'Restart behavior', iteration and time caps in 'Iteration limits and caps', CLI create, list, show, pause, resume, stop, steer, edit): loop service and driver, prompt delivery gated on user idle, settle detection from agent status, crash retry, fresh and continue sessions, restart pause. Not done checks, evaluator, markers, queue or interval presets, UI Part 2: Loops completion and safety rules (fork-loops.md 'Evidence gathered after a settled iteration', 'Check-command mode', 'Evaluator mode', 'Stop conditions: decideNext' completion, protected-path and marker branches, cost cap in 'Iteration limits and caps', 'No-progress rule', 'Notifications'): working-tree snapshot and diff, LOOP_DONE, LOOP_BLOCKED and LOOP_DECIDE markers, done check command, evaluator, protected paths, no-progress pause, checkpoint commits, cost cap and usage-limit resume, notifications",
+      "docs": [
+        "fork-loops.md"
+      ],
+      "deps": [
+        "m5-structured-runner"
+      ],
+      "status": "todo",
+      "early": true
+    },
+    {
+      "id": "sa-browser-design-mode",
+      "milestone": "Side A",
+      "title": "Scope: all of the parts below together; a \"Not ...\" note in one part excludes only what no other part here covers. Part 1: Browser design mode: Grab page element only (browser.md section 3 'Grab page element', 'In-guest extraction', 'The payload', 'Safety layer', 'Screenshot', 'Text shape 1: Grab copy'): armed picker overlay, payload extraction, C and S shortcuts, right-click menu, budgets and redaction, clipboard text and image. Not annotate or draw Part 2: Browser design mode: Annotate page element only (browser.md section 3 'Annotate page element', 'Text shape 2: Annotation Markdown', 'Delivery'): annotation popover with Change and Question intent, tray with edit, delete and copy, 20-per-page cap, Markdown generation, Send notes to a running or new agent. Not grab or draw Part 3: Browser design mode: Draw on screenshot only (browser.md section 3 'Draw on screenshot'): frozen screenshot canvas with pen, highlighter, arrow, rectangle, ellipse, text and eraser, color and size, undo, redo, clear, Copy Markup as PNG to the clipboard. Not grab or annotate",
+      "docs": [
+        "browser.md"
+      ],
+      "deps": [
+        "sa-browser-pane"
       ],
       "status": "todo",
       "early": true
@@ -656,19 +669,6 @@
       ],
       "deps": [
         "m5-automations-core"
-      ],
-      "status": "todo",
-      "early": true
-    },
-    {
-      "id": "m5-loops-core",
-      "milestone": "M5",
-      "title": "Scope: all of the parts below together; a \"Not ...\" note in one part excludes only what no other part here covers. Part 1: Loops core: Until done engine (fork-loops.md 'RPC methods', 'Config shape', 'Persistence', 'Creating a loop', 'The iteration cycle', 'Detecting that an iteration is finished', 'Session policy and pane lifecycle', 'Restart behavior', iteration and time caps in 'Iteration limits and caps', CLI create, list, show, pause, resume, stop, steer, edit): loop service and driver, prompt delivery gated on user idle, settle detection from agent status, crash retry, fresh and continue sessions, restart pause. Not done checks, evaluator, markers, queue or interval presets, UI Part 2: Loops completion and safety rules (fork-loops.md 'Evidence gathered after a settled iteration', 'Check-command mode', 'Evaluator mode', 'Stop conditions: decideNext' completion, protected-path and marker branches, cost cap in 'Iteration limits and caps', 'No-progress rule', 'Notifications'): working-tree snapshot and diff, LOOP_DONE, LOOP_BLOCKED and LOOP_DECIDE markers, done check command, evaluator, protected paths, no-progress pause, checkpoint commits, cost cap and usage-limit resume, notifications",
-      "docs": [
-        "fork-loops.md"
-      ],
-      "deps": [
-        "m5-structured-runner"
       ],
       "status": "todo",
       "early": true
