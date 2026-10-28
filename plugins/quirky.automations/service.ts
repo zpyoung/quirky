@@ -72,6 +72,8 @@ export type AutomationService = {
   target(params: Params): Promise<AutomationTargetResolution>
   dispatch(params: Params): Promise<AutomationRun>
   claimWorkspaceProvenance(params: Params): WorktreeAutomationProvenance
+  /** Retires invalid structured model picks from the exact local owner and declared provider host. */
+  modelSnapshot(params: unknown): Promise<{ retired: number }>
   tick(): Promise<ServiceResult>
   start(): Promise<void>
   dispose(): void
@@ -563,6 +565,7 @@ export function createAutomationService(
     }
     await context.call('quirky.agents/resolveLaunch', {
       agent: definition.agentId,
+      host: 'local',
       structured: true,
       ...(overrides.model === undefined ? {} : { model: overrides.model }),
       ...(overrides.optionValues === undefined ? {} : { options: overrides.optionValues })
@@ -885,6 +888,76 @@ export function createAutomationService(
   }
 
 
+  const modelSnapshot = async (value: unknown): Promise<{ retired: number }> => {
+    if (!isPlainRecord(value) || typeof value.host !== 'string' || value.host.trim() === '' ||
+      value.status !== 'available' ||
+      value.authoritative !== true || typeof value.agent !== 'string' || value.agent.trim() === '' ||
+      typeof value.observedAt !== 'number' || !Number.isFinite(value.observedAt) ||
+      value.unlisted !== 'refuse' || !Array.isArray(value.models) || value.models.length === 0 ||
+      !Array.isArray(value.unlistedOptions)) return { retired: 0 }
+
+    const modelIds = new Set<string>()
+    for (const model of value.models) {
+      if (!isPlainRecord(model) || typeof model.id !== 'string' || model.id.trim() === '' || modelIds.has(model.id)) {
+        return { retired: 0 }
+      }
+      modelIds.add(model.id)
+    }
+    const availableOptions = new Map<string, { type: 'select' | 'boolean'; values: Set<string> }>()
+    for (const raw of value.unlistedOptions) {
+      if (!isPlainRecord(raw) || typeof raw.id !== 'string' ||
+        (raw.type !== 'select' && raw.type !== 'boolean')) return { retired: 0 }
+      if (raw.type === 'boolean') {
+        if (raw.choices !== null) return { retired: 0 }
+        availableOptions.set(raw.id, { type: 'boolean', values: new Set() })
+        continue
+      }
+      if (!Array.isArray(raw.choices) || raw.choices.length === 0) return { retired: 0 }
+      const values = new Set<string>()
+      for (const choice of raw.choices) {
+        if (!isPlainRecord(choice) || typeof choice.value !== 'string' || typeof choice.label !== 'string') {
+          return { retired: 0 }
+        }
+        values.add(choice.value)
+      }
+      availableOptions.set(raw.id, { type: 'select', values })
+    }
+
+    const belongsToOwnerAndHost = (definition: AutomationDefinition): boolean =>
+      definition.owner?.kind === 'local' &&
+      definition.owner.repoId === definition.projectId &&
+      definition.owner.workspaceId === (definition.workspaceMode === 'existing' ? definition.workspaceId : null) &&
+      isPlainRecord(definition.runContext) &&
+      definition.runContext.hostId === value.host &&
+      definition.runContext.repoId === definition.projectId
+    let retired = 0
+    for (const candidate of store.list()) {
+      if (candidate.agentId !== value.agent || !belongsToOwnerAndHost(candidate) ||
+        !candidate.launchOverrides?.model || modelIds.has(candidate.launchOverrides.model)) continue
+      await runInLane(lanes, candidate.id, () => {
+        const current = store.get(candidate.id)
+        if (!current || current.agentId !== value.agent || !belongsToOwnerAndHost(current) ||
+          !current.launchOverrides?.model || modelIds.has(current.launchOverrides.model)) return
+        const optionValues = Object.fromEntries(Object.entries(current.launchOverrides.optionValues ?? {}).filter(([id, selected]) => {
+          const option = availableOptions.get(id)
+          if (!option) return false
+          if (option.type === 'boolean') return typeof selected === 'boolean'
+          return typeof selected === 'string' && option.values.has(selected)
+        })) as Record<string, string | boolean>
+        const launchOverrides: AutomationDefinition['launchOverrides'] =
+          Object.keys(optionValues).length === 0 ? null : { optionValues }
+        store.update(current.id, { launchOverrides, updatedAt: clock() })
+        mutationEvent(context, 'definition', current.id, {
+          action: 'model-retired',
+          agent: value.agent,
+          host: value.host
+        })
+        retired += 1
+      })
+    }
+    return { retired }
+  }
+
   const service: AutomationService = {
     list,
     show,
@@ -897,6 +970,7 @@ export function createAutomationService(
     target,
     dispatch,
     claimWorkspaceProvenance,
+    modelSnapshot,
     tick,
     async start() {
       if (started || disposed) return

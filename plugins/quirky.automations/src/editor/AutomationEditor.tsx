@@ -473,7 +473,7 @@ export function AutomationEditor(props: EditorProps) {
     setOptions(null)
     setOptionsLoading(true)
     setOptionsError(null)
-    void props.context.call('quirky.agents/options', { agent: draft.agentId }).then((value) => {
+    void props.context.call('quirky.agents/options', { agent: draft.agentId, host: 'local' }).then((value) => {
       if (!current) return
       setOptions(parseOptions(value))
     }).catch((error: unknown) => {

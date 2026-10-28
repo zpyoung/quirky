@@ -10,7 +10,7 @@ const harnesses = new Set<Harness>()
 const tempDirs: string[] = []
 const originalEnv = new Map<string, string | undefined>()
 const PROVIDER_ENV_KEYS = ['CLAUDE_CONFIG_DIR', 'CODEX_HOME', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_CACHE_HOME', 'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_OAUTH_TOKEN', 'OPENAI_API_KEY', 'GROK_HOME', 'GROK_CLI_CHAT_PROXY_BASE_URL', 'KIMI_CODE_HOME', 'KIMI_CODE_BASE_URL', 'OPENCODE_API_KEY', 'OPENCODE_AUTH_CONTENT', 'OPENCODE_DB', 'OPENCODE_CONFIG_DIR']
-const ENV_KEYS = ['HOME', 'QUIRKY_HOME', 'PATH', 'ZDOTDIR', 'ENV', 'BASH_ENV', ...PROVIDER_ENV_KEYS, 'ACCOUNTS_FAKE_LOGIN_MODE', 'ACCOUNTS_FAKE_EMAIL', 'ACCOUNTS_SECURITY_LOG']
+const ENV_KEYS = ['HOME', 'QUIRKY_HOME', 'PATH', 'QUIRKY_AGENT_SEARCH_DIRS', 'ZDOTDIR', 'ENV', 'BASH_ENV', ...PROVIDER_ENV_KEYS, 'ACCOUNTS_FAKE_LOGIN_MODE', 'ACCOUNTS_FAKE_EMAIL', 'ACCOUNTS_SECURITY_LOG']
 
 let savedFetch: typeof fetch | null = null
 const activeFetches = new Set<Promise<Response>>()
@@ -255,6 +255,7 @@ export async function startAccounts(options: AccountsOptions = {}): Promise<Acco
   process.env.HOME = userHome
   process.env.QUIRKY_HOME = home
   process.env.PATH = `${fakeBin}:${originalEnv.get('PATH') ?? ''}`
+  delete process.env.QUIRKY_AGENT_SEARCH_DIRS
   for (const key of PROVIDER_ENV_KEYS) delete process.env[key]
   delete process.env.ZDOTDIR
   delete process.env.ENV

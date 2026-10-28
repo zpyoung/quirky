@@ -10,6 +10,15 @@ import type { OutputWaitResult, WaitResult } from './src/waits'
 type SetupEntry = { agent: string; status: string; changed: string[]; note?: string; message?: string }
 type RemoveEntry = { agent: string; changed: string[]; message?: string }
 type StatusEntry = { agent: string; status: string; files: string[]; message?: string }
+type StatusHostIdentity = {
+  kind: 'local' | 'paired'
+  id: string
+  label?: string
+  fingerprint?: string
+  pairingRevision?: number
+  incarnation?: string
+}
+
 const DASHBOARD_COLUMNS: { bucket: DashboardBucket; label: string }[] = [
   { bucket: 'attention', label: 'Needs you' },
   { bucket: 'working', label: 'Working' },
@@ -50,6 +59,12 @@ function formatChanges(entries: { changed: string[] }[], summaries: string[], ct
   const changed = entries.flatMap((entry) => entry.changed).map((path) => `changed ${shown(path, ctx)}`)
   return [...changed, ...summaries].join('\n')
 }
+
+function hostLine(host: StatusHostIdentity): string {
+  if (host.kind === 'local') return 'Host: local'
+  return `Host: ${host.id} (${host.label ?? host.id}) · fingerprint=${host.fingerprint ?? 'unknown'} · pairingRevision=${host.pairingRevision ?? 'unknown'} · incarnation=${host.incarnation ?? 'unknown'}`
+}
+
 
 function agentArg(positionals: string[]): { agent: string } | Record<string, never> {
   return positionals[0] === undefined ? {} : { agent: positionals[0] }
@@ -274,7 +289,12 @@ export const commands: CliModule['commands'] = {
     const session = args.positionals[0]
     if (session === undefined) throw ctx.usage('missing <session>')
     const at = args.flags.at
-    const row = await ctx.call('quirky.agent-status/get', { session, ...(typeof at === 'number' ? { at } : {}) })
+    const host = args.flags.host
+    if (host !== undefined && typeof host !== 'string') throw ctx.usage('--host must be a string')
+    const params = { session, ...(typeof at === 'number' ? { at } : {}) }
+    const row = typeof host === 'string'
+      ? await ctx.call('quirky.agent-status/getOnHost', { ...params, host })
+      : await ctx.call('quirky.agent-status/get', params)
     ctx.out.result(row, () => (row === null ? 'no agent status' : JSON.stringify(row, null, 2)))
   },
   async activity(args, ctx) {
@@ -331,9 +351,19 @@ export const commands: CliModule['commands'] = {
   },
 
 
-  async 'hooks-status'(_args, ctx) {
-    const entries = (await ctx.call('quirky.agent-status/hooksStatus', {})) as StatusEntry[]
-    ctx.out.result(entries, () => entries.map((entry) => agentLine(entry.agent, entry.status, entry.message)).join('\n'))
+  async 'hooks-status'(args, ctx) {
+    const host = args.flags.host
+    if (host !== undefined && typeof host !== 'string') throw ctx.usage('--host must be a string')
+    if (host === undefined) {
+      const entries = (await ctx.call('quirky.agent-status/hooksStatus', {})) as StatusEntry[]
+      ctx.out.result(entries, () => entries.map((entry) => agentLine(entry.agent, entry.status, entry.message)).join('\n'))
+      return
+    }
+    const result = (await ctx.call('quirky.agent-status/hooksStatusOnHost', { host })) as {
+      host: StatusHostIdentity
+      result: StatusEntry[]
+    }
+    ctx.out.result(result, () => [hostLine(result.host), ...result.result.map((entry) => agentLine(entry.agent, entry.status, entry.message))].join('\n'))
   },
 
   async 'hooks-setup'(args, ctx) {

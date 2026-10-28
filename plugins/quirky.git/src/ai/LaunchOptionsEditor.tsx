@@ -13,11 +13,12 @@ type Catalog = {
   unlistedOptions: Option[]
   extraArgs: { allowed: string | null } | null
 }
-type CatalogState = { agent: string; info: Catalog | null; loading: boolean }
+type CatalogState = { agent: string; host: string; info: Catalog | null; loading: boolean }
 
 type Props = {
   context: UiPluginContext
   agent: string
+  host: string
   value: RecipeLaunchOptions | null
   args: string
   labelPrefix?: string
@@ -105,10 +106,10 @@ function rawSets(args: string, catalog: Catalog, kind: 'model' | 'effort'): bool
 }
 
 function optionsFor(catalog: Catalog, modelId: string): Option[] {
-  if (modelId === '') return catalog.unlisted === 'accept' ? catalog.unlistedOptions : []
+  if (modelId === '') return catalog.unlistedOptions
   const listed = catalog.models.find((model) => model.id === modelId)
   if (listed) return listed.options
-  return catalog.unlisted === 'accept' ? catalog.unlistedOptions : []
+  return catalog.unlistedOptions
 }
 
 function optionAllows(option: Option, value: string | boolean): boolean {
@@ -120,8 +121,8 @@ function fieldName(prefix: string, name: string): string {
   return prefix === '' ? name : `${prefix} ${name.toLowerCase()}`
 }
 
-export function LaunchOptionsEditor({ context, agent, value, args, labelPrefix = '', resetLabel, onChange }: Props) {
-  const [state, setState] = useState<CatalogState>({ agent: '', info: null, loading: false })
+export function LaunchOptionsEditor({ context, agent, host, value, args, labelPrefix = '', resetLabel, onChange }: Props) {
+  const [state, setState] = useState<CatalogState>({ agent: '', host: '', info: null, loading: false })
   const [refreshing, setRefreshing] = useState(false)
   const [refreshMessage, setRefreshMessage] = useState<string | null>(null)
   const alive = useRef(true)
@@ -131,26 +132,26 @@ export function LaunchOptionsEditor({ context, agent, value, args, labelPrefix =
     setRefreshing(false)
     setRefreshMessage(null)
     if (agent === '' || agent === 'custom') {
-      setState({ agent, info: null, loading: false })
+      setState({ agent, host, info: null, loading: false })
       return () => {
         alive.current = false
       }
     }
-    setState({ agent, info: null, loading: true })
+    setState({ agent, host, info: null, loading: true })
     void context
-      .call('quirky.agents/options', { agent })
+      .call('quirky.agents/options', { agent, host })
       .then((info) => {
-        if (alive.current) setState({ agent, info: info as Catalog, loading: false })
+        if (alive.current) setState({ agent, host, info: info as Catalog, loading: false })
       })
       .catch(() => {
-        if (alive.current) setState({ agent, info: null, loading: false })
+        if (alive.current) setState({ agent, host, info: null, loading: false })
       })
     return () => {
       alive.current = false
     }
-  }, [context, agent])
+  }, [context, agent, host])
 
-  const catalog = state.agent === agent ? state.info : null
+  const catalog = state.agent === agent && state.host === host ? state.info : null
   const model = value?.model ?? ''
   const optionValues = value?.optionValues ?? {}
   const commit = (nextModel: string, nextValues: Record<string, string | boolean>) => {
@@ -164,11 +165,11 @@ export function LaunchOptionsEditor({ context, agent, value, args, labelPrefix =
     setRefreshing(true)
     setRefreshMessage(null)
     try {
-      const result = (await context.call('quirky.agents/discoverModels', { agent, host: 'local' })) as { authoritative?: boolean; reason?: string }
+      const result = (await context.call('quirky.agents/discoverModels', { agent, host })) as { authoritative?: boolean; reason?: string }
       if (!alive.current) return
-      const refreshed = (await context.call('quirky.agents/options', { agent })) as Catalog
+      const refreshed = (await context.call('quirky.agents/options', { agent, host })) as Catalog
       if (!alive.current) return
-      setState({ agent, info: refreshed, loading: false })
+      setState({ agent, host, info: refreshed, loading: false })
       if (!result.authoritative) setRefreshMessage(result.reason ?? 'No authoritative model list was returned; saved choices were kept.')
     } catch (error) {
       if (alive.current) setRefreshMessage(error instanceof Error ? error.message : String(error))

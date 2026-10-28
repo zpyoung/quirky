@@ -2567,6 +2567,38 @@
         }
       },
       {
+        "id": "aiName",
+        "description": "Generates a bounded branch-name or conversation-title candidate from the exact Git or captured structured-session context. It never renames a branch or session.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": { "type": "string", "description": "Exact worktree selector; defaults to the caller's worktree." },
+            "action": { "type": "string", "enum": ["branchName", "conversationName"] },
+            "session": { "type": "string", "description": "Exact structured session ID; required for conversationName and optional as branchName work-prompt context." },
+            "agent": { "type": "string", "description": "One-shot provider override; otherwise the recipe or default one-shot provider." },
+            "args": { "type": "string", "description": "Raw provider arguments; singleton flags retain precedence over structured picks." },
+            "template": { "type": "string", "description": "Name prompt template; {basePrompt} is the captured context." },
+            "launchOptions": { "type": "object", "description": "Provider model and option picks; null explicitly suppresses inherited picks." },
+            "save": { "type": "string", "enum": ["repo", "global"], "description": "Explicitly save the recipe used for this naming run." }
+          },
+          "required": ["action"]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "action": { "type": "string", "enum": ["branchName", "conversationName"] },
+            "name": { "type": "string" },
+            "agent": { "type": "string" },
+            "host": { "type": "string", "description": "The provider host executing this one-shot generation." },
+            "context": { "type": "object", "additionalProperties": true },
+            "recipe": { "type": "object", "additionalProperties": true },
+            "providerSource": { "type": "object", "additionalProperties": true },
+            "saved": { "type": "boolean" }
+          },
+          "required": ["action", "name", "agent", "host", "context", "recipe", "providerSource", "saved"]
+        }
+      },
+      {
         "id": "aiRecipe",
         "description": "The recipe an AI action runs with in the worktree's repository: each field from the repository's saved recipe, else the global one, else the default, with where each field came from.",
         "readOnly": true,
@@ -2579,7 +2611,7 @@
             },
             "action": {
               "type": "string",
-              "enum": ["commitMessage", "fixCommitFailure", "fixPushFailure", "resolveConflicts", "branchSummary", "pullRequestDetails", "pullRequestReview", "reviewConversation"],
+              "enum": ["commitMessage", "fixCommitFailure", "fixPushFailure", "resolveConflicts", "branchSummary", "pullRequestDetails", "pullRequestReview", "reviewConversation", "branchName", "conversationName"],
               "description": "The AI action whose recipe is read."
             }
           },
@@ -2654,7 +2686,7 @@
             },
             "action": {
               "type": "string",
-              "enum": ["commitMessage", "fixCommitFailure", "fixPushFailure", "resolveConflicts", "branchSummary", "pullRequestDetails", "pullRequestReview", "reviewConversation"],
+              "enum": ["commitMessage", "fixCommitFailure", "fixPushFailure", "resolveConflicts", "branchSummary", "pullRequestDetails", "pullRequestReview", "reviewConversation", "branchName", "conversationName"],
               "description": "The AI action whose recipe is saved."
             },
             "scope": {

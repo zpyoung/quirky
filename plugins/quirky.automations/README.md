@@ -24,7 +24,7 @@ Create resolves the registered project and, for `workspaceMode: "existing"`, the
 
 The `target({ id })` API and `quirky automations target <id>` command inspect the saved capture and its current resolution without recapturing. A missing, moved, malformed, or remote target refuses execution; it never falls back to a local path. Remote SSH/runtime execution and registration generations are unavailable in this slice.
 
-Model and option picks are validated through `quirky.agents/resolveLaunch` as structured launch settings before a definition is written and are checked again for a fresh launch. Changing providers clears saved picks unless replacements are supplied. Raw `extraAgentArgs` are explicitly refused because structured sessions do not accept command-line arguments; `--extra-agent-args` exists only to report that refusal, not to enable a shell fallback.
+Before saving and again before dispatch, model and option picks are validated through `quirky.agents/resolveLaunch` as structured launch settings on the captured provider host. An authoritative, nonempty provider model snapshot retires a stale model only for definitions in this local owner store with the same agent and exact captured `runContext.hostId`; option values supported by the refreshed default catalog are retained. Empty, malformed, or unavailable probes leave definitions unchanged. Changing providers clears saved picks unless replacements are supplied. Raw `extraAgentArgs` are explicitly refused because structured sessions do not accept command-line arguments; `--extra-agent-args` exists only to report that refusal, not to enable a shell fallback.
 
 ## API
 

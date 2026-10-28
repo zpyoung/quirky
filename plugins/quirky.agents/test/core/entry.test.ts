@@ -121,6 +121,23 @@ describe('validateEntry', () => {
       'modelDiscovery.format must be one of: json'
     )
   })
+  test('Codex app-server discovery is a bounded provider-owned protocol, not an argv command', () => {
+    const codex = validateEntry('quirky.agents', 'codex', {
+      ...minimal,
+      launch: 'codex',
+      launchOptions: { model: { flag: ['-m', '{value}'] } },
+      modelDiscovery: { protocol: 'codex-app-server', timeoutMs: 1_000 }
+    })
+    expect(codex).toMatchObject({
+      ok: true,
+      entry: { modelDiscovery: { protocol: 'codex-app-server', timeoutMs: 1_000 } }
+    })
+    expect(errorOf({
+      ...minimal,
+      launchOptions: { model: { flag: ['--model', '{value}'] } },
+      modelDiscovery: { protocol: 'codex-app-server', timeoutMs: 1_000 }
+    })).toBe('modelDiscovery protocol codex-app-server is only valid for codex')
+  })
 
   test('launch defaults to detect, process defaults to detect, and the submit signal follows the ready signal', () => {
     const entry = entryOf({ ...minimal, detect: 'qwen', readySignal: 'codex-composer-prompt' })

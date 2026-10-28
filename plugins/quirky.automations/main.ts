@@ -7,6 +7,7 @@ import { createAutomationDispatcher } from './dispatch'
 import { createAutomationTargetResolver } from './target'
 
 let activeService: AutomationService | undefined
+let stopModelSnapshots: (() => void) | undefined
 
 export async function activate(context: PluginContext): Promise<void> {
   const targets = createAutomationTargetResolver(context)
@@ -32,6 +33,13 @@ export async function activate(context: PluginContext): Promise<void> {
     ...editorMethods(env),
     ...externalMethods(context)
   }
+  stopModelSnapshots = context.subscribe((event) => {
+    if (event.type !== 'quirky.agents/modelSnapshot') return
+    const data = 'data' in event ? event.data : undefined
+    void service.modelSnapshot(data).catch((error) => {
+      context.log(`could not retire stale automation model picks: ${error instanceof Error ? error.message : String(error)}`)
+    })
+  })
   for (const [name, handler] of Object.entries(methods)) {
     context.provide(formatContributionId('method', context.pluginId, name), handler)
   }
@@ -39,6 +47,8 @@ export async function activate(context: PluginContext): Promise<void> {
   try {
     await service.start()
   } catch (error) {
+    stopModelSnapshots?.()
+    stopModelSnapshots = undefined
     activeService = undefined
     service.dispose()
     throw error
@@ -46,6 +56,8 @@ export async function activate(context: PluginContext): Promise<void> {
 }
 
 export function deactivate(): void {
+  stopModelSnapshots?.()
+  stopModelSnapshots = undefined
   const service = activeService
   activeService = undefined
   service?.dispose()

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { RpcError, RpcErrorCode } from '@quirky/protocol'
 import { buildCommitMessagePrompt, buildFixCommitFailurePrompt, buildFixPushFailurePrompt, buildResolveConflictsPrompt } from '../../src/daemon/ai-prompts'
@@ -853,3 +853,118 @@ describe('AI Fix', () => {
   })
 })
 
+
+describe('AI name recipes', () => {
+  test('branchName uses the current branch and committed work context, and returns a candidate without renaming', async () => {
+    w = await startAiWorld()
+    await w.oneShot('pi', { reply: 'feature/add-feature' })
+    w.write('feature.ts', 'export const feature = true\n')
+    w.git('add', 'feature.ts')
+    w.git('commit', '-q', '-m', 'Add feature')
+
+    await w.api('setAiRecipe', {
+      action: 'branchName',
+      scope: 'repo',
+      agent: 'pi',
+      template: '{basePrompt}\nPrefer a short name.',
+      launchOptions: {}
+    })
+    const result = json(await w.cli(['git', 'aiName', '--action', 'branchName', '--json']))
+    expect(result).toMatchObject({
+      action: 'branchName',
+      name: 'feature/add-feature',
+      agent: 'pi',
+      host: 'local',
+      providerSource: { agent: 'recipe' }
+    })
+    expect(w.recorded('pi').stdin).toContain('Branch: "zoe/feat"')
+    expect(w.recorded('pi').stdin).toContain('feature.ts')
+    expect(w.git('branch --show-current').trim()).toBe('zoe/feat')
+  })
+
+  test('conversationName uses the exact captured structured conversation and leaves its title untouched', async () => {
+    w = await startAiWorld({ fakes: { codex: true } })
+    await w.oneShot('pi', { reply: 'captured-conversation-title' })
+    const codex = join(w.e2e.fakebin, 'codex')
+    writeFileSync(codex, `#!${process.execPath}
+let input = ''
+let threadId = 'captured-thread'
+const send = (message) => process.stdout.write(JSON.stringify(message) + '\\n')
+const notify = (method, params) => send({ method, params })
+process.stdin.setEncoding('utf8')
+process.stdin.on('data', (chunk) => {
+  input += chunk
+  for (;;) {
+    const newline = input.indexOf('\\n')
+    if (newline < 0) break
+    const line = input.slice(0, newline)
+    input = input.slice(newline + 1)
+    if (!line) continue
+    const message = JSON.parse(line)
+    if (message.method === 'initialize') send({ id: message.id, result: { userAgent: 'name-test' } })
+    else if (message.method === 'initialized') {}
+    else if (message.method === 'thread/start') {
+      send({ id: message.id, result: { thread: { id: threadId, sessionId: threadId } } })
+    } else if (message.method === 'turn/start') {
+      send({ id: message.id, result: { turn: { id: 'captured-turn', status: 'inProgress', items: [] } } })
+      const item = { id: 'captured-reply', type: 'agentMessage', phase: 'final_answer', text: 'The change keeps repository metadata in one owner.' }
+      notify('turn/completed', { threadId, turn: { id: 'captured-turn', status: 'completed', items: [item] } })
+    }
+  }
+})
+process.stdin.on('end', () => process.exit(0))
+`)
+    chmodSync(codex, 0o700)
+
+    const created = await w.call('quirky.structured/create', {
+      agent: 'codex',
+      worktree: w.feat.id,
+      prompt: 'Move repository metadata to one canonical owner.'
+    }) as { id: string; title: string }
+    const before = await w.call('quirky.session/get', { session: created.id }) as { title: string }
+    const messages = await w.call('quirky.structured/messages', { session: created.id }) as { role: string; text: string }[]
+    expect(messages.some((message) => message.role === 'user' && message.text.includes('Move repository metadata'))).toBe(true)
+    expect(messages.some((message) => message.role === 'assistant' && message.text.includes('one owner'))).toBe(true)
+
+    await w.api('setAiRecipe', {
+      action: 'conversationName',
+      scope: 'repo',
+      agent: 'pi',
+      template: 'Name this captured conversation:\\n{basePrompt}',
+      launchOptions: {}
+    })
+    const result = json(await w.cli(['git', 'aiName', '--action', 'conversationName', '--session', created.id, '--json']))
+    expect(result).toMatchObject({
+      action: 'conversationName',
+      name: 'captured-conversation-title',
+      agent: 'pi',
+      host: 'local'
+    })
+    expect(w.recorded('pi').stdin).toContain('Move repository metadata to one canonical owner.')
+    expect(w.recorded('pi').stdin).toContain('The change keeps repository metadata in one owner.')
+    expect((await w.call('quirky.session/get', { session: created.id }) as { title: string }).title).toBe(before.title)
+  })
+
+  test('branchName raw arguments outrank structured recipe picks and invalid output does not mutate the branch', async () => {
+    w = await startAiWorld({ fakes: { codex: true } })
+    await w.oneShot('codex', { reply: 'unsafe branch name' })
+    w.write('feature.ts', 'export const feature = true\n')
+    w.git('add', 'feature.ts')
+    w.git('commit', '-q', '-m', 'Add feature')
+    await w.api('setAiRecipe', {
+      action: 'branchName',
+      scope: 'repo',
+      agent: 'codex',
+      args: '--model raw-model',
+      template: '{basePrompt}',
+      launchOptions: { model: 'structured-model', optionValues: { effort: 'high' } }
+    })
+
+    const before = w.git('branch --show-current').trim()
+    expect(await fails(w.api('aiName', { action: 'branchName' }))).toMatchObject({ data: { reason: 'invalid-name' } })
+    const recorded = w.recorded('codex')
+    expect(valuesAfter(recorded.argv, '-m', '--model')).toEqual(['raw-model'])
+    expect(recorded.argv).not.toContain('structured-model')
+    expect(w.git('branch --show-current').trim()).toBe(before)
+  })
+})
