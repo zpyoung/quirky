@@ -4,7 +4,7 @@ import { act, createElement } from 'react'
 import type { Root, createRoot as ReactCreateRoot } from 'react-dom/client'
 import type { Ask, MobileMarkdownDocument, MobileWorkspaceTab, Repo, Session, Worktree, WorkspaceOriginView } from '@quirky/protocol'
 import type { MobilePageBridge } from '../src/contracts'
-import { validatePageReport, validatePageRpc, isPageMutation } from '../src/shell/bridge-policy'
+import { validatePageReport, validatePageRpc } from '../src/shell/bridge-policy'
 import { DEFAULT_WORKSPACE_PREFERENCES, workspacePreferencesKey } from '../src/pages/storage'
 import type { PageApp as PageAppComponent } from '../src/pages/PageApp'
 
@@ -598,12 +598,10 @@ test('older summary responses cannot replace newer refreshes or update an unmoun
   expect(reports).toHaveLength(reportsBeforeUnmount)
 })
 
-test('page bridge admits only empty-parameter loop summaries as a read-only consumer API', () => {
+test('page bridge rejects widened summary requests and loop controller access', () => {
   const workspaceRoute = { kind: 'workspaces' } as const
   const artifactRoute = { kind: 'terminal-artifacts', worktreeId: 'wt-api', sessionId: 'session-api' } as const
 
-  expect(() => validatePageRpc('quirky.loops/summaries', {}, ['rpc'], workspaceRoute)).not.toThrow()
-  expect(isPageMutation('quirky.loops/summaries')).toBe(false)
   expect(() => validatePageRpc('quirky.loops/summaries', {}, [], workspaceRoute)).toThrow(/rpc grant/i)
   expect(() => validatePageRpc('quirky.loops/summaries', {}, ['rpc'], artifactRoute)).toThrow()
   for (const params of [{ worktree: 'wt-api' }, { includeEnded: true }, { token: 'secret' }]) {
