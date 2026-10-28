@@ -154,5 +154,16 @@
 - **Revisit if:** platform support is expanded
 - **Source:** deferred: platform
 
+## D15: Compose the sole roadmap catch-up without weakening window identity
+- **Question:** the final integration merge conflicted in windowSelf and an auxiliary-route regression
+- **Options:** drop desktop identity; drop exact-window history initialization; combine both invariants
+- **Chose:** merged exact target74d13c9124a7858822f504141b8490ca2688578f once. windowSelf initializes the window-local view/history and returns the authenticated optional desktopClientId. Auxiliary tests retain focused-route/report checks, new view history/restoration and unchanged-main assertions. All16incoming decision-log snapshots were read in full; no normative conflict found
+- **Why:** kernel-authenticated installation identity and exact-window view isolation are independent obligations. The test now follows its actual changed auxiliary view rather than pinning the former one
+- **Evidence:** merge1173471e; merge-incoming-decisions.json and IncomingShellDecisions report; fresh merged-api-proof.json showed independent UI connection IDs2/3, preserved distinct inputs/histories and idempotent Inbox opening
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** the merged compiler or end-phase owner finds an actual contract mismatch
+- **Source:** assumed — autonomous
+
 ## Progress
-All source components and bounded integration fixes are complete. Full typecheck/UIlint and UI build passed after the final pinned-row callsite correction; no suites/review/full dogfood or screenshot score run. All source workers returned, all3component worktrees removed with inherited metadata preserved. Both private runtime services exited0 after owned browser cleanup; no real user home was used. README updated for actual public shell controls. Next commit the integrated fixes/evidence, perform the sole roadmap catch-up, read incoming binding decisions, rerun typecheck and canonical queue land.
+Ready to land. The sole roadmap catch-up is merge1173471e; all16incoming decision logs were read in full. Fresh post-merge bun run typecheck passed UIlint/root/mobile/prepared-desktop in161.45s, and merged exact-window/API smoke passed. Earlier actual browser/UI/CLI evidence is bounded in D12–D14; no suites/review/full dogfood/native acceptance/screenshot scoring pass is claimed. All workers/private browsers/runtime services have finished; all3component worktrees were removed with inherited metadata preserved. Next detach and run canonical queue land, await its authoritative verdict, archive the result and remove only owned scratch.
