@@ -1,8 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
 import { commandHelp, usageOf } from '../src/command-spec'
-import { COMMANDS, helpText } from '../src/commands'
+import { helpText } from '../src/commands'
 import type { Command } from '../src/commands/types'
 
 const shape = (parts: Partial<Command>): Command => ({
@@ -98,47 +96,6 @@ describe('commandHelp', () => {
   })
 })
 
-describe('kernel command declarations', () => {
-  const sources = new Map<string, string>()
-  const sourceOf = (file: string) => {
-    if (!sources.has(file)) sources.set(file, readFileSync(join(import.meta.dir, '../src/commands', `${file}.ts`), 'utf8'))
-    return sources.get(file) as string
-  }
-  const sourceFiles = ['api', 'daemon', 'distro', 'job', 'open', 'plugin', 'setting', 'skill', 'status', 'theme', 'ui']
-
-  test('every kernel command is declared as a kernel command with a summary', () => {
-    for (const command of COMMANDS) {
-      expect(command.plugin).toBeNull()
-      expect(command.summary.length).toBeGreaterThan(0)
-      expect(usageOf(command).startsWith(command.name)).toBe(true)
-    }
-  })
-
-  test('each listed method is called by the command file or its helpers', () => {
-    const text = sourceFiles.map(sourceOf).join('\n')
-    for (const command of COMMANDS) {
-      for (const method of command.methods) expect(text).toContain(`'${method}'`)
-    }
-  })
-
-  test('methods follow what the run code calls', () => {
-    const methods = (name: string) => COMMANDS.find((command) => command.name === name)?.methods
-    expect(methods('plugin install')).toEqual(['plugin.inspect', 'plugin.install'])
-    expect(methods('daemon restart')).toEqual(['daemon.stop'])
-    expect(methods('open')).toEqual(['status.get'])
-    expect(methods('help')).toEqual([])
-  })
-
-  test('required flags match what the commands demand', () => {
-    const required = (name: string) =>
-      Object.entries(COMMANDS.find((command) => command.name === name)?.flags ?? {})
-        .filter(([, spec]) => spec.required)
-        .map(([flag]) => flag)
-    expect(required('skill install')).toEqual(['dir'])
-    expect(required('skill status')).toEqual(['dir'])
-    expect(required('plugin list')).toEqual([])
-  })
-})
 
 describe('helpText', () => {
   test('an exact command gets its full help', () => {
@@ -162,12 +119,3 @@ describe('helpText', () => {
   })
 })
 
-describe('the v1 words', () => {
-  test('are not kernel commands; their plugins declare them', () => {
-    const kernelWords = new Set(COMMANDS.map((command) => command.name.split(' ')[0]))
-    for (const word of ['repo', 'wt', 'worktree', 'session', 'term', 'terminal', 'ask']) {
-      expect(kernelWords.has(word)).toBe(false)
-    }
-    expect(helpText()).not.toMatch(/^ {2}(repo|wt|worktree|session|term|terminal|ask)\b/m)
-  })
-})

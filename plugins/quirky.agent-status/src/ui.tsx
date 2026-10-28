@@ -18,9 +18,11 @@ function objectArgs(args: unknown): Record<string, unknown> {
 function activityInput(args: unknown): Record<string, unknown> {
   const value = objectArgs(args)
   const group = GROUPS.includes(value.group as ActivityGroup) ? (value.group as ActivityGroup) : 'status'
+  const worktree = typeof value.worktree === 'string' ? value.worktree.trim() : ''
+  const text = typeof value.text === 'string' ? value.text.trim() : ''
   return {
-    ...(typeof value.worktree === 'string' ? { worktree: value.worktree } : {}),
-    ...(typeof value.text === 'string' ? { text: value.text } : {}),
+    ...(worktree ? { worktree } : {}),
+    ...(text ? { text } : {}),
     ...(typeof value.unreadOnly === 'boolean' ? { unreadOnly: value.unreadOnly } : {}),
     group
   }
@@ -58,7 +60,7 @@ async function openActivityThread(context: UiPluginContext, args: unknown): Prom
 /** Registers Activity's sidebar entry, view, and public window commands. */
 export function activate(context: UiPluginContext): void {
   const mountView: MountFunction = (element, { input }) => {
-    Object.assign(element.style, { display: 'flex', flexDirection: 'column', flex: '1', minHeight: '0', minWidth: '0', overflow: 'auto' })
+    Object.assign(element.style, { display: 'flex', flexDirection: 'column', flex: '1', minHeight: '0', minWidth: '0', overflow: 'hidden' })
     const root = createRoot(element)
     root.render(<ActivityView context={context} input={input} />)
     return () => root.unmount()

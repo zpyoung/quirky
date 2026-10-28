@@ -5,6 +5,8 @@ Status: Approved autonomously under canonical LOOP.md unattended/night-mode rule
 
 **Amendments:** 2026-10-28 — initial source/test inventory and bounded delivery contract; inventory is not runtime proof. The required recipe effort-only flow uncovered a shared API prerequisite: catalog-declared generic options now accept no explicit model, with explicit snapshot provenance and no fabricated model. This narrowly supersedes m1-launch-settings D9's blanket API model prerequisite; existing CLI flag policy remains. Parent owns the shared cutover below.
 
+2026-10-28 clarification: recipe model/effort picks must not persist provider model settings. Existing workspace-trust preparation may still write its normal trust entry; this item must not disable or change that behavior to satisfy a configuration sentinel test.
+
 ## Goal and conceptual model
 Audit all nine terminal-domain feature documents, close self-contained missing behavior, and give every remaining obligation an explicit owner. A prior item's non-goal is not a sweep exemption. Quirky's public plugin APIs replace Orca's private IPC; observable flows, not IPC spelling, are parity requirements.
 
@@ -39,7 +41,7 @@ Before: one completed and one active thread. Walkthrough: Clear completed; query
 Before: a global recipe has Claude model/effort, repository has no launch override. Walkthrough: read effective recipe; set repo launchOptions; clear it; restart. After: effective source reflects repo/global/default correctly and restart preserves choices. Clearing choices does not erase args/template. Agent changes clear incompatible choices; malformed values fail before persistence or launch.
 
 ### R2: One-shot generation and terminal fixes use the same resolver
-Before: saved model/effort plus conflicting raw args and configured defaults. Walkthrough: generate a commit message and launch a fix through public Git API/CLI using owned external-provider stand-ins. After: actual launched argv contains exactly one model/effort value with raw-args > picks > defaults precedence. Effort without an explicit model works where the catalog supports it. Invalid pick creates no process/session. Generated text/fix prompt remain correct. No provider config file changes.
+Before: saved model/effort plus conflicting raw args and configured defaults. Walkthrough: generate a commit message and launch a fix through public Git API/CLI using owned external-provider stand-ins. After: actual launched argv contains exactly one model/effort value with raw-args > picks > defaults precedence. Effort without an explicit model works where the catalog supports it. Invalid pick creates no process/session. Generated text/fix prompt remain correct. Recipe choices do not persist model or effort into provider configuration; existing configured workspace-trust behavior is unchanged.
 
 ### R3: Settings and one-off launch choices
 Before: configured recipe. Walkthrough: choose model/effort in Source Control AI settings and Customize launch; change agent; inspect raw override messaging; save a one-off recipe. After: effective pick is visible and persisted when requested, raw-shadowed fields say Set by CLI arguments and cannot falsely promise an effective different choice; changing agent resets incompatible picks. Unknown permitted model IDs remain editable, unsupported choices fail explicitly.

@@ -5,6 +5,7 @@ import type { ActivityThread } from '../src/activity-types'
 
 const SIDEBAR = 'sidebar-section:quirky.agent-status/activity'
 const VIEW = 'view:quirky.agent-status/activity'
+const OPEN_ACTIVITY = 'command:quirky.agent-status/openActivity'
 const OPEN_THREAD = 'command:quirky.agent-status/openActivityThread'
 const SESSION_VIEW = 'view:quirky.session/worktree'
 
@@ -239,6 +240,9 @@ test('Activity navigation opens the grouped feed; filters, children and clear-co
   expect(navigation.textContent).toContain('Activity')
   await click(navigation)
   expect(h.opened.at(-1)).toEqual({ id: VIEW, input: { group: 'status' } })
+  const openActivity = h.provided.get(OPEN_ACTIVITY) as (args?: unknown) => void
+  await act(async () => openActivity({ worktree: '', text: ' ', group: 'status' }))
+  expect(h.opened.at(-1)).toEqual({ id: VIEW, input: { group: 'status' } })
   await cleanup()
 
   const unmount = await h.mount(VIEW, { group: 'status' })
@@ -254,8 +258,30 @@ test('Activity navigation opens the grouped feed; filters, children and clear-co
   await typeInto(search, 'audit')
   await click(host.querySelector('button[aria-label="Apply Activity filters"]')!)
   expect(h.calls.filter((call) => call.method === 'quirky.agent-status/activity').at(-1)?.params).toMatchObject({ text: 'audit' })
+  expect(h.opened.at(-1)?.input).toMatchObject({ text: 'audit', group: 'status' })
+  expect(h.opened.at(-1)?.input).not.toHaveProperty('worktree')
   expect(host.querySelector('[data-session-id="s-wait"]')).toBeNull()
   expect(host.querySelector('[data-session-id="s-work"]')).not.toBeNull()
+
+  const group = host.querySelector<HTMLSelectElement>('select[aria-label="Group Activity by"]')!
+  await selectValue(group, 'worktree')
+  expect(h.opened.at(-1)?.input).toMatchObject({ text: 'audit', group: 'worktree' })
+  expect(h.opened.at(-1)?.input).not.toHaveProperty('worktree')
+
+  const unread = host.querySelector<HTMLInputElement>('input[aria-label="Unread only"]')!
+  await act(async () => {
+    unread.click()
+  })
+  expect(h.calls.filter((call) => call.method === 'quirky.agent-status/activity').at(-1)?.params).toMatchObject({ unreadOnly: true })
+  expect(h.opened.at(-1)?.input).toMatchObject({ text: 'audit', unreadOnly: true, group: 'worktree' })
+  expect(h.opened.at(-1)?.input).not.toHaveProperty('worktree')
+  expect(host.querySelector('[data-session-id="s-work"]')).not.toBeNull()
+
+  await act(async () => {
+    unread.click()
+  })
+  expect(h.opened.at(-1)?.input).not.toHaveProperty('worktree')
+
   const workspace = host.querySelector<HTMLInputElement>('input[aria-label="Worktree ID"]')!
   await typeInto(workspace, 'wt1')
   await click(host.querySelector('button[aria-label="Apply Activity filters"]')!)
@@ -266,17 +292,11 @@ test('Activity navigation opens the grouped feed; filters, children and clear-co
   await typeInto(workspace, 'wt2')
   await click(host.querySelector('button[aria-label="Apply Activity filters"]')!)
   expect(host.querySelector('[data-session-id="s-work"]')).not.toBeNull()
-  const group = host.querySelector<HTMLSelectElement>('select[aria-label="Group Activity by"]')!
-  await selectValue(group, 'worktree')
-  expect(h.opened.at(-1)?.input).toMatchObject({ text: 'audit', worktree: 'wt2', group: 'worktree' })
 
-  const unread = host.querySelector<HTMLInputElement>('input[aria-label="Unread only"]')!
   await act(async () => {
     unread.click()
   })
-  expect(h.calls.filter((call) => call.method === 'quirky.agent-status/activity').at(-1)?.params).toMatchObject({ unreadOnly: true })
   expect(h.opened.at(-1)?.input).toMatchObject({ text: 'audit', worktree: 'wt2', unreadOnly: true, group: 'worktree' })
-  expect(host.querySelector('[data-session-id="s-work"]')).not.toBeNull()
 
   const ackCount = h.calls.filter((call) => call.method === 'quirky.agent-status/acknowledge').length
   await click(host.querySelector('button[aria-label="Mark all read"]')!)

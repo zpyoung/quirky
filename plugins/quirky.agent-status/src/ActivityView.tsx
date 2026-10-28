@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type ChangeEvent, type CSSProperties } from 'react'
 import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'
 import type { ActivityQuery, ActivityThread } from './activity-types'
 
@@ -22,14 +22,40 @@ const DISPLAY_ORDER: ActivityThread['display'][] = [
 type GroupBy = 'status' | 'worktree' | 'provider' | 'none'
 export type ActivityViewInput = ActivityQuery & { group: GroupBy }
 type Group = { key: string; label: string; threads: ActivityThread[] }
+const PAGE_STYLE: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  flex: '1 1 auto',
+  minHeight: 0,
+  minWidth: 0,
+  overflow: 'hidden',
+  color: 'var(--text, inherit)'
+}
+const TOOLBAR_STYLE: CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, padding: 12 }
+const ACTIONS_STYLE: CSSProperties = { display: 'flex', flexWrap: 'wrap', gap: 8 }
+const FILTERS_STYLE: CSSProperties = { display: 'flex', alignItems: 'flex-end', flexWrap: 'wrap', gap: '8px 12px', padding: '0 12px 12px' }
+const FIELD_STYLE: CSSProperties = { display: 'flex', flexDirection: 'column', flex: '1 1 220px', gap: 4, minWidth: 180 }
+const INLINE_FIELD_STYLE: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 6 }
+const RESULTS_STYLE: CSSProperties = { flex: '1 1 auto', minHeight: 0, minWidth: 0, overflowY: 'auto', padding: '0 12px 160px', boxSizing: 'border-box' }
+const GROUP_LIST_STYLE: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 12, listStyle: 'none', margin: 0, padding: 0 }
+const GROUP_STYLE: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }
+const THREAD_STYLE: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 6, padding: '10px 0', borderBottom: '1px solid var(--border, #7774)' }
+const THREAD_HEADING_STYLE: CSSProperties = { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }
+const THREAD_OPEN_STYLE: CSSProperties = { display: 'inline-flex', alignItems: 'baseline', flexWrap: 'wrap', gap: 8, padding: 0, border: 0, background: 'transparent', color: 'inherit', font: 'inherit', cursor: 'pointer', textAlign: 'left' }
+const THREAD_CONTEXT_STYLE: CSSProperties = { margin: 0, color: 'var(--muted, #8a909e)' }
+const THREAD_TEXT_STYLE: CSSProperties = { margin: 0, overflowWrap: 'anywhere' }
+const THREAD_ACTIONS_STYLE: CSSProperties = { display: 'flex', flexWrap: 'wrap', gap: 8 }
+const CHILDREN_STYLE: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 4, listStyle: 'none', margin: 0, padding: '4px 0 0 16px' }
 
 function viewInput(input: unknown): ActivityViewInput {
   const value = typeof input === 'object' && input !== null ? (input as Record<string, unknown>) : {}
   const group: GroupBy = value.group === 'worktree' || value.group === 'provider' || value.group === 'none' ? value.group : 'status'
+  const worktree = typeof value.worktree === 'string' ? value.worktree.trim() : ''
+  const text = typeof value.text === 'string' ? value.text.trim() : ''
   return {
     group,
-    ...(typeof value.worktree === 'string' ? { worktree: value.worktree } : {}),
-    ...(typeof value.text === 'string' ? { text: value.text } : {}),
+    ...(worktree ? { worktree } : {}),
+    ...(text ? { text } : {}),
     ...(typeof value.unreadOnly === 'boolean' ? { unreadOnly: value.unreadOnly } : {})
   }
 }
@@ -156,7 +182,13 @@ export function ActivityView({ context, input }: { context: UiPluginContext; inp
   }, [context, refresh])
 
   const updateView = (patch: Partial<ActivityViewInput>) => {
-    const next = { ...view, text: draftText, worktree: draftWorktree, ...patch }
+    const next = { ...view, ...patch }
+    const text = typeof patch.text === 'string' ? patch.text.trim() : draftText.trim()
+    const worktree = typeof patch.worktree === 'string' ? patch.worktree.trim() : draftWorktree.trim()
+    if (text) next.text = text
+    else delete next.text
+    if (worktree) next.worktree = worktree
+    else delete next.worktree
     setView(next)
     context.openView(VIEW_ID, next)
   }
@@ -204,10 +236,10 @@ export function ActivityView({ context, input }: { context: UiPluginContext; inp
   const hasFilters = Boolean(view.text?.trim() || view.worktree?.trim() || view.unreadOnly)
 
   return (
-    <main className="activity-view">
-      <header className="activity-toolbar">
-        <h1>Activity</h1>
-        <div className="activity-actions">
+    <main className="activity-view" style={PAGE_STYLE}>
+      <header className="activity-toolbar" style={TOOLBAR_STYLE}>
+        <h1 style={{ margin: 0, fontSize: 20 }}>Activity</h1>
+        <div className="activity-actions" style={ACTIONS_STYLE}>
           <button type="button" aria-label="Mark all read" disabled={!threads.some((thread) => thread.unread)} onClick={() => void markAllRead()}>
             Mark all read
           </button>
@@ -218,12 +250,13 @@ export function ActivityView({ context, input }: { context: UiPluginContext; inp
       </header>
       <form
         className="activity-filters"
+        style={FILTERS_STYLE}
         onSubmit={(event) => {
           event.preventDefault()
           applyFilters()
         }}
       >
-        <label>
+        <label style={FIELD_STYLE}>
           Search Activity
           <input
             aria-label="Search Activity"
@@ -232,7 +265,7 @@ export function ActivityView({ context, input }: { context: UiPluginContext; inp
             onChange={(event: ChangeEvent<HTMLInputElement>) => setDraftText(event.currentTarget.value)}
           />
         </label>
-        <label>
+        <label style={FIELD_STYLE}>
           Worktree ID
           <input
             aria-label="Worktree ID"
@@ -241,7 +274,7 @@ export function ActivityView({ context, input }: { context: UiPluginContext; inp
             onChange={(event: ChangeEvent<HTMLInputElement>) => setDraftWorktree(event.currentTarget.value)}
           />
         </label>
-        <label>
+        <label style={INLINE_FIELD_STYLE}>
           <input
             aria-label="Unread only"
             type="checkbox"
@@ -250,7 +283,7 @@ export function ActivityView({ context, input }: { context: UiPluginContext; inp
           />
           Unread only
         </label>
-        <label>
+        <label style={FIELD_STYLE}>
           Group by
           <select
             aria-label="Group Activity by"
@@ -272,28 +305,28 @@ export function ActivityView({ context, input }: { context: UiPluginContext; inp
       {!loading && !error && threads.length === 0 ? (
         <p className="activity-empty" role="status">{hasFilters ? 'No Activity threads match these filters.' : 'No Activity threads yet.'}</p>
       ) : null}
-      <div className="activity-groups">
+      <div className="activity-groups" style={RESULTS_STYLE}>
         {grouped.map((group) => (
-          <section className="activity-group" data-activity-group={group.key} key={group.key}>
-            {view.group !== 'none' ? <h2>{group.label}</h2> : null}
-            <ul>
+          <section className="activity-group" data-activity-group={group.key} key={group.key} style={GROUP_STYLE}>
+            {view.group !== 'none' ? <h2 style={{ margin: 0, fontSize: 16 }}>{group.label}</h2> : null}
+            <ul style={GROUP_LIST_STYLE}>
               {group.threads.map((thread) => {
                 const isExpanded = expanded[thread.sessionId] === true
                 return (
-                  <li className={`activity-thread${thread.unread ? ' unread' : ''}`} data-session-id={thread.sessionId} key={thread.sessionId}>
-                    <div className="activity-thread-heading">
-                      <button type="button" className="activity-thread-open" onClick={() => openThread(thread)}>
+                  <li className={`activity-thread${thread.unread ? ' unread' : ''}`} data-session-id={thread.sessionId} key={thread.sessionId} style={THREAD_STYLE}>
+                    <div className="activity-thread-heading" style={THREAD_HEADING_STYLE}>
+                      <button type="button" className="activity-thread-open" style={THREAD_OPEN_STYLE} onClick={() => openThread(thread)}>
                         <span className="activity-thread-name">{thread.sessionName}</span>
                         <span className="activity-thread-state">{thread.label}</span>
                       </button>
                       {thread.unread ? <span className="activity-unread" aria-label="Unread">Unread</span> : null}
                     </div>
-                    <p className="activity-thread-context">
+                    <p className="activity-thread-context" style={THREAD_CONTEXT_STYLE}>
                       {thread.worktreeName} · {thread.agent} · {thread.live ? 'Available' : 'Unavailable'}
                     </p>
-                    {thread.prompt ? <p className="activity-thread-prompt">{thread.prompt}</p> : null}
-                    {thread.detail ? <p className="activity-thread-detail">{thread.detail}</p> : null}
-                    <div className="activity-thread-actions">
+                    {thread.prompt ? <p className="activity-thread-prompt" style={THREAD_TEXT_STYLE}>{thread.prompt}</p> : null}
+                    {thread.detail ? <p className="activity-thread-detail" style={THREAD_TEXT_STYLE}>{thread.detail}</p> : null}
+                    <div className="activity-thread-actions" style={THREAD_ACTIONS_STYLE}>
                       <button type="button" disabled={!thread.unread} onClick={() => void markRead(thread)}>
                         {thread.unread ? 'Mark read' : 'Read'}
                       </button>
@@ -313,7 +346,7 @@ export function ActivityView({ context, input }: { context: UiPluginContext; inp
                       ) : null}
                     </div>
                     {isExpanded ? (
-                      <ul className="activity-children">
+                      <ul className="activity-children" style={CHILDREN_STYLE}>
                         {thread.children.map((child) => (
                           <li data-child-id={child.id} key={`${child.kind}:${child.id}`}>
                             <span>{child.id}</span> <span>{child.kind}</span> <span>{child.state}</span>

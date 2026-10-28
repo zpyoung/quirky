@@ -121,5 +121,71 @@
 - **Revisit if:** A further consumer assumes validated model is always nonnull.
 - **Source:** assumed — autonomous
 
+## D12: Keep the flat schema contract and distinguish recipe settings from trust preparation
+- **Question:** Why did repaired recipe source methods still disappear, and what configuration mutation belongs to the recipe?
+- **Options:** Expand the kernel schema dialect; suppress invalid-plugin diagnostics; use the established flat subset with authoritative runtime validation.
+- **Chose:** Boolean additionalProperties only; nullable launchOptions inputs remain discoverable description-only properties, with complete object/null/domain validation in the recipe service. No type arrays or schema-valued maps. Recipe picks never persist model/effort settings; existing workspace-trust preparation is unchanged.
+- **Why:** Actual standalone plugin.list reported whole-plugin invalidation for unsupported generate.optionValues and recipe.launchOptions schemas. Independent structural validation confirmed the rejection chain. The config sentinel then exposed only the normal trusted-project entry, so its fixture uses the supported trust-off setting to isolate recipe writes; no production trust path was removed.
+- **Evidence:** Runtime diagnostic artifact57 and ValidateSweepPlugins report; repaired native/API run5pass plus isolated final raw-Codex case1pass/0fail/6assertions5.43sec; recipe UI50pass/0fail/172assertions.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** A field cannot be represented or validated using the existing public schema/runtime boundary.
+- **Source:** assumed — autonomous
+
+## D13: Exercise the composed product with owned external-provider stand-ins
+- **Question:** What proves the changed paths beyond source and isolated tests?
+- **Options:** Treat unit tests as runtime proof; launch real paid providers; run the actual daemon, CLI and PTY host against isolated native-protocol stand-ins.
+- **Chose:** Full packaged build plus actual standalone daemon/CLI/PTY smoke in fresh HOME/QUIRKY_HOME. Synthetic native desktop client plus a failing open shim verifies ready short-circuit without opening the user's app. The built-web five-goal campaign uses the same owned fixture; native visibility/load-complete/physical focus remain pending.
+- **Why:** This drives the public execution path while preserving the user's real homes and accounts. It does not assert live paid-provider or physical-window clearance.
+- **Evidence:** Build exit0,21 plugin UI modules and28 packaged plugins. m7-terminal-smoke-lane7 printed SMOKE_PASS: Claude Opus/High argv and exact raw Haiku/Low precedence, Codex gpt-5.5/High native argv and prompt, invalid selection creates no session, Activity child/waiting/working/completed and stale-token refusal, real shell exit3, persisted recipe projection. Scratch smoke-observations.json. UI service still running pending campaign completion.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** A native provider differs from its declared protocol or the actual UI campaign finds a consumer failure.
+- **Source:** assumed — autonomous
+
+## D14: Route the new CLI regression to macOS and remove incidental wiring assertions
+- **Question:** How will normal merged verification exercise the new macOS-only command rather than skip it remotely?
+- **Options:** Leave all new open cases skipped on Linux; add them to the existing macOS test-routing list; change the protected runner.
+- **Chose:** Add packages/cli/test/open.e2e.test.ts to scripts/test-on-macos.txt with its platform reason. Do not change scripts/build-loop or suite behavior. Remove source-text/method-copy/default-metadata tests from command-spec.test.ts rather than re-pin the open method list; actual spawned CLI tests retain readiness/timeout/error behavior.
+- **Why:** The product deliberately refuses non-macOS open, so these cases need the existing local Mac lane. Source-string assertions and copies of command metadata do not establish consumer behavior.
+- **Evidence:** scripts/suite.ts local-only selection; actual open command's platform guard; command-spec.test.ts removed kernel declaration/source/wiring block and v1-word table check; existing public CLI flow tests remain.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Desktop opening gains another supported platform or command discovery behavior changes.
+- **Source:** deferred: platform
+
+## D15: Fix confirmed Activity UI defects and preserve the guarded campaign's limits
+- **Question:** What did the actual built-web campaign prove, and what failed?
+- **Options:** Treat all goals as passing; file our own defects as future work; fix the app findings and retain honest tool-limited outcomes.
+- **Chose:** Fix F1 by omitting blank selectors from Activity view input; fix F2 with a bounded plugin-owned results scroller and spacing, not by hiding Accounts or changing global layout. The original report has3 Activity passes and2 recipe goals unset after driver failure; those2 are tool-blocked, never relabeled passes. Retry only the relevant visible repairs with a fresh guarded campaign if the driver is usable.
+- **Why:** The visible filter alert and clipped Working row are real app findings. Subsequent act/observe/end commands timed out; the guard eventually emitted cleanup_failed because its final screenshot failed. It reported no kept-open windows and restored the frontmost app. The report remains unchanged.
+- **Evidence:** .quirk/using-apps-like-a-user/runs/20261028T081739-fab2/report.json, report.md; F1 obs-6.png; F2 obs-17.png; inherited Codex/gpt-5.5/High dialog obs-33.png. Repair-focused root check24pass/0fail/125assertions6.25sec; repaired packaged build exit0. Original runtime STOP exited0 and printed SMOKE_CLEANED true.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** The fresh actual surface still shows the alert or inaccessible lower rows.
+- **Source:** assumed — autonomous
+
+## D16: Apply the expired-item landing rule without inventing model clearance
+- **Question:** What final review remains after the long guarded-driver stall crossed the item's two-hour bound?
+- **Options:** Pretend the READY probe was review; start an unrequested extra review delay; follow canonical LOOP's already-expired-item fast path after mandatory gates.
+- **Chose:** No final model review will be started; land only after affected tests, scripts and typecheck pass. Gemini availability/READY and structural plugin validation are not code-review clearance. Preserve native and tool-limited UI evidence explicitly.
+- **Why:** The item was claimed01:56CDT; guarded campaign08:17:39Z–09:33:39Z spent76minutes and stalled after28 actions. The canonical rule says an item already past2hours lands as soon as owned tests/typecheck pass and skips an unstarted review round. The4am target was missed; no on-time claim.
+- **Evidence:** Canonical LOOP night-mode expired-item rule; actual date04:35:31CDT; guarded report start/end and command-timeout record. Review scripts are prepared but have not been dispatched.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** A later independent review finds a defect; do not interpret this choice as a review verdict.
+- **Source:** locked by docs/loop/LOOP.md
+
+## D17: Preserve incoming background, launch-snapshot and exact-navigation authority
+- **Question:** Do the new canonical decisions conflict with our Activity and recipe contracts?
+- **Options:** Replace shared contracts with private state; preserve the incoming public authority and migration order.
+- **Chose:** Preserve background non-adoption, exact explicit session navigation without replacement shells, canonical Session.launchSettings provenance, owner/runtime fail-closed behavior, durable logical request-ID versus transport-ID semantics, and append-only session migration order(pointer9/background10). Activity remains a read projection; it never settles orchestration work or grants policy authority.
+- **Why:** Read-only scouts consumed every incoming changed log through canonical3c0421b321a78b7f9f222521b0f789bc40e69341 and found no binding conflict. Our generic option-only API path preserves native option provenance rather than creating another launch table.
+- **Evidence:** IncomingSweepDecisions reports: m5-automations-ui D1–D29; m6-heimdall-core D27/D30/D31; sa-browser-profiles-settings D9/D15/D17/D21/D24/D25; m6-orchestration-ui D3–D5/D8/D9/D12–D15. Source snapshots1d7ae078 and3c0421b3.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** Catch-up brings a new conflicting contract or a test demonstrates composed ownership drift.
+- **Source:** locked by docs/loop/decisions
+
 ## Progress
-Step5: all three implementation components returned initial code. CLI focused proof35pass/0fail/263assertions after a parent-found unbounded-RPC readiness repair; no real app launched. Activity API/CLI proof7pass, UI initially lacked package deps; dependencies declared. Parent-found async query stale-write race fixed; one race test had an invalid cleared-thread dereference and is corrected, rerun pending. Recipe worker is finishing UI plus actual effort-only launch regression; it no longer fabricates raw-arg provenance. Shared generic-option cutover193pass/0fail. No component committed/merged yet; wait for final recipe return and all checks before wave barrier. Scratch /tmp/quirky-m7-sweep-terminal-lane7.KpyVcb; notes hold exact commands. Actual smoke, web campaign, affected suites, catch-up/review and land remain.
+All3 bounded components are merged(CLI5e3b571d, Activity68d3bc6e, Recipes90cfd95a); component worktrees removed. Shared generic-option prerequisitee1b6dce9 and composed-option guard8b64cd02 are integrated. Actual daemon/CLI/PTY smoke passed and its home/processes were cleaned. Guarded web campaign proved3 Activity goals, exposed2 fixed Activity UI bugs, and left2 recipe goals tool-blocked. Repaired focused check24pass and full build pass. Next: commit owned source/docs, catch up canonical once/read any newer decisions, run final affected remote suite/scripts/typecheck, fresh bounded UI repair check if driver works, register the single exhaustive completion follow-up, record evidence and authoritative land. No model review clearance; D16 applies.
