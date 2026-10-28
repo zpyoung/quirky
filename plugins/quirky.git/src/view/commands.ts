@@ -30,7 +30,7 @@ function openDiffInput(worktree: string, args: Args): DiffViewInput {
   const path = text(args.path)
   if (!path) throw new Error('open-diff needs a path.')
   const groupId = text(args.groupId)
-  const display = args.display === 'source' || args.display === 'preview' ? args.display : undefined
+  const display: DiffViewInput['display'] = args.display === 'source' || args.display === 'preview' ? args.display : undefined
   const placement = {
     ...(typeof args.preview === 'boolean' ? { preview: args.preview } : {}),
     ...(args.split === true ? { split: true } : {}),

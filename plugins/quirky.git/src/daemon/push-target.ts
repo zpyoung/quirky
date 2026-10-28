@@ -9,11 +9,13 @@ type Unavailable = { ready: false; reason: string; message: string }
 type LocalIdentity = { branch: string; head: string }
 type LocalIdentityResult = LocalIdentity | Unavailable
 type ConfiguredRemote = {
+  ready: true
   remote: string
-  repository: Identity
+  repository: PushTargetRepository
   pushUrl: string
   pushUrlFingerprint: string
 }
+type CurrentReview = { ready: true; review: Record<string, unknown> } | Unavailable
 export type ReadyPushTarget = {
   ready: true
   remote: string
@@ -31,13 +33,13 @@ type ResolvedPushTarget = ValidatedPushTarget | Unavailable
 
 const OID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i
 const REMOTE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/u
-function identity(value: unknown): Identity | null {
+function identity(value: unknown): PushTargetRepository | null {
   if (!isRecord(value) || typeof value.host !== 'string' || typeof value.owner !== 'string' || typeof value.repo !== 'string') return null
   if (!value.host || !value.owner || !value.repo) return null
   return { host: value.host, owner: value.owner, repo: value.repo }
 }
 
-function sameIdentity(left: Identity, right: Identity): boolean {
+function sameIdentity(left: PushTargetRepository, right: PushTargetRepository): boolean {
   return left.host.toLowerCase() === right.host.toLowerCase() &&
     left.owner.toLowerCase() === right.owner.toLowerCase() &&
     left.repo.toLowerCase() === right.repo.toLowerCase()
@@ -100,14 +102,14 @@ async function configuredRepository(env: DaemonEnv, worktree: Worktree, remote: 
     if (urls.length !== 1 || gitApi().pushUrlFingerprint(urls[0]!) !== fingerprint) {
       return unavailable('push_url_changed', 'The configured push URL changed while its provider identity was being verified.')
     }
-    return { remote, repository, pushUrl: urls[0]!, pushUrlFingerprint: fingerprint }
+    return { ready: true, remote, repository, pushUrl: urls[0]!, pushUrlFingerprint: fingerprint }
   } catch (error) {
     const safe = failureFields(error)
     return unavailable(safe.reason ?? 'repository_unavailable', safe.message)
   }
 }
 
-async function currentReview(env: DaemonEnv, worktree: Worktree, branch: string, head: string): Promise<Record<string, unknown> | Unavailable> {
+async function currentReview(env: DaemonEnv, worktree: Worktree, branch: string, head: string): Promise<CurrentReview> {
   try {
     const linked = worktree.linkedPR
     const linkedRepository = linked?.kind === 'pullRequest' ? identity(linked.repository) : null
@@ -141,7 +143,7 @@ async function currentReview(env: DaemonEnv, worktree: Worktree, branch: string,
         return unavailable('stale_linked_review', 'The fresh pull request no longer matches this worktree link.')
       }
     }
-    return result.review
+    return { ready: true, review: result.review }
   } catch (error) {
     const safe = failureFields(error)
     return unavailable(safe.reason ?? 'review_unavailable', safe.message)
@@ -150,7 +152,7 @@ async function currentReview(env: DaemonEnv, worktree: Worktree, branch: string,
 async function reviewDestination(
   env: DaemonEnv,
   worktree: Worktree,
-  headRepository: Identity,
+  headRepository: PushTargetRepository,
   headRefName: string
 ): Promise<(ConfiguredRemote & { dest: string }) | Unavailable> {
   if (!(await gitApi().checkRefFormatBranch(headRefName))) {
@@ -162,7 +164,7 @@ async function reviewDestination(
       return unavailable('stale_worktree_target', 'The saved worktree push target no longer matches the pull-request head.')
     }
     const configured = await configuredRepository(env, worktree, saved.remoteName)
-    if ('ready' in configured) return configured
+    if (configured.ready === false) return configured
     if (!sameIdentity(configured.repository, headRepository)) {
       return unavailable('repository_mismatch', 'The saved worktree push remote no longer matches the pull-request head repository.')
     }
@@ -180,7 +182,7 @@ async function reviewDestination(
   for (const remote of names) {
     if (!REMOTE_NAME.test(remote)) continue
     const configured = await configuredRepository(env, worktree, remote)
-    if ('ready' in configured) {
+    if (configured.ready === true) {
       if (sameIdentity(configured.repository, headRepository)) matches.push(configured)
     } else if (configured.reason === 'ambiguous_push_url' || configured.reason === 'push_url_changed') {
       unresolvedRemote = true
@@ -198,13 +200,13 @@ async function reviewDestination(
 }
 
 
-async function creationBase(env: DaemonEnv, worktree: Worktree): Promise<Identity[] | Unavailable> {
+async function creationBase(env: DaemonEnv, worktree: Worktree): Promise<PushTargetRepository[] | Unavailable> {
   try {
     const value = await env.context.call('quirky.hosting/repository', { worktree: worktree.id })
     if (!isRecord(value) || value.worktreeId !== worktree.id || !Array.isArray(value.candidates)) {
       return unavailable('repository_unavailable', 'The authenticated GitHub repositories for this worktree could not be verified.')
     }
-    const candidates = value.candidates.map(identity).filter((item): item is Identity => item !== null)
+    const candidates = value.candidates.map(identity).filter((item): item is PushTargetRepository => item !== null)
     return candidates.length > 0
       ? candidates
       : unavailable('repository_unavailable', 'No authenticated GitHub repository is configured for this worktree.')
@@ -227,10 +229,11 @@ async function readyTarget(env: DaemonEnv, worktree: Worktree, purpose: PushPurp
   let headOid: string | undefined
   let number: number | undefined
   let fork = false
-  let repository: Identity
+  let repository: PushTargetRepository
   if (purpose === 'review') {
-    const found = await currentReview(env, worktree, before.branch, before.head)
-    if ('ready' in found) return found
+    const reviewResult = await currentReview(env, worktree, before.branch, before.head)
+    if (reviewResult.ready === false) return reviewResult
+    const found = reviewResult.review
     if (found.state !== 'open' && found.state !== 'draft') {
       return unavailable('closed_review', 'The linked pull request is closed or merged; refusing to publish another branch.')
     }
@@ -249,7 +252,7 @@ async function readyTarget(env: DaemonEnv, worktree: Worktree, purpose: PushPurp
       return unavailable('head_repository_unavailable', 'The pull-request head repository was deleted or is unavailable.')
     }
     const destination = await reviewDestination(env, worktree, headRepository, found.headRefName)
-    if ('ready' in destination) return destination
+    if (destination.ready === false) return destination
     target = destination
     repository = destination.repository
     headOid = found.headRefOid
@@ -268,7 +271,7 @@ async function readyTarget(env: DaemonEnv, worktree: Worktree, purpose: PushPurp
       return unavailable('branch_mismatch', 'The configured creation push ref is not the current branch.')
     }
     const pushRepository = await configuredRepository(env, worktree, configured.remote)
-    if ('ready' in pushRepository) return pushRepository
+    if (pushRepository.ready === false) return pushRepository
     const candidates = await creationBase(env, worktree)
     if ('ready' in candidates) return candidates
     if (!candidates.some((candidate) => sameIdentity(candidate, pushRepository.repository))) {

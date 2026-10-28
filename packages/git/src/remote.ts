@@ -32,11 +32,10 @@ function fail(action: RemoteAction, r: GitResult): RemoteError {
 }
 
 /** Removes configured target URLs before Git diagnostics are normalised for callers. */
-function redactTargetUrl(bytes: Uint8Array, privateUrl: string): Uint8Array {
-  const output = text(bytes)
+function redactTargetUrl(output: string, privateUrl: string): string {
+  return output
     .replaceAll(privateUrl, '[configured push URL]')
     .replace(/(?:https?|ssh|git(?:\+ssh)?):\/\/[^\s"'<>]+/giu, '[configured push URL]')
-  return new TextEncoder().encode(output)
 }
 
 /** Runs `args` as a network command for `action`; throws the normalised `RemoteError` on failure. */
@@ -51,7 +50,11 @@ async function runRemote(
   if (r.exitCode !== 0 || r.timedOut) {
     const safe = privateUrl === undefined
       ? r
-      : { ...r, stdout: redactTargetUrl(r.stdout, privateUrl), stderr: redactTargetUrl(r.stderr, privateUrl) }
+      : {
+          ...r,
+          stdout: new TextEncoder().encode(redactTargetUrl(text(r.stdout), privateUrl)),
+          stderr: redactTargetUrl(r.stderr, privateUrl)
+        }
     throw fail(action, safe)
   }
   return r

@@ -1,6 +1,6 @@
 import { afterAll, afterEach, expect, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
-import { registerDom } from './register-dom'
+import { registerDom } from '../ui/register-dom'
 import { isolateGitConfig } from '../../../quirky.repo/test/git-fixtures'
 import type { World } from './world'
 

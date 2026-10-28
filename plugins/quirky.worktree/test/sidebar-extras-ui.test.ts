@@ -1,8 +1,9 @@
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
-import { afterAll, afterEach, beforeAll, beforeEach, expect, mock, test } from 'bun:test'
+import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from 'bun:test'
 import type { ProjectGroup, QuirkyEvent, Repo, Session, UiLayout, UiPluginContext, Worktree } from '@quirky/protocol'
 import { RpcErrorCode } from '@quirky/protocol'
 import { resolveMembershipTarget } from '../src/membership'
+import type { DropPreviewReport } from '../src/report'
 
 const SLOT = 'sidebar-section:quirky.worktree/worktrees'
 const BASE = Date.now()
@@ -61,7 +62,8 @@ type RendererReport = {
   reviewHiddenIds: string[]
   reviewHiddenCount: number
   filterCount: number
-  dropPreview: { kind: 'group' | 'repo'; id: string } | null
+  separators: { enabled: boolean; eligibleBoundaries: string[] }
+  dropPreview: DropPreviewReport | null
 }
 type TestWorld = {
   repos: Repo[]
@@ -105,6 +107,46 @@ function callGate(): CallGate {
     wait: gate.promise,
     start: started.resolve,
     release: gate.resolve
+  }
+}
+function intervalClock() {
+  const realSetInterval = globalThis.setInterval
+  const realClearInterval = globalThis.clearInterval
+  const cleanup: Array<() => void> = []
+  const intervals: { callback: () => void; delay: number; elapsed: number }[] = []
+
+  const interceptSetInterval = (<TArgs extends unknown[]>(
+    callback: (...args: TArgs) => void,
+    delay?: number,
+    ...args: TArgs
+  ) => {
+    const handle = realSetInterval(() => {}, delay)
+    cleanup.push(() => realClearInterval(handle))
+    if (typeof callback === 'function') {
+      intervals.push({
+        callback: () => callback(...args),
+        delay: delay ?? 0,
+        elapsed: 0
+      })
+    }
+    return handle
+  }) as typeof globalThis.setInterval
+  globalThis.setInterval = interceptSetInterval
+
+  return {
+    advance(milliseconds: number) {
+      for (const interval of intervals) {
+        interval.elapsed += milliseconds
+        while (interval.delay > 0 && interval.elapsed >= interval.delay) {
+          interval.elapsed -= interval.delay
+          interval.callback()
+        }
+      }
+    },
+    restore() {
+      globalThis.setInterval = realSetInterval
+      for (const clear of cleanup) clear()
+    }
   }
 }
 
@@ -1229,23 +1271,24 @@ test('quiet activity aging refreshes at sixty seconds without store events', asy
   const h = setup()
   h.world.preferences.workspaceActivityWindow = 'today'
   h.world.worktrees.find((item) => item.id === 'w-other')!.lastActivityAt = BASE - DAY + 1
-  mock.timers.enable({ apis: ['setInterval'] })
+  const timers = intervalClock()
   try {
     await h.mount()
     expect(card('other')).toBeDefined()
     const projectionCalls = h.calls.filter((call) => call.method === 'quirky.sidebar-extras/projection').length
 
-    h.world.now = BASE + 60_000
+    h.world.now = BASE + 59_999
     await act(async () => {
-      mock.timers.tick(59_999)
+      timers.advance(59_999)
       await Promise.resolve()
     })
     await h.flush()
     expect(card('other')).toBeDefined()
     expect(h.calls.filter((call) => call.method === 'quirky.sidebar-extras/projection')).toHaveLength(projectionCalls)
 
+    h.world.now = BASE + 60_000
     await act(async () => {
-      mock.timers.tick(1)
+      timers.advance(1)
       await Promise.resolve()
     })
     await h.flush()
@@ -1254,7 +1297,7 @@ test('quiet activity aging refreshes at sixty seconds without store events', asy
   } finally {
     await currentCleanup?.()
     currentCleanup = null
-    mock.timers.restore()
+    timers.restore()
   }
 })
 test('section separators mark top-level boundaries only with Pinned first', async () => {

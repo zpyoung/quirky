@@ -11,6 +11,7 @@ import {
   extras,
   fakeClock,
   type ActivityProjection,
+  type ExtrasState,
   type TestClock,
   type TestEnvironment
 } from './support'

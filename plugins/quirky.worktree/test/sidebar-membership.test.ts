@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { existsSync, mkdirSync, realpathSync, symlinkSync } from 'node:fs'
 import { join } from 'node:path'
-import { RpcErrorCode, type PluginStore, type ProjectGroup, type Repo, type Worktree, type WorktreeCreateResult } from '@quirky/protocol'
+import { RpcErrorCode, type PluginStore, type ProjectGroup, type Repo, type Session, type Worktree, type WorktreeCreateResult } from '@quirky/protocol'
 import { type SetEnv, createGroupForWorktree } from '../src/daemon/set'
 import { instanceIdFor, type DirectoryIdentitySource } from '../src/daemon/identity'
 import { makeTempHome, startHarness, waitFor, waitForAsync, type Harness } from '../../../packages/daemon/test/helpers'
@@ -117,16 +117,17 @@ describe('canonical worktree project-group membership', () => {
   test('group membership changes presentation without moving Git or session ownership', async () => {
     const { client, repo } = await startWithSessions()
     const selected = await createWorktree(client, repo, 'same-owner')
-    const session = await call<{ id: string; worktreeId: string }>(client, 'quirky.session/create', {
+    const session = (await call(client, 'quirky.session/create', {
       worktree: `id:${selected.id}`,
       agent: 'shell'
-    })
+    })) as Session
     const group = (await call(client, 'quirky.repo/groupCreate', { name: 'Presentation only' })) as GroupWithParent
 
     await call(client, 'quirky.worktree/set', { worktree: selected.id, projectGroupId: group.id })
 
     expect(await worktreeById(client, selected.id)).toMatchObject({ id: selected.id, repoId: repo.id, projectGroupId: group.id })
-    expect((await call<{ id: string; worktreeId: string }[]>(client, 'quirky.session/list')).find((item) => item.id === session.id))
+    const sessions = (await call(client, 'quirky.session/list')) as Session[]
+    expect(sessions.find((item) => item.id === session.id))
       .toMatchObject({ id: session.id, worktreeId: selected.id })
   })
 

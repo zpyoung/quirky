@@ -86,7 +86,7 @@ describe('quirky.git commands', () => {
         groupId: 'w1:group',
         display: 'preview'
       })
-      expect(fake.called('quirky.terminal/openViewTab').at(-1)?.params).toMatchObject({
+      expect(fake.callsTo('quirky.terminal/openViewTab').at(-1)?.params).toMatchObject({
         workspace: 'id:w1',
         group: 'w1:group',
         preview: false,
@@ -101,7 +101,7 @@ describe('quirky.git commands', () => {
           split: true
         }
       })
-      expect(fake.called('quirky.terminal/moveTab').at(-1)?.params).toMatchObject({ split: 'right', of: 'w1:group' })
+      expect(fake.callsTo('quirky.terminal/moveTab').at(-1)?.params).toMatchObject({ split: 'right', of: 'w1:group' })
     })
 
 

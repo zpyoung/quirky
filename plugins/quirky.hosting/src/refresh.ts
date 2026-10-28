@@ -124,6 +124,7 @@ function safeOutcome(value: unknown): Lookup | undefined {
   }
   if (value.kind !== 'found' || !isRecord(value.review)) return undefined
   const source = value.review
+  const repository = parseIdentity(source.repository)
   const number = parsePositiveInteger(source.number)
   const url = typeof source.url === 'string' ? source.url : undefined
   const title = typeof source.title === 'string' ? source.title : undefined
@@ -146,8 +147,8 @@ function safeOutcome(value: unknown): Lookup | undefined {
   const autoMergeAllowed = source.autoMergeAllowed === null || typeof source.autoMergeAllowed === 'boolean' ? source.autoMergeAllowed : undefined
   const mergeMetadataKnown = typeof source.mergeMetadataKnown === 'boolean' ? source.mergeMetadataKnown : undefined
   if (source.provider !== 'github' || !number || !url || title === undefined || body === undefined ||
-    !state || !mergeable || !checksStatus || !headRefName || !baseRefName || !headRefOid || !baseRefOid ||
-    reviewDecision === undefined || mergeStateStatus === undefined ||
+    !state || !mergeable || !checksStatus || !headRefName || !headRefOid || !baseRefName || !baseRefOid ||
+    !repository || reviewDecision === undefined || mergeStateStatus === undefined ||
     mergeQueueRequired === undefined || autoMergeAllowed === undefined || mergeMetadataKnown === undefined ||
     !Object.hasOwn(source, 'autoMergeRequest') || !Object.hasOwn(source, 'stack') || !Object.hasOwn(source, 'mergeMethods')) return undefined
   if (!isReviewParticipants(source)) return undefined
@@ -156,6 +157,7 @@ function safeOutcome(value: unknown): Lookup | undefined {
     reviews: source.reviews,
     assignees: source.assignees,
     participantsTruncated: source.participantsTruncated,
+    repository,
     provider: 'github',
     number,
     url,

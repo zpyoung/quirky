@@ -1,0 +1,38 @@
+{
+  "item": "m7-editor-source-control-completion",
+  "spec": "docs/quirk/specs/2026-10-28-m7-editor-source-control-completion/logic.md",
+  "scenarios": [
+    {
+      "id": "C1-C2-native-editing",
+      "title": "In an owned disposable Markdown file, native IME composition does not trigger slash or document-link completion; after composition, allowed [[ completion inserts the exact selected target/label. Toggle-heading and nested-details edits survive Source/Rich switches. Copy context and link-copy use the actual macOS clipboard without changing another document. Preserve the independently blocked Finder-source-path scenario; never infer native dropped identity.",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    },
+    {
+      "id": "C3-native-acl",
+      "title": "Use only a run-owned readable Markdown file with effective macOS ACL write denial. The editor shows the advisory disk restriction independently of format read-only; draft edits and local annotations remain possible. Save denial preserves exact disk, draft and dirty state. Removing only the run-created ACL and retrying saves with the normal disk precondition. Restore/delete all owned ACL fixtures; never modify user files or globally change permissions.",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    },
+    {
+      "id": "C4-C5-native-focus",
+      "title": "With a run-owned Git worktree, edit-tab Changes retains the same buffer/tab; single/double/Alt-Option-open from Source Control produces preview/permanent/right-split diff placement while Cmd/Shift selection remains reachable. Native focus and F7/Shift-F7 and Cmd+S operate only on the focused editable modified side, not a neighboring terminal or read-only staged/branch/commit pane. Markdown modified-only preview is explicit and returning to source keeps the draft and split selection.",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    },
+    {
+      "id": "C7-native-separators",
+      "title": "In a run-owned workspace with Pinned, nested project groups and several projects, scroll through actual sticky headers and toggle Sidebar section separators. Dividers never appear at the first, host-adjacent, active sticky or nested boundary, and changing the setting does not shift row bounds or drag hit targets. Restart the owned app and confirm the preference survives. A collapsed Pinned header is not representable in the current renderer and must not be claimed exercised.",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    }
+  ]
+}

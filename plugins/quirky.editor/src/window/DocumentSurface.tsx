@@ -765,20 +765,22 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
   }
 
   const openMode = async (mode: SurfaceMode) => {
+    const selectedBuffer = bufferRef.current
+    if (!selectedBuffer) return
     setChangesOpen(false)
     try {
-      if (mode === 'preview' && buffer.kind === 'markdown') {
+      if (mode === 'preview' && selectedBuffer.kind === 'markdown') {
         await context.call('quirky.editor/open', {
-          worktree: buffer.worktreeId,
-          path: buffer.relativePath,
+          worktree: selectedBuffer.worktreeId,
+          path: selectedBuffer.relativePath,
           mode: 'preview',
           preview: false,
           focus: true
         })
-      } else if (actualMode === 'preview' && buffer.kind === 'markdown') {
+      } else if (actualMode === 'preview' && selectedBuffer.kind === 'markdown') {
         await flushActiveDocument()
         const updated = await context.call('quirky.editor/view', {
-          bufferId: buffer.id,
+          bufferId: selectedBuffer.id,
           ...(actualTabId === null ? {} : { tabId: actualTabId }),
           action: 'returnToEdit',
           patch: { mode }
@@ -788,7 +790,7 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
         refresh()
       } else {
         const updated = await context.call('quirky.editor/view', {
-          bufferId: buffer.id,
+          bufferId: selectedBuffer.id,
           action: 'update',
           patch: { mode }
         }) as EditorBufferInfo
@@ -926,6 +928,7 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
   const showSource = !changesOpen && !mediaKind && (actualMode === 'source' || (!isMarkdown && !isNotebook && buffer.kind !== 'csv' && buffer.kind !== 'mermaid'))
   const showMarkdown = !changesOpen && isMarkdown && actualMode !== 'source'
   const showNotebook = !changesOpen && isNotebook && actualMode !== 'source'
+  const viewerKind = buffer.kind === 'csv' || buffer.kind === 'mermaid' || mediaKind
   const showViewer = !changesOpen && viewerKind
   const showChanges = changesOpen && canOfferChanges
   const surfaceProps = featureProps

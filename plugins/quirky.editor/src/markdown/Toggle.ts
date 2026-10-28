@@ -140,6 +140,7 @@ export const MarkdownToggle = Node.create({
 
   markdownTokenizer: {
     name: 'markdownToggle',
+    level: 'block',
     start: (source: string) => source.search(/<details(?=\s|>)/i),
     tokenize: (source: string, _tokens: MarkdownToken[], lexer: MarkdownLexerConfiguration) => {
       const opening = /^<details(?:\s[^<>]*)?>[\t \r\n]*<summary(?:\s[^<>]*)?>([\s\S]*?)<\/summary>/i.exec(source)
@@ -157,7 +158,7 @@ export const MarkdownToggle = Node.create({
       const summary = decodeHtmlText(summarySource.replace(/<[^>]*>/g, ''))
       let body = source.slice(bodyStart, closing.start)
       body = body.replace(/^\r?\n\r?\n/, '').replace(/\r?\n\r?\n$/, '')
-      return { type: 'markdownToggle', summary, headingLevel, open, text: body, tokens: lexer.blockTokens(body) }
+      return { type: 'markdownToggle', raw, summary, headingLevel, open, text: body, tokens: lexer.blockTokens(body) }
     }
   },
 
@@ -173,13 +174,13 @@ export const MarkdownToggle = Node.create({
     return { type: 'markdownToggle', attrs: { summary, headingLevel, open }, content: helpers.parseChildren(tokens) }
   },
 
-  renderMarkdown({ node, helpers }) {
-    const summary = encodeHtmlText(String(node.attrs.summary ?? ''))
-    const headingLevel = Number(node.attrs.headingLevel)
+  renderMarkdown(node, helpers) {
+    const summary = encodeHtmlText(String(node.attrs?.summary ?? ''))
+    const headingLevel = Number(node.attrs?.headingLevel)
     const summaryMarkup = Number.isInteger(headingLevel) && headingLevel >= 1 && headingLevel <= 5
       ? `<h${headingLevel}>${summary}</h${headingLevel}>`
       : summary
-    const content = helpers.renderChildren(node)
-    return `<details${node.attrs.open ? ' open' : ''}><summary>${summaryMarkup}</summary>\n\n${content}\n\n</details>`
+    const content = helpers.renderChildren(node.content ?? [])
+    return `<details${node.attrs?.open ? ' open' : ''}><summary>${summaryMarkup}</summary>\n\n${content}\n\n</details>`
   }
 })

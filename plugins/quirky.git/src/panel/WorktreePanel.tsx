@@ -37,6 +37,8 @@ import { registerPanel } from './registry'
 import { toastFor, type RemoteAction } from './remote-messages'
 import { displayPaths, Rows, type ClickKind, type Expansion, type RowButton, type RowHandlers, type RowItem } from './Rows'
 import { openHostedDiff } from '../view/hosted-tabs'
+import { isRecord } from '../daemon/validation'
+import type { PushTargetResult } from '../daemon/push-target'
 import { SectionFrame } from './SectionFrame'
 import {
   actionPaths,
@@ -80,6 +82,42 @@ type ReviewPushTarget =
       repository: { host: string; owner: string; repo: string }
     }
 type ForceConfirmation = { purpose?: PushTargetPurpose; expected?: string }
+const PUSH_TARGET_OID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/iu
+
+function pushTargetResult(value: unknown): PushTargetResult | undefined {
+  if (!isRecord(value)) return undefined
+  if (value.ready === false) {
+    return typeof value.reason === 'string' && typeof value.message === 'string' && value.message !== ''
+      ? { ready: false, reason: value.reason, message: value.message }
+      : undefined
+  }
+  if (value.ready !== true || !isRecord(value.repository)) return undefined
+
+  const repository = value.repository
+  const { remote, branch, localBranch, localHead, headOid, number, fork } = value
+  if (typeof remote !== 'string' || remote.length === 0 ||
+    typeof branch !== 'string' || branch.length === 0 ||
+    typeof localBranch !== 'string' || localBranch.length === 0 ||
+    typeof localHead !== 'string' || !PUSH_TARGET_OID.test(localHead) ||
+    (headOid !== undefined && (typeof headOid !== 'string' || !PUSH_TARGET_OID.test(headOid))) ||
+    (number !== undefined && (typeof number !== 'number' || !Number.isSafeInteger(number) || number <= 0)) ||
+    typeof fork !== 'boolean' ||
+    typeof repository.host !== 'string' || repository.host.length === 0 ||
+    typeof repository.owner !== 'string' || repository.owner.length === 0 ||
+    typeof repository.repo !== 'string' || repository.repo.length === 0) return undefined
+
+  return {
+    ready: true,
+    remote,
+    branch,
+    localBranch,
+    localHead,
+    ...(typeof headOid === 'string' ? { headOid } : {}),
+    ...(typeof number === 'number' ? { number } : {}),
+    fork,
+    repository: { host: repository.host, owner: repository.owner, repo: repository.repo }
+  }
+}
 
 type DialogState =
   | { kind: 'confirm'; title: string; body: string; confirm: string; danger: boolean; resolve(ok: boolean): void }
@@ -161,24 +199,22 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
     setReviewPushTarget({ key: reviewPushKey, state: 'loading' })
     void context.call('quirky.git/pushTarget', { worktree, purpose: 'review' }).then((raw: unknown) => {
       if (!alive) return
-      const value = dataOf(raw)
-      const repository = dataOf(value.repository)
-      const remote = asText(value.remote)
-      const branch = asText(value.branch)
-      const host = asText(repository.host)
-      const owner = asText(repository.owner)
-      const repo = asText(repository.repo)
-      if (value.ready === true && remote && branch && typeof value.fork === 'boolean' && host && owner && repo) {
+      const target = pushTargetResult(raw)
+      if (target && target.ready === true) {
         setReviewPushTarget({
           key: reviewPushKey,
           state: 'ready',
-          remote,
-          branch,
-          fork: value.fork,
-          repository: { host, owner, repo }
+          remote: target.remote,
+          branch: target.branch,
+          fork: target.fork,
+          repository: target.repository
         })
       } else {
-        setReviewPushTarget({ key: reviewPushKey, state: 'unavailable', message: asText(value.message) ?? 'The linked pull-request push target is unavailable.' })
+        setReviewPushTarget({
+          key: reviewPushKey,
+          state: 'unavailable',
+          message: target?.ready === false ? target.message : 'The linked pull-request push target is unavailable.'
+        })
       }
     }).catch((error: unknown) => {
       if (alive) setReviewPushTarget({ key: reviewPushKey, state: 'unavailable', message: messageOf(error) })
@@ -614,26 +650,23 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
 
   const confirmForcePush = async (): Promise<ForceConfirmation | null> => {
     if (githubReview.kind === 'found') {
-      let target: Record<string, unknown>
+      let target: PushTargetResult | undefined
       try {
-        target = dataOf(await context.call('quirky.git/pushTarget', { worktree, purpose: 'review' }))
+        target = pushTargetResult(await context.call('quirky.git/pushTarget', { worktree, purpose: 'review' }))
       } catch (error) {
         context.toast('Force push failed', messageOf(error))
         return null
       }
-      const repository = dataOf(target.repository)
-      const remoteName = asText(target.remote)
-      const branch = asText(target.branch)
-      const localBranch = asText(target.localBranch)
-      const headOid = asText(target.headOid)
-      if (target.ready !== true || !remoteName || !branch || !localBranch || !headOid) {
-        const message = asText(target.message) ?? 'The linked pull-request push target is unavailable.'
+      if (!target || target.ready === false || target.headOid === undefined) {
+        const message = target?.ready === false
+          ? target.message
+          : 'The linked pull-request push target is unavailable.'
         context.toast('Force push unavailable', message)
         return null
       }
-      const body = `Force push ${localBranch} to ${remoteName}/${branch} (${asText(repository.host) ?? 'GitHub'}/${asText(repository.owner) ?? ''}/${asText(repository.repo) ?? ''}) at ${headOid}? The push uses an exact lease on this pull-request head.`
+      const body = `Force push ${target.localBranch} to ${target.remote}/${target.branch} (${target.repository.host}/${target.repository.owner}/${target.repository.repo}) at ${target.headOid}? The push uses an exact lease on this pull-request head.`
       const ok = await ask({ title: 'Force push linked pull request?', body, confirm: 'Force Push', danger: true })
-      return ok ? { purpose: 'review', expected: headOid } : null
+      return ok ? { purpose: 'review', expected: target.headOid } : null
     }
     if (githubReview.kind === 'loading' || githubReview.kind === 'waiting' || githubReview.kind === 'unavailable') {
       const message = githubReview.kind === 'unavailable'

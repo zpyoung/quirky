@@ -57,9 +57,9 @@ export const MarkdownDocumentLink = Node.create({
     }
   },
 
-  renderMarkdown({ node }) {
-    const target = String(node.attrs.target ?? '')
-    const label = String(node.attrs.label ?? '')
+  renderMarkdown(node) {
+    const target = String(node.attrs?.target ?? '')
+    const label = String(node.attrs?.label ?? '')
     return `[[${target}${label && label !== target ? `|${label}` : ''}]]`
   }
 })

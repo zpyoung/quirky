@@ -326,12 +326,12 @@ async function resolveMarkdownLink(host: EditorServices, buffer: EditorBuffer, t
 
 async function validateFormatTarget(host: EditorServices, buffer: EditorBuffer, format: MarkdownFormat, target: string | undefined): Promise<string> {
   if (typeof target !== 'string' || target.trim() === '') throw errorOf(host, 'invalid-params', `${format} requires a target.`)
+  const base = posix.dirname(buffer.relativePath) === '.' ? '' : posix.dirname(buffer.relativePath)
   if (format === 'image') {
     if (/^[a-z][a-z0-9+.-]*:/i.test(target) || target.startsWith('//') || target.startsWith('/') || target.includes('\\')) throw errorOf(host, 'invalid-params', 'Markdown images must use an authorized worktree-relative image path.')
     let decoded: string
     try { decoded = decodeURIComponent(target.split('#', 1)[0]!) }
     catch { throw errorOf(host, 'invalid-params', 'Markdown image path has invalid URL encoding.') }
-    const base = posix.dirname(buffer.relativePath) === '.' ? '' : posix.dirname(buffer.relativePath)
     const relativePath = posix.normalize(posix.join(base, decoded))
     if (relativePath === '..' || relativePath.startsWith('../')) throw errorOf(host, 'invalid-params', 'Markdown image path escapes the worktree.')
     const absolute = await host.path(buffer.worktreeId, relativePath).catch(() => null)

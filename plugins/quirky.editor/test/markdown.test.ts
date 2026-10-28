@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { QuirkyClient } from '@quirky/protocol'
+import type { EditorReadResult, EditorStateData } from '../src/types'
 import { builtinsDir, makeHomeWithoutAutoHooks, startHarness, type Harness } from '../../../packages/daemon/test/helpers'
 
 const EDITOR_OPEN = 'quirky.editor/open'
@@ -10,7 +11,7 @@ const EDITOR_SAVE = 'quirky.editor/save'
 const MARKDOWN = 'quirky.editor/markdown'
 const NOTES = 'quirky.editor/notes'
 
-type Api = (method: string, params?: Record<string, unknown>) => Promise<any>
+type Api = <Result = any>(method: string, params?: Record<string, unknown>) => Promise<Result>
 type Fixture = { h: Harness; client: QuirkyClient; call: Api; root: string; worktree: string }
 
 let fixture: Fixture | null = null
@@ -30,7 +31,7 @@ beforeEach(async () => {
     client,
     root,
     worktree: `id:${worktree.id}`,
-    call: (method, params = {}) => client.callAny(method, params)
+    call: <Result = any>(method: string, params: Record<string, unknown> = {}) => client.callAny(method, params) as Promise<Result>
   }
 })
 
@@ -568,6 +569,23 @@ describe('Markdown through the daemon API', () => {
     expect(sourceAgain.content).toBe(saved)
   })
 
+  test('details insertion remains raw HTML through a subsequent buffer read', async () => {
+    const f = current()
+    put('README.md', '# Working\n\nRead the guide.\n')
+    const buffer = await open('README.md')
+    const inserted = await md('insert', {
+      bufferId: buffer.id,
+      expectedRevision: buffer.contentRevision,
+      format: 'details',
+      text: 'Owned details'
+    })
+    expect(inserted.changed).toBe(true)
+    const read = await f.call<EditorReadResult>('quirky.editor/read', { bufferId: buffer.id, action: 'buffer' })
+    expect('buffer' in read ? read.buffer.draft ?? read.buffer.content : '')
+      .toContain('<details><summary>Owned details</summary>')
+  })
+
+
   test('readable non-writable Markdown keeps drafts and notes after denial; save retry refreshes access', async () => {
     const f = current()
     put('permissions.md', 'Readable content for review.\n')
@@ -588,9 +606,8 @@ describe('Markdown through the daemon API', () => {
       })
       expect(note.note.body).toBe('This annotation remains local.')
       await expect(f.call(EDITOR_SAVE, { bufferId: opened.id })).rejects.toThrow(/writable|permission/i)
-      const read = await f.call<{
-        buffer?: { readOnly: boolean; diskWritable?: boolean; draft: string | null; baseline: string | null; dirty: boolean }
-      }>('quirky.editor/read', { bufferId: opened.id, action: 'buffer' })
+      const read = await f.call<EditorReadResult>('quirky.editor/read', { bufferId: opened.id, action: 'buffer' })
+      if (!('buffer' in read)) throw new Error('Buffer read returned text data instead of a buffer.')
       expect(read.buffer).toMatchObject({
         readOnly: false,
         diskWritable: false,
@@ -598,10 +615,7 @@ describe('Markdown through the daemon API', () => {
         baseline: opened.baseline,
         dirty: true
       })
-      const state = await f.call<{ buffers: { id: string; readOnly: boolean; diskWritable?: boolean }[] }>(
-        'quirky.editor/state',
-        { worktree: f.worktree }
-      )
+      const state = await f.call<EditorStateData>('quirky.editor/state', { worktree: f.worktree })
       expect(state.buffers.find((item) => item.id === opened.id)).toMatchObject({ readOnly: false, diskWritable: false })
       expect(draft.dirty).toBe(true)
       expect(readFileSync(path, 'utf8')).toBe('Readable content for review.\n')
