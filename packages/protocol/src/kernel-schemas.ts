@@ -166,7 +166,6 @@ const uiModel = object(
     sidebarSections: listOf({ type: 'object' }),
     statusBars: listOf({ type: 'object' }),
     panels: listOf({ type: 'object' }),
-    settingsSections: listOf({ type: 'object' }),
     views: listOf({ type: 'object' }),
     overlays: listOf({ type: 'object' }),
     commands: listOf({ type: 'object' }),

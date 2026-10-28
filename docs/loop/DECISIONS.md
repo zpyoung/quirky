@@ -133,6 +133,15 @@ files, not this one.
 | medium (lifetime and error contracts) | high | [sa-browser-agent D7](decisions/sa-browser-agent.md) | Time out commands and close owned processes, without speculative retry behavior | assumed — autonomous |
 | medium (acceptance boundary) | high | [sa-browser-agent D8](decisions/sa-browser-agent.md) | Keep browser scope within the local backend and record other-platform work | locked by docs/roadmap.md |
 | medium (observable import job api) | high | [sa-browser-agent D12](decisions/sa-browser-agent.md) | Explicit imports use tracked one-shot daemon operations, not recurring scheduler jobs | assumed — autonomous |
+| medium | high | [sa-browser-agent D19](decisions/sa-browser-agent.md) | Build one agent-browser helper per profile (user ruling) | user ruling 2026-10-27 |
+| medium (public input/error parsing contracts) | high | [sa-browser-agent D20](decisions/sa-browser-agent.md) | Preserve existing RPC failures with stable browser reason prefixes | assumed — autonomous |
+| medium (recovery preserves durable profile, not transient pages) | high for fail-closed policy, pending transport proof | [sa-browser-agent D21](decisions/sa-browser-agent.md) | Reconstruct pages after a lost helper epoch instead of guessing identities | assumed — autonomous |
+| medium (internal pinned driver protocol, public api unchanged) | high for exercised action/epoch boundary; full api concurrency still requires acceptance tests | [sa-browser-agent D23](decisions/sa-browser-agent.md) | Own the pinned native daemon and call its socket without CLI autostart | assumed — autonomous |
+| medium (private build metadata consumed by packager) | high for current macos build-host target; other-platform runtime remains d9 deferred | [sa-browser-agent D25](decisions/sa-browser-agent.md) | Package native dependencies through private generic asset-copy metadata | assumed — autonomous |
+| medium (internal target handshake and control scheduling) | high for the exercised fresh-blank/explicit dialog path; production api concurrency still needs permanent acceptance | [sa-browser-agent D26](decisions/sa-browser-agent.md) | Resolve dialog-lock deadlock with exact-session CDP control | assumed — autonomous |
+| medium (public schemas/flags) | high for specified contract; implementations still require acceptance | [sa-browser-agent D29](decisions/sa-browser-agent.md) | Make the full public command catalog explicit without dropping scope | assumed — autonomous |
+| medium (public field addition while api is unstable) | high | [sa-browser-agent D35](decisions/sa-browser-agent.md) | Add the missing ordinal field instead of dropping nth locator parity | assumed — autonomous |
+| medium (deferred apis return under a separately reviewed follow-up) | high | [sa-browser-agent D37](decisions/sa-browser-agent.md) | Ship only the operator-authorized browser core | supersedes sa-browser-agent D29 |
 | medium | high | [m0-scripting D5](decisions/m0-scripting.md) | Methods declare `params` and `result`, events declare `data`, UI commands declare `args` | assumed — autonomous |
 | medium | high | [m0-scripting D7](decisions/m0-scripting.md) | Kernel methods and events get schemas too, in one table checked against the protocol types | assumed — autonomous |
 | medium | high | [m0-scripting D9](decisions/m0-scripting.md) | One command table drives parsing, validation, help, suggestions and the catalog | locked by research/orca-features/cli.md |
@@ -219,6 +228,8 @@ files, not this one.
 | medium | high | [m5-ledger D10](decisions/m5-ledger.md) | Preserve documented UI surfaces with scriptable controls and pinned detail actions | locked by external research/orca-features/ledger.md |
 | medium | high | [m5-ledger D12](decisions/m5-ledger.md) | Correct genuine spec-review gaps and reject planned-path prepass false positives | assumed — autonomous |
 | medium | high | [m5-ledger D16](decisions/m5-ledger.md) | Correct import paths, value flags and Quirky JSON rather than copy Orca's transport envelope | assumed — autonomous |
+| medium | high | [m5-ledger D25](decisions/m5-ledger.md) | Preserve imported source identity through automatic owner recovery | locked by external research/orca-features/ledger.md |
+| medium | high | [m5-ledger D30](decisions/m5-ledger.md) | Preserve reviewer write violations as an operational limitation | assumed — autonomous |
 | medium (provider contracts and ui scenarios) | high | [m3-accounts D1](decisions/m3-accounts.md) | Implement meters and only Claude/Codex switching | locked by docs/roadmap.md |
 | medium (provider adapter boundaries) | high for cli/codex; medium for observed private quota protocols | [m3-accounts D4](decisions/m3-accounts.md) | Native CLI login and provider-specific usage ports beat custom OAuth or imported snapshots | assumed — autonomous |
 | medium (inter-plugin preparation) | high | [m3-accounts D5](decisions/m3-accounts.md) | Required account preparation is separate from launch hooks | assumed — autonomous |
@@ -476,6 +487,22 @@ files, not this one.
 | easy | high for the exercised process scope/cleanup path | [sa-browser-agent D16](decisions/sa-browser-agent.md) | Isolate the browser investigation and remove its executable scaffold | locked by docs/loop/LOOP.md |
 | easy (no implementation exists) | high | [sa-browser-agent D17](decisions/sa-browser-agent.md) | Preserve the failed spec review and its unapproved contracts with the block | assumed — autonomous |
 | easy | high | [sa-browser-agent D18](decisions/sa-browser-agent.md) | Keep the loop's exact verification commands instead of the reviewer's broader reading | locked by docs/loop/LOOP.md |
+| easy (sa-browser-ui can implement the explicitly separate presentation intent) | high | [sa-browser-agent D22](decisions/sa-browser-agent.md) | Reject explicit native focus in the headless automation slice | locked by docs/quirk/specs/2026-10-27-sa-browser-agent/logic.md |
+| easy | high | [sa-browser-agent D24](decisions/sa-browser-agent.md) | Bound owned Chrome termination after graceful detach | deferred: platform |
+| easy (raw artifacts retained) | high for review/evidence scope; no implementation completion claim | [sa-browser-agent D27](decisions/sa-browser-agent.md) | Preserve and adjudicate the bounded Codex specification review honestly | assumed — autonomous |
+| easy (internal browser platform verification) | high for observed installed version's source wiring; no unexercised clipboard runtime pass claimed | [sa-browser-agent D28](decisions/sa-browser-agent.md) | Use Chromium's real non-backed headless clipboard, not a fake store | assumed — autonomous |
+| easy | high for exact-tag provider behavior, explicitly bounded for other components | [sa-browser-agent D30](decisions/sa-browser-agent.md) | Isolate test Chrome's credential encryption path with its supported mock keychain switch | assumed — autonomous |
+| easy | high | [sa-browser-agent D31](decisions/sa-browser-agent.md) | Preserve safe native exec navigation without permitting launch | assumed — autonomous |
+| easy | high | [sa-browser-agent D32](decisions/sa-browser-agent.md) | Hand off OS focus rather than claiming a headless focus pass | locked by docs/loop/LOOP.md |
+| easy (no source commit or integration) | high | [sa-browser-agent D33](decisions/sa-browser-agent.md) | Retry the failed complete component without suppressing checks or coverage | assumed — autonomous |
+| easy | high for generic copy/boundaries; real packaged helper smoke still pending | [sa-browser-agent D34](decisions/sa-browser-agent.md) | Repair native packaging's import/schema causes and replace incidental wording checks | assumed — autonomous |
+| easy | high | [sa-browser-agent D36](decisions/sa-browser-agent.md) | Accept valid CDP event parameter maps without weakening envelope types | assumed — autonomous |
+| easy (archive commit retained) | high | [sa-browser-agent D38](decisions/sa-browser-agent.md) | Queue every unshipped flow with recoverable source | deferred: cookie import and advanced automation |
+| easy | high for the exercised path; final core suite still required | [sa-browser-agent D39](decisions/sa-browser-agent.md) | Repair the fixture and pinned helper-reference contracts, not browser symptoms | assumed — autonomous |
+| easy | high | [sa-browser-agent D40](decisions/sa-browser-agent.md) | Skip unstarted review and dogfood under the latest sprint ruling | supersedes sa-browser-agent D37 |
+| easy | high for exercised core acceptance, not deferred flows | [sa-browser-agent D41](decisions/sa-browser-agent.md) | Pass the core's affected acceptance before integration | assumed — autonomous |
+| easy | high | [sa-browser-agent D42](decisions/sa-browser-agent.md) | Catch up once and preserve incoming decision ownership | assumed — autonomous |
+| easy (temporary wrapper is removed after landing) | high for observed install-order cause; retry still must pass every integrated check | [sa-browser-agent D43](decisions/sa-browser-agent.md) | Install merged workspace dependencies without changing protected verification | assumed — autonomous |
 | easy | high | [m0-scripting D1](decisions/m0-scripting.md) | Classify the item as a CLI and API design, and run both research phases | assumed — autonomous |
 | easy | high | [m0-scripting D2](decisions/m0-scripting.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m0-scripting D3](decisions/m0-scripting.md) | Select every gray area that matters for the scripting surface | assumed — autonomous |
@@ -924,6 +951,16 @@ files, not this one.
 | easy | high | [m5-ledger D18](decisions/m5-ledger.md) | Treat an unchanged fast refresh as a visual-probe limitation, not a proved dead request | assumed — autonomous |
 | easy | high | [m5-ledger D19](decisions/m5-ledger.md) | Preserve separate visual outcomes and the constrained-viewport footer proof | assumed — autonomous |
 | easy | high | [m5-ledger D20](decisions/m5-ledger.md) | Fix asynchronous test readiness, retain the red infrastructure gate, and stop superseded verification | assumed — autonomous |
+| easy | high | [m5-ledger D21](decisions/m5-ledger.md) | Resume the restored ledger item on the authorized queue repair | assumed — autonomous |
+| easy | high | [m5-ledger D22](decisions/m5-ledger.md) | Verify affected roots and share one observed prepass across the three review lenses | locked by docs/loop/LOOP.md |
+| easy | high | [m5-ledger D23](decisions/m5-ledger.md) | Preserve interrupted-host evidence and select working process-local tool paths | assumed — autonomous |
+| easy | high | [m5-ledger D24](decisions/m5-ledger.md) | Correct the import-fence parser instead of rewriting ordinary ledger strings | assumed — autonomous |
+| easy | high | [m5-ledger D26](decisions/m5-ledger.md) | Diagnose the shell guardian failure without inventing a shell fix | assumed — autonomous |
+| easy | high | [m5-ledger D27](decisions/m5-ledger.md) | Preserve the latest integration contracts and reuse its one import scanner | supersedes m5-ledger D21 (final-review baseline only, before discovery) |
+| easy | high | [m5-ledger D28](decisions/m5-ledger.md) | Accept the observed complete gate with its isolated shell-path rerun disclosed | assumed — autonomous |
+| easy | high | [m5-ledger D29](decisions/m5-ledger.md) | Close XR1 despite its malformed first review packet, with one scoped fix batch | assumed — autonomous |
+| easy | high | [m5-ledger D31](decisions/m5-ledger.md) | Finish this item through queue-controlled integration without new flows or review rounds | locked by docs/loop/LOOP.md |
+| easy — prior snapshots remain in committed history | high | [m5-ledger D32](decisions/m5-ledger.md) | Keep only the ledger patch when catching up with the restored integration history | locked by docs/loop/LOOP.md; supersedes D27's integration snapshot selection, not its frozen review evidence |
 | easy (decision review) | high | [m3-accounts D2](decisions/m3-accounts.md) | Answer unattended design questions without a human gate | locked by docs/loop/LOOP.md |
 | easy (no implementation dispatched) | high | [m3-accounts D3](decisions/m3-accounts.md) | Use OpenAI task implementers and Gemini review fallback | assumed — autonomous |
 | easy (ui); medium (cache) | high | [m3-accounts D7](decisions/m3-accounts.md) | Retain documented presentation, errors and freshness defaults | locked by research/orca-features/accounts.md |

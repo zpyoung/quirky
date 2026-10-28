@@ -49,7 +49,6 @@ quirky vault clear --yes
 Advanced parity and verification obligations are tracked in
 [the vault's open findings](docs/loop/BLOCKERS.md#m3-vault-open-review-findings) and the dependent
 `m3-vault-parity-completion` queue item.
-
 ## How it's built
 
 - **`packages/pty-host`:** `quirky-pty` owns every terminal and its history.

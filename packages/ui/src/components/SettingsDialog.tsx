@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from 'react'
 import { usePluginHost, usePluginState } from '../context'
-import { PluginSlot } from '../plugins/PluginSlot'
-import { changedSettings, draftOf, type DraftValue } from '../plugins/settingsDraft'
 import { settingsGroups, themePicker, type SettingField } from '../plugins/settingsGroups'
+import { changedSettings, draftOf, type DraftValue } from '../plugins/settingsDraft'
+import { PluginSlot } from '../plugins/PluginSlot'
 import { Dialog } from './Dialog'
 
 function PluginField({
@@ -109,10 +109,10 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
           </fieldset>
         ))}
         {settingsSections.map((section) => (
-          <fieldset key={section.id} className="settings-section">
+          <fieldset key={section.id} className="settings-group">
             <legend>{section.title}</legend>
             {section.description && <p className="muted">{section.description}</p>}
-            <PluginSlot id={section.id} hideTitle />
+            <PluginSlot id={section.id} />
           </fieldset>
         ))}
         {themes.options.length > 1 && (

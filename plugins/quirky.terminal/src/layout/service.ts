@@ -227,6 +227,7 @@ export class LayoutService {
   createTab(workspaceId: string, spec: NewTabSpec): Promise<{ workspace: Workspace; session: Session } & NewTabIds> {
     return this.queued(() => this.addTab(workspaceId, spec))
   }
+
   private groupInfo(params: Params): { workspace: string } {
     const group = params.group as string
     return { workspace: this.ownerOf('group', group).id }

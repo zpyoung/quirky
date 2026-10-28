@@ -63,6 +63,12 @@ The item landed with these low-severity findings from the like-a-user pass and t
 - **Required repair/decision:** authorize and review a revised target/concurrency model. Recommended: one helper per profile; create/manage pages through that helper, retain returned stable `tN` to public-page mapping, serialize select-plus-command under a profile lock, and specify safe identity recovery after helper restart. Alternatively prove a target-filtering CDP adapter that preserves the per-page model. Amend logic.md first with a dated decision, tighten tech.md, close F1/F2, review the revised specs, then requeue this item and execute its full acceptance/build/remote-suite/packaging workflow. Do not assume this design-repair recommendation itself has been runtime-validated.
 - **Verification scope:** investigation smoke only. No permanent tests, dependency installation, implementation, build, full suite, UI dogfood or native scenario was run, because the mandatory pre-implementation gate halted the item. No feature completion claimed.
 
+## sa-browser-agent: operator-authorized deferred flows
+
+- This is a partial-scope deferral, not a block on the core item. The operator explicitly requested only one-helper-per-profile page lifecycle/commands and profile locking for this landing.
+- Follow-up `sa-browser-agent-extras` was added through `queue.ts add`, Side A, dependent on `sa-browser-agent`. It owns cookie detection/import/rollback and direct cookie/storage APIs; profile default/switch/clone/delete; history; advanced interaction/keyboard/find/mouse/upload/download; full screenshots/PDF; network/HAR/interception; device/emulation/permissions/clipboard/dialog; identity settings; explicit bulk CLI file/stdin input.
+- Full unshipped source and original specifications are preserved at commit `1d05b63`, branch `build/sa-browser-agent-full-snapshot`. Revised core logic and D37–D39 define the shipping boundary. Do not infer that archived methods passed full runtime acceptance.
+- Source: `deferred: cookie import and advanced automation`. No human decision is requested, and browser-pane/design-mode dependencies remain on the core item.
 ## m4-hosting-api-github: open findings and operator-approved remaining parity
 
 - **MEDIUM, user-owned Projects issue-type actions — `plugins/quirky.hosting/src/project-mutations.ts:254`:** issue-type discovery and changes require an organization-owned project. User-owned projects can contain organization issues, but determining that content owner's type is not implemented. These actions return `unsupported_operation`; other project edits, comments and tables remain supported. Deferred by the operator's core-first ruling; dependent item `m4-hosting-api-github-parity`.
@@ -171,6 +177,13 @@ Registration update: `bun scripts/build-loop/queue.ts add /tmp/quirky-session-in
 ## m3-vault: land-owned load finding
 
 - **LOW — PTY scope startup under full-suite load** (`packages/pty-host/test/helpers.ts:76`, `scripts/test-support/process-scope.ts:404`). The land-owned464-file run reported guardian startup/connect resets and test timeouts in host.test.ts; its required isolated retry passed all32 tests. No cause is established and no PTY behavior, test deadline or retry policy was changed. The independent import-fence failure, which persisted alone, was fixed rather than suppressed.
+
+## m5-ledger: original queue-order prerequisite resolved
+
+- The operator's authorized 4cf9720 queue-order repair allowed this preserved item to resume. The earlier blocked entry remains historical; no protected queue/test edit was made by this lane.
+- Final C/S/X discovery and its one scoped accepted-finding fix batch are complete. The independently confirmed XR1 alias-root evidence edge is verified closed; no accepted code finding remains open.
+- Exact aggregate/isolated CI outcomes, UI probe limits and reviewer write-constraint violations are preserved in m5-ledger D18-D19,D28-D31. Final landing remains subject to queue.ts's complete merge verification; this resolution is not a claim that landing has already succeeded.
+
 ## m3-accounts: blocking landing repairs and retry evidence
 
 - **Deadline:** the operator's one-hour target was missed during foreign queue-lock contention and integration verification. No successful or on-time landing is inferred from a queued command.

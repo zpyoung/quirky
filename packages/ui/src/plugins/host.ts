@@ -88,7 +88,7 @@ type CommandDragCapability = {
   readonly owner: Session
   readonly command: string
   readonly args: Record<string, unknown>
-  readonly dispose: () => void
+  dispose(): void
 }
 
 type Runtime = {

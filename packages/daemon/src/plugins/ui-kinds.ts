@@ -26,7 +26,7 @@ const ALLOWED_FIELDS: Record<string, readonly string[]> = {
   setting: ['type', 'default', 'title', 'description', 'minimum', 'maximum', 'values'],
   theme: ['title', 'appearance', 'colors', 'description'],
   'menu-item': ['menu', 'title', 'command', 'when', 'after'],
-}
+} satisfies Record<(typeof UI_KINDS)[number], readonly string[]>
 
 const SETTING_TYPES = ['boolean', 'number', 'string', 'enum'] as const
 const TITLE_REQUIRED = new Set(['status-bar', 'sidebar-section', 'panel', 'settings-section', 'overlay', 'setting', 'theme', 'menu-item'])

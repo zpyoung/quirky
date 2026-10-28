@@ -564,7 +564,7 @@ export class PluginHost {
           throw new Error(`${id}: undeclared worker '${name}'`)
         }
         return pathToFileURL(join(this.importRootOf(entry), workerPath)).href
-      },
+      }
     }
     return {
       pluginId: id,

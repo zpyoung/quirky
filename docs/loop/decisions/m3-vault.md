@@ -583,5 +583,38 @@
 - **Revisit if:** A valid contribution cannot render or an untrusted MIME payload dispatches a command.
 - **Source:** locked by the independent public UI contracts and operator-authorized core scope
 
+## D54: Preserve this claimed feature across an incoming snapshot without Vault
+- **Question:** Does the Ledger-era snapshot's absence of Vault cancel this item's core landing?
+- **Options:** Accept silent feature deletion; overwrite shared owners with old full files; preserve this item's committed payload and merge only its verified public support into current owners.
+- **Chose:** The last option. Restore only item-owned plugin/spec/decision/native/test payload from the feature-side commit, then integrate Worker/settings/resume/adoption support with all landed APIs retained.
+- **Why:** Read-only provenance found no user cancellation: the incoming queue-only tip never contained Vault, and Ledger D32 declines unowned historical carryovers. This lane still owns the explicit Vault core task; dropping its files would not fulfill it.
+- **Evidence:** Incoming m5-ledger357-line and sa-browser-agent479-line logs read completely; scoped merge inventory identified57 deleted item-owned files. Parent restored committed owned bytes with read-only git archive extraction; two disjoint writers preserved current UI and backend owner APIs at unchanged53991ad. No shared integration/verify/protected-loop mutation or unrelated feature resurrection.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** An explicit user cancellation or conflicting locked requirement is recorded.
+- **Source:** locked by this claimed core task and LOOP.md ownership rules
+
+## D55: Restore the complete public graph, not just compiling plugin files
+- **Question:** Which lost shared seams must exist for the restored Vault to work?
+- **Options:** Add private source fallbacks; omit failing actions; restore the existing declared public graph and verify it end to end.
+- **Chose:** Named Worker manifest/context/packaging, generic settings DTO/slot/dialog, opaque command-drag authority, external-resume registration with mandatory account guard, serialized groupInfo/adoptSession, and the four already-verified provider resume declarations. Reconcile current schemas; do not copy whole shared owner files.
+- **Why:** Source typechecks and actual packaged startup exposed omissions that a plugin-directory restore alone could hide. The settings-section whitelist key was missing despite its recognized kind; add it and make the map compile-time exhaustive over UI_KINDS, rather than catch the crash.
+- **Evidence:** Actual packaged startup failed at checkUiKindEntry before activation; the corrected existing manifest cases pass2/5assertions and current typecheck passes. The first focused run then identified only missing groupInfo/four templates; those were restored exactly (Hermes/OpenClaw --resume, Rovo --restore, Cline --id). Fresh25-file remote verification passes with flaky[]: Worker/context/package/settings, all25 copied commands, positive/forged drops, adoption and resume.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** A declared public capability is unavailable or a source-path/type shim becomes necessary.
+- **Source:** locked by the public-only plugin boundary and existing verified core contracts
+
+## D56: Keep fresh restored-runtime proof separate from stale snapshots
+- **Question:** What evidence supports the restored core after the failed partial snapshots?
+- **Options:** Count earlier failed snapshots as green; infer runtime success from types; require fresh core files and an actual packaged run.
+- **Chose:** Fresh25-file remote pass and current self-installing typecheck, plus the rebuilt four-goal web smoke and final package build. Keep earlier captured-before-fix runs as failed evidence, not assurance.
+- **Why:** Manifest parse, public group lookup and provider support gaps were real blockers. The corrected packaged surface must browse/search/clear and execute the owned absolute provider, not merely load a renderer.
+- **Evidence:** Report20261027T235530-8d8b passes all4 goals, no findings/left-open state; parent inspected obs11/17. It exercises declared packaged scanner src/worker.js248301bytes. All homes/builtins/provider/browser/daemon/PTY are owned and cleaned; startup extras omitted before boot. Fresh25 files pass62.76s; typecheck passes18.54s. The final package includes latest group/catalog declarations; no source credential or trust fallback was added.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Land's merged whole gate reports another actual core or integration failure.
+- **Source:** locked by verification-before-completion and test-state isolation
+
 ## Progress
-Core and blocking integration changes pass current typecheck and256 remote affected files plus2macOS-only files, alongside the final4-goal core UI smoke, active-account API regressions and exact replay boundary checks. Pane menus/settings/status declarations coexist and secure drag authority remains unchanged. Both completion items and precise open nonblocking findings are recorded. Whole-suite verification and final done status remain owned by queue.ts land.
+Restored core and its public graph pass fresh25-file remote verification, current typecheck, packaged build and all4 restored web goals including real fake-provider PTY execution. Earlier stale/partial snapshots are not counted passing. All landed owner contracts remain integrated; both completion items and open nonblocking findings remain recorded. Whole-suite verification and final done status remain owned by queue.ts land.

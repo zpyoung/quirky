@@ -3771,11 +3771,11 @@
         "id": "openclaw",
         "label": "OpenClaw",
         "detect": "openclaw",
-        "prompt": "stdin-after-start",
         "resume": [
           "--resume",
           "{id}"
         ],
+        "prompt": "stdin-after-start",
         "homepage": "https://github.com/openclaw/openclaw"
       },
       {

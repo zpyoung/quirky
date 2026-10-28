@@ -83,6 +83,7 @@ function checkPluginPath(manifest: Record_, field: 'main' | 'ui' | 'cli', dir: s
     errors.push(`field '${field}' must be a relative path inside the plugin directory, got '${value}'`)
   }
 }
+
 function checkWorkers(value: unknown, dir: string, errors: string[]): void {
   if (value === undefined) return
   if (!isRecord(value)) {

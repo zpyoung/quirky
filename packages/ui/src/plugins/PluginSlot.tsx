@@ -1,14 +1,14 @@
 import { useEffect, useRef } from 'react'
 import { usePluginHost, usePluginState } from '../context'
 
-type Props = { id: string; input?: unknown; hideTitle?: boolean }
+type Props = { id: string; input?: unknown }
 
 /**
  * One plugin contribution: the host's wrapper (title, loading line, error box) around a child
  * `div` the plugin owns. Each mount gets a fresh, empty child that is removed when the mount ends, so
  * a plugin never inherits what an earlier mount left behind. React never renders into that child.
  */
-export function PluginSlot({ id, input, hideTitle }: Props) {
+export function PluginSlot({ id, input }: Props) {
   const host = usePluginHost()
   const state = usePluginState()
   const anchor = useRef<HTMLDivElement>(null)
@@ -48,7 +48,7 @@ export function PluginSlot({ id, input, hideTitle }: Props) {
     >
       {!statusBar && slot.status === 'loading' && (
         <header className="plugin-slot-head">
-          {!hideTitle && <span className="plugin-slot-title">{entry?.title ?? id}</span>}
+          <span className="plugin-slot-title">{entry?.title ?? id}</span>
           <span className="muted">Loading</span>
         </header>
       )}
