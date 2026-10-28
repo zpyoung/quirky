@@ -63,5 +63,16 @@
 - All diagnostic CPU workers, test children, guardians and per-run homes are owned and cleaned by `ProcessScope`/`finally`. The isolated host checkout and local throwaway load harness will be deleted after landing.
 - No plugin/runtime/API behavior changed, so no new feature spec, native scenario, or broader feature-suite/review run is necessary for this test-only fix. Typecheck remains the canonical land gate.
 
+## D6: Preserve incoming owners and land the narrow compiled fix
+- **Question:** Do the roadmap catch-up or final gates require broadening this test-only change?
+- **Options:** expand into unrelated provider/UI/saturated-manager work; retain the verified clear-test deadline correction
+- **Chose:** Retain only the clear-test budget change. Read all four incoming decision logs, including omitted progress lines: fix-flaky-pty-host-manager, fix-flaky-terminal-features-pane, m7-terminal-owner-provisioning-and-selector-flows and ui-screenshot-review. Preserve single-writer raw fixtures, replay input gating, owner/selector/provider authority and the canonical UI lint/prepared desktop gates.
+- **Why:** None changes the clear test or contradicts its directly reproduced outer timeout. The manager log's separate 30-second saturated-output finding is not evidence to change clear polling budgets. The one roadmap merge was clean.
+- **Evidence:** Post-merge `bun run typecheck` exited 0 in 38.58 s, including frozen install, UI lint, root/mobile TypeScript and prepared desktop TypeScript. Fresh post-merge macOS clear execution: 17 pass, 0 fail, 76 assertions, 14.57 s; no flakes. Before/after identical configured-host contention receipts are above.
+- **Reversibility:** easy
+- **Confidence:** high for the exercised deadline failure and corrected paths; no claim about the unavailable historical assertion text or an exhaustive future flake rate
+- **Revisit if:** End-phase output reports another concrete failing boundary
+- **Source:** assumed — autonomous; locked by incoming decision logs for their separate owners
+
 ## Progress
-Focused failing-before/passing-after verification and macOS real-PTY smoke complete. Next: commit the test-only fix and decisions; catch up once with build/roadmap, read incoming decisions, run root typecheck and canonical land. Cleanup owned scratch after successful land. No production changes, speculative race fix, weakened assertions, human input, feature spec, review round, or protected loop changes.
+The verified test-only fix is committed, one clean roadmap catch-up is merged, all four incoming logs are read, and fresh UI-lint/root/mobile/prepared-desktop typecheck plus actual macOS clear execution passed. The same configured-host load that failed before passed all 85 cases after the fix. All agents and diagnostic jobs returned; owned load processes/test children/homes were cleaned. Ready to commit this final receipt, detach, canonical queue land, await its merge-result gate, delete owned remote/local scratch and end this one-item iteration. No follow-up item, production change, weakened assertion or protected loop edit.
