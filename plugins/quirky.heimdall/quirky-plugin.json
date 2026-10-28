@@ -1094,6 +1094,9 @@
                       "unverifiable"
                     ]
                   },
+                  "assignmentActive": {
+                    "type": "boolean"
+                  },
                   "title": {
                     "type": "string"
                   },
@@ -1122,7 +1125,8 @@
                 },
                 "required": [
                   "identity",
-                  "state"
+                  "state",
+                  "assignmentActive"
                 ],
                 "additionalProperties": true
               }
@@ -1995,6 +1999,9 @@
                       "unverifiable"
                     ]
                   },
+                  "assignmentActive": {
+                    "type": "boolean"
+                  },
                   "title": {
                     "type": "string"
                   },
@@ -2023,7 +2030,8 @@
                 },
                 "required": [
                   "identity",
-                  "state"
+                  "state",
+                  "assignmentActive"
                 ],
                 "additionalProperties": true
               }

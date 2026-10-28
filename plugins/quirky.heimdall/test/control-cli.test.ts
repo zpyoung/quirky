@@ -52,7 +52,7 @@ const watcher: WatcherDetail = {
   ownerContact: 'live',
   observedAtMs: 10,
   name: 'Ship the API',
-  workers: [{ identity: { dispatchId: 'dispatch-1', sessionId: 'session-1', processIncarnation: 'process-1' }, state: 'live' }],
+  workers: [{ identity: { dispatchId: 'dispatch-1', sessionId: 'session-1', processIncarnation: 'process-1' }, state: 'live', assignmentActive: true }],
   openEscalations: [{
     escalationId: 'approval-1',
     escalationKind: 'awaiting-approval',
