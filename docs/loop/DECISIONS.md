@@ -907,6 +907,7 @@ files, not this one.
 | easy | medium | [m1-agent-status D49](decisions/m1-agent-status.md) | The PTY host memory test is a load flake, not a regression | assumed — autonomous |
 | easy | medium | [m1-agent-status D51](decisions/m1-agent-status.md) | W3 starts while the W2 checkpoint review runs | assumed — autonomous |
 | easy | medium | [m1-agent-status D62](decisions/m1-agent-status.md) | The post-fix gate's one failure is a terminal timing flake under load | assumed — autonomous |
+| easy (test synchronization only) | medium | [fix-flaky-quirky-worktree-create D2](decisions/fix-flaky-quirky-worktree-create.md) | Investigate the background-fetch completion assertion without changing production semantics | assumed — autonomous |
 | easy | medium | [m1-notifications D4](decisions/m1-notifications.md) | In scope are the roadmap's five bullets, the OSC sequences, flows 1 to 5 of the doc and the dock badge; phone, machines, hidden-workspace mutes, the permission card and Windows are out | assumed — autonomous |
 | easy | medium | [m1-notifications D12](decisions/m1-notifications.md) | The worktree view reports which sessions it shows; until it does, the active session counts | assumed — autonomous |
 | easy | medium | [m1-notifications D17](decisions/m1-notifications.md) | Status words: needs input, failed, stopped, finished | assumed — autonomous |
@@ -1758,6 +1759,10 @@ files, not this one.
 | easy | high | [m7-diff-markdown-local-images D6](decisions/m7-diff-markdown-local-images.md) | Align the resource contract at the actual supported boundary | assumed — autonomous |
 | easy | high for observed roots; corrected runtime/typecheck evidence is recorded separately | [m7-diff-markdown-local-images D7](decisions/m7-diff-markdown-local-images.md) | Repair declaration rejection and fixture typing without weakening service guards | assumed — autonomous |
 | easy | high for exercised paths only | [m7-diff-markdown-local-images D8](decisions/m7-diff-markdown-local-images.md) | Keep exercised API and component evidence distinct from deferred acceptance | assumed — autonomous |
+| easy (verification choice only) | high | [fix-flaky-quirky-worktree-create D1](decisions/fix-flaky-quirky-worktree-create.md) | Diagnose this explicitly queued flaky-test repair on the configured remote host | assumed — autonomous |
+| easy (one existing regression scenario; no public or production contract change) | high | [fix-flaky-quirky-worktree-create D3](decisions/fix-flaky-quirky-worktree-create.md) | Await the real fetch promise and gate refresh release after creation | assumed — autonomous |
+| easy (evidence routing only; no failing scenario suppressed or changed) | high | [fix-flaky-quirky-worktree-create D4](decisions/fix-flaky-quirky-worktree-create.md) | Retain package baseline failures for the existing end-phase owner | locked by docs/loop/LOOP.md |
+| easy (test-world dependency installation only) | high | [fix-flaky-quirky-worktree-create D5](decisions/fix-flaky-quirky-worktree-create.md) | Migrate the shared fixture to the newly required runtime dependency after catch-up | locked by docs/loop/decisions/m7-terminal-owner-provisioning-and-selector-flows.md D2,D14 |
 | easy | high | [m5-loops-core D3](decisions/m5-loops-core.md) | Use one combined spec and self-review without research swarms or human questions | locked by docs/loop/LOOP.md |
 | easy | high | [m5-loops-core D9](decisions/m5-loops-core.md) | Unknown USD stays unknown and reset resume needs explicit provider evidence | assumed — autonomous |
 | easy | high | [m5-loops-core D10](decisions/m5-loops-core.md) | Notification producers use central delivery policy | locked by docs/loop/decisions/m1-notifications.md |

@@ -1852,8 +1852,7 @@
         "worktrees.md"
       ],
       "deps": [],
-      "status": "in-progress",
-      "lane": 1
+      "status": "done"
     },
     {
       "id": "fix-flaky-pty-host-clear",
