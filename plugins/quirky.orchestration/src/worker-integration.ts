@@ -33,6 +33,8 @@ export interface WorkerLifecyclePort {
 
 /** Acceptance runs in the ledger's transaction; asynchronous effects begin after commit. */
 export interface DurableMutationOptions<T extends object> {
+  /** Side-effect-free preflight, after receipt replay/mismatch lookup and before acceptance. */
+  beforeAccept?: () => void | Promise<void>
   acceptedCheckpoint?: (accepted: T) => MutationCheckpoint
   afterCommit?: (accepted: T) => T | Promise<T>
 }
