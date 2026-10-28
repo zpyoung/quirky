@@ -5,6 +5,7 @@
   "type": "module",
   "dependencies": {
     "@quirky/protocol": "workspace:*",
+    "@quirky/ui": "workspace:*",
     "tweetnacl": "1.0.3",
     "qrcode": "1.5.4",
     "ws": "8.22.0",
