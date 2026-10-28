@@ -1863,6 +1863,24 @@
       "status": "done"
     },
     {
+      "id": "fix-native-m1-term-ui-1028",
+      "milestone": "M1",
+      "title": "Fix the native-only failures in m1-term-ui from the 2026-10-28 run: SC-37",
+      "docs": [],
+      "deps": [],
+      "status": "done"
+    },
+    {
+      "id": "fix-test-packages-pty-host-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase packages/pty-host failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area packages/pty-host). Files and exact failed tests: packages/pty-host/test/stop-with-history.test.ts: stop with history > stops the root and descendants, retains output, and restores the same history. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "done"
+    },
+    {
       "id": "m7-sweep-sessions",
       "milestone": "M7",
       "docs": [
@@ -1920,14 +1938,6 @@
       "lane": 4
     },
     {
-      "id": "fix-native-m1-term-ui-1028",
-      "milestone": "M1",
-      "title": "Fix the native-only failures in m1-term-ui from the 2026-10-28 run: SC-37",
-      "docs": [],
-      "deps": [],
-      "status": "done"
-    },
-    {
       "id": "fix-native-sa-browser-agent-1028",
       "milestone": "Side A",
       "title": "Fix the native-only failures in sa-browser-agent from the 2026-10-28 run: C2-native-focus End phase: native reruns are allowed now on a packaged app with fresh owned state (never mock-keychain in place of production credential protection); gather the causal evidence named in its BLOCKERS.md entry, then fix the cause.",
@@ -1969,16 +1979,6 @@
       ],
       "status": "in-progress",
       "lane": 1
-    },
-    {
-      "id": "fix-test-packages-pty-host-1028",
-      "milestone": "M7",
-      "title": "Repair end-phase packages/pty-host failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area packages/pty-host). Files and exact failed tests: packages/pty-host/test/stop-with-history.test.ts: stop with history > stops the root and descendants, retains output, and restores the same history. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
-      "docs": [],
-      "deps": [
-        "m7-test-triage"
-      ],
-      "status": "done"
     },
     {
       "id": "fix-test-agent-status-1028",
