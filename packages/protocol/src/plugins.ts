@@ -274,7 +274,7 @@ export type ClientStream = {
   close(): void
 }
 
-/** The client connection behind a call to a `connection: true` method. */
+/** The live client connection exposed by connection-enabled methods or authenticated mobile callers. */
 export type CallerConnection = {
   id: number
   transport: 'websocket' | 'socket'

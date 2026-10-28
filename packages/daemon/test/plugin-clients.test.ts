@@ -145,7 +145,7 @@ describe('PluginContext.clients.accept', () => {
     const daemon = await startMobilePlugin()
 
     const beforeHello = await mobileCall(daemon, `${PLUGIN_ID}/identity`)
-    expect(beforeHello.result).toEqual({ role: 'mobile', name: 'Trusted Phone', deviceId: 'paired-device-1' })
+    expect(beforeHello.result).toMatchObject({ role: 'mobile', name: 'Trusted Phone', deviceId: 'paired-device-1' })
 
     const hello = await mobileCall(daemon, 'client.hello', {
       role: 'mobile',
@@ -165,7 +165,7 @@ describe('PluginContext.clients.accept', () => {
       name: 'spoofed caller',
       deviceId: 'spoofed-device'
     })
-    expect(identity.result).toEqual({ role: 'mobile', name: 'Trusted Phone', deviceId: 'paired-device-1' })
+    expect(identity.result).toEqual(beforeHello.result)
 
     await mobileCall(daemon, 'events.subscribe')
     await daemon.client.callAny(`${PLUGIN_ID}/publish`, { data: { alive: true } })
