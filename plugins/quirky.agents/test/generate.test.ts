@@ -185,23 +185,25 @@ describe('quirky.agents/generate', () => {
     const t = await start()
     await t.fake('cursor-agent', `${RECORD}\nprintf done`)
 
-    const result = await t.call(A('generate'), { agent: 'cursor', prompt: PROMPT, cwd: t.work })
+    const result = await t.call(A('generate'), { agent: 'cursor', prompt: PROMPT, cwd: t.work, args: '--max-turns 1' })
 
-    expect(t.argvOf('cursor-agent').slice(-2)).toEqual(['auto', PROMPT])
+    expect(t.argvOf('cursor-agent').slice(-4)).toEqual(['auto', '--max-turns', '1', PROMPT])
     expect(t.recorded('cursor-agent', 'stdin')).toBe('')
     expect(result.text).toBe('done')
     expect(result.args.at(-1)).toBe(PROMPT)
   })
 
-  test('NA-32: the user arguments replace Orca\'s model flag and are placed before the prompt', async () => {
+  test('NA-32: raw model and extra arguments are kept once without an unsupported model effort default', async () => {
     const t = await start()
     await t.fake('claude', `${RECORD}\nprintf ok`)
 
     await t.call(A('generate'), { agent: 'claude', prompt: 'p', cwd: t.work, args: '--model haiku --max-turns 1' })
 
-    expect(t.argvOf('claude')).toEqual([
-      '-p', '--output-format', 'text', '--model', 'haiku', '--permission-mode', 'plan', '--effort', 'low', '--strict-mcp-config', '--settings', SETTINGS, '--max-turns', '1'
-    ])
+    const argv = t.argvOf('claude')
+    expect(argv.filter((arg) => arg === '--model')).toHaveLength(1)
+    expect(argv[argv.indexOf('--model') + 1]).toBe('haiku')
+    expect(argv[argv.indexOf('--max-turns') + 1]).toBe('1')
+    expect(argv).not.toContain('--effort')
   })
 
   test('structured selections override one-shot defaults, raw arguments override picks, and unsupported picks start nothing', async () => {

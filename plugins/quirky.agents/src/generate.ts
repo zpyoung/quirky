@@ -106,7 +106,8 @@ function withoutModelTemplate(args: OneShotArg[], flags: string[]): OneShotArg[]
   for (let index = 0; index < args.length; index += 1) {
     const item = args[index]!
     if (typeof item === 'string') {
-      if (flags.includes(item) && typeof args[index + 1] === 'string' && args[index + 1]!.includes('{model}')) {
+      const next = args[index + 1]
+      if (flags.includes(item) && typeof next === 'string' && next.includes('{model}')) {
         index += 1
         continue
       }

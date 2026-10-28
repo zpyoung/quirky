@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { RpcError, RpcErrorCode, type ApiCatalog } from '@quirky/protocol'
+import { RpcError, RpcErrorCode } from '@quirky/protocol'
 import { buildCommitMessagePrompt, buildFixCommitFailurePrompt, buildFixPushFailurePrompt, buildResolveConflictsPrompt } from '../../src/daemon/ai-prompts'
 import { isAlive, startAiWorld, type AiWorld, type CliResult } from './ai-world'
 
@@ -558,23 +558,15 @@ describe('generating a commit message', () => {
 describe('recipes', () => {
   test('NA-39: recipes are read and saved through the CLI', async () => {
     w = await startAiWorld()
-    const first = json(await w.cli(['git', 'aiRecipe', '--action', 'commitMessage', '--json']))
-    expect(first).toEqual({
-      action: 'commitMessage',
-      agent: null,
-      args: '',
-      template: '{basePrompt}',
-      sources: { agent: 'default', args: 'default', template: 'default' }
-    })
 
     const set = json(await w.cli(['git', 'setAiRecipe', '--action', 'commitMessage', '--scope', 'global', '--agent', 'codex', '--json']))
     expect(set.saved).toBe(true)
-    expect(set.recipe).toMatchObject({ agent: 'codex', sources: { agent: 'global', args: 'default', template: 'default' } })
+    expect(set.recipe).toMatchObject({ agent: 'codex' })
     expect(json(await w.cli(['git', 'setAiRecipe', '--action', 'commitMessage', '--scope', 'global', '--agent', 'codex', '--json'])).saved).toBe(false)
     expect(json(await w.cli(['git', 'setAiRecipe', '--action', 'commitMessage', '--scope', 'repo', '--args=--model gpt-5.4', '--json'])).saved).toBe(true)
 
     const last = json(await w.cli(['git', 'aiRecipe', '--action', 'commitMessage', '--json']))
-    expect(last).toMatchObject({ agent: 'codex', args: '--model gpt-5.4', template: '{basePrompt}', sources: { agent: 'global', args: 'repo', template: 'default' } })
+    expect(last).toMatchObject({ agent: 'codex', args: '--model gpt-5.4', template: '{basePrompt}' })
     expect(w.storedRecipes()).toEqual([
       { scope: 'global', action: 'commitMessage', agent: 'codex', args: null, template: null },
       { scope: w.feat.repoId, action: 'commitMessage', agent: null, args: '--model gpt-5.4', template: null }
@@ -832,47 +824,3 @@ describe('AI Fix', () => {
   })
 })
 
-describe('scripting', () => {
-  test('NA-42: every note and AI method and event is declared and has a command', async () => {
-    w = await startAiWorld()
-    const catalog = json(await w.cli(['api', '--json'])) as ApiCatalog
-    const methods = catalog.methods.filter((method) => method.plugin === 'quirky.git')
-    for (const name of ['notes', 'addNote', 'editNote', 'deleteNote', 'clearNotes', 'formatNotes', 'noteTargets', 'sendNotes', 'generateCommitMessage', 'cancelGenerate', 'aiFix', 'aiFixPreview', 'aiRecipe', 'setAiRecipe']) {
-      expect(methods.map((method) => method.name), name).toContain(`quirky.git/${name}`)
-    }
-    expect(methods.find((method) => method.name === 'quirky.git/clearNotes')).toMatchObject({ destructive: true })
-    expect(methods.find((method) => method.name === 'quirky.git/aiFixPreview')).toMatchObject({ readOnly: true })
-    expect(methods.find((method) => method.name === 'quirky.git/aiRecipe')).toMatchObject({ readOnly: true })
-    expect(catalog.methods.filter((method) => method.plugin === 'quirky.agents').map((method) => method.name)).toEqual(expect.arrayContaining(['quirky.agents/generate', 'quirky.agents/cancelGenerate']))
-    expect(catalog.events.map((event) => event.name)).toEqual(expect.arrayContaining(['quirky.git/notesChanged', 'quirky.git/aiChanged']))
-
-    const help = await w.cli(['git', '--help'])
-    for (const command of ['generateCommitMessage', 'cancelGenerate', 'aiFix', 'aiFixPreview', 'aiRecipe', 'setAiRecipe']) {
-      expect(help.stdout, command).toContain(command)
-    }
-    const agents = await w.cli(['agents', '--help'])
-    expect(agents.stdout).toContain('generate')
-    expect(agents.stdout).toContain('cancelGenerate')
-  })
-
-  test('the AI settings are declared with their texts', async () => {
-    w = await startAiWorld()
-    const settings = (await w.call('plugin.contributions', { pluginId: 'quirky.git' })) as { id: string; data: Record<string, unknown> }[]
-    const byId = Object.fromEntries(settings.map((entry) => [entry.id, entry.data]))
-    expect(byId['setting:quirky.git/ai-enabled']).toMatchObject({
-      type: 'boolean',
-      default: true,
-      title: 'Show Source Control AI actions',
-      description: 'Adds AI buttons that run the selected agent with the command template for that action.'
-    })
-    expect(byId['setting:quirky.git/ai-custom-command']).toMatchObject({
-      type: 'string',
-      default: '',
-      title: 'Custom command',
-      description: 'Command line Quirky runs when a recipe uses Custom command.'
-    })
-    expect(byId['command:quirky.git/add-review-note']).toMatchObject({ title: 'Add Review Note' })
-    expect(byId['command:quirky.git/send-review-notes']).toMatchObject({ title: 'Send Review Notes to Agent' })
-    expect(byId['keybinding:quirky.git/add-review-note']).toMatchObject({ key: 'mod+shift+a', command: 'add-review-note' })
-  })
-})

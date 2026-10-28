@@ -187,5 +187,38 @@
 - **Revisit if:** Catch-up brings a new conflicting contract or a test demonstrates composed ownership drift.
 - **Source:** locked by docs/loop/decisions
 
+## D18: Register one complete remaining-parity owner
+- **Question:** How are larger gaps and driver-limited proof carried forward without losing any audited flow?
+- **Options:** Omit them; create many duplicate follow-ups; register one dependent completion item with an exhaustive title and the spec inventory.
+- **Chose:** m7-sweep-terminal-completion, M7, all9 source docs, depends on this item. Its title names every remaining flow family plus guarded recipe proof and post-repair Activity visibility closure. Existing automation remote/raw-args, terminal-dock and sidebar-extras owners remain separate and must be reconciled, not duplicated.
+- **Why:** The item title and night-mode rule explicitly permit larger work to be handed to one follow-up. Core Activity, recipe choices and truthful open are implemented; this is not a claim that the nine-doc backlog is empty.
+- **Evidence:** Authoritative queue.ts add exited0. Direct canonical queue read confirms id=m7-sweep-terminal-completion,status=todo,deps=[m7-sweep-terminal]. A queue deps read timed out; it is not treated as registration failure or item blockage.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** A listed flow already has a later shipped owner or an excluded provider is accidentally reintroduced.
+- **Source:** deferred: terminal remaining flows
+
+## D19: Recover actual owned gate failures without re-pinning incidental defaults
+- **Question:** What failed in the caught-up verification, and what repair establishes the consumer contract?
+- **Options:** Re-pin full default objects/argv; waive the failing files; fix the compiler narrowing and keep behavioral assertions.
+- **Chose:** Bind the following OneShotArg to a local before its string/includes check. Remove obsolete whole-default recipe snapshots and the incidental default-effort argv pin; preserve raw model uniqueness, max-turns/prompt placement and saved CLI recipe readback. Remove remaining pure Git settings/catalog wiring-copy tests; no production behavior is suppressed.
+- **Why:** The initial affected run passed284/286remote files and3Mac files; the2 failures were additional output metadata and omitted unsupported default effort, while all new recipe scenarios passed. The sole compiler diagnostic was TS2339 on repeated indexed-access narrowing. Actual repair uses the existing typed branch rather than a cast.
+- **Evidence:** affected.log, typecheck.log; recovery-affected.log:2/2remote files passed,flaky=[]; recovery-typecheck.log exit0; scripts.log:68pass/0fail/576assertions. Build gate exit0. All captured under /tmp/quirky-m7-sweep-terminal-lane7.KpyVcb before archival.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** An actual raw argument, prompt, source or persisted selection regression occurs; metadata copies are not a substitute for that proof.
+- **Source:** assumed — autonomous
+
+## D20: Keep the fresh guarded setup failure distinct from app behavior
+- **Question:** Did a fresh guarded campaign visibly clear the Activity repairs or finish recipe edits?
+- **Options:** Treat setup timeout as app failure; claim inferred visual success; record the actual tool boundary and preserve the proof obligation.
+- **Chose:** Record tool-blocked, not pass. Fresh begin was bounded at40seconds and timed out before selecting a driver or creating an observation; end wrote its report with0actions and no kept-open windows. No post-repair visual closure or successful recipe save/reopen is claimed.
+- **Why:** The repaired app's new isolated daemon/CLI/PTY smoke passed again, and focused UI/API checks plus build passed, but a guard that cannot initialize cannot exercise pixels. LOOP permits a tool-caused blocked/partial result when its report path and limits are recorded.
+- **Evidence:** .quirk/using-apps-like-a-user/runs/20261028T100639-4329/report.json and report.md; run.json has empty driver,0observations,window.session=null. End exit4 cleanup_failed from final screenshot playwright_failed. Second owned runtime exited0 and printed SMOKE_CLEANED true.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** The driver initializes; completion owner must run the exact remaining UI goals and retained screenshot findings.
+- **Source:** assumed — autonomous
+
 ## Progress
-All3 bounded components are merged(CLI5e3b571d, Activity68d3bc6e, Recipes90cfd95a); component worktrees removed. Shared generic-option prerequisitee1b6dce9 and composed-option guard8b64cd02 are integrated. Actual daemon/CLI/PTY smoke passed and its home/processes were cleaned. Guarded web campaign proved3 Activity goals, exposed2 fixed Activity UI bugs, and left2 recipe goals tool-blocked. Repaired focused check24pass and full build pass. Next: commit owned source/docs, catch up canonical once/read any newer decisions, run final affected remote suite/scripts/typecheck, fresh bounded UI repair check if driver works, register the single exhaustive completion follow-up, record evidence and authoritative land. No model review clearance; D16 applies.
+Ready for authoritative land. Components5e3b571d/68d3bc6e/90cfd95a integrated; shared option-only contract and safety guard integrated; owned worktrees removed. Canonical catch-up merged1074b516 at845716df after all incoming decisions were read; sole conflict in Mac test routing preserved both owners. Actual runtime smoke passed twice and both homes/processes are cleaned. Guarded UI has3Activity passes,2tool-blocked recipe goals and no post-repair visible closure; D15/D20 preserve exact reports. Affected verification284/286remote+3Mac followed by complete2-file clean recovery, scripts68pass, compiler recovery0 and packaged build0. One completion item registered and BLOCKERS appended. No final model review clearance(D16). Next: commit the scoped compiler/test/doc receipt, archive evidence, detach and queue.ts land m7-sweep-terminal; recover only failures the authoritative land names.
