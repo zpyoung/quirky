@@ -407,7 +407,7 @@
         "readOnly": true,
         "params": {
           "type": "object",
-          "properties": { "worktrees": { "type": "array", "description": "At most 1000 canonical workspace selectors.", "items": { "type": "string" } } },
+          "properties": { "worktrees": { "type": "array", "description": "At most 1000 canonical workspace selectors.", "maxItems": 1000, "items": { "type": "string", "minLength": 1, "maxLength": 4096 } } },
           "required": ["worktrees"],
           "additionalProperties": false
         },
@@ -421,9 +421,10 @@
                 "properties": {
                   "worktreeId": { "type": "string" },
                   "instanceId": { "type": "string" },
-                  "branch": { "description": "Current branch name, or null." },
-                  "headOid": { "description": "Current local commit OID, or null." },
+                  "branch": { "type": ["string", "null"], "description": "Current branch name, or null." },
+                  "headOid": { "type": ["string", "null"], "description": "Current local commit OID, or null." },
                   "review": {
+                    "type": ["object", "null"],
                     "description": "Usable resolved review facts, or null for a cache miss or stale snapshot.",
                     "properties": {
                       "state": { "type": "string", "enum": ["open", "draft", "closed", "merged"] },
@@ -460,6 +461,11 @@
         "id": "changed",
         "description": "A confirmed GitHub hosting mutation invalidated the affected repository reads.",
         "data": {"type": "object", "properties": {"worktreeId": {"type": "string"}, "repoId": {"type": "string"}, "host": {"type": "string"}, "owner": {"type": "string"}, "repo": {"type": "string"}, "sequence": {"type": "integer"}, "partial": {"type": "boolean"}, "completedSteps": {"type": "array", "items": {"type": "string"}}}, "required": ["worktreeId", "repoId", "sequence"]}
+      },
+      {
+        "id": "reviewCacheChanged",
+        "description": "A hosting review snapshot changed or was invalidated.",
+        "data": {"type": "object", "properties": {"worktreeId": {"type": "string"}, "repoId": {"type": "string"}}, "required": ["worktreeId", "repoId"], "additionalProperties": false}
       },
       {
         "id": "refresh",
