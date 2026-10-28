@@ -66,5 +66,62 @@
 - **Revisit if:** Supported platforms expand or fixture access reaches real state.
 - **Source:** deferred: platform
 
+## D7: Integrate only the audited disjoint source and explicit workspace dependencies
+- **Question:** Did the implementers remain inside their assigned source contracts?
+- **Options:** trust reports; audit every component and parent at the barrier
+- **Chose:** Both worker HEADs remained 6c9f4deedbeb336d96102221d537b267a75c9fe0; exact path inventories matched their five-path packets and parent changed only stylesheet composition/lint/docs. Committed Accounts e14104ea and Vault 1ae24672 after both returned; merged both, archived inherited component metadata and removed both worktrees/branches immediately. Parent integration adds both real @quirky/ui workspace dependencies and regenerates bun.lock.
+- **Why:** Explicit source attribution prevents cross-tree writes; the first compiler pass exposed missing public UI dependency declarations rather than a need for relative/private imports.
+- **Evidence:** barrier HEAD/status tool output; component commit/merge/remove receipts; compiler artifacts15/17; plugin package.json and bun.lock
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** A source path or dependency differs from its recorded owner.
+- **Source:** assumed — autonomous
+
+## D8: Preserve focus and required-choice authority through minimal shared contracts
+- **Question:** How can shared controls retain Accounts button focus and non-dismissible/busy modal semantics?
+- **Options:** local duplicate dialogs/ref casts; inert close callbacks/CSS hiding; minimal additive shared capabilities
+- **Chose:** ButtonProps adds optional native React19 button ref inherited by IconButton. Dialog onClose becomes optional: omission removes its X and prevents Escape/backdrop dismissal while retaining focus trapping. Switch dialog omits it; reset omits it while submitting. Remove the obsolete CSS close-hiding rule. Shared backdrop explicitly enables pointer events within the host's intentionally noninteractive overlay layer.
+- **Why:** Compiler rejected real trigger refs. Source integration exposed a visible inert close control; actual renderer then showed all switch actions inherited pointer-events:none from .overlay-layer. Fix the shared boundary, never force-click or bypass the UI guard.
+- **Evidence:** packages/ui/src/design-system/{contracts,overlays,components.css}; actual 760-wide renderer failed Keep click pointer-events:none, then switch-runtime-proof.json observed Escape/backdrop retention, no X, trapped Tab and actual explicit Keep closing the dialog
+- **Reversibility:** medium (additive public shared props, existing callers remain valid)
+- **Confidence:** high
+- **Revisit if:** A consumer requires independent close-button versus Escape permissions.
+- **Source:** assumed — autonomous
+
+## D9: Repair observed geometry at the shared layout owner
+- **Question:** What did the initial actual Usage and narrow account render reveal?
+- **Options:** clip the app or weaken overflow checks; correct popup/measurement/row layout
+- **Chose:** Usage popup uses token-step width bounded by viewport, not 100% of a small status-item mount; its max-height reserves the status bar. Hidden width measurement is fixed entirely offscreen on the negative side, not an overflowing absolute row. Account metadata spans remain separate readable lines, trailing actions wrap below identities when narrow, and section headings wrap as complete labels before supporting copy. Give the Accounts status mount a token-based preferred width, still flex-shrinkable, so collapse can measure actual available width rather than locking itself at the initial +N intrinsic size; hidden mount shrinks to zero.
+- **Why:** Initial popup was149.6wide, began at y-14 and document scroll width1486 for viewport1340. Corrected actual popup was384wide at y20 and document width1340; narrow760 popup stayed entirely inside viewport with document width760. Reflow preserves actions rather than removing them.
+- **Evidence:** initial/final screenshot and computed rectangle outputs; narrow-runtime-proof.json; packages/ui/src/design-system/accounts.css
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Another viewport or text scale exposes a concrete geometry defect.
+- **Source:** assumed — autonomous
+
+## D10: Migrate behavioral regressions without pinning private markup
+- **Question:** Which tests depend on controls replaced by the shared kit?
+- **Options:** restore obsolete attributes/classes; drop behavioral coverage; migrate to actual labels and shared dialog structure
+- **Chose:** Third test-only worker updated exactly five scoped files at unchanged e5404b8f, then parent committed8f0a078e and removed its worktree/branch after the barrier. Accounts/Vault dialogs resolve role plus aria-labelledby; native fields use associated labels; bulk switch choices resolve only the shared direct footer so duplicate per-session actions cannot weaken generation/single-flight/policy tests. Remove the inline display-style pin while retaining hidden-control and restore assertions. Add one real required-choice Dialog focus/dismissal/action transition regression.
+- **Why:** Feature-state assertions must survive presentation changes; incidental CSS assertions must not be re-pinned. Source inspection caught and corrected a first-match selector that would have selected an individual session instead of the bulk action.
+- **Evidence:** five-file component inventory and commit8f0a078e; packages/ui/test/design-system.test.tsx required-choice scenario; plugins/quirky.accounts/test/remaining-ui.test.tsx dialogFooterButtonByText
+- **Reversibility:** easy
+- **Confidence:** high for source attribution; tests UNRUN under build-first
+- **Revisit if:** End-phase execution finds a substantive behavior failure.
+- **Source:** locked by docs/loop/LOOP.md
+
+## D11: Record only the exercised isolated renderer evidence
+- **Question:** What verification supports the restyle without claiming full acceptance or golden approval?
+- **Options:** compiler-only inference; prohibited full campaigns; narrow genuine renderer proof with exact limits
+- **Chose:** Actual daemon, PTY and synthetic account/history sources under private HOME/QUIRKY_HOME, fake security/provider executables and local provider proxy; exclusively owned Chromium profile/CDP53911. Exercised Used25→Remaining75→Used, provider details/reset Dialog Escape cancellation, Accounts tabs/Appearance and six masked empty secret inputs, Vault canonical right-bottom opening/title-filter no-match/Clear/options/expanded transcript, Search Settings/Advanced without enabling indexing. Actual Claude terminal selection toB opened required-choice modal; Escape/backdrop did not close, Tab remained trapped, no X existed, and a real explicit Keep closed it without relabeling the session. Both themes have exact canonical text/surface values, no private injected styles and no document overflow at1340; narrow760 also remains within viewport. Status meters show7providers at1340 and5at760, and hiding yields mount width0/displaynone then restores.
+- **Why:** These are exercised production UI/API paths, not component copies or suite output. The fixture initially omitted sidebar-extras and produced exactly2missing-setting pageerrors; adding the genuine dependency and restarting the same home left that sequence unchanged, with no new errors. Old errors are retained, not erased.
+- **Evidence:** scratch switch/status/narrow/dark/light-runtime-proof.json; actual screenshots accounts-vault-final-{dark,light}.png and Vault settings/transcript images; public searchStatus enabledfalse/filesIndexed0; build/typecheck command receipts
+- **Reversibility:** easy
+- **Confidence:** high for named interactions only
+- **Revisit if:** End-phase suites or independent golden review find a concrete defect.
+- **Source:** locked by docs/loop/LOOP.md
+
+Evidence limits: no test suite, formal code-review round, full feature dogfood, native-host run or independent golden-model scoring was run. The rapid automation fill/type attempt yielded a shorter controlled Vault query (`n`/`no`); only the actual no-match/Clear transition is proved, not arbitrary full-string typing. No store/model change is inferred or made. Native clipboard/OS dialogs/browser handoff, credentials from real homes, Linux/Windows and full query/virtualizer workloads are not certified by this smoke.
+
 ## Progress
-Design and source survey complete. Combined logic/technical spec and unchanged shared contracts recorded; next commit spec/contracts, create two disjoint worktrees and dispatch Accounts/Vault implementers. No checks/runtime/review/test suites run yet. Scratch /tmp/quirky-l11-restyle.V894JJ; no owned services yet. No flows intentionally deferred and no follow-up item planned.
+All three implementers returned and their audited source/tests are integrated; all component worktrees/branches removed with cloned metadata preserved. All required narrow actual-renderer evidence is recorded in D8–D11. Test suites/review/full dogfood/golden scoring remain UNRUN. Next commit parent corrections/docs, catch up roadmap once, read incoming decisions, run final fresh typecheck/UI build and merged renderer check, stop owned browser/runtime, then commit/detach and canonical land. Scratch /tmp/quirky-l11-restyle.V894JJ remains until authoritative land. No flow intentionally deferred and no follow-up added.

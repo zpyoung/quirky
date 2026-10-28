@@ -10,6 +10,12 @@
   flex: 1 1 auto;
   max-width: 100%;
   position: relative;
+  width: calc(var(--ui-space-24) * 32);
+}
+
+.accounts-mount-root--bar:has(.usage-status-bar--hidden) {
+  flex: 0 0 0;
+  width: 0;
 }
 
 .accounts-mount-root--view,
@@ -73,6 +79,15 @@
 
 .accounts-ui a {
   color: var(--ui-accent);
+}
+
+.accounts-ui .section-card > .ui-section-header {
+  flex-wrap: wrap;
+}
+
+.accounts-ui .section-card > .ui-section-header > .ui-section-header__title {
+  flex-shrink: 0;
+  max-width: 100%;
 }
 
 .accounts-ui .account-stack,
@@ -680,10 +695,6 @@
   gap: var(--ui-space-6);
   min-width: 0;
   padding: var(--ui-space-8);
-}
-
-.accounts-ui.accounts-switch-dialog-root .ui-dialog__close {
-  display: none;
 }
 
 .accounts-ui .switch-dialog-content {

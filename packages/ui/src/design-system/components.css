@@ -544,6 +544,7 @@
   overflow: auto;
   padding: var(--ui-space-16);
   position: fixed;
+  pointer-events: auto;
   isolation: isolate;
   z-index: 1000;
 }
