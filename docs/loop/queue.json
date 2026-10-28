@@ -1787,6 +1787,18 @@
       "status": "done"
     },
     {
+      "id": "sb-mobile-settings-visibility",
+      "milestone": "Side B",
+      "title": "Recheck Settings > Mobile paired-device revoke visibility at 1280x720: guarded scroll/PageDown could not reach the clipped button; diagnose host overflow versus driver targeting and fix only reproduced app clipping (Mobile-page revoke path already works)",
+      "docs": [
+        "mobile.md"
+      ],
+      "deps": [
+        "sb-mobile-daemon"
+      ],
+      "status": "done"
+    },
+    {
       "id": "m7-test-triage",
       "milestone": "M7",
       "title": "End-phase test triage: run bun scripts/suite.ts packages apps plugins, bun test scripts and bun run typecheck on build/roadmap, and add one fix-test-<area>-<MMDD> item per failing package, app or plugin (naming its failing files and tests) so the lanes split the debugging; change no code",
@@ -1872,18 +1884,6 @@
       "lane": 4
     },
     {
-      "id": "sb-mobile-settings-visibility",
-      "milestone": "Side B",
-      "title": "Recheck Settings > Mobile paired-device revoke visibility at 1280x720: guarded scroll/PageDown could not reach the clipped button; diagnose host overflow versus driver targeting and fix only reproduced app clipping (Mobile-page revoke path already works)",
-      "docs": [
-        "mobile.md"
-      ],
-      "deps": [
-        "sb-mobile-daemon"
-      ],
-      "status": "done"
-    },
-    {
       "id": "fix-native-m1-term-ui-1028",
       "milestone": "M1",
       "title": "Fix the native-only failures in m1-term-ui from the 2026-10-28 run: SC-37",
@@ -1898,8 +1898,7 @@
       "title": "Fix the native-only failures in m2-editor from the 2026-10-28 run: SC-9-native",
       "docs": [],
       "deps": [],
-      "status": "in-progress",
-      "lane": 10
+      "status": "done"
     },
     {
       "id": "fix-native-m3-vault-1028",
@@ -1907,16 +1906,16 @@
       "title": "Fix the native-only failures in m3-vault from the 2026-10-28 run: SC-18-native-clipboard",
       "docs": [],
       "deps": [],
-      "status": "in-progress",
-      "lane": 1
+      "status": "done"
     },
     {
       "id": "fix-native-sa-browser-agent-1028",
       "milestone": "Side A",
-      "title": "Fix the native-only failures in sa-browser-agent from the 2026-10-28 run: C2-native-focus",
+      "title": "Fix the native-only failures in sa-browser-agent from the 2026-10-28 run: C2-native-focus End phase: native reruns are allowed now on a packaged app with fresh owned state (never mock-keychain in place of production credential protection); gather the causal evidence named in its BLOCKERS.md entry, then fix the cause.",
       "docs": [],
       "deps": [],
-      "status": "blocked"
+      "status": "in-progress",
+      "lane": 2
     },
     {
       "id": "m3-accounts-complete-user-acceptance-20261028",
@@ -1930,38 +1929,6 @@
       ],
       "status": "in-progress",
       "lane": 11
-    },
-    {
-      "id": "m7-api-freeze",
-      "milestone": "M7",
-      "title": "Plugin API 1.0: freeze and version the API, manifests declare their API version, publish an example distro",
-      "docs": [],
-      "deps": [
-        "m7-sweep-terminal",
-        "m7-sweep-editor-source-control",
-        "m7-sweep-sessions",
-        "m7-sweep-hosting",
-        "m7-sweep-automation",
-        "m7-sweep-browser-mobile",
-        "m7-sweep-orchestration",
-        "m7-terminal-owner-provisioning-and-selector-flows",
-        "m7-vm-and-owner-bound-host-workspaces",
-        "m7-test-triage",
-        "fix-flaky-pty-host-manager",
-        "m2-sidebar-extras-followup",
-        "fix-flaky-quirky-worktree-create",
-        "fix-flaky-terminal-features-pane",
-        "fix-flaky-pty-host-clear",
-        "sb-mobile-settings-visibility",
-        "fix-native-m1-term-ui-1028",
-        "fix-native-m2-editor-1028",
-        "fix-native-m3-accounts-1028",
-        "fix-native-m3-vault-1028",
-        "fix-native-sa-browser-agent-1028",
-        "m3-accounts-complete-user-acceptance-20261028"
-      ],
-      "status": "todo",
-      "early": true
     },
     {
       "id": "fix-test-scripts-1028",
@@ -1982,7 +1949,8 @@
       "deps": [
         "m7-test-triage"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 8
     },
     {
       "id": "fix-test-packages-daemon-1028",
@@ -1992,7 +1960,8 @@
       "deps": [
         "m7-test-triage"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 10
     },
     {
       "id": "fix-test-packages-ui-1028",
@@ -2002,7 +1971,8 @@
       "deps": [
         "m7-test-triage"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 1
     },
     {
       "id": "fix-test-packages-pty-host-1028",
@@ -2274,6 +2244,69 @@
         "m7-test-triage"
       ],
       "status": "todo"
+    },
+    {
+      "id": "m7-api-freeze",
+      "milestone": "M7",
+      "title": "Plugin API 1.0: freeze and version the API, manifests declare their API version, publish an example distro",
+      "docs": [],
+      "deps": [
+        "m7-sweep-terminal",
+        "m7-sweep-editor-source-control",
+        "m7-sweep-sessions",
+        "m7-sweep-hosting",
+        "m7-sweep-automation",
+        "m7-sweep-browser-mobile",
+        "m7-sweep-orchestration",
+        "m7-terminal-owner-provisioning-and-selector-flows",
+        "m7-vm-and-owner-bound-host-workspaces",
+        "m7-test-triage",
+        "fix-flaky-pty-host-manager",
+        "m2-sidebar-extras-followup",
+        "fix-flaky-quirky-worktree-create",
+        "fix-flaky-terminal-features-pane",
+        "fix-flaky-pty-host-clear",
+        "sb-mobile-settings-visibility",
+        "fix-native-m1-term-ui-1028",
+        "fix-native-m2-editor-1028",
+        "fix-native-m3-accounts-1028",
+        "fix-native-m3-vault-1028",
+        "m3-accounts-complete-user-acceptance-20261028",
+        "fix-test-scripts-1028",
+        "fix-test-apps-mobile-1028",
+        "fix-test-packages-daemon-1028",
+        "fix-test-packages-ui-1028",
+        "fix-test-packages-pty-host-1028",
+        "fix-test-agent-status-1028",
+        "fix-test-ask-1028",
+        "fix-test-browser-1028",
+        "fix-test-cli-1028",
+        "fix-test-editor-1028",
+        "fix-test-git-1028",
+        "fix-test-heimdall-1028",
+        "fix-test-mobile-1028",
+        "fix-test-loops-1028",
+        "fix-test-orchestration-1028",
+        "fix-test-notifications-1028",
+        "fix-test-session-1028",
+        "fix-test-tasks-1028",
+        "fix-test-terminal-1028",
+        "fix-test-worktree-1028",
+        "fix-test-vault-1028",
+        "fix-test-hosting-1028",
+        "fix-test-handoff-1028",
+        "fix-test-ledger-1028",
+        "fix-test-packages-cli-1028",
+        "fix-test-repo-1028",
+        "fix-test-terminal-dock-1028",
+        "fix-test-agents-1028",
+        "fix-test-accounts-1028",
+        "fix-test-packages-protocol-1028",
+        "fix-test-scripts-ui-review-1028",
+        "fix-native-sa-browser-agent-1028"
+      ],
+      "status": "todo",
+      "early": true
     }
   ]
 }
