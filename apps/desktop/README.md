@@ -15,8 +15,9 @@ cp -R apps/desktop/build/Quirky.app ~/Applications/
 open ~/Applications/Quirky.app
 ```
 
-`bun run build` builds the UI, bundles the daemon, PTY host, CLI, UI and built-in plugins into the app, and fails
-if any of them is missing. The result is `apps/desktop/build/Quirky.app`.
+`bun run build` builds the UI, bundles the daemon, PTY host, CLI, UI and built-in plugins into the app, prepares the pinned Electrobun SDK, and fails if any required input is missing. The result is `apps/desktop/build/Quirky.app`.
+
+`bun run typecheck` checks the root, mobile and desktop TypeScript projects. The desktop script runs `hutch electrobun prepare` before `tsc`, so the configured Electrobun 2.0.4 SDK is available without manual preparation. Both commands require the `hutch` CLI on `PATH`.
 
 Reinstalling over a running copy: quit Quirky first (window close or tray Quit), then repeat the
 `cp -R`. Use `rm -rf ~/Applications/Quirky.app` before copying if you want a clean replace.
