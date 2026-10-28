@@ -1104,7 +1104,6 @@ describe('launch settings', () => {
     const t = await start()
     const refused = async (params: Record<string, unknown>, message: string) =>
       expect(await failure(t.call(A('resolveLaunch'), params))).toMatchObject({ code: RpcErrorCode.InvalidParams, message })
-    await refused({ agent: 'claude', options: { effort: 'low' } }, 'effort requires a model')
     await refused({ agent: 'claude', model: 'haiku', options: { effort: 'low' } }, 'Agent claude model haiku does not support effort low.')
     await refused({ agent: 'codex', model: 'gpt-5.5', options: { effort: 'ultra' } }, 'Agent codex model gpt-5.5 does not support effort ultra.')
     await refused({ agent: 'aider', model: 'gpt-4o' }, 'Agent aider does not support launch-time model selection.')

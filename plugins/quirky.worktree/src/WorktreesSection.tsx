@@ -226,7 +226,7 @@ export function WorktreesSection({ context, report, requests }: Props) {
     dialog?.kind === 'delete' && dialog.withDescendants && target
       ? (allRows.find((row) => row.worktree.id === target.id)?.descendants ?? [])
           .map((id) => worktrees.find((worktree) => worktree.id === id))
-          .filter((worktree): worktree is Worktree => worktree !== undefined)
+          .filter((worktree): worktree is NonNullable<typeof worktree> => worktree !== undefined)
       : undefined
   const trustRepo = trust ? repos.find((repo) => repo.id === trust.request.repoId) : undefined
 

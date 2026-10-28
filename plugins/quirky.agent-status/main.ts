@@ -1,11 +1,12 @@
 import { join } from 'node:path'
 import type { LaunchHookInput, LaunchPatch, PluginContext } from '@quirky/protocol'
+import { ActivityFeed } from './src/activity'
 import { ClaudeVersionGate, claudeEventsFor, claudeSettings, commandProbe } from './src/claude-settings'
 import { HooksService } from './src/hooks'
 import type { ScriptState } from './src/script-state'
 import { AgentStatusService } from './src/service'
 import { drainSpool } from './src/spool'
-import { migrations, RowStore } from './src/store'
+import { ActivityStore, migrations, RowStore } from './src/store'
 import { DEFAULT_OUTPUT_LINES, DEFAULT_WAIT_MS } from './src/waits'
 
 const DEFAULT_CLAUDE_COMMAND = 'claude'
@@ -79,10 +80,10 @@ function waitPattern(context: PluginContext, value: unknown): string {
 
 let service: AgentStatusService | undefined
 
-/** Wires the agent-status service: hook events in, rows and session summaries out. */
+/** Wires the status service, durable Activity feed, hook events and session summaries. */
 export async function activate(context: PluginContext): Promise<void> {
   const store = context.openStore(migrations)
-  const active = new AgentStatusService(context, new RowStore(store))
+  const active = new AgentStatusService(context, new RowStore(store), new ActivityFeed(context, new ActivityStore(store)))
   service = active
   const installer = new HooksService(context)
 
@@ -95,6 +96,27 @@ export async function activate(context: PluginContext): Promise<void> {
   )
   context.provide('method:quirky.agent-status/explain', (params: Record<string, unknown>) =>
     active.explain(requireString(context, params.session, 'session'), typeof params.at === 'number' ? params.at : undefined)
+  )
+  context.provide('method:quirky.agent-status/activity', (params: Record<string, unknown>) =>
+    active.activityQuery({
+      ...(typeof params.worktree === 'string' ? { worktree: params.worktree } : {}),
+      ...(typeof params.text === 'string' ? { text: params.text } : {}),
+      ...(params.unreadOnly === true ? { unreadOnly: true } : {})
+    })
+  )
+  context.provide('method:quirky.agent-status/acknowledge', (params: Record<string, unknown>) => {
+    const session = params.session
+    const turn = params.turn
+    if (params.all === true) {
+      if (session !== undefined || turn !== undefined) throw context.error('invalid-params', 'all cannot be combined with session or turn')
+      return active.acknowledge({ all: true })
+    }
+    if (typeof session !== 'string' || session === '') throw context.error('invalid-params', 'session is required unless all is true')
+    if (turn !== undefined && typeof turn !== 'string') throw context.error('invalid-params', 'turn must be a string')
+    return active.acknowledge({ session, ...(typeof turn === 'string' ? { turn } : {}) })
+  })
+  context.provide('method:quirky.agent-status/clearCompleted', (params: Record<string, unknown>) =>
+    active.clearCompleted(typeof params.worktree === 'string' ? params.worktree : undefined)
   )
   context.provide('method:quirky.agent-status/send', (params: Record<string, unknown>) =>
     active.send(requireString(context, params.session, 'session'), sendText(context, params.text), startTimeout(context, params.startTimeoutMs))

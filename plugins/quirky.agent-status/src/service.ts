@@ -1,5 +1,7 @@
 import { join } from 'node:path'
 import { RpcErrorCode, type AgentStatusSummary, type ContributionInfo, type PluginContext, type PtyFact, type QuirkyEvent, type Session } from '@quirky/protocol'
+import { ActivityFeed } from './activity'
+import type { ActivityAcknowledgment, ActivityQuery, ActivityThread } from './activity-types'
 import { applyEvent } from './apply'
 import { explanationOf, type Explanation } from './explain'
 import { foldLead } from './fold'
@@ -76,8 +78,8 @@ const validProviderId = (id: string) => id.length >= 1 && id.length <= MAX_PROVI
 const sameSummary = (a: AgentStatusSummary | null | undefined, b: AgentStatusSummary | null) => JSON.stringify(a ?? null) === JSON.stringify(b)
 
 /**
- * Owns the agent rows: turns hooks, and where hooks are silent titles, OSC 7501 reports and typed
- * keys, into rows and keeps each terminal session's coarse status and summary in step. Events for
+ * Owns status rows and durable Activity snapshots: turns hooks, and where hooks are silent titles, OSC 7501 reports
+ * and typed keys, into rows while keeping each terminal session's coarse status and summary in step. Events for
  * one session are handled strictly in arrival order, whatever produced them.
  */
 export class AgentStatusService {
@@ -100,6 +102,7 @@ export class AgentStatusService {
   constructor(
     private readonly context: PluginContext,
     private readonly rows: RowStore,
+    private readonly activity: ActivityFeed,
     private readonly isAlive: IsAlive = processAlive,
     private readonly now: () => number = Date.now,
     private readonly timing: Timing = timingFrom(process.env)
@@ -146,17 +149,26 @@ export class AgentStatusService {
     return this.enqueue(input.sessionId, () => this.handle(input))
   }
 
-  /** Forgets a session's row and normalizer memory once the session is gone. */
-  drop(sessionId: string): Promise<void> {
+  /** Forgets transient row state while retaining an exited or removed thread in Activity. */
+  drop(sessionId: string, session?: Session): Promise<void> {
     return this.enqueue(sessionId, async () => {
-      this.rows.delete(sessionId)
-      this.rows.deleteRecords(sessionId)
+      const row = this.rows.get(sessionId)
+      this.rows.transaction(() => {
+        if (row) {
+          if (session?.kind === 'terminal') this.activity.sync(session, row)
+          else this.activity.importRow(row, this.now())
+        }
+        this.activity.retire(sessionId)
+        this.rows.delete(sessionId)
+        this.rows.deleteRecords(sessionId)
+      })
       this.caches.delete(sessionId)
       this.records.delete(sessionId)
       this.escapes.delete(sessionId)
       this.titles.delete(sessionId)
       this.sampler.forget(sessionId)
       this.cancelProgramRetry(sessionId)
+      this.context.emit('changed', { sessionId, row: null })
     })
   }
 
@@ -190,7 +202,7 @@ export class AgentStatusService {
     await Promise.all(watched.map(({ row }) => this.enqueue(row.sessionId, () => this.endIfGone(row.sessionId))))
   }
 
-  /** Follows session lifecycle events: an exited or removed session loses its row. */
+  /** Follows session lifecycle events: an exited or removed session loses its live row, not its Activity snapshot. */
   onEvent(event: QuirkyEvent): void {
     if (event.type === 'hook.received') {
       void this.ingest({
@@ -207,7 +219,7 @@ export class AgentStatusService {
       const session = (event.data as { session?: Session }).session
       if (session?.status === 'exited') {
         this.wake(session.id)
-        void this.drop(session.id)
+        void this.drop(session.id, session)
       }
     } else if (event.type === 'quirky.session/removed') {
       void this.drop((event.data as { sessionId: string }).sessionId)
@@ -215,28 +227,38 @@ export class AgentStatusService {
   }
 
   /**
-   * Restores rows after a restart: rows past seven days and rows of sessions that are gone are
-   * dropped, unfinished rows come back unconfirmed, and every survivor's summary reaches its session.
+   * Restores rows and hydrates Activity from persisted state. Missing or exited sessions lose their live row but keep
+   * a non-live Activity snapshot; unfinished live rows return unconfirmed and every survivor summary reaches its session.
    */
   async hydrate(): Promise<void> {
     for (const { row, updatedAt } of this.rows.all()) {
       const session = await this.findSession(row.sessionId)
       if (!session || session.kind !== 'terminal' || session.status === 'exited') {
-        this.rows.delete(row.sessionId)
+        this.rows.transaction(() => {
+          if (session?.kind === 'terminal') this.activity.sync(session, row)
+          else this.activity.importRow(row, updatedAt)
+          this.activity.retire(row.sessionId)
+          this.rows.delete(row.sessionId)
+        })
         continue
       }
       if (this.now() - updatedAt > RESTORE_MAX_AGE_MS) {
+        this.activity.sync(session, row)
         await this.commit(session, null)
         continue
       }
       const restored: AgentRow = row.state === 'done' ? row : { ...row, restoredUnconfirmed: true }
-      this.rows.put(restored, updatedAt)
+      this.rows.transaction(() => {
+        this.rows.put(restored, updatedAt)
+        this.activity.sync(session, restored)
+      })
       await this.publish(session, restored)
     }
     for (const sessionId of this.rows.recordSessions()) {
       const session = await this.findSession(sessionId)
       if (!session || session.kind !== 'terminal' || session.status === 'exited') this.rows.deleteRecords(sessionId)
     }
+    await this.activity.hydrate((sessionId) => this.rows.get(sessionId))
   }
 
   /** The row of every session that has one, optionally within one worktree. */
@@ -248,6 +270,18 @@ export class AgentStatusService {
       if (row) listed.push({ ...summaryOf(row, this.now(), session.status !== 'exited'), sessionId: session.id, agent: row.agent })
     }
     return listed
+  }
+
+  activityQuery(query: ActivityQuery): Promise<{ threads: ActivityThread[] }> {
+    return this.activity.query(query)
+  }
+
+  acknowledge(params: ActivityAcknowledgment): { acknowledged: number } {
+    return this.activity.acknowledge(params)
+  }
+
+  clearCompleted(worktree?: string): { cleared: number } {
+    return this.activity.clearCompleted(worktree)
   }
 
   /**
@@ -456,15 +490,18 @@ export class AgentStatusService {
 
     if (row) this.attachFacet(row)
     else this.caches.delete(session.id)
-    await this.commit(session, row)
+    await this.commit(session, row, normalized.newTurn)
     if (row) this.watchProgram(session.id, row)
     if (row && settled) this.emitSettled(session, row, settled)
   }
 
-  /** Stores a row (null removes it), sets the session's status and summary, and announces the change. */
-  private async commit(session: Session, row: AgentRow | null): Promise<void> {
-    if (row) this.rows.put(row, this.now())
-    else this.rows.delete(session.id)
+  /** Stores the row and its Activity snapshot atomically, sets session status and summary, and announces the change. */
+  private async commit(session: Session, row: AgentRow | null, startsTurn = false): Promise<void> {
+    this.rows.transaction(() => {
+      if (row) this.rows.put(row, this.now())
+      else this.rows.delete(session.id)
+      this.activity.sync(session, row, startsTurn)
+    })
     await this.publish(session, row)
     this.context.emit('changed', { sessionId: session.id, row })
     this.wake(session.id)
@@ -637,7 +674,13 @@ export class AgentStatusService {
     this.caches.delete(sessionId)
     const session = await this.liveSession(sessionId)
     if (session) await this.commit(session, null)
-    else this.rows.delete(sessionId)
+    else {
+      this.rows.transaction(() => {
+        this.activity.importRow(row, this.now())
+        this.activity.retire(sessionId)
+        this.rows.delete(sessionId)
+      })
+    }
   }
 
   private async capture(session: Session, normalized: Normalized): Promise<void> {

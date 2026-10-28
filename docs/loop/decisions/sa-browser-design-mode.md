@@ -405,5 +405,17 @@
 - **Revisit if:** canonical land names a failure or conflict.
 - **Source:** locked by LOOP.md Night mode and land-conflict recovery
 
+## D37: Preserve the second roadmap delta and Mac routing union
+- **Question:** What changed when the second controller submission found another conflict?
+- **Options:** discard a Mac-only route; retain pane, design-runtime and incoming CLI-open routes together.
+- **Chose:** preserve all3routes and current incoming shared contracts. No Browser implementation path changed in this incoming delta.
+- **Why:** design-runtime still needs installed macOS Chrome; CLI open additionally needs its owned macOS open shim. Neither belongs on the remote Linux host.
+- **Evidence:** IncomingRoadmapLocks read all5changed logs: m5-loops-ui, m6-heimdall-control, m6-heimdall-owner, m7-sweep-hosting and m7-sweep-terminal. The1030.59s controller attempt rejected on merge, before tests. The only conflict was scripts/test-on-macos.txt.
+- **Constraints:** preserve canonical TERMINAL_TAB_MENU, Browser-before-Loop order/anchors, generic worktree/workspace/group context and management footer; strict worktree validation at both boundaries; exact Heimdall authority and Session launch settings; CLI desktop-readiness wait and no reconnect after close. No clipboard/capture capability was added.
+- **Reversibility:** easy
+- **Confidence:** incoming-only diff has zero plugins/quirky.browser implementation changes; shared-context/routing smoke and canonical verification remain required.
+- **Revisit if:** controller names a test failure or another conflict.
+- **Source:** locked by incoming logs and LOOP.md conflict recovery
+
 ## Progress
 Ready for canonical land after conflict recovery. All incoming locks and both profile/design contracts are preserved; clean cfb15734 passed typecheck, Browser15remote+3Mac files and full build. Prior scripts68/0/570 and unchanged importer results remain recorded. Actual design UI campaigns and exact partial outcomes are retained; residual Watch-to-host clipboard transfer belongs to existing host-controls, and Native-only acceptance is pending. No new review/dogfood campaign or queue record is started. All owned UI runtimes and workers are stopped. Next: commit these evidence-only records, detach, submit canonical land and wait for its actual merge-result verdict. After landing archive evidence, restore .serena metadata, and remove owned temporary homes.

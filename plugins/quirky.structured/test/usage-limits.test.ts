@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { randomUUID } from 'node:crypto'
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { type Session, type StructuredMessage } from '@quirky/protocol'
 import { waitFor } from '../../../packages/daemon/test/helpers'
@@ -93,23 +92,11 @@ function contextFor(options: { codexPath?: string; claudePath?: string } = {}) {
 describe('provider usage-limit journal evidence', () => {
   test('an empty Codex start is idle and raw account/rateLimits/updated params survive in the journal', async () => {
     const testHome = isolatedHome()
-    const fixture = createCodexAppServerFixture(join(testHome, 'provider-fixtures'))
-    const threadId = `rate-limit-${randomUUID()}`
-    const original = readFileSync(fixture.executable, 'utf8')
-    const threadStart = "const id = 'scripted-thread'"
-    const startTurn = "      case 'turn/start':\n        startTurn(message, message.params.threadId, textInput(message.params.input))"
-    expect(original.includes(threadStart)).toBe(true)
-    expect(original.includes(startTurn)).toBe(true)
     const rawParams = {
-      threadId,
       exhausted: true,
       rateLimits: { primary: { usedPercent: 100, resetsAt: '2030-01-02T03:04:05.000Z' } }
     }
-    const updated = original
-      .replace(threadStart, `const id = ${JSON.stringify(threadId)}`)
-      .replace(startTurn, `      case 'turn/start':\n        notify('account/rateLimits/updated', ${JSON.stringify(rawParams)})\n        startTurn(message, message.params.threadId, textInput(message.params.input))`)
-    writeFileSync(fixture.executable, updated)
-    chmodSync(fixture.executable, 0o700)
+    const fixture = createCodexAppServerFixture(join(testHome, 'provider-fixtures'), { rateLimitsUpdated: rawParams })
 
     const { context, messages, statuses } = contextFor({ codexPath: fixture.executable })
     const runner = createCodexRunner(context, { env: isolatedProviderEnvironment(testHome) })
@@ -125,8 +112,6 @@ describe('provider usage-limit journal evidence', () => {
           'method' in data && data.method === 'account/rateLimits/updated'
       }))
       expect(update?.data).toEqual({ method: 'account/rateLimits/updated', params: rawParams })
-      expect(update?.data).toHaveProperty('params.exhausted', true)
-      expect(update?.data).toHaveProperty('params.rateLimits.primary.resetsAt', '2030-01-02T03:04:05.000Z')
     } finally {
       await runner.stop(codexSession.id)
     }
@@ -158,8 +143,6 @@ describe('provider usage-limit journal evidence', () => {
           'type' in data && data.type === 'rate_limit_event'
       }))
       expect(update?.data).toEqual(rawEvent)
-      expect(update?.data).toHaveProperty('rate_limit_info.is_exhausted', true)
-      expect(update?.data).toHaveProperty('rate_limit_info.resets_at', '2030-01-02T03:04:05.000Z')
     } finally {
       await runner.stop(claudeSession.id)
     }
