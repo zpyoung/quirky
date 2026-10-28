@@ -1,4 +1,5 @@
 import { dlopen, JSCallback, ptr, type Pointer } from 'bun:ffi'
+import { randomUUID } from 'node:crypto'
 import type { HostPowerTransition, NativeHostPowerSource } from './host-power-contracts'
 
 type NativePointer = Pointer | null
@@ -45,7 +46,8 @@ function errorMessage(error: unknown): string {
 
 function readPointerSlot(slot: Buffer): NativePointer {
   const value = slot.readBigUInt64LE(0)
-  return value === 0n ? null : Number(value)
+  // IOKit populated this pointer-sized out parameter; Bun brands its numeric pointer ABI.
+  return value === 0n ? null : Number(value) as Pointer
 }
 
 /** Create a trusted IOKit power source; delivery is polled on the Bun JS thread. */
@@ -163,7 +165,8 @@ export function createMacOSHostPowerSource(log: (message: string) => void = mess
       try {
         io = openIOKit()
         cf = openCoreFoundation()
-        mode = cf.symbols.CFStringCreateWithCString(null, PRIVATE_RUN_LOOP_MODE, CF_STRING_ENCODING_UTF8) as NativePointer
+        const modeName = Buffer.from(`${PRIVATE_RUN_LOOP_MODE}.${randomUUID()}\0`)
+        mode = cf.symbols.CFStringCreateWithCString(null, ptr(modeName), CF_STRING_ENCODING_UTF8) as NativePointer
         if (!mode) throw new Error('CFStringCreateWithCString returned null for the private run-loop mode')
         runLoop = cf.symbols.CFRunLoopGetCurrent() as NativePointer
         if (!runLoop) throw new Error('CFRunLoopGetCurrent returned null on the Bun JS thread')

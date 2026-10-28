@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test, vi } from 'bun:test'
+import { afterEach, describe, expect, test } from 'bun:test'
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -40,7 +40,6 @@ const roots: string[] = []
 const databaseClosers: Array<() => void> = []
 
 afterEach(() => {
-  vi.useRealTimers()
   for (const close of databaseClosers.splice(0).reverse()) close()
   for (const root of roots.splice(0).reverse()) rmSync(root, { recursive: true, force: true })
 })
@@ -301,9 +300,8 @@ describe('Heimdall host-power lifecycle binding', () => {
     const restoredWatcher = 'watcher-restored-asleep'
     seed(service, restoredWatcher)
 
-    vi.useFakeTimers()
     await service.start()
-    await vi.advanceTimersByTimeAsync(0)
+    await service.reconcile(restoredWatcher)
     expect(readWatchers).toEqual([])
     expect(executedWatchers).toEqual([])
 
@@ -315,12 +313,12 @@ describe('Heimdall host-power lifecycle binding', () => {
     expect(enrolled.kind).toBe('enrolled')
     if (enrolled.kind !== 'enrolled') throw new Error('fixture enrollment was refused')
     const enrolledWatcher = enrolled.enrollment.watcherId
-    await vi.advanceTimersByTimeAsync(0)
+    await service.reconcile(enrolledWatcher)
     expect(readWatchers).toEqual([])
     expect(executedWatchers).toEqual([])
 
     power.resume()
-    await vi.advanceTimersByTimeAsync(0)
+    await Promise.all([service.reconcile(restoredWatcher), service.reconcile(enrolledWatcher)])
     await readBoth.promise
     await executeBoth.promise
     expect(new Set(readWatchers)).toEqual(new Set([restoredWatcher, enrolledWatcher]))

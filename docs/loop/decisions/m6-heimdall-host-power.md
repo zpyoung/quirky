@@ -44,5 +44,27 @@
 - **Revisit if:** an idle dedicated host is available for the native run
 - **Source:** deferred: platform
 
+## D5: Verify registration separately from a real system sleep cycle
+- **Question:** what the exercised evidence proves before landing
+- **Options:** claim native sleep parity from synthetic events; distinguish safe native subscription proof and actual daemon behavior from disruptive OS verification
+- **Chose:** safe throwaway Bun smoke with fresh temporary HOME/QUIRKY_HOME. Actual system IOKit registration, two private-runloop pump opportunities and idempotent disposal succeeded without native errors. A separate actual daemon/API run with a controlled trusted source proved suspended late enrollment has no reads/effects, wake produces a live read and exactly one landed effect, and daemon stop disposes the source. Author permanent tests without running them in the feature phase. Record both real OS-cycle scenarios pending in the native handoff.
+- **Why:** a synthetic transition exercises the public kernel binding but is not evidence of OS sleep delivery; a real IOKit subscription smoke establishes FFI symbols, ABI, source creation and teardown without suspending other lanes.
+- **Evidence:** /tmp/quirky-l11-power-smoke.ts output NATIVE_IOKIT_REGISTER_PUMP_DISPOSE_OK and REAL_DAEMON_API_SLEEP_FENCE_LATE_ENROLL_WAKE_EFFECT_OK, watcher7b140a18-71e9-4e2d-8609-7fb138cd0118, reads1/effects1/disposedtrue, exit0; bun run typecheck exit0 after correcting six initial diagnostics; docs/loop/native/m6-heimdall-host-power.json
+- **Reversibility:** easy
+- **Confidence:** high for exercised paths; real OS sleep/wake cycle remains unverified
+- **Revisit if:** dedicated native-host observations expose delivery, accounting or teardown errors
+- **Source:** assumed — autonomous
+
+## D6: Keep native callback lifetime and activation lifetime explicit
+- **Question:** concurrent sources, callback teardown, listener errors and plugin shutdown ordering
+- **Options:** shared CF mode and immediate callback release; per-registration private mode and deferred native teardown
+- **Chose:** each registration owns a uniquely named CF mode, pointer-width native out slots and its JSCallback. Reentrant dispose stops delivery immediately but releases native resources only after the servicing native call returns. Every listener is attempted; failures and asynchronous returns are logged, and the exact WillSleep notification is acknowledged once after delivery attempts. OS acknowledgment is protocol handling, not a claim that a failed fence succeeded. Native source is disposed after plugin deactivation, retaining valid public capabilities until activation revocation. Runtime revoke removes callbacks before awaiting unrelated resource cleanup.
+- **Why:** a shared mode could service another daemon's callback from the wrong stack. Releasing an executing trampoline is unsafe. Withholding acknowledgment cannot guarantee fencing because macOS forces non-abortable sleep after its timeout. Plugin APIs otherwise remain valid through deactivate.
+- **Evidence:** native-host-power.ts private mode/servicingRunLoop cleanup; host-power.ts listener dispatch/revocation; daemon.ts stop; SDK IOPMLib.h mandatory acknowledgment timeout
+- **Reversibility:** medium
+- **Confidence:** high for implementation ordering; native-cycle proof pending
+- **Revisit if:** a new native event delivery mechanism changes callback ownership
+- **Source:** assumed — autonomous
+
 ## Progress
-Design complete. Commit public lifecycle contracts, then dispatch native producer and Heimdall binding in disjoint scopes. Parent owns runtime/daemon integration, documentation, typecheck and landing.
+Implementation integrated from two disjoint omp worktrees; both writers completed without checks and their explicit scopes/HEAD8398e94b were audited. Worker worktrees removed after merging. Parent corrected native pointer typing, isolated CF mode names and null-terminated mode buffer, replaced unsupported fake-timer calls with deterministic explicit pulses, added the public capability to affected context fixtures, and removed incidental wording/not-throw assertions. Safe native registration + actual daemon/API smoke passed; typecheck passed. No test suite, build, review or dogfood was run. Native sleep/wake scenarios remain pending. Commit integration/docs, catch up once with build/roadmap, read incoming decisions, run final typecheck/smoke, then detach and canonical queue land.

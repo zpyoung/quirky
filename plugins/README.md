@@ -264,8 +264,20 @@ their native launch authority; they do not receive the service principal. See
 Watcher state, attempt facts, a bounded diagnostic trace ring and terminal summaries live in the
 plugin's private store; unresolved attempt traces remain pinned. A newer unknown store version
 remains inspectable but cannot execute work. Removing a
-watcher removes its own history, not its workers. Automatic OS sleep/wake binding is not installed
-by this plugin.
+watcher removes its own history, not its workers.
+
+On macOS, the daemon's in-process IOKit power source automatically suspends every Heimdall runner
+before acknowledging system sleep. Wake resumes runners with an immediate live reconciliation;
+active budgets exclude the sleeping gap. This does not stop workers or resolve uncertain effects.
+Real sleep/wake verification is tracked separately on a dedicated idle macOS host.
+
+Plugin authors can use `context.hostPower.subscribe({ suspend, resume })` for the same lifecycle.
+Both callbacks must complete synchronously: fence work before returning; never return a promise
+or use the asynchronous event bus as a pre-sleep fence. `hostPower.suspended` exposes current state,
+and subscribing during suspension calls `suspend` before returning. The returned disposer is
+idempotent; the host also removes subscriptions when that plugin activation is revoked.
+`hostPower.supported` is false on platforms without a native source; macOS registration failure
+is a daemon startup error, not a silent fallback.
 
 ## Shared checks
 
