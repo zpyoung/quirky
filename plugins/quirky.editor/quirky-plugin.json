@@ -158,7 +158,7 @@
             },
             "explorer": {
               "type": "object",
-              "properties": { "worktreeId": { "type": "string" }, "showDotfiles": { "type": "boolean" }, "expanded": { "type": "array", "items": { "type": "string" } } },
+              "properties": { "worktreeId": { "type": "string" }, "showDotfiles": { "type": "boolean" }, "expanded": { "type": "array", "items": { "type": "string" } }, "selectedPaths": { "type": "array", "items": { "type": "string" } }, "focusedPath": { "description": "Authorized absolute focused row path, or null." }, "selectionAnchor": { "description": "Authorized absolute Shift-range anchor, or null." } },
               "required": ["worktreeId", "showDotfiles", "expanded"],
               "additionalProperties": false
             },
@@ -325,8 +325,35 @@
       {
         "id": "explorer",
         "description": "List and refresh authorized directory entries, filter the inventory, reveal paths and update per-worktree preferences.",
-        "params": { "type": "object", "properties": { "worktree": { "type": "string" }, "action": { "type": "string", "enum": ["list", "refresh", "reveal", "filter", "preferences"], "description": "reveal uses path when supplied; filter uses query; preferences accepts showDotfiles, displayRoot and expanded. list/refresh accept an optional directory path." }, "path": { "type": "string", "description": "Directory to list/refresh or path to reveal; required to reveal a specific path." }, "query": { "type": "string", "description": "Filter query, limited by the service to 2,048 UTF-8 bytes." }, "showDotfiles": { "type": "boolean" }, "showIgnored": { "type": "boolean" }, "expanded": { "type": "array", "items": { "type": "string", "description": "Worktree path to expand; the service retains only authorized directories." } }, "displayRoot": { "type": "string" } }, "required": ["action"], "additionalProperties": false },
-        "result": { "type": "object", "properties": { "root": { "type": "string" }, "entries": { "type": "array", "items": { "type": "object", "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "isDirectory": { "type": "boolean" }, "isSymlink": { "type": "boolean" }, "ignored": { "type": "boolean" }, "error": { "type": "string" } }, "required": ["path", "name", "isDirectory", "isSymlink"] } }, "truncated": { "type": "boolean" }, "showDotfiles": { "type": "boolean" }, "showIgnored": { "type": "boolean" }, "followSymlinkedDirectories": { "type": "boolean" } }, "required": ["root", "entries", "showDotfiles", "showIgnored", "followSymlinkedDirectories"], "additionalProperties": false }
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": { "type": "string" },
+            "action": { "type": "string", "enum": ["list", "refresh", "reveal", "filter", "preferences", "navigate", "select"], "description": "navigate applies a visible-tree key; select chooses a visible path. Both accept query and extend; select also accepts toggle. preferences accepts showDotfiles, displayRoot and expanded." },
+            "path": { "type": "string", "description": "Authorized directory/file path; required by select." },
+            "query": { "type": "string", "description": "Names filter query, limited to 2,048 UTF-8 bytes." },
+            "key": { "type": "string", "enum": ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End", "PageUp", "PageDown"] },
+            "extend": { "type": "boolean", "description": "Extend a contiguous range from the stable selection anchor." },
+            "toggle": { "type": "boolean", "description": "Toggle the selected path membership without opening it." },
+            "showDotfiles": { "type": "boolean" }, "showIgnored": { "type": "boolean" },
+            "expanded": { "type": "array", "items": { "type": "string", "description": "Authorized worktree directory to expand." } },
+            "displayRoot": { "type": "string" }
+          },
+          "required": ["action"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "root": { "type": "string" },
+            "entries": { "type": "array", "items": { "type": "object", "properties": { "path": { "type": "string" }, "name": { "type": "string" }, "isDirectory": { "type": "boolean" }, "isSymlink": { "type": "boolean" }, "ignored": { "type": "boolean" }, "error": { "type": "string" } }, "required": ["path", "name", "isDirectory", "isSymlink"] } },
+            "truncated": { "type": "boolean" }, "showDotfiles": { "type": "boolean" }, "showIgnored": { "type": "boolean" }, "followSymlinkedDirectories": { "type": "boolean" },
+            "expanded": { "type": "array", "items": { "type": "string" } },
+            "interaction": { "type": "object", "properties": { "selectedPaths": { "type": "array", "items": { "type": "string" } }, "focusedPath": { "description": "Focused absolute path or null." }, "selectionAnchor": { "description": "Range anchor absolute path or null." } }, "required": ["selectedPaths", "focusedPath", "selectionAnchor"], "additionalProperties": false }
+          },
+          "required": ["root", "entries", "showDotfiles", "showIgnored", "followSymlinkedDirectories"],
+          "additionalProperties": false
+        }
       },
       {
         "id": "mutate",
@@ -636,8 +663,10 @@
           "type": "object",
           "properties": {
             "bufferId": { "type": "string" },
-            "action": { "type": "string", "enum": ["metadata", "page", "edit", "sort", "filter", "insertRow", "deleteRow", "insertColumn", "deleteColumn", "delimiter", "copy", "paste", "save", "zoom", "find", "position", "media"], "description": "edit requires row/column/value; insertRow accepts optional index/count; deleteRow requires row or index; insertColumn/deleteColumn require index; delimiter requires one non-quote, non-line-break character; paste requires row/column/text. sort requires column or index and order; filter/find accept query; zoom requires scale; position requires page or offset. page, metadata, save and media need no additional fields." },
+            "action": { "type": "string", "enum": ["metadata", "page", "edit", "sort", "filter", "insertRow", "deleteRow", "insertColumn", "deleteColumn", "delimiter", "copy", "paste", "save", "zoom", "find", "position", "media", "release"], "description": "copy accepts row (row), column (column), both (cell), neither (table), or row/column/endRow/endColumn (inclusive rectangle). media accepts an optional leaseId; release requires leaseId and only revokes that acquisition. Other actions retain their existing parameters." },
             "row": { "type": "integer", "minimum": 0 }, "column": { "type": "integer", "minimum": 0 },
+            "endRow": { "type": "integer", "minimum": 0 }, "endColumn": { "type": "integer", "minimum": 0 },
+            "leaseId": { "type": "string", "description": "Nonempty unique mounted-view acquisition owner, at most128 characters; release is idempotent and does not affect other leases or anonymous API resources." },
             "index": { "type": "integer", "minimum": 0 }, "count": { "type": "integer", "minimum": 0, "description": "Optional CSV page row count; service clamps it to 1–100 rows." },
             "value": { "type": "string", "description": "CSV cell value or optional inserted header value." }, "text": { "type": "string", "description": "Paste text; UTF-8 payload must remain below 1 MiB." }, "query": { "type": "string", "description": "Filter/find query, limited to 8,192 characters by the service." },
             "delimiter": { "type": "string", "description": "For delimiter action, exactly one character other than quote or a line break." }, "order": { "type": "string", "enum": ["asc", "desc"] },
@@ -652,6 +681,7 @@
           "description": "Action-dependent result union. save returns a full editor-buffer snapshot. metadata returns kind-specific viewer metadata: CSV, image, PDF/audio/video, Mermaid, binary or unsupported-file shapes. CSV mutations return CSV metadata; sort returns viewer state; filter returns {filter,paged,readOnly,view}. page returns a CSV page {page,rows:[{index,cells}],offset,nextPage:integer|null,totalRows?,delimiter?,readOnly,changedOnDisk,limits?}, PDF page position/contentType/readOnly, or image metadata; a changed CSV page can include an empty rows array and message. media returns {url,contentType,size,acceptsRanges:true}, or {changedOnDisk:true,error,size}. copy returns {text,rows}; zoom returns {zoom,minimum,maximum,view}; find returns {query,matches,truncated?,view}; position returns {position}. PDF zoom may be a number or the string page-width.",
           "properties": {
             "acceptsRanges": { "type": "boolean", "description": "Always true for successful media resource results." },
+            "leaseId": { "type": "string" }, "released": { "type": "boolean" },
             "zoom": { "description": "Numeric zoom level or the PDF metadata string page-width." },
             "nextPage": { "description": "Next CSV page number or null when there is no next page." }
           },
