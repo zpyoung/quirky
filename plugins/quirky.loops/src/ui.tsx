@@ -130,6 +130,7 @@ function reportOverlay(): void {
   const dialog = currentDialog
   const rail = latestRailState()
   overlayReporter?.({
+    dialog,
     setup: dialog?.kind === 'setup' ? setupState(dialog.id) : null,
     rail,
     detail: isRecord(rail) ? rail.selectedDetail ?? null : null,
@@ -391,8 +392,8 @@ function mountLoopView(context: UiPluginContext, element: HTMLElement, props: Mo
   )
   return () => {
     mounted = false
-    root.unmount()
     forgetLoop(loopId, handle)
+    queueMicrotask(() => root.unmount())
   }
 }
 
