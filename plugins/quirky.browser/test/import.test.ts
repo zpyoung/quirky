@@ -90,8 +90,8 @@ function createChromiumDatabase(path: string, password: string): Database {
   const digestHost = '.decrypted.example.test'
   insert.run(digestHost, 'encrypted-v10', '', new Uint8Array(encryptChromium('v24-value-✓', digestHost, password)), expiry, 0, '', 0)
   insert.run(digestHost, 'encrypted-v11', '', new Uint8Array(encryptChromium('v11-value', digestHost, password, 'v11')), expiry, 0, '', 0)
-  insert.run('.blocked.example.test', 'app-bound', '', new Uint8Array(Buffer.from('v20-app-bound')), expiry, 0, '', 0)
-  insert.run('.partition.example.test', 'opaque-chip', 'ignored', new Uint8Array(), expiry, 1, 'opaque-partition-key', 1)
+  insert.run('.blocked.example.org', 'app-bound', '', new Uint8Array(Buffer.from('v20-app-bound')), expiry, 0, '', 0)
+  insert.run('.partition.example.net', 'opaque-chip', 'ignored', new Uint8Array(), expiry, 1, 'opaque-partition-key', 1)
   return db
 }
 
@@ -267,8 +267,8 @@ test('daemon import reads Chromium Local State profiles, decrypts v24 rows, and 
   })
   try {
     const page = await createPage(h)
-    await seedCookie(h, page, cookie('blocked-old', 'preserve-blocked', '.blocked.example.test'))
-    await seedCookie(h, page, cookie('partition-old', 'preserve-partition', '.partition.example.test'))
+    await seedCookie(h, page, cookie('blocked-old', 'preserve-blocked', '.blocked.example.org'))
+    await seedCookie(h, page, cookie('partition-old', 'preserve-partition', '.partition.example.net'))
     const beforeDatabase = readFileSync(databasePath)
     const beforeWal = readFileSync(`${databasePath}-wal`)
     const spawnCountBeforeDetection = h.spawnCount()
@@ -292,7 +292,7 @@ test('daemon import reads Chromium Local State profiles, decrypts v24 rows, and 
       totalCookies: 4,
       importedCookies: 2,
       skippedCookies: 2,
-      domains: ['decrypted.example.test'],
+      domains: ['example.test'],
       partitionSkippedCookies: 1,
       warning: { code: 'browser_import_partition_skipped' }
     })
@@ -433,6 +433,7 @@ test('daemon replacement rolls back exact cookie values, reports jobs, and drain
       cookieRow('new-b', 'b', '.drain.example.test')
     ], 'draining-source.json')
     recordDrainWrites = true
+    blockedSet = 'new-a'
     const draining = await h.client.callAny('quirky.browser/importStart', {
       source: { kind: 'file', path: drainingSource },
       yes: true
