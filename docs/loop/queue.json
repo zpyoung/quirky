@@ -1005,7 +1005,7 @@
         "orchestration.md",
         "heimdall.md"
       ],
-      "status": "todo",
+      "status": "in-progress",
       "title": "Parity sweep for orchestration.md, heimdall.md: every remaining flow in these feature docs, except the GitLab, Bitbucket, Gitea/Forgejo and Azure DevOps flows, the Objective runner and the PR sitter, which the user deferred. Find what earlier items left out or deferred, build or fix it, and record anything too large as a follow-up item",
       "deps": [
         "m6-orchestration-core",
@@ -1014,7 +1014,8 @@
         "m6-heimdall-core",
         "m6-heimdall-control",
         "m6-heimdall-owner"
-      ]
+      ],
+      "lane": 7
     },
     {
       "id": "m7-api-freeze",
