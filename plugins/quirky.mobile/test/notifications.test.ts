@@ -1,23 +1,37 @@
 import { afterEach, expect, test } from 'bun:test'
-import { startHarness, builtinsDir, type Harness } from '../../../packages/daemon/test/helpers'
+import { mkdirSync, rmSync } from 'node:fs'
+import { join } from 'node:path'
+import { startHarness, builtinsDir, makeHomeWithoutAutoHooks, type Harness } from '../../../packages/daemon/test/helpers'
 import { MobileTestClient } from './support/client'
 
 let harness: Harness | undefined
 let phone: MobileTestClient | undefined
-const saved = process.env.QUIRKY_MOBILE_PORT
+let fixtureHome: string | undefined
+let environment: Map<string, string | undefined> | undefined
+const ENV_KEYS = ['HOME', 'QUIRKY_HOME', 'QUIRKY_MOBILE_PORT', 'QUIRKY_MOBILE_HOST', 'CODEX_HOME', 'CLAUDE_CONFIG_DIR'] as const
 
 afterEach(async () => {
   await phone?.close()
   phone = undefined
   await harness?.cleanup()
   harness = undefined
-  if (saved === undefined) delete process.env.QUIRKY_MOBILE_PORT
-  else process.env.QUIRKY_MOBILE_PORT = saved
+  if (fixtureHome) rmSync(fixtureHome, { recursive: true, force: true })
+  fixtureHome = undefined
+  for (const [key, value] of environment ?? []) {
+    if (value === undefined) delete process.env[key]
+    else process.env[key] = value
+  }
+  environment = undefined
 })
 
 test('paired phone notification polling is scoped, replayable and closed by revocation', async () => {
-  process.env.QUIRKY_MOBILE_PORT = '0'
-  harness = await startHarness({ builtinPluginsDir: builtinsDir() })
+  environment = new Map(ENV_KEYS.map(key => [key, process.env[key]]))
+  fixtureHome = makeHomeWithoutAutoHooks('quirky-phone-notifications-')
+  const userHome = join(fixtureHome, 'user-home')
+  mkdirSync(userHome, { recursive: true })
+  Object.assign(process.env, { HOME: userHome, QUIRKY_HOME: fixtureHome, QUIRKY_MOBILE_PORT: '0', CODEX_HOME: join(userHome, '.codex'), CLAUDE_CONFIG_DIR: join(userHome, '.claude') })
+  delete process.env.QUIRKY_MOBILE_HOST
+  harness = await startHarness({ home: fixtureHome, builtinPluginsDir: builtinsDir() })
   const local = await harness.connect('cli')
   const offer = await local.callAny('quirky.mobile/pair', { address: '127.0.0.1' }) as { pairingUrl: string; endpoint: string; deviceId: string }
   const code = JSON.parse(Buffer.from(new URL(offer.pairingUrl).searchParams.get('code')!, 'base64url').toString())

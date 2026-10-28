@@ -77,6 +77,7 @@ export function describeSwitchBranch(env: DaemonEnv): Handler {
     assertNoOperationLock(env, worktree)
     const status = await env.readStatus(worktree)
     assertClean(env, status)
+    assertExpectedSource(env, status, params)
     const target = await resolveTarget(env, worktree, params.branch)
     await assertTargetAvailable(env, worktree, target, status)
     const from = status.branch ?? 'detached HEAD'

@@ -143,5 +143,27 @@
 - **Revisit if:** an external worker edit appears outside its declared tree.
 - **Source:** assumed — autonomous
 
+## D14: Correct process-fixture isolation without guessing at user-state rollback
+- **Question:** did each new daemon fixture isolate both Quirky state and agent configuration homes?
+- **Options:** assume temporaryQUIRKY_HOME was enough; repair the fixture boundary and disclose the missing before-state.
+- **Chose:** owned HOME/QUIRKY_HOME/CODEX_HOME/CLAUDE_CONFIG_DIR; disable unrelated auto-hooks before daemon activation; clear inherited Git directory/index/object pointers in the physical Git proof. Preserve environment and stop/remove owned resources. Record the earlier ambient-HOME gap in BLOCKERS and do not blindly remove or restore real user files.
+- **Why:** the first notification API/CLI fixtures replaced only QUIRKY_HOME. All-built-in activation included hook support, so that was not a valid isolation guarantee. No before-state hash was recorded and output did not confirm a write; neither actual mutation nor zero effects can be claimed.
+- **Evidence:** original notifications fixture startHarness call and smoke setup; corrected3file regression3pass28assertions; corrected CLI settings/catalog/sealed notification/replay smoke passed; docs/loop/BLOCKERS.md isolation observation.
+- **Reversibility:** medium
+- **Confidence:** high for fixture correction, unknown for earlier home effects
+- **Revisit if:** a trustworthy pre-run user-configuration backup becomes available.
+- **Source:** assumed — autonomous
+
+## D15: Repair both advertised CLI and guarded confirmation contracts
+- **Question:** structural plugin validation found a camelCase CLI key and missing describer guard fields.
+- **Options:** relabel the advertised command or omit source guards; preserve both public contracts and fix their registration/schema.
+- **Chose:** mobile open-settings uses the actual short CLI module key. describeSwitchBranch accepts and validates optional expectedBranch/expectedHead forwarded by the confirmation dispatcher; the narrow phone policy includes the same fields. Remove the incidental API-schema property-copy assertion; retain real CLI decline/confirm and physical Git branch checks.
+- **Why:** the actual CLI smoke reproduced no command open-settings. The guarded CLI regression never reached its expected ask because describer schema validation rejected the forwarded source snapshot. After repair, the CLI smoke opens the real settings view and guarded decline/confirm test passes.
+- **Evidence:** MobilePluginStructure report; settings smoke red then green; guarded branch CLI red wait timeout then1test5assertions green; actual method describer forwarding in packages/daemon/src/plugins/confirm.ts.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the kernel changes destructive describer argument forwarding.
+- **Source:** assumed — autonomous
+
 ## Progress
 Feature source components merged and original trees removed. Parent safe metadata APIs and vault projection verified; scoped panel admission module written and unit-verified but not wired into shared base authorization until base lands perD7. Two isolated encrypted acceptance components exist at /tmp/quirky-panels-{git-editor-proof,activity-proof}, source-only and not yet accepted; parent must run them against final policy. Browser host helper is being authored under /tmp/quirky-panel-run.42yijv/ui against actual final PageApp and sealed RPC, no fake backend. Dependency still pending; current base through3fc2dceb merged, full native/pages/bundle still awaited. Final affected suite/scripts/typecheck/build/real UI/review/followup/land remain. No whole-suite local run: night mode reserves it for queue land.

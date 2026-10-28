@@ -116,7 +116,7 @@ const named: CliModule['commands'] = {
     const value = await context.call('quirky.mobile/open', { ...(args.flags.settings === undefined ? {} : { settings: args.flags.settings }) })
     context.out.result(value, () => 'opened Mobile')
   },
-  async openSettings(args, context) {
+  async 'open-settings'(args, context) {
     noArgs(args, context)
     const value = await context.call('quirky.mobile/open', { settings: true })
     context.out.result(value, () => 'opened Mobile settings')

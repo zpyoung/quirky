@@ -1171,6 +1171,14 @@
             "branch": {
               "type": "string",
               "description": "Exact local or remote branch name returned by quirky.git/branches."
+            },
+            "expectedBranch": {
+              "type": "string",
+              "description": "Optional branch snapshot forwarded by the confirmation dispatcher."
+            },
+            "expectedHead": {
+              "type": "string",
+              "description": "Optional HEAD snapshot forwarded by the confirmation dispatcher."
             }
           },
           "required": [

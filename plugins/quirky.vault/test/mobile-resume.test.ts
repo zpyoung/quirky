@@ -6,6 +6,7 @@ import { startHarness, builtinsDir, type Harness } from '../../../packages/daemo
 import { writeEveryAgentFixture } from './fixtures/scanner-fixtures'
 import type { PublicListResult } from '../src/types'
 import type { Session } from '@quirky/protocol'
+import { Store } from '../../../packages/daemon/src/store'
 
 let harness: Harness | undefined
 let root: string | undefined
@@ -30,10 +31,12 @@ test('mobile history omits launch credentials while local resume metadata remain
   const home = join(root, 'quirky')
   const agentBin = join(root, 'agents')
   for (const dir of [userHome, sourceHome, home, agentBin]) mkdirSync(dir, { recursive: true })
-  const patch = { HOME: userHome, QUIRKY_HOME: home, QUIRKY_VAULT_SOURCE_HOME: sourceHome, QUIRKY_AGENT_SEARCH_DIRS: agentBin, QUIRKY_MOBILE_PORT: '0', CODEX_HOME: join(sourceHome, '.codex') }
+  const patch = { HOME: userHome, QUIRKY_HOME: home, QUIRKY_VAULT_SOURCE_HOME: sourceHome, QUIRKY_AGENT_SEARCH_DIRS: agentBin, QUIRKY_MOBILE_PORT: '0', QUIRKY_MOBILE_HOST: '127.0.0.1', CODEX_HOME: join(sourceHome, '.codex'), CLAUDE_CONFIG_DIR: join(userHome, '.claude') }
   environment = new Map(Object.keys(patch).map(key => [key, process.env[key]]))
   Object.assign(process.env, patch)
   await writeEveryAgentFixture(sourceHome, { cwdRoot: join(root, 'working') })
+  const store = new Store(join(home, 'quirky.db'))
+  try { store.setSettingValue('setting:quirky.agent-status/hooks', false) } finally { store.close() }
   harness = await startHarness({ home, builtinPluginsDir: builtinsDir() })
   const local = await harness.connect('cli')
   await local.callAny('quirky.agents/configure', { agent: 'claude', command: '/usr/bin/true', args: '', env: { MOBILE_PRIVATE_CREDENTIAL: 'server-only-owned-secret' } })

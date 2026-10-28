@@ -18,7 +18,7 @@ export const PANEL_METHOD_PARAMS: Readonly<Record<string, readonly string[]>> = 
   'quirky.git/describeForcePush': ['worktree', 'expected'],
   'quirky.git/branches': ['worktree', 'query'],
   'quirky.git/switchBranch': ['worktree', 'branch', 'expectedBranch', 'expectedHead', 'yes', 'confirmation'],
-  'quirky.git/describeSwitchBranch': ['worktree', 'branch'],
+  'quirky.git/describeSwitchBranch': ['worktree', 'branch', 'expectedBranch', 'expectedHead'],
   'quirky.git/continue': ['worktree'],
   'quirky.git/abort': ['worktree', 'yes', 'confirmation'],
   'quirky.git/describeAbort': ['worktree'],

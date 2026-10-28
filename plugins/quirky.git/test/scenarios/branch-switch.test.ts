@@ -17,12 +17,6 @@ describe('switchBranch', () => {
     const status = await s.api('status')
     const branches = await s.api('branches')
     expect(branches.refs).toContainEqual({ name: 'release/mobile', kind: 'local' })
-    const catalog = (await s.client.callAny('api.describe', {})) as {
-      methods: { name: string; params: { properties?: Record<string, unknown> } }[]
-    }
-    const declaration = catalog.methods.find((method) => method.name === 'quirky.git/switchBranch')
-    expect(declaration?.params.properties).toHaveProperty('expectedBranch')
-    expect(declaration?.params.properties).toHaveProperty('expectedHead')
 
     const description = await s.api('describeSwitchBranch', { branch: 'release/mobile' })
     expect(description).toContain('release/mobile')
@@ -116,12 +110,14 @@ describe('switchBranch', () => {
   test('requires explicit confirmation for the generated CLI command', async () => {
     s = await startScenario(scratch)
     s.gitIn('branch', 'release/confirm')
-    const declined = await s.cliAsk(['git', 'switchBranch', '--branch', 'release/confirm'], false)
+    const source = await s.api('status')
+    const args = ['git', 'switchBranch', '--branch', 'release/confirm', '--expected-branch', String(source.branch), '--expected-head', String(source.head)]
+    const declined = await s.cliAsk(args, false)
     expect(declined.code).not.toBe(0)
     expect(declined.stderr).toContain('release/confirm')
     expect(s.gitIn('branch', '--show-current')).toBe('zoe/feat')
 
-    const confirmed = await s.cliAsk(['git', 'switchBranch', '--branch', 'release/confirm'], true)
+    const confirmed = await s.cliAsk(args, true)
     expect(confirmed.code).toBe(0)
     expect(s.gitIn('branch', '--show-current')).toBe('release/confirm')
   })
