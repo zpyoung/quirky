@@ -1,11 +1,12 @@
-import { GitHubReviewStatus } from '../../src/panel/GitHubReview'
-import { createElement } from 'react'
-import { createRoot } from 'react-dom/client'
 import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { registerDom } from './register-dom'
 
 registerDom()
+// Load ReactDOM and portal-backed components only after happy-dom registers its window.
+const { GitHubReviewStatus } = await import('../../src/panel/GitHubReview')
+const { createElement } = await import('react')
+const { createRoot } = await import('react-dom/client')
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 const s = await import('./panel-support')
 const { act, byLabel, buttonText, click, entry, failure, fakeContext, layoutFor, mountPanel, press, q, qa, settle, statusOf, type } = s
@@ -800,7 +801,7 @@ describe('NA-40: the Source Control AI defaults view', () => {
     })
     await click(buttonText(section(element, 'branchName'), 'Generate branch name'))
     expect(fake.called('quirky.git/aiName').at(-1)?.params).toMatchObject({ worktree: 'feat', action: 'branchName' })
-    expect(section(element, 'branchName').textContent).toContain('feature/metadata-owner')
+    expect(inSection(element, 'branchName', 'Suggested name').value).toBe('feature/metadata-owner')
 
     const selectedSession = inSection(element, 'conversationName', 'Captured conversation') as HTMLSelectElement
     await act(async () => {
@@ -811,11 +812,11 @@ describe('NA-40: the Source Control AI defaults view', () => {
     expect(fake.called('quirky.git/aiName').at(-1)?.params).toMatchObject({
       worktree: 'feat', action: 'conversationName', session: 'captured-session'
     })
-    expect(section(element, 'conversationName').textContent).toContain('Metadata owner conversation')
+    expect(inSection(element, 'conversationName', 'Suggested name').value).toBe('Metadata owner conversation')
 
     failName = true
     await click(buttonText(section(element, 'conversationName'), 'Generate conversation name'))
-    expect(section(element, 'conversationName').textContent).toContain('Metadata owner conversation')
+    expect(inSection(element, 'conversationName', 'Suggested name').value).toBe('Metadata owner conversation')
     expect(section(element, 'conversationName').textContent).toContain('provider unavailable')
     expect(fake.called('quirky.git/aiName')).toHaveLength(3)
     unmount()
