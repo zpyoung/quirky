@@ -1843,6 +1843,26 @@
       "status": "done"
     },
     {
+      "id": "fix-test-scripts-1028",
+      "milestone": "M7",
+      "title": "Fix end-phase bun test scripts failures after ui-screenshot-review landed: settled frozen dependencies, 113 pass/13 fail/945 assertions across12files on macOS. scripts/ui-review/review.test.ts has12failures: threshold85, redaction, score84, unknown target/empty inventory, bad digests, invalid JSON/scores, actual family mismatch, unknown provider family, GitHub Copilot family, invisible target, image tamper and timeout-child cleanup; actual output includes fake-pi-watch.cjs appendFileSync path undefined and repeated manifest captures mkdir EEXIST. scripts/ui-review/cli.test.ts:219 rejects malformed review-only input but misses its expected validation diagnostic. Raw output retained in lane2 .quirk/build-loop/sb-mobile-settings-visibility/post-merge-scripts.log; Mobile Settings investigation changes no production or test source. Diagnose/fix these exact scripts defects without weakening consumer-visible coverage; distinguish source-text/incidental tests per project rules. Parent caught-up bun run build and typecheck pass; do not infer scripts pass.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "fix-test-packages-daemon-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase packages/daemon failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area packages/daemon). Files and exact failed tests: packages/daemon/test/desktop-shell.test.ts: auxiliary routes remain daemon-readable, local to their window, and pruned by the native owner close. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "done"
+    },
+    {
       "id": "m7-sweep-sessions",
       "milestone": "M7",
       "docs": [
@@ -1930,16 +1950,6 @@
       "lane": 11
     },
     {
-      "id": "fix-test-scripts-1028",
-      "milestone": "M7",
-      "title": "Fix end-phase bun test scripts failures after ui-screenshot-review landed: settled frozen dependencies, 113 pass/13 fail/945 assertions across12files on macOS. scripts/ui-review/review.test.ts has12failures: threshold85, redaction, score84, unknown target/empty inventory, bad digests, invalid JSON/scores, actual family mismatch, unknown provider family, GitHub Copilot family, invisible target, image tamper and timeout-child cleanup; actual output includes fake-pi-watch.cjs appendFileSync path undefined and repeated manifest captures mkdir EEXIST. scripts/ui-review/cli.test.ts:219 rejects malformed review-only input but misses its expected validation diagnostic. Raw output retained in lane2 .quirk/build-loop/sb-mobile-settings-visibility/post-merge-scripts.log; Mobile Settings investigation changes no production or test source. Diagnose/fix these exact scripts defects without weakening consumer-visible coverage; distinguish source-text/incidental tests per project rules. Parent caught-up bun run build and typecheck pass; do not infer scripts pass.",
-      "docs": [],
-      "deps": [
-        "m7-test-triage"
-      ],
-      "status": "done"
-    },
-    {
       "id": "fix-test-apps-mobile-1028",
       "milestone": "M7",
       "title": "Repair end-phase apps/mobile failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area apps/mobile). Files and exact failed tests: apps/mobile/test/panels/files-tasks.test.ts: mobile composer keeps setup and issue-command consent independent and forwards both displayed pins | apps/mobile/test/terminal-artifacts.test.tsx: artifact routes reject paths and only authorize methods bound to the selected route and grant; Session More actions opens artifacts for the exact selected terminal session | apps/mobile/test/session-tabs.test.tsx: Browser Watch scrolls the real page using coordinates in the displayed frame | apps/mobile/test/pages.test.ts: page bridge admits only empty-parameter loop summaries as a read-only consumer API; automation-created workspace filtering uses only durable provenance and persists its option | apps/mobile/test/bundle.test.ts: verified mobile page generations > downloads contiguous bounded chunks, verifies hashes, then activates the complete generation; verified mobile page generations > rejects a build ID that does not match the canonical manifest before staging; verified mobile page generations > a failed update never activates partial or hash-mismatched bytes and leaves the previous generation usable; verified mobile page generations > rejects unsupported shell versions, unsafe asset paths, duplicate paths and oversized manifests | apps/mobile/test/shell.test.ts: isolated page shell and generation storage > atomic generation activation exposes no partial files and keeps the prior verified generation on failure; isolated page shell and generation storage > reuses an unchanged verified generation and prunes stale cache records after activation. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
@@ -1949,16 +1959,6 @@
       ],
       "status": "in-progress",
       "lane": 8
-    },
-    {
-      "id": "fix-test-packages-daemon-1028",
-      "milestone": "M7",
-      "title": "Repair end-phase packages/daemon failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area packages/daemon). Files and exact failed tests: packages/daemon/test/desktop-shell.test.ts: auxiliary routes remain daemon-readable, local to their window, and pruned by the native owner close. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
-      "docs": [],
-      "deps": [
-        "m7-test-triage"
-      ],
-      "status": "done"
     },
     {
       "id": "fix-test-packages-ui-1028",
@@ -2302,8 +2302,7 @@
         "fix-test-agents-1028",
         "fix-test-accounts-1028",
         "fix-test-packages-protocol-1028",
-        "fix-test-scripts-ui-review-1028",
-        "fix-native-sa-browser-agent-1028"
+        "fix-test-scripts-ui-review-1028"
       ],
       "status": "todo",
       "early": true
