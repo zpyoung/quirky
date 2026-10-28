@@ -17,6 +17,7 @@ import type { Core } from '../service'
 import type { ClientConn } from '../types'
 import type { Store } from '../store'
 import type { RuntimeSessionAuthority } from '../session-authority'
+import { HostPowerService } from '../host-power'
 import { fillConfirm } from './confirm'
 import { DistroService, renderDistroInspection } from './distros'
 import { Dispatcher } from './dispatch'
@@ -48,6 +49,8 @@ export type PluginRuntimeOptions = {
   /** Stops the daemon process; `daemon.stop` calls it after replying. */
   stopDaemon: () => void
   sessionAuthority: RuntimeSessionAuthority
+  /** Trusted in-process native lifecycle service; omitted by isolated host harnesses. */
+  hostPower?: HostPowerService
 }
 
 type LaunchInput = Omit<LaunchHookInput, 'env' | 'args' | 'jsonArgs'>
@@ -57,6 +60,7 @@ export type PluginRuntime = {
   fileResources: FileResourceRegistry
   dispatcher: Dispatcher
   events: PluginEvents
+  hostPower: HostPowerService
   scheduler: Scheduler
   layout: LayoutService
   distros: DistroService
@@ -77,6 +81,7 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
   const { home, plugins, core, store, log, launchHookTimeoutMs } = options
 
   const events = new PluginEvents(plugins, (event) => core.broadcast(event), log)
+  const hostPower = options.hostPower ?? new HostPowerService(log, null)
   const scheduler = new Scheduler({ plugins, store, log, recheckMs: options.schedulerRecheckMs })
   const distros = new DistroService({
     home,
@@ -267,6 +272,7 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
         dataDir,
         home,
         pty: ptyApi.api,
+        hostPower: hostPower.forPlugin(id, isRevoked),
         notify(notification) {
           guard()
           core.notify(notification)
@@ -366,6 +372,7 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
       }
     },
     async revoke(pluginId) {
+      hostPower.revoke(pluginId)
       const admitted = admittedByPlugin.get(pluginId)
       if (admitted !== undefined) {
         for (const revoke of [...admitted]) revoke()
@@ -396,5 +403,5 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
     }
   }
 
-  return { extension, dispatcher, events, scheduler, layout, distros, fileResources, prepareLaunch }
+  return { extension, dispatcher, events, hostPower, scheduler, layout, distros, fileResources, prepareLaunch }
 }
