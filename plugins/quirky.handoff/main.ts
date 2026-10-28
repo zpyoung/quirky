@@ -13,6 +13,7 @@ export function activate(context: PluginContext): void {
   const provide = (name: string, handler: (params: Record<string, unknown>) => unknown) =>
     context.provide(`method:quirky.handoff/${name}`, handler)
   provide('prepare', (params) => active.prepare(params))
+  provide('openArchived', (params) => active.openArchived(params))
   provide('preview', (params) => active.preview(params))
   provide('probe', (params) => active.probe(params))
   provide('templates', () => active.templates())

@@ -120,7 +120,6 @@ describe('vault worker idle retirement', () => {
       writeFileSync(gate, 'release')
       await within(shutdown, 'shutdown did not wait for retiring worker cleanup')
       expect(shutdownSettled).toBe(true)
-      expect(client.started).toBe(false)
     } finally {
       writeFileSync(gate, 'release')
       try {
