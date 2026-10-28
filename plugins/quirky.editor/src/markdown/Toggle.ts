@@ -18,6 +18,7 @@ function encodeHtmlText(value: string): string {
 function findDetailsClose(source: string, from: number): { start: number; end: number } | null {
   let offset = from
   let lineStart = source.lastIndexOf('\n', from - 1) + 1
+  let depth = 1
   let fence: { char: string; length: number } | null = null
   let inlineCodeLength = 0
 
@@ -60,8 +61,19 @@ function findDetailsClose(source: string, from: number): { start: number; end: n
         continue
       }
       if (inlineCodeLength === 0) {
+        const opening = /^<details(?=\s|>)(?:\s[^<>]*)?>/i.exec(line.slice(index))
+        if (opening) {
+          depth += 1
+          index += opening[0].length
+          continue
+        }
         const closing = /^<\/details\s*>/i.exec(line.slice(index))
-        if (closing) return { start: offset + index, end: offset + index + closing[0].length }
+        if (closing) {
+          depth -= 1
+          if (depth === 0) return { start: offset + index, end: offset + index + closing[0].length }
+          index += closing[0].length
+          continue
+        }
       }
       index += 1
     }
@@ -81,7 +93,8 @@ export const MarkdownToggle = Node.create({
 
   addAttributes() {
     return {
-      summary: { default: 'Toggle' },
+      summary: { default: '' },
+      headingLevel: { default: null },
       open: { default: false }
     }
   },
@@ -91,8 +104,11 @@ export const MarkdownToggle = Node.create({
       tag: 'details',
       getAttrs: (element) => {
         if (!(element instanceof HTMLElement)) return false
+        const summaryElement = Array.from(element.children).find((child) => child.tagName.toLowerCase() === 'summary')
+        const headingTag = summaryElement?.firstElementChild?.tagName.toLowerCase() ?? ''
         return {
-          summary: element.querySelector('summary')?.textContent ?? 'Toggle',
+          summary: summaryElement?.textContent ?? '',
+          headingLevel: /^h[1-5]$/.test(headingTag) ? Number(headingTag.slice(1)) : null,
           open: element.hasAttribute('open')
         }
       },
@@ -108,19 +124,25 @@ export const MarkdownToggle = Node.create({
   },
 
   renderHTML({ node }) {
+    const summary = String(node.attrs.summary ?? '')
+    const headingLevel = Number(node.attrs.headingLevel)
+    const summaryContent = Number.isInteger(headingLevel) && headingLevel >= 1 && headingLevel <= 5
+      ? [`h${headingLevel}`, {}, summary]
+      : summary
     return [
       'details',
       { 'data-markdown-toggle': '', class: 'markdown-toggle', ...(node.attrs.open ? { open: true } : {}) },
-      ['summary', {}, String(node.attrs.summary ?? 'Toggle')],
+      ['summary', {}, summaryContent],
       ['div', { class: 'markdown-toggle-content' }, 0]
     ]
   },
+
 
   markdownTokenizer: {
     name: 'markdownToggle',
     start: (source: string) => source.search(/<details(?=\s|>)/i),
     tokenize: (source: string, _tokens: MarkdownToken[], lexer: MarkdownLexerConfiguration) => {
-      const opening = /^<details(?:\s[^>]*)?>\s*<summary(?:\s[^>]*)?>([\s\S]*?)<\/summary>\s*/i.exec(source)
+      const opening = /^<details(?:\s[^<>]*)?>[\t \r\n]*<summary(?:\s[^<>]*)?>([\s\S]*?)<\/summary>/i.exec(source)
       if (!opening) return undefined
       const bodyStart = opening[0].length
       const closing = findDetailsClose(source, bodyStart)
@@ -128,29 +150,36 @@ export const MarkdownToggle = Node.create({
       const raw = source.slice(0, closing.end)
       const detailsOpen = /^<details\b([^>]*)>/i.exec(source)?.[1] ?? ''
       const open = /(?:^|\s)open(?:\s|$)/i.test(detailsOpen.trim())
-      const summary = decodeHtmlText(opening[1]!.replace(/<[^>]*>/g, '').trim()) || 'Toggle'
-      const body = source.slice(bodyStart, closing.start)
-        .replace(/^\s*<div(?:\s[^>]*)?>/i, '')
-        .replace(/<\/div>\s*$/i, '')
-        .replace(/<p(?:\s[^>]*)?>/gi, '')
-        .replace(/<\/p>/gi, '\n\n')
-        .replace(/\n{3,}/g, '\n\n')
-        .trim()
-      return { type: 'markdownToggle', raw, summary, open, text: body, tokens: lexer.blockTokens(body) }
+      const summaryMarkup = opening[1]!
+      const heading = /^<h([1-5])>([\s\S]*)<\/h\1>$/i.exec(summaryMarkup)
+      const headingLevel = heading ? Number(heading[1]) : null
+      const summarySource = heading?.[2] ?? summaryMarkup
+      const summary = decodeHtmlText(summarySource.replace(/<[^>]*>/g, ''))
+      let body = source.slice(bodyStart, closing.start)
+      body = body.replace(/^\r?\n\r?\n/, '').replace(/\r?\n\r?\n$/, '')
+      return { type: 'markdownToggle', summary, headingLevel, open, text: body, tokens: lexer.blockTokens(body) }
     }
   },
 
   parseMarkdown(token, helpers) {
     const attributes = token as Record<string, unknown>
-    const summary = typeof attributes.summary === 'string' ? attributes.summary : 'Toggle'
+    const summary = typeof attributes.summary === 'string' ? attributes.summary : ''
+    const headingLevel = typeof attributes.headingLevel === 'number' &&
+      Number.isInteger(attributes.headingLevel) && attributes.headingLevel >= 1 && attributes.headingLevel <= 5
+      ? attributes.headingLevel
+      : null
     const open = attributes.open === true
     const tokens = Array.isArray(attributes.tokens) ? attributes.tokens : []
-    return { type: 'markdownToggle', attrs: { summary, open }, content: helpers.parseChildren(tokens) }
+    return { type: 'markdownToggle', attrs: { summary, headingLevel, open }, content: helpers.parseChildren(tokens) }
   },
 
   renderMarkdown({ node, helpers }) {
-    const summary = encodeHtmlText(String(node.attrs.summary ?? 'Toggle'))
+    const summary = encodeHtmlText(String(node.attrs.summary ?? ''))
+    const headingLevel = Number(node.attrs.headingLevel)
+    const summaryMarkup = Number.isInteger(headingLevel) && headingLevel >= 1 && headingLevel <= 5
+      ? `<h${headingLevel}>${summary}</h${headingLevel}>`
+      : summary
     const content = helpers.renderChildren(node)
-    return `<details${node.attrs.open ? ' open' : ''}><summary>${summary}</summary>\n\n${content}\n\n</details>`
+    return `<details${node.attrs.open ? ' open' : ''}><summary>${summaryMarkup}</summary>\n\n${content}\n\n</details>`
   }
 })

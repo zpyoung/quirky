@@ -37,7 +37,7 @@ import {
 } from './files'
 import { serializeMarkdown } from './tiptap'
 
-type MarkdownActionName = 'capabilities' | 'format' | 'insert' | 'apply' | 'links' | 'documents' | 'toc' | 'frontmatter' | 'search' | 'replace' | 'templates' | 'new' | 'importImage' | 'exportPdf'
+type MarkdownActionName = 'capabilities' | 'format' | 'insert' | 'apply' | 'links' | 'documents' | 'toc' | 'frontmatter' | 'search' | 'replace' | 'templates' | 'new' | 'importImage' | 'exportPdf' | 'renderPreview'
 type ActionParams = Record<string, unknown> & {
   action?: MarkdownActionName
   bufferId?: string
@@ -324,7 +324,7 @@ async function resolveMarkdownLink(host: EditorServices, buffer: EditorBuffer, t
   return { target, safe: false, resolved: null, ambiguous: false, missing: true, kind: 'document' }
 }
 
-async function validateFormatTarget(host: EditorServices, buffer: EditorBuffer, format: MarkdownFormat, target: string | undefined): Promise<void> {
+async function validateFormatTarget(host: EditorServices, buffer: EditorBuffer, format: MarkdownFormat, target: string | undefined): Promise<string> {
   if (typeof target !== 'string' || target.trim() === '') throw errorOf(host, 'invalid-params', `${format} requires a target.`)
   if (format === 'image') {
     if (/^[a-z][a-z0-9+.-]*:/i.test(target) || target.startsWith('//') || target.startsWith('/') || target.includes('\\')) throw errorOf(host, 'invalid-params', 'Markdown images must use an authorized worktree-relative image path.')
@@ -338,21 +338,42 @@ async function validateFormatTarget(host: EditorServices, buffer: EditorBuffer, 
     if (!absolute || !existsSync(absolute) || !statSync(absolute).isFile() || !imageMimeType(absolute)) {
       throw errorOf(host, 'not-found', `Markdown image ${target} is not an authorized image file.`)
     }
-    return
+    return target
   }
   const resolution = await resolveMarkdownLink(host, buffer, target)
   if (!resolution.safe || resolution.ambiguous) {
     throw errorOf(host, 'invalid-params', 'Link target is unsafe, ambiguous or outside the authorized worktree.')
   }
-  if (format === 'documentLink' && resolution.kind !== 'document') {
-    throw errorOf(host, 'invalid-params', 'Document links must resolve to a Markdown document in the worktree.')
+  if (format === 'documentLink') {
+    if (resolution.kind !== 'document' || typeof resolution.resolved !== 'string') {
+      throw errorOf(host, 'invalid-params', 'Document links must resolve to a Markdown document in the worktree.')
+    }
+    const relativePath = posix.relative(base, resolution.resolved) || posix.basename(resolution.resolved)
+    const encodedPath = relativePath.split('/').map((part) => encodeURIComponent(part)).join('/')
+    const anchor = typeof resolution.anchor === 'string' && resolution.anchor !== ''
+      ? `#${encodeURIComponent(resolution.anchor)}`
+      : ''
+    return `${encodedPath}${anchor}`
   }
+  return target
 }
 
 async function markdownAction(host: EditorServices, rawParams: Record<string, unknown>, caller: PluginCaller, resources: MarkdownResourcePool): Promise<MarkdownActionResult> {
   const params = rawParams as ActionParams
   const action = params.action
   if (!action) throw errorOf(host, 'invalid-params', 'markdown action is required.')
+
+  if (action === 'renderPreview') {
+    if (params.bufferId !== undefined || params.path !== undefined || params.worktree !== undefined) {
+      throw errorOf(host, 'invalid-params', 'renderPreview accepts only Markdown text and has no buffer, path or worktree context.')
+    }
+    if (typeof params.text !== 'string') throw errorOf(host, 'invalid-params', 'text is required for Markdown renderPreview.')
+    try {
+      return { html: await renderSafeMarkdownHtml(params.text) }
+    } catch (error) {
+      throw errorOf(host, 'invalid-params', error instanceof Error ? error.message : String(error))
+    }
+  }
 
   if (action === 'new' || action === 'templates') {
     const resolved = await host.resolve(typeof params.worktree === 'string' ? params.worktree : undefined, caller)
@@ -440,14 +461,15 @@ async function markdownAction(host: EditorServices, rawParams: Record<string, un
     if (action === 'format' && format === 'copyCode') {
       return { text: extractSelectedCode(operationSource, params.selection), contentRevision: buffer.contentRevision }
     }
+    let target = params.target
     if (format === 'link' || format === 'image' || format === 'documentLink') {
-      await validateFormatTarget(host, buffer, format, params.target)
+      target = await validateFormatTarget(host, buffer, format, params.target)
     }
     let desired: string
     try {
       desired = action === 'format'
-        ? formatMarkdownSelection(operationSource, format, selected, { target: params.target, language: params.language, text: params.text })
-        : insertMarkdown(operationSource, { format, text: params.text, target: params.target, language: params.language, selection: selected })
+        ? formatMarkdownSelection(operationSource, format, selected, { target, language: params.language, text: params.text })
+        : insertMarkdown(operationSource, { format, text: params.text, target, language: params.language, selection: selected })
     } catch (error) {
       throw errorOf(host, 'invalid-params', error instanceof Error ? error.message : String(error))
     }

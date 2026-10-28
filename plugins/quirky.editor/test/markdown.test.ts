@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { QuirkyClient } from '@quirky/protocol'
 import { builtinsDir, makeHomeWithoutAutoHooks, startHarness, type Harness } from '../../../packages/daemon/test/helpers'
@@ -174,7 +174,7 @@ describe('Markdown through the daemon API', () => {
     expect(encodedLink.safe).toBe(true)
     expect(encodedLink.href).toBe('https://example.test/a_(b)')
   })
-  test('SC-12: details and KaTeX remain safe in preview with source fallback, sanitized raw HTML and relative links', async () => {
+  test('SC-12: supported details stay editable while unsafe HTML still falls back; preview sanitizes output', async () => {
     const source = [
       '# Repeated heading',
       '',
@@ -200,32 +200,34 @@ describe('Markdown through the daemon API', () => {
     const buffer = await open('details.md')
     const capabilities = await md('capabilities', { bufferId: buffer.id, includeCanonical: true, includePreview: true })
 
-    expect(capabilities.richEligible).toBe(false)
-    expect(capabilities.canonicalText).toBeUndefined()
+    expect(capabilities.richEligible).toBe(true)
+    expect(capabilities.canonicalText).toContain('Background context.')
     expect(capabilities.previewHtml).toMatch(/<details(?:\s+open(?:="")?)?>/)
     expect(capabilities.previewHtml).toContain('<summary>Background</summary>')
     expect(capabilities.previewHtml).toContain('class="katex"')
     expect(capabilities.previewHtml).toContain('<math')
     expect(capabilities.previewHtml).toContain('href="docs/Target.md#target-heading"')
-    await expect(md('apply', {
+    const edited = await md('apply', {
       bufferId: buffer.id,
       expectedRevision: buffer.contentRevision,
-      text: source.replace('Equation $x^2$ and display math:', 'Changed $x^2$ and display math:')
-    })).rejects.toThrow()
-    expect((await open('details.md', 'source')).draft).toBeNull()
+      text: String(capabilities.canonicalText).replace('Equation $x^2$ and display math:', 'Changed $x^2$ and display math:')
+    })
+    expect(edited.changed).toBe(true)
+    expect(edited.buffer.draft).toContain('Changed $x^2$ and display math:')
+    expect((await open('details.md', 'source')).draft).toContain('<summary>Background</summary>')
     expect(readFileSync(join(current().root, 'details.md'), 'utf8')).toBe(source)
     const emptySource = '<details><summary>Empty</summary></details>\n'
     put('empty-details.md', emptySource)
     const emptyDetails = await open('empty-details.md')
     const emptyCapabilities = await md('capabilities', { bufferId: emptyDetails.id, includeCanonical: true })
-    expect(emptyCapabilities.richEligible).toBe(false)
-    expect(emptyCapabilities.canonicalText).toBeUndefined()
-    await expect(md('apply', {
+    expect(emptyCapabilities.richEligible).toBe(true)
+    const noOp = await md('apply', {
       bufferId: emptyDetails.id,
       expectedRevision: emptyDetails.contentRevision,
-      text: emptySource.replace('Empty', 'Changed')
-    })).rejects.toThrow()
-    expect((await open('empty-details.md', 'source')).draft).toBeNull()
+      text: String(emptyCapabilities.canonicalText)
+    })
+    expect(noOp.changed).toBe(false)
+    expect(noOp.buffer.draft).toBeNull()
     expect(readFileSync(join(current().root, 'empty-details.md'), 'utf8')).toBe(emptySource)
     const fencedSource = '```html\n<details>\n<summary>Literal closing tag</summary>\n</details>\n```\n'
     put('code-details.md', fencedSource)
@@ -284,9 +286,71 @@ describe('Markdown through the daemon API', () => {
     expect(readFileSync(join(current().root, 'unsafe-details.md'), 'utf8')).toBe(malicious)
   })
 
+  test('nested and empty details round-trip losslessly around an unrelated CRLF/frontmatter edit', async () => {
+    const f = current()
+    const source = [
+      '---',
+      'title: Keep CRLF',
+      '---',
+      '',
+      'Before stays exactly.',
+      '',
+      '<details open>',
+      '<summary>Outer &amp; &lt;summary&gt;</summary>',
+      '',
+      'Outer body.',
+      'Inline `</details>` is literal code too.',
+      '',
+      '<details>',
+      '<summary></summary>',
+      '',
+      '```html',
+      '</details> is literal code',
+      '```',
+      '',
+      '</details>',
+      '',
+      '</details>',
+      '',
+      '<details><summary>Empty body</summary></details>',
+      '',
+      'Unrelated paragraph old.',
+      ''
+    ].join('\r\n')
+    put('nested-details.md', source)
+    const buffer = await open('nested-details.md')
+    const caps = await md('capabilities', { bufferId: buffer.id, includeCanonical: true })
+    expect(caps.richEligible).toBe(true)
+
+    const noOp = await md('apply', {
+      bufferId: buffer.id,
+      expectedRevision: buffer.contentRevision,
+      text: String(caps.canonicalText)
+    })
+    expect(noOp.changed).toBe(false)
+    expect(readFileSync(join(f.root, 'nested-details.md'), 'utf8')).toBe(source)
+
+    const changed = await md('apply', {
+      bufferId: buffer.id,
+      expectedRevision: noOp.buffer.contentRevision,
+      text: String(caps.canonicalText).replace('Unrelated paragraph old.', 'Unrelated paragraph new.')
+    })
+    expect(changed.buffer.draft).toContain('<summary></summary>')
+    expect(changed.buffer.draft).toContain('</details> is literal code')
+    expect(changed.buffer.draft).toContain('Inline `</details>` is literal code too.')
+    await f.call(EDITOR_SAVE, { bufferId: buffer.id })
+    expect(readFileSync(join(f.root, 'nested-details.md'), 'utf8')).toBe(
+      source.replace('Unrelated paragraph old.', 'Unrelated paragraph new.')
+    )
+    const reopened = await open('nested-details.md', 'rich')
+    const reopenedCaps = await md('capabilities', { bufferId: reopened.id, includeCanonical: true })
+    expect(reopenedCaps.richEligible).toBe(true)
+    expect(String(reopenedCaps.canonicalText)).toContain('Outer &amp; &lt;summary&gt;')
+  })
+
   
 
-  test('SC-13: core formatting, supported inserts, link navigation and safe rejection of deferred rich inserts', async () => {
+  test('SC-13: core formatting, rich toggles, safe document links and rejection of unsafe targets', async () => {
     const f = current()
     put('guide.md', 'Opening words here.\n\nEnd.\n')
     put('docs/Target.md', '# Target\n')
@@ -406,17 +470,23 @@ describe('Markdown through the daemon API', () => {
     expect(await insert('quote', { text: 'quoted' })).toContain('> quoted')
     expect(await insert('link', { target: 'https://example.test/a_(b)', text: 'safe link' })).toContain('safe link')
     expect(await insert('image', { target: 'images/pixel.png', text: 'pixel' })).toContain('![pixel]')
-    const beforeDocumentLink = latest.draft ?? latest.content
+    const documentLink = await md('insert', {
+      bufferId: buffer.id,
+      expectedRevision: latest.contentRevision,
+      format: 'documentLink',
+      target: 'docs/Target.md',
+      text: 'Read target'
+    })
+    latest = documentLink.buffer
+    expect(latest.draft).toContain('[[docs/Target|Read target]]')
+    const beforeMalformedLink = latest.draft
     await expect(md('insert', {
       bufferId: buffer.id,
       expectedRevision: latest.contentRevision,
       format: 'documentLink',
-      target: 'docs/Target',
-      text: 'target'
+      target: 'docs/Target|invalid'
     })).rejects.toThrow()
-    const unchangedDocumentLink = await open('guide.md')
-    expect(unchangedDocumentLink.draft ?? unchangedDocumentLink.content).toBe(beforeDocumentLink)
-    latest = unchangedDocumentLink
+    expect((await open('guide.md')).draft).toBe(beforeMalformedLink)
     const code = await insert('codeBlock', { language: 'typescript', text: 'const answer = 42' })
     expect(code).toContain('```typescript')
     let codeStart = String(latest.draft).indexOf('const answer = 42')
@@ -455,16 +525,14 @@ describe('Markdown through the daemon API', () => {
     })
     expect(copiedCode.text).toContain('const answer = 42')
     expect(await insert('divider')).toContain('---')
-    const beforeUnsupportedToggles = latest.draft ?? latest.content
-    for (const [format, text] of [['details', 'Summary'], ['collapsibleHeading', 'Fold me']] as const) {
-      await expect(md('insert', {
-        bufferId: buffer.id,
-        expectedRevision: latest.contentRevision,
-        format,
-        text
-      })).rejects.toThrow()
-      const unchanged = await open('guide.md')
-      expect(unchanged.draft ?? unchanged.content).toBe(beforeUnsupportedToggles)
+    const toggleText = await insert('details', { text: 'Toggle text body' })
+    expect(toggleText).toContain('<details><summary>Toggle text body</summary>')
+    for (const level of [1, 2, 3, 4, 5]) {
+      const heading = await insert('collapsibleHeading', {
+        language: `heading${level}`,
+        text: `Heading ${level}`
+      })
+      expect(heading).toContain(`<summary><h${level}>Heading ${level}</h${level}></summary>`)
     }
 
 
@@ -486,6 +554,82 @@ describe('Markdown through the daemon API', () => {
     await expect(md('importImage', { bufferId: buffer.id, expectedRevision: image.buffer.contentRevision, path: 'images/oversized.png' })).rejects.toThrow()
     expect((await open('guide.md')).draft).toBe(image.buffer.draft)
     expect(await md('capabilities', { bufferId: buffer.id })).toMatchObject({ richEligible: true })
+    await f.call(EDITOR_SAVE, { bufferId: buffer.id })
+    const saved = readFileSync(join(f.root, 'guide.md'), 'utf8')
+    expect(saved).toContain('[[docs/Target|Read target]]')
+    for (const level of [1, 2, 3, 4, 5]) {
+      expect(saved).toContain(`<summary><h${level}>Heading ${level}</h${level}></summary>`)
+    }
+    const richAgain = await open('guide.md', 'rich')
+    expect(richAgain.id).toBe(buffer.id)
+    expect((await md('capabilities', { bufferId: buffer.id })).richEligible).toBe(true)
+    const sourceAgain = await open('guide.md', 'source')
+    expect(sourceAgain.id).toBe(buffer.id)
+    expect(sourceAgain.content).toBe(saved)
+  })
+
+  test('readable non-writable Markdown keeps drafts and notes after denial; save retry refreshes access', async () => {
+    const f = current()
+    put('permissions.md', 'Readable content for review.\n')
+    const path = join(f.root, 'permissions.md')
+    chmodSync(path, 0o444)
+    try {
+      const opened = await open('permissions.md', 'source')
+      expect(opened).toMatchObject({ readOnly: false, diskWritable: false })
+      const draft = await f.call(EDITOR_DRAFT, {
+        bufferId: opened.id,
+        content: 'Edited readable content.\n',
+        expectedRevision: opened.contentRevision
+      })
+      const note = await notes('add', {
+        bufferId: opened.id,
+        selection: { from: 0, to: 'Readable'.length, mode: 'source' },
+        text: 'This annotation remains local.'
+      })
+      expect(note.note.body).toBe('This annotation remains local.')
+      await expect(f.call(EDITOR_SAVE, { bufferId: opened.id })).rejects.toThrow(/writable|permission/i)
+      const read = await f.call<{
+        buffer?: { readOnly: boolean; diskWritable?: boolean; draft: string | null; baseline: string | null; dirty: boolean }
+      }>('quirky.editor/read', { bufferId: opened.id, action: 'buffer' })
+      expect(read.buffer).toMatchObject({
+        readOnly: false,
+        diskWritable: false,
+        draft: 'Edited readable content.\n',
+        baseline: opened.baseline,
+        dirty: true
+      })
+      const state = await f.call<{ buffers: { id: string; readOnly: boolean; diskWritable?: boolean }[] }>(
+        'quirky.editor/state',
+        { worktree: f.worktree }
+      )
+      expect(state.buffers.find((item) => item.id === opened.id)).toMatchObject({ readOnly: false, diskWritable: false })
+      expect(draft.dirty).toBe(true)
+      expect(readFileSync(path, 'utf8')).toBe('Readable content for review.\n')
+      expect((await notes('list', { bufferId: opened.id })).count).toBe(1)
+
+      chmodSync(path, 0o644)
+      const saved = await f.call(EDITOR_SAVE, { bufferId: opened.id })
+      expect(saved).toMatchObject({ diskWritable: true, draft: null, dirty: false })
+      expect(readFileSync(path, 'utf8')).toBe('Edited readable content.\n')
+      expect((await notes('list', { bufferId: opened.id })).count).toBe(1)
+    } finally {
+      chmodSync(path, 0o644)
+    }
+  })
+
+  test('detached Markdown renderPreview is text-only, bounded, and sanitized', async () => {
+    const html = await md('renderPreview', {
+      text: '# Draft preview\n\n<script>alert(1)</script>\n\n![local image](images/local.png)\n\n[unsafe](javascript:alert(1))'
+    })
+    expect(html.html).toMatch(/<h1\b[^>]*>Draft preview<\/h1>/)
+    expect(html.html).not.toMatch(/<script|onerror\s*=|javascript:/i)
+    expect(html.html).not.toContain('src="images/local.png"')
+    await expect(md('renderPreview', { text: 'x'.repeat(8 * 1024 * 1024 + 1) })).rejects.toThrow(/8 MiB/i)
+    await expect(md('renderPreview', { text: 'x'.repeat(16 * 1024 + 1) })).rejects.toThrow(/line.*preview/i)
+    await expect(md('renderPreview', { text: 'line\n'.repeat(16_384) })).rejects.toThrow(/preview limits/i)
+    await expect(md('renderPreview', { text: 'x', bufferId: 'persisted-buffer' })).rejects.toThrow()
+    await expect(md('renderPreview', { text: 'x', path: 'README.md' })).rejects.toThrow()
+    await expect(md('renderPreview', { text: 'x', worktree: current().worktree })).rejects.toThrow()
   })
 
   test('SC-14: TOC, front matter, find/replace, templates, named-file safety and real PDF export work without changing disk Markdown', async () => {

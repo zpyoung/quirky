@@ -15,6 +15,7 @@ export type FileSnapshot = {
   text: string | null
   kind: EditorKind
   readOnly: boolean
+  diskWritable: boolean
 }
 
 export type GuardedWriteResult = 'written' | 'changed' | 'missing'
@@ -44,7 +45,7 @@ export function kindForPath(path: string): EditorKind {
   return 'text'
 }
 
-export function classifySnapshot(path: string, bytes: Buffer, size: number): FileSnapshot {
+export function classifySnapshot(path: string, bytes: Buffer, size: number): Omit<FileSnapshot, 'diskWritable'> {
   const namedKind = kindForPath(path)
   const probe = bytes.subarray(0, BINARY_PROBE_BYTES)
   const hasNul = probe.includes(0)
@@ -61,6 +62,17 @@ export function classifySnapshot(path: string, bytes: Buffer, size: number): Fil
   const readOnly = binary || ['image', 'pdf', 'audio', 'video'].includes(kind) || (kind === 'csv' && size >= 1024 * 1024)
   return { bytes, size, hash: hashBytes(bytes), text: readOnly ? null : text, kind, readOnly }
 }
+export async function probeWriteAccess(path: string): Promise<boolean> {
+  let handle: FileHandle | null = null
+  try {
+    handle = await open(path, constants.O_RDWR | noFollowFlag())
+    return (await handle.stat()).isFile()
+  } catch {
+    return false
+  } finally {
+    await handle?.close().catch(() => undefined)
+  }
+}
 
 export async function readSnapshot(path: string, maximum = MAX_TEXT_FILE_BYTES): Promise<FileSnapshot> {
   const handle = await open(path, constants.O_RDONLY | noFollowFlag())
@@ -76,7 +88,7 @@ export async function readSnapshot(path: string, maximum = MAX_TEXT_FILE_BYTES):
       offset += bytesRead
     }
     const exact = offset === bytes.length ? bytes : bytes.subarray(0, offset)
-    return classifySnapshot(path, exact, info.size)
+    return { ...classifySnapshot(path, exact, info.size), diskWritable: await probeWriteAccess(path) }
   } finally {
     await handle.close()
   }
