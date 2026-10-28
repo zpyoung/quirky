@@ -1367,6 +1367,18 @@
         "m4-hosting-ui-reviews"
       ],
       "status": "todo"
+    },
+    {
+      "id": "m6-heimdall-host-power",
+      "milestone": "M6",
+      "title": "Deferred Heimdall automatic macOS host sleep/wake flow: add a trusted in-process daemon power-event publisher and public pre-sleep fencing callback/ack boundary (not the asynchronous generic event bus), bind kernel runners to suspend/resume and exclude sleep gaps from active budgets, dispose native subscriptions safely, and verify on an idle dedicated macOS/native test host. Current core provides tested explicit runner hooks but no native host event producer; unblock by implementing that producer/public lifecycle seam without helper processes or elapsed-delay inference.",
+      "docs": [
+        "heimdall.md"
+      ],
+      "deps": [
+        "m6-heimdall-core"
+      ],
+      "status": "todo"
     }
   ]
 }
