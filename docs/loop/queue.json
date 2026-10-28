@@ -1937,6 +1937,18 @@
       "status": "done"
     },
     {
+      "id": "m3-accounts-complete-user-acceptance-20261028",
+      "milestone": "M3",
+      "title": "Finish Accounts user acceptance after the LOOP night cutoff: complete same-home daemon-restart Compact/Detailed Used/Remaining/provider-visibility UI persistence; all ten drill-ins and inactive refresh/debounce; native-login link/Cancel, Codex UI add, reauth/Needs-sign-in refusal; full Claude Ask Restart/Always/Never/busy-idle/supersession UI (ordinary Keep+opt-out Keep passed); Codex pane Keep old account and keyboard follow-through (pane Restart with prior rollout contents and public focus passed; driver refused opacity0 textarea); provider removal Cancel/confirm/System-default fallback; masked MiniMax/OpenCode Go/ZCode configure/clear and secret-free errors; reset stale-account/stale-offer/failure/retry matrix (opt-out redemption/replay and wrapped Cancel passed); retained Codex warning/recovery UI. Also resolve tracked MEDIUM existing cancellation-RPC failure stopping login polling and background/structured stale-account rows offering terminal-only Restart. Preserve actual daemon/PTY A→B→remove-A→C accumulated-content proof, authority/reload/C1 regressions, explicit review independence limits and pending native clipboard/browser/Keychain/OS-focus handoffs. Exact evidence and open findings: docs/loop/decisions/m3-accounts-remaining-flows.md and BLOCKERS.md; no full UI/native pass claimed.",
+      "docs": [
+        "accounts.md"
+      ],
+      "deps": [
+        "m3-accounts-remaining-flows"
+      ],
+      "status": "done"
+    },
+    {
       "id": "m7-sweep-sessions",
       "milestone": "M7",
       "docs": [
@@ -2000,18 +2012,6 @@
       "docs": [],
       "deps": [],
       "status": "blocked"
-    },
-    {
-      "id": "m3-accounts-complete-user-acceptance-20261028",
-      "milestone": "M3",
-      "title": "Finish Accounts user acceptance after the LOOP night cutoff: complete same-home daemon-restart Compact/Detailed Used/Remaining/provider-visibility UI persistence; all ten drill-ins and inactive refresh/debounce; native-login link/Cancel, Codex UI add, reauth/Needs-sign-in refusal; full Claude Ask Restart/Always/Never/busy-idle/supersession UI (ordinary Keep+opt-out Keep passed); Codex pane Keep old account and keyboard follow-through (pane Restart with prior rollout contents and public focus passed; driver refused opacity0 textarea); provider removal Cancel/confirm/System-default fallback; masked MiniMax/OpenCode Go/ZCode configure/clear and secret-free errors; reset stale-account/stale-offer/failure/retry matrix (opt-out redemption/replay and wrapped Cancel passed); retained Codex warning/recovery UI. Also resolve tracked MEDIUM existing cancellation-RPC failure stopping login polling and background/structured stale-account rows offering terminal-only Restart. Preserve actual daemon/PTY A→B→remove-A→C accumulated-content proof, authority/reload/C1 regressions, explicit review independence limits and pending native clipboard/browser/Keychain/OS-focus handoffs. Exact evidence and open findings: docs/loop/decisions/m3-accounts-remaining-flows.md and BLOCKERS.md; no full UI/native pass claimed.",
-      "docs": [
-        "accounts.md"
-      ],
-      "deps": [
-        "m3-accounts-remaining-flows"
-      ],
-      "status": "done"
     },
     {
       "id": "fix-test-browser-1028",
