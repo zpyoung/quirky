@@ -1243,6 +1243,19 @@
         "sa-browser-profiles-settings"
       ],
       "status": "todo"
+    },
+    {
+      "id": "sb-mobile-install-links",
+      "milestone": "Side B",
+      "title": "Publish compatible Quirky companion install artifacts and wire desktop iOS Preview/Stable and Android install links/QRs; blocked until the Quirky Expo fork has signed installable builds and supported distribution URLs (never direct users to incompatible Orca apps)",
+      "docs": [
+        "mobile.md"
+      ],
+      "deps": [
+        "sb-mobile-daemon",
+        "sb-mobile-app"
+      ],
+      "status": "todo"
     }
   ]
 }
