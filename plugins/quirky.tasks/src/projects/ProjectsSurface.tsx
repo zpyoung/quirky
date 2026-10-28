@@ -626,10 +626,6 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
 
   async function updateIssueType(item: ProjectItem, issueType: { id: string; name: string }) {
     if (!project || !isIssue(item) || isRestricted(item) || isDraft(item)) return
-    if (project.ownerType === 'user') {
-      setWriteError(new Error('GitHub issue type edits are currently supported only for organization-owned Projects (hosting API D38).'))
-      return
-    }
     const key = `${item.id}|issueType`
     const mine = (mutationGeneration.current.get(key) ?? 0) + 1
     mutationGeneration.current.set(key, mine)
@@ -657,7 +653,7 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
   }
 
   async function loadIssueTypes(item: ProjectItem) {
-    if (!project || project.ownerType !== 'organization' || issueTypesByItem[item.id]) return
+    if (!project || issueTypesByItem[item.id]) return
     try {
       const response = object(await context.call('quirky.tasks/projectEdit', {
         action: 'issueType', projectId: project.id, itemId: item.id, kind: 'issue',
@@ -1180,7 +1176,6 @@ function ProjectFieldCell(props: {
     return <InlineText value={values} ariaLabel={`${props.field.name ?? propName} for issue ${String(props.item.content?.number ?? '')}`} placeholder="Comma-separated values" onSave={(value) => props.onCollectionEdit(props.item, props.field, value)} />
   }
   if ((type === 'ISSUE_TYPE' || /issue.?type/i.test(props.field.name ?? '')) && isIssue(props.item)) {
-    if (props.project.ownerType === 'user') return <span style={muted}>Issue types require an organization-owned Project (hosting API D38).</span>
     const currentType = record(props.item.content?.issueType)
     const choices = props.issueTypes ?? options
     if (choices.length === 0 && currentType === null) return <button type="button" style={{ ...button, padding: 0 }} onFocus={() => props.onLoadIssueTypes(props.item)} onClick={() => props.onLoadIssueTypes(props.item)}>Load issue types</button>
