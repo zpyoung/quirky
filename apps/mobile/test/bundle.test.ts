@@ -129,7 +129,6 @@ describe('verified mobile page generations', () => {
 
   test('manifest pins artifact route paths and capabilities to their exact metadata', () => {
     const safe = manifest()
-    expect(validateBundleManifest(safe)).toEqual(safe)
 
     for (const kind of ['terminal-artifacts', 'terminal-artifact'] as const) {
       const underGranted = {

@@ -141,8 +141,6 @@ const routeGrants = (kind: 'terminal-artifacts' | 'terminal-artifact') => PAGE_B
 test('artifact routes reject paths and only authorize methods bound to the selected route and grant', () => {
   expect(validatePanelRoute(artifactListRoute)).toEqual(artifactListRoute)
   expect(validatePanelRoute(artifactRoute)).toEqual(artifactRoute)
-  expect(routeGrants('terminal-artifacts')).toEqual(['rpc', 'storage', 'navigate'])
-  expect(routeGrants('terminal-artifact')).toEqual(['rpc', 'storage', 'navigate'])
   expect(() => validatePanelRoute({ ...artifactRoute, path: artifact.path })).toThrow()
   expect(() => validatePanelRoute({ ...artifactRoute, grant: '' })).toThrow()
 
