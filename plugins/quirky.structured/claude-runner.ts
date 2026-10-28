@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { CanUseTool, Options, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { AskEnvelope, Session } from '@quirky/protocol'
-import type { StructuredContext, StructuredRunner, StructuredStartOptions } from './runner'
+import type { StructuredContext, StructuredStartOptions, StructuredRunner } from './runner'
 
 export type ClaudeQueryParams = { prompt: AsyncIterable<SDKUserMessage>; options?: Options }
 
@@ -155,10 +155,10 @@ class ClaudeRunner implements StructuredRunner {
       if (startup.stopped) return
       const pathToClaudeCodeExecutable = await this.context.resolveClaudePath()
       if (startup.stopped) return
-      await this.context.setProviderSession(session.id, {
-        id: providerSessionId,
-        transcriptPath: providerSession?.transcriptPath ?? null
-      })
+      await this.context.setProviderSession(
+        session.id,
+        providerSession ?? { id: providerSessionId, transcriptPath: null }
+      )
       if (startup.stopped) return
       this.launch(session, prompt, query, pathToClaudeCodeExecutable, launchOptions, providerSessionId)
     } finally {
@@ -172,16 +172,17 @@ class ClaudeRunner implements StructuredRunner {
     query: NonNullable<ClaudeRunnerDeps['query']>,
     pathToClaudeCodeExecutable: string,
     launchOptions: StructuredStartOptions,
-    providerSessionId: string
+    claudeSessionId: string
   ): void {
-    const claudeSessionId = providerSessionId
     const input = createInputStream()
-    if (prompt !== undefined) {
+    if (prompt === undefined || prompt === '') {
+      this.context.setStatus(session.id, 'running')
+    } else {
       const first = userMessage(prompt, claudeSessionId)
       this.context.appendMessage({ sessionId: session.id, role: 'user', text: prompt, data: first })
+      this.context.setStatus(session.id, 'working')
       input.push(first)
     }
-    this.context.setStatus(session.id, prompt === undefined ? 'running' : 'working')
     const run: Running = {
       input,
       claudeSessionId,
@@ -192,7 +193,7 @@ class ClaudeRunner implements StructuredRunner {
         options: {
           cwd: session.cwd,
           pathToClaudeCodeExecutable,
-          ...(launchOptions.providerSession === undefined ? { sessionId: claudeSessionId } : { resume: claudeSessionId }),
+          ...(launchOptions.providerSession === undefined ? { sessionId: claudeSessionId } : { resume: launchOptions.providerSession.id }),
           permissionMode: 'default',
           canUseTool: this.canUseTool(session.id),
           ...(launchOptions.env !== undefined ? { env: environmentOf(launchOptions.env) } : {}),
@@ -282,6 +283,10 @@ class ClaudeRunner implements StructuredRunner {
       for await (const msg of run.query) {
         if (run.stopped) break
         this.journal(sessionId, msg)
+        if (msg?.type === 'result' && msg.is_error === true) {
+          await this.stop(sessionId)
+          break
+        }
       }
     } catch (error) {
       failure = error instanceof Error ? error : new Error(String(error))
@@ -328,7 +333,10 @@ class ClaudeRunner implements StructuredRunner {
         return
       case 'result':
         append('result', resultText(msg), msg)
-        this.context.setStatus(sessionId, 'done')
+        if (msg.is_error !== true) this.context.setStatus(sessionId, 'done')
+        return
+      case 'rate_limit_event':
+        append('system', 'Claude rate limit event', msg)
         return
       default:
         append('system', String(msg?.type ?? 'event'), msg)

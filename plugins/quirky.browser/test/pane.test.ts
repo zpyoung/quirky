@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:https'
-import { basename, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { expect, test } from 'bun:test'
 import type { QuirkyEvent } from '@quirky/protocol'
 import { startBrowserHarness, type BrowserTestHarness } from './harness'
@@ -35,9 +35,12 @@ function startPageServer() {
       }
       if (path === '/dialog') return new Response('<!doctype html><title>Dialog fixture</title><main>dialog</main>', { headers: { 'content-type': 'text/html; charset=utf-8' } })
       if (path === '/download') return new Response('owned download contents', {
-        headers: { 'content-type': 'application/octet-stream', 'content-disposition': 'attachment; filename="../../safe.txt"' }
+        headers: { 'content-type': 'application/octet-stream', 'content-disposition': 'attachment; filename="safe.txt"' }
       })
-      if (path === '/download-page') return new Response('<!doctype html><title>Download</title><a href="/download">Download fixture</a>', { headers: { 'content-type': 'text/html; charset=utf-8' } })
+      if (path === '/unsafe-download') return new Response('owned unsafe-name download', {
+        headers: { 'content-type': 'application/octet-stream', 'content-disposition': 'attachment; filename="../../unsafe.txt"' }
+      })
+      if (path === '/download-page') return new Response('<!doctype html><title>Download</title><a id="safe" href="/download">Download fixture</a><a id="unsafe" href="/unsafe-download">Unsafe name fixture</a>', { headers: { 'content-type': 'text/html; charset=utf-8' } })
       return new Response('not found', { status: 404 })
     }
   })
@@ -226,7 +229,7 @@ test('Watch leases deliver acknowledged latest frames and typed input/find/zoom/
 
       const resumed = await call(h, 'paneWatch', { pane: pane.id }) as { watchId: string }
       expect(resumed.watchId).not.toBe(watch.watchId)
-      await call(h, 'tabClose', { page: first.browserPageId })
+      await call(h, 'tabClose', { page: first.browserPageId, yes: true })
       const ended = await waitFor(async () => {
         const state = await call(h, 'paneState', { worktree: `id:${worktree}` }) as { tabs: Array<{ id: string; error: string | null }> }
         return state.tabs.find((tab) => tab.id === pane.id)?.error
@@ -363,7 +366,7 @@ test('Watch JavaScript dialogs resolve pending eval outside the profile lock and
     const downloadPage = await createAgentPage(h, worktree, `${fixture.url}download-page`)
     const downloadPane = await call(h, 'paneOpen', { worktree: `id:${worktree}`, mode: 'watch', page: downloadPage.browserPageId }) as { id: string }
     await call(h, 'paneWatch', { pane: downloadPane.id })
-    await call(h, 'click', { page: downloadPage.browserPageId, element: 'a' })
+    await call(h, 'click', { page: downloadPage.browserPageId, element: '#safe' })
     const downloaded = await waitFor(async () => {
       const state = await call(h, 'paneState', { worktree: `id:${worktree}` }) as { tabs: Array<{ id: string; downloads: Array<{ id: string; state: string; path?: string }> }> }
       return state.tabs.find((tab) => tab.id === downloadPane.id)?.downloads.find((download) => download.state === 'completed')
@@ -373,6 +376,14 @@ test('Watch JavaScript dialogs resolve pending eval outside the profile lock and
     expect(readFileSync(join(downloads, 'safe.txt'), 'utf8')).toBe('keep existing file')
     expect(existsSync(downloaded.path!)).toBe(true)
     expect(readFileSync(downloaded.path!, 'utf8')).toBe('owned download contents')
+    await call(h, 'click', { page: downloadPage.browserPageId, element: '#unsafe' })
+    const unsafe = await waitFor(async () => {
+      const state = await call(h, 'paneState', { worktree: `id:${worktree}` }) as { tabs: Array<{ id: string; downloads: Array<{ id: string; state: string; path?: string }> }> }
+      return state.tabs.find((tab) => tab.id === downloadPane.id)?.downloads.find((download) => download.id !== downloaded.id && download.state === 'completed')
+    })
+    expect(realpathSync(dirname(unsafe.path!))).toBe(realpathSync(downloads))
+    expect(readFileSync(unsafe.path!, 'utf8')).toBe('owned unsafe-name download')
+    expect(readFileSync(join(downloads, 'safe.txt'), 'utf8')).toBe('keep existing file')
   } finally {
     fixture.stop()
     try { await h.cleanup() } finally { await certificate?.stop() }

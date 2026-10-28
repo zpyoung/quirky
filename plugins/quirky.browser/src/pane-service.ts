@@ -1279,12 +1279,13 @@ export class PaneService {
 
   private publishDownload(stagingPath: string, profileId: string, requestedName: string): string {
     const stagingDir = realpathSync(join(this.context.dataDir, 'pane-downloads', profileId))
-    const source = resolve(stagingPath)
+    const requestedSource = resolve(stagingPath)
+    const sourceInfo = lstatSync(requestedSource)
+    if (!sourceInfo.isFile() || sourceInfo.isSymbolicLink()) throw fault('browser_error', 'Chrome produced a non-regular download artifact')
+    const source = realpathSync(requestedSource)
     if (!within(stagingDir, source) || basename(source) === '' || basename(source) === '.' || basename(source) === '..') {
       throw fault('browser_error', 'Chrome download escaped its owned staging directory')
     }
-    const sourceInfo = lstatSync(source)
-    if (!sourceInfo.isFile() || sourceInfo.isSymbolicLink()) throw fault('browser_error', 'Chrome produced a non-regular download artifact')
     const downloads = this.downloadDirectory
     mkdirSync(downloads, { recursive: true, mode: 0o700 })
     const destinationRoot = realpathSync(downloads)

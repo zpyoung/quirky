@@ -299,6 +299,23 @@ Registration update: `bun scripts/build-loop/queue.ts add /tmp/quirky-session-in
   and no pending waiters/foreign process cleanup. No human decision is required.
 - **Still shipped:** durable Run/Dispatch mail, FIFO delivery/ack, exclusive waits, resumable
   questions/replies, gates, and explicit exact-incarnation/idempotent session prompt submission.
+
+## m6-orchestration-workers: observed default-profile editor activation timeout
+
+- **Type:** observed integration bug, medium severity.
+- **File:** `plugins/quirky.editor/main.ts:28-51`, awaited restore in `src/daemon/service.ts:212-226`.
+- **Description:** the final merged built UI on a fresh private profile displayed
+  `quirky.editor failed to activate: activation timed out`; subsequent shared-browser
+  observations also timed out. The editor timeout's cause is not established.
+- **Evidence:** screenshot `omp-sshots-15b77ad4f1dc5ef8.png`; private test PATH was
+  `fakebin:/usr/bin:/bin`. Source inspection does not establish missing `rg` as the cause.
+- **Verification boundary:** the worker terminal UI was exercised successfully in a fresh
+  private profile after public `plugin.disable({id:"quirky.editor"})`, using a dedicated
+  owned Chromium process. No editor source or worker guard was changed to make that pass.
+  Actual worker focus/title, physical takeover, retained release and exact stop passed.
+- **Next diagnostic:** reproduce editor activation with its restore trace and normal tool
+  environment; distinguish that producer timeout from the shared-browser driver timeouts.
+  This records an observation, not an unfinished worker flow or a human decision.
 ## m4-hosting-ui-tasks: deferred parity and cross-feature acceptance
 
 - **Owner:** registered follow-up `m4-hosting-ui-tasks-complete-remaining-flows`, dependent on Tasks, sourced worktree creation and Reviews. The operator's 4am sprint directive authorizes the exercised core landing, not a claim that all25 original scenarios passed.
@@ -322,3 +339,14 @@ Registration update: `bun scripts/build-loop/queue.ts add /tmp/quirky-session-in
   - `m7-sweep-browser-mobile` remains the final parity audit, not a replacement for these specific mappings.
 - **Acceptance limits:** the operator skipped review; Native nightly remains pending. No broad UI acceptance or Watch transport/input/find/zoom/viewport acceptance is claimed here, and none of the deferred flows is reported passing.
 - **Parent landing:** parent owns the final affected suite (`bun scripts/suite.ts plugins/quirky.browser packages/ui packages/protocol apps/desktop`), scripts (`bun test scripts`) and typecheck (`bun run typecheck`) gates, followed by controller `queue.ts land`.
+- **Precise lane8 boundary:** cross-lane pane/profile composition and visible integration acceptance is assigned to this item's already-added `sa-browser-pane-native-host-controls`, alongside the deferred base-pane UI. Lane8 retains its own profiles/settings implementation and focused queued subflows; this deferred composition is not a new gate for lane8. This clarifies the owner list above under the operator's “follow-ups this item already added” ruling, without editing queue titles or adding items.
+
+## sa-browser-pane: first merged-gate evidence and preserved verification limits
+
+- First normal controller land rejected: all five Mac-only files passed, including Browser automation and pane tests; remote630files624passed6failed exceeded the configured isolated-retry limit, so no remote retries occurred.
+- Concrete Browser integration defects were repaired without relaxing consumer assertions: terminal contributions now precede the typed management footer; SC-22 waits for actual detected-agent readiness rather than a count that Browser legitimately changes.
+- Dock cancellation now holds the real post-body/pre-Enter boundary through an injected fixture-only hook after the unchanged500ms delay. Explicit per-harness built-in overlays replace the proposed shared prototype monkeypatch. Cancellation/PTY bytes and actual effort/transcript/sentinel/draft assertions remain. Only an incidental negative notice-prose pin was deleted.
+- Fresh scoped proof: Dock send/defect files2/2pass, no retries; exact terminal SC-22 passes; menu unit file passes; typecheck passes after fixture plumbing. This is not a claim that a single post-fix630-file run passed.
+- Unchanged failures still awaiting the normal merged retry: Git remote SC-29 wait (five possible predicates; available stack does not identify one), daemon lock five-second test bound, incoming loops-store five-second bound. No speculative producer change, timeout increase or waived assertion was used for these.
+- Operator's45-minute target was not met; the first controller verification alone took1800.57seconds after source submission. No on-time or authoritative landed claim is inferred from a submitted command.
+

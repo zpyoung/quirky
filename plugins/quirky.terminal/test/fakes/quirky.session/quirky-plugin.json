@@ -32,6 +32,12 @@
             "agent": { "type": "string" },
             "cwd": { "type": "string" },
             "prompt": { "type": "string" },
+            "title": { "type": "string" },
+            "model": { "type": "string" },
+            "options": {
+              "type": "object",
+              "additionalProperties": true
+            },
             "extraArgs": { "type": "string" }
           }
         }

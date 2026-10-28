@@ -18,11 +18,11 @@ export function sessionsFile(dataDir: string): string {
 }
 
 /**
- * Stands in for the session plugin with the methods and events the terminal plugin uses: records
- * are kept in a JSON file, terminals are spawned on the PTY host, `create` takes `cwd`, `agent`,
- * `prompt` and the synthetic `floating` worktree, and every change announces `changed` or
- * `removed`. A PTY exit ends the record, restorable when the host stopped; `restore` starts a shell
- * in such a record.
+ * Stands in for the session plugin with the methods and events the terminal plugin uses. Records
+ * are kept in a JSON file, terminals are spawned on the PTY host, and `create` accepts `cwd`,
+ * `agent`, `prompt`, `title`, `model`, `options`, `extraArgs` and the synthetic `floating` worktree.
+ * Every change announces `changed` or `removed`. A PTY exit ends the record, restorable when the
+ * host stopped; `restore` starts a shell in such a record.
  */
 export function activate(context: PluginContext): void {
   const file = sessionsFile(context.dataDir)
@@ -86,7 +86,7 @@ export function activate(context: PluginContext): void {
     }
     const agent = (params.agent ?? 'shell') as string
     const label = agent === 'shell' ? 'Shell' : ((await context.call('quirky.agents/get', { agent })) as { label: string }).label
-    const session = await record(params, 'terminal', label)
+    const session = await record(params, 'terminal', (params.title as string | undefined) ?? label)
     await context.pty.spawn(session.id, { argv: ['/bin/zsh', '-l'], cwd: session.cwd, env: {}, cols: 80, rows: 24 })
     sessions.push(session)
     save()

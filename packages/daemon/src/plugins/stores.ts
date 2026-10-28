@@ -14,6 +14,8 @@ export interface OpenPluginStoreOptions {
   migrations: StoreMigration[]
   /** Consulted on every handle call; a false return makes the handle throw as if closed. */
   isActive: () => boolean
+  /** Opt in to read-only access to a schema newer than the supplied migration list. */
+  newerVersion?: 'read-only'
 }
 
 function isThenable(value: unknown): boolean {
@@ -27,7 +29,7 @@ function userVersion(db: Database): number {
 /**
  * Opens `<home>/plugin-data/<pluginId>/store.db` and brings it to `migrations.length` by running each
  * pending migration in its own transaction. A failed migration is rolled back and the database closed;
- * earlier steps stay committed. A database ahead of the plugin's migration list is left untouched.
+ * earlier steps stay committed. A newer schema is refused, or reopened read-only when explicitly requested.
  * `close()` is idempotent and turns every handle method into a throw.
  */
 export function openPluginStore(options: OpenPluginStoreOptions): { store: PluginStore; close(): void } {
@@ -38,7 +40,9 @@ export function openPluginStore(options: OpenPluginStoreOptions): { store: Plugi
 
   const dir = pluginDataDir(home, pluginId)
   mkdirSync(dir, { recursive: true, mode: 0o700 })
-  const db = new Database(join(dir, 'store.db'))
+  const file = join(dir, 'store.db')
+  let db = new Database(file)
+  let readOnly = false
   let closed = false
   const close = () => {
     if (closed) return
@@ -48,6 +52,10 @@ export function openPluginStore(options: OpenPluginStoreOptions): { store: Plugi
   const live = () => {
     if (closed || !isActive()) throw new Error(`${pluginId} is no longer active`)
   }
+  const writable = () => {
+    live()
+    if (readOnly) throw new Error(`${pluginId} store is read-only because its schema is newer than this build`)
+  }
 
   let savepointCounter = 0
   const store: PluginStore = {
@@ -55,8 +63,12 @@ export function openPluginStore(options: OpenPluginStoreOptions): { store: Plugi
       live()
       return userVersion(db)
     },
-    run(sql, ...params: StoreValue[]) {
+    get readOnly() {
       live()
+      return readOnly
+    },
+    run(sql, ...params: StoreValue[]) {
+      writable()
       const result = db.query(sql).run(...(params as never[]))
       return { changes: Number(result.changes), lastInsertRowid: Number(result.lastInsertRowid) }
     },
@@ -69,11 +81,11 @@ export function openPluginStore(options: OpenPluginStoreOptions): { store: Plugi
       return db.query(sql).all(...(params as never[])) as T[]
     },
     exec(sql) {
-      live()
+      writable()
       db.exec(sql)
     },
     transaction<T>(work: () => T): T {
-      live()
+      writable()
       // inside a migration's transaction a plain BEGIN would fail, so nest with a savepoint
       const nested = db.inTransaction
       const savepoint = `quirky_tx_${++savepointCounter}`
@@ -90,11 +102,17 @@ export function openPluginStore(options: OpenPluginStoreOptions): { store: Plugi
   }
 
   try {
-    db.exec('PRAGMA journal_mode = WAL')
     const version = userVersion(db)
     if (version > migrations.length) {
-      throw new Error(`${pluginId} store is at version ${version}, but the plugin knows ${migrations.length} migrations`)
+      if (options.newerVersion !== 'read-only') {
+        throw new Error(`${pluginId} store is at version ${version}, but the plugin knows ${migrations.length} migrations`)
+      }
+      db.close()
+      db = new Database(file, { readonly: true })
+      readOnly = true
+      return { store, close }
     }
+    db.exec('PRAGMA journal_mode = WAL')
     for (let i = version; i < migrations.length; i++) {
       db.exec('BEGIN IMMEDIATE')
       try {

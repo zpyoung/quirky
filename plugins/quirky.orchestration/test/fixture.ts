@@ -16,6 +16,7 @@ const TESTED_BUILTINS = [
   'quirky.worktree',
   'quirky.repo',
   'quirky.agent-status',
+  'quirky.terminal',
   'quirky.structured',
   'quirky.ask'
 ] as const
