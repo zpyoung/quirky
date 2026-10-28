@@ -2,7 +2,7 @@
   "id": "quirky.structured",
   "name": "Structured sessions",
   "version": "0.1.0",
-  "description": "Background Claude and Codex sessions without a terminal: journaled messages and permission prompts as asks.",
+  "description": "Native Claude and Codex sessions without a terminal: journaled messages and permission prompts as asks.",
   "main": "main.ts",
   "activation": "lazy",
   "dependencies": ["quirky.session", "quirky.ask", "quirky.agents"],

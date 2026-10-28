@@ -140,6 +140,21 @@ export class TerminalService {
     return { ok: true }
   }
 
+  /** Claims real user input before bytes are sent; query replies and injected prompts do not call it. */
+  userInput = async (params: Record<string, unknown>): Promise<{ ok: true }> => {
+    const session = await this.requireWritable(params.session as string)
+    const identity = await this.context.call('quirky.session/identity', { session: session.id }) as {
+      sessionId: string
+      live: boolean
+      processIncarnation: string
+    }
+    if (!identity.live || identity.sessionId !== session.id || identity.processIncarnation !== params.expectedIncarnation) {
+      throw this.context.error('conflict', 'terminal process changed before user input; reattach before typing')
+    }
+    this.context.pty.reportUserInput({ session: session.id, expectedIncarnation: identity.processIncarnation })
+    return { ok: true }
+  }
+
   /** Types raw input; the session then counts as touched for the layout's exit rule. */
   write = async (params: Record<string, unknown>): Promise<{ ok: true }> => {
     const session = await this.requireWritable(params.session as string)

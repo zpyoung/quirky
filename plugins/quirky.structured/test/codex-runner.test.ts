@@ -146,6 +146,7 @@ describe('Codex app-server runner', () => {
     expect(setup.statuses).toEqual(['running'])
     expect(setup.messages).toEqual([])
 
+
     await setup.runner.send(setup.session.id, 'first custody-recorded turn')
     await until(() => setup.statuses.includes('done'))
     expect(setup.fixture.requests().filter((request) => request.method === 'turn/start')).toHaveLength(1)

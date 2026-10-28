@@ -11,7 +11,7 @@ import type {
   DeliveryRow,
   DispatchId,
   GroupAddress,
-  InboxMessageRow,
+  HeartbeatResult,
   InboxParams,
   InboxResult,
   JsonValue,
@@ -388,10 +388,12 @@ export class OrchestrationMessages {
       }
       const messages: MessageRow[] = []
       let report: WorkerReportResult | null = null
-      let heartbeat: ReturnType<OrchestrationCore['recordHeartbeat']> | null = null
+      let heartbeat: HeartbeatResult | null = null
       for (const target of acceptedTargets) {
+        if (type !== 'worker_done' && type !== 'heartbeat') this.assertResolvedTarget(target)
+        const lifecycle = type === 'worker_done' || type === 'heartbeat'
         const row = this.insertMessage({
-          runId: target.runId,
+          runId: lifecycle ? target.runId : (acceptedSender.runId ?? unboundRunId),
           fromSessionId: acceptedSender.sessionId,
           sender: this.messageSender(type, payload, acceptedSender),
           mailbox: target.mailbox,
@@ -766,6 +768,13 @@ export class OrchestrationMessages {
     }
     if (input.to === undefined) {
       if (sender.dispatchId !== null) {
+        if (sender.coordinatorRunId !== null) {
+          const active = this.activeDispatchFor(sender.sessionId)
+          if (!active || active.id !== sender.dispatchId) {
+            fail(this.context, 'consumer_fenced', `caller no longer owns Dispatch ${sender.dispatchId}`, { dispatchId: sender.dispatchId })
+          }
+          this.assertDispatchOwner(active, caller)
+        }
         const dispatch = this.core.getDispatch(sender.dispatchId as DispatchId)
         return [{ mailbox: { kind: 'run', runId: dispatch.runId }, runId: dispatch.runId }]
       }
@@ -921,6 +930,7 @@ export class OrchestrationMessages {
   }
 
   private insertMessage(input: {
+    id?: MessageId
     runId: RunId
     fromSessionId: string
     sender: MailboxAddress
@@ -934,7 +944,7 @@ export class OrchestrationMessages {
     read: boolean
   }): MessageRow {
     if (input.runId === unboundRunId) this.ensureUnboundRun()
-    const id = newId('msg') as MessageId
+    const id = input.id ?? (newId('msg') as MessageId)
     const at = now()
     this.store.run(
       `INSERT INTO messages (
@@ -1331,14 +1341,15 @@ export class OrchestrationMessages {
       })
     }
     this.assertMailboxOwner(mailboxOfRow(original), caller)
+    this.assertResolvedTarget(target)
     const threadId = original.thread_id ?? original.id
+    const sender = this.senderContext(caller)
     this.store.run(`UPDATE messages SET read = 1 WHERE id = ?`, original.id)
     this.notifyMailboxAvailable(mailboxOfRow(original))
     const replyMessage = this.insertMessage({
-      runId: target.runId,
+      runId: sender.runId ?? unboundRunId,
       fromSessionId: caller.runtimeSessionId,
-      sender: this.senderContext(caller).sender,
-      mailbox: target.mailbox,
+      sender: sender.sender,
       subject: `Re: ${original.subject}`,
       body: input.body,
       type: 'status',
@@ -1435,6 +1446,7 @@ export class OrchestrationMessages {
     const options = [...(input.options ?? [])]
     const at = now()
     const message = this.insertMessage({
+      id: messageId,
       runId: dispatch.run_id as RunId,
       fromSessionId: caller.runtimeSessionId,
       sender: { kind: 'dispatch', dispatchId: dispatch.id as DispatchId },
@@ -1457,7 +1469,7 @@ export class OrchestrationMessages {
       at
     )
     queueMicrotask(() => this.notifyCommitted({ mailbox: message.mailbox, messageId: message.id, type: 'question' }))
-    return { state: 'cancelled', answer: null, messageId, threadId, timeoutMs }
+    return { state: 'cancelled', answer: null, messageId: message.id, threadId: message.threadId ?? message.id, timeoutMs }
   }
 
   private async waitForAnswer(
@@ -1597,6 +1609,8 @@ export class OrchestrationMessages {
   }
 
   private resolveConsumerMailbox(caller: RuntimeCallerEvidence, explicitRunId: RunId | undefined, readOnly: boolean): ConsumerMailbox {
+    const active = this.activeDispatchFor(caller.runtimeSessionId)
+    if (active) this.assertDispatchOwner(active, caller)
     if (explicitRunId !== undefined) {
       const run = this.core.getRun(explicitRunId)
       if (!readOnly) this.core.requireCoordinator(caller, explicitRunId)
@@ -1604,9 +1618,7 @@ export class OrchestrationMessages {
     }
     const bound = this.core.getBoundRun(caller.runtimeSessionId)
     if (bound) return { mailbox: { kind: 'run', runId: bound.id }, runId: bound.id, generation: bound.consumerGeneration }
-    const active = this.activeDispatchFor(caller.runtimeSessionId)
     if (active) {
-      this.assertDispatchOwner(active, caller)
       return {
         mailbox: { kind: 'dispatch', dispatchId: active.id as DispatchId },
         runId: active.run_id as RunId,
@@ -1614,6 +1626,27 @@ export class OrchestrationMessages {
       }
     }
     return { mailbox: { kind: 'session', sessionId: caller.runtimeSessionId }, runId: unboundRunId, generation: 0 }
+  }
+
+  private assertResolvedTarget(target: RoutedTarget): void {
+    if (target.mailbox.kind === 'run') {
+      this.core.getRun(target.mailbox.runId)
+      return
+    }
+    if (target.mailbox.kind !== 'dispatch') return
+    const dispatch = this.core.getDispatch(target.mailbox.dispatchId)
+    if (dispatch.status !== 'pending' && dispatch.status !== 'dispatched') {
+      fail(this.context, 'dispatch_inactive', `Dispatch ${dispatch.id} is no longer active`, {
+        dispatchId: dispatch.id,
+        runId: dispatch.runId
+      })
+    }
+    if (dispatch.runId !== target.runId) {
+      fail(this.context, 'dispatch_run_mismatch', `Dispatch ${dispatch.id} changed Runs before delivery`, {
+        dispatchId: dispatch.id,
+        runId: target.runId
+      })
+    }
   }
 
   private assertAddressRun(input: SendParams, target: RoutedTarget): void {
