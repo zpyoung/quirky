@@ -59,6 +59,8 @@ export interface WorkerStartReceipt {
 }
 export interface WorkerRecord extends WorkerRow {
   runtimeEpoch: string; processIncarnation: string | null; mode: WorkerMode
+  /** Kernel identity epoch; null until real session authority attaches. Never the supervisor epoch above. */
+  processRuntimeEpoch: string | null
   startOptions: WorkerStartParams; receipt: WorkerStartReceipt | null
 }
 export interface TerminalResource {
@@ -181,7 +183,10 @@ export interface WorkerLifecycle extends WorkerLifecyclePort {
   onExit(sessionId: string, incarnation: string | null, reason: string, exitCode: number | null): void
   dispose(): void
 }
-export interface WorkerStarter { start(params: WorkerStartParams, caller: CoordinatorEvidence): Promise<MutationResult<WorkerStartReceipt>> }
+export interface WorkerStarter {
+  start(params: WorkerStartParams, caller: CoordinatorEvidence): Promise<MutationResult<WorkerStartReceipt>>
+  dispose(): void
+}
 export interface WorkerFleet {
   show(params: WorkerShowParams): Promise<WorkerShowResult>
   list(params: WorkerListParams, caller: RuntimeCallerEvidence | null): Promise<WorkerListResult>
