@@ -23,7 +23,7 @@ export type CodexAppServerFixture = {
  * Writes a deterministic native-protocol app-server executable under a test's temporary home.
  * The executable accepts `app-server`, speaks JSONL on stdio, and never contacts a provider.
  */
-export function createCodexAppServerFixture(home: string, options?: { heldPrefix: string }): CodexAppServerFixture {
+export function createCodexAppServerFixture(home: string, options?: { heldPrefix?: string; uniqueThreads?: boolean }): CodexAppServerFixture {
   mkdirSync(home, { recursive: true })
   const executable = join(home, 'codex-app-server-fixture')
   const logPath = join(home, 'codex-app-server.jsonl')
@@ -34,6 +34,7 @@ const { spawn } = require('node:child_process')
 const logPath = ${JSON.stringify(logPath)}
 const environmentLogPath = ${JSON.stringify(environmentLogPath)}
 const heldPrefix = ${JSON.stringify(options?.heldPrefix ?? null)}
+const uniqueThreads = ${JSON.stringify(options?.uniqueThreads ?? false)}
 let input = ''
 let nextTurn = 1
 let nextApproval = 1
@@ -167,7 +168,7 @@ function receive(message) {
       case 'initialized':
         return
       case 'thread/start': {
-        const id = 'scripted-thread'
+        const id = uniqueThreads ? 'scripted-thread-' + require('node:crypto').randomUUID() : 'scripted-thread'
         send({ id: message.id, result: { thread: { id, sessionId: id } } })
         notify('thread/started', { thread: { id } })
         return
