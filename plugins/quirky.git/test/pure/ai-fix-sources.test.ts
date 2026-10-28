@@ -79,7 +79,7 @@ describe('public hosting-backed recipe source flows', () => {
       const launches = calls.filter((call) => call.method === 'quirky.terminal/newTab')
       expect(launches).toHaveLength(1)
       expect(launches[0]!.params).toMatchObject({
-        worktree: worktree.id,
+        workspace: worktree.id,
         agent: 'codex',
         prompt: preview.prompt,
         extraArgs: '--model gpt-5.5',
