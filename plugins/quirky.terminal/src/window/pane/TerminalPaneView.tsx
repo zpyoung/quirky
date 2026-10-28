@@ -640,7 +640,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       if (!latest.current.settings['right-click-paste'] || event.ctrlKey) return
       event.preventDefault()
       event.stopPropagation()
-      void Promise.resolve(navigator.clipboard?.readText())
+      void context.readClipboardText()
         .then((text) => (text ? paste(text) : undefined))
         .catch(() => {})
     }
