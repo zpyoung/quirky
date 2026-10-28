@@ -1214,7 +1214,8 @@
       "deps": [
         "sa-browser-pane"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 6
     },
     {
       "id": "sa-browser-pane-workspace-preview",
