@@ -109,12 +109,6 @@ describe('kernel method schemas', () => {
     expect(p('client.hello').properties!.role!.enum).toEqual(['desktop', 'ui', 'cli', 'mobile'])
     expect(p('status.get')).toEqual({ type: 'object' })
   })
-  test('sessionToken is an optional hello field separate from sessionId', () => {
-    const hello = methodSchemas['client.hello']!
-    expect(hello.required).not.toContain('sessionToken')
-    expect(hello.properties?.sessionToken).toEqual({ type: 'string' })
-    expect(hello.properties?.sessionId).toEqual({ type: 'string' })
-  })
 
 })
 

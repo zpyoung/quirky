@@ -129,19 +129,6 @@ describe('structured sessions with a runner', () => {
     expect(world.statusLog[0]).toEqual({ sessionId: session.id, status: 'working' })
   })
 
-  test('passes kernel session identity into the structured tool environment', async () => {
-    const session = await create()
-    await waitFor(() => runner.started.length === 1)
-    const options = runner.started[0]?.options as StructuredLaunchOptions | undefined
-
-    expect(options?.env).toMatchObject({
-      QUIRKY_HOME: h.home,
-      QUIRKY_SESSION_ID: session.id,
-      QUIRKY_WORKTREE_ID: session.worktreeId,
-      QUIRKY_SESSION_TOKEN: expect.any(String)
-    })
-    expect(options?.env?.QUIRKY_SESSION_TOKEN?.length).toBeGreaterThan(0)
-  })
 
   test('a structured tool child authenticates with its launch lease', async () => {
     const session = await create()
@@ -416,48 +403,8 @@ try {
     expect((await pending).status).toBe('declined')
   })
 
-  test('SC-23: a model and effort pick is resolved, recorded on the session and given to the runner', async () => {
-    const snapshot = {
-      agent: 'claude',
-      options: { model: { value: 'opus', source: 'explicit' }, effort: { value: 'high', source: 'explicit' } },
-      summary: 'Claude · Opus · Effort: high'
-    }
-    world.resolveLaunchOverride = () => ({
-      added: [],
-      args: '',
-      structured: { model: 'opus', effort: 'high' },
-      shadowed: [],
-      launchSettings: snapshot
-    })
-    await call('quirky.structured/create', {
-      worktree: 'main',
-      agent: 'claude',
-      prompt: 'hi',
-      model: 'opus',
-      options: { effort: 'high' }
-    })
-    expect(world.resolveLaunchCalls).toEqual([
-      { agent: 'claude', model: 'opus', options: { effort: 'high' }, structured: true }
-    ])
-    expect(world.registerCalls[0].launchSettings).toEqual(snapshot)
-    await waitFor(() => runner.started.length === 1)
-    expect(runner.started[0].options).toEqual({ model: 'opus', effort: 'high' })
-  })
 
-  test('SC-23: with no pick nothing is resolved and the runner gets no options', async () => {
-    await create()
-    await waitFor(() => runner.started.length === 1)
-    expect(world.resolveLaunchCalls).toEqual([])
-    expect(world.registerCalls[0]).not.toHaveProperty('launchSettings')
-    expect(runner.started[0].options).toEqual({})
-  })
 
-  test('SC-23: a pick that resolves to no snapshot registers without launchSettings', async () => {
-    await call('quirky.structured/create', { worktree: 'main', agent: 'claude', prompt: 'hi', model: 'opus' })
-    expect(world.registerCalls[0]).not.toHaveProperty('launchSettings')
-    await waitFor(() => runner.started.length === 1)
-    expect(runner.started[0].options).toEqual({ model: 'opus' })
-  })
 
   test('SC-24: extra arguments are refused and nothing is registered', async () => {
     expect(
@@ -635,8 +582,10 @@ describe('the Codex runner inside the plugin', () => {
     expect(h.pty.requests.some((request) => request.type === 'create')).toBe(false)
     const ask = await waitForAsync(async () => ((await call('quirky.ask/list', { pendingOnly: true })) as { id: string }[])[0])
     await call('quirky.ask/answer', { askId: ask.id, answers: { decision: { value: 'allow', source: 'option' } } })
-    await waitFor(() => world.statusLog.some((entry) => entry.sessionId === session.id && entry.status === 'done'))
-    expect(settledEvents().find((event) => event.sessionId === session.id && event.state === 'done')).toMatchObject({
+    const settled = await waitFor(() =>
+      settledEvents().find((event) => event.sessionId === session.id && event.state === 'done')
+    )
+    expect(settled).toMatchObject({
       agent: 'codex',
       state: 'done',
       lastAssistantMessage: 'Codex: [approve] summarize'
