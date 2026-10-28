@@ -1618,7 +1618,7 @@
       },
       {
         "id": "notes",
-        "description": "A worktree's diff notes, sorted by path, line, start line and creation time.",
+        "description": "A worktree's canonical diff and Markdown notes, sorted by path and line. Markdown notes are aggregated through the editor's public API and remain editor-owned.",
         "readOnly": true,
         "params": {
           "type": "object",
@@ -1667,6 +1667,25 @@
                   },
                   "updatedAt": {
                     "description": "When the note was last edited, or null."
+                  },
+                  "source": { "type": "string", "enum": ["markdown"] },
+                  "markdownSnapshot": {
+                    "type": "object",
+                    "description": "Canonical editor-owned snapshot for safe cross-surface delivery settlement.",
+                    "properties": {
+                      "id": { "type": "string" }, "bufferId": { "type": "string" },
+                      "worktreeId": { "type": "string" }, "filePath": { "type": "string" },
+                      "source": { "type": "string", "enum": ["markdown"] },
+                      "selectedText": { "type": "string" },
+                      "startLine": { "type": "integer", "minimum": 1 },
+                      "endLine": { "type": "integer", "minimum": 1 },
+                      "lineNumber": { "type": "integer", "minimum": 1 },
+                      "body": { "type": "string" }, "createdAt": { "type": "number" },
+                      "updatedAt": { "type": "number" }, "sentAt": { "type": "number" },
+                      "side": { "type": "string", "enum": ["modified"] }
+                    },
+                    "required": ["id", "bufferId", "worktreeId", "filePath", "source", "lineNumber", "body", "createdAt", "side"],
+                    "additionalProperties": false
                   }
                 },
                 "required": [

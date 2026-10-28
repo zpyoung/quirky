@@ -1,10 +1,11 @@
-import type {
-  GitCompare,
-  GitStatus,
-  GitStatusEntry,
-  QuirkyEvent,
-  UiLayout,
-  UiPluginContext
+import {
+  RpcErrorCode,
+  type GitCompare,
+  type GitStatus,
+  type GitStatusEntry,
+  type QuirkyEvent,
+  type UiLayout,
+  type UiPluginContext
 } from '@quirky/protocol'
 import { createNativeBrowserCapability } from '../../../../packages/ui/src/native-browser'
 
@@ -132,6 +133,12 @@ export function fakeContext(initial: UiLayout): Fake {
         switch (method) {
           case 'quirky.git/status':
             return fake.statuses[params.worktree as string] ?? fake.status
+          case 'quirky.git/notes':
+            return { notes: [] }
+          case 'quirky.hosting/cachedReviews':
+            return { workspaces: [] }
+          case 'quirky.hosting/forBranch':
+            throw Object.assign(new Error(`unknown method: ${method}`), { code: RpcErrorCode.MethodNotFound })
           case 'quirky.git/compare':
             return fake.compare
           case 'quirky.worktree/resolve':
@@ -232,6 +239,19 @@ export function mountPanel(fake: Fake): { element: HTMLElement; unmount: () => v
 /** Lets pending promises and effects run. */
 export async function settle(): Promise<void> {
   for (let i = 0; i < 6; i++) await act(async () => {})
+}
+
+/** Wait for a rendered state change without coupling tests to async lookup timing. */
+export async function waitForState(root: Node, condition: () => boolean): Promise<void> {
+  if (condition()) return
+  const { promise, resolve } = Promise.withResolvers<void>()
+  const observer = new MutationObserver(() => {
+    if (!condition()) return
+    observer.disconnect()
+    resolve()
+  })
+  observer.observe(root, { attributes: true, childList: true, subtree: true })
+  await promise
 }
 
 export async function click(target: Element | null | undefined, init: MouseEventInit = {}): Promise<void> {
