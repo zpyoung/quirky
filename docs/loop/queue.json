@@ -1074,8 +1074,9 @@
       "deps": [
         "m3-vault"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 12
     },
     {
       "id": "fix-flaky-daemon-pty-client",
