@@ -181,8 +181,7 @@ const paneStyles = {
     width: '100%',
     height: '100%',
     objectFit: 'contain',
-    userSelect: 'none',
-    WebkitUserDrag: 'none'
+    userSelect: 'none'
   },
   overlay: {
     position: 'absolute',
@@ -193,7 +192,7 @@ const paneStyles = {
     justifyContent: 'center',
     padding: 'var(--ui-space-16)',
     overflow: 'auto',
-    background: 'color-mix(in srgb, var(--ui-surface) 88%, transparent)'
+    background: 'var(--ui-scrim)'
   },
   card: {
     width: '100%',
@@ -1225,6 +1224,7 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
           key={`${frame.watchId}:${frame.sequence}`}
           src={imageSource(frame)}
           alt={`Watched page frame ${frame.width} by ${frame.height}`}
+          draggable={false}
           style={paneStyles.watchImage}
           onLoad={() => acknowledgeFrame(frame)}
           onError={() => setWatchError('The latest Watch frame could not be decoded.')}

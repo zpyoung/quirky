@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent, CSSProperties, SyntheticEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { Button, FormRow, TextField } from '@quirky/ui'
 import type { DesignScreenshot } from '../design-contract'
 import { DESIGN_FULL_SCREENSHOT_MAX_BYTES } from '../design-contract'
@@ -47,6 +48,7 @@ const overlayStyle: CSSProperties = {
   pointerEvents: 'auto',
   color: 'var(--ui-text)',
   background: 'var(--ui-rail)',
+  accentColor: 'var(--ui-accent)',
   fontSize: 'var(--ui-font-body)',
   lineHeight: 1.4,
   outline: 0
@@ -73,7 +75,7 @@ const imageStageStyle: CSSProperties = {
   placeItems: 'center',
   padding: 'var(--ui-space-8)'
 }
-const screenshotFrameShadow = '0 var(--ui-space-8) var(--ui-space-24) color-mix(in srgb, var(--ui-rail) 55%, transparent)'
+const screenshotFrameShadow = '0 var(--ui-space-8) var(--ui-space-24) var(--ui-shadow)'
 const screenshotLayerStyle: CSSProperties = { position: 'absolute', inset: 0, width: '100%', height: '100%' }
 const footerStyle: CSSProperties = {
   display: 'flex',
@@ -532,7 +534,7 @@ export function MarkupOverlay({ screenshot, onClose, onCopied, onError }: Markup
     }
   }
 
-  return (
+  return createPortal(
     <div
       ref={dialogRef}
       role="dialog"
@@ -648,6 +650,6 @@ export function MarkupOverlay({ screenshot, onClose, onCopied, onError }: Markup
           {committingCopy ? 'Writing PNG…' : copying ? 'Preparing PNG…' : 'Copy Markup'}
         </Button>
       </div>
-    </div>
+    </div>, document.body
   )
 }

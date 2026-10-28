@@ -47,6 +47,8 @@ quirky browser tab profile set-page --page <page-id> --profile <profile-id> --js
 `tab profile set-page` changes a managed agent page; existing `tab profile set --pane` changes a hosted Browser pane. Clone requires an empty isolated destination and copies actual cookies, not native-webview storage. Chrome identity uses the existing next-runtime-start setting; it does not change an already running profile's identity.
 
 ## Browser panes
+
+Browser stays a center view (including hosted worktree tabs); Browser Settings remains a settings section and command-opened center view, not a new tool stripe. Pane controls, profiles, import forms, annotations and markup use the shared graphite controls and semantic tokens in dark and light. `quirky.browser` is enrolled in the canonical UI lint gate.
 The operator-authorized delivery for sa-browser-pane is pane lifecycle and navigation through the daemon API and CLI. Retained Watch, advanced controls and page-event source is not a claim that its remaining UI scenarios passed. Existing sa-browser-pane-native-host-controls owns screencast, base-pane UI and cross-lane pane/profile integration acceptance; native-events owns page events; workspace-preview owns grant preview. Lane8 retains its own profiles/settings feature and focused follow-ups. Exact handoffs are in docs/loop/decisions/sa-browser-pane.md and docs/loop/BLOCKERS.md.
 
 
@@ -87,7 +89,7 @@ Ordinary selected text is not treated as a Grab shortcut. macOS Watch editing su
 
 Annotate opens a Change/Question editor (up to 2,000 characters). Notes stay in this window's memory, retain the URL and element context captured when selected, and are not reassigned when the page navigates. They survive hosted-view unmounts while the browser page remains open. Each page keeps at most 20 notes; the oldest is dropped. Closing a page removes its notes, and restarting the application loses all notes. Copy uses the browser's Markdown formatter. Send lists same-worktree agent sessions and available new agents; it removes only notes confirmed delivered and unchanged since the send snapshot.
 
-Draw freezes a real Watch screenshot and opens the markup editor. Copy Markup reports success only after the composed PNG is actually written to the clipboard. Native cropped screenshots and Draw are disabled: the pinned public SDK exposes no page snapshot capability. Native never falls back to Watch or an approximate image.
+Draw freezes a real Watch screenshot and opens the markup editor above the whole window, outside pane clipping and tool-slot stacking contexts. Its controls follow the app theme; screenshot pixels and chosen drawing ink do not change with the theme. Copy Markup reports success only after the composed PNG is actually written to the clipboard. Native cropped screenshots and Draw are disabled: the pinned public SDK exposes no page snapshot capability. Native never falls back to Watch or an approximate image.
 
 ```sh
 quirky browser design arm --pane <pane-id> --mode grab

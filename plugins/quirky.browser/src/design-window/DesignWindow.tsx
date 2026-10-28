@@ -85,7 +85,7 @@ const floatingPanelStyle: CSSProperties = {
   border: 'var(--ui-border-width) solid var(--ui-border)',
   borderRadius: 'var(--ui-radius-window)',
   background: 'var(--ui-surface)',
-  boxShadow: '0 var(--ui-space-8) var(--ui-space-24) color-mix(in srgb, var(--ui-rail) 55%, transparent)',
+  boxShadow: '0 var(--ui-space-8) var(--ui-space-24) var(--ui-shadow)',
   color: 'var(--ui-text)',
   fontSize: 'var(--ui-font-body)',
   lineHeight: 1.4,
@@ -1047,7 +1047,7 @@ export function DesignWindow({ context, pane, nativeHandle, pageHost, nativePage
       width: hoverPayload.target.rectViewport.width * pageGeometry.width / hoverPayload.page.viewportWidth,
       height: hoverPayload.target.rectViewport.height * pageGeometry.height / hoverPayload.page.viewportHeight,
       boxSizing: 'border-box', border: 'var(--ui-focus-width) solid var(--ui-accent)',
-      boxShadow: '0 0 0 100vmax color-mix(in srgb, var(--ui-rail) 55%, transparent)', pointerEvents: 'none'
+      boxShadow: '0 0 0 100vmax var(--ui-shadow)', pointerEvents: 'none'
     }}><span style={highlightLabelStyle}>{hoverPayload.target.tagName}{hoverPayload.target.accessibility.role ? ` role=${hoverPayload.target.accessibility.role}` : ''}{hoverPayload.target.accessibility.accessibleName ? ` “${hoverPayload.target.accessibility.accessibleName}”` : ''} {Math.round(hoverPayload.target.rectViewport.width)}×{Math.round(hoverPayload.target.rectViewport.height)}</span></div> : null}
     {annotations.map((annotation, index) => {
       if (!pageHost || !pane || !frameCurrent(annotation, pane.url) || !pageGeometry || pageGeometry.width <= 0) return null

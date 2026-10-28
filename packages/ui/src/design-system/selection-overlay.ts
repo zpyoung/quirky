@@ -7,7 +7,7 @@ import tokenStyles from './tokens.css' with { type: 'text' }
 const selectionOverlayStyles = `${tokenStyles.replaceAll(':root', ':host').replaceAll("[data-theme='dark']", ":host([data-theme='dark'])").replaceAll("[data-theme='light']", ":host([data-theme='light'])")}
 :host { all: initial; contain: strict; }
 * { box-sizing: border-box; }
-.surface { position: fixed; inset: 0; outline: none; cursor: crosshair; background: transparent; pointer-events: auto; }
+.surface { position: fixed; inset: 0; outline: none; cursor: crosshair; background: var(--ui-transparent); pointer-events: auto; }
 .highlight { position: fixed; border: var(--ui-focus-width) solid var(--ui-accent); box-shadow: 0 0 0 var(--ui-border-width) var(--ui-surface); pointer-events: none; }
 .label { position: fixed; max-width: 90vw; padding: var(--ui-space-4) var(--ui-space-8); border-radius: var(--ui-radius-mark); background: var(--ui-selected); color: var(--ui-text); font: var(--ui-font-body)/1.4 system-ui, sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
 `
@@ -20,7 +20,7 @@ function createSelectionOverlay(document: Document, styles: string) {
     : document.defaultView?.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
   for (const [property, value] of Object.entries({
     position: 'fixed', inset: '0', width: '100vw', height: '100vh',
-    'z-index': '2147483647', background: 'transparent', 'pointer-events': 'auto',
+    'z-index': '2147483647', background: 'var(--ui-transparent)', 'pointer-events': 'auto',
   })) host.style.setProperty(property, value, 'important')
   const shadow = host.attachShadow({ mode: 'closed' })
   const style = document.createElement('style')

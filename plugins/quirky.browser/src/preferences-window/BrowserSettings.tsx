@@ -17,7 +17,7 @@ const TERMINAL_LINK_ACTIONS = [
   { value: 'terminal', label: 'Leave to terminal' }
 ] as const
 const IDENTITY_LABELS = { clean: 'Cleaned', native: 'Native' } as const
-const SETTINGS_LAYOUT_STYLE = { display: 'grid', gap: 'var(--ui-space-16)', minWidth: 0, color: 'var(--ui-text)', fontSize: 'var(--ui-font-body)' } as const
+const SETTINGS_LAYOUT_STYLE = { display: 'grid', gap: 'var(--ui-space-16)', minWidth: 0, color: 'var(--ui-text)', fontSize: 'var(--ui-font-body)', accentColor: 'var(--ui-accent)' } as const
 const SETTINGS_SECTION_STYLE = { display: 'grid', gap: 'var(--ui-space-12)', minWidth: 0, background: 'var(--ui-surface)', border: 'var(--ui-border-width) solid var(--ui-border)', borderRadius: 'var(--ui-radius-control)', padding: 'var(--ui-space-12)' } as const
 const SETTINGS_COPY_STYLE = { color: 'var(--ui-muted)', fontSize: 'var(--ui-font-body)', lineHeight: 1.4, margin: 0, overflowWrap: 'anywhere' } as const
 const SETTINGS_MESSAGE_STYLE = { margin: 0, overflowWrap: 'anywhere' } as const

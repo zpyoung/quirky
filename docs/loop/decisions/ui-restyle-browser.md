@@ -51,7 +51,7 @@
 - **Why:** an external guest world cannot mount the app's React component tree or inherit its token sheet. This is an actual missing reusable DOM primitive, not a relocation of pane/design selectors. Source Browser calls only the public UI subpath
 - **Evidence:** plugins/quirky.browser/src/design/guest.ts:339–355 original local style construction; packages/ui/src/design-system/selection-overlay.ts; additive package export
 - **Reversibility:** easy
-- **Confidence:** medium until actual bundled picker smoke
+- **Confidence:** high for the actual Watch picker exercised in D10; Native theme integration is unclaimed
 - **Revisit if:** the guest program is not self-contained after bundling or the external document interferes with owned geometry
 - **Source:** assumed — autonomous
 
@@ -66,5 +66,56 @@
 - **Revisit if:** supported platform scope expands
 - **Source:** deferred: platform
 
+## D7: Fix canonical lint/type diagnostics at their owners
+- **Question:** the first gates reported three raw-transparent compositions, a missing CSS text module declaration and unsupported React CSSProperties.WebkitUserDrag
+- **Options:** scanner exclusions/casts; shared semantic alpha tokens and concrete asset/DOM typing
+- **Chose:** shared transparent/shadow/scrim aliases in the primitive token sheet; explicit stylesheet text asset declaration; HTML draggable=false instead of an untyped vendor CSS property. No scanner changes or suppressions
+- **Why:** the published scanner correctly includes transparent among raw color literals. Alpha composition belongs to shared tokens, not plugins; HTML image drag behavior has a typed native property
+- **Evidence:** initial canonical gate output; packages/ui/src/design-system/tokens.css; style-assets.d.ts; BrowserPaneWindow watch image; final bg8 typecheck exit0
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the asset loader changes or another shared overlay needs different alpha semantics
+- **Source:** assumed — autonomous
+
+## D8: Escape the shell stacking context for the viewport markup editor
+- **Question:** actual built Draw showed tools/stripes over the nominally fixed full-window editor and obscured its footer actions
+- **Options:** larger z-index inside the pane; move the existing viewport overlay to document.body
+- **Chose:** a body portal with the same dialog ref, handlers, drawing data, event isolation and cancellation; native controls inherit semantic accentColor
+- **Why:** increasing an already maximal child z-index cannot escape an ancestor stacking context. The isolated final smoke shows the whole editor above the shell and accessible Cancel/Copy Markup, with real stroke/undo/redo transitions
+- **Evidence:** earlier screenshot omp-sshots-15b878bb4bd4af65.webp; isolated fixed screenshots 15b879cf0b5f063a and15b879e2f81f063b; MarkupOverlay.tsx
+- **Reversibility:** easy
+- **Confidence:** high for the exercised renderer
+- **Revisit if:** native-window focus acceptance contradicts the existing dialog lifecycle
+- **Source:** assumed — autonomous
+
+## D9: Isolate the smoke browser by profile and exact CDP endpoint
+- **Question:** lane9 reported the shared app.path Chrome target collision during its editor smoke
+- **Options:** keep using/close/kill the shared-path handle; stop its use and attach an explicitly owned profile/CDP browser
+- **Chose:** no more operations or close/kill on the shared-path handle. Launch a separate scoped Chrome at50649 with its unique private profile; use only that explicit CDP tab. Stop own old fixture50143 and replace it with fresh51425. Never touch lane9's50274/65350. Final unique CDP tab released; only its scoped Chrome and own fixture were stopped, both exit0
+- **Why:** the user report is authoritative; handle names alone did not establish isolation. Earlier screenshots/actions retain the collision qualification and do not substitute for final isolated evidence
+- **Evidence:** user interjection; scoped Chrome service ready identity/profile; explicit CDP browser.open; final services exit0
+- **Reversibility:** easy
+- **Confidence:** high for final isolated scope
+- **Revisit if:** a browser automation target lacks process/profile/endpoint ownership proof
+- **Source:** assumed — autonomous
+
+## D10: Report only observed gates and bounded actual surface proof
+- **Question:** what supports landing under the explicit build-first policy?
+- **Options:** claim every suite/native/golden score; record actual type/build/smoke and preserve unrun boundaries
+- **Chose:** final bun run typecheck passed UIlint/root/mobile/prepared-desktop in40.78s; actual UI build emitted11host/vendor files and25plugin UI modules. Isolated final Watch showed Find1of2→2of2, dark/light markup with real stroke and Undo/Redo state, bundled guest picker selecting the owned h1 into an actual annotation/tray, dark profile creation/selected radios and Browser Settings, light home-page save/engine selection and native checkbox/disabled-active-profile controls. Actual readback showedlight/duckduckgo/exact owned home URL. Screenshots personally inspected. No native guest, real browser-source import, send or clipboard write was performed
+- **Why:** minimum changed-surface proof is not a suite, full dogfood or independent screenshot score. Existing behavioral tests remain unrun; design-ui selectors now use semantic annotation/target regions rather than deleted styling classes. No appearance/source-text test pins added
+- **Evidence:** bg7build exit0; bg8typecheck exit0; isolated screenshots/evidence under .quirk/build-loop/ui-restyle-browser; actual scoped services/CLI API responses
+- **Reversibility:** easy
+- **Confidence:** high for exercised paths only
+- **Revisit if:** the end-phase owner finds a behavioral or scored-visual failure
+- **Source:** locked by docs/loop/LOOP.md
+
+### Verification qualifications
+- First own source runtime lost CDP before UI use and cleaned up. A fresh runtime used the established harness's mock-keychain Chrome launcher and started successfully; no product root-cause or runtime-policy change is claimed.
+- On first pane activation, immediate Find interaction twice lost the just-opened field; after window settlement, explicit observed Find entry/count transitions succeeded. No timeout/retry policy or product condition was weakened. This is not a claim that initial-activation timing was debugged.
+- Earlier API fixture input used a selector-prefixed worktree where the view needed a raw ID; corrected before final isolated proof. Folder fixtures intentionally show unavailable Git features. Diagnostics retain three refused health requests to the already stopped old50143daemon. A misnamed pageErrors field based on navigation entries was discarded; it is not error-count evidence.
+- The sole roadmap catch-up changed queue state only, brought no new decision logs and caused no source conflicts. No second roadmap merge is planned except actual controller-failure recovery.
+- No suites, formal review round, full dogfood or default85 independent screenshot score ran under build-first. The existing ui-final-review item remains the collected-visual-review owner; no testing/review follow-up was added.
+
 ## Progress
-Combined spec self-reviewed against SC1–SC5 and approved parent. Shared TextField ref contract is additive and forwarded by existing React19 implementation. Next commit contracts/spec then dispatch3disjoint UI slices in external worktrees. No business API changes or new flows.
+All three disjoint source components integrated after HEAD/scope barriers; all three external worktrees removed. Final source passes canonical typecheck/UIlint and built isolated changed-surface smoke with D7–D10 qualifications. Combined spec/README reflect the presentation cutover. Sole roadmap catch-up done (queue-only). All owned fixture/explicit-CDP services exited0; shared-path handle intentionally left untouched per user ownership notice. Next commit final source/docs, detach, run authoritative queue land and await its actual receipt in this turn.

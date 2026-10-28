@@ -41,6 +41,9 @@ No new functionality, mobile restyle, native SDK capability, native screenshot s
 - Runtime/service/protocol/guest-program behavior is fenced unchanged. Geometry derived from pages or screenshots and content ink values are not UI chrome literals.
 - Existing @quirky/ui exports own buttons, badges, fields, sections, rows and dialogs. React 19 input-ref support may be added additively to shared TextField if needed; no incompatible exported signature changes.
 - Token-based inline layout stays in the owning UI files; no plugin CSS/style tags or new global Browser selectors. Native fields inside FormRow use shared control classes.
+- A shared DOM-only selection-overlay component supplies canonical tokens inside an external guest's closed shadow root; Browser retains its state/geometry/events. The guest component takes its document's declared dark/light appearance, otherwise its system preference. No app-to-native theme synchronization capability is claimed.
+- Shared transparent/shadow/scrim aliases own alpha composition; plugins reference tokens rather than raw transparent color literals.
+- The viewport-fixed markup editor portals to document.body, escaping pane/tool-slot stacking and clipping while retaining its original event isolation, focus ref and cancellation lifecycle.
 - Three disjoint implementation slices: pane UI; preferences UI; design/markup UI. Parent owns lint enrollment, docs, shared contract additions and integration. Workers use absolute assigned worktree paths, never commit/run checks.
 - Verification: current LOOP explicitly selects typecheck-only build-first gates and prohibits suites/formal review/dogfood. Author regression coverage if behavior edges change; do not run suites. Minimum actual built changed-surface smoke is recorded separately and is not a screenshot-model score. Default85 golden review remains an end-phase obligation, not a fabricated pass.
 
@@ -48,4 +51,4 @@ No new functionality, mobile restyle, native SDK capability, native screenshot s
 Chrome: Browser controls, not page content. Watch: an explicitly managed page displayed through its existing frame lease. Golden: unchanged approved dark/light combined reference screen.
 
 ## Status & amendments
-**Amendments:** none.
+**Amendments:** 2026-10-28 — self-review found the missing guest-world DOM presentation primitive and observed markup clipping under the six-slot shell. The final tech section records those presentation-only adaptations. No feature/API/consent behavior changed.
