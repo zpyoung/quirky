@@ -1,11 +1,11 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent } from 'react'
 import type { ProjectGroup, Repo, Session, UiPluginContext, Worktree } from '@quirky/protocol'
-import { Badge, Button, IconButton, ListRow, SectionHeader, StatusDot as UiStatusDot, type UiStatus } from '@quirky/ui'
+import { Badge, Button, ContextMenu, IconButton, ListRow, SectionHeader, StatusDot as UiStatusDot, type ContextMenuItem, type UiStatus } from '@quirky/ui'
 import { DEFAULT_STOCK_OPTIONS, type StockWorktreeOptions, type WorktreeControl } from './control-types'
 import type { HeimdallWorktreeStatus } from './useTree'
 import { resolveMembershipTarget, type MembershipTarget } from './membership'
 import { changeGroup, copyText, currentWindowId, setWorkspaceSleeping, setWorktree } from './actions'
-import { ContextMenu, groupMenu, projectMenu, workspaceMenu, type MenuItem } from './Menu'
+import { groupMenu, projectMenu, workspaceMenu } from './Menu'
 import { projectSeparatorBoundaries, repoLabel, type AutomationAvailabilitySnapshot, type DialogState, type GroupNode, type ProjectNode, type TreeModel, type TreeRow } from './report'
 import type { WorktreeProjectIdentity, WorktreeStatusDefinition } from './parity-types'
 import { semanticStatus, UnreadBell } from './StatusDot'
@@ -41,7 +41,7 @@ export type TreeProps = {
   loopsByWorktree?: ReadonlyMap<string, LoopProjection>
 }
 
-type OpenMenu = { x: number; y: number; label: string; items: MenuItem[] }
+type OpenMenu = { x: number; y: number; label: string; items: ContextMenuItem[] }
 
 const plural = (count: number) => `${count} ${count === 1 ? 'child' : 'children'}`
 const EMPTY_LOOP_PROJECTIONS: ReadonlyMap<string, LoopProjection> = new Map()

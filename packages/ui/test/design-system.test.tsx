@@ -224,45 +224,6 @@ describe('shared graphite components', () => {
     expect(container.querySelector('[role="menu"]')).toBeNull()
   })
 
-  test('context submenus preserve disabled actions, keyboard return and root dismissal', async () => {
-    const actions: string[] = []
-    const opener = document.createElement('button')
-    document.body.append(opener)
-    opener.focus()
-    await render(<Menu label="Workspace" position={{ x: 20, y: 30 }} onClose={() => actions.push('close')} items={[
-      { id: 'status', label: 'Move to Status', submenu: [
-        { id: 'blocked', label: 'Unavailable', disabled: true, onAction: () => actions.push('blocked') },
-        { id: 'done', label: 'Done', current: true, onAction: () => actions.push('done') },
-      ] },
-      { id: 'delete', label: 'Delete', disabled: true, title: 'Primary worktree' },
-    ]} />)
-    const status = document.querySelector('[role="menuitem"][aria-haspopup="menu"]')!
-    expect(document.activeElement).toBe(status)
-    await key(status, 'ArrowRight')
-    const done = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find((button) => button.textContent?.includes('Done'))!
-    expect(document.activeElement).toBe(done)
-    await key(done, 'ArrowLeft')
-    expect(document.activeElement).toBe(status)
-    expect(actions).toEqual([])
-    await click(status)
-    const unavailable = [...document.querySelectorAll('[role="menuitem"]')].find((button) => button.textContent?.includes('Unavailable'))!
-    await click(unavailable)
-    expect(actions).toEqual([])
-    const selected = [...document.querySelectorAll('[role="menuitem"]')].find((button) => button.textContent?.includes('Done'))!
-    await click(selected)
-    expect(actions).toEqual(['close', 'done'])
-    expect(document.activeElement).toBe(opener)
-  })
-
-  test('context menu Escape dismisses without invoking an action', async () => {
-    const actions: string[] = []
-    await render(<Menu label="Workspace" position={{ x: 2, y: 3 }} onClose={() => actions.push('close')} items={[
-      { id: 'delete', label: 'Delete', onAction: () => actions.push('delete') },
-    ]} />)
-    await key(document.querySelector('[role="menuitem"]')!, 'Escape')
-    expect(actions).toEqual(['close'])
-  })
-
   test('only the top stacked dialog traps focus and handles Escape', async () => {
     const calls: string[] = []
     const tree = (inner: boolean) => <>

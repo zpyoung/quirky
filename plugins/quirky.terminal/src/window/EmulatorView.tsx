@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Button, EmptyState, FormRow, ToolPanelFrame } from '@quirky/ui'
 import type { UiPluginContext } from '@quirky/protocol'
 import type { EmulatorDevice, EmulatorFrame, EmulatorListing } from '../emulator'
 
@@ -53,23 +54,39 @@ export function EmulatorView({ context, input, report }: { context: UiPluginCont
 
   useEffect(() => { report?.({ selected: selected || null, device: device ?? null, loading, error, capturedAt: frame?.capturedAt ?? null }) }, [report, selected, device, loading, error, frame?.capturedAt])
 
-  return <section aria-label="Mobile Emulator" style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: 12, boxSizing: 'border-box', gap: 10 }}>
-    <header style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-      <strong>Mobile Emulator</strong>
-      <label>iOS Simulator <select aria-label="Simulator device" value={selected} onChange={(event) => { setError(null); setSelected(event.target.value) }} disabled={loading}>
-        <option value="">Choose a simulator</option>
-        {devices.map((entry) => <option key={entry.id} value={entry.id}>{entry.name} · {entry.state}</option>)}
-      </select></label>
-      <button type="button" disabled={loading} onClick={() => setRevision((value) => value + 1)}>Refresh</button>
-    </header>
-    <small>Read-only preview of the exact selected Xcode simulator. Start it in Simulator; agents keep their own control tools. Hidden tabs stop polling.</small>
-    {loading ? <p role="status">Loading simulators…</p> : null}
-    {error ? <p role="alert">{error}</p> : null}
-    {!loading && devices.length === 0 && !error ? <p>No available iOS simulators. Install a simulator runtime in Xcode, then Refresh.</p> : null}
-    {selected && !device && !loading ? <p>The selected simulator is no longer available. Choose another device explicitly.</p> : null}
-    {device && device.state !== 'Booted' ? <p>{device.name} is {device.state}. Start this exact device in Simulator, then Refresh.</p> : null}
-    {device?.state === 'Booted' && !frame && !error ? <p role="status">Capturing {device.name}…</p> : null}
-    {frame ? <small>Last frame: {new Date(frame.capturedAt).toLocaleTimeString()}{error ? ' · Preview paused; Refresh to retry.' : ''}</small> : null}
-    {frame ? <img alt={`Preview of ${device?.name ?? frame.device}`} src={`data:image/png;base64,${frame.data}`} style={{ minHeight: 0, maxWidth: '100%', flex: '1 1 0', objectFit: 'contain', alignSelf: 'center' }} /> : null}
-  </section>
+  return (
+    <div className="tt-tool-panel-fill tt-emulator-panel" data-terminal-emulator>
+      <ToolPanelFrame title="Mobile Emulator" actions={<Button disabled={loading} onClick={() => setRevision((value) => value + 1)}>Refresh</Button>}>
+        <div className="tt-emulator-layout">
+          <FormRow label="iOS Simulator" htmlFor="terminal-emulator-device">
+            <select
+              id="terminal-emulator-device"
+              className="ui-text-field__input"
+              aria-label="Simulator device"
+              value={selected}
+              onChange={(event) => { setError(null); setSelected(event.target.value) }}
+              disabled={loading}
+            >
+              <option value="">Choose a simulator</option>
+              {devices.map((entry) => <option key={entry.id} value={entry.id}>{entry.name} · {entry.state}</option>)}
+            </select>
+          </FormRow>
+          <p className="ui-text-muted">Read-only preview of the exact selected Xcode simulator. Start it in Simulator; agents keep their own control tools. Hidden tabs stop polling.</p>
+          {loading ? <p className="ui-text-muted" role="status">Loading simulators…</p> : null}
+          {error ? <div className="ui-error-text" role="alert">{error}</div> : null}
+          {!loading && devices.length === 0 && !error ? (
+            <EmptyState
+              message="No available iOS simulators. Install a simulator runtime in Xcode, then Refresh."
+              action={{ label: 'Refresh', onAction: () => setRevision((value) => value + 1) }}
+            />
+          ) : null}
+          {selected && !device && !loading ? <p className="ui-text-muted">The selected simulator is no longer available. Choose another device explicitly.</p> : null}
+          {device && device.state !== 'Booted' ? <p className="ui-text-muted">{device.name} is {device.state}. Start this exact device in Simulator, then Refresh.</p> : null}
+          {device?.state === 'Booted' && !frame && !error ? <p className="ui-text-muted" role="status">Capturing {device.name}…</p> : null}
+          {frame ? <small className="ui-text-muted">Last frame: {new Date(frame.capturedAt).toLocaleTimeString()}{error ? ' · Preview paused; Refresh to retry.' : ''}</small> : null}
+          {frame ? <img className="tt-emulator-frame" alt={`Preview of ${device?.name ?? frame.device}`} src={`data:image/png;base64,${frame.data}`} /> : null}
+        </div>
+      </ToolPanelFrame>
+    </div>
+  )
 }

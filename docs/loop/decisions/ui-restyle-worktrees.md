@@ -110,5 +110,16 @@
 - **Revisit if:** final visual review or the end phase rejects an appearance or behavior
 - **Source:** locked by docs/loop/LOOP.md
 
+## D11: Reuse the canonical context-menu owner delivered by the sole catch-up
+- **Question:** how do incoming decisions compose with this branch's independently implemented context-menu extension?
+- **Options:** retain two competing shared menu implementations; discard terminal behavior; migrate Worktrees to the newly landed canonical ContextMenu
+- **Chose:** merge roadmap e897f88cf8d27eaa8dde246ac7baed144ad2acbf once; union all five plugin lint opt-ins. Read fix-test-packages-ui-1028, ui-restyle-editor and ui-restyle-terminal completely, including Progress. Preserve exact-window input/focus, Ask ownership and the incoming rich ContextMenu. Migrate all worktree menu builders to ContextMenuItem and import ContextMenu directly. Remove our temporary local adapter, Menu extension, duplicate CSS/token and superseded menu tests. Keep only disabled-title and measured viewport-clamp additions at the canonical context-menu owner.
+- **Why:** two shared context-menu conventions would contradict the approved design-system goal. Incoming terminal menus have fuller nested/search/IME semantics. Additive tooltip/clamp changes preserve existing callers and actual primary-delete explanations; no daemon API changes or compatibility shims are introduced.
+- **Evidence:** sole catch-up conflict only in scripts/ui-lint-plugins.json; incoming three decision logs; packages/ui/src/design-system/context-menu{,-contracts}.tsx/ts; worktree menu reference search; item spec composition amendment
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** post-merge compiler or actual Worktrees menu smoke rejects the composed contract
+- **Source:** supersedes ui-restyle-worktrees D8 (Menu-extension clause only)
+
 ## Progress
-All three source components audited at the all-writer barrier, integrated as f22f86c9/fd28584a/98e42ed9 under8de9061, and their external worktrees removed. Parent shared-source fixes and minimum actual runtime proof are in D8–D10. PanelRestyle is migrating affected behavior-test selectors in one isolated tests worktree, without checks/commits. Next: finish that barrier, update receipts, commit, perform the sole roadmap catch-up/read incoming decisions, run final typecheck, close owned browser/runtime, detach and canonical land. Suites, formal reviews and screenshot-model approval remain unrun by policy.
+The sole roadmap catch-up is being resolved with canonical ContextMenu reuse (D11), not a second menu system. All source components are integrated and removed. The scoped eight-file behavior-test continuation returned without checks/commits; its barrier audit/integration is next. Pre-catch-up runtime proof is D9–D10; owned runtime exited0 with homeRemoved:true and managed tabs empty. Next: finish this composition, integrate tests, run final typecheck/build and focused post-merge menu smoke, then commit/detach/canonical land. Suites, formal review and screenshot scoring remain unrun by policy.

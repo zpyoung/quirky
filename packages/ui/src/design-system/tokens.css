@@ -11,6 +11,7 @@
   --ui-working: #4cc38a;
   --ui-needs-you: #e5b454;
   --ui-failing: #ef6b73;
+  --ui-transparent: transparent;
   --ui-font-title: 15px;
   --ui-font-body: 12px;
   --ui-font-label: 11px;
@@ -35,7 +36,6 @@
   --ui-icon-size: 16px;
   --ui-status-dot-size: 8px;
   --ui-dialog-wide-width: 52rem;
-  --ui-menu-width: 14rem;
   --ui-form-column-width: 16rem;
 }
 

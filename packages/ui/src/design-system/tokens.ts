@@ -10,6 +10,7 @@ export const uiTokens = {
     working: '--ui-working',
     needsYou: '--ui-needs-you',
     failing: '--ui-failing',
+    transparent: '--ui-transparent',
   },
   font: {
     title: '--ui-font-title',

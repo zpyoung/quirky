@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Button, EmptyState, FormRow, ToolPanelFrame } from '@quirky/ui'
 import type { UiKeybinding, UiModel, UiPluginContext } from '@quirky/protocol'
 
 /** Edits the same daemon-owned binding overrides the public keybinding API exposes. */
@@ -59,21 +60,41 @@ export function ShortcutSettings({ context, report }: { context: UiPluginContext
       if (mounted.current) setPending(null)
     }
   }
-  return <section aria-label="Terminal Shortcuts">
-    <p>Remap terminal shortcuts for this profile. Context conditions and Terminal-first policy remain in effect. Reset restores the current plugin or distro default.</p>
-    {loading ? <p role="status">Loading shortcuts…</p> : null}
-    {error ? <p role="alert">{error}</p> : null}
-    {!loading && bindings.length === 0 ? <p>No terminal shortcuts are available.</p> : null}
-    <div style={{ display: 'grid', gap: 8 }}>
-      {bindings.map((binding) => <div key={binding.id} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-        <label style={{ flex: '1 1 260px' }}>{titles[binding.command] ?? binding.command}
-          <input aria-label={`Shortcut for ${binding.id}`} value={drafts[binding.id] ?? (binding.status === 'unbound' ? '' : binding.key)} onChange={(event) => setDrafts((current) => ({ ...current, [binding.id]: event.target.value }))} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void mutate(binding, 'save') } }} placeholder="mod+shift+k" disabled={pending !== null} style={{ marginLeft: 8, width: 150 }} />
-        </label>
-        <small>{binding.status}{binding.shadowedBy ? ` · ${binding.shadowedBy}` : ''}</small>
-        <button type="button" disabled={pending !== null} onClick={() => void mutate(binding, 'save')}>Save</button>
-        <button type="button" disabled={pending !== null} onClick={() => void mutate(binding, 'disable')}>Disable</button>
-        <button type="button" disabled={pending !== null} onClick={() => void mutate(binding, 'reset')}>Reset</button>
-      </div>)}
-    </div>
-  </section>
+  return (
+    <section className="tt-tool-panel-fill tt-shortcut-settings">
+      <ToolPanelFrame title="Terminal Shortcuts">
+        <p className="ui-text-muted">Remap terminal shortcuts for this profile. Context conditions and Terminal-first policy remain in effect. Reset restores the current plugin or distro default.</p>
+        {loading ? <p className="ui-text-muted" role="status">Loading shortcuts…</p> : null}
+        {error ? <div className="ui-error-text" role="alert">{error}</div> : null}
+        {!loading && bindings.length === 0 ? <EmptyState message="No terminal shortcuts are available." /> : null}
+        <div className="tt-shortcut-list">
+          {bindings.map((binding) => {
+            const inputId = `terminal-shortcut-${binding.id}`
+            return (
+              <div key={binding.id} className="tt-shortcut-row">
+                <FormRow label={titles[binding.command] ?? binding.command} htmlFor={inputId}>
+                  <input
+                    id={inputId}
+                    aria-label={`Shortcut for ${binding.id}`}
+                    className="ui-text-field__input"
+                    value={drafts[binding.id] ?? (binding.status === 'unbound' ? '' : binding.key)}
+                    onChange={(event) => setDrafts((current) => ({ ...current, [binding.id]: event.target.value }))}
+                    onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void mutate(binding, 'save') } }}
+                    placeholder="mod+shift+k"
+                    disabled={pending !== null}
+                  />
+                </FormRow>
+                <small className="tt-shortcut-status">{binding.status}{binding.shadowedBy ? ` · ${binding.shadowedBy}` : ''}</small>
+                <div className="ui-cluster">
+                  <Button disabled={pending !== null} onClick={() => void mutate(binding, 'save')}>Save</Button>
+                  <Button disabled={pending !== null} onClick={() => void mutate(binding, 'disable')}>Disable</Button>
+                  <Button disabled={pending !== null} onClick={() => void mutate(binding, 'reset')}>Reset</Button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </ToolPanelFrame>
+    </section>
+  )
 }

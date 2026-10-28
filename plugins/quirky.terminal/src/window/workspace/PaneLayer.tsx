@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { Button, EmptyState, IconButton } from '@quirky/ui'
 import { parseContributionId } from '@quirky/protocol'
 
 import { paneLeaves, paneRects, roundRatio } from '../../layout/tree'
@@ -85,7 +86,7 @@ function StructuredHost({ controller, session }: { controller: WorkspaceControll
   return (
     <div className="qt-structured">
       <div ref={host} className="qt-structured-body" />
-      {failed ? <p className="qt-muted">The structured session view is not available.</p> : null}
+      {failed ? <EmptyState message="The structured session view is not available." /> : null}
     </div>
   )
 }
@@ -109,7 +110,7 @@ function HostedViewLayer({ controller, tab }: { controller: WorkspaceController;
   return (
     <div className="qt-structured qt-hosted-view" data-hosted-view={tab.id}>
       <div ref={host} className="qt-structured-body" />
-      {failure ? <p className="qt-muted qt-pad">{failure}</p> : null}
+      {failure ? <EmptyState message={failure} /> : null}
     </div>
   )
 }
@@ -259,12 +260,12 @@ function ExitOverlay({ controller, leaf }: { controller: WorkspaceController; le
       <strong>Terminal exited</strong>
       <span>{exitText(leaf.exit!)}</span>
       <div className="qt-exit-actions">
-        <button type="button" onClick={() => void controller.closePane(leaf.id)}>
+        <Button variant="secondary" onClick={() => void controller.closePane(leaf.id)}>
           Close
-        </button>
-        <button type="button" className="qt-primary" onClick={() => void controller.restartPane(leaf.id)}>
+        </Button>
+        <Button variant="primary" onClick={() => void controller.restartPane(leaf.id)}>
           Restart
-        </button>
+        </Button>
       </div>
     </div>
   )
@@ -276,48 +277,47 @@ function PaneHeader({ controller, state, tab, leaf, multi, onGrip }: { controlle
   let close
   if (!multi) {
     close = (
-      <button type="button" className="qt-icon" aria-label="Close tab" title="Close tab" onClick={() => void controller.closeTab(tab.id)}>
+      <IconButton className="qt-icon" label="Close tab" title="Close tab" onClick={() => void controller.closeTab(tab.id)}>
         <CloseIcon />
-      </button>
+      </IconButton>
     )
   } else if (leaf.title) {
     close = (
-      <button type="button" className="qt-icon" aria-label="Remove title" title="Remove title" onClick={() => void controller.clearTitle(leaf.id)}>
+      <IconButton className="qt-icon" label="Remove title" title="Remove title" onClick={() => void controller.clearTitle(leaf.id)}>
         <CloseIcon />
-      </button>
+      </IconButton>
     )
   } else {
     close = (
-      <button type="button" className="qt-icon" aria-label="Close Pane" title="Close Pane" onClick={() => void controller.closePane(leaf.id)}>
+      <IconButton className="qt-icon" label="Close Pane" title="Close Pane" onClick={() => void controller.closePane(leaf.id)}>
         <CloseIcon />
-      </button>
+      </IconButton>
     )
   }
 
   return (
     <div className="qt-pane-header" data-pane-header={leaf.id} onMouseDown={(event) => event.stopPropagation()}>
       {renaming ? (
-        <InlineField label="Pane title" initial={leaf.title ?? ''} className="qt-title-field" onCommit={(value) => void controller.commitRename(value)} onCancel={() => controller.cancelRename()} />
+        <InlineField label="Pane title" initial={leaf.title ?? ''} className="ui-text-field__input qt-title-field" onCommit={(value) => void controller.commitRename(value)} onCancel={() => controller.cancelRename()} />
       ) : leaf.title ? (
         <span className="qt-pane-title" title={leaf.title}>
           {leaf.title}
         </span>
       ) : null}
       {multi ? (
-        <button type="button" className="qt-icon qt-grip" aria-label="Move pane" title="Move pane" onMouseDown={onGrip}>
+        <IconButton className="qt-icon qt-grip" label="Move pane" title="Move pane" onMouseDown={onGrip}>
           <GripIcon />
-        </button>
+        </IconButton>
       ) : null}
       {multi ? (
-        <button
-          type="button"
+        <IconButton
           className="qt-icon"
-          aria-label={expanded ? 'Collapse pane' : 'Expand pane'}
+          label={expanded ? 'Collapse pane' : 'Expand pane'}
           title={expanded ? 'Collapse pane' : 'Expand pane'}
           onClick={() => void controller.toggleExpand(leaf.id)}
         >
           {expanded ? <CollapseIcon /> : <ExpandIcon />}
-        </button>
+        </IconButton>
       ) : null}
       {close}
     </div>

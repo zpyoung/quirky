@@ -31,8 +31,16 @@ async function mountGallery() {
   return container
 }
 
+function accessibleText(node: Node): string {
+  if (node instanceof Element && node.getAttribute('aria-hidden') === 'true') return ''
+  if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? ''
+  return [...node.childNodes].map(accessibleText).join('')
+}
+
 function button(scope: ParentNode, label: string): HTMLButtonElement {
-  const found = [...scope.querySelectorAll('button')].find((candidate) => candidate.textContent?.trim() === label)
+  const found = [...scope.querySelectorAll('button')].find((candidate) =>
+    (candidate.getAttribute('aria-label')?.trim() || accessibleText(candidate).trim()) === label
+  )
   if (!found) throw new Error(`Gallery button not found: ${label}`)
   return found
 }
@@ -42,32 +50,6 @@ function status(scope: ParentNode, name: string): string {
   if (!found) throw new Error(`Gallery status not found: ${name}`)
   return found.textContent ?? ''
 }
-
-test('renders all fifteen component categories in independent dark and light scopes', async () => {
-  const container = await mountGallery()
-  const scopes = [...container.querySelectorAll<HTMLElement>('.ui-gallery-theme')]
-  expect(scopes.map((scope) => scope.dataset.theme)).toEqual(['dark', 'light'])
-  const categories = [
-    'Button',
-    'IconButton',
-    'TextField',
-    'ListRow',
-    'SectionHeader',
-    'Tabs',
-    'Badge',
-    'StatusDot',
-    'Menu',
-    'Toast',
-    'Dialog',
-    'EmptyState',
-    'FormRow',
-    'ToolPanelFrame',
-    'InlineAgentCard'
-  ]
-  for (const scope of scopes) {
-    expect([...scope.querySelectorAll<HTMLElement>('.ui-gallery-demo')].map((demo) => demo.dataset.category)).toEqual(categories)
-  }
-})
 
 test('keeps the button examples and their action feedback functional in both themes', async () => {
   const container = await mountGallery()

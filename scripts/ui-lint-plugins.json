@@ -1,4 +1,7 @@
 [
+  "quirky.editor",
   "quirky.repo",
+  "quirky.terminal",
+  "quirky.terminal-dock",
   "quirky.worktree"
 ]

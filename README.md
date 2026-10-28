@@ -227,7 +227,7 @@ does not evaluate arbitrary runtime style computations or trace imported style o
 Worktrees remains the default left-top tool. It renders repository/project management through
 the existing `quirky.repo` API rather than a separate repository panel. Rows use shared status
 dots, attention counts and a second activity line; project/worktree dialogs and panel options
-use the same graphite controls in both themes. Shared Menu supports pointer-positioned context
+use the same graphite controls in both themes. Shared ContextMenu supports pointer-positioned
 menus with nested actions; shared Dialog supports wide content and stacked focus ownership.
 
 ### Public plugin UI and grouping APIs
@@ -308,6 +308,13 @@ workspace source, so newly added plugins do not need generated per-plugin links 
 Keep those mappings aligned with `packages/protocol/package.json` exports.
 
 ## Editor documents and shared review notes
+
+The **Files** tool opens in the right-top slot by default; documents stay in center tabs.
+Editor controls, Quick Open, Save As, dirty-close and notebook trust dialogs use the shared
+graphite UI in dark and light. Source editing, Markdown modes, notebooks and file viewers keep
+their existing commands and save guards. `quirky.editor` is included in the UI lint gate:
+presentation changes must use `@quirky/ui` components and semantic tokens, with engine styles
+owned by the shared UI package rather than injected plugin CSS.
 
 New Markdown documents use collision-safe untitled placeholders. Save opens a relative-path
 Save As dialog; cancelling keeps the draft. The public `quirky.editor/saveAs` method accepts

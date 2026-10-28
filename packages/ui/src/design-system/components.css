@@ -943,46 +943,6 @@
   background: var(--ui-selected);
 }
 
-.ui-menu__popup {
-  left: 0;
-  min-width: 100%;
-  position: absolute;
-  top: 100%;
-  z-index: 10;
-}
-
-.ui-menu__popup > .ui-menu__list {
-  position: static;
-}
-
-.ui-context-menu {
-  max-width: calc(100vw - var(--ui-space-8));
-  min-width: var(--ui-menu-width);
-  position: fixed;
-  z-index: 1100;
-}
-
-.ui-context-menu > .ui-menu__list {
-  margin: 0;
-  max-height: calc(100vh - var(--ui-space-8));
-  overflow-y: auto;
-}
-
-.ui-menu__list.ui-menu__submenu {
-  border: 0;
-  border-inline-start: var(--ui-border-width) solid var(--ui-border);
-  margin: var(--ui-space-2) 0 var(--ui-space-2) var(--ui-space-8);
-  min-width: 0;
-  padding: 0 0 0 var(--ui-space-4);
-  position: static;
-}
-
-.ui-menu__item {
-  align-items: center;
-  display: flex;
-  gap: var(--ui-space-12);
-  justify-content: space-between;
-}
 
 .ui-disclosure {
   border: var(--ui-border-width) solid var(--ui-border);

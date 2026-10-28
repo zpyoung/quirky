@@ -27,23 +27,8 @@ export type ListRowProps = {
 export type SectionHeaderProps = Omit<HTMLAttributes<HTMLElement>, 'title'> & { title: string; titleTooltip?: string; actions?: ReactNode }
 export type TabItem = { id: string; label: string; disabled?: boolean; panelId?: string }
 export type TabsProps = { label: string; items: readonly TabItem[]; value: string; onChange: (id: string) => void }
-export type MenuItem = {
-  id: string
-  label: string
-  onAction?: () => void
-  disabled?: boolean
-  destructive?: boolean
-  title?: string
-  current?: boolean
-  submenu?: readonly MenuItem[]
-}
-export type MenuProps = {
-  label: string
-  items: readonly MenuItem[]
-  /** A context menu opens immediately at a pointer's viewport coordinates. */
-  position?: { x: number; y: number }
-  onClose?: () => void
-}
+export type MenuItem = { id: string; label: string; onAction: () => void; disabled?: boolean; destructive?: boolean }
+export type MenuProps = { label: string; items: readonly MenuItem[] }
 export type ToastProps = { title: string; description?: ReactNode; status?: UiStatus; action?: UiAction; onDismiss: () => void; durationMs?: number }
 export type DialogProps = { open: boolean; title: string; children: ReactNode; actions?: ReactNode; onClose: () => void; variant?: 'dialog' | 'sheet'; size?: 'default' | 'wide'; closeOnBackdrop?: boolean }
 export type EmptyStateProps = { message: string; action?: UiAction; icon?: ReactNode }

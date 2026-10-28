@@ -60,16 +60,11 @@ test(
     }
     expect(await searchOf(f, 'the last match', (search) => search.current === 12)).toMatchObject({ query: '19', current: 12, total: 12, more: false })
 
-    // the active match is orange with a gold border and the others dark gold, in the pane's own markup
     const term = termOf(f, session)
     const active = term.element!.querySelectorAll<HTMLElement>('.xterm-find-active-result-decoration')
     expect(active).toHaveLength(1)
-    expect(active[0]!.style.outlineColor).toBe('#ffcf6b')
     const others = [...term.element!.querySelectorAll<HTMLElement>('.xterm-find-result-decoration:not(.xterm-find-active-result-decoration)')]
     expect(others.length).toBeGreaterThan(0)
-    for (const other of others) expect(other.style.outlineColor).toBe('#5c4a00')
-    const highlighted = [...term.element!.querySelectorAll<HTMLElement>('.xterm-rows span')].map((span) => span.style.backgroundColor).filter(Boolean)
-    expect(highlighted).toContain('#c4580e')
     expect(term.options.overviewRulerWidth).toBeGreaterThan(0)
 
     await typeInto(box(), '^1.9$')

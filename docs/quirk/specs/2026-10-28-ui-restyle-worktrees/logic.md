@@ -56,6 +56,8 @@ Tool: host-mounted contribution in one saved slot. Activity: actual agent/sessio
 
 2026-10-28: autonomous approval of this bounded slice under LOOP.md; parent design unchanged.
 
+2026-10-28 composition amendment: the sole roadmap catch-up delivered the richer canonical ContextMenu from ui-restyle-terminal. Reuse it directly and remove this branch's redundant Menu extension/adapter/styles/tests. Add only the meaningful disabled-action tooltip and viewport clamp to that shared owner; ordinary dropdown Menu remains unchanged.
+
 ## Technical decisions and implementation contracts
 
 ### Architecture and shared contracts
@@ -66,7 +68,7 @@ DO NOT CHANGE: daemon/API/CLI files, feature algorithms/hooks/state authorities,
 
 2026-10-28 shared presentation extensions, committed before use:
 
-- `MenuItem` adds optional `submenu`, `title`, `current` and optional `onAction` for submenu/disabled entries; `MenuProps` adds optional pointer `position: { x, y }` and `onClose`. Context mode opens immediately without a trigger, clamps to viewport, preserves keyboard/submenu/disabled semantics and calls `onClose` once on dismissal. Ordinary trigger menus keep their contract. Worktree ContextMenu becomes data mapping only.
+- Reuse canonical `ContextMenu`/`ContextMenuList` and `ContextMenuItem` from `@quirky/ui`, including existing nested keyboard/search semantics. Worktree feature builders produce that type directly. `ContextMenuItem.title` preserves disabled-action reasons and shared ContextMenu clamps its measured root on size/window changes. No local context component or parallel Menu variant remains.
 - `ListRow` adds `mainTitle`, `mainLabel`, optional `progress` and `compact`; its existing single shared dot renders progress and compact rows retain their activity description. `StatusDot` accepts finite percentage progress with 0–100 clamping.
 - `SectionHeader` accepts standard header attributes plus `titleTooltip`, preserving context/drop targets and true hidden state.
 - `Dialog` gains `size: default|wide`; shared top-dialog focus ownership replaces the local wrapper. Remove the obsolete plugin Dialog implementation and import the shared component directly.

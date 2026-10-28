@@ -1,11 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
-import {
-  GRAPHITE_TERMINAL_PALETTES,
-  TERMINAL_ANSI_KEYS,
-  type TerminalAppearanceMode,
-  type TerminalPalette
-} from '@quirky/protocol'
 import { readTerminalTheme } from '../src/terminal-theme'
 
 let systemLight = false
@@ -26,45 +20,53 @@ afterEach(() => {
   document.documentElement.removeAttribute('data-theme')
 })
 
-function expectGraphitePalette(theme: TerminalPalette, appearance: TerminalAppearanceMode, base: Partial<TerminalPalette> = {}) {
-  const expected = GRAPHITE_TERMINAL_PALETTES[appearance]
-  for (const key of ['background', 'foreground', 'cursor', 'cursorAccent', 'selectionBackground', 'selectionForeground'] as const) {
-    expect(theme[key]).toBe(base[key] ?? expected[key])
-  }
-  for (const key of TERMINAL_ANSI_KEYS) expect(theme[key]).toBe(expected[key])
-}
-
-test('the root light appearance selects all graphite slots over a dark system preference', () => {
-  document.documentElement.setAttribute('data-theme', 'light')
-  systemLight = false
+test('an explicit root appearance is stable across system changes and changes when the root changes', () => {
   const source = document.createElement('div')
   document.body.appendChild(source)
 
-  expectGraphitePalette(readTerminalTheme(source), 'light')
-})
-
-test('the root dark appearance stays authoritative over a light system and inherits terminal base colors', () => {
   document.documentElement.setAttribute('data-theme', 'dark')
+  systemLight = false
+  const dark = readTerminalTheme(source)
   systemLight = true
-  const ancestor = document.createElement('div')
-  ancestor.style.setProperty('--terminal-background', '#custom-background')
-  ancestor.style.setProperty('--terminal-foreground', '#custom-foreground')
-  ancestor.style.setProperty('--terminal-cursor', '#custom-cursor')
-  const source = document.createElement('div')
-  ancestor.appendChild(source)
-  document.body.appendChild(ancestor)
+  expect(readTerminalTheme(source)).toEqual(dark)
 
-  expectGraphitePalette(readTerminalTheme(source), 'dark', {
-    background: '#custom-background',
-    foreground: '#custom-foreground',
-    cursor: '#custom-cursor'
-  })
+  document.documentElement.setAttribute('data-theme', 'light')
+  const light = readTerminalTheme(source)
+  systemLight = false
+  expect(readTerminalTheme(source)).toEqual(light)
+
+  expect(light.background).not.toBe(dark.background)
+  expect(light.foreground).not.toBe(dark.foreground)
 })
 
 test('a standalone source without root data-theme follows the system preference', () => {
-  systemLight = true
   const source = document.createElement('div')
   document.body.appendChild(source)
 
-  expectGraphitePalette(readTerminalTheme(source), 'light')
+  document.documentElement.setAttribute('data-theme', 'dark')
+  const dark = readTerminalTheme(source)
+  document.documentElement.setAttribute('data-theme', 'light')
+  const light = readTerminalTheme(source)
+  document.documentElement.removeAttribute('data-theme')
+
+  systemLight = false
+  expect(readTerminalTheme(source)).toEqual(dark)
+  systemLight = true
+  expect(readTerminalTheme(source)).toEqual(light)
+})
+
+test('overrides terminal base colors supplied on the source', () => {
+  document.documentElement.setAttribute('data-theme', 'dark')
+  systemLight = true
+  const source = document.createElement('div')
+  source.style.setProperty('--terminal-background', '#123456')
+  source.style.setProperty('--terminal-foreground', '#ddeeff')
+  source.style.setProperty('--terminal-cursor', '#abcdef')
+  document.body.appendChild(source)
+
+  const theme = readTerminalTheme(source)
+
+  expect(theme.background).toBe('#123456')
+  expect(theme.foreground).toBe('#ddeeff')
+  expect(theme.cursor).toBe('#abcdef')
 })

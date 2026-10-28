@@ -2,12 +2,11 @@ import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 
 import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'
 import type { FloatingBounds, FloatingState } from '../../layout/types'
 import { FLOATING_WORKSPACE } from '../../layout/types'
-import { Menu } from '../workspace/Menu'
-import { controllerFor, injectWorkspaceStyles, mountWorkspace, setFloatingFocus } from '../workspace'
+import { ContextMenu, IconButton } from '@quirky/ui'
+import { controllerFor, mountWorkspace, setFloatingFocus } from '../workspace'
 import { terminalSettingName } from '../workspace/model'
 import type { ViewReport, WorkspaceOptions } from '../workspace'
-import { BUTTON_SIZE, clampButton, defaultButton, moveBounds, resizeBounds, resolveBounds, type Edge, type Point, type Viewport } from './geometry'
-import { injectFloatingStyles } from './styles'
+import { clampButton, defaultButton, moveBounds, resizeBounds, resolveBounds, type Edge, type Point, type Viewport } from './geometry'
 
 const FLOATING_EVENT = 'quirky.terminal/floating'
 const ENABLED_SETTING = 'setting:quirky.terminal/floating-enabled'
@@ -102,11 +101,6 @@ export function FloatingOverlay({ context, report, workspaceOptions }: Props) {
   const panel = useRef<HTMLDivElement>(null)
   const suppressClick = useRef(false)
   const stopDrag = useRef<(() => void) | null>(null)
-
-  useState(() => {
-    injectWorkspaceStyles(document)
-    injectFloatingStyles(document)
-  })
 
   useEffect(() => {
     let live = true
@@ -281,26 +275,25 @@ export function FloatingOverlay({ context, report, workspaceOptions }: Props) {
           <div className="qf-titlebar" data-floating-titlebar onMouseDown={dragPanel} onDoubleClick={() => void send({ maximized: !state.maximized })}>
             <span>Floating Workspace</span>
             <div className="qf-controls">
-              <button type="button" className="qf-control" aria-label={state.maximized ? 'Restore' : 'Maximize'} title={state.maximized ? 'Restore' : 'Maximize'} onClick={() => void send({ maximized: !state.maximized })}>
+              <IconButton className="qf-control" label={state.maximized ? 'Restore' : 'Maximize'} title={state.maximized ? 'Restore' : 'Maximize'} onClick={() => void send({ maximized: !state.maximized })}>
                 <Icon path={state.maximized ? RESTORE : MAXIMIZE} />
-              </button>
-              <button type="button" className="qf-control" aria-label="Minimize" title="Minimize" onClick={() => void send({ open: false })}>
+              </IconButton>
+              <IconButton className="qf-control" label="Minimize" title="Minimize" onClick={() => void send({ open: false })}>
                 <Icon path={MINIMIZE} />
-              </button>
+              </IconButton>
             </div>
           </div>
           <PanelBody context={context} options={workspaceOptions} onReport={setBody} />
           {state.maximized ? null : EDGES.map((edge) => <div key={edge} className={`qf-edge qf-edge-${edge}`} data-edge={edge} onMouseDown={(event) => resizePanel(edge, event)} />)}
         </div>
       ) : null}
-      <button
-        type="button"
+      <IconButton
         className={`qf-button${local?.button ? ' qf-dragging' : ''}`}
         data-floating-button
-        aria-label={state.open ? 'Minimize floating workspace' : 'Show floating workspace'}
+        label={state.open ? 'Minimize floating workspace' : 'Show floating workspace'}
         aria-pressed={state.open}
         title={`${state.open ? 'Minimize' : 'Show'} floating workspace (⌘⌥A)`}
-        style={{ left: button.x, top: button.y, width: BUTTON_SIZE, height: BUTTON_SIZE }}
+        style={{ left: button.x, top: button.y }}
         onMouseDown={dragButton}
         onClick={onButtonClick}
         onContextMenu={(event) => {
@@ -309,10 +302,10 @@ export function FloatingOverlay({ context, report, workspaceOptions }: Props) {
         }}
       >
         <Icon path={PANELS} />
-      </button>
+      </IconButton>
       {menu ? (
         <div className="qf-menu-layer">
-          <Menu
+          <ContextMenu
             items={[{ label: 'Hide Floating Workspace', onSelect: () => void context.call('setting.set', { id: ENABLED_SETTING, value: false }).catch((error) => context.toast('Could not hide the floating workspace', messageOf(error))) }]}
             label="Floating workspace"
             x={menu.x}
