@@ -202,6 +202,8 @@ export function startPtyServer(options: PtyServerOptions): PtyServer {
       case 'kill':
         manager.kill(request.sessionId, request.signal, request.reason)
         return {}
+      case 'stopWithHistory':
+        return manager.stopWithHistory(request.sessionId).then(() => ({}))
       case 'forget':
         manager.forget(request.sessionId)
         return {}
