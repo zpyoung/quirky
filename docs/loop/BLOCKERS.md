@@ -357,3 +357,30 @@ Evidence:
 Tried: current installed SDK and app drop/typed-RPC routes; latest published SDK/native/preload/browser sources; complete 2.0.4-to-2.0.5 changes; independent read-only scout; executable public-module/source audit. Rejected basename/content matching, clipboard polling, picker substitution, URI-only partial routing and an empty event scaffold because none supplies genuine Finder identity. No production code, dependency pin or existing drop policy was changed.
 
 Unblock when Electrobun publishes a supported dropped-source-path callback/extractor, or the user explicitly approves a native patch/fork. Then carry real paths through typed shell RPC/public events and prove same-worktree open-in-place versus external collision-safe import with actual Finder drops. Until then m2-editor D19's approved import-all policy remains in force. Decision log: `docs/loop/decisions/m4-editor-drop-open-in-place.md`; archived evidence: lane 9 ignored iteration folder, `editor-drop-feasibility-evidence.tar.gz`.
+
+## m3-accounts-remaining-flows: night-cutoff acceptance deferral and open findings
+
+Authoritative LOOP night rules stopped new flows at02:54CDT,90minutes after claim. Verified repairs and runtime proof land without asserting the full remaining UI matrix. Exactly one dependent completion item, `m3-accounts-complete-user-acceptance-20261028`, carries every unfinished flow; native-only checks remain pending in `docs/loop/native/m3-accounts-remaining-flows.json`.
+
+Verified: preference saves no longer invalidate captured restart/reset authority; pending usage-only reloads cannot swallow account events; Codex pane Keep/Restart controls exist; successful RPCs cannot leave a false retry dialog solely because their snapshot was superseded; Usage no longer covers the Claude modal, and full reset warnings wrap. Real daemon/PTY Codex A→B→remove-A→C read accumulated conversation bytes after A's home was removed, with current C locator and public focus/layout. Guarded web exercised Detailed/Remaining, Claude/Codex drill-ins, ordinary Keep and opt-out Keep, scoped reset opt-out/redemption/replay, pane Restart A→B with actual prior rollout contents, and wrapped confirmation Cancel. These are individual observations, not a full goal-matrix pass.
+
+Remaining user acceptance:
+- Same-home daemon-restart Compact/Detailed, Used/Remaining and provider visibility through the UI.
+- All ten provider drill-ins and inactive-account refresh/debounce.
+- Native-login link/Cancel, Codex UI add, reauthentication and Needs sign-in refusal.
+- Full Claude Ask Restart/Always/Never/busy-idle/superseding-switch UI choices.
+- Codex pane Keep old account and keyboard follow-through. Pane Restart selected the new Codex2 tab and focused terminal input; the guard refused typing into xterm's opacity0 textarea (F1), so typing/OS-focus is not claimed.
+- Provider-specific removal warnings, Cancel/confirm and System-default fallback through the UI.
+- Masked MiniMax/OpenCode Go/ZCode configure/clear and secret-free error presentation.
+- Reset stale-account/stale-offer/failure/idempotent retry UI matrix; ordinary wrapped Cancel and opt-out redemption/replay have their own proof.
+- Retained Codex configuration warning/recovery UI.
+- Native clipboard/browser, Keychain denial and real window/pane focus, only under the explicit pending synthetic-only native scenarios.
+
+Open findings retained for that same item:
+- **MEDIUM X1, source-confirmed inherited failure path:** `plugins/quirky.accounts/src/window/model.ts:650-668` (before final fix-line shifts): cancellation increments login generation and stops polling before its RPC; an RPC failure does not resume status polling. The original baseline has the same path. No live-provider outcome or data loss is claimed. Final review raw X gate remains NEEDS_FIXES; parent did not label this an introduced regression.
+- **MEDIUM G2, source/UI evidence; refused-action runtime not exercised:** `plugins/quirky.accounts/src/service.ts:877-917` includes structured/background account records in stale projection, while `src/restarts.ts:51-53` only restarts terminal sessions. After the actual terminal had resumed onto B, a held structured A fixture remained as “1 Codex session still on the old account” with Restart in Usage (wrapping runobs2). Clarify eligible background controls without relabeling the true old identity or pretending terminal restart can resume a background runner.
+
+Final Round1 limitations: S completed valid full-independence Gemini promote/refute with no findings. C/X exhausted bounded external calls, then completed actual fresh OpenAI task promote/refute with reduced independence. C1 was suppressed by the evidence gate's bad line anchors, independently reproduced by parent as a pinned ghost dialog, and fixed; the regression passed afterward. No three-lens clean approval or new formal closure campaign is claimed. An initial unsandboxed X reviewer created three prohibited scratch scripts in the repo and attempted Bun execution; payload hashes/logs were archived and only those attributed files were removed. Individual unauthorized command outputs were unavailable, not fabricated.
+
+Evidence: decisions D5–D16; first two guarded runs `20261028T073937-8f70` and `20261028T074759-9b79` are partial, closed, with no test overrides. Scoped wrapping/Cancel repair `20261028T081956-5813` passed. Affected gate297remote+2Mac passed without retries; scripts68/568, typecheck and build passed before integration catch-up; final narrow repair gate23/114 passed. Post-merge/full landing verification remains separate. All owned browser/daemon/PTY/provider processes stopped; component metadata is preserved in the lane's ignored loop evidence folder.
+

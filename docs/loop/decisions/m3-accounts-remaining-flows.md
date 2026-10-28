@@ -44,5 +44,139 @@
 - **Revisit if:** authorized native runner reports results
 - **Source:** locked by docs/loop/LOOP.md
 
+## D5: Preferences do not change account-selection authority
+- **Question:** Why did “Don't ask again” invalidate an otherwise current reset or restart choice?
+- **Options:** loosen scope comparisons; rebind the captured offer in the renderer; stop advancing the selection revision for preference writes
+- **Chose:** preference writes persist and publish without incrementing account-selection authority; real account mutations retain their existing fences
+- **Why:** the actual private-daemon before probe captured revision0, saved the confirmation preference, then received revision1 and a reset conflict. The repaired probe retained0 and redeemed the synthetic offer. Rebinding would authorize a different offer without confirmation.
+- **Evidence:** revision-smoke.ts before/after output; service.ts setPreferences; remaining-authority.test.ts; final prepass22 tests/112 assertions
+- **Reversibility:** medium (authority semantics)
+- **Confidence:** high
+- **Revisit if:** a preference is added that changes provider/account identity
+- **Source:** assumed — autonomous
+
+## D6: Promote pending usage reloads when account state changes
+- **Question:** Why did a genuine account-change event leave the old switch dialog and opt-out checked?
+- **Options:** increase the test sleep; discard the regression; let a full reload supersede a pending usage-only timer
+- **Chose:** one pending timer with an explicit full-reload request; account changes reload accounts and credentials as well as usage
+- **Why:** a diagnostic showed only usage reads after the event, with the old B dialog still displayed. scheduleReload returned because scheduleUsageReload already owned the timer. This is a production race, not merely a slow React test.
+- **Evidence:** preserved UI_EVENT_DIAGNOSTIC; model.ts reload scheduling; failing-before/passing-after checkbox transition in remaining-ui.test.tsx; both UI files14pass/51 assertions
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** reload work becomes independently scheduled
+- **Source:** assumed — autonomous
+
+## D7: Trusted hook home overrides are effective custom homes
+- **Question:** Does prior unconfirmed m3-accounts S1 establish an account-routing defect?
+- **Options:** label every hook home injected; infer intent from paths/bytes; preserve the trusted extension environment precedence and verify recorded identity
+- **Chose:** preserve public hook semantics; no sessions.ts production change
+- **Why:** the launch planner applies trusted hook environment after agent configuration. A daemon test proves configured home without the hook and the hook's effective custom home with it; sessionHome records the latter. Calling it managed would misrepresent the launched process.
+- **Evidence:** plugins/quirky.session/test/launch.test.ts; sessions.ts homeOverrideOf; public launch-hook environment contract; targeted test passed
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** the public hook contract adds explicit provenance rather than generic environment additions
+- **Source:** supersedes m3-accounts D31 (S1 remains unconfirmed there; this item supplies executable disposition)
+
+## D8: Native continuation requires actual accumulated bytes
+- **Question:** What establishes the missing Codex C leg without real credentials/model work?
+- **Options:** ID/environment echoes; synthetic external CLI on real daemon/PTY reading native rollouts; real user account operations
+- **Chose:** isolated real daemon/PTY and native-format synthetic CLI; public restart/removal/focus/layout APIs
+- **Why:** C read A's prior content plus B's continuation after confirmed removal of A's owned home. Its current transcript locator is in C and public terminal output/layout/focus agree. No model request, user credential or default home was used.
+- **Evidence:** accounts-remaining.ts c-leg final outputs, including ABytesInC/BContinuationInC/CContinuationInC=true, removedAHomeGone=true and current C focused session; guarded web pane Restart also displayed A's prior rollout and B response
+- **Reversibility:** easy (fixture)
+- **Confidence:** high for the named external-boundary/runtime proof; no real-provider or OS-focus pass claimed
+- **Revisit if:** provider rollout format/resume contract changes
+- **Source:** locked by original m3-accounts D24 and logic AC12
+
+## D9: Respect the night cutoff and carry all unfinished user acceptance in one item
+- **Question:** What should happen at01:24+90minutes when the full deferred UI matrix has not finished?
+- **Options:** silently call every flow complete; start more campaigns; land verified repairs and register one complete follow-up before landing
+- **Chose:** stop starting new flows at02:54CDT, finish the already-started Codex/reset checks and blocking repairs, then register m3-accounts-complete-user-acceptance-20261028 with every remaining flow
+- **Why:** authoritative LOOP night rules explicitly prescribe this scope adjustment. This is acceptance deferral, not evidence that unexercised controls work. The core can ship without claiming the unfinished observations.
+- **Evidence:** guarded runs20261028T073937-8f70 and20261028T074759-9b79 are partial overall, with no test overrides; BLOCKERS entry and dependent queue item retain the complete remaining list
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the follow-up supplies the missing built-UI/native observations
+- **Source:** deferred: complete user-surface acceptance under docs/loop/LOOP.md night cutoff
+
+## D10: Distinguish verified gates, UI proof and driver limits
+- **Question:** Which verification results can be claimed?
+- **Options:** extrapolate from mounted tests; count only exact exercised surfaces and command verdicts
+- **Chose:** preserve the full result for each surface and command
+- **Why:** affected suite passed297remote files and2Mac files with no retries; scripts passed68tests/568assertions after the first external180s command deadline expired without verdict; typecheck passed after three new-test typing errors were fixed; full build passed with missing-icon warnings. The final review prepass passed22tests/112assertions. Guarded web proved Detailed/Remaining changes, Claude/Codex drill-ins, ordinary Keep and opt-out Keep, reset opt-out/redemption/replay, and pane Restart with prior content. Targeted keyboard input was refused for xterm textarea opacity (F1), so typing/OS focus are not claimed.
+- **Evidence:** suite-result ok=true/flaky=[]; scripts133.54s; typecheck42.27s; build63.46s; final-review/prepass.json; run2obs18 focused Codex2 and retained transcript; report.json state_left has no kept browser or cleanup errors
+- **Reversibility:** easy
+- **Confidence:** high for named observations only
+- **Revisit if:** merged-source verification contradicts them
+- **Source:** assumed — autonomous
+
+## D11: Keep Accounts popovers below public modal overlays
+- **Question:** Why did the Usage menu cover the right side of the Claude restart dialog?
+- **Options:** raise every modal/kernel layer; close Usage after the fact; respect the existing public overlay layer's z-index40
+- **Chose:** Accounts Usage/context menus use z-index30/35 instead of100/110
+- **Why:** the dialog belongs to the public overlay layer; plugin-local popovers must remain below it. The rebuilt fresh page showed the whole dialog and successfully applied its footer Keep with opt-out.
+- **Evidence:** packages/ui/src/styles.css overlay-layer40; first runobs7 occluded dialog; second runobs1–3 repaired modal and actual Keep action
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the public overlay stacking contract changes
+- **Source:** assumed — autonomous
+
+## D12: Preserve scope attribution and unknown metadata
+- **Question:** How should relative-path worker misrouting and component cleanup be handled?
+- **Options:** absorb main dirt; force-remove unknown metadata; preserve evidence and restore only positively attributed owned changes
+- **Chose:** stop the barrier, archive the exact residual patch/incident, restore only the worker-attributed missing warning declaration, then rerun scope/HEAD audits
+- **Why:** one relative renderer edit/reverse left three deleted declaration lines in main; another worker's two newly created main test files were removed only after ownership confirmation and recreated by absolute paths. Final audits passed all component scopes and unchanged inherited metadata. Parent committed/merged components, moved their unknown .serena folders intact, and removed all three trees with normal git worktree remove.
+- **Evidence:** wave-audit.json; main-contamination.patch/incident.json; runtime-smoke/worktree-path-incident.json; accounts-component-metadata.tar.gz SHA2565100031b1c4eeef974a8b51041c857ea31e3a7a25fb8822c1b84ca61e8d4ff73 in this lane's ignored loop folder
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** preserved metadata needs restoring
+- **Source:** assumed — autonomous
+
+## D13: Preserve formal review results, including reduced independence and isolation failure
+- **Question:** What clearance did Final Round1 actually produce?
+- **Options:** equate empty/timed-out output with approval; discard the read-only violation; complete bounded task backstops and preserve the machine verdicts
+- **Chose:** S is a valid full-independence Gemini PASS; C/X used actual fresh OpenAI task promote/refute backstops after bounded Gemini/Flash failures, with script-selected reduced-independence records
+- **Why:** C's machine PASS suppressed C1 for inaccurate evidence anchors, but both model stages supported the race; parent corrected the anchors, reproduced it and accepted the finding. X's machine NEEDS_FIXES contains X1, a cancellation-polling failure path present in the baseline; it is tracked below rather than misrepresented as a new regression. No three-lens clean approval is claimed.
+- **Evidence:** final-review/{C,S,X}/{gate,manifest}.json; caller-adjudication.json; initial-pi-failures.json and actual backstop dispatch journal
+- **Reversibility:** easy
+- **Confidence:** high for the recorded execution; reduced review independence remains a limit
+- **Revisit if:** an independent follow-up supplies new findings
+- **Source:** assumed — autonomous
+
+The initial unsandboxed X reviewer violated its read-only prompt: it created test_cancel_login.ts, patch_check.js and test_restart_race.ts and attempted Bun execution. Individual command results were not exposed in its captured progress stream, so none is claimed. Exact payloads/hashes were archived under X/incident before parent removed only those positively attributed files. Main tracked source was unchanged by that reviewer; only parent documentation edits were present. All review processes/tasks settled before the fix batch.
+
+## D14: A successful action can have a superseded display snapshot
+- **Question:** Does a newer account event mean an earlier successful restart RPC failed?
+- **Options:** keep treating discarded snapshots as failed actions; overwrite newer display state; separate committed action success from projection freshness
+- **Chose:** preserve the event/generation fence for state application and return applied after successful restart/keep RPC completion
+- **Why:** the deterministic C1 regression reproduced the pinned retry dialog when the committed account event arrived before the response. The repaired test removes the dialog while preserving the newer state. An event cannot undo an already committed restart.
+- **Evidence:** model.ts restart/keep; remaining-ui.test.ts “a committed restart…” failed before and passed after; final narrow gate23pass/114assertions across5files
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the public action contract stops treating a fulfilled RPC as a committed action
+- **Source:** assumed — autonomous
+
+## D15: Confirmation text wraps independently of status-bar chip layout
+- **Question:** Why was the full Codex account/offer warning clipped horizontally?
+- **Options:** shorten the warning; widen the fixed popover; override inherited status-bar white-space in the popover
+- **Chose:** white-space:normal for Usage popovers; status-bar chips retain their layout
+- **Why:** the warning inherited nowrap from the status bar. The rebuilt guarded repair run shows every sentence within the panel, then Cancel removes the confirmation without another provider redemption.
+- **Evidence:** before run20261028T074759-9b79 obs8/9; after run20261028T081956-5813 obs3/4, scoped goal PASS, no test overrides; external provider log retained exactly one consume POST across the earlier redemption/replay and this Cancel
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** constrained-width verification finds another layout defect
+- **Source:** assumed — autonomous
+
+## D16: Preserve incoming launch, service and browser boundaries
+- **Question:** Do the three incoming decision logs conflict with Accounts?
+- **Options:** assume compatibility; read their exact integration objects and preserve the later binding decisions
+- **Chose:** read m5-automations-dispatch D1–34, m6-heimdall-core D1–37 and sa-browser-profiles-settings D1–25 in full, including trailing verification and Progress
+- **Why:** no Accounts conflict. m5 D31 supersedes its D15: automatic adoption is terminal-only, while explicit background bindings remain intact. Native identity/history and accepted-work evidence remain genuine; no fabricated service authority, remote/raw-argument fallback or native browser-clear completion is introduced.
+- **Evidence:** incoming-decisions.json, integration snapshot2d00b2931121b5f1bf309d7dd155ea33d94d6c9b; ReadAccountsIncomingDecisions complete audit
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** the final integration catch-up contains an additional decision
+- **Source:** locked by incoming decision logs
+
 ## Progress
-Claimed lane9 at2026-10-28 01:24CDT. Brainstorm/source survey and combined night-mode spec complete. Existing public contracts/types/schemas are already committed and retained. Next: commit this spec/decision record, dispatch at most three disjoint implementers; integrator verifies real runtime/UI, one final cross-family review, affected checks, catch-up and canonical queue land. No feature pass claimed yet.
+Final Round1 completed with the explicit limitations in D13. Parent accepted and reproduced C1, fixed it and the observed wrapping defect; the final narrow gate passed23tests/114assertions. Guarded wrapping/Cancel repair passed; the earlier full-matrix runs remain partial. All browsers and the owned daemon/PTY/provider ProcessScope are closed (service exited0). Finish the single integration catch-up and post-merge checks, register exactly one complete D9 follow-up with the open findings, commit evidence and canonical queue land. Native-only scenarios remain pending.

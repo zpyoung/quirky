@@ -5,6 +5,8 @@ Status: Approved autonomous defaults under authoritative LOOP.md; one combined l
 
 **Amendments:** 2026-10-28 — initial completion specification; no original acceptance removed.
 
+**Night-cutoff amendment:** 2026-10-28,02:54CDT — authoritative LOOP.md requires stopping new flows at90minutes. This branch lands the verified authority/reload/modal/pane repairs, public cancellation/policy regressions and real Codex A→B→remove-A→C content proof. Complete remaining user acceptance moves as one dependent item, `m3-accounts-complete-user-acceptance-20261028`, registered before landing. The criteria below remain the acceptance contract for that work; neither existing API coverage nor the two partial guarded-web reports establish a full UI/native pass. The unfinished list is recorded in the item's decision log/BLOCKERS entry.
+
 ## Conceptual model
 Complete the deferred Accounts user-surface flows on the existing built-in plugin. Account selection changes future launches; a running process keeps its true account until a conversation-preserving restart. Usage is provider quota, never inferred model consumption. Durable preferences and exact account/offer/restart authority survive their intended lifetime. Rendering or preference edits must not authorize spending against another account.
 

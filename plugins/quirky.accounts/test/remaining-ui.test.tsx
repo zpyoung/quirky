@@ -290,6 +290,31 @@ test('Claude switch submission is single-flight while opt-out saves', async () =
   expect(container.querySelector('[role="dialog"]')).toBeNull()
 })
 
+test('a committed restart does not leave a retry dialog when its account event arrives before the response', async () => {
+  stateValue = makeState('claude', 51, 'Account B')
+  usageValue = usageFor(stateValue)
+  const response = Promise.withResolvers<unknown>()
+  restartGate = response.promise
+  await mount('overlay:quirky.accounts/switch-dialog')
+  const restart = container.querySelector('.switch-dialog .dialog-actions button:last-child')
+  if (!(restart instanceof HTMLButtonElement)) throw new Error('Missing dialog restart action')
+  await act(async () => { restart.click() })
+  await restartStarted
+  const previousReads = calls.filter((entry) => entry.method === 'quirky.accounts/list').length
+  stateValue = { ...stateValue, staleSessions: [] }
+  await act(async () => {
+    await emit({ type: 'quirky.accounts/changed', data: { revision: stateValue.revision } } as QuirkyEvent)
+  })
+  await waitFor(
+    () => calls.filter((entry) => entry.method === 'quirky.accounts/list').length > previousReads ? true : null,
+    'the committed account event to reload its snapshot'
+  )
+  await act(async () => { response.resolve(stateValue) })
+  await settle()
+  expect(container.querySelector('[role="dialog"]')).toBeNull()
+  expect(container.querySelector('[role="alert"]')).toBeNull()
+})
+
 test('stale reset failure stays visible without reporting redemption', async () => {
   const scopeA = { accountId: 'codex-a', accountRevision: 61, offerRevision: 'offer-a' }
   const scopeB = { accountId: 'codex-b', accountRevision: 62, offerRevision: 'offer-b' }

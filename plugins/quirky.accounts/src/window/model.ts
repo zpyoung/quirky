@@ -730,7 +730,9 @@ export class AccountsUiStore {
       if (selectionChanged) void this.loadAccounts()
       return selectionChanged ? 'selection-changed' : 'failed'
     }
-    return this.applyAccountResult(result, generation) ? 'applied' : 'failed'
+    // A successful RPC stays successful when a newer account event supersedes its snapshot.
+    this.applyAccountResult(result, generation)
+    return 'applied'
   }
 
   async keep(sessions: string[], selectionRevision: number): Promise<SessionActionResult> {
@@ -746,7 +748,8 @@ export class AccountsUiStore {
       if (selectionChanged) void this.loadAccounts()
       return selectionChanged ? 'selection-changed' : 'failed'
     }
-    return this.applyAccountResult(result, generation) ? 'applied' : 'failed'
+    this.applyAccountResult(result, generation)
+    return 'applied'
   }
 
   private async restartGroups(sessions: StaleSession[], yes: boolean): Promise<void> {

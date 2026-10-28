@@ -48,7 +48,7 @@ export const ACCOUNTS_CSS = `
 .accounts-ui .provider-letter{align-items:center;background:var(--bg-active,#2d3240);border-radius:4px;display:inline-flex;font-size:11px;font-weight:700;height:18px;justify-content:center;width:18px}
 .accounts-ui .meter{background:var(--border,#2b2f3a);border-radius:4px;height:6px;overflow:hidden;width:100%}
 .accounts-ui .meter>span{background:var(--meter-color,var(--accent,#4f8ff7));display:block;height:100%;width:var(--meter-width,0%)}
-.accounts-ui .usage-popover{box-shadow:0 12px 34px #0008;bottom:calc(100% + 7px);max-height:min(76vh,640px);min-width:340px;overflow:auto;position:absolute;right:0;top:auto;width:min(440px,90vw);z-index:30}
+.accounts-ui .usage-popover{box-shadow:0 12px 34px #0008;bottom:calc(100% + 7px);max-height:min(76vh,640px);min-width:340px;overflow:auto;position:absolute;right:0;top:auto;width:min(440px,90vw);white-space:normal;z-index:30}
 .accounts-ui .usage-popover-header{align-items:center;display:flex;justify-content:space-between;margin-bottom:10px}
 .accounts-ui .usage-controls{border-bottom:1px solid var(--border,#2b2f3a);margin-bottom:9px;padding-bottom:9px}
 .accounts-ui .segmented{background:var(--bg,#16181d);border:1px solid var(--border,#2b2f3a);border-radius:7px;display:inline-flex;padding:2px}
