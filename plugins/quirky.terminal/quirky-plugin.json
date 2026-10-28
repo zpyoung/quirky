@@ -2985,6 +2985,23 @@
         ]
       },
       {
+        "id": "artifacts",
+        "words": "artifacts",
+        "summary": "list, preview, refresh or conditionally save a file discovered in terminal output",
+        "positionals": [
+          { "name": "action", "description": "list, preview, refresh or save" },
+          { "name": "worktree", "description": "the source worktree ID" },
+          { "name": "session", "description": "the source terminal session ID" }
+        ],
+        "flags": {
+          "artifact-id": { "type": "string", "description": "opaque ID returned by list" },
+          "grant": { "type": "string", "description": "opaque caller-bound grant returned by list or refresh" },
+          "revision": { "type": "string", "description": "exact revision returned by preview" },
+          "content-file": { "type": "string", "description": "local UTF-8 file containing save content" }
+        },
+        "methods": ["quirky.terminal/artifacts"]
+      },
+      {
         "id": "send",
         "words": "send",
         "summary": "type text into a terminal; with $QUIRKY_SESSION_ID set, <session> may be omitted",

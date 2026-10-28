@@ -2,6 +2,7 @@ import type { CliArgs, CliContext, CliModule, MobileTerminalState, PtySnapshot }
 import { paneCommands } from './src/cli/pane'
 import { quickFloatingCommands } from './src/cli/quick-floating'
 import { workspaceCommands } from './src/cli/workspace'
+import { artifactCommands } from './src/cli/artifacts'
 
 function singleSessionArg(args: CliArgs, ctx: CliContext): string {
   if (args.positionals.length > 1) throw ctx.usage(`unexpected argument "${args.positionals[1]}"`)
@@ -30,6 +31,7 @@ const named: CliModule['commands'] = {
   ...workspaceCommands,
   ...paneCommands,
   ...quickFloatingCommands,
+  ...artifactCommands,
 
   async read(args, ctx) {
     const session = singleSessionArg(args, ctx)
