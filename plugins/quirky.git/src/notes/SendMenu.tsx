@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { ContextMenu, IconButton, StatusDot } from '@quirky/ui'
+import type { ContextMenuItem, UiStatus } from '@quirky/ui'
 import type { UiPluginContext } from '@quirky/protocol'
 import type { NoteTarget } from '../daemon/targets'
-import { PopupMenu, type MenuEntry } from '../panel/Menu'
 import { messageOf, relativeTime } from '../panel/format'
 import type { Note } from './useNotes'
 
@@ -57,15 +58,14 @@ export function postSendRequest(next: SendRequest | null): void {
 
 const NO_REQUEST = () => request
 
-const STATE_DOT: Record<string, string> = { working: 'working', waiting: 'waiting', blocked: 'waiting', done: 'done' }
-const cap = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
-
-function targetEntry(target: NoteTarget, send: (to: { session: string }) => void): MenuEntry {
+function targetEntry(target: NoteTarget, send: (to: { session: string }) => void): ContextMenuItem {
   const state = target.state ?? target.status
-  const parts = [cap(state), relativeTime(target.lastActivityAt), ...(target.title.trim() === '' ? [] : [target.title.trim()])]
+  const label = state.charAt(0).toUpperCase() + state.slice(1)
+  const status: UiStatus = state === 'waiting' || state === 'blocked' ? 'needs-you' : state === 'done' ? 'done' : 'working'
+  const parts = [label, relativeTime(target.lastActivityAt), ...(target.title.trim() === '' ? [] : [target.title.trim()])]
   return {
     label: target.label,
-    icon: <span className={`dot dot-${STATE_DOT[state] ?? 'running'}`} aria-hidden="true" />,
+    icon: <StatusDot status={status} label={label} />,
     detail: parts.join(' · '),
     disabled: !target.sendable,
     ...(target.reason === undefined ? {} : { title: target.reason }),
@@ -74,8 +74,8 @@ function targetEntry(target: NoteTarget, send: (to: { session: string }) => void
 }
 
 /** The rows that choose where a scope goes: running sessions, then agents to start. */
-function targetEntries(targets: Targets, send: (to: { session: string } | { agent: string }) => void): MenuEntry[] {
-  const rows: MenuEntry[] = [{ label: 'Send notes to', heading: true }, ...targets.sessions.map((target) => targetEntry(target, send))]
+function targetEntries(targets: Targets, send: (to: { session: string } | { agent: string }) => void): ContextMenuItem[] {
+  const rows: ContextMenuItem[] = [{ label: 'Send notes to', heading: true }, ...targets.sessions.map((target) => targetEntry(target, send))]
   rows.push({ label: 'New agent', heading: true, separatorBefore: true })
   for (const agent of targets.agents) rows.push({ label: agent.label, onSelect: () => send({ agent: agent.id }) })
   if (targets.agents.length === 0) rows.push({ label: 'No agents available', disabled: true })
@@ -87,7 +87,6 @@ type Props = {
   worktree: string
   /** One scope lists its targets directly; several list the scopes first, each opening the targets. */
   scopes: readonly SendScope[]
-  className?: string
   /** The trigger's accessible name; "Send notes to an agent" by default. */
   ariaLabel?: string
   /** The trigger's content; a send icon by default. */
@@ -101,10 +100,10 @@ type Props = {
  * left out of every scope, so the trigger reads "Sending…" while all of them are on their way
  * and "All notes sent" when none are left. Sending toasts its progress and its failure.
  */
-export function SendMenu({ context, worktree, scopes, className, ariaLabel, children, respondToRequest }: Props) {
+export function SendMenu({ context, worktree, scopes, ariaLabel, children, respondToRequest }: Props) {
   useSyncExternalStore(subscribe, () => heldVersion)
   const pending = useSyncExternalStore(subscribe, NO_REQUEST)
-  const button = useRef<HTMLButtonElement>(null)
+  const anchor = useRef<HTMLSpanElement>(null)
   const alive = useRef(true)
   const [menu, setMenu] = useState<{ x: number; y: number; targets: Targets } | null>(null)
 
@@ -120,7 +119,7 @@ export function SendMenu({ context, worktree, scopes, className, ariaLabel, chil
   }, [])
 
   const show = async () => {
-    const box = button.current?.getBoundingClientRect()
+    const box = anchor.current?.getBoundingClientRect()
     try {
       const targets = (await context.call('quirky.git/noteTargets', { worktree })) as Targets
       if (alive.current) setMenu({ x: box?.left ?? 0, y: box?.bottom ?? 0, targets })
@@ -147,7 +146,7 @@ export function SendMenu({ context, worktree, scopes, className, ariaLabel, chil
     }
   }
 
-  const entries = (targets: Targets): MenuEntry[] => {
+  const entries = (targets: Targets): ContextMenuItem[] => {
     const rowsFor = (scope: (typeof sendable)[number]) => targetEntries(targets, (to) => void deliver(scope, to))
     if (sendable.length === 1) return rowsFor(sendable[0]!)
     return [
@@ -158,23 +157,18 @@ export function SendMenu({ context, worktree, scopes, className, ariaLabel, chil
 
   return (
     <>
-      <button
-        ref={button}
-        type="button"
-        className={className ?? 'icon-button'}
-        aria-label={ariaLabel ?? 'Send notes to an agent'}
-        aria-haspopup="menu"
-        title={deliverable ? 'Send notes to an agent' : idle}
-        disabled={!deliverable}
-        onClick={() => void show()}
-      >
-        {children ?? (
-          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
-            <path d="M2 8.2 14 2.5l-3.2 11-3-4.2z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-          </svg>
-        )}
-      </button>
-      {menu && <PopupMenu x={menu.x} y={menu.y} label="Send notes" items={entries(menu.targets)} onClose={() => setMenu(null)} />}
+      <span ref={anchor}>
+        <IconButton
+          label={ariaLabel ?? 'Send notes to an agent'}
+          aria-haspopup="menu"
+          title={deliverable ? 'Send notes to an agent' : idle}
+          disabled={!deliverable}
+          onClick={() => void show()}
+        >
+          {children ?? '➤'}
+        </IconButton>
+      </span>
+      {menu && <ContextMenu x={menu.x} y={menu.y} label="Send notes" items={entries(menu.targets)} onClose={() => setMenu(null)} />}
     </>
   )
 }

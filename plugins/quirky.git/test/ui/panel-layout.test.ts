@@ -5,7 +5,7 @@ import { registerDom } from './register-dom'
 registerDom()
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 const s = await import('./panel-support')
-const { act, byLabel, buttonText, click, compareOf, DIFF_VIEW, entry, fakeContext, layoutFor, mountPanel, press, q, qa, rowOf, sectionHeadings, settle, statusOf, type } = s
+const { act, byLabel, buttonText, click, compareOf, DIFF_VIEW, entry, fakeContext, layoutFor, mountPanel, press, q, qa, rowContainerOf, rowOf, sectionHeadings, settle, statusOf, type } = s
 
 afterAll(() => GlobalRegistrator.unregister())
 beforeEach(() => {
@@ -42,8 +42,8 @@ describe('SC-8: the panel layout', () => {
   test('lists the sections in the default order, then Committed on Branch and the collapsed Commits dock', async () => {
     const { element, unmount } = await open()
     expect(sectionHeadings(element)).toEqual(['Changes', 'Staged Changes', 'Untracked Files', 'Committed on Branch', 'Commits'])
-    expect(qa(element, '.scm-section-head .scm-count').map((c) => c.textContent)).toEqual(['1', '2', '1', '2'])
-    expect(q(element, '[data-section="history"] .scm-history')).toBeNull()
+    expect(qa(element, '[data-section-count] .ui-badge').map((c) => c.textContent)).toEqual(['1', '2', '1', '2'])
+    expect(q(element, '[data-section="history"] ul')).toBeNull()
     unmount()
   })
 
@@ -56,12 +56,12 @@ describe('SC-8: the panel layout', () => {
 
   test('the branch row reads <branch> → <base> with ↑N and the line-total chip', async () => {
     const { element, unmount } = await open()
-    const row = q(element, '.scm-branch')!
-    expect(q(row, '.scm-branch-name')?.textContent).toBe('zoe/feat')
-    expect(q(row, '.scm-base')?.textContent).toBe('origin/main')
-    expect(q(row, '.scm-ahead')?.textContent).toBe('↑1')
-    expect(q(row, '.scm-behind')).toBeNull()
-    expect(q(row, '.scm-chip')?.textContent).toBe('+52 −3')
+    const row = q(element, '[data-branch-row]')!
+    expect(q(row, '[data-branch-name]')?.textContent).toBe('zoe/feat')
+    expect(q(row, '[data-base-ref]')?.textContent).toBe('origin/main')
+    expect(q(row, '[aria-label="1 commit(s) to push"]')?.textContent).toBe('↑1')
+    expect(q(row, '[aria-label*="to pull"]')).toBeNull()
+    expect(q(row, '[aria-label="Lines changed on this branch"]')?.textContent).toBe('+52 −3')
     unmount()
   })
 
@@ -70,12 +70,12 @@ describe('SC-8: the panel layout', () => {
       fake.status = statusOf([entry('src/app/math.ts', 'unstaged', 'modified', { added: 5, removed: 0 })])
     })
     const row = rowOf(element, 'src/app/math.ts')!
-    expect(q(row, '.scm-row-name')?.textContent).toBe('math.ts')
-    expect(q(row, '.scm-row-dir')?.textContent).toBe('src/app')
-    expect(q(row, '.scm-added')?.textContent).toBe('+5')
-    expect(q(row, '.scm-removed')).toBeNull()
-    expect(q(row, '.scm-letter')?.textContent).toBe('M')
-    expect(q(row, '.scm-letter')?.className).toContain('scm-status-modified')
+    const details = rowContainerOf(element, 'src/app/math.ts')!
+    expect(q(row, '[data-row-name]')?.textContent).toBe('math.ts')
+    expect(q(row, '[data-row-dir]')?.getAttribute('data-row-dir')).toBe('src/app')
+    expect(q(details, '[aria-label="5 additions"]')?.textContent).toBe('+5')
+    expect(q(details, '[aria-label*="deletions"]')).toBeNull()
+    expect(q(details, '[aria-label="Git status modified"]')?.textContent).toBe('M')
     unmount()
   })
 
@@ -88,14 +88,14 @@ describe('SC-8: the panel layout', () => {
         entry('u.ts', 'untracked')
       ])
     })
-    const letters = Object.fromEntries(['a.ts', 'd.ts', 'r.ts', 'u.ts'].map((p) => [p, q(rowOf(element, p)!, '.scm-letter')?.textContent]))
+    const letters = Object.fromEntries(['a.ts', 'd.ts', 'r.ts', 'u.ts'].map((path) => [path, q(rowOf(element, path)!, '[aria-label^="Git status "]')?.textContent]))
     expect(letters).toEqual({ 'a.ts': 'A', 'd.ts': 'D', 'r.ts': 'R', 'u.ts': 'U' })
     unmount()
   })
 
   test('the Committed on Branch heading says how many files changed against the base', async () => {
     const { element, unmount } = await open()
-    expect(q(element, '[data-section="branch"] .scm-section-head')?.getAttribute('title')).toBe('2 files changed vs origin/main')
+    expect(q(element, '[data-section="branch"]')?.title).toBe('2 files changed vs origin/main')
     unmount()
   })
 })
@@ -170,7 +170,7 @@ describe('SC-14: row and section buttons', () => {
         entry('README.md', 'staged')
       ])
     })
-    const labels = (path: string, section: string) => qa(rowOf(element, path, section)!.parentElement!, '.scm-row-actions button').map((b) => b.getAttribute('title'))
+    const labels = (path: string, section: string) => qa(rowOf(element, path, section)!.parentElement!, '.ui-list-row__trailing button').map((button) => button.getAttribute('title'))
     expect(labels('math.ts', 'unstaged')).toEqual(['Discard changes', 'Stage'])
     expect(labels('gone.ts', 'unstaged')).toEqual(['Restore file', 'Stage'])
     expect(labels('notes.txt', 'untracked')).toEqual(['Delete untracked file', 'Stage'])
@@ -180,7 +180,7 @@ describe('SC-14: row and section buttons', () => {
 
   test('section headings offer discard, stage or unstage all, and View all', async () => {
     const { element, unmount } = await open()
-    const buttons = (section: string) => qa(element, `[data-section="${section}"] .scm-section-actions button`).map((b) => b.getAttribute('aria-label'))
+    const buttons = (section: string) => qa(element, `[data-section="${section}"] [data-section-action]`).map((button) => button.getAttribute('aria-label'))
     expect(buttons('unstaged')).toEqual(['Discard all', 'Stage all', 'View all'])
     expect(buttons('untracked')).toEqual(['Delete all untracked', 'Stage all', 'View all'])
     expect(buttons('staged')).toEqual(['Discard all', 'Unstage all', 'View all'])
@@ -193,7 +193,7 @@ describe('SC-14: row and section buttons', () => {
     })
     const row = rowOf(element, 'vendor/lib')!
     expect(row.textContent).toContain('Stage inside submodule')
-    expect(qa(row.parentElement!, '.scm-row-actions button')).toHaveLength(0)
+    expect(qa(row.parentElement!, '.ui-list-row__trailing button')).toHaveLength(0)
     unmount()
   })
 })
@@ -253,16 +253,16 @@ describe('SC-15: selection and the bulk bar', () => {
     const { fake, element, unmount } = await open(four)
     await click(rowOf(element, 'a.ts'))
     expect(fake.views).toHaveLength(1)
-    expect(q(element, '.scm-bulk')).toBeNull()
+    expect(q(element, '[role="toolbar"][aria-label="Selection actions"]')).toBeNull()
     await click(rowOf(element, 'c.ts'), { shiftKey: true })
-    expect(q(element, '.scm-bulk')?.textContent).toContain('3 selected')
+    expect(q(element, '[role="toolbar"][aria-label="Selection actions"]')?.textContent).toContain('3 selected')
     expect(buttonText(element, 'Stage (3)')).toBeDefined()
     expect(fake.views).toHaveLength(1)
     await click(rowOf(element, 'b.ts'), { metaKey: true })
-    expect(q(element, '.scm-bulk')?.textContent).toContain('2 selected')
+    expect(q(element, '[role="toolbar"][aria-label="Selection actions"]')?.textContent).toContain('2 selected')
     expect(fake.reports.at(-1).selection).toEqual(['a.ts', 'c.ts'])
-    await press(q(element, '.scm')!, 'Escape')
-    expect(q(element, '.scm-bulk')).toBeNull()
+    await press(q(element, '[data-git-panel]')!, 'Escape')
+    expect(q(element, '[role="toolbar"][aria-label="Selection actions"]')).toBeNull()
     unmount()
   })
 
@@ -281,18 +281,18 @@ describe('SC-15: selection and the bulk bar', () => {
     await act(async () => {
       rowOf(element, 'c.ts')!.parentElement!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 10, clientY: 10 }))
     })
-    expect(q(element, '.scm-bulk')?.textContent).toContain('1 selected')
+    expect(q(element, '[role="toolbar"][aria-label="Selection actions"]')?.textContent).toContain('1 selected')
     unmount()
   })
 
   test('a pointer-down outside the panel clears the selection', async () => {
     const { element, unmount } = await open(four)
     await click(rowOf(element, 'a.ts'), { metaKey: true })
-    expect(q(element, '.scm-bulk')).not.toBeNull()
+    expect(q(element, '[role="toolbar"][aria-label="Selection actions"]')).not.toBeNull()
     await act(async () => {
       document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
     })
-    expect(q(element, '.scm-bulk')).toBeNull()
+    expect(q(element, '[role="toolbar"][aria-label="Selection actions"]')).toBeNull()
     unmount()
   })
 
@@ -302,7 +302,7 @@ describe('SC-15: selection and the bulk bar', () => {
     fake.settings.viewMode = 'tree'
     await act(async () => fake.emit({ type: 'setting.changed', id: 'setting:quirky.git/viewMode', value: 'tree' }))
     await settle()
-    expect(q(element, '.scm-bulk')).toBeNull()
+    expect(q(element, '[role="toolbar"][aria-label="Selection actions"]')).toBeNull()
     unmount()
   })
 })
@@ -312,8 +312,8 @@ describe('SC-16: the filter', () => {
     const { element, unmount } = await open()
     await click(byLabel(element, 'Filter files by name'))
     await type(byLabel(element, 'Filter files…') as HTMLInputElement, 'MATH')
-    expect(qa(element, '.scm-row-main[title]').map((r) => r.getAttribute('title'))).toEqual(['math.ts', 'src/math.ts'])
-    expect(q(element, '.scm-section-actions button')).toBeNull()
+    expect(qa(element, '[data-row-path] button[aria-pressed]').map((button) => button.closest('[data-row-path]')?.getAttribute('title'))).toEqual(['math.ts', 'src/math.ts'])
+    expect(q(element, '[data-section-action]')).toBeNull()
     expect(q(element, '[data-section="history"]')).toBeNull()
     expect(byLabel(element, 'Filter files by name')?.getAttribute('title')).toBe('Filter: MATH')
     await press(byLabel(element, 'Filter files…')!, 'Escape')
@@ -344,8 +344,8 @@ describe('SC-17: the tree view', () => {
 
   test('groups rows by compacted folder, folders first, and Stage folder stages its files', async () => {
     const { fake, element, unmount } = await open(tree)
-    const dirs = qa(element, '[data-section="unstaged"] .scm-dir')
-    expect(dirs.map((d) => `${q(d, '.scm-row-name')?.textContent} ${q(d, '.scm-count')?.textContent}`)).toEqual(['lib 1', 'src/app 2'])
+    const dirs = qa(element, '[data-section="unstaged"] [data-directory-path]')
+    expect(dirs.map((dir) => `${dir.getAttribute('data-directory-name')} ${q(dir, '[role="img"]')?.textContent}`)).toEqual(['lib 1', 'src/app 2'])
     await click(byLabel(dirs[1]!, 'Stage folder src/app'))
     expect(fake.called('quirky.git/stage').at(-1)?.params).toEqual({ worktree: 'feat', paths: ['src/app/a.ts', 'src/app/b.ts'] })
     unmount()
@@ -356,7 +356,7 @@ describe('SC-17: the tree view', () => {
     await click(byLabel(element, 'More source control actions'))
     await click(buttonText(document.body, 'View as tree'))
     expect(fake.called('setting.set').at(-1)?.params).toEqual({ id: 'setting:quirky.git/viewMode', value: 'tree' })
-    expect(qa(element, '.scm-dir').length).toBeGreaterThan(0)
+    expect(qa(element, '[data-directory-path]').length).toBeGreaterThan(0)
     unmount()
   })
 

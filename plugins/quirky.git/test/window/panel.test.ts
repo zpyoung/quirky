@@ -29,20 +29,26 @@ test('SC-9: the group order setting reorders the sections live, with Conflicts f
 
 test('SC-10: the empty states say what to do', async () => {
   const w = await boot(scratch)
-  await w.win.waitFor(() => q('.scm-empty'))
-  expect(text(q('.scm-empty strong'))).toBe('No changes on this branch')
-  expect(text(q('.scm-empty p'))).toBe('This workspace is clean and this branch has no changes ahead of origin/main')
+  await w.win.waitFor(() => q('.ui-empty-state__message')?.textContent === 'No changes')
+  expect(text(q('.ui-empty-state__message'))).toBe('No changes')
+  expect(qa('.ui-empty-state__action').map(text)).toEqual(['Open terminal'])
+  await click(buttonText('Open terminal'))
+  const terminal = await w.win.waitFor(async () => {
+    const view = await openView(w)
+    return view?.id === SESSION_VIEW && typeof view.input?.session === 'string' ? view : undefined
+  })
+  expect(terminal.input?.worktree).toBe(w.feat.id)
 
   const notes = join(scratch(), 'notes')
   mkdirSync(notes, { recursive: true })
   const folder = (await w.agent.callAny('quirky.repo/add', { path: notes, folder: true })) as Repo
   const [folderTree] = (await w.agent.callAny('quirky.worktree/list', { repo: folder.id })) as Worktree[]
   await w.agent.callAny('ui.view.open', { id: SESSION_VIEW, input: { worktree: folderTree!.id } })
-  await w.win.waitFor(() => q('.scm-unavailable'))
-  expect(text(q('.scm-unavailable'))).toBe('Opened as folder. Git features are unavailable for this workspace.')
+  await w.win.waitFor(() => q('[data-git-panel] .ui-empty-state__message'))
+  expect(text(q('[data-git-panel] .ui-empty-state__message'))).toBe('Opened as folder. Git features are unavailable for this workspace.')
 
   await w.agent.callAny('ui.view.close', {})
-  await w.win.waitFor(() => text(q('.scm-root .muted')) === 'Select a workspace to view changes')
+  await w.win.waitFor(() => text(q('.ui-tool-panel-frame .ui-empty-state__message')) === 'Select a workspace to view changes')
   expect(w.problems()).toEqual([])
 }, SLOW)
 
@@ -54,15 +60,15 @@ test('SC-16: the filter narrows rows, hides the bulk buttons and refuses a long 
   const input = (await w.win.waitFor(() => q('input[aria-label="Filter files…"]'))) as HTMLInputElement
   await type(input, 'MATH')
   await w.win.waitFor(async () => (await w.report()).filter === 'MATH')
-  expect(qa('.scm-row-name').map(text)).toEqual(['math.ts'])
+  expect(qa('[data-row-path] button[aria-pressed]').map((button) => text(q('[data-row-name]', button)))).toEqual(['math.ts'])
   expect(q('[data-section="history"]')).toBeNull()
-  expect(qa('.scm-section-actions button')).toHaveLength(0)
+  expect(qa('[data-section-action]')).toHaveLength(0)
 
   await type(input, 'x'.repeat(3000))
-  await w.win.waitFor(() => text(q('.scm-empty strong')) === 'Search text is too large')
-  expect(text(q('.scm-empty p'))).toBe('Use a shorter file filter.')
+  await w.win.waitFor(() => text(q('.ui-empty-state__message')) === 'Search text is too large')
+  expect(text(q('[data-git-content]'))).toContain('Use a shorter file filter.')
   await press(input, 'Escape')
-  await w.win.waitFor(() => qa('.scm-row-name').length === 4)
+  await w.win.waitFor(() => qa('[data-row-path] button[aria-pressed]').length === 4)
   expect(q('[data-section="history"]')).not.toBeNull()
 }, SLOW)
 
@@ -74,13 +80,12 @@ test('SC-17: View as tree groups rows by folder, stages a folder, and the choice
   await w.win.waitFor(() => rowOf('lib/c.ts'))
   await click(byLabel('More source control actions'))
   await click(menuItem('View as tree'))
-  await w.win.waitFor(() => q('.scm-dir'))
+  await w.win.waitFor(() => q('[data-directory-path]'))
   expect(await settingValue(w, 'viewMode')).toBe('tree')
   expect((await w.report()).viewMode).toBe('tree')
-  const dirs = qa('.scm-dir').map((d) => text(q('.scm-row-name', d)) + text(q('.scm-count', d)))
-  expect(dirs).toEqual(['lib1', 'src/app2'])
-
-  const folder = qa('.scm-dir').find((d) => text(q('.scm-row-name', d)) === 'src/app')!
+  const dirs = qa('[data-directory-path]')
+  expect(dirs.map((dir) => `${dir.getAttribute('data-directory-name')}${text(q('[role="img"]', dir))}`)).toEqual(['lib1', 'src/app2'])
+  const folder = dirs.find((dir) => dir.getAttribute('data-directory-name') === 'src/app')!
   await click(byLabel('Stage folder src/app', folder))
   await w.win.waitFor(() => rowOf('src/app/b.ts', 'staged'))
   expect(w.git('diff', '--cached', '--name-only').split('\n')).toEqual(['src/app/a.ts', 'src/app/b.ts'])
@@ -132,15 +137,15 @@ test('SC-24: a bulk discard that fails shows one notice with the first message, 
     for (let round = 0; round < 2; round++) {
       await click(byLabel('Delete all untracked', q('[data-section="untracked"]')!))
       await click(buttonText('Delete 2', await w.win.waitFor(() => dialogNamed('Delete 2 untracked files?'))))
-      await w.win.waitFor(() => q('.notice'))
+      await w.win.waitFor(() => q('[aria-label="Source control notices"] > [role="alert"], [aria-label="Source control notices"] > [role="status"]'))
       await Bun.sleep(300)
-      expect(qa('.notice')).toHaveLength(1)
+      expect(qa('[aria-label="Source control notices"] > [role="alert"], [aria-label="Source control notices"] > [role="status"]')).toHaveLength(1)
     }
-    const notice = q('.notice')!
-    expect(text(q('strong', notice))).toBe('Failed to discard 2 file(s)')
-    expect(text(q('.notice-text', notice))).toContain('ro/a.txt, ro/b.txt')
+    const notice = q('[aria-label="Source control notices"] > [role="alert"], [aria-label="Source control notices"] > [role="status"]')!
+    expect(text(notice)).toContain('Failed to discard 2 file(s)')
+    expect(text(notice)).toContain('ro/a.txt, ro/b.txt')
     expect(buttonText('Retry', notice)).toBeDefined()
-    expect(buttonText('Dismiss', notice)).toBeDefined()
+    expect(byLabel('Dismiss notification', notice)).toBeDefined()
   } finally {
     chmodSync(join(w.dir, 'ro'), 0o755)
   }
@@ -150,10 +155,10 @@ test('SC-54: Load more shows the rest of the history, up to 200', async () => {
   const w = await boot(scratch)
   Bun.spawnSync(['sh', '-c', 'for i in $(seq 1 59); do git commit -q --allow-empty -m "c$i"; done'], { cwd: w.dir, env: process.env })
   await w.win.waitFor(() => q('[data-section="history"]'))
-  await click(q('[data-section="history"] .scm-section-toggle'))
-  await w.win.waitFor(() => qa('.scm-commit').length === 50)
+  await click(q('[data-section="history"] [aria-label="Expand Commits"]'))
+  await w.win.waitFor(() => qa('[data-commit-row]').length === 50)
   await click(buttonText('Load more'))
-  await w.win.waitFor(() => qa('.scm-commit').length === 60)
+  await w.win.waitFor(() => qa('[data-commit-row]').length === 60)
   expect(buttonText('Load more')).toBeUndefined()
 }, SLOW)
 
@@ -171,7 +176,7 @@ test('quirky.git/changed events refresh the panel and an open diff before the ne
   await quickly(() => rowOf('math.ts', 'unstaged'))
   expect((await w.cli(['git', 'discard', '--paths', 'math.ts', '--yes']).done).code).toBe(0)
   await quickly(() => !rowOf('math.ts'))
-  await quickly(() => q('.qgv-file') && (byLabel('Next change') as HTMLButtonElement).disabled)
+  await quickly(() => q('[data-git-view-root] h2') && (byLabel('Next change') as HTMLButtonElement).disabled)
   expect(w.problems()).toEqual([])
 }, SLOW)
 
@@ -183,16 +188,16 @@ test('SC-7: a dirty submodule row expands to its read-only changes from the daem
   w.write('vendor/lib/x.c', 'int y;\n')
   await w.win.waitFor(() => rowOf('vendor/lib', 'unstaged'))
   expect(text(rowOf('vendor/lib'))).toContain('Stage inside submodule')
-  expect(qa('.scm-row-actions button', rowOf('vendor/lib')!.parentElement!)).toHaveLength(0)
+  expect(qa('.ui-list-row__trailing button', rowContainerOf('vendor/lib', 'unstaged')!).length).toBe(0)
 
   await click(byLabel('Expand vendor/lib'))
-  await w.win.waitFor(() => qa('.scm-sub-entry').length === 1)
-  expect(text(q('.scm-sub-entry .scm-row-name'))).toBe('x.c')
-  expect(text(q('.scm-sub-entry .scm-letter'))).toBe('M')
-  expect(qa('.scm-sub-entry button')).toHaveLength(0)
+  await w.win.waitFor(() => qa('[data-submodule-entry]').length === 1)
+  expect(text(q('[data-row-name]', q('[data-submodule-entry]')))).toBe('x.c')
+  expect(text(q('[aria-label="Git status modified"]', q('[data-submodule-entry]')))).toBe('M')
+  expect(qa('[data-submodule-entry] button')).toHaveLength(0)
   expect((await openView(w))?.id).not.toBe(DIFF_VIEW)
 
   await click(byLabel('Collapse vendor/lib'))
-  expect(qa('.scm-sub-entry')).toHaveLength(0)
+  expect(qa('[data-submodule-entry]')).toHaveLength(0)
   expect(w.problems()).toEqual([])
 }, SLOW)
