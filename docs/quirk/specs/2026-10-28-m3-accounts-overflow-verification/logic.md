@@ -1,7 +1,9 @@
 # Accounts responsive verification
 
 ## Status & amendments
-Approved autonomously under the unattended loop contract. Tech spec requested by LOOP.md. 2026-10-28: initial scope; no amendment to inherited Accounts behavior.
+Approved autonomously under the unattended loop contract. 2026-10-28 initial spec retained for end-phase acceptance; original tech spec was written before the policy change.
+
+**Amendments:** 2026-10-28 operator moved all testing/debugging to the end phase and explicitly ordered this in-progress item to land now with typecheck only. AC1–AC4 remain acceptance obligations for that end phase, not claims achieved by this landing. The active suite was cancelled without a verdict; no repair, badge-only/Remaining completion or guarded UI pass is claimed. Decisions D7–D9 record completed observations and the superseded schedule. No additional testing/debugging follow-up is allowed under the updated LOOP.
 
 ## Purpose and conceptual model
 Close the missing observations named by `m3-accounts-overflow-verification`, not rebuild Accounts. The status bar projects provider quota snapshots; presentation preferences change density without changing quota or account identity. Available width determines a visible prefix and a collapsed suffix represented by `+N`.
