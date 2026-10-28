@@ -67,6 +67,7 @@ test(
     await ui.h.ok(['setting', 'set', 'setting:quirky.terminal-dock/enabled', 'true'])
     await ui.contextMenu(`[data-pane="${shell.pane.id}"]`)
     const shellMenu = await ui.waitView('a plain shell context menu', (view) => view.menu?.kind === 'pane')
+    expect(shellMenu.menu!.target).toBe(shell.pane.id)
     expect(shellMenu.menu!.items.map((item) => item.label)).not.toContain('Show agent composer')
     await ui.run('close-menu')
 
@@ -153,6 +154,19 @@ test(
     expect(ui.win.document.activeElement).toBe(activeEditor)
     await waitFor('composer dock context restored after passthrough', () => windowContext(ui).get('terminalDockFocus') === true ? true : undefined)
     expect(windowContext(ui).get('terminalDockFocus')).toBe(true)
+    await ui.run('command:quirky.terminal-dock/settings')
+    const setting = await ui.el<HTMLInputElement>('input[aria-label="Terminal dock (Experimental)"]')
+    setting.click()
+    await waitForDock(ui, agent.pane.id, agent.session, (state) => !state.enabled && !state.mounted, 'to disable the dock')
+
+    const reenabledSetting = await ui.el<HTMLInputElement>('input[aria-label="Terminal dock (Experimental)"]')
+    reenabledSetting.click()
+    await ui.openView({ session: agent.session })
+    await ui.waitView('the active terminal pane after leaving Settings', (view) => view.focusedPane === agent.pane.id)
+    const reenabledEditor = await ui.el<HTMLTextAreaElement>('.qtd-editor')
+    await waitForDock(ui, agent.pane.id, agent.session, (state) => state.enabled && state.mounted, 'to remount the dock after re-enabling')
+    await waitFor('composer focus after re-enabling Terminal dock', () => ui.win.document.activeElement === reenabledEditor ? true : undefined)
+    expect(ui.win.document.activeElement).toBe(reenabledEditor)
 
     const paneArea = ui.q(`[data-panes="${agent.tab.id}"]`)!
     ui.setRect(paneArea, { left: 0, top: 0, width: 1000, height: 239 })
@@ -164,10 +178,10 @@ test(
     ui.setRect(paneArea, { left: 0, top: 0, width: 1000, height: 260 })
     await ui.refit()
     expect(paneReport(await ui.view(), agent.pane.id)?.dock?.mounted).toBe(false)
-    ui.setRect(paneArea, { left: 0, top: 0, width: 1000, height: 280 })
+    ui.setRect(paneArea, { left: 0, top: 0, width: 1000, height: 279.8125 })
     await ui.refit()
     await ui.el('.qtd-composer')
-    await waitForDock(ui, agent.pane.id, agent.session, (state) => state.mounted, 'to remount at gutter plus one hundred')
+    await waitForDock(ui, agent.pane.id, agent.session, (state) => state.mounted, 'to remount when the fractional container renders a 280-pixel pane')
 
     const handle = await ui.el<HTMLElement>('.qtd-resize-handle')
     const targetWindow = ui.win.document.defaultView!

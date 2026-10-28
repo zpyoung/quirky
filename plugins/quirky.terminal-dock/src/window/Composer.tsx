@@ -489,7 +489,7 @@ export function Composer({ context, pane, session, registerActions }: Props) {
     }
   }, [context, pane, flushDraft, refreshState])
   const restoreFailedSend = useCallback((id: string, sentVersion: number) => {
-    if (localVersionRef.current === sentVersion || !dirtyRef.current) return
+    if (localVersionRef.current === sentVersion) return
     const snapshot = sendSnapshotsRef.current.get(id)
     if (snapshot === undefined) return
     const recovered = composeRecoveredDraft(snapshot.text, stateRef.current?.draft ?? '', localDraftRef.current)
