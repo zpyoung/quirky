@@ -21,7 +21,7 @@ export const navigationSchema: Schema = {
 export function initialUiState(): AutomationUiState {
   return {
     revision: 0,
-    navigation: { page: 'list', automationId: null, runId: null, tab: 'overview', query: '', host: 'all', status: 'all', lastRun: 'all', agent: 'all', sort: 'name', direction: 'asc', runQuery: '', runStatus: 'all' },
+    navigation: { page: 'list', automationId: null, runId: null, tab: 'overview', query: '', host: 'all', status: 'all', lastRun: 'all', agent: '', sort: 'name', direction: 'asc', runQuery: '', runStatus: 'all' },
     editor: null
   }
 }
@@ -72,6 +72,7 @@ export function createAutomationUiEnv(context: PluginContext, service: Automatio
     },
     async navigate(input) {
       const patch = validateNavigation(context, input)
+      await rememberPrevious()
       const next = env.update(value => { Object.assign(value.navigation, patch) })
       await context.call('ui.view.open', { id: AUTOMATIONS_VIEW, input: { revision: next.revision, navigation: next.navigation } })
       return next
@@ -81,7 +82,7 @@ export function createAutomationUiEnv(context: PluginContext, service: Automatio
   env.methods = {
     uiState: () => env.read(),
     uiNavigate: params => env.navigate(params),
-    async open(params) { await rememberPrevious(); return env.navigate(params) },
+    open: params => env.navigate(params),
     async close() {
       if (previousView) await context.call('ui.view.open', { id: previousView.id, ...(previousView.input === undefined ? {} : { input: previousView.input }) })
       else await context.call('ui.view.close', {})

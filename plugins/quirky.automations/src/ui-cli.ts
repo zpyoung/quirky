@@ -2,7 +2,7 @@ import type { CliArgs, CliContext, CliModule } from '@quirky/protocol'
 
 const METHODS: Record<string, string> = {
   uiState: 'uiState', uiNavigate: 'uiNavigate', open: 'open', close: 'close', settings: 'settings',
-  editorData: 'editorData', openEditor: 'openEditor', patchDraft: 'patchDraft', saveEditor: 'saveEditor', cancelEditor: 'cancelEditor',
+  'editor-data': 'editorData', 'editor-open': 'openEditor', 'editor-patch': 'patchDraft', 'editor-save': 'saveEditor', 'editor-cancel': 'cancelEditor',
   'external-list': 'externalList', 'external-action': 'externalAction', 'external-action-describe': 'externalActionDescribe'
 }
 function jsonObject(value: unknown, name: string, context: CliContext): Record<string, unknown> {
