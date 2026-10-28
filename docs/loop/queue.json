@@ -1496,6 +1496,14 @@
       "lane": 9
     },
     {
+      "id": "fix-desktop-startup-imports",
+      "milestone": "M7",
+      "title": "The packaged desktop app hangs at startup with no window: 35b193b5 dropped the `electrobun/main` import (ApplicationMenu, BrowserView, BrowserWindow, Tray, Utils, app) and the `./desktop-window-route` import (desktopWindowRouteUrl, folderPickerResult) from apps/desktop/src/bun/index.ts, so `app` is undefined. Restore both imports, and make the root `bun run typecheck` also typecheck apps/desktop (after `hutch electrobun prepare`) so land catches this. Also make `bun run build` work in a fresh checkout, which today fails until `hutch electrobun prepare` has run. Verify by building Quirky.app and launching it on a temporary QUIRKY_HOME until its window shows.",
+      "docs": [],
+      "deps": [],
+      "status": "done"
+    },
+    {
       "id": "m7-test-triage",
       "milestone": "M7",
       "title": "End-phase test triage: run bun scripts/suite.ts packages apps plugins, bun test scripts and bun run typecheck on build/roadmap, and add one fix-test-<area>-<MMDD> item per failing package, app or plugin (naming its failing files and tests) so the lanes split the debugging; change no code",
@@ -1518,7 +1526,8 @@
         "m7-diff-markdown-local-images",
         "m7-terminal-runtime-native-and-worktree-parity",
         "m7-orchestration-worker-federation",
-        "m7-terminal-provider-host-and-worktree-remainder"
+        "m7-terminal-provider-host-and-worktree-remainder",
+        "fix-desktop-startup-imports"
       ],
       "status": "todo"
     },
@@ -1718,6 +1727,26 @@
       ],
       "status": "todo",
       "early": true
+    },
+    {
+      "id": "m7-terminal-owner-provisioning-and-selector-flows",
+      "milestone": "M7",
+      "title": "Complete only the still-unbuilt flows from m7-terminal-provider-host-and-worktree-remainder Landing disposition: separately authenticated full-owner remote CLI offer/grant/registry/admission/revocation and saved/one-off routing over existing E2EE without widening mobile/federation credentials; authenticated remote provider process launch and hook setup/removal/config mutations using that genuine owner authority, non-Codex built-in model-list protocols where real provider APIs exist, and exact remote-automation model retirement only through the canonical blocked remote-automation owner; ordinary exact-host worktree creation through authentic host generation/workspace authority without repurposing supervised workers; authoritative durable desktop-other-client and worktree-host identity plus owner-bound remote-connectivity cleanup; VM environmentRecipes provision/suspend/resume/destroy and attachment lifecycle (not local command-tab substitution); canonical workspace-view selector resolution for per-window navigation/history/sleep/close so id:/path/name view inputs resolve to actual owners and unknown/ambiguous owners refuse before changing sleep state. Preserve shipped prepared pools/defaultTabs/tracker/icon controls, read-only exact-peer provider/status projections, window routing/CAS, bounded direct Kitty raster palettes and profile-owned floating Markdown/editor/Browser. Native notification permission/click/dismiss requires supported SDK callbacks; production signed terminal-host launchd/TCC/admission/upgrade requires authorized signing/packaging identity. Reconcile existing m5-automations-dispatch-remote-and-args, m5-automations-ui-remote-authorities and native Browser owners; no duplicate transport or excluded native-chat/hosting/Objective/sitter scope. Implementation flows only, not verification/review/debugging.",
+      "docs": [
+        "ask.md",
+        "cli.md",
+        "agent-status.md",
+        "launch-settings.md",
+        "notifications.md",
+        "providers.md",
+        "term-daemon.md",
+        "term-ui.md",
+        "worktrees.md"
+      ],
+      "deps": [
+        "m7-terminal-provider-host-and-worktree-remainder"
+      ],
+      "status": "todo"
     }
   ]
 }

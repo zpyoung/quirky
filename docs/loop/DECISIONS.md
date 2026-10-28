@@ -2405,6 +2405,10 @@ files, not this one.
 | easy | high | [m1-providers D47](decisions/m1-providers.md) | Trust writes skip the real home in test runs, after one test run wrote to it | assumed — autonomous |
 | easy | high | [m1-providers D49](decisions/m1-providers.md) | The UI scenarios passed in the web window; one visual defect was fixed | assumed — autonomous |
 | easy | high | [m1-providers D50](decisions/m1-providers.md) | No native-only scenarios | assumed — autonomous |
+| easy | high | [fix-desktop-startup-imports D1](decisions/fix-desktop-startup-imports.md) | Restore the missing runtime and route imports without changing startup behavior | assumed — autonomous |
+| easy | high | [fix-desktop-startup-imports D2](decisions/fix-desktop-startup-imports.md) | Make public root build and typecheck commands own desktop preparation | assumed — autonomous |
+| easy | high | [fix-desktop-startup-imports D3](decisions/fix-desktop-startup-imports.md) | Verify the requested packaged native window with an isolated runtime | assumed — autonomous |
+| easy | high | [fix-desktop-startup-imports D4](decisions/fix-desktop-startup-imports.md) | Use the desktop compiler gate as the import-regression check | assumed — autonomous |
 | easy | high | [m1-term-daemon D1](decisions/m1-term-daemon.md) | Classify the item as API, CLI and Data design, and run every research phase | assumed — autonomous |
 | easy | high | [m1-term-daemon D2](decisions/m1-term-daemon.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m1-term-daemon D3](decisions/m1-term-daemon.md) | Keep m1-term-daemon as one item, and put the Manage Sessions flows in it as a panel | locked by docs/loop/LOOP.md |
