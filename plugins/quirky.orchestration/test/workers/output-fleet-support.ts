@@ -24,7 +24,7 @@ export const sessionFixture = (overrides: Partial<Session> = {}): Session => ({
   exitSignal: null,
   exitCause: null,
   restorable: false,
-  launchSettings: { agent: overrides.agent ?? 'claude', options: { model: { value: 'sonnet', source: 'explicit' } } },
+  launchSettings: { agent: overrides.agent ?? 'claude', options: { model: { value: 'sonnet', source: 'explicit' } }, summary: `${overrides.agent ?? 'claude'} · Sonnet` },
   providerSession: { id: 'provider-session', transcriptPath: '/private/captured/session.jsonl' },
   ...overrides
 })

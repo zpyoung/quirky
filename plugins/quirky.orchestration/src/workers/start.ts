@@ -447,7 +447,7 @@ async function launchAccepted(
   const effects: WorkerEffect[] = []
   let residualResources: JsonValue[] = []
   let inputMayHaveBeenAccepted = false
-  let custodyRecorded = false
+  let placementForFailure: WorkerPlacement | undefined
 
   try {
     await releaseRetryResource(lifecycle, repository, params, caller, run.id)
@@ -465,7 +465,7 @@ async function launchAccepted(
         throw fail('worker_identity_changed', 'The placed session kind does not match the validated worker mode.')
       }
       if (params.terminal) refuseActiveTerminal(core, repository, params.terminal)
-      const resource = workerSessionResource(repository, dispatch, placed)
+      placementForFailure = placed
       core.store.transaction(() => {
         const current = repository.get(dispatch.id)
         if (!current || current.state !== 'starting') throw fail('lifecycle_conflict', `Worker ${dispatch.id} changed before custody was recorded.`)
@@ -628,8 +628,8 @@ async function launchAccepted(
     const effectsFromFailure = effectsFromError(cause)
     for (const item of effectsFromFailure) if (!effects.some(existing => existing.kind === item.kind && existing.id === item.id && existing.action === item.action)) effects.push(item)
     residualResources = [...residualsFromError(cause)]
-    if (stage === 'submitting' && isAmbiguousStart(cause, stage, inputMayHaveBeenAccepted) && placement && !effects.some(item => item.kind === 'dispatch_input')) {
-      effects.push({ kind: 'dispatch_input', action: 'outcome_unknown', role: 'agent', id: placement.session.id })
+    if (stage === 'submitting' && isAmbiguousStart(cause, stage, inputMayHaveBeenAccepted) && placementForFailure && !effects.some(item => item.kind === 'dispatch_input')) {
+      effects.push({ kind: 'dispatch_input', action: 'outcome_unknown', role: 'agent', id: placementForFailure.session.id })
     }
     const receipt = settleAfterCommitFailure(core, repository, initial, cause, stage, turnStart, effects, residualResources, inputMayHaveBeenAccepted)
     return receipt

@@ -54,19 +54,26 @@ await import(${JSON.stringify(native.executable)})
     await fixture.call('quirky.agents/refresh', {})
     const coordinator = await fixture.call('quirky.session/create', { worktree: `path:${fixture.repo}`, agent: 'claude', title: 'Fixture coordinator' }) as Session
     await eventually(() => existsSync(join(fixture.home, 'worker-fixture', `${coordinator.id}.events.jsonl`)), Boolean, 'coordinator process to start')
+    const cli = async (session: string, args: string[], timeout = 60_000): Promise<CliResult> => {
+      const id = crypto.randomUUID()
+      const dir = join(fixture.home, 'worker-fixture')
+      appendFileSync(join(dir, `${session}.requests.jsonl`), JSON.stringify({ id, args: [...args, '--json'] }) + '\n')
+      const reply = join(dir, `${id}.reply.json`)
+      const result = await eventually(
+        () => existsSync(reply) ? JSON.parse(readFileSync(reply, 'utf8')) as CliResult : null,
+        value => value !== null,
+        `launched ${session} CLI ${args.join(' ')}`,
+        timeout,
+      )
+      return result!
+    }
     return {
       fixture,
       coordinator,
       native,
-      async cli(session: string, args: string[], timeout = 60_000): Promise<{ code: number; stdout: string; stderr: string }> {
-        const id = crypto.randomUUID()
-        const dir = join(fixture.home, 'worker-fixture')
-        appendFileSync(join(dir, `${session}.requests.jsonl`), JSON.stringify({ id, args: [...args, '--json'] }) + '\n')
-        const reply = join(dir, `${id}.reply.json`)
-        return eventually(() => existsSync(reply) ? JSON.parse(readFileSync(reply, 'utf8')) as { code: number; stdout: string; stderr: string } : null, (value) => value !== null, `launched ${session} CLI ${args.join(' ')}`, timeout).then((value) => value!)
-      },
+      cli,
       async callAs<T>(session: string, verb: string, flags: string[] = []): Promise<T> {
-        const result = await this.cli(session, ['orchestration', verb, ...flags])
+        const result = await cli(session, ['orchestration', verb, ...flags])
         if (result.code !== 0) throw new Error(`orchestration ${verb} exit ${result.code}: ${result.stderr}\n${result.stdout}`)
         try { return JSON.parse(result.stdout) as T } catch { throw new Error(`orchestration ${verb} did not return JSON: ${result.stdout}`) }
       },

@@ -395,6 +395,7 @@ test('settled worker-terminal reuse transfers custody and a late release cannot 
     'fresh worker tab title after provider OSC',
   )
   expect(workerSession.title).toContain('Placement acceptance worker')
+  if (workerTab === null) throw new Error('the worker terminal tab disappeared after observation')
   expect(workerTab.customTitle).toBe(workerSession.title)
   expect(workerTab.liveTitle).not.toBeNull()
   expect(await layout(h)).toEqual(focusBefore)
@@ -478,8 +479,10 @@ test('a precreated external agent stays external and release never closes it', a
   expect(await h.ptyAlive(external.id)).toBe(true)
   const after = await h.fixture.call('quirky.orchestration/workerShow', { dispatchId: receipt.dispatchId }) as WorkerShowResult
   expect(after.terminalResource?.ownershipState).toBe('external')
+  const externalResource = shown.terminalResource
+  if (!externalResource) throw new Error('the external terminal has no custody record')
   expect((await h.fixture.call('quirky.session/identity', { session: external.id }) as { processIncarnation: string }).processIncarnation)
-    .toBe(shown.terminalResource?.processIncarnation)
+    .toBe(externalResource.processIncarnation)
 }, 90_000)
 
 test('wrong-workspace, coordinator, nonagent, and already-active terminals refuse without typing or adding work', async () => {

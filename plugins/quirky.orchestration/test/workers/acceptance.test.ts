@@ -168,7 +168,9 @@ test('a certified unexpected worker exit records its cause and wakes the coordin
   const before = await h.fixture.call('quirky.session/identity', { session: worker.session }) as { sessionId: string; processIncarnation: string; live: boolean }
   expect(before.sessionId).toBe(worker.session)
   expect(before.live).toBe(true)
-  expect(before.processIncarnation).toBe(worker.shown.terminalResource?.processIncarnation)
+  const terminalResource = worker.shown.terminalResource
+  if (!terminalResource) throw new Error('the exact worker has no terminal custody record')
+  expect(before.processIncarnation).toBe(terminalResource.processIncarnation)
   process.kill(started.pid, 'SIGKILL')
   const failed = await eventually(
     () => h.fixture.call('quirky.orchestration/workerShow', { dispatchId: worker.receipt.dispatchId }) as Promise<WorkerShowResult>,
