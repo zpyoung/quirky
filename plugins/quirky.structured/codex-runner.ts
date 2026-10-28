@@ -152,7 +152,7 @@ class CodexRunner implements StructuredRunner {
       if (run.startupFailure) throw run.startupFailure
       this.running.set(session.id, run)
 
-      if (prompt === undefined) {
+      if (prompt === undefined || prompt === '') {
         run.ready = true
         this.context.setStatus(session.id, 'running')
         this.flushDeferred(run)
@@ -436,6 +436,14 @@ class CodexRunner implements StructuredRunner {
         })
         return
       }
+      case 'account/rateLimits/updated':
+        this.context.appendMessage({
+          sessionId: run.sessionId,
+          role: 'system',
+          text: 'Codex account rate limits updated',
+          data: { method, params: rawParams }
+        })
+        return
       case 'turn/started': {
         const turn = params.turn
         if (typeof turn !== 'object' || turn === null || Array.isArray(turn)) return

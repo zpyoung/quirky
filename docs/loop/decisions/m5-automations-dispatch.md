@@ -330,5 +330,27 @@
 - **Revisit if:** authoritative merge-result verification finds a new failure
 - **Source:** assumed — autonomous
 
+## D31: Compose loop evidence and honor canonical terminal-only auto-adoption
+- **Question:** The second land waited behind integration, then stopped before tests on new Codex/reconciliation conflicts
+- **Options:** drop one event family or restore ordinary structured auto-tabs; combine independent evidence cases and follow landed loops D19
+- **Chose:** retain both thread/tokenUsage/updated per-turn evidence and account/rateLimits/updated raw reset evidence. Automatic workspace discovery/adoption accepts only terminal sessions and excludes background true. Existing explicit bindings remain intact. Amend the spec and background regression so absent/false-flag structured sessions also remain unbound and do not steal the active tab.
+- **Why:** Loops D19 is locked to the architecture's structured-background direction and supersedes this item's earlier assumed preservation of ordinary structured auto-adoption. Both Codex event cases are additive; reset times and USD remain provider evidence, never inferred. Optional bounded journal reads preserve the unbounded call shape used by the automation observer.
+- **Evidence:** docs/loop/decisions/m5-loops-core.md D2,D9,D13-D15,D19-D20,D24-D25; read-only LoopCatchup audit; two resolved conflict blocks; amended logic.md and background API regression
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** an explicit future structured viewer defines a separate opt-in binding contract
+- **Source:** supersedes m5-automations-dispatch D15
+
+## D32: Preserve prepared structured sessions owned by an activating creator
+- **Question:** Does the newly merged creator-cleanup filter treat a legitimate startup creator as unavailable?
+- **Options:** keep active-only cleanup; use the same active-or-activating live policy as checks
+- **Chose:** retain both live states, while failed/inactive/disabled creators still stop their sessions and asks. A new actual daemon/plugin-host regression prepares a deferred background session during owner activation, activates a different lazy plugin, then proves the prepared session remains live and journaled.
+- **Why:** The focused regression failed with status exited under the incoming active-only filter and passed after the one predicate change. The injected runner models an idle connection without a provider turn; a parent fixture guard that rejected every connection start was corrected to allow undefined-prompt idle startup while still rejecting unexpected turns. This is not a production fallback or a paid-model invocation.
+- **Evidence:** structured/test/startup-owner.test.ts red exited, then1pass4assertions; composed startup/Codex/native-limit/background/layout command43pass0fail177assertions5.61s followed by frozen-install/typecheck0 (595installs609packages unchanged), total32.08s
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the kernel changes which lifecycle states grant a valid creating context
+- **Source:** assumed — autonomous
+
 ## Progress
-Mandatory recovery is verified: c49562d9 composes pointer migration9/background10, create-option union and activating check ownership. Fresh four-file native/API/store acceptance23/0/99assertions and frozen-install/typecheck0 passed. All workers/process jobs returned; the single remote/raw-args follow-up is already registered. Commit this evidence, detach and retry authoritative queue land immediately. No final model-review clearance is claimed under the expired-item night-mode rule.
+Second recovery is verified. Both Codex evidence cases survive; terminal auto-adoption follows the landed terminal-only policy; valid activating structured creators remain live. Fresh five-file startup/Codex/rate-limit/background/layout acceptance43/0/177assertions and frozen-install/typecheck0 passed. All workers returned. Commit/detach and retry authoritative land immediately; do not restart broad checks, add another follow-up, or claim an unperformed model review.

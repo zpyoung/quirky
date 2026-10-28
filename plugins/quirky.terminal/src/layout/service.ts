@@ -26,8 +26,7 @@ const ID_IN_TEXT = /"(?:tab|grp|pane|split)-(\d+)"/g
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
 const isNotFound = (error: unknown) => (error as { code?: number } | null)?.code === RpcErrorCode.NotFound
-const isTabbed = (session: Session) =>
-  session.background !== true && (session.kind === 'terminal' || session.kind === 'structured')
+const isTabbed = (session: Session) => session.background !== true && session.kind === 'terminal'
 
 /** What `createTab` takes beyond the workspace: where the tab goes and what its session runs. */
 export type NewTabSpec = {

@@ -166,29 +166,23 @@ test('background structured sessions stay journaled without changing terminal se
     agent: 'claude',
     prompt: 'ordinary task'
   })) as Session
-  expect(ordinary.background).not.toBe(true)
   await journal(ordinary.id)
   await waitForSessionChange(ordinary.id)
-  const afterOrdinary = await waitForAsync(async () => {
-    const workspace = (await call<{ workspace: Workspace }>('quirky.terminal/workspace', { workspace: worktree!.id })).workspace
-    return terminalSessionIds(workspace).includes(ordinary.id) ? workspace : undefined
-  })
-  expect(terminalSessionIds(afterOrdinary)).toContain(ordinary.id)
+  const afterOrdinary = (await call<{ workspace: Workspace }>('quirky.terminal/workspace', { workspace: worktree!.id })).workspace
+  expect(terminalSessionIds(afterOrdinary)).not.toContain(ordinary.id)
+  expect(activeTab(afterOrdinary)).toBe(activeTab(initial))
 
-  const explicitlyVisible = (await call('quirky.structured/create', {
+  const explicitFalse = (await call('quirky.structured/create', {
     worktree: worktree!.id,
     agent: 'claude',
-    prompt: 'explicitly visible task',
+    prompt: 'explicit false flag task',
     background: false
   })) as Session
-  expect(explicitlyVisible.background).not.toBe(true)
-  await journal(explicitlyVisible.id)
-  await waitForSessionChange(explicitlyVisible.id)
-  const afterExplicitFalse = await waitForAsync(async () => {
-    const workspace = (await call<{ workspace: Workspace }>('quirky.terminal/workspace', { workspace: worktree!.id })).workspace
-    return terminalSessionIds(workspace).includes(explicitlyVisible.id) ? workspace : undefined
-  })
-  expect(terminalSessionIds(afterExplicitFalse)).toContain(explicitlyVisible.id)
+  await journal(explicitFalse.id)
+  await waitForSessionChange(explicitFalse.id)
+  const afterExplicitFalse = (await call<{ workspace: Workspace }>('quirky.terminal/workspace', { workspace: worktree!.id })).workspace
+  expect(terminalSessionIds(afterExplicitFalse)).not.toContain(explicitFalse.id)
+  expect(activeTab(afterExplicitFalse)).toBe(activeTab(initial))
 
   const sessionsBeforeInvalidCalls = (await call('quirky.session/list', { worktree: worktree!.id })) as Session[]
   await expectInvalid(

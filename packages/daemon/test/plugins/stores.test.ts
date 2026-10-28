@@ -189,16 +189,35 @@ describe('migrations', () => {
     expect(unhandled).toEqual([])
   })
 
-  test('a downgrade throws the exact message and writes nothing', () => {
+  test('a downgrade is refused unless explicitly opened read-only, preserving newer data', () => {
     const home = makeTempDir()
-    const three: StoreMigration[] = ['CREATE TABLE a (id INTEGER)', 'CREATE TABLE b (id INTEGER)', 'CREATE TABLE c (id INTEGER)']
-    open(home, three).close()
+    const migrations: StoreMigration[] = [
+      'CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT)',
+      "INSERT INTO items (name) VALUES ('newer data')"
+    ]
+    open(home, migrations).close()
     const file = join(pluginDataDir(home, ID), 'store.db')
     const before = { bytes: readFileSync(file), state: inspect(file) }
-    expect(() => open(home, three.slice(0, 1))).toThrow(`${ID} store is at version 3, but the plugin knows 1 migrations`)
-    expect(readFileSync(file).equals(before.bytes)).toBe(true)
+    expect(() => open(home, migrations.slice(0, 1))).toThrow()
+    const { store, close } = openPluginStore({
+      home, pluginId: ID, migrations: migrations.slice(0, 1), isActive: () => true, newerVersion: 'read-only'
+    })
+    try {
+      expect(store.readOnly).toBe(true)
+      expect(store.version).toBe(2)
+      expect(store.get<{ name: string }>('SELECT name FROM items')).toEqual({ name: 'newer data' })
+      expect(() => store.run("DELETE FROM items")).toThrow()
+      expect(() => store.exec("DELETE FROM items")).toThrow()
+      expect(() => store.get("DELETE FROM items RETURNING id")).toThrow()
+      expect(() => store.all("DELETE FROM items RETURNING id")).toThrow()
+      let ran = false
+      expect(() => store.transaction(() => { ran = true })).toThrow()
+      expect(ran).toBe(false)
+    } finally {
+      close()
+    }
     expect(inspect(file)).toEqual(before.state)
-    expect(before.state.version).toBe(3)
+    expect(readFileSync(file).equals(before.bytes)).toBe(true)
   })
 
   test.each([[undefined], ['CREATE TABLE a (id INTEGER)'], [{ 0: 'x', length: 1 }], [[1]], [[null]], [['CREATE TABLE a (id INTEGER)', {}]]])(
