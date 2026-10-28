@@ -1328,8 +1328,7 @@
       "deps": [
         "sb-mobile-app"
       ],
-      "status": "in-progress",
-      "lane": 7
+      "status": "done"
     },
     {
       "id": "m2-editor-build-unbuilt-flows",
