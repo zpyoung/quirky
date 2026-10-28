@@ -2,10 +2,12 @@
   "name": "@quirky/ui",
   "version": "0.1.0",
   "private": true,
-  "type": "module",
   "exports": {
+    ".": "./src/design-system/index.ts",
+    "./styles.css": "./src/design-system/styles.css",
     "./terminal-theme": "./src/terminal-theme.ts"
   },
+  "type": "module",
   "scripts": {
     "build": "bun build.ts"
   },

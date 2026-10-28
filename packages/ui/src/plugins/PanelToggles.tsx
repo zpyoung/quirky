@@ -55,7 +55,8 @@ export function PanelToggles({ vertical = false }: { vertical?: boolean }) {
         ref={menuRef}
         role="menu"
         aria-label={`Position ${model?.panels.find((panel) => panel.id === menu.panelId)?.title ?? 'panel'} activity control`}
-        style={{ position: 'fixed', zIndex: 1000, left: menu.x, top: menu.y, display: 'flex', gap: 4, padding: 5, color: 'var(--text, #d7dae0)', background: 'var(--bg-raised, #1d2027)', border: '1px solid var(--border, #2b2f3a)', borderRadius: 6, boxShadow: '0 8px 28px #0008' }}
+        className="panel-context-menu"
+        style={{ left: menu.x, top: menu.y }}
       >
         {(['top', 'side'] as const).map((position) => (
           <button

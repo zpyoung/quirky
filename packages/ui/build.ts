@@ -22,6 +22,15 @@ const app = await Bun.build({
   external: shared,
   define
 })
+const gallery = await Bun.build({
+  entrypoints: [join(root, 'src/gallery.tsx')],
+  target: 'browser',
+  minify: true,
+  outdir: dist,
+  naming: '[name].[ext]',
+  external: shared,
+  define
+})
 
 // one splitting build so the vendor entries share a single React chunk
 const vendor = await Bun.build({
@@ -56,7 +65,7 @@ const pluginBuilds = await Promise.all(
   })
 )
 
-for (const result of [app, vendor, ...pluginBuilds]) {
+for (const result of [app, gallery, vendor, ...pluginBuilds]) {
   if (!result.success) {
     for (const log of result.logs) console.error(log)
     process.exit(1)
@@ -80,6 +89,7 @@ for (const id of pluginIds) {
 }
 
 await copyFile(join(root, 'src/index.html'), join(dist, 'index.html'))
+await copyFile(join(root, 'src/gallery.html'), join(dist, 'gallery.html'))
 await copyFile(Bun.resolveSync('@xterm/xterm/css/xterm.css', root), join(dist, 'xterm.css'))
 
-console.log(`built ${app.outputs.length + vendor.outputs.length} files into ${dist} and ${pluginBuilds.length} plugin UI modules`)
+console.log(`built ${app.outputs.length + gallery.outputs.length + vendor.outputs.length} files into ${dist} and ${pluginBuilds.length} plugin UI modules`)

@@ -209,7 +209,7 @@ export function App() {
               ? `${activityWidth}px ${sidebarWidth}px minmax(0, 1fr) ${activityItemsWidth}px${panelTrack}`
               : `${sidebarWidth}px minmax(0, 1fr) ${activityItemsWidth}px${panelTrack}`,
           gridTemplateAreas,
-          ...(activityPosition === 'top' ? { gridTemplateRows: '36px minmax(0, 1fr)' } : {})
+          ...(activityPosition === 'top' ? { gridTemplateRows: 'var(--compat-px-36) minmax(0, 1fr)' } : {})
         }
       : {})
   } as CSSProperties
