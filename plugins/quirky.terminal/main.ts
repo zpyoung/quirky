@@ -23,6 +23,7 @@ export async function activate(context: PluginContext): Promise<void> {
     attach: terminal.attach,
     detach: terminal.detach,
     write: terminal.write,
+    userInput: terminal.userInput,
     resize: terminal.resize,
     send: terminal.send,
     read: terminal.read,

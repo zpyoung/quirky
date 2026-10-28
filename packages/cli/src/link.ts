@@ -3,6 +3,7 @@ import {
   KERNEL_METHOD_SCHEMAS,
   RpcError,
   RpcErrorCode,
+  type CallOptions,
   type AskEnvelope,
   type MethodName,
   type ParamsOf,
@@ -31,8 +32,9 @@ export class ConnectionLostError extends Error {
  * goes to the current one. `callAny` reaches methods the CLI has no static types for, such as plugin methods.
  */
 export interface DaemonLink {
-  call<M extends MethodName>(method: M, params: ParamsOf<M>): Promise<ResultOf<M>>
-  callAny(method: string, params: Record<string, unknown>): Promise<unknown>
+  readonly requestBase: string
+  call<M extends MethodName>(method: M, params: ParamsOf<M>, options?: Pick<CallOptions, 'timeoutMs'>): Promise<ResultOf<M>>
+  callAny(method: string, params: Record<string, unknown>, options?: Pick<CallOptions, 'timeoutMs'>): Promise<unknown>
   reconnect(): Promise<void>
   close(): void
 }
@@ -89,13 +91,19 @@ export function createDaemonLink(connect: () => Promise<QuirkyClient>, options: 
     return `${base}:${createHash('sha256').update(method).digest('hex').slice(0, 12)}#${k}`
   }
 
-  /** One logical call: resent under its own ID while replies are lost. */
-  const attempt = async (method: string, params: Record<string, unknown>): Promise<unknown> => {
+  const attempt = async (
+    method: string,
+    params: Record<string, unknown>,
+    callOptions?: Pick<CallOptions, 'timeoutMs'>
+  ): Promise<unknown> => {
     const requestId = nextRequestId(method)
     for (let resends = 0; ; resends++) {
       try {
         const client = await get()
-        return await client.callAny(method, params, { requestId })
+        return await client.callAny(method, params, {
+          requestId,
+          ...(callOptions?.timeoutMs === undefined ? {} : { timeoutMs: callOptions.timeoutMs })
+        })
       } catch (error) {
         if (!isConnectionLost(error)) throw error
         if (resends >= MAX_RESENDS) throw new ConnectionLostError(base)
@@ -120,18 +128,22 @@ export function createDaemonLink(connect: () => Promise<QuirkyClient>, options: 
     }
   }
 
-  const invoke = async (method: string, params: Record<string, unknown>): Promise<unknown> => {
+  const invoke = async (
+    method: string,
+    params: Record<string, unknown>,
+    callOptions?: Pick<CallOptions, 'timeoutMs'>
+  ): Promise<unknown> => {
     const sent = needsYes(method) ? { ...params, yes: true } : params
     let result: unknown
     try {
-      result = await attempt(method, sent)
+      result = await attempt(method, sent, callOptions)
     } catch (error) {
       const pending = confirmationOf(error)
       if (!pending) throw error
       options.stderr?.(`confirm in Quirky: ${pending.action} (ask ${pending.askId}); or rerun with --yes\n`)
       const envelope = await awaitAnswer(pending.askId)
       if (envelope.status === 'declined') throw new RpcError(RpcErrorCode.Conflict, 'declined')
-      return attempt(method, { ...sent, confirmation: pending.askId })
+      return attempt(method, { ...sent, confirmation: pending.askId }, callOptions)
     }
     if (method === 'api.describe') learnDestructive(result)
     return result
@@ -143,8 +155,9 @@ export function createDaemonLink(connect: () => Promise<QuirkyClient>, options: 
   }
 
   return {
-    call: (method, params) => invoke(method, params as Record<string, unknown>) as Promise<never>,
-    callAny: (method, params) => invoke(method, params),
+    requestBase: base,
+    call: (method, params, callOptions) => invoke(method, params as Record<string, unknown>, callOptions) as Promise<never>,
+    callAny: (method, params, callOptions) => invoke(method, params, callOptions),
     reconnect,
     close() {
       void current?.then((client) => client.close()).catch(() => {})

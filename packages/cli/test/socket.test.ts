@@ -45,11 +45,22 @@ describe('SC-1: the CLI reaches the daemon over the unix socket', () => {
     const result = await runCli(['status'], {
       home: daemon.home,
       cwd: daemon.home,
-      env: { QUIRKY_SESSION_ID: 'sess_9', QUIRKY_WORKTREE_ID: 'wt_9' }
+      env: {
+        QUIRKY_SESSION_ID: 'sess_9',
+        QUIRKY_SESSION_TOKEN: 'session-secret',
+        QUIRKY_WORKTREE_ID: 'wt_9'
+      }
     })
     expect(result.code).toBe(0)
     const [hello] = daemon.methodCalls('client.hello')
-    expect(hello).toMatchObject({ role: 'cli', name: 'quirky', cwd: daemon.home, sessionId: 'sess_9', worktreeId: 'wt_9' })
+    expect(hello).toMatchObject({
+      role: 'cli',
+      name: 'quirky',
+      cwd: daemon.home,
+      sessionId: 'sess_9',
+      sessionToken: 'session-secret',
+      worktreeId: 'wt_9'
+    })
   })
 
   test.skipIf(!socketClientPresent)('every call goes over the socket named in runtime.json', async () => {

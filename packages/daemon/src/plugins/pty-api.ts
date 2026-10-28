@@ -1,5 +1,6 @@
-import { bytesToBase64, type ExitCause, type PluginPty, type PtyFact } from '@quirky/protocol'
+import { bytesToBase64, type ExitCause, type PluginPty, type PluginUserInput, type PtyFact } from '@quirky/protocol'
 import type { PtyClient } from '../pty-client'
+import type { RuntimeSessionAuthority } from '../session-authority'
 
 const acceptedInputEncoder = new TextEncoder()
 const acceptedInputDecoder = new TextDecoder()
@@ -23,6 +24,8 @@ type Fanout = {
   exit: Set<{ pluginId: string; listener: ExitListener }>
   fact: Set<{ pluginId: string; listener: FactListener }>
   input: Set<{ pluginId: string; listener: InputListener }>
+  userInput: Set<{ pluginId: string; listener: (input: PluginUserInput) => void }>
+  userInputEvidence: Map<string, PluginUserInput>
   reconnect: Set<{ pluginId: string; listener: ReconnectListener }>
   /** Plugins holding a host subscription per session; the host subscription ends when the last holder lets go. */
   holds: Map<string, Set<string>>
@@ -41,6 +44,8 @@ function fanoutFor(pty: PtyClient, log: (message: string) => void): Fanout {
     exit: new Set(),
     fact: new Set(),
     input: new Set(),
+    userInput: new Set(),
+    userInputEvidence: new Map(),
     reconnect: new Set(),
     holds: new Map(),
     log,
@@ -81,7 +86,8 @@ function fanoutFor(pty: PtyClient, log: (message: string) => void): Fanout {
 export function createPtyApi(
   pty: PtyClient,
   pluginId: string,
-  log: (message: string) => void = () => {}
+  log: (message: string) => void = () => {},
+  sessionAuthority?: RuntimeSessionAuthority
 ): { api: PluginPty; revoke(): void } {
   const fanout = fanoutFor(pty, log)
   const removers = new Set<() => void>()
@@ -116,7 +122,9 @@ export function createPtyApi(
     },
     async spawn(sessionId, { argv, cwd, env, cols, rows, shellReady, restore }) {
       live()
-      return pty.request('create', { sessionId, argv, cwd, env, cols, rows, shellReady, restore })
+      const result = await pty.request('create', { sessionId, argv, cwd, env, cols, rows, shellReady, restore })
+      await sessionAuthority?.bindTerminalProcess(sessionId, env, result.pid).catch(() => undefined)
+      return result
     },
     write(sessionId, data) {
       live()
@@ -154,10 +162,13 @@ export function createPtyApi(
         ...(signal === undefined ? {} : { signal }),
         ...(options?.reason === undefined ? {} : { reason: options.reason })
       })
+      sessionAuthority?.revokeTerminal(sessionId)
     },
     async forget(sessionId) {
       live()
       await pty.request('forget', { sessionId })
+      fanout.userInputEvidence.delete(sessionId)
+      sessionAuthority?.revokeTerminal(sessionId)
     },
     async list() {
       live()
@@ -217,6 +228,19 @@ export function createPtyApi(
     onExit: (listener) => listen(fanout.exit, { pluginId, listener }),
     onFact: (listener) => listen(fanout.fact, { pluginId, listener }),
     onInput: (listener) => listen(fanout.input, { pluginId, listener }),
+    reportUserInput(input) {
+      live()
+      const evidence: PluginUserInput = { ...input, at: Date.now() }
+      fanout.userInputEvidence.set(input.session, evidence)
+      // Unlike informational listeners, custody guards must run before input and
+      // must fail closed instead of being logged and swallowed.
+      for (const entry of [...fanout.userInput]) entry.listener(evidence)
+    },
+    lastUserInput(sessionId) {
+      live()
+      return fanout.userInputEvidence.get(sessionId) ?? null
+    },
+    onUserInput: (listener) => listen(fanout.userInput, { pluginId, listener }),
     onReconnect: (listener) => listen(fanout.reconnect, { pluginId, listener })
   }
 

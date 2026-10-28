@@ -87,6 +87,9 @@ export type PluginPtyWriteError = Error & {
   acceptedBytes: number | null
 }
 
+/** Explicit human input intent, never inferred from PTY writes or terminal query replies. */
+export type PluginUserInput = Readonly<{ session: string; expectedIncarnation: string; at: number }>
+
 /** The PTY host operations a plugin may use. */
 export type PluginPty = {
   readonly connected: boolean
@@ -141,6 +144,12 @@ export type PluginPty = {
   onFact(listener: (sessionId: string, fact: PtyFact) => void): () => void
   /** Hears every write any plugin makes to a session, as text (invalid UTF-8 decodes lossily). */
   onInput(listener: (sessionId: string, data: string) => void): () => void
+  /** Runs custody guards synchronously; a guard failure prevents the caller's following write. */
+  reportUserInput(input: { session: string; expectedIncarnation: string }): void
+  /** Positive input evidence for custody established immediately after a new session was spawned. */
+  lastUserInput(sessionId: string): PluginUserInput | null
+  /** Listener must be synchronous. Does not activate an unused plugin or hear programmatic writes. */
+  onUserInput(listener: (input: PluginUserInput) => void): () => void
   onReconnect(listener: () => void): () => void
 }
 
@@ -171,11 +180,25 @@ export type PluginNotification = {
   onDismiss?: { command: string; args?: unknown }
 }
 
+
+export type PluginSessionSource = 'terminal_launch' | 'structured_lease' | 'restored_authority'
+
+/** A live session identity assembled from kernel-owned launch authority, never client metadata. */
+export type PluginSessionIdentity = {
+  sessionId: string
+  runtimeEpoch: string
+  processIncarnation: string
+  source: PluginSessionSource
+  live: true
+}
+
+export type PluginSessionAuthority = PluginSessionIdentity
+
 /** The kernel half of launching a session. */
 export type PluginLaunch = {
   readonly shell: string
   readonly binDir: string
-  /** The `QUIRKY_*` and PATH environment for a session; reserved names in `envPatch` are dropped and a `null` value removes the variable. */
+  /** Returns the environment for a terminal process, including a kernel-issued launch token. */
   env(input: {
     sessionId: string
     worktreeId: string
@@ -184,6 +207,14 @@ export type PluginLaunch = {
     /** Absolute path to the trusted plugin shell init file for an interactive shell session. */
     shellInit?: string
   }): Record<string, string>
+  /** Opens a child-process session lease, returning its environment and an idempotent revoker. */
+  openStructuredLease(input: {
+    sessionId: string
+    worktreeId: string
+    agent: string
+  }): { env: Record<string, string>; release(): void }
+  /** Looks up metadata for a currently verified live session without exposing its token. */
+  sessionIdentity(sessionId: string): PluginSessionIdentity | null
   shellArgv(): string[]
   /** True when the configured shell gets Quirky's ready-marker wrapper (zsh or bash). */
   shellReady(): boolean
@@ -233,6 +264,7 @@ export type PluginCaller =
       cwd?: string
       sessionId?: string
       worktreeId?: string
+      sessionAuthority?: PluginSessionAuthority
       /** Set only for `connection: true` methods. */
       connection?: CallerConnection
     }

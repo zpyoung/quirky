@@ -1,6 +1,6 @@
 import type { PluginContext, PluginStore } from '@quirky/protocol'
 import type {
-  DispatchAdmissionInput, DispatchId, DispatchRow, DispatchStatus, LifecycleCorePort,
+  DispatchAdmissionInput, DispatchId, DispatchRow, DispatchStatus, JsonValue, LifecycleCorePort,
   MutationCheckpoint, MutationRequest, MutationResult, MutatingOrchestrationMethod,
   ResetMode, RunId, RunRow, RuntimeCallerEvidence, TaskCreateParams, TaskId, TaskRow, UtcTimestamp,
   WorkerOutcome, WorkerRow, WorkerState, WorkerTransitionInput,
@@ -33,6 +33,8 @@ export interface WorkerLifecyclePort {
 
 /** Acceptance runs in the ledger's transaction; asynchronous effects begin after commit. */
 export interface DurableMutationOptions<T extends object> {
+  /** Side-effect-free preflight, after receipt replay/mismatch lookup and before acceptance. */
+  beforeAccept?: () => void | Promise<void>
   acceptedCheckpoint?: (accepted: T) => MutationCheckpoint
   afterCommit?: (accepted: T) => T | Promise<T>
 }
@@ -56,7 +58,7 @@ export interface OrchestrationWorkerCore extends LifecycleCorePort {
   createTask(input: Omit<TaskCreateParams, keyof MutationRequest>, caller: RuntimeCallerEvidence): TaskRow
   reserveWorkerDispatch(input: Omit<DispatchAdmissionInput, 'assigneeSessionId'>, caller: RuntimeCallerEvidence): DispatchRow
   attachDispatchAuthority(dispatchId: DispatchId, identity: SessionIdentity, caller: RuntimeCallerEvidence): DispatchRow
-  emitWorkerStatus(dispatchId: DispatchId, subject: string, body: string, high: boolean): void
+  emitWorkerStatus(dispatchId: DispatchId, subject: string, body: string, high: boolean, type?: 'status' | 'escalation', payload?: JsonValue): void
   closeWorkerQuestions(dispatchId: DispatchId, at: UtcTimestamp): void
   mutate<T extends object>(
     method: MutatingOrchestrationMethod,

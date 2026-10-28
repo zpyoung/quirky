@@ -25,17 +25,17 @@ const FAKES_DIR = join(PLUGIN_DIR, 'test', 'fakes')
 const globals = globalThis as any
 
 class FakeRunner implements StructuredRunner {
-  started: { session: Session; prompt: string; options?: unknown }[] = []
+  started: { session: Session; prompt: string | undefined; options?: unknown }[] = []
   sent: { sessionId: string; text: string }[] = []
   stopped: string[] = []
   startError: Error | null = null
   sendError: Error | null = null
   constructor(readonly context: StructuredContext) {}
-  async start(session: Session, prompt: string, options?: StructuredLaunchOptions) {
+  async start(session: Session, prompt?: string, options?: StructuredStartOptions) {
     if (this.startError) throw this.startError
     this.started.push({ session, prompt, options })
-    this.context.appendMessage({ sessionId: session.id, role: 'user', text: prompt })
-    this.context.setStatus(session.id, 'working')
+    if (prompt !== undefined) this.context.appendMessage({ sessionId: session.id, role: 'user', text: prompt })
+    this.context.setStatus(session.id, prompt === undefined ? 'running' : 'working')
   }
   async send(sessionId: string, text: string) {
     if (this.sendError) throw this.sendError
@@ -129,6 +129,122 @@ describe('structured sessions with a runner', () => {
     expect(world.statusLog[0]).toEqual({ sessionId: session.id, status: 'working' })
   })
 
+  test('passes kernel session identity into the structured tool environment', async () => {
+    const session = await create()
+    await waitFor(() => runner.started.length === 1)
+    const options = runner.started[0]?.options as StructuredLaunchOptions | undefined
+
+    expect(options?.env).toMatchObject({
+      QUIRKY_HOME: h.home,
+      QUIRKY_SESSION_ID: session.id,
+      QUIRKY_WORKTREE_ID: session.worktreeId,
+      QUIRKY_SESSION_TOKEN: expect.any(String)
+    })
+    expect(options?.env?.QUIRKY_SESSION_TOKEN?.length).toBeGreaterThan(0)
+  })
+
+  test('a structured tool child authenticates with its launch lease', async () => {
+    const session = await create()
+    await waitFor(() => runner.started.length === 1)
+    const launchEnv = (runner.started[0]?.options as StructuredLaunchOptions | undefined)?.env
+    if (
+      !launchEnv ||
+      typeof launchEnv.QUIRKY_HOME !== 'string' ||
+      typeof launchEnv.QUIRKY_SESSION_ID !== 'string' ||
+      typeof launchEnv.QUIRKY_SESSION_TOKEN !== 'string'
+    ) {
+      throw new Error('structured runner did not receive its kernel session environment')
+    }
+    const script = String.raw`
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { QuirkyClient } from '@quirky/protocol'
+import { rpcUrl } from '@quirky/protocol/node'
+const runtime = JSON.parse(readFileSync(join(process.env.QUIRKY_HOME, 'runtime.json'), 'utf8'))
+const client = await QuirkyClient.connect(rpcUrl(runtime), {
+  role: 'cli',
+  sessionId: process.env.QUIRKY_SESSION_ID,
+  sessionToken: process.env.QUIRKY_SESSION_TOKEN
+})
+try {
+  const authority = await client.callAny('quirky.session/callerAuthority', {})
+  process.stdout.write(JSON.stringify(authority) ?? 'null')
+} finally {
+  client.close()
+}
+`
+    const child = Bun.spawn([process.execPath, '-e', script], {
+      cwd: join(PLUGIN_DIR, '../..'),
+      env: {
+        HOME: h.home,
+        PATH: typeof launchEnv.PATH === 'string' ? launchEnv.PATH : (process.env.PATH ?? ''),
+        QUIRKY_HOME: launchEnv.QUIRKY_HOME,
+        QUIRKY_SESSION_ID: launchEnv.QUIRKY_SESSION_ID,
+        QUIRKY_SESSION_TOKEN: launchEnv.QUIRKY_SESSION_TOKEN
+      },
+      stdout: 'pipe',
+      stderr: 'pipe'
+    })
+    try {
+      const [exitCode, stdout, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text()
+      ])
+      if (exitCode !== 0) throw new Error(stderr)
+      expect(exitCode).toBe(0)
+      const authority = JSON.parse(stdout)
+      expect(authority).toMatchObject({
+        sessionId: session.id,
+        source: 'structured_lease',
+        runtimeEpoch: expect.any(String),
+        processIncarnation: expect.any(String),
+        live: true
+      })
+      expect(JSON.stringify(authority)).not.toContain(launchEnv.QUIRKY_SESSION_TOKEN)
+    } finally {
+      if (child.exitCode === null) child.kill()
+    }
+  })
+
+  test('reserves a live structured lease without sending a deferred initial turn', async () => {
+    const session = (await call('quirky.structured/create', {
+      worktree: 'main',
+      agent: 'claude',
+      title: 'Worker',
+      deferStart: true
+    })) as Session
+    await waitFor(() => runner.started.length === 1)
+
+    expect(session.title).toBe('Worker')
+    expect(runner.started[0]?.prompt).toBeUndefined()
+    expect(runner.sent).toEqual([])
+    expect((runner.started[0]?.options as StructuredLaunchOptions | undefined)?.env).toMatchObject({
+      QUIRKY_SESSION_ID: session.id,
+      QUIRKY_SESSION_TOKEN: expect.any(String)
+    })
+  })
+
+  test('revokes structured identity on stop and runner exit', async () => {
+    const stopped = await create('stop me')
+    await waitFor(() => runner.started.length === 1)
+    const beforeStop = await call('quirky.session/identity', { session: stopped.id })
+    expect(beforeStop).toMatchObject({ sessionId: stopped.id, source: 'structured_lease', live: true })
+    await call('quirky.structured/stop', { session: stopped.id })
+    await expect(call('quirky.session/identity', { session: stopped.id })).rejects.toMatchObject({
+      code: RpcErrorCode.NotFound
+    })
+
+    const exited = await create('exit me')
+    await waitFor(() => runner.started.length === 2)
+    const beforeExit = await call('quirky.session/identity', { session: exited.id })
+    expect(beforeExit).toMatchObject({ sessionId: exited.id, source: 'structured_lease', live: true })
+    runner.context.setStatus(exited.id, 'exited')
+    await expect(call('quirky.session/identity', { session: exited.id })).rejects.toMatchObject({
+      code: RpcErrorCode.NotFound
+    })
+  })
+
   test('account prep receives plan provenance and explicit home wins in the runner environment', async () => {
     const worldWithCustomHome = new FakeWorld()
     worldWithCustomHome.agentPlanEnv = { CLAUDE_CONFIG_DIR: '/custom/claude' }
@@ -151,7 +267,11 @@ describe('structured sessions with a runner', () => {
       homeOverrides: { claude: { value: '/custom/claude', source: 'explicit' } }
     })
     const options = runner.started[0]?.options as StructuredLaunchOptions | undefined
-    expect(options?.env).toEqual({ CLAUDE_CONFIG_DIR: '/custom/claude' })
+    expect(options?.env).toMatchObject({
+      CLAUDE_CONFIG_DIR: '/custom/claude',
+      QUIRKY_SESSION_ID: session.id,
+      QUIRKY_SESSION_TOKEN: expect.any(String)
+    })
   })
 
   test('a selected account prep failure removes the session before the runner starts', async () => {
@@ -194,6 +314,20 @@ describe('structured sessions with a runner', () => {
     expect(after.map((m) => m.seq)).toEqual([2])
     await waitFor(() => structuredEvents().length === 2)
     expect(structuredEvents().map((e) => e.data.message.seq)).toEqual([1, 2])
+  })
+
+  test('replays an operation-id structured send once and rejects a changed payload', async () => {
+    const session = await create('go')
+    await waitFor(() => runner.started.length === 1)
+    const params = { session: session.id, text: 'more', operationId: 'structured-op-1' }
+
+    await call('quirky.structured/send', params)
+    await call('quirky.structured/send', params)
+
+    expect(runner.sent).toEqual([{ sessionId: session.id, text: 'more' }])
+    await expect(call('quirky.structured/send', { ...params, text: 'different' })).rejects.toMatchObject({
+      code: RpcErrorCode.Conflict
+    })
   })
 
   test('done settles once and closing the session stops the runner and drops its journal', async () => {

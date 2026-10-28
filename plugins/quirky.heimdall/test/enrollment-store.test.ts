@@ -534,3 +534,27 @@ describe('Heimdall storage lifecycle boundaries', () => {
     expect(store.journal(current.watcherId).map((entry) => entry.kind)).toEqual(['terminal'])
   })
 })
+
+test('positive resolution releases temporary trace pins back to the retention ring', () => {
+  const fixture = makeContext()
+  const store = createKernelStore(fixture.context)
+  const current = makeEnrollment()
+  store.save(current)
+  const attempt = {
+    kind:'attempt',class:'fact' as const,origin:'owner' as const,resolved:false,
+    attemptId:'pin-attempt',fingerprint:'pin-fingerprint',action:{ kind:'publish' },state:'running'
+  }
+  store.append(current.watcherId, attempt)
+  for (let index = 0; index < 60; index++) {
+    store.trace(current.watcherId, {
+      watcherId:current.watcherId,seq:store.nextTraceSeq(current.watcherId),
+      startedAtMs:index,durationMs:0,exitPath:'watching',pinned:true,fullResyncDue:false,snapshotReadCount:1,declined:[]
+    })
+  }
+  store.retain(current.watcherId)
+  expect(store.traces(current.watcherId)).toHaveLength(60)
+  store.append(current.watcherId, { ...attempt,state:'settled',effect:'landed',resolved:true })
+  store.retain(current.watcherId)
+  expect(store.traces(current.watcherId)).toHaveLength(50)
+  expect(store.traces(current.watcherId).some((trace) => trace.pinned)).toBe(false)
+})

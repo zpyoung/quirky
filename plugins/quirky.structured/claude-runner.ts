@@ -146,9 +146,6 @@ class ClaudeRunner implements StructuredRunner {
   async start(session: Session, prompt?: string, launchOptions: StructuredStartOptions = {}): Promise<void> {
     if (session.agent !== 'claude') throw new Error('structured sessions support claude only')
     const providerSession = launchOptions.providerSession
-    if (prompt === undefined && providerSession === undefined) {
-      throw new Error('a structured Claude session needs an initial prompt or provider session')
-    }
     const providerSessionId = providerSession?.id ?? randomUUID()
     const startup = { stopped: false }
     this.starting.set(session.id, startup)
@@ -175,16 +172,15 @@ class ClaudeRunner implements StructuredRunner {
     query: NonNullable<ClaudeRunnerDeps['query']>,
     pathToClaudeCodeExecutable: string,
     launchOptions: StructuredStartOptions,
-    providerSessionId: string
+    claudeSessionId: string
   ): void {
-    const claudeSessionId = providerSessionId
     const input = createInputStream()
     if (prompt !== undefined) {
       const first = userMessage(prompt, claudeSessionId)
       this.context.appendMessage({ sessionId: session.id, role: 'user', text: prompt, data: first })
+      this.context.setStatus(session.id, 'working')
       input.push(first)
     }
-    this.context.setStatus(session.id, prompt === undefined ? 'running' : 'working')
     const run: Running = {
       input,
       claudeSessionId,
@@ -195,7 +191,9 @@ class ClaudeRunner implements StructuredRunner {
         options: {
           cwd: session.cwd,
           pathToClaudeCodeExecutable,
-          ...(launchOptions.providerSession === undefined ? { sessionId: claudeSessionId } : { resume: claudeSessionId }),
+          ...(launchOptions.providerSession === undefined
+            ? { sessionId: claudeSessionId }
+            : { resume: claudeSessionId }),
           permissionMode: 'default',
           canUseTool: this.canUseTool(session.id),
           ...(launchOptions.env !== undefined ? { env: environmentOf(launchOptions.env) } : {}),
@@ -205,6 +203,7 @@ class ClaudeRunner implements StructuredRunner {
       })
     }
     this.running.set(session.id, run)
+    if (prompt === undefined) this.context.setStatus(session.id, 'running')
     void this.pump(session.id, run)
   }
 

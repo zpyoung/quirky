@@ -77,6 +77,7 @@ function unknownCommand(argv: readonly string[], commands: readonly Command[]): 
 async function dispatch(runtime: Runtime, out: Printer, argv: readonly string[]): Promise<void> {
   const { writer } = runtime
   const ctx: Context = {
+    requestBase: runtime.link.requestBase,
     rpc: runtime.link,
     out,
     env: runtime.env,
@@ -248,6 +249,7 @@ if (import.meta.main) {
     identity: {
       cwd: process.cwd(),
       sessionId: process.env.QUIRKY_SESSION_ID,
+      sessionToken: process.env.QUIRKY_SESSION_TOKEN,
       worktreeId: process.env.QUIRKY_WORKTREE_ID
     }
   }

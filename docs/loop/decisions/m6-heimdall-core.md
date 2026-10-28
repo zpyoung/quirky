@@ -198,5 +198,16 @@
 - **Revisit if:** actual daemon or dependency integration shows a contract mismatch
 - **Source:** assumed — autonomous
 
+## D19: Retain budget history as facts and release only positively resolved trace pins
+- **Question:** retention and stopped pacing edge regressions after the first source checkpoint
+- **Options:** treat budget rows as reclaimable diagnostics; keep trace pins forever; follow durable budget/temporary pin contracts
+- **Chose:** interval-open/checkpoint/close are facts, not resolved observations. Positive resolution of all known attempts releases temporary trace pins before applying the50-row ring; unknown pin contexts remain conservative. A stopped pacing policy returns no timer even when prior gate/error backoff is nonzero.
+- **Why:** actual regression showed320ms of completed work shrinking to250ms under the observation ring; a resolved watcher retained60pinned traces instead of50; stopped policy scheduled120000ms rather than no timer. Each failed before and passed after the bounded fix. No terminal or worker outcome is inferred from absence.
+- **Evidence:** three targeted Bun regression outputs; runner interval classes, store attemptRetention/retain, pacingDelay stopped boundary; owner handoff requires owner-in-flight intervals use fact class too
+- **Reversibility:** easy
+- **Confidence:** high for exercised boundaries
+- **Revisit if:** full kernel/API gates show a changed budget or pin lifecycle
+- **Source:** assumed — autonomous
+
 ## Progress
 Iteration4: original source wave/replacement barrier audited; actual store/registry/enrollment/runner/plugin/adapter plus additive service handler/migration/test checkpoints are merged on the item branch. Integrated kernel/storage/adapter/migration unit regressions pass51/51 with172assertions; three concrete regressions have red-green proof. Runtime checkpoint794266f1 is published, final import/test safety correction follows. No owned implementer remains running. Full daemon API/worker proof and actual eight-service core facade/hubs still require the prerequisite's committed executable source; lane1 has supplied read-only component paths, not a runtime API claim. Continue real service integration, affected gates/typecheck, deps-ready/catch-up and queue-controlled landing. Lane10 controls then lane12 owner integrate their own serial hubs; their modules remain untouched.

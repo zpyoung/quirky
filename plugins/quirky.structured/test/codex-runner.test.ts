@@ -153,6 +153,25 @@ describe('Codex app-server runner', () => {
       { threadId: 'scripted-thread', input: [{ type: 'text', text: 'second' }], model: 'gpt-5.5', effort: 'xhigh' }
     ])
   })
+
+  test('starts a native thread without an initial turn until the caller is attached', async () => {
+    await setup.runner.start(setup.session, undefined)
+    expect(setup.fixture.requests().map((request) => request.method)).toEqual([
+      'initialize',
+      'initialized',
+      'thread/start'
+    ])
+    expect(setup.statuses).toEqual(['running'])
+    expect(setup.messages).toEqual([])
+
+    await setup.runner.send(setup.session.id, 'first custody-recorded turn')
+    await until(() => setup.statuses.includes('done'))
+    expect(setup.fixture.requests().filter((request) => request.method === 'turn/start')).toHaveLength(1)
+    expect(setup.messages.filter((message) => message.role === 'user').map((message) => message.text)).toEqual([
+      'first custody-recorded turn'
+    ])
+  })
+
   test('a refused send is not journaled or left working', async () => {
     await setup.runner.start(setup.session, 'first accepted turn')
     await until(() => setup.statuses.includes('done'))
@@ -162,7 +181,6 @@ describe('Codex app-server runner', () => {
     ])
     expect(setup.statuses).toEqual(['working', 'done', 'exited'])
   })
-
 
   test('steers an active turn with its expected ID and records input only after acceptance', async () => {
     await setup.runner.start(setup.session, '[hold] first')
