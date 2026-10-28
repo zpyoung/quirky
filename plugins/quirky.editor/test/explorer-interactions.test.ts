@@ -221,7 +221,7 @@ test('Explorer rejects unauthorized or hidden paths and uses only filtered visib
     .rejects.toMatchObject({ code: RpcErrorCode.InvalidParams })
 })
 
-test('Explorer safely resets stale anchors after collapse, filter and refresh, and keeps empty trees empty', async () => {
+test('Explorer safely resets stale anchors after collapse, filter and refresh', async () => {
   const world = await fixture({ 'A/inside.txt': 'inside\n', 'needle.txt': 'match\n', 'ordinary.txt': 'other\n', 'z-gone.txt': 'stale\n' })
   const worktree = world.worktree.id
   const path = (name: string) => join(world.root, name)
@@ -248,6 +248,9 @@ test('Explorer safely resets stale anchors after collapse, filter and refresh, a
   expect(interaction(afterRefresh).focusedPath).not.toBe(path('z-gone.txt'))
   expect(interaction(afterRefresh).selectionAnchor).not.toBe(path('z-gone.txt'))
 
+})
+
+test('Explorer keeps empty trees empty', async () => {
   const empty = await fixture({})
   const initial = await explorer(empty, empty.worktree.id, { action: 'list' })
   expect(initial.entries).toEqual([])

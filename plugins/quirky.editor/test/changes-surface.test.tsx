@@ -205,10 +205,14 @@ test('Changes compares HEAD to the shared draft, not staged content, in the same
   await act(async () => surface.element.querySelector<HTMLButtonElement>('[aria-label="Inline"]')?.click())
   expect(surface.element.querySelector('.qe-changes-inline')).not.toBeNull()
   const inlineRows = [...surface.element.querySelectorAll<HTMLElement>('.qe-changes-inline-row')]
-  const reconstruct = (excluded: 'added' | 'removed') => inlineRows
-    .filter((row) => !row.classList.contains(excluded))
-    .map((row) => row.querySelector('code')?.textContent ?? '')
-    .join('')
+  const reconstruct = (excluded: 'added' | 'removed') => {
+    const rows = inlineRows
+      .filter((row) => !row.classList.contains(excluded))
+      .map((row) => row.querySelector('code')?.textContent ?? '')
+    // Empty diff rows are visually spaced, but do not add source text.
+    if (rows.at(-1)?.trim() === '') rows.pop()
+    return rows.join('')
+  }
   expect(reconstruct('added')).toBe('Committed HEAD')
   expect(reconstruct('removed')).toBe('Shared draft')
   expect(surface.element.querySelector('[aria-label="Next change"]')).not.toBeNull()
