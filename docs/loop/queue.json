@@ -595,9 +595,8 @@
       "deps": [
         "sa-browser-pane"
       ],
-      "status": "in-progress",
-      "early": true,
-      "lane": 8
+      "status": "done",
+      "early": true
     },
     {
       "id": "m5-automations-core",
