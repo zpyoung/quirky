@@ -1864,8 +1864,9 @@
         "m2-sidebar-extras",
         "m7-test-triage"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 4
     },
     {
       "id": "fix-flaky-quirky-worktree-create",
