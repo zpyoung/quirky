@@ -132,5 +132,49 @@
 - **Revisit if:** a supported hook makes one of these flows reachable before the follow-up is claimed
 - **Source:** deferred: native page-event interception
 
+## D13: Install native navigation policy after a blank-first owned claim
+- **Question:** Does the pinned tag constructor actually install its initial navigation rules, and can host overlays cover native content with CSS?
+- **Options:** trust constructor/options and z-index; private FFI; supported blank-first claim/policy setter plus semantic masks
+- **Chose:** create only sandboxed partitioned about:blank, verify tag ownership, call public BrowserView.setNavigationRules(['^*','https://*','http://*','file://*','about:blank']) before remote/file navigation, then allow requests. Supported native rules are wildcard, ^block, last-match-wins and unmatched-allow. Native host masks semantic dialog/menu/listbox overlays; z-index is insufficient. This supersedes D9's zoom-only host operation restriction.
+- **Why:** local SDK constructor/native create request omits navigationRules, while public setter forwards them; initial untrusted src would load before policy. SDK docs explicitly describe native layers above host DOM and mask support.
+- **Evidence:** installed SDK BrowserView.ts init and native.ts createWebview/webviewTagInit; https://framework.blackboard.sh/electrobun/apis/browser/electrobun-webview-tag/ (parent read); pending native DF-native-policy scenario.
+- **Reversibility:** medium (host initialization)
+- **Confidence:** high for documented grammar/local omission, actual native parser behavior pending nightly
+- **Revisit if:** SDK fixes constructor forwarding or native runtime rejects a documented safe/deny rule
+- **Source:** assumed — autonomous
+
+## D14: Stop and recover the native worker's cross-worktree edit violation
+- **Question:** Native worker used relative edit headers, which resolved to the parent checkout; can those edits be accepted?
+- **Options:** keep them as implementation; reset the parent wholesale; stop worker and reverse only its exact accidental hunks
+- **Chose:** stop Native edits, enumerate exact changed paths/calls, reverse only native-browser.ts additions, index.ts export and malformed ui.ts context hunk. Tool snapshots restored the original hashes9605/3E87/8E49. Parent PaneTab/spec/decision changes remained untouched. Worker retained only its absolute assigned-tree index export/test files and resumed under explicit absolute-header replan.
+- **Why:** component scopes are correctness boundaries. No accidental parent source is accepted; no tests/commits ran against the contaminated tree. Runtime and UI were reminded, UI confirmed all its headers absolute.
+- **Evidence:** worker exact3successful relative call report; actual scoped parent diff and changed-path enumeration; corrective edit tool snapshot hashes; /tmp/sa-browser-pane.fiGLjz/journal.json and later barrier audit.
+- **Reversibility:** easy (recovered before component acceptance)
+- **Confidence:** high for exact reversed paths; final barrier still required
+- **Revisit if:** the barrier detects another parent/sibling mutation
+- **Source:** assumed — autonomous
+
+## D15: Reject native clear before invocation when deletion completion is unproven
+- **Question:** Does awaiting the SDK's void clearStorageData prove deletion completed, and does QUIRKY_HOME isolate native website storage?
+- **Options:** report cleared after invocation; probe real shared Default; infer HOME relocates WK storage; reject completion-unavailable and test new UUID partitions only
+- **Chose:** clearPartition rejects before Session invocation unless a supported completion contract is proven. Lane8's one-use guarded command preserves Chrome/metadata on rejection and owns the native-profile-clear-completion follow-up. Native tests/nightly use fresh UUID profiles; never shared Default without a proven isolated native root. Existing partition format remains unchanged.
+- **Why:** public SessionInstance.clearStorageData returns void and directly calls a native symbol; the installed SDK has no native completion/websiteDataStore implementation or public root override evidence. Await-void is not completion proof. User explicitly prohibited deleting native data or claiming completion on invocation alone.
+- **Evidence:** installed SDK api/sdks/main/proc/native.ts:3347-3393; Native worker source packet (projected Go/Rust/Zig likewise invocation-only); user lane8 interjections; amended native scenarios.
+- **Reversibility:** easy when supported SDK completion/root controls exist
+- **Confidence:** high for the unavailable boundary; no claim about private native implementation timing
+- **Revisit if:** supported native clearing completion is evidenced and verified on a run-owned partition
+- **Source:** user ruling 2026-10-28 (lane8 native storage safety)
+
+## D16: Expose unavailable clearing before consuming a destructive claim
+- **Question:** How can lane8 distinguish a proven pre-invocation unavailable capability from an uncertain clear that may have started?
+- **Options:** consume claim then catch all errors; infer from error text; explicit clearPartitionAvailable capability
+- **Chose:** required public clearPartitionAvailable=false for current native and web adapters; lane8 checks first. clearPartition still validates/rejects before any host/Session action. Remove dormant native clear RPC route/Session import so no hidden clearing path remains.
+- **Why:** the user requested this exact guard to preserve confirmed request/metadata state after a known unsupported operation. Injected test models may report true, but production cannot without supported completion evidence.
+- **Evidence:** user lane8 availability interjection; Native worker acknowledgment; D15 public void API evidence.
+- **Reversibility:** easy (a future supported completion capability can report true)
+- **Confidence:** high
+- **Revisit if:** SDK completion is implemented and verified on a run-owned native partition
+- **Source:** user ruling 2026-10-28 (lane8 clear availability)
+
 ## Progress
 Claimed 2026-10-28T00:35Z. Contract/spec commit2ab093ce; three isolated OpenAI components running under /tmp/sa-browser-pane.fiGLjz with hard disjoint scopes/journal. Parent amendments D8–D10 communicated before code acceptance. Web dogfood doctor passed. Next: wave barrier HEAD/scope audits, merge implementations, owned acceptance/build and real Watch smoke, one Gemini review/fix, affected suite/scripts/types, one catchup/decision reconciliation, commit/detach/controller land. Native-only scenarios are pending nightly; no implementation verified yet.
