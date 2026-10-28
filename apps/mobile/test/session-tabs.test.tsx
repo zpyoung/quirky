@@ -10,7 +10,6 @@ import { MarkdownTabView } from '../src/pages/MarkdownTabView'
 import { BrowserWatchView } from '../src/pages/BrowserWatchView'
 import { startBrowserHarness } from '../../../plugins/quirky.browser/test/harness'
 import type { BrowserTestHarness } from '../../../plugins/quirky.browser/test/harness'
-type MarkdownDocument = MobileMarkdownDocument & { relativePath: string }
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
@@ -94,7 +93,7 @@ test('phone Markdown preview keeps raw HTML and external resources inert', () =>
 })
 
 test('Markdown tab preserves local text through stale saves and cancelled dirty close', async () => {
-  let documentValue: MarkdownDocument = {
+  let documentValue: MobileMarkdownDocument = {
     tabId: 'ui-tab-md', worktreeId: 'wt-md', title: 'Phone note.md', relativePath: 'Phone note.md',
     text: '# Original\n', revision: 4, dirty: false, readOnly: false
   }

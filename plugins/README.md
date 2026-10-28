@@ -498,6 +498,42 @@ or **Restore** after the phone leaves. The default retains phone dimensions unti
 restored; Settings offers timed restoration. The corresponding APIs are
 `quirky.terminal/mobileState`, `/takeBack`, `/restoreFit` and `/claim`.
 
+Phone workspace controls use `quirky.session/sleepWorkspace`, `/wakeWorkspace` and
+`/workspaceSleepStates`. Sleep records recovery before stopping processes and preserves PTY
+history; unsupported agents are refused before teardown. Interrupted or wrong-filesystem-instance
+recovery stays visible as partial rather than restoring into a replacement workspace.
+
+`quirky.worktree/origins` returns caller-relative automation/other-client predicates, with `null`
+for unknown evidence. It never returns creator device IDs or guesses automation from `createdBy`.
+The phone hides only proven matches.
+
+Markdown tabs expose bounded text through `quirky.mobile/sessionTabs`, `/markdownCreate`,
+`/markdownRead`, `/markdownWrite`, `/markdownSave` and `/sessionTabAction`. Write and Save require
+the current content revision. Preview renders Markdown without executing HTML or fetching
+document-supplied images; Copy path uses a worktree-relative path.
+
+Explicit Chrome Watch uses `/browserWatchCreate`, `/browserWatchStart`, `/browserWatchFrame`,
+`/browserWatchFrameAck`, `/browserWatchStop`, `/browserWatchNavigate`, `/browserWatchControl`
+and `/browserWatchInput`. The broker checks the exact connection, workspace, tab and lease.
+Frames are bounded JPEGs, acknowledged after image load; hiding/leaving releases only the owned
+lease. Native tabs stay visible with an unavailable explanation, never an implicit engine switch.
+
+```sh
+quirky session sleep <worktree>
+quirky session wake <worktree>
+quirky session sleep-states --json
+quirky wt origins --json
+quirky mobile session-tabs --worktree <worktree> --json
+quirky mobile markdown-read --worktree <worktree> --tab-id <tab> --json
+quirky mobile markdown-write --worktree <worktree> --tab-id <tab> --text '# Note' --expected-revision 3
+quirky mobile markdown-save --worktree <worktree> --tab-id <tab> --expected-revision 4
+quirky mobile browser-watch control --worktree <worktree> --tab-id <tab> --watch-id <lease> --action reload
+```
+
+A Watch lease requires a persistent API connection: exiting its CLI process releases that
+connection's lease. Use the public API for a retained frame/input consumer. Interactive native
+chat and voice remain excluded until an authorized architecture/roadmap ruling.
+
 Trusted transport plugins can use the public
 [`PluginContext.clients.accept`](../packages/protocol/src/plugins.ts) API after
 authenticating a peer. The admitted identity is immutable; authorization runs

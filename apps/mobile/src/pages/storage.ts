@@ -4,7 +4,7 @@ import type { MobilePageBridge } from '../contracts'
 export type WorkspaceGroupBy = 'none' | 'status' | 'pr' | 'project'
 export type WorkspaceSortBy = 'name' | 'agentActivity' | 'recent' | 'project' | 'manual'
 export type WorkspaceCardLayout = 'detailed' | 'compact'
-export type WorkspaceFilterKey = 'exceptDefaultBranch' | 'hideDefaultBranch' | 'hideAutomationCreated' | 'hideCliCreated' | 'hideOtherClient' | 'hideDetachedHead'
+export type WorkspaceFilterKey = 'exceptDefaultBranch' | 'hideDefaultBranch' | 'hideSleeping' | 'hideAutomationCreated' | 'hideCliCreated' | 'hideOtherClient' | 'hideDetachedHead'
 export type WorkspacePropertyKey = 'status' | 'branch' | 'project' | 'kind' | 'path' | 'head' | 'baseRef' | 'projectGroup' | 'branchRetention' | 'pushTarget' | 'pullRequest' | 'issue' | 'comment' | 'creator' | 'activity' | 'tabCount'
 
 export type WorkspacePreferences = {
@@ -34,6 +34,7 @@ export const DEFAULT_WORKSPACE_PREFERENCES: WorkspacePreferences = {
   filters: {
     exceptDefaultBranch: false,
     hideDefaultBranch: false,
+    hideSleeping: false,
     hideAutomationCreated: false,
     hideCliCreated: false,
     hideOtherClient: false,
@@ -51,7 +52,7 @@ const CACHE_PREFIX = 'quirky.mobile.workspaces.cache.v1:'
 const GROUP_BY: WorkspaceGroupBy[] = ['none', 'status', 'pr', 'project']
 const SORT_BY: WorkspaceSortBy[] = ['name', 'agentActivity', 'recent', 'project', 'manual']
 const CARD_LAYOUT: WorkspaceCardLayout[] = ['detailed', 'compact']
-const FILTER_KEYS: WorkspaceFilterKey[] = ['exceptDefaultBranch', 'hideDefaultBranch', 'hideAutomationCreated', 'hideCliCreated', 'hideOtherClient', 'hideDetachedHead']
+const FILTER_KEYS: WorkspaceFilterKey[] = ['exceptDefaultBranch', 'hideDefaultBranch', 'hideSleeping', 'hideAutomationCreated', 'hideCliCreated', 'hideOtherClient', 'hideDetachedHead']
 const PROPERTY_KEYS: WorkspacePropertyKey[] = ['status', 'branch', 'project', 'kind', 'path', 'head', 'baseRef', 'projectGroup', 'branchRetention', 'pushTarget', 'pullRequest', 'issue', 'comment', 'creator', 'activity', 'tabCount']
 const WORKTREE_STATUSES: WorktreeStatus[] = ['todo', 'in-progress', 'in-review', 'done']
 
@@ -85,8 +86,6 @@ function preferencesFrom(value: unknown): WorkspacePreferences | null {
     : DEFAULT_WORKSPACE_PREFERENCES.sidebarWidth
   const nextFilters = { ...DEFAULT_WORKSPACE_PREFERENCES.filters }
   for (const key of FILTER_KEYS) if (typeof filters[key] === 'boolean') nextFilters[key] = filters[key] as boolean
-  nextFilters.hideAutomationCreated = false
-  nextFilters.hideOtherClient = false
   return {
     groupBy: isEnum(value.groupBy, GROUP_BY) ? value.groupBy : DEFAULT_WORKSPACE_PREFERENCES.groupBy,
     sortBy: isEnum(value.sortBy, SORT_BY) ? value.sortBy : DEFAULT_WORKSPACE_PREFERENCES.sortBy,

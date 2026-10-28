@@ -1374,11 +1374,11 @@ export class EditorDaemon {
     const keys = await this.fileKeys(savedPath)
     return await this.fileQueue.run(keys, async () => {
       const currentState = this.requireState(bufferId)
-      if (trigger === 'autosave' && (generation !== currentState.generation || !this.autosaveEligible(currentState) || currentState.autosaveHold || !currentState.verified)) return { buffer: currentState.buffer }
+      if (trigger === 'autosave' && (generation !== currentState.generation || !this.autosaveEligible(currentState) || currentState.autosaveHold || !currentState.verified)) return currentState.buffer
       if (currentState.buffer.path !== savedPath || (trigger !== 'overwrite' && currentState.buffer.baseline !== baseline)) {
         throw this.context.error('conflict', 'The editor buffer baseline changed while the save was queued; re-read state before saving.')
       }
-      const result = await this.bufferQueue.run([`buffer:${bufferId}`], async () => {
+      const result = await this.bufferQueue.run<{ buffer: EditorBuffer } | { external: 'deleted' | 'changed' }>([`buffer:${bufferId}`], async () => {
         const latest = this.requireState(bufferId)
         this.assertSaveRevision(expectedRevision, latest.buffer.contentRevision)
         if (latest.buffer.path !== savedPath || (trigger !== 'overwrite' && latest.buffer.baseline !== baseline)) {

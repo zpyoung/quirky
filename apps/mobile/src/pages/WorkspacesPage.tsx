@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type PointerEvent, type ReactNode } from 'react'
-import type { ProjectGroup, Repo, Session, Worktree, WorktreeCreateResult } from '@quirky/protocol'
+import type { ProjectGroup, Repo, Session, Worktree, WorktreeCreateResult, WorkspaceOriginView, WorkspaceSleepState } from '@quirky/protocol'
 import type { MobilePageBridge, MobileRoute } from '../contracts'
 import { PageError, PageModal, errorMessage, statusLabel } from './components'
+import { matchesWorkspaceFilters } from './workspace-filters'
 import {
   DEFAULT_WORKSPACE_PREFERENCES,
   projectWorkspaceSessions,
@@ -44,9 +45,10 @@ const PROPERTY_OPTIONS: Array<{ value: WorkspacePropertyKey; label: string }> = 
 const FILTER_OPTIONS: Array<{ key: WorkspaceFilterKey; label: string; detail: string }> = [
   { key: 'exceptDefaultBranch', label: 'Except default branch', detail: 'Keep the primary worktree visible when other filters would hide it.' },
   { key: 'hideDefaultBranch', label: 'Hide default branch', detail: 'Hide primary worktrees.' },
-  { key: 'hideAutomationCreated', label: 'Hide automation-created', detail: 'Unavailable: public worktree metadata does not distinguish automation from ordinary API-created workspaces.' },
+  { key: 'hideSleeping', label: 'Hide sleeping', detail: 'Hide only workspaces whose sessions are authoritatively asleep. Partial recovery stays visible.' },
+  { key: 'hideAutomationCreated', label: 'Hide automation-created', detail: 'Hide only workspaces with recorded automation origin. Unknown origins remain visible.' },
   { key: 'hideCliCreated', label: 'Hide CLI-created', detail: 'Hide workspaces whose source is the Quirky CLI.' },
-  { key: 'hideOtherClient', label: 'Hide other-client workspaces', detail: 'Unavailable: public worktree metadata does not identify the originating client.' },
+  { key: 'hideOtherClient', label: 'Hide other-client workspaces', detail: 'Hide workspaces proven to originate from another client. Unknown origins remain visible.' },
   { key: 'hideDetachedHead', label: 'Hide detached HEAD', detail: 'Hide worktrees without a branch name.' }
 ]
 
@@ -78,7 +80,7 @@ function statusRank(status: string): number {
 }
 
 function activeFilterCount(filters: WorkspacePreferences['filters']): number {
-  return FILTER_OPTIONS.reduce((count, option) => count + (option.key !== 'hideOtherClient' && option.key !== 'hideAutomationCreated' && filters[option.key] ? 1 : 0), 0)
+  return FILTER_OPTIONS.reduce((count, option) => count + (filters[option.key] ? 1 : 0), 0)
 }
 
 export function WorkspacesPage({ bridge, connected, onNavigate, onReport }: Props) {
@@ -86,6 +88,10 @@ export function WorkspacesPage({ bridge, connected, onNavigate, onReport }: Prop
   const [groups, setGroups] = useState<ProjectGroup[]>([])
   const [worktrees, setWorktrees] = useState<Worktree[]>([])
   const [sessions, setSessions] = useState<WorkspaceSessionSummary[]>([])
+  const [origins, setOrigins] = useState<WorkspaceOriginView[]>([])
+  const [sleepStates, setSleepStates] = useState<WorkspaceSleepState[]>([])
+  const [sleepDialog, setSleepDialog] = useState<Worktree | null>(null)
+  const [sleepBusy, setSleepBusy] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [stale, setStale] = useState(!connected)
   const [error, setError] = useState<string | null>(null)
@@ -157,11 +163,13 @@ export function WorkspacesPage({ bridge, connected, onNavigate, onReport }: Prop
     loadInFlight.current = currentRequest
     setLoading(true)
     try {
-      const [nextRepos, nextGroups, nextWorktrees, nextSessions] = await Promise.all([
+      const [nextRepos, nextGroups, nextWorktrees, nextSessions, nextOrigins, nextSleepStates] = await Promise.all([
         bridge.call<Repo[]>('quirky.repo/list', {}),
         bridge.call<ProjectGroup[]>('quirky.repo/groupList', {}),
         bridge.call<Worktree[]>('quirky.worktree/list', {}),
-        bridge.call<Session[]>('quirky.session/list', {})
+        bridge.call<Session[]>('quirky.session/list', {}),
+        bridge.call<WorkspaceOriginView[]>('quirky.worktree/origins', {}),
+        bridge.call<WorkspaceSleepState[]>('quirky.session/workspaceSleepStates', {})
       ])
       if (currentRequest !== requestId.current || !pageActiveNow()) return
       const cache: WorkspaceCache = {
@@ -174,6 +182,8 @@ export function WorkspacesPage({ bridge, connected, onNavigate, onReport }: Prop
       setGroups(nextGroups)
       setWorktrees(nextWorktrees)
       setSessions(cache.sessions)
+      setOrigins(nextOrigins)
+      setSleepStates(nextSleepStates)
       setStale(false)
       setError(null)
       serverLoaded.current = true
@@ -222,6 +232,8 @@ export function WorkspacesPage({ bridge, connected, onNavigate, onReport }: Prop
     }
     return byWorktree
   }, [sessions])
+  const originsByWorktree = useMemo(() => new Map(origins.map((origin) => [origin.worktreeId, origin])), [origins])
+  const sleepByWorktree = useMemo(() => new Map(sleepStates.map((state) => [state.worktreeId, state])), [sleepStates])
 
   const visibleWorktrees = useMemo(() => {
     const search = query.trim().toLocaleLowerCase()
@@ -231,11 +243,7 @@ export function WorkspacesPage({ bridge, connected, onNavigate, onReport }: Prop
       const projectGroup = worktree.projectGroupId ? groupsById.get(worktree.projectGroupId) : undefined
       if (selectedRepoId && worktree.repoId !== selectedRepoId) return false
       if (search && ![worktree.name, worktree.branch ?? '', worktree.path, worktree.id, worktree.comment, repo?.name ?? '', repo?.displayName ?? '', projectGroup?.name ?? ''].some((part) => part.toLocaleLowerCase().includes(search))) return false
-      if (filter.hideDefaultBranch && worktree.isMain) return false
-      if (filter.exceptDefaultBranch && worktree.isMain) return true
-      if (filter.hideCliCreated && worktree.createdBy === 'cli') return false
-      if (filter.hideDetachedHead && worktree.branch === null) return false
-      return true
+      return matchesWorkspaceFilters(worktree, filter, originsByWorktree.get(worktree.id), sleepByWorktree.get(worktree.id)?.state)
     })
     const index = new Map(worktrees.map((worktree, position) => [worktree.id, position]))
     const activity = (worktree: Worktree) => sessionsByWorktree.get(worktree.id) ?? []
@@ -267,7 +275,7 @@ export function WorkspacesPage({ bridge, connected, onNavigate, onReport }: Prop
       }
     })
     return sorted
-  }, [worktrees, reposById, groupsById, sessionsByWorktree, repos, selectedRepoId, query, preferences])
+  }, [worktrees, reposById, groupsById, sessionsByWorktree, originsByWorktree, sleepByWorktree, repos, selectedRepoId, query, preferences])
 
   const groupedRows = useMemo((): GroupedRows[] => {
     const labels = new Map<string, string>()
@@ -331,6 +339,39 @@ export function WorkspacesPage({ bridge, connected, onNavigate, onReport }: Prop
     } catch (cause) {
       setActionError(errorMessage(cause, 'Could not create a terminal in the floating workspace.'))
     }
+  }
+
+  const changeSleep = async (worktree: Worktree, wake: boolean): Promise<boolean> => {
+    if (!canMutateNow() || sleepBusy) return false
+    setSleepBusy(worktree.id)
+    setActionError(null)
+    try {
+      const state = await bridge.call<WorkspaceSleepState>(wake ? 'quirky.session/wakeWorkspace' : 'quirky.session/sleepWorkspace', { worktree: worktree.id })
+      if (!pageActiveNow()) return false
+      setSleepStates((current) => [...current.filter((item) => item.worktreeId !== state.worktreeId), state])
+      setSleepDialog(null)
+      const expected = wake ? 'awake' : 'asleep'
+      if (state.state !== expected) {
+        const errors = state.sessions.flatMap((session) => session.error ? [`${session.sessionId}: ${session.error}`] : [])
+        setActionError(`Workspace recovery is ${state.state}.${errors.length ? ` ${errors.join(' ')}` : ' Use Wake to resume retained sessions.'}`)
+        return false
+      }
+      setNotice(`${worktree.name} ${wake ? 'is awake' : 'is asleep; history and resume records are retained'}.`)
+      await load()
+      return true
+    } catch (cause) {
+      setActionError(errorMessage(cause, wake ? 'Could not wake this workspace.' : 'Sleep was refused; recovery records are retained.'))
+      await load()
+      return false
+    } finally {
+      setSleepBusy(null)
+    }
+  }
+
+  const openWorkspace = async (worktree: Worktree) => {
+    const state = sleepByWorktree.get(worktree.id)?.state
+    if (state === 'asleep' && !(await changeSleep(worktree, true))) return
+    await onNavigate({ kind: 'session', worktreeId: worktree.id })
   }
 
   const requestDelete = async (worktree: Worktree) => {
@@ -504,9 +545,10 @@ export function WorkspacesPage({ bridge, connected, onNavigate, onReport }: Prop
                     )}
                     {!isGroupCollapsed && <div className="qp-worktree-rows">
                       {roots.map((worktree) => renderWorktreeTree(worktree, 0, group.worktrees, {
-                        bridge, canMutate, groupsById, menuWorktreeId, preferences, reposById, sessionsByWorktree,
-                        collapsed, onOpen: (item) => void onNavigate({ kind: 'session', worktreeId: item.id }), onToggleCollapse: toggleCollapsed,
-                        onToggleMenu: (id) => setMenuWorktreeId(menuWorktreeId === id ? null : id), onPin: togglePin, onDelete: requestDelete
+                        bridge, canMutate, groupsById, menuWorktreeId, preferences, reposById, sessionsByWorktree, sleepByWorktree, sleepBusy,
+                        collapsed, onOpen: (item) => void openWorkspace(item), onToggleCollapse: toggleCollapsed,
+                        onToggleMenu: (id) => setMenuWorktreeId(menuWorktreeId === id ? null : id), onPin: togglePin, onDelete: requestDelete,
+                        onSleep: (item) => { setMenuWorktreeId(null); setSleepDialog(item) }, onWake: (item) => void changeSleep(item, true)
                       }))}
                     </div>}
                   </section>
@@ -546,6 +588,16 @@ export function WorkspacesPage({ bridge, connected, onNavigate, onReport }: Prop
           }
         }}
       />}
+      {sleepDialog && <PageModal title="Sleep workspace" labelledBy="qp-sleep-workspace-title" onClose={() => { if (!sleepBusy) setSleepDialog(null) }} footer={
+        <>
+          <button className="qp-button" type="button" disabled={sleepBusy !== null} onClick={() => setSleepDialog(null)}>Cancel</button>
+          <button className="qp-button qp-button--primary" type="button" disabled={!canMutate || sleepBusy !== null} onClick={() => void changeSleep(sleepDialog, false)}>{sleepBusy ? 'Stopping sessions…' : 'Sleep workspace'}</button>
+        </>
+      }>
+        <p className="qp-dialog-copy">Stop sessions in {sleepDialog.name} while retaining terminal history and supported agent resume identities. Wake resumes the recorded sessions; this does not delete the workspace.</p>
+        <p className="qp-dialog-copy">If a session cannot be safely resumed, the desktop refuses before stopping it. Partial recovery remains visible.</p>
+        {actionError && <PageError>{actionError}</PageError>}
+      </PageModal>}
       {deleteDialog && <PageModal title="Delete workspace" labelledBy="qp-delete-workspace-title" onClose={() => { if (!deleteBusy) setDeleteDialog(null) }} footer={
         <>
           <button className="qp-button" type="button" disabled={deleteBusy} onClick={() => setDeleteDialog(null)}>Cancel</button>
@@ -568,12 +620,16 @@ type RenderContext = {
   preferences: WorkspacePreferences
   reposById: Map<string, Repo>
   sessionsByWorktree: Map<string, WorkspaceSessionSummary[]>
+  sleepByWorktree: Map<string, WorkspaceSleepState>
+  sleepBusy: string | null
   collapsed(key: string, isWorktree?: boolean): boolean
   onOpen(worktree: Worktree): void
   onToggleCollapse(key: string, isWorktree?: boolean): void
   onToggleMenu(id: string): void
   onPin(worktree: Worktree): void
   onDelete(worktree: Worktree): void
+  onSleep(worktree: Worktree): void
+  onWake(worktree: Worktree): void
 }
 
 function renderWorktreeTree(worktree: Worktree, depth: number, groupRows: Worktree[], context: RenderContext): ReactNode {
@@ -585,6 +641,9 @@ function renderWorktreeTree(worktree: Worktree, depth: number, groupRows: Worktr
   const displayProperties = new Set(context.preferences.properties)
   const isPinnedHere = context.preferences.pinnedWorktreeIds.includes(worktree.id)
   const sessionRows = context.sessionsByWorktree.get(worktree.id) ?? []
+  const sleep = context.sleepByWorktree.get(worktree.id)
+  const sleeping = sleep !== undefined && sleep.state !== 'awake'
+  const sleepPending = context.sleepBusy !== null || sleep?.state === 'sleeping' || sleep?.state === 'waking'
   const activeSession = sessionRows.find((item) => item.status === 'working' || item.status === 'waiting' || item.status === 'running')
   const activityLabel = activeSession ? `${activeSession.agent} · ${statusLabel(activeSession.status)}` : sessionRows.length > 0 ? 'No active agent' : 'No sessions'
   const cardClass = `qp-worktree-card${context.preferences.cardLayout === 'compact' ? ' qp-worktree-card--compact' : ''}${depth > 0 ? ' qp-worktree-card--child' : ''}`
@@ -602,6 +661,7 @@ function renderWorktreeTree(worktree: Worktree, depth: number, groupRows: Worktr
           {children.length > 0 && <button className="qp-icon-button" type="button" aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} ${worktree.name}`} aria-expanded={!isCollapsed} onClick={() => context.onToggleCollapse(worktree.id, true)}>{isCollapsed ? '▸' : '▾'}</button>}
           <div className="qp-worktree-card__body">
             <div className="qp-worktree-card__name">{worktree.name}{worktree.isMain ? ' · primary' : ''}</div>
+            {sleeping && <span className="qp-chip qp-chip--warn">{sleep.state === 'asleep' ? 'Sleeping' : `Recovery: ${sleep.state}`}</span>}
             {displayProperties.has('branch') && <div className="qp-worktree-card__branch">{worktree.branch ?? 'Detached HEAD'}</div>}
             {displayProperties.has('project') && <div className="qp-worktree-card__project">{displayName(repo, projectGroup, worktree)}</div>}
             {displayProperties.has('kind') && <div className="qp-worktree-card__project">{worktree.kind === 'git' ? 'Git worktree' : 'Folder workspace'}</div>}
@@ -637,13 +697,15 @@ function renderWorktreeTree(worktree: Worktree, depth: number, groupRows: Worktr
             {displayProperties.has('activity') && worktree.lastActivityAt > 0 && <span className="qp-chip qp-chip--muted">Updated {new Date(worktree.lastActivityAt).toLocaleString()}</span>}
           </div>
         )}
-        <button className="qp-button qp-worktree-card__open" type="button" aria-label={`Open ${worktree.name}`} onClick={() => context.onOpen(worktree)}>
+        <button className="qp-button qp-worktree-card__open" type="button" disabled={sleepPending || (sleeping && !context.canMutate)} aria-label={`Open ${worktree.name}`} onClick={() => context.onOpen(worktree)}>
           Open workspace · {sessionRows.length} {sessionRows.length === 1 ? 'tab' : 'tabs'}
         </button>
         {context.menuWorktreeId === worktree.id && <div className="qp-worktree-card__menu" role="group" aria-label={`Actions for ${worktree.name}`}>
           <button type="button" disabled={!context.bridge.init.grants.includes('storage')} onClick={() => context.onPin(worktree)}>{isPinnedHere ? 'Unpin on this phone' : 'Pin on this phone'}</button>
-          <button type="button" disabled title="Quirky does not expose a reversible workspace sleep operation; no sessions will be changed.">Sleep unavailable</button>
-          <p>Sleep is unavailable: Quirky has no reversible workspace stop API. This action will not close or alter sessions.</p>
+          {sleeping
+            ? <button type="button" disabled={!context.canMutate || sleepPending} onClick={() => context.onWake(worktree)}>Wake workspace</button>
+            : <button type="button" disabled={!context.canMutate || sleepPending || worktree.removing} onClick={() => context.onSleep(worktree)}>Sleep workspace</button>}
+          {sleep?.state === 'partial' && <p>Some sessions need recovery. Wake retries retained resume records.</p>}
           <button type="button" disabled={!context.canMutate || worktree.isMain || worktree.removing} title={worktree.isMain ? 'The primary worktree cannot be deleted.' : undefined} onClick={() => context.onDelete(worktree)}>{worktree.removing ? 'Deleting…' : 'Delete workspace'}</button>
         </div>}
       </article>
@@ -698,13 +760,9 @@ function OptionsSheet({ bridge, preferences, onClose, onChange }: {
       </section>
       <section className="qp-sheet__section">
         <h3>Filters</h3>
-        <label className="qp-filter-toggle">
-          <input type="checkbox" disabled checked={false} readOnly aria-label="Hide sleeping unavailable" />
-          <span>Hide sleeping <small>Unavailable: Quirky does not yet provide reversible sleep and restore for a workspace. No sessions are stopped.</small></span>
-        </label>
         {FILTER_OPTIONS.map((option) => (
           <label className="qp-filter-toggle" key={option.key}>
-            <input type="checkbox" disabled={option.key === 'hideOtherClient' || option.key === 'hideAutomationCreated'} checked={preferences.filters[option.key]} onChange={(event) => setFilter(option.key, event.currentTarget.checked)} />
+            <input type="checkbox" checked={preferences.filters[option.key]} onChange={(event) => setFilter(option.key, event.currentTarget.checked)} />
             <span>{option.label}<small>{option.detail}</small></span>
           </label>
         ))}

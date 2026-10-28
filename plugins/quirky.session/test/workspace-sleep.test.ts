@@ -314,7 +314,9 @@ describe('workspace sleep and wake', () => {
     const retried = await call<WorkspaceSleepState>(client!, 'quirky.session/wakeWorkspace', { worktree: 'floating' })
 
     expect(retried).toMatchObject({ state: 'awake', sessions: [{ sessionId: agent.id, state: 'restored', error: null }] })
-    expect(fakeAgents().calls.filter((entry) => entry.method === 'prepareResume').every((entry) => entry.params.providerSession.id === 'provider-retry-9')).toBe(true)
+    const resumed = (await call<Session[]>(client!, 'quirky.session/list', { worktree: 'floating' }))
+      .find((session) => session.resumedFrom === agent.id && session.status !== 'exited')
+    expect(resumed?.providerSession?.id).toBe('provider-retry-9')
   })
 
 

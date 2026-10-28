@@ -82,7 +82,7 @@
               },
               "restorable": {
                 "type": "boolean",
-                "description": "True when the session ended with the PTY host and can be restored."
+                "description": "True when the PTY host retains recoverable history after a host loss or reversible stop."
               },
               "background": {
                 "type": "boolean",
@@ -202,7 +202,7 @@
             },
             "restorable": {
               "type": "boolean",
-              "description": "True when the session ended with the PTY host and can be restored."
+              "description": "True when the PTY host retains recoverable history after a host loss or reversible stop."
             },
             "background": {
               "type": "boolean",
@@ -370,7 +370,7 @@
             },
             "restorable": {
               "type": "boolean",
-              "description": "True when the session ended with the PTY host and can be restored."
+              "description": "True when the PTY host retains recoverable history after a host loss or reversible stop."
             },
             "background": {
               "type": "boolean",
@@ -504,7 +504,7 @@
             },
             "restorable": {
               "type": "boolean",
-              "description": "True when the session ended with the PTY host and can be restored."
+              "description": "True when the PTY host retains recoverable history after a host loss or reversible stop."
             },
             "background": {
               "type": "boolean",
@@ -648,7 +648,7 @@
             },
             "restorable": {
               "type": "boolean",
-              "description": "True when the session ended with the PTY host and can be restored."
+              "description": "True when the PTY host retains recoverable history after a host loss or reversible stop."
             },
             "background": {
               "type": "boolean",
@@ -766,7 +766,7 @@
             },
             "restorable": {
               "type": "boolean",
-              "description": "True when the session ended with the PTY host and can be restored."
+              "description": "True when the PTY host retains recoverable history after a host loss or reversible stop."
             },
             "background": {
               "type": "boolean",
@@ -893,7 +893,7 @@
             },
             "restorable": {
               "type": "boolean",
-              "description": "True when the session ended with the PTY host and can be restored."
+              "description": "True when the PTY host retains recoverable history after a host loss or reversible stop."
             },
             "background": {
               "type": "boolean",
@@ -1043,7 +1043,7 @@
             },
             "restorable": {
               "type": "boolean",
-              "description": "True when the session ended with the PTY host and can be restored."
+              "description": "True when the PTY host retains recoverable history after a host loss or reversible stop."
             },
             "background": {
               "type": "boolean",
@@ -1154,7 +1154,7 @@
             },
             "restorable": {
               "type": "boolean",
-              "description": "True when the session ended with the PTY host and can be restored."
+              "description": "True when the PTY host retains recoverable history after a host loss or reversible stop."
             },
             "background": {
               "type": "boolean",
@@ -1318,7 +1318,7 @@
             },
             "restorable": {
               "type": "boolean",
-              "description": "True when the session ended with the PTY host and can be restored."
+              "description": "True when the PTY host retains recoverable history after a host loss or reversible stop."
             },
             "background": {
               "type": "boolean",
@@ -1440,7 +1440,7 @@
             },
             "restorable": {
               "type": "boolean",
-              "description": "True when the session ended with the PTY host and can be restored."
+              "description": "True when the PTY host retains recoverable history after a host loss or reversible stop."
             },
             "background": {
               "type": "boolean",
@@ -1527,7 +1527,7 @@
                 "exitCode": { "description": "The exit code, or null while the process is alive." },
                 "exitSignal": { "description": "The signal that ended the process, or null." },
                 "exitCause": { "description": "Why the session ended (exited, killed, stopped, host-restart or host-lost), or null while it is alive." },
-                "restorable": { "type": "boolean", "description": "True when the session ended with the PTY host and can be restored." },
+                "restorable": { "type": "boolean", "description": "True when the PTY host retains recoverable history after a host loss or reversible stop." },
                 "background": { "type": "boolean", "description": "True when automatic terminal tab adoption is disabled; explicit viewing remains possible." },
                 "launch": { "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept." },
                 "launchSettings": { "description": "What the launch applied ({agent, options, args, summary}); null when it applied nothing." },
@@ -1626,7 +1626,7 @@
                 "properties": {
                   "sessionId": { "type": "string" },
                   "state": { "type": "string", "enum": ["pending", "stopped", "restored"] },
-                  "error": { "type": ["string", "null"] }
+                  "error": { "description": "Per-session recovery error message, or null when there is no error." }
                 },
                 "required": ["sessionId", "state", "error"]
               }
@@ -1658,7 +1658,7 @@
                 "properties": {
                   "sessionId": { "type": "string" },
                   "state": { "type": "string", "enum": ["pending", "stopped", "restored"] },
-                  "error": { "type": ["string", "null"] }
+                  "error": { "description": "Per-session recovery error message, or null when there is no error." }
                 },
                 "required": ["sessionId", "state", "error"]
               }
@@ -1687,7 +1687,7 @@
                   "properties": {
                     "sessionId": { "type": "string" },
                     "state": { "type": "string", "enum": ["pending", "stopped", "restored"] },
-                    "error": { "type": ["string", "null"] }
+                    "error": { "description": "Per-session recovery error message, or null when there is no error." }
                   },
                   "required": ["sessionId", "state", "error"]
                 }
@@ -1759,7 +1759,7 @@
                 },
                 "restorable": {
                   "type": "boolean",
-                  "description": "True when the session ended with the PTY host and can be restored."
+                  "description": "True when the PTY host retains recoverable history after a host loss or reversible stop."
                 },
                 "background": {
                   "type": "boolean",

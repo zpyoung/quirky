@@ -1,26 +1,15 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type PointerEvent, type SyntheticEvent, type WheelEvent } from 'react'
-import type { MobileWorkspaceTab } from '@quirky/protocol'
+import type { MobileBrowserFrame, MobileWorkspaceTab } from '@quirky/protocol'
 import type { MobilePageBridge } from '../contracts'
 import { errorMessage, PageError } from './components'
 
-type BrowserTab = MobileWorkspaceTab & { browserMode?: 'native' | 'watch' }
-type BrowserWatch = { tab: BrowserTab; watchId: string }
-type BrowserFrame = {
-  tabId: string
-  worktreeId: string
-  watchId: string
-  sequence: number
-  width: number
-  height: number
-  mimeType: 'image/jpeg'
-  data: string
-}
+type BrowserWatch = { tab: MobileWorkspaceTab; watchId: string }
 type Viewport = 'default' | 'mobile-s' | 'mobile-m' | 'mobile-l' | 'tablet' | 'laptop' | 'laptop-l' | 'desktop'
 
 type Props = {
   bridge: MobilePageBridge
   worktreeId: string
-  tab: BrowserTab
+  tab: MobileWorkspaceTab
   canMutate: boolean
   onTabsChanged(): void
   onClosed(): void
@@ -39,7 +28,7 @@ const VIEWPORT_SIZES: Record<Viewport, { width: number; height: number }> = {
 
 export function BrowserWatchView({ bridge, worktreeId, tab, canMutate, onTabsChanged, onClosed }: Props) {
   const [watch, setWatch] = useState<BrowserWatch | null>(null)
-  const [frame, setFrame] = useState<BrowserFrame | null>(null)
+  const [frame, setFrame] = useState<MobileBrowserFrame | null>(null)
   const [address, setAddress] = useState('')
   const [textInput, setTextInput] = useState('')
   const [viewport, setViewport] = useState<Viewport>('mobile-m')
@@ -48,7 +37,7 @@ export function BrowserWatchView({ bridge, worktreeId, tab, canMutate, onTabsCha
   const [error, setError] = useState<string | null>(null)
   const image = useRef<HTMLImageElement>(null)
   const watchRef = useRef<BrowserWatch | null>(null)
-  const frameRef = useRef<BrowserFrame | null>(null)
+  const frameRef = useRef<MobileBrowserFrame | null>(null)
   const visibleRef = useRef(visible)
   const polling = useRef(false)
   const operationTail = useRef<Promise<void>>(Promise.resolve())
@@ -119,7 +108,7 @@ export function BrowserWatchView({ bridge, worktreeId, tab, canMutate, onTabsCha
       if (!active || polling.current) return
       polling.current = true
       try {
-        const next = await bridge.call<BrowserFrame | null>('quirky.mobile/browserWatchFrame', {
+        const next = await bridge.call<MobileBrowserFrame | null>('quirky.mobile/browserWatchFrame', {
           worktree: watch.tab.worktreeId, tabId: watch.tab.tabId, watchId: watch.watchId
         })
         if (active && next && next.sequence !== frameRef.current?.sequence) {
@@ -194,7 +183,7 @@ export function BrowserWatchView({ bridge, worktreeId, tab, canMutate, onTabsCha
     }
   }
 
-  const point = (event: { currentTarget: HTMLImageElement; clientX: number; clientY: number }, source: BrowserFrame): { x: number; y: number } | null => {
+  const point = (event: { currentTarget: HTMLImageElement; clientX: number; clientY: number }, source: MobileBrowserFrame): { x: number; y: number } | null => {
     const rect = event.currentTarget.getBoundingClientRect()
     const scale = Math.min(rect.width / source.width, rect.height / source.height)
     if (!Number.isFinite(scale) || scale <= 0) return null
@@ -251,7 +240,7 @@ export function BrowserWatchView({ bridge, worktreeId, tab, canMutate, onTabsCha
     }
   }
 
-  const acknowledgeFrame = (event: SyntheticEvent<HTMLImageElement>, loaded: BrowserFrame) => {
+  const acknowledgeFrame = (event: SyntheticEvent<HTMLImageElement>, loaded: MobileBrowserFrame) => {
     if (event.currentTarget.naturalWidth === 0) return
     const current = watchRef.current
     if (!current || current.watchId !== loaded.watchId) return

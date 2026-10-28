@@ -115,7 +115,7 @@ describe('quirky.worktree/origins public API', () => {
     const run = await fixture.client.callAny('quirky.automations/run', {
       id: definition.id, expectedOwner: definition.owner
     }) as { workspaceId: string | null }
-    expect(run.workspaceId).toEqual(expect.any(String))
+    if (typeof run.workspaceId !== 'string') throw new Error('automation did not create a workspace')
 
     const beforeRestart = await fixture.client.callAny('quirky.worktree/origins', {}) as WorkspaceOriginView[]
     expect(originFor(beforeRestart, generic.worktree.id)?.automation).toBe(false)

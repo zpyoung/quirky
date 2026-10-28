@@ -73,6 +73,18 @@ test('mobile Watch uses real worktree tab identity, bounded frames and connectio
   expect(frame).toMatchObject({ tabId: created.tab.tabId, worktreeId: worktree, watchId: created.watchId, mimeType: 'image/jpeg' })
   expect(Buffer.from(frame.data, 'base64').subarray(0, 3)).toEqual(Buffer.from([0xff, 0xd8, 0xff]))
   expect(Buffer.byteLength(frame.data, 'ascii')).toBeLessThanOrEqual(512 * 1024)
+  const { value: point } = await call<{ value: { x: number; y: number; scale: number } }>(first, 'quirky.browser/eval', {
+    page: pane.page,
+    expression: '(() => { const rect = document.querySelector("#submit").getBoundingClientRect(); return {x: rect.x + rect.width / 2, y: rect.y + rect.height / 2, scale: visualViewport.scale}; })()'
+  })
+  for (const type of ['mousePressed', 'mouseReleased']) {
+    await call(first, 'quirky.mobile/browserWatchInput', {
+      worktree, tabId: created.tab.tabId, watchId: created.watchId,
+      kind: 'mouse', type, x: point.x * point.scale, y: point.y * point.scale, button: 'left'
+    })
+  }
+  expect(await call(first, 'quirky.browser/eval', { page: pane.page, expression: 'document.querySelector("#result").textContent' }))
+    .toMatchObject({ value: 'clicked' })
   await call(first, 'quirky.mobile/browserWatchInput', {
     worktree, tabId: created.tab.tabId, watchId: created.watchId, kind: 'mouse', type: 'mousePressed', x: 45, y: 16, button: 'left'
   })

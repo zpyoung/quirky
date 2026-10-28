@@ -23,8 +23,6 @@ type LeaseResult = { terminals: PhoneTerminalLease[] }
 type CloseResult = { ok: true } | { ok: false; reason: string }
 type CloseDialog = { sessionIds: string[]; descriptions: string[]; leaveAfterClose: boolean }
 type AnswerDraft = { selected: string[]; freeText: string; text: string; confirm: boolean | null }
-type WorkspaceTab = MobileWorkspaceTab & { browserMode?: 'native' | 'watch' }
-type MobileMarkdownProjection = MobileMarkdownDocument & { relativePath: string }
 
 const QUICK_PREFIX = 'quirky.mobile.terminal.quick.v1:'
 const SHORTCUT_PREFIX = 'quirky.mobile.terminal.shortcuts.v1:'
@@ -191,7 +189,7 @@ function buildAskSubmission(ask: Ask, drafts: Record<string, AnswerDraft>) {
 export function SessionPage({ bridge, route, connected, onNavigate, onReport }: Props) {
   const [sessions, setSessions] = useState<Session[]>([])
   const [worktrees, setWorktrees] = useState<Worktree[]>([])
-  const [workspaceTabs, setWorkspaceTabs] = useState<WorkspaceTab[]>([])
+  const [workspaceTabs, setWorkspaceTabs] = useState<MobileWorkspaceTab[]>([])
   const [asks, setAsks] = useState<Ask[]>([])
   const [showResolvedAsks, setShowResolvedAsks] = useState(false)
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(route.sessionId ?? null)
@@ -331,7 +329,7 @@ export function SessionPage({ bridge, route, connected, onNavigate, onReport }: 
       setSessions(sessionResult as Session[])
       setAsks(askResult as Ask[])
       if (route.worktreeId !== 'floating' && Array.isArray(worktreeResult)) setWorktrees(worktreeResult as Worktree[])
-      setWorkspaceTabs(route.worktreeId !== 'floating' && Array.isArray(tabResult) ? tabResult as WorkspaceTab[] : [])
+      setWorkspaceTabs(route.worktreeId !== 'floating' && Array.isArray(tabResult) ? tabResult as MobileWorkspaceTab[] : [])
       setPageError(null)
     } catch (cause) {
       if (currentRequest === loadSequence.current && pageActiveNow()) setPageError(errorMessage(cause, 'Could not load this workspace.'))
@@ -437,7 +435,7 @@ export function SessionPage({ bridge, route, connected, onNavigate, onReport }: 
     if (navigate) void onNavigate({ kind: 'session', worktreeId: route.worktreeId, sessionId })
   }
 
-  const selectWorkspaceTab = (tab: WorkspaceTab) => {
+  const selectWorkspaceTab = (tab: MobileWorkspaceTab) => {
     if (manageTabs) return
     setSelectedTabIds([])
     setSelectedWorkspaceTabId(tab.tabId)
@@ -450,7 +448,7 @@ export function SessionPage({ bridge, route, connected, onNavigate, onReport }: 
     setAgentChoices([])
     setNewTabOpen(true)
   }
-  const chooseWorkspaceTab = (tab: WorkspaceTab) => {
+  const chooseWorkspaceTab = (tab: MobileWorkspaceTab) => {
     setWorkspaceTabs((current) => current.some((entry) => entry.tabId === tab.tabId)
       ? current.map((entry) => entry.tabId === tab.tabId ? tab : entry)
       : [...current, tab])
@@ -467,7 +465,7 @@ export function SessionPage({ bridge, route, connected, onNavigate, onReport }: 
     setCreatingMarkdown(true)
     setTabCreationError(null)
     try {
-      const document = await bridge.call<MobileMarkdownProjection>('quirky.mobile/markdownCreate', { worktree: route.worktreeId })
+      const document = await bridge.call<MobileMarkdownDocument>('quirky.mobile/markdownCreate', { worktree: route.worktreeId })
       chooseWorkspaceTab({
         tabId: document.tabId, worktreeId: document.worktreeId, kind: 'markdown', title: document.title, dirty: document.dirty
       })
@@ -485,7 +483,7 @@ export function SessionPage({ bridge, route, connected, onNavigate, onReport }: 
     setCreatingBrowser(true)
     setTabCreationError(null)
     try {
-      const created = await bridge.call<{ tab: WorkspaceTab; watchId: string }>('quirky.mobile/browserWatchCreate', { worktree: route.worktreeId })
+      const created = await bridge.call<{ tab: MobileWorkspaceTab; watchId: string }>('quirky.mobile/browserWatchCreate', { worktree: route.worktreeId })
       chooseWorkspaceTab(created.tab)
       setNotice('Browser (Chrome Watch) opened. This is an explicit agent-page Watch, not a Native browser mirror.')
       await load()

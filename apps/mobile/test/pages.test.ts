@@ -100,13 +100,12 @@ afterEach(async () => {
 })
 
 type Call = { method: string; params: Record<string, unknown> }
-type MarkdownDocument = MobileMarkdownDocument & { relativePath: string }
 function fakeBridge(options: { route?: MobilePageBridge['init']['route']; worktrees?: Worktree[]; sessions?: Session[]; asks?: Ask[]; sessionTabs?: MobileWorkspaceTab[]; answerError?: string } = {}) {
   let worktrees = options.worktrees ?? [makeWorktree('wt-api', 'api-payments'), makeWorktree('wt-web', 'web-shell', { repoId: 'repo-web' })]
   let sessions = options.sessions ?? [session]
   let asks = options.asks ?? []
   let sessionTabs = options.sessionTabs ?? []
-  const documents = new Map<string, MarkdownDocument>()
+  const documents = new Map<string, MobileMarkdownDocument>()
   const calls: Call[] = []
   const navigations: unknown[] = []
   const storage = new Map<string, string>()
@@ -134,6 +133,8 @@ function fakeBridge(options: { route?: MobilePageBridge['init']['route']; worktr
         case 'quirky.repo/list': result = [repo, { ...repo, id: 'repo-web', name: 'web', path: '/repos/web' }]; break
         case 'quirky.repo/groupList': result = []; break
         case 'quirky.worktree/list': result = worktrees; break
+        case 'quirky.worktree/origins': result = []; break
+        case 'quirky.session/workspaceSleepStates': result = []; break
         case 'quirky.worktree/show': result = { ...worktrees.find((item) => item.id === params.worktree), children: [] }; break
         case 'quirky.session/list': result = params.worktree === undefined ? sessions : sessions.filter((item) => item.worktreeId === params.worktree); break
         case 'quirky.ask/list': result = asks; break
@@ -142,7 +143,7 @@ function fakeBridge(options: { route?: MobilePageBridge['init']['route']; worktr
         case 'quirky.mobile/markdownCreate': {
           const tabId = 'actual-markdown-tab'
           const worktreeId = String(params.worktree)
-          const document: MarkdownDocument = {
+          const document: MobileMarkdownDocument = {
             tabId, worktreeId, title: 'Phone note.md', relativePath: 'Phone note.md',
             text: '', revision: 1, dirty: false, readOnly: false
           }

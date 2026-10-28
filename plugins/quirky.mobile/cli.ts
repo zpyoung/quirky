@@ -1,4 +1,18 @@
 import type { CliArgs, CliContext, CliModule } from '@quirky/protocol'
+import { validMobileBrowserParams } from '@quirky/protocol'
+
+const WATCH_METHODS: Record<string, string> = {
+  create: 'quirky.mobile/browserWatchCreate', start: 'quirky.mobile/browserWatchStart',
+  frame: 'quirky.mobile/browserWatchFrame', ack: 'quirky.mobile/browserWatchFrameAck',
+  stop: 'quirky.mobile/browserWatchStop', navigate: 'quirky.mobile/browserWatchNavigate',
+  control: 'quirky.mobile/browserWatchControl', input: 'quirky.mobile/browserWatchInput'
+}
+const WATCH_FLAGS: Record<string, string> = {
+  worktree: 'worktree', 'tab-id': 'tabId', 'watch-id': 'watchId', url: 'url', sequence: 'sequence',
+  input: 'input', action: 'action', text: 'text', forward: 'forward', level: 'level', preset: 'preset',
+  kind: 'kind', type: 'type', x: 'x', y: 'y', button: 'button', key: 'key', code: 'code',
+  'delta-x': 'deltaX', 'delta-y': 'deltaY', modifiers: 'modifiers'
+}
 
 function stringFlag(args: CliArgs, name: string): string | undefined {
   const value = args.flags[name]
@@ -23,6 +37,30 @@ function bundleReadArgs(args: CliArgs, context: CliContext, withGzip: boolean): 
     offset: offset as number,
     ...(withGzip && args.flags.gzip === true ? { gzip: true } : {})
   }
+}
+
+function tabArgs(args: CliArgs, context: CliContext, fields: readonly string[]): Record<string, unknown> {
+  const allowed = ['worktree', ...fields]
+  if (args.positionals.length || Object.keys(args.flags).some((key) => !allowed.includes(key))) throw context.usage(`accepted flags: ${allowed.map((field) => `--${field}`).join(', ')}`)
+  const worktree = stringFlag(args, 'worktree')
+  if (!worktree?.trim()) throw context.usage('--worktree is required')
+  const params: Record<string, unknown> = { worktree }
+  if (fields.includes('tab-id')) {
+    const tabId = stringFlag(args, 'tab-id')
+    if (!tabId?.trim()) throw context.usage('--tab-id is required')
+    params.tabId = tabId
+  }
+  if (fields.includes('expected-revision')) {
+    const revision = args.flags['expected-revision']
+    if (!Number.isSafeInteger(revision) || (revision as number) < 0) throw context.usage('--expected-revision must be a non-negative integer')
+    params.expectedRevision = revision
+  }
+  if (fields.includes('text')) {
+    const text = stringFlag(args, 'text')
+    if (text === undefined || Buffer.byteLength(text) > 64 * 1024) throw context.usage('--text is required and must fit 64 KiB of UTF-8')
+    params.text = text
+  }
+  return params
 }
 
 export const commands: CliModule['commands'] = {
@@ -99,6 +137,56 @@ export const commands: CliModule['commands'] = {
   async 'agent-catalog'(args, context) {
     noArgs(args, context)
     const value = await context.call('quirky.mobile/agentCatalog', {})
+    context.out.result(value, () => JSON.stringify(value, null, 2))
+  },
+  async 'session-tabs'(args, context) {
+    const value = await context.call('quirky.mobile/sessionTabs', tabArgs(args, context, []))
+    context.out.result(value, () => JSON.stringify(value, null, 2))
+  },
+  async 'markdown-create'(args, context) {
+    const value = await context.call('quirky.mobile/markdownCreate', tabArgs(args, context, []))
+    context.out.result(value, () => JSON.stringify(value, null, 2))
+  },
+  async 'markdown-read'(args, context) {
+    const value = await context.call('quirky.mobile/markdownRead', tabArgs(args, context, ['tab-id']))
+    context.out.result(value, () => JSON.stringify(value, null, 2))
+  },
+  async 'markdown-write'(args, context) {
+    const value = await context.call('quirky.mobile/markdownWrite', tabArgs(args, context, ['tab-id', 'text', 'expected-revision']))
+    context.out.result(value, () => JSON.stringify(value, null, 2))
+  },
+  async 'markdown-save'(args, context) {
+    const value = await context.call('quirky.mobile/markdownSave', tabArgs(args, context, ['tab-id', 'expected-revision']))
+    context.out.result(value, () => JSON.stringify(value, null, 2))
+  },
+  async 'session-tab-action'(args, context) {
+    const params = tabArgs(args, context, ['tab-id', 'action', 'name', 'discard'])
+    const action = stringFlag(args, 'action')
+    if (!action || !['rename', 'close', 'refresh'].includes(action)) throw context.usage('--action must be rename, close or refresh')
+    params.action = action
+    if (action === 'rename') {
+      const name = stringFlag(args, 'name')
+      if (!name?.trim() || name.length > 128 || args.flags.discard !== undefined) throw context.usage('rename requires --name (1–128 characters), without --discard')
+      params.name = name
+    } else if (args.flags.name !== undefined) throw context.usage('--name is only accepted for rename')
+    if (args.flags.discard !== undefined) {
+      if (action !== 'close' || typeof args.flags.discard !== 'boolean') throw context.usage('--discard is a close-only boolean')
+      params.discard = args.flags.discard
+    }
+    const value = await context.call('quirky.mobile/sessionTabAction', params)
+    context.out.result(value, () => JSON.stringify(value, null, 2))
+  },
+  async 'browser-watch'(args, context) {
+    const operation = args.positionals[0]
+    if (args.positionals.length !== 1 || !operation || !Object.hasOwn(WATCH_METHODS, operation)) throw context.usage('usage: mobile browser-watch <create|start|frame|ack|stop|navigate|control|input> --worktree <id> [typed flags]')
+    const method = WATCH_METHODS[operation]!
+    const params: Record<string, unknown> = {}
+    for (const [flag, value] of Object.entries(args.flags)) {
+      if (!Object.hasOwn(WATCH_FLAGS, flag)) throw context.usage(`unsupported Watch flag --${flag}`)
+      params[WATCH_FLAGS[flag]!] = value
+    }
+    if (!validMobileBrowserParams(method, params)) throw context.usage('invalid typed Watch parameters; use the exact workspace, tab, live lease and operation fields')
+    const value = await context.call(method, params)
     context.out.result(value, () => JSON.stringify(value, null, 2))
   },
   async 'bundle-chunk'(args, context) {

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { RpcErrorCode, type MobileMarkdownDocument, type MobileWorkspaceTab, type PluginCaller, type PluginContext, type QuirkyEvent } from '@quirky/protocol'
+import { RpcErrorCode, type MobileBrowserFrame, type MobileMarkdownDocument, type MobileWorkspaceTab, type PluginCaller, type PluginContext, type QuirkyEvent } from '@quirky/protocol'
 
 const MAX_MARKDOWN_BYTES = 64 * 1024
 const MAX_FRAME_BASE64_BYTES = 512 * 1024
@@ -12,19 +12,7 @@ const VIEWPORTS = ['default', 'mobile-s', 'mobile-m', 'mobile-l', 'tablet', 'lap
 
 type MarkdownMode = 'source' | 'rich' | 'preview'
 type BrowserMode = 'native' | 'watch'
-type MobileMarkdownDocumentWithPath = MobileMarkdownDocument & { relativePath: string }
-type MobileWorkspaceTabWithMode = MobileWorkspaceTab & { browserMode?: BrowserMode }
-type MobileWatchResult = { tab: MobileWorkspaceTabWithMode; watchId: string }
-type MobileBrowserFrame = {
-  tabId: string
-  worktreeId: string
-  watchId: string
-  sequence: number
-  width: number
-  height: number
-  mimeType: 'image/jpeg'
-  data: string
-}
+type MobileWatchResult = { tab: MobileWorkspaceTab; watchId: string }
 type BrowserControlAction = 'back' | 'forward' | 'reload' | 'stop' | 'find' | 'zoom' | 'viewport'
 type EditorBufferState = {
   id: string
@@ -208,7 +196,7 @@ function mobileMarkdownTab(tabId: string, worktreeId: string, title: string, dir
   return { tabId, worktreeId, kind: 'markdown', title: safeTitle(title), dirty }
 }
 
-function mobileBrowserTab(pane: BrowserPaneState, title = pane.title): MobileWorkspaceTabWithMode {
+function mobileBrowserTab(pane: BrowserPaneState, title = pane.title): MobileWorkspaceTab {
   return {
     tabId: pane.tabId,
     worktreeId: pane.worktreeId,
@@ -216,7 +204,7 @@ function mobileBrowserTab(pane: BrowserPaneState, title = pane.title): MobileWor
     title: safeTitle(title, 'Browser'),
     dirty: false,
     browserMode: pane.mode
-  } as MobileWorkspaceTabWithMode
+  }
 }
 
 function paneByTabId(context: PluginContext, panes: BrowserPaneState[], worktreeId: string, tabId: string): BrowserPaneState {
@@ -432,7 +420,7 @@ export function registerMobileSessionTabs(context: PluginContext): () => Promise
     return browserPaneValue(context, result, worktreeId)
   }
 
-  const browserTabForId = async (worktreeId: string, tabId: string): Promise<MobileWorkspaceTabWithMode> => {
+  const browserTabForId = async (worktreeId: string, tabId: string): Promise<MobileWorkspaceTab> => {
     const pane = paneByTabId(context, await currentBrowserPanes(worktreeId), worktreeId, tabId)
     const titles = await terminalTabTitles(context, worktreeId)
     return mobileBrowserTab(pane, titles.get(tabId) ?? pane.title)
@@ -711,7 +699,7 @@ export function registerMobileSessionTabs(context: PluginContext): () => Promise
     return { closed: true }
   }
 
-  const browserWatchNavigate = async (params: Record<string, unknown>, caller: PluginCaller): Promise<MobileWorkspaceTabWithMode> => {
+  const browserWatchNavigate = async (params: Record<string, unknown>, caller: PluginCaller): Promise<MobileWorkspaceTab> => {
     const input = requireString(context, params, 'input')
     if (Buffer.byteLength(input, 'utf8') > MAX_NAVIGATION_BYTES) throw context.error('invalid-params', `input exceeds ${MAX_NAVIGATION_BYTES} UTF-8 bytes.`)
     const { lease } = await findOwnedBrowserLease(params, caller)
@@ -721,7 +709,7 @@ export function registerMobileSessionTabs(context: PluginContext): () => Promise
     return await browserTabForId(lease.worktreeId, lease.tabId)
   }
 
-  const browserWatchControl = async (params: Record<string, unknown>, caller: PluginCaller): Promise<MobileWorkspaceTabWithMode> => {
+  const browserWatchControl = async (params: Record<string, unknown>, caller: PluginCaller): Promise<MobileWorkspaceTab> => {
     const action = params.action
     if (action !== 'back' && action !== 'forward' && action !== 'reload' && action !== 'stop' && action !== 'find' && action !== 'zoom' && action !== 'viewport') {
       throw context.error('invalid-params', 'action must be back, forward, reload, stop, find, zoom, or viewport.')
@@ -785,7 +773,7 @@ export function registerMobileSessionTabs(context: PluginContext): () => Promise
     return { sent: true }
   }
 
-  const sessionTabs = async (params: Record<string, unknown>): Promise<MobileWorkspaceTabWithMode[]> => {
+  const sessionTabs = async (params: Record<string, unknown>): Promise<MobileWorkspaceTab[]> => {
     const worktreeId = await resolveWorktree(context, requireString(context, params, 'worktree'))
     const titles = await terminalTabTitles(context, worktreeId)
     let markdown: MobileWorkspaceTab[] = []
@@ -801,7 +789,7 @@ export function registerMobileSessionTabs(context: PluginContext): () => Promise
     } catch (error) {
       if (!unavailableMethod(error, 'quirky.editor', 'state')) throw error
     }
-    let browser: MobileWorkspaceTabWithMode[] = []
+    let browser: MobileWorkspaceTab[] = []
     try {
       browser = (await currentBrowserPanes(worktreeId)).map((pane) => mobileBrowserTab(pane, titles.get(pane.tabId) ?? pane.title))
     } catch (error) {
@@ -810,7 +798,7 @@ export function registerMobileSessionTabs(context: PluginContext): () => Promise
     return [...markdown, ...browser]
   }
 
-  const markdownCreate = async (params: Record<string, unknown>): Promise<MobileMarkdownDocumentWithPath> => {
+  const markdownCreate = async (params: Record<string, unknown>): Promise<MobileMarkdownDocument> => {
     const worktreeId = await resolveWorktree(context, requireString(context, params, 'worktree'))
     await readEditorState(context, worktreeId)
     const path = `${MARKDOWN_NOTE_PREFIX}${randomUUID()}.md`
@@ -825,12 +813,12 @@ export function registerMobileSessionTabs(context: PluginContext): () => Promise
     return await markdownDocument(context, worktreeId, opened.openedTabId)
   }
 
-  const markdownRead = async (params: Record<string, unknown>): Promise<MobileMarkdownDocumentWithPath> => {
+  const markdownRead = async (params: Record<string, unknown>): Promise<MobileMarkdownDocument> => {
     const worktreeId = await resolveWorktree(context, requireString(context, params, 'worktree'))
     return await markdownDocument(context, worktreeId, requireString(context, params, 'tabId'))
   }
 
-  const markdownWrite = async (params: Record<string, unknown>): Promise<MobileMarkdownDocumentWithPath> => {
+  const markdownWrite = async (params: Record<string, unknown>): Promise<MobileMarkdownDocument> => {
     const worktreeId = await resolveWorktree(context, requireString(context, params, 'worktree'))
     const tabId = requireString(context, params, 'tabId')
     const text = params.text
@@ -845,7 +833,7 @@ export function registerMobileSessionTabs(context: PluginContext): () => Promise
     return await markdownDocument(context, worktreeId, tabId)
   }
 
-  const markdownSave = async (params: Record<string, unknown>): Promise<MobileMarkdownDocumentWithPath> => {
+  const markdownSave = async (params: Record<string, unknown>): Promise<MobileMarkdownDocument> => {
     const worktreeId = await resolveWorktree(context, requireString(context, params, 'worktree'))
     const tabId = requireString(context, params, 'tabId')
     const expectedRevision = requireRevision(context, params)
@@ -925,7 +913,7 @@ async function terminalTabTitles(context: PluginContext, worktreeId: string): Pr
   return titles
 }
 
-async function markdownDocument(context: PluginContext, worktreeId: string, tabId: string): Promise<MobileMarkdownDocumentWithPath> {
+async function markdownDocument(context: PluginContext, worktreeId: string, tabId: string): Promise<MobileMarkdownDocument> {
   const { buffer } = findMarkdownTab(context, await readEditorState(context, worktreeId), worktreeId, tabId)
   const draftBytes = buffer.draftBytes
   const textBytes = draftBytes === null ? buffer.contentBytes : draftBytes
@@ -938,7 +926,7 @@ async function markdownDocument(context: PluginContext, worktreeId: string, tabI
     action: 'text',
     kind,
     offset: 0,
-    length: MAX_MARKDOWN_BYTES + 1,
+    length: MAX_MARKDOWN_BYTES,
     contentRevision: buffer.contentRevision
   })
   const text = mobileDocumentText(context, rawText, buffer.contentRevision)

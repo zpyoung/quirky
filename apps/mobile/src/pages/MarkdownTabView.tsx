@@ -4,7 +4,6 @@ import type { MobilePageBridge } from '../contracts'
 import { errorMessage, PageError, PageModal } from './components'
 import { MarkdownPreview } from './MarkdownPreview'
 
-type MarkdownDocument = MobileMarkdownDocument & { relativePath: string }
 type MobileTab = { tabId: string; worktreeId: string; kind: 'markdown'; title: string; dirty: boolean }
 
 type Props = {
@@ -21,7 +20,7 @@ const MAX_MARKDOWN_BYTES = 64 * 1024
 const textEncoder = new TextEncoder()
 
 export function MarkdownTabView({ bridge, worktreeId, tab, canMutate, canCopy, onTabsChanged, onClosed }: Props) {
-  const [documentValue, setDocumentValue] = useState<MarkdownDocument | null>(null)
+  const [documentValue, setDocumentValue] = useState<MobileMarkdownDocument | null>(null)
   const [text, setText] = useState('')
   const [mode, setMode] = useState<'source' | 'preview'>('source')
   const [loading, setLoading] = useState(true)
@@ -36,7 +35,7 @@ export function MarkdownTabView({ bridge, worktreeId, tab, canMutate, canCopy, o
   const [refreshPrompt, setRefreshPrompt] = useState(false)
   const mounted = useRef(false)
   const textRef = useRef(text)
-  const documentRef = useRef<MarkdownDocument | null>(null)
+  const documentRef = useRef<MobileMarkdownDocument | null>(null)
   const revisionRef = useRef<number | null>(null)
   const pendingText = useRef<string | null>(null)
   const writeFlight = useRef<Promise<void> | null>(null)
@@ -47,7 +46,7 @@ export function MarkdownTabView({ bridge, worktreeId, tab, canMutate, canCopy, o
     let active = true
     setLoading(true)
     setError(null)
-    void bridge.call<MarkdownDocument>('quirky.mobile/markdownRead', { worktree: worktreeId, tabId: tab.tabId }).then((next) => {
+    void bridge.call<MobileMarkdownDocument>('quirky.mobile/markdownRead', { worktree: worktreeId, tabId: tab.tabId }).then((next) => {
       if (!active) return
       documentRef.current = next
       revisionRef.current = next.revision
@@ -76,7 +75,7 @@ export function MarkdownTabView({ bridge, worktreeId, tab, canMutate, canCopy, o
         pendingText.current = null
         const expectedRevision = revisionRef.current
         if (expectedRevision === null) throw new Error('The Markdown tab is not ready to edit.')
-        const accepted = await bridge.call<MarkdownDocument>('quirky.mobile/markdownWrite', {
+        const accepted = await bridge.call<MobileMarkdownDocument>('quirky.mobile/markdownWrite', {
           worktree: worktreeId, tabId: tab.tabId, text: nextText, expectedRevision
         })
         revisionRef.current = accepted.revision
@@ -104,7 +103,7 @@ export function MarkdownTabView({ bridge, worktreeId, tab, canMutate, canCopy, o
     while (writeFlight.current) await writeFlight.current
   }, [])
 
-  const acceptDocument = useCallback((next: MarkdownDocument) => {
+  const acceptDocument = useCallback((next: MobileMarkdownDocument) => {
     documentRef.current = next
     revisionRef.current = next.revision
     textRef.current = next.text
@@ -130,7 +129,7 @@ export function MarkdownTabView({ bridge, worktreeId, tab, canMutate, canCopy, o
         worktree: worktreeId, tabId: tab.tabId, action: 'refresh'
       })
       if (action.closed) throw new Error('The desktop closed this tab while it was refreshing.')
-      const next = await bridge.call<MarkdownDocument>('quirky.mobile/markdownRead', { worktree: worktreeId, tabId: tab.tabId })
+      const next = await bridge.call<MobileMarkdownDocument>('quirky.mobile/markdownRead', { worktree: worktreeId, tabId: tab.tabId })
       acceptDocument(next)
       setRefreshPrompt(false)
       setNotice('Markdown refreshed from the desktop editor.')
@@ -151,7 +150,7 @@ export function MarkdownTabView({ bridge, worktreeId, tab, canMutate, canCopy, o
       if (writeErrorRef.current) throw new Error(writeErrorRef.current)
       const expectedRevision = revisionRef.current
       if (expectedRevision === null) throw new Error('The Markdown tab is not ready to save.')
-      const saved = await bridge.call<MarkdownDocument>('quirky.mobile/markdownSave', {
+      const saved = await bridge.call<MobileMarkdownDocument>('quirky.mobile/markdownSave', {
         worktree: worktreeId, tabId: tab.tabId, expectedRevision
       })
       acceptDocument(saved)

@@ -21,10 +21,13 @@ export type WorkspaceSleepState = {
 export type MobileWorkspaceTab = {
   tabId: string
   worktreeId: string
-  kind: 'markdown' | 'browser'
   title: string
   dirty: boolean
-}
+} & (
+  | { kind: 'markdown'; browserMode?: never }
+  /** Native tabs stay visible; selecting one never implicitly converts it into Chrome Watch. */
+  | { kind: 'browser'; browserMode: 'native' | 'watch' }
+)
 
 /** A bounded text projection; no absolute path, resource capability, environment or credentials. */
 export type MobileMarkdownDocument = {

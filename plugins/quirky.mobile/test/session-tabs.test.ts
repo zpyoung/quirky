@@ -3,12 +3,11 @@ import { execFileSync } from 'node:child_process'
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { MobileMarkdownDocument as ProtocolMarkdownDocument, MobileWorkspaceTab, QuirkyClient, Worktree } from '@quirky/protocol'
+import type { MobileMarkdownDocument, MobileWorkspaceTab, QuirkyClient, Worktree } from '@quirky/protocol'
 import { makeTempHome, startHarness, type Harness } from '../../../packages/daemon/test/helpers'
 import { makeBuiltinDir } from '../../quirky.session/test/support'
 
 type Fixture = { harness: Harness; client: QuirkyClient; worktree: Worktree; root: string }
-type MobileMarkdownDocument = ProtocolMarkdownDocument & { relativePath: string }
 let fixture: Fixture | undefined
 const roots = new Set<string>()
 const previousPort = process.env.QUIRKY_MOBILE_PORT
@@ -87,7 +86,7 @@ test('public mobile Markdown APIs preserve actual tab identity, bounded drafts a
   })).rejects.toThrow()
 
   writeFileSync(join(root, created.relativePath), '# Changed on disk\n')
-  expect(await call(client, 'quirky.mobile/sessionTabAction', { worktree: worktree.id, tabId: created.tabId, action: 'refresh' }))
+  expect(await call<{ tabId: string; closed: boolean }>(client, 'quirky.mobile/sessionTabAction', { worktree: worktree.id, tabId: created.tabId, action: 'refresh' }))
     .toEqual({ tabId: created.tabId, closed: false })
   const refreshed = await call<MobileMarkdownDocument>(client, 'quirky.mobile/markdownRead', { worktree: worktree.id, tabId: created.tabId })
   expect(refreshed).toMatchObject({ text: '# Changed on disk\n', dirty: false })
@@ -100,11 +99,11 @@ test('public mobile Markdown APIs preserve actual tab identity, bounded drafts a
     worktree: worktree.id, tabId: created.tabId, text: '# Keep this draft\n', expectedRevision: refreshed.revision
   })
   expect(dirty.dirty).toBe(true)
-  expect(await call(client, 'quirky.mobile/sessionTabAction', { worktree: worktree.id, tabId: created.tabId, action: 'close' }))
+  expect(await call<{ tabId: string; closed: boolean }>(client, 'quirky.mobile/sessionTabAction', { worktree: worktree.id, tabId: created.tabId, action: 'close' }))
     .toEqual({ tabId: created.tabId, closed: false })
   expect(await call<MobileMarkdownDocument>(client, 'quirky.mobile/markdownRead', { worktree: worktree.id, tabId: created.tabId }))
     .toMatchObject({ text: '# Keep this draft\n', dirty: true })
-  expect(await call(client, 'quirky.mobile/sessionTabAction', { worktree: worktree.id, tabId: created.tabId, action: 'close', discard: true }))
+  expect(await call<{ tabId: string; closed: boolean }>(client, 'quirky.mobile/sessionTabAction', { worktree: worktree.id, tabId: created.tabId, action: 'close', discard: true }))
     .toEqual({ tabId: created.tabId, closed: true })
   expect(await call<MobileWorkspaceTab[]>(client, 'quirky.mobile/sessionTabs', { worktree: worktree.id })).not.toContainEqual(expect.objectContaining({ tabId: created.tabId }))
 })
@@ -145,6 +144,11 @@ test('public mobile Markdown APIs enforce UTF-8 byte limits before returning doc
   await expect(call(client, 'quirky.mobile/markdownWrite', {
     worktree: worktree.id, tabId: created.tabId, text: `${exactLimit}é`, expectedRevision: accepted.revision
   })).rejects.toThrow(/64 KiB|65536/)
+  const asciiLimit = 'a'.repeat(64 * 1024)
+  const ascii = await call<MobileMarkdownDocument>(client, 'quirky.mobile/markdownWrite', {
+    worktree: worktree.id, tabId: created.tabId, text: asciiLimit, expectedRevision: accepted.revision
+  })
+  expect(ascii.text).toBe(asciiLimit)
 
   writeFileSync(join(root, 'large.md'), 'x'.repeat(64 * 1024 + 1))
   const large = await call<{ openedTabId: string }>(client, 'quirky.editor/open', { worktree: worktree.id, path: 'large.md', mode: 'source' })

@@ -1,10 +1,19 @@
+import { MOBILE_BROWSER_METHOD_PARAMS, validMobileBrowserParams } from '@quirky/protocol'
 import type { MobileConnectionState, MobileGrant, MobilePageInit, MobileRoute } from '../contracts'
 
 export const PAGE_METHOD_PARAMS: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  ...MOBILE_BROWSER_METHOD_PARAMS,
   'quirky.repo/list': [],
   'quirky.repo/groupList': [],
   'quirky.mobile/agentCatalog': [],
+  'quirky.mobile/sessionTabs': ['worktree'],
+  'quirky.mobile/markdownCreate': ['worktree'],
+  'quirky.mobile/markdownRead': ['worktree', 'tabId'],
+  'quirky.mobile/markdownWrite': ['worktree', 'tabId', 'text', 'expectedRevision'],
+  'quirky.mobile/markdownSave': ['worktree', 'tabId', 'expectedRevision'],
+  'quirky.mobile/sessionTabAction': ['worktree', 'tabId', 'action', 'name', 'discard'],
   'quirky.worktree/list': ['repo'],
+  'quirky.worktree/origins': [],
   'quirky.worktree/show': ['worktree'],
   'quirky.worktree/create': ['repo', 'name', 'branchName', 'base'],
   'quirky.worktree/describeRemove': ['worktree'],
@@ -14,6 +23,9 @@ export const PAGE_METHOD_PARAMS: Readonly<Record<string, readonly string[]>> = O
   'quirky.session/create': ['worktree', 'agent', 'cols', 'rows'],
   'quirky.session/setName': ['session', 'name'],
   'quirky.session/close': ['session'],
+  'quirky.session/sleepWorkspace': ['worktree'],
+  'quirky.session/wakeWorkspace': ['worktree'],
+  'quirky.session/workspaceSleepStates': [],
   'quirky.ask/list': ['pendingOnly'],
   'quirky.ask/answer': ['askId', 'answers', 'skipped'],
   'quirky.terminal/attach': ['session', 'cols', 'rows', 'historyLines'],
@@ -83,6 +95,22 @@ function viewport(params: Record<string, unknown>): boolean {
 }
 
 function validPageSpecificParams(method: string, params: Record<string, unknown>): boolean {
+  if (Object.hasOwn(MOBILE_BROWSER_METHOD_PARAMS, method)) return validMobileBrowserParams(method, params)
+  if (method === 'quirky.worktree/origins' || method === 'quirky.session/workspaceSleepStates') return Object.keys(params).length === 0
+  if (method === 'quirky.session/sleepWorkspace' || method === 'quirky.session/wakeWorkspace' ||
+    method === 'quirky.mobile/sessionTabs' || method === 'quirky.mobile/markdownCreate') return boundedString(params, 'worktree')
+  if (method === 'quirky.mobile/markdownRead' || method === 'quirky.mobile/markdownWrite' ||
+    method === 'quirky.mobile/markdownSave' || method === 'quirky.mobile/sessionTabAction') {
+    if (!boundedString(params, 'worktree') || !boundedString(params, 'tabId') || (params.tabId as string).length > 128) return false
+    if (method === 'quirky.mobile/markdownRead') return true
+    if (method === 'quirky.mobile/markdownWrite' || method === 'quirky.mobile/markdownSave') {
+      if (!Number.isSafeInteger(params.expectedRevision) || (params.expectedRevision as number) < 0) return false
+      return method === 'quirky.mobile/markdownSave' || (typeof params.text === 'string' && utf8ByteLength(params.text) <= 64 * 1024)
+    }
+    if (params.action === 'rename') return boundedString(params, 'name') && (params.name as string).length <= 128 && !!(params.name as string).trim() && params.discard === undefined
+    if (params.action === 'close') return params.name === undefined && (params.discard === undefined || typeof params.discard === 'boolean')
+    return params.action === 'refresh' && params.name === undefined && params.discard === undefined
+  }
   if (method === 'quirky.repo/list' || method === 'quirky.repo/groupList' || method === 'quirky.mobile/agentCatalog') return Object.keys(params).length === 0
   if (method === 'quirky.worktree/list') return boundedString(params, 'repo', false)
   if (method === 'quirky.worktree/show' || method === 'quirky.worktree/describeRemove') return boundedString(params, 'worktree')
@@ -125,8 +153,12 @@ export function validatePageRpc(method: unknown, params: unknown, grants: readon
 }
 
 export function isPageMutation(method: string): boolean {
+  if (Object.hasOwn(MOBILE_BROWSER_METHOD_PARAMS, method)) return method !== 'quirky.mobile/browserWatchFrame'
   return method === 'quirky.worktree/create' || method === 'quirky.worktree/remove' || method === 'quirky.worktree/set' ||
     method === 'quirky.session/create' || method === 'quirky.session/setName' || method === 'quirky.session/close' ||
+    method === 'quirky.session/sleepWorkspace' || method === 'quirky.session/wakeWorkspace' ||
+    method === 'quirky.mobile/markdownCreate' || method === 'quirky.mobile/markdownWrite' ||
+    method === 'quirky.mobile/markdownSave' || method === 'quirky.mobile/sessionTabAction' ||
     method === 'quirky.ask/answer' || method === 'quirky.terminal/attach' || method === 'quirky.terminal/detach' ||
     method === 'quirky.terminal/clear' || method === 'quirky.terminal/displayMode' || method === 'quirky.terminal/claim' ||
     method === 'quirky.terminal/write' || method === 'quirky.terminal/send' || method === 'quirky.terminal/resize'

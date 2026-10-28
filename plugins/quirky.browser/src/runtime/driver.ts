@@ -160,6 +160,8 @@ type PaneWatchState = {
   popups: number[]
   frameWidth?: number
   frameHeight?: number
+  frameScale?: number
+  frameOffsetTop?: number
   stopped: boolean
 }
 
@@ -487,19 +489,21 @@ export class BrowserRuntime {
         if (typeof input.x !== 'number' || !Number.isFinite(input.x) || input.x < 0 || input.x > 16_384 ||
             typeof input.y !== 'number' || !Number.isFinite(input.y) || input.y < 0 || input.y > 16_384 ||
             typeof watch.frameWidth !== 'number' || typeof watch.frameHeight !== 'number' ||
-            input.x >= watch.frameWidth || input.y >= watch.frameHeight) {
+            typeof watch.frameScale !== 'number' || typeof watch.frameOffsetTop !== 'number' ||
+            input.x >= watch.frameWidth || input.y >= watch.frameHeight || input.y < watch.frameOffsetTop) {
           throw fault('invalid_argument', 'pointer coordinates must be within the last displayed browser frame')
         }
-        params.x = input.x
-        params.y = input.y
+        // Screencast coordinates are device-independent frame pixels; CDP input uses layout CSS pixels.
+        params.x = input.x / watch.frameScale
+        params.y = (input.y - watch.frameOffsetTop) / watch.frameScale
         if (input.kind === 'wheel') {
           if (typeof input.deltaX !== 'number' || !Number.isFinite(input.deltaX) ||
               typeof input.deltaY !== 'number' || !Number.isFinite(input.deltaY)) {
             throw fault('invalid_argument', 'wheel input requires finite deltaX and deltaY')
           }
           params.type = 'mouseWheel'
-          params.deltaX = input.deltaX
-          params.deltaY = input.deltaY
+          params.deltaX = input.deltaX / watch.frameScale
+          params.deltaY = input.deltaY / watch.frameScale
         } else {
           if (input.type !== 'mousePressed' && input.type !== 'mouseReleased' && input.type !== 'mouseMoved') {
             throw fault('invalid_argument', 'mouse type must be mousePressed, mouseReleased, or mouseMoved')
@@ -783,10 +787,16 @@ export class BrowserRuntime {
             if (!this.isCurrentPaneWatch(state) || !data) return
             const width = typeof record.deviceWidth === 'number' ? record.deviceWidth : record.sourceWidth
             const height = typeof record.deviceHeight === 'number' ? record.deviceHeight : record.sourceHeight
+            const scale = record.pageScaleFactor
+            const offsetTop = record.offsetTop
             if (typeof width !== 'number' || !Number.isFinite(width) || width < 1 ||
-                typeof height !== 'number' || !Number.isFinite(height) || height < 1) return
+                typeof height !== 'number' || !Number.isFinite(height) || height < 1 ||
+                typeof scale !== 'number' || !Number.isFinite(scale) || scale <= 0 ||
+                typeof offsetTop !== 'number' || !Number.isFinite(offsetTop) || offsetTop < 0 || offsetTop >= height) return
             state.frameWidth = width
             state.frameHeight = height
+            state.frameScale = scale
+            state.frameOffsetTop = offsetTop
             try { callbacks.onFrame({ data, width, height }) } catch { /* the latest-frame sink may have closed */ }
           }).catch(() => this.endPaneWatch(state, 'The Watch screencast transport was lost.'))
         })

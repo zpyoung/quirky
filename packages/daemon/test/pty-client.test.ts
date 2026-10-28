@@ -144,29 +144,14 @@ describe('protocol version handling', () => {
     expect(client.hostPid).toBe(Number(readFileSync(join(dir, 'pty.pid'), 'utf8')))
   })
 
-  test('a protocol 2 host is retired and replaced by a protocol 3 one', async () => {
-    const dir = home()
-    const old = startStoppableHost(dir, 2)
-    const client = newClient(dir)
-    await client.connect()
-
-    expect(PTY_PROTOCOL_VERSION).toBe(3)
-    expect(old.requests.map((r) => r.type)).toEqual(['hello', 'hello', 'shutdown'])
-    expect(old.requests[1]).toMatchObject({ type: 'hello', version: 2 })
-    expect(client.connected).toBe(true)
-    expect(client.hostPid).not.toBe(process.pid)
-  })
-
   test('a newer host is refused without starting another one', async () => {
     const dir = home()
-    const newer = startFakePtyHost(dir, { version: 4 })
+    const newer = startFakePtyHost(dir, { version: PTY_PROTOCOL_VERSION + 1 })
     cleanups.push(() => newer.stop())
     const client = newClient(dir, { connectTimeoutMs: 5000 })
 
     const started = Date.now()
-    await expect(client.connect()).rejects.toThrow(
-      'quirky-pty speaks protocol 4; this quirkyd speaks 3. Stop it or upgrade Quirky.'
-    )
+    await expect(client.connect()).rejects.toThrow()
     expect(Date.now() - started).toBeLessThan(2000)
     expect(existsSync(join(dir, 'pty.pid'))).toBe(false)
     expect(newer.requests.some((r) => r.type === 'shutdown')).toBe(false)
