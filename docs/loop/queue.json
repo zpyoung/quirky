@@ -1316,8 +1316,7 @@
       "deps": [
         "m7-sweep-terminal"
       ],
-      "status": "in-progress",
-      "lane": 9
+      "status": "done"
     },
     {
       "id": "sb-mobile-app-prerequisites",
