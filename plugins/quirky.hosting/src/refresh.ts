@@ -1,6 +1,7 @@
 import type { Handler, HostingEnv, Scope } from './env'
 import { isRecord, nonEmptyString, parseBranch, parseIdentity, parseOid, parsePositiveInteger, sameIdentity, type IdentityValue } from './pr-data'
 import type { Lookup, Review } from './pr-review'
+import { isReviewParticipants } from './review-participants'
 
 export type RefreshReason = 'visible' | 'active' | 'post-push' | 'manual' | 'swr'
 type RefreshCandidate = { worktree: string; branch?: string; number?: number; headOid?: string; active?: boolean }
@@ -141,11 +142,20 @@ function safeOutcome(value: unknown): Lookup | undefined {
   const baseRefOid = parseOid(source.baseRefOid)
   const reviewDecision = typeof source.reviewDecision === 'string' ? source.reviewDecision : undefined
   const mergeStateStatus = typeof source.mergeStateStatus === 'string' ? source.mergeStateStatus : undefined
+  const mergeQueueRequired = source.mergeQueueRequired === null || typeof source.mergeQueueRequired === 'boolean' ? source.mergeQueueRequired : undefined
+  const autoMergeAllowed = source.autoMergeAllowed === null || typeof source.autoMergeAllowed === 'boolean' ? source.autoMergeAllowed : undefined
+  const mergeMetadataKnown = typeof source.mergeMetadataKnown === 'boolean' ? source.mergeMetadataKnown : undefined
   if (source.provider !== 'github' || !number || !url || title === undefined || body === undefined ||
     !state || !mergeable || !checksStatus || !headRefName || !baseRefName || !headRefOid || !baseRefOid ||
     reviewDecision === undefined || mergeStateStatus === undefined ||
+    mergeQueueRequired === undefined || autoMergeAllowed === undefined || mergeMetadataKnown === undefined ||
     !Object.hasOwn(source, 'autoMergeRequest') || !Object.hasOwn(source, 'stack') || !Object.hasOwn(source, 'mergeMethods')) return undefined
+  if (!isReviewParticipants(source)) return undefined
   const review: Review = {
+    requestedReviewers: source.requestedReviewers,
+    reviews: source.reviews,
+    assignees: source.assignees,
+    participantsTruncated: source.participantsTruncated,
     provider: 'github',
     number,
     url,
@@ -162,7 +172,14 @@ function safeOutcome(value: unknown): Lookup | undefined {
     mergeStateStatus,
     autoMergeRequest: source.autoMergeRequest,
     stack: source.stack,
-    mergeMethods: source.mergeMethods
+    mergeMethods: source.mergeMethods,
+    mergeQueueRequired,
+    autoMergeAllowed,
+    mergeMetadataKnown
+  }
+  for (const key of ['additions', 'deletions', 'changedFiles'] as const) {
+    const count = source[key]
+    if (typeof count === 'number' && Number.isSafeInteger(count) && count >= 0) review[key] = count
   }
   if (isRecord(source.headRepositoryOwner) && typeof source.headRepositoryOwner.login === 'string') {
     review.headRepositoryOwner = { login: source.headRepositoryOwner.login }
