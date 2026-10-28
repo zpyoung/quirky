@@ -158,6 +158,7 @@ files, not this one.
 | medium | high | [m2-sidebar-extras D18](decisions/m2-sidebar-extras.md) | Accept confirmed spec defects and reject planned-artifact reference false positives | assumed — autonomous |
 | medium | high | [m2-sidebar-extras D20](decisions/m2-sidebar-extras.md) | Preserve accepted W1 components and repair only observed integration defects | assumed — autonomous |
 | medium | high | [m2-sidebar-extras D21](decisions/m2-sidebar-extras.md) | Preserve notification unread semantics when catching up | locked by docs/loop/decisions/m1-notifications.md |
+| medium | high | [fix-flaky-pty-host-host D2](decisions/fix-flaky-pty-host-host.md) | Preserve independent cleanup ownership and isolate experiments | locked by docs/loop/decisions/fix-test-process-leaks.md |
 | medium | high | [m2-source-control-notes-ai D3](decisions/m2-source-control-notes-ai.md) | The slice is diff notes, every Source Control AI action, and their settings | supersedes nothing; bound by m2-source-control-core D6 |
 | medium | high | [m2-source-control-notes-ai D6](decisions/m2-source-control-notes-ai.md) | Notes live in a `quirky.git` plugin store keyed by worktree ID and survive a restart | assumed — autonomous |
 | medium | high | [m2-source-control-notes-ai D14](decisions/m2-source-control-notes-ai.md) | Notes are scriptable: `quirky git` gains note commands, which Orca lacks | assumed — autonomous |
@@ -221,6 +222,11 @@ files, not this one.
 | medium | high | [m5-structured-runner D7](decisions/m5-structured-runner.md) | Checks are a built-in plugin with run and cancel methods | assumed — autonomous |
 | medium | high | [m5-structured-runner D12](decisions/m5-structured-runner.md) | One connected runner owns each native conversation | assumed — autonomous |
 | medium | high | [m5-structured-runner D13](decisions/m5-structured-runner.md) | Ask owns cancellation when its creating plugin is disabled or the daemon stops | assumed — autonomous |
+| medium (cross-plugin launch contract) | high for compatibility; reconciliation verification pending | [m5-structured-runner D36](decisions/m5-structured-runner.md) | Compose incoming account preparation with the existing native runner | locked by docs/loop/decisions/m3-accounts.md |
+| medium (credential identity at spawn) | high for the observed code path; red/green execution pending | [m5-structured-runner D37](decisions/m5-structured-runner.md) | Close the concrete structured-Codex account gap before landing | locked by docs/loop/decisions/m3-accounts.md |
+| medium (cross-feature integration) | high for the observed conflict; incoming deletion provenance still being traced | [m5-structured-runner D45](decisions/m5-structured-runner.md) | Reconcile a newer integration tip instead of discarding verified m5 work | assumed — autonomous (operator-directed landing continuation) |
+| medium (cross-feature merge composition) | high | [m5-structured-runner D46](decisions/m5-structured-runner.md) | Restore the unlanded candidate removed by handoff's cleanup, not an obsolete feature design | assumed — autonomous (operator-directed feature landing) |
+| medium (shared public launch/ui contracts) | high | [m5-structured-runner D47](decisions/m5-structured-runner.md) | Preserve the three new binding decision logs and their public contracts | locked by docs/loop/decisions/m3-session-info.md |
 | medium | high | [m5-ledger D1](decisions/m5-ledger.md) | Implement the complete Project ledger feature | locked by docs/roadmap.md |
 | medium | high | [m5-ledger D4](decisions/m5-ledger.md) | Normalize ledger storage in the public plugin SQLite store | locked by docs/loop/decisions/m0-daemon-api.md |
 | medium | high | [m5-ledger D6](decisions/m5-ledger.md) | Preserve target distinctions and reject ambiguous selector combinations | locked by external research/orca-features/ledger.md |
@@ -250,6 +256,7 @@ files, not this one.
 | medium | high | [m0-registry D6](decisions/m0-registry.md) | A plugin's own contributions use short names, overrides use full IDs | assumed — autonomous |
 | medium | high | [m0-registry D9](decisions/m0-registry.md) | Disable works by plugin ID or contribution ID, before any code loads, and persists | locked by docs/roadmap.md (disable by ID); assumed — autonomous (cascade and persistence) |
 | medium | high | [m0-registry D11](decisions/m0-registry.md) | Plugins activate lazily on first use by default, or at startup when the manifest says so | locked by docs/roadmap.md (lazy); assumed — autonomous (trigger set) |
+| medium | high | [fix-test-cost D11](decisions/fix-test-cost.md) | Retain the POSIX test platform boundary | deferred: platform |
 | medium | high | [m3-terminal-dock D1](decisions/m3-terminal-dock.md) | Build the dock as an opt-in built-in plugin with its own composer | locked by docs/roadmap.md |
 | medium | high | [m3-terminal-dock D3](decisions/m3-terminal-dock.md) | Preserve macOS parity and do not reproduce the three observed Orca defects | locked by docs/roadmap.md |
 | medium | high | [m3-terminal-dock D7](decisions/m3-terminal-dock.md) | Missing pane and send APIs alone are not reasons to block | assumed — autonomous |
@@ -561,6 +568,20 @@ files, not this one.
 | easy | high | [fix-ask-regex-budget-20261027 D5](decisions/fix-ask-regex-budget-20261027.md) | Retain the merged SC-31 repair and verify the shared pure matcher without a new UI scenario | assumed — autonomous |
 | easy | high for observed results; no claim that the report race is fixed | [fix-ask-regex-budget-20261027 D6](decisions/fix-ask-regex-budget-20261027.md) | Keep the runner's isolated-retry policy and report its observed race | locked by scripts/suite.ts |
 | easy | high for the exercised scope, not a completeness guarantee | [fix-ask-regex-budget-20261027 D7](decisions/fix-ask-regex-budget-20261027.md) | Accept the standard independent final review and land through the queue | locked by docs/loop/LOOP.md |
+| easy | high | [fix-flaky-pty-host-host D1](decisions/fix-flaky-pty-host-host.md) | Repair the named timing failure without re-specifying terminal features | locked by docs/loop/LOOP.md |
+| easy | high | [fix-flaky-pty-host-host D3](decisions/fix-flaky-pty-host-host.md) | Use OpenAI implementation and available Gemini review | assumed — autonomous |
+| easy | high | [fix-flaky-pty-host-host D4](decisions/fix-flaky-pty-host-host.md) | Give host tests and their cleanup independent load-tolerant outer budgets | assumed — autonomous |
+| easy | high | [fix-flaky-pty-host-host D5](decisions/fix-flaky-pty-host-host.md) | Stop local stress and verify contention-sensitive work remotely | locked by operator instruction, 2026-10-27 |
+| easy | high for observed readiness and hook failures | [fix-flaky-pty-host-host D6](decisions/fix-flaky-pty-host-host.md) | Bound slow guardian readiness without weakening the handshake | assumed — autonomous |
+| easy | high for the exercised cli lifecycle | [fix-flaky-pty-host-host D7](decisions/fix-flaky-pty-host-host.md) | Keep product surfaces and platform support unchanged | locked by docs/loop/decisions/fix-test-process-leaks.md |
+| easy | high for the reviewed paths | [fix-flaky-pty-host-host D8](decisions/fix-flaky-pty-host-host.md) | Accept Final Round 1 with no additional fix batch | assumed — autonomous |
+| easy | high for the observed process states; native bun wait-loop mechanism is not yet established | [fix-flaky-pty-host-host D9](decisions/fix-flaky-pty-host-host.md) | Treat the remote synchronous-wait stall as unresolved, not a successful isolated rerun | assumed — autonomous |
+| easy | high for the missing close; medium for its relationship to the observed spin | [fix-flaky-pty-host-host D10](decisions/fix-flaky-pty-host-host.md) | Release each exited session's native terminal handle during finalization | supersedes fix-flaky-pty-host-host D7 |
+| easy | high | [fix-flaky-pty-host-host D11](decisions/fix-flaky-pty-host-host.md) | Replace the subscriber-query sleep race with an input and parse barrier | assumed — autonomous |
+| easy | high | [fix-flaky-pty-host-host D12](decisions/fix-flaky-pty-host-host.md) | Give bulk raw-replay fixtures one output writer | assumed — autonomous |
+| easy | high | [fix-flaky-pty-host-host D13](decisions/fix-flaky-pty-host-host.md) | Wait for both expected copies before checking cold-restore input | assumed — autonomous |
+| easy | high | [fix-flaky-pty-host-host D14](decisions/fix-flaky-pty-host-host.md) | Follow the incoming night-mode verification contract | locked by docs/loop/LOOP.md |
+| easy | high for attribution to the named test file; no root-cause claim about the fetch implementation | [fix-flaky-pty-host-host D15](decisions/fix-flaky-pty-host-host.md) | Attach the independent fetch failure to its existing queued repair | assumed — autonomous |
 | easy (test/fix scope only) | high | [fix-flaky-quirky-worktree-window-projects D1](decisions/fix-flaky-quirky-worktree-window-projects.md) | Treat the load-sensitive failures as a fix item | locked by docs/loop/LOOP.md |
 | easy | high | [fix-flaky-quirky-worktree-window-projects D2](decisions/fix-flaky-quirky-worktree-window-projects.md) | Isolate all process-based experiments and own cleanup | locked by docs/loop/LOOP.md |
 | easy | high for the recorded failure; fresh controlled red/green verification remains pending. | [fix-flaky-quirky-worktree-window-projects D3](decisions/fix-flaky-quirky-worktree-window-projects.md) | Reuse the already-landed condition-based report wait | assumed — autonomous |
@@ -958,6 +979,20 @@ files, not this one.
 | easy | high | [m5-structured-runner D32](decisions/m5-structured-runner.md) | Repeat affected verification on the operator's replacement host | assumed — autonomous (operator-directed environment repair) |
 | easy | high | [m5-structured-runner D33](decisions/m5-structured-runner.md) | Supply the scripted native fixture's existing Node prerequisite on the replacement host | assumed — autonomous |
 | easy | high | [m5-structured-runner D34](decisions/m5-structured-runner.md) | Preserve verified source when foreign dirty integration state prevents both landing and blocking | locked by docs/loop/LOOP.md |
+| easy | high | [m5-structured-runner D35](decisions/m5-structured-runner.md) | Resume operator-prioritized landing after the queue repair | assumed — autonomous (operator-directed resumption) |
+| easy | high for observed failure/load; final gate pending | [m5-structured-runner D38](decisions/m5-structured-runner.md) | Preserve the first merged scripts failure without altering protected tests | assumed — autonomous |
+| easy | high for the exercised snapshot only | [m5-structured-runner D39](decisions/m5-structured-runner.md) | Preserve the first broad merge snapshot's green result without mistaking it for account coverage | assumed — autonomous |
+| easy (targeted coverage) | high for reproduced wrong-account and fail-open behavior; green pending | [m5-structured-runner D40](decisions/m5-structured-runner.md) | Use actual child identity and failure-before-spawn as the account regression | assumed — autonomous |
+| easy | high for exercised native/cli paths; no ui/native-window scenario added | [m5-structured-runner D41](decisions/m5-structured-runner.md) | Re-exercise the merged native lifecycle through the real CLI | assumed — autonomous |
+| easy | high | [m5-structured-runner D42](decisions/m5-structured-runner.md) | Deduplicate identical protocol path maps after the automatic merge | assumed — autonomous |
+| easy | high for exercised final integration | [m5-structured-runner D43](decisions/m5-structured-runner.md) | Accept the repaired integration only after fresh green consumer and local gates | assumed — autonomous |
+| easy | high for the scoped reviewed invariants | [m5-structured-runner D44](decisions/m5-structured-runner.md) | Check the account reconciliation without reopening the completed feature review | assumed — autonomous |
+| easy (restoration/coverage) | high for reproduced omissions | [m5-structured-runner D48](decisions/m5-structured-runner.md) | Verify restoration at both the type and real consumer boundaries | assumed — autonomous |
+| easy (consumer regression and faithful restoration) | high for observed launch/resume behavior | [m5-structured-runner D49](decisions/m5-structured-runner.md) | Keep a real CLI/default-catalog/native-process regression for launch and resume | assumed — autonomous |
+| easy | high for corrected fixture and consumer coverage | [m5-structured-runner D50](decisions/m5-structured-runner.md) | Restore fixture contracts and delete obsolete copies instead of repinning them | assumed — autonomous |
+| easy | high for recorded outcomes and index operation | [m5-structured-runner D51](decisions/m5-structured-runner.md) | Preserve all historical snapshot failures and reconcile the actual Git index before committing | assumed — autonomous |
+| easy | high for final exercised integration | [m5-structured-runner D52](decisions/m5-structured-runner.md) | Land the fully reconciled final source after consumer and smoke proof | assumed — autonomous |
+| easy | high | [m5-structured-runner D53](decisions/m5-structured-runner.md) | Use the operator's immediate landing gate ownership | assumed — autonomous (operator-directed verification ownership) |
 | easy | high | [m5-ledger D3](decisions/m5-ledger.md) | Use omp implementers with the reachable Gemini reviewer fallback | assumed — autonomous |
 | easy | high | [m5-ledger D11](decisions/m5-ledger.md) | Build and verify macOS behavior without claiming other platforms | deferred: platform |
 | easy | high | [m5-ledger D13](decisions/m5-ledger.md) | Use two independent implementation components with one integration owner | assumed — autonomous |
@@ -1041,6 +1076,18 @@ files, not this one.
 | easy | high | [m0-registry D32](decisions/m0-registry.md) | Wave 2 checkpoint findings: fix all four defects | assumed — autonomous |
 | easy | high | [m0-registry D33](decisions/m0-registry.md) | A long QUIRKY_HOME breaks the PTY host's socket; logged, not fixed here | deferred: platform |
 | easy | high | [m0-registry D34](decisions/m0-registry.md) | The final review loop closed after three rounds with no open finding | assumed — autonomous |
+| easy | high | [fix-test-cost D1](decisions/fix-test-cost.md) | Optimize test execution, not product behavior | assumed — autonomous |
+| easy | high | [fix-test-cost D2](decisions/fix-test-cost.md) | Use omp implementers and the reachable Gemini reviewer | assumed — autonomous |
+| easy | high | [fix-test-cost D3](decisions/fix-test-cost.md) | Measure on the existing configured remote runner | assumed — autonomous |
+| easy | high for measured command cost; limited for total process-tree cost | [fix-test-cost D4](decisions/fix-test-cost.md) | Profile test commands without claiming whole-host CPU | assumed — autonomous |
+| easy | high | [fix-test-cost D5](decisions/fix-test-cost.md) | Share only compatible daemon state, not every test fixture | assumed — autonomous |
+| easy | high | [fix-test-cost D6](decisions/fix-test-cost.md) | Make clean real shells explicit and keep integration scenarios on login shells | assumed — autonomous |
+| easy | high | [fix-test-cost D7](decisions/fix-test-cost.md) | Replace positive-completion sleeps, retain real observation windows | assumed — autonomous |
+| easy | high | [fix-test-cost D8](decisions/fix-test-cost.md) | Apply the incoming verification policy without an unstarted review round | locked by docs/loop/LOOP.md |
+| easy | high | [fix-test-cost D9](decisions/fix-test-cost.md) | Preserve the real output and restart-observation boundaries | assumed — autonomous |
+| easy | high | [fix-test-cost D10](decisions/fix-test-cost.md) | Keep incoming feature decisions and default test semantics intact | locked by docs/loop/decisions/m3-session-info.md |
+| easy | high for observed results; no attribution of the intermittent failures | [fix-test-cost D12](decisions/fix-test-cost.md) | Keep the established flaky-rerun policy and report each non-first-pass gate | locked by scripts/suite.ts |
+| easy | high for observed costs; no causal aggregate speedup claim | [fix-test-cost D13](decisions/fix-test-cost.md) | Report the measured costs without claiming an aggregate suite speedup | assumed — autonomous |
 | easy | high | [m3-terminal-dock D2](decisions/m3-terminal-dock.md) | Run unattended brainstorming and select every relevant gray area | locked by docs/loop/LOOP.md |
 | easy | high | [m3-terminal-dock D4](decisions/m3-terminal-dock.md) | Bind omp OpenAI implementers to Gemini review after Opus proved unavailable | assumed — autonomous |
 | easy | high | [m3-terminal-dock D5](decisions/m3-terminal-dock.md) | Linux and Windows execution remain deferred | deferred: platform |

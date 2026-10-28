@@ -17,6 +17,8 @@ import { fileURLToPath } from 'node:url'
 const CLAIM_FILES = ['runtime.json', 'pty.pid'] as const
 const POLL_INTERVAL_MS = 75
 const GRACEFUL_SHUTDOWN_MS = 250
+// A live guardian may wait on Bun startup and its first process-table snapshot under suite load.
+const GUARDIAN_STARTUP_TIMEOUT_MS = 15_000
 const HELPER_PATH = fileURLToPath(import.meta.url)
 const scopeEnvironmentCache = new Map<string, boolean>()
 
@@ -378,7 +380,7 @@ async function bootstrapGuardian(configPath: string): Promise<void> {
     env: { ...process.env, QUIRKY_HOME: config.home }
   }
   const guardian = Bun.spawn(command, guardianOptions)
-  const deadline = Date.now() + 4_000
+  const deadline = Date.now() + GUARDIAN_STARTUP_TIMEOUT_MS
   while (Date.now() < deadline) {
     if (existsSync(config.readyFile)) return
     if (guardian.exitCode !== null) throw new Error(`process scope guardian exited with ${guardian.exitCode}`)

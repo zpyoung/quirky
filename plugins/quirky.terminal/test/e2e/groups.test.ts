@@ -21,7 +21,7 @@ const titles = async (h: Awaited<ReturnType<typeof startE2e>>) => groupShape((aw
 test(
   'SC-45: Move Tab to Split places the new group on the chosen side',
   async () => {
-    const h = await startE2e()
+    const h = await startE2e({ cleanShell: true })
     const one = await openTab(h, ['--title', 'Terminal 1'], { ready: false })
     const hello = await openTab(h, ['--title', 'Hello'], { ready: false })
     expect(await titles(h)).toEqual(['Terminal 1', 'Hello'])
@@ -55,7 +55,7 @@ test(
 test(
   'SC-47: group dividers clamp between 0.15 and 0.85',
   async () => {
-    const h = await startE2e()
+    const h = await startE2e({ cleanShell: true })
     await openTab(h, ['--title', 'A'], { ready: false })
     const b = await openTab(h, ['--title', 'B'], { ready: false })
     await terminal(h, 'tab', 'move', b.tab.id, '--split', 'right')
@@ -81,7 +81,7 @@ test(
 test(
   'SC-48: a group goes away with its last tab, and Close Split Pane keeps its tabs',
   async () => {
-    const h = await startE2e()
+    const h = await startE2e({ cleanShell: true })
     const one = await openTab(h, ['--title', 'Terminal 1'])
     const hello = await openTab(h, ['--title', 'Hello'])
     const logs = await openTab(h, ['--title', 'Logs'])

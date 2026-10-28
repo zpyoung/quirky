@@ -398,5 +398,16 @@ Reader: autonomous builders and later operator review — Decision: preserve the
 - **Revisit if:** the normal queue gate fails or integration advances with another conflict
 - **Source:** assumed — autonomous
 
+## D37: Resolve the documentation-only landing race and retry immediately
+- **Question:** how to proceed when the second queue attempt encountered another moving integration tip
+- **Options:** repeat long semantic verification; drop the feature documentation; combine the additive README edits and recheck types
+- **Chose:** combine the existing sidebar API guidance with incoming public-protocol path guidance, retain the automatically merged lockfile and structured fixture updates, and retry landing after typecheck exited 0. Read the incoming test-cost, PTY-host and updated structured-runner decisions; retain their ownership and public-source mapping contracts.
+- **Why:** the only conflict was README.md; no runtime conflict or new feature failure was reported. The queue remains responsible for fresh full merged verification. No new review, dogfood or semantic suite is started for this documentation resolution.
+- **Evidence:** bg_27 conflict before verification; additive README resolution; latest `bun run typecheck` exit 0 in 24.33 seconds
+- **Reversibility:** easy
+- **Confidence:** high for this conflict resolution; full landing remains pending
+- **Revisit if:** the queue names a real merged-source failure
+- **Source:** assumed — autonomous (operator-directed fast landing)
+
 ## Progress
-Corrective ledger merge verified: all affected files have passing observations, focused ledger window passes without retry, scripts pass 62/0 and typecheck passes. The real CLI subtree-deletion smoke also passes and removed its home. Next: commit the corrective merge, detach and retry queue.ts land m2-sidebar-extras with isolated Git defaults preserving the observed author identity. No final review/dogfood campaign was started; exhaustive parity remains in m2-sidebar-extras-followup. All workers and runtime resources have returned; inherited .serena/ and test-migrated.test.ts remain untouched/uncommitted.
+Second landing conflict was documentation-only and is resolved additively; latest typecheck passes. Core semantic/script/runtime evidence remains D29–D36. Commit this correction, detach and retry queue.ts land immediately with the private Git defaults; do not restart review/dogfood or another semantic campaign. The queued follow-up owns exhaustive parity. All workers and runtime resources have returned; inherited .serena/ and test-migrated.test.ts remain untouched/uncommitted.

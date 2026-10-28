@@ -3,8 +3,8 @@
 Quirky is a memory-efficient rewrite of [Orca](https://github.com/zpyoung/orca) for running coding
 agents in git worktrees. Quirky runs on macOS: you add repos, create worktrees, run shells and agents
 in terminals that survive closing the app, see which agents are working, waiting or done, review
-and commit diffs, answer `quirky ask` questions, and run background Claude sessions with no
-terminal. The measured v1 daemon and PTY host together used about 43 MB with eight busy terminals
+and commit diffs, answer `quirky ask` questions, and run background Claude and Codex sessions
+without a terminal, with shared local checks. The measured v1 daemon and PTY host together used about 43 MB with eight busy terminals
 (`research/memory-probe/quirky-v1-daemon.md`).
 
 ## Try it
@@ -71,6 +71,9 @@ remain available alongside the Source Control activity item.
 The operator-directed core landing leaves exhaustive parity and browser verification to
 `m2-sidebar-extras-followup`; see [the sidebar specification](docs/quirk/specs/2026-10-27-m2-sidebar-extras/logic.md)
 for that remaining acceptance target.
+The root TypeScript configuration resolves both public `@quirky/protocol` entries directly to
+workspace source, so newly added plugins do not need generated per-plugin links for typechecking.
+Keep those mappings aligned with `packages/protocol/package.json` exports.
 
 ## Docs
 

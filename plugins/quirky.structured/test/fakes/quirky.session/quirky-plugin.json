@@ -6,6 +6,7 @@
   "contributes": {
     "method": [
       { "id": "register", "params": { "type": "object", "additionalProperties": true } },
+      { "id": "setProviderSession", "params": { "type": "object", "additionalProperties": true } },
       { "id": "setStatus", "params": { "type": "object", "additionalProperties": true } },
       { "id": "get", "readOnly": true, "params": { "type": "object", "additionalProperties": true } },
       { "id": "list", "readOnly": true, "params": { "type": "object", "additionalProperties": true } },
