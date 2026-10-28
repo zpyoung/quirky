@@ -44,5 +44,27 @@
 - **Revisit if:** public native or host-owned credential import capability is explicitly authorized
 - **Source:** deferred: platform
 
+## D5: Repair actual wrapped-menu anchoring instead of bypassing hit tests
+- **Question:** Why did the real Browser menu import button fail with covered-by-input after Settings imports worked?
+- **Options:** force a DOM click; widen the window; fix the popover's containing block
+- **Chose:** position the profile menu against the toolbar, not its wrapping summary; constrain width to the pane. Keep actual pointer hit testing. Parent owns the small BrowserPaneWindow.tsx style/class fix beyond the two original worker scopes.
+- **Why:** the toolbar wrapped the summary to its left edge, while right:0 plus420px minimum anchored the menu atx=-64.55 behind the sidebar. A one-variable live geometry hypothesis moved it inside the pane; shipped-source rebundle/reload reproduced the correct position without injected style.
+- **Evidence:** actual UI before toolbar left240/popover left-64.55/right355.45; shipped after pane240–1236/menu249–669, direct Import Cookies click works; screenshot omp-sshots-15b7f609d3892f99.webp.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a narrower/split toolbar places import controls outside its owning pane
+- **Source:** assumed — autonomous
+
+## D6: Separate focused real-path evidence from unrun suites and OS chooser assurance
+- **Question:** What actually ran and which receipts justify landing?
+- **Options:** infer broad/native parity; disclose precise exercised paths and native handoff
+- **Chose:** both OpenAI workers returned unchanged09f8f41c HEADs; audited two new panel files and four entrypoint paths only, parent committed efac49f8/bd2921d7 and merged; both worktrees removed. Initial root+mobile typecheck exited0 in36.72s. Web bundle built25plugin UI modules. Actual daemon/owned Chrome UI: selected nondefault Import Review, explicit Firefox2source profiles, invalid JSON produced error/no jobs; selected JSON confirmation produced1imported/1Google skipped/2total plus real warning, successful job and JSON badge; Firefox Work confirmation produced1imported/0skipped/1total, persisted Firefox Work badge. Default stayed untouched. Menu and hint both named Import Review; Hide Hint removed the hint; fixed menu screenshot and clean post-reload page errors observed.
+- **Why:** permanent acceptance tests were authored but intentionally unrun under build-first. Runtime proof uses only owned synthetic sources and mock-keychain Chrome. First fixture symlinked browser dist outside its plugin root, correctly refused by static serving; copying owned dist into fixture resolved that setup error, not an application authorization change.
+- **Evidence:** real jobs b0b7ccf7-f4ae-4fb5-87b4-e5b5c630a653/cd33879d-0aca-409f-8bcb-a53ca56b0f59 both succeeded for profile_50b331d7a6284392b200bd448cb88d27; screenshots omp-sshots-15b7f51d7f892f95.webp,15b7f529bf092f96.webp,15b7f609d3892f99.webp. Supervisor l11-browser-import-ui exited0, cleanup/homeRemoved/scratchRemoved alltrue; managed browser tab closed. Final native chooser interaction/focus is pending docs/loop/native/sa-browser-profile-import-ui.json, not inferred from uploadFile.
+- **Reversibility:** easy
+- **Confidence:** high for exercised flows only
+- **Revisit if:** end-phase suites or native chooser scenario fail
+- **Source:** locked by docs/loop/LOOP.md
+
 ## Progress
-Requirements and prerequisite map complete. Combined spec self-reviewed. Next commit shared contracts/capability, dispatch two disjoint implementation components, integrate, typecheck and focused actual-surface proof; catch up once, read incoming decisions, commit/detach/land. No tests or review campaign run.
+Implementation and focused actual-surface smoke complete; permanent suites/review/full dogfood unrun. Contracts09f8f41c and both components merged, worktrees removed; D5 includes verified wrapped-menu fix, D6 records runtime/cleanup receipts. README and one pending native chooser scenario updated. Next: commit receipts, exactly one roadmap catchup and read incoming decision logs, rerun root+mobile typecheck, detach and canonical queue land. No added follow-up: every named implementation flow ships within existing local managed-Chrome authority.

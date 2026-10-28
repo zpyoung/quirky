@@ -41,7 +41,7 @@ const styles = `
 .qbp button:disabled { opacity:.48; cursor:not-allowed; }
 .qbp button:focus-visible, .qbp input:focus-visible, .qbp [tabindex]:focus-visible { outline:2px solid var(--accent,#4f8ff7); outline-offset:1px; }
 .qbp input { min-width:0; padding:6px 8px; border:1px solid var(--border,#2b2f3a); border-radius:5px; background:var(--bg,#16181d); }
-.qbp-toolbar { display:flex; flex:0 0 auto; align-items:center; flex-wrap:wrap; gap:5px; padding:7px 9px; border-bottom:1px solid var(--border,#2b2f3a); background:var(--bg-raised,#1d2027); }
+.qbp-toolbar { position:relative; display:flex; flex:0 0 auto; align-items:center; flex-wrap:wrap; gap:5px; padding:7px 9px; border-bottom:1px solid var(--border,#2b2f3a); background:var(--bg-raised,#1d2027); }
 .qbp-address-wrap { position:relative; display:flex; flex:1 1 260px; min-width:180px; gap:5px; }
 .qbp-address { flex:1 1 auto; width:100%; }
 .qbp-address-popover, .qbp-menu-popover { position:absolute; z-index:20; top:calc(100% + 5px); right:0; display:flex; flex-direction:column; gap:3px; min-width:min(420px,calc(100vw - 24px)); max-height:min(60vh,460px); padding:6px; overflow:auto; border:1px solid var(--border,#2b2f3a); border-radius:7px; background:var(--bg-raised,#1d2027); box-shadow:0 10px 32px #0009; }
@@ -50,6 +50,8 @@ const styles = `
 .qbp-suggestion-title { display:block; font-weight:600; overflow-wrap:anywhere; }
 .qbp-suggestion-detail { display:block; color:var(--muted,#8a909e); font-size:11px; overflow-wrap:anywhere; }
 .qbp-details { position:relative; flex:0 0 auto; }
+.qbp-toolbar > .qbp-profile-details { position:static; }
+.qbp-profile-details > .qbp-menu-popover { left:9px; right:auto; width:min(420px,calc(100% - 18px)); min-width:0; }
 .qbp-details > summary { min-height:28px; padding:5px 9px; border:1px solid var(--border,#2b2f3a); border-radius:5px; cursor:pointer; list-style:none; white-space:nowrap; }
 .qbp-details > summary::-webkit-details-marker { display:none; }
 .qbp-mode { display:flex; align-items:center; gap:5px; padding:3px 8px; border:1px solid var(--border,#2b2f3a); border-radius:5px; color:var(--muted,#a4a9b4); white-space:nowrap; }
@@ -947,7 +949,7 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
           onMessage={reportDesignMessage}
           actionRef={designActionRef}
         />
-        <details className="qbp-details">
+        <details className="qbp-details qbp-profile-details">
           <summary aria-label="Browser menu">Browser menu</summary>
           <div className="qbp-menu-popover" role="menu">
             <BrowserProfileMenu context={context} pane={pane ?? undefined} inline onError={(text) => setMessage({ text, kind: 'error' })} />

@@ -3,6 +3,8 @@
 ## Status & amendments
 Approved autonomously under docs/loop/LOOP.md on 2026-10-28. Combined logic and technical specification under build-first rules. Self-reviewed against browser.md section 2 and Cookie import in detail; no open questions.
 
+**Amendments:** 2026-10-28 — actual-surface proof exposed a wrapped-toolbar menu outside its pane. The profile menu must remain pointer-accessible inside its owning pane; parent repairs BrowserPaneWindow.tsx containing-block/width styles. No import/API/engine scope change (decision D5).
+
 ## Purpose and conceptual model
 Connect the shipped import engine to the built-in Browser plugin's human controls. Imported credentials belong to the explicitly selected managed Chrome profile, available in Watch/agent Chrome, never the Native system webview. A source browser/profile is an explicitly selected read-only source; the destination profile is independent. Import replaces the engine's safe matching site families, not all stored cookies.
 
@@ -50,3 +52,4 @@ None; no extra unbuilt flow introduced. Native/remote prerequisites retain exist
 - Shared panel owns detection/file dialog/confirmation/tracked-job polling/status/toasts. BrowserProfileMenu.tsx owns menu/hint composition; BrowserSettings.tsx owns row target and badges. Remove obsolete ImportDetails, not an alias.
 - Existing public methods: detectBrowsers()->{browsers}; importStart({profile,source,yes:true})->{id}; importGet({id})->ImportJob. Public context.confirm precedes yes:true. Use one in-flight polling request at a time with cleanup on unmount. No new API methods or CLI aliases.
 - Backend+contract integration parent; one isolated panel implementer; one isolated menu/settings implementer. At most two OpenAI omp workers, scopes disjoint after parent contracts commit. No reviews/suite runs; permanent behavior tests authored but not run under LOOP. Parent runs root typecheck and an isolated focused actual-surface smoke required by developer, not a full dogfood campaign.
+- Wrapped Browser profile-menu popovers anchor to the toolbar rather than a wrapping summary and fit within its width. The focused browser smoke checks actual hit testing and bounds before/after; no source-text/CSS-value permanent test is introduced.
