@@ -173,7 +173,9 @@ class MobileRpcClient implements MobileRpc {
   private nextId = 1
   private currentState: MobileConnectionState = { phase: 'connecting', attempts: 0, message: 'Connecting securely' }
   private authenticated = false
+  private pairingProofAccepted = false
   private stopped = false
+  private terminalError: MobileRpcError | null = null
   private closeRequested = false
   private readonly pending = new Map<number, PendingCall>()
   private readonly eventHandlers = new Set<(event: { event: string; data: unknown }) => void>()
@@ -214,8 +216,9 @@ class MobileRpcClient implements MobileRpc {
     this.socket = socket
     socket.binaryType = 'arraybuffer'
     const opened = deferred<void>()
-    this.readyGate = deferred<void>()
-    this.pairingProof = deferred<void>()
+    const readyGate = this.readyGate = deferred<void>()
+    const pairingProof = this.pairingProof = deferred<void>()
+    const handshake = Promise.all([readyGate.promise, pairingProof.promise])
     const timeoutError = new MobileRpcError('timeout', 'Desktop connection timed out')
     const openTimer = setTimeout(() => opened.reject(timeoutError), connectTimeoutMs)
     let handshakeTimer: ReturnType<typeof setTimeout> | undefined
@@ -226,38 +229,38 @@ class MobileRpcClient implements MobileRpc {
     socket.onerror = () => {
       const error = new MobileRpcError('connection', 'Desktop connection failed')
       opened.reject(error)
-      this.readyGate?.reject(error)
-      this.pairingProof?.reject(error)
+      readyGate.reject(error)
+      pairingProof.reject(error)
     }
     socket.onclose = (event) => this.handleSocketClose(event.code ?? 1006)
     socket.onmessage = (event) => {
       this.messageQueue = this.messageQueue.then(() => this.processMessage(event.data)).catch((error: unknown) => {
         const failure = error instanceof MobileRpcError ? error : new MobileRpcError('protocol', 'Encrypted desktop message is invalid')
-        this.fail(failure, 'auth-failed')
+        this.fail(failure, failure.kind === 'connection' ? 'unreachable' : 'auth-failed')
       })
     }
     if (this.options.signal) {
       this.signalAbort = () => {
         const error = new MobileRpcError('closed', 'Pairing was cancelled')
         opened.reject(error)
-        this.readyGate?.reject(error)
-        this.pairingProof?.reject(error)
+        readyGate.reject(error)
+        pairingProof.reject(error)
         this.fail(error, 'disconnected')
       }
       if (this.options.signal.aborted) this.signalAbort()
       else this.options.signal.addEventListener('abort', this.signalAbort, { once: true })
     }
     try {
-      await Promise.race([opened.promise, this.aborted.promise])
+      await Promise.race([opened.promise, handshake, this.aborted.promise])
       if (this.stopped) throw new MobileRpcError('closed', 'Connection closed')
       handshakeTimer = setTimeout(() => {
         const error = new MobileRpcError('timeout', 'Encrypted pairing handshake timed out')
-        this.readyGate?.reject(error)
-        this.pairingProof?.reject(error)
+        readyGate.reject(error)
+        pairingProof.reject(error)
       }, handshakeTimeoutMs)
       socket.send(JSON.stringify(hello))
-      await Promise.race([this.readyGate.promise, this.aborted.promise])
-      await Promise.race([this.pairingProof.promise, this.aborted.promise])
+      await Promise.race([handshake, this.aborted.promise])
+      if (this.stopped) throw this.terminalError ?? new MobileRpcError('closed', 'Connection closed during authentication')
       this.authenticated = true
       this.setState({ phase: 'connected', attempts: 0, connectedAt: Date.now(), message: 'Encrypted direct connection' })
       this.touchActivity()
@@ -367,6 +370,7 @@ class MobileRpcClient implements MobileRpc {
     const binaryData = typeof Blob !== 'undefined' && data instanceof Blob ? await data.arrayBuffer() : data
     const frame = bytesFromMessage(binaryData)
     if (!frame || !this.schedule || frame.length > MAX_MOBILE_BINARY_BYTES + 82 || framePayloadKind(frame) !== 'binary') throw new MobileRpcError('protocol', 'Unexpected encrypted binary frame')
+    if (!this.pairingProofAccepted) throw new MobileRpcError('protocol', 'Desktop sent binary data before authenticated proof')
     const plaintext = openMobileE2EEV2Frame({
       frame, key: this.schedule.desktopToMobileKey, sessionId: this.schedule.sessionId,
       direction: 'desktop-to-mobile', payloadKind: 'binary', expectedCounter: this.inboundCounter
@@ -420,7 +424,36 @@ class MobileRpcClient implements MobileRpc {
   private acceptText(text: string): void {
     let value: unknown
     try { value = JSON.parse(text) as unknown } catch { throw new MobileRpcError('protocol', 'Desktop sent invalid encrypted JSON') }
-    if (!isRecord(value) || value.jsonrpc !== '2.0') throw new MobileRpcError('protocol', 'Desktop sent an invalid JSON-RPC message')
+    if (!isRecord(value)) throw new MobileRpcError('protocol', 'Desktop sent an invalid encrypted message')
+    if (value.type === 'e2ee_authenticated') {
+      if (this.pairingProofAccepted) throw new MobileRpcError('protocol', 'Desktop sent a duplicate authenticated proof')
+      const schedule = this.schedule
+      const proof = this.pairingProof
+      if (!schedule || !proof) throw new MobileRpcError('protocol', 'Authenticated proof arrived outside pairing')
+      if (!exactKeys(value, ['type', 'v', 'transcriptHashB64']) || value.v !== 2 ||
+        typeof value.transcriptHashB64 !== 'string' || value.transcriptHashB64 !== encodeBase64(schedule.transcriptHash)) {
+        throw new MobileRpcError('auth-failed', 'Desktop authenticated proof did not match the encrypted session')
+      }
+      this.pairingProofAccepted = true
+      proof.resolve()
+      return
+    }
+    if (value.type === 'e2ee_error') {
+      if (this.pairingProofAccepted) throw new MobileRpcError('protocol', 'Desktop sent a late authentication error')
+      if (!exactKeys(value, ['type', 'error']) || !isRecord(value.error) ||
+        !exactKeys(value.error, ['code']) || typeof value.error.code !== 'string') {
+        throw new MobileRpcError('protocol', 'Desktop sent an invalid encrypted authentication error')
+      }
+      if (value.error.code === 'registry_unavailable') {
+        throw new MobileRpcError('connection', 'Desktop device registry is temporarily unavailable', value.error.code)
+      }
+      if (value.error.code === 'unauthorized' || value.error.code === 'bad_proof') {
+        throw new MobileRpcError('auth-failed', 'Desktop rejected the pairing credential', value.error.code)
+      }
+      throw new MobileRpcError('protocol', 'Desktop sent an unknown encrypted authentication error')
+    }
+    if (!this.pairingProofAccepted) throw new MobileRpcError('protocol', 'Desktop sent an RPC message before authenticated proof')
+    if (value.jsonrpc !== '2.0') throw new MobileRpcError('protocol', 'Desktop sent an invalid JSON-RPC message')
     if (Object.hasOwn(value, 'method')) {
       if (!exactKeys(value, ['jsonrpc', 'method', 'params']) || value.method !== 'event' ||
         !isRecord(value.params) || typeof value.params.type !== 'string' || value.params.type.length === 0) {
@@ -538,6 +571,7 @@ class MobileRpcClient implements MobileRpc {
   private finish(error: MobileRpcError, phase: MobileConnectionState['phase']): void {
     if (this.stopped) return
     this.stopped = true
+    this.terminalError = error
     this.credentialToken = ''
     if (this.livenessTimer !== undefined) {
       clearTimeout(this.livenessTimer)
