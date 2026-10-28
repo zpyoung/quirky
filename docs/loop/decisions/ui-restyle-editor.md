@@ -121,5 +121,16 @@
 - **Revisit if:** An owned surviving process is identified by exact fixture identity.
 - **Source:** assumed — autonomous
 
+## D12: Preserve incoming exact-window, Ask snapshot and shell mount contracts
+- **Question:** Do the sole roadmap catch-up's decisions conflict with the restyle?
+- **Options:** restore focus-inferred routing or old host mounts; preserve the landed owning contracts
+- **Chose:** Read all four incoming decision logs completely: fix-test-agent-status-1028, fix-test-apps-mobile-1028, fix-test-ask-1028 and fix-test-packages-ui-1028. Preserve exact connId ambiguity/stale refusal, MainArea canonical active-view input identity, ToolShell's canonical panel focus region, exact-ID Ask snapshot isolation, authenticated attention ownership, mobile grants and native/platform evidence limits. No conflict or editor API/caller migration is required.
+- **Why:** This restyle changes editor presentation rather than those authorities. The actual multi-window fixture ambiguity refusal is consistent with the incoming exact-window decision; fixture setup must target the live connection instead of weakening admission. The merge is clean and introduces no alternative editor state.
+- **Evidence:** incoming-decisions.json complete four-log snapshot; sole git merge build/roadmap; merged compiler gate
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** The canonical merge-result gate demonstrates a concrete integration failure.
+- **Source:** locked by incoming decision logs
+
 ## Progress
-Combined spec self-reviewed and shared existing component/style ownership contracts committed before implementer dispatch. Next: three isolated source tasks, no worker checks/commits, barrier audit and integration; parent lint/typecheck/minimal actual UI proof, one roadmap catch-up and incoming-decision audit, final compiler gate then canonical queue land. Suites, automated golden scoring and review rounds remain unrun under build-first; no visual-approval claim.
+Ready for canonical land. Three scoped components committed and merged after exact HEAD/path/metadata barrier; all owned component worktrees removed with inherited metadata preserved. Source integration79e1faab and one clean roadmap catch-up complete. All four incoming logs read without conflict. Full merged UI-lint/root/mobile/prepared-desktop typecheck passed exit0/32.73s; pre-catch-up actual renderer build passed11host/vendor files25plugin modules and minimum real UI/print interactions are recorded in D9. Two substantive interaction regression files authored, suites/reviews/full dogfood/native/golden scoring UNRUN under build-first. No editor flow intentionally left unbuilt and no successor added. Owned isolated Chrome stopped, daemon shutdown exception and exact no-owned-process inventory retained under D11; original drifted foreign browser target untouched under D10. Next: commit this receipt, detach and canonical queue land ui-restyle-editor, await actual verdict; preserve compact ignored evidence then remove only owned scratch after success. No second item or whole-queue completion claim.

@@ -309,7 +309,6 @@ their existing commands and save guards. `quirky.editor` is included in the UI l
 presentation changes must use `@quirky/ui` components and semantic tokens, with engine styles
 owned by the shared UI package rather than injected plugin CSS.
 
-
 New Markdown documents use collision-safe untitled placeholders. Save opens a relative-path
 Save As dialog; cancelling keeps the draft. The public `quirky.editor/saveAs` method accepts
 `bufferId`, `path` and `expectedRevision`, refuses existing destinations and preserves the
