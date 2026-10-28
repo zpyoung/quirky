@@ -1,0 +1,30 @@
+{
+  "item": "sb-mobile-app-panels",
+  "spec": "docs/quirk/specs/2026-10-28-sb-mobile-app-panels/logic.md",
+  "scenarios": [
+    {
+      "id": "P8-phone-keyboard-sheets",
+      "title": "With the actual Expo phone shell paired to an isolated desktop, open Tasks > Create Workspace with the software keyboard visible at narrow width; scroll to all fields/actions, cancel, then open filters. Header and content return to bounds and no sheet/action is clipped. Requires a real phone/simulator; desktop browser proof does not establish this.",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    },
+    {
+      "id": "P3-P4-native-clipboard-links",
+      "title": "On the paired native phone, copy a file path/review notes/task link through the granted clipboard action, then open a task external link in the OS browser and return to the same host/worktree without losing panel state. Use only temporary owned repository/provider fixtures.",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    },
+    {
+      "id": "P7-phone-background-resume",
+      "title": "Enable direct foreground notifications on a paired phone, leave and return to the app, and verify subscription cleanup/reconnect, no duplicated alert and correct focused-workspace suppression. Background APNs/FCM banners are not supported by this direct subscription and must not be represented as delivered.",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    }
+  ]
+}

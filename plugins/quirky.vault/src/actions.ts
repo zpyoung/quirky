@@ -87,7 +87,8 @@ export class VaultActions {
         )
       }
     }
-    return resumed
+    // Launch environments belong to the host; the phone only needs resumable session metadata.
+    return caller.role === 'mobile' ? { ...resumed, launch: undefined } : resumed
   }
 
   deleteSession = async (params: Record<string, unknown>): Promise<{
