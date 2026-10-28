@@ -54,6 +54,7 @@ Tested integration snapshot: `97aaa12d9fdf91a966cbc78d5557e113fc9789b3`.
 | `bun scripts/suite.ts packages apps plugins` | Exit 1; 701/853 remote files passed, 152 failed; 6/7 macOS files passed, 1 failed; 2284.91 seconds | `artifact://64`; complete compressed transcript and grouped inventory linked below |
 | `bun test scripts` | Exit 0; 81 pass, 0 fail, 844 assertions across 7 files; 75.45 seconds | `artifact://70`; synthetic failing test output belongs to suite/controller fixtures, not failed script tests |
 | `bun run typecheck` | Exit 0; frozen install, UI lint, root/mobile TypeScript and desktop typecheck passed; 31.33 seconds | Parent job bg_62 output |
+| `bun run typecheck` after the single integration catch-up | Exit 0; frozen install, UI lint, root/mobile TypeScript and desktop typecheck passed; 35.18 seconds | Candidate `faeac9702db1643fa740f81ed40f46eecfb9dce2`; parent job bg_63 |
 
 ## Failure report and repair ownership
 
@@ -79,5 +80,16 @@ Reader: repair lanes and the operator — Decision: which existing or new owner 
 - **Revisit if:** later owners demonstrate extraction error or a consumed integration correction
 - **Source:** locked by docs/loop/LOOP.md
 
+## D6: Keep the baseline immutable across concurrent integration repairs
+- **Question:** Do incoming repair commits replace the earlier complete-suite results?
+- **Options:** relabel earlier failures as passing from later partial receipts; preserve the exact baseline and tell residual owners which corrections to consume
+- **Chose:** preserve `97aaa12d` results and mark caught-up candidate `faeac970` as typechecked only
+- **Why:** All eight incoming decision logs were read. Their four flaky fixes target different files from this baseline. The later terminal-owner item overlaps `worktree/test/window-navigation.test.ts` and repairs successful-navigation history; the worktree repair must consume that landed correction as well as lane 4's pending fixture/renderer work before repairing residual failures. Accounts' native sign-in Open repair is not accounts API/profile acceptance; browser native C2 remains blocked, not fixed. The incoming screenshot-review command has a separately owned scripts failure.
+- **Evidence:** incoming decisions `fix-flaky-{pty-host-clear,pty-host-manager,quirky-worktree-create,terminal-features-pane}`, `fix-native-{m3-accounts-1028,sa-browser-agent-1028}`, `m7-terminal-owner-provisioning-and-selector-flows`, `ui-screenshot-review`; current typecheck exit 0
+- **Reversibility:** easy (evidence and ownership annotation only)
+- **Confidence:** high
+- **Revisit if:** a repair owner supplies a newer complete-suite receipt for its residual area
+- **Source:** assumed — autonomous
+
 ## Progress
-All three baseline commands completed. Added 29 per-area repair items through the authoritative controller; direct queue read confirms them, each depending on this item. Sidebar-extras activity remains with the existing lane-4 owner. No product/test source changed. Next: commit the report, catch up with integration once, read incoming decisions, typecheck the report candidate, and land through the controller. Baseline failures are the intended triage deliverable, not a claim of passing acceptance.
+All required baseline checks completed and all observed failing areas have repair ownership. The exact failed-file inventory and Mac retry were independently cross-checked against the transcript. The single integration catch-up is complete; all eight incoming decision logs were read, and caught-up root typecheck passed. No product/test source changed. Ready to commit this final report and land through the authoritative controller. Baseline failures are the intended triage deliverable; the later merged tree has not been claimed suite-green.
