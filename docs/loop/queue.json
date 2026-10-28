@@ -1597,6 +1597,20 @@
         "m2-editor-complete-remaining-flows"
       ],
       "status": "todo"
+    },
+    {
+      "id": "m7-sweep-automation-completion",
+      "milestone": "M7",
+      "title": "Build the remaining unimplemented automation-domain flows inventoried in docs/quirk/specs/2026-10-28-m7-sweep-automation/logic.md: durable automation-created workspace provenance with automation/run IDs and name/title snapshots; sidebar Created by automation badge, Open automation/Open run navigation and explicit deleted/unavailable-history states; persisted Hide automation-created filtering; mobile worktree loop labels/counts/cap reasons using the actual client and compact loop summaries after sb-mobile-app lands; ledger SSH-host workspace ownership/routing/import/evidence and selected-runtime availability after public host registration-generation/execution/filesystem APIs exist, never dereference remote paths locally. Reconcile concurrently landed mobile/host/provenance implementations and existing remote automation owners before coding. Preserve structured-only background execution and explicit user exclusions. This item contains unbuilt functionality only, not a verification, review or debugging campaign.",
+      "docs": [
+        "automations.md",
+        "fork-loops.md",
+        "ledger.md"
+      ],
+      "deps": [
+        "m7-sweep-automation"
+      ],
+      "status": "todo"
     }
   ]
 }
