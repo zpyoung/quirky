@@ -120,6 +120,17 @@
 - **Confidence:** high
 - **Revisit if:** native-only behavior is introduced
 - **Source:** deferred: platform
+## D12: Host-computed opt-in close context closes the spec-review blocker
+- **Question:** P2 spec finding: identical guard invocation for single and bulk removal cannot both protect individual closes and permit bulk detach.
+- **Options:** untrusted caller-supplied bypass; block all closes; host-computed opt-in reason.
+- **Chose:** optional hosted ViewTab/openViewTab closeContext flag. Opted-in guards receive single/bulk/replacement computed by actual daemon entry point, threaded through removeTabs; existing guard schemas unchanged. One-shot single approval binds actual loopId+tabId. Bulk detach never stops child.
+- **Why:** reviewer traced closeTab and closeTabs through identical removeTabs guard. Distinguishing trust at the owning host, not the plugin's UI assumption, satisfies both U11 cases without widening authority.
+- **Evidence:** LoopSpecReview P2, tech.md Contracts; terminal/layout/service.ts317-322,798-824,1019.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** raw single-close or bulk regression bypasses the choice contract.
+- **Source:** assumed — autonomous
+
 
 ## Progress
 Claimed m5-loops-ui, merged committed core and presets dependencies. Structured conflict resolution preserved both existing orchestration authority/pointer/close and incoming loops guards/paging/owner cleanup; unverified merge source, not a completion claim. Logic/tech/shared component contracts ready; spec reviewer active. Next: finish spec review, commit contracts/specs, dispatch three isolated implementers, integrate+verify, merge dependency tips/readiness, catch up roadmap/read decisions, final review/fix, UI proof and authoritative land. Do not end while workers/jobs run; no second item.
