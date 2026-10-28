@@ -53,10 +53,11 @@ ordering is unchanged. See the public
 
 ## Background structured sessions
 
-`quirky.structured` runs Claude through its Agent SDK and Codex through `codex app-server` over
-stdio JSONL. Neither allocates a PTY. Start a background session from a registered worktree:
+`quirky.structured` runs Claude through its Agent SDK and Codex through the native `codex app-server`
+over stdio JSONL. Both run without a PTY. Start either provider in a registered worktree:
 
 ```sh
+quirky session new --background --agent claude --prompt "Review this repository" --json
 quirky session new --background --agent codex --prompt "Review this repository" \
   --model gpt-5.5 --effort high --json
 ```
@@ -124,10 +125,11 @@ Plugin stores still refuse a schema newer than their migration list by default. 
 in with `context.openStore(migrations, { newerVersion: 'read-only' })` and inspect `store.readOnly`;
 SQLite enforces read-only access, migrations do not run, and write/transaction methods refuse.
 
-## Orchestration core
+## Orchestration
 
 `quirky.orchestration` provides durable Runs, dependent Tasks, authoritative Dispatch attempts,
-mailboxes, resumable questions and decision gates through `quirky orchestration`.
+mailboxes, resumable questions, decision gates and worker lifecycle operations. The manifest
+declares session and worker APIs plus CLI verbs under `quirky orchestration`.
 Actor-sensitive commands run inside a live Quirky-managed terminal or structured session;
 the kernel verifies its launch credential and process or lease identity. `--from` and
 `--terminal` are equality assertions, not credentials.
@@ -151,11 +153,60 @@ Public session helpers provide exact-incarnation identity, guarded close and ide
 submission. Structured `create` accepts `deferStart: true` without a prompt, so authority can attach
 before the first turn. Automatic idle-mailbox nudging is deferred to
 `m6-orchestration-idle-pointer-shutdown`; explicit safe submission and durable mail remain available.
-Worker placement/custody/fleet and headless service coordinators are separate orchestration slices.
+Worker placement, custody and fleet use this same core. Headless coordinators use the plugin-owned
+service APIs below; plugin metadata cannot impersonate a session.
+
+**Session and worker methods:** `runCreate`, `runUse`, `runCurrent`, `runList`, `runShow`, `taskCreate`,
+`taskList`, `taskUpdate`, `dispatch`, `dispatchShow`, `send`, `check`, `reply`, `inbox`, `ask`,
+`gateCreate`, `gateResolve`, `gateList`, `requestShow`, `reset`, `workerStart`, `workerShow`,
+`workerRead`, `workerList`, `workerStop`, `workerAbandon`, `workerRelease`, `workerRetain`,
+`workerTerminalUserInput` (internal terminal-custody guard).
+
+**CLI verbs (28):** `run-create`, `run-use`, `run-current`, `run-list`, `run-show`, `task-create`,
+`task-list`, `task-update`, `dispatch`, `dispatch-show`, `send`, `check`, `reply`, `inbox`, `ask`,
+`gate-create`, `gate-resolve`, `gate-list`, `request-show`, `reset`, `worker-start`, `worker-show`,
+`worker-read`, `worker-list`, `worker-stop`, `worker-abandon`, `worker-release`, `worker-retain`.
+Use `quirky api --json` for the current method and result schemas.
 
 See the [contracts](quirky.orchestration/src/contracts.ts),
-[runtime interfaces](quirky.orchestration/src/runtime-contracts.ts) and
-[behavior specification](../docs/quirk/specs/2026-10-27-m6-orchestration-core/logic.md).
+[runtime interfaces](quirky.orchestration/src/runtime-contracts.ts),
+[core behavior specification](../docs/quirk/specs/2026-10-27-m6-orchestration-core/logic.md) and
+[worker behavior specification](../docs/quirk/specs/2026-10-27-m6-orchestration-workers/logic.md).
+
+## Heimdall kernel and service-owned Runs
+
+`quirky.heimdall` runs bounded watchers supplied by registered kind plugins. A kind owns its
+authorization, observation, decision, execution and stop hooks; the kernel owns scheduling,
+capability gates, durable attempts, budgets and recovery. Register through `quirky.heimdall/registerKind`,
+then use `enroll`, `inspect` and `reconcile`. Hook and result types are defined in
+[`contracts.ts`](quirky.heimdall/src/contracts.ts).
+
+Enrollment is unique per canonical workspace. Re-enrollment preserves watcher identity;
+re-arming an operator-disarmed watcher starts a new budget generation. Work in flight counts
+toward active time without double-counting overlaps. Background workers require positive live
+identity and an active assignment to count. Missing contact, an idle prompt or a lost reply does
+not prove completion. Unknown effects retain their durable request identity.
+
+Headless plugins use the eight `quirky.orchestration` service methods through `PluginContext.call`:
+
+- `serviceRunCreate` creates a stable Run for the authenticated plugin and its key. It does not
+  invent a coordinator session.
+- `serviceRunShow` reads owned worker identities and blocking Ask threads without consuming mail
+  or changing consumer generations.
+- `serviceWorkerStart` starts an attested worker in an explicit workspace. `serviceSend` sends
+  guidance with the Run as sender; `serviceCheck` consumes and acknowledges owned Run deliveries.
+- `serviceReply` answers a pending blocking Ask. `serviceWorkerStop` requires the exact session
+  and process incarnation; `serviceWorkerRelease` uses settled-outcome, archive and custody guards.
+
+Another plugin cannot read or control that service-owned Run. Ordinary worker CLI commands keep
+their native launch authority; they do not receive the service principal. See
+[`services/contracts.ts`](quirky.orchestration/src/services/contracts.ts) for request and result types.
+
+Watcher state, attempt facts, a bounded diagnostic trace ring and terminal summaries live in the
+plugin's private store; unresolved attempt traces remain pinned. A newer unknown store version
+remains inspectable but cannot execute work. Removing a
+watcher removes its own history, not its workers. Automatic OS sleep/wake binding is not installed
+by this plugin.
 
 ## Shared checks
 
@@ -185,6 +236,7 @@ Timeout/cancel sends TERM to the process group, then KILL after a two-second gra
 including descendants retaining output pipes. Plugin shutdown cancels and awaits active checks.
 Completed IDs can be reused; cancelling an unknown/completed ID returns `cancelled: false`.
 Process-tree cleanup is verified on macOS; Windows requires separate process-tree support.
+
 ## GitHub hosting
 
 `quirky.hosting` provides GitHub's API and generated `quirky hosting` commands. It

@@ -461,7 +461,7 @@
     "menu-item": [
       {
         "id": "new-loop",
-        "menu": "quirky.terminal/plus",
+        "menu": "quirky.terminal/tab",
         "title": "Loop…",
         "command": "new"
       }

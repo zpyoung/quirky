@@ -140,12 +140,12 @@ UiToastState = { key: string|null; kind; title; body; detail: string|null; persi
 
 ### M1: menu items
 
-Additive API amendment, 2026-10-28: Handoff continues to use the pane target and `{ session }`. The shared menu-item API also accepts `quirky.terminal/plus`; its command receives `{ workspace, group }`, and its rows appear only in the blank/static plus menu after Agent settings. `when` and `after` are pane-only and are rejected for plus items. See the [loop UI contract](../2026-10-28-m5-loops-ui/tech.md#contracts--interfaces).
+Additive API amendment, 2026-10-28: Handoff continues to use the pane target and `{ session }`. The shared menu-item API also accepts `quirky.terminal/tab`; tab commands receive `{ worktree, workspace, group }`, preserving Browser's `after: 'quick-commands'` placement. Tab contributions appear before Agent settings, with the unconditioned Loop row last by stable ID and visible only in the blank/static + menu. Handoff's pane `when` and `after` behavior remains unchanged. See the [loop UI contract](../2026-10-28-m5-loops-ui/tech.md#contracts--interfaces).
 
 
 SCHEMA (manifest `contributes['menu-item']` entry):
 ```
-{ id: string; menu: 'quirky.terminal/pane' | 'quirky.terminal/plus'; title: string; command: string;
+{ id: string; menu: 'quirky.terminal/pane' | 'quirky.terminal/tab'; title: string; command: string;
   when?: { agent?: 'any' }; after?: 'quick-commands' }
 ```
 - `when.agent: 'any'` matches when the pane's session `agent !== 'shell'`. Items of disabled or

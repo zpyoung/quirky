@@ -1,4 +1,5 @@
 import type { PluginStore } from '@quirky/protocol'
+import type { AutomationOwner, AutomationRunDispatchState } from './dispatch-contract'
 
 export type AutomationRunStatus =
   | 'pending' | 'dispatching' | 'dispatched' | 'completed'
@@ -10,6 +11,7 @@ export type AutomationLaunchOverrides = { model?: string; optionValues?: Record<
 export type AutomationDefinition = {
   id: string
   creationKey?: string
+  owner?: AutomationOwner | null
   name: string
   prompt: string
   agentId: 'claude' | 'codex'
@@ -55,6 +57,7 @@ export type AutomationRun = {
   sessionKind: 'structured'
   sessionId: string | null
   launchSettings: Record<string, unknown> | null
+  dispatchState?: AutomationRunDispatchState | null
   outputSnapshot?: { format: 'plain_text'; content: string; capturedAt: number; truncated: boolean } | null
   precheckResult?: Record<string, unknown> | null
   usage?: Record<string, unknown> | null
@@ -62,7 +65,7 @@ export type AutomationRun = {
 }
 export type AutomationRunPatch = Partial<Pick<AutomationRun,
   'status' | 'workspaceId' | 'workspaceDisplayName' | 'sessionId' | 'launchSettings' |
-  'outputSnapshot' | 'precheckResult' | 'usage' | 'error'>>
+  'outputSnapshot' | 'precheckResult' | 'usage' | 'error' | 'dispatchState'>>
 export type AutomationRunsPage = { runs: AutomationRun[]; nextCursor: string | null }
 export type AutomationRunInput = {
   trigger: AutomationTrigger

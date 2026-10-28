@@ -183,7 +183,7 @@ export class SessionPointers {
     if (beforeSend) return beforeSend
     const current = this.records.get(session.id)
     if (!current) return { status: 'released', reason: 'recipient_gone' }
-    const turnRefusal = this.structuredRefusal(current)
+    const turnRefusal = this.structuredRefusal(current, params.purpose)
     if (turnRefusal) {
       const afterCheck = this.recipientResult(session, params.expectedIncarnation)
       return afterCheck ?? turnRefusal
@@ -249,9 +249,10 @@ export class SessionPointers {
       : { status: 'deferred', reason: 'not_quiescent' }
   }
 
-  private structuredRefusal(session: Session): PointerOperationResult | null {
+  private structuredRefusal(session: Session, purpose: PointerParams['purpose']): PointerOperationResult | null {
     if (session.kind !== 'structured') return { status: 'released', reason: 'recipient_changed' }
-    if (session.status === 'starting') return { status: 'deferred', reason: 'flight_active' }
+    // Driving input waits on structured/send's native startup barrier; mailbox nudges must remain idle-only.
+    if (session.status === 'starting' && purpose === 'mailbox_pointer') return { status: 'deferred', reason: 'flight_active' }
     if (session.status === 'working') return { status: 'deferred', reason: 'not_idle' }
     if (session.status === 'waiting') return { status: 'deferred', reason: 'blocked_dialog' }
     if (session.status === 'exited') return { status: 'deferred', reason: 'not_quiescent' }

@@ -23,7 +23,7 @@ export type CodexAppServerFixture = {
  * Writes a deterministic native-protocol app-server executable under a test's temporary home.
  * The executable accepts `app-server`, speaks JSONL on stdio, and never contacts a provider.
  */
-export function createCodexAppServerFixture(home: string): CodexAppServerFixture {
+export function createCodexAppServerFixture(home: string, options?: { heldPrefix?: string }): CodexAppServerFixture {
   mkdirSync(home, { recursive: true })
   const executable = join(home, 'codex-app-server-fixture')
   const logPath = join(home, 'codex-app-server.jsonl')
@@ -33,6 +33,7 @@ const fs = require('node:fs')
 const { spawn } = require('node:child_process')
 const logPath = ${JSON.stringify(logPath)}
 const environmentLogPath = ${JSON.stringify(environmentLogPath)}
+const heldPrefix = ${JSON.stringify(options?.heldPrefix ?? null)}
 let input = ''
 let nextTurn = 1
 let nextApproval = 1
@@ -125,7 +126,15 @@ function startTurn(message, threadId, text) {
   }
   send({ id: message.id, result: { turn } })
   notify('turn/started', { threadId, turn })
-  if (state.held) return
+  if (state.held) {
+    if (heldPrefix) {
+      const item = { id: 'prefix-' + turn.id, type: 'agentMessage', phase: 'commentary', text: heldPrefix }
+      notify('item/started', { threadId, turnId: turn.id, item: { ...item, text: '' } })
+      notify('item/agentMessage/delta', { threadId, turnId: turn.id, itemId: item.id, delta: heldPrefix })
+      notify('item/completed', { threadId, turnId: turn.id, item })
+    }
+    return
+  }
   if (text.includes('[unknown]')) {
     const id = 'unknown-' + nextApproval++
     approvals.set(id, () => finish(threadId, turn))

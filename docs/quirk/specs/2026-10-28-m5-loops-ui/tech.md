@@ -2,18 +2,18 @@
 Status: Approved autonomously. Logic: [logic.md](logic.md).
 
 ## Architecture
-Implements [logic scope](logic.md#scope-and-non-goals). React19 plugin module `plugins/quirky.loops/src/ui.tsx` provides overlay, hosted loop view and declared UI commands. Setup/rail components use UiPluginContext only; same-plugin types imports are allowed. `quirky.terminal/openViewTab` hosts the view without owning its native session. Public menu-item declarations grow an additional terminal-plus target; terminal remains loop-neutral. Bounded journal is rendered read-only, not the interactive session composer.
+Implements [logic scope](logic.md#scope-and-non-goals). React19 plugin module `plugins/quirky.loops/src/ui.tsx` provides overlay, hosted loop view and declared UI commands. Setup/rail components use UiPluginContext only; same-plugin types imports are allowed. `quirky.terminal/openViewTab` hosts the view without owning its native session. Public menu-item declarations use Terminal's tab-menu target; terminal remains loop-neutral. Bounded journal is rendered read-only, not the interactive session composer.
 
 For settled fresh or ended loops, `window/LoopView.tsx` selects the matching finished `IterationDetail.outputTail` already returned by the loop API and labels it as saved output; active/needs-you/continued-paused sessions still use bounded structured messages. Skip live journal reads in the settled projection instead of catching and hiding NotFound. Preserve the structured plugin's destructive session-removal behavior and the core's session-removed cleanup barrier. Regression: close the fresh session positively through actual core completion before opening its loop view, then require the recorded provider output in the primary Output region.
 
-The public plus target is `TERMINAL_PLUS_MENU = 'quirky.terminal/plus'`. Its commands receive `{ workspace, group }`; rows appear after Agent settings only in the blank/static plus menu. `when` and `after` remain pane-only and are rejected for plus items. Existing pane contributions still receive `{ session }`.
+The public tab target is `TERMINAL_TAB_MENU = 'quirky.terminal/tab'`. Tab commands receive `{ worktree, workspace, group }`; Browser entries retain `after: 'quick-commands'` placement. Tab contributions appear before Agent settings, with the unconditioned Loop row last by stable ID and only in the blank/static + menu (not during search). Handoff continues to use the pane target and `{ session }` with its existing condition/order behavior.
 
 ## Code references
 Implements [key decisions](logic.md#key-decisions--rationale). Root for all paths: `/Users/zpyoung/orca/workspaces/quirky/build-roadmap`.
-- `packages/protocol/src/ui.ts`: UiMenuItemEntry lines95-108; UiPluginContext lines272-323. Add generic plus-menu literal, preserve pane behavior.
+- `packages/protocol/src/ui.ts`: UiMenuItemEntry lines95-108; UiPluginContext lines272-323. Add generic tab-menu literal, preserve pane behavior.
 - `packages/daemon/src/plugins/ui-kinds.ts`: checkMenuItem lines79-98; `ui-model.ts` buildMenuItems and menuItems output. Validate/project generic target.
-- `plugins/quirky.terminal/src/window/workspace/controller.ts`: WorkspaceOptions lines80-100, plusItems1077-1095, execClose808-829. Add generic plus contributions callback; leave pane/menu/agent behavior intact.
-- `plugins/quirky.terminal/src/window/commands.ts`: watchMenuContributions/paneMenuContributions; route plus declaration through model. `src/ui.tsx`: workspaceSlots35-40 wires generic extras.
+- `plugins/quirky.terminal/src/window/workspace/controller.ts`: WorkspaceOptions lines80-100, plusItems1077-1095, execClose808-829. Add generic tab-menu contributions before the typed Agent settings footer; keep unconditioned Loop rows static.
+- `plugins/quirky.terminal/src/window/commands.ts`: watchMenuContributions/paneMenuContributions; route tab declarations through model. `src/ui.tsx`: workspaceSlots35-40 wires generic extras.
 - `plugins/quirky.terminal/src/layout/service.ts`: openViewTab492 onward and ensureViewsClosable317-322 already public, validates declared view/method/command and guards all removals. Reuse instead of private imports. `src/layout/types.ts` ViewTab49-63 already has closeCommand/closeMethod/closeParams.
 - `plugins/quirky.terminal/src/layout/store.ts`: persisted hosted-tab validation must accept and retain the optional boolean closeContext opt-in; absent remains absent for existing tabs.
 - `plugins/quirky.loops/main.ts`: handler registration145-218; `quirky-plugin.json` method/CLI declarations; `cli.ts` plugin CLI module. Additive UI/tab methods/commands only, preserving incoming preset API.

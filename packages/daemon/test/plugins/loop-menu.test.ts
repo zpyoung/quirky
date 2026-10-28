@@ -5,7 +5,7 @@ import { parseManifest } from '../../src/plugins/manifest'
 
 const menuItem = {
   id: 'new-loop',
-  menu: 'quirky.terminal/plus',
+  menu: 'quirky.terminal/tab',
   title: 'Loop…',
   command: 'new'
 }
@@ -44,7 +44,7 @@ const declarations: ContributionInfo[] = [
   }
 ]
 
-test('the terminal plus menu accepts and projects loop contributions as public commands', () => {
+test('the terminal tab menu accepts and projects loop contributions as public commands', () => {
   const parsed = parseManifest(JSON.stringify({
     id: 'quirky.loops',
     name: 'Background loops',
@@ -57,20 +57,28 @@ test('the terminal plus menu accepts and projects loop contributions as public c
   expect(model.menuItems).toEqual([{
     id: 'menu-item:quirky.loops/new-loop',
     plugin: 'quirky.loops',
-    menu: 'quirky.terminal/plus',
+    menu: 'quirky.terminal/tab',
     title: 'Loop…',
     command: 'command:quirky.loops/new'
   }])
 })
 
-test('plus menu items reject pane-only agent filters and ordering', () => {
-  const parsed = parseManifest(JSON.stringify({
+test('tab menu items retain valid quick-command placement and reject unknown placement', () => {
+  const placed = parseManifest(JSON.stringify({
     id: 'quirky.loops',
     name: 'Background loops',
     version: '0.1.0',
-    contributes: { 'menu-item': [{ ...menuItem, when: { agent: 'any' }, after: 'quick-commands' }] }
+    contributes: { 'menu-item': [{ ...menuItem, after: 'quick-commands' }] }
   }), { dirName: 'quirky.loops', dir: loopPlugin.dir, source: 'builtin' })
-  expect(parsed.ok).toBe(false)
+  expect(placed.ok).toBe(true)
+
+  const invalid = parseManifest(JSON.stringify({
+    id: 'quirky.loops',
+    name: 'Background loops',
+    version: '0.1.0',
+    contributes: { 'menu-item': [{ ...menuItem, after: 'copy' }] }
+  }), { dirName: 'quirky.loops', dir: loopPlugin.dir, source: 'builtin' })
+  expect(invalid.ok).toBe(false)
 })
 
 test('the full loops manifest declares its UI command module and menu target', async () => {

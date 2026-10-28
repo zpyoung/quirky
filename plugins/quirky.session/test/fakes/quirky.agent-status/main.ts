@@ -1,6 +1,9 @@
 import { join } from 'node:path'
 import type { LaunchHookInput, PluginContext } from '@quirky/protocol'
 
+export const CLAUDE_SETTINGS = {
+  hooks: { SessionStart: [{ hooks: [{ type: 'command', command: 'fake-statusline-hook' }] }] }
+}
 type PointerState = 'idle' | 'working' | 'blocked' | 'unknown' | 'exited'
 let pointerState: PointerState = 'unknown'
 let pointerQuiet = true
@@ -16,14 +19,6 @@ export function setPointerState(state: PointerState): void {
 
 export function setPointerQuiet(quiet: boolean): void {
   pointerQuiet = quiet
-}
-
-export function claudeSettingsFile(home: string): string {
-  return join(home, 'hooks', 'claude-settings.json')
-}
-
-export const CLAUDE_SETTINGS = {
-  hooks: { SessionStart: [{ hooks: [{ type: 'command', command: 'fake-statusline-hook' }] }] }
 }
 
 /** Adds launch arguments, script-state results, JSON settings, and Codex notify arguments for the test fake. */

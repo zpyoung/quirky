@@ -12,6 +12,7 @@ const CLI_MAIN = join(REPO_ROOT, 'packages/cli/src/main.ts')
 const TESTED_BUILTINS = [
   'quirky.orchestration',
   'quirky.session',
+  'quirky.terminal',
   'quirky.agents',
   'quirky.worktree',
   'quirky.repo',

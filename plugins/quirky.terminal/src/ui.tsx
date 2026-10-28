@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { UiPluginContext } from '@quirky/protocol'
 import { SessionsPanel, type SessionsReport } from './window/SessionsPanel'
-import { paneMenuContributions, paneMenuQuickCommands, plusMenuContributions, reportQuickCommandsMenu, sessionCommands, terminalCommands, watchMenuContributions, watchQuickCommands, type MenuContributionSource, type QuickCommandSource } from './window/commands'
+import { paneMenuContributions, paneMenuQuickCommands, reportQuickCommandsMenu, sessionCommands, tabMenuContributions, terminalCommands, watchMenuContributions, watchQuickCommands, type MenuContributionSource, type QuickCommandSource } from './window/commands'
 import { mountFloatingOverlay } from './window/floating'
 import { QuickCommandsStripButton, mountQuickCommandsPanel } from './window/quick-commands'
 import { mountWorkspace, type WorkspaceOptions } from './window/workspace'
@@ -31,13 +31,18 @@ function StripQuickCommands({ context, workspace, group, source }: { context: Ui
   )
 }
 
-/** The slots a workspace view fills beyond the tab area: the strip's quick-command button (not in the floating workspace) and the pane menu rows. */
+/** The slots beyond the tab area: strip quick commands and menu rows from public contributions. */
 function workspaceSlots(context: UiPluginContext, workspace: string, source: QuickCommandSource, contributions: MenuContributionSource): WorkspaceOptions {
   return {
-    ...(workspace === FLOATING_WORKSPACE ? {} : { stripExtras: (group: Group) => <StripQuickCommands context={context} workspace={workspace} group={group} source={source} /> }),
+    ...(workspace === FLOATING_WORKSPACE
+      ? {}
+      : {
+          stripExtras: (group: Group) => <StripQuickCommands context={context} workspace={workspace} group={group} source={source} />
+        }),
     paneMenuExtras: (pane) => paneMenuQuickCommands(context, source, pane.id),
     paneMenuContributions: (pane, session) => paneMenuContributions(context, contributions, pane, session),
-    plusMenuContributions: (group) => plusMenuContributions(context, contributions, workspace, group.id)
+    tabMenuContributions: (group, workspaceId) => tabMenuContributions(context, contributions, workspace, workspaceId, group),
+    subscribeMenuContributions: contributions.subscribe
   }
 }
 

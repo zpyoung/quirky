@@ -6,6 +6,8 @@
  * to `requestId`; the transport supplies `contractVersion`.
  */
 
+import type { ServiceMethodInputs, ServiceMethodResults } from './services/contracts'
+
 export type SessionId = string
 export type UtcTimestamp = string
 export type UUID = string
@@ -49,6 +51,14 @@ export interface RuntimeCallerEvidence {
     processIncarnation: string
   }
 }
+/** Service authority comes only from an authenticated plugin caller after owner validation. */
+export interface ServiceCoordinatorPrincipal {
+  kind: 'service'
+  pluginId: string
+  runId: RunId
+  authority: 'kernel_plugin'
+}
+export type CoordinatorAuthority = RuntimeCallerEvidence | ServiceCoordinatorPrincipal
 
 export type ContractVersion = 1
 
@@ -78,6 +88,9 @@ export interface RunRow {
   createdAt: UtcTimestamp
   updatedAt: UtcTimestamp
 }
+
+export interface ServiceOwner { pluginId: string; key: string }
+export type ServiceRunRow = RunRow & { coordinatorSessionId: null; serviceOwner: ServiceOwner }
 
 export type TaskStatus = 'pending' | 'ready' | 'dispatched' | 'completed' | 'failed' | 'blocked'
 export type WorkerOutcome = 'succeeded' | 'failed'
@@ -112,7 +125,7 @@ export interface TaskRow {
   runId: RunId
   parentTaskId: TaskId | null
   dependencyTaskIds: readonly TaskId[]
-  createdBySessionId: SessionId
+  createdBySessionId: SessionId | null
   taskTitle: string
   displayName: string
   spec: string
@@ -213,7 +226,7 @@ export type GroupMessageType = Exclude<MessageType, GroupForbiddenMessageType>
 export interface MessageRow {
   id: MessageId
   runId: RunId
-  fromSessionId: SessionId
+  fromSessionId: SessionId | null
   /** Canonical role address: questions originate at a Dispatch, answers at a Run. */
   sender: MailboxAddress
   mailbox: MailboxAddress
@@ -286,7 +299,7 @@ export interface AcceptedAskCheckpoint {
   timeoutMs: number
 }
 
-/** Durable supervised acceptance before any process/workspace launch effect. */
+/** Durable acceptance for a scoped worker mutation before external process/workspace effects. */
 export interface AcceptedWorkerCheckpoint {
   state: 'accepted'
   accepted: true
@@ -903,7 +916,7 @@ export type OrchestrationMethodInputs = {
   gateList: GateListParams
   requestShow: RequestShowParams
   reset: ResetParams
-}
+} & ServiceMethodInputs
 
 export type OrchestrationMethodResults = {
   runCreate: MutationResult<{ run: RunRow }>
@@ -928,7 +941,7 @@ export type OrchestrationMethodResults = {
   gateList: { runId: RunId; gates: readonly GateRow[]; count: number }
   requestShow: RequestShowResult
   reset: MutationResult<{ mode: ResetMode }>
-}
+} & ServiceMethodResults
 
 export type OrchestrationMethod = keyof OrchestrationMethodInputs & keyof OrchestrationMethodResults
 export type OrchestrationMethodInput<M extends OrchestrationMethod> = OrchestrationMethodInputs[M]

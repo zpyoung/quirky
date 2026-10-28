@@ -12,7 +12,7 @@ import { pathsFromDrop, readWorktreePathsDrop, resolveWorktreeDropPaths, WORKTRE
 import { trackKittyFlags } from './kitty'
 import { PathChecker, createFileLinkProvider } from './link-provider'
 import { LinkPopover, type PopoverItem } from './LinkPopover'
-import { decideLinkClick, relativeWithinRoot, type LinkKind } from './links'
+import { decideLinkClick, hasCommandModifier, relativeWithinRoot, type LinkKind } from './links'
 import { resolveKeyAction } from './keys'
 import { createOsc52Base64, createOsc52Provider, createOsc52QueryGuard } from './osc52'
 import { planPaste, runPaste } from './paste'
@@ -27,6 +27,7 @@ import { MobileDriverOverlay } from './MobileDriverOverlay'
 
 /** The most characters a search query may have. */
 export const MAX_SEARCH_QUERY = 1000
+const LINK_CLICK_SETTING_KEYS = ['link-click', 'link-middle-click'] as const
 
 const SEARCH_DECORATIONS = {
   matchBackground: '#5c4a00',
@@ -290,6 +291,10 @@ export function TerminalPaneView(props: TerminalPaneProps) {
     const screen = screenRef.current
     if (!host || !screen) return
     const initial = latest.current.settings
+    const linkClickSettings = {
+      'link-click': initial['link-click'],
+      'link-middle-click': initial['link-middle-click']
+    }
     const colorSource = themeSource ?? host.ownerDocument.documentElement
     const colors = readTerminalColors(colorSource)
     const alpha = (settingsNow: PaneSettings) => settingsNow['background-opacity']
@@ -336,6 +341,32 @@ export function TerminalPaneView(props: TerminalPaneProps) {
         .call('quirky.terminal/openExternal', reveal ? { target, reveal: true } : { target })
         .catch((error: unknown) => context.toast('Could not open link', messageOf(error)))
     }
+    const openUrlTarget = (target: string, event?: Pick<MouseEvent, 'metaKey' | 'ctrlKey' | 'shiftKey'>) => {
+      if (!/^https?:/i.test(target)) {
+        openTarget(target, false)
+        return
+      }
+      const workspaceId = latest.current.workspaceId
+      const ownerId = workspaceId?.replace(/^id:/, '')
+      if (!ownerId || ownerId === 'floating') {
+        openTarget(target, false)
+        return
+      }
+      const params = {
+        url: target,
+        worktree: `id:${ownerId}`,
+        ...(event && hasCommandModifier(event) ? { modifier: true } : {}),
+        ...(event?.shiftKey ? { shift: true } : {})
+      }
+      void context.call('quirky.browser/openLink', params).catch((error: unknown) => {
+        if (typeof error === 'object' && error !== null && 'code' in error && error.code === RpcErrorCode.MethodNotFound) {
+          void context.call('quirky.terminal/openExternal', { target })
+            .catch((fallbackError: unknown) => context.toast('Could not open link', messageOf(fallbackError)))
+          return
+        }
+        context.toast('Could not open link', messageOf(error))
+      })
+    }
     const openPathTarget = async (target: string, line: number | null, column: number | null) => {
       const workspaceId = latest.current.workspaceId
       if (!workspaceId || workspaceId === 'floating') {
@@ -374,7 +405,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       const items: PopoverItem[] =
         kind === 'url'
           ? [
-              { label: 'Open', run: () => openTarget(target, false) },
+              { label: 'Open', run: (event) => openUrlTarget(target, event) },
               { label: 'Copy Link', run: () => copyText(target) }
             ]
           : [
@@ -386,15 +417,24 @@ export function TerminalPaneView(props: TerminalPaneProps) {
     }
     const activateLink = (kind: LinkKind, target: string, event: MouseEvent, line: number | null = null, column: number | null = null) => {
       if (term.hasSelection()) return
-      const action = decideLinkClick(kind, event, latest.current.settings)
+      // The window model can update before deferred plugin events or React props.
+      for (const key of LINK_CLICK_SETTING_KEYS) {
+        linkClickSettings[key] = latest.current.settings[key]
+        try {
+          const value = context.getSetting(key)
+          if (value === 'actions' || value === 'open' || value === 'terminal') linkClickSettings[key] = value
+        } catch {
+          // A disabled setting retains the owning pane's effective default.
+        }
+      }
+      const action = decideLinkClick(kind, event, linkClickSettings)
       if (action === 'none') return
       event.preventDefault()
       if (action === 'popover') showPopover(kind, target, event)
       else if (action === 'open') {
         if (kind === 'path') void openPathTarget(target, line, column)
-        else openTarget(target, false)
+        else openUrlTarget(target, event)
       } else if (action === 'reveal') openTarget(target, true)
-      else copyText(target)
     }
     const activateUri = (event: MouseEvent, uri: string) => {
       if (/^file:/i.test(uri)) {
@@ -451,9 +491,38 @@ export function TerminalPaneView(props: TerminalPaneProps) {
     let streamId: number | null = null
     let unsubscribe: (() => void) | null = null
     const canSend = () => !readOnly && latest.current.interactive
+    let inputClaim: Promise<void> | null = null
+    let inputClaimAt = 0
+    const claimUserInput = (): Promise<void> | null => {
+      if (!canSend() || !gate.allows()) return null
+      if (inputClaim) return inputClaim
+      if (Date.now() - inputClaimAt < 30_000) return null
+      const claim = (async () => {
+        const identity = await context.call('quirky.session/identity', { session: sessionId }) as { processIncarnation: string; live: boolean }
+        if (!identity.live || !identity.processIncarnation) throw new Error('Terminal process is no longer attached.')
+        await context.call('quirky.terminal/userInput', { session: sessionId, expectedIncarnation: identity.processIncarnation })
+        inputClaimAt = Date.now()
+      })()
+      inputClaim = claim
+      void claim.then(
+        () => { if (inputClaim === claim) inputClaim = null },
+        (error: unknown) => {
+          if (inputClaim === claim) inputClaim = null
+          if (!disposed) context.toast('Input blocked', error instanceof Error ? error.message : String(error))
+        }
+      )
+      return claim
+    }
+    const onInputIntent = () => { void claimUserInput()?.catch(() => {}) }
     const sendInput = (data: string) => {
       if (!canSend() || !gate.allows()) return
-      void context.call('quirky.terminal/write', { session: sessionId, data }).catch(() => {})
+      const write = () => {
+        if (!disposed && canSend() && gate.allows()) return context.call('quirky.terminal/write', { session: sessionId, data })
+      }
+      // onKey precedes xterm's corresponding onData synchronously. Query replies
+      // emit only onData and never create human input evidence.
+      if (inputClaim) void inputClaim.then(write).catch(() => {})
+      else void write()?.catch(() => {})
     }
 
     term.attachCustomKeyEventHandler((event) => {
@@ -461,11 +530,15 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       const action = resolveKeyAction(event, { kittyFlags: kitty.kitty.flags, optionAsAlt: latest.current.settings['option-as-alt'], optionSide })
       if (!action) return true
       event.preventDefault()
-      if (action.type === 'send') sendInput(action.data)
+      if (action.type === 'send') {
+        onInputIntent()
+        sendInput(action.data)
+      }
       else if (action.position === 'top') term.scrollToTop()
       else term.scrollToBottom()
       return false
     })
+    term.onKey(onInputIntent)
 
     term.onData((data) => sendInput(latest.current.settings['jis-yen-backslash'] && data === '¥' ? '\\' : data))
 
@@ -477,6 +550,9 @@ export function TerminalPaneView(props: TerminalPaneProps) {
         context.toast('Paste is larger than 16 MiB', 'Nothing was pasted.')
         return
       }
+      if (text.length === 0) return
+      await claimUserInput()
+      if (disposed || !canSend()) return
       const outcome = await runPaste(plan.chunks, (data) => context.call('quirky.terminal/write', { session: sessionId, data }), { closer: plan.closer })
       if (outcome === 'timeout') context.toast('Paste timed out', 'Only part of the text was pasted.')
       else if (outcome === 'failed') context.toast('Paste failed', 'The terminal stopped accepting input.')
@@ -574,6 +650,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       if (paths.length === 0) return
       event.preventDefault()
       event.stopPropagation()
+      onInputIntent()
       sendInput(shellEscapePaths(paths))
     }
     host.addEventListener('mousedown', onMouseDown, true)
@@ -596,6 +673,11 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       context.setContext('terminalFocus', false)
     }
     textarea?.addEventListener('focus', onTextareaFocus)
+    // IME and virtual keyboards can commit text without onKey. Their real DOM
+    // input intent is guarded before xterm's data callback; parser replies do
+    // not dispatch these events.
+    textarea?.addEventListener('compositionstart', onInputIntent, true)
+    textarea?.addEventListener('input', onInputIntent, true)
     textarea?.addEventListener('blur', releaseFocusContext)
 
     let fitFrame = 0
@@ -737,6 +819,8 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       releaseFocusContext()
       textarea?.removeEventListener('focus', onTextareaFocus)
       textarea?.removeEventListener('blur', releaseFocusContext)
+      textarea?.removeEventListener('compositionstart', onInputIntent, true)
+      textarea?.removeEventListener('input', onInputIntent, true)
       element.removeEventListener('paste', onPaste, true)
       element.removeEventListener('copy', onCopy, true)
       host.removeEventListener('mousedown', onMouseDown, true)

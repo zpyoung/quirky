@@ -541,9 +541,13 @@ export function activate(context: PluginContext): void {
     if (params.extraArgs !== undefined) {
       throw context.error('invalid-params', "Extra arguments can't be applied to a structured session.")
     }
+    const background = params.background
+    if (background !== undefined && typeof background !== 'boolean') {
+      throw context.error('invalid-params', 'background must be a boolean')
+    }
     const unsupported = Object.keys(params).find(
       (key) =>
-        !['worktree', 'agent', 'prompt', 'model', 'options', 'extraArgs', 'title', 'deferStart'].includes(key)
+        !['worktree', 'agent', 'prompt', 'model', 'options', 'extraArgs', 'background', 'title', 'deferStart'].includes(key)
     )
     if (unsupported !== undefined) throw context.error('invalid-params', `structured create does not support ${unsupported}`)
     const deferStart = params.deferStart === true
@@ -583,6 +587,7 @@ export function activate(context: PluginContext): void {
       agent,
       kind: 'structured',
       title,
+      ...(background === undefined ? {} : { background }),
       ...(resolution?.launchSettings ? { launchSettings: resolution.launchSettings } : {})
     })) as Session
     if (!active) return registered
@@ -643,7 +648,6 @@ export function activate(context: PluginContext): void {
         ...(resolution?.structured ?? {}),
         env: environmentForLease(lease.env, environment)
       }
-      journal.setLaunchOptions(registered.id, resolution?.structured ?? {})
       startRunner(registered, agent, prompt, launchOptions, token)
     } catch (error) {
       startupFailed(registered.id, token, error)
@@ -681,7 +685,7 @@ export function activate(context: PluginContext): void {
 
     let options: StructuredLaunchOptions
     try {
-      options = journal.getLaunchOptions(old.id) ?? launchOptionsFromSnapshot(old)
+      options = launchOptionsFromSnapshot(old)
     } catch (error) {
       throw context.error('conflict', `session ${old.id} cannot replay its structured launch options: ${error instanceof Error ? error.message : String(error)}`)
     }
@@ -717,6 +721,7 @@ export function activate(context: PluginContext): void {
         agent,
         kind: 'structured',
         title,
+        ...(old.background === true ? { background: true } : {}),
         ...(old.launchSettings === null || old.launchSettings === undefined ? {} : { launchSettings: old.launchSettings })
       })) as Session
       if (!active) {
@@ -791,7 +796,6 @@ export function activate(context: PluginContext): void {
         ...options,
         env: environmentForLease(lease.env, environment)
       }
-      journal.setLaunchOptions(registered.id, options)
       startRunner(
         registered,
         agent,
@@ -1025,7 +1029,7 @@ export function activate(context: PluginContext): void {
     if (!active) return
     try {
       const plugins = await context.call('plugin.list') as PluginInfo[]
-      const activeIds = new Set(plugins.filter((plugin) => plugin.state === 'active').map((plugin) => plugin.id))
+      const activeIds = new Set(plugins.filter((plugin) => plugin.state === 'active' || plugin.state === 'activating').map((plugin) => plugin.id))
       const abandoned = [...live].filter(([, entry]) =>
         entry.ownerPluginId !== null && !activeIds.has(entry.ownerPluginId) && !entry.stopping && entry.status !== 'exited'
       )

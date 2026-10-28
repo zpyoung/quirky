@@ -1,8 +1,12 @@
 import type { PluginContext } from '@quirky/protocol'
 import type { OrchestrationMethod } from './src/contracts'
-import { createOrchestration } from './src/service'
+import { createOrchestration, type ComposedOrchestrationService } from './src/service'
 import { migrations } from './src/store'
-import type { OrchestrationService } from './src/surface-contracts'
+import { verifyCaller } from './src/identity'
+import { createWorkerCore } from './src/workers/core-adapter'
+import { registerWorkers, type WorkerComponents } from './src/workers/register'
+import { workerMigrations } from './src/workers/store'
+import { serviceMigrations } from './src/services/migrations'
 
 const methods = [
   'runCreate',
@@ -24,22 +28,55 @@ const methods = [
   'gateResolve',
   'gateList',
   'requestShow',
-  'reset'
+  'reset',
+  'serviceRunCreate',
+  'serviceRunShow',
+  'serviceWorkerStart',
+  'serviceCheck',
+  'serviceWorkerRelease',
+  'serviceWorkerStop',
+  'serviceReply',
+  'serviceSend'
 ] as const satisfies readonly OrchestrationMethod[]
 
-let activeService: OrchestrationService | undefined
+let activeService: ComposedOrchestrationService | undefined
+let activeWorkers: WorkerComponents | undefined
 
-export function activate(context: PluginContext): void {
-  const store = context.openStore(migrations)
+export async function activate(context: PluginContext): Promise<void> {
+  const store = context.openStore([...migrations, ...workerMigrations, ...serviceMigrations])
   const service = createOrchestration(context, store)
-  for (const method of methods) {
-    context.provide(`method:${context.pluginId}/${method}`, service.methods[method])
+  let workers: WorkerComponents | undefined
+  try {
+    const workerCore = createWorkerCore(service.core, service.serviceCoordinator)
+    workers = registerWorkers(
+      workerCore,
+      async (caller, aliases) => (await verifyCaller(context, caller, aliases)).evidence,
+      (listener) => context.pty.onUserInput(listener)
+    )
+    service.serviceCoordinator.bindWorkers(workers)
+    for (const method of methods) {
+      context.provide(`method:${context.pluginId}/${method}`, service.methods[method])
+    }
+    for (const [method, handler] of Object.entries(workers.methods)) {
+      context.provide(`method:${context.pluginId}/${method}`, handler)
+    }
+    activeService = service
+    activeWorkers = workers
+  } catch (error) {
+    const cleanup = await Promise.allSettled([workers?.dispose(), service.dispose()])
+    for (const result of cleanup) if (result.status === 'rejected') context.log(`activation cleanup failed: ${String(result.reason)}`)
+    throw error
   }
-  activeService = service
 }
 
 export async function deactivate(): Promise<void> {
   const service = activeService
+  const workers = activeWorkers
   activeService = undefined
-  await service?.dispose()
+  activeWorkers = undefined
+  try {
+    await workers?.dispose()
+  } finally {
+    await service?.dispose()
+  }
 }

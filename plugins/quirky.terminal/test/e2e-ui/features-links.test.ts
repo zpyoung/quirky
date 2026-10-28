@@ -134,34 +134,35 @@ test(
       { target: file, reveal: true }
     ])
 
-    // Cmd-click opens URLs; Shift-Cmd-click copies URLs and reveals paths.
+    // Command opens directly; Shift+Command uses the alternate browser destination, never clipboard copy.
     url.activate(mouse('mouseup', { metaKey: true }), url.text)
     await waitFor('the URL Cmd-click to open', () => (clicks().length === 3 ? true : undefined))
     const writes = f.clipboard.writes.length
     url.activate(mouse('mouseup', { metaKey: true, shiftKey: true }), url.text)
+    await waitFor('the alternate browser destination', () => (clicks().length === 4 ? true : undefined))
+    expect(clicks().at(-1)).toEqual({ target: URL_TEXT, reveal: false })
+    expect(f.clipboard.writes).toHaveLength(writes)
     path.activate(mouse('mouseup', { metaKey: true, shiftKey: true }), path.text)
-    await waitFor('the URL to be copied and the file revealed', () => (clicks().length === 4 && f.clipboard.writes.length === writes + 1 ? true : undefined))
-    expect(clicks().slice(2)).toEqual([
-      { target: URL_TEXT, reveal: false },
-      { target: file, reveal: true }
-    ])
-    expect(f.clipboard.writes.at(-1)).toBe(URL_TEXT)
+    await waitFor('the file to be revealed', () => (clicks().length === 5 ? true : undefined))
+    expect(clicks().at(-1)).toEqual({ target: file, reveal: true })
 
     // A middle click follows its setting, while other click combinations do nothing.
     url.activate(mouse('mouseup', { button: 1 }), url.text)
-    await waitFor('the middle URL to open', () => (clicks().length === 5 ? true : undefined))
-    expect(clicks().slice(4)).toEqual([{ target: URL_TEXT, reveal: false }])
+    await waitFor('the middle URL to open', () => (clicks().length === 6 ? true : undefined))
+    expect(clicks().at(-1)).toEqual({ target: URL_TEXT, reveal: false })
     url.activate(mouse('mouseup', { altKey: true }), url.text)
     url.activate(mouse('mouseup', { button: 2 }), url.text)
     path.activate(mouse('mouseup', { altKey: true }), path.text)
-    expect(clicks()).toHaveLength(5)
+    expect(clicks()).toHaveLength(6)
     expect(popover()).toBeNull()
 
     // the plain click setting: Open opens, Leave to terminal does nothing
     await f.h.ok(['setting', 'set', 'setting:quirky.terminal/link-click', 'open'])
     await waitFor('the setting in the window', () => (settingNow(f, 'setting:quirky.terminal/link-click') === 'open' ? true : undefined))
+    const beforePlainOpen = clicks().length
     url.activate(mouse('mouseup'), url.text)
-    await waitFor('a plain click to open', () => (clicks().length > 5 ? true : undefined))
+    await waitFor('a plain click to open', () => (clicks().length === beforePlainOpen + 1 ? true : undefined))
+    expect(clicks().at(-1)).toEqual({ target: URL_TEXT, reveal: false })
     await f.h.ok(['setting', 'set', 'setting:quirky.terminal/link-click', 'terminal'])
     await waitFor('the setting in the window', () => (settingNow(f, 'setting:quirky.terminal/link-click') === 'terminal' ? true : undefined))
     const before = clicks().length

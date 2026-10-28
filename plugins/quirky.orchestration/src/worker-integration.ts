@@ -1,6 +1,6 @@
 import type { PluginContext, PluginStore } from '@quirky/protocol'
 import type {
-  DispatchAdmissionInput, DispatchId, DispatchRow, DispatchStatus, JsonValue, LifecycleCorePort,
+  CoordinatorAuthority, DispatchAdmissionInput, DispatchId, DispatchRow, DispatchStatus, JsonValue, LifecycleCorePort,
   MutationCheckpoint, MutationRequest, MutationResult, MutatingOrchestrationMethod,
   ResetMode, RunId, RunRow, RuntimeCallerEvidence, TaskCreateParams, TaskId, TaskRow, UtcTimestamp,
   WorkerOutcome, WorkerRow, WorkerState, WorkerTransitionInput,
@@ -49,21 +49,34 @@ export interface DurableMutationOptions<T extends object> {
 export interface OrchestrationWorkerCore extends LifecycleCorePort {
   readonly context: PluginContext
   readonly store: PluginStore
+  readonly nestedWorkerMaxDepth: number
   registerWorkerPort(port: WorkerLifecyclePort): void
-  requireCoordinator(caller: RuntimeCallerEvidence, runId?: RunId): RunRow
+  requireCoordinator(caller: CoordinatorAuthority, runId?: RunId): RunRow
   getRun(runId: RunId): RunRow
   getTask(taskId: TaskId): TaskRow
   getDispatch(dispatchId: DispatchId): DispatchRow
+  listDispatches(runId?: RunId): DispatchRow[]
+  boundRunId(caller: RuntimeCallerEvidence): RunId | null
+  attentionFor(dispatchId: DispatchId): { guidance: boolean; input: boolean; approval: boolean; rootCompletion: boolean }
   createDispatch(input: DispatchAdmissionInput & { supervised?: boolean }, caller: RuntimeCallerEvidence, identity: SessionIdentity): DispatchRow
-  createTask(input: Omit<TaskCreateParams, keyof MutationRequest>, caller: RuntimeCallerEvidence): TaskRow
-  reserveWorkerDispatch(input: Omit<DispatchAdmissionInput, 'assigneeSessionId'>, caller: RuntimeCallerEvidence): DispatchRow
-  attachDispatchAuthority(dispatchId: DispatchId, identity: SessionIdentity, caller: RuntimeCallerEvidence): DispatchRow
+  /** Internal lifecycle fence; only exact supervised stops may block a live Task. */
+  blockTaskForWorkerStop(input: { taskId: TaskId; dispatchId: DispatchId; at: UtcTimestamp }): TaskRow
+  createTask(input: Omit<TaskCreateParams, keyof MutationRequest>, caller: CoordinatorAuthority): TaskRow
+  reserveWorkerDispatch(input: Omit<DispatchAdmissionInput, 'assigneeSessionId'>, caller: CoordinatorAuthority): DispatchRow
+  attachWorkerAuthority(dispatchId: DispatchId, identity: SessionIdentity, caller: CoordinatorAuthority): DispatchRow
   emitWorkerStatus(dispatchId: DispatchId, subject: string, body: string, high: boolean, type?: 'status' | 'escalation', payload?: JsonValue): void
   closeWorkerQuestions(dispatchId: DispatchId, at: UtcTimestamp): void
+  mutateWorker<T extends object>(
+    method: string,
+    params: MutationRequest & Record<string, unknown>,
+    caller: CoordinatorAuthority,
+    operation: (store: PluginStore) => T,
+    options?: DurableMutationOptions<T>,
+  ): Promise<MutationResult<T>>
   mutate<T extends object>(
     method: MutatingOrchestrationMethod,
-    params: MutationRequest,
-    caller: RuntimeCallerEvidence,
+    params: MutationRequest & Record<string, unknown>,
+    caller: CoordinatorAuthority,
     operation: (store: PluginStore) => T,
     options?: DurableMutationOptions<T>,
   ): Promise<MutationResult<T>>
