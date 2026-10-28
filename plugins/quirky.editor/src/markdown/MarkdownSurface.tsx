@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import { CHORD_PLATFORM, RpcErrorCode } from '@quirky/protocol'
+import { Button, Dialog, TextField } from '@quirky/ui'
 import type { SurfaceProps } from '../types'
 import type { MarkdownHeading } from './source'
 import type { MarkdownReviewNote } from './notes'
@@ -29,32 +30,6 @@ const CODE_LANGUAGES = [
   'TypeScript', 'XML', 'YAML'
 ]
 const sourceValue = (buffer: SurfaceProps['buffer']) => buffer.draft !== null ? buffer.draft : buffer.content
-const markdownStyle: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  height: '100%',
-  minHeight: 0,
-  color: 'var(--quirky-editor-fg, inherit)',
-  background: 'var(--quirky-editor-bg, transparent)',
-  fontFamily: 'var(--quirky-editor-font, inherit)'
-}
-const toolbarStyle: React.CSSProperties = {
-  display: 'flex',
-  flexWrap: 'wrap',
-  alignItems: 'center',
-  gap: 4,
-  padding: '6px 8px',
-  borderBottom: '1px solid var(--quirky-border, #7774)',
-  flex: '0 0 auto'
-}
-const buttonStyle: React.CSSProperties = {
-  border: '1px solid var(--quirky-border, #7775)',
-  borderRadius: 4,
-  padding: '4px 7px',
-  color: 'inherit',
-  background: 'transparent',
-  cursor: 'pointer'
-}
 
 function methodParams(bufferId: string, params: Record<string, unknown>): Record<string, unknown> {
   return { bufferId, ...params }
@@ -221,7 +196,7 @@ function MarkdownPreview({
   }, [articleRef, markdownAnchor, onMissingAnchor, onView, source])
 
   return (
-    <article ref={articleRef} className="markdown-body" style={{ padding: '16px 24px', overflow: 'auto', lineHeight: 1.6 }}>
+    <article ref={articleRef} className="markdown-body markdown-body--editor markdown-preview-body">
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={MARKDOWN_PREVIEW_REHYPE_PLUGINS}
@@ -233,7 +208,7 @@ function MarkdownPreview({
           },
           img({ src, alt }) {
             const resource = src ? imageUrls[src] : undefined
-            return resource ? <img src={resource} alt={alt ?? ''} loading="lazy" style={{ maxWidth: '100%' }} /> : alt ? <span>{alt}</span> : null
+            return resource ? <img src={resource} alt={alt ?? ''} loading="lazy" /> : alt ? <span>{alt}</span> : null
           },
           code({ className, children, ...props }) {
             if (className?.includes('language-mermaid')) {
@@ -286,17 +261,17 @@ function SourceSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
   }
 
   return (
-    <div style={{ ...markdownStyle, overflow: 'hidden' }}>
-      <div style={toolbarStyle}>
+    <div className="markdown-surface markdown-surface--source">
+      <div className="markdown-toolbar">
         {eligibility?.richEligible
-          ? <button type="button" style={buttonStyle} onClick={() => void openRich()}>Rich Editor</button>
+          ? <Button type="button" onClick={() => void openRich()}>Rich Editor</Button>
           : eligibility?.reason?.includes('600') && eligibility.openAnywayAvailable
-            ? <button type="button" style={buttonStyle} disabled={busy} onClick={() => void openRich(true)}>Open anyway</button>
+            ? <Button type="button" disabled={busy} onClick={() => void openRich(true)}>Open anyway</Button>
             : <span>Rich editing unavailable</span>}
-        <button type="button" style={buttonStyle} onClick={() => props.context.call('quirky.editor/open', { worktree: `id:${props.buffer.worktreeId}`, path: props.buffer.relativePath, mode: 'preview', focus: false })}>Open Markdown Preview</button>
+        <Button type="button" onClick={() => props.context.call('quirky.editor/open', { worktree: `id:${props.buffer.worktreeId}`, path: props.buffer.relativePath, mode: 'preview', focus: false })}>Open Markdown Preview</Button>
         <span>Source mode</span>
-        {eligibility?.reason && <span role="status">{eligibility.reason}</span>}
-        {error && <span role="alert">{error}</span>}
+        {eligibility?.reason && <span role="status" className="markdown-inline-status">{eligibility.reason}</span>}
+        {error && <span role="alert" className="markdown-inline-error">{error}</span>}
       </div>
       <textarea
         aria-label="Markdown source"
@@ -304,7 +279,7 @@ function SourceSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
         value={content}
         readOnly={props.buffer.readOnly}
         onChange={(event) => props.onDraft(event.currentTarget.value)}
-        style={{ flex: 1, minHeight: 0, resize: 'none', border: 0, outline: 0, padding: 16, color: 'inherit', background: 'transparent', font: 'inherit', lineHeight: 1.55, whiteSpace: 'pre' }}
+        className="markdown-source"
       />
     </div>
   )
@@ -474,31 +449,31 @@ function PreviewSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
   }, [])
 
   return (
-    <div style={{ ...markdownStyle, fontSize: props.fontSize }}>
-      <div style={toolbarStyle}>
-        <button type="button" style={buttonStyle} onClick={() => void openSource()}>Source</button>
-        <button type="button" style={buttonStyle} onClick={() => setSearchOpen((open) => !open)}>Find in preview</button>
-        <button type="button" style={buttonStyle} onClick={() => props.onAction(MARKDOWN_METHOD, methodParams(props.buffer.id, { action: 'exportPdf' }))}>Export as PDF</button>
+    <div className="markdown-surface markdown-surface--preview" style={{ fontSize: props.fontSize }}>
+      <div className="markdown-toolbar">
+        <Button type="button" onClick={() => void openSource()}>Source</Button>
+        <Button type="button" onClick={() => setSearchOpen((open) => !open)}>Find in preview</Button>
+        <Button type="button" onClick={() => props.onAction(MARKDOWN_METHOD, methodParams(props.buffer.id, { action: 'exportPdf' }))}>Export as PDF</Button>
         <span>Markdown Preview</span>
       </div>
-      {searchOpen && <div style={toolbarStyle}>
-        <input ref={searchInput} aria-label="Find in preview" placeholder="Find in preview" value={query} onChange={(event) => setQuery(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === 'Enter') void runSearch() }} />
-        <label><input type="checkbox" aria-label="Match case" checked={matchCase} onChange={(event) => setMatchCase(event.currentTarget.checked)} /> Match case</label>
-        <label><input type="checkbox" aria-label="Match whole word" checked={wholeWord} onChange={(event) => setWholeWord(event.currentTarget.checked)} /> Match whole word</label>
-        <button type="button" style={buttonStyle} onClick={() => void runSearch()}>Find</button>
-        <button type="button" style={buttonStyle} onClick={() => movePreviewSearch(-1)}>Previous</button>
-        <button type="button" style={buttonStyle} onClick={() => movePreviewSearch(1)}>Next</button>
-        <button type="button" style={buttonStyle} onClick={() => setReplaceOpen((open) => !open)}>Replace</button>
-        {replaceOpen && <><input aria-label="Replace with" value={replaceText} onChange={(event) => setReplaceText(event.currentTarget.value)} /><button type="button" style={buttonStyle} onClick={() => void replacePreview(false)}>Replace</button><button type="button" style={buttonStyle} onClick={() => void replacePreview(true)}>Replace all</button></>}
+      {searchOpen && <div className="markdown-toolbar markdown-toolbar--search">
+        <input ref={searchInput} className="markdown-input" aria-label="Find in preview" placeholder="Find in preview" value={query} onChange={(event) => setQuery(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === 'Enter') void runSearch() }} />
+        <label className="markdown-check"><input type="checkbox" aria-label="Match case" checked={matchCase} onChange={(event) => setMatchCase(event.currentTarget.checked)} /> Match case</label>
+        <label className="markdown-check"><input type="checkbox" aria-label="Match whole word" checked={wholeWord} onChange={(event) => setWholeWord(event.currentTarget.checked)} /> Match whole word</label>
+        <Button type="button" onClick={() => void runSearch()}>Find</Button>
+        <Button type="button" onClick={() => movePreviewSearch(-1)}>Previous</Button>
+        <Button type="button" onClick={() => movePreviewSearch(1)}>Next</Button>
+        <Button type="button" onClick={() => setReplaceOpen((open) => !open)}>Replace</Button>
+        {replaceOpen && <><input className="markdown-input" aria-label="Replace with" value={replaceText} onChange={(event) => setReplaceText(event.currentTarget.value)} /><Button type="button" onClick={() => void replacePreview(false)}>Replace</Button><Button type="button" onClick={() => void replacePreview(true)}>Replace all</Button></>}
         {searchResult && <span>{searchResult.total === 0 ? 'No results' : `${searchIndex + 1} of ${searchResult.total}`}</span>}
-        <button type="button" style={buttonStyle} onClick={() => { setSearchOpen(false); setSearchResult(null) }}>Close</button>
+        <Button type="button" onClick={() => { setSearchOpen(false); setSearchResult(null) }}>Close</Button>
       </div>}
-      {error && <div role="alert" style={{ padding: 8, color: 'var(--quirky-danger, #e66)' }}>{error}<button type="button" style={buttonStyle} onClick={() => setError(null)}>Dismiss</button></div>}
-      {busy && <div role="status" style={{ padding: 12 }}>Preparing preview…</div>}
-      {!busy && preview && !preview.available && <div role="alert" style={{ padding: 16 }}>
+      {error && <div role="alert" className="markdown-alert markdown-alert--error">{error}<Button type="button" onClick={() => setError(null)}>Dismiss</Button></div>}
+      {busy && <div role="status" className="markdown-status">Preparing preview…</div>}
+      {!busy && preview && !preview.available && <div role="alert" className="markdown-alert">
         {preview.reason ?? 'This document cannot be rendered within the preview limits.'}
-        <button type="button" style={buttonStyle} onClick={() => void openSource()}>Open source view</button>
-        <button type="button" style={buttonStyle} onClick={() => void refresh()}>Retry</button>
+        <Button type="button" onClick={() => void openSource()}>Open source view</Button>
+        <Button type="button" onClick={() => void refresh()}>Retry</Button>
       </div>}
       {!busy && preview?.available && <MarkdownPreview
         source={split.body}
@@ -509,7 +484,7 @@ function PreviewSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
         onMissingAnchor={reportMissingAnchor}
         articleRef={previewArticle}
       />}
-      {!busy && !preview && error && <div role="alert">Preview failed. <button type="button" style={buttonStyle} onClick={() => void refresh()}>Retry</button><button type="button" style={buttonStyle} onClick={() => void openSource()}>Open source</button></div>}
+      {!busy && !preview && error && <div role="alert" className="markdown-alert markdown-alert--error">Preview failed. <Button type="button" onClick={() => void refresh()}>Retry</Button><Button type="button" onClick={() => void openSource()}>Open source</Button></div>}
     </div>
   )
 }
@@ -1357,40 +1332,45 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
   )
 
   return (
-    <div style={{ ...markdownStyle, overflow: 'hidden', fontSize: props.fontSize }}>
-      <div style={toolbarStyle} role="toolbar" aria-label="Markdown formatting">
-        <button type="button" style={buttonStyle} onMouseDown={(event) => event.preventDefault()} onClick={() => insertToolbarFormat('body')}>Body text</button>
-        {[1, 2, 3].map((level) => <button key={level} type="button" style={buttonStyle} onMouseDown={(event) => event.preventDefault()} onClick={() => insertToolbarFormat(`heading${level}` as MarkdownFormat)}>H{level}</button>)}
-        <button type="button" style={buttonStyle} aria-label="Bold" onMouseDown={(event) => event.preventDefault()} onClick={() => insertToolbarFormat('bold')}><strong>B</strong></button>
-        <button type="button" style={buttonStyle} aria-label="Italic" onMouseDown={(event) => event.preventDefault()} onClick={() => insertToolbarFormat('italic')}><em>I</em></button>
-        <button type="button" style={buttonStyle} aria-label="Strikethrough" onMouseDown={(event) => event.preventDefault()} onClick={() => insertToolbarFormat('strike')}><s>S</s></button>
-        <button type="button" style={buttonStyle} onMouseDown={(event) => event.preventDefault()} onClick={() => insertToolbarFormat('bulletList')}>Bullets</button>
-        <button type="button" style={buttonStyle} onMouseDown={(event) => event.preventDefault()} onClick={() => insertToolbarFormat('orderedList')}>Numbered</button>
-        <button type="button" style={buttonStyle} onMouseDown={(event) => event.preventDefault()} onClick={() => insertToolbarFormat('taskList')}>Checklist</button>
-        <button type="button" style={buttonStyle} onMouseDown={(event) => event.preventDefault()} onClick={() => insertToolbarFormat('quote')}>Quote</button>
-        <button type="button" style={buttonStyle} onMouseDown={(event) => event.preventDefault()} onClick={() => insertToolbarFormat('link')}>Link</button>
-        <button type="button" style={buttonStyle} onMouseDown={(event) => event.preventDefault()} onClick={() => insertToolbarFormat('image')}>Image</button>
-        <button type="button" style={buttonStyle} onClick={() => setMoreOpen((open) => !open)}>More blocks ▾</button>
-        <button type="button" style={buttonStyle} onClick={() => void openSource()}>Source</button>
-        <button type="button" style={buttonStyle} onClick={() => void openPreview()}>Preview</button>
-        <button type="button" style={buttonStyle} onClick={() => setSearchOpen((open) => !open)}>Find</button>
-        <button type="button" style={buttonStyle} onClick={() => void toggleToc()}>TOC</button>
-        {frontmatter && <button type="button" style={buttonStyle} onClick={() => void toggleFrontMatter()}>Front Matter</button>}
-        <button type="button" style={buttonStyle} onClick={() => void exportPdf()}>Export PDF</button>
-        <button type="button" style={buttonStyle} onClick={() => void openNewDocument()}>New Markdown</button>
+    <div className="markdown-surface markdown-surface--rich" style={{ fontSize: props.fontSize }}>
+      <div className="markdown-toolbar" role="toolbar" aria-label="Markdown formatting">
+        <Button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => insertToolbarFormat('body')}>Body text</Button>
+        {[1, 2, 3].map((level) => <Button key={level} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => insertToolbarFormat(`heading${level}` as MarkdownFormat)}>H{level}</Button>)}
+        <Button type="button" aria-label="Bold" onMouseDown={(event) => event.preventDefault()} onClick={() => insertToolbarFormat('bold')}><strong>B</strong></Button>
+        <Button type="button" aria-label="Italic" onMouseDown={(event) => event.preventDefault()} onClick={() => insertToolbarFormat('italic')}><em>I</em></Button>
+        <Button type="button" aria-label="Strikethrough" onMouseDown={(event) => event.preventDefault()} onClick={() => insertToolbarFormat('strike')}><s>S</s></Button>
+        <Button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => insertToolbarFormat('bulletList')}>Bullets</Button>
+        <Button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => insertToolbarFormat('orderedList')}>Numbered</Button>
+        <Button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => insertToolbarFormat('taskList')}>Checklist</Button>
+        <Button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => insertToolbarFormat('quote')}>Quote</Button>
+        <Button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => insertToolbarFormat('link')}>Link</Button>
+        <Button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => insertToolbarFormat('image')}>Image</Button>
+        <Button type="button" onClick={() => setMoreOpen((open) => !open)}>More blocks ▾</Button>
+        <Button type="button" onClick={() => void openSource()}>Source</Button>
+        <Button type="button" onClick={() => void openPreview()}>Preview</Button>
+        <Button type="button" onClick={() => setSearchOpen((open) => !open)}>Find</Button>
+        <Button type="button" onClick={() => void toggleToc()}>TOC</Button>
+        {frontmatter && <Button type="button" onClick={() => void toggleFrontMatter()}>Front Matter</Button>}
+        <Button type="button" onClick={() => void exportPdf()}>Export PDF</Button>
+        <Button type="button" onClick={() => void openNewDocument()}>New Markdown</Button>
       </div>
-      {templatesOpen && <div role="dialog" aria-label="New Markdown" style={{ ...toolbarStyle, alignItems: 'stretch' }}>
-        <strong>New Markdown</strong>
-        <input aria-label="Document title" placeholder="Title" value={templateTitle} onChange={(event) => setTemplateTitle(event.currentTarget.value)} />
-        <input aria-label="Search templates" placeholder="Search templates…" value={templateQuery} onChange={(event) => setTemplateQuery(event.currentTarget.value)} />
-        <button type="button" style={buttonStyle} onClick={() => void createNewDocument()}>Blank Markdown (untitled.md)</button>
-        {visibleTemplates.length === 0 && templateOptions.length > 0 && <span>No matching templates.</span>}
-        {visibleTemplates.map((template) => <button key={template.relativePath} type="button" style={buttonStyle} onClick={() => void createNewDocument(template.relativePath)}>{template.title} — {template.relativePath}</button>)}
-        <button type="button" style={buttonStyle} onClick={() => setTemplatesOpen(false)}>Cancel</button>
-      </div>}
+      {templatesOpen && <Dialog
+        open={templatesOpen}
+        title="New Markdown"
+        onClose={() => setTemplatesOpen(false)}
+        actions={<Button onClick={() => setTemplatesOpen(false)}>Cancel</Button>}
+      >
+        <div className="markdown-template-dialog">
+          <TextField label="Document title" className="markdown-input" placeholder="Title" value={templateTitle} onChange={(event) => setTemplateTitle(event.currentTarget.value)} />
+          <TextField label="Search templates" className="markdown-input" placeholder="Search templates…" value={templateQuery} onChange={(event) => setTemplateQuery(event.currentTarget.value)} />
+          <Button type="button" onClick={() => void createNewDocument()}>Blank Markdown (untitled.md)</Button>
+          {visibleTemplates.length === 0 && templateOptions.length > 0 && <span>No matching templates.</span>}
+          {visibleTemplates.map((template) => <Button key={template.relativePath} type="button" onClick={() => void createNewDocument(template.relativePath)}>{template.title} — {template.relativePath}</Button>)}
+        </div>
+      </Dialog>}
 
-      {moreOpen && <div style={toolbarStyle} role="menu" aria-label="More Markdown blocks">
-        {[['Heading 4', 'heading4'], ['Heading 5', 'heading5'], ['Collapsible section', 'details'], ['Code block', 'codeBlock'], ['Table', 'table'], ['Divider', 'divider'], ['Mermaid diagram', 'mermaid'], ['Inline math', 'inlineMath'], ['Math block', 'blockMath'], ['Emoji', 'emoji']].map(([label, format]) => <button key={format} type="button" role="menuitem" style={buttonStyle} disabled={readOnly && format === 'emoji'} onClick={() => {
+      {moreOpen && <div className="markdown-popover markdown-popover--menu" role="menu" aria-label="More Markdown blocks">
+        {[['Heading 4', 'heading4'], ['Heading 5', 'heading5'], ['Collapsible section', 'details'], ['Code block', 'codeBlock'], ['Table', 'table'], ['Divider', 'divider'], ['Mermaid diagram', 'mermaid'], ['Inline math', 'inlineMath'], ['Math block', 'blockMath'], ['Emoji', 'emoji']].map(([label, format]) => <Button key={format} type="button" role="menuitem" disabled={readOnly && format === 'emoji'} onClick={() => {
           const item = SLASH_CATALOG.find((candidate) => candidate.format === format)
           if (format === 'emoji') setEmojiOpen(true)
           else if (item) void runSlash(item)
@@ -1398,55 +1378,55 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
             void call(MARKDOWN_METHOD, { action: 'insert', expectedRevision: revision.current, format }).then((result) => updateBufferFromApi((result as { buffer?: SurfaceProps['buffer'] }).buffer)).catch((cause) => setFeedback(errorText(cause)))
           }
           setMoreOpen(false)
-        }}>{label}</button>)}</div>}
+        }}>{label}</Button>)}</div>}
 
-      {eligibility && !eligibility.eligible && <div role="status" style={{ padding: '6px 10px' }}>
+      {eligibility && !eligibility.eligible && <div role="status" className="markdown-status">
         <span>{eligibility.reason}</span>
-        {eligibility.reason?.includes('600') && utf8Bytes(source) <= 1024 * 1024 && <button type="button" style={buttonStyle} onClick={() => setOpenAnyway(true)}>Open anyway</button>}
-        <button type="button" style={buttonStyle} onClick={() => void openSource()}>Open source mode</button>
+        {eligibility.reason?.includes('600') && utf8Bytes(source) <= 1024 * 1024 && <Button type="button" onClick={() => setOpenAnyway(true)}>Open anyway</Button>}
+        <Button type="button" onClick={() => void openSource()}>Open source mode</Button>
       </div>}
-      {frontmatter && frontMatterVisible && <details open style={{ padding: '4px 10px', borderBottom: '1px solid var(--quirky-border, #7774)' }}>
-        <summary>Front Matter (edit in source mode)</summary><pre style={{ maxHeight: '8rem', overflow: 'auto', whiteSpace: 'pre-wrap' }}>{frontmatter}</pre>
+      {frontmatter && frontMatterVisible && <details open className="markdown-frontmatter">
+        <summary>Front Matter (edit in source mode)</summary><pre className="markdown-frontmatter__source">{frontmatter}</pre>
       </details>}
-      {searchOpen && <div style={toolbarStyle}>
-        <input ref={searchInput} aria-label="Find in rich editor" placeholder="Find in rich editor" value={searchQuery} onChange={(event) => setSearchQuery(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === 'Enter') void updateSearch() }} />
-        <label><input type="checkbox" aria-label="Match case" checked={matchCase} onChange={(event) => setMatchCase(event.currentTarget.checked)} /> Match case</label>
-        <label><input type="checkbox" aria-label="Match whole word" checked={wholeWord} onChange={(event) => setWholeWord(event.currentTarget.checked)} /> Match whole word</label>
-        <button type="button" style={buttonStyle} onClick={() => void updateSearch()}>Find</button>
-        <button type="button" style={buttonStyle} onClick={() => moveSearch(-1)}>Previous</button>
-        <button type="button" style={buttonStyle} onClick={() => moveSearch(1)}>Next</button>
-        <button type="button" style={buttonStyle} onClick={() => setSearchReplace((show) => !show)}>Replace</button>
-        {searchReplace && <><input aria-label="Replace with" value={replaceText} onChange={(event) => setReplaceText(event.currentTarget.value)} /><button type="button" style={buttonStyle} onClick={() => void replaceMatches(false)}>Replace</button><button type="button" style={buttonStyle} onClick={() => void replaceMatches(true)}>Replace all</button></>}
+      {searchOpen && <div className="markdown-toolbar markdown-toolbar--search">
+        <input ref={searchInput} className="markdown-input" aria-label="Find in rich editor" placeholder="Find in rich editor" value={searchQuery} onChange={(event) => setSearchQuery(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === 'Enter') void updateSearch() }} />
+        <label className="markdown-check"><input type="checkbox" aria-label="Match case" checked={matchCase} onChange={(event) => setMatchCase(event.currentTarget.checked)} /> Match case</label>
+        <label className="markdown-check"><input type="checkbox" aria-label="Match whole word" checked={wholeWord} onChange={(event) => setWholeWord(event.currentTarget.checked)} /> Match whole word</label>
+        <Button type="button" onClick={() => void updateSearch()}>Find</Button>
+        <Button type="button" onClick={() => moveSearch(-1)}>Previous</Button>
+        <Button type="button" onClick={() => moveSearch(1)}>Next</Button>
+        <Button type="button" onClick={() => setSearchReplace((show) => !show)}>Replace</Button>
+        {searchReplace && <><input aria-label="Replace with" value={replaceText} onChange={(event) => setReplaceText(event.currentTarget.value)} /><Button type="button" onClick={() => void replaceMatches(false)}>Replace</Button><Button type="button" onClick={() => void replaceMatches(true)}>Replace all</Button></>}
         {searchResult && <span>{searchResult.total ? `${searchIndex + 1} of ${searchResult.total}` : 'No results'}</span>}
-        <button type="button" style={buttonStyle} onClick={() => setSearchOpen(false)}>Close</button>
+        <Button type="button" onClick={() => setSearchOpen(false)}>Close</Button>
       </div>}
 
-      {docMenu && <div role="dialog" aria-label="Markdown document links" style={{ ...toolbarStyle, position: 'relative', zIndex: 4 }}>
+      {docMenu && <div role="dialog" aria-label="Markdown document links" className="markdown-popover markdown-popover--list">
         <strong>Markdown document links</strong>
-        <div role="listbox" aria-label="Document matches">
+        <div role="listbox" aria-label="Document matches" className="markdown-popover__items">
           {docMenu.items.length === 0
             ? <span>No documents found</span>
-            : docMenu.items.map((item, index) => <button key={item.relativePath} type="button" role="option" aria-selected={index === docMenu.index} style={{ ...buttonStyle, outline: index === docMenu.index ? '2px solid currentColor' : undefined }} onMouseDown={(event) => event.preventDefault()} onClick={() => chooseDocument(item.relativePath)}>{item.relativePath}</button>)}
+            : docMenu.items.map((item, index) => <Button key={item.relativePath} type="button" role="option" aria-selected={index === docMenu.index} className="markdown-option" onMouseDown={(event) => event.preventDefault()} onClick={() => chooseDocument(item.relativePath)}>{item.relativePath}</Button>)}
         </div>
         <span>{docMenu.items.length} of {docMenu.total} matches{docMenu.truncated ? ' (truncated)' : ''}</span>
       </div>}
-      {slash && <div role="dialog" aria-label="Slash commands" style={{ ...toolbarStyle, position: 'relative', zIndex: 4 }}>
-        <input autoFocus aria-label="Search blocks" placeholder="Search blocks…" value={slash.query} onChange={(event) => setSlash({ query: event.currentTarget.value, index: 0 })} />
-        {currentSlashItems.length === 0 ? <span>No blocks found</span> : currentSlashItems.map((item, index) => <button key={item.id} type="button" role="option" aria-selected={index === slash.index} style={{ ...buttonStyle, outline: index === slash.index ? '2px solid currentColor' : undefined }} onMouseDown={(event) => event.preventDefault()} onClick={() => void runSlash(item)}>{item.group}: {item.label}</button>)}
+      {slash && <div role="dialog" aria-label="Slash commands" className="markdown-popover markdown-popover--list">
+        <input autoFocus className="markdown-input" aria-label="Search blocks" placeholder="Search blocks…" value={slash.query} onChange={(event) => setSlash({ query: event.currentTarget.value, index: 0 })} />
+        {currentSlashItems.length === 0 ? <span>No blocks found</span> : currentSlashItems.map((item, index) => <Button key={item.id} type="button" role="option" aria-selected={index === slash.index} className="markdown-option" onMouseDown={(event) => event.preventDefault()} onClick={() => void runSlash(item)}>{item.group}: {item.label}</Button>)}
       </div>}
 
-      {linkBubble && <div role="dialog" aria-label="Link actions" style={toolbarStyle}>
-        <input aria-label="Paste or type a link" placeholder="Paste or type a link…" value={linkValue} onChange={(event) => setLinkValue(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === 'Enter') void saveLink(); if (event.key === 'Escape') setLinkBubble(false) }} />
-        <button type="button" style={buttonStyle} onClick={() => void openExternal(linkValue)}>Open link</button>
-        <button type="button" style={buttonStyle} onClick={async () => { try { await navigator.clipboard.writeText(linkValue); setFeedback('Copied link') } catch { setFeedback('Failed to copy link') } }}>Copy link</button>
-        <button type="button" style={buttonStyle} onClick={() => void saveLink()}>Save link</button>
-        <button type="button" style={buttonStyle} onClick={() => { editor?.chain().focus().extendMarkRange('link').unsetLink().run(); setLinkBubble(false); void flush() }}>Remove link</button>
-        <button type="button" style={buttonStyle} onClick={() => setLinkBubble(false)}>Close</button>
+      {linkBubble && <div role="dialog" aria-label="Link actions" className="markdown-popover markdown-toolbar">
+        <input className="markdown-input" aria-label="Paste or type a link" placeholder="Paste or type a link…" value={linkValue} onChange={(event) => setLinkValue(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === 'Enter') void saveLink(); if (event.key === 'Escape') setLinkBubble(false) }} />
+        <Button type="button" onClick={() => void openExternal(linkValue)}>Open link</Button>
+        <Button type="button" onClick={async () => { try { await navigator.clipboard.writeText(linkValue); setFeedback('Copied link') } catch { setFeedback('Failed to copy link') } }}>Copy link</Button>
+        <Button type="button" onClick={() => void saveLink()}>Save link</Button>
+        <Button type="button" onClick={() => { editor?.chain().focus().extendMarkRange('link').unsetLink().run(); setLinkBubble(false); void flush() }}>Remove link</Button>
+        <Button type="button" onClick={() => setLinkBubble(false)}>Close</Button>
       </div>}
 
-      {emojiOpen && <div role="dialog" aria-label="Emoji picker" style={{ ...toolbarStyle, flexDirection: 'column', alignItems: 'stretch', maxWidth: 'min(100%, 360px)', maxHeight: '70vh', overflow: 'auto' }}>
+      {emojiOpen && <div role="dialog" aria-label="Emoji picker" className="markdown-popover markdown-popover--emoji">
         {emojiPickerLoading && <div role="status">Loading native emoji picker…</div>}
-        {emojiPickerError && <div role="alert">Could not load the emoji picker: {emojiPickerError}<button type="button" style={buttonStyle} onClick={() => void loadEmojiPicker()}>Retry</button></div>}
+        {emojiPickerError && <div role="alert">Could not load the emoji picker: {emojiPickerError}<Button type="button" onClick={() => void loadEmojiPicker()}>Retry</Button></div>}
         {EmojiPicker && emojiPickerModuleLoaded && <EmojiPicker
           autoFocusSearch
           emojiStyle={emojiPickerModuleLoaded.EmojiStyle.NATIVE}
@@ -1461,24 +1441,24 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
             void flush().catch(() => {})
           }}
         />}
-        <button type="button" style={buttonStyle} onClick={() => setEmojiOpen(false)}>Close</button>
+        <Button type="button" onClick={() => setEmojiOpen(false)}>Close</Button>
       </div>}
 
-      {tocOpen && <aside aria-label="Table of Contents" style={{ borderBottom: '1px solid var(--quirky-border, #7774)', padding: 8, maxHeight: '30vh', overflow: 'auto' }}>
+      {tocOpen && <aside aria-label="Table of Contents" className="markdown-toc">
         <strong>Table of Contents</strong>
-        <div>{[1, 2, 3, 4, 5].map((level) => <label key={level} style={{ marginRight: 8 }}><input type="checkbox" checked={tocLevels.has(level)} aria-label={`Show H${level}`} onChange={(event) => { const checked = event.currentTarget.checked; setTocLevels((current) => { const next = new Set(current); if (checked) next.add(level); else next.delete(level); return next }) }} />H{level}</label>)}
-          {[1, 2, 3, 4, 5].map((level) => <button key={`collapse-${level}`} type="button" style={buttonStyle} onClick={() => setTocLevels(new Set([1, 2, 3, 4, 5].filter((candidate) => candidate <= level)))}>Collapse to H{level}</button>)}
-          <button type="button" style={buttonStyle} onClick={() => setTocLevels(new Set([1, 2, 3, 4, 5]))}>Expand all</button>
+        <div>{[1, 2, 3, 4, 5].map((level) => <label key={level} className="markdown-check"><input type="checkbox" checked={tocLevels.has(level)} aria-label={`Show H${level}`} onChange={(event) => { const checked = event.currentTarget.checked; setTocLevels((current) => { const next = new Set(current); if (checked) next.add(level); else next.delete(level); return next }) }} />H{level}</label>)}
+          {[1, 2, 3, 4, 5].map((level) => <Button key={`collapse-${level}`} type="button" onClick={() => setTocLevels(new Set([1, 2, 3, 4, 5].filter((candidate) => candidate <= level)))}>Collapse to H{level}</Button>)}
+          <Button type="button" onClick={() => setTocLevels(new Set([1, 2, 3, 4, 5]))}>Expand all</Button>
         </div>
-        {visibleToc.length === 0 ? <p>No headings</p> : visibleToc.map((heading) => <button key={`${heading.id}:${heading.line}`} type="button" style={{ ...buttonStyle, display: 'block', marginLeft: (heading.level - 1) * 12 }} onClick={() => jumpToHeading(heading)}>{heading.text}</button>)}
+        {visibleToc.length === 0 ? <p>No headings</p> : visibleToc.map((heading) => <Button key={`${heading.id}:${heading.line}`} type="button" className="markdown-toc-heading" data-level={heading.level} onClick={() => jumpToHeading(heading)}>{heading.text}</Button>)}
       </aside>}
 
-      {feedback && <div role="status" style={{ padding: '4px 10px' }}>{feedback}<button type="button" style={buttonStyle} onClick={() => setFeedback(null)}>Dismiss</button></div>}
-      {flushError && <div role="alert" style={{ padding: '6px 10px', color: 'var(--quirky-danger, #e66)' }}>{flushError}<button type="button" style={buttonStyle} onClick={() => void flush().catch(() => {})}>Retry</button><button type="button" style={buttonStyle} onClick={() => void openSource()}>Open source</button></div>}
+      {feedback && <div role="status" className="markdown-status">{feedback}<Button type="button" onClick={() => setFeedback(null)}>Dismiss</Button></div>}
+      {flushError && <div role="alert" className="markdown-alert markdown-alert--error">{flushError}<Button type="button" onClick={() => void flush().catch(() => {})}>Retry</Button><Button type="button" onClick={() => void openSource()}>Open source</Button></div>}
 
-      <div style={{ display: 'flex', minHeight: 0, flex: 1 }}>
+      <div className="markdown-rich-layout">
         <div
-          style={{ flex: 1, minWidth: 0, overflow: 'auto', padding: 12 }}
+          className="markdown-rich-content markdown-body--editor"
           onMouseUp={() => { if (editor) setSelection((current) => selectionForReview(editor) ? { from: editor.state.selection.from, to: editor.state.selection.to, ...selectionForReview(editor)! } : current) }}
           onPasteCapture={(event) => {
             const file = imageFileFromTransfer(event.clipboardData)
@@ -1499,48 +1479,48 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
           }}
         >
           {editor && <EditorContent editor={editor} />}
-          {editor?.isActive('table') && <div style={toolbarStyle} aria-label="Table actions">
-            <button type="button" style={buttonStyle} disabled={editor.isActive('tableHeader')} onClick={() => { editor.chain().focus().addRowBefore().run(); void flush() }}>Insert row above</button>
-            <button type="button" style={buttonStyle} onClick={() => { editor.chain().focus().addRowAfter().run(); void flush() }}>Insert row below</button>
-            <button type="button" style={buttonStyle} disabled={editor.isActive('tableHeader')} onClick={() => { editor.chain().focus().deleteRow().run(); void flush() }}>Delete row</button>
-            <button type="button" style={buttonStyle} onClick={() => { editor.chain().focus().addColumnBefore().run(); void flush() }}>Insert column left</button>
-            <button type="button" style={buttonStyle} onClick={() => { editor.chain().focus().addColumnAfter().run(); void flush() }}>Insert column right</button>
-            <button type="button" style={buttonStyle} onClick={() => { editor.chain().focus().deleteColumn().run(); void flush() }}>Delete column</button>
-            <button type="button" style={buttonStyle} onClick={() => { editor.chain().focus().deleteTable().run(); void flush() }}>Delete table</button>
+          {editor?.isActive('table') && <div className="markdown-toolbar markdown-toolbar--engine-actions" aria-label="Table actions">
+            <Button type="button" disabled={editor.isActive('tableHeader')} onClick={() => { editor.chain().focus().addRowBefore().run(); void flush() }}>Insert row above</Button>
+            <Button type="button" onClick={() => { editor.chain().focus().addRowAfter().run(); void flush() }}>Insert row below</Button>
+            <Button type="button" disabled={editor.isActive('tableHeader')} onClick={() => { editor.chain().focus().deleteRow().run(); void flush() }}>Delete row</Button>
+            <Button type="button" onClick={() => { editor.chain().focus().addColumnBefore().run(); void flush() }}>Insert column left</Button>
+            <Button type="button" onClick={() => { editor.chain().focus().addColumnAfter().run(); void flush() }}>Insert column right</Button>
+            <Button type="button" onClick={() => { editor.chain().focus().deleteColumn().run(); void flush() }}>Delete column</Button>
+            <Button type="button" onClick={() => { editor.chain().focus().deleteTable().run(); void flush() }}>Delete table</Button>
           </div>}
-          {editor?.isActive('codeBlock') && <div style={toolbarStyle} aria-label="Code block actions">
-            <select aria-label="Code language" value={codeLanguage} onChange={(event) => { editor.chain().focus().updateAttributes('codeBlock', { language: event.currentTarget.value || null }).run(); void flush() }}>
+          {editor?.isActive('codeBlock') && <div className="markdown-toolbar markdown-toolbar--engine-actions" aria-label="Code block actions">
+            <select className="markdown-select" aria-label="Code language" value={codeLanguage} onChange={(event) => { editor.chain().focus().updateAttributes('codeBlock', { language: event.currentTarget.value || null }).run(); void flush() }}>
               <option value="">Plain text</option>{CODE_LANGUAGES.slice(1).map((language) => <option key={language} value={language.toLowerCase()}>{language}</option>)}
             </select>
-            <button type="button" style={buttonStyle} onClick={async () => { try { await navigator.clipboard.writeText(codeText); setFeedback('Copied code') } catch { setFeedback('Could not copy code') } }}>Copy code</button>
+            <Button type="button" onClick={async () => { try { await navigator.clipboard.writeText(codeText); setFeedback('Copied code') } catch { setFeedback('Could not copy code') } }}>Copy code</Button>
           </div>}
         </div>
-        <aside aria-label={`Review notes, ${notes.length} notes`} style={{ width: 260, maxWidth: '35%', borderLeft: '1px solid var(--quirky-border, #7774)', overflow: 'auto', padding: 8 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><strong>Review notes ({notes.length})</strong><button type="button" style={buttonStyle} onClick={() => void loadNotes()}>Refresh</button></div>
-          <div style={toolbarStyle}>
-            <button type="button" style={buttonStyle} onClick={() => { if (currentSelection) { setSelection({ from: editor?.state.selection.from ?? 0, to: editor?.state.selection.to ?? 0, ...currentSelection }); setNoteEdit(null); setNoteBody(''); setNoteComposer(true) } }}>+ Add note</button>
-            <button type="button" style={buttonStyle} onClick={() => void copyNotes()}>Copy notes for agent</button>
-            <button type="button" style={buttonStyle} onClick={() => void openSendMenu()}>Send notes to</button>
+        <aside aria-label={`Review notes, ${notes.length} notes`} className="markdown-review-notes">
+          <div className="markdown-notes-heading"><strong>Review notes ({notes.length})</strong><Button type="button" onClick={() => void loadNotes()}>Refresh</Button></div>
+          <div className="markdown-toolbar markdown-toolbar--notes">
+            <Button type="button" onClick={() => { if (currentSelection) { setSelection({ from: editor?.state.selection.from ?? 0, to: editor?.state.selection.to ?? 0, ...currentSelection }); setNoteEdit(null); setNoteBody(''); setNoteComposer(true) } }}>+ Add note</Button>
+            <Button type="button" onClick={() => void copyNotes()}>Copy notes for agent</Button>
+            <Button type="button" onClick={() => void openSendMenu()}>Send notes to</Button>
           </div>
-          {sendMenu && <div role="dialog" aria-label="Send notes to">
-            <label>Running agent<select value={sendTarget} onChange={(event) => setSendTarget(event.currentTarget.value)}><option value="">Choose a running agent</option>{agentTargets.sessions.map((session) => <option key={session.id} value={session.id}>{session.agent} · {session.title}</option>)}</select></label>
-            <button type="button" style={buttonStyle} disabled={!sendTarget} onClick={() => void sendNotes('existing')}>Send</button>
-            <label>New agent<select value={sendAgent} onChange={(event) => setSendAgent(event.currentTarget.value)}><option value="">Choose an agent</option>{agentTargets.agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.label}</option>)}</select></label>
-            <button type="button" style={buttonStyle} disabled={!sendAgent} onClick={() => void sendNotes('new')}>New agent</button>
-            <button type="button" style={buttonStyle} onClick={() => setSendMenu(false)}>Cancel</button>
+          {sendMenu && <div role="dialog" aria-label="Send notes to" className="markdown-popover markdown-popover--form">
+            <label className="markdown-field">Running agent<select className="markdown-select" value={sendTarget} onChange={(event) => setSendTarget(event.currentTarget.value)}><option value="">Choose a running agent</option>{agentTargets.sessions.map((session) => <option key={session.id} value={session.id}>{session.agent} · {session.title}</option>)}</select></label>
+            <Button type="button" disabled={!sendTarget} onClick={() => void sendNotes('existing')}>Send</Button>
+            <label className="markdown-field">New agent<select className="markdown-select" value={sendAgent} onChange={(event) => setSendAgent(event.currentTarget.value)}><option value="">Choose an agent</option>{agentTargets.agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.label}</option>)}</select></label>
+            <Button type="button" disabled={!sendAgent} onClick={() => void sendNotes('new')}>New agent</Button>
+            <Button type="button" onClick={() => setSendMenu(false)}>Cancel</Button>
           </div>}
-          {noteComposer && <div role="dialog" aria-label="Add note for the AI">
+          {noteComposer && <div role="dialog" aria-label="Add note for the AI" className="markdown-popover markdown-popover--form">
             <p>{selection?.text ? `Selected text: ${selection.text}` : 'Add note for the AI'}</p>
-            <textarea ref={noteInput} aria-label="Add note for the AI" rows={3} maxLength={MAX_NOTE_BODY_BYTES} value={noteBody} onChange={(event) => setNoteBody(event.currentTarget.value)} />
-            <button type="button" style={buttonStyle} onClick={() => void addNote()}>{noteEdit ? 'Save note' : 'Add note'}</button>
-            <button type="button" style={buttonStyle} onClick={() => { setNoteComposer(false); setNoteEdit(null); setNoteBody('') }}>Cancel</button>
+            <textarea ref={noteInput} className="markdown-textarea" aria-label="Add note for the AI" rows={3} maxLength={MAX_NOTE_BODY_BYTES} value={noteBody} onChange={(event) => setNoteBody(event.currentTarget.value)} />
+            <Button type="button" onClick={() => void addNote()}>{noteEdit ? 'Save note' : 'Add note'}</Button>
+            <Button type="button" onClick={() => { setNoteComposer(false); setNoteEdit(null); setNoteBody('') }}>Cancel</Button>
           </div>}
-          {notes.map((note) => <article key={note.id} style={{ border: '1px solid var(--quirky-border, #7775)', borderRadius: 5, padding: 8, marginTop: 8 }}>
+          {notes.map((note) => <article key={note.id} className="markdown-note">
             <small>{note.startLine === note.endLine ? `Line ${note.lineNumber}` : `Lines ${note.startLine}-${note.endLine}`}</small>
-            {note.selectedText && <blockquote style={{ margin: '4px 0', paddingLeft: 8, borderLeft: '2px solid currentColor' }}>{note.selectedText}</blockquote>}
+            {note.selectedText && <blockquote className="markdown-note__selection">{note.selectedText}</blockquote>}
             <p>{note.body}</p>
-            <button type="button" style={buttonStyle} onClick={() => { setNoteEdit(note.id); setNoteBody(note.body); setNoteComposer(true) }}>Edit</button>
-            <button type="button" style={buttonStyle} onClick={async () => { await call(NOTES_METHOD, { action: 'delete', noteId: note.id }); await loadNotes() }}>Delete</button>
+            <Button type="button" onClick={() => { setNoteEdit(note.id); setNoteBody(note.body); setNoteComposer(true) }}>Edit</Button>
+            <Button type="button" onClick={async () => { await call(NOTES_METHOD, { action: 'delete', noteId: note.id }); await loadNotes() }}>Delete</Button>
           </article>)}
         </aside>
       </div>
