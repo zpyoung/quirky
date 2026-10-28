@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
-import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
-import { join, resolve, sep } from 'node:path'
+import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync, type Stats } from 'node:fs'
+import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { validateValue, type Schema } from '@quirky/protocol'
 import { fault } from '../runtime/errors'
 export type BrowserProfile = { id: string; label: string; scope: 'default' | 'isolated' }
@@ -60,23 +60,38 @@ const STATE_SCHEMA: Schema = {
   additionalProperties: false
 }
 
-function validProfileId(id: string): boolean {
+export function isValidProfileId(id: string): boolean {
   return id === 'default' || /^profile_[0-9a-f]{32}$/.test(id)
 }
 
 function isWithin(root: string, path: string): boolean {
-  const relativePath = resolve(path).slice(resolve(root).length)
-  return relativePath === '' || relativePath.startsWith(sep)
+  const relativePath = relative(resolve(root), resolve(path))
+  return relativePath === '' || (relativePath !== '..' && !relativePath.startsWith(`..${sep}`) && !isAbsolute(relativePath))
+}
+
+function lstatIfPresent(path: string): Stats | undefined {
+  try {
+    return lstatSync(path)
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return undefined
+    throw error
+  }
 }
 
 export class BrowserStore {
+  private readonly canonicalDataDir: string
   private readonly statePath: string
   private state: BrowserState
 
   constructor(readonly dataDir: string) {
     mkdirSync(dataDir, { recursive: true, mode: 0o700 })
+    const dataDirectoryInfo = lstatSync(dataDir)
+    if (dataDirectoryInfo.isSymbolicLink() || !dataDirectoryInfo.isDirectory()) {
+      throw fault('invalid_argument', 'browser data directory is not a safe directory')
+    }
     chmodSync(dataDir, 0o700)
-    this.statePath = join(dataDir, 'browser-state.json')
+    this.canonicalDataDir = realpathSync(dataDir)
+    this.statePath = join(this.canonicalDataDir, 'browser-state.json')
     this.state = this.readState()
     if (!this.state.profiles.some((profile) => profile.id === 'default')) {
       this.state.profiles.unshift({ id: 'default', label: 'Default', scope: 'default' })
@@ -95,7 +110,7 @@ export class BrowserStore {
     const failure = validateValue(STATE_SCHEMA, parsed, 'browser metadata')
     if (failure) throw fault('browser_error', 'persisted browser metadata has an invalid schema')
     const state = parsed as BrowserState
-    if (state.profiles.some((profile) => !validProfileId(profile.id)) || state.pages.some((page) => !validProfileId(page.profileId))) {
+    if (state.profiles.some((profile) => !isValidProfileId(profile.id)) || state.pages.some((page) => !isValidProfileId(page.profileId))) {
       throw fault('browser_error', 'persisted browser metadata contains an unsafe profile identifier')
     }
     if (state.pages.some((page) =>
@@ -121,15 +136,82 @@ export class BrowserStore {
   }
 
   profilePath(profileId: string): string {
-    const profile = this.getProfile(profileId)
-    const profilesRoot = resolve(this.dataDir, 'profiles')
-    const path = resolve(profilesRoot, profile.id)
-    if (!isWithin(profilesRoot, path)) throw fault('invalid_argument', 'profile identifier is not a safe path')
-    mkdirSync(path, { recursive: true, mode: 0o700 })
-    chmodSync(path, 0o700)
+    const path = this.profileDirectory(profileId, true)
+    if (!path) throw fault('browser_error', 'profile directory could not be created')
     return path
   }
 
+  private profileDirectory(profileId: string, create: boolean): string | undefined {
+    if (!isValidProfileId(profileId)) throw fault('invalid_argument', 'profile identifier is not a safe path')
+    this.getProfile(profileId)
+
+    const dataRoot = realpathSync(this.dataDir)
+    if (dataRoot !== this.canonicalDataDir) {
+      throw fault('invalid_argument', 'browser data directory changed after initialization')
+    }
+    const profilesRoot = resolve(this.canonicalDataDir, 'profiles')
+    if (!isWithin(dataRoot, profilesRoot) || profilesRoot === dataRoot) {
+      throw fault('invalid_argument', 'profile storage is outside the browser data directory')
+    }
+
+    let profilesInfo = lstatIfPresent(profilesRoot)
+    if (!profilesInfo && create) {
+      mkdirSync(profilesRoot, { recursive: true, mode: 0o700 })
+      profilesInfo = lstatSync(profilesRoot)
+    }
+    if (!profilesInfo) return undefined
+    if (profilesInfo.isSymbolicLink() || !profilesInfo.isDirectory()) {
+      throw fault('invalid_argument', 'profile storage root is not a safe directory')
+    }
+
+    const path = resolve(profilesRoot, profileId)
+    if (!isWithin(profilesRoot, path) || path === profilesRoot) {
+      throw fault('invalid_argument', 'profile identifier is not a safe path')
+    }
+    let profileInfo = lstatIfPresent(path)
+    if (!profileInfo && create) {
+      mkdirSync(path, { recursive: false, mode: 0o700 })
+      profileInfo = lstatSync(path)
+    }
+    if (profileInfo && (profileInfo.isSymbolicLink() || !profileInfo.isDirectory())) {
+      throw fault('invalid_argument', 'profile path is not a safe directory')
+    }
+    return profileInfo ? path : undefined
+  }
+
+  private assertProfileHasNoPages(profileId: string): void {
+    if (this.state.pages.some((page) => page.profileId === profileId)) {
+      throw fault('browser_error', `profile ${profileId} is in use by a managed page`)
+    }
+  }
+
+  clearProfileDirectory(profileId: string): void {
+    this.getProfile(profileId)
+    this.assertProfileHasNoPages(profileId)
+    const path = this.profileDirectory(profileId, false)
+    if (!path) return
+    rmSync(path, { recursive: true, force: true })
+    mkdirSync(path, { recursive: false, mode: 0o700 })
+  }
+
+  deleteProfile(profileId: string): void {
+    const profile = this.getProfile(profileId)
+    if (profile.id === 'default' || profile.scope === 'default') {
+      throw fault('invalid_argument', 'the Default browser profile cannot be deleted')
+    }
+    this.assertProfileHasNoPages(profileId)
+    const path = this.profileDirectory(profileId, false)
+    if (path) rmSync(path, { recursive: true, force: true })
+
+    const index = this.state.profiles.findIndex((item) => item.id === profileId)
+    const [removed] = this.state.profiles.splice(index, 1)
+    try {
+      this.persist()
+    } catch (error) {
+      this.state.profiles.splice(index, 0, removed!)
+      throw error
+    }
+  }
 
   listProfiles(): BrowserProfile[] {
     return [...this.state.profiles].sort((a, b) => a.id === 'default' ? -1 : b.id === 'default' ? 1 : a.label.localeCompare(b.label))
