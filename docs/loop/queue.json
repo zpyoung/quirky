@@ -1409,7 +1409,8 @@
       "deps": [
         "m7-sweep-automation-completion"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 1
     },
     {
       "id": "m7-test-triage",
