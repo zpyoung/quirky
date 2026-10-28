@@ -364,23 +364,21 @@ function makeContext(
     workerEntrypoint: () => { throw new Error('workerEntrypoint is unsupported in the orchestration fixture') },
     dataDir: '/tmp/heimdall-data',
     home: '/tmp/quirky-home',
+    createFileResource: () => { throw new Error('unexpected file resource request') },
+    clients: { accept: () => { throw new Error('unexpected remote client admission') } },
     call,
     subscribe,
-    log: () => { throw new Error('log is unsupported in the orchestration fixture') },
-    provide: () => { throw new Error('provide is unsupported in the orchestration fixture') },
-    emit: () => { throw new Error('emit is unsupported in the orchestration fixture') },
-    createFileResource: async () => { throw new Error('createFileResource is unsupported in the orchestration fixture') },
-    openStore: () => { throw new Error('openStore is unsupported in the orchestration fixture') },
-    getSetting: () => { throw new Error('getSetting is unsupported in the orchestration fixture') },
-    storedSettingValue: () => { throw new Error('storedSettingValue is unsupported in the orchestration fixture') },
-    error: () => { throw new Error('error is unsupported in the orchestration fixture') },
-    get pty(): PluginContext['pty'] { throw new Error('pty is unsupported in the orchestration fixture') },
-    notify: () => { throw new Error('notify is unsupported in the orchestration fixture') },
-    get launch(): PluginContext['launch'] { throw new Error('launch is unsupported in the orchestration fixture') },
-    clients: {
-      accept: () => { throw new Error('clients are unsupported in the orchestration fixture') }
-    }
-  } satisfies PluginContext
+    log: () => {},
+    provide: () => {},
+    emit: () => true,
+    openStore: () => { throw new Error('not used') },
+    getSetting: () => undefined,
+    storedSettingValue: () => undefined,
+    error: (_kind, message) => new Error(message),
+    pty: null as never,
+    notify: () => {},
+    launch: null as never
+  }
 }
 
 function makeEnrollment(overrides: Partial<Enrollment> = {}): Enrollment {

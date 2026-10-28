@@ -92,6 +92,7 @@ function contextFor(options: { codexPath?: string; claudePath?: string } = {}) {
 describe('provider usage-limit journal evidence', () => {
   test('an empty Codex start is idle and raw account/rateLimits/updated params survive in the journal', async () => {
     const testHome = isolatedHome()
+
     const rawParams = {
       exhausted: true,
       rateLimits: { primary: { usedPercent: 100, resetsAt: '2030-01-02T03:04:05.000Z' } }
