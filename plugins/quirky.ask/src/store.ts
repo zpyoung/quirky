@@ -133,7 +133,7 @@ export function createAskStore(context: UiPluginContext, clock: AskStoreClock = 
       appliedGeneration = mine
       watermark = Math.max(watermark, eventSeq)
       for (const ask of list) watermark = Math.max(watermark, ask.seq)
-      const live = list.filter((ask) => !removed.has(ask.id))
+      const live = list.filter((ask) => !removed.has(ask.id) && !resolvedIds.has(ask.id))
       publish(
         live.filter((ask) => !ask.queued).sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id)),
         live.filter((ask) => ask.queued).length

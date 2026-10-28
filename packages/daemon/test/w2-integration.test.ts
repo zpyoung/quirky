@@ -25,26 +25,28 @@ afterEach(async () => {
 
 /** A fake `quirky.ask` the dispatcher can open confirmations through; `answer` stands in for the person. */
 const FAKE_ASK_MAIN = `
-const asks = new Map()
-export function activate(context: any) {
-  context.provide('method:quirky.ask/create', (params: any) => {
+import type { PluginContext } from '@quirky/protocol'
+const asks = new Map<string, { spec: unknown; status: 'pending' | 'answered'; value: unknown }>()
+export function activate(context: PluginContext) {
+  context.provide('method:quirky.ask/create', (params: Record<string, unknown>) => {
     const askId = 'ask_' + (asks.size + 1)
     asks.set(askId, { spec: params.spec, status: 'pending', value: null })
     return { askId }
   })
-  context.provide('method:quirky.ask/wait', (params: any) => {
-    const ask = asks.get(params.askId)
-    if (!ask) throw context.error('not-found', 'no such ask')
-    return {
+  context.provide('method:quirky.ask/list', () => [...asks].map(([askId, ask]) => ({
+    id: askId,
+    envelope: {
       status: ask.status,
-      askId: params.askId,
+      askId,
       answers: ask.status === 'answered' ? { confirm: { value: ask.value, source: 'input' } } : {},
       skipped: []
     }
-  })
-  context.provide('method:quirky.ask/answer', (params: any) => {
-    asks.get(params.askId).status = 'answered'
-    asks.get(params.askId).value = params.value
+  })))
+  context.provide('method:quirky.ask/answer', (params: Record<string, unknown>) => {
+    const ask = asks.get(String(params.askId))
+    if (!ask) throw context.error('not-found', 'no such ask')
+    ask.status = 'answered'
+    ask.value = params.value
     return { ok: true }
   })
 }
@@ -101,9 +103,9 @@ function builtinPlugins(marker: string): string {
             }
           },
           {
-            id: 'wait',
+            id: 'list',
             readOnly: true,
-            params: { type: 'object', properties: { askId: { type: 'string' }, timeoutMs: { type: 'integer' } }, required: ['askId'] }
+            params: { type: 'object', properties: {} }
           },
           {
             id: 'answer',

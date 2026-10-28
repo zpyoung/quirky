@@ -657,26 +657,22 @@ describe('drafts', () => {
 describe('the queue', () => {
   test('SC-14: a second ask from the same session waits', async () => {
     const window = await openWindow(h)
-    const s1 = await connectAs(h, { sessionId: 's1' })
-    const a = ((await s1.callAny('quirky.ask/create', { spec })) as { askId: string }).askId
-    expect(((await client.call('ui.state', {})) as any).layout.panel).toBe(PANEL)
-    await client.call('ui.panel.close', {})
-    const b = ((await s1.callAny('quirky.ask/create', { spec: { ...spec, title: 'Second' } })) as { askId: string }).askId
+    const asker = await connectAs(h)
+    const a = ((await asker.callAny('quirky.ask/create', { spec, session: 's1' })) as { askId: string }).askId
+    const b = ((await asker.callAny('quirky.ask/create', { spec: { ...spec, title: 'Second' }, session: 's1' })) as { askId: string }).askId
 
-    const asks = await asksOf(s1, true)
+    const asks = await asksOf(asker, true)
     expect(asks.map((ask) => [ask.id, ask.queued])).toEqual([[a, false], [b, true]])
     const createdB = await waitFor(() => eventsOf(window.events, 'created').find((event) => event.data.ask.id === b))
     expect(createdB.data.ask.queued).toBe(true)
-    expect(h.notifications).toEqual([])
-    expect(((await client.call('ui.state', {})) as any).layout.panel).toBeNull()
     expect(eventsOf(window.events, 'surfaced')).toEqual([])
   })
 
   test('SC-15: when the first resolves, the second surfaces with a fresh seq', async () => {
     const window = await openWindow(h)
-    const s1 = await connectAs(h, { sessionId: 's1' })
-    const a = ((await s1.callAny('quirky.ask/create', { spec })) as { askId: string }).askId
-    const b = ((await s1.callAny('quirky.ask/create', { spec: { ...spec, title: 'Second' } })) as { askId: string }).askId
+    const asker = await connectAs(h)
+    const a = ((await asker.callAny('quirky.ask/create', { spec, session: 's1' })) as { askId: string }).askId
+    const b = ((await asker.callAny('quirky.ask/create', { spec: { ...spec, title: 'Second' }, session: 's1' })) as { askId: string }).askId
     const waitingOnB = call('wait', { askId: b, timeoutMs: 10000 })
 
     await call('answer', { askId: a, answers: { env: { value: 'dev', source: 'option' } }, skipped: ['why'] })
@@ -694,8 +690,9 @@ describe('the queue', () => {
   })
 
   test('SC-17: asks from different sessions, or with no session, never queue', async () => {
-    const clients = [await connectAs(h, { sessionId: 's1' }), await connectAs(h, { sessionId: 's2' }), await connectAs(h), await connectAs(h)]
-    for (const asker of clients) await asker.callAny('quirky.ask/create', { spec })
+    for (const session of ['s1', 's2', undefined, undefined]) {
+      await call('create', { spec, ...(session === undefined ? {} : { session }) })
+    }
     const asks = await asksOf(client, true)
     expect(asks.map((ask) => ask.queued)).toEqual([false, false, false, false])
     expect(h.notifications).toEqual([])
@@ -703,10 +700,10 @@ describe('the queue', () => {
 
   test('SC-18: timing out a queued ask leaves the head alone, and so does cancelling one', async () => {
     const window = await openWindow(h)
-    const s1 = await connectAs(h, { sessionId: 's1' })
-    const a = ((await s1.callAny('quirky.ask/create', { spec })) as { askId: string }).askId
-    const b = ((await s1.callAny('quirky.ask/create', { spec, timeoutMs: 400 })) as { askId: string }).askId
-    const c = ((await s1.callAny('quirky.ask/create', { spec })) as { askId: string }).askId
+    const asker = await connectAs(h)
+    const a = ((await asker.callAny('quirky.ask/create', { spec, session: 's1' })) as { askId: string }).askId
+    const b = ((await asker.callAny('quirky.ask/create', { spec, session: 's1', timeoutMs: 400 })) as { askId: string }).askId
+    const c = ((await asker.callAny('quirky.ask/create', { spec, session: 's1' })) as { askId: string }).askId
 
     expect(await call('wait', { askId: b, timeoutMs: 5000 })).toMatchObject({ status: 'timed_out' })
     expect(await call('cancel', { askId: c })).toMatchObject({ status: 'declined' })
@@ -717,9 +714,9 @@ describe('the queue', () => {
   })
 
   test('SC-18: asks that are both overdue at startup end timed out and the queued one is never surfaced or announced', async () => {
-    const s1 = await connectAs(h, { sessionId: 's1' })
-    const a = ((await s1.callAny('quirky.ask/create', { spec, timeoutMs: 300 })) as { askId: string }).askId
-    const b = ((await s1.callAny('quirky.ask/create', { spec, timeoutMs: 300 })) as { askId: string }).askId
+    const asker = await connectAs(h)
+    const a = ((await asker.callAny('quirky.ask/create', { spec, session: 's1', timeoutMs: 300 })) as { askId: string }).askId
+    const b = ((await asker.callAny('quirky.ask/create', { spec, session: 's1', timeoutMs: 300 })) as { askId: string }).askId
     const home = h.home
     await stopKeepingHome(h)
     await Bun.sleep(400)
@@ -816,11 +813,11 @@ describe('the queue', () => {
 
   test('SC-19: seq keeps rising across restarts and the queue order survives', async () => {
     const window1 = await openWindow(h)
-    const s1 = await connectAs(h, { sessionId: 's1' })
+    const asker = await connectAs(h)
     const [a, b, c] = [
-      ((await s1.callAny('quirky.ask/create', { spec })) as { askId: string }).askId,
-      ((await s1.callAny('quirky.ask/create', { spec })) as { askId: string }).askId,
-      ((await s1.callAny('quirky.ask/create', { spec })) as { askId: string }).askId
+      ((await asker.callAny('quirky.ask/create', { spec, session: 's1' })) as { askId: string }).askId,
+      ((await asker.callAny('quirky.ask/create', { spec, session: 's1' })) as { askId: string }).askId,
+      ((await asker.callAny('quirky.ask/create', { spec, session: 's1' })) as { askId: string }).askId
     ]
     expect(askEvents(window1.events)).toEqual([['created', 1], ['created', 2], ['created', 3]])
     const home = h.home

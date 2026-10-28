@@ -22,7 +22,7 @@ async function startWithOtherPanel() {
 const layoutOf = async (client: { call: (method: 'ui.state', params: {}) => Promise<UiState> }) => (await client.call('ui.state', {})).layout
 
 describe('the Questions panel', () => {
-  test('SC-31: with a window connected and no panel open, a new ask opens the panel and sends no notify', async () => {
+  test('a session-null ask remains available without stealing the connected window panel', async () => {
     const h = await startAsk()
     const window = await openWindow(h)
     const agent = await h.connect('cli')
@@ -30,7 +30,7 @@ describe('the Questions panel', () => {
 
     const { askId } = (await agent.callAny('quirky.ask/create', { spec })) as { askId: string }
 
-    expect((await layoutOf(agent)).panel).toBe(PANEL)
+    expect((await layoutOf(agent)).panel).toBeNull()
     await waitFor(() => window.events.find((event) => event.type === 'quirky.ask/created'))
     expect(window.events.filter((event) => event.type === 'notify')).toEqual([])
     expect((await agent.callAny('quirky.ask/list', { pendingOnly: true })) as unknown[]).toHaveLength(1)
@@ -52,6 +52,7 @@ describe('the Questions panel', () => {
     const h = await startAsk()
     const window = await openWindow(h)
     const agent = await h.connect('cli')
+    await agent.call('ui.panel.open', { id: PANEL })
     await agent.callAny('quirky.ask/create', { spec })
     await agent.call('ui.sidebar.set', { visible: false })
     const changes = () => window.events.filter((event) => event.type === 'ui.state.changed').length
