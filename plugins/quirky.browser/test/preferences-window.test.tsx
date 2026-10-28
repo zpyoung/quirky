@@ -88,6 +88,12 @@ function makeContext(): UiPluginContext {
     pluginId: 'quirky.browser',
     log: () => {},
     provide: () => {},
+    nativeBrowser: {
+      available: false,
+      clearPartitionAvailable: false,
+      mount: () => { throw new Error('Native views are unavailable in this owned DOM fixture.') },
+      clearPartition: async () => { throw new Error('Native storage completion is unavailable in this owned DOM fixture.') }
+    },
     call: async (method: string, params?: Record<string, unknown>): Promise<unknown> => {
       calls.push({ method, params })
       if (method === 'quirky.browser/preferencesState') return structuredClone(state)
@@ -334,8 +340,9 @@ test('home page edits remain drafts until saved and external changes do not repl
   if (!homePage) throw new Error('Missing browser home page field')
 
   await act(async () => {
-    settings[settingIds.homePage] = 'https://remote.example.test'
-    for (const listener of listeners) await listener({ type: 'setting.changed', id: settingIds.homePage, value: settings[settingIds.homePage] })
+    const value = 'https://remote.example.test'
+    settings[settingIds.homePage] = value
+    for (const listener of listeners) await listener({ type: 'setting.changed', id: settingIds.homePage, value })
     await settleUI()
   })
   expect(homePage.value).toBe('https://remote.example.test')
@@ -346,8 +353,9 @@ test('home page edits remain drafts until saved and external changes do not repl
   expect(calls.filter(({ method, params }) => method === 'setting.set' && params?.id === settingIds.homePage)).toHaveLength(0)
 
   await act(async () => {
-    settings[settingIds.homePage] = 'https://later.example.test'
-    for (const listener of listeners) await listener({ type: 'setting.changed', id: settingIds.homePage, value: settings[settingIds.homePage] })
+    const value = 'https://later.example.test'
+    settings[settingIds.homePage] = value
+    for (const listener of listeners) await listener({ type: 'setting.changed', id: settingIds.homePage, value })
     await settleUI()
   })
   expect(homePage.value).toBe('https://start.example.test')

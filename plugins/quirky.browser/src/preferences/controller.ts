@@ -4,7 +4,7 @@ import { isValidProfileId, type BrowserProfile } from '../profiles/store'
 import type { PreferencesAdapters, PreferencesState, RegisterPreferences } from './contract'
 import { identityModeFromSetting } from './identity'
 
-const IMPORTS_UNAVAILABLE = 'Browser data import is unavailable because the browser-extras import engine is not installed.'
+const IMPORTS_UNAVAILABLE = 'Cookie import is unavailable in this build; detected-browser and file imports require the Browser extras integration.'
 const LOCALHOST_LABELS_UNAVAILABLE = 'Localhost worktree labels are unavailable because no faithful reachable-host mapping is available.'
 
 type Handler = (params: Record<string, unknown>) => unknown | Promise<unknown>
