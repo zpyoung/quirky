@@ -1,24 +1,8 @@
 import { expect, test } from 'bun:test'
 import type { SettingInfo } from '@quirky/protocol'
-import { isPaletteChord, paletteKey } from '../src/plugins/palette'
+import { paletteKey } from '../src/plugins/palette'
 import { changedSettings, draftOf } from '../src/plugins/settingsDraft'
 
-const key = (init: Partial<Parameters<typeof isPaletteChord>[0]>) => ({
-  key: 'p',
-  code: 'KeyP',
-  metaKey: false,
-  ctrlKey: false,
-  altKey: false,
-  shiftKey: false,
-  ...init
-})
-
-test('the palette chord is Cmd+Shift+P and nothing near it', () => {
-  expect(isPaletteChord(key({ metaKey: true, shiftKey: true, key: 'P' }))).toBe(true)
-  expect(isPaletteChord(key({ metaKey: true }))).toBe(false)
-  expect(isPaletteChord(key({ shiftKey: true }))).toBe(false)
-  expect(isPaletteChord(key({ metaKey: true, shiftKey: true, altKey: true }))).toBe(false)
-})
 
 test('palette arrows move and wrap, Enter runs the selection', () => {
   expect(paletteKey('ArrowDown', 0, 3)).toEqual({ selected: 1, run: false })

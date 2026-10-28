@@ -1,0 +1,14 @@
+{
+  "item": "m3-terminal-dock",
+  "spec": "docs/quirk/specs/2026-10-27-m3-terminal-dock/logic.md",
+  "scenarios": [
+    {
+      "id": "SC-12-native-file-dialog",
+      "title": "In a fresh private HOME and QUIRKY_HOME with a supported agent dock, type a draft, click Attach, choose a run-created valid PNG in the OS file dialog, verify its named removable chip without draft loss, and remove only that chip. Never send to a real account or use the normal profile.",
+      "status": "pending",
+      "lastRun": null,
+      "report": null,
+      "summary": null
+    }
+  ]
+}

@@ -8,6 +8,7 @@ import {
   type UiModel,
   type UiSlotState,
   type UiState,
+  type UiToastState,
   type UiWindowInfo
 } from '@quirky/protocol'
 import { conflict, invalidParams, notFound } from '../errors'
@@ -18,7 +19,11 @@ import type { PluginHost } from './host'
 const LAYOUT_KEY = 'layout'
 const MAX_JSON_LENGTH = 64 * 1024
 const COMMAND_TIMEOUT_MS = 30_000
+const TOAST_DISMISS = 'ui.toast.dismiss'
 const FOCUS_TARGETS = ['sidebar', 'view', 'panel'] as const
+const PANEL_WIDTH_MIN = 220
+const PANEL_WIDTH_MAX = 4096
+const ACTIVITY_BAR_POSITIONS = ['top', 'side'] as const
 
 const DEFAULT_LAYOUT: UiLayout = { view: null, panel: null, sidebar: true, focus: null }
 
@@ -41,6 +46,8 @@ export type LayoutServiceOptions = {
 
 type Report = { state: unknown; order: number }
 
+type ToastReport = { toasts: UiToastState[]; order: number }
+
 type PendingCommand = {
   conn: ClientConn
   resolve(value: { result: unknown }): void
@@ -62,6 +69,10 @@ function jsonLength(value: unknown): number {
   return JSON.stringify(value)?.length ?? 0
 }
 
+function isPanelWidth(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= PANEL_WIDTH_MIN && value <= PANEL_WIDTH_MAX
+}
+
 function sameValue(a: unknown, b: unknown): boolean {
   if (a === b) return true
   if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false
@@ -76,6 +87,20 @@ function readStored(value: unknown): UiLayout {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return { ...DEFAULT_LAYOUT }
   const stored = value as Record<string, unknown>
   const view = stored.view as { id?: unknown; input?: unknown } | null | undefined
+  const storedWidths = stored.panelWidths
+  const panelWidths: Record<string, number> = {}
+  let hasPanelWidths = false
+  if (typeof storedWidths === 'object' && storedWidths !== null && !Array.isArray(storedWidths)) {
+    const widths = storedWidths as Record<string, unknown>
+    for (const id in widths) {
+      if (!Object.hasOwn(widths, id)) continue
+      const width = widths[id]
+      if (parseContributionId(id)?.kind !== 'panel' || !isPanelWidth(width)) continue
+      panelWidths[id] = width
+      hasPanelWidths = true
+    }
+  }
+  const activityBarPosition = ACTIVITY_BAR_POSITIONS.find((position) => position === stored.activityBarPosition)
   return {
     view:
       view && typeof view === 'object' && typeof view.id === 'string'
@@ -83,7 +108,10 @@ function readStored(value: unknown): UiLayout {
         : null,
     panel: typeof stored.panel === 'string' ? stored.panel : null,
     sidebar: typeof stored.sidebar === 'boolean' ? stored.sidebar : true,
-    focus: FOCUS_TARGETS.find((target) => target === stored.focus) ?? null
+    focus: FOCUS_TARGETS.find((target) => target === stored.focus) ?? null,
+    ...(hasPanelWidths ? { panelWidths } : {}),
+    ...(activityBarPosition ? { activityBarPosition } : {}),
+    ...(stored.palette === true ? { palette: true } : {})
   }
 }
 
@@ -94,6 +122,7 @@ function readStored(value: unknown): UiLayout {
  */
 export class LayoutService {
   private readonly reports = new Map<string, Map<number, Report>>()
+  private readonly toastReports = new Map<number, ToastReport>()
   private readonly pending = new Map<string, PendingCommand>()
   private reportCounter = 0
   private lastFocusedAt = 0
@@ -111,7 +140,8 @@ export class LayoutService {
   /**
    * The effective layout, the connected windows, and every slot of the UI model with what it shows
    * and reports. An overlay is shown while a window has reported for it, unless the latest report
-   * is an object whose boolean `shown` says otherwise.
+   * is an object whose boolean `shown` says otherwise. `toasts` is the focused window's list (empty
+   * until it reports), else, with no window focused, the list reported last.
    */
   state(): UiState {
     const layout = this.layout()
@@ -119,6 +149,7 @@ export class LayoutService {
     const windows = this.windows()
     const focusedConn = windows.find((window) => window.focused)?.connId
     const slots: UiSlotState[] = [
+      ...model.activityItems.map((entry) => ({ entry, shown: () => true })),
       ...model.sidebarSections.map((entry) => ({ entry, shown: () => layout.sidebar })),
       ...model.statusBars.map((entry) => ({ entry, shown: () => true })),
       ...model.panels.map((entry) => ({ entry, shown: () => layout.panel === entry.id })),
@@ -135,7 +166,7 @@ export class LayoutService {
         ...(report ? { report: report.state } : {})
       }
     })
-    return { windows, layout, slots }
+    return { windows, layout, slots, toasts: this.toastsOf(focusedConn)?.toasts ?? [] }
   }
 
   /**
@@ -158,6 +189,26 @@ export class LayoutService {
     return this.change((layout) => ({ ...layout, panel: id }))
   }
 
+  /** Configures the desired width for an effective panel and/or the global activity-bar position. */
+  configurePanel(id: string, width?: number, activityBarPosition?: 'top' | 'side'): UiLayout {
+    if (typeof id !== 'string' || id.length === 0) throw invalidParams('id must be a non-empty string')
+    if (width === undefined && activityBarPosition === undefined) {
+      throw invalidParams('width or activityBarPosition must be provided')
+    }
+    if (width !== undefined && !isPanelWidth(width)) {
+      throw invalidParams(`width must be an integer from ${PANEL_WIDTH_MIN} to ${PANEL_WIDTH_MAX}`)
+    }
+    if (activityBarPosition !== undefined && !ACTIVITY_BAR_POSITIONS.includes(activityBarPosition)) {
+      throw invalidParams('activityBarPosition must be top or side')
+    }
+    this.requireSlot(id, 'panel')
+    return this.change((layout) => ({
+      ...layout,
+      ...(width === undefined ? {} : { panelWidths: { ...layout.panelWidths, [id]: width } }),
+      ...(activityBarPosition === undefined ? {} : { activityBarPosition })
+    }))
+  }
+
   closePanel(): UiLayout {
     return this.change((layout) => ({ ...layout, panel: null, focus: layout.focus === 'panel' ? null : layout.focus }))
   }
@@ -168,6 +219,17 @@ export class LayoutService {
       sidebar: visible,
       focus: !visible && layout.focus === 'sidebar' ? null : layout.focus
     }))
+  }
+
+  /** Sets the shared palette state atomically; omitting `open` toggles its current value. */
+  setPalette(open?: boolean): UiLayout {
+    return this.change((layout) => {
+      const shouldOpen = open === undefined ? layout.palette !== true : open
+      if (shouldOpen) return { ...layout, palette: true }
+      const closed = { ...layout }
+      delete closed.palette
+      return closed
+    })
   }
 
   /** Moves focus to the sidebar, the view or the panel. InvalidParams for any other target. */
@@ -239,16 +301,31 @@ export class LayoutService {
     if (problem !== null) return Promise.reject(invalidParams(problem))
     const target = this.targetWindow()
     if (!target) return Promise.reject(conflict('no Quirky window is open'))
+    return this.route(target, id, args)
+  }
 
-    const requestId = crypto.randomUUID()
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(
-        () => this.settle(requestId, (pending) => pending.reject(unanswered())),
-        this.options.commandTimeoutMs ?? COMMAND_TIMEOUT_MS
-      )
-      this.pending.set(requestId, { conn: target, resolve, reject, timer })
-      this.options.sendTo(target, { type: 'ui.command.request', requestId, id, args: args ?? {} })
-    })
+  /**
+   * Keeps the toasts a window shows, replacing its earlier list. InvalidParams for a connection
+   * that is not a window, a list that is not an array or one over 64 KiB of JSON.
+   */
+  reportToasts(conn: ClientConn, toasts: unknown): void {
+    this.requireWindow(conn)
+    if (!Array.isArray(toasts)) throw invalidParams('toasts must be an array')
+    if (jsonLength(toasts) > MAX_JSON_LENGTH) throw invalidParams('toasts are over 64 KiB')
+    this.toastReports.set(conn.id, { toasts: toasts as UiToastState[], order: ++this.reportCounter })
+  }
+
+  /**
+   * Dismisses the toast with `key` in the window whose toasts `ui.state` lists, which runs its
+   * onDismiss command. Conflict when no window is open, the window disconnects or stays silent;
+   * NotFound when that window shows no toast with `key`.
+   */
+  async dismissToast(key: string): Promise<void> {
+    if (!this.targetWindow()) throw conflict('no Quirky window is open')
+    const shown = this.toastsOf(this.focusedConn()?.id)
+    const target = shown ? this.openWindows().find((conn) => conn.id === shown.connId) : undefined
+    if (!shown || !target || !shown.toasts.some((toast) => toast.key === key)) throw notFound(`no toast ${key}`)
+    await this.route(target, TOAST_DISMISS, { key })
   }
 
   /** Completes a routed command. Ignored unless it comes from the window the command went to. */
@@ -271,10 +348,23 @@ export class LayoutService {
       if (bySlot.size === 0) this.reports.delete(slot)
       if (existed) this.options.broadcast({ type: 'ui.report.changed', slot, connId: conn.id })
     }
+    this.toastReports.delete(conn.id)
     for (const [requestId, pending] of this.pending) {
       if (pending.conn === conn) this.settle(requestId, (settled) => settled.reject(unanswered()))
     }
     if (conn.role === 'ui') this.announceWindows()
+  }
+
+  private route(target: ClientConn, id: string, args: unknown): Promise<{ result: unknown }> {
+    const requestId = crypto.randomUUID()
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(
+        () => this.settle(requestId, (pending) => pending.reject(unanswered())),
+        this.options.commandTimeoutMs ?? COMMAND_TIMEOUT_MS
+      )
+      this.pending.set(requestId, { conn: target, resolve, reject, timer })
+      this.options.sendTo(target, { type: 'ui.command.request', requestId, id, args: args ?? {} })
+    })
   }
 
   private settle(requestId: string, finish: (pending: PendingCommand) => void): void {
@@ -328,6 +418,15 @@ export class LayoutService {
     const focused = open.filter((conn) => conn.focusedAt !== undefined)
     if (focused.length > 0) return focused.reduce((best, conn) => (conn.focusedAt! > best.focusedAt! ? conn : best))
     return open[open.length - 1]
+  }
+
+  private toastsOf(focusedConn: number | undefined): { connId: number; toasts: UiToastState[] } | undefined {
+    if (focusedConn !== undefined) return { connId: focusedConn, toasts: this.toastReports.get(focusedConn)?.toasts ?? [] }
+    let latest: { connId: number; toasts: UiToastState[]; order: number } | undefined
+    for (const [connId, report] of this.toastReports) {
+      if (!latest || report.order > latest.order) latest = { connId, ...report }
+    }
+    return latest
   }
 
   private reportFor(slot: string, focusedConn: number | undefined): Report | undefined {

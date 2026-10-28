@@ -13,6 +13,7 @@ import {
   type PromptDeliveryState,
   type PtySessionInfo,
   type Session,
+  type SessionBadge,
   type SessionLaunch,
   type SessionProviderSession,
   type SessionStatus
@@ -79,6 +80,19 @@ export function providerSessionIdProblem(id: string): string | null {
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
+
+const isBadge = (value: unknown): value is SessionBadge =>
+  isPlainObject(value) &&
+  typeof value.label === 'string' &&
+  (value.tooltip === undefined || typeof value.tooltip === 'string') &&
+  (value.command === undefined || typeof value.command === 'string')
+
+const pickBadge = ({ label, tooltip, command, args }: SessionBadge): SessionBadge => ({
+  label,
+  ...(tooltip === undefined ? {} : { tooltip }),
+  ...(command === undefined ? {} : { command }),
+  ...(args === undefined ? {} : { args })
+})
 
 type HomeOverride = { value: string | null; source: 'explicit' | 'inherited' | 'injected' | 'absent' }
 type HomeOverrides = { claude: HomeOverride; codex: HomeOverride }
@@ -386,6 +400,27 @@ export class SessionService {
    */
   resume = async (params: Record<string, unknown>): Promise<Session> => {
     const old = this.require(params.session as string)
+    if (old.kind === 'structured') {
+      if (params.fork !== undefined) throw this.context.error('conflict', 'structured sessions do not support fork')
+      if (params.providerSession !== undefined) {
+        throw this.context.error('invalid-params', 'structured sessions do not support providerSession overrides')
+      }
+      if (params.transcriptPath !== undefined) {
+        throw this.context.error('invalid-params', 'structured sessions do not support transcriptPath overrides')
+      }
+      const unsupported = Object.keys(params).find((key) => key !== 'session' && key !== 'prompt')
+      if (unsupported !== undefined) throw this.context.error('invalid-params', `structured resume does not support ${unsupported}`)
+      if (params.prompt !== undefined && typeof params.prompt !== 'string') {
+        throw this.context.error('invalid-params', 'prompt must be a string')
+      }
+      return (await this.context.call('quirky.structured/resume', {
+        session: old.id,
+        ...(params.prompt === undefined ? {} : { prompt: params.prompt })
+      })) as Session
+    }
+    if (params.prompt !== undefined) {
+      throw this.context.error('invalid-params', 'prompt is only supported when resuming a structured session')
+    }
     if (old.kind !== 'terminal') throw this.context.error('conflict', `session ${old.id} is not a terminal session`)
     if (old.agent === 'shell') throw this.context.error('conflict', `session ${old.id} is a shell, not an agent`)
     const info = await this.agentInfo(old.agent)
@@ -450,6 +485,93 @@ export class SessionService {
   }
 
   /**
+   * Starts a new terminal session from an agent-owned transcript. The source cwd remains the
+   * process cwd; `worktree` supplies only Quirky ownership and launch-hook identity.
+   */
+  resumeExternal = async (params: Record<string, unknown>, caller: PluginCaller): Promise<Session> => {
+    if (typeof params.agent !== 'string' || params.agent === '') {
+      throw this.context.error('invalid-params', 'agent is required')
+    }
+    const cwd = this.startCwd(params.cwd)
+    if (cwd === undefined) throw this.context.error('invalid-params', 'cwd is required')
+    if (!isPlainObject(params.providerSession)) {
+      throw this.context.error('invalid-params', 'providerSession must be an object')
+    }
+    const providerId = params.providerSession.id
+    const transcriptPath = params.providerSession.transcriptPath
+    if (typeof providerId !== 'string') throw this.context.error('invalid-params', 'providerSession.id must be a string')
+    if (transcriptPath !== null && typeof transcriptPath !== 'string') {
+      throw this.context.error('invalid-params', 'providerSession.transcriptPath must be a string or null')
+    }
+    const problem = providerSessionIdProblem(providerId)
+    if (problem) throw this.context.error('invalid-params', problem)
+
+    const agent = params.agent
+    const info = await this.agentInfo(agent)
+    if (!info.resumable) throw this.context.error('conflict', `${agent} can't resume sessions`)
+    if (params.fork !== undefined && typeof params.fork !== 'boolean') {
+      throw this.context.error('invalid-params', 'fork must be a boolean')
+    }
+    const fork = params.fork === true
+    if (fork && !info.canFork) throw this.context.error('conflict', `${agent} can't fork from Quirky yet`)
+
+    let record: SessionLaunch | null = null
+    if (params.record !== undefined && params.record !== null) {
+      if (!isPlainObject(params.record)) throw this.context.error('invalid-params', 'record must be an object or null')
+      const supplied = params.record
+      if (typeof supplied.command !== 'string' || typeof supplied.args !== 'string' || !isPlainObject(supplied.env)) {
+        throw this.context.error('invalid-params', 'record must contain command, args and env')
+      }
+      const env: Record<string, string> = {}
+      for (const [name, value] of Object.entries(supplied.env)) {
+        if (typeof value !== 'string') throw this.context.error('invalid-params', `record.env.${name} must be a string`)
+        env[name] = value
+      }
+      record = { command: supplied.command, args: supplied.args, env }
+    }
+
+    if (params.worktree !== undefined && typeof params.worktree !== 'string') {
+      throw this.context.error('invalid-params', 'worktree must be a selector string')
+    }
+    const target = await this.resolveWorktree(params.worktree ?? FLOATING, caller, cwd)
+    const providerSession: SessionProviderSession = { id: providerId, transcriptPath }
+    const session = this.newRecord({ id: target.id, path: cwd }, 'terminal', agent as AgentKind, info.label)
+    const accountPrepare = await this.accountPreparationAvailable()
+    const userEnv = accountPrepare
+      ? record?.env ?? plannedEnvironmentOf(await this.context.call('quirky.agents/plan', { agent, cwd }))
+      : {}
+    const launched = await this.start(session, target.repoId, params, undefined, async (additions) => {
+      const prepared = accountPrepare
+        ? await this.prepareAccount(session, agent, cwd, userEnv, additions.env)
+        : null
+      const preparedProviderSession =
+        prepared?.resumeTranscriptPath === undefined
+          ? providerSession
+          : { ...providerSession, transcriptPath: prepared.resumeTranscriptPath }
+      const hookEnv = preparedHookEnv(additions.env, userEnv, prepared)
+      const resumed = (await this.context.call('quirky.agents/prepareResume', {
+        agent,
+        cwd,
+        record,
+        providerSession: preparedProviderSession,
+        fork,
+        hookArgs: additions.args,
+        hookEnv
+      })) as { command: string; env: Record<string, string | null>; record: SessionLaunch }
+      return {
+        argv: this.context.launch.commandArgv(resumed.command),
+        envPatch: resumed.env,
+        launch: resumed.record,
+        launchSettings: null,
+        promptDelivery: null,
+        paste: null,
+        providerSession: fork ? null : preparedProviderSession
+      }
+    })
+    return this.deliverAfterLaunch(launched, false)
+  }
+
+  /**
    * Gives a session a name, or clears it with null. The name is stored lowercase and is unique among
    * sessions that have not exited: a running holder refuses it with `name-taken`, an exited holder
    * loses it to this session.
@@ -485,10 +607,20 @@ export class SessionService {
   register = async (params: Record<string, unknown>, caller: PluginCaller): Promise<Session> => {
     const checked = params.launchSettings === undefined || params.launchSettings === null ? null : checkLaunchSettings(params.launchSettings)
     if (typeof checked === 'string') throw this.context.error('invalid-params', `launchSettings is malformed: ${checked}`)
-    const worktree = await this.resolveWorktree(params.worktree, caller)
+    const cwd = this.startCwd(params.cwd)
+    const resolved = await this.resolveWorktree(params.worktree, caller, cwd)
+    const worktree = cwd === undefined ? resolved : { ...resolved, path: cwd }
+    const resumedFrom = params.resumedFrom
+    if (resumedFrom !== undefined) {
+      if (typeof resumedFrom !== 'string' || resumedFrom.length === 0) {
+        throw this.context.error('invalid-params', 'resumedFrom must be a non-empty session ID')
+      }
+      if (!this.records.get(resumedFrom)) throw this.context.error('not-found', `no such resumed session: ${resumedFrom}`)
+    }
     const session = {
       ...this.newRecord(worktree, 'structured', params.agent as AgentKind, params.title as string),
-      launchSettings: checked?.settings ?? null
+      launchSettings: checked?.settings ?? null,
+      ...(resumedFrom === undefined ? {} : { resumedFrom })
     }
     this.records.insert(session, worktree.repoId)
     return this.publish(session)
@@ -541,6 +673,25 @@ export class SessionService {
     }
     if ((before.unread ?? null) === unread) return before
     return this.publish(this.records.update(before.id, { unread: unread as Session['unread'] }) as Session)
+  }
+
+  /**
+   * Sets or removes (`badge: null`) one chip on a session's tab. The stored key is prefixed with
+   * the calling plugin's ID, or the client role for a non-plugin caller, so callers never touch
+   * each other's badges.
+   */
+  setBadge = (params: Record<string, unknown>, caller: PluginCaller): { session: Session } => {
+    const before = this.require(params.session as string)
+    const { key, badge } = params
+    if (typeof key !== 'string' || key === '') throw this.context.error('invalid-params', 'key must be a non-empty string')
+    if (badge !== null && !isBadge(badge)) {
+      throw this.context.error('invalid-params', 'badge must be null or an object with a label and optional tooltip, command and args')
+    }
+    const badges = { ...before.badges }
+    const qualified = `${caller.role === 'plugin' ? caller.pluginId : caller.role}/${key}`
+    if (badge === null) delete badges[qualified]
+    else badges[qualified] = pickBadge(badge)
+    return { session: this.publish(this.records.update(before.id, { badges }) as Session) }
   }
 
   /**

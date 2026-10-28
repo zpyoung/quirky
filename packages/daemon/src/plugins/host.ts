@@ -1,5 +1,6 @@
 import { mkdirSync, rmSync, symlinkSync } from 'node:fs'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import {
   formatContributionId,
   isPluginId,
@@ -19,7 +20,18 @@ import { computeRegistry, type Registry, type RegistryPlugin } from './registry'
 
 type ExtensionMembers = Pick<
   PluginContext,
-  'dataDir' | 'emit' | 'subscribe' | 'call' | 'openStore' | 'getSetting' | 'error' | 'home' | 'pty' | 'notify' | 'launch'
+  | 'dataDir'
+  | 'emit'
+  | 'subscribe'
+  | 'call'
+  | 'openStore'
+  | 'getSetting'
+  | 'error'
+  | 'home'
+  | 'pty'
+  | 'notify'
+  | 'launch'
+  | 'createFileResource'
 > &
   Partial<Pick<PluginContext, 'storedSettingValue'>>
 
@@ -34,7 +46,7 @@ export type ContextExtension = {
     isRevoked: () => boolean
   ): ExtensionMembers
   /** Runs once per attempt that called `create`, after the module's `deactivate` settles. */
-  revoke(pluginId: string): void
+  revoke(pluginId: string): void | Promise<void>
 }
 
 export type PluginHostOptions = {
@@ -121,7 +133,7 @@ export class PluginHost {
   private activationOrder: string[] = []
   /** Why each disabled plugin is off, as of the last recompute. */
   private disabledSets = { user: new Set<string>(), distro: new Set<string>(), safeMode: new Set<string>() }
-  /** Plugins whose directory is being swapped; they can't activate until the rescan that follows. */
+  /** Plugins being replaced or released; activation stays blocked for that lifecycle transition. */
   private readonly replacing = new Set<string>()
   /**
    * Bumped when a plugin is released. Bun caches a module by its path, helpers included, so an
@@ -444,11 +456,11 @@ export class PluginHost {
       runtime.module = undefined
       if (disabledMidway) {
         if (imported.module) await this.callDeactivate(id, imported.module, runtime)
-        this.revokeExtension(id, attempt)
+        await this.revokeExtension(id, attempt)
         this.setState(runtime, 'inactive')
         throw conflict(`${id} was disabled during activation`)
       }
-      this.revokeExtension(id, attempt)
+      await this.revokeExtension(id, attempt)
       runtime.error = messageOf(error)
       this.options.log(`plugin ${id} failed to activate: ${runtime.error}`)
       this.setState(runtime, 'failed')
@@ -530,11 +542,12 @@ export class PluginHost {
           throw new Error(`${id}: context.${member} is not available`)
         }
       })
-    const defaults: Omit<ExtensionMembers, 'storedSettingValue'> & Pick<PluginContext, 'storedSettingValue'> = {
+    const defaults: Omit<ExtensionMembers, 'storedSettingValue'> & Pick<PluginContext, 'storedSettingValue' | 'workerEntrypoint'> = {
       dataDir: '',
       home: '',
       pty: unavailableObject<PluginContext['pty']>('pty'),
       launch: unavailableObject<PluginContext['launch']>('launch'),
+      createFileResource: unavailable('createFileResource'),
       notify: unavailable('notify'),
       emit: () => {
         throw new Error(`${id}: context.emit is not available`)
@@ -554,7 +567,16 @@ export class PluginHost {
       storedSettingValue: () => {
         throw new Error(`${id}: context.storedSettingValue is not available`)
       },
-      error: (_kind, message) => new Error(message)
+      error: (_kind, message) => new Error(message),
+      workerEntrypoint: (name) => {
+        if (attempt.revoked) throw new Error(`${id} is no longer active`)
+        const workers = manifest.workers
+        const workerPath = workers?.[name]
+        if (workers === undefined || workerPath === undefined || !Object.hasOwn(workers, name)) {
+          throw new Error(`${id}: undeclared worker '${name}'`)
+        }
+        return pathToFileURL(join(this.importRootOf(entry), workerPath)).href
+      }
     }
     return {
       pluginId: id,
@@ -642,14 +664,24 @@ export class PluginHost {
         }
       }
     }
-    await Promise.allSettled([...released].map((id) => this.runtimes.get(id)?.inflight))
-    for (const id of [...this.activationOrder].reverse()) {
-      if (released.has(id)) await this.deactivate(id)
-    }
+    const addedToReplacing: string[] = []
     for (const id of released) {
-      this.runtimes.delete(id)
-      this.generations.set(id, (this.generations.get(id) ?? 0) + 1)
-      this.removeLink(id)
+      if (this.replacing.has(id)) continue
+      this.replacing.add(id)
+      addedToReplacing.push(id)
+    }
+    try {
+      await Promise.allSettled([...released].map((id) => this.runtimes.get(id)?.inflight))
+      for (const id of [...this.activationOrder].reverse()) {
+        if (released.has(id)) await this.deactivate(id)
+      }
+      for (const id of released) {
+        this.runtimes.delete(id)
+        this.generations.set(id, (this.generations.get(id) ?? 0) + 1)
+        this.removeLink(id)
+      }
+    } finally {
+      for (const id of addedToReplacing) this.replacing.delete(id)
     }
   }
 
@@ -665,14 +697,14 @@ export class PluginHost {
     runtime.module = undefined
     runtime.state = 'inactive'
     if (module) await this.callDeactivate(id, module, runtime)
-    if (attempt) this.revokeExtension(id, attempt)
+    if (attempt) await this.revokeExtension(id, attempt)
   }
 
-  private revokeExtension(id: string, attempt: Attempt): void {
+  private async revokeExtension(id: string, attempt: Attempt): Promise<void> {
     if (!attempt.extensionLive) return
     attempt.extensionLive = false
     try {
-      this.options.extension?.revoke(id)
+      await this.options.extension?.revoke(id)
     } catch (error) {
       this.options.log(`plugin ${id}: revoke failed: ${messageOf(error)}`)
     }

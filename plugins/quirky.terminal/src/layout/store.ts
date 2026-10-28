@@ -46,18 +46,38 @@ function isPaneNode(value: unknown, depth = 0): value is PaneNode {
 }
 
 function isTab(value: unknown): value is Tab {
+  if (
+    !isRecord(value) ||
+    !isString(value.id) ||
+    !(TAB_COLORS as readonly unknown[]).includes(value.color) ||
+    typeof value.pinned !== 'boolean' ||
+    !isString(value.createdAt)
+  ) {
+    return false
+  }
+  if (value.kind === 'view') {
+    return (
+      !('root' in value) &&
+      !('activePane' in value) &&
+      !('session' in value) &&
+      isString(value.viewId) &&
+      isString(value.key) &&
+      (value.input === undefined || isRecord(value.input)) &&
+      isString(value.title) &&
+      typeof value.preview === 'boolean' &&
+      (value.closeCommand === undefined || isString(value.closeCommand)) &&
+      (value.closeMethod === undefined || isString(value.closeMethod)) &&
+      (value.closeParams === undefined || isRecord(value.closeParams))
+    )
+  }
   return (
-    isRecord(value) &&
-    isString(value.id) &&
+    value.kind === undefined &&
     isString(value.defaultTitle) &&
     isNullableString(value.customTitle) &&
     isNullableString(value.liveTitle) &&
-    (TAB_COLORS as readonly unknown[]).includes(value.color) &&
-    typeof value.pinned === 'boolean' &&
     isPaneNode(value.root) &&
     isString(value.activePane) &&
-    isNullableString(value.expandedPane) &&
-    isString(value.createdAt)
+    isNullableString(value.expandedPane)
   )
 }
 

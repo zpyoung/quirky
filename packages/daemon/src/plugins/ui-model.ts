@@ -1,7 +1,6 @@
 import {
   CODE_BACKED_KINDS,
   DEFAULT_THEME,
-  RESERVED_CHORDS,
   parseChord,
   parseContributionId,
   parseWhen,
@@ -12,6 +11,7 @@ import {
   type ThemeInfo,
   type UiCommandEntry,
   type UiKeybinding,
+  type UiMenuItemEntry,
   type UiModel,
   type UiSettingEntry,
   type UiSlotEntry,
@@ -168,13 +168,11 @@ function resolveKeybindings(
   for (const binding of distro.bindings) {
     const base = { id: binding.id, plugin: distro.id, key: binding.chord, command: binding.command }
     if (!effectiveCommands.has(binding.command)) result.push({ ...base, status: 'unbound' })
-    else if (RESERVED_CHORDS.includes(binding.chord)) result.push({ ...base, status: 'shadowed', shadowedBy: 'kernel' })
     else distroByChord.set(binding.chord, binding)
   }
 
   for (const bindings of byGroup.values()) {
     const { chord, when } = bindings[0]
-    const reserved = RESERVED_CHORDS.includes(chord)
     const distroBinding = when === '' ? distroByChord.get(chord) : undefined
     const maxima = bindings.filter(
       (candidate) => !bindings.some((other) => other !== candidate && beats(other.declaration, candidate.declaration))
@@ -192,10 +190,7 @@ function resolveKeybindings(
         command: binding.command,
         ...(when !== '' ? { when } : {}),
       }
-      if (reserved) {
-        result.push({ ...base, status: 'shadowed', shadowedBy: 'kernel' })
-        addWarning(warnings, declaration.plugin, `${declaration.id} is shadowed by the window's own shortcut ${chord}`)
-      } else if (distroBinding) {
+      if (distroBinding) {
         result.push({ ...base, status: 'shadowed', shadowedBy: distroBinding.id })
         addWarning(warnings, declaration.plugin, `${declaration.id} is shadowed by ${distroBinding.id} on ${chord}`)
       } else if (binding === winner) {
@@ -238,6 +233,25 @@ function buildThemes(effective: ContributionInfo[]): ThemeInfo[] {
   })
   declared.sort((a, b) => a.title.localeCompare(b.title) || compare(a.id, b.id))
   return [DEFAULT_THEME, ...declared]
+}
+
+function buildMenuItems(effective: ContributionInfo[]): UiMenuItemEntry[] {
+  const items = effective.map((declaration): UiMenuItemEntry => {
+    const { data } = declaration
+    const written = stringField(data, 'command') ?? ''
+    const when = data.when as UiMenuItemEntry['when']
+    const after = data.after as UiMenuItemEntry['after']
+    return {
+      id: declaration.id,
+      plugin: declaration.plugin,
+      menu: data.menu as UiMenuItemEntry['menu'],
+      title: stringField(data, 'title') ?? declaration.name,
+      command: parseContributionId(written) ? written : `command:${declaration.plugin}/${written}`,
+      ...(when !== undefined ? { when } : {}),
+      ...(after !== undefined ? { after } : {}),
+    }
+  })
+  return items.sort((a, b) => compare(a.id, b.id))
 }
 
 /**
@@ -286,6 +300,9 @@ export function buildUiModel(input: {
       kind,
       plugin: declaration.plugin,
       title: stringField(declaration.data, 'title') ?? declaration.name,
+      ...(kind === 'settings-section' && stringField(declaration.data, 'description') !== undefined
+        ? { description: stringField(declaration.data, 'description') }
+        : {}),
       order: typeof declaration.data.order === 'number' ? declaration.data.order : DEFAULT_ORDER,
       module: moduleOf(declaration.plugin),
       ...(kind === 'view' && declaration.data.settings === true ? { settings: true } : {}),
@@ -317,18 +334,23 @@ export function buildUiModel(input: {
     bindings: input.distroId ? distroBindings(input.distroKeybindings ?? [], input.distroId) : []
   })
 
+  const menuItems = buildMenuItems(ofKind('menu-item'))
+
   const themes = buildThemes(ofKind('theme'))
   const active = themes.some((theme) => theme.id === chosenTheme) ? chosenTheme : DEFAULT_THEME.id
 
   const model: UiModel = {
     sidebarSections: slot('sidebar-section').sort(byOrder),
     statusBars: slot('status-bar').sort(byOrder),
+    activityItems: slot('activity-item').sort(byOrder),
     panels: slot('panel').sort(byOrder),
+    settingsSections: slot('settings-section').sort(byOrder),
     views: slot('view').sort((a, b) => compare(a.id, b.id)),
     overlays: slot('overlay').sort(byOrder),
     commands,
     keybindings,
     settings,
+    menuItems,
     themes,
     theme: { chosen: chosenTheme, active },
     modules,

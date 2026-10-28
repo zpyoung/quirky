@@ -2,8 +2,37 @@ import { Database } from 'bun:sqlite'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import type { PluginStore, StoreMigration, StructuredMessage, StructuredRole } from '@quirky/protocol'
+import type { StructuredLaunchOptions } from './runner'
 
 type Row = { session_id: string; seq: number; role: StructuredRole; text: string; data: string | null; at: number }
+type LaunchOptionsRow = { options_json: string }
+
+const CREATE_LAUNCH_OPTIONS_TABLE = `
+  CREATE TABLE IF NOT EXISTS structured_launch_options (
+    session_id TEXT PRIMARY KEY,
+    options_json TEXT NOT NULL
+  )`
+
+function parseLaunchOptions(json: string): StructuredLaunchOptions {
+  let value: unknown
+  try {
+    value = JSON.parse(json)
+  } catch {
+    throw new Error('stored structured launch options are malformed')
+  }
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error('stored structured launch options are malformed')
+  }
+  const options = value as Record<string, unknown>
+  const unsupported = Object.keys(options).find((key) => key !== 'model' && key !== 'effort')
+  if (unsupported !== undefined) throw new Error(`stored structured launch options contain unsupported field "${unsupported}"`)
+  if (options.model !== undefined && typeof options.model !== 'string') throw new Error('stored structured model is malformed')
+  if (options.effort !== undefined && typeof options.effort !== 'string') throw new Error('stored structured effort is malformed')
+  return {
+    ...(options.model === undefined ? {} : { model: options.model }),
+    ...(options.effort === undefined ? {} : { effort: options.effort })
+  }
+}
 
 const CREATE_TABLE = `
   CREATE TABLE IF NOT EXISTS structured_messages (
@@ -39,14 +68,37 @@ function createAndImportV1(home: string): StoreMigration {
   }
 }
 
+function createLaunchOptionsTable(): StoreMigration {
+  return (store) => store.exec(CREATE_LAUNCH_OPTIONS_TABLE)
+}
+
 /** The migrations of the plugin's store, for `context.openStore`. */
 export function journalMigrations(home: string): StoreMigration[] {
-  return [createAndImportV1(home)]
+  return [createAndImportV1(home), createLaunchOptionsTable()]
 }
 
 /** The structured sessions' message journal. */
 export class Journal {
   constructor(private readonly store: PluginStore) {}
+
+  /** Stores the exact native model and effort selection applied to a structured session. */
+  setLaunchOptions(sessionId: string, options: StructuredLaunchOptions): void {
+    this.store.run(
+      `INSERT INTO structured_launch_options (session_id, options_json) VALUES (?, ?)
+       ON CONFLICT(session_id) DO UPDATE SET options_json = excluded.options_json`,
+      sessionId,
+      JSON.stringify(options)
+    )
+  }
+
+  /** Returns null when the session predates the private launch-options migration. */
+  getLaunchOptions(sessionId: string): StructuredLaunchOptions | null {
+    const row = this.store.get<LaunchOptionsRow>(
+      'SELECT options_json FROM structured_launch_options WHERE session_id = ?',
+      sessionId
+    )
+    return row ? parseLaunchOptions(row.options_json) : null
+  }
 
   /** Stores a message under the next `seq` of its session. */
   append(input: { sessionId: string; role: StructuredRole; text: string; data?: unknown; at: number }): StructuredMessage {
@@ -87,6 +139,9 @@ export class Journal {
 
   /** Drops the session's journal. */
   remove(sessionId: string): void {
-    this.store.run('DELETE FROM structured_messages WHERE session_id = ?', sessionId)
+    this.store.transaction(() => {
+      this.store.run('DELETE FROM structured_messages WHERE session_id = ?', sessionId)
+      this.store.run('DELETE FROM structured_launch_options WHERE session_id = ?', sessionId)
+    })
   }
 }

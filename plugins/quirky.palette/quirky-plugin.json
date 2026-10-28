@@ -1,0 +1,82 @@
+{
+  "id": "quirky.palette",
+  "name": "Command Palette",
+  "version": "0.1.0",
+  "description": "Provides the replaceable command-palette action and its shared layout state API.",
+  "main": "main.ts",
+  "ui": "dist/ui.js",
+  "cli": "cli.ts",
+  "cliAliases": ["pal"],
+  "activation": "startup",
+  "contributes": {
+    "method": [
+      {
+        "id": "status",
+        "description": "Reports whether the daemon-owned command palette is open.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "open": { "type": "boolean", "description": "Whether the palette is open." }
+          },
+          "required": ["open"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "set",
+        "description": "Sets or toggles the daemon-owned command palette through the kernel layout API.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "open": { "type": "boolean", "description": "True opens, false closes; omit to toggle." }
+          },
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "open": { "type": "boolean", "description": "The resulting palette state." }
+          },
+          "required": ["open"],
+          "additionalProperties": false
+        }
+      }
+    ],
+    "command": [
+      {
+        "id": "toggle",
+        "title": "Toggle Command Palette",
+        "description": "Open or close the command palette."
+      }
+    ],
+    "keybinding": [
+      {
+        "id": "toggle",
+        "key": "mod+shift+p",
+        "command": "toggle"
+      }
+    ],
+    "cli-command": [
+      {
+        "id": "status",
+        "summary": "show whether the command palette is open",
+        "methods": ["quirky.palette/status"]
+      },
+      {
+        "id": "set",
+        "summary": "open, close or toggle the command palette",
+        "flags": {
+          "open": { "type": "boolean", "description": "open the command palette" },
+          "close": { "type": "boolean", "description": "close the command palette", "param": "open" }
+        },
+        "methods": ["quirky.palette/set"]
+      }
+    ]
+  }
+}

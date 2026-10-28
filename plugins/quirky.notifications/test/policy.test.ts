@@ -9,18 +9,18 @@ const OVERLAY = 'overlay:quirky.terminal/floating'
 const never = () => new Promise<never>(() => {})
 const window = [{ connId: 1, focused: true, inputAt: 1, present: true }]
 
-const idle: UiState = { windows: [], layout: { view: null, panel: null, sidebar: true, focus: null }, slots: [] }
+const idle: UiState = { windows: [], layout: { view: null, panel: null, sidebar: true, focus: null }, toasts: [], slots: [] }
 
 const floatingOnly: UiState = {
   windows: window,
   layout: { view: null, panel: null, sidebar: true, focus: null },
-  slots: [{ id: OVERLAY, kind: 'overlay', plugin: 'quirky.terminal', title: 'Floating Workspace', shown: true, report: { shown: true, visibleSessions: ['f1'] } }]
+  toasts: [], slots: [{ id: OVERLAY, kind: 'overlay', plugin: 'quirky.terminal', title: 'Floating Workspace', shown: true, report: { shown: true, visibleSessions: ['f1'] } }]
 }
 
 const worktreeOpen: UiState = {
   windows: window,
   layout: { view: { id: VIEW, input: { worktree: 'w1' } }, panel: null, sidebar: true, focus: null },
-  slots: [{ id: VIEW, kind: 'view', plugin: 'quirky.session', title: 'Session', shown: true, report: { worktree: 'w1', visibleSessions: [] } }]
+  toasts: [], slots: [{ id: VIEW, kind: 'view', plugin: 'quirky.session', title: 'Session', shown: true, report: { worktree: 'w1', visibleSessions: [] } }]
 }
 
 const answers = (over: Record<string, unknown> = {}): Record<string, unknown> => ({

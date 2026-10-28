@@ -33,10 +33,14 @@ function makeContext(handlers: Record<string, Handler> = {}) {
       const handler = provided.get(id)
       if (handler) await handler(args)
     },
+    createCommandDrag() { throw new Error('command dragging is unavailable in this fake') },
+    consumeCommandDrag() { return null },
+    cancelCommandDrag() {},
     openView(id, input) { opened.push({ id, input }) },
     closeView() {},
     togglePanel() {},
     getLayout() { return { view: null, panel: null, sidebar: true, focus: null } },
+    setPalette() { throw new Error('unexpected palette mutation') },
     onLayout() { return () => {} },
     onStream() { return () => {} },
     onConnection() { return () => {} },

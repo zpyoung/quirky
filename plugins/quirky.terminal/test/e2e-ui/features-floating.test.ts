@@ -51,9 +51,9 @@ test(
   async () => {
     const f = await startFeatures()
     const { h } = f
-    await until(f, button)
+    await floatingReport(f, 'initial floating state', (report) => report.state !== null)
     expect(panel()).toBeNull()
-    expect(button()).not.toBeNull()
+    await until(f, button)
 
     expect((await press('mod+alt+a')).defaultPrevented).toBe(true)
     await until(f, panel)
@@ -247,6 +247,7 @@ test(
   async () => {
     const f = await startFeatures()
     const { h } = f
+    await floatingReport(f, 'initial floating button state', (report) => report.state !== null)
     const start = box(button()!)
     expect(start).toMatchObject({ x: window.innerWidth - 36 - 24, y: window.innerHeight - 36 - 72, width: 36, height: 36 })
 

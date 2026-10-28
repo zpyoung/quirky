@@ -1254,6 +1254,7 @@
         },
         "result": {
           "type": "object",
+          "additionalProperties": true,
           "properties": {
             "kind": {
               "type": "string",
@@ -1270,8 +1271,7 @@
               "additionalProperties": true
             },
             "worktree": {
-              "type": "object",
-              "additionalProperties": true
+              "description": "Workspace ID for linked/resumed results; the public workspace record for a created result."
             },
             "requestId": {
               "type": "string"
@@ -1292,7 +1292,17 @@
               "type": "string"
             },
             "setup": {
+              "description": "Setup policy for a composer result; the public setup outcome for a created result."
+            },
+            "url": {
               "type": "string"
+            },
+            "linked": {
+              "type": "boolean"
+            },
+            "warnings": {
+              "type": "array",
+              "items": {}
             },
             "agent": {},
             "error": {
