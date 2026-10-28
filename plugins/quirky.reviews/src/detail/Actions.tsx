@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Badge, Button, Menu, SectionHeader, StatusDot } from '@quirky/ui'
 import type { ReviewsSurfaceProps, ReviewData } from '../contracts'
 import { directMergeAllowed, queueMergeAllowed, reviewMethods } from './methods'
 import { isRecord, parseReviewStackResult, reviewContext, safeHttpUrl, sameRepo, workspaceLinkFor, type ReviewContext, type ReviewStackEntry, type ReviewStackResult, type WorkspaceLink } from './data'
-
 export type ReviewActionsProps = ReviewsSurfaceProps & { surface: 'detail' | 'checks' }
 
 type MergeMethod = 'squash' | 'merge' | 'rebase'
@@ -145,7 +145,7 @@ export function ReviewActions(props: ReviewActionsProps) {
     }
     : null
 
-  if (review === null || owner === null) return <section className="review-actions"><h3>Pull request</h3><p>Review actions are unavailable until a pull request is selected.</p></section>
+  if (review === null || owner === null) return <section className="ui-stack"><SectionHeader title="Pull request" /><p className="ui-text-muted">Review actions are unavailable until a pull request is selected.</p></section>
 
   const policy = reviewMethods(review)
   const allowed = policy.allowed.filter((method): method is MergeMethod => method === 'squash' || method === 'merge' || method === 'rebase')
@@ -366,53 +366,50 @@ export function ReviewActions(props: ReviewActionsProps) {
   const mergeLabel = directAllowed && primaryMethod !== undefined
     ? methodLabels[primaryMethod]
     : queueAllowed ? 'Merge when ready' : mergeStateLabel(review)
-  const openState = review.state === 'open' || review.state === 'draft'
+  const mergeMenuItems = [
+    ...(activeAutoMerge ? [{ id: 'disable-auto-merge', label: 'Disable auto-merge', disabled: busy || busyFromState || !autoMergeAllowed, onAction: () => { void toggleAutoMerge() } }] : []),
+    ...(!directAllowed && !activeAutoMerge && autoMergeAllowed ? [{ id: 'enable-auto-merge', label: review.mergeQueueRequired === true ? 'Merge when ready' : 'Enable auto-merge', disabled: busy || busyFromState, onAction: () => { void toggleAutoMerge() } }] : []),
+    ...orderedMethods.map((method) => ({
+      id: method,
+      label: `${methodLabels[method]}${method === policy.defaultMethod ? ' (default)' : ''}`,
+      disabled: busy || busyFromState || !directAllowed,
+      onAction: () => { void confirmMerge(method, 'direct') },
+    })),
+    ...(queueAllowed && primaryMethod ? [{ id: 'merge-when-ready', label: `Merge when ready (${methodLabels[primaryMethod]})`, disabled: busy || busyFromState, onAction: () => { void confirmMerge(primaryMethod, 'queue') } }] : []),
+    { id: 'provider-merge-box', label: 'Open provider merge box', disabled: safeUrl === null, onAction: () => { void openMergeBox() } },
+  ]
 
-  return <section className="review-actions" aria-label="Pull request actions">
-    <h3>Pull request</h3>
-    <p className={`review-state review-state-${review.state}`}>{review.state === 'open' ? 'Open' : review.state === 'draft' ? 'Draft' : review.state === 'closed' ? 'Closed' : 'Merged'}</p>
-    <p className="review-merge-state" title={statusLine(review)}>{mergeStateLabel(review)}</p>
-    <p>{statusLine(review)}</p>
-    {stackPresent ? <section className="review-stack-summary" aria-label="Pull request stack">
+  return <section className="ui-stack" aria-label="Pull request actions">
+    <SectionHeader title="Pull request" />
+    <Badge tone={review.state === 'open' ? 'working' : review.state === 'merged' ? 'accent' : 'neutral'}>{review.state === 'open' ? 'Open' : review.state === 'draft' ? 'Draft' : review.state === 'closed' ? 'Closed' : 'Merged'}</Badge>
+    <Badge title={statusLine(review)} tone={review.checksStatus === 'failure' || hasConflict ? 'failing' : review.reviewDecision === 'REVIEW_REQUIRED' || review.reviewDecision === 'CHANGES_REQUESTED' ? 'needs-you' : review.checksStatus === 'success' ? 'working' : 'neutral'}>{mergeStateLabel(review)}</Badge>
+    <p className="ui-text-muted">{statusLine(review)}</p>
+    {stackPresent ? <section className="ui-stack" aria-label="Pull request stack">
       <strong>{stackComplete ? `Stack ${stack?.stack?.number}: ${included.length} pull requests included` : 'Stack membership unavailable'}</strong>
-      {stackComplete ? <ol>{included.map((entry) => <li key={`${entry.position}:${entry.number}`}>#{entry.number} {entry.title}</li>)}</ol> : <p role="alert">{stack?.reason ?? 'The complete stack could not be verified.'} Open the provider merge box to review stack state.</p>}
+      {stackComplete ? <ol>{included.map((entry) => <li key={`${entry.position}:${entry.number}`}>#{entry.number} {entry.title}</li>)}</ol> : <p role="alert"><StatusDot status="failing" label="Error" /> {stack?.reason ?? 'The complete stack could not be verified.'} Open the provider merge box to review stack state.</p>}
     </section> : null}
 
-    {openState ? <div className="review-merge-actions">
-      <button type="button" disabled={busy || busyFromState || (!directAllowed && !queueAllowed)} title={statusLine(review)}
+    {openState ? <div className="ui-cluster">
+      <Button variant="primary" disabled={busy || busyFromState || (!directAllowed && !queueAllowed)} title={statusLine(review)}
         onClick={() => primaryMethod && void confirmMerge(primaryMethod, queueAllowed && !directAllowed ? 'queue' : 'direct')}>
         {busy ? 'Working…' : mergeLabel}
-      </button>
-      <details className="review-merge-menu">
-        <summary aria-label="More merge actions">More merge actions</summary>
-        {activeAutoMerge ? <button type="button" disabled={busy || busyFromState || !autoMergeAllowed} onClick={() => void toggleAutoMerge()}>Disable auto-merge</button> : null}
-        {!directAllowed && !activeAutoMerge && autoMergeAllowed ? <button type="button" disabled={busy || busyFromState} onClick={() => void toggleAutoMerge()}>{review.mergeQueueRequired === true ? 'Merge when ready' : 'Enable auto-merge'}</button> : null}
-        {orderedMethods.map((method) => <button
-          key={method}
-          type="button"
-          disabled={busy || busyFromState || !directAllowed}
-          onClick={() => void confirmMerge(method, 'direct')}
-        >{methodLabels[method]}{method === policy.defaultMethod ? ' (default)' : ''}</button>)}
-        {queueAllowed && primaryMethod ? <button type="button" disabled={busy || busyFromState} onClick={() => void confirmMerge(primaryMethod, 'queue')}>Merge when ready ({methodLabels[primaryMethod]})</button> : null}
-        <button type="button" disabled={safeUrl === null} onClick={() => void openMergeBox()}>Open provider merge box</button>
-      </details>
+      </Button>
+      <Menu label="More merge actions" items={mergeMenuItems} />
     </div> : null}
 
-    {review.state === 'draft' ? <button type="button" disabled={busy || busyFromState} onClick={() => void markReady()}>Mark ready for review</button> : null}
-    {review.state === 'open' || review.state === 'draft' ? <button type="button" disabled={busy || busyFromState} onClick={() => void changeReviewState('close')}>Close pull request</button> : null}
+    {review.state === 'draft' ? <Button disabled={busy || busyFromState} onClick={() => void markReady()}>Mark ready for review</Button> : null}
+    {review.state === 'open' || review.state === 'draft' ? <Button variant="destructive" disabled={busy || busyFromState} onClick={() => void changeReviewState('close')}>Close pull request</Button> : null}
     {review.state === 'merged' ? <>
-      {workspaceRemoval.status === 'loading' ? <p role="status">Checking for a linked workspace…</p> : null}
-      {workspaceRemoval.error ? <p role="alert" className="review-error">{workspaceRemoval.error}</p> : null}
+      {workspaceRemoval.status === 'loading' ? <p role="status" className="ui-text-muted">Checking for a linked workspace…</p> : null}
+      {workspaceRemoval.error ? <p role="alert"><StatusDot status="failing" label="Error" /> {workspaceRemoval.error}</p> : null}
       {workspaceRemoval.status === 'ready' && workspaceRemoval.link === null && workspaceRemoval.error === null
         ? <p>No workspace is linked to this merged pull request.</p>
         : null}
-      {workspaceRemoval.status === 'ready' && workspaceRemoval.link !== null ? <button
-        type="button"
-        disabled={busy || busyFromState || workspaceRemoveBusy}
-        onClick={() => void removeWorkspace()}
-      >{workspaceRemoveBusy ? 'Deleting workspace…' : `Delete workspace · ${workspaceRemoval.link.name}`}</button> : null}
+      {workspaceRemoval.status === 'ready' && workspaceRemoval.link !== null ? <Button variant="destructive"
+      disabled={busy || busyFromState || workspaceRemoveBusy}
+      onClick={() => void removeWorkspace()}>{workspaceRemoveBusy ? 'Deleting workspace…' : `Delete workspace · ${workspaceRemoval.link.name}`}</Button> : null}
     </> : null}
-    {review.checksStatus === 'failure' ? <button type="button" disabled={busy} onClick={() => void openFixDialog()}>Fix broken checks</button> : null}
-    {error ? <p role="alert" className="review-error">{error}</p> : null}
+    {review.checksStatus === 'failure' ? <Button variant="primary" disabled={busy} onClick={() => void openFixDialog()}>Fix broken checks</Button> : null}
+    {error ? <p role="alert"><StatusDot status="failing" label="Error" /> {error}</p> : null}
   </section>
 }
