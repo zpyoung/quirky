@@ -1,4 +1,5 @@
 import { decodeBase64Url, decodeBase64 } from './crypto'
+import type { OwnerCliPairOffer } from '../runtime-owner'
 
 const OFFER_KEYS = ['v', 'endpoint', 'deviceToken', 'publicKeyB64', 'pairedDeviceId', 'scope'] as const
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -66,5 +67,30 @@ export function parseMobileOffer(input: string): MobilePairOffer {
     publicKeyB64: value.publicKeyB64,
     pairedDeviceId: value.pairedDeviceId,
     scope: 'mobile'
+  }
+}
+
+/** Decodes and validates the exact separately-authorized owner-cli v2 offer. */
+export function parseOwnerCliOffer(input: string): OwnerCliPairOffer {
+  const code = extractCode(input)
+  const bytes = decodeBase64Url(code, 4096)
+  let value: unknown
+  try { value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)) as unknown } catch { throw new Error('Owner pairing code is malformed') }
+  if (!isRecord(value) || !exactKeys(value, OFFER_KEYS) || value.v !== 2 || value.scope !== 'owner-cli') {
+    throw new Error('Pairing code is not a supported owner-cli v2 offer')
+  }
+  if (typeof value.endpoint !== 'string' || typeof value.deviceToken !== 'string' || !TOKEN.test(value.deviceToken) ||
+    typeof value.publicKeyB64 !== 'string' || !STANDARD_KEY.test(value.publicKeyB64) ||
+    typeof value.pairedDeviceId !== 'string' || !UUID.test(value.pairedDeviceId)) {
+    throw new Error('Owner pairing offer fields are invalid')
+  }
+  try { decodeBase64(value.publicKeyB64, 32) } catch { throw new Error('Owner pairing public key is invalid') }
+  return {
+    v: 2,
+    endpoint: normalizeEndpoint(value.endpoint),
+    deviceToken: value.deviceToken,
+    publicKeyB64: value.publicKeyB64,
+    pairedDeviceId: value.pairedDeviceId,
+    scope: 'owner-cli'
   }
 }

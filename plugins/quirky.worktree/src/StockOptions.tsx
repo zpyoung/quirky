@@ -137,6 +137,7 @@ export function StockOptions({
           </fieldset>
           <label><input aria-label="Show sleeping" type="checkbox" checked={options.showSleeping} onChange={(event) => changeOptions({ showSleeping: event.currentTarget.checked })} />Show sleeping</label>
           <label><input aria-label="Hide CLI-created worktrees" type="checkbox" checked={options.hideCliCreated} onChange={(event) => changeOptions({ hideCliCreated: event.currentTarget.checked })} />Hide CLI-created</label>
+          <label><input aria-label="Hide worktrees from other desktop clients" type="checkbox" checked={options.hideOtherClients} onChange={(event) => changeOptions({ hideOtherClients: event.currentTarget.checked })} />Hide worktrees from other desktop clients</label>
           <label><input aria-label="Hide default branch" type="checkbox" checked={options.hideDefaultBranch} onChange={(event) => changeOptions({ hideDefaultBranch: event.currentTarget.checked })} />Hide default branch</label>
           <label><input aria-label="Hide detached HEAD" type="checkbox" checked={options.hideDetached} onChange={(event) => changeOptions({ hideDetached: event.currentTarget.checked })} />Hide detached HEAD</label>
           <label><input aria-label="Hide archived worktrees" type="checkbox" checked={options.hideArchived} onChange={(event) => changeOptions({ hideArchived: event.currentTarget.checked })} />Hide archived</label>
@@ -154,7 +155,7 @@ export function StockOptions({
               return <label key={repo.id}><input type="checkbox" aria-label={`Show project ${repo.displayName ?? repo.name}`} checked={checked} onChange={(event) => filterRepo(repo.id, event.currentTarget.checked)} />{repo.displayName ?? repo.name}</label>
             })}
           </fieldset>
-          <p className="muted">Host and other-client filters are unavailable because the worktree API exposes no authoritative host or client identity.</p>
+          <p className="muted">Other-client filtering hides only worktrees known to come from a different authenticated desktop installation. Unknown, paired-phone, plugin and CLI origins stay visible; remote host filtering remains unavailable without authoritative host identity.</p>
         </div>
       )}
     </div>

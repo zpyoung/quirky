@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import type { LaunchHookInput, LaunchPatch, PluginContext } from '@quirky/protocol'
+import type { LaunchHookInput, LaunchPatch, OwnerRuntimeCallResult, PluginContext } from '@quirky/protocol'
 import { ActivityFeed } from './src/activity'
 import { DashboardService } from './src/dashboard'
 import { ClaudeVersionGate, claudeEventsFor, claudeSettings, commandProbe } from './src/claude-settings'
@@ -47,17 +47,70 @@ function requestedHost(context: PluginContext, value: unknown): string {
   return value === undefined ? 'local' : requireString(context, value, 'host')
 }
 
+function runtimeSelector(context: PluginContext, host: string): string | null {
+  if (!host.startsWith('runtime:')) return null
+  const selector = host.slice('runtime:'.length)
+  if (selector === '' || selector.trim() !== selector || selector.length > 2048 || /[\u0000-\u001f\u007f]/.test(selector)) {
+    throw context.error('invalid-params', 'runtime host must name a saved owner target')
+  }
+  return selector
+}
+
+async function callOwnerRuntime(
+  context: PluginContext,
+  selector: string,
+  method: string,
+  params: Record<string, unknown>
+): Promise<OwnerRuntimeCallResult> {
+  let value: unknown
+  try {
+    value = await context.call('quirky.cli/runtimeCall', { runtime: selector, method, params })
+  } catch {
+    throw context.error('conflict', 'The saved owner runtime is unavailable or does not authorize this status operation.')
+  }
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw context.error('conflict', 'The saved owner runtime returned an invalid status result.')
+  }
+  const result = value as Record<string, unknown>
+  const runtime = result.runtime
+  if (!Object.hasOwn(result, 'result') || typeof runtime !== 'object' || runtime === null || Array.isArray(runtime) ||
+    typeof (runtime as Record<string, unknown>).id !== 'string' ||
+    typeof (runtime as Record<string, unknown>).name !== 'string' ||
+    typeof (runtime as Record<string, unknown>).endpoint !== 'string' ||
+    typeof (runtime as Record<string, unknown>).grantId !== 'string') {
+    throw context.error('conflict', 'The saved owner runtime returned an invalid status result.')
+  }
+  return value as OwnerRuntimeCallResult
+}
+
 function readOnHost(
   context: PluginContext,
   hostValue: unknown,
   method: RemoteStatusReadMethod,
   params: Record<string, unknown>,
   local: () => unknown | Promise<unknown>
-): Promise<HostedStatusResult> {
+): Promise<HostedStatusResult | OwnerRuntimeCallResult> {
   const host = requestedHost(context, hostValue)
-  return host === 'local'
-    ? Promise.resolve(local()).then((result) => ({ host: localStatusHost, result }))
-    : readFromStatusPeer(context, host, method, params)
+  if (host === 'local') return Promise.resolve(local()).then((result) => ({ host: localStatusHost, result }))
+  const runtime = runtimeSelector(context, host)
+  if (runtime !== null) return callOwnerRuntime(context, runtime, method, params)
+  return readFromStatusPeer(context, host, method, params)
+}
+
+function writeOnHost<T>(
+  context: PluginContext,
+  hostValue: unknown,
+  method: string,
+  params: Record<string, unknown>,
+  local: () => Promise<T>
+): Promise<T | OwnerRuntimeCallResult> {
+  const host = requestedHost(context, hostValue)
+  if (host === 'local') return local()
+  const runtime = runtimeSelector(context, host)
+  if (runtime === null) {
+    throw context.error('invalid-params', 'Hook setup and removal support local or runtime:<saved owner selector>; paired-host mutations are not available.')
+  }
+  return callOwnerRuntime(context, runtime, method, params)
 }
 
 function sendText(context: PluginContext, value: unknown): string {
@@ -180,12 +233,16 @@ export async function activate(context: PluginContext): Promise<void> {
   context.provide('method:quirky.agent-status/hooksStatusOnHost', (params: Record<string, unknown>) =>
     readOnHost(context, params.host, 'quirky.agent-status/hooksStatus', {}, () => installer.status())
   )
-  context.provide('method:quirky.agent-status/hooksSetup', (params: Record<string, unknown>) =>
-    installer.setup(typeof params.agent === 'string' ? params.agent : undefined)
-  )
-  context.provide('method:quirky.agent-status/hooksRemove', (params: Record<string, unknown>) =>
-    installer.remove(typeof params.agent === 'string' ? params.agent : undefined)
-  )
+  context.provide('method:quirky.agent-status/hooksSetup', (params: Record<string, unknown>) => {
+    const agent = params.agent === undefined ? undefined : requireString(context, params.agent, 'agent')
+    const forwarded = agent === undefined ? {} : { agent }
+    return writeOnHost(context, params.host, 'quirky.agent-status/hooksSetup', forwarded, () => installer.setup(agent))
+  })
+  context.provide('method:quirky.agent-status/hooksRemove', (params: Record<string, unknown>) => {
+    const agent = params.agent === undefined ? undefined : requireString(context, params.agent, 'agent')
+    const forwarded = agent === undefined ? {} : { agent }
+    return writeOnHost(context, params.host, 'quirky.agent-status/hooksRemove', forwarded, () => installer.remove(agent))
+  })
   context.provide('job:quirky.agent-status/presence', () => active.sweepPresence())
 
   await active.hydrate()
