@@ -49,6 +49,7 @@ quirky browser tab profile set-page --page <page-id> --profile <profile-id> --js
 ## Browser panes
 
 Browser stays a center view (including hosted worktree tabs); Browser Settings remains a settings section and command-opened center view, not a new tool stripe. Pane controls, profiles, import forms, annotations and markup use the shared graphite controls and semantic tokens in dark and light. `quirky.browser` is enrolled in the canonical UI lint gate.
+
 The operator-authorized delivery for sa-browser-pane is pane lifecycle and navigation through the daemon API and CLI. Retained Watch, advanced controls and page-event source is not a claim that its remaining UI scenarios passed. Existing sa-browser-pane-native-host-controls owns screencast, base-pane UI and cross-lane pane/profile integration acceptance; native-events owns page events; workspace-preview owns grant preview. Lane8 retains its own profiles/settings feature and focused follow-ups. Exact handoffs are in docs/loop/decisions/sa-browser-pane.md and docs/loop/BLOCKERS.md.
 
 
@@ -68,6 +69,8 @@ quirky browser pane close --pane <pane-id> --json
 ```
 
 Every pane API method has a `quirky browser pane ...` CLI command, including suggestions, state reports, frame acknowledgements, typed Watch input, prompt responses and download actions. `pane control` accepts `back`, `forward`, `reload`, `hardReload`, `stop`, `find`, `zoom`, and `viewport`. Address navigation uses the same normalization, safe history and search-engine settings as the UI. The Browser menu contains History, zoom, viewport presets, and Watch choices; the address bar and Find controls are visible in the toolbar. Mod+Shift+B opens a browser tab. While a browser pane is focused, Mod+L focuses the address bar, Mod+F opens Find, Alt+Left/Right navigate history, Mod+R reloads, Mod+Shift+R hard reloads in Watch and reports the Native SDK limitation otherwise, and Mod+=/Mod+-/Mod+0 adjust or reset zoom.
+
+Find protects the focused typed query from delayed canonical replies. Next, Previous and Enter use that current query; canonical updates after editing and switching to a different pane still hydrate the field.
 
 `pane close` returns `true` after the hosted tab and pane resources are removed. Its `fromTab` and `tabId` parameters are reserved for the terminal's authenticated close hook.
 

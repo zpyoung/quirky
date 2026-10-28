@@ -11,6 +11,7 @@ Preserve navigation, address suggestions, native/Watch mode boundaries, profiles
 
 ### SC1: Pane navigation and Find
 Given an existing pane, show shared controls for Back/Forward/Reload, address/search, Find, mode, design actions, Browser menu and history. Disabled and loading conditions, address keyboard handling, focus refs, Find counters and native/Watch geometry remain unchanged. Example: opening Find retains the selected pane and address and exposes the existing previous/next/close actions.
+The focused Find draft must survive older canonical search replies; Next/Previous use the typed query. A later canonical update after blur and an actual pane change may hydrate the displayed query.
 
 ### SC2: Profile menu, settings and import
 Given Browser settings or its menu, group related preferences with shared section/form rows, readable help/error/status messages and compact shared actions. Preserve selected-profile radios, pending admissions, one-use confirmation, importer consent and all unavailable-capability explanations. Example: selecting another profile still calls profileSet; this restyle never changes clear/delete eligibility or initiates native state access.
@@ -44,6 +45,7 @@ No new functionality, mobile restyle, native SDK capability, native screenshot s
 - A shared DOM-only selection-overlay component supplies canonical tokens inside an external guest's closed shadow root; Browser retains its state/geometry/events. The guest component takes its document's declared dark/light appearance, otherwise its system preference. No app-to-native theme synchronization capability is claimed.
 - Shared transparent/shadow/scrim aliases own alpha composition; plugins reference tokens rather than raw transparent color literals.
 - The viewport-fixed markup editor portals to document.body, escaping pane/tool-slot stacking and clipping while retaining its original event isolation, focus ref and cancellation lifecycle.
+- Find draft ownership is synchronous while the input is focused. Both canonical synchronization paths use the same guard; pane identity changes still hydrate, and Next/Previous/Enter read the current draft ref. Stale-reply and pane-change regressions are authored, not run under build-first.
 - Three disjoint implementation slices: pane UI; preferences UI; design/markup UI. Parent owns lint enrollment, docs, shared contract additions and integration. Workers use absolute assigned worktree paths, never commit/run checks.
 - Verification: current LOOP explicitly selects typecheck-only build-first gates and prohibits suites/formal review/dogfood. Author regression coverage if behavior edges change; do not run suites. Minimum actual built changed-surface smoke is recorded separately and is not a screenshot-model score. Default85 golden review remains an end-phase obligation, not a fabricated pass.
 
@@ -51,4 +53,4 @@ No new functionality, mobile restyle, native SDK capability, native screenshot s
 Chrome: Browser controls, not page content. Watch: an explicitly managed page displayed through its existing frame lease. Golden: unchanged approved dark/light combined reference screen.
 
 ## Status & amendments
-**Amendments:** 2026-10-28 — self-review found the missing guest-world DOM presentation primitive and observed markup clipping under the six-slot shell. The final tech section records those presentation-only adaptations. No feature/API/consent behavior changed.
+**Amendments:** 2026-10-28 — shared guest presentation and the markup body portal close the observed presentation seams. Required failed-land composition then exposed Find typing Alpha→Ala; the SC1 draft-ownership guard repairs that input loss without changing API, backend search, leases, queues, timeouts or consent. No new feature or permission was added.

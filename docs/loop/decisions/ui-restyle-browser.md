@@ -124,9 +124,31 @@
 - **Why:** these are additive shared-system registrations, not competing palettes or state authorities. Preserve canonical active-view input/focus, rich document-body context menus, content color/geometry ownership, exact-window routing and the independently reported native/GPU/browser-isolation limits
 - **Evidence:** first controller land exit1/20.97s; three exact conflict blocks and explicit union resolutions; incoming decision logs; recovery merge/type/build receipts
 - **Reversibility:** easy
-- **Confidence:** high for contract composition; fresh merged gate remains required
+- **Confidence:** high after merged typecheck/build and the final guarded Browser smoke
 - **Revisit if:** merged typecheck or minimal current Browser surface fails
 - **Source:** locked by docs/loop/LOOP.md failed-land retry procedure
 
+## D12: Keep delayed Find replies from replacing the focused draft
+- **Question:** fresh composed Browser smoke typed Alpha but displayed Ala with No matches
+- **Options:** slow the driver/retry or increase waits; preserve the current typed query while its field owns focus
+- **Chose:** a bounded Find draft-ownership guard, following the address field's existing distinction between local editing and canonical state. Hydrate on real pane changes and canonical updates when not editing; do not rehydrate merely on blur before Next's click. Add an unrun consumer-visible stale-reply regression
+- **Why:** the source unconditionally copied pane.find.text into the controlled field while onChange issued per-keystroke requests. An older reply could alter the text before subsequent keyboard events. No backend search, lease, queue, timeout, retry or debounce change is warranted
+- **Evidence:** recovery screenshot15b87be8e4bd1efd/valueAla; BrowserPaneWindow canonical effect445–450 and Find onChange; bounded component worktree atcb0b6e04
+- **Reversibility:** easy
+- **Confidence:** high: final actual typing retained Alpha and Next moved1of2→2of2 without changing the query
+- **Revisit if:** focused draft protection breaks canonical external-query or pane-change hydration
+- **Source:** assumed — autonomous
+
+## D13: Finish recovery with current source proof, not earlier receipts
+- **Question:** what passed after the recovery merge and focused Find repair?
+- **Options:** reuse the pre-repair type/smoke; record fresh current typing/build and an owned Browser interaction
+- **Chose:** scoped f8d33f58 repair plus two unrun real-component regressions; final full typecheck/UIlint/root/mobile/prepared-desktop exit0/34.28s and UI build11host/25plugin modules exit0. Fresh private54775runtime on uniquely owned53064CDP retained typedAlpha/count1of2, then Alpha/count2of2 after Next. Final dark/light screenshots and full-window light Draw/Cancel were personally inspected; no Watch green status dot suggests an agent is working. Both final scoped services exited0 and the exact CDP tab was released
+- **Why:** an earlier recovery build attempted alongside frozen install could not resolve the newly merged KaTeX CSS; the build after setup completed succeeded without source workaround. Reload of the previous fixture later showed Connecting to Watch with no fresh frame; final repaired-path proof uses a fresh owned runtime and does not claim reload lease acceptance. No backend/lease code changed
+- **Evidence:** bg13typecheck, bg14build; screenshots15b87d9b4d7d1efe/15b87da9023d1eff/15b87da9433d1f00; earlier red15b87be8e4bd1efd; canonical pane snapshot/readbacks; final services exit0. Two old53190health refusals remain in browser diagnostics; no zero-error-whole-campaign claim
+- **Reversibility:** easy
+- **Confidence:** high for current exercised source only; native, suites and golden scoring remain unrun
+- **Revisit if:** canonical merge-result gate or end-phase acceptance finds a regression
+- **Source:** assumed — autonomous
+
 ## Progress
-First canonical land refused concurrent restyle integration. Required recovery merge resolves the three additive conflicts under D11; the initial single catch-up was queue-only, and this second merge is controller-directed recovery. All owned old runtime/browser services already stopped. Next commit the resolved merge, run merged canonical typecheck/build and a narrow explicit-CDP Browser mount/Find proof, record exact result, detach and retry authoritative land in this turn.
+Required recovery merge cb0b6e04 retained every concurrent export/token/enforcement contract. Bounded Find repair f8d33f58 passed the current typecheck/UIlint and actual built fresh-runtime Watch proof under D12–D13; authored tests remain unrun. All four component worktrees removed and every owned fixture/unique-CDP service stopped; user-prohibited shared handle untouched. Next commit final docs/receipts, detach and retry authoritative land; await actual receipt in this turn. No second item or full-queue completion claim.
