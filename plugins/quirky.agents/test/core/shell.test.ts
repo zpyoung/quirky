@@ -152,7 +152,8 @@ describe('joinCommand', () => {
     test.skipIf(!path)(`a real ${name} reads back exactly the original words`, () => {
       const words = ADVERSARIAL.filter((value) => !value.includes('\n'))
       const line = joinCommand(words)
-      const proc = Bun.spawnSync([path as string, '-c', `printf '%s\\n' ${line}`], { stdout: 'pipe', stderr: 'pipe' })
+      const startupFlags = name === 'bash' ? ['--noprofile', '--norc'] : name === 'zsh' ? ['-f'] : []
+      const proc = Bun.spawnSync([path as string, ...startupFlags, '-c', `printf '%s\\n' ${line}`], { stdout: 'pipe', stderr: 'pipe' })
       expect(proc.exitCode).toBe(0)
       expect(proc.stdout.toString().split('\n').slice(0, -1)).toEqual(words)
     })

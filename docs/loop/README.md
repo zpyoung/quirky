@@ -53,6 +53,14 @@ back to this Mac.
   whose lanes are waiting to land, so a single run verifies them all.
 - **Flaky files:** a failing test file is rerun once on its own. One that then passes is logged to
   `<git common dir>/build-loop/flakes.log`; fix the ones that keep showing up.
+- **Per-file costs:** `QUIRKY_TEST_PROFILE=1 bun run test` prints `suite-file` JSON rows with
+  `file`, `wallMs`, `userCpuMs`, `systemCpuMs` and `exitCode` for each attempt, including isolated
+  retries. Without a remote host, profiling runs each discovered file serially; ordinary runs keep
+  their existing scheduling. `QUIRKY_TEST_LOCAL=1` also forces that local profiling path.
+  CPU is OS resource accounting for the test command and waited-for descendants, not total host
+  or independent guardian CPU. Wall time includes execution and cleanup, but not initial guardian
+  creation, slot contention, transfer or install. Compare the same files and runner configuration;
+  suite elapsed time also depends on other lanes and slot contention.
 
 ## Running it
 

@@ -125,8 +125,12 @@ export async function ensureWorkspace(h: E2eHarness, selector = 'main'): Promise
   return workspace
 }
 
-/** Waits until the shell of `session` has shown its first prompt. */
+/** Waits for a shell-ready marker, or a real command round-trip in clean-shell mode. */
 export async function waitReady(h: E2eHarness, session: string): Promise<void> {
+  if (h.cleanShell) {
+    await h.run(session, ':')
+    return
+  }
   await waitFor(`a ready shell for ${session}`, async () => (await h.hostRow(session))?.shellState === 'ready')
 }
 

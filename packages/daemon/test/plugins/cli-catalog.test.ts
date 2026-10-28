@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from 'bun:test'
+import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
 import { join } from 'node:path'
 import { type ApiDescription, type PluginInfo } from '@quirky/protocol'
 import { KERNEL_CLI_GROUPS } from '../../src/plugins/cli-catalog'
@@ -6,11 +6,12 @@ import { makeTempHome, startHarness, type Harness } from '../helpers'
 import { makeTempDir, moduleSource, removeTempDirs, writePlugin } from './fixtures'
 
 let h: Harness | null = null
+let sharedHarness: Harness | null = null
 afterEach(async () => {
-  await h?.cleanup()
+  if (h && h !== sharedHarness) await h.cleanup()
   h = null
-  removeTempDirs()
 })
+afterAll(() => removeTempDirs())
 
 type Manifest = { id: string } & Record<string, unknown>
 
@@ -95,8 +96,18 @@ const worktree: Manifest = {
 }
 
 describe('api.describe cli section', () => {
+  let worktreeFixture: Awaited<ReturnType<typeof boot>>
+
+  beforeAll(async () => {
+    worktreeFixture = await boot({ builtin: [worktree] })
+    sharedHarness = h
+  })
+  afterAll(async () => {
+    await sharedHarness?.cleanup()
+    sharedHarness = null
+  })
   test('lists a group with its aliases and each declared command with words, module, methods and flags', async () => {
-    const s = await boot({ builtin: [worktree] })
+    const s = worktreeFixture
     const { cli } = await s.describe()
 
     expect(cli.groups).toEqual([{ plugin: 'quirky.worktree', words: 'worktree', aliases: ['wt'] }])
@@ -144,7 +155,7 @@ describe('api.describe cli section', () => {
   })
 
   test('the bare command takes the group word alone', async () => {
-    const s = await boot({ builtin: [worktree] })
+    const s = worktreeFixture
     const root = (await s.describe()).cli.commands.find((command) => command.id.endsWith('/root'))!
 
     expect(root.words).toBe('worktree')
@@ -153,7 +164,7 @@ describe('api.describe cli section', () => {
   })
 
   test('derives flags from the method params like a generated command, without a params flag', async () => {
-    const s = await boot({ builtin: [worktree] })
+    const s = worktreeFixture
     const list = (await s.describe()).cli.commands.find((command) => command.id.endsWith('/list'))!
 
     expect(list.flags).toEqual([
@@ -224,22 +235,21 @@ describe('api.describe cli section', () => {
 
     expect(go).toMatchObject({ method: 'other.plugin/go', methods: ['other.plugin/go'], flags: [] })
   })
-})
+  describe('method flags', () => {
+    test('carries readOnly, destructive, confirm and connection into the methods list', async () => {
+      const methods = new Map((await worktreeFixture.describe()).methods.map((method) => [method.name, method]))
 
-describe('api.describe method flags', () => {
-  test('carries readOnly, destructive, confirm and connection into the methods list', async () => {
-    const s = await boot({ builtin: [worktree] })
-    const methods = new Map((await s.describe()).methods.map((method) => [method.name, method]))
-
-    expect(methods.get('quirky.worktree/list')).toMatchObject({ readOnly: true })
-    expect(methods.get('quirky.worktree/list')).not.toHaveProperty('destructive')
-    expect(methods.get('quirky.worktree/remove')).toMatchObject({
-      destructive: true,
-      confirm: 'Remove worktree {worktree}?',
+      expect(methods.get('quirky.worktree/list')).toMatchObject({ readOnly: true })
+      expect(methods.get('quirky.worktree/list')).not.toHaveProperty('destructive')
+      expect(methods.get('quirky.worktree/remove')).toMatchObject({
+        destructive: true,
+        confirm: 'Remove worktree {worktree}?',
+      })
+      expect(methods.get('quirky.worktree/attach')).toMatchObject({ connection: true })
     })
-    expect(methods.get('quirky.worktree/attach')).toMatchObject({ connection: true })
   })
 })
+
 
 describe('group aliases', () => {
   const plugin = (id: string, cliAliases: string[]): Manifest => ({

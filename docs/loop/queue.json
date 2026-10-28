@@ -229,8 +229,7 @@
         "m1-launch-settings",
         "m1-agent-status"
       ],
-      "status": "in-progress",
-      "lane": 12
+      "status": "done"
     },
     {
       "id": "m6-orchestration-core",
@@ -272,8 +271,9 @@
       "deps": [
         "m6-orchestration-workers"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 11
     },
     {
       "id": "m6-heimdall-control",
@@ -285,8 +285,9 @@
       "deps": [
         "m6-heimdall-core"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 10
     },
     {
       "id": "m6-heimdall-owner",
@@ -339,8 +340,7 @@
         "term-daemon.md"
       ],
       "deps": [],
-      "status": "in-progress",
-      "lane": 10
+      "status": "done"
     },
     {
       "id": "m1-agent-status-scripting",

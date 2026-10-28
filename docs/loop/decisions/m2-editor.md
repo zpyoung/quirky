@@ -462,7 +462,18 @@
 - **Revisit if:** palette broadcasts, pane-scoped focus or hosted-view isolation fail the merged verification
 - **Source:** locked by docs/loop/decisions/m3-terminal-dock.md and docs/loop/decisions/fix-flaky-pty-host-host.md
 
+## D43: Combine test-cost accounting with isolated, correctly installed test children
+- **Question:** How should the reported runner conflict preserve the incoming cost contract?
+- **Options:** drop profiling; lose test isolation/bootstrap; combine additive runner behavior
+- **Chose:** repair the concrete bg_94 rejection against pinned 5268955347ab4ac049dfd49f38b3c35a6a3df1d7. Read both updated decision logs completely. Retain opt-in per-attempt accounting and existing isolated retry policy, machine-wide locks and remote transport. Every local execution path, including profiling, installs the current candidate's frozen dependencies first when a package manifest exists; standalone manifest-free Bun test directories need no dependency installation. Every actual test child retains fresh HOME/QUIRKY_HOME, disabled auto-hooks, awaited process cleanup and home removal.
+- **Why:** profiling must measure real isolated test execution rather than bypassing preparation or exposing real user state. The incoming branch does not eliminate the install-before-merge verification issue; candidate bootstrap is still required.
+- **Evidence:** CostRunnerMerge; scripts/suite.ts five resolved blocks; full incoming fix-test-cost D1–D13 and m5-structured-runner D1–D53 plus both Progress sections. bg_95 reached 67 passing scripts cases and exposed the new manifest-free profiling fixture. ProfileCliFix preserved that test and the real workspace-install regression; bg_97 then passed all 18 suite-runner cases and typecheck on the 569-package graph.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the combined runner loses per-attempt measurements or a local path executes against stale dependencies
+- **Source:** locked by docs/loop/decisions/fix-test-cost.md and docs/loop/decisions/m5-structured-runner.md
+
 ## Progress
-Step 7 resubmission ready: required dock/PTy conflict repair is committed as dd48a59. Both incoming logs were fully read; panel geometry, daemon palette, real-session dock/accessories and hosted views coexist. Frozen installation and typecheck pass on the 568-package graph. All prior core, real handoff, packaged assets, syntax fence, scripts and browser proofs remain recorded. Commit/detach and resubmit; no protected or foreign integration edits and no success claim before controller acceptance.
+Step 7 resubmission ready: combine incoming test-cost profiling with isolated test children and candidate dependency bootstrap (D43). The only failing scripts case was the manifest-free profiling CLI fixture; its narrow runner fix passes all 18 suite-runner cases, and typecheck passes. The other 67 scripts cases passed in bg_95. All prior core, real handoff, packaged assets, syntax fence, affected-package and browser proofs remain recorded. Commit/detach and resubmit; no protected or foreign integration edits and no success claim before controller acceptance. Owned implementation worktrees are being removed; verification/review/UI evidence is archived in this lane's ignored `.orca/loops/omp-until-done-8f388de7/m2-editor-evidence.tar.gz`.
 
 Last SC-9 point: Finder drops import copies under D19, including in-worktree sources. Native SC-9 stays pending for the nightly run. Open-in-place is owned by the operator's `m4-editor-drop-open-in-place`, not an m2-editor blocker.
