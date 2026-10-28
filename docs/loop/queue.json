@@ -1883,6 +1883,26 @@
       "status": "done"
     },
     {
+      "id": "fix-test-agent-status-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase plugins/quirky.agent-status failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.agent-status). Files and exact failed tests: plugins/quirky.agent-status/test/transcript-producers.test.ts: captured provider status producers > private OSC status facts use the captured session owner and ignore provider identity changes; captured provider status producers > private OSC status facts are fenced to the provider turn as well as the session | plugins/quirky.agent-status/test/e2e/hooks-cli.e2e.test.ts: SC-27: the Agent status hooks switch > off removes the entries, a restart does nothing, setup refuses while off, and on installs again | plugins/quirky.agent-status/test/hooks.test.ts: SC-27: the Agent status hooks switch > off removes every entry and status shows hooks_disabled; the restart touches nothing; on installs again; SC-27: the Agent status hooks switch > setup while the switch is off refuses with the switch message; SC-27: the Agent status hooks switch > remove still works while the switch is off. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "fix-test-cli-1028",
+      "milestone": "M7",
+      "title": "Repair end-phase plugins/quirky.cli failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.cli). Files and exact failed tests: plugins/quirky.cli/test/runtimes.test.ts: saved paired runtime APIs retain private offers but never return credentials from add, list, show, or status; a malformed pairing offer is rejected before any saved runtime is written. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "done"
+    },
+    {
       "id": "m7-sweep-sessions",
       "milestone": "M7",
       "docs": [
@@ -1983,16 +2003,6 @@
       "lane": 1
     },
     {
-      "id": "fix-test-agent-status-1028",
-      "milestone": "M7",
-      "title": "Repair end-phase plugins/quirky.agent-status failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.agent-status). Files and exact failed tests: plugins/quirky.agent-status/test/transcript-producers.test.ts: captured provider status producers > private OSC status facts use the captured session owner and ignore provider identity changes; captured provider status producers > private OSC status facts are fenced to the provider turn as well as the session | plugins/quirky.agent-status/test/e2e/hooks-cli.e2e.test.ts: SC-27: the Agent status hooks switch > off removes the entries, a restart does nothing, setup refuses while off, and on installs again | plugins/quirky.agent-status/test/hooks.test.ts: SC-27: the Agent status hooks switch > off removes every entry and status shows hooks_disabled; the restart touches nothing; on installs again; SC-27: the Agent status hooks switch > setup while the switch is off refuses with the switch message; SC-27: the Agent status hooks switch > remove still works while the switch is off. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
-      "docs": [],
-      "deps": [
-        "m7-test-triage"
-      ],
-      "status": "done"
-    },
-    {
       "id": "fix-test-ask-1028",
       "milestone": "M7",
       "title": "Repair end-phase plugins/quirky.ask failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.ask). Files and exact failed tests: plugins/quirky.ask/test/presentation-store.test.ts: Q2: a timeout summary is retained for four seconds outside the pending badge | plugins/quirky.ask/test/asks.test.ts: the queue > SC-14: a second ask from the same session waits | plugins/quirky.ask/test/cli.test.ts: spec refusals > SC-3: header, label, description and default may say API token; --chunk-ms > SC-20: the real quirky binary prints the same two lines | plugins/quirky.ask/test/ui.test.ts: the Questions panel module > SC-23: option previews render rich Markdown inside a hostile-content-free sandbox | plugins/quirky.ask/test/v1-import.test.ts: migration 4 > adds nullable exact-owner and idempotency fields without changing imported Ask rows | plugins/quirky.ask/test/panel.test.ts: the Questions panel > SC-31: with a window connected and no panel open, a new ask opens the panel and sends no notify; the Questions panel > SC-31: an already open Questions panel is left alone for a second ask | plugins/quirky.ask/test/confirmation.test.ts: quirky.ask as the confirmation backend > D20: a destructive call opens a confirm ask for the caller and runs once it is answered yes; quirky.ask as the confirmation backend > a declined confirm ask refuses the call; quirky.ask as the confirmation backend > an unavailable confirmation is a refusal and never runs the destructive method. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
@@ -2013,16 +2023,6 @@
       ],
       "status": "in-progress",
       "lane": 5
-    },
-    {
-      "id": "fix-test-cli-1028",
-      "milestone": "M7",
-      "title": "Repair end-phase plugins/quirky.cli failures from baseline 97aaa12d (full evidence docs/loop/reports/m7-test-triage.json, area plugins/quirky.cli). Files and exact failed tests: plugins/quirky.cli/test/runtimes.test.ts: saved paired runtime APIs retain private offers but never return credentials from add, list, show, or status; a malformed pairing offer is rejected before any saved runtime is written. Reproduce via canonical suite; fix consumer-visible defects and delete incidental wording/source/default/inventory mirror assertions rather than repinning them. Preserve fresh private process homes and cleanup. Cross-plugin failures must coordinate with the owning repair, not introduce aliases or bypasses.",
-      "docs": [],
-      "deps": [
-        "m7-test-triage"
-      ],
-      "status": "done"
     },
     {
       "id": "fix-test-editor-1028",
@@ -2246,6 +2246,16 @@
       "status": "todo"
     },
     {
+      "id": "fix-test-scripts-profile-timeout-1028",
+      "milestone": "M7",
+      "title": "Repair bun test scripts timeout in scripts/suite.test.ts:196: runFiles emits no profile rows when profiling is disabled. During caught-up fix-test-agent-status-1028 gates on macOS, bun test scripts returned125pass/1fail across126tests12files in284.50s; named case exceeded5000ms (5053.94ms). No diagnosed root cause or flake claim; no deadlines/assertions/source changed. Other suite fixture broken/flaky log lines are intentional nested test outputs, not extra top-level failures. Diagnose actual process/profile behavior and preserve deterministic private HOME/QUIRKY_HOME and child cleanup; delete incidental assertions rather than repin. Evidence docs/loop/decisions/fix-test-agent-status-1028.md and lane2 iteration11 raw artifact://30.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "todo"
+    },
+    {
       "id": "m7-api-freeze",
       "milestone": "M7",
       "title": "Plugin API 1.0: freeze and version the API, manifests declare their API version, publish an example distro",
@@ -2302,20 +2312,11 @@
         "fix-test-agents-1028",
         "fix-test-accounts-1028",
         "fix-test-packages-protocol-1028",
-        "fix-test-scripts-ui-review-1028"
+        "fix-test-scripts-ui-review-1028",
+        "fix-test-scripts-profile-timeout-1028"
       ],
       "status": "todo",
       "early": true
-    },
-    {
-      "id": "fix-test-scripts-profile-timeout-1028",
-      "milestone": "M7",
-      "title": "Repair bun test scripts timeout in scripts/suite.test.ts:196: runFiles emits no profile rows when profiling is disabled. During caught-up fix-test-agent-status-1028 gates on macOS, bun test scripts returned125pass/1fail across126tests12files in284.50s; named case exceeded5000ms (5053.94ms). No diagnosed root cause or flake claim; no deadlines/assertions/source changed. Other suite fixture broken/flaky log lines are intentional nested test outputs, not extra top-level failures. Diagnose actual process/profile behavior and preserve deterministic private HOME/QUIRKY_HOME and child cleanup; delete incidental assertions rather than repin. Evidence docs/loop/decisions/fix-test-agent-status-1028.md and lane2 iteration11 raw artifact://30.",
-      "docs": [],
-      "deps": [
-        "m7-test-triage"
-      ],
-      "status": "todo"
     }
   ]
 }
