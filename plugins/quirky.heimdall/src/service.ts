@@ -1,4 +1,4 @@
-import { validateValue, type PluginCaller, type PluginContext } from '@quirky/protocol'
+import { parseContributionId, validateValue, type PluginCaller, type PluginContext } from '@quirky/protocol'
 import type {
   Enrollment,
   EnrollmentInput,
@@ -301,7 +301,9 @@ async function effectiveHookReferences(context: PluginContext): Promise<Set<stri
       typeof item.plugin === 'string' &&
       typeof item.id === 'string'
     ) {
-      references.add(`${item.plugin}/${item.id}`)
+      const parsed = parseContributionId(item.id)
+      if (!parsed || parsed.kind !== 'method' || parsed.namespace !== item.plugin) continue
+      references.add(`${parsed.namespace}/${parsed.name}`)
     }
   }
   return references
