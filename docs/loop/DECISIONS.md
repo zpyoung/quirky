@@ -299,6 +299,9 @@ files, not this one.
 | medium | high | [m5-loops-ui D12](decisions/m5-loops-ui.md) | Host-computed opt-in close context closes the spec-review blocker | assumed — autonomous |
 | medium | high | [m5-loops-ui D15](decisions/m5-loops-ui.md) | Host identity removes the serialized close-guard read cycle | assumed — autonomous |
 | medium | high | [m5-loops-ui D24](decisions/m5-loops-ui.md) | Adapt to the landed generic tab-menu contract during the operator merge | assumed — autonomous, within operator-directed merge |
+| medium (visible composition) | high | [ui-restyle-orchestration D1](decisions/ui-restyle-orchestration.md) | Restyle all four desktop plugin surfaces without changing workflow authority | locked by docs/quirk/specs/2026-10-28-ui-redesign/logic.md |
+| medium | high | [ui-restyle-orchestration D2](decisions/ui-restyle-orchestration.md) | Preserve pending, empty, failure, draft and safety behavior | assumed — autonomous |
+| medium (public field types and additive plugin registrations) | high | [ui-restyle-orchestration D12](decisions/ui-restyle-orchestration.md) | Compose the sole roadmap catch-up with all incoming field and plugin contracts | locked by docs/loop/LOOP.md and incoming decision logs |
 | medium (review independence record) | high | [m7-sweep-automation D5](decisions/m7-sweep-automation.md) | Use OpenAI task implementers and verified Gemini reviewer fallback | assumed — autonomous |
 | medium | high | [m7-sweep-automation D8](decisions/m7-sweep-automation.md) | Fix menu dismissal and sidebar loop presentation in three disjoint slices | assumed — autonomous |
 | medium | high for source omissions; remote prerequisite design remains open. | [m7-sweep-automation D9](decisions/m7-sweep-automation.md) | Retain larger newly discovered flows in one completion item | deferred: automation workspace provenance, mobile loop projection and remote ledger ownership |
@@ -1238,6 +1241,16 @@ files, not this one.
 | easy | high | [m5-loops-ui D22](decisions/m5-loops-ui.md) | Keep native conversation ownership strict during UI verification | assumed — autonomous |
 | easy | high | [m5-loops-ui D23](decisions/m5-loops-ui.md) | Preserve explicit component attribution and current public API documentation | assumed — autonomous |
 | easy | high | [m5-loops-ui D25](decisions/m5-loops-ui.md) | Declare canonical context at both command-validation boundaries | assumed — autonomous |
+| easy | high | [ui-restyle-orchestration D3](decisions/ui-restyle-orchestration.md) | Reuse the canonical theme, component and lint authorities | locked by docs/quirk/specs/2026-10-28-ui-redesign/logic.md |
+| easy | high | [ui-restyle-orchestration D4](decisions/ui-restyle-orchestration.md) | Use build-first combined spec and three isolated implementation components | locked by docs/loop/LOOP.md |
+| easy | high | [ui-restyle-orchestration D5](decisions/ui-restyle-orchestration.md) | Verify on this Mac with wholly private runtime state | deferred: platform |
+| easy | high | [ui-restyle-orchestration D6](decisions/ui-restyle-orchestration.md) | Add missing native fields and editor appearance once in the shared system | assumed — autonomous |
+| easy | high | [ui-restyle-orchestration D7](decisions/ui-restyle-orchestration.md) | Quarantine two relative-path edits and reassign their ownership after stopping the writer | assumed — autonomous |
+| easy | high | [ui-restyle-orchestration D8](decisions/ui-restyle-orchestration.md) | Repair the shared appearance and event boundaries exposed by the real build and smoke | assumed — autonomous |
+| easy | high | [ui-restyle-orchestration D9](decisions/ui-restyle-orchestration.md) | Keep liveness distinct from work status and remove incidental assertions | assumed — autonomous |
+| easy | high for the observed tool failure; root cause beyond the boundary remains unproven | [ui-restyle-orchestration D10](decisions/ui-restyle-orchestration.md) | Use a stable owned headless shell after two newer browser transports failed | assumed — autonomous |
+| easy | high for exercised paths; exhaustive acceptance remains unclaimed | [ui-restyle-orchestration D11](decisions/ui-restyle-orchestration.md) | Record minimum surface proof without claiming full acceptance or visual scoring | locked by docs/loop/LOOP.md |
+| easy | high for named observations only | [ui-restyle-orchestration D13](decisions/ui-restyle-orchestration.md) | Finish with fresh composed-source surface proof | assumed — autonomous |
 | easy (follow-up items remain explicit) | high | [m7-sweep-automation D1](decisions/m7-sweep-automation.md) | Audit all three documents; preserve explicit exclusions | locked by docs/roadmap.md |
 | easy | high | [m7-sweep-automation D2](decisions/m7-sweep-automation.md) | Resolve unattended workflow questions locally | locked by docs/loop/LOOP.md |
 | easy | high | [m7-sweep-automation D4](decisions/m7-sweep-automation.md) | Preserve existing follow-up ownership | assumed — autonomous |
