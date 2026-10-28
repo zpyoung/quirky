@@ -418,7 +418,7 @@ export class AccountService {
       if (override.value === null) {
         const home = this.unsetHome(provider)
         const identity = this.readIdentitySafely(provider, home, provider === 'claude')
-        const account = this.identityFor(provider, null, identity.email ?? 'System default', 'default')
+        const account = this.identityFor(provider, null, identity.email ?? 'System default', 'default', identity.authKind)
         const resumeTranscriptPath = provider === 'codex' && input.resume
           ? await this.prepareCodexResume(input.resume, home, null)
           : undefined
@@ -436,7 +436,7 @@ export class AccountService {
       const home = resolve(input.cwd, override.value)
       const identity = this.readIdentitySafely(provider, home, false)
       const label = identity.email ?? `Custom ${provider === 'claude' ? 'Claude' : 'Codex'} home`
-      const account = this.identityFor(provider, null, label, 'custom')
+      const account = this.identityFor(provider, null, label, 'custom', identity.authKind)
       this.saveSessionIdentityIfPresent(input, account, home)
       return { env: {}, shellInit: null, account }
     }
@@ -448,7 +448,7 @@ export class AccountService {
           ? this.unsetHome(provider)
           : this.profiles.defaultHome(provider)
       const identity = this.readIdentitySafely(provider, home, provider === 'claude')
-      const account = this.identityFor(provider, null, identity.email ?? 'System default', 'default')
+      const account = this.identityFor(provider, null, identity.email ?? 'System default', 'default', identity.authKind)
       const resumeTranscriptPath = provider === 'codex' && input.resume
         ? await this.prepareCodexResume(input.resume, home, null)
         : undefined
@@ -479,7 +479,7 @@ export class AccountService {
       ? await this.prepareCodexResume(input.resume, home, selectedId)
       : undefined
     if (provider === 'codex') this.syncCodexConfigWarning(account.id)
-    const accountIdentity = this.identityFor(provider, account.id, account.label, 'managed')
+    const accountIdentity = this.identityFor(provider, account.id, account.label, 'managed', identity.authKind)
     this.saveSessionIdentityIfPresent(input, accountIdentity, home)
     return {
       env: { [this.homeVariable(provider)]: home },
@@ -1048,8 +1048,14 @@ export class AccountService {
     )
   }
 
-  private identityFor(provider: ManagedProvider, id: string | null, label: string, source: AccountIdentity['source']): AccountIdentity {
-    return { provider, id, label, source }
+  private identityFor(
+    provider: ManagedProvider,
+    id: string | null,
+    label: string,
+    source: AccountIdentity['source'],
+    authKind: ProviderIdentity['authKind']
+  ): AccountIdentity {
+    return { provider, id, label, source, authKind }
   }
 
   private readIdentitySafely(provider: ManagedProvider, home: string, includeEnvironmentApiKey: boolean): ProviderIdentity {

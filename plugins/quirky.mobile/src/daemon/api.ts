@@ -3,6 +3,8 @@ import { normalizeAdvertisedEndpoint } from './network'
 
 export type MobileConfigureInput = Partial<MobileSettings>
 export type MobilePairInput = { address?: string; rotate?: boolean }
+export type OwnerPairInput = { name: string; confirm: true; address?: string }
+export type OwnerRevokeInput = { grantId: string; confirm: true }
 export type MobileOpenInput = { settings: boolean }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -84,4 +86,31 @@ export function openInput(value: unknown): MobileOpenInput {
   if (!isObject(value) || Object.keys(value).some((key) => key !== 'settings')) throw new Error('open params must contain only settings')
   if (value.settings !== undefined && typeof value.settings !== 'boolean') throw new Error('settings must be boolean')
   return { settings: value.settings === true }
+}
+
+export function ownerPairInput(value: unknown): OwnerPairInput {
+  if (!isObject(value) || Object.keys(value).some((key) => !['name', 'confirm', 'address'].includes(key))) {
+    throw new Error('ownerPair params must contain only name, confirm, and optional address')
+  }
+  const name = value.name
+  if (typeof name !== 'string' || name.trim() !== name || name.length === 0 || name.length > 80) {
+    throw new Error('name must be a trimmed string of 1 to 80 characters')
+  }
+  if (value.confirm !== true) throw new Error('owner grant creation requires confirm: true')
+  const result: OwnerPairInput = { name, confirm: true }
+  if (Object.hasOwn(value, 'address')) {
+    if (typeof value.address !== 'string' || value.address.length === 0 || value.address.length > 16_384 || value.address.trim() !== value.address) {
+      throw new Error('address must be a nonempty trimmed string')
+    }
+    result.address = value.address
+  }
+  return result
+}
+
+export function ownerRevokeInput(value: unknown): OwnerRevokeInput {
+  if (!isObject(value) || Object.keys(value).length !== 2 ||
+    typeof value.grantId !== 'string' || !/^[0-9a-f-]{36}$/i.test(value.grantId) || value.confirm !== true) {
+    throw new Error('ownerRevoke requires a UUID grantId and confirm: true')
+  }
+  return { grantId: value.grantId, confirm: true }
 }

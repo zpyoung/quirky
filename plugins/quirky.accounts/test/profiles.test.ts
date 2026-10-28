@@ -117,7 +117,7 @@ describe('quirky.accounts profile ownership and routing', () => {
     await call(h, 'quirky.accounts/select', { provider: 'claude', accountId: id })
 
     const inherited = await call<AccountPrepareResult>(h, 'quirky.accounts/prepare', prepareArgs(h, 'claude', 'session-managed'))
-    expect(inherited.account).toEqual({ provider: 'claude', id, label: 'managed@example.test', source: 'managed' })
+    expect(inherited.account).toEqual({ provider: 'claude', id, label: 'managed@example.test', source: 'managed', authKind: 'oauth' })
     expect(inherited.env.CLAUDE_CONFIG_DIR).toBe(h.managedHome('claude', id))
     expect(inherited.account?.id).toBe(id)
 
@@ -126,7 +126,7 @@ describe('quirky.accounts profile ownership and routing', () => {
     writeFileSync(join(custom, '.claude.json'), '{"oauthAccount":{"emailAddress":"custom@example.test"}}')
     writeFileSync(join(custom, '.credentials.json'), '{"claudeAiOauth":{"accessToken":"fixture-custom-token"}}')
     const explicit = await call<AccountPrepareResult>(h, 'quirky.accounts/prepare', prepareArgs(h, 'claude', 'session-custom', 'explicit', custom))
-    expect(explicit.account).toEqual({ provider: 'claude', id: null, label: 'custom@example.test', source: 'custom' })
+    expect(explicit.account).toEqual({ provider: 'claude', id: null, label: 'custom@example.test', source: 'custom', authKind: 'oauth' })
     expect(explicit.env.CLAUDE_CONFIG_DIR).not.toBe(h.managedHome('claude', id))
   })
 

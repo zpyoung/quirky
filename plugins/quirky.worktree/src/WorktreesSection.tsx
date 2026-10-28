@@ -101,9 +101,15 @@ function orderedWorktrees(
   })
 }
 
-function passesStockFilters(worktree: WorktreeControl, options: StockWorktreeOptions): boolean {
+function passesStockFilters(
+  worktree: WorktreeControl,
+  options: StockWorktreeOptions,
+  hasAuthenticatedDesktopClient: boolean,
+  otherClientByWorktree: ReadonlyMap<string, boolean | null>
+): boolean {
   return (options.filterRepoIds.length === 0 || options.filterRepoIds.includes(worktree.repoId)) &&
     !(options.hideCliCreated && worktree.createdBy === 'cli') &&
+    !(options.hideOtherClients && hasAuthenticatedDesktopClient && otherClientByWorktree.get(worktree.id) === true) &&
     !(options.hideDefaultBranch && worktree.isMain) &&
     !(options.hideDetached && worktree.kind === 'git' && !worktree.isMain && worktree.branch === null) &&
     !(options.hideArchived && worktree.archivedAt !== null) &&
@@ -117,7 +123,7 @@ const CREATE_GRACE_MS = 5 * 60 * 1_000
 
 /** The sidebar's workspace tree with its menus, dialogs, add-project form and `ui state` report. */
 export function WorktreesSection({ context, report, requests }: Props) {
-  const { repos, groups, worktrees, sessions, loaded } = useTree(context)
+  const { repos, groups, worktrees, sessions, otherClientByWorktree, hasAuthenticatedDesktopClient, loaded } = useTree(context)
   const now = useNow()
   const [layout, setLayout] = useState(() => context.getLayout())
   const [dialog, setDialog] = useState<DialogState | null>(null)
@@ -244,25 +250,27 @@ export function WorktreesSection({ context, report, requests }: Props) {
   const alwaysShowPrimary = activityProjection?.preferences.alwaysShowDefaultBranchWorkspace ?? true
   const ordered = useMemo(() => orderedWorktrees(worktrees, stockOptions.sortBy, sessions, repos), [worktrees, stockOptions.sortBy, sessions, repos])
   const hiddenFilteredWorktrees = useMemo(
-    () => revealFiltered ? [] : ordered.filter((worktree) => !passesStockFilters(worktree, stockOptions)),
-    [ordered, revealFiltered, stockOptions]
+    () => revealFiltered ? [] : ordered.filter((worktree) =>
+      !passesStockFilters(worktree, stockOptions, hasAuthenticatedDesktopClient, otherClientByWorktree)
+    ),
+    [ordered, revealFiltered, stockOptions, hasAuthenticatedDesktopClient, otherClientByWorktree]
   )
   const hiddenSleepingWorktrees = useMemo(
     () => stockOptions.showSleeping ? [] : ordered.filter((worktree) =>
-      passesStockFilters(worktree, stockOptions) && isSleeping(worktree) &&
+      passesStockFilters(worktree, stockOptions, hasAuthenticatedDesktopClient, otherClientByWorktree) && isSleeping(worktree) &&
       !(worktree.isMain && alwaysShowPrimary) && (!visibleIds || visibleIds.has(worktree.id))
     ),
-    [ordered, stockOptions.showSleeping, stockOptions, visibleIds, alwaysShowPrimary]
+    [ordered, stockOptions.showSleeping, stockOptions, visibleIds, alwaysShowPrimary, hasAuthenticatedDesktopClient, otherClientByWorktree]
   )
   const treeVisibleIds = useMemo(() => {
     const result = new Set<string>()
     for (const worktree of ordered) {
-      if (!revealFiltered && !passesStockFilters(worktree, stockOptions)) continue
+      if (!revealFiltered && !passesStockFilters(worktree, stockOptions, hasAuthenticatedDesktopClient, otherClientByWorktree)) continue
       const showSleeping = !isSleeping(worktree) || stockOptions.showSleeping || revealSleeping || (worktree.isMain && alwaysShowPrimary)
       if (showSleeping && (!visibleIds || visibleIds.has(worktree.id))) result.add(worktree.id)
     }
     return result
-  }, [ordered, stockOptions, revealFiltered, revealSleeping, visibleIds, alwaysShowPrimary])
+  }, [ordered, stockOptions, revealFiltered, revealSleeping, visibleIds, alwaysShowPrimary, hasAuthenticatedDesktopClient, otherClientByWorktree])
   const orderedRepos = useMemo(() => {
     const activityByRepo = new Map<string, number>()
     for (const worktree of worktrees) {

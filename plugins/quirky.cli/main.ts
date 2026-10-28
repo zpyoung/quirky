@@ -1,4 +1,5 @@
-import type { PluginContext } from '@quirky/protocol'
+import type { OwnerCliPairOffer, OwnerRuntimeCallParams, OwnerRuntimeCallResult, PluginContext } from '@quirky/protocol'
+import { createMobileRpc, parseOwnerCliOffer, type MobileRpc } from '@quirky/protocol/paired-client'
 import {
   addSavedRuntimeTarget,
   commandStatus,
@@ -7,14 +8,15 @@ import {
   installCommand,
   installProfileLauncher,
   listSavedRuntimeTargets,
+  markSavedRuntimeTargetUsed,
   profileLauncherList,
   removeSavedRuntimeTarget,
   resolveSavedRuntimeTarget,
   summarizeSavedRuntimeTarget,
   uninstallCommand,
-  uninstallProfileLauncher
+  uninstallProfileLauncher,
+  type ResolvedRuntimeTarget
 } from '@quirky/protocol/node'
-
 type Params = Record<string, unknown>
 
 function stringParam(context: PluginContext, params: Params, key: string, optional = false): string | undefined {
@@ -48,6 +50,62 @@ function provideAsync(context: PluginContext, name: string, handler: (params: Pa
   context.provide(`method:${context.pluginId}/${name}`, async (params: Params) => {
     try { return await handler(params) } catch (error) { throw failure(context, error) }
   })
+}
+
+async function callOwnerRuntime(context: PluginContext, params: Params): Promise<OwnerRuntimeCallResult> {
+  if (Object.keys(params).some((key) => !['runtime', 'method', 'params'].includes(key))) {
+    throw context.error('invalid-params', 'runtimeCall accepts only runtime, method, and optional params')
+  }
+  const input: OwnerRuntimeCallParams = {
+    runtime: stringParam(context, params, 'runtime')!,
+    method: stringParam(context, params, 'method')!,
+    ...(params.params === undefined ? {} : { params: params.params as Record<string, unknown> })
+  }
+  if (params.params !== undefined &&
+    (params.params === null || typeof params.params !== 'object' || Array.isArray(params.params))) {
+    throw context.error('invalid-params', 'params must be an object')
+  }
+  if (input.method === 'quirky.cli/runtimeCall') {
+    throw context.error('invalid-params', 'runtimeCall cannot forward to itself')
+  }
+  let target: ResolvedRuntimeTarget
+  try { target = resolveSavedRuntimeTarget(context.home, input.runtime) } catch {
+    throw context.error('not-found', 'Saved owner runtime was not found or is unavailable')
+  }
+  if (target.scope !== 'owner-cli' || target.grantId === null) {
+    throw context.error('invalid-params', 'runtime must select a saved owner-cli target')
+  }
+  let offer: OwnerCliPairOffer
+  try { offer = parseOwnerCliOffer(target.pairingCode) } catch {
+    throw context.error('conflict', 'Saved owner runtime offer is invalid')
+  }
+  if (offer.endpoint !== target.endpoint || offer.publicKeyB64 !== target.publicKeyB64 ||
+    offer.pairedDeviceId !== target.pairedDeviceId || offer.pairedDeviceId !== target.grantId) {
+    throw context.error('conflict', 'Saved owner runtime identity does not match its pinned offer')
+  }
+  let rpc: MobileRpc
+  try {
+    rpc = await createMobileRpc({ endpoint: target.endpoint, publicKeyB64: target.publicKeyB64, token: offer.deviceToken })
+  } catch {
+    throw context.error('conflict', 'Owner runtime connection failed')
+  }
+  try {
+    const result = await rpc.call(input.method, input.params ?? {})
+    markSavedRuntimeTargetUsed(context.home, target.id)
+    return {
+      runtime: {
+        id: target.id,
+        name: target.name,
+        endpoint: target.endpoint,
+        grantId: target.grantId
+      },
+      result
+    }
+  } catch {
+    throw context.error('conflict', 'Owner runtime call failed')
+  } finally {
+    rpc.close()
+  }
 }
 
 export function activate(context: PluginContext): void {
@@ -108,13 +166,9 @@ export function activate(context: PluginContext): void {
   ))
   provideAsync(context, 'runtimeAdd', async (params) => {
     const pairingCode = stringParam(context, params, 'pairingCode')!
-    // Defer E2EE until an offer is added; launcher-only API calls do not need the transport graph.
-    const offer = await import('@quirky/protocol/paired-client').then(({ parseMobileOffer }) => parseMobileOffer(pairingCode))
-    return addSavedRuntimeTarget(context.home, stringParam(context, params, 'name')!, pairingCode, {
-      endpoint: offer.endpoint,
-      pairedDeviceId: offer.pairedDeviceId
-    })
+    return addSavedRuntimeTarget(context.home, stringParam(context, params, 'name')!, pairingCode)
   })
+  provideAsync(context, 'runtimeCall', (params) => callOwnerRuntime(context, params))
   provide(context, 'runtimeList', () => ({ runtimes: listSavedRuntimeTargets(context.home) }))
   provide(context, 'runtimeShow', (params) => summarizeSavedRuntimeTarget(
     resolveSavedRuntimeTarget(context.home, stringParam(context, params, 'selector')!)

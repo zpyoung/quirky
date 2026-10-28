@@ -97,8 +97,8 @@ export type PluginHarness = {
   builtinPluginsDir: string
   /** Stops this daemon and its PTY host, then starts another on the same home and plugins. */
   restart(): Promise<{ h: Harness; client: QuirkyClient }>
-  /** A client whose hello carries the given identity, as the CLI's does inside a session. */
-  connectAs(identity: { cwd?: string; worktreeId?: string; sessionId?: string }, role?: ClientRole): Promise<QuirkyClient>
+  /** A client whose initial authenticated hello carries the given connection identity. */
+  connectAs(identity: { cwd?: string; worktreeId?: string; sessionId?: string; desktopClientId?: string }, role?: ClientRole): Promise<QuirkyClient>
   cleanup(): Promise<void>
 }
 

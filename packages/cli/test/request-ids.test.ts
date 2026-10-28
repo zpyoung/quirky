@@ -147,4 +147,28 @@ describe('a lost reply followed by a failed reconnect', () => {
     const error = await link.callAny('quirky.repo/add', {}).catch((e) => e)
     expect(error).toBeInstanceOf(DaemonUnavailableError)
   })
+  test('does not automatically replay uncertain destructive or owner runtime calls', async () => {
+    for (const [method, isDestructive] of [
+      ['quirky.worktree/remove', () => true],
+      ['quirky.cli/runtimeCall', () => false]
+    ] as const) {
+      let connects = 0
+      let calls = 0
+      const link = createDaemonLink(async () => {
+        connects++
+        return {
+          callAny: async () => {
+            calls++
+            throw new ConnectionLost()
+          },
+          close() {}
+        } as unknown as QuirkyClient
+      }, { requestBase: 'do-not-replay', isDestructive })
+      const error = await link.callAny(method, {}).catch((failure) => failure)
+      expect(error).toBeInstanceOf(ConnectionLostError)
+      expect(connects).toBe(1)
+      expect(calls).toBe(1)
+      link.close()
+    }
+  })
 })
