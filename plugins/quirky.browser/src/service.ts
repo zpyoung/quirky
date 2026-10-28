@@ -8,6 +8,10 @@ import { asPluginError, fault } from './runtime/errors'
 import { parseExec } from './runtime/exec'
 import type { BrowserDependencies } from './runtime/dependencies'
 import { BrowserStore, type BrowserPage } from './profiles/store'
+import { ProfileLifecycle } from './preferences-lifecycle'
+import { registerPreferences } from './preferences/controller'
+import { identityModeFromSetting } from './preferences/identity'
+import type { PreferencesController } from './preferences/contract'
 
 export type BrowserPlugin = { deactivate(): Promise<void> }
 type Worktree = { id: string; name: string; path: string; branch?: unknown }
@@ -77,28 +81,46 @@ export class BrowserService {
   private readonly store: BrowserStore
   private readonly runtime: BrowserRuntime
   private readonly actions: BrowserActions
+  private readonly profileLifecycle: ProfileLifecycle
+  private preferences?: PreferencesController
   private active = true
   constructor(private readonly context: PluginContext, dependencies: BrowserDependencies) {
     this.store = new BrowserStore(context.dataDir)
-    this.runtime = new BrowserRuntime(this.store, dependencies, (pageId) => this.actions?.clearPageRefs(pageId))
+    this.runtime = new BrowserRuntime(this.store, dependencies, (pageId) => this.actions?.clearPageRefs(pageId), identityModeFromSetting(context.getSetting('identityMode')))
     this.actions = new BrowserActions(this.store, this.runtime)
+    this.profileLifecycle = new ProfileLifecycle(context, this.store, this.runtime, () => this.listPanes())
   }
 
   activate(): void {
     for (const name of BROWSER_METHODS) {
       this.context.provide(`method:quirky.browser/${name}`, (params: Record<string, unknown>, caller: PluginCaller) => this.call(name, params, caller))
     }
+    this.profileLifecycle.activate()
+    this.preferences = registerPreferences(this.context, {
+      listProfiles: () => this.store.listProfiles(),
+      listPanes: () => this.listPanes(),
+      listPageProfiles: () => this.store.listPages().map((page) => page.profileId),
+      setPaneProfile: async (pane, profile) => {
+        this.profileLifecycle.assertAvailable(profile)
+        return await this.setPaneProfile(pane, profile)
+      },
+      clearProfile: (profile, remove) => this.profileLifecycle.clearProfile(profile, remove)
+    })
   }
 
   async deactivate(): Promise<void> {
     this.active = false
+    this.preferences?.deactivate()
+    this.profileLifecycle.deactivate()
     await this.runtime.stopAll()
   }
 
   private async call(name: BrowserMethod, params: Record<string, unknown>, caller: PluginCaller): Promise<unknown> {
     try {
       if (!this.active) throw fault('browser_error', 'browser plugin is shutting down')
-      return await this.invoke(name, params, caller)
+      const result = await this.invoke(name, params, caller)
+      if (name === 'tabCreate' || name === 'tabClose' || name === 'profileCreate') this.context.emit('preferencesChanged', {})
+      return result
     } catch (error) {
       throw asPluginError(this.context, error)
     }
@@ -152,6 +174,7 @@ export class BrowserService {
     const worktreeId = await this.resolveWorktreeTarget(optionalString(params, 'worktree'), optionalString(params, 'cwd'), caller, false)
     const profileId = optionalString(params, 'profile') ?? 'default'
     this.store.getProfile(profileId)
+    this.profileLifecycle.assertAvailable(profileId)
     const page = this.store.addPage({ worktreeId: worktreeId ?? null, profileId, url: 'about:blank', title: '' })
     try {
       await this.runtime.withPage(page, 'tabCreate', async (execution) => {

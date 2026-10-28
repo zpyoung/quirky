@@ -1,7 +1,7 @@
 import type { PluginCaller, PluginContext } from '@quirky/protocol'
 import { asPluginError, fault } from '../runtime/errors'
 import { isValidProfileId, type BrowserProfile } from '../profiles/store'
-import type { BrowserIdentityMode, PreferencesAdapters, PreferencesState, RegisterPreferences } from './contract'
+import type { PreferencesAdapters, PreferencesState, RegisterPreferences } from './contract'
 import { identityModeFromSetting } from './identity'
 
 const IMPORTS_UNAVAILABLE = 'Browser data import is unavailable because the browser-extras import engine is not installed.'

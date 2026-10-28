@@ -12,7 +12,6 @@ export type PreferencesState = {
 }
 export type PreferencesAdapters = {
   listProfiles(): BrowserProfile[]
-  createProfile(name: string): BrowserProfile
   listPanes(): PaneTab[]
   listPageProfiles(): string[]
   setPaneProfile(pane: string, profile: string): Promise<unknown>

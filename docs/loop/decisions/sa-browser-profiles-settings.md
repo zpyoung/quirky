@@ -77,5 +77,27 @@
 - **Revisit if:** nightly identifies an actual failure
 - **Source:** deferred: platform
 
+## D8: Guard native clearing with one-use confirmation capabilities and admission control
+- **Question:** Can a directly invoked window command bypass destructive confirmation, or can a late native clear erase data after a new pane enters the profile?
+- **Options:** trust raw partition command args; release a profile gate on every UI timeout; one-use pending confirmed request and fail-closed admission
+- **Chose:** profileClear/Delete mint opaque one-use requests after dispatcher confirmation; only a UI/desktop caller may claim one, yielding only the validated Browser partition. Check native availability before claiming. Gate profile admission before the first native await and reject createPage/paneOpen/profileSet during clear. Chrome/data/metadata mutation follows a claimed, acknowledged native completion. An already-claimed command with unknown completion keeps the profile unavailable until daemon restart; unclaimed failure releases it.
+- **Why:** public ui.command.run is itself scriptable, and a timeout does not prove the native action stopped. A small explicit gate prevents both confirmation bypass and late-clear data loss without arbitrary cancellation/retry machinery.
+- **Evidence:** packages/daemon/src/plugins/layout.ts:291-304,358-366; packages/daemon/src/plugins/dispatch.ts:102-135; src/preferences-lifecycle.ts; preferences-integration.test.ts one-use/concurrency scenarios.
+- **Reversibility:** easy (internal capability lifetime)
+- **Confidence:** high for policy; runtime verification pending
+- **Revisit if:** the window-command protocol supplies provable cancellation or completion recovery
+- **Source:** assumed — autonomous
+
+## D9: Reject native clear before invocation until the SDK can acknowledge completion
+- **Question:** Does Session.clearStorageData returning void establish that WKWebView data removal completed, and does QUIRKY_HOME isolate native storage?
+- **Options:** equate await-void with completion; invoke and poll incomplete cookie visibility; reject before invocation and queue the exact unsupported flow
+- **Chose:** clearPartitionAvailable=false for current native and web adapters; clearPartition rejects completion-unavailable before any real Session invocation. Window command checks capability before consuming the confirmed token. Profile clear/remove retain Chrome data and metadata and report unavailable. Queue sa-browser-native-profile-clear-completion, dependent on this item. Native nightly uses two fresh run-owned UUID partitions only; never clear/use Default without proven native storage-root isolation.
+- **Why:** projected SDK native.ts:3347-3365 exposes invocation without acknowledgement/barrier, native websiteDataStore implementation and storage-root override are not projected or documented. Owner confirmed no real Session clear ran. Profile creation/switching/settings ship independently; claiming deletion parity would be false.
+- **Evidence:** lane4 user evidence packet in this session; installed native.ts:3347-3365; authoritative queue add /tmp/quirky-l8-native-clear-followup.json exited0; logic SC3 amendment; native handoff file.
+- **Reversibility:** medium (requires SDK capability)
+- **Confidence:** high for inspected public API limitation; no claim private implementation never waits
+- **Revisit if:** supported completion and native storage-root isolation are established
+- **Source:** deferred: native profile clear completion; supersedes sa-browser-profiles-settings D5
+
 ## Progress
-2026-10-28: claimed early item, merged lane4 contract commit2ab093ce; read source browser.md section2/Settings, roadmap/architecture and prior Browser decisions. Spec self-reviewed; shared preferences contracts ready. Next commit contracts, dispatch3 disjoint implementers; integrate lane4 latest before checks; exact missing-flow queue entries; UI smoke/review/remote checks; deps ready; roadmap catchup and land. No implementation is verified yet.
+2026-10-28: spec/contracts419df709; lane4 type checkpoint023a7a90 merged, production still pending. Three original implementers returned with no commits/checks, HEAD419df709 verified. Backend12 API/store tests71 assertions and2 identity tests passed; accepted componente022ef6e merged86b51635, worktree removed. A concurrent blank line in parent store was preserved inb865c015 before additive conflict resolution; no user code discarded. Generated .serena/project.local.yml excluded from component commits. Link unit19/41 passed; two new consumer tests incorrectly used plain Actions click while expecting direct Open, fixed to Cmd-click after observed red. UI test did not reach assertions because Browser package lacked React; parent declared existing repo React19.2/types/DOM test deps and installed. UI corrective worker fixes inspected zoom100-versus-level0 mismatch, home-page explicit Save, and overlapping profile switch; no new checks while it runs. Four exact outside-prerequisite flows queued with BLOCKERS/native handoff. Next: UI fix barrier, acceptance and component merges, integrate real lane4 production/service/UI/manifest, full affected remote/scripts/types and owned smoke, one cross-family review/fix, deps ready, roadmap catchup and land. No UI/native/deletion parity pass is claimed.

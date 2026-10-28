@@ -1,0 +1,9 @@
+{
+  "item": "sa-browser-profiles-settings",
+  "spec": "docs/quirk/specs/2026-10-28-sa-browser-profiles-settings/logic.md",
+  "scenarios": [
+    { "id": "SC2-native", "title": "In an owned test home, create TWO fresh UUID Browser profiles and use only these, never shared Default. Store a local-fixture cookie/site value in first profile, switch to second and verify isolation; switch back restores first value, same hosted tab and URL, at most one native guest resident. QUIRKY_HOME alone is not proof of native websiteDataStore isolation.", "status": "pending", "lastRun": null, "report": null, "summary": null },
+    { "id": "SC3-native", "title": "Use only fresh UUID profiles/data created by this native run. Close their panes, clear one and verify fixture cookies/site storage gone while profile persists; delete the other and verify partition cleared before metadata/directory removal; cancel and active-profile refusal preserve data. NEVER clear Default without separately proven Electrobun native storage-root isolation; otherwise mark that Default-native portion blocked (daemon/API preserves Default already covered).", "status": "pending", "lastRun": null, "report": null, "summary": null },
+    { "id": "SC6-native", "title": "In owned test terminal/worktree, Cmd-click URL uses configured in-app/system route; Shift-Cmd forces system or inverts configured route when enabled; file Shift-Cmd reveal and ordinary terminal/editor copy remain unaffected, with no unrequested focus steal", "status": "pending", "lastRun": null, "report": null, "summary": null }
+  ]
+}

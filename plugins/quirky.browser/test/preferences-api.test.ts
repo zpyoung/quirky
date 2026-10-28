@@ -24,7 +24,6 @@ function preferenceHarness(options: {
   const settings: Record<string, unknown> = { identityMode: 'clean', openLinksInApp: false, openLinksInAppModifierInverts: false, ...options.settings }
   const adapters: PreferencesAdapters = {
     listProfiles: () => options.profiles ?? [{ id: 'default', label: 'Default', scope: 'default' }, profile],
-    createProfile: (name) => ({ id: 'profile_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', label: name, scope: 'isolated' }),
     listPanes: () => (options.panes ?? []).map((pane) => pane as never),
     listPageProfiles: () => options.pages ?? [],
     setPaneProfile: async (pane, selected) => {

@@ -158,16 +158,18 @@ test('Markdown Preview routes HTTP links with their worktree and selected modifi
 
 })
 
-test('Rich Markdown Editor routes an ordinary HTTP link through Browser', async () => {
+test('Rich Markdown keeps ordinary link clicks in the editor and routes modified navigation through Browser', async () => {
   const surface = await renderSurface('rich', `[Docs](${HTTP_LINK})`)
   const anchor = await link(surface, HTTP_LINK)
-  const event = new MouseEvent('click', { bubbles: true, cancelable: true })
+  await act(async () => void anchor.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })))
+  await flush()
+  expect(browserCalls(surface)).toEqual([])
 
+  const event = new MouseEvent('click', { bubbles: true, cancelable: true, metaKey: true })
   await act(async () => void anchor.dispatchEvent(event))
   await flush()
-
   expect(event.defaultPrevented).toBe(true)
-  expect(browserCalls(surface)).toEqual([{ url: HTTP_LINK, worktree: `id:${WORKTREE}` }])
+  expect(browserCalls(surface)).toEqual([{ url: HTTP_LINK, worktree: `id:${WORKTREE}`, modifier: true }])
 })
 
 test('mail links retain the external opener and document links retain editor navigation', async () => {

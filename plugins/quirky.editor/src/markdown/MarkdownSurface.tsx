@@ -657,8 +657,9 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
             openExternalRef.current(target, event)
             return true
           }
+          if (!event.metaKey && !event.ctrlKey && !event.shiftKey) return false
           const href = event.target.closest('a[href]')?.getAttribute('href')
-          if (!href || (!/^https?:/i.test(href) && !event.metaKey && !event.ctrlKey && !event.shiftKey)) return false
+          if (!href) return false
           event.preventDefault()
           openExternalRef.current(href, event)
           return true
