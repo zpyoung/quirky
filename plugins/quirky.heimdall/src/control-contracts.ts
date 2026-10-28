@@ -8,6 +8,7 @@ export type CommandResult = { kind: 'applied'; appliedAtMs: number } | { kind: '
 export interface WorkerIdentity { dispatchId: string; sessionId?: string; processIncarnation?: string; pid?: number; startTime?: string; terminalHandle?: string }
 export interface WatcherWorker { identity: WorkerIdentity; state: 'live' | 'exited' | 'unverifiable'; title?: string; lastContactAtMs?: number; question?: { messageId: string; body: string; answered?: boolean }; [key: string]: unknown }
 export interface OpenEscalation { escalationId: string; escalationKind: string; status: string; foldCount: number; reason?: string; detail?: string; approvalScope?: ApprovalScope; [key: string]: unknown }
+export interface FleetAction { watcherId: string; watcherName: string; attemptId: string; atMs: number; actionKind: string; state: 'attempted' | 'running' | 'settled'; effect?: 'landed' | 'not-landed' | 'indeterminate'; reason?: string }
 export type WatcherCommand =
   | { kind: 'pause' | 'resume' | 'disarm' | 'delete' }
   | { kind: 'approve'; escalationId: string; scope: ApprovalScope }
@@ -24,7 +25,7 @@ export interface FleetRow {
   budget: Inspection['budget']; runningWorkers: number; maxConcurrency: number | null
   openEscalations: OpenEscalation[]; pendingQuestion: boolean
 }
-export interface FleetSnapshot { generatedAtMs: number; rows: FleetRow[]; buckets: { needsYou: number; lostContact: number; active: number; inactive: number }; activeCount: number; attentionCount: number }
+export interface FleetSnapshot { generatedAtMs: number; rows: FleetRow[]; actionHistory: FleetAction[]; buckets: { needsYou: number; lostContact: number; active: number; inactive: number }; activeCount: number; attentionCount: number }
 export interface WatcherDetail extends Inspection { target: WatcherTarget; ownerFence: OwnerFence; ownerContact: 'live' | 'unverifiable'; observedAtMs: number; name: string; workers: WatcherWorker[]; openEscalations: OpenEscalation[]; pendingControls: string[] }
 export interface DebugReport { schemaVersion: 2; generatedAtMs: number; enrollment: Enrollment; status: RunnerStatus | null; budget: Inspection['budget']; openInterval: JournalEntry | null; ledger: JournalEntry[]; traces: TickTrace[]; pendingControls: string[]; malformed: string | null; workers: WatcherWorker[]; runner: RunnerStatus | null; pointers: { database: string; workspace: string; leaseHolder: string | null } }
 /** Kernel-owned barrier: fence new actions BEFORE waiting for the current tick; release in finally. */
