@@ -1,4 +1,7 @@
 import type { Handler, HostingEnv, Identity, Scope } from './env'
+import type { GitHubWorktreeSource } from '@quirky/protocol'
+import { parseBranch, parseOid } from './pr-data'
+import { normalizeRestPull } from './pr-review'
 import {
   array,
   configuredRepositories,
@@ -15,6 +18,7 @@ import {
   requiredList,
   safeErrorReason,
   scopeForRepository,
+  sameIdentity,
   pullRequestRepositories,
   string,
   type WorkItemKind,
@@ -47,6 +51,8 @@ const ITEM_DETAILS_QUERY = `query WorkItemDetails($owner: String!, $repo: String
 }`
 
 type ItemCaller = Parameters<Handler>[1]
+
+type SourceLookupState = { visibleRepositories: Set<string> }
 
 type ParsedReference = { number: number; kind: WorkItemKind | null; identity: Identity }
 
@@ -106,22 +112,28 @@ function isNotFound(error: unknown): boolean {
   return safeErrorReason(error) === 'not_found'
 }
 
-async function readIssue(env: HostingEnv, scope: Scope, identity: Identity, number: number): Promise<unknown | null> {
+async function readIssue(env: HostingEnv, scope: Scope, identity: Identity, number: number, sourceLookup?: SourceLookupState): Promise<unknown | null> {
+  const endpoint = `repos/${identity.owner}/${identity.repo}/issues/${number}`
   try {
-    return await env.rest(scopeForRepository(scope, identity), `repos/${identity.owner}/${identity.repo}/issues/${number}`, 'GET', undefined, { idempotent: true })
+    return sourceLookup
+      ? await sourceRest(env, scope, identity, endpoint, sourceLookup)
+      : await env.rest(scopeForRepository(scope, identity), endpoint, 'GET', undefined, { idempotent: true })
   } catch (error: unknown) {
     if (isNotFound(error)) return null
     throw error
   }
 }
 
-async function readPullRequest(env: HostingEnv, scope: Scope, identity: Identity, number: number): Promise<unknown | null> {
+async function readPullRequest(env: HostingEnv, scope: Scope, identity: Identity, number: number, sourceLookup?: SourceLookupState): Promise<unknown | null> {
   const selected = scopeForRepository(scope, identity)
   try {
     return await env.json(selected, ['pr', 'view', String(number), '--repo', `${identity.owner}/${identity.repo}`, '--json', PR_DETAIL_FIELDS], { idempotent: true })
   } catch (viewError: unknown) {
     try {
-      return await env.rest(selected, `repos/${identity.owner}/${identity.repo}/pulls/${number}`, 'GET', undefined, { idempotent: true })
+      const endpoint = `repos/${identity.owner}/${identity.repo}/pulls/${number}`
+      return sourceLookup
+        ? await sourceRest(env, scope, identity, endpoint, sourceLookup)
+        : await env.rest(selected, endpoint, 'GET', undefined, { idempotent: true })
     } catch (restError: unknown) {
       if (isNotFound(restError) && isNotFound(viewError)) return null
       if (isNotFound(restError)) throw viewError
@@ -135,29 +147,31 @@ async function resolveWorkItem(
   scope: Scope,
   number: number,
   kind: WorkItemKind | undefined,
-  selectedIdentity: Identity | undefined
-): Promise<{ item: WorkItemRecord; identity: Identity } | null> {
+  selectedIdentity: Identity | undefined,
+  includeRaw = false,
+  sourceLookup?: SourceLookupState
+): Promise<{ item: WorkItemRecord; identity: Identity; raw?: unknown } | null> {
   const identities = selectedIdentity ? [selectedIdentity] : workItemRepositoryOrder(scope, kind)
   const preferredPullRepository = selectedIdentity ?? pullRequestRepositories(scope)[0]
   let latestError: unknown
   for (const identity of identities) {
     if (kind !== 'pullRequest') {
       try {
-        const issue = await readIssue(env, scope, identity, number)
+        const issue = await readIssue(env, scope, identity, number, sourceLookup)
         if (issue !== null) {
           const raw = record(issue)
           const resultKind: WorkItemKind = raw && isRecord(raw.pull_request) ? 'pullRequest' : 'issue'
           if (resultKind === 'pullRequest') {
-            const hydrated = await readPullRequest(env, scope, identity, number)
+            const hydrated = await readPullRequest(env, scope, identity, number, sourceLookup)
             const mapped = mapWorkItem(hydrated ?? issue, { identity, kind: 'pullRequest' })
             if (mapped) {
               if (hydrated === null) mapped.partial = true
-              return { item: mapped, identity }
+              return { item: mapped, identity, ...(includeRaw ? { raw: hydrated ?? issue } : {}) }
             }
             throw env.invalid('unknown', 'GitHub returned an invalid pull request.')
           }
           const mapped = mapWorkItem(issue, { identity, kind: 'issue' })
-          if (mapped) return { item: mapped, identity }
+          if (mapped) return { item: mapped, identity, ...(includeRaw ? { raw: issue } : {}) }
         }
       } catch (error: unknown) {
         latestError = error
@@ -166,9 +180,9 @@ async function resolveWorkItem(
     }
     if (kind !== 'issue' && (kind === 'pullRequest' || (preferredPullRepository !== undefined && identityKey(identity) === identityKey(preferredPullRepository)))) {
       try {
-        const pull = await readPullRequest(env, scope, identity, number)
+        const pull = await readPullRequest(env, scope, identity, number, sourceLookup)
         const mapped = pull === null ? null : mapWorkItem(pull, { identity, kind: 'pullRequest' })
-        if (mapped) return { item: mapped, identity }
+        if (mapped) return { item: mapped, identity, ...(includeRaw ? { raw: pull } : {}) }
       } catch (error: unknown) {
         latestError = error
         if (!isNotFound(error)) throw error
@@ -506,9 +520,302 @@ async function workItemDetails(env: HostingEnv, params: Record<string, unknown>,
   })
 }
 
+type SourceReference = { number: number; kind?: WorkItemKind; identity?: Identity }
+
+function sourceReference(env: HostingEnv, scope: Scope, value: unknown): SourceReference {
+  if (typeof value !== 'string' || value.length === 0 || utf8Length(value) > 2048) {
+    throw env.invalid('validation_error', 'reference must be #number or a configured GitHub work-item URL no longer than 2048 bytes.')
+  }
+  const numberMatch = /^#([1-9][0-9]*)$/.exec(value)
+  if (numberMatch) {
+    const number = positiveInteger(Number(numberMatch[1]))
+    if (number === null) throw env.invalid('validation_error', 'reference must contain a positive safe issue or pull request number.')
+    return { number }
+  }
+  const parsed = parseReference(env, scope, value)
+  if (!parsed || parsed.kind === null) throw env.invalid('validation_error', 'reference must be #number or a configured GitHub work-item URL.')
+  return { number: parsed.number, kind: parsed.kind, identity: parsed.identity }
+}
+
+function safeRepositoryPart(value: unknown): value is string {
+  return typeof value === 'string' &&
+    value.length > 0 && value.length <= 100 &&
+    /^[A-Za-z0-9_.-]+$/.test(value) &&
+    value !== '.' && value !== '..'
+}
+
+function safeSourceIdentity(identity: Identity): boolean {
+  return /^[A-Za-z0-9.-]+(?::[0-9]{1,5})?$/.test(identity.host) &&
+    safeRepositoryPart(identity.owner) &&
+    safeRepositoryPart(identity.repo)
+}
+
+function sourceItemUrl(identity: Identity, kind: WorkItemKind, number: number): string {
+  return `https://${identity.host}/${identity.owner}/${identity.repo}/${kind === 'issue' ? 'issues' : 'pull'}/${number}`
+}
+
+function httpsUrlMatches(value: unknown, identity: Identity, suffix: string): boolean {
+  if (typeof value !== 'string') return false
+  try {
+    const parsed = new URL(value)
+    const expectedPath = `/${identity.owner}/${identity.repo}${suffix}`
+    const actualPath = suffix.length === 0 ? parsed.pathname.replace(/\/$/, '') : parsed.pathname
+    return parsed.protocol === 'https:' &&
+      parsed.username.length === 0 &&
+      parsed.password.length === 0 &&
+      parsed.search.length === 0 &&
+      parsed.hash.length === 0 &&
+      parsed.host.toLowerCase() === identity.host.toLowerCase() &&
+      actualPath.toLowerCase() === expectedPath.toLowerCase()
+  } catch {
+    return false
+  }
+}
+
+function visibleSourceRepository(value: unknown, identity: Identity): boolean {
+  const repository = record(value)
+  const owner = record(repository?.owner)
+  if (!repository || !owner || !safeRepositoryPart(owner.login) || !safeRepositoryPart(repository.name)) return false
+  const reportedIdentity = { host: identity.host, owner: owner.login, repo: repository.name }
+  return safeSourceIdentity(reportedIdentity) &&
+    sameIdentity(reportedIdentity, identity) &&
+    httpsUrlMatches(repository.html_url, identity, '')
+}
+
+async function sourceRest(
+  env: HostingEnv,
+  scope: Scope,
+  identity: Identity,
+  endpoint: string,
+  sourceLookup: SourceLookupState
+): Promise<unknown> {
+  const selected = scopeForRepository(scope, identity)
+  try {
+    return await env.rest(selected, endpoint, 'GET', undefined, { idempotent: true })
+  } catch (itemError: unknown) {
+    const itemReason = safeErrorReason(itemError)
+    if (itemReason !== 'repository_unavailable' && itemReason !== 'not_found') throw itemError
+
+    const key = identityKey(identity)
+    if (sourceLookup.visibleRepositories.has(key)) {
+      throw env.invalid('not_found', 'The GitHub work item was not found in the configured repository.')
+    }
+    const repository = await env.rest(
+      selected,
+      `repos/${identity.owner}/${identity.repo}`,
+      'GET',
+      undefined,
+      { idempotent: true }
+    )
+    if (visibleSourceRepository(repository, identity)) {
+      sourceLookup.visibleRepositories.add(key)
+      throw env.invalid('not_found', 'The GitHub work item was not found in the configured repository.')
+    }
+    if (itemReason === 'repository_unavailable') throw itemError
+    throw env.invalid('repository_unavailable', 'The configured GitHub repository is unavailable or inaccessible.')
+  }
+}
+
+type SourceRepository = { identity: Identity; sshUrl: string }
+
+function validatedSshCloneUrl(value: unknown, identity: Identity): string | null {
+  if (typeof value !== 'string') return null
+  const expectedHostname = identity.host.replace(/:\d+$/, '').toLowerCase()
+  const scp = /^git@([^/:]+):([^/]+)\/([^/]+)\.git$/i.exec(value)
+  if (scp) {
+    return scp[1]?.toLowerCase() === expectedHostname &&
+      scp[2]?.toLowerCase() === identity.owner.toLowerCase() &&
+      scp[3]?.toLowerCase() === identity.repo.toLowerCase()
+      ? value
+      : null
+  }
+  try {
+    const parsed = new URL(value)
+    return parsed.protocol === 'ssh:' &&
+      parsed.username === 'git' &&
+      parsed.password.length === 0 &&
+      parsed.search.length === 0 &&
+      parsed.hash.length === 0 &&
+      parsed.hostname.toLowerCase() === expectedHostname &&
+      parsed.pathname.toLowerCase() === `/${identity.owner}/${identity.repo}.git`.toLowerCase()
+      ? value
+      : null
+  } catch {
+    return null
+  }
+}
+
+function sourceRepository(value: unknown, host: string): SourceRepository | null {
+  const repository = record(value)
+  const owner = record(repository?.owner)
+  if (!repository || !owner || !safeRepositoryPart(owner.login) || !safeRepositoryPart(repository.name)) return null
+  const identity = { host, owner: owner.login, repo: repository.name }
+  if (!safeSourceIdentity(identity) || !httpsUrlMatches(repository.html_url, identity, '')) return null
+  if (Object.hasOwn(repository, 'clone_url') && !httpsUrlMatches(repository.clone_url, identity, '.git')) return null
+  const sshUrl = Object.hasOwn(repository, 'ssh_url')
+    ? validatedSshCloneUrl(repository.ssh_url, identity)
+    : canonicalSshCloneUrl(identity)
+  if (!sshUrl) return null
+  return { identity, sshUrl }
+}
+
+function sourceSchemaError(env: HostingEnv): never {
+  throw env.invalid('upstream_unavailable', 'GitHub returned incomplete or mismatched worktree source details.')
+}
+
+function issueSource(
+  env: HostingEnv,
+  rawValue: unknown,
+  identity: Identity,
+  number: number
+): GitHubWorktreeSource {
+  const raw = record(rawValue)
+  if (!raw ||
+    positiveInteger(raw.number) !== number ||
+    typeof raw.title !== 'string' ||
+    raw.title.trim().length === 0 ||
+    isRecord(raw.pull_request) ||
+    raw.__typename === 'PullRequest' ||
+    !safeSourceIdentity(identity) ||
+    !httpsUrlMatches(raw.html_url, identity, `/issues/${number}`)) {
+    return sourceSchemaError(env)
+  }
+  return {
+    item: {
+      provider: 'github',
+      kind: 'issue',
+      number,
+      title: raw.title,
+      url: sourceItemUrl(identity, 'issue', number),
+      repository: identity
+    },
+    head: null,
+    base: null
+  }
+}
+
+async function validatedPullRef(
+  env: HostingEnv,
+  scope: Scope,
+  rawValue: unknown,
+  normalizedValue: unknown
+): Promise<string | null> {
+  if (typeof rawValue !== 'string' ||
+    typeof normalizedValue !== 'string' ||
+    rawValue !== normalizedValue ||
+    parseBranch(rawValue) !== rawValue) return null
+  try {
+    await env.git(scope, ['check-ref-format', `refs/heads/${rawValue}`])
+    return rawValue
+  } catch {
+    return null
+  }
+}
+
+function canonicalSshCloneUrl(identity: Identity): string {
+  return `git@${identity.host.replace(/:\d+$/, '')}:${identity.owner}/${identity.repo}.git`
+}
+
+async function pullRequestSource(
+  env: HostingEnv,
+  scope: Scope,
+  identity: Identity,
+  number: number,
+  sourceLookup: SourceLookupState
+): Promise<GitHubWorktreeSource> {
+  const response = await sourceRest(env, scope, identity, `repos/${identity.owner}/${identity.repo}/pulls/${number}`, sourceLookup)
+  const raw = record(response)
+  const normalized = raw ? normalizeRestPull(raw) : undefined
+  const head = record(raw?.head)
+  const base = record(raw?.base)
+  const headRepository = sourceRepository(head?.repo, identity.host)
+  const baseRepository = sourceRepository(base?.repo, identity.host)
+  const headRefName = await validatedPullRef(env, scope, head?.ref, normalized?.headRefName)
+  const baseRefName = await validatedPullRef(env, scope, base?.ref, normalized?.baseRefName)
+  const headOid = parseOid(head?.sha)
+  const baseOid = parseOid(base?.sha)
+  if (!raw ||
+    !normalized ||
+    positiveInteger(raw.number) !== number ||
+    typeof raw.title !== 'string' ||
+    raw.title.trim().length === 0 ||
+    !httpsUrlMatches(raw.html_url, identity, `/pull/${number}`) ||
+    !safeSourceIdentity(identity) ||
+    !headRepository ||
+    !baseRepository ||
+    !sameIdentity(baseRepository.identity, identity) ||
+    !headRefName ||
+    !baseRefName ||
+    !headOid ||
+    !baseOid ||
+    normalized.headRefOid !== headOid ||
+    normalized.baseRefOid !== baseOid ||
+    typeof raw.maintainer_can_modify !== 'boolean') {
+    return sourceSchemaError(env)
+  }
+  return {
+    item: {
+      provider: 'github',
+      kind: 'pullRequest',
+      number,
+      title: raw.title,
+      url: sourceItemUrl(identity, 'pullRequest', number),
+      repository: identity
+    },
+    head: {
+      repository: headRepository.identity,
+      refName: headRefName,
+      oid: headOid,
+      sshUrl: headRepository.sshUrl,
+      httpsUrl: `https://${headRepository.identity.host}/${headRepository.identity.owner}/${headRepository.identity.repo}.git`,
+      maintainerCanModify: raw.maintainer_can_modify
+    },
+    base: {
+      repository: baseRepository.identity,
+      refName: baseRefName,
+      oid: baseOid
+    }
+  }
+}
+
+async function worktreeSource(
+  env: HostingEnv,
+  params: Record<string, unknown>,
+  caller: ItemCaller
+): Promise<GitHubWorktreeSource> {
+  const scope = await env.resolve(params, caller)
+  const reference = sourceReference(env, scope, params.reference)
+  const sourceLookup: SourceLookupState = { visibleRepositories: new Set() }
+  if (reference.identity && reference.kind === 'issue') {
+    const raw = await sourceRest(
+      env,
+      scope,
+      reference.identity,
+      `repos/${reference.identity.owner}/${reference.identity.repo}/issues/${reference.number}`,
+      sourceLookup
+    )
+    const result = issueSource(env, raw, reference.identity, reference.number)
+    ensureOutputBound(env, result, 'Worktree source')
+    return result
+  }
+  if (reference.identity && reference.kind === 'pullRequest') {
+    const result = await pullRequestSource(env, scope, reference.identity, reference.number, sourceLookup)
+    ensureOutputBound(env, result, 'Worktree source')
+    return result
+  }
+  const resolved = await resolveWorkItem(env, scope, reference.number, undefined, undefined, true, sourceLookup)
+  if (!resolved) throw env.invalid('not_found', 'The GitHub work item was not found in the configured repositories.')
+  const result = resolved.item.kind === 'pullRequest'
+    ? await pullRequestSource(env, scope, resolved.identity, reference.number, sourceLookup)
+    : issueSource(env, resolved.raw, resolved.identity, reference.number)
+  ensureOutputBound(env, result, 'Worktree source')
+  return result
+}
+
 export function itemDetailMethods(env: HostingEnv): Record<string, Handler> {
   return {
     workItem: (params, caller) => workItem(env, params, caller),
-    workItemDetails: (params, caller) => workItemDetails(env, params, caller)
+    workItemDetails: (params, caller) => workItemDetails(env, params, caller),
+    worktreeSource: (params, caller) => worktreeSource(env, params, caller)
   }
 }

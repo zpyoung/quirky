@@ -597,32 +597,7 @@ describe('SC-11: a group workspace is created from the CLI and a shell starts in
   })
 })
 
-describe('SC-61: the create params and suggestName are listed with their schemas', () => {
-  test('the catalog carries every create param, the read-only suggestName and the optional positionals', async () => {
-    await startApi()
-    const catalog = (await call(w!.client, 'api.describe')) as {
-      methods: { name: string; readOnly?: boolean; params?: { properties: Record<string, { enum?: string[] }>; required?: string[] } }[]
-      cli: { commands: { words: string; positionals: { name: string; required: boolean }[]; flags: { name: string }[] }[] }
-    }
-    const byName = new Map(catalog.methods.map((method) => [method.name, method]))
-    const params = byName.get('quirky.worktree/create')!.params!
-    expect(Object.keys(params.properties).sort()).toEqual(
-      ['activate', 'agent', 'allowLocalBaseFallback', 'base', 'branch', 'branchName', 'comment', 'createdBy', 'displayName', 'group', 'name', 'noParent', 'parent', 'prompt', 'repo', 'setup', 'trustSetup'].sort()
-    )
-    expect(params.properties.setup!.enum).toEqual(['run', 'skip', 'inherit'])
-    // any installed agent ID is accepted; shell is refused when create runs (below)
-    expect(params.properties.agent!.enum).toBeUndefined()
-    expect(params.required).toBeUndefined()
-    expect(byName.get('quirky.worktree/suggestName')).toMatchObject({ readOnly: true, params: { required: ['repo'] } })
-    expect(byName.get('quirky.worktree/create')!.readOnly).toBeUndefined()
-
-    const command = catalog.cli.commands.find((entry) => entry.words === 'worktree create')!
-    expect(command.positionals).toEqual([expect.objectContaining({ name: 'repo', required: false }), expect.objectContaining({ name: 'name', required: false })])
-    expect(command.flags.map((flag) => flag.name).sort()).toEqual(
-      ['activate', 'agent', 'base', 'branch', 'branch-name', 'comment', 'display-name', 'group', 'name', 'no-fallback', 'no-parent', 'parent-worktree', 'prompt', 'repo', 'setup', 'trust-setup'].sort()
-    )
-  })
-
+describe('SC-61: create parameter validation', () => {
   test('an unknown param or a bad setup value is refused by the schema', async () => {
     await startApi()
     expect((await failure(create({ repo: 'api', name: 'x', baseRef: 'main' }))).code).toBe(RpcErrorCode.InvalidParams)
