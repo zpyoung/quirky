@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { MobileTestClient } from './support/client'
 import { builtinsDir, makeTempHome, startHarness, waitFor, waitForAsync, type Harness } from '../../../packages/daemon/test/helpers'
 import { runCli } from '../../../packages/cli/test/fixtures/fake-daemon'
+import { RpcErrorCode } from '@quirky/protocol'
 
 let harness: Harness | undefined
 let mobile: MobileTestClient | undefined
@@ -171,6 +172,24 @@ describe('mobile daemon integration', () => {
     await mobile.call('quirky.terminal/claim', { session: session.id, cols: 70, rows: 20 })
     const mobileTerminals = await mobile.call('quirky.terminal/mobileState', { session: session.id }) as { terminals: { session: string }[] }
     expect(mobileTerminals.terminals.map(({ session: terminal }) => terminal)).toContain(session.id)
+    const secondSocket = MobileTestClient.connect(offer.endpoint, offer.publicKeyB64, offer.deviceToken)
+    try {
+      await secondSocket.authenticated
+      await secondSocket.call('quirky.terminal/attach', { session: session.id, cols: 70, rows: 20 })
+      const ownerState = await mobile.call('quirky.terminal/mobileState', { session: session.id }) as { terminals: { controlledByCaller: boolean }[] }
+      const secondState = await secondSocket.call('quirky.terminal/mobileState', { session: session.id }) as { terminals: { controlledByCaller: boolean }[] }
+      expect(ownerState.terminals[0]?.controlledByCaller).toBe(true)
+      expect(secondState.terminals[0]?.controlledByCaller).toBe(false)
+      await mobile.call('quirky.terminal/write', { session: session.id, data: 'owner socket input' })
+      await expect(secondSocket.call('quirky.terminal/write', { session: session.id, data: 'same-token second socket input' }))
+        .rejects.toMatchObject({ code: RpcErrorCode.Conflict })
+      await expect(secondSocket.call('quirky.terminal/clear', { session: session.id }))
+        .rejects.toMatchObject({ code: RpcErrorCode.Conflict })
+      await expect(secondSocket.call('quirky.terminal/displayMode', { session: session.id, mode: 'desktop' }))
+        .rejects.toMatchObject({ code: RpcErrorCode.Conflict })
+    } finally {
+      await secondSocket.close()
+    }
     const marker = 'mobile-encrypted-terminal-output'
     harness.pty.emit(session.id, marker)
     await waitFor(() => mobile!.binaryFrames.some((frame) => Buffer.from(frame).includes(Buffer.from(marker))), 5000)

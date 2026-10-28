@@ -3,9 +3,9 @@ import { assertMobileCallAllowed } from '../src/daemon/authorization'
 
 describe('mobile RPC authorization', () => {
   test('rejects caller-supplied executable and launch configuration on session creation', () => {
-    expect(() => assertMobileCallAllowed('quirky.session/create', { worktree: 'floating', agent: 'shell', prompt: 'check status' })).not.toThrow()
-    for (const key of ['command', 'cwd', 'extraArgs', 'model', 'options']) {
-      expect(() => assertMobileCallAllowed('quirky.session/create', { agent: 'shell', [key]: 'unrestricted' })).toThrow()
+    expect(() => assertMobileCallAllowed('quirky.session/create', { worktree: 'floating', agent: 'shell', cols: 80, rows: 24 })).not.toThrow()
+    for (const key of ['command', 'cwd', 'extraArgs', 'model', 'options', 'prompt']) {
+      expect(() => assertMobileCallAllowed('quirky.session/create', { worktree: 'floating', agent: 'shell', [key]: 'unrestricted' })).toThrow()
     }
   })
 
@@ -28,10 +28,37 @@ describe('mobile RPC authorization', () => {
     expect(() => assertMobileCallAllowed('quirky.terminal/claim', { session: 's', cols: 1001, rows: 25 })).toThrow()
   })
 
-  test('admits only safe bounded ask answers and read-only files methods', () => {
+  test('bounds ask answers and contained file access', () => {
     expect(() => assertMobileCallAllowed('quirky.ask/answer', { askId: 'ask-1', answers: { question: 'yes' } })).not.toThrow()
     expect(() => assertMobileCallAllowed('quirky.ask/answer', { askId: 'ask-1', answers: {}, token: 'secret' })).toThrow()
-    expect(() => assertMobileCallAllowed('quirky.hosting/fileContents', { number: 2, path: '../secrets' })).toThrow()
-    expect(() => assertMobileCallAllowed('quirky.git/status', { worktree: 'current' })).not.toThrow()
+    expect(() => assertMobileCallAllowed('quirky.files/read', { path: '/etc/passwd' })).toThrow()
+    expect(() => assertMobileCallAllowed('quirky.editor/open', { worktree: 'wt', path: '../secret' })).toThrow()
+  })
+
+  test('admits only bounded page bundles, safe agent catalog, phone preferences, and shipped workspace consumers', () => {
+    expect(() => assertMobileCallAllowed('quirky.mobile/agentCatalog', {})).not.toThrow()
+    expect(() => assertMobileCallAllowed('quirky.mobile/agentCatalog', { rawAgents: true })).toThrow()
+    expect(() => assertMobileCallAllowed('quirky.mobile/bundleManifest', {})).not.toThrow()
+    expect(() => assertMobileCallAllowed('quirky.mobile/bundleChunk', { buildId: 'a'.repeat(64), path: 'index.html', offset: 0 })).not.toThrow()
+    expect(() => assertMobileCallAllowed('quirky.mobile/bundleChunk', { buildId: 'a'.repeat(64), path: '../secret', offset: 0 })).toThrow()
+    expect(() => assertMobileCallAllowed('quirky.mobile/bundleRange', { buildId: 'a'.repeat(64), path: 'index.html', offset: 0, gzip: true })).not.toThrow()
+    expect(() => assertMobileCallAllowed('quirky.mobile/preferences', {})).not.toThrow()
+    expect(() => assertMobileCallAllowed('quirky.mobile/updatePreferences', { autoRestoreFitMs: null })).not.toThrow()
+    expect(() => assertMobileCallAllowed('quirky.mobile/updatePreferences', { autoRestoreFitMs: 60_000, machineName: 'admin' })).toThrow()
+    expect(() => assertMobileCallAllowed('quirky.worktree/remove', { worktree: 'worktree-1' })).toThrow(/confirmation/i)
+    expect(() => assertMobileCallAllowed('quirky.worktree/remove', { worktree: 'worktree-1', yes: true })).not.toThrow()
+    expect(() => assertMobileCallAllowed('quirky.worktree/remove', { worktree: 'worktree-1', yes: 'yes' })).toThrow()
+    expect(() => assertMobileCallAllowed('quirky.worktree/remove', { worktree: 'worktree-1', force: true })).toThrow()
+    expect(() => assertMobileCallAllowed('quirky.terminal/clear', { session: 'session-1' })).not.toThrow()
+    expect(() => assertMobileCallAllowed('quirky.terminal/displayMode', { session: 'session-1', mode: 'phone', cols: 80, rows: 24 })).not.toThrow()
+    expect(() => assertMobileCallAllowed('quirky.terminal/displayMode', { session: 'session-1', mode: 'desktop' })).not.toThrow()
+    expect(() => assertMobileCallAllowed('quirky.terminal/displayMode', { session: 'session-1', mode: 'phone' })).toThrow()
+    expect(() => assertMobileCallAllowed('quirky.terminal/displayMode', { session: 'session-1', mode: 'desktop', cols: 80, rows: 24 })).toThrow()
+    expect(() => assertMobileCallAllowed('quirky.mobile/bundleChunk', { buildId: 'a'.repeat(64), path: 'index.html', offset: -1 })).toThrow()
+    expect(() => assertMobileCallAllowed('quirky.worktree/create', { repo: 'repo', name: 'name', trustSetup: true })).toThrow()
+    expect(() => assertMobileCallAllowed('quirky.worktree/create', { repo: 'repo', name: 'name', branchName: 'phone/name', base: 'main' })).not.toThrow()
+    expect(() => assertMobileCallAllowed('quirky.worktree/set', { worktree: 'worktree-1', pinned: true, expectedInstanceId: 'instance-1' })).not.toThrow()
+    expect(() => assertMobileCallAllowed('quirky.worktree/set', { worktree: 'worktree-1', status: 'done' })).toThrow()
+    expect(() => assertMobileCallAllowed('quirky.ask/list', { pendingOnly: false })).not.toThrow()
   })
 })

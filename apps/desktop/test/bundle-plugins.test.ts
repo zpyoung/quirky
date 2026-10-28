@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, sym
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { bundlePlugins } from '../scripts/bundle-plugins'
+import { bundleMobilePlugins } from '../scripts/bundle-mobile'
 
 let work: string
 let src: string
@@ -283,4 +284,37 @@ describe('bundlePlugins', () => {
 
     await expect(bundlePlugins(src, out)).rejects.toThrow(/quirky\.demo.*collid/i)
   })
+  test('copies the generated mobile page bundle into the packaged quirky.mobile plugin', async () => {
+    const mobile = writePlugin('quirky.mobile', {
+      main: 'main.ts',
+      staticAssets: ['assets/mobile']
+    }, {
+      'main.ts': 'export const active = true\n',
+      'assets/mobile/manifest.json': '{\"v\":1,\"shellVersion\":1}\n',
+      'assets/mobile/index.html': '<!doctype html><script src=\"/page.js\"></script>',
+      'assets/mobile/page.js': 'document.body.dataset.bundle = \"ready\"'
+    })
+    expect(existsSync(join(mobile, 'assets', 'mobile', 'page.js'))).toBe(true)
+
+    await bundlePlugins(src, out)
+
+    const packaged = join(out, 'quirky.mobile', 'assets', 'mobile')
+    expect(readFileSync(join(packaged, 'manifest.json'), 'utf8')).toBe('{\"v\":1,\"shellVersion\":1}\n')
+    expect(readFileSync(join(packaged, 'page.js'), 'utf8')).toContain('dataset.bundle')
+  })
+})
+
+test('desktop mobile packaging builds a fresh page bundle before copying plugin assets', async () => {
+  const mobile = writePlugin('quirky.mobile', { main: 'main.ts', staticAssets: ['assets/mobile'] }, {
+    'main.ts': 'export const active = true\n'
+  })
+  write(join(work, 'apps', 'mobile', 'web-entry', 'main.tsx'), 'document.body.dataset.bundle = \"fresh\"')
+  const bundled = await bundleMobilePlugins(work, out)
+  expect(bundled).toContain('quirky.mobile')
+
+  const sourceManifest = JSON.parse(readFileSync(join(mobile, 'assets', 'mobile', 'manifest.json'), 'utf8'))
+  const packaged = join(out, 'quirky.mobile', 'assets', 'mobile')
+  expect(readFileSync(join(packaged, 'manifest.json'), 'utf8')).toBe(readFileSync(join(mobile, 'assets', 'mobile', 'manifest.json'), 'utf8'))
+  expect(sourceManifest.assets.map((asset: { path: string }) => asset.path)).toEqual(expect.arrayContaining(['index.html', 'page.js']))
+  expect(readFileSync(join(packaged, 'page.js'), 'utf8')).toContain('fresh')
 })

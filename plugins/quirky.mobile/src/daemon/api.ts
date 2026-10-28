@@ -52,6 +52,14 @@ export function configureInput(value: unknown): MobileConfigureInput {
   return result
 }
 
+export function updatePreferencesInput(value: unknown): Pick<MobileSettings, 'autoRestoreFitMs'> {
+  if (!isObject(value) || Object.keys(value).length !== 1 || !Object.hasOwn(value, 'autoRestoreFitMs')) throw new Error('phone preference params must contain only autoRestoreFitMs')
+  const duration = value.autoRestoreFitMs
+  if (duration === null) return { autoRestoreFitMs: null }
+  if (typeof duration !== 'number' || !Number.isFinite(duration)) throw new Error('autoRestoreFitMs must be a finite number or null')
+  return { autoRestoreFitMs: Math.max(5000, Math.min(3_600_000, Math.floor(duration))) }
+}
+
 export function pairInput(value: unknown): MobilePairInput {
   if (!isObject(value)) throw new Error('pair params must be an object')
   if (Object.keys(value).some((key) => key !== 'address' && key !== 'rotate')) throw new Error('pair contains an unsupported field')
