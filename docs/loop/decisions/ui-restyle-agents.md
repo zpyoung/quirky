@@ -154,6 +154,17 @@
 - **Revisit if:** Canonical retry names another concrete integration failure.
 - **Source:** locked by docs/loop/LOOP.md failed-land recovery procedure
 
+## D15: Finish recovery with a composed gate and narrow current shared-dialog proof
+- **Question:** Does the required recovery retain typing and existing shared-control interactions?
+- **Options:** Reuse only pre-recovery receipts; run a fresh compiler/build and owned two-path smoke.
+- **Chose:** Recovery mergeff1d8c73 passed complete typecheck/UIlint13plugins/root/mobile/prepared-desktop and renderer build in35.85s combined,11host/vendor files25plugin modules. Fresh owned daemon60886 and testing ChromiumCDP60918 showed canonical Blank Terminal selected after acknowledgement, Auto restored, and the genuine session fallback menu opening a shared Gemini prompt, preserving the typed draft and closing on Escape with0dialogs. No provider launched; browser errors[].
+- **Why:** This exercises the incoming shared Dialog/default composition. Disabling terminal to select the fallback also removes quirky.terminal/attach, so its visible Could not attach error is an explicit fixture limit, not a claim of working fallback PTY attachment. Earlier source smoke remains separately scoped; no full acceptance, suite or golden-score claim.
+- **Evidence:** recovery-agents-dark.png, recovery-session-dark.png and actual inspected prompt capture; bg6 output; observed settled aria-pressed:true/draft/closed dialog values; exact private browser/daemon service receipts.
+- **Reversibility:** easy
+- **Confidence:** high for named recovered-source interactions only
+- **Revisit if:** Canonical retry fails a concrete gate.
+- **Source:** assumed — autonomous
+
 ## Progress
 
-Ready for canonical land. Current source and all four plugin migrations complete; sole catch-up retained incoming shared-system contracts and eight-plugin lint enforcement. Final caught-up typecheck/build and isolated current-source proof passed within D12 limits; suites/review/full dogfood/golden scoring remain unrun under build-first. Every worker returned and component worktrees removed. All owned browser handles released; both exclusively owned browser services stopped. Scoped daemon/PTY cleanup printed AGENTS25_CLEANED; its lingering readline process was then explicitly stopped through the service owner. No product flow deferred or review-only follow-up added. Next: commit receipts, detach and canonical queue land; after success remove owned scratch/helper files and end exactly this item.
+Ready to retry canonical land. First controller conflict resolved through the required recovery mergeff1d8c73; all incoming Ledger/orchestration/Accounts logs read and13plugin lint IDs preserved. Complete recovered typecheck/build and fresh owned minimal shared-control/dialog proof passed within D15 limits. No further structured-surface edits. All workers returned and component worktrees removed; initial/final/recovery browser handles released and exact private browser services stopped. Initial scoped daemon/PTY cleanup confirmed; await recovery scope cleanup before commit/detach/retry. Suites/formal review/full dogfood/golden/native acceptance remain unrun under explicit build-first. No product flow deferred or duplicate verification item added.
