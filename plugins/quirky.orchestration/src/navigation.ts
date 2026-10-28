@@ -1,16 +1,30 @@
 import type { MethodHandler, PluginContext } from '@quirky/protocol'
 import type { DispatchId, TaskId } from './contracts'
-import type { OrchestrationCore } from './core'
+import type { OrchestrationWorkerCore } from './worker-integration'
 import { fail } from './errors'
 import { targetIdentity } from './identity'
 import { createWorkerStore } from './workers/store'
 
+type AssignmentRecord = {
+  assignee_session_id: string | null
+  runtime_epoch: string | null
+  process_incarnation: string | null
+  supervised: number
+}
+
 /** Read-only current terminal target, shared by links, rows and operator CLI navigation. */
-export function createTaskNavigation(context: PluginContext, core: OrchestrationCore): MethodHandler {
+export function createTaskNavigation(context: PluginContext, core: Pick<OrchestrationWorkerCore, 'store' | 'getTask'>): MethodHandler {
   const workers = createWorkerStore(core.store)
   const latest = (taskId: TaskId): DispatchId | null => core.store.get<{ id: DispatchId }>(
     'SELECT id FROM dispatches WHERE task_id = ? ORDER BY created_at DESC, id DESC LIMIT 1', taskId
   )?.id ?? null
+  const assignmentRecord = (dispatchId: DispatchId): AssignmentRecord => {
+    const record = core.store.get<AssignmentRecord>(
+      'SELECT assignee_session_id, runtime_epoch, process_incarnation, supervised FROM dispatches WHERE id = ?', dispatchId
+    )
+    if (!record) fail(context, 'dispatch_not_found', 'The Task Dispatch no longer exists', { dispatchId })
+    return record
+  }
   return async (params) => {
     if (typeof params.taskId !== 'string' || !params.taskId.startsWith('task_')) {
       fail(context, 'invalid_argument', 'taskId must identify a Task')
@@ -19,7 +33,7 @@ export function createTaskNavigation(context: PluginContext, core: Orchestration
     core.getTask(taskId)
     const dispatchId = latest(taskId)
     if (!dispatchId) fail(context, 'terminal_not_found', 'This Task has no Dispatch terminal to open', { taskId })
-    const dispatch = core.getDispatchRecord(dispatchId)
+    const dispatch = assignmentRecord(dispatchId)
     const sessionId = dispatch.assignee_session_id
     if (!sessionId) fail(context, 'terminal_not_found', 'The latest Dispatch has no assigned terminal', { taskId, dispatchId })
     const identity = await targetIdentity(context, sessionId)
@@ -30,7 +44,7 @@ export function createTaskNavigation(context: PluginContext, core: Orchestration
       fail(context, 'worker_identity_changed', 'The assigned process changed; no terminal was opened', { taskId, dispatchId })
     }
     // Re-read after the public async identity lookup: retries, reuse and release may have committed meanwhile.
-    const current = core.getDispatchRecord(dispatchId)
+    const current = assignmentRecord(dispatchId)
     const assignment = core.store.get<{ id: string }>(
       'SELECT id FROM dispatches WHERE assignee_session_id = ? ORDER BY created_at DESC, id DESC LIMIT 1',
       sessionId
