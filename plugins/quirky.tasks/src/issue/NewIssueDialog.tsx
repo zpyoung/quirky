@@ -1,6 +1,6 @@
+import { Button, Dialog, FormRow, TextField } from '@quirky/ui'
 import { useEffect, useRef, useState } from 'react'
 import type { IssueDraft, TaskRepo, TasksSurfaceProps } from '../contracts'
-import { MarkdownComposer } from './Markdown'
 
 type RecordValue = Record<string, unknown>
 type SourceChoice = { id: 'origin' | 'upstream'; label: string }
@@ -17,8 +17,6 @@ type ChoiceEnvelope = {
   repoId: string | null
 }
 
-const buttonStyle = { border: '1px solid var(--border, #3a3d43)', borderRadius: 6, background: 'var(--surface, #22252b)', color: 'var(--text, #e5e7eb)', padding: '7px 10px', cursor: 'pointer', font: 'inherit' } as const
-const muted = { color: 'var(--text-muted, #9ca3af)' } as const
 
 function record(value: unknown): RecordValue | null {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
@@ -290,108 +288,97 @@ export function NewIssueDialog(props: TasksSurfaceProps) {
   const assigneeSet = new Set(draft.assignees)
   const titleMissing = draft.title.trim().length === 0
 
-  return <div role="dialog" aria-modal="true" aria-labelledby="new-issue-title" onKeyDown={(event) => {
-    if ((event.metaKey || event.ctrlKey) && event.key === 'Enter' && !event.nativeEvent.isComposing) {
-      event.preventDefault()
-      void createIssue()
-    }
-  }} style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,.58)', display: 'grid', placeItems: 'center', padding: 16 }}>
-    <section style={{ width: 'min(860px, 100%)', maxHeight: '92vh', overflow: 'auto', background: 'var(--background, #191b20)', color: 'var(--text, #e5e7eb)', border: '1px solid var(--border, #3a3d43)', borderRadius: 10, padding: 18, display: 'grid', gap: 14 }}>
-      <header style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-        <div style={{ marginRight: 'auto' }}>
-          <h2 id="new-issue-title" style={{ margin: 0, fontSize: 20 }}>New GitHub issue</h2>
-          <p style={{ ...muted, margin: '5px 0 0' }}>Filing in {selectedSourceLabel ?? selectedRepo?.displayName ?? selectedRepo?.name ?? 'a selected repository'}</p>
-        </div>
-        <button type="button" aria-label="Close new issue dialog" onClick={() => void closeDialog()} style={buttonStyle}>Close</button>
-      </header>
+  const actions = <div className="quirky-tasks-new-issue__actions">
+    <span className="ui-text-muted">Cmd+Enter to submit</span>
+    <Button type="button" onClick={() => void closeDialog()} disabled={submitting}>Cancel</Button>
+    <Button type="button" variant="primary" onClick={() => void createIssue()} disabled={submitting || titleMissing || !selectedRepo}>{submitting ? 'Creating…' : 'Create issue'}</Button>
+  </div>
 
-      {loadingOptions && <p role="status" style={{ ...muted, margin: 0 }}>Loading selected repositories…</p>}
-      {repositories.length > 1 && <label style={{ display: 'grid', gap: 5 }}>Project
-        <select aria-label="Issue repository" value={draft.repoId ?? ''} onChange={(event) => updateDraft({ repoId: event.currentTarget.value || null })} disabled={submitting} style={buttonStyle}>
+  return <Dialog open={open} title="New GitHub issue" onClose={() => { void closeDialog() }} closeOnBackdrop={false} actions={actions}>
+    <div className="quirky-tasks-new-issue" onKeyDown={(event) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === 'Enter' && !event.nativeEvent.isComposing) {
+        event.preventDefault()
+        void createIssue()
+      }
+    }}>
+      <p className="quirky-tasks-new-issue__destination">Filing in {selectedSourceLabel ?? selectedRepo?.displayName ?? selectedRepo?.name ?? 'a selected repository'}</p>
+
+      {loadingOptions && <p className="quirky-tasks-new-issue__status" role="status">Loading selected repositories…</p>}
+      {repositories.length > 1 && <FormRow label="Project" htmlFor="new-issue-repo">
+        <select id="new-issue-repo" aria-label="Issue repository" value={draft.repoId ?? ''} onChange={(event) => updateDraft({ repoId: event.currentTarget.value || null })} disabled={submitting} className="quirky-tasks-control">
           {repositories.map((repo) => <option key={repo.id} value={repo.id}>{repo.displayName ?? repo.name}</option>)}
         </select>
-      </label>}
+      </FormRow>}
 
-      {sourceChoices.sources.length > 1 && <label style={{ display: 'grid', gap: 5 }}>Issue source
-        <select aria-label="Issue source" value={sourceChoices.source} onChange={(event) => {
+      {sourceChoices.sources.length > 1 && <FormRow label="Issue source" htmlFor="new-issue-source">
+        <select id="new-issue-source" aria-label="Issue source" value={sourceChoices.source} onChange={(event) => {
           const selected = event.currentTarget.value
           if (selected === 'origin' || selected === 'upstream') void changeIssueSource(selected)
-        }} disabled={submitting} style={buttonStyle}>
+        }} disabled={submitting} className="quirky-tasks-control">
           {sourceChoices.sources.map((source) => <option key={source.id} value={source.id}>{source.label}</option>)}
         </select>
-      </label>}
-      {sourceChoices.message && <p style={{ ...muted, margin: 0 }}>{sourceChoices.message}</p>}
+      </FormRow>}
+      {sourceChoices.message && <p className="quirky-tasks-new-issue__status">{sourceChoices.message}</p>}
 
-      <label style={{ display: 'grid', gap: 5 }}>Title
-        <input
-          aria-label="Issue title"
-          autoFocus
-          value={draft.title}
-          placeholder="Short summary"
-          onChange={(event) => updateDraft({ title: event.currentTarget.value })}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' && !event.shiftKey) {
-              event.preventDefault()
-              void createIssue()
-            }
-          }}
-          disabled={submitting || !selectedRepo}
-          style={{ ...buttonStyle, width: '100%', boxSizing: 'border-box' }}
-        />
-      </label>
+      <TextField
+        label="Title"
+        id="new-issue-title"
+        autoFocus
+        value={draft.title}
+        placeholder="Short summary"
+        onChange={(event) => updateDraft({ title: event.currentTarget.value })}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault()
+            void createIssue()
+          }
+        }}
+        disabled={submitting || !selectedRepo}
+      />
 
-      <section aria-label="Issue description" style={{ display: 'grid', gap: 5 }}>
-        <label style={{ fontWeight: 600 }}>Description (optional, Markdown)</label>
+      <section className="quirky-tasks-new-issue__description" aria-label="Issue description">
+        <p>Description (optional, Markdown)</p>
         <MarkdownComposer value={draft.body} onChange={(body) => updateDraft({ body })} label="Issue description" placeholder="What's going on?" disabled={submitting || !selectedRepo} minRows={8} onSubmit={() => void createIssue()} />
       </section>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
-        <fieldset style={{ border: '1px solid var(--border, #3a3d43)', borderRadius: 6, padding: 10 }}>
+      <div className="quirky-tasks-new-issue__collections">
+        <fieldset className="quirky-tasks-new-issue__fieldset">
           <legend>Labels</legend>
-          {!choicesAvailable && <p style={{ ...muted, marginTop: 0 }}>{labels.message ?? 'Loading repository labels…'}</p>}
-          <div style={{ maxHeight: 160, overflow: 'auto', display: 'grid', gap: 5 }}>
-            {labels.labels.map((label) => <label key={label} style={{ display: 'flex', gap: 7, alignItems: 'center' }}>
+          {!choicesAvailable && <p className="quirky-tasks-new-issue__status">{labels.message ?? 'Loading repository labels…'}</p>}
+          <div className="quirky-tasks-new-issue__choices">
+            {labels.labels.map((label) => <label key={label} className="quirky-tasks-new-issue__choice">
               <input type="checkbox" checked={labelSet.has(label)} disabled={submitting} onChange={(event) => updateDraft({ labels: event.currentTarget.checked ? [...new Set([...draft.labels, label])] : draft.labels.filter((value) => value !== label) })} />
               {label}
             </label>)}
           </div>
-          <label style={{ display: 'grid', gap: 5, marginTop: 8 }}>Add label
-            <input aria-label="Add issue label" value={newLabel} onChange={(event) => setNewLabel(event.currentTarget.value)} disabled={submitting || !selectedRepo} style={buttonStyle} />
-          </label>
-          <button type="button" onClick={() => {
+          <TextField label="Add label" value={newLabel} onChange={(event) => setNewLabel(event.currentTarget.value)} disabled={submitting || !selectedRepo} />
+          <Button type="button" className="quirky-tasks-new-issue__add" onClick={() => {
             const label = newLabel.trim()
             if (label) updateDraft({ labels: [...new Set([...draft.labels, label])] })
             setNewLabel('')
-          }} disabled={submitting || !selectedRepo || newLabel.trim().length === 0} style={{ ...buttonStyle, marginTop: 6 }}>Add label</button>
+          }} disabled={submitting || !selectedRepo || newLabel.trim().length === 0}>Add label</Button>
         </fieldset>
 
-        <fieldset style={{ border: '1px solid var(--border, #3a3d43)', borderRadius: 6, padding: 10 }}>
+        <fieldset className="quirky-tasks-new-issue__fieldset">
           <legend>Assignees</legend>
-          {!choicesAvailable && <p style={{ ...muted, marginTop: 0 }}>{assignees.message ?? 'Loading assignable users…'}</p>}
-          <div style={{ maxHeight: 160, overflow: 'auto', display: 'grid', gap: 5 }}>
-            {assignees.assignees.map((user) => <label key={user.login} style={{ display: 'flex', gap: 7, alignItems: 'center' }}>
+          {!choicesAvailable && <p className="quirky-tasks-new-issue__status">{assignees.message ?? 'Loading assignable users…'}</p>}
+          <div className="quirky-tasks-new-issue__choices">
+            {assignees.assignees.map((user) => <label key={user.login} className="quirky-tasks-new-issue__choice">
               <input type="checkbox" checked={assigneeSet.has(user.login)} disabled={submitting} onChange={(event) => updateDraft({ assignees: event.currentTarget.checked ? [...new Set([...draft.assignees, user.login])] : draft.assignees.filter((value) => value !== user.login) })} />
               {user.login}
             </label>)}
           </div>
-          <label style={{ display: 'grid', gap: 5, marginTop: 8 }}>Add assignee login
-            <input aria-label="Add issue assignee" value={newAssignee} onChange={(event) => setNewAssignee(event.currentTarget.value)} disabled={submitting || !selectedRepo} style={buttonStyle} />
-          </label>
-          <button type="button" onClick={() => {
+          <TextField label="Add assignee login" value={newAssignee} onChange={(event) => setNewAssignee(event.currentTarget.value)} disabled={submitting || !selectedRepo} />
+          <Button type="button" className="quirky-tasks-new-issue__add" onClick={() => {
             const assignee = newAssignee.trim()
             if (assignee) updateDraft({ assignees: [...new Set([...draft.assignees, assignee])] })
             setNewAssignee('')
-          }} disabled={submitting || !selectedRepo || newAssignee.trim().length === 0} style={{ ...buttonStyle, marginTop: 6 }}>Add assignee</button>
+          }} disabled={submitting || !selectedRepo || newAssignee.trim().length === 0}>Add assignee</Button>
         </fieldset>
       </div>
 
-      {draftError && <p role="alert" style={{ color: 'var(--danger, #f87171)', margin: 0 }}>Draft could not be saved: {draftError}</p>}
-      {error && <p role="alert" style={{ color: 'var(--danger, #f87171)', margin: 0 }}>{error}</p>}
-      <footer style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', borderTop: '1px solid var(--border, #3a3d43)', paddingTop: 12 }}>
-        <span style={{ ...muted, marginRight: 'auto' }}>Cmd+Enter to submit</span>
-        <button type="button" onClick={() => void closeDialog()} disabled={submitting} style={buttonStyle}>Cancel</button>
-        <button type="button" onClick={() => void createIssue()} disabled={submitting || titleMissing || !selectedRepo} style={{ ...buttonStyle, background: 'var(--accent, #2563eb)', color: '#fff' }}>{submitting ? 'Creating…' : 'Create issue'}</button>
-      </footer>
-    </section>
-  </div>
+      {draftError && <p className="quirky-tasks-new-issue__error" role="alert">Draft could not be saved: {draftError}</p>}
+      {error && <p className="quirky-tasks-new-issue__error" role="alert">{error}</p>}
+    </div>
+  </Dialog>
 }

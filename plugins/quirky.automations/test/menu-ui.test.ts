@@ -322,9 +322,13 @@ test('Escape and detail arrow keys keep their existing navigation when no row me
   const page = await mountPage(rig.context, 'detail', { navigation: { tab: 'runs' } })
   await settle()
   expect(page.container.querySelector('[role="menu"]')).toBeNull()
+  const selectedTab = page.container.querySelector<HTMLButtonElement>('[role="tab"][aria-selected="true"]')
+  if (!selectedTab) throw new Error('Expected the active shared detail tab')
+  const navigationsBeforeArrow = rig.calls.filter(({ method }) => method === `${API}uiNavigate`).length
 
-  await act(async () => { dispatchKey(document.body, 'ArrowLeft') })
+  await act(async () => { dispatchKey(selectedTab, 'ArrowLeft') })
   await settle()
+  expect(rig.calls.filter(({ method }) => method === `${API}uiNavigate`)).toHaveLength(navigationsBeforeArrow + 1)
   expect(rig.calls.filter(({ method }) => method === `${API}uiNavigate`).at(-1)?.params).toEqual({ tab: 'overview' })
 
   await act(async () => { dispatchKey(document.body, 'Escape') })

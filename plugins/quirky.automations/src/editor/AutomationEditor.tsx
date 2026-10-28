@@ -1,4 +1,5 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
+import { Badge, Button, Dialog, FormRow, SectionHeader, TextField } from '@quirky/ui'
 import type { AutomationDefinition, SchedulePreset } from '../../types'
 import { buildAutomationRrule, describeAutomationSchedule, isValidAutomationSchedule } from '../../schedule'
 import type {
@@ -49,40 +50,6 @@ const PRECHECK_TIMEOUT_OPTIONS = [
   { value: 600, label: '10 min' }
 ] as const
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-const EDITOR_CSS = `
-.auto-editor__backdrop{align-items:center;background:color-mix(in srgb,var(--bg) 72%,transparent);display:flex;inset:0;justify-content:center;padding:1rem;position:fixed;z-index:10000}
-.auto-editor{background:var(--bg-raised);border:1px solid var(--border);border-radius:.6rem;box-shadow:0 1rem 3rem color-mix(in srgb,var(--bg) 65%,transparent);color:inherit;display:flex;flex-direction:column;font:inherit;max-height:90vh;max-width:1080px;min-height:0;overflow:hidden;width:min(1080px,calc(100vw - 2rem))}
-.auto-editor__header,.auto-editor__footer{align-items:center;display:flex;flex:0 0 auto;gap:.75rem;justify-content:space-between;padding:.75rem 1rem}
-.auto-editor__header{border-bottom:1px solid var(--border)}
-.auto-editor form{display:flex;flex:1 1 auto;flex-direction:column;min-height:0;overflow:hidden}
-.auto-editor__layout{display:grid;flex:1 1 auto;gap:1.25rem;grid-template-columns:minmax(0,1fr) minmax(18rem,22rem);min-height:0;overflow-y:auto;padding:1rem}
-.auto-editor__prompt,.auto-editor__settings{display:flex;flex-direction:column;gap:1rem;min-width:0}
-.auto-editor__settings{border-left:1px solid var(--border);padding-left:1rem}
-.auto-editor__field{display:flex;flex-direction:column;gap:.35rem;min-width:0}
-.auto-editor__field label,.auto-editor__field-label{font-weight:600}
-.auto-editor input,.auto-editor select,.auto-editor textarea{background:var(--bg);border:1px solid var(--border);box-sizing:border-box;color:inherit;font:inherit;max-width:100%;min-height:2.2rem;padding:.4rem .55rem;width:100%}
-.auto-editor input[type="checkbox"]{min-height:auto;padding:0;width:auto}
-.auto-editor textarea{min-height:6rem;resize:vertical}
-.auto-editor__name{font-size:1.35rem;font-weight:650}
-.auto-editor__muted,.auto-editor__help{color:var(--muted);font-size:.9rem;line-height:1.45}
-.auto-editor__section{border-top:1px solid var(--border);display:flex;flex-direction:column;gap:.75rem;padding-top:.75rem}
-.auto-editor__row{align-items:center;display:flex;gap:.5rem;flex-wrap:wrap}
-.auto-editor__row>*{flex:1 1 auto}
-.auto-editor__toggle{display:flex;gap:.35rem}
-.auto-editor__toggle button[aria-pressed="true"]{font-weight:700;outline:2px solid currentColor}
-.auto-editor__error,.auto-editor__warning{border-left:3px solid var(--amber);padding:.4rem .65rem}
-.auto-editor__error{border-color:var(--danger)}
-.auto-editor__chips{display:grid;gap:.35rem;grid-template-columns:repeat(5,minmax(0,1fr))}
-.auto-editor__chip{border:1px solid var(--border);border-radius:.3rem;min-width:0;padding:.3rem;text-align:center}
-.auto-editor__chip span{display:block;font-size:.75rem;opacity:.75}
-.auto-editor__chip code{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.auto-editor__footer{border-top:1px solid var(--border)}
-.auto-editor__footer-actions{display:flex;gap:.5rem}
-.auto-editor button{font:inherit;min-height:2.15rem;padding:.35rem .65rem}
-.auto-editor button:disabled{cursor:not-allowed;opacity:.55}
-.auto-editor [aria-invalid="true"]{outline:2px solid var(--danger)}
-@media(max-width:760px){.auto-editor__backdrop{padding:.5rem}.auto-editor{width:calc(100vw - 1rem)}.auto-editor__layout{grid-template-columns:minmax(0,1fr)}.auto-editor__settings{border-left:0;border-top:1px solid var(--border);padding-left:0;padding-top:1rem}}
-`
 
 function isObject(value: unknown): value is ObjectValue {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -336,9 +303,6 @@ function scheduleValues(draft: AutomationDraft): { preset: SchedulePreset; time:
   }
 }
 
-function styleToggle(active: boolean): { fontWeight: number; opacity: number } {
-  return active ? { fontWeight: 700, opacity: 1 } : { fontWeight: 400, opacity: 0.85 }
-}
 
 export function AutomationEditor(props: EditorProps) {
   const editor = props.state.editor
@@ -373,16 +337,10 @@ export function AutomationEditor(props: EditorProps) {
   const writeSequence = useRef(0)
   const branchListId = useId()
   const modelListId = useId()
-  const dialogRef = useRef<HTMLElement | null>(null)
+  const editorRootRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
-    if (!editorKey || typeof document === 'undefined') return
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    const initialFocus = dialogRef.current?.querySelector<HTMLElement>('[data-auto-editor-autofocus]') ?? dialogRef.current
-    initialFocus?.focus()
-    return () => {
-      if (previousFocus?.isConnected) previousFocus.focus()
-    }
+    if (editorKey) editorRootRef.current?.querySelector<HTMLInputElement>('[data-auto-editor-autofocus]')?.focus()
   }, [editorKey])
 
   function syncSchedule(value: AutomationDraft): void {
@@ -765,32 +723,6 @@ export function AutomationEditor(props: EditorProps) {
       setSaving(false)
     }
   }
-  function handleDialogKeyDown(event: KeyboardEvent<HTMLElement>): void {
-    if (event.key === 'Escape') {
-      event.preventDefault()
-      event.stopPropagation()
-      if (!saving) void cancel()
-      return
-    }
-    if (event.key !== 'Tab') return
-    const focusable = dialogRef.current?.querySelectorAll<HTMLElement>(
-      'button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),[tabindex]:not([tabindex="-1"])'
-    )
-    if (!focusable?.length) {
-      event.preventDefault()
-      dialogRef.current?.focus()
-      return
-    }
-    const first = focusable[0]
-    const last = focusable[focusable.length - 1]
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault()
-      last?.focus()
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault()
-      first?.focus()
-    }
-  }
 
   if (!editor || !draft) return null
 
@@ -803,355 +735,328 @@ export function AutomationEditor(props: EditorProps) {
   const rawArgsExplanation = 'Raw extra agent arguments are unsupported for structured sessions. Use the model and options catalog above.'
 
   return (
-    <div className="auto-editor__backdrop" role="presentation">
-      <style>{EDITOR_CSS}</style>
-      <section
-        className="auto-editor"
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="auto-editor-title"
-        tabIndex={-1}
-        onKeyDown={handleDialogKeyDown}
+    <div className="auto-editor-scope" onKeyDown={(event) => { if (event.key === 'Escape') event.stopPropagation() }}>
+      <Dialog
+        open
+        title={editor.id ? 'Edit automation' : 'Create automation'}
+        closeOnBackdrop={false}
+        onClose={() => { if (!saving) void cancel() }}
+        actions={<>
+          <span className="auto-editor__form-status">{busyMessage ?? (editor.id ? 'Save Changes is available when a field changes.' : 'New automations are enabled when saved.')}</span>
+          <Button disabled={saving} onClick={() => void cancel()}>Cancel</Button>
+          <Button variant="primary" type="submit" form="auto-editor-form" disabled={!canSave}>{saving ? 'Saving…' : editor.id ? 'Save Changes' : 'Create'}</Button>
+        </>}
       >
-      <header className="auto-editor__header">
-        <div>
-          <h2 id="auto-editor-title">{editor.id ? 'Edit automation' : 'Create automation'}</h2>
-          <div className="auto-editor__help">Once saved, runs automatically until paused.</div>
-        </div>
-        {!editor.id && (
-          <label className="auto-editor__field">
-            <span>Use template</span>
-            <select value={templateChoice} onChange={(event) => {
-              const id = event.currentTarget.value
-              setTemplateChoice(id)
-              if (id) updateDraft({}, id)
-            }}>
-              <option value="">Choose a template…</option>
-              {TEMPLATE_CHOICES.map((template) => <option key={template.id} value={template.id}>{template.label}</option>)}
-            </select>
-          </label>
-        )}
-      </header>
-
-      <form onSubmit={(event) => { event.preventDefault(); void save() }}>
-        <div className="auto-editor__layout">
-          <section className="auto-editor__prompt" aria-label="Automation prompt and name">
-            <label className="auto-editor__field" htmlFor="auto-editor-name">
-              <span>Automation name</span>
-              <input
-                id="auto-editor-name"
-                data-auto-editor-autofocus
-                className="auto-editor__name"
-                value={draft.name}
-                placeholder="Weekday repo audit"
-                maxLength={256}
-                onChange={(event) => updateDraft({ name: event.currentTarget.value })}
-              />
-            </label>
-            <label className="auto-editor__field" htmlFor="auto-editor-prompt">
-              <span>Prompt</span>
-              <textarea
-                id="auto-editor-prompt"
-                value={draft.prompt}
-                placeholder="Run the weekly dependency audit and summarize risky changes."
-                maxLength={64 * 1024}
-                aria-invalid={!draft.prompt.trim()}
-                onChange={(event) => updateDraft({ prompt: event.currentTarget.value })}
-              />
-              <span className="auto-editor__help">Supports skills, file paths, and built-in commands like /goal.</span>
-            </label>
-            {targetStatus && !targetStatus.available && <div className="auto-editor__warning" role="status">Saved target unavailable: {targetStatus.error}</div>}
-            {catalogLoading && <div className="auto-editor__muted" role="status">Loading projects, workspaces, and agents…</div>}
-            {!hasProjects && !catalogLoading && <div className="auto-editor__warning" role="status">No projects are available on Local. Add a project before saving an automation.</div>}
-            {visibleErrors.map((message) => <div key={message} className="auto-editor__error" role="alert">{message}</div>)}
-            {setupWarning && <div className="auto-editor__warning" role="status">{setupWarning}</div>}
-          </section>
-
-          <aside className="auto-editor__settings" aria-label="Automation settings">
-            <div className="auto-editor__field">
-              <label htmlFor="auto-editor-agent">Agent</label>
-              <select id="auto-editor-agent" value={draft.agentId} onChange={(event) => {
-                const agentId = event.currentTarget.value
-                if (agentId === 'claude' || agentId === 'codex') updateDraft({ agentId })
+        <div
+          className="auto-editor"
+          ref={editorRootRef}
+          onKeyDown={(event) => {
+            if (event.key !== 'Escape') return
+            event.preventDefault()
+            event.stopPropagation()
+            if (!saving) void cancel()
+          }}
+        >
+          <div className="auto-editor__intro">
+            <p>Once saved, runs automatically until paused.</p>
+            {!editor.id && <FormRow label="Use template" htmlFor="auto-editor-template">
+              <select id="auto-editor-template" value={templateChoice} onChange={(event) => {
+                const id = event.currentTarget.value
+                setTemplateChoice(id)
+                if (id) updateDraft({}, id)
               }}>
-                {agentUnavailable && <option value={draft.agentId} disabled>{draft.agentId} ({editor.original ? 'saved agent unavailable' : 'agent unavailable'})</option>}
-                {(data?.agents ?? []).map((agent) => (
-                  <option key={agent.id} value={agent.id} disabled={!agent.enabled || !agent.installed}>
-                    {agent.label}{!agent.installed ? ' (not installed)' : !agent.enabled ? ' (disabled)' : ''}
-                  </option>
-                ))}
+                <option value="">Choose a template…</option>
+                {TEMPLATE_CHOICES.map((template) => <option key={template.id} value={template.id}>{template.label}</option>)}
               </select>
-              {agentUnavailable && <span className="auto-editor__help">This saved or selected agent is unavailable. Choose an enabled structured agent to continue.</span>}
-            </div>
+            </FormRow>}
+          </div>
 
-            <div className="auto-editor__field">
-              <label htmlFor="auto-editor-model">Model</label>
-              <div className="auto-editor__row">
-                <input
-                  id="auto-editor-model"
-                  list={modelListId}
-                  value={currentOverrides?.model ?? ''}
-                  disabled={optionsLoading}
-                  maxLength={128}
-                  placeholder="Default (from Settings)"
-                  onChange={(event) => {
-                    const model = event.currentTarget.value
-                    updateOverrides(model ? { model, optionValues: {} } : null)
-                  }}
+          <form id="auto-editor-form" onSubmit={(event) => { event.preventDefault(); void save() }}>
+            <div className="auto-editor__layout">
+              <section className="auto-editor__prompt" aria-label="Automation prompt and name">
+                <TextField
+                  id="auto-editor-name"
+                  label="Automation name"
+                  data-auto-editor-autofocus
+                  className="auto-editor__name"
+                  value={draft.name}
+                  placeholder="Weekday repo audit"
+                  maxLength={256}
+                  onChange={(event) => updateDraft({ name: event.currentTarget.value })}
                 />
-                {currentOverrides?.model && <button type="button" onClick={() => updateOverrides(null)}>Use default</button>}
-              </div>
-              <datalist id={modelListId}>
-                {(options?.models ?? []).map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}
-              </datalist>
-              {optionsError && <span className="auto-editor__error" role="alert">{optionsError}</span>}
-              {options?.unlisted === 'accept' && <span className="auto-editor__help">This agent accepts opaque custom model IDs; native launch validation checks them when saved.</span>}
-              {options?.unlisted === 'refuse' && <span className="auto-editor__help">This agent's native catalog may refuse model IDs that are not listed.</span>}
-              {!options?.supported && options && <span className="auto-editor__help">This agent does not publish structured launch options.</span>}
-              {!options?.structured && options && <span className="auto-editor__help">This agent cannot use structured automation sessions.</span>}
-              {savedModelUnavailable && <span className="auto-editor__warning" role="status">Saved model “{currentOverrides?.model}” is not in this agent's catalog and may be refused. Choose a listed model or clear it.</span>}
-            </div>
+                <FormRow label="Prompt" htmlFor="auto-editor-prompt" help="Supports skills, file paths, and built-in commands like /goal.">
+                  <textarea
+                    id="auto-editor-prompt"
+                    value={draft.prompt}
+                    placeholder="Run the weekly dependency audit and summarize risky changes."
+                    maxLength={64 * 1024}
+                    aria-invalid={!draft.prompt.trim()}
+                    onChange={(event) => updateDraft({ prompt: event.currentTarget.value })}
+                  />
+                </FormRow>
+                {targetStatus && !targetStatus.available && <div className="auto-editor__warning" role="status">Saved target unavailable: {targetStatus.error}</div>}
+                {catalogLoading && <div className="auto-editor__muted" role="status">Loading projects, workspaces, and agents…</div>}
+                {!hasProjects && !catalogLoading && <div className="auto-editor__warning" role="status">No projects are available on Local. Add a project before saving an automation.</div>}
+                {visibleErrors.map((message) => <div key={message} className="auto-editor__error" role="alert">{message}</div>)}
+                {setupWarning && <div className="auto-editor__warning" role="status">{setupWarning}</div>}
+              </section>
 
-            {modelOptions.map((option) => {
-              const value = currentOptionValues[option.id]
-              const invalidSavedValue = value !== undefined && (
-                option.type === 'boolean'
-                  ? typeof value !== 'boolean'
-                  : typeof value !== 'string' || !option.choices?.some((choice) => choice.value === value)
-              )
-              return (
-                <div className="auto-editor__field" key={option.id}>
-                  <label htmlFor={`auto-option-${option.id}`}>{option.label}</label>
-                  {invalidSavedValue && <span className="auto-editor__warning" role="status">Saved value is not in the current option catalog.</span>}
-                  {option.type === 'boolean' ? (
-                    <div className="auto-editor__row">
-                      <label><input
-                        id={`auto-option-${option.id}`}
-                        type="checkbox"
-                        checked={value === true}
-                        onChange={(event) => updateOptionValue(option.id, event.currentTarget.checked)}
-                      /> Enabled</label>
-                      {value !== undefined && <button type="button" onClick={() => updateOptionValue(option.id, null)}>Use default</button>}
+              <aside className="auto-editor__settings" aria-label="Automation settings">
+                <FormRow label="Agent" htmlFor="auto-editor-agent" help={agentUnavailable ? 'This saved or selected agent is unavailable. Choose an enabled structured agent to continue.' : undefined}>
+                  <select id="auto-editor-agent" value={draft.agentId} onChange={(event) => {
+                    const agentId = event.currentTarget.value
+                    if (agentId === 'claude' || agentId === 'codex') updateDraft({ agentId })
+                  }}>
+                    {agentUnavailable && <option value={draft.agentId} disabled>{draft.agentId} ({editor.original ? 'saved agent unavailable' : 'agent unavailable'})</option>}
+                    {(data?.agents ?? []).map((agent) => (
+                      <option key={agent.id} value={agent.id} disabled={!agent.enabled || !agent.installed}>
+                        {agent.label}{!agent.installed ? ' (not installed)' : !agent.enabled ? ' (disabled)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </FormRow>
+
+                <div className="auto-editor__field">
+                  <TextField
+                    id="auto-editor-model"
+                    label="Model"
+                    list={modelListId}
+                    value={currentOverrides?.model ?? ''}
+                    disabled={optionsLoading}
+                    maxLength={128}
+                    placeholder="Default (from Settings)"
+                    onChange={(event) => {
+                      const model = event.currentTarget.value
+                      updateOverrides(model ? { model, optionValues: {} } : null)
+                    }}
+                  />
+                  {currentOverrides?.model && <Button onClick={() => updateOverrides(null)}>Use default</Button>}
+                  <datalist id={modelListId}>
+                    {(options?.models ?? []).map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}
+                  </datalist>
+                  {optionsError && <span className="auto-editor__error" role="alert">{optionsError}</span>}
+                  {options?.unlisted === 'accept' && <span className="auto-editor__help">This agent accepts opaque custom model IDs; native launch validation checks them when saved.</span>}
+                  {options?.unlisted === 'refuse' && <span className="auto-editor__help">This agent's native catalog may refuse model IDs that are not listed.</span>}
+                  {!options?.supported && options && <span className="auto-editor__help">This agent does not publish structured launch options.</span>}
+                  {!options?.structured && options && <span className="auto-editor__help">This agent cannot use structured automation sessions.</span>}
+                  {savedModelUnavailable && <span className="auto-editor__warning" role="status">Saved model “{currentOverrides?.model}” is not in this agent's catalog and may be refused. Choose a listed model or clear it.</span>}
+                </div>
+
+                {modelOptions.map((option) => {
+                  const value = currentOptionValues[option.id]
+                  const invalidSavedValue = value !== undefined && (
+                    option.type === 'boolean'
+                      ? typeof value !== 'boolean'
+                      : typeof value !== 'string' || !option.choices?.some((choice) => choice.value === value)
+                  )
+                  return (
+                    <div className="auto-editor__field" key={option.id}>
+                      {option.type === 'boolean' ? (
+                        <>
+                          <span className="auto-editor__field-label">{option.label}</span>
+                          {invalidSavedValue && <span className="auto-editor__warning" role="status">Saved value is not in the current option catalog.</span>}
+                          <label className="auto-editor__check-row"><input id={`auto-option-${option.id}`} type="checkbox" checked={value === true} onChange={(event) => updateOptionValue(option.id, event.currentTarget.checked)} /> Enabled</label>
+                          {value !== undefined && <Button onClick={() => updateOptionValue(option.id, null)}>Use default</Button>}
+                        </>
+                      ) : (
+                        <>
+                          {invalidSavedValue && <span className="auto-editor__warning" role="status">Saved value is not in the current option catalog.</span>}
+                          <div className="auto-editor__control-row">
+                            <FormRow label={option.label} htmlFor={`auto-option-${option.id}`}>
+                              <select
+                                id={`auto-option-${option.id}`}
+                                value={typeof value === 'string' ? value : ''}
+                                onChange={(event) => updateOptionValue(option.id, event.currentTarget.value || null)}
+                              >
+                                <option value="">Default</option>
+                                {typeof value === 'string' && !option.choices?.some((choice) => choice.value === value) &&
+                                  <option value={value}>{value} (unavailable)</option>}
+                                {(option.choices ?? []).map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}
+                              </select>
+                            </FormRow>
+                            {value !== undefined && <Button onClick={() => updateOptionValue(option.id, null)}>Use default</Button>}
+                          </div>
+                        </>
+                      )}
                     </div>
-                  ) : (
-                    <div className="auto-editor__row">
-                      <select
-                        id={`auto-option-${option.id}`}
-                        value={typeof value === 'string' ? value : ''}
-                        onChange={(event) => updateOptionValue(option.id, event.currentTarget.value || null)}
-                      >
-                        <option value="">Default</option>
-                        {typeof value === 'string' && !option.choices?.some((choice) => choice.value === value) &&
-                          <option value={value}>{value} (unavailable)</option>}
-                        {(option.choices ?? []).map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}
+                  )
+                })}
+                {unavailableOptionIds.map((id) => (
+                  <div className="auto-editor__warning" role="status" key={`unavailable-${id}`}>
+                    Saved option “{id}” is unavailable for this model.
+                    <Button onClick={() => updateOptionValue(id, null)}>Clear saved option</Button>
+                  </div>
+                ))}
+
+                <FormRow label="Extra agent arguments" htmlFor="auto-editor-extra-args" help={rawArgsExplanation}>
+                  <textarea id="auto-editor-extra-args" disabled value="" placeholder="Raw arguments are unavailable" />
+                </FormRow>
+
+                <section className="auto-editor__section" aria-label="Run target">
+                  <SectionHeader title="Run target" />
+                  <FormRow label="Host" htmlFor="auto-editor-host" help="Stored and scheduled by this local Quirky daemon. Remote authority is unavailable.">
+                    <select id="auto-editor-host" value="local" disabled>
+                      <option value="local">Local</option>
+                    </select>
+                  </FormRow>
+                  <FormRow label="Project" htmlFor="auto-editor-project">
+                    <select
+                      id="auto-editor-project"
+                      value={draft.projectId}
+                      onChange={(event) => {
+                        setBranchRefs([])
+                        updateDraft({ projectId: event.currentTarget.value })
+                      }}
+                    >
+                      {!availableProjects.some((project) => project.id === draft.projectId) && draft.projectId &&
+                        <option value={draft.projectId} disabled>Unavailable project: {draft.projectId}</option>}
+                      <option value="">Select project</option>
+                      {availableProjects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+                    </select>
+                  </FormRow>
+                  <div className="auto-editor__field">
+                    <span className="auto-editor__field-label">Workspace</span>
+                    <div className="auto-editor__toggle" role="group" aria-label="Workspace mode">
+                      <Button className="auto-editor__toggle-option" aria-pressed={draft.workspaceMode === 'existing'} onClick={() => updateDraft({ workspaceMode: 'existing' })}>Worktree</Button>
+                      <Button className="auto-editor__toggle-option" aria-pressed={draft.workspaceMode === 'new_per_run'} onClick={() => updateDraft({ workspaceMode: 'new_per_run' })}>New run</Button>
+                    </div>
+                  </div>
+                  {draft.workspaceMode === 'existing' ? (
+                    <FormRow label="Workspace" htmlFor="auto-editor-workspace" error={activeWorkspaceMissing ? 'Choose an available workspace before saving.' : undefined}>
+                      <select id="auto-editor-workspace" value={draft.workspaceId ?? ''} onChange={(event) => updateDraft({ workspaceId: event.currentTarget.value || null })}>
+                        {activeWorkspaceMissing && <option value={draft.workspaceId ?? ''} disabled>Unavailable workspace: {draft.workspaceId}</option>}
+                        <option value="">Select workspace</option>
+                        {availableWorkspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name}{workspace.isMain ? ' (main)' : ''}</option>)}
                       </select>
-                      {value !== undefined && <button type="button" onClick={() => updateOptionValue(option.id, null)}>Use default</button>}
+                    </FormRow>
+                  ) : (
+                    <div className="auto-editor__field">
+                      <FormRow label="Create from" htmlFor="auto-editor-base-branch" help="Leave blank to use the project default branch.">
+                        <input
+                          id="auto-editor-base-branch"
+                          list={branchListId}
+                          value={draft.baseBranch ?? ''}
+                          placeholder="Project default"
+                          onChange={(event) => updateDraft({ baseBranch: event.currentTarget.value || null })}
+                        />
+                      </FormRow>
+                      <datalist id={branchListId}>
+                        {branchRefs.map((branch) => <option key={`${branch.kind}:${branch.name}`} value={branch.name}>{branch.kind}</option>)}
+                      </datalist>
+                      {branchLoading && <span className="auto-editor__muted" role="status">Searching branches…</span>}
+                      {branchError && <span className="auto-editor__error" role="alert">{branchError}</span>}
                     </div>
                   )}
-                </div>
-              )
-            })}
-            {unavailableOptionIds.map((id) => (
-              <div className="auto-editor__warning" role="status" key={`unavailable-${id}`}>
-                Saved option “{id}” is unavailable for this model.
-                <button type="button" onClick={() => updateOptionValue(id, null)}>Clear saved option</button>
-              </div>
-            ))}
+                  <div className="auto-editor__field">
+                    <span className="auto-editor__field-label">Session</span>
+                    <div className="auto-editor__toggle" role="group" aria-label="Session mode">
+                      <Button className="auto-editor__toggle-option" aria-pressed={!draft.reuseSession} onClick={() => updateDraft({ reuseSession: false })}>Fresh</Button>
+                      <Button className="auto-editor__toggle-option" aria-pressed={draft.reuseSession} onClick={() => updateDraft({ reuseSession: true })}>Reuse</Button>
+                    </div>
+                    <span className="auto-editor__help">Reuse sends future runs to the previous live automation session. New run always starts fresh.</span>
+                  </div>
+                </section>
 
-            <div className="auto-editor__field">
-              <label htmlFor="auto-editor-extra-args">Extra agent arguments</label>
-              <textarea id="auto-editor-extra-args" disabled value="" placeholder="Raw arguments are unavailable" />
-              <span className="auto-editor__help">{rawArgsExplanation}</span>
+                <section className="auto-editor__section" aria-label="Schedule and run policy">
+                  <SectionHeader title="Schedule and run policy" />
+                  <FormRow label="Cadence" htmlFor="auto-editor-cadence">
+                    <select id="auto-editor-cadence" value={schedulePreset} onChange={(event) => changePreset(event.currentTarget.value as SchedulePreset)}>
+                      <option value="hourly">Hourly</option>
+                      <option value="daily">Daily</option>
+                      <option value="weekdays">Weekdays</option>
+                      <option value="weekly">Weekly</option>
+                      <option value="custom">Custom cron</option>
+                    </select>
+                  </FormRow>
+                  {schedulePreset === 'hourly' ? (
+                    <FormRow label="Minute" htmlFor="auto-editor-minute">
+                      <select id="auto-editor-minute" value={hourlyMinute} onChange={(event) => setMinute(event.currentTarget.value)}>
+                        {Array.from({ length: 60 }, (_, minute) => <option key={minute} value={minute}>{minute.toString().padStart(2, '0')}</option>)}
+                      </select>
+                    </FormRow>
+                  ) : schedulePreset === 'weekly' ? (
+                    <>
+                      <FormRow label="Day" htmlFor="auto-editor-day">
+                        <select id="auto-editor-day" value={weeklyDay} onChange={(event) => setDay(Number(event.currentTarget.value))}>
+                          {WEEKDAYS.map((day, value) => <option key={value} value={value}>{day}</option>)}
+                        </select>
+                      </FormRow>
+                      <FormRow label="Time" htmlFor="auto-editor-time">
+                        <input id="auto-editor-time" type="time" value={scheduleTime} onChange={(event) => setTime(event.currentTarget.value)} />
+                      </FormRow>
+                    </>
+                  ) : schedulePreset === 'daily' || schedulePreset === 'weekdays' ? (
+                    <FormRow label="Time" htmlFor="auto-editor-time">
+                      <input id="auto-editor-time" type="time" value={scheduleTime} onChange={(event) => setTime(event.currentTarget.value)} />
+                    </FormRow>
+                  ) : (
+                    <div className="auto-editor__field">
+                      <FormRow label="Cron expression" htmlFor="auto-editor-cron">
+                        <input id="auto-editor-cron" value={customCron} maxLength={2048} placeholder="0 9 * * 1-5" onChange={(event) => {
+                          const value = event.currentTarget.value
+                          setCustomCron(value)
+                          changeSchedule('custom', scheduleTime, hourlyMinute, weeklyDay, value)
+                        }} />
+                      </FormRow>
+                      <div className="auto-editor__chips" aria-label="Cron fields">
+                        {['Minute', 'Hour', 'Day', 'Month', 'Weekday'].map((label, index) => (
+                          <div className="auto-editor__chip" key={label}><span>{label}</span><code>{customFields[index] ?? '—'}</code></div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div className="auto-editor__schedule-status" role="status">
+                    <Badge tone={scheduleValid ? 'working' : 'failing'}>{scheduleStatus}</Badge>
+                  </div>
+                  <FormRow label="Timezone" htmlFor="auto-editor-timezone" help={`Uses an IANA timezone such as ${Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'}.`}>
+                    <input id="auto-editor-timezone" value={draft.timezone} onChange={(event) => updateDraft({ timezone: event.currentTarget.value })} />
+                  </FormRow>
+                  <FormRow label="Grace" htmlFor="auto-editor-grace">
+                    <select id="auto-editor-grace" value={draft.missedRunGraceMinutes} onChange={(event) => updateDraft({ missedRunGraceMinutes: Number(event.currentTarget.value) })}>
+                      {GRACE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                    </select>
+                  </FormRow>
+                </section>
+
+                <section className="auto-editor__section" aria-label="Precheck">
+                  <SectionHeader title="Precheck" />
+                  <FormRow label="Run precheck" htmlFor="auto-editor-precheck">
+                    <input id="auto-editor-precheck" type="checkbox" checked={draft.precheck !== null} onChange={(event) => updateDraft({
+                      precheck: event.currentTarget.checked ? { command: '', timeoutSeconds: 60 } : null
+                    })} />
+                  </FormRow>
+                  {draft.precheck && (
+                    <>
+                      <FormRow label="Timeout" htmlFor="auto-editor-precheck-timeout">
+                        <select id="auto-editor-precheck-timeout" value={draft.precheck.timeoutSeconds} onChange={(event) => updateDraft({
+                          precheck: { ...draft.precheck!, timeoutSeconds: Number(event.currentTarget.value) }
+                        })}>
+                          {PRECHECK_TIMEOUT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                        </select>
+                      </FormRow>
+                      <FormRow label="Command" htmlFor="auto-editor-precheck-command">
+                        <textarea id="auto-editor-precheck-command" value={draft.precheck.command} placeholder="gh pr list --json number -q '.[0].number'"
+                          onChange={(event) => updateDraft({ precheck: { ...draft.precheck!, command: event.currentTarget.value } })} />
+                      </FormRow>
+                    </>
+                  )}
+                </section>
+
+                {draft.workspaceMode === 'new_per_run' && (setupPresent || projectError) && (
+                  <section className="auto-editor__section" aria-label="Workspace setup">
+                    <SectionHeader title="Workspace setup" />
+                    <FormRow label="Run setup for each new workspace" htmlFor="auto-editor-setup" help="Setup defaults to skipped. Shared setup hooks require explicit trust before they can run unattended.">
+                      <input id="auto-editor-setup" type="checkbox" checked={draft.setupDecision === 'run'} onChange={(event) => updateDraft({ setupDecision: event.currentTarget.checked ? 'run' : 'skip' })} />
+                    </FormRow>
+                    {projectDetails?.setupPolicy && <span className="auto-editor__help">Project setup policy: {projectDetails.setupPolicy}</span>}
+                    {projectError && <span className="auto-editor__error" role="alert">{projectError}</span>}
+                  </section>
+                )}
+              </aside>
             </div>
-
-            <section className="auto-editor__section" aria-label="Run target">
-              <div className="auto-editor__field">
-                <label htmlFor="auto-editor-host">Host</label>
-                <select id="auto-editor-host" value="local" disabled aria-describedby="auto-editor-host-help">
-                  <option value="local">Local</option>
-                </select>
-                <span className="auto-editor__help" id="auto-editor-host-help">Stored and scheduled by this local Quirky daemon. Remote authority is unavailable.</span>
-              </div>
-              <div className="auto-editor__field">
-                <label htmlFor="auto-editor-project">Project</label>
-                <select
-                  id="auto-editor-project"
-                  value={draft.projectId}
-                  onChange={(event) => {
-                    setBranchRefs([])
-                    updateDraft({ projectId: event.currentTarget.value })
-                  }}
-                >
-                  {!availableProjects.some((project) => project.id === draft.projectId) && draft.projectId &&
-                    <option value={draft.projectId} disabled>Unavailable project: {draft.projectId}</option>}
-                  <option value="">Select project</option>
-                  {availableProjects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
-                </select>
-              </div>
-              <div className="auto-editor__field">
-                <span className="auto-editor__field-label">Workspace</span>
-                <div className="auto-editor__toggle" role="group" aria-label="Workspace mode">
-                  <button type="button" aria-pressed={draft.workspaceMode === 'existing'} style={styleToggle(draft.workspaceMode === 'existing')}
-                    onClick={() => updateDraft({ workspaceMode: 'existing' })}>Worktree</button>
-                  <button type="button" aria-pressed={draft.workspaceMode === 'new_per_run'} style={styleToggle(draft.workspaceMode === 'new_per_run')}
-                    onClick={() => updateDraft({ workspaceMode: 'new_per_run' })}>New run</button>
-                </div>
-              </div>
-              {draft.workspaceMode === 'existing' ? (
-                <div className="auto-editor__field">
-                  <label htmlFor="auto-editor-workspace">Workspace</label>
-                  <select id="auto-editor-workspace" value={draft.workspaceId ?? ''} onChange={(event) => updateDraft({ workspaceId: event.currentTarget.value || null })}>
-                    {activeWorkspaceMissing && <option value={draft.workspaceId ?? ''} disabled>Unavailable workspace: {draft.workspaceId}</option>}
-                    <option value="">Select workspace</option>
-                    {availableWorkspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name}{workspace.isMain ? ' (main)' : ''}</option>)}
-                  </select>
-                  {activeWorkspaceMissing && <span className="auto-editor__warning" role="alert">Choose an available workspace before saving.</span>}
-                </div>
-              ) : (
-                <div className="auto-editor__field">
-                  <label htmlFor="auto-editor-base-branch">Create from</label>
-                  <input
-                    id="auto-editor-base-branch"
-                    list={branchListId}
-                    value={draft.baseBranch ?? ''}
-                    placeholder="Project default"
-                    onChange={(event) => updateDraft({ baseBranch: event.currentTarget.value || null })}
-                  />
-                  <datalist id={branchListId}>
-                    {branchRefs.map((branch) => <option key={`${branch.kind}:${branch.name}`} value={branch.name}>{branch.kind}</option>)}
-                  </datalist>
-                  <span className="auto-editor__help">Leave blank to use the project default branch.</span>
-                  {branchLoading && <span className="auto-editor__muted" role="status">Searching branches…</span>}
-                  {branchError && <span className="auto-editor__error" role="alert">{branchError}</span>}
-                </div>
-              )}
-              <div className="auto-editor__field">
-                <span className="auto-editor__field-label">Session</span>
-                <div className="auto-editor__toggle" role="group" aria-label="Session mode">
-                  <button type="button" aria-pressed={!draft.reuseSession} style={styleToggle(!draft.reuseSession)}
-                    onClick={() => updateDraft({ reuseSession: false })}>Fresh</button>
-                  <button type="button" aria-pressed={draft.reuseSession} style={styleToggle(draft.reuseSession)}
-                    onClick={() => updateDraft({ reuseSession: true })}>Reuse</button>
-                </div>
-                <span className="auto-editor__help">Reuse sends future runs to the previous live automation session. New run always starts fresh.</span>
-              </div>
-            </section>
-
-            <section className="auto-editor__section" aria-label="Schedule and run policy">
-              <div className="auto-editor__field">
-                <label htmlFor="auto-editor-cadence">Cadence</label>
-                <select id="auto-editor-cadence" value={schedulePreset} onChange={(event) => changePreset(event.currentTarget.value as SchedulePreset)}>
-                  <option value="hourly">Hourly</option>
-                  <option value="daily">Daily</option>
-                  <option value="weekdays">Weekdays</option>
-                  <option value="weekly">Weekly</option>
-                  <option value="custom">Custom cron</option>
-                </select>
-              </div>
-              {schedulePreset === 'hourly' ? (
-                <div className="auto-editor__field">
-                  <label htmlFor="auto-editor-minute">Minute</label>
-                  <select id="auto-editor-minute" value={hourlyMinute} onChange={(event) => setMinute(event.currentTarget.value)}>
-                    {Array.from({ length: 60 }, (_, minute) => <option key={minute} value={minute}>{minute.toString().padStart(2, '0')}</option>)}
-                  </select>
-                </div>
-              ) : schedulePreset === 'weekly' ? (
-                <>
-                  <div className="auto-editor__field">
-                    <label htmlFor="auto-editor-day">Day</label>
-                    <select id="auto-editor-day" value={weeklyDay} onChange={(event) => setDay(Number(event.currentTarget.value))}>
-                      {WEEKDAYS.map((day, value) => <option key={value} value={value}>{day}</option>)}
-                    </select>
-                  </div>
-                  <div className="auto-editor__field">
-                    <label htmlFor="auto-editor-time">Time</label>
-                    <input id="auto-editor-time" type="time" value={scheduleTime} onChange={(event) => setTime(event.currentTarget.value)} />
-                  </div>
-                </>
-              ) : schedulePreset === 'daily' || schedulePreset === 'weekdays' ? (
-                <div className="auto-editor__field">
-                  <label htmlFor="auto-editor-time">Time</label>
-                  <input id="auto-editor-time" type="time" value={scheduleTime} onChange={(event) => setTime(event.currentTarget.value)} />
-                </div>
-              ) : (
-                <div className="auto-editor__field">
-                  <label htmlFor="auto-editor-cron">Cron expression</label>
-                  <input id="auto-editor-cron" value={customCron} maxLength={2048} placeholder="0 9 * * 1-5" onChange={(event) => {
-                    const value = event.currentTarget.value
-                    setCustomCron(value)
-                    changeSchedule('custom', scheduleTime, hourlyMinute, weeklyDay, value)
-                  }} />
-                  <div className="auto-editor__chips" aria-label="Cron fields">
-                    {['Minute', 'Hour', 'Day', 'Month', 'Weekday'].map((label, index) => (
-                      <div className="auto-editor__chip" key={label}><span>{label}</span><code>{customFields[index] ?? '—'}</code></div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              <div className={scheduleValid ? 'auto-editor__help' : 'auto-editor__error'} role="status">{scheduleStatus}</div>
-              <div className="auto-editor__field">
-                <label htmlFor="auto-editor-timezone">Timezone</label>
-                <input id="auto-editor-timezone" value={draft.timezone} onChange={(event) => updateDraft({ timezone: event.currentTarget.value })} />
-                <span className="auto-editor__help">Uses an IANA timezone such as {Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'}.</span>
-              </div>
-              <div className="auto-editor__field">
-                <label htmlFor="auto-editor-grace">Grace</label>
-                <select id="auto-editor-grace" value={draft.missedRunGraceMinutes} onChange={(event) => updateDraft({ missedRunGraceMinutes: Number(event.currentTarget.value) })}>
-                  {GRACE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                </select>
-              </div>
-            </section>
-
-            <section className="auto-editor__section" aria-label="Precheck">
-              <label className="auto-editor__row">
-                <input type="checkbox" checked={draft.precheck !== null} onChange={(event) => updateDraft({
-                  precheck: event.currentTarget.checked ? { command: '', timeoutSeconds: 60 } : null
-                })} />
-                <span className="auto-editor__field-label">Precheck</span>
-              </label>
-              {draft.precheck && (
-                <>
-                  <div className="auto-editor__field">
-                    <label htmlFor="auto-editor-precheck-timeout">Timeout</label>
-                    <select id="auto-editor-precheck-timeout" value={draft.precheck.timeoutSeconds} onChange={(event) => updateDraft({
-                      precheck: { ...draft.precheck!, timeoutSeconds: Number(event.currentTarget.value) }
-                    })}>
-                      {PRECHECK_TIMEOUT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                    </select>
-                  </div>
-                  <div className="auto-editor__field">
-                    <label htmlFor="auto-editor-precheck-command">Command</label>
-                    <textarea id="auto-editor-precheck-command" value={draft.precheck.command} placeholder="gh pr list --json number -q '.[0].number'"
-                      onChange={(event) => updateDraft({ precheck: { ...draft.precheck!, command: event.currentTarget.value } })} />
-                  </div>
-                </>
-              )}
-            </section>
-
-            {draft.workspaceMode === 'new_per_run' && (setupPresent || projectError) && (
-              <section className="auto-editor__section" aria-label="Workspace setup">
-                <label className="auto-editor__row">
-                  <input type="checkbox" checked={draft.setupDecision === 'run'} onChange={(event) => updateDraft({ setupDecision: event.currentTarget.checked ? 'run' : 'skip' })} />
-                  <span className="auto-editor__field-label">Run setup for each new workspace</span>
-                </label>
-                <span className="auto-editor__help">Setup defaults to skipped. Shared setup hooks require explicit trust before they can run unattended.</span>
-                {projectDetails?.setupPolicy && <span className="auto-editor__help">Project setup policy: {projectDetails.setupPolicy}</span>}
-                {projectError && <span className="auto-editor__error" role="alert">{projectError}</span>}
-              </section>
-            )}
-          </aside>
+          </form>
         </div>
-
-        <footer className="auto-editor__footer">
-          <span className="auto-editor__help">{busyMessage ?? (editor.id ? 'Save Changes is available when a field changes.' : 'New automations are enabled when saved.')}</span>
-          <div className="auto-editor__footer-actions">
-            <button type="button" disabled={saving} onClick={() => void cancel()}>Cancel</button>
-            <button type="submit" disabled={!canSave}>{saving ? 'Saving…' : editor.id ? 'Save Changes' : 'Create'}</button>
-          </div>
-        </footer>
-      </form>
-      </section>
+      </Dialog>
     </div>
   )
 }

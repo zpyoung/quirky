@@ -4,7 +4,8 @@ import type { MountFunction, UiPluginContext } from '@quirky/protocol'
 import { API, AUTOMATIONS_VIEW, AUTOMATIONS_SETTINGS_VIEW, type AutomationUiState } from './ui-contracts'
 import { AutomationEditor } from './editor/AutomationEditor'
 import { AutomationsPage } from './list/AutomationsPage'
-import { AUTOMATIONS_STYLE } from './style'
+import { Button, ContextMenuList, EmptyState, FormRow, IconButton, ToolPanelFrame } from '@quirky/ui'
+import '@quirky/ui/styles.css'
 
 function message(cause: unknown): string { return cause instanceof Error ? cause.message : String(cause) }
 function useAutomationState(context: UiPluginContext) {
@@ -49,16 +50,18 @@ function AutomationApp({ context, report }: SurfaceProps) {
     report?.({ ...state, error, pageSurface: pageSurface.current, editorSurface: editorSurface.current })
   }, [state, error, report])
   return <div className="quirky-automations">
-    <style>{AUTOMATIONS_STYLE}</style>
-    <header className="auto-shell-header">
-      <button aria-label="Close Automations" title="Return to previous view" onClick={() => void context.call(`${API}close`, {}).catch(cause => notify(message(cause), 'error'))}>×</button>
-      <button className="auto-settings-link" onClick={() => void context.call(`${API}settings`, {}).catch(cause => notify(message(cause), 'error'))}>Automation settings</button>
-    </header>
-    {error && <p role="alert">{error} <button onClick={() => void refresh()}>Retry</button></p>}
-    {!state ? <p role="status">Loading Automations…</p> : <>
-      <AutomationsPage context={context} state={state} refresh={refresh} notify={notify} report={reportPage} />
-      {state.editor && <AutomationEditor context={context} state={state} refresh={refresh} notify={notify} report={reportEditor} />}
-    </>}
+    <ToolPanelFrame title="Automations" actions={<>
+      <IconButton label="Close Automations" title="Return to previous view" onClick={() => void context.call(`${API}close`, {}).catch(cause => notify(message(cause), 'error'))}>×</IconButton>
+      <Button onClick={() => void context.call(`${API}settings`, {}).catch(cause => notify(message(cause), 'error'))}>Automation settings</Button>
+    </>}>
+      <div className="auto-app-body">
+        {error && <div className="auto-shell-error" role="alert">{error} <Button onClick={() => void refresh()}>Retry</Button></div>}
+        {!state ? <div className="auto-shell-loading" role="status"><EmptyState message="Loading Automations…" /></div> : <>
+          <AutomationsPage context={context} state={state} refresh={refresh} notify={notify} report={reportPage} />
+          {state.editor && <AutomationEditor context={context} state={state} refresh={refresh} notify={notify} report={reportEditor} />}
+        </>}
+      </div>
+    </ToolPanelFrame>
   </div>
 }
 
@@ -80,16 +83,20 @@ function AutomationSettings({ context, report }: SurfaceProps) {
       setError('')
     } catch (cause) { setError(message(cause)) }
   }
-  return <section className="quirky-automations auto-settings">
-    <style>{AUTOMATIONS_STYLE}</style><h1>Automations</h1>
-    <p>Schedule agent work and choose whether Automations appears in the sidebar.</p>
-    <ol><li>Describe the work</li><li>Quirky starts each run</li><li>Review the results</li></ol>
-    <label><input type="checkbox" checked={visible} onChange={event => void save('show-automations-button', event.target.checked)} /> Show Automations Button</label>
-    <p>Show the Automations shortcut in the sidebar.</p>
-    <label><input type="checkbox" checked={ask} onChange={event => void save('ask-before-delete', event.target.checked)} /> Ask Before Deleting Automations</label>
-    <p>Show a confirmation before deleting automations and their run history.</p>
-    <button onClick={() => void context.call(`${API}open`, {}).catch(cause => setError(message(cause)))}>Open Automations</button>
-    {error && <p role="alert">{error}</p>}
+  return <section className="auto-settings">
+    <ToolPanelFrame title="Automation settings" actions={<Button onClick={() => void context.call(`${API}open`, {}).catch(cause => setError(message(cause)))}>Open Automations</Button>}>
+      <div className="auto-settings__content">
+        <p>Schedule agent work and choose whether Automations appears in the sidebar.</p>
+        <ol><li>Describe the work</li><li>Quirky starts each run</li><li>Review the results</li></ol>
+        <FormRow label="Show Automations Button" htmlFor="auto-setting-sidebar" help="Show the Automations shortcut in the sidebar.">
+          <input id="auto-setting-sidebar" type="checkbox" checked={visible} onChange={event => void save('show-automations-button', event.target.checked)} />
+        </FormRow>
+        <FormRow label="Ask Before Deleting Automations" htmlFor="auto-setting-delete" help="Show a confirmation before deleting automations and their run history.">
+          <input id="auto-setting-delete" type="checkbox" checked={ask} onChange={event => void save('ask-before-delete', event.target.checked)} />
+        </FormRow>
+        {error && <p role="alert" className="auto-error">{error}</p>}
+      </div>
+    </ToolPanelFrame>
   </section>
 }
 
@@ -97,22 +104,36 @@ function AutomationSidebar({ context, report }: SurfaceProps) {
   const [visible, setVisible] = useState(context.getSetting('show-automations-button') !== false)
   const [menu, setMenu] = useState(false)
   const [error, setError] = useState('')
+  const menuTrigger = useRef<HTMLButtonElement | null>(null)
   useEffect(() => context.subscribe(event => { if (event.type.startsWith('setting.')) setVisible(context.getSetting('show-automations-button') !== false) }), [context])
   useEffect(() => { report?.({ visible, menu, error }) }, [visible, menu, error, report])
   if (!visible) return null
   return <div className="auto-sidebar" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setMenu(false) }}>
-    <button onClick={() => void context.call(`${API}open`, {}).catch(cause => setError(message(cause)))} onContextMenu={event => { event.preventDefault(); setMenu(true) }}>◷ Automations</button>
-    {menu && <div role="menu"><button role="menuitem" onClick={() => {
-      setMenu(false)
-      void context.call('setting.set', { id: 'setting:quirky.automations/show-automations-button', value: false }).then(() => setVisible(false)).catch(cause => setError(message(cause)))
-    }}>Hide from sidebar</button></div>}
+    <Button className="auto-sidebar__trigger" onClick={() => void context.call(`${API}open`, {}).catch(cause => setError(message(cause)))} onContextMenu={event => {
+      event.preventDefault()
+      menuTrigger.current = event.currentTarget
+      setMenu(true)
+    }}>◷ Automations</Button>
+    {menu && <div className="auto-sidebar__menu"><ContextMenuList
+      label="Automations actions"
+      items={[{ id: 'hide', label: 'Hide from sidebar' }]}
+      onChoose={(item) => {
+        if (item.id !== 'hide') return
+        setMenu(false)
+        void context.call('setting.set', { id: 'setting:quirky.automations/show-automations-button', value: false }).then(() => setVisible(false)).catch(cause => setError(message(cause)))
+      }}
+      onClose={() => {
+        setMenu(false)
+        menuTrigger.current?.focus()
+      }}
+    /></div>}
     {error && <span role="alert">{error}</span>}
   </div>
 }
 
 export function activate(context: UiPluginContext): void {
   const mount = (Component: ComponentType<SurfaceProps>): MountFunction => (element, props) => {
-    Object.assign(element.style, { display: 'flex', flex: '1', minWidth: '0', minHeight: '0', overflow: 'hidden' })
+    element.classList.add('auto-plugin-mount')
     const root = createRoot(element)
     root.render(<Component context={context} report={props.report} />)
     return () => queueMicrotask(() => root.unmount())
