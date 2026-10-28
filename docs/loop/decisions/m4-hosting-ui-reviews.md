@@ -264,5 +264,16 @@
 - **Revisit if:** canonical dependency readiness or queue-owned merged verification reports another concrete failure.
 - **Source:** assumed — autonomous; locked by sourced-worktree and provider-normalization contracts
 
+## D25: Observe dependency readiness before the required final integration
+- **Question:** may an early item submit its land while Tasks is still pending?
+- **Options:** submit against pending status; wait for the canonical gate and perform its required post-dependency merge/checks.
+- **Chose:** stayed in the same turn through pending results until queue.ts deps returned ready:true/pending:[]; then merged build/roadmap without conflicts. This is the explicit early-item dependency step, not another discretionary catch-up or review campaign.
+- **Why:** the public global composer and shared exports must be landed dependencies, not merely source available on another branch. New Mobile client admission/phone allowlist and Automations pending-dispatch ownership do not alter the trusted desktop Reviews backend.
+- **Evidence:** canonical ready result; successful roadmap merge including landed Tasks, Mobile and Automations. Read all incoming Mobile D1–D23, Automations D1–D13 and Tasks D24. Both settings-view and command-settings navigation survive additively. Post-dependency typecheck passed18.89seconds; affected check is running.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** post-dependency or queue-owned merged checks identify an incompatibility.
+- **Source:** locked by docs/loop/LOOP.md Early items build on their dependencies' branches
+
 ## Progress
-All named affected-gate failures are closed with D23/D24 evidence. Typecheck, scripts and packaged build passed; actual packaged surface and public disclosure controls passed within D21's stated limits. All implementers, browser/daemon resources and component worktrees are cleaned. Tasks is still the canonical pending dependency; wait in this turn for queue.ts deps ready:true, perform required post-dependency roadmap integration/affected checks, then commit/detach/queue.ts land. No new final review/dogfood campaign or second item.
+Ready for immediate normal land: dependency ready:true/pending[]; required post-dependency roadmap merge clean; typecheck passed18.89seconds; affected248files/248passed/0failed/zero retries in379.90seconds. Scripts68/0/562assertions and packaged build passed; actual packaged surface and public disclosure controls passed within D21's limits. All earlier named failures are closed, all implementers/component trees/UI resources cleaned. Commit this evidence, detach and queue.ts land now; the controller owns complete merged verification. Unstarted final review/full dogfood remain skipped under D20, with native effects pending and prerequisite deferrals explicit. Exactly this one item.
