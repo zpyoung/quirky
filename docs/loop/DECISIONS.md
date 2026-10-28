@@ -298,6 +298,10 @@ files, not this one.
 | medium | high | [m5-loops-presets D9](decisions/m5-loops-presets.md) | Merge audited core repairs without treating the dependency as landed | locked by docs/loop/LOOP.md |
 | medium | high | [m5-loops-presets D11](decisions/m5-loops-presets.md) | Keep queue writes explicit and skip reads constant-time | assumed — autonomous |
 | medium | high | [m5-loops-presets D14](decisions/m5-loops-presets.md) | Preserve lease-aware send admission and durable CLI request identity | locked by docs/loop/decisions/m6-orchestration-core.md |
+| medium | high | [m7-sweep-terminal D5](decisions/m7-sweep-terminal.md) | Close Activity, recipe choices and CLI open; preserve every larger gap | assumed — autonomous |
+| medium | high | [m7-sweep-terminal D6](decisions/m7-sweep-terminal.md) | Preserve existing status and argument authority while adding projections | assumed — autonomous |
+| medium | high | [m7-sweep-terminal D10](decisions/m7-sweep-terminal.md) | Generic option-only API picks retain explicit provenance and the native model | supersedes m1-launch-settings D9 |
+| medium | high | [m7-sweep-terminal D17](decisions/m7-sweep-terminal.md) | Preserve incoming background, launch-snapshot and exact-navigation authority | locked by docs/loop/decisions |
 | medium | high | [m6-heimdall-core D1](decisions/m6-heimdall-core.md) | Preserve the queue's kernel-only boundary | locked by docs/loop/queue.json |
 | medium | high | [m6-heimdall-core D3](decisions/m6-heimdall-core.md) | Keep kinds replaceable through declared public method hooks | locked by docs/loop/decisions/m0-daemon-api.md |
 | medium | high | [m6-heimdall-core D4](decisions/m6-heimdall-core.md) | Preserve private-store downgrade refusal and forward-schema diagnostics | locked by docs/loop/decisions/m0-daemon-api.md |
@@ -1174,6 +1178,22 @@ files, not this one.
 | easy | high | [m5-loops-presets D17](decisions/m5-loops-presets.md) | Select fixture guardians by exact home and current process owner | assumed — autonomous |
 | easy | high | [m5-loops-presets D18](decisions/m5-loops-presets.md) | Separate EDIT pacing policy from strict CREATE preset combinations | locked by research/orca-features/fork-loops.md |
 | easy | high | [m5-loops-presets D19](decisions/m5-loops-presets.md) | Catch up once after authoritative dependency completion | locked by docs/loop/LOOP.md |
+| easy | high | [m7-sweep-terminal D1](decisions/m7-sweep-terminal.md) | Audit all nine docs; preserve explicit exclusions | locked by docs/roadmap.md |
+| easy | high | [m7-sweep-terminal D2](decisions/m7-sweep-terminal.md) | Use unattended night-mode workflow and autonomous defaults | locked by docs/loop/LOOP.md |
+| easy | high | [m7-sweep-terminal D3](decisions/m7-sweep-terminal.md) | Use OpenAI implementers and reachable Gemini reviewer | assumed — autonomous |
+| easy | high | [m7-sweep-terminal D4](decisions/m7-sweep-terminal.md) | Preserve inherited untracked files without staging them | assumed — autonomous |
+| easy | high | [m7-sweep-terminal D7](decisions/m7-sweep-terminal.md) | Tests-first workers do not execute mid-flight checks | assumed — autonomous |
+| easy | high | [m7-sweep-terminal D8](decisions/m7-sweep-terminal.md) | Existing native desktop identity is the readiness evidence | assumed — autonomous |
+| easy | high | [m7-sweep-terminal D9](decisions/m7-sweep-terminal.md) | Red regressions prove absent public Activity and recipe choices | assumed — autonomous |
+| easy | high | [m7-sweep-terminal D11](decisions/m7-sweep-terminal.md) | Parent owns the shared option-only prerequisite and schema descriptions | assumed — autonomous |
+| easy | high | [m7-sweep-terminal D12](decisions/m7-sweep-terminal.md) | Keep the flat schema contract and distinguish recipe settings from trust preparation | assumed — autonomous |
+| easy | high | [m7-sweep-terminal D13](decisions/m7-sweep-terminal.md) | Exercise the composed product with owned external-provider stand-ins | assumed — autonomous |
+| easy | high | [m7-sweep-terminal D14](decisions/m7-sweep-terminal.md) | Route the new CLI regression to macOS and remove incidental wiring assertions | deferred: platform |
+| easy | high | [m7-sweep-terminal D15](decisions/m7-sweep-terminal.md) | Fix confirmed Activity UI defects and preserve the guarded campaign's limits | assumed — autonomous |
+| easy | high | [m7-sweep-terminal D16](decisions/m7-sweep-terminal.md) | Apply the expired-item landing rule without inventing model clearance | locked by docs/loop/LOOP.md |
+| easy | high | [m7-sweep-terminal D18](decisions/m7-sweep-terminal.md) | Register one complete remaining-parity owner | deferred: terminal remaining flows |
+| easy | high | [m7-sweep-terminal D19](decisions/m7-sweep-terminal.md) | Recover actual owned gate failures without re-pinning incidental defaults | assumed — autonomous |
+| easy | high | [m7-sweep-terminal D20](decisions/m7-sweep-terminal.md) | Keep the fresh guarded setup failure distinct from app behavior | assumed — autonomous |
 | easy | high | [m6-heimdall-core D2](decisions/m6-heimdall-core.md) | Resolve all design questions autonomously under night mode | locked by docs/loop/LOOP.md |
 | easy | high | [m6-heimdall-core D5](decisions/m6-heimdall-core.md) | OpenAI implementers and verified Gemini fallback review | assumed — autonomous |
 | easy | high | [m6-heimdall-core D7](decisions/m6-heimdall-core.md) | Verify macOS and isolate every process | deferred: platform |
