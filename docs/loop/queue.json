@@ -617,8 +617,9 @@
         "m5-structured-runner",
         "m1-worktrees"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 7
     },
     {
       "id": "m5-loops-core",
