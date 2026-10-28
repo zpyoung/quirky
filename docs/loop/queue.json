@@ -1855,7 +1855,8 @@
         "term-ui.md"
       ],
       "deps": [],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 5
     },
     {
       "id": "fix-flaky-pty-host-clear",
