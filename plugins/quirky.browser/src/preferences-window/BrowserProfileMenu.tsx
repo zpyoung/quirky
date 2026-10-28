@@ -1,7 +1,8 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { BrowserProfile } from '../profiles/store'
 import type { BrowserPreferencesProps } from '../preferences/contract'
-import { BROWSER_SETTING_IDS, ImportDetails, ProfileCreator, errorMessage, profileSourceLabel, useBrowserPreferenceData } from './shared'
+import { BROWSER_SETTING_IDS, ProfileCreator, errorMessage, profileSourceLabel, useBrowserPreferenceData } from './shared'
+import { CookieImportPanel } from './CookieImportPanel'
 
 const PROFILE_ROWS_STYLE = { display: 'flex', flexDirection: 'column', gap: 4 } as const
 const PROFILE_ROW_STYLE = { display: 'flex', alignItems: 'center', gap: 4 } as const
@@ -37,7 +38,7 @@ export function BrowserProfileMenu(props: BrowserPreferencesProps & { inline?: b
   const profiles = preferences?.profiles ?? []
   const effectiveSelection = pane ? selectedProfile : (profiles.find((row) => row.active)?.profile.id ?? 'default')
   const currentProfile = profiles.find(({ profile }) => profile.id === effectiveSelection)?.profile
-  const menuLabel = currentProfile?.label ?? 'Default'
+  const menuLabel = currentProfile?.label ?? (effectiveSelection === 'default' ? 'Default' : effectiveSelection)
 
   const selectProfile = async (profile: BrowserProfile) => {
     if (!pane || profile.id === selectedProfile || profileSwitchingRef.current) return
@@ -107,7 +108,7 @@ export function BrowserProfileMenu(props: BrowserPreferencesProps & { inline?: b
       {successMessage && <p role="status">{successMessage}</p>}
       <button type="button" disabled={loading && !preferences} onClick={() => { setCreateOpen(true); setActionError(null); setSuccessMessage(null) }}>New Profile</button>
       <button type="button" aria-expanded={importOpen} onClick={() => setImportOpen((open) => !open)}>Import Cookies</button>
-      {importOpen && <ImportDetails context={context} imports={preferences?.imports ?? null} loadError={stateError} onHideHint={() => void hideHint()} onError={onError} />}
+      {importOpen && <CookieImportPanel context={context} imports={preferences?.imports ?? null} destination={{ id: effectiveSelection, label: menuLabel }} loadError={stateError} onHideHint={() => void hideHint()} onError={onError} onImported={refresh} />}
       <button type="button" onClick={() => void context.executeCommand('command:quirky.browser/browserSettings').catch((cause: unknown) => {
         const message = errorMessage(cause)
         setActionError(message)
@@ -119,10 +120,13 @@ export function BrowserProfileMenu(props: BrowserPreferencesProps & { inline?: b
 }
 
 export function BrowserImportHint(props: BrowserPreferencesProps) {
-  const { context, onError } = props
-  const { preferences, loading, stateError, settings, saveSetting } = useBrowserPreferenceData(context, onError)
+  const { context, pane, onError } = props
+  const { preferences, loading, stateError, settings, saveSetting, refresh } = useBrowserPreferenceData(context, onError)
   const [expanded, setExpanded] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
+  const hintProfileId = profileIdForPane(pane)
+  const hintProfile = preferences?.profiles.find(({ profile }) => profile.id === hintProfileId)?.profile
+  const hintDestination = { id: hintProfileId, label: hintProfile?.label ?? (hintProfileId === 'default' ? 'Default' : hintProfileId) }
 
   const hideHint = async () => {
     setActionError(null)
@@ -141,7 +145,7 @@ export function BrowserImportHint(props: BrowserPreferencesProps) {
     {expanded && <div>
       {stateError && <p role="alert">{stateError}</p>}
       {actionError && <p role="alert">{actionError}</p>}
-      {loading && !preferences ? <p>Loading cookie import availability…</p> : <ImportDetails context={context} imports={preferences?.imports ?? null} loadError={stateError} onHideHint={() => void hideHint()} onError={onError} />}
+      {loading && !preferences ? <p>Loading cookie import availability…</p> : <CookieImportPanel context={context} imports={preferences?.imports ?? null} destination={hintDestination} loadError={stateError} onHideHint={() => void hideHint()} onError={onError} onImported={refresh} />}
     </div>}
   </aside>
 }

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { BrowserPreferencesProps, ProfileUsage } from '../preferences/contract'
-import { BROWSER_SETTING_IDS, ImportDetails, ProfileCreator, errorMessage, useBrowserPreferenceData } from './shared'
+import { BROWSER_SETTING_IDS, ProfileCreator, errorMessage, profileSourceLabel, useBrowserPreferenceData } from './shared'
+import { CookieImportPanel } from './CookieImportPanel'
 import type { BrowserWindowSettings } from './shared'
 
 const SEARCH_ENGINES = [
@@ -29,7 +30,7 @@ export function BrowserSettings(props: BrowserPreferencesProps & { embedded?: bo
   const [actionError, setActionError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
-  const [importsOpen, setImportsOpen] = useState(false)
+  const [importOpenProfile, setImportOpenProfile] = useState<string | null>(null)
   const [homePageDraft, setHomePageDraft] = useState(settings.homePage)
   const [homePageDirty, setHomePageDirty] = useState(false)
   const homePageDraftRef = useRef(homePageDraft)
@@ -182,22 +183,22 @@ export function BrowserSettings(props: BrowserPreferencesProps & { embedded?: bo
       <p>Clearing or removing profile data requires a native session-clear completion capability. It is currently unavailable; failed requests preserve profile data and metadata.</p>
       <button type="button" disabled={profilePending !== null} onClick={() => { setCreateOpen(true); setActionError(null); setSuccessMessage(null) }}>Add Profile</button>
       {preferences && <ul aria-label="Browser profiles">
-        {preferences.profiles.map((row) => <li key={row.profile.id} style={PROFILE_ROW_STYLE}>
-          <strong>{row.profile.label}</strong>
-          {row.active && <span>Active</span>}
-          {isDefaultProfile(row.profile)
-            ? <button type="button" disabled={profilePending !== null || savingSettings.size > 0} onClick={() => void profileAction(row)}>Clear cookies &amp; site data</button>
-            : <button type="button" disabled={row.active || profilePending !== null || savingSettings.size > 0} onClick={() => void profileAction(row)}>Remove</button>}
-          {!isDefaultProfile(row.profile) && row.active && <small>This profile is in use and cannot be removed.</small>}
-        </li>)}
+        {preferences.profiles.map((row) => {
+          const importOpen = importOpenProfile === row.profile.id
+          const sourceLabel = profileSourceLabel(row.profile)
+          return <li key={row.profile.id} style={PROFILE_ROW_STYLE}>
+            <strong>{row.profile.label}</strong>
+            {sourceLabel && <small>{sourceLabel}</small>}
+            {row.active && <span>Active</span>}
+            {isDefaultProfile(row.profile)
+              ? <button type="button" disabled={profilePending !== null || savingSettings.size > 0} onClick={() => void profileAction(row)}>Clear cookies &amp; site data</button>
+              : <button type="button" disabled={row.active || profilePending !== null || savingSettings.size > 0} onClick={() => void profileAction(row)}>Remove</button>}
+            {!isDefaultProfile(row.profile) && row.active && <small>This profile is in use and cannot be removed.</small>}
+            <button type="button" aria-expanded={importOpen} onClick={() => setImportOpenProfile((current) => current === row.profile.id ? null : row.profile.id)}>Import Cookies</button>
+            {importOpen && <CookieImportPanel context={context} imports={preferences.imports} destination={{ id: row.profile.id, label: row.profile.label }} loadError={stateError} onHideHint={() => void writeSetting(BROWSER_SETTING_IDS.browserImportHintHidden, true)} onError={onError} onImported={refresh} />}
+          </li>
+        })}
       </ul>}
-      {preferences && <>
-        <button type="button" aria-expanded={importsOpen} onClick={() => setImportsOpen((open) => !open)}>Import Cookies</button>
-        {importsOpen
-          ? <ImportDetails context={context} imports={preferences.imports} onHideHint={() => void writeSetting(BROWSER_SETTING_IDS.browserImportHintHidden, true)} onError={onError} />
-          : <p>Cookie import is unavailable: {preferences.imports.reason}</p>}
-        <p>Google logins are not imported. Sign in to Google directly in Quirky.</p>
-      </>}
       {preferences?.localhostLabels && <p>Localhost Worktree Labels unavailable: {preferences.localhostLabels.reason}</p>}
       {createOpen && <ProfileCreator context={context} onCreated={profileCreated} onCancel={() => setCreateOpen(false)} onError={onError} />}
     </section>

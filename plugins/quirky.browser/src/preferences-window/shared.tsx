@@ -17,6 +17,18 @@ export const BROWSER_SETTING_IDS = {
 } as const
 
 export const BROWSER_SETTINGS_COMMAND = 'command:quirky.browser/browserSettings'
+const PROFILE_SOURCE_LABELS: Readonly<Record<string, string>> = {
+  chrome: 'Google Chrome',
+  edge: 'Microsoft Edge',
+  arc: 'Arc',
+  chromium: 'Brave',
+  comet: 'Comet',
+  helium: 'Helium',
+  firefox: 'Firefox',
+  safari: 'Safari',
+  json: 'JSON file/data',
+  file: 'File'
+}
 
 type SearchEngine = 'google' | 'duckduckgo' | 'bing' | 'kagi'
 type IdentityMode = 'clean' | 'native'
@@ -216,9 +228,9 @@ export function profileSourceLabel(profile: BrowserProfile): string | null {
   if ('sourceLabel' in profile && typeof profile.sourceLabel === 'string' && profile.sourceLabel.trim()) return profile.sourceLabel
   if (!('source' in profile)) return null
   const source: unknown = profile.source
-  if (typeof source === 'string' && source.trim()) return `Imported from ${source}`
+  if (typeof source === 'string' && source.trim()) return `Imported from ${PROFILE_SOURCE_LABELS[source] ?? source}`
   if (!isRecord(source) || typeof source.browserFamily !== 'string') return null
-  const family = source.browserFamily.charAt(0).toUpperCase() + source.browserFamily.slice(1)
+  const family = PROFILE_SOURCE_LABELS[source.browserFamily] ?? source.browserFamily.charAt(0).toUpperCase() + source.browserFamily.slice(1)
   const profileName = typeof source.profileName === 'string' && source.profileName.trim() ? ` (${source.profileName})` : ''
   return `Imported from ${family}${profileName}`
 }
