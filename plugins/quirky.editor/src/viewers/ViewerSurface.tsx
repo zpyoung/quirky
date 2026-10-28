@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useId, useRef, useState, type CSSProperties } from 'react'
+import { Badge, Button, EmptyState, TextField } from '@quirky/ui'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { GlobalWorkerOptions, getDocument, type PDFDocumentProxy } from 'pdfjs-dist'
 import type { SurfaceProps } from '../types'
 import DOMPurify from 'dompurify'
@@ -8,10 +9,6 @@ GlobalWorkerOptions.workerSrc = new URL('./pdf.worker.min.mjs', import.meta.url)
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024
 const PAGE_PRELOAD_BYTES = 256 * 1024
-const tableStyle: CSSProperties = { borderCollapse: 'collapse', width: '100%', tableLayout: 'auto' }
-const cellStyle: CSSProperties = { padding: '4px 8px', border: '1px solid var(--border, #777)', minWidth: 48, maxWidth: 1200 }
-const pageStyle: CSSProperties = { width: '100%', overflow: 'auto', position: 'relative' }
-const imageStyle: CSSProperties = { display: 'block', maxWidth: '100%', maxHeight: 520, objectFit: 'contain' }
 
 type ApiRecord = Record<string, unknown>
 type CsvRow = { index: number; cells: string[] }
@@ -68,11 +65,11 @@ async function call(props: SurfaceProps, action: string, fields: Record<string, 
 
 function SourceText({ props, value, label }: { props: SurfaceProps; value: string; label: string }) {
   return <textarea
+    className="editor-viewer-source viewer-source"
     aria-label={label}
     spellCheck={false}
     value={value}
     onChange={(event) => props.onDraft(event.currentTarget.value)}
-    style={{ width: '100%', minHeight: 360, resize: 'vertical', fontFamily: 'monospace' }}
   />
 }
 
@@ -98,7 +95,7 @@ function CsvSurface({ props, sourceMode }: { props: SurfaceProps; sourceMode: bo
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [changed, setChanged] = useState(false)
-  const filterInput = useRef<HTMLInputElement>(null)
+  const filterInputId = useId()
 
   const refresh = async (targetPage = page) => {
     setLoading(true)
@@ -168,7 +165,7 @@ function CsvSurface({ props, sourceMode }: { props: SurfaceProps; sourceMode: bo
   const findRows = useCallback(async (args?: Record<string, unknown>) => {
     if (buffer.readOnly || metadata?.paged === true) throw new Error('Find is unavailable in read-only paged CSV previews.')
     const query = typeof args?.query === 'string' ? args.query : undefined
-    filterInput.current?.focus()
+    document.getElementById(filterInputId)?.focus()
     if (query === undefined) return { opened: true }
     await call(props, 'filter', { query })
     setFilter(query)
@@ -281,61 +278,65 @@ function CsvSurface({ props, sourceMode }: { props: SurfaceProps; sourceMode: bo
   }
 
   if (sourceMode) {
-    if (buffer.size >= 1024 * 1024) return <section aria-label="Large CSV source">
-      <p>Large CSV files are read-only and shown in bounded pages. Use the table preview to browse records.</p>
-      <button type="button" onClick={() => onView({ mode: 'rich' })}>Return to Table</button>
+    if (buffer.size >= 1024 * 1024) return <section className="viewer-empty" aria-label="Large CSV source">
+      <EmptyState
+        message="Large CSV files are read-only and shown in bounded pages. Use the table preview to browse records."
+        action={{ label: 'Return to Table', onAction: () => onView({ mode: 'rich' }) }}
+      />
     </section>
     return <SourceText props={props} value={buffer.draft !== null ? buffer.draft : buffer.content} label="CSV source" />
   }
 
+
   const header = rows.find((row) => row.index === 0)?.cells ?? []
   const dataRows = rows.filter((row) => row.index !== 0)
   const readOnly = metadata?.paged === true || buffer.readOnly
-  const changedBanner = changed && <p role="status">CSV changed on disk. Reload the file to refresh the preview. <button type="button" onClick={() => void reload()} disabled={loading}>Reload</button></p>
+  const changedBanner = changed && <p role="status">CSV changed on disk. Reload the file to refresh the preview. <Button type="button" onClick={() => void reload()} disabled={loading}>Reload</Button></p>
 
   return <section className="viewer-csv" aria-label={metadata?.paged ? 'Paged CSV preview' : 'CSV table'} style={{ fontSize: props.fontSize }}>
     <header className="viewer-toolbar">
-      <span>{metadata?.paged ? 'Read-only paged preview' : `${metadata?.rows ?? rows.length} rows · ${metadata?.columns ?? header.length} columns`}</span>
+      <Badge tone={metadata?.paged ? 'needs-you' : 'neutral'}>{metadata?.paged ? 'Read-only paged preview' : `${metadata?.rows ?? rows.length} rows · ${metadata?.columns ?? header.length} columns`}</Badge>
       {!readOnly && <>
-        <button type="button" onClick={() => void saveTable()} disabled={loading}>Save</button>
-        <button type="button" onClick={() => void insertRow()} disabled={loading}>Add row</button>
-        <button type="button" onClick={() => void insertColumn()} disabled={loading}>Add column</button>
-        <select aria-label="Delimiter" value={delimiter} onChange={(event) => {
+        <Button type="button" variant="primary" onClick={() => void saveTable()} disabled={loading}>Save</Button>
+        <Button type="button" onClick={() => void insertRow()} disabled={loading}>Add row</Button>
+        <Button type="button" onClick={() => void insertColumn()} disabled={loading}>Add column</Button>
+        <select className="editor-viewer-select" aria-label="Delimiter" value={delimiter} onChange={(event) => {
           const value = event.currentTarget.value
           setDelimiter(value)
           void call(props, 'delimiter', { delimiter: value }).then(() => refresh(0)).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)))
         }}>
           <option value=",">Comma</option><option value="\t">Tab</option><option value=";">Semicolon</option><option value="|">Pipe</option>
         </select>
-        <label>Filter rows <input ref={filterInput} aria-label="Filter rows" value={filter} onChange={(event) => void changeFilter(event.currentTarget.value)} /></label>
-        <textarea aria-label="Paste CSV cells" value={pasteText} onChange={(event) => setPasteText(event.currentTarget.value)} placeholder="Paste CSV or tab-separated cells" />
-        <label>Paste row <input type="number" min="0" value={pasteAt.row} onChange={(event) => { const value = Number(event.currentTarget.value); setPasteAt((old) => ({ ...old, row: value })) }} /></label>
-        <label>Paste column <input type="number" min="0" value={pasteAt.column} onChange={(event) => { const value = Number(event.currentTarget.value); setPasteAt((old) => ({ ...old, column: value })) }} /></label>
-        <button type="button" onClick={() => void paste()} disabled={loading}>Paste</button>
-        <fieldset>
+        <TextField id={filterInputId} label="Filter rows" value={filter} onChange={(event) => void changeFilter(event.currentTarget.value)} />
+        <textarea className="editor-viewer-source viewer-paste" aria-label="Paste CSV cells" value={pasteText} onChange={(event) => setPasteText(event.currentTarget.value)} placeholder="Paste CSV or tab-separated cells" />
+        <TextField label="Paste row" type="number" min="0" value={pasteAt.row} onChange={(event) => { const value = Number(event.currentTarget.value); setPasteAt((old) => ({ ...old, row: value })) }} />
+        <TextField label="Paste column" type="number" min="0" value={pasteAt.column} onChange={(event) => { const value = Number(event.currentTarget.value); setPasteAt((old) => ({ ...old, column: value })) }} />
+        <Button type="button" onClick={() => void paste()} disabled={loading}>Paste</Button>
+        <fieldset className="viewer-copy-range">
           <legend>Copy rectangular range (zero-based source coordinates)</legend>
-          <label>Start row (source index) <input aria-label="Copy range start row (source index)" type="number" min="0" step="1" value={copyRange.row} onChange={(event) => { const value = event.currentTarget.value; setCopyRange((old) => ({ ...old, row: value })) }} /></label>
-          <label>Start column (source index) <input aria-label="Copy range start column (source index)" type="number" min="0" step="1" value={copyRange.column} onChange={(event) => { const value = event.currentTarget.value; setCopyRange((old) => ({ ...old, column: value })) }} /></label>
-          <label>End row (source index) <input aria-label="Copy range end row (source index)" type="number" min="0" step="1" value={copyRange.endRow} onChange={(event) => { const value = event.currentTarget.value; setCopyRange((old) => ({ ...old, endRow: value })) }} /></label>
-          <label>End column (source index) <input aria-label="Copy range end column (source index)" type="number" min="0" step="1" value={copyRange.endColumn} onChange={(event) => { const value = event.currentTarget.value; setCopyRange((old) => ({ ...old, endColumn: value })) }} /></label>
-          <button type="button" onClick={copySelectedRange} disabled={loading}>Copy range</button>
+          <TextField label="Start row (source index)" aria-label="Copy range start row (source index)" type="number" min="0" step="1" value={copyRange.row} onChange={(event) => { const value = event.currentTarget.value; setCopyRange((old) => ({ ...old, row: value })) }} />
+          <TextField label="Start column (source index)" aria-label="Copy range start column (source index)" type="number" min="0" step="1" value={copyRange.column} onChange={(event) => { const value = event.currentTarget.value; setCopyRange((old) => ({ ...old, column: value })) }} />
+          <TextField label="End row (source index)" aria-label="Copy range end row (source index)" type="number" min="0" step="1" value={copyRange.endRow} onChange={(event) => { const value = event.currentTarget.value; setCopyRange((old) => ({ ...old, endRow: value })) }} />
+          <TextField label="End column (source index)" aria-label="Copy range end column (source index)" type="number" min="0" step="1" value={copyRange.endColumn} onChange={(event) => { const value = event.currentTarget.value; setCopyRange((old) => ({ ...old, endColumn: value })) }} />
+          <Button type="button" onClick={copySelectedRange} disabled={loading}>Copy range</Button>
         </fieldset>
       </>}
     </header>
     {changedBanner}
-    {error && <p role="alert">{error} <button type="button" onClick={() => void refresh(page)}>Retry</button></p>}
+    {error && <p className="viewer-error" role="alert">{error} <Button type="button" onClick={() => void refresh(page)}>Retry</Button></p>}
     {metadata?.limits && metadata.paged && <p>Limits: {metadata.limits.maxColumns} columns · {bytesLabel(metadata.limits.maxRecordBytes ?? 0)} per record · {metadata.limits.maxCachedPages} cached pages</p>}
     {loading && <p role="status">Loading CSV page…</p>}
-    <div className="viewer-table-scroll" style={{ overflow: 'auto', maxHeight: '75vh' }}>
-      <table style={tableStyle}>
-        {header.length > 0 && <thead><tr>{header.map((title, column) => <th key={column} style={cellStyle}>
-          <button type="button" onClick={() => !metadata?.paged && void sortColumn(column)} disabled={Boolean(metadata?.paged)}>{title || `Column ${column + 1}`}</button>
-          {!readOnly && <button type="button" aria-label={`Copy column ${column} (source index)`} onClick={() => void copySelection({ column })} disabled={loading}>Copy column</button>}
-          {!readOnly && <button type="button" aria-label={`Delete column ${column + 1}`} onClick={() => void deleteColumn(column)} disabled={loading}>Delete column</button>}
-        </th>)}{!readOnly && <th style={cellStyle}><button type="button" aria-label="Copy row 0 (source index)" onClick={() => void copySelection({ row: 0 })} disabled={loading}>Copy row 0</button></th>}</tr></thead>}
+    <div className="viewer-table-scroll">
+      <table className="viewer-table">
+        {header.length > 0 && <thead><tr>{header.map((title, column) => <th key={column}>
+          <Button type="button" onClick={() => !metadata?.paged && void sortColumn(column)} disabled={Boolean(metadata?.paged)}>{title || `Column ${column + 1}`}</Button>
+          {!readOnly && <Button type="button" aria-label={`Copy column ${column} (source index)`} onClick={() => void copySelection({ column })} disabled={loading}>Copy column</Button>}
+          {!readOnly && <Button type="button" variant="destructive" aria-label={`Delete column ${column + 1}`} onClick={() => void deleteColumn(column)} disabled={loading}>Delete column</Button>}
+        </th>)}{!readOnly && <th><Button type="button" aria-label="Copy row 0 (source index)" onClick={() => void copySelection({ row: 0 })} disabled={loading}>Copy row 0</Button></th>}</tr></thead>}
         <tbody>{dataRows.map((row) => <tr key={row.index}>
-          {row.cells.map((cell, column) => <td key={column} style={cellStyle} onDoubleClick={() => void copyCell(row.index, column)}>
+          {row.cells.map((cell, column) => <td key={column} onDoubleClick={() => void copyCell(row.index, column)}>
             {readOnly ? <span>{cell}</span> : <input
+              className="viewer-cell-input"
               aria-label={`Row ${row.index + 1}, column ${column + 1}`}
               value={cellDrafts[`${row.index}:${column}`] ?? cell}
               onChange={(event) => { const value = event.currentTarget.value; setCellDrafts((old) => ({ ...old, [`${row.index}:${column}`]: value })) }}
@@ -351,19 +352,19 @@ function CsvSurface({ props, sourceMode }: { props: SurfaceProps; sourceMode: bo
                 }).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)))
               }}
             />}
-            <button type="button" onClick={() => void copyCell(row.index, column)}>Copy cell</button>
+            <Button type="button" onClick={() => void copyCell(row.index, column)}>Copy cell</Button>
           </td>)}
           {!readOnly && <td>
-            <button type="button" aria-label={`Copy row ${row.index} (source index)`} onClick={() => void copySelection({ row: row.index })} disabled={loading}>Copy row</button>
-            <button type="button" onClick={() => void call(props, 'deleteRow', { row: row.index }).then(() => refresh(page)).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)))}>Delete row</button>
+            <Button type="button" aria-label={`Copy row ${row.index} (source index)`} onClick={() => void copySelection({ row: row.index })} disabled={loading}>Copy row</Button>
+            <Button type="button" variant="destructive" onClick={() => void call(props, 'deleteRow', { row: row.index }).then(() => refresh(page)).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)))}>Delete row</Button>
           </td>}
         </tr>)}</tbody>
       </table>
     </div>
-    {metadata?.paged && <nav aria-label="CSV pages">
-      <button type="button" onClick={() => { const next = Math.max(0, page - 1); setPage(next); void refresh(next) }} disabled={page === 0 || loading}>Previous page</button>
+    {metadata?.paged && <nav className="viewer-pages" aria-label="CSV pages">
+      <Button type="button" onClick={() => { const next = Math.max(0, page - 1); setPage(next); void refresh(next) }} disabled={page === 0 || loading}>Previous page</Button>
       <span>Page {page + 1}</span>
-      <button type="button" onClick={() => { const next = nextPage ?? page + 1; setPage(next); void refresh(next) }} disabled={nextPage === null || loading}>Next page</button>
+      <Button type="button" onClick={() => { const next = nextPage ?? page + 1; setPage(next); void refresh(next) }} disabled={nextPage === null || loading}>Next page</Button>
     </nav>}
   </section>
 }
@@ -379,8 +380,8 @@ function MediaActions({ props, error, retry }: { props: SurfaceProps; error: str
     }
   }
   return <div className="viewer-media-actions">
-    <button type="button" onClick={retry}>Retry</button>
-    <button type="button" onClick={() => void openDefault()}>Open in Default App</button>
+    <Button type="button" onClick={retry}>Retry</Button>
+    <Button type="button" onClick={() => void openDefault()}>Open in Default App</Button>
     {error && <p role="alert">{error}</p>}{openError && <p role="alert">{openError}</p>}
   </div>
 }
@@ -439,14 +440,14 @@ function ImageViewer({ props, metadata, url, error, retry }: { props: SurfacePro
     }
   }} onTouchEnd={() => { touchDistance.current = null }}>
     <header className="viewer-toolbar">
-      <button type="button" onClick={() => void setScale(zoom / 1.25)} disabled={zoom <= 0.25}>Zoom out</button>
-      <button type="button" onClick={() => void setScale(1)}>Reset zoom</button>
-      <button type="button" onClick={() => void setScale(zoom * 1.25)} disabled={zoom >= 8}>Zoom in</button>
+      <Button type="button" onClick={() => void setScale(zoom / 1.25)} disabled={zoom <= 0.25}>Zoom out</Button>
+      <Button type="button" onClick={() => void setScale(1)}>Reset zoom</Button>
+      <Button type="button" onClick={() => void setScale(zoom * 1.25)} disabled={zoom >= 8}>Zoom in</Button>
       <span>{Math.round(zoom * 100)}%</span>
       <span>{metadata.width ?? '—'} × {metadata.height ?? '—'}</span>
       <span>{bytesLabel(metadata.bytes ?? props.buffer.size)}</span>
     </header>
-    {url ? <img src={url} alt={props.buffer.name} style={{ ...imageStyle, transform: `scale(${zoom})`, transformOrigin: 'top left' }} onError={() => setLoadError(true)} /> : <p role="status">Loading image…</p>}
+    {url ? <img className="viewer-image__preview" src={url} alt={props.buffer.name} style={{ transform: `scale(${zoom})` }} onError={() => setLoadError(true)} /> : <p role="status">Loading image…</p>}
   </section>
 }
 
@@ -461,7 +462,7 @@ function PdfViewer({ props, url, error, retry }: { props: SurfaceProps; url: str
   const container = useRef<HTMLDivElement | null>(null)
   const canvas = useRef<HTMLCanvasElement | null>(null)
   const scrollTimer = useRef<number | undefined>(undefined)
-  const searchInput = useRef<HTMLInputElement>(null)
+  const searchInputId = useId()
 
   useEffect(() => {
     if (!url) return
@@ -561,7 +562,7 @@ function PdfViewer({ props, url, error, retry }: { props: SurfaceProps; url: str
     const requestedQuery = typeof args?.query === 'string' ? args.query : undefined
     if (requestedQuery === undefined || requestedQuery === '') {
       if (requestedQuery === '') setQuery('')
-      searchInput.current?.focus()
+      document.getElementById(searchInputId)?.focus()
       return { opened: true }
     }
     setQuery(requestedQuery)
@@ -591,18 +592,18 @@ function PdfViewer({ props, url, error, retry }: { props: SurfaceProps; url: str
   if (error || localError) return <div role="alert"><p>{localError ?? error}</p><MediaActions props={props} error={localError ?? error} retry={retry} /></div>
   return <section className="viewer-pdf" aria-label="PDF preview">
     <header className="viewer-toolbar">
-      <button type="button" onClick={() => void changeScale(scale === 'page-width' ? 0.8 : Math.max(0.25, scale / 1.25))}>Zoom out</button>
-      <button type="button" onClick={() => void changeScale('page-width')}>Page width</button>
-      <button type="button" onClick={() => void changeScale(scale === 'page-width' ? 1.25 : Math.min(5, scale * 1.25))}>Zoom in</button>
+      <Button type="button" onClick={() => void changeScale(scale === 'page-width' ? 0.8 : Math.max(0.25, scale / 1.25))}>Zoom out</Button>
+      <Button type="button" onClick={() => void changeScale('page-width')}>Page width</Button>
+      <Button type="button" onClick={() => void changeScale(scale === 'page-width' ? 1.25 : Math.min(5, scale * 1.25))}>Zoom in</Button>
       <span>{scale === 'page-width' ? 'Page width' : `${Math.round(scale * 100)}%`}</span>
-      <label>Find in PDF <input ref={searchInput} value={query} onChange={(event) => setQuery(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === 'Enter') void search().catch(() => {}) }} /></label>
-      <button type="button" onClick={() => { void search().catch(() => {}) }} disabled={!query.trim()}>Find</button>
-      <button type="button" onClick={() => void goToPage(page - 1)} disabled={page <= 1}>Previous page</button>
+      <TextField id={searchInputId} label="Find in PDF" value={query} onChange={(event) => setQuery(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === 'Enter') void search().catch(() => {}) }} />
+      <Button type="button" onClick={() => { void search().catch(() => {}) }} disabled={!query.trim()}>Find</Button>
+      <Button type="button" onClick={() => void goToPage(page - 1)} disabled={page <= 1}>Previous page</Button>
       <span>{page}{pdf ? ` / ${pdf.numPages}` : ''}</span>
-      <button type="button" onClick={() => void goToPage(page + 1)} disabled={!pdf || page >= pdf.numPages}>Next page</button>
+      <Button type="button" onClick={() => void goToPage(page + 1)} disabled={!pdf || page >= pdf.numPages}>Next page</Button>
     </header>
     {searchMessage && <p role="status">{searchMessage}</p>}
-    <div ref={container} style={pageStyle} onScroll={onScroll}>
+    <div ref={container} className="viewer-pdf-page" onScroll={onScroll}>
       {url ? <canvas ref={canvas} aria-label={`PDF page ${page}`} /> : <p role="status">Loading PDF…</p>}
     </div>
     <MediaActions props={props} error={null} retry={retry} />
@@ -614,8 +615,8 @@ function MediaViewer({ props, metadata, url, error, retry }: { props: SurfacePro
   const source = url
   const mediaError = codecError ?? error
   return <section className="viewer-media" aria-label={metadata.kind === 'audio' ? 'Audio preview' : 'Video preview'}>
-    {source && metadata.kind === 'audio' && <audio controls preload="metadata" src={source} onError={() => setCodecError('Unable to play this media file. The file may be unavailable or use an unsupported codec.')} />}
-    {source && metadata.kind === 'video' && <video controls preload="metadata" src={source} style={{ maxWidth: '100%', maxHeight: '75vh' }} onError={() => setCodecError('Unable to play this media file. The file may be unavailable or use an unsupported codec.')} />}
+    {source && metadata.kind === 'audio' && <audio className="viewer-media__audio" controls preload="metadata" src={source} onError={() => setCodecError('Unable to play this media file. The file may be unavailable or use an unsupported codec.')} />}
+    {source && metadata.kind === 'video' && <video className="viewer-media__video" controls preload="metadata" src={source} onError={() => setCodecError('Unable to play this media file. The file may be unavailable or use an unsupported codec.')} />}
     {!source && <p role="status">Loading media…</p>}
     <p>{bytesLabel(metadata.size ?? props.buffer.size)}</p>
     <MediaActions props={props} error={mediaError} retry={retry} />
@@ -625,9 +626,17 @@ function MediaViewer({ props, metadata, url, error, retry }: { props: SurfacePro
 function MermaidViewer({ props, sourceMode }: { props: SurfaceProps; sourceMode: boolean }) {
   const source = props.buffer.draft !== null ? props.buffer.draft : props.buffer.content
   const id = useId().replaceAll(':', '')
+  const container = useRef<HTMLElement | null>(null)
   const [svg, setSvg] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [rendering, setRendering] = useState(false)
+  const [themeRevision, setThemeRevision] = useState(0)
+  useEffect(() => {
+    const themeRoot = container.current?.closest('[data-theme]') ?? document.documentElement
+    const observer = new MutationObserver(() => setThemeRevision((revision) => revision + 1))
+    observer.observe(themeRoot, { attributes: true, attributeFilter: ['data-theme'], subtree: true })
+    return () => observer.disconnect()
+  }, [])
   useEffect(() => {
     if (sourceMode) return
     if (new TextEncoder().encode(source).byteLength > 1024 * 1024) {
@@ -637,18 +646,49 @@ function MermaidViewer({ props, sourceMode }: { props: SurfaceProps; sourceMode:
     let active = true
     setRendering(true)
     setError(null)
-    mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', htmlLabels: false, theme: 'default' })
+    const computed = getComputedStyle(container.current ?? document.documentElement)
+    const token = (name: string) => computed.getPropertyValue(name).trim()
+    const text = token('--ui-text')
+    const surface = token('--ui-surface')
+    const selected = token('--ui-selected')
+    const rail = token('--ui-rail')
+    const border = token('--ui-border')
+    const muted = token('--ui-muted')
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: 'strict',
+      htmlLabels: false,
+      theme: 'base',
+      themeVariables: {
+        background: surface,
+        primaryColor: selected,
+        primaryTextColor: text,
+        primaryBorderColor: border,
+        lineColor: muted,
+        secondaryColor: rail,
+        secondaryTextColor: text,
+        secondaryBorderColor: border,
+        tertiaryColor: surface,
+        tertiaryTextColor: text,
+        tertiaryBorderColor: border,
+        mainBkg: surface,
+        nodeBkg: selected,
+        clusterBkg: rail,
+        titleColor: text,
+        edgeLabelBackground: surface
+      }
+    })
     void mermaid.render(`quirky-mermaid-${id}`, source).then(({ svg: result }) => {
       if (active) setSvg(DOMPurify.sanitize(result, { USE_PROFILES: { svg: true, svgFilters: true }, FORBID_TAGS: ['script', 'foreignObject'] }))
     }).catch((cause: unknown) => {
       if (active) setError(cause instanceof Error ? cause.message : 'Mermaid could not render this diagram.')
     }).finally(() => { if (active) setRendering(false) })
     return () => { active = false }
-  }, [id, source, sourceMode])
+  }, [id, source, sourceMode, themeRevision])
   if (sourceMode) return <SourceText props={props} value={source} label="Mermaid source" />
-  return <section className="viewer-mermaid" aria-label="Mermaid diagram">
+  return <section className="viewer-mermaid" aria-label="Mermaid diagram" ref={container}>
     {rendering && <p role="status">Rendering diagram…</p>}
-    {error ? <div role="alert"><p>{error}</p><button type="button" onClick={() => props.onView({ mode: 'source' })}>Source</button></div> : <div role="img" aria-label="Rendered Mermaid diagram" dangerouslySetInnerHTML={{ __html: svg }} />}
+    {error ? <div role="alert"><EmptyState message={error} action={{ label: 'Source', onAction: () => props.onView({ mode: 'source' }) }} /></div> : <div className="viewer-mermaid__diagram" role="img" aria-label="Rendered Mermaid diagram" dangerouslySetInnerHTML={{ __html: svg }} />}
   </section>
 }
 
@@ -729,24 +769,26 @@ export function ViewerSurface(props: SurfaceProps) {
     }
   }
 
-  if (buffer.size > MAX_FILE_BYTES) return <section role="alert"><p>File is too large to preview.</p><button type="button" onClick={retry}>Retry</button></section>
+  if (buffer.size > MAX_FILE_BYTES) return <section className="viewer-empty" role="alert">
+    <EmptyState message="File is too large to preview." action={{ label: 'Retry', onAction: retry }} />
+  </section>
 
   return <section className="quirky-viewer-surface" aria-label={`${buffer.kind} viewer`} style={{ fontSize: props.fontSize }}>
     <header className="viewer-toolbar">
       <strong>{buffer.name}</strong>
-      {canToggleSource && <button type="button" aria-pressed={sourceMode} onClick={() => onView({ mode: sourceMode ? 'rich' : 'source' })}>{sourceMode ? 'Table / Preview' : 'Source'}</button>}
-      {buffer.kind === 'image' && metadata.width !== undefined && <span>{metadata.width} × {metadata.height} · {bytesLabel(metadata.bytes ?? buffer.size)}</span>}
-      {(buffer.kind === 'audio' || buffer.kind === 'video') && <span>{metadata.contentType ?? 'Media'}</span>}
+      {canToggleSource && <Button className="editor-viewer-mode-toggle" type="button" aria-pressed={sourceMode} onClick={() => onView({ mode: sourceMode ? 'rich' : 'source' })}>{sourceMode ? 'Table / Preview' : 'Source'}</Button>}
+      {buffer.kind === 'image' && metadata.width !== undefined && <Badge>{metadata.width} × {metadata.height} · {bytesLabel(metadata.bytes ?? buffer.size)}</Badge>}
+      {(buffer.kind === 'audio' || buffer.kind === 'video') && <Badge>{metadata.contentType ?? 'Media'}</Badge>}
     </header>
-    {buffer.external === 'changed' && <p role="status">File changed on disk. Reload the viewer. <button type="button" onClick={() => void reload()} disabled={loading}>Reload</button></p>}
+    {buffer.external === 'changed' && <p className="viewer-notice" role="status">File changed on disk. Reload the viewer. <Button type="button" onClick={() => void reload()} disabled={loading}>Reload</Button></p>}
     {loading && <p role="status">Loading preview…</p>}
-    {error && <p role="alert">{error} {buffer.external !== 'changed' && <button type="button" onClick={retry}>Retry</button>} {buffer.external === 'changed' && <button type="button" onClick={() => void reload()}>Reload</button>}</p>}
+    {error && <div className="viewer-error" role="alert"><EmptyState message={error} action={buffer.external === 'changed' ? { label: 'Reload', onAction: () => void reload() } : { label: 'Retry', onAction: retry }} /></div>}
     {buffer.kind === 'csv' && <CsvSurface props={props} sourceMode={sourceMode} />}
     {buffer.kind === 'image' && !sourceMode && <ImageViewer props={props} metadata={metadata} url={url} error={error} retry={retry} />}
     {buffer.kind === 'pdf' && <PdfViewer props={props} url={url} error={error} retry={retry} />}
     {(buffer.kind === 'audio' || buffer.kind === 'video') && <MediaViewer props={props} metadata={metadata} url={url} error={error} retry={retry} />}
     {buffer.kind === 'mermaid' && <MermaidViewer props={props} sourceMode={sourceMode} />}
-    {buffer.kind === 'binary' && <div role="alert"><p>Binary file — cannot display.</p><button type="button" onClick={retry}>Retry</button></div>}
-    {!['csv', 'image', 'pdf', 'audio', 'video', 'mermaid', 'binary'].includes(buffer.kind) && <div role="alert">Unsupported file viewer.</div>}
+    {buffer.kind === 'binary' && <div role="alert"><EmptyState message="Binary file — cannot display." action={{ label: 'Retry', onAction: retry }} /></div>}
+    {!['csv', 'image', 'pdf', 'audio', 'video', 'mermaid', 'binary'].includes(buffer.kind) && <div role="alert"><EmptyState message="Unsupported file viewer." /></div>}
   </section>
 }
