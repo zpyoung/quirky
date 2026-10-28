@@ -7,7 +7,7 @@ const call = (h: BrowserTestHarness, name: string, params: Record<string, unknow
 
 type Fixture = { url: string; stop(): void }
 function startDesignFixture(): Fixture {
-  const html = `<!doctype html><title>Design fixture</title><style>body{margin:0}#paragraph{position:absolute;left:40px;top:40px;width:200px;height:80px}#button{position:absolute;left:300px;top:40px;width:160px;height:60px}</style><p id="paragraph">Coordinate-only paragraph</p><button id="button">Second element</button><script>window.__designClicks=0;window.__designContexts=0;document.addEventListener('click',()=>window.__designClicks++);document.addEventListener('contextmenu',()=>window.__designContexts++)</script>`
+  const html = `<!doctype html><title>Design fixture</title><style>body{margin:0}#paragraph{position:absolute;left:40px;top:40px;width:200px;height:80px}#button{position:absolute;left:300px;top:40px;width:160px;height:60px}</style><p id="paragraph" title="${'public'.repeat(110)}CLIENT_SECRET=hidden">Coordinate-only paragraph</p><button id="button">Second element</button><script>window.__designClicks=0;window.__designContexts=0;document.addEventListener('click',()=>window.__designClicks++);document.addEventListener('contextmenu',()=>window.__designContexts++)</script>`
   const server = Bun.serve({
     hostname: '127.0.0.1', port: 0,
     fetch() {
@@ -136,7 +136,7 @@ test('Watch picker selects click coordinates without a prior hover, blocks page 
     expect(await call(h, 'designHover', { pane: page.pane, opId: first.opId })).toEqual({ payload: null })
     await clickAt(h, page.pane, 60, 60)
     const firstRead = await call(h, 'designRead', { pane: page.pane, opId: first.opId }) as { status: string; selection?: { kind: string; payload: { target: { textSnippet: string; attributes: Record<string, string>; computedStyles: Record<string, string> }; screenshot: { mimeType: string; dataUrl: string; width: number; height: number } | null } } }
-    expect(firstRead.selection).toMatchObject({ kind: 'selected', payload: { target: { textSnippet: 'Coordinate-only paragraph', attributes: { id: 'paragraph' } } } })
+    expect(firstRead.selection).toMatchObject({ kind: 'selected', payload: { target: { textSnippet: 'Coordinate-only paragraph', attributes: { id: 'paragraph', title: '[redacted]' } } } })
     expect(Object.keys(firstRead.selection!.payload.target.computedStyles)).toHaveLength(16)
     const screenshot = firstRead.selection!.payload.screenshot
     expect(screenshot?.mimeType).toBe('image/png')
@@ -243,7 +243,7 @@ test('Watch picker highlights, handles C/S and context selection, and restores o
   }
 }, 90_000)
 
-test('Watch crop uses page-offset clips and the actual screenshot scale on a scrolled DPR-2 viewport', async () => {
+test('Watch crop uses local viewport coordinates and the actual screenshot scale on a scrolled DPR-2 viewport', async () => {
   const h = await startBrowserHarness()
   const fixture = startCaptureFixture()
   try {
@@ -274,6 +274,11 @@ test('Watch crop uses page-offset clips and the actual screenshot scale on a scr
     expect(red).toBeGreaterThan(200)
     expect(green).toBeLessThan(60)
     expect(blue).toBeLessThan(60)
+    const armed = await call(h, 'designArm', { pane: page.pane, mode: 'grab' }) as { opId: string }
+    await call(h, 'paneInput', { pane: page.pane, kind: 'mouse', type: 'mouseMoved', x: 100, y: 60 })
+    const hoverAfterCrop = await call(h, 'designHover', { pane: page.pane, opId: armed.opId }) as { payload: { target: { attributes: Record<string, string> } } | null }
+    expect(hoverAfterCrop.payload?.target.attributes.id).toBe('target')
+    await call(h, 'designCancel', { pane: page.pane, opId: armed.opId })
   } finally {
     fixture.stop()
     await h.cleanup()

@@ -84,7 +84,6 @@ async function mountWithMenuItems(menuItems: UiMenuItemEntry[]) {
     'quirky.worktree/resolve': () => ({ repoId: 'repo-1' }),
     'ui.contributions': () => ({ menuItems })
   })
-  const reports: unknown[] = []
   const executed: { id: string; args: unknown }[] = []
   fake.context.executeCommand = async (id, args) => {
     executed.push({ id, args })

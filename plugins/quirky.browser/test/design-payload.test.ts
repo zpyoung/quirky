@@ -65,6 +65,13 @@ test('clampPayload strips credentials, redacts hostile HTML and enforces every f
   expect([result.target.rectViewport.x, result.target.rectViewport.y, result.target.rectViewport.width, result.target.rectViewport.height].every(Number.isFinite)).toBe(true)
 })
 
+test('redacts secret markers beyond the attribute output boundary', () => {
+  const input = payload()
+  const target = input.target as Record<string, unknown>
+  target.attributes = { title: `${'public'.repeat(110)}CLIENT_SECRET=hidden` }
+  expect(clampPayload(input).target.attributes.title).toBe('[redacted]')
+})
+
 test('clampPayload rejects malformed pages and drops screenshots above the exact PNG byte budget', () => {
   expect(() => clampPayload({ page: {}, target: {} })).toThrow()
   expect(() => clampPayload(payload({ page: { sanitizedUrl: 'javascript:alert(1)' } }))).toThrow()

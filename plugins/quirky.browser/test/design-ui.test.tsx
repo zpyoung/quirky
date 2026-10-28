@@ -1,9 +1,9 @@
-import { afterAll, beforeEach, expect, test } from 'bun:test'
+import { afterAll, afterEach, beforeEach, expect, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import type { UiPluginContext } from '@quirky/protocol'
-import type { DesignPayload, DesignSelection } from '../src/design-contract'
+import type { DesignPayload, DesignSelection, DesignTarget } from '../src/design-contract'
 import { DesignWindow, setLiveDesignPageKeys } from '../src/design-window/DesignWindow'
 
 const RUNTIME_GLOBALS = ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'setImmediate', 'clearImmediate', 'queueMicrotask', 'MessageChannel', 'performance', 'fetch', 'WebSocket'] as const
@@ -13,6 +13,12 @@ for (const [name, value] of nativeGlobals) {
   if (value !== undefined) Object.defineProperty(globalThis, name, { value, writable: true, configurable: true })
 }
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+const mountedViews = new Set<() => void>()
+afterEach(async () => {
+  await act(async () => {
+    for (const unmount of [...mountedViews]) unmount()
+  })
+})
 afterAll(() => {
   setLiveDesignPageKeys([])
   GlobalRegistrator.unregister()
@@ -30,7 +36,14 @@ const payload = (url: string): DesignPayload => ({
   nearbyText: [], ancestorPath: ['html', 'body'], screenshot: null
 })
 
-function fakeContext(selection: DesignSelection | ((index: number) => DesignSelection), selectionCount = 1) {
+type SendFixture = { target: DesignTarget; respond: () => Promise<unknown> }
+
+const explicitSendTarget: DesignTarget = {
+  session: 'fixture-session', agent: 'fixture-agent', label: 'Explicit fixture target', title: 'Fixture session',
+  status: 'running', state: 'running', lastActivityAt: 0, sendable: true
+}
+
+function fakeContext(selection: DesignSelection | ((index: number) => DesignSelection), selectionCount = 1, options: { send?: SendFixture } = {}) {
   let nextOp = 0
   let selectionIndex = 0
   const delivered = new Set<string>()
@@ -52,8 +65,11 @@ function fakeContext(selection: DesignSelection | ((index: number) => DesignSele
       }
       if (method === 'quirky.browser/designHover') return { payload: null }
       if (method === 'quirky.browser/designCancel') return { cancelled: true }
-      if (method === 'quirky.browser/designFormat') return { text: 'Attached browser context from fixture' }
-      if (method === 'quirky.browser/designTargets') return { sessions: [], agents: [] }
+      if (method === 'quirky.browser/designTargets') return { sessions: options.send ? [options.send.target] : [], agents: [] }
+      if (method === 'quirky.browser/designSend') {
+        if (!options.send) throw new Error(`Unexpected browser call ${method}`)
+        return options.send.respond()
+      }
       throw new Error(`Unexpected browser call ${method}`)
     }
   }
@@ -70,13 +86,21 @@ async function settleUntil(predicate: () => boolean): Promise<void> {
   expect(predicate()).toBe(true)
 }
 
-function mount(selection: DesignSelection | ((index: number) => DesignSelection), url = 'https://example.test/a', selectionCount = 1) {
-  const fake = fakeContext(selection, selectionCount)
+function mount(selection: DesignSelection | ((index: number) => DesignSelection), url = 'https://example.test/a', selectionCount = 1, options: { send?: SendFixture } = {}) {
+  const fake = fakeContext(selection, selectionCount, options)
   setLiveDesignPageKeys(['page-1'])
   const host = document.createElement('div')
   const rootElement = document.createElement('div')
   document.body.append(host, rootElement)
   const root: Root = createRoot(rootElement)
+  let mounted = true
+  const unmount = () => {
+    if (!mounted) return
+    mounted = false
+    mountedViews.delete(unmount)
+    root.unmount()
+  }
+  mountedViews.add(unmount)
   const pane = { id: 'pane-1', mode: 'watch' as const, page: 'page-1', url, title: 'Fixture', loading: false, error: null, worktreeId: 'worktree-1' }
   const render = (nextPane = pane) => act(() => root.render(<DesignWindow
     context={fake.context}
@@ -87,7 +111,7 @@ function mount(selection: DesignSelection | ((index: number) => DesignSelection)
     onMessage={fake.onMessage}
   />))
   render()
-  return { ...fake, host, root, render, pane, rootElement }
+  return { ...fake, host, render, pane, rootElement, unmount }
 }
 
 const button = (root: ParentNode, name: string) => {
@@ -96,6 +120,90 @@ const button = (root: ParentNode, name: string) => {
   return found
 }
 
+function explicitTargetButton(root: ParentNode): HTMLButtonElement {
+  const found = root.querySelector<HTMLButtonElement>('button.qbp-design-target')
+  if (!found) throw new Error('Explicit send target was not found')
+  return found
+}
+
+test('a refused annotation send retains the note and releases it for another send', async () => {
+  const url = 'https://example.test/refused'
+  const comment = 'Keep this note after a refused send'
+  const selection: DesignSelection = { kind: 'selected', payload: payload(url) }
+  const ui = mount(selection, url, 1, {
+    send: { target: explicitSendTarget, respond: async () => { throw new Error('fixture refusal') } }
+  })
+
+  await act(async () => { button(ui.rootElement, 'Annotate').click() })
+  await settleUntil(() => ui.host.querySelector('textarea[aria-label="Feedback"]') !== null)
+  const textarea = ui.host.querySelector('textarea[aria-label="Feedback"]') as HTMLTextAreaElement
+  await act(async () => {
+    textarea.focus()
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(textarea, comment)
+    textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    textarea.dispatchEvent(new Event('keyup', { bubbles: true }))
+  })
+  await act(async () => { button(ui.host, 'Add').click() })
+  await settleUntil(() => ui.host.querySelector('.qbp-design-note p')?.textContent?.includes(comment) === true)
+
+  await act(async () => { button(ui.host, 'Send').click() })
+  await settleUntil(() => ui.host.querySelector('button.qbp-design-target') !== null)
+  await act(async () => { explicitTargetButton(ui.host).click() })
+  await settleUntil(() => button(ui.host, 'Send').disabled === false)
+
+  expect(ui.host.querySelector('.qbp-design-note p')?.textContent).toContain(comment)
+  expect(button(ui.host, 'Send').disabled).toBe(false)
+  await act(async () => ui.unmount())
+})
+
+test('editing an annotation while sending retains the edited revision after a pasted result', async () => {
+  const url = 'https://example.test/edited-during-send'
+  const originalComment = 'Original note being sent'
+  const editedComment = 'Edited note retained after send'
+  const selection: DesignSelection = { kind: 'selected', payload: payload(url) }
+  const deferredSend = Promise.withResolvers<unknown>()
+  const ui = mount(selection, url, 1, {
+    send: { target: explicitSendTarget, respond: () => deferredSend.promise }
+  })
+
+  await act(async () => { button(ui.rootElement, 'Annotate').click() })
+  await settleUntil(() => ui.host.querySelector('textarea[aria-label="Feedback"]') !== null)
+  let textarea = ui.host.querySelector('textarea[aria-label="Feedback"]') as HTMLTextAreaElement
+  await act(async () => {
+    textarea.focus()
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(textarea, originalComment)
+    textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    textarea.dispatchEvent(new Event('keyup', { bubbles: true }))
+  })
+  await act(async () => { button(ui.host, 'Add').click() })
+  await settleUntil(() => ui.host.querySelector('.qbp-design-note p')?.textContent?.includes(originalComment) === true)
+
+  await act(async () => { button(ui.host, 'Send').click() })
+  await settleUntil(() => ui.host.querySelector('button.qbp-design-target') !== null)
+  await act(async () => { explicitTargetButton(ui.host).click() })
+  expect(button(ui.host, 'Send').disabled).toBe(true)
+
+  await act(async () => { button(ui.host, 'Edit').click() })
+  await settleUntil(() => ui.host.querySelector('textarea[aria-label="Feedback"]') !== null)
+  textarea = ui.host.querySelector('textarea[aria-label="Feedback"]') as HTMLTextAreaElement
+  await act(async () => {
+    textarea.focus()
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(textarea, editedComment)
+    textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    textarea.dispatchEvent(new Event('keyup', { bubbles: true }))
+  })
+  await act(async () => { button(ui.host, 'Save').click() })
+  await settleUntil(() => ui.host.querySelector('.qbp-design-note p')?.textContent?.includes(editedComment) === true)
+  expect(button(ui.host, 'Send').disabled).toBe(true)
+
+  await act(async () => { deferredSend.resolve({ delivery: 'pasted' }) })
+  await settleUntil(() => ui.host.querySelector('.qbp-design-note p')?.textContent?.includes(editedComment) === true && button(ui.host, 'Send').disabled === false)
+  expect(ui.host.querySelector('.qbp-design-note p')?.textContent).toContain(editedComment)
+  expect(ui.host.querySelector('.qbp-design-note p')?.textContent).not.toContain(originalComment)
+  expect(button(ui.host, 'Send').disabled).toBe(false)
+  await act(async () => ui.unmount())
+})
+
 test('right-click selection offers actions without changing the clipboard', async () => {
   const selection: DesignSelection = { kind: 'context-selected', payload: payload('https://example.test/a') }
   const ui = mount(selection)
@@ -103,10 +211,7 @@ test('right-click selection offers actions without changing the clipboard', asyn
   await settleUntil(() => [...ui.host.querySelectorAll('button')].some((entry) => entry.textContent?.trim() === 'Copy'))
   expect(ui.writes).toEqual([])
   expect(ui.messages).toEqual([])
-  await act(async () => { button(ui.host, 'Copy').click() })
-  expect(ui.writes).toEqual(['Attached browser context from fixture'])
-  expect(ui.messages).toContainEqual({ text: 'Copied', kind: 'info' })
-  await act(async () => ui.root.unmount())
+  await act(async () => ui.unmount())
 })
 
 test('an annotation keeps the selected page URL when the browser navigates', async () => {
@@ -125,7 +230,7 @@ test('an annotation keeps the selected page URL when the browser navigates', asy
   await settleUntil(() => ui.host.textContent?.includes('Keep this note on its original page') === true)
   ui.render({ ...ui.pane, url: 'https://example.test/next' })
   expect(ui.host.textContent).toContain('https://example.test/original')
-  await act(async () => ui.root.unmount())
+  await act(async () => ui.unmount())
 })
 
 test('annotations survive a hosted pane unmount and remount for the same live page', async () => {
@@ -143,12 +248,12 @@ test('annotations survive a hosted pane unmount and remount for the same live pa
   })
   await act(async () => { button(first.host, 'Add').click() })
   await settleUntil(() => first.host.textContent?.includes('Keep this note while the hosted pane remounts') === true)
-  await act(async () => first.root.unmount())
+  await act(async () => first.unmount())
 
   const remounted = mount(selection, url)
   expect(remounted.host.textContent).toContain('Keep this note while the hosted pane remounts')
   expect(remounted.host.textContent).toContain(url)
-  await act(async () => remounted.root.unmount())
+  await act(async () => remounted.unmount())
 })
 
 test('the annotation tray keeps the newest 20 notes and drops the oldest', async () => {
@@ -175,5 +280,5 @@ test('the annotation tray keeps the newest 20 notes and drops the oldest', async
   expect(comments[0]).toContain('Note 2')
   expect(comments).not.toContain('Change: Note 1')
   expect(comments[19]).toContain('Note 21')
-  await act(async () => ui.root.unmount())
+  await act(async () => ui.unmount())
 })

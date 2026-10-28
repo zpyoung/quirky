@@ -57,8 +57,7 @@ function truncate(value: string, max: number): string {
 
 function safeString(value: unknown, max: number): string {
   if (typeof value !== 'string') return ''
-  const bounded = truncate(value, max)
-  return hasSecret(bounded) ? '[redacted]' : bounded
+  return hasSecret(value) ? '[redacted]' : truncate(value, max)
 }
 
 function sanitizedUrl(value: unknown, base?: string): string {

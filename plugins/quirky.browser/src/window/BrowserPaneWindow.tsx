@@ -777,9 +777,10 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
       frameRef.current?.sequence !== candidate.sequence ||
       frameRef.current?.pane !== candidate.pane
     ) return
+    loadedFrameRef.current = { watchId: candidate.watchId, sequence: candidate.sequence }
     const previousAck = lastAckRef.current
     if (previousAck?.watchId === candidate.watchId && previousAck.sequence === candidate.sequence) return
-    lastAckRef.current = { watchId: candidate.watchId, sequence: candidate.sequence }
+    lastAckRef.current = loadedFrameRef.current
     void context.call('quirky.browser/paneFrameAck', { pane: candidate.pane, watchId: candidate.watchId, sequence: candidate.sequence }).catch((error: unknown) => {
       if (mountedRef.current) setWatchError(errorText(error))
     })

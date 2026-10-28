@@ -268,6 +268,7 @@ test('Watch reload and hard reload navigate the bound page while preserving its 
         page: page.browserPageId,
         expression: 'document.querySelector("#request").textContent'
       })).toEqual({ value: '2' })
+      await call(h, 'click', { page: page.browserPageId, element: '#text' })
       await call(h, 'paneInput', { pane: pane.id, kind: 'text', text: 'after reload' })
       expect(await call(h, 'eval', {
         page: page.browserPageId,
@@ -280,6 +281,7 @@ test('Watch reload and hard reload navigate the bound page while preserving its 
         page: page.browserPageId,
         expression: 'document.querySelector("#request").textContent'
       })).toEqual({ value: '3' })
+      await call(h, 'click', { page: page.browserPageId, element: '#text' })
       await call(h, 'paneInput', { pane: pane.id, kind: 'text', text: 'after hard reload' })
       expect(await call(h, 'eval', {
         page: page.browserPageId,

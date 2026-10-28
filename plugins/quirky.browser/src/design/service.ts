@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import type { PluginContext } from '@quirky/protocol'
 import type { DesignAnnotation, DesignGuestAction, DesignPayload, DesignRead, DesignRect, DesignScreenshot, DesignTarget, DesignTargets } from '../design-contract'
-import { clampAnnotations, clampPayload, MAX_SCREENSHOT_BYTES } from './payload'
+import { clampAnnotations, clampPayload } from './payload'
+import { cropViewportPng, screenshotFromPngBase64 } from './png'
 import { formatBrowserAnnotationsAsMarkdown, formatGrabPayloadAsText } from './format'
 import { guestProgram } from './guest'
 import { BrowserFault, fault } from '../runtime/errors'
@@ -20,7 +21,6 @@ const NEW_AGENT_SETTLE_TIMEOUT_MS = 90_000
 const NEW_AGENT_POLL_MS = 100
 const OWNER_ANNOTATION_ATTRIBUTE = 'data-orca-browser-annotation-overlay'
 const CAPTURE_MARKER_ATTRIBUTE = 'data-quirky-design-capture'
-const BASE64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
 
 const SECRET_MARKERS = [
   'access_token', 'auth_token', 'api_key', 'apikey', 'client_secret', 'oauth_state', 'x-amz-',
@@ -99,38 +99,6 @@ function sanitizeTerminalControls(value: string): string {
     result += character
   }
   return result
-}
-function base64ByteLength(value: string): number | null {
-  if (value.length === 0 || value.length % 4 !== 0 || !/^(?:[A-Za-z\d+/]{4})*(?:[A-Za-z\d+/]{2}==|[A-Za-z\d+/]{3}=)?$/.test(value)) return null
-  const padding = value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0
-  return value.length * 3 / 4 - padding
-}
-
-function base64ByteAt(value: string, byteIndex: number): number {
-  const group = Math.floor(byteIndex / 3) * 4
-  const position = byteIndex % 3
-  const a = BASE64.indexOf(value[group] ?? '')
-  const b = BASE64.indexOf(value[group + 1] ?? '')
-  const c = BASE64.indexOf(value[group + 2] ?? '')
-  const d = BASE64.indexOf(value[group + 3] ?? '')
-  if (a < 0 || b < 0 || c < 0 || d < 0) return -1
-  if (position === 0) return (a << 2) | (b >> 4)
-  if (position === 1) return ((b & 15) << 4) | (c >> 2)
-  return ((c & 3) << 6) | d
-}
-
-function pngDimensions(base64: string): { width: number; height: number } | null {
-  if (!base64.startsWith('iVBORw0KGgoAAAANSUhEUg')) return null
-  let width = 0
-  let height = 0
-  for (let index = 0; index < 4; index++) {
-    const widthByte = base64ByteAt(base64, 16 + index)
-    const heightByte = base64ByteAt(base64, 20 + index)
-    if (widthByte < 0 || heightByte < 0) return null
-    width = width * 256 + widthByte
-    height = height * 256 + heightByte
-  }
-  return width > 0 && height > 0 ? { width, height } : null
 }
 
 function stalePageError(error: unknown): boolean {
@@ -398,33 +366,22 @@ export class DesignService {
           }, execution.binding.sessionId, GUEST_CALL_TIMEOUT_MS))
           guestHidden = true
           annotationSnapshot = await this.hideAnnotationOverlays(execution, captureId)
-          let clip: Record<string, number> | undefined
-          let crop = false
-          if (targetRect) {
-            const layout = record(await execution.cdp.send('Page.getLayoutMetrics', {}, execution.binding.sessionId, GUEST_CALL_TIMEOUT_MS))
-            const viewport = record(layout?.cssVisualViewport) ?? record(layout?.visualViewport)
-            if (!viewport || !isFiniteNumber(viewport.pageX) || !isFiniteNumber(viewport.pageY) ||
-                !isFiniteNumber(viewport.clientWidth) || !isFiniteNumber(viewport.clientHeight)) return null
-            const width = Math.max(0, viewport.clientWidth)
-            const height = Math.max(0, viewport.clientHeight)
-            const x = Math.max(0, Math.min(width, targetRect.x))
-            const y = Math.max(0, Math.min(height, targetRect.y))
-            const right = Math.max(x, Math.min(width, targetRect.x + targetRect.width))
-            const bottom = Math.max(y, Math.min(height, targetRect.y + targetRect.height))
-            if (right <= x || bottom <= y) return null
-            clip = { x: viewport.pageX + x, y: viewport.pageY + y, width: right - x, height: bottom - y, scale: 1 }
-            crop = true
-          }
-          const params: Record<string, unknown> = { format: 'png', fromSurface: true, captureBeyondViewport: false }
-          if (clip) params.clip = clip
+          const params = { format: 'png', fromSurface: true, captureBeyondViewport: false }
           const capture = record(await execution.cdp.send('Page.captureScreenshot', params, execution.binding.sessionId, CAPTURE_TIMEOUT_MS))
           const data = capture?.data
           if (typeof data !== 'string') return null
-          const byteLength = base64ByteLength(data)
-          if (byteLength === null || (crop && byteLength > MAX_SCREENSHOT_BYTES)) return null
-          const dimensions = pngDimensions(data)
-          if (!dimensions) return null
-          const screenshot = { mimeType: 'image/png' as const, dataUrl: `data:image/png;base64,${data}`, ...dimensions }
+          const fullScreenshot = screenshotFromPngBase64(data)
+          if (!fullScreenshot) return null
+          let screenshot = fullScreenshot
+          if (targetRect) {
+            const viewportWidth = guestValue(await execution.cdp.send('Runtime.evaluate', {
+              expression: 'window.innerWidth', returnByValue: true, awaitPromise: false
+            }, execution.binding.sessionId, GUEST_CALL_TIMEOUT_MS))
+            if (!isFiniteNumber(viewportWidth) || viewportWidth <= 0) return null
+            const cropped = cropViewportPng(fullScreenshot, viewportWidth, targetRect)
+            if (!cropped) return null
+            screenshot = cropped
+          }
           if (operation && (this.operations.get(operation.opId) !== operation || !this.executionMatches(operation, execution))) return null
           this.assertPaneStillTargets(tab, page)
           return screenshot

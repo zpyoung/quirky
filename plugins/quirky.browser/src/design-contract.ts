@@ -1,6 +1,8 @@
 /** Untrusted guest data is clamped before any display, export, or delivery. */
 export type DesignRect = { x: number; y: number; width: number; height: number }
 export type DesignScreenshot = { mimeType: 'image/png'; dataUrl: string; width: number; height: number }
+/** Full viewport images use the owned CDP transport's 50 MiB encoded ceiling; Grab crops stay at 2 MiB. */
+export const DESIGN_FULL_SCREENSHOT_MAX_BYTES = 50 * 1024 * 1024 * 3 / 4
 export type DesignPayload = {
   page: { sanitizedUrl: string; title: string; viewportWidth: number; viewportHeight: number; scrollX: number; scrollY: number; devicePixelRatio: number; capturedAt: string }
   target: {

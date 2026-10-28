@@ -20,17 +20,12 @@ const ARM_PROGRAM = `(function(opId, mode) {
   }
   const safeText = (value, max) => {
     if (typeof value !== 'string') return ''
-    let end = Math.min(value.length, max)
-    const last = value.charCodeAt(end - 1)
-    const next = value.charCodeAt(end)
-    if (last >= 0xd800 && last <= 0xdbff && next >= 0xdc00 && next <= 0xdfff) end--
-    const bounded = value.slice(0, end)
-    const lower = bounded.toLowerCase()
+    const lower = value.toLowerCase()
     if (secretMarkers.some((marker) => lower.includes(marker))) return '[redacted]'
     if (value.length <= max) return value
     const suffix = ' (truncated)'
     if (max <= suffix.length) return suffix.slice(0, max)
-    end = max - suffix.length
+    let end = max - suffix.length
     const beforeSuffix = value.charCodeAt(end - 1)
     const suffixStart = value.charCodeAt(end)
     if (beforeSuffix >= 0xd800 && beforeSuffix <= 0xdbff && suffixStart >= 0xdc00 && suffixStart <= 0xdfff) end--

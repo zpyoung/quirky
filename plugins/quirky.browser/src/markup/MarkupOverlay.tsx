@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent, CSSProperties, SyntheticEvent } from 'react'
 import type { DesignScreenshot } from '../design-contract'
+import { DESIGN_FULL_SCREENSHOT_MAX_BYTES } from '../design-contract'
 import { cacheMarkupBounds, eraseShapes, mapClientPointToSource } from './geometry'
 import type { MarkupShape, Point } from './geometry'
 import {
@@ -25,7 +26,7 @@ const MAX_SHAPES = 500
 const MAX_STROKE_POINTS = 6000
 const MAX_SCREENSHOT_DIMENSION = 16_384
 const MAX_SCREENSHOT_PIXELS = 32_000_000
-const MAX_SCREENSHOT_DATA_URL_CHARS = 4 * 1024 * 1024
+const MAX_SCREENSHOT_DATA_URL_CHARS = DESIGN_FULL_SCREENSHOT_MAX_BYTES * 4 / 3 + 'data:image/png;base64,'.length
 const TOOL_LABELS: Array<{ tool: MarkupTool; label: string }> = [
   { tool: 'pen', label: 'Pen' },
   { tool: 'highlighter', label: 'Highlighter' },
@@ -301,8 +302,12 @@ export function MarkupOverlay({ screenshot, onClose, onCopied, onError }: Markup
   }
 
   const commitShapes = (shapes: MarkupShape[]) => {
-    const bounded = shapes.length > MAX_SHAPES ? shapes.slice(-MAX_SHAPES) : shapes
-    updateHistory(commitMarkupAction(historyRef.current, bounded.map(cacheMarkupBounds)))
+    if (shapes.length > MAX_SHAPES) {
+      drawScene(previewCanvasRef.current, [])
+      onErrorRef.current('The markup shape limit is reached. Erase, undo or clear before adding more.')
+      return
+    }
+    updateHistory(commitMarkupAction(historyRef.current, shapes.map(cacheMarkupBounds)))
   }
 
   const mapEventPoint = (event: ReactPointerEvent<HTMLCanvasElement>): Point => {

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import type { NativeBrowserHandle, UiPluginContext } from '@quirky/protocol'
 import { MarkupOverlay } from '../markup/MarkupOverlay'
 import type { DesignAnnotation, DesignPayload, DesignRead, DesignScreenshot, DesignSelection, DesignTarget, DesignTargets } from '../design-contract'
+import { DESIGN_FULL_SCREENSHOT_MAX_BYTES } from '../design-contract'
 import { guestProgram } from '../design/guest'
 import { clampPayload } from '../design/payload'
 type AnnotationPageSnapshot = { annotations: DesignAnnotation[]; heldIds: ReadonlySet<string> }
@@ -171,19 +172,20 @@ function hoverOf(value: unknown): DesignPayload | null {
   return sanitizePayload(recordOf(value)?.payload)
 }
 
-function screenshotOf(value: unknown): DesignScreenshot | null {
+function screenshotOf(value: unknown, maxBytes = SCREENSHOT_MAX_BYTES): DesignScreenshot | null {
   const source = recordOf(value)
   if (!source || source.mimeType !== 'image/png' || typeof source.dataUrl !== 'string' || !/^data:image\/png;base64,[A-Za-z0-9+/]+=*$/.test(source.dataUrl)) return null
   const width = source.width
   const height = source.height
   const encoded = source.dataUrl.slice('data:image/png;base64,'.length)
+  const padding = encoded.endsWith('==') ? 2 : encoded.endsWith('=') ? 1 : 0
   if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height) || (width as number) <= 0 || (height as number) <= 0) return null
-  if ((width as number) > 32_768 || (height as number) > 32_768 || Math.floor(encoded.length * 3 / 4) > SCREENSHOT_MAX_BYTES) return null
+  if ((width as number) > 32_768 || (height as number) > 32_768 || Math.floor(encoded.length * 3 / 4) - padding > maxBytes) return null
   return { mimeType: 'image/png', dataUrl: source.dataUrl, width: width as number, height: height as number }
 }
 
-function screenshotFromCapture(value: unknown): DesignScreenshot | null {
-  return screenshotOf(recordOf(value)?.screenshot)
+function screenshotFromCapture(value: unknown, maxBytes = SCREENSHOT_MAX_BYTES): DesignScreenshot | null {
+  return screenshotOf(recordOf(value)?.screenshot, maxBytes)
 }
 
 function targetsOf(value: unknown): DesignTargets {
@@ -283,6 +285,7 @@ export function DesignWindow({ context, pane, nativeHandle, pageHost, nativePage
   const [nativeShortcutOwner] = useState(() => idOf('native-shortcut'))
   const operationRef = useRef<Operation | null>(null)
   const hoverRef = useRef<DesignPayload | null>(null)
+  const copiedSelectionRef = useRef<{ identity: string; payload: DesignPayload } | null>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const writeTextRef = useRef<WriteText | null>(null)
   const writeImageRef = useRef<WriteImage | null>(null)
@@ -398,6 +401,7 @@ export function DesignWindow({ context, pane, nativeHandle, pageHost, nativePage
   useEffect(() => {
     if (identityRef.current !== currentIdentity) {
       identityRef.current = currentIdentity
+      copiedSelectionRef.current = null
       generationRef.current++
       armAttemptRef.current++
       if (mountedRef.current && !armPendingRef.current) setOperationPending(false)
@@ -494,7 +498,7 @@ export function DesignWindow({ context, pane, nativeHandle, pageHost, nativePage
     }
   }, [callFor, cancelOperation, context, onMessage])
 
-  const startOperation = useCallback(async (mode: 'grab' | 'annotate'): Promise<boolean> => {
+  const startOperation = useCallback(async (mode: 'grab' | 'annotate', keepCopiedSelection = false): Promise<boolean> => {
     const target = currentPaneRef.current
     const handle = currentHandleRef.current
     const eligible = target && target.url !== '' && target.url !== 'about:blank' && !target.loading && !target.error &&
@@ -504,6 +508,7 @@ export function DesignWindow({ context, pane, nativeHandle, pageHost, nativePage
       return false
     }
     if (armPendingRef.current) return false
+    if (!keepCopiedSelection) copiedSelectionRef.current = null
     const identity = identityOf(target, watchId, frameSize)
     const attempt = ++armAttemptRef.current
     const opId = target.mode === 'native' ? idOf('design') : ''
@@ -552,9 +557,10 @@ export function DesignWindow({ context, pane, nativeHandle, pageHost, nativePage
       if (!navigator.clipboard?.writeText) throw new Error('Text clipboard access is unavailable.')
       await navigator.clipboard.writeText(formatted.text)
       if (stillCurrent()) {
+        copiedSelectionRef.current = { identity: expectedIdentity ?? identityOf(currentPaneRef.current, currentWatchRef.current, currentFrameSizeRef.current), payload }
         setCopyError(null)
         setSelectionMenu(null)
-        if (rearm) void startOperation('grab')
+        if (rearm) void startOperation('grab', true)
       }
       onMessage(successMessage, 'info')
       return true
@@ -575,7 +581,7 @@ export function DesignWindow({ context, pane, nativeHandle, pageHost, nativePage
       ...(operation ? { opId: operation.opId } : {}),
       ...(rect ? { rect } : {})
     }))
-    return screenshotFromCapture(result)
+    return screenshotFromCapture(result, rect ? SCREENSHOT_MAX_BYTES : DESIGN_FULL_SCREENSHOT_MAX_BYTES)
   }, [context, pane, serializeGuest])
 
   const writeImage = useCallback(async (screenshot: DesignScreenshot, successMessage: string, rearm: boolean, expectedIdentity?: string): Promise<boolean> => {
@@ -615,6 +621,8 @@ export function DesignWindow({ context, pane, nativeHandle, pageHost, nativePage
       }
     }
     if (!isCurrent()) return
+    const copied = copiedSelectionRef.current
+    if (!payload && asImage && copied?.identity === operation.identity) payload = copied.payload
     if (!payload) {
       onMessage('No element hovered.', 'error')
       return
@@ -628,7 +636,7 @@ export function DesignWindow({ context, pane, nativeHandle, pageHost, nativePage
       return
     }
     try {
-      const screenshot = await capture(operation, payload.target.rectViewport)
+      const screenshot = screenshotOf(payload.screenshot) ?? await capture(operation, payload.target.rectViewport)
       if (!isCurrent()) return
       if (!screenshot) {
         onMessage('No screenshot available for this element.', 'error')
@@ -668,6 +676,7 @@ export function DesignWindow({ context, pane, nativeHandle, pageHost, nativePage
   const runAction = useCallback(async (action: DesignAction): Promise<boolean> => {
     if (action === 'cancel') {
       if (markupScreenshot) return false
+      copiedSelectionRef.current = null
       await cancelOperation()
       setSelectionMenu(null)
       setDraft(null)
@@ -712,18 +721,10 @@ export function DesignWindow({ context, pane, nativeHandle, pageHost, nativePage
     if (!focused || !target || !usablePage || event.isComposing || event.key === 'Process' || event.key === 'Dead' || editableHostTarget(event.target)) return
     const op = operationRef.current
     if (markupScreenshot) return
-    if (event.key === 'Escape' && (op || draft || selectionMenu)) {
+    if (event.key === 'Escape' && (op || armPendingRef.current || draft || selectionMenu)) {
       event.preventDefault()
       event.stopPropagation()
       void runActionRef.current('cancel')
-      return
-    }
-    if (event.target instanceof Element && event.target.closest('.qbp-toolbar, .qbp-find, .qbp-design-toolbar, .qbp-design-overlay')) return
-    if (target.mode === 'native') return
-    if (shortcutMod(event) && event.shiftKey && event.key.toLowerCase() === 'c' && !event.altKey) {
-      event.preventDefault()
-      event.stopPropagation()
-      void runActionRef.current('annotate')
       return
     }
     if (op?.mode === 'grab' && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && (event.key.toLowerCase() === 'c' || event.key.toLowerCase() === 's')) {
@@ -744,6 +745,14 @@ export function DesignWindow({ context, pane, nativeHandle, pageHost, nativePage
         }
         await copyHover(key.toLowerCase() === 's')
       }).finally(() => { shortcutPendingRef.current = false })
+      return
+    }
+    if (event.target instanceof Element && event.target.closest('.qbp-toolbar, .qbp-find, .qbp-design-toolbar, .qbp-design-overlay')) return
+    if (target.mode === 'native') return
+    if (shortcutMod(event) && event.shiftKey && event.key.toLowerCase() === 'c' && !event.altKey) {
+      event.preventDefault()
+      event.stopPropagation()
+      void runActionRef.current('annotate')
       return
     }
     if (shortcutMod(event) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 'c' && !op && !event.repeat) {
@@ -972,6 +981,11 @@ export function DesignWindow({ context, pane, nativeHandle, pageHost, nativePage
     }
   }, [context, onMessage])
 
+  const copiedCurrentElement = copiedSelectionRef.current?.identity === currentIdentity
+  const grabHint = copiedCurrentElement
+    ? pane?.mode === 'watch' ? 'Copied — press S to screenshot, or select another element. Esc cancels.' : 'Copied — select another element. Esc cancels.'
+    : pane?.mode === 'watch' ? 'Click an element, or hover and press C to copy / S to screenshot. Esc cancels.' : 'Click an element, or hover and press C to copy. Esc cancels.'
+
   const panel = pageHost ? createPortal(<div className="qbp-design-overlay" aria-label="Browser design mode">
     {hoverPayload && currentOperation?.mode === 'grab' && pageGeometry && pageGeometry.width > 0 ? <div aria-label={`${hoverPayload.target.tagName}${hoverPayload.target.accessibility.role ? ` role=${hoverPayload.target.accessibility.role}` : ''}${hoverPayload.target.accessibility.accessibleName ? ` “${hoverPayload.target.accessibility.accessibleName}”` : ''} ${Math.round(hoverPayload.target.rectViewport.width)}×${Math.round(hoverPayload.target.rectViewport.height)}`} style={{
       position: 'absolute', left: pageGeometry.left + hoverPayload.target.rectViewport.x * pageGeometry.width / hoverPayload.page.viewportWidth,
@@ -987,6 +1001,7 @@ export function DesignWindow({ context, pane, nativeHandle, pageHost, nativePage
         key={annotation.id}
         type="button"
         className="qbp-design-pin"
+        data-quirky-native-mask
         style={{ left: pageGeometry.left + (rect.x + rect.width / 2) * pageGeometry.width / annotation.payload.page.viewportWidth, top: pageGeometry.top + (rect.y + rect.height / 2) * pageGeometry.height / annotation.payload.page.viewportHeight }}
         aria-label={`Edit annotation ${index + 1}: ${annotation.comment}`}
         title={annotation.comment}
@@ -1048,7 +1063,7 @@ export function DesignWindow({ context, pane, nativeHandle, pageHost, nativePage
       </> : null}
       <button type="button" onClick={() => setTargetsOpen(false)}>Close</button>
     </div> : null}
-    {annotations.length ? <section className="qbp-design-tray" aria-label="Browser annotations">
+    {annotations.length ? <section className="qbp-design-tray" data-quirky-native-mask aria-label="Browser annotations">
       <header className="qbp-design-tray-head">
         <button type="button" aria-expanded={!collapsed} onClick={() => setCollapsed(!collapsed)}>{annotations.length} annotation{annotations.length === 1 ? '' : 's'}</button>
         <button type="button" disabled={!notesAvailable.length} onClick={() => void openTargets()}>Send</button>
@@ -1076,7 +1091,7 @@ export function DesignWindow({ context, pane, nativeHandle, pageHost, nativePage
       <button type="button" aria-pressed={currentOperation?.mode === 'annotate'} disabled={!active || operationPending || interactionLocked || Boolean(currentOperation && currentOperation.mode !== 'annotate')} title="Annotate page element (Mod+Shift+C)" onClick={() => currentOperation?.mode === 'annotate' ? void cancelOperation() : void startOperation('annotate')}>{operationPending ? 'Arming…' : 'Annotate'}{annotations.length ? ` (${annotations.length})` : ''}</button>
       <button type="button" aria-pressed={Boolean(markupScreenshot)} disabled={drawingDisabled} title={pane?.mode === 'native' ? 'Native Draw is unavailable: the pinned public SDK has no supported page snapshot capability.' : 'Draw on screenshot'} onClick={() => void beginDraw()}>Draw</button>
       {pane?.mode === 'native' ? <span className="qbp-design-hint">Native cropped screenshots and Draw are unavailable: the pinned public SDK has no supported page snapshot capability.</span> : null}
-      {currentOperation ? <span className="qbp-design-hint" role="status">{currentOperation.mode === 'grab' ? 'Click an element, or hover and press C to copy / S to screenshot. Esc cancels.' : 'Click an element to annotate. Esc cancels.'}</span> : null}
+      {currentOperation ? <span className="qbp-design-hint" role="status">{currentOperation.mode === 'grab' ? grabHint : 'Click an element to annotate. Esc cancels.'}</span> : null}
       {pane?.mode === 'native' && !nativeHandle ? <span className="qbp-design-hint">Native design tools are available when its sandboxed page is ready.</span> : null}
     </div>
     {panel}
