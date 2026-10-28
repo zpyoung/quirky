@@ -18,8 +18,11 @@ type AgentChoice = { id: string; label: string }
 /** The installed, enabled agents `quirky.agents` reports, else the fallback list. */
 async function loadAgents(context: UiPluginContext): Promise<AgentChoice[]> {
   try {
-    const result = (await context.call('quirky.agents/list', {})) as AgentChoice[]
-    return Array.isArray(result) && result.length ? result : FALLBACK_AGENTS
+    const result = (await context.call('quirky.agents/list', {})) as {
+      agents?: (AgentChoice & { installed: boolean; enabled: boolean })[]
+    }
+    const agents = result.agents?.filter((candidate) => candidate.installed && candidate.enabled)
+    return agents?.length ? agents.map(({ id, label }) => ({ id, label })) : FALLBACK_AGENTS
   } catch {
     return FALLBACK_AGENTS
   }

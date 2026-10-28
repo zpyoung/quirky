@@ -243,5 +243,17 @@
 - **Revisit if:** merge-result verification exposes a specific semantic incompatibility.
 - **Source:** locked by docs/loop/LOOP.md step7 recovery; supersedes this item D17 (fixture bounds)
 
+## D23: Read the canonical agent listing and await the event actually being asserted
+- **Question:** how to close the two controller-reported gate failures without expanding the item?
+- **Options:** weaken Create-more acceptance or increase waits; repair the catalog response shape and consumer event observation.
+- **Chose:** CreateDialog consumes quirky.agents/list's canonical AgentListing.agents and presents installed/enabled entries, retaining existing empty/unavailable fallback policy. No array/object compatibility shim. The custom-agent fixture was valid and remains unchanged. Structured Codex acceptance waits for its actual settled done event before asserting that event, rather than observing the earlier producer status. All assertions and deadlines remain.
+- **Why:** the old array cast silently fell back for every valid listing object, hiding the installed custom agent. The controller's actual structured failure had done status but no settled event yet; its isolated retry passed27/0, demonstrating the observation-order boundary. These are concrete gate repairs, not new flows.
+- **Evidence:** controller574/576 remote files and4/4macOS files; window-create failed at195 twice; agents/core/types.ts AgentListing and agents/service.ts listing assembly; installer helper itself verifies listing.agents; CreateDialog.tsx19-25; structured.test.ts488-493.
+- **Final checks:** the two affected acceptance files passed together43/0,171 assertions,110665ms; current typecheck passed57741ms. No extra review, dogfood or flow was started. No unfinished feature flows were identified, so no artificial follow-up was added.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a valid installed provider remains absent or event publication fails within the existing deadline.
+- **Source:** assumed — autonomous; locked by operator immediate-wrap instruction (no unstarted review/dogfood, no new flows)
+
 ## Progress
-All implementation, scoped acceptance, scripts, typecheck, packaged build, consent runtime/CLI, guarded web goals and one cross-family review round completed. Original catch-up2e2d617e; first land then rejected a moving-tip conflict, so step7 recovery merged integration and preserved editor-tab guards/background splitting plus incoming suite isolation. Recovery acceptance/typecheck/build and actual source/consent smokes passed. Owned UI services/homes cleaned and reports retained. Next: commit this required merge, detach and retry queue.ts land m4-worktrees-create-from-github; land owns whole-suite verification. Notify lane6 of the authoritative result. No quirky.tasks edits.
+All scoped feature/API/CLI/UI checks and one review round completed. Moving-tip recovery9431013f preserved incoming contracts; controller then exposed two concrete gate defects, now repaired with canonical AgentListing consumption and consumer-event observation. Final affected files43/0/171 assertions and typecheck pass. Next: commit these repairs, detach and queue.ts land immediately; controller owns whole-suite verification. All implementer agents are finished, no owned UI services remain, and evidence is preserved. No unfinished flows/follow-up, source fallback or quirky.tasks edits. Notify lane6 of authoritative landing result.
