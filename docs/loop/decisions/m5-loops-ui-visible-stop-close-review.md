@@ -66,5 +66,16 @@
 - **Revisit if:** platform verification starts.
 - **Source:** deferred: platform
 
+## D7: Preserve fixture teardown even when window shutdown fails
+- **Question:** native acceptance must not leak a process or altered environment if headless window cleanup rejects.
+- **Options:** sequential teardown; nested finally blocks around window, geometry and rig cleanup.
+- **Chose:** native test afterEach always restores geometry and awaits the rig's owned cleanup; the rig restores environment and runner overrides after stopping its harness.
+- **Why:** a window teardown failure must not skip native subprocess ownership cleanup. Default scripted tests and product source remain unchanged.
+- **Evidence:** NativeControlCoverage two-file component at e84e568c; unchanged HEAD and exact source scope audited; component f12b67e8 committed by parent, integrated and worktree removed.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** end-phase process ownership checks expose a cleanup failure.
+- **Source:** assumed — autonomous
+
 ## Progress
-Scope read and self-reviewed specification complete. Next: commit shared fixture interfaces and specification, dispatch one isolated implementer for native Stop/Close coverage, catch up once, typecheck, append precise end-phase handoff and land. No test, dogfood or review run has been started.
+Native fixture and three rendered-control acceptance tests implemented in component f12b67e8; HEAD/scope audit passed, component merged and isolated worktree removed. No product source or existing test assertions changed. No tests, dogfood or review were run. Append-only end-phase handoff recorded in BLOCKERS. Next: catch up once with build/roadmap, read incoming decisions, typecheck, commit evidence, detach and canonical land.
