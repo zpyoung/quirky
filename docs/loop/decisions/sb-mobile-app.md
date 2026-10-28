@@ -143,5 +143,16 @@
 - **Revisit if:** new mobile Session-returning methods or catalog credential fields are added.
 - **Source:** assumed — autonomous
 
+## D14: Adopt the committed safe catalog's exact installed/isDefault shape
+- **Question:** lane4's completed producer differs from its initial available-field proposal.
+- **Options:** keep the proposal with an alias; consume the real producer contract exactly.
+- **Chose:** cherry-pick module/test-only619876b9 as94597e25, never the panels branch. Exact result `{defaultAgent:string|null,agents:[{id,label,installed,enabled,isDefault,resumable}]}`; no available alias or raw-list fallback. Parent intentionally advanced bundle component53b19b61→94597e25 to supply that prerequisite without touching its uncommitted source. Bundle owns main/manifest/CLI/literal authorization integration. Existing Schema cannot express a string/null union, so nullable defaultAgent is accurately described and producer-owned rather than broadening the protocol schema.
+- **Why:** eliminates credential-bearing agents/info payloads while launching the full saved config server-side. The exact producer, not an earlier proposal, is the contract.
+- **Evidence:** lane4 checkpoint619876b9 and supplied green sealed catalog1test6assertions; actual cherry-pick94597e25; producer exports registerMobileAgentCatalog; public schema type limitations reported by bundle implementer.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** catalog producer fields change or public schema gains nullable unions.
+- **Source:** supersedes sb-mobile-app D13 catalog field proposal
+
 ## Progress
 All original workers stopped;56attributed source files relocated into correct component trees and parent baseline restored. Fresh NativeCompletion/PagesCompletion/BundleCompletion retries running at53b19b61 with exact roots; parent owns session projection only, plus docs. Encrypted Session confidentiality1test14assertions passed after red; broader source/build/UI still unverified. Await source completion, audit HEAD/scope and run full affected acceptance; safe catalog helper from lane4 pending. Single-followup/onecatchup/finalreview/queue land still required. No wholequeuecompletion marker.

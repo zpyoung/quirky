@@ -801,9 +801,13 @@ export function SessionPage({ bridge, route, connected, onNavigate, onReport }: 
               <button className="qp-button" type="button" disabled={!ownsTerminal} onClick={() => void writeTerminal('\u001b[Z')}>Shift+Tab</button>
             </div>
             <div className="qp-dock-row">
-              <input className="qp-dock-input" aria-label="Terminal command" placeholder={ownsTerminal ? 'Type a command…' : 'Take control to send input'} value={commandDraft} disabled={!ownsTerminal} onChange={(event) => setCommandDraft(event.currentTarget.value)} onKeyDown={(event) => {
-                if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void submitCommand() }
-              }} />
+              <input className="qp-dock-input" aria-label="Terminal command" placeholder={ownsTerminal ? 'Type a command…' : 'Take control to send input'} value={commandDraft} disabled={!ownsTerminal}
+                autoComplete={bridge.init.preferences.autocomplete ? 'on' : 'off'}
+                autoCorrect={bridge.init.preferences.autocomplete ? 'on' : 'off'}
+                autoCapitalize="none" spellCheck={bridge.init.preferences.autocomplete}
+                onChange={(event) => setCommandDraft(event.currentTarget.value)} onKeyDown={(event) => {
+                  if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void submitCommand() }
+                }} />
               <button className="qp-button qp-button--primary" type="button" disabled={!ownsTerminal || commandBusy || !commandDraft} onClick={() => void submitCommand()}>{commandBusy ? 'Sending…' : 'Send'}</button>
               <button className="qp-button" type="button" disabled={!ownsTerminal} onClick={() => setCommandsOpen(true)}>Quick commands</button>
               <button className="qp-button" type="button" disabled={!ownsTerminal} onClick={() => setShortcutOpen(true)}>Shortcuts</button>

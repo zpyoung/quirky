@@ -106,7 +106,7 @@ export async function buildMobilePages(
       minify: true,
       splitting: false,
       sourcemap: 'none',
-      naming: { entry: 'page.js', chunk: 'chunk-[name]-[hash].[ext]', asset: 'asset-[name]-[hash].[ext]' },
+      naming: { entry: 'page.[ext]', chunk: 'chunk-[name]-[hash].[ext]', asset: 'asset-[name]-[hash].[ext]' },
       define: { 'process.env.NODE_ENV': '"production"' }
     })
     if (!built.success) throw new Error(`mobile page bundle build failed:\n${built.logs.map((log) => String(log)).join('\n')}`)

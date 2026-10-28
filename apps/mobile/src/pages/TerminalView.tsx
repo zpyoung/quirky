@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, forwardRef } from 'react'
 import { FitAddon } from '@xterm/addon-fit'
+import { WebLinksAddon } from '@xterm/addon-web-links'
 import { Terminal } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
 import type { MobileTerminalState, PtySnapshot, PtySubscription, Session } from '@quirky/protocol'
@@ -96,6 +97,15 @@ export const TerminalView = forwardRef<TerminalViewHandle, Props>(function Termi
   useEffect(() => {
     const container = host.current
     if (!container) return
+    const openLink = (uri: string) => {
+      if (bridge.init.preferences.terminalLinkMode !== 'phone') {
+        setStreamError('Desktop browser links are unavailable. Choose Open on phone in Terminal settings.')
+        return
+      }
+      void bridge.native.openExternal(uri).catch((cause) => {
+        if (mountedRef.current) setStreamError(errorMessage(cause, 'Could not open the terminal link.'))
+      })
+    }
     const current = new Terminal({
       allowProposedApi: false,
       cursorBlink: true,
@@ -104,11 +114,20 @@ export const TerminalView = forwardRef<TerminalViewHandle, Props>(function Termi
       fontSize: Math.max(8, Math.min(28, 14 * textScaleRef.current)),
       lineHeight: 1.05,
       scrollback: 3000,
+      linkHandler: { activate: (_event, uri) => openLink(uri) },
       theme: { background: '#101318', foreground: '#e7ebf0', cursor: '#d9e7f8', selectionBackground: '#496486' }
     })
     const fit = new FitAddon()
     current.loadAddon(fit)
+    current.loadAddon(new WebLinksAddon((_event, uri) => openLink(uri)))
     current.open(container)
+    if (current.textarea) {
+      const enabled = bridge.init.preferences.autocomplete
+      current.textarea.autocomplete = enabled ? 'on' : 'off'
+      current.textarea.setAttribute('autocorrect', enabled ? 'on' : 'off')
+      current.textarea.setAttribute('autocapitalize', 'none')
+      current.textarea.spellcheck = enabled
+    }
     terminal.current = current
     fitAddon.current = fit
     mountedRef.current = true
