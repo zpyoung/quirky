@@ -1492,8 +1492,7 @@
       "deps": [
         "m7-terminal-runtime-native-and-worktree-parity"
       ],
-      "status": "in-progress",
-      "lane": 9
+      "status": "done"
     },
     {
       "id": "fix-desktop-startup-imports",
