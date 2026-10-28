@@ -17,7 +17,10 @@ export interface KernelAction {
 }
 export interface ApprovalScope { actionKind: string; contentIdentity: string; evidenceKey: string; preparedCommitSha?: string }
 export type GateVerdict = { verdict: 'allow' } | { verdict: 'hold' | 'escalate'; reason: string; detail?: string }
-export interface Deviation { kind: string; detail?: string }
+export interface Deviation {
+  kind: string; naturalKey?: string; detail?: string
+  dispatchId?: string; messageId?: string; trigger?: 'idle' | 'silent'
+}
 export type Decision<A extends KernelAction = KernelAction> =
   | { action: A; considered?: string[] }
   | { action: null; reason: string; detail?: string; considered?: string[]; deviation?: Deviation }
@@ -34,12 +37,12 @@ export interface ExecuteContext {
 export type StopResult = { kind: 'terminal'; state: string; reason: string } | { kind: 'park'; reason: ParkReason; detail: string } | null
 export interface EnrollmentInput {
   kind: string; kindPayload: Json; capabilities?: Record<string, CapabilityMode>; budget?: BudgetPolicy
-  owner?: OwnerConfig; ownerInterventionCapability?: CapabilityMode
+  owner?: OwnerConfig | null; ownerInterventionCapability?: CapabilityMode
 }
 export interface AuthorizedEnrollment {
   workspaceKey: string; workspacePath: string; executionHostId: string; schedulerOwner: string
   repoId?: string | null; worktreeId?: string | null; kindPayload: Json; undo?: Json
-  owner?: OwnerConfig; ownerInterventionCapability?: CapabilityMode
+  owner?: OwnerConfig | null; ownerInterventionCapability?: CapabilityMode
 }
 export interface Enrollment extends AuthorizedEnrollment {
   watcherId: string; kind: string; enabled: boolean; paused: boolean; commandRevision: number
