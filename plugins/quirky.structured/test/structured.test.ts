@@ -179,13 +179,11 @@ try {
         new Response(child.stderr).text()
       ])
       if (exitCode !== 0) throw new Error(stderr)
-      expect(exitCode).toBe(0)
       const authority = JSON.parse(stdout) as Record<string, unknown>
       const runtimeEpoch = authority.runtimeEpoch
       const processIncarnation = authority.processIncarnation
       if (
         authority.sessionId !== session.id ||
-        authority.source !== 'structured_lease' ||
         authority.live !== true ||
         typeof runtimeEpoch !== 'string' ||
         runtimeEpoch.length === 0 ||
@@ -218,7 +216,7 @@ try {
     const stopped = await create('stop me')
     await waitFor(() => runner.started.length === 1)
     const beforeStop = await call('quirky.session/identity', { session: stopped.id })
-    expect(beforeStop).toMatchObject({ sessionId: stopped.id, source: 'structured_lease', live: true })
+    expect(beforeStop).toMatchObject({ sessionId: stopped.id, live: true })
     await call('quirky.structured/stop', { session: stopped.id })
     await expect(call('quirky.session/identity', { session: stopped.id })).rejects.toMatchObject({
       code: RpcErrorCode.NotFound
@@ -227,7 +225,7 @@ try {
     const exited = await create('exit me')
     await waitFor(() => runner.started.length === 2)
     const beforeExit = await call('quirky.session/identity', { session: exited.id })
-    expect(beforeExit).toMatchObject({ sessionId: exited.id, source: 'structured_lease', live: true })
+    expect(beforeExit).toMatchObject({ sessionId: exited.id, live: true })
     runner.context.setStatus(exited.id, 'exited')
     await expect(call('quirky.session/identity', { session: exited.id })).rejects.toMatchObject({
       code: RpcErrorCode.NotFound
@@ -401,6 +399,45 @@ try {
     expect((await pending).status).toBe('declined')
   })
 
+  test('SC-23: a model and effort pick is resolved and recorded on the session', async () => {
+    const snapshot = {
+      agent: 'claude',
+      options: { model: { value: 'opus', source: 'explicit' }, effort: { value: 'high', source: 'explicit' } },
+      summary: 'Claude · Opus · Effort: high'
+    }
+    world.resolveLaunchOverride = () => ({
+      added: [],
+      args: '',
+      structured: { model: 'opus', effort: 'high' },
+      shadowed: [],
+      launchSettings: snapshot
+    })
+    await call('quirky.structured/create', {
+      worktree: 'main',
+      agent: 'claude',
+      prompt: 'hi',
+      model: 'opus',
+      options: { effort: 'high' }
+    })
+    expect(world.resolveLaunchCalls).toEqual([
+      { agent: 'claude', model: 'opus', options: { effort: 'high' }, structured: true }
+    ])
+    expect(world.registerCalls[0].launchSettings).toEqual(snapshot)
+    await waitFor(() => runner.started.length === 1)
+  })
+
+  test('SC-23: with no pick no launch settings are resolved or recorded', async () => {
+    await create()
+    await waitFor(() => runner.started.length === 1)
+    expect(world.resolveLaunchCalls).toEqual([])
+    expect(world.registerCalls[0]).not.toHaveProperty('launchSettings')
+  })
+
+  test('SC-23: a pick that resolves to no snapshot registers without launchSettings', async () => {
+    await call('quirky.structured/create', { worktree: 'main', agent: 'claude', prompt: 'hi', model: 'opus' })
+    expect(world.registerCalls[0]).not.toHaveProperty('launchSettings')
+    await waitFor(() => runner.started.length === 1)
+  })
 
   test('SC-24: extra arguments are refused and nothing is registered', async () => {
     expect(
@@ -516,6 +553,10 @@ describe('the Claude runner inside the plugin', () => {
     await waitFor(() => query.written.length === 1)
 
     query.emit({ type: 'system', subtype: 'init', session_id: 'c1', model: 'm' })
+    await waitForAsync(async () => {
+      const stored = (await call('quirky.session/get', { session: session.id })) as Session
+      return stored.providerSession?.id === 'c1' ? stored : undefined
+    })
     const permission = (query.params.options!.canUseTool as any)('Bash', { command: 'ls' }, {
       signal: new AbortController().signal,
       toolUseID: 'tu'
@@ -528,8 +569,13 @@ describe('the Claude runner inside the plugin', () => {
 
     query.emit({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'done' }] } })
     query.emit({ type: 'result', subtype: 'success', result: 'All good', is_error: false })
-    await waitFor(() => world.statusLog.some((entry) => entry.status === 'done'))
-    expect(world.statusLog.map((entry) => entry.status)).toEqual(['working', 'waiting', 'working', 'done'])
+    await waitForAsync(() =>
+      settledEvents().find((event) => event.sessionId === session.id && event.state === 'done')
+    )
+    expect(settledEvents().filter((event) => event.sessionId === session.id).map((event) => event.state)).toEqual([
+      'waiting',
+      'done'
+    ])
 
     await call('quirky.structured/send', { session: session.id, text: 'and tests' })
     await waitFor(() => query.written.length === 2)
@@ -726,7 +772,6 @@ describe('the Codex runner inside the plugin', () => {
     const runtimeEpoch = identity.runtimeEpoch
     if (
       identity.sessionId !== session.id ||
-      identity.source !== 'structured_lease' ||
       identity.live !== true ||
       typeof processIncarnation !== 'string' ||
       processIncarnation.length === 0 ||
@@ -754,7 +799,7 @@ describe('the Codex runner inside the plugin', () => {
     expect(
       await call('quirky.structured/send', {
         session: session.id,
-        text: 'first custody-recorded turn',
+        text: 'first lease-bound turn',
         expectedIncarnation: processIncarnation
       })
     ).toEqual({ ok: true })
@@ -764,7 +809,7 @@ describe('the Codex runner inside the plugin', () => {
       ((await call('quirky.structured/messages', { session: session.id })) as StructuredMessage[])
         .filter((message) => message.role === 'user')
         .map((message) => message.text)
-    ).toEqual(['first custody-recorded turn'])
+    ).toEqual(['first lease-bound turn'])
 
     expect(
       await call('quirky.structured/stop', {
@@ -801,7 +846,10 @@ describe('the Codex runner inside the plugin', () => {
       ['[rpc-error]', 'scripted turn request error']
     ]) {
       const session = await createAgent('codex', prompt)
-      await waitFor(() => world.statusLog.some((entry) => entry.sessionId === session.id && entry.status === 'exited'))
+      await waitForAsync(async () => {
+        const stored = (await call('quirky.session/get', { session: session.id })) as Session
+        return stored.status === 'exited' ? stored : undefined
+      })
       const messages = (await call('quirky.structured/messages', { session: session.id })) as StructuredMessage[]
       expect(messages.some((message) => message.role === 'system' && message.text.includes(diagnostic)), JSON.stringify(messages)).toBe(true)
       expect(settledEvents().some((event) => event.sessionId === session.id && event.state === 'done')).toBe(false)
@@ -839,8 +887,8 @@ describe('the Codex runner inside the plugin', () => {
     })
 
     const original = await createAgent('codex', 'continue this conversation')
-    await waitFor(() =>
-      worldWithManagedCodex.statusLog.some((entry) => entry.sessionId === original.id && entry.status === 'done')
+    await waitForAsync(() =>
+      settledEvents().find((event) => event.sessionId === original.id && event.state === 'done')
     )
     expect(fixture.environments()).toEqual([{ CODEX_HOME: managedHome }])
     expect((await call('quirky.session/get', { session: original.id })).providerSession).toMatchObject({

@@ -319,5 +319,49 @@
 - **Revisit if:** a real output-producing native provider cannot reach ready through the unchanged observer
 - **Source:** assumed — autonomous
 
+## D30: Separate logical receipt identity from a fresh CLI transport invocation
+- **Question:** a completed CLI retry returned the same Run but replayed:false because generic RPC caching intercepted the call before the plugin ledger
+- **Options:** bypass daemon caching by parameter shape; add method metadata; weaken the documented replay result; use the existing explicit transport request-ID option
+- **Chose:** expose the existing CallOptions.requestId through the CLI call surface. Only explicit durable orchestration mutation calls supply a fresh transport UUID per invocation; logical params.requestId remains stable. Connection-loss resends keep their transport identity. Other methods retain the existing generic retry behavior.
+- **Why:** the feature contract requires completed logical receipts to report replayed:true and pending live requests to join, while abandoned pending receipts remain operation_unknown. The two ledgers must not mask each other or create duplicate effects.
+- **Evidence:** affected CLI retry failure; DaemonLink.nextRequestId and daemon RequestLog trace; orchestration.md mutation idempotency lines538-554; existing protocol CallOptions requestId
+- **Reversibility:** medium
+- **Confidence:** high for the contract; final CLI verification remains required
+- **Revisit if:** connection-loss resends or another method's generic idempotency changes
+- **Source:** locked by /Users/zpyoung/PycharmProjects/PERSONAL/quirky/research/orca-features/orchestration.md
+
+## D31: Describe real Codex structured model and effort support in the catalog
+- **Question:** a detected and enabled Codex was refused because its public launch catalog lacked structured model mapping
+- **Options:** fake the runtime capability; remove validation; declare the actual native mappings
+- **Chose:** add model/effort mappings through the existing agent launch catalog and keep the runtime gate and option validation. Native Codex receives the same public app-server option names it already implements.
+- **Why:** provider support and the public catalog must agree. A local runtime override would leave create/resume and worker launch inconsistent.
+- **Evidence:** native kernel readonly evidence211; agents/options structured contract and service calculation; CodexRunner public model/effort inputs; catalog source correction
+- **Reversibility:** easy
+- **Confidence:** high for the mapping; native end-to-end verification remains required
+- **Revisit if:** a supported pick cannot reach the real native provider unchanged
+- **Source:** assumed — autonomous
+
+## D32: Settle Worker state from the accepted attested report
+- **Question:** a real accepted worker_done completed Task/Dispatch but left Worker ready, so guarded release refused
+- **Options:** infer success from process exit; bypass release guards; settle the Worker atomically with its verified report
+- **Chose:** acceptReport records the reported succeeded/failed outcome in the same store transaction, including early reports through ready. Duplicates preserve the outcome and stopping workers remain fenced.
+- **Why:** positive authenticated report evidence, not liveness or exit, authorizes outcome settlement and later cleanup.
+- **Evidence:** real child CLI accepted report followed by release refusal; lifecycle source and regressions; subsequent real release returned released with exact process close and retained archive identity
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** a late or duplicate report changes a fenced attempt or another Dispatch
+- **Source:** assumed — autonomous
+
+## D33: Repair fixture transport and native API preconditions, not production readiness
+- **Question:** partial JSON replies, stale agent discovery and missing fake session provider persistence obscured real acceptance paths
+- **Options:** retry malformed JSON; inflate readiness deadlines; fabricate session authority; implement the actual fixture protocols
+- **Chose:** publish private CLI replies by atomic rename; refresh and enable private test binaries through the public catalog; advertise handled bracketed-paste mode before input; persist provider IDs supplied by native initialization in the fake session API; wait for public settled events. Input-driven held native commentary supplies real journal evidence.
+- **Why:** every actor still launches as an actual child with the kernel-issued lease. A timer, a process ID or optimistic working status is not accepted-work proof.
+- **Evidence:** observed JSON EOF and2794362f; native no-launchable-agent evidence; missing fake setProviderSession failure; native input-driven fixture source and public-event barrier
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the corrected genuine transport still cannot exercise an included flow
+- **Source:** assumed — autonomous
+
 ## Progress
 Iteration4: executable checkpoint df799424 (peer merge e410f69f) provides all eight real owner-scoped service APIs, shared worker lifecycle and plugin hubs; no stubs or forged session principal. Own kernel units63pass273assertions and real daemon API6pass35assertions. Latest service run4pass2fail exposed durable stop checkpoint and an invalid provider-exit/terminal-exit fixture assumption; both corrected in source, not yet claimed passing. Current own compiler improved136diagnostics27files to26diagnostics7files; the remaining source/test fixes are integrated but final compiler verification is pending. Native canonical history smoke passes before/after D27; isolated pointer fix is extracted without owner/control hubs. Core agent is completing actual ordinary Run-sender response schemas and pending worker-question persistence, based on peer public CLI evidence. Next: finish that barrier, exercise all8 real services and native kind-to-worker-to-terminal/archive smoke, affected remote suite/scripts/typecheck, docs/changelog, deps-ready and one final roadmap catchup, then queue land. D20 skips only the unstarted review campaign; D21 is the sole deferred native host-power flow. No human ask.

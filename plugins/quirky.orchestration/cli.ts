@@ -1,4 +1,5 @@
-import type { CliArgs, CliContext, CliModule } from '@quirky/protocol'
+import { randomUUID } from 'node:crypto'
+import type { CallOptions, CliArgs, CliContext, CliModule } from '@quirky/protocol'
 import type {
   AskResult,
   CheckResult,
@@ -34,6 +35,13 @@ const MUTATION_METHODS = [
   'runCreate', 'runUse', 'taskCreate', 'taskUpdate', 'dispatch', 'send', 'check', 'reply', 'ask', 'gateCreate',
   'gateResolve', 'workerStart', 'workerStop', 'workerAbandon', 'workerRelease', 'workerRetain', 'reset'
 ] as const
+
+function hasDurableMutationRequest(method: OrchestrationMethod, params: ObjectValue): boolean {
+  if (!MUTATION_METHODS.some((candidate) => candidate === method)) return false
+  if (method === 'dispatch' && params.dryRun === true) return false
+  if (method === 'check' && (params.mode === 'peek' || params.mode === 'all') && params.ackDeliveryId === undefined) return false
+  return true
+}
 const PROVIDER_IDS = ['claude', 'openclaude', 'codex', 'opencode', 'mimo', 'gemini', 'droid', 'grok', 'cursor'] as const
 
 function isObject(value: unknown): value is ObjectValue {
@@ -431,12 +439,14 @@ async function call<M extends OrchestrationMethod>(
   method: M,
   params: ObjectValue,
   guard: ResponseGuard<M>,
-  options?: { timeoutMs?: number }
+  options?: Pick<CallOptions, 'requestId' | 'timeoutMs'>
 ): Promise<OrchestrationMethodResult<M>> {
-  const requestId = isString(params.requestId) ? params.requestId : undefined
   let result: unknown
+  const requestId = isString(params.requestId) ? params.requestId : undefined
+  const transportRequestId = hasDurableMutationRequest(method, params) ? randomUUID() : undefined
+  const callOptions = transportRequestId === undefined ? options : { ...options, requestId: transportRequestId }
   try {
-    result = await context.call(`quirky.orchestration/${method}`, params, options)
+    result = await context.call(`quirky.orchestration/${method}`, params, callOptions)
   } catch (error) {
     if (requestId !== undefined && isConnectionLost(error)) {
       throw context.fail(recoveryText(
@@ -700,6 +710,9 @@ export const commands: CliModule['commands'] = {
         ? `Worker report ${result.report.status}${result.messages.length === 0 ? '' : `: ${result.messages.map((message) => message.id).join(', ')}`}`
         : `Heartbeat ${result.heartbeat.status}${result.messages.length === 0 ? '' : `: ${result.messages.map((message) => message.id).join(', ')}`}`
     output(context, result, text)
+    if (result.kind === 'worker_report' && result.report.status === 'rejected') {
+      throw context.fail(`Worker report rejected: ${result.report.reason}`)
+    }
   },
 
   check: async (args, context) => {
