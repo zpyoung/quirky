@@ -1520,8 +1520,7 @@
       "deps": [
         "m7-terminal-provider-host-and-worktree-remainder"
       ],
-      "status": "in-progress",
-      "lane": 12
+      "status": "done"
     },
     {
       "id": "ui-tokens-and-components",
