@@ -61,7 +61,7 @@ const REMOTE_METHODS: Readonly<Record<RemoteAction, string>> = {
 }
 
 const PUSH_ACTIONS: ReadonlySet<RemoteAction> = new Set(['push', 'force-push', 'sync'])
-const OWN_BUTTON: ReadonlySet<GitBusyOp> = new Set(['push', 'force-push', 'pull', 'sync'])
+const OWN_BUTTON: ReadonlySet<GitBusyOp> = new Set(['switch', 'push', 'force-push', 'pull', 'sync'])
 const RETRY_MS = 10_000
 const MESSAGE_REQUIRED = 'Enter a commit message to commit'
 

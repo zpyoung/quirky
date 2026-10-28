@@ -1,6 +1,25 @@
 import nacl from 'tweetnacl'
+import type { MobileSocket, MobileWebSocketConstructor } from '../src/transport/client'
 import { DesktopMobileE2EEV2Session } from '../../../plugins/quirky.mobile/src/crypto/e2ee-v2'
 
+export type TestPeerSocket = MobileSocket & {
+  readonly url: string
+  emitEvent(data: unknown): void
+  sealEncryptedText(text: string): string
+  emitEncryptedText(text: string): void
+  emitEncryptedTextFrame(frame: string): void
+  emitTerminal(streamId: number, bytes: Uint8Array): void
+}
+
+export type TestPeer = {
+  WebSocket: MobileWebSocketConstructor
+  sockets: TestPeerSocket[]
+  requests: { method: string; params: Record<string, unknown>; requestId?: string }[]
+  authenticatedTokens: string[]
+  encryptedTextFrames: string[]
+  publicKeyB64: string
+  serverSecretKey: Uint8Array
+}
 const encodeBase64 = (bytes: Uint8Array): string => {
   let binary = ''
   for (const byte of bytes) binary += String.fromCharCode(byte)
@@ -12,14 +31,18 @@ export const DEVICE_ID = '00000000-0000-4000-8000-000000000001'
 
 export function makeTestPeer(options: {
   holdReady?: boolean
+  holdAuthentication?: boolean
+  authenticationFrames?: (response: Record<string, unknown>) => readonly Record<string, unknown>[]
   onRequest?: (method: string, params: Record<string, unknown>) => unknown | Promise<unknown>
   expectedToken?: string
   identitySeed?: number
-} = {}) {
+  preAuthenticationBinary?: boolean
+} = {}): TestPeer {
   const desktop = nacl.box.keyPair.fromSecretKey(new Uint8Array(32).fill(options.identitySeed ?? 37))
   const sockets: TestSocket[] = []
   const requests: { method: string; params: Record<string, unknown>; requestId?: string }[] = []
   const authenticatedTokens: string[] = []
+  const encryptedTextFrames: string[] = []
 
   class TestSocket {
     static CONNECTING = 0
@@ -60,6 +83,7 @@ export function makeTestPeer(options: {
         })
         if (!this.session) { this.fail(); return }
         if (!options.holdReady) this.deliverText(JSON.stringify(this.session.ready))
+        if (!options.holdReady && options.preAuthenticationBinary) this.emitTerminal(43, new Uint8Array([65, 66, 67]))
         return
       }
       const plaintext = this.session.openText(data)
@@ -73,11 +97,17 @@ export function makeTestPeer(options: {
       if (envelope.type === 'e2ee_auth') {
         const token = typeof envelope.deviceToken === 'string' ? envelope.deviceToken : ''
         authenticatedTokens.push(token)
+        if (options.holdAuthentication) return
         const accepted = options.expectedToken === undefined || options.expectedToken === token
         const response = accepted
           ? { type: 'e2ee_authenticated', v: 2, transcriptHashB64: this.session.transcriptHashB64 }
           : { type: 'e2ee_error', error: { code: 'unauthorized' } }
-        this.deliverText(this.session.sealText(JSON.stringify(response)))
+        const frames = options.authenticationFrames?.(response) ?? [response]
+        for (const frame of frames) {
+          const encrypted = this.session.sealText(JSON.stringify(frame))
+          encryptedTextFrames.push(encrypted)
+          this.deliverText(encrypted)
+        }
         return
       }
       if (typeof envelope.id !== 'number' || typeof envelope.method !== 'string') return
@@ -112,9 +142,18 @@ export function makeTestPeer(options: {
       if (!this.session || this.readyState !== TestSocket.OPEN) throw new Error('test peer is not authenticated')
       this.deliverText(this.session.sealText(JSON.stringify({ jsonrpc: '2.0', method: 'event', params: data })))
     }
-    emitEncryptedText(text: string): void {
+    sealEncryptedText(text: string): string {
       if (!this.session || this.readyState !== TestSocket.OPEN) throw new Error('test peer is not authenticated')
-      this.deliverText(this.session.sealText(text))
+      const frame = this.session.sealText(text)
+      encryptedTextFrames.push(frame)
+      return frame
+    }
+    emitEncryptedText(text: string): void {
+      this.emitEncryptedTextFrame(this.sealEncryptedText(text))
+    }
+    emitEncryptedTextFrame(frame: string): void {
+      if (!this.session || this.readyState !== TestSocket.OPEN) throw new Error('test peer is not authenticated')
+      this.deliverText(frame)
     }
 
 
@@ -158,6 +197,7 @@ export function makeTestPeer(options: {
     sockets,
     requests,
     authenticatedTokens,
+    encryptedTextFrames,
     publicKeyB64: encodeBase64(desktop.publicKey),
     serverSecretKey: desktop.secretKey
   }

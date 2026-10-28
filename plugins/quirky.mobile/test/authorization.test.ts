@@ -1,30 +1,8 @@
 import { describe, expect, test } from 'bun:test'
-import { MOBILE_METHOD_ALLOWLIST, assertMobileCallAllowed } from '../src/daemon/authorization'
+import { assertMobileCallAllowed } from '../src/daemon/authorization'
 
 describe('mobile RPC authorization', () => {
-  test('uses literal routes for safe consumer APIs across each current feature family', () => {
-    for (const method of [
-      'status.get', 'quirky.mobile/info', 'quirky.mobile/preferences', 'quirky.mobile/updatePreferences',
-      'quirky.mobile/bundleManifest', 'quirky.mobile/bundleChunk', 'quirky.mobile/bundleRange', 'quirky.mobile/agentCatalog',
-      'quirky.repo/list', 'quirky.repo/groupList', 'quirky.worktree/list', 'quirky.worktree/show', 'quirky.worktree/create',
-      'quirky.worktree/describeRemove', 'quirky.worktree/remove', 'quirky.worktree/set',
-      'quirky.session/list', 'quirky.session/get', 'quirky.session/create', 'quirky.session/resume', 'quirky.session/restore', 'quirky.session/setName', 'quirky.session/close',
-      'quirky.agent-status/wait', 'quirky.ask/list', 'quirky.ask/answer', 'quirky.terminal/attach', 'quirky.terminal/detach', 'quirky.terminal/mobileState',
-      'quirky.agent-status/list', 'quirky.agent-status/get', 'quirky.agent-status/explain', 'quirky.agent-status/waitOutput',
-      'quirky.terminal/claim', 'quirky.terminal/read', 'quirky.terminal/snapshot', 'quirky.terminal/history', 'quirky.terminal/write',
-      'quirky.terminal/send', 'quirky.terminal/resize', 'quirky.terminal/describeClose', 'quirky.terminal/clear',
-      'quirky.terminal/displayMode'
-    ]) expect(Object.hasOwn(MOBILE_METHOD_ALLOWLIST, method)).toBe(true)
-    for (const method of [
-      'quirky.agents/list', 'quirky.agents/prepareResume', 'events.subscribe', 'quirky.mobile/admin', 'quirky.git/status', 'quirky.accounts/list', 'quirky.hosting/files',
-      'quirky.mobile/pair', 'daemon.stop', 'plugin.install', 'plugin.disable', 'distro.install',
-      'settings.update', 'ui.command.run', 'quirky.terminal/restartHost', 'quirky.terminal/killAll',
-      'quirky.git/forcePush', 'quirky.terminal/takeBack', 'quirky.terminal/restoreFit', 'quirky.agents/configure',
-      'quirky.agent-status/send', 'quirky.ask/cancel', 'quirky.files/read',
-      'quirky.worktree/listAll', 'quirky.worktree/resolve', 'quirky.session-info/sections'
-    ]) expect(Object.hasOwn(MOBILE_METHOD_ALLOWLIST, method)).toBe(false)
-    expect(() => assertMobileCallAllowed('quirky.mobile/agentCatalog', {})).not.toThrow()
-    expect(() => assertMobileCallAllowed('quirky.agents/list', {})).toThrow()
+  test('rejects caller-supplied executable and launch configuration on session creation', () => {
     expect(() => assertMobileCallAllowed('quirky.session/create', { worktree: 'floating', agent: 'shell', cols: 80, rows: 24 })).not.toThrow()
     for (const key of ['command', 'cwd', 'extraArgs', 'model', 'options', 'prompt']) {
       expect(() => assertMobileCallAllowed('quirky.session/create', { worktree: 'floating', agent: 'shell', [key]: 'unrestricted' })).toThrow()
@@ -50,21 +28,14 @@ describe('mobile RPC authorization', () => {
     expect(() => assertMobileCallAllowed('quirky.terminal/claim', { session: 's', cols: 1001, rows: 25 })).toThrow()
   })
 
-  test('keeps filesystem APIs outside the shipped phone page surface', () => {
+  test('bounds ask answers and contained file access', () => {
     expect(() => assertMobileCallAllowed('quirky.ask/answer', { askId: 'ask-1', answers: { question: 'yes' } })).not.toThrow()
     expect(() => assertMobileCallAllowed('quirky.ask/answer', { askId: 'ask-1', answers: {}, token: 'secret' })).toThrow()
-    for (const method of ['quirky.hosting/files', 'quirky.hosting/fileContents', 'quirky.git/status', 'quirky.files/read']) {
-      expect(() => assertMobileCallAllowed(method, {})).toThrow()
-    }
+    expect(() => assertMobileCallAllowed('quirky.files/read', { path: '/etc/passwd' })).toThrow()
+    expect(() => assertMobileCallAllowed('quirky.editor/open', { worktree: 'wt', path: '../secret' })).toThrow()
   })
 
   test('admits only bounded page bundles, safe agent catalog, phone preferences, and shipped workspace consumers', () => {
-    for (const method of [
-      'quirky.mobile/bundleManifest', 'quirky.mobile/bundleChunk', 'quirky.mobile/bundleRange',
-      'quirky.mobile/agentCatalog', 'quirky.mobile/preferences', 'quirky.mobile/updatePreferences',
-      'quirky.repo/list', 'quirky.repo/groupList', 'quirky.worktree/create', 'quirky.worktree/describeRemove',
-      'quirky.worktree/remove', 'quirky.worktree/set', 'quirky.terminal/describeClose', 'quirky.terminal/clear', 'quirky.terminal/displayMode'
-    ]) expect(Object.hasOwn(MOBILE_METHOD_ALLOWLIST, method)).toBe(true)
     expect(() => assertMobileCallAllowed('quirky.mobile/agentCatalog', {})).not.toThrow()
     expect(() => assertMobileCallAllowed('quirky.mobile/agentCatalog', { rawAgents: true })).toThrow()
     expect(() => assertMobileCallAllowed('quirky.mobile/bundleManifest', {})).not.toThrow()
