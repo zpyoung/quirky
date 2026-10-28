@@ -1,0 +1,56 @@
+:root,
+[data-theme='dark'] {
+  color-scheme: dark;
+  --ui-rail: #101114;
+  --ui-surface: #16171b;
+  --ui-selected: #22242b;
+  --ui-border: #24262c;
+  --ui-text: #eceef2;
+  --ui-muted: #7c828d;
+  --ui-accent: #7c8cff;
+  --ui-working: #4cc38a;
+  --ui-needs-you: #e5b454;
+  --ui-failing: #ef6b73;
+  --ui-font-title: 15px;
+  --ui-font-body: 12px;
+  --ui-font-label: 11px;
+  --ui-font-section: 10.5px;
+  --ui-font-mono: 11.5px;
+  --ui-space-2: 2px;
+  --ui-space-4: 4px;
+  --ui-space-6: 6px;
+  --ui-space-8: 8px;
+  --ui-space-12: 12px;
+  --ui-space-16: 16px;
+  --ui-space-24: 24px;
+  --ui-radius-mark: 5px;
+  --ui-radius-control: 7px;
+  --ui-radius-window: 10px;
+  --ui-row-single: 26px;
+  --ui-row-double: 34px;
+  --ui-border-width: 1px;
+  --ui-focus-width: 2px;
+  --ui-focus-offset: 2px;
+  --ui-icon-size: 16px;
+  --ui-status-dot-size: 8px;
+}
+
+[data-theme='light'] {
+  color-scheme: light;
+  --ui-rail: #f4f5f7;
+  --ui-surface: #ffffff;
+  --ui-selected: #e7e9ef;
+  --ui-border: #e3e5ea;
+  --ui-text: #1b1d22;
+  --ui-muted: #80868f;
+  --ui-accent: #5b6cff;
+  --ui-working: #1f9d63;
+  --ui-needs-you: #c98a0b;
+  --ui-failing: #d6455d;
+}
+
+:root,
+[data-theme='dark'],
+[data-theme='light'] {
+  color: var(--ui-text);
+}

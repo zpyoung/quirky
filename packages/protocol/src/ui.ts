@@ -41,29 +41,44 @@ export type ThemeInfo = {
   colors: Record<ThemeToken, string>
 }
 
-/** The theme in effect when none is chosen, and the fallback when a chosen one is gone. */
+/** The logical system-following choice; a window resolves its local appearance. */
 export const DEFAULT_THEME: ThemeInfo = {
   id: 'default',
   plugin: null,
-  title: 'Quirky Dark',
+  title: 'Follow system',
   appearance: 'dark',
   colors: {
-    bg: '#16181d',
-    'bg-raised': '#1d2027',
-    'bg-hover': '#262a33',
-    'bg-active': '#2d3240',
-    border: '#2b2f3a',
-    text: '#d7dae0',
-    muted: '#8a909e',
-    accent: '#4f8ff7',
-    amber: '#f0b429',
-    green: '#3fb950',
-    grey: '#8b949e',
+    bg: '#101114',
+    'bg-raised': '#16171b',
+    'bg-hover': '#22242b',
+    'bg-active': '#22242b',
+    border: '#24262c',
+    text: '#eceef2',
+    muted: '#7c828d',
+    accent: '#7c8cff',
+    amber: '#e5b454',
+    green: '#4cc38a',
+    grey: '#7c828d',
     dim: '#4a505c',
-    danger: '#e5534b',
-    'terminal-background': '#16181d',
-    'terminal-foreground': '#d7dae0',
-    'terminal-cursor': '#d7dae0'
+    danger: '#ef6b73',
+    'terminal-background': '#16171b',
+    'terminal-foreground': '#eceef2',
+    'terminal-cursor': '#eceef2'
+  }
+}
+
+/** Explicit appearance pins, selected through the existing theme.set API. */
+export const DARK_THEME: ThemeInfo = { ...DEFAULT_THEME, id: 'dark', title: 'Dark' }
+export const LIGHT_THEME: ThemeInfo = {
+  id: 'light',
+  plugin: null,
+  title: 'Light',
+  appearance: 'light',
+  colors: {
+    bg: '#f4f5f7', 'bg-raised': '#ffffff', 'bg-hover': '#e7e9ef', 'bg-active': '#e7e9ef',
+    border: '#e3e5ea', text: '#1b1d22', muted: '#80868f', accent: '#5b6cff',
+    amber: '#c98a0b', green: '#1f9d63', grey: '#80868f', dim: '#a4a9b2', danger: '#d6455d',
+    'terminal-background': '#ffffff', 'terminal-foreground': '#1b1d22', 'terminal-cursor': '#1b1d22'
   }
 }
 

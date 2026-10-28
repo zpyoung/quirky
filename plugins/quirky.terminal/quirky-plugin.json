@@ -2686,11 +2686,11 @@
     ],
     "view": [{"id":"emulator","title":"Mobile Emulator","description":"Read-only preview of an explicitly selected Xcode iOS simulator."}],
     "setting": [
-      {"id":"theme-mode","type":"enum","title":"Terminal theme mode","description":"Independent of the application: inherit its terminal colors, follow system light/dark, or force dark/light.","default":"inherit","values":["inherit","system","dark","light"]},
+      {"id":"theme-mode","type":"enum","title":"Terminal theme mode","description":"Follow app appearance with graphite defaults, follow the system independently, or pin terminals to dark/light. Changes apply without restarting panes.","default":"inherit","values":["inherit","system","dark","light"]},
       {"id":"theme-dark","type":"enum","title":"Dark terminal palette","default":"default","values":["default","tango","custom"]},
       {"id":"theme-light","type":"enum","title":"Light terminal palette","default":"default","values":["default","tango","custom"]},
-      {"id":"theme-custom-dark","type":"string","title":"Custom dark terminal palette","description":"JSON object of xterm color names and #rgb/#rrggbb colors (background, foreground, cursor and ANSI names). Invalid palettes show a warning and use the dark default.","default":"{}"},
-      {"id":"theme-custom-light","type":"string","title":"Custom light terminal palette","description":"JSON object of xterm color names and #rgb/#rrggbb colors. Invalid palettes show a warning and use the light default.","default":"{}"},
+      {"id":"theme-custom-dark","type":"string","title":"Custom dark terminal palette","description":"JSON object of xterm color names and #rgb/#rrggbb colors (background, foreground, cursor and ANSI names). Invalid palettes warn and use the full graphite dark palette.","default":"{}"},
+      {"id":"theme-custom-light","type":"string","title":"Custom light terminal palette","description":"JSON object of xterm color names and #rgb/#rrggbb colors. Invalid palettes warn and use the full graphite light palette.","default":"{}"},
       {
         "id": "scrollback",
         "type": "number",
