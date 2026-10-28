@@ -23,6 +23,7 @@ export type FixtureItem = {
   requestedReviewers?: string[] | null
   reviews?: { author: string | null; state: string }[] | null
   reviewAssignees?: string[] | null
+  autoMergeRequest?: { enabledAt: string } | null
 }
 
 export type ListFixtureState = {
@@ -33,6 +34,10 @@ export type ListFixtureState = {
   unknownCount?: boolean
   mergeQueueRequired?: boolean | null
   autoMergeAllowed?: boolean | null
+  asyncMergeOutcome?: 'merged' | 'enqueued' | 'pending'
+  failIssueUpdate?: boolean
+  failPRReviewerEdit?: boolean
+  lagSearch?: { repository: string; remaining: number; items: FixtureItem[] }
 }
 
 /** A stateful fake `gh` executable that serves the public Hosting API's GitHub requests. */
@@ -89,6 +94,7 @@ if (args[0] === 'issue' && ['close', 'reopen', 'edit'].includes(args[1])) {
   const items = Array.isArray(state.items?.[repo]) ? state.items[repo] : []
   const item = items.find((entry) => entry.kind === 'issue' && entry.number === number)
   if (!item) fail('issue not found')
+  if (args[1] === 'edit' && state.failIssueUpdate === true) fail('fixture issue update failure')
   if (args[1] === 'close') {
     item.state = 'closed'
     const reasonIndex = args.indexOf('--reason')
@@ -117,6 +123,7 @@ if (args[0] === 'pr' && args[1] === 'edit') {
   const items = Array.isArray(state.items?.[repo]) ? state.items[repo] : []
   const item = items.find((entry) => entry.kind === 'pullRequest' && entry.number === number)
   if (!item) fail('pull request not found')
+  if (state.failPRReviewerEdit === true) fail('fixture reviewer update failure')
   for (const option of ['--add-reviewer', '--remove-reviewer']) {
     const index = args.indexOf(option)
     if (index < 0) continue
@@ -124,6 +131,16 @@ if (args[0] === 'pr' && args[1] === 'edit') {
     if (option === '--add-reviewer') item.requestedReviewers = [...new Set([...(item.requestedReviewers ?? []), ...logins])]
     else item.requestedReviewers = (item.requestedReviewers ?? []).filter((login) => !logins.includes(login))
   }
+  save()
+  emit('')
+}
+if (args[0] === 'pr' && args[1] === 'merge' && args.includes('--disable-auto')) {
+  const number = Number(args[2])
+  const repo = repoArgument()
+  const items = Array.isArray(state.items?.[repo]) ? state.items[repo] : []
+  const item = items.find((entry) => entry.kind === 'pullRequest' && entry.number === number)
+  if (!item) fail('pull request not found')
+  item.autoMergeRequest = null
   save()
   emit('')
 }
@@ -172,7 +189,12 @@ if (args[0] === 'api') {
       if (state.failCounts === true && first === 1) fail('fixture count failure')
       if (state.failList === key && first !== 1) fail('fixture list failure')
       const stored = Array.isArray(state.items?.[key]) ? state.items[key] : []
-      const filtered = stored.filter((item) => matches(item, search))
+      let filtered = stored.filter((item) => matches(item, search))
+      const lagSearch = isObject(state.lagSearch) ? state.lagSearch : null
+      if (first !== 1 && lagSearch?.repository === key && Number(lagSearch.remaining) > 0 && Array.isArray(lagSearch.items)) {
+        lagSearch.remaining = Number(lagSearch.remaining) - 1
+        filtered = lagSearch.items.filter((item) => matches(item, search))
+      }
       const nodes = filtered.slice(after, after + first).map(toGraphqlNode)
       const next = after + nodes.length < filtered.length
       emit({ data: { search: { issueCount: filtered.length, nodes, pageInfo: { endCursor: next ? String(after + nodes.length) : null, hasNextPage: next } }, rateLimit: { cost: 1 } } })
@@ -184,6 +206,13 @@ if (args[0] === 'api') {
       else if (state.autoMergeAllowed === undefined) repository.autoMergeAllowed = true
       emit({ data: { repository } })
     }
+    if (query.includes('EnableHostingPullRequestAutoMerge')) {
+      const id = String(graphqlVariables.pullRequestId ?? '')
+      const item = Object.values(state.items ?? {}).flat().find((entry) => entry.kind === 'pullRequest' && pullRequestId(entry) === id)
+      if (!item) fail('pull request was not found for auto-merge')
+      item.autoMergeRequest = { enabledAt: '2026-10-01T00:00:00Z' }
+      emit({ data: { enablePullRequestAutoMerge: { pullRequest: { id, autoMergeRequest: item.autoMergeRequest } } } })
+    }
     if (query.includes('HostingChecksRollup')) {
       const owner = String(graphqlVariables.owner ?? 'test-owner')
       const repo = String(graphqlVariables.name ?? 'test-repo')
@@ -191,6 +220,22 @@ if (args[0] === 'api') {
       const item = (state.items?.[owner + '/' + repo] ?? []).find((entry) => entry.kind === 'pullRequest' && entry.number === number)
       const contexts = (item?.checks ?? []).map((check, index) => ({ __typename: 'CheckRun', databaseId: index + 1, name: check.name, status: check.status, conclusion: check.conclusion ?? null, detailsUrl: check.url ?? null }))
       emit({ data: { repository: { pullRequest: { headRefOid: item?.headRefOid ?? 'a'.repeat(40), commits: { nodes: [{ commit: { statusCheckRollup: { contexts: { nodes: contexts, pageInfo: { hasNextPage: false } } }, checkSuites: { nodes: [], pageInfo: { hasNextPage: false } } } }] } } } } })
+    }
+    if (query.includes('HostingComments')) {
+      const owner = String(graphqlVariables.owner ?? 'test-owner')
+      const repo = String(graphqlVariables.name ?? 'test-repo')
+      const number = Number(graphqlVariables.number)
+      const item = (state.items?.[owner + '/' + repo] ?? []).find((entry) => entry.kind === 'pullRequest' && entry.number === number)
+      const empty = { nodes: [], pageInfo: { hasNextPage: false } }
+      emit({ data: { repository: { pullRequest: item ? { id: pullRequestId(item), comments: empty, reviews: empty, reviewThreads: empty } : null } } })
+    }
+    if (query.includes('HostingFileViews')) {
+      const owner = String(graphqlVariables.owner ?? 'test-owner')
+      const repo = String(graphqlVariables.name ?? 'test-repo')
+      const number = Number(graphqlVariables.number)
+      const item = (state.items?.[owner + '/' + repo] ?? []).find((entry) => entry.kind === 'pullRequest' && entry.number === number)
+      const files = { totalCount: 0, nodes: [], pageInfo: { hasNextPage: false, endCursor: null } }
+      emit({ data: { repository: { pullRequest: item ? { id: pullRequestId(item), files } : null } } })
     }
     if (query.includes('WorkItemDetails')) {
       const owner = String(graphqlVariables.owner ?? 'test-owner')
@@ -211,6 +256,17 @@ if (args[0] === 'api') {
     const [, , , kind] = labelRoute
     emit(kind === 'labels' ? [{ name: 'bug' }, { name: 'needs triage' }] : [{ login: 'fixture-user', avatar_url: null }])
   }
+  const asyncMergeRoute = /^repos\/([^/]+)\/([^/]+)\/pulls\/(\d+)\/merge-async(?:\/([^/]+))?$/.exec(endpoint)
+  if (asyncMergeRoute) {
+    const status = state.asyncMergeOutcome ?? 'enqueued'
+    emit({ status })
+  }
+  const pullCommentsRoute = /^repos\/([^/]+)\/([^/]+)\/issues\/(\d+)\/comments(?:\?.*)?$/.exec(endpoint)
+  if (pullCommentsRoute) emit([])
+  const pullReviewsRoute = /^repos\/([^/]+)\/([^/]+)\/pulls\/(\d+)\/reviews(?:\?.*)?$/.exec(endpoint)
+  if (pullReviewsRoute) emit([])
+  const pullFilesRoute = /^repos\/([^/]+)\/([^/]+)\/pulls\/(\d+)\/files(?:\?.*)?$/.exec(endpoint)
+  if (pullFilesRoute) emit([])
   const pullRoute = /^repos\/([^/]+)\/([^/]+)\/pulls\/(\d+)(?:\?.*)?/.exec(endpoint)
   if (pullRoute) {
     const [, owner, repo, number] = pullRoute
@@ -226,6 +282,7 @@ if (args[0] === 'api') {
     const found = issues.find((item) => item.number === Number(number))
     if (method === 'GET') emit(number ? toRestIssue(found) : issues.map(toRestIssue))
     if (method === 'PATCH') {
+      if (state.failIssueUpdate === true) fail('fixture issue update failure')
       if (!found) fail('issue not found')
       const body = isObject(request) ? request : {}
       Object.assign(found, body)
@@ -262,9 +319,14 @@ function matches(item, query) {
   if (author && author[1] === '@me' && item.author !== 'fixture-user') return false
   return true
 }
+function pullRequestId(item) {
+  const match = /^https?:\/\/[^/]+\/([^/]+)\/([^/]+)\/pull\/([1-9][0-9]*)$/.exec(String(item.url ?? ''))
+  return match ? 'PR_' + match[1] + '_' + match[2] + '_' + match[3] : 'PR_fixture_' + item.number
+}
 function toGraphqlNode(item) {
   return {
     __typename: item.kind === 'issue' ? 'Issue' : 'PullRequest',
+    ...(item.kind === 'pullRequest' ? { id: pullRequestId(item) } : {}),
     number: item.number,
     title: item.title,
     body: item.body ?? '',
@@ -289,7 +351,7 @@ function toPullRequest(item) {
     isDraft: item.state === 'draft',
     html_url: item.url,
     mergeable: true,
-    autoMergeRequest: null,
+    autoMergeRequest: item.autoMergeRequest ?? null,
     reviewRequests: item.requestedReviewers === null ? null : (item.requestedReviewers ?? []).map((login) => ({ login })),
     reviews: item.reviews === null ? null : (item.reviews ?? []).map((review) => ({ author: review.author ? { login: review.author } : null, state: review.state })),
     assignees: item.reviewAssignees === null ? null : (item.reviewAssignees ?? item.assignees ?? []).map((login) => ({ login })),

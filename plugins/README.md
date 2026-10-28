@@ -464,18 +464,35 @@ quirky tasks projects --json
 quirky tasks --help
 ```
 
-`quirky.tasks/workspace` with `action: "start"` opens the retained composer; it does not
-create a workspace until confirmation. Targets contain `worktree`, `kind` (`issue` or
-`pullRequest`), `number`, and the exact GitHub `url`. Creation delegates to
-`quirky.worktree/create` with that URL as `github`; there is no plain-create fallback.
+`quirky.tasks/workspace` with `action: "start"` normally opens the retained composer.
+Project-style `newWorkspace: true` requests can create directly when a usable agent
+and setup policy allow it; otherwise they return the composer. Targets contain
+`worktree`, `kind` (`issue` or `pullRequest`), `number`, and the exact GitHub `url`.
+Creation delegates to `quirky.worktree/create` with that URL as `github`; there is
+no plain-create fallback.
+
+Composer submissions carry `composerRequestId`. Setup and issue-command choices
+are independent. Approve only the displayed script: use `trustSetup` with
+`trustSetupHash`, or `issueCommand: "run"` with `trustIssueCommand` and
+`trustIssueCommandHash`. Preserve both approved pins when another script needs
+consent; changed content requires fresh approval. Skipping one script does not
+skip the other.
+
+Created results retain `agentSessionId`, `agentPending`, setup/issue-command
+outcomes and warnings. `promptDelivery` is an observed session state, not proof
+from workspace creation: `pending`, `unconfirmed`, and `not-delivered` do not mean
+the agent received context. Read `quirky.session/get` for subsequent delivery
+changes; do not recreate a workspace to retry a failed agent launch.
 Merge uses conditional kernel confirmation and the canonical hosting expected-head guard.
 Ordinary issue edits, reviewer changes and opening the composer do not ask.
 
 The public UI-library exports are `@quirky/plugin-tasks/markdown`
 (`Markdown`, `MarkdownComposer`, `safeHttpUrl`) and
 `@quirky/plugin-tasks/review-navigation` (`openReview`).
-PR navigation calls `quirky.reviews/open` with `{worktree, number, tab?}`;
-`tab` is `conversation`, `checks`, or `files`. Missing contributions produce an error,
+PR navigation accepts the complete target, including `url` or `host`/`owner`/`repo`,
+and calls `quirky.reviews/open` with `{worktree, number, tab?, prRepo?}`.
+`tab` is `conversation`, `checks`, or `files`. Source identity prevents same-number
+origin/upstream PRs from being confused. Missing contributions produce an error,
 not an issue page pretending to be PR detail.
 
 Task Sources is a contributed Settings view. A boolean setting can also declare

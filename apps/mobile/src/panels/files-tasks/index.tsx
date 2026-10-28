@@ -44,6 +44,7 @@ type TaskRow = ObjectValue & { kind: 'issue' | 'pullRequest'; number: number; ti
 type TaskRepository = { id: string; name: string; displayName?: string; worktree: string }
 type TaskList = { items: TaskRow[]; repositories: TaskRepository[]; failures: ObjectValue[]; page: number; totalPages: number }
 type WorkspaceAgent = { id: string; label: string; isDefault: boolean }
+type WorkspaceConsentDecision = { kind: 'setup' | 'issue'; choice: 'run' | 'skip' }
 type StateAwareBridge = PanelBridge & {
   readonly state: MobileConnectionState
   onState(handler: (state: MobileConnectionState) => void): () => void
@@ -1111,6 +1112,7 @@ function TasksPanel({ bridge }: { bridge: PanelBridge }) {
   const [workspacePrompt, setWorkspacePrompt] = useState('')
   const [workspaceAgent, setWorkspaceAgent] = useState('')
   const [workspaceSetup, setWorkspaceSetup] = useState('inherit')
+  const [workspaceIssueCommand, setWorkspaceIssueCommand] = useState('inherit')
   const [workspaceAgents, setWorkspaceAgents] = useState<WorkspaceAgent[]>([])
   const [agentError, setAgentError] = useState('')
   const [workspaceOpen, setWorkspaceOpen] = useState(false)
@@ -1119,6 +1121,7 @@ function TasksPanel({ bridge }: { bridge: PanelBridge }) {
   const [workspaceSuccess, setWorkspaceSuccess] = useState('')
   const [routeError, setRouteError] = useState('')
   const listGeneration = useRef(0)
+  const workspaceAgentTouched = useRef(false)
   const detailGeneration = useRef(0)
 
   useEffect(() => {
@@ -1563,10 +1566,12 @@ function TasksPanel({ bridge }: { bridge: PanelBridge }) {
         return
       }
       const request = result.request
+      workspaceAgentTouched.current = false
       setWorkspaceRequest(request)
       setWorkspaceName(string(request.name))
       setWorkspacePrompt(string(request.prompt))
       setWorkspaceSetup(string(request.setup, 'inherit'))
+      setWorkspaceIssueCommand(string(request.issueCommand, 'inherit'))
       setWorkspaceAgent(string(request.agent))
       setWorkspaceOpen(true)
       setAgentError('')
@@ -1579,7 +1584,7 @@ function TasksPanel({ bridge }: { bridge: PanelBridge }) {
           return [{ id: agent.id, label: string(agent.label, agent.id), isDefault: agent.isDefault === true || agent.id === defaultAgent }]
         })
         setWorkspaceAgents(available)
-        if (!string(request.agent)) setWorkspaceAgent(available.find((agent) => agent.isDefault)?.id ?? '')
+        if (!workspaceAgentTouched.current && !string(request.agent)) setWorkspaceAgent(available.find((agent) => agent.isDefault)?.id ?? '')
       }).catch((cause) => setAgentError(`Agent options unavailable; workspace creation can continue without an agent. ${announceError(messageOf(cause))}`))
     } catch (cause) { setWorkspaceError(`Unable to start workspace: ${announceError(messageOf(cause))}`) }
     finally { setWorkspaceBusy(false) }
@@ -1605,18 +1610,37 @@ function TasksPanel({ bridge }: { bridge: PanelBridge }) {
     finally { setWorkspaceBusy(false) }
   }
 
-  const submitWorkspace = async (trustSetup = false, setupOverride?: 'run' | 'skip') => {
+  const submitWorkspace = async (decision?: WorkspaceConsentDecision) => {
     if (!connected || !workspaceRequest || workspaceBusy || stale) return
     const target = record(workspaceRequest.target)
     const requestId = string(workspaceRequest.requestId)
     if (!target || !requestId) { setWorkspaceError('The active workspace composer is incomplete.'); return }
+    const trustKind = workspaceRequest.trustKind === 'setup' || workspaceRequest.trustKind === 'issue' ? workspaceRequest.trustKind : null
+    const displayedHash = string(workspaceRequest.trustHash)
+    if (decision?.choice === 'run' && (trustKind !== decision.kind || typeof workspaceRequest.trustScript !== 'string' || !displayedHash)) {
+      setWorkspaceError(`The creator did not provide a content hash for this ${decision.kind === 'issue' ? 'issue command' : 'setup'} script, so it cannot be approved once.`)
+      return
+    }
+    const setupChoice = decision?.kind === 'setup' ? decision.choice : workspaceSetup
+    const issueCommandChoice = decision?.kind === 'issue' ? decision.choice : workspaceIssueCommand
+    const setupApprovalHash = setupChoice === 'run'
+      ? decision?.kind === 'setup' && decision.choice === 'run' ? displayedHash : string(workspaceRequest.trustSetupHash)
+      : ''
+    const issueCommandApprovalHash = issueCommandChoice === 'run'
+      ? decision?.kind === 'issue' && decision.choice === 'run' ? displayedHash : string(workspaceRequest.trustIssueCommandHash)
+      : ''
     setWorkspaceBusy(true)
     setWorkspaceError('')
+    if (decision?.kind === 'setup') setWorkspaceSetup(decision.choice)
+    if (decision?.kind === 'issue') setWorkspaceIssueCommand(decision.choice)
     try {
       const response = await bridge.call('quirky.tasks/workspace', {
         target, action: 'start', newWorkspace: true, composerRequestId: requestId,
-        name: workspaceName.trim(), prompt: workspacePrompt, setup: setupOverride ?? workspaceSetup,
-        ...(workspaceAgent ? { agent: workspaceAgent } : {}), ...(trustSetup ? { trustSetup: true } : {})
+        name: workspaceName.trim(), prompt: workspacePrompt, setup: setupChoice,
+        ...(target.kind === 'issue' ? { issueCommand: issueCommandChoice } : {}),
+        agent: workspaceAgent,
+        ...(setupApprovalHash ? { trustSetup: true, trustSetupHash: setupApprovalHash } : {}),
+        ...(issueCommandApprovalHash ? { trustIssueCommand: true, trustIssueCommandHash: issueCommandApprovalHash } : {})
       })
       const outcome = classifyWorkspaceResult(response)
       if (outcome.kind === 'created' || outcome.kind === 'resumed') {
@@ -1624,7 +1648,7 @@ function TasksPanel({ bridge }: { bridge: PanelBridge }) {
       } else if (outcome.kind === 'composer') {
         setWorkspaceRequest(outcome.request)
         setWorkspaceError(string(outcome.request.error))
-      } else throw new Error('The GitHub Tasks API did not confirm a created workspace.')
+      } else throw new Error('The GitHub Tasks API did not confirm a created worktree.')
     } catch (cause) { setWorkspaceError(`Unable to create workspace: ${announceError(messageOf(cause))}`) }
     finally { setWorkspaceBusy(false) }
   }
@@ -1667,6 +1691,14 @@ function TasksPanel({ bridge }: { bridge: PanelBridge }) {
     ? [{ value: '', label: 'Any status' }, { value: 'open', label: 'Open' }, { value: 'closed', label: 'Closed' }]
     : [{ value: '', label: 'Any status' }, { value: 'open', label: 'Open' }, { value: 'closed', label: 'Closed' }, { value: 'merged', label: 'Merged' }, { value: 'draft', label: 'Draft' }]
   const repoFilterChecked = (id: string) => draftRepoIds === null || draftRepoIds.includes(id)
+  const workspaceTrustKind = workspaceRequest?.trustKind === 'setup' || workspaceRequest?.trustKind === 'issue' ? workspaceRequest.trustKind : null
+  const workspaceTrustLabel = workspaceTrustKind === 'issue' ? 'Issue command' : 'Setup script'
+  const workspaceConsentLabel = workspaceTrustKind === 'issue' ? 'issue command' : 'setup'
+  const workspaceTrustRequired = workspaceTrustKind !== null && typeof workspaceRequest?.trustScript === 'string'
+  const workspaceTrustHashAvailable = typeof workspaceRequest?.trustHash === 'string' && workspaceRequest.trustHash.length > 0
+  const workspaceTrustCanRun = workspaceTrustKind === 'setup'
+    ? workspaceSetup === 'run'
+    : workspaceTrustKind === 'issue' ? workspaceIssueCommand === 'run' : false
 
   const setRepoChecked = (id: string, checked: boolean) => {
     if (draftRepoIds === null) {
@@ -1872,9 +1904,9 @@ function TasksPanel({ bridge }: { bridge: PanelBridge }) {
       title={`Create workspace from ${string(workspaceRequest.target && record(workspaceRequest.target)?.kind) === 'pullRequest' ? 'pull request' : 'issue'}`}
       onClose={() => void cancelWorkspace()}
       zIndex={80}
-      footer={typeof workspaceRequest.trustScript === 'string' ? <>
-        <button type="button" disabled={!connected || workspaceBusy} onClick={() => void submitWorkspace(false, 'skip')} style={buttonStyle}>Skip setup</button>
-        <button type="button" disabled={!connected || workspaceBusy || workspaceSetup !== 'run'} onClick={() => void submitWorkspace(true, 'run')} style={buttonStyle}>{workspaceBusy ? 'Creating…' : 'Run setup once'}</button>
+      footer={workspaceTrustRequired && workspaceTrustKind ? <>
+        <button type="button" disabled={!connected || workspaceBusy || stale} onClick={() => void submitWorkspace({ kind: workspaceTrustKind, choice: 'skip' })} style={buttonStyle}>Skip {workspaceConsentLabel}</button>
+        <button type="button" disabled={!connected || workspaceBusy || stale || !workspaceTrustHashAvailable || !workspaceTrustCanRun} onClick={() => void submitWorkspace({ kind: workspaceTrustKind, choice: 'run' })} style={buttonStyle}>{workspaceBusy ? 'Creating…' : `Run ${workspaceConsentLabel} once`}</button>
       </> : <>
         <button type="button" disabled={workspaceBusy} onClick={() => void cancelWorkspace()} style={buttonStyle}>Cancel</button>
         <button type="button" disabled={!connected || workspaceBusy || stale || (workspaceRequest.setupDecisionRequired === true && workspaceSetup === 'inherit')} onClick={() => void submitWorkspace()} style={buttonStyle}>{workspaceBusy ? 'Creating…' : 'Create workspace'}</button>
@@ -1885,13 +1917,22 @@ function TasksPanel({ bridge }: { bridge: PanelBridge }) {
         {workspaceRequest.target && record(workspaceRequest.target)?.url ? <button type="button" onClick={() => void openExternal(record(workspaceRequest.target)?.url)} style={{ ...buttonStyle, justifySelf: 'start' }}>Open task externally</button> : null}
         <label style={{ display: 'grid', gap: 5 }}><span>Workspace name</span><input autoComplete="off" maxLength={200} value={workspaceName} onChange={(event) => setWorkspaceName(event.currentTarget.value)} style={inputStyle} /></label>
         <label style={{ display: 'grid', gap: 5 }}><span>Initial prompt</span><textarea value={workspacePrompt} onChange={(event) => setWorkspacePrompt(event.currentTarget.value)} style={{ ...inputStyle, minHeight: 100, resize: 'vertical' }} /></label>
-        <label style={{ display: 'grid', gap: 5 }}><span>Agent (optional)</span><select value={workspaceAgent} onChange={(event) => setWorkspaceAgent(event.currentTarget.value)} style={inputStyle}>
+        <label style={{ display: 'grid', gap: 5 }}><span>Agent (optional)</span><select value={workspaceAgent} onChange={(event) => { workspaceAgentTouched.current = true; setWorkspaceAgent(event.currentTarget.value) }} style={inputStyle}>
           <option value="">Create without starting an agent</option>{workspaceAgents.map((agent) => <option key={agent.id} value={agent.id}>{agent.label}{agent.isDefault ? ' · default' : ''}</option>)}
         </select></label>
-        {workspaceRequest.setupDecisionRequired === true || typeof workspaceRequest.trustScript === 'string' ? <label style={{ display: 'grid', gap: 5 }}><span>Repository setup</span><select value={workspaceSetup} onChange={(event) => setWorkspaceSetup(event.currentTarget.value)} style={inputStyle}>
+        {workspaceRequest.setupDecisionRequired === true || workspaceTrustKind === 'setup' || workspaceSetup !== 'inherit' ? <label style={{ display: 'grid', gap: 5 }}><span>Repository setup</span><select value={workspaceSetup} onChange={(event) => setWorkspaceSetup(event.currentTarget.value)} style={inputStyle}>
           <option value="inherit" disabled>Choose whether to run setup</option><option value="run">Run setup</option><option value="skip">Skip setup</option>
         </select></label> : <p style={{ ...mutedStyle, margin: 0 }}>Repository setup follows the project policy.</p>}
-        {typeof workspaceRequest.trustScript === 'string' ? <details open><summary>Setup script needs approval{workspaceRequest.trustChanged === true ? ' (script changed)' : ''}</summary><pre style={{ maxHeight: 220, overflow: 'auto', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', padding: 8, background: 'var(--surface-raised, #25272c)' }}>{workspaceRequest.trustScript}</pre></details> : null}
+        {record(workspaceRequest.target)?.kind === 'issue' ? <label style={{ display: 'grid', gap: 5 }}><span>Issue command</span><select value={workspaceIssueCommand} onChange={(event) => setWorkspaceIssueCommand(event.currentTarget.value)} style={inputStyle}>
+          <option value="inherit">Follow repository issue-command settings</option><option value="run">Run issue command</option><option value="skip">Skip issue command</option>
+        </select></label> : null}
+        {workspaceTrustRequired && workspaceTrustKind ? <details open><summary>{workspaceTrustLabel} needs approval{workspaceRequest.trustChanged === true ? ' (script changed)' : ''}</summary>
+          <p style={{ ...mutedStyle, margin: 0 }}>{workspaceTrustLabel} content must match this displayed hash before it can run.</p>
+          <code>Displayed SHA-256: {string(workspaceRequest.trustHash, 'Unavailable')}</code>
+          {typeof workspaceRequest.trustSetupHash === 'string' ? <p style={{ ...mutedStyle, margin: 0 }}>Setup approval remains pinned to SHA-256 {workspaceRequest.trustSetupHash}.</p> : null}
+          {typeof workspaceRequest.trustIssueCommandHash === 'string' ? <p style={{ ...mutedStyle, margin: 0 }}>Issue-command approval remains pinned to SHA-256 {workspaceRequest.trustIssueCommandHash}.</p> : null}
+          <pre style={{ maxHeight: 220, overflow: 'auto', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', padding: 8, background: 'var(--surface-raised, #25272c)' }}>{string(workspaceRequest.trustScript)}</pre>
+        </details> : null}
         {agentError ? <p role="status" style={{ ...mutedStyle, margin: 0, overflowWrap: 'anywhere' }}>{agentError}</p> : null}
         {workspaceError || (typeof workspaceRequest.error === 'string' ? workspaceRequest.error : '') ? <p role="alert" style={{ ...dangerStyle, margin: 0, overflowWrap: 'anywhere' }}>{workspaceError || string(workspaceRequest.error)}</p> : null}
       </form>
