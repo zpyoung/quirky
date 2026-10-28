@@ -191,5 +191,16 @@ The initial unsandboxed X reviewer violated its read-only prompt: it created tes
 
 The canonical queue add exited0 and the integration queue confirmed exactly one new todo item, m3-accounts-complete-user-acceptance-20261028, depending on this item. Canonical deps returned ready:true with no pending dependencies. No unfinished acceptance requirement was deleted; D9 and BLOCKERS remain the follow-up's contract.
 
+## D18: Keep the full verifier after an intermittent script timeout
+- **Question:** Does the first land's script timeout justify changing a deadline or claiming the product failed?
+- **Options:** weaken assertions/deadlines; bypass the scripts gate; preserve the rejection and investigate the exact scenario before a normal full retry
+- **Chose:** preserve all source, deadlines and verification policy; inspect the awaited setup/child/cleanup path and run the unchanged named case, then the complete scripts gate
+- **Why:** the first land passed all683product files after the configured loops-store isolated retry and all5Mac files, then failed scripts67pass/1timeout in “runFiles emits no profile rows when profiling is disabled” at5003.68ms. Source inspection did not establish the cause. The unchanged isolated case passed in1121ms; the subsequent full scripts run passed68tests/576assertions in144.60s. Those executions establish an intermittent outcome, not a proven load-only root cause. A normal queue retry must still run every required gate.
+- **Evidence:** first-land-result.json; full land836.15s; ScriptsProfilerFailure source audit; isolated1pass/2assertions; full scripts retry68pass/0fail/576assertions
+- **Reversibility:** easy
+- **Confidence:** high for observed results; root cause remains unknown
+- **Revisit if:** the normal authoritative retry reproduces the timeout
+- **Source:** assumed — autonomous; preserves m3-accounts D35's no-waiver precedent
+
 ## Progress
-The source, final fix batch, sole integration catch-up, complete incoming-decision read and required post-merge gates are complete. All owned subprocesses/browsers/reviewers are stopped and all three component trees removed with unknown metadata preserved. One complete acceptance follow-up is registered and confirmed; native-only scenarios remain pending. Archive final evidence, commit this result, detach and run canonical queue land; do not claim landed until its actual verdict. Full remaining UI/native parity and full-independent three-lens clearance are not claimed.
+The first canonical land was rejected only by the script timeout in D18; no landed claim is made. The required failure-recovery merge brought queue.json only, with no new source or decision logs. Unchanged isolated and complete scripts checks now pass; product gates and prior source checks remain as recorded. Commit this evidence, detach and retry canonical queue land with the full verifier. The one registered complete-acceptance follow-up, native handoffs and explicit review limits remain unchanged.
