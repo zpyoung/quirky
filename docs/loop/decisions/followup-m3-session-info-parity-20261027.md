@@ -94,5 +94,16 @@
 - No affected suite, scripts suite or review round was started. No full web/native pass is claimed. Existing native SC-5 pass and SC-7/9 blocked history remain untouched; two additional native feedback/denial scenarios are pending.
 - Owned supplementary tab closed; official dogfood ended partial; owned UI daemon exited0 after SIGTERM with awaited harness cleanup. All throwaway runtime probes are removed before land.
 
+## D9: Preserve incoming contracts and land the typechecked composition
+- **Question:** Does the required roadmap catch-up change this item's public/native boundaries or current landing gate?
+- **Options:** Ignore incoming decisions; read and preserve all three incoming logs.
+- **Chose:** Cleanly merged build/roadmap after implementation commit c5ae5606. Read m3-accounts-remaining-flows, m7-sweep-editor-source-control and sb-mobile-app in full through a read-only scout; no conflict. Preserve public owner seams, captured transcript provenance, honest native/keyboard evidence and typecheck-only policy.
+- **Why:** Accounts D7/D10, sweep D3/D5/D8/D14 and mobile D9/D10/D23–25/D29 reinforce the same boundaries; browser/fake-provider evidence is not native permission/focus proof. No additional source change is required.
+- **Evidence:** Actual root `bun run typecheck` after frozen install and clean roadmap merge exited0 in28.10s, including root TypeScript and apps/mobile TypeScript. No suites, dogfood, review or test-failure repair ran after D8. Final dogfood cleanup report says kept-open nothing, clipboard not touched, cleanup errors none.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** Authoritative queue land reports a conflict or type error.
+- **Source:** locked by docs/loop/LOOP.md and incoming decision logs
+
 ## Progress
-Operator build-first cutover: implementation is the narrow text-wrap fix, readiness-aware NA-29 regression and native handoff. Further verification stopped at D8; no unbuilt flow/follow-up item. Next: commit current work, merge roadmap once/read incoming decisions, make typecheck pass and land. Never claim the partial web campaign or unrun suites/review passed.
+Current implementation, native handoff and exact partial evidence are committed; single roadmap catch-up completed cleanly and full root/mobile typecheck passed. All owned runtime resources are closed; no agents/jobs remain. Next: commit this final evidence, detach and authoritative queue land. Further verification belongs to the operator's end phase; do not claim unrun/partial goals passed.
