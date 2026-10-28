@@ -79,6 +79,8 @@ export interface OwnerController {
   ready(watcherId: string, reportKey: string): Promise<{ kind: 'accepted' | 'refused'; reason?: string }>
   answer(watcherId: string, escalationId: string, body: string): Promise<OwnerStepResult>
   inspect(watcherId: string): OwnerState
+  /** Releases one watcher's owner connection and issued reports without touching worker sessions. */
+  release(watcherId: string): Promise<void>
   shutdown(): Promise<void>
 }
 
@@ -86,5 +88,6 @@ export interface OwnerController {
 export interface OwnerKernelPort {
   step(enrollment: Enrollment, snapshot: Snapshot, deviation?: OwnerDeviation, canDispatch?: () => boolean): Promise<OwnerStepResult & { action?: KernelAction }>
   execute(action: KernelAction, context: ExecuteContext): Promise<ExecuteResult>
+  onTerminal?(watcherId: string): Promise<void>
   shutdown(): Promise<void>
 }
