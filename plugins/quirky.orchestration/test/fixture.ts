@@ -212,7 +212,6 @@ export async function startOrchestrationFixture(): Promise<OrchestrationFixture>
         QUIRKY_WORKTREE_ID: party.worktreeId,
         QUIRKY_SESSION_TOKEN: party.sessionToken
       },
-      stdin: 'ignore',
       stdout: 'pipe',
       stderr: 'pipe'
     })

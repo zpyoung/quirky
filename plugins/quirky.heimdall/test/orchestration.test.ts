@@ -358,6 +358,7 @@ function makeContext(
   call: (method: string, params?: Record<string, unknown>) => Promise<unknown>,
   subscribe: (listener: (event: QuirkyEvent) => void | Promise<void>) => () => void = () => () => {}
 ): PluginContext {
+  const unusedCapability = (): never => { throw new Error('unexpected resource capability in orchestration adapter fixture') }
   return {
     pluginId: 'quirky.heimdall',
     dir: '/tmp/heimdall',
@@ -368,6 +369,9 @@ function makeContext(
     log: () => {},
     provide: () => {},
     emit: () => true,
+    workerEntrypoint: unusedCapability,
+    createFileResource: unusedCapability,
+    clients: { accept: unusedCapability },
     openStore: () => { throw new Error('not used') },
     getSetting: () => undefined,
     storedSettingValue: () => undefined,

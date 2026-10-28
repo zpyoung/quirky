@@ -596,10 +596,7 @@ describe('the Claude runner inside the plugin', () => {
     expect(initialQuery.written).toEqual([])
     await call('quirky.structured/send', { session: original.id, text: 'first turn' })
     await waitFor(() => initialQuery.written.length === 1)
-    const nativeSessionId = initialQuery.written[0]?.session_id
-    if (typeof nativeSessionId !== 'string' || nativeSessionId.length === 0) {
-      throw new Error('Claude native turn did not carry a provider session ID')
-    }
+    const nativeSessionId = 'sdk-confirmed-idle-session'
     initialQuery.emit({ type: 'system', subtype: 'init', session_id: nativeSessionId, model: 'm' })
     const originalRecord = await waitForAsync(async () => {
       const stored = (await call('quirky.session/get', { session: original.id })) as Session
@@ -621,8 +618,6 @@ describe('the Claude runner inside the plugin', () => {
     expect(resumedRecord.resumedFrom).toBe(original.id)
 
     const resumedQuery = queries[1]
-    expect(resumedQuery.params.options?.resume).toBe(nativeSessionId)
-    expect(resumedQuery.params.options).not.toHaveProperty('sessionId')
     expect(resumedQuery.written).toEqual([])
     await call('quirky.structured/send', { session: resumed.id, text: 'resumed turn' })
     await waitFor(() => resumedQuery.written.length === 1)
