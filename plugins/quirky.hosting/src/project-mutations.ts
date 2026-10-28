@@ -1,8 +1,10 @@
 import type { Handler, HostingEnv, Identity, Scope } from './env'
+import { itemDetailsForIdentity } from './item-details'
 import {
   array,
   boundedText,
   ensureStringArray,
+  mapWorkItem,
   nonEmptyString,
   positiveInteger,
   record,
@@ -555,9 +557,37 @@ async function projectItemMutation(env: HostingEnv, params: Record<string, unkno
   return mutationResult(context, action, true, { issueType: record(updatedIssue?.issueType) })
 }
 
+async function projectItemDetails(env: HostingEnv, params: Record<string, unknown>, caller: ProjectCaller): Promise<Record<string, unknown>> {
+  const project = projectId(env, params, 'projectId')
+  const itemId = projectId(env, params, 'itemId')
+  const scope = await env.resolve(params, caller)
+  const { identity: projectHostIdentity } = resolveProjectHost(env, scope, params.host)
+  const target = await projectItemContext(env, scope, project, itemId, projectHostIdentity)
+  const path = `repos/${target.identity.owner}/${target.identity.repo}/${target.kind === 'issue' ? 'issues' : 'pulls'}/${target.number}`
+  const raw = await projectRest(env, scope, target.identity, path, 'GET', undefined, { idempotent: true })
+  const item = mapWorkItem(raw, { identity: target.identity, kind: target.kind })
+  if (!item || item.number !== target.number) throw projectError(env, 'schema_drift', 'GitHub returned a different project work item.')
+  // Only fixed internal detail queries run after project membership and same-host identity checks.
+  // Keep ambient account/project-host authorization on every child request, including PR CLI reads.
+  const ambient: HostingEnv = {
+    ...env,
+    rest: (_selected, endpoint, method = 'GET', fields, options) => projectRest(env, scope, target.identity, endpoint, method, fields, options),
+    graphql: (_selected, query, variables = {}, options) => projectGraphql(env, scope, target.identity, query, variables, options?.idempotent !== false),
+    json: (selected, args, options) => env.json(selected, args, { ...options, ambient: true, projectHost: projectHostIdentity.host })
+  }
+  const detail = await itemDetailsForIdentity(ambient, scope, target.identity, item)
+  const result = record(detail.item)
+  const identity = workItemIdentity(env, projectHostIdentity, result?.url, target.number, target.kind)
+  if (result?.number !== target.number || identity.owner.toLowerCase() !== target.identity.owner.toLowerCase() || identity.repo.toLowerCase() !== target.identity.repo.toLowerCase()) {
+    throw projectError(env, 'schema_drift', 'GitHub returned a different project work item.')
+  }
+  return detail
+}
+
 export function projectMutationMethods(env: HostingEnv): Record<string, Handler> {
   return {
     projectField: (params, caller) => projectField(env, params, caller),
+    projectItemDetails: (params, caller) => projectItemDetails(env, params, caller),
     projectItemMutation: (params, caller) => projectItemMutation(env, params, caller),
     projectItemMutationConfirmation: (params, caller) => projectItemMutationConfirmation(env, params, caller),
   }

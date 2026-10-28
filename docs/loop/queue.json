@@ -494,8 +494,7 @@
       "deps": [
         "m4-hosting-api-github"
       ],
-      "status": "in-progress",
-      "lane": 6
+      "status": "done"
     },
     {
       "id": "m4-hosting-ui-reviews",
@@ -508,9 +507,8 @@
         "m4-hosting-api-github",
         "m4-hosting-ui-tasks"
       ],
-      "status": "in-progress",
-      "early": true,
-      "lane": 5
+      "status": "done",
+      "early": true
     },
     {
       "id": "m4-hosting-ui-gitlab",
@@ -671,8 +669,9 @@
       "deps": [
         "m5-automations-core"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 6
     },
     {
       "id": "m5-loops-presets",
@@ -684,8 +683,9 @@
       "deps": [
         "m5-loops-core"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 5
     },
     {
       "id": "m5-loops-ui",

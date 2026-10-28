@@ -11,6 +11,7 @@ import { addNote, clearNotes, deleteNote, describeClearNotes, editNote, formatNo
 import { describeForcePush, fastForward, fetchRemote, forcePush, pull, push, rebaseFromBase, sync } from './remote'
 import { describeDiscard, discard, stage, unstage } from './staging'
 import { noteTargets, sendNotes } from './targets'
+import { mergePreview } from './merge-preview'
 
 /**
  * Every method `quirky.git` provides, by manifest name. A handler that throws has its git,
@@ -44,6 +45,7 @@ export function methodTable(env: DaemonEnv): Record<string, Handler> {
     sync: sync(env),
     rebaseFromBase: rebaseFromBase(env),
     compare: compare(env),
+    mergePreview: mergePreview(env),
     setBase: setBase(env),
     branches: branches(env),
     history: history(env),
