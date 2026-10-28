@@ -27,6 +27,27 @@ describe('diff sources', () => {
     expect(await diff({ path: 'notes.txt', source: 'unstaged' })).toMatchObject({ original: '', modified: 'fresh\n' })
   })
 
+  test('editor Changes compares HEAD to the working file, not the staged index', async () => {
+    s = await startScenario(scratch)
+    s.write('math.ts', 'staged\\n')
+    s.gitIn('add', 'math.ts')
+    s.write('math.ts', 'draft\\n')
+
+    expect(await diff({ path: 'math.ts', source: 'unstaged', compareAgainstHead: true })).toMatchObject({
+      source: 'unstaged',
+      staged: false,
+      original: 'a\\nb\\nc\\nd\\ne\\n',
+      modified: 'draft\\n'
+    })
+    expect(await diff({ path: 'math.ts', source: 'unstaged' })).toMatchObject({
+      original: 'staged\\n',
+      modified: 'draft\\n'
+    })
+    const incompatible = await s.fails(diff({ path: 'math.ts', source: 'staged', compareAgainstHead: true }))
+    expect(incompatible.code).toBe(RpcErrorCode.InvalidParams)
+    expect(incompatible.message).toContain('compareAgainstHead is only available for source unstaged')
+  })
+
   test('SC-55: the v1 staged flag means the staged source, and the source defaults to unstaged', async () => {
     s = await startScenario(scratch)
     s.write('math.ts', 'v2\n')

@@ -477,6 +477,60 @@ describe('SC-29: the chevron menu', () => {
   })
 })
 
+describe('C6: linked review push targets', () => {
+  const review = {
+    kind: 'found',
+    review: { number: 7, url: 'https://github.com/upstream/project/pull/7', state: 'open' }
+  }
+  const target = {
+    ready: true,
+    remote: 'fork',
+    branch: 'zoe/feat',
+    localBranch: 'zoe/feat',
+    localHead: 'a'.repeat(40),
+    headOid: 'c'.repeat(40),
+    number: 7,
+    fork: true,
+    repository: { host: 'github.com', owner: 'fork', repo: 'project' }
+  }
+
+  test('shows the exact fork destination and sends linked Push as purpose review', async () => {
+    const { fake, element, unmount } = await open((f) => {
+      f.status = statusOf([], { upstreamStatus: upstream(2, 0) })
+      f.on('quirky.hosting/forBranch', () => review)
+      f.on('quirky.git/pushTarget', () => target)
+    })
+    await waitForState(element, () => q(element, '.scm-push-target') !== null)
+    expect(q(element, '.scm-push-target')?.textContent).toContain('fork/zoe/feat')
+    expect(q(element, '.scm-push-target')?.textContent).toContain('Fork')
+    expect(fake.called('quirky.git/pushTarget').at(-1)?.params).toEqual({ worktree: 'feat', purpose: 'review' })
+
+    await click(primary(element))
+    expect(fake.called('quirky.git/push').at(-1)?.params).toEqual({ worktree: 'feat', purpose: 'review' })
+    unmount()
+  })
+
+  test('force confirmation shows the target and leases the freshly resolved PR head', async () => {
+    const { fake, element, unmount } = await open((f) => {
+      f.status = statusOf([], { upstreamStatus: upstream(2, 2, true) })
+      f.on('quirky.hosting/forBranch', () => review)
+      f.on('quirky.git/pushTarget', () => target)
+      f.on('quirky.git/describeForcePush', () => 'Force push zoe/feat to fork?')
+    })
+    await click(primary(element))
+    expect(dialog()?.textContent).toContain('fork/zoe/feat')
+    await click(buttonText(dialog()!, 'Force Push'))
+
+    expect(fake.called('quirky.git/forcePush').at(-1)?.params).toMatchObject({
+      worktree: 'feat',
+      purpose: 'review',
+      expected: 'c'.repeat(40),
+      yes: true
+    })
+    unmount()
+  })
+})
+
 describe('SC-30: a running remote call', () => {
   test('the primary reads "Push in progress…" disabled with a spinner and every menu row is disabled', async () => {
     const { element, unmount } = await open((f) => {

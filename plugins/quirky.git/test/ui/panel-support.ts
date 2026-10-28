@@ -70,6 +70,22 @@ export const compareOf = (overrides: Partial<GitCompare> = {}): GitCompare => ({
 
 export type Call = { method: string; params: Record<string, unknown> }
 type Handler = (params: Record<string, unknown>) => unknown | Promise<unknown>
+type HostedTab = {
+  kind: 'view'
+  id: string
+  viewId: string
+  key: string
+  input: Record<string, unknown>
+  title: string
+  pinned: boolean
+  preview: boolean
+  closeMethod?: string
+  closeParams?: Record<string, unknown>
+  closeContext?: boolean
+}
+type HostedGroup = { kind: 'group'; id: string; tabs: HostedTab[]; activeTab: string | null }
+type HostedRoot = HostedGroup | { kind: 'split'; id: string; direction: 'right'; first: HostedRoot; second: HostedRoot }
+type HostedWorkspace = { id: string; revision: number; activeGroup: string; root: HostedRoot }
 
 export type Fake = {
   context: UiPluginContext
@@ -101,6 +117,127 @@ export function fakeContext(initial: UiLayout): Fake {
   const eventListeners = new Set<(event: QuirkyEvent) => void>()
   const layoutListeners = new Set<(layout: UiLayout) => void>()
   const handlers = new Map<string, Handler>()
+  const terminalWorkspaces = new Map<string, HostedWorkspace>()
+  let terminalTabSequence = 0
+  const groupsFrom = (node: HostedRoot): HostedGroup[] =>
+    node.kind === 'group' ? [node] : [...groupsFrom(node.first), ...groupsFrom(node.second)]
+  const groupFor = (workspace: HostedWorkspace, id: string): HostedGroup | undefined =>
+    groupsFrom(workspace.root).find((group) => group.id === id)
+  const workspaceFor = (selector: unknown): HostedWorkspace => {
+    const selected = typeof selector === 'string' ? selector.replace(/^id:/u, '') : 'default'
+    let workspace = terminalWorkspaces.get(selected)
+    if (!workspace) {
+      const groupId = `${selected}:group`
+      workspace = { id: selected, revision: 0, activeGroup: groupId, root: { kind: 'group', id: groupId, tabs: [], activeTab: null } }
+      terminalWorkspaces.set(selected, workspace)
+    }
+    return workspace
+  }
+  const legacyInput = (value: unknown): unknown => {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) return value
+    const input = { ...(value as Record<string, unknown>) }
+    delete input.groupId
+    delete input.tabId
+    delete input.preview
+    delete input.split
+    return input
+  }
+  const terminalCall = (method: string, params: Record<string, unknown>): unknown => {
+    const workspace = workspaceFor(params.workspace)
+    if (method === 'quirky.terminal/workspace') return { workspace }
+    if (method === 'quirky.terminal/openViewTab') {
+      const viewId = typeof params.viewId === 'string' ? params.viewId : ''
+      const key = typeof params.key === 'string' ? params.key : ''
+      const title = typeof params.title === 'string' ? params.title : ''
+      const group = groupFor(workspace, typeof params.group === 'string' ? params.group : workspace.activeGroup)
+      if (!group || viewId === '' || key === '') throw new Error('invalid fake hosted-view request')
+      const supplied = typeof params.input === 'object' && params.input !== null && !Array.isArray(params.input)
+        ? params.input as Record<string, unknown>
+        : {}
+      const replaceId = typeof params.replace === 'string' ? params.replace : undefined
+      let tab = replaceId
+        ? groupsFrom(workspace.root).flatMap((owner) => owner.tabs).find((candidate) => candidate.id === replaceId)
+        : params.reuse === false
+          ? undefined
+          : groupsFrom(workspace.root).flatMap((owner) => owner.tabs).find((candidate) => candidate.viewId === viewId && candidate.key === key)
+      if (!tab) {
+        tab = {
+          kind: 'view',
+          id: `view-tab-${++terminalTabSequence}`,
+          viewId,
+          key,
+          input: supplied,
+          title,
+          pinned: false,
+          preview: params.preview === true
+        }
+        group.tabs.push(tab)
+      } else {
+        tab.viewId = viewId
+        tab.key = key
+        tab.input = supplied
+        tab.title = title
+        tab.preview = params.preview === true
+        if (!group.tabs.includes(tab)) group.tabs.push(tab)
+      }
+      tab.closeMethod = typeof params.closeMethod === 'string' ? params.closeMethod : undefined
+      tab.closeParams = typeof params.closeParams === 'object' && params.closeParams !== null && !Array.isArray(params.closeParams)
+        ? params.closeParams as Record<string, unknown>
+        : undefined
+      tab.closeContext = params.closeContext === true
+      if (params.activate !== false) {
+        workspace.activeGroup = group.id
+        group.activeTab = tab.id
+      }
+      workspace.revision += 1
+      fake.views.push({ id: viewId, input: legacyInput(supplied) })
+      fake.emit({ type: 'quirky.terminal/layout', data: { workspace: workspace.id, revision: workspace.revision } })
+      return { workspace, tab: tab.id }
+    }
+    if (method === 'quirky.terminal/rekeyViewTabs') {
+      const changes = Array.isArray(params.changes) ? params.changes : []
+      for (const raw of changes) {
+        if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) continue
+        const change = raw as Record<string, unknown>
+        const tab = groupsFrom(workspace.root).flatMap((owner) => owner.tabs).find((candidate) => candidate.id === change.tab)
+        if (!tab) continue
+        if (typeof change.key === 'string') tab.key = change.key
+        if (typeof change.input === 'object' && change.input !== null && !Array.isArray(change.input)) tab.input = change.input as Record<string, unknown>
+        if (typeof change.title === 'string') tab.title = change.title
+        if (typeof change.preview === 'boolean') tab.preview = change.preview
+      }
+      workspace.revision += 1
+      fake.emit({ type: 'quirky.terminal/layout', data: { workspace: workspace.id, revision: workspace.revision } })
+      return { workspace }
+    }
+    if (method === 'quirky.terminal/moveTab' && params.split === 'right') {
+      const tab = groupsFrom(workspace.root).flatMap((owner) => owner.tabs).find((candidate) => candidate.id === params.tab)
+      const group = typeof params.of === 'string' ? groupFor(workspace, params.of) : undefined
+      if (tab && group && workspace.root.kind === 'group') {
+        group.tabs = group.tabs.filter((item) => item !== tab)
+        const right: HostedGroup = { kind: 'group', id: `${workspace.id}:group-${++terminalTabSequence}`, tabs: [tab], activeTab: tab.id }
+        workspace.root = { kind: 'split', id: `${workspace.id}:split-${terminalTabSequence}`, direction: 'right', first: group, second: right }
+        workspace.activeGroup = right.id
+      }
+      workspace.revision += 1
+      fake.emit({ type: 'quirky.terminal/layout', data: { workspace: workspace.id, revision: workspace.revision } })
+      return { workspace }
+    }
+    if (method === 'quirky.terminal/pinTab') {
+      const tab = groupsFrom(workspace.root).flatMap((owner) => owner.tabs).find((candidate) => candidate.id === params.tab)
+      if (tab) tab.pinned = params.pinned === true
+      workspace.revision += 1
+      fake.emit({ type: 'quirky.terminal/layout', data: { workspace: workspace.id, revision: workspace.revision } })
+      return { workspace }
+    }
+    if (method === 'quirky.terminal/closeTab') {
+      for (const group of groupsFrom(workspace.root)) group.tabs = group.tabs.filter((tab) => tab.id !== params.tab)
+      workspace.revision += 1
+      fake.emit({ type: 'quirky.terminal/layout', data: { workspace: workspace.id, revision: workspace.revision } })
+      return { workspace }
+    }
+    throw new Error(`unexpected terminal method ${method}`)
+  }
   const fake: Fake = {
     calls: [],
     reports: [],
@@ -130,6 +267,7 @@ export function fakeContext(initial: UiLayout): Fake {
         fake.calls.push({ method, params })
         const scripted = handlers.get(method)
         if (scripted) return scripted(params)
+        if (method.startsWith('quirky.terminal/')) return terminalCall(method, params)
         switch (method) {
           case 'quirky.git/status':
             return fake.statuses[params.worktree as string] ?? fake.status

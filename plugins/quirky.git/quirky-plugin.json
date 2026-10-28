@@ -596,6 +596,26 @@
         }
       },
       {
+        "id": "diffCloseGuard",
+        "description": "Refuse hosted diff tab removal while its modified-side draft is unsaved.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": { "type": "string" },
+            "tabId": { "type": "string" },
+            "dirty": { "type": "boolean" },
+            "closeReason": { "type": "string" },
+            "closeViewId": { "type": "string" },
+            "closeViewKey": { "type": "string" },
+            "closeViewInput": { "type": "object", "additionalProperties": true }
+          },
+          "required": ["worktree", "tabId", "dirty", "closeViewId", "closeViewKey", "closeViewInput"],
+          "additionalProperties": false
+        },
+        "result": { "type": "boolean" }
+      },
+      {
         "id": "push",
         "description": "Pushes HEAD to its push remote, publishing the branch when it has no upstream.",
         "params": {
@@ -637,7 +657,7 @@
       },
       {
         "id": "forcePush",
-        "description": "Force pushes HEAD with a lease on the remote branch's last known commit, replacing what the remote has.",
+        "description": "Force pushes to a configured GitHub target with an exact lease; a supplied purpose is freshly validated before mutation.",
         "destructive": true,
         "confirm": "Force push this branch?",
         "describe": "describeForcePush",
@@ -655,7 +675,7 @@
             },
             "expected": {
               "type": "string",
-              "description": "Commit sha (40 hex) the remote branch must still be at; defaults to the remote-tracking ref."
+              "description": "Full 40- or 64-character commit SHA the remote branch must still be at; defaults to the remote-tracking ref."
             }
           }
         },
@@ -684,7 +704,7 @@
       },
       {
         "id": "describeForcePush",
-        "description": "The question asked before a force push.",
+        "description": "The force-push confirmation for the current configured target, optionally bound to a freshly validated review or creation destination.",
         "readOnly": true,
         "params": {
           "type": "object",
@@ -693,9 +713,14 @@
               "type": "string",
               "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
             },
+            "purpose": {
+              "type": "string",
+              "enum": ["review", "creation"],
+              "description": "Resolve and name the same fresh GitHub destination that the following force push must revalidate."
+            },
             "expected": {
               "type": "string",
-              "description": "Commit sha (40 hex) the remote branch must still be at; defaults to the remote-tracking ref."
+              "description": "Full 40- or 64-character commit SHA the remote branch must still be at; defaults to the remote-tracking ref."
             }
           }
         },
@@ -2752,6 +2777,23 @@
             "worktree": {
               "type": "string",
               "description": "Worktree selector; defaults to the open view's worktree."
+            },
+            "preview": {
+              "type": "boolean",
+              "description": "Open as a replaceable hosted preview tab; defaults to permanent."
+            },
+            "split": {
+              "type": "boolean",
+              "description": "Open in a new right-hand group instead of the active group."
+            },
+            "groupId": {
+              "type": "string",
+              "description": "Exact existing destination group; defaults to the active group."
+            },
+            "display": {
+              "type": "string",
+              "description": "Show source or a modified-only Markdown preview.",
+              "enum": ["source", "preview"]
             }
           },
           "required": [

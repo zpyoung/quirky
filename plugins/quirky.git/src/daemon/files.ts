@@ -26,10 +26,20 @@ export function diff(env: DaemonEnv): Handler {
   return async (params, caller) => {
     const source: GitDiffSource = params.source ?? (params.staged ? 'staged' : 'unstaged')
     const worktree = await env.resolve(params, caller)
+    if (params.compareAgainstHead !== undefined && typeof params.compareAgainstHead !== 'boolean') {
+      throw env.context.error('invalid-params', 'compareAgainstHead must be a boolean.')
+    }
+    if (params.compareAgainstHead === true && source !== 'unstaged') {
+      throw env.context.error('invalid-params', 'compareAgainstHead is only available for source unstaged.')
+    }
     const { rel } = await containedPath(worktree.path, params.path)
     const oldPath = params.oldPath === undefined ? undefined : (await containedPath(worktree.path, params.oldPath)).rel
-    const request: DiffRequest = { path: rel, source, ...(oldPath !== undefined && { oldPath }) }
-
+    const request: DiffRequest = {
+      path: rel,
+      source,
+      ...(oldPath !== undefined && { oldPath }),
+      ...(params.compareAgainstHead === true ? { compareAgainstHead: true } : {})
+    }
     if (source === 'branch') {
       request.mergeBase = oidParam(env, 'mergeBase', params.mergeBase)
       request.head = oidParam(env, 'head', params.head)

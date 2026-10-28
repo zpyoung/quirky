@@ -8,10 +8,11 @@ import { abort, conflictFile, continueOperation, describeAbort } from './conflic
 import { diff, hugeFolders, ignoreFolder, reveal, save, submoduleStatus } from './files'
 import { commitFiles, history } from './history'
 import { addNote, clearNotes, deleteNote, describeClearNotes, editNote, formatNotes, notes } from './notes'
-import { describeForcePush, fastForward, fetchRemote, forcePush, pull, push, rebaseFromBase, sync } from './remote'
+import { describeForcePush, fastForward, fetchRemote, forcePush, pull, push, pushTarget, rebaseFromBase, sync } from './remote'
 import { describeDiscard, discard, stage, unstage } from './staging'
 import { noteTargets, sendNotes } from './targets'
 import { mergePreview } from './merge-preview'
+import { diffCloseGuard } from './hosted'
 
 /**
  * Every method `quirky.git` provides, by manifest name. A handler that throws has its git,
@@ -37,6 +38,8 @@ export function methodTable(env: DaemonEnv): Record<string, Handler> {
     ignoreFolder: ignoreFolder(env),
     reveal: reveal(env),
     push: push(env),
+    diffCloseGuard: diffCloseGuard(),
+    pushTarget: pushTarget(env),
     forcePush: forcePush(env),
     describeForcePush: describeForcePush(env),
     pull: pull(env),

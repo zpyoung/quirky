@@ -1,6 +1,8 @@
+import { createHash } from 'node:crypto'
 import type { Worktree } from '@quirky/protocol'
 import type { Handler, HostingConfiguration, HostingEnv, Scope } from './env'
 import { isRecord, nonEmptyString, parseBranch, parseOid, parsePositiveInteger, parseIdentity, sameIdentity, providerReason, type IdentityValue } from './pr-data'
+import { parseRemoteIdentity, resolveTrustedIdentity } from './identity-remote'
 import { reviewParticipants, type ReviewParticipants } from './review-participants'
 import type { CachedReviewsResult, CachedWorkspaceReview } from './cached-review-types'
 
@@ -69,7 +71,13 @@ export type Review = {
   changedFiles?: number
   headRepositoryOwner?: { login: string }
   headRepository?: { name: string; owner?: { login: string } }
+  /** The repository containing the PR's base branch, taken from the authenticated lookup scope. */
+  repository: IdentityValue
 } & ReviewParticipants
+
+export type PushRepositoryResult =
+  | { ready: true; repository: IdentityValue; pushUrlFingerprint: string }
+  | { ready: false; reason: string; message: string }
 
 export type Lookup =
   | { kind: 'found'; review: Review; fetchedAt: number }
@@ -105,10 +113,11 @@ export function isPRStackSummary(value: unknown): value is PRStackSummary {
 
 type CachedLookup = { expiresAt: number; value: Lookup }
 export type PRLookup = {
-  forBranch(params: Record<string, unknown>, caller: Parameters<Handler>[1], options?: { noCache?: boolean }): Promise<Lookup>
+  forBranch(params: Record<string, unknown>, caller: Parameters<Handler>[1], options?: { noCache?: boolean; strict?: boolean }): Promise<Lookup>
   review(params: Record<string, unknown>, caller: Parameters<Handler>[1]): Promise<Lookup>
   cachedReviews(params: Record<string, unknown>, caller: Parameters<Handler>[1]): Promise<CachedReviewsResult>
   readFresh(params: Record<string, unknown>, caller: Parameters<Handler>[1]): Promise<PRRead | null>
+  pushRepository(params: Record<string, unknown>, caller: Parameters<Handler>[1]): Promise<PushRepositoryResult>
   invalidate(scope: Scope, data?: Record<string, unknown>): void
 }
 
@@ -209,6 +218,7 @@ function reviewFromRaw(raw: Record<string, unknown>, repository: IdentityValue, 
   const review: Review = {
     ...reviewParticipants(raw),
     provider: 'github', number, url, title, body, state, headRefName, baseRefName, headRefOid, baseRefOid,
+    repository: { host: repository.host, owner: repository.owner, repo: repository.repo },
     updatedAt: typeof providerUpdatedAt === 'string' && Number.isFinite(Date.parse(providerUpdatedAt)) ? providerUpdatedAt : null,
     mergeable: mergeability(raw), checksStatus: checksStatus(raw),
     reviewDecision: Object.hasOwn(raw, 'reviewDecision') && (
@@ -694,7 +704,7 @@ export function createPRLookup(env: HostingEnv): PRLookup {
     }
   }
 
-  const lookupResolved = async (request: NormalizedLookup, scope: Scope): Promise<Lookup> => {
+  const lookupResolved = async (request: NormalizedLookup, scope: Scope, strict = false): Promise<Lookup> => {
     const fetchedAt = Date.now()
     const { params, branch, linked, fallback, headOid } = request
     const repositories = selectRepositories(env, scope, params.prRepo)
@@ -715,6 +725,27 @@ export function createPRLookup(env: HostingEnv): PRLookup {
       }
     }
     if (!branch) return { kind: 'no-review', fetchedAt }
+    if (strict) {
+      const matches: PRRead[] = []
+      let firstError: unknown
+      for (const repository of repositories) {
+        try {
+          matches.push(...await branchCandidates(env, scope, repository, branch))
+        } catch (error) {
+          if (firstError === undefined) firstError = error
+        }
+      }
+      if (firstError !== undefined) {
+        const safe = errorFields(firstError)
+        return { kind: 'unavailable', reason: safe.reason ?? 'upstream_unavailable', message: safe.message, fetchedAt }
+      }
+      if (matches.length > 1) {
+        return { kind: 'unavailable', reason: 'ambiguous_head', message: 'More than one pull request is linked to this branch.', fetchedAt }
+      }
+      const match = matches[0]
+      return match ? { kind: 'found', review: match.review, fetchedAt } : { kind: 'no-review', fetchedAt }
+    }
+
     let firstError: unknown
     for (const repository of repositories) {
       try {
@@ -950,7 +981,7 @@ export function createPRLookup(env: HostingEnv): PRLookup {
   const forBranch = async (
     params: Record<string, unknown>,
     caller: Parameters<Handler>[1],
-    options?: { noCache?: boolean }
+    options?: { noCache?: boolean; strict?: boolean }
   ): Promise<Lookup> => {
     const scope = await env.resolve(params, caller)
     const request = normalizeLookup(params, scope)
@@ -961,7 +992,7 @@ export function createPRLookup(env: HostingEnv): PRLookup {
     const active = params.active === true
     const generation = cacheGeneration
     if (options?.noCache === true) {
-      const value = await lookupResolved(request, scope)
+      const value = await lookupResolved(request, scope, options.strict === true)
       const expiresAt = Date.now() + cacheTtl(value, active)
       await captureSnapshot(value, scope, request, generation, 'branch', active, expiresAt)
       return value
@@ -1003,6 +1034,52 @@ export function createPRLookup(env: HostingEnv): PRLookup {
     const repositories = selectRepositories(env, scope, params.prRepo)
     return resolveExact(scope, repositories, number, true)
   }
+  const pushRepository = async (
+    params: Record<string, unknown>,
+    caller: Parameters<Handler>[1]
+  ): Promise<PushRepositoryResult> => {
+    const remote = params.remote
+    if (typeof remote !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/u.test(remote)) {
+      inputError(env, 'remote must be a configured remote name.')
+    }
+    const scope = await env.resolve(params, caller)
+    let names: string
+    try {
+      names = await env.gitWorktree(scope.worktree, ['remote'])
+    } catch {
+      return { ready: false, reason: 'git_unavailable', message: 'The configured Git remotes could not be read.' }
+    }
+    if (!names.split(/\\r?\\n/u).some((name) => name === remote)) {
+      return { ready: false, reason: 'remote_unavailable', message: 'The configured push remote no longer exists.' }
+    }
+    let output: string
+    try {
+      output = await env.gitWorktree(scope.worktree, ['remote', 'get-url', '--push', '--all', remote])
+    } catch {
+      return { ready: false, reason: 'push_url_unavailable', message: 'The configured push URL could not be read.' }
+    }
+    const urls = output.split(/\\r?\\n/u).map((url) => url.trim()).filter(Boolean)
+    if (urls.length !== 1) {
+      return {
+        ready: false,
+        reason: urls.length === 0 ? 'push_url_unavailable' : 'ambiguous_push_url',
+        message: urls.length === 0 ? 'The configured remote has no push URL.' : 'The configured remote has multiple push URLs.'
+      }
+    }
+    const parsed = parseRemoteIdentity(urls[0]!)
+    if (!parsed) {
+      return { ready: false, reason: 'unsupported_provider', message: 'The configured push URL is not a supported GitHub repository.' }
+    }
+    try {
+      const repository = await resolveTrustedIdentity(parsed, async () => await env.authAccounts(scope))
+      return repository
+        ? { ready: true, repository, pushUrlFingerprint: createHash('sha256').update(urls[0]!).digest('hex') }
+        : { ready: false, reason: 'unsupported_provider', message: 'The configured push URL is not a trusted GitHub repository.' }
+    } catch {
+      return { ready: false, reason: 'repository_unavailable', message: 'The configured push repository could not be verified.' }
+    }
+  }
+
 
   env.onInvalidate((scope) => {
     cacheGeneration += 1
@@ -1020,5 +1097,5 @@ export function createPRLookup(env: HostingEnv): PRLookup {
     staleSnapshots.clear()
   })
 
-  return { forBranch, review, cachedReviews, readFresh, invalidate }
+  return { forBranch, review, cachedReviews, readFresh, pushRepository, invalidate }
 }
