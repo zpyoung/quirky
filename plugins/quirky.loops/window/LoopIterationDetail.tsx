@@ -1,3 +1,4 @@
+import { Button } from '@quirky/ui'
 import type { IterationDetail } from '../src/types'
 
 export type LoopIterationDetailProps = {
@@ -54,10 +55,10 @@ export function LoopIterationDetail({ detail, onBack }: LoopIterationDetailProps
   const diff = detail.diff === null ? 'Unavailable' : `+${detail.diff.added} / −${detail.diff.removed}`
 
   return (
-    <section className="loop-iteration-detail" aria-labelledby="loop-iteration-title">
-      <button type="button" className="loop-back" onClick={onBack}>Back</button>
+    <section className="ui-stack" aria-labelledby="loop-iteration-title">
+      <Button type="button" onClick={onBack}>Back</Button>
       <h3 id="loop-iteration-title">Iteration {detail.n}{attemptSuffix}</h3>
-      <dl className="loop-detail-facts">
+      <dl>
         <dt>Outcome</dt><dd>{outcomeLabel(detail)}</dd>
         <dt>Duration</dt><dd>{formatDuration(duration)}</dd>
         <dt>Cost</dt><dd>{cost}</dd>
@@ -65,21 +66,21 @@ export function LoopIterationDetail({ detail, onBack }: LoopIterationDetailProps
         <dt>Check</dt><dd>{detailCheckLabel(detail)}</dd>
         <dt>Evaluator</dt><dd>{detail.evaluator?.verdict === 'met' ? 'Condition met' : detail.evaluator?.verdict === 'not-met' ? 'Condition not met' : 'Unavailable'}</dd>
       </dl>
-      {detail.evaluator !== null && <section className="loop-evaluator-reason" aria-label="Evaluator reason">
+      {detail.evaluator !== null && <section className="ui-stack" aria-label="Evaluator reason">
         <h4>Evaluator reason</h4>
         <p>{detail.evaluator.reason || 'No reason recorded.'}</p>
       </section>}
-      {output !== null && <section className="loop-check-output" aria-label="Check output">
+      {output !== null && <section className="ui-stack" aria-label="Check output">
         <h4>Check output</h4>
-        <pre>{output}</pre>
+        <pre className="ui-readout">{output}</pre>
       </section>}
-      <section className="loop-iteration-errors" aria-label="Errors">
+      <section className="ui-stack" aria-label="Errors">
         <h4>Errors</h4>
         {errors.length === 0 ? <p>None recorded.</p> : <ul>{errors.map((error, index) => <li key={`${index}:${error}`}>{error}</li>)}</ul>}
       </section>
-      <section className="loop-output-tail" aria-label="Iteration output tail">
+      <section className="ui-stack" aria-label="Iteration output tail">
         <h4>Output tail</h4>
-        {detail.outputTail.length === 0 ? <p>No output recorded.</p> : <pre>{detail.outputTail}</pre>}
+        {detail.outputTail.length === 0 ? <p>No output recorded.</p> : <pre className="ui-readout">{detail.outputTail}</pre>}
       </section>
     </section>
   )

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { Annotation, EditorState, StateEffect, StateField, type Extension, type Range } from '@codemirror/state'
+import { Annotation, EditorState, StateEffect, StateField, type Range } from '@codemirror/state'
 import { Decoration, EditorView, lineNumbers, type DecorationSet } from '@codemirror/view'
 import type { SecretHit } from '../core/types'
 
@@ -10,7 +10,7 @@ const setHits = StateEffect.define<SecretHit[]>()
 function marksOf(hits: SecretHit[], length: number): DecorationSet {
   const ranges: Range<Decoration>[] = hits
     .filter((hit) => hit.start < hit.end && hit.end <= length)
-    .map((hit) => Decoration.mark({ class: 'hf-secret', attributes: { title: `Potential secret: ${hit.excerpt}` } }).range(hit.start, hit.end))
+    .map((hit) => Decoration.mark({ class: 'ui-secret-highlight', attributes: { title: `Potential secret: ${hit.excerpt}` } }).range(hit.start, hit.end))
   return Decoration.set(ranges, true)
 }
 
@@ -25,18 +25,6 @@ const secretMarks = StateField.define<DecorationSet>({
   provide: (field) => EditorView.decorations.from(field)
 })
 
-const theme: Extension = EditorView.theme({
-  '&': { color: 'var(--text)', backgroundColor: 'var(--bg)', fontSize: '12px', height: '100%' },
-  '.cm-scroller': { fontFamily: 'ui-monospace, Menlo, monospace', lineHeight: '1.5', overflow: 'auto' },
-  '.cm-content': { caretColor: 'var(--accent)' },
-  '.cm-cursor': { borderLeftColor: 'var(--accent)' },
-  '.cm-gutters': { backgroundColor: 'var(--bg-raised)', color: 'var(--dim)', border: 'none' },
-  '&.cm-focused': { outline: 'none' },
-  '.hf-secret': {
-    backgroundColor: 'color-mix(in srgb, var(--danger) 35%, transparent)',
-    borderBottom: '2px solid var(--danger)'
-  }
-})
 
 type Props = {
   text: string
@@ -66,7 +54,6 @@ export function PreviewEditor({ text, secrets, onEdit }: Props) {
           lineNumbers(),
           EditorView.lineWrapping,
           secretMarks,
-          theme,
           EditorView.contentAttributes.of({ 'aria-label': 'Brief preview' }),
           EditorView.updateListener.of((update) => {
             if (update.docChanged && !update.transactions.some((transaction) => transaction.annotation(external))) {
@@ -94,5 +81,5 @@ export function PreviewEditor({ text, secrets, onEdit }: Props) {
     view.current?.dispatch({ effects: setHits.of(secrets), annotations: external.of(true) })
   }, [secrets])
 
-  return <div ref={host} className="hf-editor" data-preview-editor />
+  return <div ref={host} className="ui-code-editor" data-preview-editor />
 }

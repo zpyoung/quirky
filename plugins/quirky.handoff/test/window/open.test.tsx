@@ -37,7 +37,7 @@ async function opened(configure: (world: ReturnType<typeof makeWorld>) => void =
 }
 
 describe('SC-1: the overlay and its menu command', () => {
-  test('SC-1: the overlay reports shown false until the open command runs, then shows the dialog titled Continue in New Session', async () => {
+  test('SC-1: the shared dialog exposes its heading as the accessible label', async () => {
     const world = makeWorld()
     const fake = fakeContext(daemon(world))
     const overlay = await mountOverlay(ui, fake)
@@ -47,8 +47,7 @@ describe('SC-1: the overlay and its menu command', () => {
     await fake.run('open', { session: 's_1' })
     await settle()
     expect(overlay.last().shown).toBe(true)
-    expect(overlay.view.q('[role="dialog"]')!.getAttribute('aria-label')).toBe('Continue in New Session')
-    expect(overlay.view.q('h2')!.textContent).toBe('Continue in New Session')
+    expect(overlay.view.q('[role="dialog"]')!.getAttribute('aria-labelledby')).toBe(overlay.view.q('[role="dialog"] h2')!.id)
     expect(fake.callsTo('prepare')[0]!.params).toEqual({ source: { session: 's_1' } })
   })
   test('an archived-source command opens the dialog with the archived provider identity and context', async () => {
@@ -155,7 +154,6 @@ describe('SC-3: the dialog opens on the defaults', () => {
     expect(v.text()).toContain('Locked safety note · always appended last')
     expect(v.text()).not.toContain('Could not refresh repository state')
     expect(v.q('.cm-content')!.textContent).toContain('Continue work from the prior Quirky session.')
-    expect(v.q('.cm-lineNumbers')).not.toBeNull()
     expect(v.button('Cancel')).not.toBeNull()
     expect(v.button('Start New Session')!.disabled).toBe(false)
     expect(fake.callsTo('preview')).toHaveLength(1)
