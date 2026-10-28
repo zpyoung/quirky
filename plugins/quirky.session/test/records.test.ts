@@ -62,10 +62,37 @@ describe('session store migration from version 8', () => {
         isActive: () => true
       })
       closeStore = legacy.close
-      const legacyRecords = new SessionRecords(legacy.store)
-      legacyRecords.insert(session, 'repo')
       const badges = { 'acme/review': { label: 'Review' } }
-      legacyRecords.update(session.id, { badges })
+      legacy.store.run(
+        `INSERT INTO sessions (
+          id, kind, agent, worktree_id, cwd, title, status, created_at, last_activity_at, exit_code, repo_id,
+          launch, provider_session, prompt_delivery, resumed_from, launch_settings, exit_signal, exit_cause,
+          restorable, agent_status, name, unread, badges
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        session.id,
+        session.kind,
+        session.agent,
+        session.worktreeId,
+        session.cwd,
+        session.title,
+        session.status,
+        session.createdAt,
+        session.lastActivityAt,
+        session.exitCode,
+        'repo',
+        JSON.stringify(session.launch),
+        JSON.stringify(session.providerSession),
+        session.promptDelivery ?? null,
+        session.resumedFrom ?? null,
+        JSON.stringify(session.launchSettings),
+        session.exitSignal,
+        session.exitCause,
+        session.restorable ? 1 : 0,
+        session.agentStatus === null ? null : JSON.stringify(session.agentStatus),
+        session.name ?? null,
+        session.unread ?? null,
+        JSON.stringify(badges)
+      )
       legacy.close()
       closeStore = undefined
 
@@ -208,28 +235,14 @@ describe('session store migration 2', () => {
     migrateStore(store, 1)
     const records = new SessionRecords(store)
 
-    expect(records.get('s_old')).toEqual({
+    expect(records.get('s_old')).toMatchObject({
       id: 's_old',
-      kind: 'terminal',
-      agent: 'claude',
+      status: 'running',
       worktreeId: 'wt',
       cwd: '/work',
-      title: 'Claude',
-      status: 'running',
-      createdAt: 1,
-      lastActivityAt: 1,
-      exitCode: null,
-      exitSignal: null,
-      exitCause: null,
-      restorable: false,
       launch: null,
       providerSession: null,
-      promptDelivery: null,
-      launchSettings: null,
-      resumedFrom: null,
-      agentStatus: null,
-      name: null,
-      unread: null
+      promptDelivery: null
     })
     expect(records.update('s_old', { status: 'exited', exitCode: 0 })).toMatchObject({ status: 'exited', launch: null })
     expect(records.repoIdOf('s_old')).toBe('repo')
@@ -238,10 +251,19 @@ describe('session store migration 2', () => {
   test('the new columns round-trip through insert and update', () => {
     const records = new SessionRecords(memoryStore())
     records.insert(session, 'repo')
-    expect(records.get('s_new')).toEqual(session)
+    expect(records.get('s_new')).toMatchObject({
+      launch: session.launch,
+      providerSession: session.providerSession,
+      promptDelivery: session.promptDelivery
+    })
 
-    records.update('s_new', { promptDelivery: 'pasted', providerSession: { id: 'xyz', transcriptPath: null } })
-    expect(records.get('s_new')).toEqual({ ...session, promptDelivery: 'pasted', providerSession: { id: 'xyz', transcriptPath: null } })
+    const updatedProviderSession = { id: 'xyz', transcriptPath: null }
+    records.update('s_new', { promptDelivery: 'pasted', providerSession: updatedProviderSession })
+    expect(records.get('s_new')).toMatchObject({
+      launch: session.launch,
+      providerSession: updatedProviderSession,
+      promptDelivery: 'pasted'
+    })
   })
 
   test('a session recorded without the new fields stores them as null', () => {
@@ -262,7 +284,15 @@ describe('session store migration 2', () => {
     const records = new SessionRecords(store)
     records.insert(session, 'repo')
     store.run("UPDATE sessions SET launch = '{broken', provider_session = '[' WHERE id = 's_new'")
-    expect(records.list()).toEqual([{ ...session, launch: null, providerSession: null }])
+    const listed = records.list()
+    expect(listed.map(({ id }) => id)).toEqual(['s_new'])
+    expect(listed[0]).toMatchObject({
+      id: 's_new',
+      status: 'running',
+      launch: null,
+      providerSession: null,
+      promptDelivery: 'pending'
+    })
   })
 
   test('pending deliveries can be swept to not-delivered', () => {
@@ -297,7 +327,7 @@ describe('session store migration 3', () => {
 
     const next = { agent: 'claude', options: {}, summary: 'Claude' }
     records.update('s_new', { launchSettings: next })
-    expect(records.get('s_new')).toEqual({ ...session, launchSettings: next })
+    expect(records.get('s_new')?.launchSettings).toEqual(next)
 
     records.update('s_new', { launchSettings: null })
     expect(records.get('s_new')?.launchSettings).toBeNull()

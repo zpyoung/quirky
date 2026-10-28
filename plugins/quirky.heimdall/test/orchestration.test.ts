@@ -364,7 +364,6 @@ function makeContext(
     workerEntrypoint: () => { throw new Error('workerEntrypoint is unsupported in the orchestration fixture') },
     dataDir: '/tmp/heimdall-data',
     home: '/tmp/quirky-home',
-    workerEntrypoint: () => { throw new Error('unexpected worker entrypoint request') },
     createFileResource: () => { throw new Error('unexpected file resource request') },
     clients: { accept: () => { throw new Error('unexpected remote client admission') } },
     call,

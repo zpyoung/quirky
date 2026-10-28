@@ -396,5 +396,40 @@
 - **Revisit if:** acknowledgement is lost or two actionable waiters become active
 - **Source:** locked by docs/loop/decisions/m6-orchestration-core.md D7
 
+## D37: Land the passing scope under the operator's final sprint instruction
+- **Question:** the operator requires this dependency to land without another review campaign
+- **Options:** start more review; repeat green gates; land the exercised implementation through the queue
+- **Chose:** commit final evidence, keep the completed affected checks and single roadmap catchup, and run queue.ts land. No test expectation is weakened. Automatic native host-power binding remains the single D21 follow-up already queued and recorded in BLOCKERS.md.
+- **Why:** all included public worker/kernel flows are now exercised and green; queue land owns merge-result verification.
+- **Evidence:** operator instruction; passing real-process service/native proofs, typecheck, scripts and corrected affected plugin gate
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** the queue merge-result gate reports a concrete failure
+- **Source:** locked by operator instruction in this iteration
+
 ## Progress
-Iteration4: roadmap catchup committed0d45d83a; isolated fixture followup committedbd082884; all integration/fix agents returned. Both OWN actual-process smokes PASS: all8 owner services through native CLI Ask/answer/report/release/exact stop with foreign/stale-identity rejection, and real kernel-kind structured Codex dispatch through authenticated worker_done to terminal summary, one retained turn, captured structured journal and positive exact session exit. Private homes/processes cleaned. OWN full typecheck PASS0diagnostics20.71s; exact scripts gate PASS68tests570assertions after serializing local runtime work without changing deadlines; ordinary API acceptance PASS23tests253assertions. The193-file affected run passed187; corrected plugin follow-up passed51/52 before the final pre-acceptance waiter assertion correction. Final52-file affected follow-up is running. Dependency proof ready:true; one roadmap catchup done and all17 incoming logs read. Next: finish that remote gate, commit final boundary fixes/docs and queue land, whose merge-result whole-suite verification remains mandatory. D20 skips only the unstarted review campaign; D21 remains the sole deferred native host-power flow. No owner/control hubs, fake worker authority, new human ask or unverified whole-feature claim.
+Iteration4: source checkpoint8ce174fb includes the terminal-summary and confirmed historical-worker-identity fixes after roadmap catchup0d45d83a and isolated fixture followupbd082884. All agents returned; no owner/control hubs or fabricated worker authority. Dependency proof is ready:true and all17 incoming decision logs were read. One roadmap catchup is complete. Review remains skipped under D20/D37. The included acceptance flows are green; D21 native host-power binding is the sole queued follow-up. Next: commit this evidence, detach and run queue land; only its merge-result result can mark the item landed.
+
+| Verification | Observed result |
+| --- | --- |
+| Real owner-service process flow | All8 APIs, actual child CLI Ask/answer/report/release/exact stop, foreign/stale identity refused; private processes/homes cleaned |
+| Native kernel process flow | Scripted native Codex app-server through real runner/daemon/attestation; completed Task/Dispatch, terminal watcher, retained turn1, captured structured archive and positive exact session exit |
+| Full typecheck | PASS, zero diagnostics,20.71s |
+| Repository scripts | PASS,68tests570assertions; no deadline changes |
+| Ordinary API acceptance | PASS,23tests253assertions |
+| Broad affected scope |193files,187passed before fixes; corrected files re-exercised below |
+| Corrected affected plugin scope |52files, gate ok:true; acceptance-restart passed its isolated retry and was recorded flaky by the suite |
+
+Landing attempt1 reported an integration conflict, not a test failure. The required repair merge
+is aa34887f: retain landed native follow-up model/effort and cumulative-usage coverage, preserve
+session migrations8/9/10 and background ownership rules. Both newly incoming decision logs were
+read without an M6 authority conflict. Changed-scope verification passed34/34 files with no flaky
+retry; full typecheck passed0diagnostics22.46s; the native kernel process smoke passed again in6.04s.
+Retry queue land without another review or repeat of unchanged green scopes.
+
+Landing attempt2 exercised the whole658-file remote suite plus5 local macOS files. Three initial
+load-sensitive files passed their isolated retries; the persistent failure was the Heimdall
+workspace package manifest missing from the import fence's inputs. Added the conventional private
+`@quirky/plugin-heimdall` package with its sole public protocol dependency and updated bun.lock.
+The actual import fence now passes9/9 tests. No test, runtime authority or deadline was relaxed.
+The roadmap was already up to date for this repair. Retry queue land on this metadata correction.

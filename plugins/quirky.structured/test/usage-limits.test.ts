@@ -96,7 +96,7 @@ describe('provider usage-limit journal evidence', () => {
     const fixture = createCodexAppServerFixture(join(testHome, 'provider-fixtures'))
     const threadId = `rate-limit-${randomUUID()}`
     const original = readFileSync(fixture.executable, 'utf8')
-    const threadStart = "const id = 'scripted-thread'"
+    const threadStart = "const id = uniqueThreads ? 'scripted-thread-' + require('node:crypto').randomUUID() : 'scripted-thread'"
     const startTurn = "      case 'turn/start':\n        startTurn(message, message.params.threadId, textInput(message.params.input))"
     expect(original.includes(threadStart)).toBe(true)
     expect(original.includes(startTurn)).toBe(true)
