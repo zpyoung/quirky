@@ -5,10 +5,10 @@
     {
       "id": "SC-9-native",
       "title": "On a disposable worktree, every Finder file drop into the editor/explorer imports a collision-safe copy, including a source already inside the worktree; explorer row drag into a terminal inserts shell-escaped paths; Copy Path/Relative Path use the system clipboard and Reveal in Finder selects the file without stealing unrelated state.",
-      "status": "fail",
+      "status": "pending",
       "lastRun": "2026-10-28",
       "report": "/Users/zpyoung/orca/workspaces/quirky/native-qa/.quirk/using-apps-like-a-user/runs/20261028T061952-27c6/report.md",
-      "summary": "Explorer Copy Path copies the worktree root joined to the absolute path, and Copy Relative Path copies the absolute path; Finder drops weren't exercised."
+      "summary": "Awaiting native retest after fix-native-m2-editor-1028 repairs Explorer clipboard path identity and terminal drag exports. Previous run observed duplicated-root Copy Path and absolute Copy Relative Path; Finder drops and Reveal were not exercised. Historical lastRun/report retained; no native pass claimed."
     },
     {
       "id": "SC-8-trash-native",

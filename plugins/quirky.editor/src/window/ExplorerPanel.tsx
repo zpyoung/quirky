@@ -68,7 +68,7 @@ function topLevelPaths(paths: string[]): string[] {
 }
 
 function fileUrl(path: string): string {
-  return `file://${encodeURI(path).replaceAll('#', '%23')}`
+  return `file://${encodeURI(path).replaceAll('#', '%23').replaceAll('?', '%3F')}`
 }
 
 function escapedGlob(path: string): string {
@@ -594,10 +594,19 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
 
 
   const copyPaths = async (relative: boolean, paths = selectedPaths) => {
-    if (!rootListing || paths.length === 0) return
-    const root = rootListing.root.replace(/\/$/, '')
-    const values = paths.map((path) => relative ? path : `${root}/${path}`)
+    if (paths.length === 0) return
     try {
+      let values = paths
+      if (relative) {
+        if (!worktree) return
+        const root = await resolveWorktreeRoot(worktree)
+        if (root === null) return
+        values = paths.map((path) => {
+          const value = relativeExplorerPath(root, path)
+          if (value === null) throw new Error('The selected path is outside this worktree.')
+          return value
+        })
+      }
       await navigator.clipboard.writeText(values.join('\n'))
       context.toast('Paths copied', `${values.length} path(s)`)
     } catch (reason) {
@@ -675,12 +684,10 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
     }
   }
 
-  const openInTerminal = async (path: string, isDirectory: boolean) => {
-    if (!worktree || !rootListing) return
-    const directory = isDirectory ? path : path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '.'
-    const cwd = directory === '.' ? rootListing.root : `${rootListing.root.replace(/\/$/, '')}/${directory}`
+  const openInTerminal = async (path: string) => {
+    if (!worktree) return
     try {
-      await context.call('quirky.terminal/newTab', { workspace: worktree, cwd })
+      await context.call('quirky.terminal/newTab', { workspace: worktree, cwd: path })
     } catch (reason) {
       setError(messageOf(reason))
     }
@@ -924,10 +931,18 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
               }}
               onDoubleClick={() => !entry.isDirectory && void openFile(entry.path, { preview: false, pinned: true })}
               onDragStart={(event) => {
+                if (worktreeRoot === null || resolvedWorktreeId === null) {
+                  event.preventDefault()
+                  return
+                }
                 const paths = topLevelPaths(selectedPaths.includes(entry.path) ? selectedPaths : [entry.path])
-                event.dataTransfer.setData(WORKTREE_PATHS_MIME, JSON.stringify({ worktreeId: state?.explorer.worktreeId ?? worktree, paths }))
-                const root = rootListing?.root.replace(/\/$/, '') ?? ''
-                event.dataTransfer.setData('text/uri-list', paths.map((path) => fileUrl(`${root}/${path}`)).join('\r\n'))
+                const relativePaths = paths.map((path) => relativeExplorerPath(worktreeRoot, path))
+                if (relativePaths.includes(null)) {
+                  event.preventDefault()
+                  return
+                }
+                event.dataTransfer.setData(WORKTREE_PATHS_MIME, JSON.stringify({ worktreeId: resolvedWorktreeId, paths: relativePaths }))
+                event.dataTransfer.setData('text/uri-list', paths.map(fileUrl).join('\r\n'))
                 event.dataTransfer.effectAllowed = 'copyMove'
               }}
               onDragOver={(event) => {
@@ -961,7 +976,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
                   {!entry.isDirectory && <button type="button" onClick={() => void duplicatePath(entry.path)}>Duplicate</button>}
                   <button type="button" onClick={() => { setRenamePath(entry.path); setRenameValue(entry.path) }}>Rename</button>
                   <button type="button" onClick={() => void deleteSelected([entry.path])}>Delete</button>
-                  {entry.isDirectory && <button type="button" onClick={() => void openInTerminal(entry.path, true)}>Open in Terminal</button>}
+                  {entry.isDirectory && <button type="button" onClick={() => void openInTerminal(entry.path)}>Open in Terminal</button>}
                   {entry.isDirectory && <button type="button" onClick={() => { setSearchMode('contents'); setIncludePattern(`${escapedGlob(entry.path)}/**`) }}>Find in Folder</button>}
                   {!entry.isDirectory && entry.name.toLowerCase().endsWith('.md') && <button type="button" onClick={() => void openMarkdownPreview(entry.path)}>Open Markdown Preview</button>}
                 </div>
