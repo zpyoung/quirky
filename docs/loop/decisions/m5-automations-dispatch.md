@@ -319,5 +319,16 @@
 - **Revisit if:** the public plugin lifecycle replaces activating with another live state
 - **Source:** assumed — autonomous
 
+## D30: Retry landing only after fresh composed-runtime proof
+- **Question:** Does the resolved text still execute both the background and landed orchestration seams?
+- **Options:** trust marker removal; exercise the composed ownership/store/structured/native paths and compile the merge
+- **Chose:** on c49562d91f3407f98ee52c2d22fb90b3a301b603 run checks ownership, session records, structured background and permanent native CLI acceptance together, then frozen-install/typecheck. Result23pass0fail99assertions in78.46seconds; typecheck exited0 with594installs608packages unchanged. Total143.52seconds. No broad suite or final review round was restarted; authoritative land owns the whole merge-result gate.
+- **Why:** This directly covers both migration ordering and background creation after native lease changes, plus legitimate activating-owner prechecks and retained inactive-owner cancellation. Unlanded BG-only temporary profiles are not a shipped schema: peers were told to use fresh disposable homes when restarting that old smoke build on the canonical migration9/10 source.
+- **Evidence:** composed command output; `.orca/loops/omp-until-done-deaecbdd/dispatch-recovery-evidence.tar.gz`, SHA256 `640d574a8d0e66ff00d387098a4ec4b98207bfad17cdf56f42b1371d380c65d5`; recovery.diff and recovery-observed.json; accepted lane6 recovery hash messagee96402df-4709-4d1a-a422-fd0641afcde4
+- **Reversibility:** easy
+- **Confidence:** high for exercised paths; final model review remains explicitly unperformed
+- **Revisit if:** authoritative merge-result verification finds a new failure
+- **Source:** assumed — autonomous
+
 ## Progress
-First land stopped before tests; mandatory recovery now composes both additive conflicts and preserves orchestration's landed migration order. Incoming m6 decision log read; no binding product conflict. Startup check-owner regression fixed without changing inactive-owner cancellation. Before retry, run focused ownership/background/migration/native tests and typecheck on this merged source, then commit/detach and authoritative queue land immediately. The single constrained-flow follow-up is already registered; do not add it again. Night-mode skips the still-unstarted final model review, without claiming clearance.
+Mandatory recovery is verified: c49562d9 composes pointer migration9/background10, create-option union and activating check ownership. Fresh four-file native/API/store acceptance23/0/99assertions and frozen-install/typecheck0 passed. All workers/process jobs returned; the single remote/raw-args follow-up is already registered. Commit this evidence, detach and retry authoritative queue land immediately. No final model-review clearance is claimed under the expired-item night-mode rule.
