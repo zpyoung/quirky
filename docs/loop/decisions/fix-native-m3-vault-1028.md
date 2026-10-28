@@ -33,5 +33,49 @@
 - **Revisit if:** The next native report records a remaining failure.
 - **Source:** locked by docs/loop/LOOP.md
 
+## D4: Preserve the separate script failures in an end-phase repair item
+- **Question:** Does this Vault repair authorize changing the unrelated screenshot-review subsystem when the script gate fails?
+- **Options:** Suppress or weaken its failures; expand this item into UI-review debugging; retain the failing gate evidence and queue its separate repair.
+- **Chose:** Run the complete gate once, record all 13 real failures, and add `fix-test-scripts-ui-review-1028` with dependency `m7-test-triage` through the canonical queue command. Append the failure inventory to BLOCKERS.md. No script assertion, UI-review implementation or protected loop path changed.
+- **Why:** End-phase triage is already claimed by lane8. These failures concern screenshot reviewer results, fixture directory reuse and malformed-input diagnostic persistence; none runs Vault clipboard actions. The final integration gate is typecheck, but a failed script gate must remain visible and owned rather than be presented as passed.
+- **Evidence:** `bun test scripts`:113 pass,13 fail,945 assertions,98.17s,exit1. Twelve failures are in `scripts/ui-review/review.test.ts`; `manifest()` at85 throws EEXIST on repeated captures; several expected passed/failed or specialized errors receive generic error. `scripts/ui-review/cli.test.ts:219` throws ENOENT for ui-review-error.json after malformed review-only input. Full lane1 iteration23 output artifacts26/38; durable inventory in docs/loop/BLOCKERS.md under this item and the queued title. Canonical queue status lists m7-test-triage in-progress lane8.
+- **Reversibility:** easy.
+- **Confidence:** high for the failure inventory; no UI-review root cause is asserted.
+- **Revisit if:** The end-phase repair identifies a Vault-dependent cause.
+- **Source:** assumed — autonomous
+
+## D5: Preserve incoming owner decisions and the narrow native boundary
+- **Question:** Do decisions arriving in the one integration catch-up change the repair?
+- **Options:** Reopen PTY timing or Chrome security work; preserve their owners and the Vault parity decision.
+- **Chose:** Merge build/roadmap once, read both incoming decision logs completely, and retain their boundaries. No conflict with the existing Vault fix. UI-lint, root/mobile/prepared-desktop typecheck passed after the merge in43.70s.
+- **Why:** fix-flaky-pty-host-clear changes only real-PTY test/cleanup budgets. fix-native-sa-browser-agent-1028 blocks unproven packaged Chrome process failure and explicitly preserves production credential protection. Neither authorizes a new Vault clipboard bridge or a native pass claim.
+- **Evidence:** clean integration merge; docs/loop/decisions/fix-flaky-pty-host-clear.md D1–D6; docs/loop/decisions/fix-native-sa-browser-agent-1028.md D1–D4; `bun run typecheck` exit0.
+- **Reversibility:** easy.
+- **Confidence:** high for compilation and independent authority preservation.
+- **Revisit if:** Canonical land reports a conflicting incoming change.
+- **Source:** locked by incoming decision logs
+
+## D6: Resolve the guarded scroll limitation without changing working UI
+- **Question:** Does the first guarded run's blocked expanded-copy goal establish another product defect?
+- **Options:** Change panel layout from the blocked result alone; abandon the goal; identify its actual scroll owner and repeat the guarded operation there.
+- **Chose:** Inspect scroll geometry read-only, then run a focused guarded follow-up against the visible outer Agent Session History panel. It passed: loaded first-prompt content and the entire Copy first prompt button are visible. Preserve the original blocked report and its findings instead of rewriting it.
+- **Why:** The nested prompt consumes its own scrolling; the outer panel had clientHeight539 and scrollHeight758. Scrolling that outer panel exposed the existing control. The menu campaign had already shown all four copy actions together. No stalled source request or remaining clipping defect was established, so another production change would be speculative.
+- **Evidence:** `.quirk/using-apps-like-a-user/runs/20261028T212851-cbcb/report.md`:g1 pass,g2 blocked; obs-4.png shows every requested menu copy action. Focused follow-up `.quirk/using-apps-like-a-user/runs/20261028T213452-7fc9/report.md`:g1 pass,no findings,no cleanup errors; obs-4.png shows loaded prompt and full Copy first prompt button. Both are actual built web UI/daemon campaigns, not native certification. Build exit0 in18.90s; missing icon.iconset warning remains unchanged.
+- **Reversibility:** easy.
+- **Confidence:** high for visual reachability and source loading; macOS clipboard remains pending.
+- **Revisit if:** The nightly native runner cannot reach these controls in its rebuilt app.
+- **Source:** assumed — autonomous
+
+## D7: Keep browser permission diagnostics separate from clipboard acceptance
+- **Question:** Can the parent browser probe establish exact clipboard behavior or require a product permission change?
+- **Options:** Change application permissions; call a browser clipboard shim a native pass; retain only the observed diagnostic boundary.
+- **Chose:** No application permission change and no four-value browser/native pass claim. A headless Chromium probe read one exact literal log path after its isolated grant; subsequent permission/read operations failed and the tool killed its worker. Exact four-value acceptance comes only from the existing daemon/window regression; native certification stays pending.
+- **Why:** The runtime already reports a denied Clipboard write honestly. Browser grant changes are not evidence against Vault's existing clipboard owner. The guarded visual campaigns never touched the clipboard. All smoke HOME/XDG_CONFIG_HOME/QUIRKY_HOME/source paths are owned temporary paths, including provider-hook writes.
+- **Evidence:** Lane1 iteration23 browser probe: Clipboard write permission denied, one exact log-path read, then read/grant worker-recovery failure. Parent tabs closed/released. The first guarded campaign's ended blocked session was retained by the tool; exact-session process cleanup `playwright-cli -s=20261028T212851-cbcb close` reported it closed. This was teardown only, not an unguarded QA action. Focused follow-up end retained nothing.
+- **Reversibility:** easy.
+- **Confidence:** high for the reported evidence boundary; no native clipboard claim.
+- **Revisit if:** A compliant native run supplies a concrete Clipboard API failure.
+- **Source:** locked by docs/loop/NATIVE.md
+
 ## Progress
-Root cause and already-landed repair inspected; existing literal-copy and source-detail regression passes. Rebuilt app successfully. Isolated real daemon uses only owned HOME/XDG_CONFIG_HOME/QUIRKY_HOME/source roots and current bundled plugins/UI. Web reachability campaign, script gate, catch-up, typecheck and landing remain in progress. No production or test change is justified by current evidence.
+The already-landed parity repair is confirmed by the unchanged 29-assertion selected-copy/details regression and rebuilt web campaigns: all four menu actions visible, full first prompt loaded, expanded copy reachable by outer-panel scrolling. Only the original failed clipboard scenario is reset to pending; historical reports and separately blocked native scenarios remain intact. One clean catch-up and post-merge typecheck pass; script gate's13 UI-review failures are recorded and queued separately. No production/test edits, duplicate regression, assertion weakening or native pass claim. Both agents completed, parent tabs released, retained guarded browser closed, isolated daemon service exited0 and owned PTY pid/runtime files disappeared. Ready to commit evidence, detach, canonical queue land, wait for its result, and remove the owned scratch directory.
