@@ -499,7 +499,15 @@ export function createWorkerFleet(core: WorkerCore, repo: WorkerRepository, runt
     const task = cloneTask(core.getTask(dispatch.taskId))
     const worker = cloneWorker(repo.get(dispatch.id))
     const resource = cloneResource(repo.resource(dispatch.id))
-    const candidate: FleetCandidate = { dispatch, task, worker, resource, attention: { ...core.attentionFor(dispatch.id) } }
+    const run = core.getRun(dispatch.runId)
+    const candidate: FleetCandidate = {
+      dispatch,
+      task,
+      coordinatorSessionId: run.coordinatorSessionId,
+      worker,
+      resource,
+      attention: { ...core.attentionFor(dispatch.id) }
+    }
     const initialObservation = await observeCandidate(runtime, candidate)
     const evidence = await readAgentEvidence(runtime, dispatch, worker, resource, initialObservation)
     const observation = observationAfterEvidence(initialObservation, evidence)
