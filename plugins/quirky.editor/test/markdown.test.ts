@@ -576,17 +576,22 @@ describe('Markdown through the daemon API', () => {
     expect(createdContent).toMatch(/Date: \d{4}-\d{2}-\d{2}/)
 
     const createdPath = join(f.root, created.buffer.relativePath)
-    await expect(md('retarget', { bufferId: created.buffer.id, path: 'docs/release-plan.md' })).rejects.toThrow()
-    expect(readFileSync(createdPath, 'utf8')).toBe(createdContent)
-    expect(existsSync(join(f.root, 'docs/release-plan.md'))).toBe(false)
+    mkdirSync(join(f.root, 'docs'), { recursive: true })
+    const saved = await f.call('quirky.editor/saveAs', {
+      bufferId: created.buffer.id,
+      path: 'docs/release-plan.md',
+      expectedRevision: created.buffer.contentRevision
+    })
+    expect(saved).toMatchObject({ id: created.buffer.id, relativePath: 'docs/release-plan.md', untitled: false })
+    expect(existsSync(createdPath)).toBe(false)
+    expect(readFileSync(join(f.root, 'docs/release-plan.md'), 'utf8')).toBe(createdContent)
 
     const blank = await md('new', { worktree: f.worktree })
     const blankPath = join(f.root, blank.buffer.relativePath)
-    expect(blankPath).not.toBe(createdPath)
+    expect(blankPath).not.toBe(join(f.root, 'docs/release-plan.md'))
     expect(blankPath).not.toBe(join(f.root, 'untitled.md'))
-    const blankContent = readFileSync(blankPath, 'utf8')
-    await f.call('quirky.editor/close', { bufferId: blank.buffer.id, choice: 'discard' })
-    expect(readFileSync(blankPath, 'utf8')).toBe(blankContent)
+    await f.call('quirky.editor/close', { bufferId: blank.buffer.id })
+    expect(existsSync(blankPath)).toBe(false)
     expect(readFileSync(join(f.root, 'untitled.md'), 'utf8')).toBe('occupied\n')
     mkdirSync(join(f.root, 'exports'), { recursive: true })
     const diskBeforeExport = readFileSync(join(f.root, 'toc.md'), 'utf8')
