@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react'
-import type { ActivityPreferences, ActivityWindow, SidebarProjection } from './useSidebarActivity'
+import type { ActivityPreferencePatch, ActivityWindow, SidebarProjection } from './useSidebarActivity'
 
 const WINDOWS: Array<{ value: ActivityWindow; label: string }> = [
   { value: 'all', label: 'All' },
@@ -13,7 +13,7 @@ const WINDOWS: Array<{ value: ActivityWindow; label: string }> = [
 type Props = {
   projection: SidebarProjection | null
   error: string | null
-  setPreferences(patch: Partial<Pick<ActivityPreferences, 'workspaceActivityWindow' | 'workspaceActivityCustomDays' | 'alwaysShowDefaultBranchWorkspace'>>): Promise<boolean>
+  setPreferences(patch: ActivityPreferencePatch): Promise<boolean>
 }
 
 export function ActivityFilters({ projection, error, setPreferences }: Props) {
@@ -25,7 +25,7 @@ export function ActivityFilters({ projection, error, setPreferences }: Props) {
   const window = preferences?.workspaceActivityWindow
   const storedDays = preferences?.workspaceActivityCustomDays
   const days = daysDraft && daysDraft.basedOn === storedDays ? daysDraft.value : String(storedDays ?? 30)
-  const badge = window && window !== 'all' ? 1 : 0
+  const badge = projection?.filterCount ?? 0
 
   useEffect(() => {
     setDaysDraft(null)
@@ -114,7 +114,31 @@ export function ActivityFilters({ projection, error, setPreferences }: Props) {
               <span>Except default branch</span>
             </label>
           )}
-          <button className="workspace-clear-filters" type="button" onClick={() => void setPreferences({ workspaceActivityWindow: 'all' })}>
+          <label>
+            <input
+              type="checkbox"
+              checked={preferences.hideCompletedReviewWorkspaces}
+              onChange={(event) => void setPreferences({ hideCompletedReviewWorkspaces: event.currentTarget.checked })}
+            />
+            <span>Hide merged/closed reviews</span>
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={preferences.hidePassingCheckWorkspaces}
+              onChange={(event) => void setPreferences({ hidePassingCheckWorkspaces: event.currentTarget.checked })}
+            />
+            <span>Hide passing checks</span>
+          </label>
+          <button
+            className="workspace-clear-filters"
+            type="button"
+            onClick={() => void setPreferences({
+              workspaceActivityWindow: 'all',
+              hideCompletedReviewWorkspaces: false,
+              hidePassingCheckWorkspaces: false
+            })}
+          >
             Clear filters
           </button>
         </div>
