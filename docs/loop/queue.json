@@ -1720,7 +1720,8 @@
         "ui-terminal-theme",
         "ui-screenshot-review"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 10
     },
     {
       "id": "ui-final-review",
