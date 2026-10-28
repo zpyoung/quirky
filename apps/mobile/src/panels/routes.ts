@@ -6,6 +6,8 @@ export const PANEL_ROUTE_FIELDS: Readonly<Record<PanelRoute['kind'], readonly st
   review: ['kind', 'worktreeId', 'path'],
   files: ['kind', 'worktreeId', 'path'],
   'file-preview': ['kind', 'worktreeId', 'path'],
+  'terminal-artifacts': ['kind', 'worktreeId', 'sessionId'],
+  'terminal-artifact': ['kind', 'worktreeId', 'sessionId', 'artifactId', 'grant'],
   tasks: ['kind'],
   accounts: ['kind'],
   'agent-history': ['kind', 'worktreeId'],
@@ -23,6 +25,8 @@ export const PANEL_BUNDLE_ROUTES: readonly PanelBundleRouteMetadata[] = [
   { kind: 'review', path: '/review', grants: ['rpc', 'storage', 'navigate', 'clipboard.write', 'externalLink'] },
   { kind: 'files', path: '/files', grants: ['rpc', 'storage', 'navigate', 'clipboard.write', 'externalLink'] },
   { kind: 'file-preview', path: '/files/preview', grants: ['rpc', 'storage', 'navigate', 'clipboard.write', 'externalLink'] },
+  { kind: 'terminal-artifacts', path: '/terminal-artifacts', grants: ['rpc', 'storage', 'navigate'] },
+  { kind: 'terminal-artifact', path: '/terminal-artifact', grants: ['rpc', 'storage', 'navigate'] },
   { kind: 'tasks', path: '/tasks', grants: ['rpc', 'storage', 'navigate', 'clipboard.write', 'externalLink'] },
   { kind: 'accounts', path: '/accounts', grants: ['rpc', 'storage', 'navigate'] },
   { kind: 'agent-history', path: '/agent-history', grants: ['rpc', 'storage', 'navigate'] },
@@ -45,6 +49,16 @@ export function validatePanelRoute(value: unknown): PanelRoute {
       route.path.startsWith('/') || route.path.startsWith('\\') || /^[A-Za-z]:/.test(route.path) ||
       route.path.split(/[\\/]+/).some(part => part === '..' || (part === '.' && !(route.kind === 'files' && route.path === '.')))) {
       throw new Error('panel file path must be bounded and worktree-relative')
+    }
+  }
+  if (route.kind === 'terminal-artifacts' || route.kind === 'terminal-artifact') {
+    if (typeof route.sessionId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(route.sessionId)) {
+      throw new Error('terminal artifact route requires a bounded session id')
+    }
+    if (route.kind === 'terminal-artifact' &&
+      (typeof route.artifactId !== 'string' || route.artifactId.length === 0 || route.artifactId.length > 128 || /[\x00-\x1f\x7f]/u.test(route.artifactId) ||
+        typeof route.grant !== 'string' || route.grant.length === 0 || route.grant.length > 1024 || /[\u0000-\u001f\u007f]/u.test(route.grant))) {
+      throw new Error('terminal artifact route requires a bounded artifact capability')
     }
   }
   if (route.tab !== undefined && (typeof route.tab !== 'string' || !['changes', 'pull-request', 'commits'].includes(route.tab))) throw new Error('unsupported source control tab')

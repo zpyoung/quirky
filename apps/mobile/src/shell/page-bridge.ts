@@ -1,7 +1,7 @@
 import type { MobileCallOptions, MobileConnectionState, MobileNativeActions, MobilePageBridge, MobilePageInit, MobileRoute } from '../contracts'
 import { MOBILE_BRIDGE_MAX_BYTES } from '../contracts'
 import { decodeBase64 } from './generation'
-import { isPageMutation, sanitizeConnectionState, utf8ByteLength, validatePageInit, validatePageReport, validatePageRpc, validateRoute } from './bridge-policy'
+import { isPageMutation, refreshedTerminalArtifactGrant, sanitizeConnectionState, utf8ByteLength, validatePageInit, validatePageReport, validatePageRpc, validateRoute } from './bridge-policy'
 import { safeExternalUrl } from './shell-security'
 
 type PageMessageHandler = (json: string) => void
@@ -10,7 +10,7 @@ export type PageBridgePort = {
   subscribe(handler: PageMessageHandler): () => void
 }
 
-type Pending = { method: string; resolve(value: unknown): void; reject(error: Error): void }
+type Pending = { method: string; params?: Record<string, unknown>; resolve(value: unknown): void; reject(error: Error): void }
 
 type JsonRecord = Record<string, unknown>
 
@@ -31,6 +31,7 @@ function messageError(value: unknown): Error {
 export function createPageBridge(port: PageBridgePort, init: MobilePageInit): MobilePageBridge {
   validatePageInit(init)
   let connectionState = sanitizeConnectionState(init.connectionState)
+  let artifactGrant = init.route.kind === 'terminal-artifact' ? init.route.grant : undefined
   let requestNumber = 0
   let closed = false
   const pending = new Map<string, Pending>()
@@ -89,15 +90,15 @@ export function createPageBridge(port: PageBridgePort, init: MobilePageInit): Mo
 
   function call<T>(method: string, params: Record<string, unknown> = {}, options?: MobileCallOptions): Promise<T> {
     try {
-      validatePageRpc(method, params, init.grants, init.route)
-      if (isPageMutation(method) && connectionState.phase !== 'connected') throw new Error('terminal and workspace mutations require a connected desktop')
+      validatePageRpc(method, params, init.grants, init.route, artifactGrant)
+      if (isPageMutation(method, params) && connectionState.phase !== 'connected') throw new Error('terminal and workspace mutations require a connected desktop')
       if (closed) throw new Error('page bridge is closed')
       if (pending.size >= MAX_PENDING_REQUESTS) throw new Error('page bridge request limit reached')
       const requestId = nextRequestId(options?.requestId)
       const timeoutMs = options?.timeoutMs
       if (timeoutMs !== undefined && (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 30_000)) throw new Error('page request timeout is invalid')
       return new Promise<T>((resolve, reject) => {
-        pending.set(requestId, { method, resolve: resolve as (value: unknown) => void, reject })
+        pending.set(requestId, { method, params, resolve: resolve as (value: unknown) => void, reject })
         try {
           post({ v: 1, kind: 'call', sessionId: init.sessionId, requestId, method, params, ...(timeoutMs === undefined ? {} : { timeoutMs }) })
         } catch (error) {
@@ -149,9 +150,15 @@ export function createPageBridge(port: PageBridgePort, init: MobilePageInit): Mo
       const task = pending.get(value.requestId)
       if (!task) return
       pending.delete(value.requestId)
-      if (value.ok) task.resolve(value.result)
-      else task.reject(messageError(value.error))
-      return
+      if (value.ok) {
+        if (task.method === 'quirky.terminal/artifacts' && task.params?.action === 'refresh') {
+          const nextGrant = refreshedTerminalArtifactGrant(init.route, value.result)
+          if (nextGrant && task.params.grant === artifactGrant && nextGrant !== artifactGrant) artifactGrant = nextGrant
+        }
+        task.resolve(value.result)
+      } else {
+        task.reject(messageError(value.error))
+      }
     }
     if (value.kind === 'state') {
       let next: MobileConnectionState
@@ -160,7 +167,7 @@ export function createPageBridge(port: PageBridgePort, init: MobilePageInit): Mo
       for (const listener of [...stateListeners]) listener(next)
       if (next.phase !== 'connected') {
         for (const [requestId, task] of pending) {
-          if (!isPageMutation(task.method)) continue
+          if (!isPageMutation(task.method, task.params)) continue
           pending.delete(requestId)
           task.reject(new Error('connection changed before the operation completed; retry explicitly if needed'))
         }

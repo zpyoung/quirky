@@ -29,6 +29,9 @@ function boundedWorktreeId(value: string | undefined): string | undefined {
 
 function initialPanelReturnRoute(route: MobileRoute): MobileRoute {
   if (route.kind === 'session') return route
+  if (route.kind === 'terminal-artifacts' || route.kind === 'terminal-artifact') {
+    return { kind: 'session', worktreeId: route.worktreeId, sessionId: route.sessionId }
+  }
   const worktreeId = routeWorktreeId(route)
   return isPanelRoute(route) && worktreeId ? { kind: 'session', worktreeId } : { kind: 'workspaces' }
 }
@@ -39,6 +42,8 @@ function panelTitle(route: MobileRoute): string {
     case 'review': return 'Review'
     case 'files': return 'Files'
     case 'file-preview': return 'File preview'
+    case 'terminal-artifacts': return 'Terminal artifacts'
+    case 'terminal-artifact': return 'Terminal artifact'
     case 'tasks': return 'Tasks'
     case 'accounts': return 'Accounts'
     case 'agent-history': return 'Agent history'
@@ -84,9 +89,17 @@ export function PageApp({ bridge }: PageAppProps) {
 
   const reportWorkspaceLayout = useCallback((state: Record<string, unknown>) => setWorkspaceLayout(state), [])
   const reportSessionLayout = useCallback((state: Record<string, unknown>) => setSessionLayout(state), [])
+  const navigationGuardRef = useRef<(() => Promise<boolean>) | null>(null)
+  const registerNavigationGuard = useCallback((guard: () => Promise<boolean>) => {
+    navigationGuardRef.current = guard
+    return () => {
+      if (navigationGuardRef.current === guard) navigationGuardRef.current = null
+    }
+  }, [])
 
   const navigate = useCallback(async (next: MobileRoute | { kind: 'home' }) => {
     const previous = routeRef.current
+    if (navigationGuardRef.current && !(await navigationGuardRef.current())) return
     await bridge.navigate(next)
     if (next.kind === 'home') return
     if (isPanelRoute(next)) {
@@ -122,6 +135,8 @@ export function PageApp({ bridge }: PageAppProps) {
       if (worktreeId !== undefined) state.worktreeId = worktreeId
       if (route.kind === 'source-control' && route.tab !== undefined) state.tab = route.tab
       if ((route.kind === 'review' || route.kind === 'files' || route.kind === 'file-preview') && route.path !== undefined) state.path = route.path
+      if (route.kind === 'terminal-artifacts' || route.kind === 'terminal-artifact') state.sessionId = route.sessionId
+      if (route.kind === 'terminal-artifact') state.artifactId = route.artifactId
     }
     bridge.report(state)
   }, [bridge, route, connection.phase, active, workspaceLayout, sessionLayout, lastWorktreeId])
@@ -168,7 +183,7 @@ export function PageApp({ bridge }: PageAppProps) {
             </div>
           </header>
           <div style={{ flex: '1 1 auto', minHeight: 0, overflow: 'auto', overscrollBehavior: 'contain' }}>
-            <PanelApp bridge={routingBridge} route={route} />
+            <PanelApp bridge={routingBridge} route={route} connected={active} onRegisterNavigationGuard={registerNavigationGuard} />
           </div>
         </>
       ) : null}

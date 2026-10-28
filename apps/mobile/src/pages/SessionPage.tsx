@@ -839,6 +839,11 @@ export function SessionPage({ bridge, route, connected, onNavigate, onReport }: 
             setActionsOpen(false)
             setRenameDialog(true)
           }}>Rename session</button>
+          <button className="qp-button" type="button" disabled={!selectedSession} onClick={() => {
+            if (!selectedSession) return
+            setActionsOpen(false)
+            void onNavigate({ kind: 'terminal-artifacts', worktreeId: route.worktreeId, sessionId: selectedSession.id })
+          }}>Terminal artifacts</button>
           <button className="qp-button" type="button" disabled={!selectedSession || !ownsTerminal} onClick={() => void clearTerminal()}>Clear terminal</button>
           <button className="qp-button" type="button" disabled={!selectedSession || !canMutate} onClick={() => selectedSession && void prepareClose([selectedSession.id], false)}>Close tab</button>
           <button className="qp-button" type="button" disabled={!selectedSession || !canMutate || !terminalGranted || !clipboardWriteGranted || copyBusy} onClick={() => selectedSession && void copyAndLeave([selectedSession.id])}>Copy & leave</button>
