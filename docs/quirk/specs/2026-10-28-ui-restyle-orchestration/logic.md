@@ -79,3 +79,5 @@ None. No additional product feature is included.
 2026-10-28: self-reviewed against all four named plugins and approved parent. Scope, lifecycle authority, empty/failure behavior and theme ownership are explicit. One combined logic/technical spec follows the authoritative LOOP override; no separate tech.md or review round.
 
 **Amendments:** 2026-10-28 — all three implementers identified missing multiline/select primitives and the handoff editor's private theme. Added the coordinated shared additions above instead of local CSS or replacing functional CodeMirror behavior.
+
+2026-10-28 — real overlay interaction proved the shared dialog inherited the host overlay layer's pointer-events:none. The shared backdrop now owns pointer-events:auto; host-loaded shared CSS remains the sole stylesheet authority. The roadmap catch-up retains incoming TextField ref support alongside the new native multiline/select controls.

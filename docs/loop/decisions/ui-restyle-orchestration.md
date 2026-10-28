@@ -121,5 +121,27 @@
 - **Revisit if:** end-phase tests or approved screenshot scoring identify a regression
 - **Source:** locked by docs/loop/LOOP.md
 
+## D12: Compose the sole roadmap catch-up with all incoming field and plugin contracts
+- **Question:** roadmap composition conflicted in the shared React field imports and TextFieldProps
+- **Options:** drop incoming ref support; drop new native multiline/select fields; retain both additive public contracts
+- **Chose:** merge701ea034 preserves React19 TextField ref typing plus TextArea/SelectField native attributes and every Browser/editor/terminal/supervision lint opt-in. Read all incoming Accounts completion, Browser restyle and editor restyle decisions, including raw omitted receipts. Retain their public reset envelope, exact-window/native/browser ownership boundaries and source-data/engine semantics; no binding conflict
+- **Why:** input ref support and native textarea/select fields are independent requirements. New fields do not replace the input control. Incoming Accounts end-phase verification does not override this item's explicit build-first title; its remote-only test policy remains binding for any later tests, none run here
+- **Evidence:** two conflict blocks combined explicitly; complete three-log read; final composed UIlint/root/mobile/prepared-desktop typecheck exit0/42.71s; post-install UI build11host/25plugin modules exit0/1.43s
+- **Reversibility:** medium (public field types and additive plugin registrations)
+- **Confidence:** high
+- **Revisit if:** controller merge-result typecheck names a concrete contract mismatch
+- **Source:** locked by docs/loop/LOOP.md and incoming decision logs
+
+## D13: Finish with fresh composed-source surface proof
+- **Question:** did incoming shared presentation and field contracts affect this item's actual controls?
+- **Options:** reuse only pre-merge evidence; exercise a fresh owned runtime and record the exact boundary
+- **Chose:** fresh merged real daemon/browser showed Heimdall in its default slot; actual handoff multiline note and Relationship=reviews selection, clickable modal and dark/light appearance; dark editor22/23/27 and preserved two-line draft. New loop prompt accepted multiline input; Escape cancelled, no dialog remained, and public loop list stayed empty. Current browser errors[], no page-wide overflow. Final PNGs personally inspected. Exact handle released and merged fixture exited0 after cleanup
+- **Why:** the shared CSS/ref composition was actually exercised rather than inferred from types; this remains minimum smoke, not golden scoring, provider launch, remote output pagination, nonempty fleet or full lifecycle acceptance
+- **Evidence:** orchestration-restyle-evidence/merged-proof.json, merged-handoff-dark.png and merged-handoff-light.png beside lane notes; actual browser receipts; lane10-orchestration-merged-smoke exit0
+- **Reversibility:** easy
+- **Confidence:** high for named observations only
+- **Revisit if:** end-phase acceptance or independent screenshot scoring finds a regression
+- **Source:** assumed — autonomous
+
 ## Progress
-All three source components passed the all-worker path/HEAD barrier at ddb06f9d; committed b982bbbb/fleet,93fee2af/handoff,e8d7fd75/loops, merged and removed all component worktrees. Parent source, lint opt-in, shared primitive/event support and docs integrated. Initial type errors in new test selectors/native query typing fixed; full typecheck and narrow real surface proof are recorded in D8–D11. All workers and3owned browser/daemon scopes returned; no owned runtime remains. Tests/suites/reviews/full dogfood/screenshot scoring remain unrun under explicit build-first. Next one roadmap catch-up, read all incoming decisions, final typecheck/build and any minimal merged proof, then commit/detach/canonical land and await receipt.
+Ready for canonical land. Three components committed b982bbbb/93fee2af/e8d7fd75 after exact all-worker path/HEAD barrier; all component worktrees removed. Parent integration869b85c9 and sole roadmap merge701ea034 preserve all field/ref/export/token/enforcement contracts; all3incoming decision logs read completely. Final composed typecheck and real UI build pass; fresh merged surface proof is D13. All4owned daemon/browser scopes ended with exit0, all workers returned, no owned runtime remains. Obsolete CSS/injector/class consumer search found no matches. Tests/suites/reviews/full dogfood/native/golden scoring remain unrun under explicit build-first; no unbuilt product flow deferred or follow-up added. Next commit final receipt/spec amendment, detach, canonical queue land, await actual outcome, preserve ignored evidence and remove only owned scratch/merged temporary branches.
