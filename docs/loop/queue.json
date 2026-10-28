@@ -1045,8 +1045,7 @@
         "term-daemon.md"
       ],
       "deps": [],
-      "status": "in-progress",
-      "lane": 3
+      "status": "done"
     },
     {
       "id": "followup-m3-session-info-parity-20261027",
