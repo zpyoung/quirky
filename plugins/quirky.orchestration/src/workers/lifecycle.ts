@@ -39,13 +39,17 @@ function sameFederationAuthority(left: FederationReportAuthority, right: Federat
     left.processRuntimeEpoch === right.processRuntimeEpoch
 }
 
+function isFederatedCaller(caller: WorkerReportAuthority): caller is FederationReportAuthority {
+  return 'kind' in caller && caller.kind === 'federated-worker'
+}
+
 function isExactCaller(
   record: WorkerRecord,
   dispatch: DispatchRow,
   caller: WorkerReportAuthority,
   federation: FederationEngine | null
 ): boolean {
-  if ('kind' in caller && caller.kind === 'federated-worker') {
+  if (isFederatedCaller(caller)) {
     if (!federation || !record.sessionId || !record.processIncarnation || !record.processRuntimeEpoch) return false
     const binding = federation.home(dispatch.id)
     if (!binding || binding.side !== 'home' || binding.homeDispatchId !== dispatch.id ||
@@ -61,6 +65,7 @@ function isExactCaller(
       return false
     }
   }
+  if (!('runtimeOwned' in caller)) return false
   return caller.runtimeOwned === true && caller.live === true && record.processRuntimeEpoch !== null &&
     caller.callerSessionId === record.sessionId &&
     caller.runtimeSessionId === record.sessionId &&

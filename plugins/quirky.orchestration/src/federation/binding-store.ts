@@ -161,18 +161,6 @@ export class FederationBindingStore {
     return row ? bindingOf(row) : null
   }
 
-  forCaller(callerSessionId: string, processIncarnation: string, processRuntimeEpoch: string): FederationBinding | null {
-    const rows = this.store.all<BindingDbRow>(
-      `SELECT * FROM federation_bindings
-       WHERE side = 'host' AND session_id = ? AND process_incarnation = ? AND process_runtime_epoch = ?
-         AND state IN ('active', 'unknown')
-       ORDER BY updated_at DESC`,
-      callerSessionId,
-      processIncarnation,
-      processRuntimeEpoch,
-    )
-    return rows.length === 1 ? bindingOf(rows[0]!) : null
-  }
 
   bindings(side?: FederationBinding['side']): readonly FederationBinding[] {
     const rows = side === undefined
@@ -187,7 +175,9 @@ export class FederationBindingStore {
     side: FederationBinding['side'] = 'host',
   ): FederationBinding {
     const binding = this.require(bindingId, side)
-    if (binding.hostRunId !== null && (binding.hostRunId !== receipt.runId || binding.hostTaskId !== receipt.taskId || binding.hostDispatchId !== receipt.dispatchId)) {
+    if ((binding.hostRunId !== null && binding.hostRunId !== receipt.runId) ||
+      (binding.hostTaskId !== null && binding.hostTaskId !== receipt.taskId) ||
+      (binding.hostDispatchId !== null && binding.hostDispatchId !== receipt.dispatchId)) {
       fail(this.context, 'request_mismatch', `Federation binding ${bindingId} already names a different host attachment.`, { bindingId })
     }
     this.store.run(
@@ -277,8 +267,7 @@ export class FederationBindingStore {
       current.peer.id !== binding.peer.id || current.peer.pairingRevision !== binding.peer.pairingRevision ||
       current.peer.fingerprint.replaceAll(':', '').toLowerCase() !== binding.peer.fingerprint.replaceAll(':', '').toLowerCase() ||
       current.peerIncarnation !== binding.peerIncarnation || current.sessionId !== binding.sessionId ||
-      current.processIncarnation !== binding.processIncarnation || current.processRuntimeEpoch !== binding.processRuntimeEpoch ||
-      current.state !== binding.state) {
+      current.processIncarnation !== binding.processIncarnation || current.processRuntimeEpoch !== binding.processRuntimeEpoch) {
       fail(this.context, 'worker_identity_changed', `Federation binding ${binding.id} changed after it was read.`, { bindingId: binding.id })
     }
     this.assertSavedPairing(current)

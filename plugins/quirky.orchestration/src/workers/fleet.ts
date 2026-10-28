@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { Session } from '@quirky/protocol'
+import type { DispatchId, DispatchRow, RunId, RuntimeCallerEvidence, TaskRow } from '../contracts'
 import type { FederationEngine } from '../federation/contracts'
 import type {
   TerminalResource, TerminalState, WorkerCore, WorkerFleet, WorkerFleetRow, WorkerLiveness,
@@ -371,7 +372,7 @@ function makeFleetRow(
     coordinatorSessionId: candidate.coordinatorSessionId,
     parentSessionId: dispatch.creatorSessionId,
     dispatchStatus: dispatch.status,
-    agentTerminalHandle: resource?.ownerDispatchId === dispatch.id ? resource.sessionId : worker?.sessionId ?? null,
+    agentTerminalHandle: resource && resource.ownerDispatchId === dispatch.id ? resource.sessionId : worker?.sessionId ?? null,
     terminalState,
     resource: cloneResource(resource),
     projection

@@ -1,6 +1,6 @@
 import type { QuirkyEvent } from '@quirky/protocol'
 import { randomUUID } from 'node:crypto'
-import type { DispatchRow, DispatchStatus, JsonValue, RunRow, TaskRow, UtcTimestamp } from '../contracts'
+import type { DispatchRow, DispatchStatus, JsonValue, MutationResult, RunRow, TaskRow, UtcTimestamp } from '../contracts'
 import type {
   CoordinatorEvidence, FederatedWorkerStartHooks, ServiceCoordinatorEvidence, TerminalResource, TurnStart, WorkerCore, WorkerEffect,
   WorkerLifecycle, WorkerModeDecision, WorkerPlacement, WorkerRecord,

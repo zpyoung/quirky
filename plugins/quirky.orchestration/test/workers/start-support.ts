@@ -246,6 +246,7 @@ export function makeWorkerStartHarness(): WorkerStartHarness {
     store,
     nestedWorkerMaxDepth: 1,
     registerWorkerPort: (port: WorkerLifecyclePort) => { workerPort = port },
+    registerFederationAuthorityValidator: () => { throw error('worker_identity_changed', 'Federated authority is unsupported by this local worker fixture.') },
     requireCoordinator,
     getRun: runId => runId === run.id ? run : (() => { throw error('run_not_found', `Run ${runId} was not found`) })(),
     getTask: taskId => tasks.get(taskId) ?? (() => { throw error('task_not_found', `Task ${taskId} was not found`) })(),
@@ -503,6 +504,10 @@ export function makeWorkerStartHarness(): WorkerStartHarness {
       dispatches.set(dispatch.id, { ...dispatch, lastHeartbeatAt: NOW })
       return { status: 'accepted', lastHeartbeatAt: NOW }
     },
+    preflightFederatedWorkerDone: () => ({ status: 'rejected', reason: 'worker_identity_changed', audited: true }),
+    reportFederatedWorkerDone: () => ({ status: 'rejected', reason: 'worker_identity_changed', audited: true }),
+    recordFederatedHeartbeat: () => ({ status: 'rejected', reason: 'worker_identity_changed', lastHeartbeatAt: null }),
+    reportFederatedWorkerExit: () => ({ status: 'rejected', reason: 'worker_identity_changed', audited: true }),
   } satisfies WorkerCore
 
   const lifecycle: WorkerLifecycle = {
@@ -532,6 +537,7 @@ export function makeWorkerStartHarness(): WorkerStartHarness {
     acceptReport: (_store: PluginStore, input) => {
       const record = records.get(input.dispatchId)
       const dispatch = dispatches.get(input.dispatchId)
+      if ('kind' in input.caller) return null
       if (!record || !dispatch || dispatch.assigneeSessionId !== input.caller.runtimeSessionId ||
         record.processIncarnation !== input.caller.attestation.processIncarnation ||
         record.processRuntimeEpoch !== input.caller.attestation.runtimeEpoch ||
@@ -555,12 +561,14 @@ export function makeWorkerStartHarness(): WorkerStartHarness {
       }, input.outcome)
     },
     recordHeartbeat: (_store, input) => {
+      if ('kind' in input.caller) return
       const record = records.get(input.dispatchId)
       if (record) repository.addObservation(input.dispatchId, 'heartbeat', {
         at: input.at,
         processIncarnation: input.caller.attestation.processIncarnation,
       })
     },
+    acceptFederatedExit: () => ({ status: 'rejected', reason: 'worker_identity_changed' }),
     stop: async () => ({} as never),
     abandon: async () => ({} as never),
     release: async () => ({} as never),

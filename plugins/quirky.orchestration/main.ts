@@ -16,6 +16,7 @@ import { createFederationEngine, type FederationEnginePort } from './src/federat
 import { createFederationMail, type FederationMailComponent } from './src/federation/mail'
 import { createFederationSurface } from './src/federation/surface'
 import { fail } from './src/errors'
+
 const methods = [
   'runCreate',
   'runUse',
@@ -100,7 +101,18 @@ export async function activate(context: PluginContext): Promise<void> {
       if (caller.role !== 'plugin' || caller.pluginId !== context.pluginId) {
         fail(context, 'peer_plugin_only', 'federationSubmissionPreflight is available only to the orchestration plugin.')
       }
-      return mail!.submissionPreflight(params as OrchestrationSubmission)
+      const { runId, taskId, dispatchId, type, subject, body, payload } = params
+      if (typeof runId !== 'string' || typeof taskId !== 'string' || typeof dispatchId !== 'string' ||
+        (type !== 'worker_done' && type !== 'status') || typeof subject !== 'string' || typeof body !== 'string') {
+        fail(context, 'invalid_argument', 'federationSubmissionPreflight requires exact run/task/dispatch and report fields.')
+      }
+      const submissionPayload: Record<string, unknown> | null = payload === null ? null
+        : typeof payload === 'object' && payload !== null && !Array.isArray(payload)
+          ? payload as Record<string, unknown>
+          : fail(context, 'invalid_argument', 'federationSubmissionPreflight payload must be an object or null.')
+      const submission: OrchestrationSubmission = { runId, taskId, dispatchId, type, subject, body, payload: submissionPayload }
+      if (!mail) fail(context, 'peer_listener_unavailable', 'Federation mail is not active.')
+      return mail.submissionPreflight(submission)
     })
     for (const [method, handler] of Object.entries(workers.methods)) {
       context.provide(`method:${context.pluginId}/${method}`, handler)

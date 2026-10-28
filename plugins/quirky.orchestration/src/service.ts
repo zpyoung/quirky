@@ -28,6 +28,7 @@ function adaptServiceHandler<M extends ServiceMethod>(handler: ServiceHandler<M>
 
 /** Compose the semantic core once around the caller-provided plugin store. */
 export type ComposedOrchestrationService = OrchestrationService & {
+  readonly core: OrchestrationCore
   readonly serviceCoordinator: OrchestrationServiceCoordinator
   readonly messages: OrchestrationMessages
 }

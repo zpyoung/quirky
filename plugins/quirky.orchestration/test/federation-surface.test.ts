@@ -52,10 +52,12 @@ async function startRemote(h: FederationAcceptance, spec: string): Promise<Worke
 }
 
 async function hostWorkerFor(h: FederationAcceptance, sessionId: string): Promise<WorkerFleetRow> {
-  return eventually(async () => {
+  const worker = await eventually(async () => {
     const result = await h.host!.fixture.call('quirky.orchestration/workerList', { limit: 100 }) as WorkerListResult
     return result.workers.find((row) => row.projection.host.kind === 'local' && row.resource?.sessionId === sessionId) ?? null
-  }, (row): row is WorkerFleetRow => row !== null, 'host-owned remote worker row')
+  }, (row) => row !== null, 'host-owned remote worker row')
+  if (!worker) throw new Error('host worker inventory did not contain the exact remote worker session')
+  return worker
 }
 
 async function sendHostCompletion(h: FederationAcceptance, worker: WorkerFleetRow): Promise<void> {

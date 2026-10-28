@@ -295,6 +295,7 @@ export class OrchestrationMessages implements MessageArrivalPort {
   private readonly askWaiters = new Map<string, Set<AskWaiter>>()
   private readonly arrivalListeners = new Set<(arrival: MessageArrival) => void | Promise<void>>()
   private readonly mailboxAvailableListeners = new Set<(mailbox: MailboxAddress) => void>()
+  private nextWaiterId = 1
   private federationHooks: FederationMessagingHooks | null = null
 
   private get store(): PluginStore {

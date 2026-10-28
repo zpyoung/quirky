@@ -1,14 +1,16 @@
 import { randomUUID } from 'node:crypto'
 import type { PluginContext } from '@quirky/protocol'
-import type { CoordinatorAuthority, DispatchId, MutationResult, RuntimeCallerEvidence } from '../contracts'
+import type { CoordinatorAuthority, DispatchId, JsonValue, MutationResult, RunId, RuntimeCallerEvidence, TaskId } from '../contracts'
 import type { OrchestrationWorkerCore } from '../worker-integration'
 import type {
   FederationBinding, FederationEngine, FederationSurface
 } from './contracts'
 import type {
-  WorkerControlParams, WorkerControlResult, WorkerFleetRow, WorkerListParams, WorkerListResult,
-  WorkerReadParams, WorkerReadResult, WorkerShowResult
+  TerminalResource, WorkerControlParams, WorkerControlResult, WorkerFleetRow, WorkerListParams, WorkerListResult,
+  WorkerObservation, WorkerProjection, WorkerReadParams, WorkerReadResult, WorkerRepository, WorkerShowResult
 } from '../worker-contracts'
+import type { SessionIdentity } from '../runtime-contracts'
+import { createWorkerStore } from '../workers/store'
 import type { RuntimePeerReply } from '@quirky/protocol'
 import { isRecord } from './guards'
 
@@ -61,26 +63,46 @@ function federationError(context: PluginContext, kind: 'invalid-params' | 'not-f
 }
 
 function decodeJson(value: string, prefix: string): unknown {
-  return JSON.parse(Buffer.from(value.slice(prefix.length), 'base64url').toString('utf8')) as unknown
+  return JSON.parse(Buffer.from(value.slice(prefix.length), 'base64url').toString('utf8'))
 }
 
 function remoteReadCursor(value: string | undefined, binding: FederationBinding, context: PluginContext): RemoteReadCursor | null {
   if (value === undefined) return null
-  if (value.length > MAX_READ_CURSOR_CHARS || !value.startsWith(READ_CURSOR_PREFIX)) {
+  const hostDispatchId = binding.hostDispatchId
+  const sessionId = binding.sessionId
+  const processIncarnation = binding.processIncarnation
+  const processRuntimeEpoch = binding.processRuntimeEpoch
+  if (!hostDispatchId || !sessionId || !processIncarnation || !processRuntimeEpoch ||
+    value.length > MAX_READ_CURSOR_CHARS || !value.startsWith(READ_CURSOR_PREFIX)) {
     throw federationError(context, 'invalid-params', 'cursor_invalid')
   }
   try {
     const decoded = decodeJson(value, READ_CURSOR_PREFIX)
-    if (!isRecord(decoded) || decoded.version !== 1 || decoded.bindingId !== binding.id ||
-      decoded.homeDispatchId !== binding.homeDispatchId || decoded.hostDispatchId !== binding.hostDispatchId ||
-      decoded.peerId !== binding.peer.id || decoded.peerFingerprint !== binding.peer.fingerprint ||
-      decoded.pairingRevision !== binding.peer.pairingRevision || decoded.hostIncarnation !== binding.peerIncarnation ||
-      decoded.sessionId !== binding.sessionId || decoded.processIncarnation !== binding.processIncarnation ||
-      decoded.processRuntimeEpoch !== binding.processRuntimeEpoch || typeof decoded.sourceIdentity !== 'string' ||
-      decoded.sourceIdentity.length === 0 || typeof decoded.cursor !== 'string' || decoded.cursor.length === 0) {
+    if (!isRecord(decoded) || decoded.version !== 1 ||
+      typeof decoded.sourceIdentity !== 'string' || decoded.sourceIdentity.length === 0 ||
+      typeof decoded.cursor !== 'string' || decoded.cursor.length === 0 ||
+      decoded.bindingId !== binding.id || decoded.homeDispatchId !== binding.homeDispatchId ||
+      decoded.hostDispatchId !== hostDispatchId || decoded.peerId !== binding.peer.id ||
+      decoded.peerFingerprint !== binding.peer.fingerprint || decoded.pairingRevision !== binding.peer.pairingRevision ||
+      decoded.hostIncarnation !== binding.peerIncarnation || decoded.sessionId !== sessionId ||
+      decoded.processIncarnation !== processIncarnation || decoded.processRuntimeEpoch !== processRuntimeEpoch) {
       throw new Error('invalid cursor')
     }
-    return decoded as unknown as RemoteReadCursor
+    return {
+      version: 1,
+      bindingId: binding.id,
+      homeDispatchId: binding.homeDispatchId,
+      hostDispatchId,
+      peerId: binding.peer.id,
+      peerFingerprint: binding.peer.fingerprint,
+      pairingRevision: binding.peer.pairingRevision,
+      hostIncarnation: binding.peerIncarnation,
+      sessionId,
+      processIncarnation,
+      processRuntimeEpoch,
+      sourceIdentity: decoded.sourceIdentity,
+      cursor: decoded.cursor
+    }
   } catch {
     throw federationError(context, 'invalid-params', 'cursor_invalid')
   }
@@ -104,7 +126,7 @@ function decodeFleetCursor(value: string, context: PluginContext): FleetCursor {
       typeof decoded.offset !== 'number' || !Number.isSafeInteger(decoded.offset) || decoded.offset < 0) {
       throw new Error('invalid cursor')
     }
-    return decoded as unknown as FleetCursor
+    return { version: 1, snapshotId: decoded.snapshotId, offset: decoded.offset }
   } catch {
     throw federationError(context, 'invalid-params', 'cursor_invalid')
   }
@@ -174,64 +196,305 @@ function homeOutcome(core: OrchestrationWorkerCore, binding: FederationBinding):
   if (dispatch.status === 'completed') return 'finished_unverified'
   return binding.state === 'unknown' ? 'outcome_unknown' : 'in_progress'
 }
+function remoteShapeError(context: PluginContext): Error {
+  return federationError(context, 'conflict', 'remote_worker_identity_mismatch')
+}
 
-function mapShow(value: unknown, binding: FederationBinding, core: OrchestrationWorkerCore, context: PluginContext): WorkerShowResult {
+function requiredString(value: unknown, context: PluginContext): string {
+  if (typeof value !== 'string') throw remoteShapeError(context)
+  return value
+}
+
+function nullableString(value: unknown, context: PluginContext): string | null {
+  if (value === null || typeof value === 'string') return value
+  throw remoteShapeError(context)
+}
+
+function requiredBoolean(value: unknown, context: PluginContext): boolean {
+  if (typeof value !== 'boolean') throw remoteShapeError(context)
+  return value
+}
+
+function oneOf<const T extends readonly string[]>(value: unknown, values: T, context: PluginContext): T[number] {
+  if (typeof value === 'string') {
+    const found = values.find((candidate) => candidate === value)
+    if (found !== undefined) return found
+  }
+  throw remoteShapeError(context)
+}
+
+function stringArray(value: unknown, context: PluginContext): string[] {
+  if (!Array.isArray(value) || !value.every((item) => typeof item === 'string')) throw remoteShapeError(context)
+  return value
+}
+
+function isJsonValue(value: unknown): value is JsonValue {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return true
+  if (typeof value === 'number') return Number.isFinite(value)
+  if (Array.isArray(value)) return value.every(isJsonValue)
+  return isRecord(value) && Object.values(value).every(isJsonValue)
+}
+function isJsonValueArray(value: unknown): value is JsonValue[] {
+  return Array.isArray(value) && value.every(isJsonValue)
+}
+
+function dispatchId(value: unknown, context: PluginContext): DispatchId {
+  if (typeof value !== 'string' || !value.startsWith('ctx_')) throw remoteShapeError(context)
+  return value as DispatchId
+}
+
+function taskId(value: unknown, context: PluginContext): TaskId {
+  if (typeof value !== 'string' || !value.startsWith('task_')) throw remoteShapeError(context)
+  return value as TaskId
+}
+
+function runId(value: unknown, context: PluginContext): RunId {
+  if (typeof value !== 'string' || !value.startsWith('run_')) throw remoteShapeError(context)
+  return value as RunId
+}
+
+function parseTerminalResource(value: unknown, context: PluginContext): TerminalResource | null {
+  if (value === null) return null
+  if (!isRecord(value) || !Array.isArray(value.priorOwnerDispatchIds)) throw remoteShapeError(context)
+  const recoveryAttemptCount = value.recoveryAttemptCount
+  if (typeof recoveryAttemptCount !== 'number' || !Number.isSafeInteger(recoveryAttemptCount) || recoveryAttemptCount < 0) {
+    throw remoteShapeError(context)
+  }
+  return {
+    id: requiredString(value.id, context),
+    originDispatchId: dispatchId(value.originDispatchId, context),
+    ownerDispatchId: dispatchId(value.ownerDispatchId, context),
+    priorOwnerDispatchIds: value.priorOwnerDispatchIds.map((id) => dispatchId(id, context)),
+    worktreeId: requiredString(value.worktreeId, context),
+    sessionId: requiredString(value.sessionId, context),
+    processIncarnation: requiredString(value.processIncarnation, context),
+    ownershipState: oneOf(value.ownershipState, ['owned', 'transferred', 'user_owned', 'external', 'released'] as const, context),
+    releaseState: oneOf(value.releaseState, ['not_requested', 'retained', 'requested', 'releasing', 'released', 'unknown'] as const, context),
+    retainedReason: nullableString(value.retainedReason, context),
+    releaseRequestedAt: nullableString(value.releaseRequestedAt, context),
+    releaseCompletedAt: nullableString(value.releaseCompletedAt, context),
+    releaseError: nullableString(value.releaseError, context),
+    recoveryAttemptCount,
+    lastRecoveryAt: nullableString(value.lastRecoveryAt, context),
+    archiveSource: nullableString(value.archiveSource, context),
+    archiveStatus: value.archiveStatus === null ? null : oneOf(value.archiveStatus, ['captured', 'empty', 'unavailable'] as const, context)
+  }
+}
+
+
+function parseWorkerProjection(value: unknown, context: PluginContext): WorkerProjection {
+  if (!isRecord(value) || value.role !== 'worker' || !isRecord(value.stage) || !isRecord(value.liveness) ||
+    !isRecord(value.evidence) || !isRecord(value.nextAction) || !isRecord(value.attention)) {
+    throw remoteShapeError(context)
+  }
+  let parent: WorkerProjection['parent'] = null
+  if (value.parent !== null) {
+    if (!isRecord(value.parent)) throw remoteShapeError(context)
+    parent = { taskId: taskId(value.parent.taskId, context) }
+  }
+  let provider: WorkerProjection['provider'] = null
+  if (value.provider !== null) {
+    if (!isRecord(value.provider)) throw remoteShapeError(context)
+    provider = {
+      id: requiredString(value.provider.id, context),
+      model: nullableString(value.provider.model, context)
+    }
+  }
+  let host: WorkerProjection['host']
+  if (!isRecord(value.host)) throw remoteShapeError(context)
+  host = {
+    kind: oneOf(value.host.kind, ['local', 'remote'] as const, context),
+    id: requiredString(value.host.id, context)
+  }
+  let workspace: WorkerProjection['workspace'] = null
+  if (value.workspace !== null) {
+    if (!isRecord(value.workspace)) throw remoteShapeError(context)
+    workspace = { id: requiredString(value.workspace.id, context), kind: requiredString(value.workspace.kind, context) }
+  }
+  if (!Array.isArray(value.nextAction.argv)) throw remoteShapeError(context)
+  const resource = parseTerminalResource(value.resource, context)
+  return {
+    id: dispatchId(value.id, context),
+    role: 'worker',
+    parent,
+    provider,
+    host,
+    workspace,
+    stage: {
+      worker: nullableString(value.stage.worker, context),
+      dispatch: requiredString(value.stage.dispatch, context),
+      detail: requiredString(value.stage.detail, context),
+      activity: oneOf(value.stage.activity, ['working', 'blocked', 'waiting', 'done', 'unknown'] as const, context)
+    },
+    outcome: oneOf(value.outcome, ['in_progress', 'succeeded', 'failed', 'outcome_unknown', 'finished_unverified'] as const, context),
+    liveness: {
+      status: oneOf(value.liveness.status, ['live', 'exited', 'unverifiable'] as const, context),
+      reason: nullableString(value.liveness.reason, context)
+    },
+    evidence: {
+      durable: requiredBoolean(value.evidence.durable, context),
+      liveStatus: oneOf(value.evidence.liveStatus, ['fresh', 'stale', 'unavailable', 'redacted_restore'] as const, context),
+      lastObservedAt: nullableString(value.evidence.lastObservedAt, context)
+    },
+    resource,
+    nextAction: {
+      kind: oneOf(value.nextAction.kind, ['inspect', 'release', 'recover', 'none'] as const, context),
+      argv: stringArray(value.nextAction.argv, context)
+    },
+    attention: {
+      categories: stringArray(value.attention.categories, context),
+      requiresAction: requiredBoolean(value.attention.requiresAction, context)
+    }
+  }
+}
+
+function parseRemoteObservation(value: unknown, binding: FederationBinding, context: PluginContext): WorkerObservation {
+  if (!isRecord(value)) throw remoteShapeError(context)
+  let identity: SessionIdentity | null = null
+  if (value.identity !== null) {
+    if (!isRecord(value.identity)) throw remoteShapeError(context)
+    identity = {
+      sessionId: requiredString(value.identity.sessionId, context),
+      live: requiredBoolean(value.identity.live, context),
+      runtimeEpoch: requiredString(value.identity.runtimeEpoch, context),
+      processIncarnation: requiredString(value.identity.processIncarnation, context),
+      source: oneOf(value.identity.source, ['terminal_launch', 'structured_lease', 'restored_authority'] as const, context),
+      kind: oneOf(value.identity.kind, ['terminal', 'structured'] as const, context),
+      providerId: nullableString(value.identity.providerId, context),
+      worktreeId: requiredString(value.identity.worktreeId, context)
+    }
+    if (identity.sessionId !== binding.sessionId || identity.runtimeEpoch !== binding.processRuntimeEpoch ||
+      identity.processIncarnation !== binding.processIncarnation) throw federationError(context, 'conflict', 'worker_identity_changed')
+  }
+  let agentWait: WorkerObservation['agentWait']
+  if (value.agentWait !== undefined) {
+    if (!isRecord(value.agentWait)) throw remoteShapeError(context)
+    agentWait = {
+      waiting: requiredBoolean(value.agentWait.waiting, context),
+      source: requiredString(value.agentWait.source, context),
+      reason: nullableString(value.agentWait.reason, context)
+    }
+  }
+  const status = oneOf(value.status, ['live', 'unverifiable', 'exited', 'missing', 'unattached', 'identity_changed'] as const, context)
+  const exactWorker = requiredBoolean(value.exactWorker, context)
+  if (exactWorker && identity === null) throw remoteShapeError(context)
+  return {
+    status,
+    exactWorker,
+    reason: nullableString(value.reason, context),
+    identity,
+    session: null,
+    ...(agentWait === undefined ? {} : { agentWait })
+  }
+}
+
+function mapShow(
+  value: unknown,
+  binding: FederationBinding,
+  core: OrchestrationWorkerCore,
+  workerStore: WorkerRepository,
+  context: PluginContext
+): WorkerShowResult {
   if (!isRecord(value) || !isRecord(value.dispatch) || value.dispatch.id !== binding.hostDispatchId ||
-    !isRecord(value.projection) || !isRecord(value.projection.nextAction) ||
-    !Array.isArray(value.projection.nextAction.argv) ||
-    !value.projection.nextAction.argv.every((part) => typeof part === 'string') ||
-    !isRecord(value.observation) || !isRecord(value.worker) || value.worker.dispatchId !== binding.hostDispatchId) {
+    binding.hostTaskId !== null && value.dispatch.taskId !== binding.hostTaskId ||
+    binding.hostRunId !== null && value.dispatch.runId !== binding.hostRunId ||
+    !isRecord(value.worker) || value.worker.dispatchId !== binding.hostDispatchId ||
+    value.worker.sessionId !== binding.sessionId || value.worker.processIncarnation !== binding.processIncarnation ||
+    value.worker.processRuntimeEpoch !== binding.processRuntimeEpoch) {
     throw federationError(context, 'conflict', 'remote_worker_identity_mismatch')
   }
+  const hostProjection = parseWorkerProjection(value.projection, context)
+  if (hostProjection.id !== binding.hostDispatchId || hostProjection.host.kind !== 'local') {
+    throw federationError(context, 'conflict', 'remote_worker_identity_mismatch')
+  }
+  const resource = mapResource(parseTerminalResource(value.terminalResource, context), binding)
+  const projectionResource = mapResource(hostProjection.resource, binding)
+  if (resource?.id !== projectionResource?.id) throw federationError(context, 'conflict', 'remote_worker_identity_mismatch')
+  const observation = parseRemoteObservation(value.observation, binding, context)
   const homeDispatch = core.getDispatch(binding.homeDispatchId)
   const homeTask = core.getTask(binding.homeTaskId)
-  const hostWorker = value.worker as WorkerShowResult['worker']
-  const worker = hostWorker ? {
-    ...hostWorker,
-    dispatchId: binding.homeDispatchId,
-    startOptions: { ...hostWorker.startOptions, runId: binding.homeRunId, taskId: binding.homeTaskId },
-    receipt: hostWorker.receipt ? {
-      ...hostWorker.receipt,
-      runId: binding.homeRunId,
-      taskId: binding.homeTaskId,
-      dispatchId: binding.homeDispatchId
-    } : null
-  } : null
-  const projection = value.projection as WorkerShowResult['projection']
-  const resource = mapResource(value.terminalResource as WorkerShowResult['terminalResource'], binding)
-  const nextAction = projection.nextAction
-  const argv = nextAction.argv.map((part) => part === binding.hostDispatchId ? binding.homeDispatchId : part)
+  const worker = workerStore.get(binding.homeDispatchId)
+  if (!worker || worker.sessionId !== binding.sessionId || worker.processIncarnation !== binding.processIncarnation ||
+    worker.processRuntimeEpoch !== binding.processRuntimeEpoch) {
+    throw federationError(context, 'conflict', 'remote_worker_identity_mismatch')
+  }
   return {
     dispatch: homeDispatch,
     worker,
     projection: {
-      ...projection,
+      ...hostProjection,
       id: binding.homeDispatchId,
       parent: homeTask.parentTaskId ? { taskId: homeTask.parentTaskId } : null,
       host: { kind: 'remote', id: binding.peer.id },
-      stage: { ...projection.stage, dispatch: homeDispatch.status },
+      stage: { ...hostProjection.stage, dispatch: homeDispatch.status },
       outcome: homeOutcome(core, binding),
       resource,
-      nextAction: { ...nextAction, argv }
+      nextAction: {
+        ...hostProjection.nextAction,
+        argv: hostProjection.nextAction.argv.map((part) => part === binding.hostDispatchId ? binding.homeDispatchId : part)
+      }
     },
     terminal: null,
-    observation: {
-      ...(value.observation as WorkerShowResult['observation']),
-      session: null
-    },
+    observation,
     terminalResource: resource
   }
 }
 
 function readResult(value: unknown, binding: FederationBinding, context: PluginContext): WorkerReadResult {
-  if (!isRecord(value) || value.dispatchId !== binding.hostDispatchId ||
-    typeof value.sourceIdentity !== 'string' || value.sourceIdentity.length === 0 ||
-    typeof value.nextCursor !== 'string' && value.nextCursor !== null ||
-    typeof value.sessionId !== 'string' && value.sessionId !== null) {
-    throw federationError(context, 'conflict', 'remote_worker_identity_mismatch')
+  if (!isRecord(value) || !isRecord(value.clipping) || !isRecord(value.agentLiveness)) throw remoteShapeError(context)
+  const resultDispatchId = dispatchId(value.dispatchId, context)
+  const sessionId = nullableString(value.sessionId, context)
+  const sourceIdentity = requiredString(value.sourceIdentity, context)
+  if (resultDispatchId !== binding.hostDispatchId || sessionId !== binding.sessionId || sourceIdentity.length === 0) {
+    throw federationError(context, 'conflict', 'worker_identity_changed')
   }
-  if (binding.sessionId !== value.sessionId) throw federationError(context, 'conflict', 'worker_identity_changed')
-  return value as unknown as WorkerReadResult
+  let messages: JsonValue[] | undefined
+  if (value.messages !== undefined) {
+    if (!isJsonValueArray(value.messages)) throw remoteShapeError(context)
+    messages = value.messages
+  }
+  let remote: WorkerReadResult['remote']
+  if (value.remote !== undefined) {
+    if (!isRecord(value.remote)) throw remoteShapeError(context)
+    remote = {
+      peerId: requiredString(value.remote.peerId, context),
+      bindingId: requiredString(value.remote.bindingId, context),
+      hostDispatchId: requiredString(value.remote.hostDispatchId, context),
+      hostIncarnation: requiredString(value.remote.hostIncarnation, context)
+    }
+  }
+  const maxBytes = value.clipping.maxBytes
+  if (typeof maxBytes !== 'number' || !Number.isSafeInteger(maxBytes) || maxBytes < 0) {
+    throw remoteShapeError(context)
+  }
+  const clipping = {
+    clipped: requiredBoolean(value.clipping.clipped, context),
+    maxBytes
+  }
+  return {
+    dispatchId: resultDispatchId,
+    sessionId,
+    source: oneOf(value.source, ['transcript', 'terminal', 'structured'] as const, context),
+    archived: requiredBoolean(value.archived, context),
+    sourceExact: requiredBoolean(value.sourceExact, context),
+    fallbackReason: value.fallbackReason === null ? null : oneOf(value.fallbackReason, [
+      'provider_unsupported', 'session_not_reported', 'transcript_empty', 'transcript_missing',
+      'transcript_unreadable', 'transcript_parse_failed', 'remote_capability_unavailable'
+    ] as const, context),
+    content: requiredString(value.content, context),
+    ...(messages === undefined ? {} : { messages }),
+    contentComplete: requiredBoolean(value.contentComplete, context),
+    clipping,
+    nextCursor: nullableString(value.nextCursor, context),
+    terminalLiveness: oneOf(value.terminalLiveness, ['live', 'unverifiable', 'exited', 'missing', 'unattached', 'identity_changed'] as const, context),
+    agentLiveness: {
+      status: oneOf(value.agentLiveness.status, ['live', 'exited', 'unverifiable'] as const, context),
+      reason: nullableString(value.agentLiveness.reason, context)
+    },
+    warnings: stringArray(value.warnings, context),
+    sourceIdentity,
+    ...(remote === undefined ? {} : { remote })
+  }
 }
 
 function remoteReadResult(result: WorkerReadResult, binding: FederationBinding): WorkerReadResult {
@@ -319,14 +582,61 @@ function remoteObservedRow(home: WorkerFleetRow, host: WorkerFleetRow, binding: 
   }
 }
 
-function responseList(value: unknown, context: PluginContext): WorkerListResult {
-  if (!isRecord(value) || !Array.isArray(value.workers) || !isRecord(value.scope) || !isRecord(value.page) ||
-    typeof value.page.snapshotId !== 'string' || typeof value.page.total !== 'number' ||
-    value.page.nextCursor !== null && typeof value.page.nextCursor !== 'string' ||
-    !Array.isArray(value.partialHostErrors)) {
+function parseFleetRow(value: unknown, context: PluginContext): WorkerFleetRow {
+  if (!isRecord(value)) throw federationError(context, 'conflict', 'remote_fleet_snapshot_invalid')
+  const rowDispatchId = dispatchId(value.dispatchId, context)
+  const task = taskId(value.taskId, context)
+  const run = runId(value.runId, context)
+  const resource = parseTerminalResource(value.resource, context)
+  const projection = parseWorkerProjection(value.projection, context)
+  if (projection.id !== rowDispatchId || projection.resource?.id !== resource?.id) {
     throw federationError(context, 'conflict', 'remote_fleet_snapshot_invalid')
   }
-  return value as unknown as WorkerListResult
+  return {
+    dispatchId: rowDispatchId,
+    taskId: task,
+    runId: run,
+    workerState: nullableString(value.workerState, context),
+    taskTitle: requiredString(value.taskTitle, context),
+    displayName: requiredString(value.displayName, context),
+    coordinatorSessionId: nullableString(value.coordinatorSessionId, context),
+    parentSessionId: nullableString(value.parentSessionId, context),
+    currentAssignment: requiredBoolean(value.currentAssignment, context),
+    dispatchStatus: requiredString(value.dispatchStatus, context),
+    agentTerminalHandle: nullableString(value.agentTerminalHandle, context),
+    terminalState: oneOf(value.terminalState, ['active', 'reclaimable', 'retained', 'release_pending', 'release_unknown', 'released'] as const, context),
+    resource,
+    projection
+  }
+}
+
+function responseList(value: unknown, context: PluginContext): WorkerListResult {
+  if (!isRecord(value) || !Array.isArray(value.workers) || !isRecord(value.scope) ||
+    !isRecord(value.page) || !Array.isArray(value.partialHostErrors)) {
+    throw federationError(context, 'conflict', 'remote_fleet_snapshot_invalid')
+  }
+  const scopeRunId = value.scope.runId === null ? null : runId(value.scope.runId, context)
+  const partialHostErrors = value.partialHostErrors.map((error: unknown) => {
+    if (!isRecord(error)) throw federationError(context, 'conflict', 'remote_fleet_snapshot_invalid')
+    return { host: requiredString(error.host, context), reason: requiredString(error.reason, context) }
+  })
+  const pageTotal = value.page.total
+  if (typeof pageTotal !== 'number' || !Number.isSafeInteger(pageTotal) || pageTotal < 0) {
+    throw federationError(context, 'conflict', 'remote_fleet_snapshot_invalid')
+  }
+  return {
+    workers: value.workers.map((row: unknown) => parseFleetRow(row, context)),
+    scope: {
+      runId: scopeRunId,
+      source: oneOf(value.scope.source, ['flag', 'bound', 'all'] as const, context)
+    },
+    page: {
+      nextCursor: nullableString(value.page.nextCursor, context),
+      snapshotId: requiredString(value.page.snapshotId, context),
+      total: pageTotal
+    },
+    partialHostErrors
+  }
 }
 
 function sameFleetFilter(left: FleetFilter, right: FleetFilter): boolean {
@@ -361,6 +671,7 @@ export function createFederationSurface(
   engine: FederationEngine
 ): FederationSurface {
   const snapshots = new Map<string, FederationFleetSnapshot>()
+  const workerStore = createWorkerStore(core.store)
 
   function pruneSnapshots(now = Date.now()): void {
     for (const [id, snapshot] of snapshots) if (snapshot.expiresAt <= now) snapshots.delete(id)
@@ -386,12 +697,14 @@ export function createFederationSurface(
 
   async function show(params: { dispatchId: DispatchId }): Promise<WorkerShowResult> {
     const binding = bindingFor(params.dispatchId)
-    if (!binding.hostDispatchId) throw federationError(context, 'conflict', 'remote_worker_not_attached')
+    if (!binding.hostDispatchId || !binding.hostTaskId || !binding.hostRunId) {
+      throw federationError(context, 'conflict', 'remote_worker_not_attached')
+    }
     const value = await remoteCall(engine, binding, 'quirky.orchestration/federationShow', {
       bindingId: binding.id,
       expectedIncarnation: binding.peerIncarnation
     }, context)
-    return mapShow(value, binding, core, context)
+    return mapShow(value, binding, core, workerStore, context)
   }
 
   async function read(params: WorkerReadParams): Promise<WorkerReadResult> {
@@ -616,7 +929,26 @@ export function createFederationSurface(
     if (!isRecord(value) || !isRecord(value.mutation) || value.dispatchId !== binding.hostDispatchId) {
       throw federationError(context, 'conflict', 'remote_control_result_invalid')
     }
-    return { ...value, dispatchId: binding.homeDispatchId } as MutationResult<WorkerControlResult>
+    const mutation = {
+      requestId: requiredString(value.mutation.requestId, context),
+      replayed: requiredBoolean(value.mutation.replayed, context)
+    }
+    if (mutation.requestId !== params.requestId) throw federationError(context, 'conflict', 'remote_control_result_invalid')
+    let archive: WorkerControlResult['archive']
+    if (value.archive !== undefined) {
+      if (!isRecord(value.archive)) throw federationError(context, 'conflict', 'remote_control_result_invalid')
+      archive = { source: requiredString(value.archive.source, context), status: requiredString(value.archive.status, context) }
+    }
+    const result: WorkerControlResult = {
+      dispatchId: binding.homeDispatchId,
+      state: requiredString(value.state, context),
+      processAction: oneOf(value.processAction, ['closed_agent_terminal', 'none', 'unknown'] as const, context),
+      ...(value.alreadySettled === undefined ? {} : { alreadySettled: requiredBoolean(value.alreadySettled, context) }),
+      ...(value.lastError === undefined ? {} : { lastError: requiredString(value.lastError, context) }),
+      ...(value.warning === undefined ? {} : { warning: requiredString(value.warning, context) }),
+      ...(archive === undefined ? {} : { archive })
+    }
+    return { ...result, mutation }
   }
 
   return { show, read, list, control }

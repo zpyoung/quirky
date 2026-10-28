@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import type { PluginCaller, RuntimePeerReply } from '@quirky/protocol'
 import type {
-  CoordinatorAuthority, DispatchId, DispatchRow, MutationResult, RunId, RuntimeCallerEvidence, TaskId,
+  CoordinatorAuthority, DispatchId, DispatchRow, MutationResult, RunId, TaskId,
   WorkerDoneReportInput, WorkerHeartbeatInput,
 } from '../contracts'
 import type { OrchestrationCore } from '../core'
@@ -226,8 +226,10 @@ export function createFederationEngine(
       workerStore.insert(mirror)
       return
     }
-    if (existing.sessionId !== mirror.sessionId || existing.processIncarnation !== mirror.processIncarnation ||
-      existing.processRuntimeEpoch !== mirror.processRuntimeEpoch || existing.runtimeEpoch !== mirror.runtimeEpoch) {
+    if ((existing.sessionId !== null && existing.sessionId !== mirror.sessionId) ||
+      (existing.processIncarnation !== null && existing.processIncarnation !== mirror.processIncarnation) ||
+      (existing.processRuntimeEpoch !== null && existing.processRuntimeEpoch !== mirror.processRuntimeEpoch) ||
+      existing.runtimeEpoch !== mirror.runtimeEpoch) {
       fail(context, 'worker_identity_changed', `Home WorkerRecord identity changed for federation binding ${binding.id}.`, { bindingId: binding.id })
     }
     const terminal = existing.state === 'succeeded' || existing.state === 'failed' || existing.state === 'stopped' || existing.state === 'abandoned'
@@ -274,6 +276,7 @@ export function createFederationEngine(
         processRuntimeEpoch: identity.processRuntimeEpoch,
       })
       mirrorWorker(attached, worker, true)
+      if (side === 'home') core.attachFederatedWorkerAuthority(engine.reportAuthority(attached))
       return attached
     }
     mirrorWorker(next, worker, false)
@@ -283,7 +286,17 @@ export function createFederationEngine(
   const updateHomeStartState = (binding: FederationBinding, receipt: WorkerStartReceipt): void => {
     if (receipt.state === 'outcome_unknown') bindings.setState(binding.id, 'home', 'unknown')
     else if (receipt.state === 'failed') bindings.setState(binding.id, 'home', 'settled')
-    else if (binding.state !== 'settled') bindings.setState(binding.id, 'home', 'active')
+    else {
+      const dispatch = core.getDispatch(binding.homeDispatchId)
+      if (dispatch.status === 'pending') {
+        core.transitionDispatch({
+          dispatchId: dispatch.id, expectedState: 'pending', nextState: 'dispatched', at: now(),
+        })
+      }
+      if (dispatch.status === 'pending' || dispatch.status === 'dispatched') {
+        bindings.setState(binding.id, 'home', 'active')
+      }
+    }
   }
 
   const settleHomeStartFailure = (binding: FederationBinding): void => {
@@ -336,6 +349,7 @@ export function createFederationEngine(
     if (!result || result.dispatchId !== dispatchId || result.sessionId !== binding.sessionId) {
       fail(context, 'worker_identity_changed', `Host output reader returned a different worker for federation binding ${binding.id}.`, { bindingId: binding.id })
     }
+    if (!show.worker) fail(context, 'worker_identity_changed', `Host WorkerRecord disappeared for federation binding ${binding.id}.`, { bindingId: binding.id })
     if (show.worker.processIncarnation !== binding.processIncarnation || show.worker.processRuntimeEpoch !== binding.processRuntimeEpoch) {
       fail(context, 'worker_identity_changed', `Host output source changed for federation binding ${binding.id}.`, { bindingId: binding.id })
     }
@@ -456,7 +470,10 @@ export function createFederationEngine(
       !isObject(params.preflight) || !isObject(params.params)) {
       fail(context, 'invalid_argument', 'Federated host start request is incomplete.')
     }
-    if (params.params.requestId !== params.requestId || startInputHash(params.params) !== params.requestHash) {
+    const hashedParams = params.params.taskId === undefined
+      ? { ...params.params, spec: params.task.spec }
+      : params.params
+    if (params.params.requestId !== params.requestId || startInputHash(hashedParams) !== params.requestHash) {
       fail(context, 'request_mismatch', 'Federated host start input hash or request ID changed.', { bindingId: params.bindingId })
     }
     const peer = peers.getPeer(principal.peerId)
@@ -623,7 +640,6 @@ export function createFederationEngine(
       taskId: undefined,
       spec: task.spec,
       taskTitle: task.taskTitle,
-      displayName: task.displayName,
     }
   }
 
@@ -757,14 +773,6 @@ export function createFederationEngine(
         processRuntimeEpoch: current.processRuntimeEpoch,
       }
     },
-    hostForCaller(caller: RuntimeCallerEvidence) {
-      if (!caller || caller.runtimeOwned !== true || caller.live !== true ||
-        caller.callerSessionId !== caller.runtimeSessionId) return null
-      const binding = bindings.forCaller(caller.runtimeSessionId, caller.attestation.processIncarnation, caller.attestation.runtimeEpoch)
-      if (!binding || binding.sessionId !== caller.callerSessionId || binding.processIncarnation !== caller.attestation.processIncarnation ||
-        binding.processRuntimeEpoch !== caller.attestation.runtimeEpoch) return null
-      return binding
-    },
     bindings: side => bindings.bindings(side),
     async assertBinding(binding) {
       const current = bindings.assertPersisted(binding)
@@ -785,6 +793,11 @@ export function createFederationEngine(
       }
       const homeRun = core.requireCoordinator(caller, params.runId)
       const normalized: WorkerStartParams = { ...params, runId: homeRun.id }
+      const readinessTimeout = normalized.timeoutMs ?? 60_000
+      if (!Number.isSafeInteger(readinessTimeout) || readinessTimeout < 1 || readinessTimeout + 50_000 > 2_147_483_647) {
+        fail(context, 'invalid_argument', 'Readiness timeout plus client grace exceeds the runtime timer limit.')
+      }
+      const launchTimeout = readinessTimeout + 40_000
       const { on: _on, from: _from, ...executionParams } = normalized
       let preparation: StartPreparation | null = null
       return core.mutateWorker('workerStart', normalized, caller, storeView => {
@@ -854,14 +867,29 @@ export function createFederationEngine(
             const reason = typeof response.code === 'string' ? response.code : 'invalid_argument'
             fail(context, 'invalid_argument', `${reason}: ${typeof response.message === 'string' ? response.message : 'Host rejected federated worker placement.'}`)
           }
-          if (!isObject(preflight.result.decision) || typeof preflight.result.decision.mode !== 'string') {
+          if (!isObject(preflight.result.decision)) {
             fail(context, 'peer_invalid_response', 'Host placement preflight returned no worker mode decision.', { peerId: params.on })
+          }
+          const decision = preflight.result.decision
+          if ((decision.mode !== 'terminal' && decision.mode !== 'structured') ||
+            (decision.preferred !== 'terminal' && decision.preferred !== 'structured') ||
+            typeof decision.reason !== 'string' || typeof decision.detail !== 'string') {
+            fail(context, 'peer_invalid_response', 'Host placement preflight returned an invalid worker mode decision.', { peerId: params.on })
+          }
+          const worktreeId = preflight.result.worktreeId
+          if (worktreeId !== null && typeof worktreeId !== 'string') {
+            fail(context, 'peer_invalid_response', 'Host placement preflight returned an invalid worktree ID.', { peerId: params.on })
           }
           preparation = {
             peer: peer.peer,
             peerIncarnation: peer.status.incarnation,
-            decision: preflight.result.decision as WorkerStartReceipt['mode'],
-            worktreeId: typeof preflight.result.worktreeId === 'string' ? preflight.result.worktreeId : null,
+            decision: {
+              mode: decision.mode,
+              preferred: decision.preferred,
+              reason: decision.reason,
+              detail: decision.detail,
+            },
+            worktreeId,
             bindingId,
             requestHash,
             executionParams,
@@ -881,6 +909,7 @@ export function createFederationEngine(
           let binding = bindings.home(accepted.dispatchId)
           if (!binding) return unknownReceipt(accepted, 'Durable home federation binding is unavailable after acceptance.')
           const homeTask = core.getTask(accepted.taskId)
+          const { spec: _spec, ...hostParams } = prepared.executionParams
           const request: StartRequest = {
             phase: 'start',
             bindingId: binding.id,
@@ -890,10 +919,10 @@ export function createFederationEngine(
             home: { runId: accepted.runId, taskId: accepted.taskId, dispatchId: accepted.dispatchId },
             task: { spec: homeTask.spec, taskTitle: homeTask.taskTitle, displayName: homeTask.displayName },
             preflight: { decision: prepared.decision, worktreeId: prepared.worktreeId },
-            params: prepared.executionParams,
+            params: hostParams,
           }
           try {
-            const response = await remote(binding, FEDERATION_METHODS.attach, request as unknown as Record<string, unknown>, normalized.requestId, ATTACH_TIMEOUT_MS)
+            const response = await remote(binding, FEDERATION_METHODS.attach, request as unknown as Record<string, unknown>, normalized.requestId, launchTimeout)
             if (!isObject(response.result) || response.result.bindingId !== binding.id) {
               fail(context, 'peer_invalid_response', 'Host attachment response does not name the durable federation binding.')
             }
@@ -906,12 +935,12 @@ export function createFederationEngine(
                 dispatchId: response.result.host.dispatchId as DispatchId,
               }, 'home')
             }
-            if (!binding.hostDispatchId) {
-              bindings.setState(binding.id, 'home', 'unknown')
-              return unknownReceipt(accepted, 'Host did not commit a durable worker receipt before returning.')
-            }
             const hostReceipt = asReceipt(response.result.receipt)
             if (!hostReceipt) fail(context, 'peer_invalid_response', 'Host attachment response has no worker receipt.')
+            if (!binding.hostDispatchId) {
+              bindings.setState(binding.id, 'home', 'unknown')
+              return unknownReceipt(accepted, hostReceipt.lastError ?? 'Host did not commit a durable worker receipt before returning.')
+            }
             if (hostReceipt.state === 'ready' &&
               (!binding.sessionId || !binding.processIncarnation || !binding.processRuntimeEpoch)) {
               bindings.setState(binding.id, 'home', 'unknown')

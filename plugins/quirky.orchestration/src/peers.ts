@@ -45,10 +45,11 @@ type InboundPeerPrincipal = Omit<FederationPeerPrincipal, 'incarnation'>
 type InboundIdentity = { kind: 'bootstrap' } | { kind: 'paired'; principal: InboundPeerPrincipal }
 
 const LISTEN_PATH = '/rpc'
-const MAX_REQUEST_BYTES = 4 * 1024 * 1024
-const MAX_RESPONSE_BYTES = 4 * 1024 * 1024
+// A legal 1,214,464-byte task may expand sixfold when JSON escapes control characters.
+const MAX_REQUEST_BYTES = 8 * 1024 * 1024
+const MAX_RESPONSE_BYTES = 8 * 1024 * 1024
 const REQUEST_TIMEOUT_MS = 15_000
-const MAX_REQUEST_TIMEOUT_MS = 180_000
+const MAX_REQUEST_TIMEOUT_MS = 2_147_483_647
 const MIN_TOKEN_BYTES = 32
 const CAPABILITIES = Object.freeze([
   'quirky.heimdall/remoteFleet',

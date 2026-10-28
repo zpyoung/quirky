@@ -1,6 +1,6 @@
 import type { PluginContext, PluginStore } from '@quirky/protocol'
 import type {
-  CoordinatorAuthority, DispatchAdmissionInput, DispatchId, DispatchRow, DispatchStatus, HeartbeatResult, JsonValue, LifecycleCorePort,
+  CoordinatorAuthority, DispatchAdmissionInput, DispatchId, DispatchRow, DispatchStatus, JsonValue, LifecycleCorePort,
   MutationCheckpoint, MutationRequest, MutationResult, MutatingOrchestrationMethod,
   ResetMode, RunId, RunRow, RuntimeCallerEvidence, TaskCreateParams, TaskId, TaskRow, UtcTimestamp,
   FederatedWorkerExitAcceptance, FederatedWorkerExitInput, WorkerDoneReportInput, WorkerExitResult, WorkerHeartbeatInput,

@@ -48,15 +48,19 @@ export function registerWorkers(core: WorkerCore, resolveCaller: WorkerCallerRes
   })
   if (active) track(lifecycle.recoverReleases())
 
-  const control = (method: 'stop' | 'abandon' | 'release' | 'retain'): MethodHandler => async (params, caller) => {
-    const input = params as unknown as WorkerControlParams
-    const evidence = await resolveCaller(caller, { from: params.from as string | undefined })
-    const binding = federationEngine?.home(input.dispatchId)
-    if (binding) {
+  const coordinatorControl = (method: 'stop' | 'abandon' | 'release' | 'retain'): WorkerLifecycle['stop'] => (params, caller) => {
+    if (federationEngine?.home(params.dispatchId)) {
       if (!federationSurface) throw core.context.error('conflict', 'Federation surface is unavailable.')
-      return federationSurface.control(method, input, evidence)
+      return federationSurface.control(method, params, caller)
     }
-    return lifecycle[method](input, evidence)
+    return lifecycle[method](params, caller)
+  }
+  const control = (method: 'stop' | 'abandon' | 'release' | 'retain'): MethodHandler => {
+    const execute = coordinatorControl(method)
+    return async (params, caller) => execute(
+      params as unknown as WorkerControlParams,
+      await resolveCaller(caller, { from: params.from as string | undefined }),
+    )
   }
   const methods: Record<string, MethodHandler> = {
     workerStart: async (params, caller) => {
@@ -138,8 +142,23 @@ export function registerWorkers(core: WorkerCore, resolveCaller: WorkerCallerRes
     methods,
     // Service coordinators use these same typed pipelines through an owner-Run core
     // adapter; they do not re-enter the session-authenticated public handlers.
-    starter,
-    lifecycle,
+    starter: {
+      ...starter,
+      start(params, caller) {
+        if (Object.hasOwn(params, 'on')) {
+          if (!federationEngine) throw core.context.error('conflict', 'Federated worker execution is unavailable.')
+          return federationEngine.start(params, caller)
+        }
+        return starter.start(params, caller)
+      },
+    },
+    lifecycle: {
+      ...lifecycle,
+      stop: coordinatorControl('stop'),
+      abandon: coordinatorControl('abandon'),
+      release: coordinatorControl('release'),
+      retain: coordinatorControl('retain'),
+    },
     bindFederation(engine, surface) {
       federationEngine = engine
       federationSurface = surface

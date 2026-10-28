@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import type { Session } from '@quirky/protocol'
 import type { MutationResult, RunRow } from '../src/contracts'
 import type { WorkerControlResult, WorkerListResult, WorkerReadResult, WorkerShowResult, WorkerStartReceipt } from '../src/worker-contracts'
-import { eventually, mutation, startOrchestrationFixture, type OrchestrationFixture, type OrchestrationParty } from './fixture'
+import { mutation, pause, startOrchestrationFixture, type OrchestrationFixture, type OrchestrationParty } from './fixture'
 
 const fixtures: OrchestrationFixture[] = []
 afterEach(async () => {
@@ -16,6 +16,21 @@ async function daemon(): Promise<OrchestrationFixture> {
   const fixture = await startOrchestrationFixture()
   fixtures.push(fixture)
   return fixture
+}
+
+async function eventually<T>(
+  read: () => T | Promise<T>,
+  accepts: (value: T) => boolean,
+  description: string,
+  timeoutMs = 15_000,
+): Promise<T> {
+  const deadline = Date.now() + timeoutMs
+  while (true) {
+    const value = await read()
+    if (accepts(value)) return value
+    if (Date.now() >= deadline) throw new Error(`timed out waiting for ${description}: ${JSON.stringify(value)}`)
+    await pause(25)
+  }
 }
 
 async function pair(home: OrchestrationFixture, host: OrchestrationFixture): Promise<void> {
@@ -222,15 +237,10 @@ test('remote retain, stop, release/archive, and abandon affect only the exact ho
     'four isolated host service workers',
     90_000,
   )
-  const hostByTitle = new Map(allHostWorkers.workers.map(row => [row.taskTitle, row]))
-  const retainedTitle = allHostWorkers.workers.find(row => row.taskTitle.includes('Retain '))!.taskTitle
-  const stoppedTitle = allHostWorkers.workers.find(row => row.taskTitle.includes('Stop '))!.taskTitle
-  const releasedTitle = allHostWorkers.workers.find(row => row.taskTitle.includes('Release '))!.taskTitle
-  const abandonedTitle = allHostWorkers.workers.find(row => row.taskTitle.includes('Abandon '))!.taskTitle
-  const retainedHost = hostByTitle.get(retainedTitle)!
-  const stoppedHost = hostByTitle.get(stoppedTitle)!
-  const releasedHost = hostByTitle.get(releasedTitle)!
-  const abandonedHost = hostByTitle.get(abandonedTitle)!
+  const retainedHost = allHostWorkers.workers.find(row => row.taskTitle.includes('Retain '))!
+  const stoppedHost = allHostWorkers.workers.find(row => row.taskTitle.includes('Stop '))!
+  const releasedHost = allHostWorkers.workers.find(row => row.taskTitle.includes('Release '))!
+  const abandonedHost = allHostWorkers.workers.find(row => row.taskTitle.includes('Abandon '))!
 
   const retained = await runControl<MutationResult<WorkerControlResult>>(home, homeParty, 'worker-retain', retainedStart.receipt.dispatchId)
   expect(retained.state).toBe('retained')

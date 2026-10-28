@@ -12,9 +12,7 @@ import type {
   WorkerHeartbeatInput,
   WorkerReportRejection,
   WorkerReportResult,
-  FederatedWorkerExitInput,
   ResetMode,
-  WorkerExitResult,
 } from '../contracts'
 import type { OrchestrationCore } from '../core'
 import type { OrchestrationMessages, FederationMessagingHooks } from '../messaging'
@@ -25,7 +23,6 @@ import type {
   FederationMail,
   FederationPeerPrincipal,
   FederationRelayItem,
-  FederationReportAuthority,
 } from './contracts'
 import { FederationMailStore, type MailDirection } from './mail-store'
 
@@ -34,7 +31,7 @@ const ACK_METHOD = 'quirky.orchestration/federationAck'
 const IMPORT_METHOD = 'quirky.orchestration/federationImport'
 const PAGE_SIZE = 50
 const PAGES_PER_TICK = 6
-const SYNC_INTERVAL_MS = 750
+const SYNC_INTERVAL_MS = 1_000
 const LIFECYCLE_IMPORT_TIMEOUT_MS = 40_000
 const UNAVAILABLE = 'The paired home could not commit the federated worker report.'
 
@@ -56,12 +53,6 @@ type MessageEnvelope = {
 }
 type ImportResult = { sequence: number; id: string; result: unknown; duplicate: boolean }
 type AppliedImport = { result: unknown; message: MessageRow | null; questionId: string | null }
-type FederatedReportCore = OrchestrationCore & {
-  preflightFederatedWorkerDone(input: WorkerDoneReportInput, authority: FederationReportAuthority): WorkerReportResult | null
-  reportFederatedWorkerDone(input: WorkerDoneReportInput, authority: FederationReportAuthority): WorkerReportResult
-  recordFederatedHeartbeat(input: WorkerHeartbeatInput, authority: FederationReportAuthority): HeartbeatResult
-  reportFederatedWorkerExit(input: FederatedWorkerExitInput, authority: FederationReportAuthority): WorkerExitResult
-}
 
 function objectRecord(value: unknown): Record<string, unknown> | null {
   return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : null
@@ -150,8 +141,9 @@ function assertImportReply(value: unknown, items: readonly FederationRelayItem[]
   return { through: record.through as number, results }
 }
 
-function reportRejection(result: WorkerReportResult): OrchestrationSubmissionVerdict {
-  if (result.status !== 'rejected') return { kind: 'accepted' }
+function reportRejection(
+  result: Extract<WorkerReportResult, { status: 'rejected' }>,
+): Extract<OrchestrationSubmissionVerdict, { kind: 'rejected' }> {
   const lifecycle = result.lifecycle
   return {
     kind: 'rejected',
@@ -171,7 +163,6 @@ export function createFederationMail(
   engine: FederationEngine,
 ): FederationMailComponent {
   const store = new FederationMailStore(core.store)
-  const federatedCore = core as FederatedReportCore
   const syncPromises = new Map<string, Promise<void>>()
   let disposed = false
   let timer: ReturnType<typeof setInterval> | null = null
@@ -219,7 +210,13 @@ export function createFederationMail(
     timeoutMs?: number,
   ): Promise<unknown> => {
     await engine.assertBinding(binding)
-    const reply = await engine.remote(binding, method, params, undefined, timeoutMs)
+    let requestId: string | undefined
+    if (method === IMPORT_METHOD || method === ACK_METHOD) {
+      const digest = createHash('sha256').update(canonical({ bindingId: binding.id, method, params })).digest('hex')
+      // UUIDv8 retains a stable operation identity across reconnects and daemon restarts.
+      requestId = `${digest.slice(0, 8)}-${digest.slice(8, 12)}-8${digest.slice(13, 16)}-8${digest.slice(17, 20)}-${digest.slice(20, 32)}`
+    }
+    const reply = await engine.remote(binding, method, params, requestId, timeoutMs)
     return requirePeerReply(binding, reply)
   }
 
@@ -290,6 +287,54 @@ export function createFederationMail(
     return binding
   }
 
+  const hostBindingForVerifiedCaller = (
+    dispatchId: DispatchId,
+    caller: RuntimeCallerEvidence,
+  ): FederationBinding | null => {
+    const binding = engine.host(dispatchId)
+    if (!binding) return null
+    const dispatch = core.store.get<{
+      id: string
+      run_id: string
+      task_id: string
+      status: string
+      assignee_session_id: string | null
+      runtime_epoch: string | null
+      process_incarnation: string | null
+    }>(
+      `SELECT id, run_id, task_id, status, assignee_session_id, runtime_epoch, process_incarnation
+       FROM dispatches WHERE id = ?`,
+      dispatchId,
+    )
+    const workerRow = core.store.get<{ record_json: string }>(
+      `SELECT record_json FROM worker_dispatches WHERE dispatch_id = ?`,
+      dispatchId,
+    )
+    const worker = workerRow ? objectRecord(JSON.parse(workerRow.record_json)) : null
+    if (
+      binding.side !== 'host' || binding.hostDispatchId !== dispatchId || !binding.hostRunId ||
+      !binding.hostTaskId || !binding.sessionId || !binding.processIncarnation || !binding.processRuntimeEpoch ||
+      (binding.state !== 'active' && binding.state !== 'unknown') ||
+      caller.runtimeOwned !== true || caller.live !== true ||
+      caller.callerSessionId !== caller.runtimeSessionId ||
+      caller.runtimeSessionId !== binding.sessionId ||
+      caller.attestation.processIncarnation !== binding.processIncarnation ||
+      !dispatch || dispatch.run_id !== binding.hostRunId || dispatch.task_id !== binding.hostTaskId ||
+      dispatch.assignee_session_id !== caller.runtimeSessionId ||
+      (dispatch.status !== 'pending' && dispatch.status !== 'dispatched') ||
+      dispatch.runtime_epoch !== caller.attestation.runtimeEpoch ||
+      dispatch.process_incarnation !== caller.attestation.processIncarnation ||
+      !worker || worker.sessionId !== binding.sessionId ||
+      worker.processIncarnation !== binding.processIncarnation ||
+      worker.processRuntimeEpoch !== binding.processRuntimeEpoch ||
+      worker.state === 'stopping' || worker.state === 'stop_unknown' || worker.state === 'stopped' ||
+      worker.state === 'abandoned' || worker.state === 'failed' || worker.state === 'succeeded'
+    ) {
+      throw new Error(`Verified worker caller does not match exact host federation binding ${binding.id}`)
+    }
+    return binding
+  }
+
   const enqueueObservedHostExits = (binding: FederationBinding): void => {
     if (binding.side !== 'host' || !binding.hostDispatchId || !binding.hostTaskId ||
       !binding.sessionId || !binding.processIncarnation || !binding.processRuntimeEpoch ||
@@ -339,17 +384,17 @@ export function createFederationMail(
 
   const outgoingMessage = (message: MessageRow, caller: RuntimeCallerEvidence | null): void => {
     if (message.type === 'worker_done' || message.type === 'heartbeat') return
-    if (caller !== null) {
-      const hostBinding = engine.hostForCaller(caller)
-      if (hostBinding) {
-        if (hostBinding.side !== 'host' || !hostBinding.hostDispatchId || !hostBinding.hostRunId ||
-          message.sender.kind !== 'dispatch' || message.sender.dispatchId !== hostBinding.hostDispatchId || message.runId !== hostBinding.hostRunId) {
-          throw new Error('Verified host worker message does not match its federation binding')
-        }
-        if (message.type === 'status') return
-        queueItem(hostBinding, 'to_home', message.id, 'message', payloadMessage(message))
-        return
+    const hostBinding = caller !== null && message.sender.kind === 'dispatch'
+      ? hostBindingForVerifiedCaller(message.sender.dispatchId, caller)
+      : null
+    if (hostBinding) {
+      if (!hostBinding.hostDispatchId || !hostBinding.hostRunId || message.sender.kind !== 'dispatch' ||
+        message.sender.dispatchId !== hostBinding.hostDispatchId || message.runId !== hostBinding.hostRunId) {
+        throw new Error('Verified host worker message does not match its federation binding')
       }
+      if (message.type === 'status') return
+      queueItem(hostBinding, 'to_home', message.id, 'message', payloadMessage(message))
+      return
     }
     if (message.mailbox.kind !== 'dispatch') return
     const homeBinding = engine.home(message.mailbox.dispatchId)
@@ -362,10 +407,11 @@ export function createFederationMail(
   }
 
   const afterQuestionCreated = (message: MessageRow, caller: RuntimeCallerEvidence): void => {
-    const binding = engine.hostForCaller(caller)
+    if (message.sender.kind !== 'dispatch') throw new Error('Verified remote question has no Dispatch sender')
+    const binding = hostBindingForVerifiedCaller(message.sender.dispatchId, caller)
     if (!binding) return
-    if (binding.side !== 'host' || message.sender.kind !== 'dispatch' || message.sender.dispatchId !== binding.hostDispatchId ||
-      message.runId !== binding.hostRunId || message.mailbox.kind !== 'run' || message.mailbox.runId !== binding.hostRunId) {
+    if (message.sender.dispatchId !== binding.hostDispatchId || message.runId !== binding.hostRunId ||
+      message.mailbox.kind !== 'run' || message.mailbox.runId !== binding.hostRunId) {
       throw new Error('Verified remote question does not match its federation binding')
     }
     store.bindQuestion(binding.id, message.id, 'to_home')
@@ -385,9 +431,12 @@ export function createFederationMail(
   }
 
   const afterReply = (originalMessageId: string, replyMessage: MessageRow, caller: RuntimeCallerEvidence): void => {
-    const hostBinding = engine.hostForCaller(caller)
+    const hostBinding = replyMessage.sender.kind === 'dispatch'
+      ? hostBindingForVerifiedCaller(replyMessage.sender.dispatchId, caller)
+      : null
     if (hostBinding) {
-      if (!hostBinding.hostRunId || replyMessage.runId !== hostBinding.hostRunId) {
+      if (!hostBinding.hostRunId || replyMessage.runId !== hostBinding.hostRunId ||
+        replyMessage.sender.kind !== 'dispatch' || replyMessage.sender.dispatchId !== hostBinding.hostDispatchId) {
         throw new Error('Verified host worker reply does not match its federation binding')
       }
       queueItem(hostBinding, 'to_home', replyMessage.id, 'message', payloadMessage(replyMessage))
@@ -478,7 +527,7 @@ export function createFederationMail(
   }
 
   const beforeHeartbeat = async (input: WorkerHeartbeatInput, caller: RuntimeCallerEvidence): Promise<HeartbeatResult | null> => {
-    const binding = engine.hostForCaller(caller)
+    const binding = hostBindingForVerifiedCaller(input.dispatchId, caller)
     if (!binding) return null
     if (binding.side !== 'host' || input.dispatchId !== binding.hostDispatchId || input.taskId !== binding.hostTaskId ||
       !binding.hostRunId || !binding.hostTaskId || !binding.hostDispatchId) {
@@ -523,7 +572,7 @@ export function createFederationMail(
         typeof exit.at !== 'string') {
         throw new Error('Federated process exit does not match the exact attached host worker')
       }
-      const result = federatedCore.reportFederatedWorkerExit({
+      const result = core.reportFederatedWorkerExit({
         dispatchId: binding.homeDispatchId,
         taskId: binding.homeTaskId,
         processIncarnation: binding.processIncarnation,
@@ -566,7 +615,7 @@ export function createFederationMail(
         (raw.phase !== undefined && typeof raw.phase !== 'string')) {
         throw new Error('Federated heartbeat does not match its home binding')
       }
-      const result = federatedCore.recordFederatedHeartbeat({
+      const result = core.recordFederatedHeartbeat({
         taskId: binding.homeTaskId,
         dispatchId: binding.homeDispatchId,
         ...(typeof raw.phase === 'string' ? { phase: raw.phase } : {}),
@@ -594,7 +643,7 @@ export function createFederationMail(
         : {}),
       ...(typeof rawReport.reportPath === 'string' ? { reportPath: rawReport.reportPath } : {}),
     }
-    let result = federatedCore.preflightFederatedWorkerDone(report, engine.reportAuthority(binding))
+    let result = core.preflightFederatedWorkerDone(report, engine.reportAuthority(binding))
     if (result?.status === 'rejected') {
       const verdict = reportRejection(result)
       messages.markFederatedRejected(message.id, 'worker_done', verdict.reason, verdict.kind === 'rejected' ? verdict.code : 'federated_worker_report_rejected')
@@ -622,7 +671,7 @@ export function createFederationMail(
       messages.markFederatedRejected(message.id, 'worker_done', verdict.reason, verdict.code)
       return { result: verdict, message: messages.getFederatedMessage(message.id), questionId: null }
     }
-    result = federatedCore.reportFederatedWorkerDone(report, engine.reportAuthority(binding))
+    result = core.reportFederatedWorkerDone(report, engine.reportAuthority(binding))
     if (result.status === 'rejected') {
       const rejection = reportRejection(result)
       messages.markFederatedRejected(message.id, 'worker_done', rejection.reason, rejection.kind === 'rejected' ? rejection.code : 'federated_worker_report_rejected')
@@ -641,7 +690,8 @@ export function createFederationMail(
     }
   }
 
-  const importItems = async (binding: FederationBinding, items: readonly FederationRelayItem[]): Promise<{ through: number; results: ImportResult[] }> => {
+  const importQueues = new Map<string, Promise<void>>()
+  const applyImports = async (binding: FederationBinding, items: readonly FederationRelayItem[]): Promise<{ through: number; results: ImportResult[] }> => {
     if (items.length > PAGE_SIZE) throw new Error(`Federation import page exceeds ${PAGE_SIZE} items`)
     const generation = resetGeneration
     assertBindingCurrent(binding, generation)
@@ -671,6 +721,17 @@ export function createFederationMail(
     return { through: store.cursor(binding.id, inboundDirection(binding)), results }
   }
 
+  const importItems = (binding: FederationBinding, items: readonly FederationRelayItem[]) => {
+    const prior = importQueues.get(binding.id) ?? Promise.resolve()
+    const operation = prior.then(() => applyImports(binding, items))
+    const settled = operation.then(() => undefined, () => undefined)
+    importQueues.set(binding.id, settled)
+    void settled.then(() => {
+      if (importQueues.get(binding.id) === settled) importQueues.delete(binding.id)
+    })
+    return operation
+  }
+
   const inbound: FederationInboundHandler = async (method, params, principal, _requestId) => {
     const bindingId = params.bindingId
     if (typeof bindingId !== 'string' || bindingId.length === 0) throw new Error('Federation mail request is missing its binding ID')
@@ -679,28 +740,34 @@ export function createFederationMail(
       const direction = params.direction
       const after = params.after
       const limit = params.limit
-      if (direction !== outboundDirection(binding) || !Number.isSafeInteger(after) || (after as number) < 0 ||
-        !Number.isInteger(limit) || (limit as number) < 1 || (limit as number) > PAGE_SIZE) {
+      if ((direction !== 'to_home' && direction !== 'to_worker') || direction !== outboundDirection(binding) ||
+        !Number.isSafeInteger(after) || (after as number) < 0 || !Number.isInteger(limit) ||
+        (limit as number) < 1 || (limit as number) > PAGE_SIZE) {
         throw new Error('Federation pull request has an invalid direction, cursor, or page limit')
       }
-      const items = store.listOutbox(binding.id, direction, after as number, limit as number)
+      const mailDirection = direction as MailDirection
+      const items = store.listOutbox(binding.id, mailDirection, after as number, limit as number)
       return { items, through: items.at(-1)?.sequence ?? after }
     }
     if (method === ACK_METHOD) {
       const direction = params.direction
       const through = params.through
-      if (direction !== outboundDirection(binding) || !Number.isSafeInteger(through) || (through as number) < 0) {
+      if ((direction !== 'to_home' && direction !== 'to_worker') || direction !== outboundDirection(binding) ||
+        !Number.isSafeInteger(through) || (through as number) < 0) {
         throw new Error('Federation acknowledgement has an invalid direction or cursor')
       }
-      return { through: store.acknowledge(binding.id, direction, through as number) }
+      const mailDirection = direction as MailDirection
+      return { through: store.acknowledge(binding.id, mailDirection, through as number) }
     }
     if (method === IMPORT_METHOD) {
       const direction = params.direction
       const rawItems = params.items
-      if (direction !== inboundDirection(binding) || !Array.isArray(rawItems) || rawItems.length > PAGE_SIZE) {
+      if ((direction !== 'to_home' && direction !== 'to_worker') || direction !== inboundDirection(binding) ||
+        !Array.isArray(rawItems) || rawItems.length > PAGE_SIZE) {
         throw new Error('Federation import has an invalid direction or page size')
       }
-      const items = rawItems.map((item) => assertRelayItem(item, binding.id, direction))
+      const mailDirection = direction as MailDirection
+      const items = rawItems.map((item) => assertRelayItem(item, binding.id, mailDirection))
       return importItems(binding, items)
     }
     throw new Error(`Unsupported federation mail method ${method}`)

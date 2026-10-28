@@ -937,6 +937,29 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
     return this.getDispatch(dispatchId)
   }
 
+  attachFederatedWorkerAuthority(authority: FederationReportAuthority): DispatchRow {
+    this.assertFederationAuthority(authority)
+    const dispatch = this.getDispatchRecord(authority.dispatchId)
+    if (dispatch.assignee_session_id !== null) {
+      if (dispatch.assignee_session_id === authority.sessionId &&
+        dispatch.runtime_epoch === authority.processRuntimeEpoch &&
+        dispatch.process_incarnation === authority.processIncarnation) return this.getDispatch(authority.dispatchId)
+      fail(this.context, 'worker_identity_changed', 'The federated Dispatch already has another process identity.')
+    }
+    if (!dispatch.supervised || dispatch.status !== 'pending') {
+      fail(this.context, 'lifecycle_conflict', 'The federated Dispatch is not awaiting its first process attachment.')
+    }
+    const updated = this.store.run(
+      `UPDATE dispatches SET assignee_session_id = ?, runtime_epoch = ?, process_incarnation = ?,
+       consumer_generation = consumer_generation + 1
+       WHERE id = ? AND supervised = 1 AND status = 'pending' AND assignee_session_id IS NULL`,
+      authority.sessionId, authority.processRuntimeEpoch, authority.processIncarnation, authority.dispatchId,
+    )
+    if (updated.changes !== 1) fail(this.context, 'lifecycle_conflict', 'The federated Dispatch changed during process attachment.')
+    this.fenceDispatchConsumer(authority.dispatchId, dispatch.consumer_generation)
+    return this.getDispatch(authority.dispatchId)
+  }
+
   /** Read-only sender, Dispatch, and worker-state fence used before an asynchronous submission hook. */
   preflightWorkerDone(input: WorkerDoneReportInput, caller: RuntimeCallerEvidence): WorkerReportResult | null {
     const dispatch = this.store.get<DispatchRecord>('SELECT * FROM dispatches WHERE id = ?', input.dispatchId)
@@ -1047,14 +1070,13 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
   }
 
   private reportWorkerDoneAccepted(input: WorkerDoneReportInput, authority: WorkerReportAuthority): WorkerReportResult {
-    const federated = authority.kind === 'federated-worker'
-    if (federated) this.assertFederationAuthority(authority)
+    if ('kind' in authority) this.assertFederationAuthority(authority)
     const dispatch = this.store.get<DispatchRecord>('SELECT * FROM dispatches WHERE id = ?', input.dispatchId)
     if (!dispatch) return { status: 'rejected', reason: 'unknown_dispatch', audited: true }
     const task = this.store.get<TaskRecord>('SELECT * FROM tasks WHERE id = ?', input.taskId)
     if (!task) return { status: 'rejected', reason: 'unknown_task', audited: true }
     if (task.id !== dispatch.task_id) return { status: 'rejected', reason: 'task_dispatch_mismatch', audited: true }
-    if (federated) {
+    if ('kind' in authority) {
       if (authority.dispatchId !== dispatch.id) return { status: 'rejected', reason: 'worker_identity_changed', audited: true }
     } else {
       if (dispatch.assignee_session_id === null || authority.callerSessionId !== dispatch.assignee_session_id) {
@@ -1110,7 +1132,9 @@ export class OrchestrationCore implements OrchestrationWorkerCore {
       }
       if (!worker) fail(this.context, 'worker_port_unavailable', `supervised Dispatch ${dispatch.id} report was not reconciled`, { dispatchId: dispatch.id })
     }
-    const reportingSession = federated ? authority.sessionId : authority.runtimeSessionId
+    const reportingSession = 'kind' in authority
+      ? authority.sessionId
+      : authority.runtimeSessionId
     const result: TaskResult = {
       kind: 'worker_report',
       outcome: input.outcome,

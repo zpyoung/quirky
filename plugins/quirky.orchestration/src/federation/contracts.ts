@@ -1,4 +1,4 @@
-import type { PluginCaller, RuntimePeer, RuntimePeerReply } from '@quirky/protocol'
+import type { RuntimePeer, RuntimePeerReply } from '@quirky/protocol'
 import type { CoordinatorAuthority, DispatchId, JsonValue, MutationResult, RunId, RuntimeCallerEvidence, TaskId } from '../contracts'
 import type { WorkerControlParams, WorkerControlResult, WorkerListParams, WorkerListResult, WorkerReadParams, WorkerReadResult, WorkerShowParams, WorkerShowResult, WorkerStartParams, WorkerStartReceipt } from '../worker-contracts'
 
@@ -58,7 +58,6 @@ export interface FederationEngine {
   host(dispatchId: DispatchId): FederationBinding | null
   /** Rechecks persisted binding and returns distinct authority only after exact host attachment. */
   reportAuthority(binding: FederationBinding): FederationReportAuthority
-  hostForCaller(caller: RuntimeCallerEvidence): FederationBinding | null
   bindings(side?: 'home' | 'host'): readonly FederationBinding[]
   assertBinding(binding: FederationBinding): Promise<void>
   remote(binding: FederationBinding, method: string, params: Record<string, unknown>, requestId?: string, timeoutMs?: number): Promise<RuntimePeerReply>
@@ -84,5 +83,3 @@ export interface FederationSurface {
   control(action: 'stop' | 'release' | 'retain' | 'abandon', params: WorkerControlParams, caller: CoordinatorAuthority): Promise<MutationResult<WorkerControlResult>>
 }
 
-/** Non-secret bindings may be rendered; paired credentials never appear in these ports. */
-export type FederationOperator = Pick<PluginCaller, 'role' | 'pluginId' | 'sessionId'>

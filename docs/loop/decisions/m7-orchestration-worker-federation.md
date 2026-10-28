@@ -99,5 +99,38 @@
 - **Revisit if:** merged typecheck or smoke exposes a remaining integration seam.
 - **Source:** assumed — autonomous
 
+## D10: Repair concrete integration boundaries without weakening identity fences
+- **Question:** Merged typechecking and real paired-daemon execution exposed cross-component contract gaps.
+- **Options:** unsafe casts/local fallback or suppress failures; repair the actual typed and runtime producers.
+- **Chose:** Concrete composed core type, proper local/federated union narrowing and migrated fixtures; remove unused operator/caller-epoch APIs. Route authenticated service starts/controls through the same federation pipeline and declare on in serviceWorkerStart. Keep original task labels separate from worktree creation flags. Permit null-to-known host attachment slots while rejecting changes to any already-proven slot. Preserve host failure detail, stable UUIDv8 relay mutation IDs, and exact verified sender Dispatch routing instead of comparing unrelated supervisor/process epochs.
+- **Why:** Initial typecheck reported86 diagnostics, then12; repaired root/mobile typecheck passed24.61s. Actual smoke proved host launch, distinct home/host IDs, no home process creation, correct remote viewer route and ordered F1/F2. It then exposed an unqueued question; after sender routing repair the persisted host queue contained that question, while real daemon logs proved Import/Ack were missing required UUIDs. These are producer/authority repairs, not a passing whole-flow claim.
+- **Evidence:** artifacts33,35 and root/mobile typecheck output; actual smoke outputs and safe failure-state/daemon artifacts in owned scratch. A real production openPluginStore upgrade5→7 preserved policy7 and created all federation tables, with homeRemoved:true.
+- **Reversibility:** medium
+- **Confidence:** high for observed boundaries and exact diagnostics; complete smoke/viewer proof still pending.
+- **Revisit if:** the next actual paired-daemon run contradicts these repaired contracts.
+- **Source:** assumed — autonomous
+
+## D11: Keep lifecycle identity separate from mutable state and record exercised proof
+- **Question:** Real report settlement and owner rejection reached additional authority/concurrency boundaries.
+- **Options:** weaken fences or accept transport enqueue as success; retain exact identity while fixing actual state transitions.
+- **Chose:** Attach the proven foreign process to the home Dispatch through a distinct core federation-authority method; no local caller evidence. Promote a ready home attempt to dispatched. Serialize per-binding asynchronous imports so simultaneous push/pull cannot both apply one sequence. Compare immutable binding identity independently of active→settled state, allowing the committed home verdict to reach the host. Remove temporary exception logging after finding the exact failure.
+- **Why:** The real daemon proved a home completion had committed before a post-commit identity check rejected its own mutable state change. Earlier concurrent status import committed once but a second importer raced the cursor. Both must be replay-safe without re-running kind policy or claiming an absent host exited.
+- **Evidence:** Actual readonly queue/inbox snapshots and isolated exception trace; final two-real-daemon/real-PTY CLI smoke exit0 in14.15s: illegal placement refused, distinct home/host IDs with no home spawn, ordered F1/F2, blocking question→beta, heartbeat/status, actual2433-byte remote output, home completion before host acceptance, released archived output/fleet, real installed owner rejecting then accepting a remote new-top-level worker, exact stop preserving both coordinators. Both homes removed.
+- **Reversibility:** medium
+- **Confidence:** high for these paths; acceptance suites/restart/fault campaigns remain unexecuted under LOOP.
+- **Revisit if:** end-phase execution contradicts the observed contracts.
+- **Source:** assumed — autonomous
+
+## D12: Report focused shipped-view evidence without claiming a UI campaign
+- **Question:** What actual visible behavior was exercised under the required minimal runtime verification?
+- **Options:** infer UI from types; run a full forbidden dogfood campaign; exercise the actual shipped components against private real daemons.
+- **Chose:** Build a temporary adapter around shipped OrchestrationRows, terminal task-link handler and registered RemoteWorkerOutputView. Actual sidebar and task-link clicks opened the fixed remote-output route; viewer showed worker-host, terminal source, live evidence, source fallback and real FEDERATION_SHIPPED_VIEW output. Refresh worked; no toast was shown. Close the browser, stop the owned service and remove both homes. Do not call this full-app/native or all-scenario coverage.
+- **Why:** The coding contract requires actual surface proof while LOOP defers campaigns. Scratch bundling initially lacked plugin-owned React dependencies, corrected by linking that actual dependency directory. The adapter's SSE hit Bun's default10s idle timeout; this produced a transport warning, not a viewer success fabrication.
+- **Evidence:** Screenshot omp-sshots-15b823586b1ed1dc.webp and actual route/taskTerminal response; federation-surface-lane5-v3 exit0 with both homeRemoved:true. Root/mobile typecheck passed24.65s after the real-path repairs. The earlier two-hour item target was not met; no new flow or external blocker was invented to hide the implementation work.
+- **Reversibility:** easy
+- **Confidence:** high for the exercised shipped surfaces; full suites/reviews/native/TLS-network campaigns were not run.
+- **Revisit if:** end-phase browser/native checks expose different behavior.
+- **Source:** assumed — autonomous
+
 ## Progress
-Claimed exactly this item after canonical waits returned busy14 times including the final wait that claimed it. Combined spec self-reviewed; shared federation ports and on/remote-host worker types ready for contracts commit. Next: dispatch three isolated implementers, integrate, typecheck and narrow real paired-daemon smoke, catch up once/read new decisions, commit/detach/canonical land and await receipt. No suites/reviews/full UI/native passes claimed; inherited .serena/ untouched.
+All three source components integrated and removed with metadata preserved; disjoint type repairs and actual runtime producer fixes are complete. Root/mobile typecheck and focused real paired-daemon/CLI, migration-upgrade and shipped-view proofs passed within D10–D12 limits. No suites/reviews/full dogfood/native campaign run or passing claim. Next: commit own source/docs, catch up once with build/roadmap and read incoming decisions, rerun typecheck, detach/canonical land and await receipt. All owned runtimes/browser tabs are stopped; inherited .serena/ untouched.
