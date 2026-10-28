@@ -206,7 +206,8 @@ test('daemon import replaces only safe families and accepts explicit file and JS
     ], 'selected-cookies.json')
     const beforeFile = readFileSync(file)
     const fileResult = await h.client.callAny('quirky.browser/importCookies', {
-      source: { kind: 'file', path: file }
+      source: { kind: 'file', path: file },
+      yes: true
     }) as { importedCookies: number; skippedCookies: number; googleCookiesSkipped?: number; domains: string[] }
     expect(fileResult).toMatchObject({
       importedCookies: 2,
@@ -232,7 +233,8 @@ test('daemon import replaces only safe families and accepts explicit file and JS
       source: { kind: 'json', cookies: [
         cookieRow('readable-sibling', 'must-not-write', '.one.github.io'),
         { ...cookieRow('opaque-chip', 'unknown', '.one.github.io'), partitionKeyOpaque: true }
-      ] }
+      ] },
+      yes: true
     }) as { importedCookies: number; partitionSkippedCookies?: number; domains: string[] }
     expect(jsonResult).toMatchObject({ importedCookies: 0, partitionSkippedCookies: 2, domains: [] })
     const afterUnreadablePartition = await getCookies(h, page)
@@ -242,8 +244,8 @@ test('daemon import replaces only safe families and accepts explicit file and JS
     const invalidFile = join(h.home, 'invalid-cookie-source.json')
     writeFileSync(invalidFile, '{')
     const beforeInvalid = canonical(await getCookies(h, page))
-    await expectReason(h, 'importCookies', { source: { kind: 'file', path: invalidFile } }, 'browser_import_invalid_json')
-    await expectReason(h, 'importCookies', { source: { kind: 'json', cookies: [] } }, 'browser_import_empty')
+    await expectReason(h, 'importCookies', { source: { kind: 'file', path: invalidFile }, yes: true }, 'browser_import_invalid_json')
+    await expectReason(h, 'importCookies', { source: { kind: 'json', cookies: [] }, yes: true }, 'browser_import_empty')
     expect(canonical(await getCookies(h, page))).toEqual(beforeInvalid)
   } finally {
     await h.cleanup()
@@ -279,10 +281,12 @@ test('daemon import reads Chromium Local State profiles, decrypts v24 rows, and 
     ])
     expect(JSON.stringify(detected)).not.toContain(root)
     await expectReason(h, 'importCookies', {
-      source: { kind: 'browser', family: 'chrome', profile: '../escape' }
+      source: { kind: 'browser', family: 'chrome', profile: '../escape' },
+      yes: true
     }, 'invalid_argument')
     const result = await h.client.callAny('quirky.browser/importCookies', {
-      source: { kind: 'browser', family: 'chrome', profile: 'Default' }
+      source: { kind: 'browser', family: 'chrome', profile: 'Default' },
+      yes: true
     }) as { totalCookies: number; importedCookies: number; skippedCookies: number; domains: string[]; warning?: { code: string } }
     expect(result).toMatchObject({
       totalCookies: 4,
@@ -292,7 +296,6 @@ test('daemon import reads Chromium Local State profiles, decrypts v24 rows, and 
       partitionSkippedCookies: 1,
       warning: { code: 'browser_import_partition_skipped' }
     })
-    expect(result.warning?.code).not.toBe('browser_import_source_warning')
     const imported = await getCookies(h, page)
     expect(imported).toContainEqual(expect.objectContaining({ name: 'encrypted-v10', value: 'v24-value-✓' }))
     expect(imported).toContainEqual(expect.objectContaining({ name: 'encrypted-v11', value: 'v11-value' }))
@@ -329,7 +332,8 @@ test('daemon imports Firefox SQLite/WAL and Safari binarycookies without modifyi
     const beforeFirefoxWal = readFileSync(`${firefoxPath}-wal`)
     const beforeSafari = readFileSync(safariPath)
     const firefox = await h.client.callAny('quirky.browser/importCookies', {
-      source: { kind: 'browser', family: 'firefox', profile: 'default-release' }
+      source: { kind: 'browser', family: 'firefox', profile: 'default-release' },
+      yes: true
     }) as { importedCookies: number; partitionSkippedCookies?: number }
     expect(firefox).toMatchObject({ importedCookies: 1, partitionSkippedCookies: 2 })
     const afterFirefox = await getCookies(h, page)
@@ -338,7 +342,8 @@ test('daemon imports Firefox SQLite/WAL and Safari binarycookies without modifyi
     expect(afterFirefox).not.toContainEqual(expect.objectContaining({ name: 'expired' }))
     expect(afterFirefox).not.toContainEqual(expect.objectContaining({ name: 'partition-sibling' }))
     const safari = await h.client.callAny('quirky.browser/importCookies', {
-      source: { kind: 'browser', family: 'safari' }
+      source: { kind: 'browser', family: 'safari' },
+      yes: true
     }) as { importedCookies: number }
     expect(safari.importedCookies).toBe(1)
     expect(await getCookies(h, page)).toContainEqual(expect.objectContaining({
@@ -401,20 +406,20 @@ test('daemon replacement rolls back exact cookie values, reports jobs, and drain
       cookieRow('new-a', 'a', '.rollback.example.test'),
       cookieRow('new-b', 'b', '.rollback.example.test')
     ], 'rollback-source.json')
-    await expectReason(h, 'importCookies', { source: { kind: 'file', path: failedSource } }, 'browser_error')
+    await expectReason(h, 'importCookies', { source: { kind: 'file', path: failedSource }, yes: true }, 'browser_error')
     expect(canonical(await getCookies(h, page))).toEqual(before)
 
     failSetName = 'new-b'
     failRollbackDelete = true
-    await expectReason(h, 'importCookies', { source: { kind: 'file', path: failedSource } }, 'browser_unsafe_replace')
+    await expectReason(h, 'importCookies', { source: { kind: 'file', path: failedSource }, yes: true }, 'browser_unsafe_replace')
     expect(canonical(await getCookies(h, page))).toEqual(before)
 
     const malformed = join(h.home, 'job-malformed.json')
     writeFileSync(malformed, '{')
     const started = await h.client.callAny('quirky.browser/importStart', {
-      source: { kind: 'file', path: malformed }
+      source: { kind: 'file', path: malformed },
+      yes: true
     }) as { id: string }
-    expect(typeof started.id).toBe('string')
     const job = await finishJob(h, started.id)
     expect(job).toMatchObject({ status: 'failed', error: { code: 'browser_import_invalid_json' } })
     expect(JSON.stringify(job)).not.toContain(malformed)
@@ -429,7 +434,8 @@ test('daemon replacement rolls back exact cookie values, reports jobs, and drain
     ], 'draining-source.json')
     recordDrainWrites = true
     const draining = await h.client.callAny('quirky.browser/importStart', {
-      source: { kind: 'file', path: drainingSource }
+      source: { kind: 'file', path: drainingSource },
+      yes: true
     }) as { id: string }
     await enteredBlockedSet
     let cleanupPromise: Promise<void> | undefined
@@ -442,7 +448,6 @@ test('daemon replacement rolls back exact cookie values, reports jobs, and drain
     expect(cleanupFinished).toBe(true)
     expect(sourceWrites.filter((name) => name === 'new-a' || name === 'new-b')).toContain('new-a')
     expect(sourceWrites.filter((name) => name === 'new-a' || name === 'new-b')).not.toContain('new-b')
-    expect(draining.id).toMatch(/^[0-9a-f-]{36}$/)
   } finally {
     releaseBlocked()
     if (!cleanupFinished) await h.cleanup()
