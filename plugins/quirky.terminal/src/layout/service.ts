@@ -26,8 +26,7 @@ const ID_IN_TEXT = /"(?:tab|grp|pane|split)-(\d+)"/g
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
 const isNotFound = (error: unknown) => (error as { code?: number } | null)?.code === RpcErrorCode.NotFound
-const isTabbed = (session: Session) =>
-  session.background !== true && (session.kind === 'terminal' || session.kind === 'structured')
+const isTabbed = (session: Session) => session.background !== true && session.kind === 'terminal'
 
 /** What `createTab` takes beyond the workspace: where the tab goes and what its session runs. */
 export type NewTabSpec = {
@@ -37,6 +36,8 @@ export type NewTabSpec = {
   prompt?: string
   extraArgs?: string
   title?: string
+  model?: string
+  options?: Record<string, string | boolean>
   quickCommand?: string
   activate?: boolean
   revision?: number
@@ -418,7 +419,16 @@ export class LayoutService {
   /** Starts a session in a workspace's worktree (or the floating one) through the session plugin. */
   private async startSession(
     workspaceId: string,
-    spec: { agent: string; prompt?: string; extraArgs?: string; title?: string; command?: string; cwd?: StartCwd }
+    spec: {
+      agent: string
+      prompt?: string
+      extraArgs?: string
+      title?: string
+      command?: string
+      model?: string
+      options?: Record<string, string | boolean>
+      cwd?: StartCwd
+    }
   ): Promise<Session> {
     const create = (cwd: string | undefined) =>
       this.context.call('quirky.session/create', {
@@ -427,6 +437,8 @@ export class LayoutService {
         ...(spec.prompt === undefined ? {} : { prompt: spec.prompt }),
         ...(spec.extraArgs === undefined || spec.extraArgs.trim() === '' ? {} : { extraArgs: spec.extraArgs }),
         ...(spec.title === undefined ? {} : { title: spec.title }),
+        ...(spec.model === undefined ? {} : { model: spec.model }),
+        ...(spec.options === undefined ? {} : { options: spec.options }),
         ...(spec.command === undefined ? {} : { command: spec.command }),
         ...(cwd === undefined ? {} : { cwd })
       }) as Promise<Session>
@@ -705,6 +717,8 @@ export class LayoutService {
       ...(params.prompt === undefined ? {} : { prompt: params.prompt as string }),
       ...(params.extraArgs === undefined ? {} : { extraArgs: params.extraArgs as string }),
       ...(params.title === undefined ? {} : { title: params.title as string }),
+      ...(params.model === undefined ? {} : { model: params.model as string }),
+      ...(params.options === undefined ? {} : { options: params.options as Record<string, string | boolean> }),
       ...(params.quickCommand === undefined ? {} : { quickCommand: params.quickCommand as string }),
       ...(params.activate === undefined ? {} : { activate: params.activate as boolean }),
       ...(params.revision === undefined ? {} : { revision: params.revision as number })
@@ -779,6 +793,9 @@ export class LayoutService {
       agent,
       ...(spec.prompt === undefined ? {} : { prompt: spec.prompt }),
       ...(spec.extraArgs === undefined ? {} : { extraArgs: spec.extraArgs }),
+      ...(title === undefined || title === '' ? {} : { title }),
+      ...(spec.model === undefined ? {} : { model: spec.model }),
+      ...(spec.options === undefined ? {} : { options: spec.options }),
       ...(spec.cwd === undefined ? {} : { cwd: { path: spec.cwd, soft: false } })
     })
     try {

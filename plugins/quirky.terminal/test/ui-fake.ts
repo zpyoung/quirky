@@ -1,5 +1,6 @@
 import { act } from 'react'
 import { RpcError, RpcErrorCode, type QuirkyEvent, type UiLayout, type UiPluginContext } from '@quirky/protocol'
+import { createNativeBrowserCapability } from '../../../packages/ui/src/native-browser'
 
 type Handler = (params: Record<string, any>) => unknown
 
@@ -65,6 +66,7 @@ export function fakeContext(handlers: Record<string, Handler> = {}, settings: Re
 
   const context: UiPluginContext = {
     pluginId: 'quirky.terminal',
+    nativeBrowser: createNativeBrowserCapability(),
     log() {},
     provide(id, implementation) {
       provided.set(id, implementation as (...args: any[]) => any)
@@ -187,6 +189,8 @@ export function paneHandlers(options: { replay?: string; existing?: string[] } =
     'quirky.terminal/attach': () => attachResult({ streamId: ++nextStream, replay: options.replay ?? '' }),
     'quirky.terminal/detach': () => ({ ok: true }),
     'quirky.terminal/write': () => ({ ok: true }),
+    'quirky.session/identity': (params) => ({ sessionId: params.session, processIncarnation: `fixture-${params.session}`, live: true }),
+    'quirky.terminal/userInput': () => ({ ok: true }),
     'quirky.terminal/resize': () => ({ ok: true }),
     'quirky.terminal/pathsExist': (params) => ({ exists: (params.paths as string[]).map((path) => existing.has(path)) }),
     'quirky.terminal/openExternal': () => ({ ok: true }),

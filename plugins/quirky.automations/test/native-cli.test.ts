@@ -99,9 +99,7 @@ function buildEnvironment(scope: ProcessScope, codexBin: string): Record<string,
     'GIT_ASKPASS'
   ]) delete env[key]
 
-  const nodeExecutable = Bun.which('node')
-  if (!nodeExecutable) throw new Error('The existing Codex fixture requires node on PATH')
-  const pathEntries = [codexBin, dirname(nodeExecutable), dirname(process.execPath), '/usr/bin', '/bin', '/usr/sbin', '/sbin']
+  const pathEntries = [codexBin, dirname(process.execPath), '/usr/bin', '/bin', '/usr/sbin', '/sbin']
   env.PATH = [...new Set(pathEntries)].join(':')
   env.HOME = scope.home
   env.QUIRKY_HOME = scope.home
@@ -220,6 +218,9 @@ test('real CLI and daemon automate native Codex runs, reuse, failures, schedulin
     const bin = join(home, 'bin')
     mkdirSync(bin)
     const fixture: CodexAppServerFixture = createCodexAppServerFixture(join(home, 'native'))
+    // Pin only this disposable protocol stand-in to Bun; system Node's ABI is not under test.
+    const protocolScript = readFileSync(fixture.executable, 'utf8')
+    writeFileSync(fixture.executable, `#!${process.execPath}\n${protocolScript.slice(protocolScript.indexOf('\n') + 1)}`, { mode: 0o700 })
     symlinkSync(fixture.executable, join(bin, 'codex'))
 
     const env = buildEnvironment(scope, bin)

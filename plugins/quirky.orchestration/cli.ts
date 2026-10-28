@@ -19,6 +19,7 @@ import type {
   TaskRow,
   WorkerRow,
 } from './src/contracts'
+import { workerCommands } from './src/workers/cli'
 
 type ObjectValue = Record<string, unknown>
 type ResponseGuard<M extends OrchestrationMethod> = (value: unknown) => value is OrchestrationMethodResult<M>
@@ -544,6 +545,7 @@ function keepalive<T>(context: CliContext, timeoutMs: number, operation: () => P
 }
 
 export const commands: CliModule['commands'] = {
+  ...workerCommands,
   'run-create': async (args, context) => {
     const params: ObjectValue = { objective: stringFlag(args, context, 'objective') }
     addCallerAliases(params, args, context)

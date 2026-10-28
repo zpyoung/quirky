@@ -250,6 +250,10 @@ test(
     const { h } = ui
     const first = await ui.firstTab()
     const session = await h.call<{ id: string }>('quirky.session/register', { worktree: 'main', agent: 'claude', kind: 'structured', title: 'Claude (background)' })
+    // Background registration must not steal focus; hosting a structured viewer requires explicit adoption.
+    const beforeAdoption = await layoutOf(h)
+    expect(panesOf(beforeAdoption).some((pane) => pane.session === session.id)).toBe(false)
+    await h.call('quirky.terminal/adoptSession', { session: session.id, group: groupsOf(beforeAdoption)[0]!.id })
     const ws = await ui.waitLayout('the structured session in a tab', (candidate) => panesOf(candidate).some((pane) => pane.session === session.id))
     const tab = tabsOf(ws).find((entry) => leavesOf(entry.root).some((pane) => pane.session === session.id))!
     expect(titleOf(tab)).toBe('Claude (background)')

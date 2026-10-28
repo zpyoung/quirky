@@ -256,9 +256,8 @@
       "deps": [
         "m6-orchestration-core"
       ],
-      "status": "in-progress",
-      "early": true,
-      "lane": 9
+      "status": "done",
+      "early": true
     },
     {
       "id": "m6-heimdall-core",
@@ -585,8 +584,7 @@
       "deps": [
         "sa-browser-agent"
       ],
-      "status": "in-progress",
-      "lane": 4
+      "status": "done"
     },
     {
       "id": "sa-browser-profiles-settings",
@@ -626,9 +624,8 @@
       "deps": [
         "m5-structured-runner"
       ],
-      "status": "in-progress",
-      "early": true,
-      "lane": 2
+      "status": "done",
+      "early": true
     },
     {
       "id": "sa-browser-design-mode",
@@ -682,9 +679,8 @@
       "deps": [
         "m5-loops-core"
       ],
-      "status": "in-progress",
-      "early": true,
-      "lane": 5
+      "status": "done",
+      "early": true
     },
     {
       "id": "m5-loops-ui",
@@ -723,8 +719,9 @@
       "deps": [
         "m6-orchestration-workers"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 2
     },
     {
       "id": "m6-objective-plan",
@@ -831,8 +828,9 @@
       "deps": [
         "sb-mobile-daemon"
       ],
-      "status": "todo",
-      "early": true
+      "status": "in-progress",
+      "early": true,
+      "lane": 5
     },
     {
       "id": "sb-mobile-app-panels",

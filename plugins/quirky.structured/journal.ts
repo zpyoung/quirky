@@ -6,6 +6,7 @@ import type { StructuredLaunchOptions } from './runner'
 
 type Row = { session_id: string; seq: number; role: StructuredRole; text: string; data: string | null; at: number }
 type LaunchOptionsRow = { options_json: string }
+type StoredLaunchOptions = Pick<StructuredLaunchOptions, 'model' | 'effort'>
 export type StructuredSendReceipt = {
   operationId: string
   sessionId: string
@@ -40,7 +41,7 @@ const CREATE_SEND_RECEIPTS_TABLE = `
 `
 
 
-function parseLaunchOptions(json: string): StructuredLaunchOptions {
+function parseLaunchOptions(json: string): StoredLaunchOptions {
   let value: unknown
   try {
     value = JSON.parse(json)
@@ -103,7 +104,7 @@ function createLaunchOptionsTable(): StoreMigration {
 export function journalMigrations(home: string): StoreMigration[] {
   return [
     createAndImportV1(home),
-    createLaunchOptionsTable(),
+    (store) => store.exec(CREATE_LAUNCH_OPTIONS_TABLE),
     (store) => store.exec(CREATE_SEND_RECEIPTS_TABLE)
   ]
 }
@@ -113,17 +114,21 @@ export class Journal {
   constructor(private readonly store: PluginStore) {}
 
   /** Stores the exact native model and effort selection applied to a structured session. */
-  setLaunchOptions(sessionId: string, options: StructuredLaunchOptions): void {
+  setLaunchOptions(sessionId: string, options: StoredLaunchOptions): void {
+    const stored: StoredLaunchOptions = {
+      ...(options.model === undefined ? {} : { model: options.model }),
+      ...(options.effort === undefined ? {} : { effort: options.effort })
+    }
     this.store.run(
       `INSERT INTO structured_launch_options (session_id, options_json) VALUES (?, ?)
        ON CONFLICT(session_id) DO UPDATE SET options_json = excluded.options_json`,
       sessionId,
-      JSON.stringify(options)
+      JSON.stringify(stored)
     )
   }
 
   /** Returns null when the session predates the private launch-options migration. */
-  getLaunchOptions(sessionId: string): StructuredLaunchOptions | null {
+  getLaunchOptions(sessionId: string): StoredLaunchOptions | null {
     const row = this.store.get<LaunchOptionsRow>(
       'SELECT options_json FROM structured_launch_options WHERE session_id = ?',
       sessionId
@@ -209,13 +214,33 @@ export class Journal {
     return message
   }
 
-  /** The session's messages with `seq` above `afterSeq`, oldest first. */
-  list(sessionId: string, afterSeq = 0): StructuredMessage[] {
-    const rows = this.store.all<Row>(
-      'SELECT session_id, seq, role, text, data, at FROM structured_messages WHERE session_id = ? AND seq > ? ORDER BY seq',
-      sessionId,
-      afterSeq
-    )
+  /** The session's messages with `seq` above `afterSeq`, oldest first unless a bounded tail is requested. */
+  list(sessionId: string, afterSeq = 0, limit?: number, tail = false): StructuredMessage[] {
+    let rows: Row[]
+    if (limit !== undefined && tail) {
+      rows = this.store.all<Row>(
+        `SELECT session_id, seq, role, text, data, at FROM (
+           SELECT session_id, seq, role, text, data, at FROM structured_messages
+           WHERE session_id = ? AND seq > ? ORDER BY seq DESC LIMIT ?
+         ) ORDER BY seq`,
+        sessionId,
+        afterSeq,
+        limit
+      )
+    } else if (limit !== undefined) {
+      rows = this.store.all<Row>(
+        'SELECT session_id, seq, role, text, data, at FROM structured_messages WHERE session_id = ? AND seq > ? ORDER BY seq LIMIT ?',
+        sessionId,
+        afterSeq,
+        limit
+      )
+    } else {
+      rows = this.store.all<Row>(
+        'SELECT session_id, seq, role, text, data, at FROM structured_messages WHERE session_id = ? AND seq > ? ORDER BY seq',
+        sessionId,
+        afterSeq
+      )
+    }
     return rows.map((row) => {
       const message: StructuredMessage = { sessionId: row.session_id, seq: row.seq, role: row.role, text: row.text, at: row.at }
       if (row.data !== null) message.data = JSON.parse(row.data)

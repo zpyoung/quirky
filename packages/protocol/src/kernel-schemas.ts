@@ -156,9 +156,9 @@ const uiMenuItem = object(
   {
     id: string(),
     plugin: string(),
-    menu: { type: 'string', enum: ['quirky.terminal/pane'] },
+    menu: { type: 'string', enum: ['quirky.terminal/pane', 'quirky.terminal/tab'] },
     title: string(),
-    command: string('A full command ID, run with `{ session }`.'),
+    command: string('A full command ID; receives pane session or new-tab worktree/workspace/group context.'),
     when: object({ agent: { type: 'string', enum: ['any'] } }),
     after: { type: 'string', enum: ['quick-commands'] }
   },

@@ -1,5 +1,6 @@
 import { expect } from 'bun:test'
 import type { GitDiff, GitStatus, QuirkyEvent, UiLayout, UiPluginContext } from '@quirky/protocol'
+import { createNativeBrowserCapability } from '../../../../packages/ui/src/native-browser'
 
 // the test file registers happy-dom before importing this module
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -67,6 +68,7 @@ export function fakeContext(layout: UiLayout = layoutFor(null)): Fake {
     },
     context: {
       pluginId: 'quirky.git',
+      nativeBrowser: createNativeBrowserCapability(),
       log() {},
       provide: (id, implementation) => void fake.provided.set(id, implementation),
       async call(method, params = {}) {

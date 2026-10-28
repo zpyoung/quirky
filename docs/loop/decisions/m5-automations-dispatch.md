@@ -319,5 +319,60 @@
 - **Revisit if:** the public plugin lifecycle replaces activating with another live state
 - **Source:** assumed — autonomous
 
+## D30: Retry landing only after fresh composed-runtime proof
+- **Question:** Does the resolved text still execute both the background and landed orchestration seams?
+- **Options:** trust marker removal; exercise the composed ownership/store/structured/native paths and compile the merge
+- **Chose:** on c49562d91f3407f98ee52c2d22fb90b3a301b603 run checks ownership, session records, structured background and permanent native CLI acceptance together, then frozen-install/typecheck. Result23pass0fail99assertions in78.46seconds; typecheck exited0 with594installs608packages unchanged. Total143.52seconds. No broad suite or final review round was restarted; authoritative land owns the whole merge-result gate.
+- **Why:** This directly covers both migration ordering and background creation after native lease changes, plus legitimate activating-owner prechecks and retained inactive-owner cancellation. Unlanded BG-only temporary profiles are not a shipped schema: peers were told to use fresh disposable homes when restarting that old smoke build on the canonical migration9/10 source.
+- **Evidence:** composed command output; `.orca/loops/omp-until-done-deaecbdd/dispatch-recovery-evidence.tar.gz`, SHA256 `640d574a8d0e66ff00d387098a4ec4b98207bfad17cdf56f42b1371d380c65d5`; recovery.diff and recovery-observed.json; accepted lane6 recovery hash messagee96402df-4709-4d1a-a422-fd0641afcde4
+- **Reversibility:** easy
+- **Confidence:** high for exercised paths; final model review remains explicitly unperformed
+- **Revisit if:** authoritative merge-result verification finds a new failure
+- **Source:** assumed — autonomous
+
+## D31: Compose loop evidence and honor canonical terminal-only auto-adoption
+- **Question:** The second land waited behind integration, then stopped before tests on new Codex/reconciliation conflicts
+- **Options:** drop one event family or restore ordinary structured auto-tabs; combine independent evidence cases and follow landed loops D19
+- **Chose:** retain both thread/tokenUsage/updated per-turn evidence and account/rateLimits/updated raw reset evidence. Automatic workspace discovery/adoption accepts only terminal sessions and excludes background true. Existing explicit bindings remain intact. Amend the spec and background regression so absent/false-flag structured sessions also remain unbound and do not steal the active tab.
+- **Why:** Loops D19 is locked to the architecture's structured-background direction and supersedes this item's earlier assumed preservation of ordinary structured auto-adoption. Both Codex event cases are additive; reset times and USD remain provider evidence, never inferred. Optional bounded journal reads preserve the unbounded call shape used by the automation observer.
+- **Evidence:** docs/loop/decisions/m5-loops-core.md D2,D9,D13-D15,D19-D20,D24-D25; read-only LoopCatchup audit; two resolved conflict blocks; amended logic.md and background API regression
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** an explicit future structured viewer defines a separate opt-in binding contract
+- **Source:** supersedes m5-automations-dispatch D15
+
+## D32: Preserve prepared structured sessions owned by an activating creator
+- **Question:** Does the newly merged creator-cleanup filter treat a legitimate startup creator as unavailable?
+- **Options:** keep active-only cleanup; use the same active-or-activating live policy as checks
+- **Chose:** retain both live states, while failed/inactive/disabled creators still stop their sessions and asks. A new actual daemon/plugin-host regression prepares a deferred background session during owner activation, activates a different lazy plugin, then proves the prepared session remains live and journaled.
+- **Why:** The focused regression failed with status exited under the incoming active-only filter and passed after the one predicate change. The injected runner models an idle connection without a provider turn; a parent fixture guard that rejected every connection start was corrected to allow undefined-prompt idle startup while still rejecting unexpected turns. This is not a production fallback or a paid-model invocation.
+- **Evidence:** structured/test/startup-owner.test.ts red exited, then1pass4assertions; composed startup/Codex/native-limit/background/layout command43pass0fail177assertions5.61s followed by frozen-install/typecheck0 (595installs609packages unchanged), total32.08s
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the kernel changes which lifecycle states grant a valid creating context
+- **Source:** assumed — autonomous
+
+## D33: Preserve badge schema and transient-token security during the third recovery
+- **Question:** Another integration tip added presets, workers and browser-pane contracts while the item was landing
+- **Options:** restore an old Session schema/launch snapshot; compose the public metadata and canonical security changes
+- **Chose:** retain background projection and writes together with withoutSessionToken on launch insert/update/readback. Preserve the canonical single setBadge contribution, name/unread/client-role badge fields and changed-event metadata; add background to its compact Session result schema. Keep canonical pointer9/background10 order. Browser Native/Watch modes do not add a SessionKind.
+- **Why:** The incoming conflict removed an older duplicate badge block, not the background capability. A structural inspection found15unique method IDs and one compact Session result missing background; that property was restored without reintroducing duplicate methods. Incoming structured-runner Progress is historical evidence, not clearance for this merge.
+- **Evidence:** ThirdCatchup read m5-loops-presets D1-D5,D9,D11,D14,D18-D19; m6-orchestration-workers D3-D7,D12,D14-D16,D18-D21,D26-D27; sa-browser-pane D2,D4,D8,D13,D21,D23-D24,D26-D30; structured-runner Progress delta only; records/schema conflict resolutions
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** a later Session result adds metadata without declaring it
+- **Source:** assumed — autonomous
+
+## D34: Pin only the disposable native-protocol stand-in to Bun
+- **Question:** Lane6 reported system Node's missing libllhttp9.3 dependency while9.4 was installed
+- **Options:** change Homebrew/production fallback; let the test depend on that unrelated ABI; explicitly select the known test interpreter
+- **Chose:** the permanent native CLI test rewrites only its generated stand-in interpreter to the running Bun before execution and removes its system-Node PATH prerequisite. Production CLI resolution, startup failure and close/diagnostic behavior are unchanged. No confirmation rerun of the reported ABI failure and no package-manager mutation.
+- **Why:** This test proves the app-server protocol, not system Node installation. Fresh third-recovery records/sessions/background/startup/native acceptance passed126/0/435assertions85.30s, followed by frozen-install/typecheck0 (595installs609packages unchanged), total116.70s.
+- **Evidence:** user-reported Node ABI diagnosis; native-cli.test.ts disposable fixture setup; third recovery five-file command output
+- **Reversibility:** easy
+- **Confidence:** high for the exercised protocol and storage paths
+- **Revisit if:** the stand-in starts requiring a Node-specific runtime feature
+- **Source:** assumed — autonomous
+
 ## Progress
-First land stopped before tests; mandatory recovery now composes both additive conflicts and preserves orchestration's landed migration order. Incoming m6 decision log read; no binding product conflict. Startup check-owner regression fixed without changing inactive-owner cancellation. Before retry, run focused ownership/background/migration/native tests and typecheck on this merged source, then commit/detach and authoritative queue land immediately. The single constrained-flow follow-up is already registered; do not add it again. Night-mode skips the still-unstarted final model review, without claiming clearance.
+Third recovery is verified: token-redacted Session snapshots and background metadata compose, the canonical badge method remains unique and declares background, and migration order stays pointer9/background10. Fresh records/sessions/background/startup/native acceptance126/0/435assertions and frozen-install/typecheck0 passed. All workers returned. Commit/detach and retry authoritative land immediately; one follow-up only, no unperformed model-review clearance.

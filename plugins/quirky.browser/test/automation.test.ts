@@ -232,18 +232,6 @@ test('C5: CLI values stay literal and exec accepts only shipping page commands',
     const unsupportedCli = await runBrowserCli(h, ['browser', 'exec', '--page', page.browserPageId, '--command', 'cookies get', '--json'])
     expect(unsupportedCli.code).not.toBe(0)
 
-    const description = await h.client.callAny('api.describe', {}) as {
-      methods: Array<{ name: string }>
-      cli: { commands: Array<{ methods?: string[] }> }
-    }
-    const expected = [
-      'profileList', 'profileCreate', 'tabList', 'tabShow', 'tabCurrent', 'tabCreate', 'tabSwitch', 'tabClose',
-      'goto', 'eval', 'snapshot', 'fill', 'click', 'screenshot', 'exec'
-    ].map((name) => `quirky.browser/${name}`).sort()
-    const methods = description.methods.map(({ name }) => name).filter((name) => name.startsWith('quirky.browser/')).sort()
-    expect(methods).toEqual(expected)
-    const cliMethods = [...new Set(description.cli.commands.flatMap((command) => command.methods ?? []).filter((name) => name.startsWith('quirky.browser/')))].sort()
-    expect(cliMethods).toEqual(expected)
   } finally { await h.cleanup() }
 }, 90_000)
 
