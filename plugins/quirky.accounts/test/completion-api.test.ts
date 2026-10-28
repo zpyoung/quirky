@@ -1,14 +1,14 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test'
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
-import type { Session } from '@quirky/protocol'
-import type { AccountState, SessionHomeResult } from '../src/types'
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { RpcErrorCode, type Session } from '@quirky/protocol'
+import type { AccountState, PendingLogin, SessionHomeResult } from '../src/types'
 import type { UsageState } from '../src/usage/types'
 import type { StructuredRunnerFactory } from '../../quirky.structured/runner'
 import { isolateGitConfig, makeRepo } from '../../quirky.repo/test/git-fixtures'
 import { cleanupAll, defaultHome, startAccounts, type AccountsHarness } from './support/index'
 import { interceptProviderFetch, restoreProviderFetchFixtures } from './acceptance-fixtures'
-import { addManagedAccount, call, createClaudeSession, sessionPlugins } from './remaining-support'
+import { addManagedAccount, call, createClaudeSession, finishLogin, sessionPlugins } from './remaining-support'
 
 setDefaultTimeout(60_000)
 
@@ -70,6 +70,134 @@ function codexPrepareArgs(h: AccountsHarness, sessionId: string) {
       codex: { value: null, source: 'absent' }
     }
   }
+}
+
+function nativeConversationFixture(provider: 'claude' | 'codex', home: string, cwd: string): { path: string; contents: string } {
+  if (provider === 'claude') {
+    const sessionId = 'a61103f9-879c-4bb6-b40a-9214dbe64733'
+    const userId = `${sessionId}-user`
+    const assistantId = `${sessionId}-assistant`
+    const project = `-${cwd.split(/[\\/]/).filter(Boolean).join('-')}`
+    const path = join(home, 'projects', project, `${sessionId}.jsonl`)
+    const contents = [
+      JSON.stringify({
+        type: 'user',
+        uuid: userId,
+        parentUuid: null,
+        isSidechain: false,
+        userType: 'external',
+        cwd,
+        sessionId,
+        version: '2.1.80',
+        message: { role: 'user', content: 'The lantern repair notes are filed in the green ledger.' },
+        timestamp: '2026-10-28T10:00:00.000Z'
+      }),
+      JSON.stringify({
+        type: 'assistant',
+        uuid: assistantId,
+        parentUuid: userId,
+        isSidechain: false,
+        userType: 'external',
+        cwd,
+        sessionId,
+        version: '2.1.80',
+        message: {
+          id: assistantId,
+          type: 'message',
+          role: 'assistant',
+          model: 'claude-sonnet-4-5-20250929',
+          content: [{ type: 'text', text: 'I have recorded the maintenance note for later.' }],
+          stop_reason: 'end_turn',
+          usage: { input_tokens: 42, output_tokens: 12 }
+        },
+        timestamp: '2026-10-28T10:00:01.000Z'
+      })
+    ].join('\n') + '\n'
+    return { path, contents }
+  }
+
+  const sessionId = 'd3ff7c83-402b-4c05-9ebd-2f385c0db2dc'
+  const path = join(home, 'sessions', '2026', '10', '28', `rollout-2026-10-28T10-00-00-${sessionId}.jsonl`)
+  const contents = [
+    JSON.stringify({ type: 'session_meta', payload: { id: sessionId, cwd } }),
+    JSON.stringify({
+      type: 'response_item',
+      payload: {
+        type: 'message',
+        role: 'user',
+        content: [{ type: 'input_text', text: 'The lantern repair notes are filed in the green ledger.' }]
+      }
+    }),
+    JSON.stringify({
+      type: 'response_item',
+      payload: {
+        type: 'message',
+        role: 'assistant',
+        content: [{ type: 'output_text', text: 'I have recorded the maintenance note for later.' }]
+      }
+    })
+  ].join('\n') + '\n'
+  return { path, contents }
+}
+
+async function assertReauthenticationPreservesConversation(provider: 'claude' | 'codex'): Promise<void> {
+  const h = await startAccounts()
+  const email = `reauth-${provider}@fixture.test`
+  const account = await addManagedAccount(h, provider, email)
+  const accountHome = h.managedHome(provider, account.id)
+  await call(h, 'quirky.accounts/select', { provider, accountId: account.id })
+
+  const sessionId = `reauth-identity-${provider}`
+  await call(h, 'quirky.accounts/prepare', {
+    agent: provider,
+    sessionId,
+    worktreeId: `worktree-reauth-${provider}`,
+    cwd: h.userHome,
+    homeOverrides: {
+      claude: { value: null, source: 'absent' },
+      codex: { value: null, source: 'absent' }
+    }
+  })
+  const savedSessionHome = { provider, home: accountHome }
+  expect(await call<SessionHomeResult>(h, 'quirky.accounts/sessionHome', { session: sessionId })).toEqual(savedSessionHome)
+
+  const conversation = nativeConversationFixture(provider, accountHome, h.userHome)
+  mkdirSync(dirname(conversation.path), { recursive: true })
+  writeFileSync(conversation.path, conversation.contents)
+  const conversationBytes = readFileSync(conversation.path)
+
+  const authPath = join(accountHome, provider === 'claude' ? '.credentials.json' : 'auth.json')
+  rmSync(authPath)
+  await call(h, 'quirky.accounts/select', { provider, accountId: null })
+  const refused = await h.client.callAny('quirky.accounts/select', { provider, accountId: account.id })
+    .then(() => null, (error: unknown) => error as { code?: number })
+  expect(refused).toMatchObject({ code: RpcErrorCode.Conflict })
+
+  const identity = { id: account.id, provider, email: account.email, label: account.label }
+  let state = await call<AccountState>(h, 'quirky.accounts/list')
+  expect(state.accounts).toContainEqual(expect.objectContaining({ ...identity, needsSignIn: true }))
+
+  h.setLoginMode('failure')
+  const failedLogin = await call<PendingLogin>(h, 'quirky.accounts/beginLogin', { provider, accountId: account.id })
+  expect((await finishLogin(h, failedLogin)).status).toBe('error')
+  expect(readFileSync(conversation.path)).toEqual(conversationBytes)
+  expect(h.managedHome(provider, account.id)).toBe(accountHome)
+  expect(await call<SessionHomeResult>(h, 'quirky.accounts/sessionHome', { session: sessionId })).toEqual(savedSessionHome)
+  state = await call<AccountState>(h, 'quirky.accounts/list')
+  expect(state.accounts).toContainEqual(expect.objectContaining({ ...identity, needsSignIn: true }))
+
+  h.setLoginMode('complete', email)
+  const successfulLogin = await call<PendingLogin>(h, 'quirky.accounts/beginLogin', { provider, accountId: account.id })
+  const recovered = await finishLogin(h, successfulLogin)
+  expect(recovered.status).toBe('complete')
+  expect(recovered.result).toMatchObject(identity)
+  expect(readFileSync(conversation.path)).toEqual(conversationBytes)
+  expect(h.managedHome(provider, account.id)).toBe(accountHome)
+  expect(await call<SessionHomeResult>(h, 'quirky.accounts/sessionHome', { session: sessionId })).toEqual(savedSessionHome)
+  state = await call<AccountState>(h, 'quirky.accounts/list')
+  expect(state.accounts).toContainEqual(expect.objectContaining({ ...identity, needsSignIn: false }))
+  expect((await call<AccountState>(h, 'quirky.accounts/select', { provider, accountId: account.id })).active[provider])
+    .toBe(account.id)
 }
 
 describe('quirky.accounts completion API acceptance', () => {
@@ -168,6 +296,73 @@ describe('quirky.accounts completion API acceptance', () => {
       await fixture.restore()
     }
   })
+  test('stale Codex account and offer scopes return public conflicts without provider redemption', async () => {
+    const h = await startAccounts()
+    await addManagedAccount(h, 'codex', 'stale-account-a@fixture.test')
+    await call(h, 'quirky.accounts/setPreferences', { skipCodexResetConfirm: true })
+    let availableCount = 1
+    const redemptionRequests: string[] = []
+    const fixture = interceptProviderFetch((url, init) => {
+      if (url.hostname !== 'chatgpt.com') return null
+      if (url.pathname === '/backend-api/wham/usage') return codexUsageResponse(availableCount)
+      if (url.pathname === '/backend-api/wham/rate-limit-reset-credits/consume') {
+        redemptionRequests.push(String(init?.body ?? ''))
+        return Response.json({ code: 'reset' })
+      }
+      return null
+    })
+    try {
+      const initial = codexSnapshot(await call<UsageState>(h, 'quirky.accounts/refresh', { provider: 'codex', force: true }))
+      const originalScope = initial.rateLimitResetCredits?.expectedScope
+      if (!originalScope) throw new Error('Codex usage did not include an original reset scope')
+
+      const accountB = await addManagedAccount(h, 'codex', 'stale-account-b@fixture.test')
+      expect((await call<AccountState>(h, 'quirky.accounts/list')).active.codex).toBe(accountB.id)
+      const accountBUsage = codexSnapshot(await call<UsageState>(h, 'quirky.accounts/refresh', { provider: 'codex', force: true }))
+      const accountBScope = accountBUsage.rateLimitResetCredits?.expectedScope
+      if (!accountBScope) throw new Error('Codex usage did not include the selected account reset scope')
+      expect(accountBScope.accountId).toBe(accountB.id)
+
+      const staleAccount = await h.client.callAny('quirky.accounts/consumeResetCredit', {
+        idempotencyKey: 'accounts-completion-stale-account-conflict',
+        expectedScope: originalScope
+      }).then(() => null, (error: unknown) => error as { code?: number; message?: string })
+      expect(staleAccount).toMatchObject({
+        code: RpcErrorCode.Conflict,
+        message: 'Codex reset offer changed; refresh usage and confirm again'
+      })
+
+      const migratedRequest = await h.client.callAny('quirky.accounts/consumeResetCredit', {
+        idempotencyKey: 'accounts-completion-stale-account-conflict',
+        expectedScope: accountBScope
+      }).then(() => null, (error: unknown) => error as { code?: number; message?: string })
+      expect(migratedRequest).toMatchObject({
+        code: RpcErrorCode.Conflict,
+        message: 'Codex reset idempotency key is already bound to another offer'
+      })
+
+      availableCount = 0
+      const changedOffer = codexSnapshot(await call<UsageState>(h, 'quirky.accounts/refresh', { provider: 'codex', force: true }))
+      const changedOfferScope = changedOffer.rateLimitResetCredits?.expectedScope
+      if (!changedOfferScope) throw new Error('Codex usage did not include the changed reset offer scope')
+      expect(changedOfferScope.accountId).toBe(accountBScope.accountId)
+      expect(changedOfferScope.accountRevision).toBe(accountBScope.accountRevision)
+      expect(changedOfferScope.offerRevision).not.toBe(accountBScope.offerRevision)
+
+      const staleOffer = await h.client.callAny('quirky.accounts/consumeResetCredit', {
+        idempotencyKey: 'accounts-completion-stale-offer-conflict',
+        expectedScope: accountBScope
+      }).then(() => null, (error: unknown) => error as { code?: number; message?: string })
+      expect(staleOffer).toMatchObject({
+        code: RpcErrorCode.Conflict,
+        message: 'Codex reset offer changed; refresh usage and confirm again'
+      })
+      expect(redemptionRequests).toEqual([])
+    } finally {
+      await fixture.restore()
+    }
+  })
+
 
   test('an unknown Codex reset outcome retries and replays the same redemption identity', async () => {
     const h = await startAccounts()
@@ -229,6 +424,14 @@ describe('quirky.accounts completion API acceptance', () => {
     const restoredState = await call<AccountState>(h, 'quirky.accounts/list')
     expect(restoredState.configWarnings.some((item) => item.accountId === account.id)).toBe(false)
     expect(readFileSync(managedConfig, 'utf8')).toContain('model = "gpt-5.2"')
+  })
+
+  test('Claude reauthentication failure and success preserve native conversation bytes and account identity', async () => {
+    await assertReauthenticationPreservesConversation('claude')
+  })
+
+  test('Codex reauthentication failure and success preserve native conversation bytes and account identity', async () => {
+    await assertReauthenticationPreservesConversation('codex')
   })
 
   test('structured sessions keep their recorded account and cannot be offered as terminal restarts', async () => {

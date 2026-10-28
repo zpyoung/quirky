@@ -186,7 +186,7 @@ function AccountSwitcher({ store, provider, state, usage }: { store: AccountsUiS
         const active = account.id === selectedId
         const accountUsage = active
           ? usage?.providers.find((item) => item.provider === provider && item.accountId === account.id)
-          : usage?.inactive[account.id]
+          : usage?.inactive[`${provider}:${account.id}`]
         return <div className="account-row" key={account.id}>
           <div className="account-row-main"><strong>{account.label}</strong><small>{[account.email, account.organization, account.lastAuthenticatedAt ? `Signed in ${new Date(account.lastAuthenticatedAt).toLocaleDateString()}` : null].filter(Boolean).join(' · ') || 'Managed account'}</small>{account.needsSignIn && <small className="status-error">Sign in again to use this account.</small>}<InactiveUsage snapshot={accountUsage} direction={state?.preferences.direction ?? 'used'} active={active} /></div>
           <div className="account-actions">{active && <span className="badge active">Active</span>}{account.needsSignIn && <span className="badge warning">Needs sign-in</span>}<button type="button" aria-label={`Select ${ProviderName} account ${account.label}`} disabled={!state || account.needsSignIn || active} onClick={() => void store.selectAccount(provider, account.id)}>{active ? 'Active' : account.needsSignIn ? 'Needs sign-in' : 'Select'}</button></div>

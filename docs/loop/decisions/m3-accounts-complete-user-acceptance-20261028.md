@@ -84,7 +84,7 @@ All three component clones lacked the same parent-only .serena entries; workers 
 - **Options:** account/ID echoes; actual daemon/PTY native-format transcripts with isolated external CLIs
 - **Chose:** real daemon, transport, PTY and production AccountsUiStore; fake only external provider CLI/quota/security and one explicit Cancel transport-delivery failure
 - **Why:** Codex A→B→remove-A→C read accumulated A/B user messages in C, appended continuation and rendered A/B/C identities after A's home vanished. A separate real native pending login retained its pending state after injected transport failure, resumed status reads and projected the completed account into the renderer store. This is not a browser/native OS pass.
-- **Evidence:** codex-smoke result passed3.26s, all eight content/identity/home booleans true; cancellation smoke passed2.14s including teardown, actualDaemonNativeLoginCompleted/failedCancelTransportRetainedPending/statusPollingResumed/completionReachedRendererAccountState=true. Both owned smoke services exited0 after explicit stop.
+- **Evidence:** codex-smoke result passed3.26s, all seven content/identity/home booleans true; cancellation smoke passed2.14s including teardown, actualDaemonNativeLoginCompleted/failedCancelTransportRetainedPending/statusPollingResumed/completionReachedRendererAccountState=true. Both owned smoke services exited0 after explicit stop.
 - **Reversibility:** easy
 - **Confidence:** high for named runtime boundaries only
 - **Revisit if:** provider native formats or public resume contract changes
@@ -103,5 +103,55 @@ Runtime fixture repairs were not product changes: match current main.js/vendor a
 - **Revisit if:** merged repaired source still fails
 - **Source:** locked by operator coordination
 
+## D10: Bound final review clearance to the actual source and valid dispatches
+- **Question:** What assurance did the single final review round produce?
+- **Options:** infer approval from empty or invalid attempts; preserve valid machine verdicts and operational limitations separately
+- **Chose:** C/S/X final Gemini promote/refute and mechanical deep gates each PASS, zero findings, suppressed, advisory or contested records; Accounts code/tests/README only at4624dd97..e0ac29f2
+- **Why:** the shared exact four-file remote prepass passed25.093s without flakes. Author decision-log reasoning was withheld from the bounded model artifact. Empty-claims mechanical excerpts unexpectedly fell back to the full target; contaminated refutes were discarded and replaced with actual fresh Accounts-only dispatches. C's final grants exclude bash; final source-only stages add no reproduction evidence.
+- **Evidence:** review/{C,S,X}/{gate,manifest}.json; C/protocol-events.json; S/protocol-limitations.json; X/scope-and-limitations.json; actual prompts/raw replies/stderr
+- **Reversibility:** easy
+- **Confidence:** high for the recorded bounded machine verdict, not a completeness guarantee
+- **Revisit if:** a changed source seam or runtime scenario fails
+- **Source:** assumed — autonomous
+
+Invalidated reviewers attempted prohibited commands despite prompts: S ran `bun test plugins/quirky.accounts/test/completion-api.test.ts`; X added the inactive-test filter; C invoked `npm run test` and later attempted a guarded single-file suite. Individual test outputs/exits and historical descendant cleanup were not captured, so none is verification evidence. C's latter shell guard was present, not proof the command executed. Parent's source check found no diff from the frozen source after the first incidents; a later PID/cwd snapshot found no matching test/suite command owned by lane11, while unrelated lanes' commands were left untouched. The final valid review attempts and the unauthorized attempts remain separately archived; absent output is never clearance.
+
+## D11: Repair two defects exposed by genuine UI acceptance
+- **Question:** Why did inactive account meters stay empty and stale reset dialogs offer only generic Retry?
+- **Options:** click nonexistent row expanders; loosen scope fences or error matching; repair the producer/consumer contracts
+- **Chose:** desktop inactive lookup uses `provider:accountId`, matching the daemon and mobile; four reset authority errors use public PluginContext Conflict errors, leaving provider-attempt errors and durable ledger ordering unchanged
+- **Why:** real expanded Claude/Codex choices stayed placeholders although the daemon cached composite keys. The mounted fixture had bare keys, masking the defect. Correcting the fixture first produced22pass/1fail remotely; the lookup repair passed. Plain reset authority Errors were wrapped/prefixed by the dispatcher as internal errors, breaking the existing exact safe-message classifier; typed public conflicts preserve both authority and actionable refresh guidance.
+- **Evidence:** presentation run20261028T220631-5ca5 obs6/19; switch/reset run20261028T220355-cbe0 obs65/72; Usage.tsx189; usage/index.ts451/462/469/477; new public Conflict/no-redemption/key-binding regressions. Corrected UI+API two-file remote gate passed16.29s; final usage/authority/UI/API four-file remote gate passed27.27s without flakes.
+- **Reversibility:** easy
+- **Confidence:** high for source/public-API proof; fresh guarded UI repair observations recorded separately
+- **Revisit if:** an inactive consumer uses a different key contract or a reset error loses its public Conflict type
+- **Source:** assumed — autonomous
+
+This is the one accepted actual-UI-finding fix batch after the bounded review, followed by tests/build rather than another review round. Two additional public-API tests preserve nonempty native Claude/Codex conversation bytes, the exact managed home and saved identity through Needs-sign-in refusal, failed reauth and successful recovery. They supplement, not relabel, the lifecycle report's partial history verdict. No tautological nonempty check or incidental error-wording pin is retained in those reauth tests.
+
+## D12: Retain exact browser evidence and continue automatic worker cutoffs
+- **Question:** Can automatic worker wrap notices or a driver-refused terminal establish completed acceptance?
+- **Options:** call partial runs complete; silently drop remaining flows; preserve partial reports and use fresh bounded verifiers
+- **Chose:** retain every original report and continue remaining reachable scenarios with fresh small tasks; native opacity/OS-focus stays pending
+- **Why:** the first presentation and switch/reset workers received automatic child wrap notices, not a parent/user scope reduction. Their unfinished provider errors, inactive rows, queued supersession and unknown-outcome retry remain active acceptance obligations. Lifecycle browser is closed and its private daemon stopped. A kept ended switch/reset browser was explicitly closed under the operator's cleanup instruction, without changing its report.
+- **Evidence:** lifecycle20261028T220000-eb53: eight goals pass and two reauth-history goals partial; presentation215954-66ee/220443-7ad2/220631-5ca5 preferences pass across two same-home restarts, all details opened and three credential provider save/clear sequences observed; switching220355-cbe0 Ask/Always/Never and true old Codex Keep/resumed B prior contents observed, supersession blocked and retry unstarted. Fresh parent ZCode223128-8f43 passed valid7d25%/30d40% with plan/source; browser and daemon closed.
+- **Reversibility:** easy
+- **Confidence:** high for named observations only
+- **Revisit if:** final reports or screenshots contradict the current acceptance map
+- **Source:** locked by the full inherited acceptance contract
+
+The initial ZCode external fixture supplied `usage` as consumed rather than total and omitted `currentValue`. Its error was truthful, not a product bug. The corrected isolated external fixture produced both actual meters through visible Refresh/Usage/ZCode actions. No production quota mapper was changed.
+
+## D13: Run all subsequent tests remotely and close finished surfaces
+- **Question:** How does the overload ruling change verification?
+- **Options:** continue direct local single-file tests; route every test through the canonical suite runner
+- **Chose:** `bun scripts/suite.ts <file-or-dir>` for every later test, including single files and scripts; only the runner's named macOS exceptions/native packaging remain local
+- **Why:** explicit operator instruction names Mac load260 and idle remote capacity. Already-completed local checks predate that ruling. Guarded web flows remain actual user-surface checks, with browsers and fixture services closed immediately when finished.
+- **Evidence:** operator interjection; scripts/test-on-macos.txt; subsequent single-file red and two/four-file green remote receipts; stopped smoke/lifecycle/ZCode service receipts
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** operator changes the execution policy
+- **Source:** locked by operator remote-only verification instruction
+
 ## Progress
-Both scoped production defects integrated; local targeted gates, typecheck/build and actual native-content/cancellation smokes have receipts. Three isolated guarded UI campaigns are running on independent real daemon/PTY homes: presentation, lifecycle, and switching/reset. Broader affected suite still running; scripts failure matches an already-landed owner repair awaiting the sole catch-up. Next: finish every reachable UI flow, retain driver/native limits, complete one bounded review/fix batch, merge current roadmap once and read incoming decisions, rerun checks, stop all owned services and canonical land. No full UI/native or broad-suite pass claimed.
+Initial fixes, one bounded source review and one genuine-UI defect fix batch are complete, with fresh remote four-file gate green. Fresh bounded verifiers are finishing inactive/error/read-only, queued supersession and reset retry/actionable stale-scope observations; opacity-refused keyboard/native handoffs stay explicit. Next: commit the accepted fix batch, catch up current roadmap once (Ask/scripts repairs landed), read incoming decisions, run final remote Accounts/scripts and typecheck/build, finish/close the remaining browser/daemon surfaces, retain evidence and canonical land. No broad-suite or native pass claimed.

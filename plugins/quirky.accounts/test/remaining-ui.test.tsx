@@ -338,8 +338,8 @@ function makeAllProviderUsage(state: AccountState): UsageFixture {
   return {
     providers,
     inactive: {
-      'claude-b': makeProviderSnapshot('claude', 'claude-b', 91, 'inactive-claude-window'),
-      'codex-b': makeProviderSnapshot('codex', 'codex-b', 92, 'inactive-codex-window')
+      'claude:claude-b': makeProviderSnapshot('claude', 'claude-b', 91, 'inactive-claude-window'),
+      'codex:codex-b': makeProviderSnapshot('codex', 'codex-b', 92, 'inactive-codex-window')
     },
     updatedAt: 10
   }
