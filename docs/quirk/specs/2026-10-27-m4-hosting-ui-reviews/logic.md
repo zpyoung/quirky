@@ -7,6 +7,18 @@ Status: approved autonomously under canonical LOOP.md night mode. One logic spec
 
 **Amendments:** 2026-10-27: initial composite-scope specification.
 
+**Amendments:** 2026-10-27: canonical PR conversation/assignee primitives are added to hosting, not faked through Project routes. ReviewTarget/open accepts optional prRepo, preserved through every read and mutation; same-number origin/upstream reviews remain distinct. Source Control close/reopen/ready do not gain an invented atomic head guard; expectedHead applies to destructive merge and inline-comment coordinates as specified.
+
+**Amendments:** 2026-10-27: unavailable other-provider review/create/settings flows are assigned to queued m4-hosting-ui-review-provider-parity (blocked provider API prerequisites). In-app review-link routing and modifier inversion are assigned to m4-hosting-ui-review-browser-routing (human browser pane/Link Routing prerequisites). All GitHub core scenarios remain required; system routing works and unavailable in-app requests fail explicitly.
+
+**Amendments:** 2026-10-27: exact conflict paths use the new canonical quirky.git/mergePreview over available base/head commit objects. Missing objects/custom external merge drivers are explicit unavailable states, not changed files relabeled as conflicts. Shared agent dialog captures source surface, target/prRepo and headOid so PR-page Fix cannot dispatch to another active workspace's review.
+
+**Amendments:** 2026-10-27: rich hosting settings use generic public view.settings:true and SettingsDialog navigation. Only opted-in effective view owners appear; the shell does not import feature implementations. Same-head refresh does not invalidate an edited agent dialog; captured source/number/worktree/head determines launch identity.
+
+**Amendments:** 2026-10-27: the stack map uses canonical hosting/reviewStack's bounded real member entries. A stack resource ID is never guessed to be a PR number. Mismatched/unsupported membership remains explicitly unavailable; stack actions keep the shared hosting/merge direct|queue route.
+
+**Amendments:** 2026-10-27: settings observations and file-tree visibility are explicit daemon state, not hidden React-only values. Existing comments preserve safe provider URLs and nullable provider bot identity; no URL-fragment guesses. Incomplete Detail/Creation component handoffs retain their full acceptance scope and receive focused retries, not silent reductions.
+
 ## Purpose and conceptual model
 A hosted review is a provider-qualified repository/number identity with a current head. The active workspace can link or suppress a review independently of the provider's review state. Checks follows that workspace; a PR detail page can inspect another review without changing the workspace. Creation operates on the exact current branch and confirmed eligibility. All surfaces use the canonical hosting API, never renderer subprocesses or a second merge/auth policy.
 
@@ -92,3 +104,5 @@ None added. Provider-dependent flows genuinely blocked by other-provider APIs re
 
 ## Technical decisions and contracts
 The public integration mapping supplies exact hosting/UI/git/worktree/AI method names; reuse those rather than adding parallel provider policy. Commit shared interfaces in plugins/quirky.reviews/src/contracts.ts before implementers. Parent owns main.ts, ui.tsx, manifest/package/build integration, shared environment and test harness. ComponentA owns src/detail/ and test/detail.test.ts; ComponentB owns src/checks/ and test/checks.test.ts; ComponentC owns src/create/ and test/create.test.ts. Their method factories accept ReviewsEnv and return Record<string,MethodHandler>; UI components accept ReviewsSurfaceProps. Parent alone composes registrations. All state changes go through synchronous atomic env.update, increment revision and emit changed; readonly observations use public context.call. Durable settings/suppression persist; navigation/drafts are session-local. Component scopes do not overlap; no worker commits/build/lint/formatters/full suites. Parent runs affected suite/scripts/typecheck, one final cross-family review/fix batch, visible dogfood and normal queue landing after pending dependencies ready.
+
+Missing canonical hosting primitives are parent-owned src/review-conversation.ts and src/pr.ts registration plus manifest/test changes; lane6 retains its existing read modules. New methods preserve optional prRepo through lookup.readFresh; top-level comment membership is checked by exact provider API issue_url before edits/deletion. Shared ReviewTarget has optional prRepo; no target/source identity is dropped on mutation. Parent harness extends the existing hosting test helper with extraBuiltins, matching the pending Tasks hook; no duplicate harness convention.

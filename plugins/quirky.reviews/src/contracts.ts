@@ -5,7 +5,7 @@ export const CHECKS_PANEL = 'panel:quirky.reviews/checks'
 export const CREATE_VIEW = 'view:quirky.reviews/create'
 export const SETTINGS_VIEW = 'view:quirky.reviews/settings'
 export type ReviewTab = 'conversation' | 'checks' | 'files'
-export type ReviewTarget = { worktree: string; number: number; tab?: ReviewTab }
+export type ReviewTarget = { worktree: string; number: number; tab?: ReviewTab; prRepo?: { host: string; owner: string; repo: string } }
 export type Audience = 'all' | 'humans' | 'bots'
 export type JsonRecord = Record<string, unknown>
 export type ReviewData = {
@@ -20,7 +20,7 @@ export type DetailState = {
   target: ReviewTarget | null; tab: ReviewTab; generation: number; loading: boolean; error: string | null
   review: ReviewData | null; details: JsonRecord | null; checks: JsonRecord | null; comments: JsonRecord | null; files: JsonRecord | null
   audience: Audience; grouping: 'grouped' | 'timeline'; expandedChecks: string[]; queuedComments: string[]
-  selectedFile: string | null; diffMode: 'inline' | 'side-by-side'; collapsedFiles: string[]; fileFilter: string
+  selectedFile: string | null; diffMode: 'inline' | 'side-by-side'; collapsedFiles: string[]; fileFilter: string; fileTreeVisible: boolean
   commentDraft: string; bodyDraft: string | null; pending: string[]; fetchedAt: number
 }
 export type ChecksState = {
@@ -29,7 +29,7 @@ export type ChecksState = {
   checks: JsonRecord | null; comments: JsonRecord | null; conflicts: JsonRecord | null
   audience: Audience; grouping: 'grouped' | 'timeline'; expandedChecks: string[]; queuedComments: string[]
   commentDraft: string; titleDraft: string | null; height: number; fetchedAt: number
-  agentDialog: { action: 'fix' | 'conflicts' | 'comments'; prompt: string; agent?: string; args?: string } | null
+  agentDialog: { action: 'fix' | 'conflicts' | 'comments'; prompt: string; agent?: string; args?: string; surface?: 'detail' | 'checks'; target?: ReviewTarget; headOid?: string; visible?: boolean } | null
 }
 export type CreationDefaults = { draft: boolean; useTemplate: boolean; generateDetailsOnOpen: boolean; openAfterCreate: boolean }
 export type CreationState = {
@@ -38,13 +38,18 @@ export type CreationState = {
   bases: string[]; generating: boolean; requestId: string | null; submitting: boolean; generated: boolean
   result: JsonRecord | null; defaults: CreationDefaults
 }
+export type HostingSettingsState = {
+  worktree: string | null; generation: number; loading: boolean; error: string | null
+  diagnostics: JsonRecord | null; accounts: JsonRecord | null; configuration: JsonRecord | null; budget: JsonRecord | null; fetchedAt: number
+}
 export type ReviewsState = {
   revision: number; previousView: UiLayout['view']; detail: DetailState; checks: ChecksState; creation: CreationState
+  settings: HostingSettingsState
   defaults: CreationDefaults; repoDefaults: Record<string, Partial<CreationDefaults>>
   botOverrides: string[]; links: Record<string, { number: number; url: string }>; suppressed: Record<string, { number: number; url: string }>
 }
 export type MethodSpec = {
-  id: string; readOnly?: boolean; destructive?: boolean; confirm?: string; describe?: string
+  id: string; description?: string; readOnly?: boolean; destructive?: boolean; confirm?: string; describe?: string
   params: JsonRecord; result: JsonRecord
 }
 export type ReviewsEnv = {
