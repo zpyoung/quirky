@@ -183,8 +183,12 @@ nonzero; neither an idle pointer nor missing status proves that work finished.
 
 Public session helpers provide exact-incarnation identity, guarded close and idempotent prompt
 submission. Structured `create` accepts `deferStart: true` without a prompt, so authority can attach
-before the first turn. Automatic idle-mailbox nudging is deferred to
-`m6-orchestration-idle-pointer-shutdown`; explicit safe submission and durable mail remain available.
+before the first turn. Automatic idle-mailbox hints use the same safe submission path: Run
+coordinators receive `quirky orchestration check --run <id>` and Dispatch workers receive
+`quirky orchestration check`. Hints never contain message bodies or acknowledge mail. Active
+deliveries and consuming waiters retain mailbox ownership. Shutdown stops scheduler timers and
+listeners without waiting for external RPC settlement; attempted operations keep their durable
+IDs for restart recovery.
 Worker placement, custody and fleet use this same core. Headless coordinators use the plugin-owned
 service APIs below; plugin metadata cannot impersonate a session.
 
