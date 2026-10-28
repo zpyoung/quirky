@@ -143,5 +143,16 @@
 - **Revisit if:** the browser harness supplies a verified account-state isolation boundary
 - **Source:** deferred: platform
 
+## D14: Preserve additive public props during required failed-land recovery
+- **Question:** canonical land refused a concurrent shared-contract merge; how should both restyles compose?
+- **Options:** discard TextField input refs; discard worktree progress; combine independent prop additions and retry the controller
+- **Chose:** follow failed-land recovery only: merge roadmap e1b24c25417bcfddafe105d46aa01b9fe36fbad5, preserve React19 TextField ref typing and StatusDot progress together. Retain all lint enrollments/exports/tokens. Read ui-restyle-browser D1–D13/Progress and m3-accounts-complete-user-acceptance-20261028 D1–D17/Progress fully, including the untruncated reviewer limit. Preserve Browser focused-Find draft ownership, exact profile/CDP isolation qualifications, Accounts strict reset envelope/queued-progress/auth and native evidence boundaries.
+- **Why:** the sole conflict is adjacent independent lines in the shared contract, not competing interaction authorities. Existing TextField spreads the input props and shared status rendering already consumes progress. Neither capability needs an alias or producer change.
+- **Evidence:** first canonical land exit1/1.39s; exact contracts.ts conflict; incoming decision logs; union resolution
+- **Reversibility:** easy
+- **Confidence:** high for composition; fresh recovery typecheck/build is still required
+- **Revisit if:** the composed gate or canonical retry names another failure
+- **Source:** locked by docs/loop/LOOP.md failed-land retry procedure
+
 ## Progress
-Ready for canonical land: sole catch-up c6a1c69a preserves all incoming owners and canonical shared ContextMenu; tests fe5b6f95 integrated, all four owned component worktrees removed. Final composed UIlint/root/mobile/prepared-desktop typecheck and actual UI build passed31.90s. Focused runtime proof and limits are D9–D13; no suite, full dogfood, screenshot-model or native acceptance claim. Every worker/check returned, both private daemon/PTY scopes exited0/homeRemoved:true, all managed tabs released and the exact owned Chrome service stopped. Next: commit this final receipt/helper corrections, detach and canonical queue land; await its authoritative result, preserve evidence and remove owned scratch. No unbuilt feature flow or follow-up item.
+First canonical landing refused concurrent contracts; required recovery D14 is resolved, pending fresh compiler/build before retry. Original sole catch-up c6a1c69a and tests fe5b6f95 remain intact. All four component worktrees and owned runtimes are already removed/stopped. Earlier source proof and limitations remain D9–D13; no suite/model/native clearance is inferred. Next: commit recovery, run typecheck/build, record its actual result, detach and retry canonical queue land. Preserve evidence and remove owned scratch only after authoritative success.

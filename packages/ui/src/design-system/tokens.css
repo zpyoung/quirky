@@ -56,5 +56,8 @@
 :root,
 [data-theme='dark'],
 [data-theme='light'] {
+  --ui-transparent: transparent;
+  --ui-shadow: color-mix(in srgb, var(--ui-rail) 55%, transparent);
+  --ui-scrim: color-mix(in srgb, var(--ui-surface) 88%, transparent);
   color: var(--ui-text);
 }

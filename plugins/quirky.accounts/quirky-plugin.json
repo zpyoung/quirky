@@ -252,7 +252,7 @@
         "confirm": "Use one rate-limit reset credit for the displayed active Codex account?",
         "describe": "describeReset",
         "params": { "type": "object", "properties": { "idempotencyKey": { "type": "string" }, "expectedScope": { "type": "object", "properties": { "accountId": {}, "accountRevision": { "type": "integer", "minimum": 0 }, "offerRevision": { "type": "string" } }, "required": ["accountId", "accountRevision", "offerRevision"] }, "yes": { "type": "boolean" } }, "required": ["idempotencyKey", "expectedScope"] },
-        "result": { "type": "object", "properties": { "outcome": { "type": "string", "enum": ["reset", "nothingToReset", "noCredit", "alreadyRedeemed"] }, "state": { "type": "object", "additionalProperties": true } } }
+        "result": { "type": "object", "properties": { "outcome": { "type": "string", "enum": ["reset", "nothingToReset", "noCredit", "alreadyRedeemed"] }, "state": { "type": "object", "additionalProperties": true } }, "required": ["outcome", "state"] }
       }
     ],
     "event": [
