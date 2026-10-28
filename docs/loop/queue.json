@@ -689,9 +689,8 @@
         "m5-loops-core",
         "m5-loops-presets"
       ],
-      "status": "in-progress",
-      "early": true,
-      "lane": 1
+      "status": "done",
+      "early": true
     },
     {
       "id": "m5-ledger",
@@ -971,7 +970,7 @@
         "fork-loops.md",
         "ledger.md"
       ],
-      "status": "todo",
+      "status": "in-progress",
       "title": "Parity sweep for automations.md, fork-loops.md, ledger.md: every remaining flow in these feature docs, except the GitLab, Bitbucket, Gitea/Forgejo and Azure DevOps flows, the Objective runner and the PR sitter, which the user deferred. Find what earlier items left out or deferred, build or fix it, and record anything too large as a follow-up item",
       "deps": [
         "m5-structured-runner",
@@ -982,7 +981,8 @@
         "m5-loops-presets",
         "m5-loops-ui",
         "m5-ledger"
-      ]
+      ],
+      "lane": 1
     },
     {
       "id": "m7-sweep-browser-mobile",
@@ -1465,6 +1465,52 @@
       ],
       "deps": [
         "m5-loops-ui"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m3-accounts-complete-user-acceptance-20261028",
+      "milestone": "M3",
+      "title": "Finish Accounts user acceptance after the LOOP night cutoff: complete same-home daemon-restart Compact/Detailed Used/Remaining/provider-visibility UI persistence; all ten drill-ins and inactive refresh/debounce; native-login link/Cancel, Codex UI add, reauth/Needs-sign-in refusal; full Claude Ask Restart/Always/Never/busy-idle/supersession UI (ordinary Keep+opt-out Keep passed); Codex pane Keep old account and keyboard follow-through (pane Restart with prior rollout contents and public focus passed; driver refused opacity0 textarea); provider removal Cancel/confirm/System-default fallback; masked MiniMax/OpenCode Go/ZCode configure/clear and secret-free errors; reset stale-account/stale-offer/failure/retry matrix (opt-out redemption/replay and wrapped Cancel passed); retained Codex warning/recovery UI. Also resolve tracked MEDIUM existing cancellation-RPC failure stopping login polling and background/structured stale-account rows offering terminal-only Restart. Preserve actual daemon/PTY A→B→remove-A→C accumulated-content proof, authority/reload/C1 regressions, explicit review independence limits and pending native clipboard/browser/Keychain/OS-focus handoffs. Exact evidence and open findings: docs/loop/decisions/m3-accounts-remaining-flows.md and BLOCKERS.md; no full UI/native pass claimed.",
+      "docs": [
+        "accounts.md"
+      ],
+      "deps": [
+        "m3-accounts-remaining-flows"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m7-editor-source-control-completion",
+      "milestone": "M7",
+      "title": "Complete remaining editor/source-control/sidebar parity: lossless rich details/collapsible headings and document-link insertion/completion; edit-tab Changes and Markdown diff preview plus preview/permanent/split diff tabs; GitHub fork notices, validated PR-derived push targets and target-specific push-before-PR; permission-aware save/annotation UX; finish editor GUI acceptance SC-3–22 (mixed close/conflict/autosave/restart/deleted recovery, explorer mutations/undo/selection/ignored/symlinks/import/drag, Quick Open/search, rich slash/IME/table/math/Mermaid/emoji/images/notes/TOC/frontmatter/templates/PDF, notebook environment install/venv/trust/recovery, CSV/PDF/media/shortcuts/remount) and the all-17 sidebar edge audit (quiet aging, fresh-agent-only liveness, corrupt preferences, separator boundaries/persistence). Implement missing public APIs and prove real UI/native scenarios; preserve the separately blocked Finder-source-path item and exclude non-GitHub forges, Objective runner and PR sitter.",
+      "docs": [
+        "editor.md",
+        "sidebar-extras.md",
+        "source-control.md"
+      ],
+      "deps": [
+        "m7-sweep-editor-source-control"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "m7-sweep-terminal-completion",
+      "milestone": "M7",
+      "title": "Complete every remaining terminal-domain parity obligation inventoried in docs/quirk/specs/2026-10-28-m7-sweep-terminal/logic.md: ask handoff/provider-question bridges, session/surface liveness and unavailable outcomes, rich previews/result flash/autofocus/attention and delayed unattended escalation; CLI installed-command/profile shims and selectable paired remote runtimes; Activity Dashboard/pop-out/filters and hidden-idle zero-total defect; transcript/statusLine/private OSC producers and remote hooks; model discovery/retirement/stale-choice UI and host capability gates; remaining hosting AI recipe composition; issue-derived unsubmitted drafts, pane Fork action and cold agent resume; terminal cross-plugin tab/editor/dock/handoff/mobile composition, hidden view parking, rendering extras and shortcut remapping; worktree sleep/descendants/wake, safe cleanup preview/ignore/restore/bulk delete, stock grouping/sorting/card/property/filter controls, external-worktree visibility inbox/policies, back/forward/keyboard/Open-in navigation, manual references, board/custom status, sparse/pool/keep-main/host/environment/default-tab/model/shared-path create options and project identity extras; supported macOS notification permission/click/dismiss and signed terminal-host/folder-picker prerequisites. Finish guarded recipe settings/customize proof and post-repair Activity visibility closure once the UI driver initializes reliably (reports 20261028T081739-fab2 and 20261028T100639-4329). Reconcile later shipped owners and native reports before coding; do not duplicate existing automation remote/raw-args, terminal-dock or sidebar-extras follow-ups. Preserve explicit user hosting/Objective/sitter exclusions and macOS platform scope.",
+      "docs": [
+        "ask.md",
+        "cli.md",
+        "agent-status.md",
+        "launch-settings.md",
+        "notifications.md",
+        "providers.md",
+        "term-daemon.md",
+        "term-ui.md",
+        "worktrees.md"
+      ],
+      "deps": [
+        "m7-sweep-terminal"
       ],
       "status": "todo"
     }

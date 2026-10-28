@@ -95,9 +95,10 @@ export type UiCommandEntry = {
 
 /** The window menus a `menu-item` contribution may target. */
 export const TERMINAL_PANE_MENU = 'quirky.terminal/pane'
+/** The tab-strip menu; commands receive `{ worktree, workspace, group }`. */
 export const TERMINAL_TAB_MENU = 'quirky.terminal/tab'
 
-/** A plugin menu row; pane commands receive `{ session }`, new-tab commands receive `{ worktree, workspace, group }`. */
+/** A public menu row; pane commands receive `{ session }`, tab commands `{ worktree, workspace, group }`. */
 export type UiMenuItemEntry = {
   id: string
   plugin: string

@@ -1,4 +1,5 @@
 import { TERMINAL_PANE_MENU, TERMINAL_TAB_MENU, type Session, type UiMenuItemEntry, type UiModel, type UiPluginContext } from '@quirky/protocol'
+import type { MenuContributionItem } from './workspace/controller'
 import { findGroup } from '../layout/tree'
 import type { FloatingState, Group, PaneLeaf, QuickCommand, Workspace } from '../layout/types'
 import { FLOATING_WORKSPACE } from '../layout/types'
@@ -464,19 +465,22 @@ export function paneMenuContributions(context: UiPluginContext, source: MenuCont
         })
     }))
 }
-/** The public tab-menu rows, scoped to the worktree, workspace, and group that opened the menu. */
+
+/** Public tab-menu rows preserve placement and receive their worktree, workspace, and group context. */
 export function tabMenuContributions(
   context: UiPluginContext,
   source: MenuContributionSource,
   worktree: string,
   workspace: string,
   group: Group
-): MenuItem[] {
+): MenuContributionItem[] {
   return source
     .items()
     .filter((item) => item.menu === TERMINAL_TAB_MENU)
+    .sort((left, right) => left.id.localeCompare(right.id))
     .map((item) => ({
       id: item.id,
+      after: item.after,
       label: item.title,
       onSelect: () =>
         void context.executeCommand(item.command, { worktree, workspace, group: group.id }).catch((error: unknown) => {

@@ -333,6 +333,18 @@ Registration update: `bun scripts/build-loop/queue.ts add /tmp/quirky-session-in
 - **MEDIUM, LOW confidence — Settings paired-device revoke reachability remains unconfirmed** (`plugins/quirky.mobile/src/ui.tsx:70`, `packages/ui/src/styles.css:1137-1144`). At1280x720, the guarded UI run found the Settings revoke button mostly below the status bar; scroll/PageDown produced no observable change. The host slot already supplies `overflow: auto`, so an app layout cause was not established and no speculative CSS change was made. The shorter Mobile-page revoke route worked for all three run-created pairings. Follow-up `sb-mobile-settings-visibility` owns distinguishing scroll-driver targeting from actual clipping.
 - **Tool limitations, not claimed passes:** stable interface Refresh produced no visible change twice; IP redaction hid the custom-address value signal although save/persistence worked; Cmd+R/Cmd+Shift+R did not establish a browser reload. Functional intro/settings/driving/devices goals passed; pairing/post-build goals remain partial in `.quirk/using-apps-like-a-user/runs/20261028T005355-6182/report.md`. No test overrides or kept-open windows.
 
+
+## m5-loops-ui: operator-directed remaining visible verification
+
+- **Owner:** the sole follow-up `m5-loops-ui-visible-stop-close-review`, dependent on this landing.
+- **Still shipped:** complete New loop dialog, three presets, validation/Advanced controls, hosted read-only output/rail, genuine saved output after fresh cleanup, queue/history/detail/control forms, declared API/CLI commands and guarded Cancel/Keep running/Stop tab closure.
+- **Remaining visible flows:** Stop panel Cancel, After this iteration and Now; Close Cancel, Keep running and Stop loop. Their API/CLI/native paths are exercised, but no visible pass is claimed. Finish these on the existing implementation with unique fixture native conversation identities; retain all tests and ownership guards.
+- **Evidence:** `.quirk/using-apps-like-a-user/runs/20261028T071503-520f/report.md` passed observe/adjust/queue, but F5/F6 show fixture startup crashes. The throwaway provider returned `scripted-thread` while the continued queue already owned that conversation. A UUID-based fixture then admitted two native conversations concurrently and cleaned all owned preflight sessions. Production exclusivity was not weakened.
+- **Tool-limited setup:** run `20261028T060845-277a` exercised defaults, preset changes, queue draft CRUD, invalid cap/timeout/cost feedback, Cancel/reset and successful background Start with preserved focus. Start was `UNSETTLED`; stable observation proved the result, but the tool's last-act pass guard prevented a pass verdict. Record/finalize this limitation without pretending the app failed.
+- **Unstarted review:** the prepared Gemini cross-family discovery/refute campaign was never dispatched. The follow-up owns one bounded code review and its blocking fixes, not an invented PASS.
+- **Scope clarification:** reattachment through the declared command/CLI is already independently proven; no unrequested GUI loop picker is assumed. No feature runtime/API flow was replaced with a mock, stub or no-op.
+- **Unblock when:** the named visible cases and bounded review are completed against the landed code. No human decision is required.
+
 ## m5-automations-dispatch: deferred constrained flows
 
 - **Source decisions:** `docs/loop/decisions/m5-automations-dispatch.md` D2-D3.
