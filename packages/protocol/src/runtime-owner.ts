@@ -16,11 +16,19 @@ export type OwnerRuntimeIdentity = {
   grantId: string
 }
 
+/** Issued by the authenticated remote daemon, never supplied by a host label or path. */
+export type OwnerHostIdentity = {
+  hostId: string
+  generation: string
+}
+
 /** Local owner resolves a saved owner grant; never accepts a phone/federation credential. */
 export type OwnerRuntimeCallParams = {
   runtime: string
   method: string
   params?: Record<string, unknown>
+  /** Checked on the same authenticated connection before dispatching the requested operation. */
+  expectedHost?: OwnerHostIdentity
 }
 
 export type OwnerRuntimeCallResult = {
@@ -32,4 +40,13 @@ export type OwnerRuntimeCallResult = {
 export type WorkspaceViewOwner = {
   worktreeId: string
   instanceId: string
+}
+
+export type RegisteredOwnerHost = {
+  id: string
+  runtime: OwnerRuntimeIdentity
+  identity: OwnerHostIdentity
+  connected: boolean
+  error: string | null
+  updatedAt: number
 }
