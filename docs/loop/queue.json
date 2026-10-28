@@ -1268,6 +1268,43 @@
         "sa-browser-pane"
       ],
       "status": "todo"
+    },
+    {
+      "id": "sa-browser-profile-import-ui",
+      "milestone": "Side A",
+      "title": "Browser profile UI: connect Import Cookies menus, detected browser/profile source rows, From File dialog, imported-source badges and import summary/error toasts to sa-browser-agent-extras real import engine. Source detection only on explicit opening; Google exclusion disclosed. Blocked prerequisite: import engine removed from shipped core, not fake menu success.",
+      "docs": [
+        "browser.md"
+      ],
+      "deps": [
+        "sa-browser-profiles-settings",
+        "sa-browser-agent-extras"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "sa-browser-native-identity",
+      "milestone": "Side A",
+      "title": "Browser identity: apply Cleaned/Native user-agent mode to human Native system-webview after supported SDK UA override hook becomes available; current public BrowserView exposes partition but no UA setter. Preserve restart requirement and never substitute Chrome for native.",
+      "docs": [
+        "browser.md"
+      ],
+      "deps": [
+        "sa-browser-profiles-settings"
+      ],
+      "status": "todo"
+    },
+    {
+      "id": "sa-browser-localhost-label-routing",
+      "milestone": "Side A",
+      "title": "Browser Localhost Worktree Labels: implement reachable per-worktree localhost host/port mapping for native and agent engines using supported routing/DNS capability; do not only rewrite displayed hostnames. Requires a real native mapping/proxy prerequisite absent from current local-only Browser API.",
+      "docs": [
+        "browser.md"
+      ],
+      "deps": [
+        "sa-browser-profiles-settings"
+      ],
+      "status": "todo"
     }
   ]
 }
