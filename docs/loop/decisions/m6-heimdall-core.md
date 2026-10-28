@@ -187,5 +187,16 @@
 - **Revisit if:** actual hook API proof shows a different source-grounded serialization need
 - **Source:** assumed — autonomous
 
+## D18: Accept source checkpoints only with observed behavioral checks
+- **Question:** integrated kernel components exposed both real defects and incidental test expectations
+- **Options:** trust handoff reports; pin observed revision counts/trace wording; exercise invariants and repair causes
+- **Chose:** actual SQLite migration regression proved mailbox sequence reuse (expected101, got2), then passed after preserving the prior autoincrement watermark. Capability regression proved inherited constructor allowed an ungranted action, then passed after requiring an own explicit on/gated grant. Contact-loss regression proved8000ms charged instead of1000ms, then passed with checkpoint-only close. Fixed runner's timing constants import from the owning budget module, without re-export shims. Deleted incidental attempt-row-count/trace-wording assertions; retained the32-effect bound and strengthened unresolved-to-terminal transition proof.
+- **Why:** append-only attempt revisions legitimately create multiple rows per effect; trace summary wording is not the terminal safety invariant. Actual counters, permission boundaries, durable cursor identity and positive outcome transitions are consumer-visible.
+- **Evidence:** targeted migration/capability/contact red-green outputs; final integrated five-file check51pass0fail172assertions; contact targeted rerun1pass0fail3assertions. Resolver real-child smoke also passed. No daemon/API/worker/whole-feature pass claim from these unit checks.
+- **Reversibility:** easy
+- **Confidence:** high for exercised paths; service backend and full API verification remain pending
+- **Revisit if:** actual daemon or dependency integration shows a contract mismatch
+- **Source:** assumed — autonomous
+
 ## Progress
-Iteration4: spec/contracts committed6764039; three disjoint implementation worktrees running, no checks/commits until their wave barrier. Worker dependency query returned ready:false pending m6-orchestration-workers after510s; independent implementation continues. Lanes1+9 approved service authority extension reserved to lane11, parent authored type contracts; actual core/worker runtime still pending. Missing feature/API smoke completed with isolated actual quirkyd and cleanup. Next: accept/audit components after all return, integrate dependency implementation and additive service APIs, exercise AC1-11 including real worker adapter, affected suite/scripts/typecheck, deps-ready/catch-up/final independent review/queue landing. No runtime feature acceptance claim.
+Iteration4: original source wave/replacement barrier audited; actual store/registry/enrollment/runner/plugin/adapter plus additive service handler/migration/test checkpoints are merged on the item branch. Integrated kernel/storage/adapter/migration unit regressions pass51/51 with172assertions; three concrete regressions have red-green proof. Runtime checkpoint794266f1 is published, final import/test safety correction follows. No owned implementer remains running. Full daemon API/worker proof and actual eight-service core facade/hubs still require the prerequisite's committed executable source; lane1 has supplied read-only component paths, not a runtime API claim. Continue real service integration, affected gates/typecheck, deps-ready/catch-up and queue-controlled landing. Lane10 controls then lane12 owner integrate their own serial hubs; their modules remain untouched.

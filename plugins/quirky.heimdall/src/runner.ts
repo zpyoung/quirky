@@ -26,9 +26,9 @@ import type {
   WorkerMessage,
   WorkerRequest
 } from './contracts'
-import { budgetGeneration, budgetUsage, openBudgetIntervals } from './budget'
+import { ACTIVE_TIME_CHECKPOINT_MS, ACTIVE_TIME_SAMPLE_MS, budgetGeneration, budgetUsage, openBudgetIntervals } from './budget'
 import { actionFingerprint, gateAction } from './gate'
-import { ACTIVE_TIME_CHECKPOINT_MS, ACTIVE_TIME_SAMPLE_MS, FULL_RESYNC_INTERVAL_MS, pacingDelay } from './pacing'
+import { FULL_RESYNC_INTERVAL_MS, pacingDelay } from './pacing'
 
 const MAX_ACTIONS_PER_TICK = 32
 const DEFAULT_SHUTDOWN_MS = 1_500
