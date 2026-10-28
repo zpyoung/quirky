@@ -16,6 +16,12 @@ export type MarkdownDocument = { relativePath: string; name: string; title: stri
 export type MarkdownTemplate = { relativePath: string; name: string; title: string }
 export type ImageResource = { url: string; revoke(): void }
 export type MarkdownResourcePool = Map<string, Map<string, ImageResource>>
+export type MarkdownImageSource = Pick<EditorBuffer, 'id' | 'relativePath' | 'worktreeId'>
+export type MarkdownImageResolveOptions = {
+  isActive?: () => boolean
+  maxImages?: number
+  imageLimitError?: () => Error
+}
 
 const MARKDOWN_EXTENSIONS = new Set(['.md', '.markdown', '.mdx'])
 const IMAGE_MIME_TYPES: Record<string, string> = {
@@ -25,7 +31,7 @@ const IMAGE_MIME_TYPES: Record<string, string> = {
 const IGNORED_DIRECTORY_NAMES = new Set(['.git', 'node_modules'])
 const MAX_DISCOVERY_ENTRIES = 100_000
 const MAX_TEMPLATE_ENTRIES = 10_000
-const MAX_LOCAL_PREVIEW_IMAGES = 64
+export const MARKDOWN_MAX_PREVIEW_IMAGES = 64
 const MAX_LOCAL_PREVIEW_BUFFERS = 64
 
 function isRegularFile(path: string): boolean {
@@ -226,9 +232,11 @@ export function fillMarkdownTemplate(template: string, values: { title: string; 
 
 function decodedLocalImageTarget(target: string): string | null {
   const trimmed = target.trim().replace(/^<|>$/g, '')
-  if (trimmed === '' || /^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i.test(trimmed)) return null
+  if (trimmed === '' || /^(?:[a-z][a-z0-9+.-]*:|\/\/|\/|#)/i.test(trimmed)) return null
   try {
-    return decodeURIComponent(trimmed)
+    const decoded = decodeURIComponent(trimmed)
+    if (decoded === '' || /^(?:[a-z][a-z0-9+.-]*:|\/\/|\/|#)/i.test(decoded)) return null
+    return decoded
   } catch {
     return null
   }
@@ -236,18 +244,19 @@ function decodedLocalImageTarget(target: string): string | null {
 
 export async function resolveMarkdownImages(
   host: EditorServices,
-  buffer: EditorBuffer,
+  source: MarkdownImageSource,
   markdown: string,
-  resources: MarkdownResourcePool
+  resources: MarkdownResourcePool,
+  options: MarkdownImageResolveOptions = {}
 ): Promise<ReadonlyMap<string, string>> {
-  let byPath = resources.get(buffer.id)
+  let byPath = resources.get(source.id)
   if (!byPath) {
     if (resources.size >= MAX_LOCAL_PREVIEW_BUFFERS) return new Map()
     byPath = new Map()
-    resources.set(buffer.id, byPath)
+    resources.set(source.id, byPath)
   }
   const imageUrls = new Map<string, string>()
-  const directory = dirname(buffer.relativePath) === '.' ? '' : dirname(buffer.relativePath)
+  const directory = dirname(source.relativePath) === '.' ? '' : dirname(source.relativePath)
   const pattern = /!\[[^\]]*\]\((<[^>\r\n]+>|(?:\\.|[^)\s])+)(?:\s+['"][^\r\n]*['"])?\)/g
   for (const match of markdown.matchAll(pattern)) {
     const raw = match[1]!.replace(/^<|>$/g, '')
@@ -255,14 +264,23 @@ export async function resolveMarkdownImages(
     if (!target) continue
     const relativePath = normalize(posix.join(directory, target)).replace(/\\/g, '/')
     if (!safePath(relativePath)) continue
-    const absolute = await host.path(buffer.worktreeId, relativePath).catch(() => null)
+    const absolute = await host.path(source.worktreeId, relativePath).catch(() => null)
+    if (options.isActive && !options.isActive()) throw new Error('Detached Markdown image acquisition was cancelled.')
     if (!absolute || !isRegularFile(absolute)) continue
     const mime = IMAGE_MIME_TYPES[extname(absolute).toLowerCase()]
     if (!mime) continue
     let handle = byPath.get(absolute)
     if (!handle) {
-      if (byPath.size >= MAX_LOCAL_PREVIEW_IMAGES) continue
-      handle = await host.context.createFileResource({ path: absolute, contentType: mime })
+      if (byPath.size >= (options.maxImages ?? MARKDOWN_MAX_PREVIEW_IMAGES)) {
+        if (options.imageLimitError) throw options.imageLimitError()
+        continue
+      }
+      const created = await host.context.createFileResource({ path: absolute, contentType: mime })
+      if (options.isActive && !options.isActive()) {
+        created.revoke()
+        throw new Error('Detached Markdown image acquisition was cancelled.')
+      }
+      handle = created
       byPath.set(absolute, handle)
     }
     imageUrls.set(raw, handle.url)

@@ -8,6 +8,7 @@ import { choosePdfDestination, exportPdfWithChrome } from './pdf'
 import { confirmNativeReplacement, chooseMarkdownImage } from './native'
 import { renderSafeMarkdownHtml } from './preview'
 import { reconcileSerializedMarkdown } from './reconcile'
+import { createDetachedMarkdownPreviewService } from './detachedPreview'
 
 import {
   MARKDOWN_MAX_IMAGE_BYTES,
@@ -779,6 +780,7 @@ async function exportMarkdownPdf(host: EditorServices, buffer: EditorBuffer, par
 
 export function createMarkdownMethods(host: EditorServices): FeatureMethods {
   const resources: MarkdownResourcePool = new Map()
+  const detachedPreview = createDetachedMarkdownPreviewService(host)
   const removeCloseListener = host.onClose((bufferId) => {
     try {
       if (host.get(bufferId).mode === 'preview') return
@@ -789,10 +791,11 @@ export function createMarkdownMethods(host: EditorServices): FeatureMethods {
   const notes = createMarkdownNotesMethod(host)
   const workspaceNotes = createWorkspaceNotesMethod(host)
   return {
-    methods: { markdown, notes, workspaceNotes },
+    methods: { markdown, markdownPreview: detachedPreview.method, notes, workspaceNotes },
     dispose() {
       removeCloseListener()
       releaseMarkdownImages(resources)
+      detachedPreview.dispose()
     }
   }
 }
