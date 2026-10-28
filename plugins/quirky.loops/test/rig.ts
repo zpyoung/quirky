@@ -220,6 +220,7 @@ printf '%s\\n' 'VERDICT: not-met' 'REASON: isolated evaluator fixture'
       cliContext(json = false) {
         const lines: string[] = []
         const context: CliContext = {
+          requestBase: crypto.randomUUID(),
           call: (method, params = {}) => client.callAny(method, params),
           out: {
             json,

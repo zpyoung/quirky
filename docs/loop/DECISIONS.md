@@ -41,6 +41,8 @@ files, not this one.
 | hard | high | [m0-core D6](decisions/m0-core.md) | v1's methods are renamed to their plugin's namespace, with no aliases, and the protocol version goes to 2 | supersedes m0-daemon-api D5 |
 | hard | high | [m0-core D7](decisions/m0-core.md) | v1's events become the plugins' events | assumed — autonomous |
 | hard | high | [m0-core D31](decisions/m0-core.md) | Port v1 for real, growing the public plugin API, rather than facades or raw RPC primitives | locked by docs/roadmap.md (built-ins use only the public API); assumed — autonomous (the approach) |
+| hard | high | [m6-orchestration-core D4](decisions/m6-orchestration-core.md) | Keep Quirky session identity, not Orca pane compatibility | locked by docs/loop/decisions/m1-agent-status.md |
+| hard | high | [m6-orchestration-core D7](decisions/m6-orchestration-core.md) | Match FIFO replay and generation-fenced acknowledgements | locked by research/orca-features/orchestration.md |
 | hard | high | [m1-worktrees D5](decisions/m1-worktrees.md) | Extend `quirky.repo` and `quirky.worktree` in place, with one create path and one remove path | assumed — autonomous |
 | hard | high | [m1-worktrees D7](decisions/m1-worktrees.md) | Worktree IDs stay v1's path hash; extra folder workspaces get random IDs | assumed — autonomous |
 | hard (sensitive data already read cannot be unread). | high | [m3-vault D5](decisions/m3-vault.md) | Consent controls index creation; disabling preserves it and clear disables before deletion | locked by docs/roadmap.md |
@@ -222,6 +224,21 @@ files, not this one.
 | medium | high | [m0-core D19](decisions/m0-core.md) | Mutating calls carry a request ID, and the daemon returns the first outcome to a retry | assumed — autonomous |
 | medium | high | [m0-core D23](decisions/m0-core.md) | Plugin UI commands run in the window when called through the API | locked by docs/roadmap.md |
 | medium | high | [m0-core D24](decisions/m0-core.md) | v1's window surfaces become the built-ins' UI contributions, and the shell keeps only the chrome | supersedes m0-ui-api D26 |
+| medium | high | [m6-orchestration-core D1](decisions/m6-orchestration-core.md) | Preserve both combined parts of the claimed item | locked by docs/loop/queue.json |
+| medium | high | [m6-orchestration-core D3](decisions/m6-orchestration-core.md) | Choose one lazy durable plugin, not an in-memory broker or scheduler | locked by docs/architecture.md |
+| medium | high | [m6-orchestration-core D6](decisions/m6-orchestration-core.md) | Preserve transactional DAG and attempt state graphs | locked by research/orca-features/orchestration.md |
+| medium | high | [m6-orchestration-core D8](decisions/m6-orchestration-core.md) | Match durable address routing and fail closed group membership | locked by research/orca-features/orchestration.md |
+| medium | high | [m6-orchestration-core D9](decisions/m6-orchestration-core.md) | Questions time out without duplication and gates are separate | locked by research/orca-features/orchestration.md |
+| medium | high | [m6-orchestration-core D10](decisions/m6-orchestration-core.md) | Pointer delivery is bounded, identity-checked and non-consuming | locked by research/orca-features/orchestration.md |
+| medium | high | [m6-orchestration-core D11](decisions/m6-orchestration-core.md) | Durable receipts must cooperate with kernel request IDs | locked by research/orca-features/orchestration.md |
+| medium | high | [m6-orchestration-core D12](decisions/m6-orchestration-core.md) | Reset is plugin-scoped and preserves receipts | locked by docs/architecture.md |
+| medium | high | [m6-orchestration-core D15](decisions/m6-orchestration-core.md) | Contract preparation is inert and keeps source-level recovery combinations | assumed — autonomous |
+| medium | high | [m6-orchestration-core D30](decisions/m6-orchestration-core.md) | Grow shared public runtime seams rather than infer worker authority | assumed — autonomous |
+| medium | high | [m6-orchestration-core D31](decisions/m6-orchestration-core.md) | Preserve incoming account, hosting and worktree decisions | locked by docs/loop/decisions/m3-accounts.md |
+| medium | high | [m6-orchestration-core D33](decisions/m6-orchestration-core.md) | Share atomic staged worker acceptance with lane9 | assumed — autonomous |
+| medium | high | [m6-orchestration-core D34](decisions/m6-orchestration-core.md) | Reserve explicit service coordinator APIs to lane11 without synthetic sessions | assumed — autonomous |
+| medium | high | [m6-orchestration-core D37](decisions/m6-orchestration-core.md) | Separate transport replay keys from durable orchestration request IDs | assumed — autonomous |
+| medium | high | [m6-orchestration-core D39](decisions/m6-orchestration-core.md) | Preserve landed schema history and all incoming ownership decisions | locked by docs/loop/LOOP.md |
 | medium | high | [m1-worktrees D9](decisions/m1-worktrees.md) | New worktrees go under `<worktrees folder>/<repo>/<name>`, with nesting and a per-project location as settings | locked by research/orca-features/worktrees.md (the rules); assumed — autonomous (v1's root) |
 | medium | high | [m1-worktrees D11](decisions/m1-worktrees.md) | Branches get a prefix, by default the git username | locked by research/orca-features/worktrees.md |
 | medium | high | [m1-worktrees D14](decisions/m1-worktrees.md) | The base is the requested one, else the project's saved base, else the detected default | locked by research/orca-features/worktrees.md |
@@ -909,6 +926,31 @@ files, not this one.
 | easy | high | [m0-core D43](decisions/m0-core.md) | W3 checkpoint: accept all eight findings, which collapse to five defects | assumed — autonomous |
 | easy | high | [m0-core D45](decisions/m0-core.md) | W4 checkpoint: accept all six findings, which collapse to four defects | assumed — autonomous |
 | easy | high | [m0-core D46](decisions/m0-core.md) | Final Round 1: accept all thirteen findings, which collapse to seven defects | assumed — autonomous |
+| easy | high | [m6-orchestration-core D2](decisions/m6-orchestration-core.md) | Follow unattended night mode and elect recommended defaults | locked by docs/loop/LOOP.md |
+| easy | high | [m6-orchestration-core D5](decisions/m6-orchestration-core.md) | Preserve schema-generated CLI and native JSON-RPC shapes | assumed — autonomous |
+| easy | high | [m6-orchestration-core D13](decisions/m6-orchestration-core.md) | Prepare contracts only while the early dependency is not ready | locked by docs/loop/LOOP.md |
+| easy | high | [m6-orchestration-core D14](decisions/m6-orchestration-core.md) | macOS only; no new native UI scenario in this slice | deferred: platform |
+| easy | high | [m6-orchestration-core D16](decisions/m6-orchestration-core.md) | Retain the early checkpoint while the dependency remains pending | locked by docs/loop/LOOP.md:79-83 |
+| easy | high | [m6-orchestration-core D17](decisions/m6-orchestration-core.md) | Iteration 5 retains the same pending early-item gate | locked by docs/loop/LOOP.md:79-83 |
+| easy | high | [m6-orchestration-core D18](decisions/m6-orchestration-core.md) | Iteration 6 preserves the early checkpoint | locked by docs/loop/LOOP.md:79-83 |
+| easy | high | [m6-orchestration-core D19](decisions/m6-orchestration-core.md) | Iteration 7 remains at the early dependency gate | locked by docs/loop/LOOP.md:79-83 |
+| easy | high | [m6-orchestration-core D20](decisions/m6-orchestration-core.md) | Iteration 8 preserves the dependency-gated checkpoint | locked by docs/loop/LOOP.md:79-83 |
+| easy | high | [m6-orchestration-core D21](decisions/m6-orchestration-core.md) | Iteration 9 preserves the early checkpoint | locked by docs/loop/LOOP.md:79-83 |
+| easy | high | [m6-orchestration-core D22](decisions/m6-orchestration-core.md) | Iteration 10 retains the pending early checkpoint | locked by docs/loop/LOOP.md:79-83 |
+| easy | high | [m6-orchestration-core D23](decisions/m6-orchestration-core.md) | Iteration 11 retains the early dependency checkpoint | locked by docs/loop/LOOP.md:79-83 |
+| easy | high | [m6-orchestration-core D24](decisions/m6-orchestration-core.md) | Iteration 12 retains the early dependency checkpoint | locked by docs/loop/LOOP.md:79-83 |
+| easy | high | [m6-orchestration-core D25](decisions/m6-orchestration-core.md) | Iteration 13 retains the early dependency checkpoint | locked by docs/loop/LOOP.md:79-83 |
+| easy | high | [m6-orchestration-core D26](decisions/m6-orchestration-core.md) | Iteration 14 retains the early dependency checkpoint | locked by docs/loop/LOOP.md:79-83 |
+| easy | high | [m6-orchestration-core D27](decisions/m6-orchestration-core.md) | Iteration 15 retains the early dependency checkpoint | locked by docs/loop/LOOP.md:79-83 |
+| easy | high | [m6-orchestration-core D28](decisions/m6-orchestration-core.md) | Implement against the dependency branch under the current early-item rule | supersedes m6-orchestration-core D13,D16–D27 (execution gate only) |
+| easy | high | [m6-orchestration-core D29](decisions/m6-orchestration-core.md) | Use OpenAI implementers with the verified Gemini review fallback | assumed — autonomous |
+| easy | high | [m6-orchestration-core D32](decisions/m6-orchestration-core.md) | Apply the aged-item night-mode landing rule | locked by docs/loop/LOOP.md |
+| easy | high | [m6-orchestration-core D35](decisions/m6-orchestration-core.md) | Repair a worktree-routing violation before accepting runtime output | assumed — autonomous |
+| easy | high | [m6-orchestration-core D36](decisions/m6-orchestration-core.md) | Publish actual source checkpoints without claiming acceptance | assumed — autonomous |
+| easy | high | [m6-orchestration-core D38](decisions/m6-orchestration-core.md) | Keep behavioral regressions and remove incidental implementation pins | assumed — autonomous |
+| easy | high | [m6-orchestration-core D40](decisions/m6-orchestration-core.md) | Apply the operator's immediate landing scope | supersedes m6-orchestration-core D32 (explicit operator landing instruction) |
+| easy | high | [m6-orchestration-core D41](decisions/m6-orchestration-core.md) | Defer only automatic idle nudging, preserving its intact acceptance contract | deferred: automatic idle-mailbox scheduling |
+| easy | high | [m6-orchestration-core D42](decisions/m6-orchestration-core.md) | Reconcile the queue-reported integration conflict without weakening identity | locked by docs/loop/LOOP.md |
 | easy | high | [m1-worktrees D1](decisions/m1-worktrees.md) | Classify the item as an API, CLI, Organization, Visual and Data design, and run research phases A and B | assumed — autonomous |
 | easy | high | [m1-worktrees D2](decisions/m1-worktrees.md) | Skip the visual companion and the adhd offer, use the standard gray-area set | locked by docs/loop/LOOP.md |
 | easy | high | [m1-worktrees D4](decisions/m1-worktrees.md) | Select every gray area that matters for worktrees | assumed — autonomous |

@@ -182,6 +182,7 @@ export function testCliContext(
   const lines: string[] = []
   const json = options.json ?? false
   const ctx: CliContext = {
+    requestBase: crypto.randomUUID(),
     call: (method, params = {}) => client.callAny(method, params),
     out: {
       json,

@@ -6,12 +6,39 @@ import type { StructuredLaunchOptions } from './runner'
 
 type Row = { session_id: string; seq: number; role: StructuredRole; text: string; data: string | null; at: number }
 type LaunchOptionsRow = { options_json: string }
+export type StructuredSendReceipt = {
+  operationId: string
+  sessionId: string
+  payloadHash: string
+  state: 'pending' | 'completed'
+}
+
+type StoredSendReceipt = {
+  operation_id: string
+  session_id: string
+  payload_hash: string
+  state: StructuredSendReceipt['state']
+}
+
 
 const CREATE_LAUNCH_OPTIONS_TABLE = `
   CREATE TABLE IF NOT EXISTS structured_launch_options (
     session_id TEXT PRIMARY KEY,
     options_json TEXT NOT NULL
   )`
+
+const CREATE_SEND_RECEIPTS_TABLE = `
+  CREATE TABLE IF NOT EXISTS structured_send_receipts (
+    operation_id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    payload_hash TEXT NOT NULL,
+    state TEXT NOT NULL CHECK (state IN ('pending', 'completed')),
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS structured_send_receipts_updated_at ON structured_send_receipts(updated_at)
+`
+
 
 function parseLaunchOptions(json: string): StructuredLaunchOptions {
   let value: unknown
@@ -74,7 +101,11 @@ function createLaunchOptionsTable(): StoreMigration {
 
 /** The migrations of the plugin's store, for `context.openStore`. */
 export function journalMigrations(home: string): StoreMigration[] {
-  return [createAndImportV1(home), createLaunchOptionsTable()]
+  return [
+    createAndImportV1(home),
+    createLaunchOptionsTable(),
+    (store) => store.exec(CREATE_SEND_RECEIPTS_TABLE)
+  ]
 }
 
 /** The structured sessions' message journal. */
@@ -98,6 +129,61 @@ export class Journal {
       sessionId
     )
     return row ? parseLaunchOptions(row.options_json) : null
+  }
+
+  sendReceipt(operationId: string): StructuredSendReceipt | null {
+    const row = this.store.get<StoredSendReceipt>(
+      'SELECT operation_id, session_id, payload_hash, state FROM structured_send_receipts WHERE operation_id = ?',
+      operationId
+    )
+    return row
+      ? { operationId: row.operation_id, sessionId: row.session_id, payloadHash: row.payload_hash, state: row.state }
+      : null
+  }
+
+  reserveSendReceipt(
+    input: Omit<StructuredSendReceipt, 'state'>,
+    now: number
+  ): { receipt: StructuredSendReceipt; created: boolean } | null {
+    return this.store.transaction(() => {
+      const existing = this.sendReceipt(input.operationId)
+      if (existing) return { receipt: existing, created: false }
+      this.store.run(
+        "DELETE FROM structured_send_receipts WHERE state = 'completed' AND updated_at < ?",
+        now - 30 * 24 * 60 * 60 * 1000
+      )
+      const count = this.store.get<{ count: number }>('SELECT COUNT(*) AS count FROM structured_send_receipts')!.count
+      if (count >= 10_000) {
+        this.store.run(`
+          DELETE FROM structured_send_receipts
+          WHERE operation_id IN (
+            SELECT operation_id FROM structured_send_receipts
+            WHERE state = 'completed' ORDER BY updated_at LIMIT 64
+          )
+        `)
+      }
+      const afterPrune = this.store.get<{ count: number }>('SELECT COUNT(*) AS count FROM structured_send_receipts')!.count
+      if (afterPrune >= 10_000) return null
+      this.store.run(
+        `INSERT INTO structured_send_receipts
+          (operation_id, session_id, payload_hash, state, created_at, updated_at)
+          VALUES (?, ?, ?, 'pending', ?, ?)`,
+        input.operationId,
+        input.sessionId,
+        input.payloadHash,
+        now,
+        now
+      )
+      return { receipt: { ...input, state: 'pending' }, created: true }
+    })
+  }
+
+  completeSendReceipt(operationId: string, now: number): void {
+    this.store.run(
+      "UPDATE structured_send_receipts SET state = 'completed', updated_at = ? WHERE operation_id = ?",
+      now,
+      operationId
+    )
   }
 
   /** Stores a message under the next `seq` of its session. */
