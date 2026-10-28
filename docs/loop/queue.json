@@ -1598,9 +1598,7 @@
         "m7-terminal-runtime-native-and-worktree-parity",
         "m7-orchestration-worker-federation",
         "m7-terminal-provider-host-and-worktree-remainder",
-        "fix-desktop-startup-imports",
-        "m7-terminal-owner-provisioning-and-selector-flows",
-        "m7-vm-and-owner-bound-host-workspaces"
+        "fix-desktop-startup-imports"
       ],
       "status": "todo"
     },
@@ -1658,7 +1656,9 @@
         "m7-sweep-hosting",
         "m7-sweep-automation",
         "m7-sweep-browser-mobile",
-        "m7-sweep-orchestration"
+        "m7-sweep-orchestration",
+        "m7-terminal-owner-provisioning-and-selector-flows",
+        "m7-vm-and-owner-bound-host-workspaces"
       ],
       "status": "todo",
       "early": true
