@@ -8,6 +8,7 @@ import type { LoopCreateInput } from '../src/types'
 import { normalizeLoopConfig } from '../src/config'
 import { loopMigrations } from '../src/store'
 import { LoopService } from '../src/service'
+import { HostPowerService } from '../../../packages/daemon/src/host-power'
 
 const roots: string[] = []
 const runtimes: Runtime[] = []
@@ -78,6 +79,7 @@ class Runtime {
     const runtime = this
     this.context = {
       pluginId: 'quirky.loops', dir: root, dataDir: join(quirkyHome, 'plugin-data'), home,
+      hostPower: new HostPowerService(() => {}, null).forPlugin('quirky.loops', () => false),
       workerEntrypoint: () => '', log: () => undefined, provide: () => undefined,
       emit(event, data) {
         runtime.events.push({ type: `quirky.loops/${event}`, data } as QuirkyEvent)

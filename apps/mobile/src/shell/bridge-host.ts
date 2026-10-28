@@ -74,7 +74,7 @@ export function createBridgeHost(options: BridgeHostOptions): PageBridgeHost {
   const pendingRequests = new Map<string, 'rpc' | 'other'>()
   let pendingStreamAttachments = 0
   let stopState: (() => void) | undefined
-  let rememberedWorktreeId = init.route.kind === 'session' ? init.route.worktreeId : null
+  let rememberedWorktreeId = init.host.lastWorktree ?? null
 
   function send(value: JsonRecord): void {
     if (closed || !ready) return
@@ -152,7 +152,7 @@ export function createBridgeHost(options: BridgeHostOptions): PageBridgeHost {
     const requestId = message.requestId as string
     const method = message.method as string
     const params = message.params as Record<string, unknown>
-    validatePageRpc(method, params, init.grants)
+    validatePageRpc(method, params, init.grants, init.route)
     if (isPageMutation(method) && rpc.state.phase !== 'connected') throw new Error('mutations require a connected desktop')
     const timeoutMs = message.timeoutMs
     if (timeoutMs !== undefined && (!Number.isSafeInteger(timeoutMs) || (timeoutMs as number) < 1 || (timeoutMs as number) > MAX_TIMEOUT_MS)) throw new Error('page RPC timeout is invalid')
@@ -251,7 +251,7 @@ export function createBridgeHost(options: BridgeHostOptions): PageBridgeHost {
       try {
         validatePageReport(value.state)
         const state = value.state as Record<string, unknown>
-        if (state.route === 'session' && typeof state.worktreeId === 'string' && state.worktreeId !== rememberedWorktreeId) {
+        if (typeof state.worktreeId === 'string' && state.worktreeId !== rememberedWorktreeId) {
           rememberedWorktreeId = state.worktreeId
           void options.rememberWorkspace(init.host.id, state.worktreeId).catch(() => {})
         }

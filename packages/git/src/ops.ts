@@ -182,6 +182,20 @@ export async function checkRefFormatBranch(name: string): Promise<boolean> {
   return (await runGit('/', ['check-ref-format', '--branch', name])).exitCode === 0
 }
 
+/** Switches to an existing local branch, or creates a local tracking branch from a remote ref. */
+export async function switchToBranch(cwd: string, branch: string, trackingBranch?: string): Promise<void> {
+  if (!(await checkRefFormatBranch(branch))) throw new GitError(`invalid branch name: ${branch}`, '', 128)
+  if (trackingBranch === undefined) {
+    if (!(await localBranchExists(cwd, branch))) throw new GitError(`local branch does not exist: ${branch}`, '', 128)
+    await git(cwd, ['switch', '--no-guess', branch])
+    return
+  }
+  if (!(await checkRefFormatBranch(trackingBranch))) throw new GitError(`invalid tracking branch: ${trackingBranch}`, '', 128)
+  const remoteRef = await runGit(cwd, ['show-ref', '--verify', '--quiet', `refs/remotes/${trackingBranch}`])
+  if (remoteRef.exitCode !== 0) throw new GitError(`remote branch does not exist: ${trackingBranch}`, remoteRef.stderr, remoteRef.exitCode)
+  if (await localBranchExists(cwd, branch)) throw new GitError(`local branch already exists: ${branch}`, '', 128)
+  await git(cwd, ['switch', '--track', '--create', branch, trackingBranch])
+}
 /** Adds a worktree at `path` on new branch `branch` cut from `fullBase`, without upstream tracking; creates parent dirs. */
 export async function addNewBranchWorktree(
   repo: string,
