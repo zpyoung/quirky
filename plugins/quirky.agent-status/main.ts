@@ -1,6 +1,6 @@
 import { join } from 'node:path'
 import type { LaunchHookInput, LaunchPatch, PluginContext } from '@quirky/protocol'
-import { ClaudeVersionGate, commandProbe, writeClaudeSettings } from './src/claude-settings'
+import { ClaudeVersionGate, claudeEventsFor, claudeSettings, commandProbe } from './src/claude-settings'
 import { HooksService } from './src/hooks'
 import type { ScriptState } from './src/script-state'
 import { AgentStatusService } from './src/service'
@@ -10,12 +10,12 @@ import { DEFAULT_OUTPUT_LINES, DEFAULT_WAIT_MS } from './src/waits'
 
 const DEFAULT_CLAUDE_COMMAND = 'claude'
 
-/** The launch arguments that point Claude at its per-version hook settings and Codex at the notify script. */
+/** The per-version Claude hook settings and Codex notify argument supplied to each agent launch. */
 function agentHooks(context: PluginContext, gate: ClaudeVersionGate): (launch: LaunchHookInput) => Promise<LaunchPatch> {
   return async (launch) => {
     if (launch.agent === 'claude' || launch.agent === 'claude-agent-teams') {
       const version = await gate.version(await claudeCommand(context), { sessionId: launch.sessionId, worktreeId: launch.worktreeId })
-      return { args: ['--settings', writeClaudeSettings(context.dataDir, version)] }
+      return { jsonArgs: { '--settings': claudeSettings(claudeEventsFor(version)) } }
     }
     if (launch.agent === 'codex') {
       const notify = `notify=${JSON.stringify([join(context.home, 'bin', 'quirky-hook'), 'codex'])}`

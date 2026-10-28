@@ -8,11 +8,11 @@ import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { ClipboardAddon, type IBase64, type IClipboardProvider } from '@xterm/addon-clipboard'
 import { RpcError, RpcErrorCode, base64ToBytes, type UiPluginContext } from '@quirky/protocol'
 import { shellEscapePaths } from '../../shell-escape'
-import { pathsFromDrop } from './drop'
+import { pathsFromDrop, readWorktreePathsDrop, resolveWorktreeDropPaths, WORKTREE_PATHS_MIME } from './drop'
 import { trackKittyFlags } from './kitty'
 import { PathChecker, createFileLinkProvider } from './link-provider'
 import { LinkPopover, type PopoverItem } from './LinkPopover'
-import { decideLinkClick, type LinkKind } from './links'
+import { decideLinkClick, relativeWithinRoot, type LinkKind } from './links'
 import { resolveKeyAction } from './keys'
 import { createOsc52Base64, createOsc52Provider, createOsc52QueryGuard } from './osc52'
 import { planPaste, runPaste } from './paste'
@@ -49,6 +49,7 @@ export type SearchOptions = { regex?: boolean; caseSensitive?: boolean }
 /** The operations the workspace drives on a mounted pane. */
 export type TerminalPaneHandle = {
   focus(): void
+  scrollToBottom(): void
   /** The selected text (gutter-trimmed when the setting says so), also put on the clipboard; empty when nothing is selected. */
   copy(): string
   selectAll(): void
@@ -67,11 +68,15 @@ export type TerminalPaneHandle = {
 export type TerminalPaneProps = {
   context: UiPluginContext
   sessionId: string
+  /** The owning worktree ID, or `floating` when this pane has no worktree owner. */
+  workspaceId?: string
   /** The directory relative file links are joined onto. */
   cwd: string
   settings: PaneSettings
   /** Whether this is the focused pane of its tab; the pane takes keyboard focus when it becomes active. */
   active: boolean
+  /** The terminal must not reclaim focus while the embedded dock owns keyboard input. */
+  suppressAutoFocus?: boolean
   /** False once the process has exited, so keystrokes are not sent to a dead session. */
   interactive: boolean
   /** True while a divider or panel drag is resizing the pane; the shell is told the final size once the drag ends. */
@@ -165,7 +170,7 @@ let focusOwner: object | null = null
  * addon for OSC 52. The workspace keys it by pane ID so a layout change never remounts it.
  */
 export function TerminalPaneView(props: TerminalPaneProps) {
-  const { context, sessionId, settings, active, dragging, themeSource, ref } = props
+  const { context, sessionId, settings, active, dragging, suppressAutoFocus, themeSource, ref } = props
   const hostRef = useRef<HTMLDivElement>(null)
   const screenRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -233,11 +238,14 @@ export function TerminalPaneView(props: TerminalPaneProps) {
 
   const closeSearch = () => {
     applySearch(null)
-    runtime.current?.term.focus()
+    if (!latest.current.suppressAutoFocus) runtime.current?.term.focus()
   }
 
   useImperativeHandle(ref, () => ({
-    focus: () => runtime.current?.term.focus(),
+    focus: () => {
+      if (!latest.current.suppressAutoFocus) runtime.current?.term.focus()
+    },
+    scrollToBottom: () => runtime.current?.term.scrollToBottom(),
     copy: () => runtime.current?.copy() ?? '',
     selectAll: () => runtime.current?.term.selectAll(),
     paste: (text) => runtime.current?.paste(text) ?? Promise.resolve(),
@@ -327,6 +335,40 @@ export function TerminalPaneView(props: TerminalPaneProps) {
         .call('quirky.terminal/openExternal', reveal ? { target, reveal: true } : { target })
         .catch((error: unknown) => context.toast('Could not open link', messageOf(error)))
     }
+    const openPathTarget = async (target: string, line: number | null, column: number | null) => {
+      const workspaceId = latest.current.workspaceId
+      if (!workspaceId || workspaceId === 'floating') {
+        openTarget(target, false)
+        return
+      }
+      const ownerId = workspaceId.replace(/^id:/, '')
+      const worktreeSelector = `id:${ownerId}`
+      let root: string
+      try {
+        const resolved = (await context.call('quirky.worktree/resolve', { selector: worktreeSelector })) as { path?: unknown }
+        if (typeof resolved.path !== 'string') throw new Error('the worktree did not return a root path')
+        root = resolved.path
+      } catch (error) {
+        context.toast('Could not resolve the worktree for this file link', messageOf(error))
+        return
+      }
+      const path = relativeWithinRoot(root, target)
+      if (path === null) {
+        openTarget(target, false)
+        return
+      }
+      try {
+        await context.call('quirky.editor/open', {
+          worktree: worktreeSelector,
+          path,
+          ...(line === null ? {} : { line }),
+          ...(column === null ? {} : { column }),
+          focus: true
+        })
+      } catch (error) {
+        context.toast('Could not open file in editor', messageOf(error))
+      }
+    }
     const showPopover = (kind: LinkKind, target: string, event: MouseEvent) => {
       const items: PopoverItem[] =
         kind === 'url'
@@ -341,14 +383,16 @@ export function TerminalPaneView(props: TerminalPaneProps) {
             ]
       setPopover({ x: event.clientX, y: event.clientY, items })
     }
-    const activateLink = (kind: LinkKind, target: string, event: MouseEvent) => {
+    const activateLink = (kind: LinkKind, target: string, event: MouseEvent, line: number | null = null, column: number | null = null) => {
       if (term.hasSelection()) return
       const action = decideLinkClick(kind, event, latest.current.settings)
       if (action === 'none') return
       event.preventDefault()
       if (action === 'popover') showPopover(kind, target, event)
-      else if (action === 'open') openTarget(target, false)
-      else if (action === 'reveal') openTarget(target, true)
+      else if (action === 'open') {
+        if (kind === 'path') void openPathTarget(target, line, column)
+        else openTarget(target, false)
+      } else if (action === 'reveal') openTarget(target, true)
       else copyText(target)
     }
     const activateUri = (event: MouseEvent, uri: string) => {
@@ -376,7 +420,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       createFileLinkProvider(term, checker, {
         cwd: () => latest.current.cwd,
         hover: setHint,
-        activate: (event, link) => activateLink('path', link.path, event)
+        activate: (event, link) => activateLink('path', link.path, event, link.line, link.column)
       })
     )
 
@@ -486,16 +530,46 @@ export function TerminalPaneView(props: TerminalPaneProps) {
         .catch(() => {})
     }
     const onMouseEnter = () => {
-      if (latest.current.settings['focus-follows-mouse'] && !draggingRef.current) term.focus()
+      if (latest.current.settings['focus-follows-mouse'] && !latest.current.suppressAutoFocus && !draggingRef.current) term.focus()
     }
     const onDragOver = (event: DragEvent) => {
       const types = Array.from(event.dataTransfer?.types ?? [])
-      if (!types.includes('Files') && !types.includes('text/uri-list')) return
+      if (!types.includes('Files') && !types.includes('text/uri-list') && !types.includes(WORKTREE_PATHS_MIME)) return
       event.preventDefault()
     }
     const onDrop = (event: DragEvent) => {
-      if (!event.dataTransfer) return
-      const paths = pathsFromDrop(event.dataTransfer)
+      const transfer = event.dataTransfer
+      if (!transfer) return
+      const worktreeDrop = readWorktreePathsDrop(transfer)
+      if (worktreeDrop.kind !== 'absent') {
+        event.preventDefault()
+        event.stopPropagation()
+        if (worktreeDrop.kind === 'invalid') {
+          context.toast('Could not use dropped files', 'The editor row drag payload is invalid.')
+          return
+        }
+        const workspaceId = latest.current.workspaceId?.replace(/^id:/, '')
+        if (!workspaceId || workspaceId === 'floating' || worktreeDrop.worktreeId !== workspaceId) {
+          context.toast('Could not use dropped files', 'The dragged files belong to a different worktree.')
+          return
+        }
+        void (async () => {
+          try {
+            const resolved = (await context.call('quirky.worktree/resolve', { selector: `id:${workspaceId}` })) as { path?: unknown }
+            if (typeof resolved.path !== 'string') throw new Error('the worktree did not return a root path')
+            const paths = resolveWorktreeDropPaths(resolved.path, worktreeDrop.paths)
+            if (!paths) {
+              context.toast('Could not use dropped files', 'The dragged path escapes its worktree.')
+              return
+            }
+            sendInput(shellEscapePaths(paths))
+          } catch (error) {
+            context.toast('Could not use dropped files', messageOf(error))
+          }
+        })()
+        return
+      }
+      const paths = pathsFromDrop(transfer)
       if (paths.length === 0) return
       event.preventDefault()
       event.stopPropagation()
@@ -533,7 +607,17 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       if (fitFrame || disposed) return
       fitFrame = requestAnimationFrame(doFit)
     }
-    const observer = new ResizeObserver(scheduleFit)
+    let observedWidth = screen.clientWidth
+    let observedHeight = screen.clientHeight
+    const onScreenResize = () => {
+      const width = screen.clientWidth
+      const height = screen.clientHeight
+      if (width === observedWidth && height === observedHeight) return
+      observedWidth = width
+      observedHeight = height
+      scheduleFit()
+    }
+    const observer = new ResizeObserver(onScreenResize)
     observer.observe(screen)
 
     const reportSize = () => setView((now) => (now.cols === term.cols && now.rows === term.rows ? now : { ...now, cols: term.cols, rows: term.rows }))
@@ -638,7 +722,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       if (event.type === 'theme.changed') applyTheme()
     })
 
-    if (latest.current.active) term.focus()
+    if (latest.current.active && !latest.current.suppressAutoFocus) term.focus()
 
     return () => {
       disposed = true
@@ -731,12 +815,19 @@ export function TerminalPaneView(props: TerminalPaneProps) {
   }, [settings['allow-osc52']])
 
   useEffect(() => {
-    if (active) runtime.current?.term.focus()
-  }, [active])
+    if (active && !suppressAutoFocus) runtime.current?.term.focus()
+  }, [active, suppressAutoFocus])
 
   const wasDragging = useRef(dragging)
   useEffect(() => {
-    if (wasDragging.current && !dragging) sendResize()
+    if (wasDragging.current && !dragging) {
+      const rt = runtime.current
+      const screen = screenRef.current
+      if (rt) {
+        if (screen && screen.clientWidth > 0 && screen.clientHeight > 0) guarded(() => rt.fit.fit(), undefined)
+        sendResize()
+      }
+    }
     wasDragging.current = dragging
   }, [dragging, sendResize])
 

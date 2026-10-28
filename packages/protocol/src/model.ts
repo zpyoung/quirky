@@ -51,6 +51,12 @@ export type Worktree = {
   /** True while a removal is in flight, so views can show the row as deleting. */
   removing: boolean
   groupId: string | null
+  /** Display-only membership in a project group; distinct from folder identity and repo ownership. */
+  projectGroupId: string | null
+  /** Greatest session lifecycle/activity timestamp observed for this workspace; zero when unknown. */
+  lastActivityAt: number
+  /** Filesystem-instance identity, distinct from the path-derived worktree ID. */
+  instanceId: string
 }
 
 /** A named, orderable collection of projects in the tree. */
@@ -63,6 +69,8 @@ export type ProjectGroup = {
   order: number
   createdFrom: 'manual' | 'folder-scan'
   repoIds: string[]
+  /** Parent project group, or null for a root group. */
+  parentId: string | null
 }
 
 /** Per-project preferences that override the global defaults. */
@@ -190,6 +198,14 @@ export type AgentStatusSummary = {
 /** Why a session is marked unread: an agent finished, a terminal bell rang, or a program posted a notification. */
 export type SessionUnread = 'agent' | 'bell' | 'notification'
 
+/** A chip a plugin attaches to a session's tab; clicking it runs `command` with `args` when `command` is set. */
+export type SessionBadge = {
+  label: string
+  tooltip?: string
+  command?: string
+  args?: unknown
+}
+
 export type Session = {
   id: string
   kind: SessionKind
@@ -221,6 +237,8 @@ export type Session = {
   name?: string | null
   /** Why the session is marked unread; null or absent when it is not. */
   unread?: SessionUnread | null
+  /** Chips on the session's tab, keyed `<plugin id>/<key>`; absent when there are none. */
+  badges?: Record<string, SessionBadge>
 }
 
 export type GitFileStatus = {

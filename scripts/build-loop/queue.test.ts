@@ -60,15 +60,15 @@ describe('next', () => {
 describe('early items', () => {
   const early = (id: string, deps: string[]): Item => ({ ...item(id, deps), early: true })
 
-  test('start once each dependency is being implemented', () => {
-    const items = [item('a', [], 'done'), { ...item('b', ['a'], 'in-progress'), lane: 1 }, early('c', ['b']), item('d', ['b'])]
-    expect(next(items, 2)).toMatchObject({ kind: 'item', item: { id: 'c' } })
+  test('start once each dependency is claimed, however deep the chain', () => {
+    const items = [item('a'), { ...item('b', ['a'], 'in-progress'), lane: 1 }, early('c', ['b']), item('d', ['b'])]
+    expect(next(items, 2)).toMatchObject({ kind: 'item', item: { id: 'a' } })
+    expect(next([{ ...item('a', [], 'in-progress'), lane: 3 }, ...items.slice(1)], 2)).toMatchObject({ kind: 'item', item: { id: 'c' } })
   })
 
-  test('wait while a dependency is itself still waiting on its own', () => {
-    const items = [item('a'), { ...item('b', ['a'], 'in-progress'), lane: 1 }, early('c', ['b'])]
-    expect(next(items, 2)).toMatchObject({ kind: 'item', item: { id: 'a' } })
-    expect(next([{ ...item('a', [], 'in-progress'), lane: 3 }, ...items.slice(1)], 2)).toMatchObject({ kind: 'busy' })
+  test('wait while a dependency is unclaimed', () => {
+    const items = [{ ...item('a', [], 'in-progress'), lane: 1 }, item('b', ['a']), early('c', ['b'])]
+    expect(next(items, 2)).toMatchObject({ kind: 'busy' })
   })
 
   test('pendingDeps names the dependencies not yet done', () => {

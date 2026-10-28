@@ -656,6 +656,165 @@
         }
       },
       {
+        "id": "openViewTab",
+        "description": "Opens or reuses a session-free hosted view in the existing workspace tab strip.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "workspace": {
+              "type": "string",
+              "description": "A worktree selector or `floating`; default the caller's workspace."
+            },
+            "group": {
+              "type": "string",
+              "description": "The target group; default the active group. Without `workspace`, the workspace that holds it."
+            },
+            "viewId": {
+              "type": "string",
+              "description": "An effective declared view contribution ID."
+            },
+            "key": {
+              "type": "string",
+              "description": "The view's stable identity key within its workspace."
+            },
+            "input": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "The input passed to the mounted view."
+            },
+            "title": {
+              "type": "string",
+              "description": "The tab title; at most 200 characters."
+            },
+            "reuse": {
+              "type": "boolean",
+              "description": "Reuse the matching workspace, view ID and key identity; defaults to true."
+            },
+            "replace": {
+              "type": "string",
+              "description": "Explicitly replace this existing unpinned preview view tab."
+            },
+            "activate": {
+              "type": "boolean",
+              "description": "Activate the tab; defaults to true."
+            },
+            "preview": {
+              "type": "boolean",
+              "description": "Whether this is a replaceable preview tab; defaults to false."
+            },
+            "closeCommand": {
+              "type": "string",
+              "description": "An effective command contribution used by the renderer's close affordance."
+            },
+            "closeMethod": {
+              "type": "string",
+              "description": "An effective method name used to guard every tab removal."
+            },
+            "closeParams": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Parameters passed to closeMethod and closeCommand with the actual tabId added."
+            },
+            "revision": {
+              "type": "integer",
+              "description": "Fails with a conflict naming the current revision when the workspace is at another one."
+            }
+          },
+          "required": [
+            "viewId",
+            "key",
+            "title"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "workspace": {
+              "type": "object",
+              "description": "The whole workspace after the change, with its new revision."
+            },
+            "tab": {
+              "type": "string",
+              "description": "The stable ID of the reused, created or replaced tab."
+            }
+          },
+          "required": [
+            "workspace",
+            "tab"
+          ]
+        }
+      },
+      {
+        "id": "rekeyViewTabs",
+        "description": "Atomically updates identity, input, title or preview metadata for hosted views of one declared view.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "workspace": {
+              "type": "string",
+              "description": "A worktree selector or `floating`; default the caller's workspace."
+            },
+            "viewId": {
+              "type": "string",
+              "description": "The effective declared view ID of every changed tab."
+            },
+            "changes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "tab": {
+                    "type": "string",
+                    "description": "The stable tab ID."
+                  },
+                  "key": {
+                    "type": "string",
+                    "description": "The new view identity key."
+                  },
+                  "input": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "description": "The new mounted view input."
+                  },
+                  "title": {
+                    "type": "string",
+                    "description": "The new tab title; at most 200 characters."
+                  },
+                  "preview": {
+                    "type": "boolean",
+                    "description": "Whether the tab remains a replaceable preview."
+                  }
+                },
+                "required": [
+                  "tab",
+                  "key"
+                ]
+              }
+            },
+            "revision": {
+              "type": "integer",
+              "description": "Fails with a conflict naming the current revision when the workspace is at another one."
+            }
+          },
+          "required": [
+            "viewId",
+            "changes"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "workspace": {
+              "type": "object",
+              "description": "The whole workspace after the change, with its new revision."
+            }
+          },
+          "required": [
+            "workspace"
+          ]
+        }
+      },
+      {
         "id": "newTab",
         "description": "Starts a session and opens it as a tab at the end of a group.",
         "params": {
@@ -693,6 +852,10 @@
               "type": "string",
               "description": "The quick command this tab runs, remembered on the group."
             },
+            "activate": {
+              "type": "boolean",
+              "description": "Whether the new tab takes focus; default true. When false the workspace's active group, that group's active tab and the recent list stay as they are."
+            },
             "revision": {
               "type": "integer",
               "description": "Fails with a conflict naming the current revision when the workspace is at another one."
@@ -705,10 +868,25 @@
             "workspace": {
               "type": "object",
               "description": "The whole workspace after the change, with its new revision."
+            },
+            "session": {
+              "type": "string",
+              "description": "The id of the session the new tab runs."
+            },
+            "tab": {
+              "type": "string",
+              "description": "The id of the new tab."
+            },
+            "pane": {
+              "type": "string",
+              "description": "The id of the new tab's pane."
             }
           },
           "required": [
-            "workspace"
+            "workspace",
+            "session",
+            "tab",
+            "pane"
           ]
         }
       },
@@ -1249,6 +1427,123 @@
             "workspace": {
               "type": "object",
               "description": "The whole workspace after the change, with its new revision."
+            }
+          },
+          "required": [
+            "workspace"
+          ]
+        }
+      },
+      {
+        "id": "focusContext",
+        "description": "Reads or updates the daemon's last focused terminal workspace. Omit workspace to read; use null to clear.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "workspace": {
+              "description": "A focused worktree ID or floating; null clears the focus context."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "workspace": {
+              "description": "The last focused terminal workspace, or null."
+            }
+          },
+          "required": [
+            "workspace"
+          ]
+        }
+      },
+      {
+        "id": "openSession",
+        "description": "Opens an existing local terminal session in its worktree, or activates its existing pane, without creating or restoring a process.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The ID of an existing running local terminal session."
+            },
+            "workspace": {
+              "type": "string",
+              "description": "The worktree ID or floating; defaults to the session's worktree."
+            }
+          },
+          "required": [
+            "session"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "workspace": {
+              "type": "object",
+              "description": "The workspace with the session's pane active."
+            },
+            "pane": {
+              "type": "string",
+              "description": "The pane for the opened session."
+            }
+          },
+          "required": [
+            "workspace",
+            "pane"
+          ]
+        }
+      },
+      {
+        "id": "groupInfo",
+        "description": "The workspace owning a tab group; fails for an unknown group.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "group": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "group"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "workspace": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "workspace"
+          ]
+        }
+      },
+      {
+        "id": "adoptSession",
+        "description": "Places an existing session in an explicit group through the serialized layout queue. The group must belong to the session's worktree; an already-adopted tab is moved rather than duplicated.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string"
+            },
+            "group": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "session",
+            "group"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "workspace": {
+              "type": "object"
             }
           },
           "required": [
@@ -2131,6 +2426,21 @@
           },
           "required": [
             "state"
+          ]
+        }
+      },
+      {
+        "id": "focusContextChanged",
+        "description": "The last focused terminal workspace changed.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "workspace": {
+              "description": "The last focused terminal workspace, or null when no workspace is focused."
+            }
+          },
+          "required": [
+            "workspace"
           ]
         }
       }
@@ -3496,6 +3806,46 @@
       {
         "id": "focus-previous-pane",
         "title": "Focus Previous Pane"
+      },
+      {
+        "id": "focus-pane",
+        "title": "Focus Terminal Pane",
+        "args": {
+          "type": "object",
+          "properties": {
+            "pane": {
+              "type": "string",
+              "description": "The pane ID to activate, focus and scroll to bottom."
+            },
+            "workspace": {
+              "type": "string",
+              "description": "The worktree ID or floating; inferred from the pane when omitted."
+            }
+          },
+          "required": [
+            "pane"
+          ]
+        }
+      },
+      {
+        "id": "open-session",
+        "title": "Open Existing Session",
+        "args": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The ID of an existing terminal session."
+            },
+            "workspace": {
+              "type": "string",
+              "description": "The worktree ID or floating; defaults to the session's worktree."
+            }
+          },
+          "required": [
+            "session"
+          ]
+        }
       },
       {
         "id": "toggle-expand-pane",

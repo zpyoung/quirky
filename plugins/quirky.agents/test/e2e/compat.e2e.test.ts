@@ -145,15 +145,15 @@ describe('SC-38: v1 sessions and commands keep working', () => {
   )
 
   test(
-    "SC-38: `session new --agent claude --prompt hi` gets agent-status's --settings argument before the prompt",
+    'SC-38: `session new --agent claude --prompt hi` gets one effective JSON settings argument before the prompt',
     async () => {
       await reopen()
       const created = await cliJson<Session>(['session', 'new', '--agent', 'claude', '--prompt', 'hi', '--json'])
       expect(created).toMatchObject({ agent: 'claude', status: 'running', promptDelivery: 'command-line' })
       const started = await startOf('claude', created.id)
       const settings = started.argv.indexOf('--settings')
+      expect(started.argv.filter((argument) => argument === '--settings')).toHaveLength(1)
       expect(settings).toBeGreaterThanOrEqual(0)
-      expect(started.argv[settings + 1]).toMatch(/claude-settings-[^/]+\.json$/)
       expect(started.argv.at(-1)).toBe('hi')
       expect(settings).toBeLessThan(started.argv.length - 1)
 

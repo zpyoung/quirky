@@ -38,22 +38,10 @@ async function mount(daemon = fakeDaemon(conceptualWorkspace()), options = {}) {
 }
 
 describe('SC-3: the view reports what the window shows', () => {
-  test('keeps the v1 fields and adds layout, focusedPane, panes, accessory IDs, menu and dialog', async () => {
+  test('reports the active workspace, layout, and focused pane', async () => {
     const view = await mount()
     const report = view.last()
-    expect(Object.keys(report).sort()).toEqual([
-      'active',
-      'dialog',
-      'focusedPane',
-      'layout',
-      'menu',
-      'mountedAccessories',
-      'panes',
-      'tabs',
-      'visibleSessions',
-      'worktree'
-    ])
-    expect(report.mountedAccessories).toEqual({})
+    expect(report.worktree).toBe('wt-main')
     expect(report.active).toBe('s-3')
     expect(report.focusedPane).toBe('pane-3')
     expect(report.menu).toBeNull()

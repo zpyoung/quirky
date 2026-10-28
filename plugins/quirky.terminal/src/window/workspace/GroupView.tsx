@@ -2,9 +2,10 @@ import { useRef, type DragEvent, type MouseEvent as ReactMouseEvent } from 'reac
 import { displayTitle } from '../../layout/titles'
 import { dropZone, paneLeaves, roundRatio } from '../../layout/tree'
 import type { DropZone } from '../../layout/tree'
-import { GROUP_RATIO_MAX, GROUP_RATIO_MIN, TAB_COLOR_HEX } from '../../layout/types'
+import { GROUP_RATIO_MAX, GROUP_RATIO_MIN, isViewTab, TAB_COLOR_HEX } from '../../layout/types'
 import type { Group, GroupNode, Tab } from '../../layout/types'
 import { CollapseIcon, CloseIcon, PinIcon } from './icons'
+import { hasCommandDrop } from './controller'
 import type { ControllerState, WorkspaceController } from './controller'
 import { activeTabOf, byPaneId, groupRects, px } from './model'
 import type { GroupDividerRect } from './model'
@@ -17,8 +18,9 @@ type Common = { controller: WorkspaceController; state: ControllerState }
 function TabItem({ controller, state, group, tab, index, others, now }: Common & { group: Group; tab: Tab; index: number; others: Tab[]; now: number }) {
   const ws = state.workspace!
   const selected = group.activeTab === tab.id
-  const leaves = paneLeaves(tab.root)
-  const lead = leaves.find((leaf) => leaf.id === tab.activePane) ?? leaves[0]
+  const terminal = isViewTab(tab) ? null : tab
+  const leaves = terminal ? paneLeaves(terminal.root) : []
+  const lead = terminal ? leaves.find((leaf) => leaf.id === terminal.activePane) ?? leaves[0] : undefined
   const session = lead ? state.sessions[lead.session] : undefined
   const unread = leaves.map((leaf) => state.sessions[leaf.session]?.unread).find((reason) => reason)
   const title = displayTitle(tab)
@@ -52,7 +54,7 @@ function TabItem({ controller, state, group, tab, index, others, now }: Common &
         event.preventDefault()
         void controller.closeTab(tab.id)
       }}
-      onDoubleClick={() => controller.renameTab(tab.id)}
+      onDoubleClick={() => isViewTab(tab) && tab.preview ? void controller.promoteViewTab(tab.id) : controller.renameTab(tab.id)}
       onContextMenu={(event) => {
         event.preventDefault()
         controller.openMenu('tab', tab.id, { x: event.clientX, y: event.clientY })
@@ -76,13 +78,33 @@ function TabItem({ controller, state, group, tab, index, others, now }: Common &
         void controller.dropTab({ kind: 'strip', group: group.id, index: indexFor(event) })
       }}
     >
-      {unread ? <UnreadBell reason={unread} /> : <StatusGlyph session={session} now={now} />}
+      {terminal ? (unread ? <UnreadBell reason={unread} /> : <StatusGlyph session={session} now={now} />) : null}
       {renaming ? (
         <InlineField label="Tab title" initial={displayTitle(tab)} className="qt-rename" onCommit={(value) => void controller.commitRename(value)} onCancel={() => controller.cancelRename()} />
       ) : (
         <span className="qt-tab-title">{title}</span>
       )}
-      {tab.expandedPane !== null ? (
+      {Object.entries(session?.badges ?? {}).map(([key, badge]) =>
+        badge.command ? (
+          <button
+            key={key}
+            type="button"
+            className="qt-badge"
+            title={badge.tooltip}
+            onClick={(event) => {
+              event.stopPropagation()
+              void controller.context.executeCommand(badge.command!, badge.args)
+            }}
+          >
+            {badge.label}
+          </button>
+        ) : (
+          <span key={key} className="qt-badge" title={badge.tooltip}>
+            {badge.label}
+          </span>
+        )
+      )}
+      {terminal && terminal.expandedPane !== null ? (
         <button
           type="button"
           className="qt-icon qt-collapse"
@@ -90,7 +112,7 @@ function TabItem({ controller, state, group, tab, index, others, now }: Common &
           title="Collapse expanded pane"
           onClick={(event) => {
             event.stopPropagation()
-            void controller.toggleExpand(tab.expandedPane!)
+            void controller.toggleExpand(terminal.expandedPane!)
           }}
         >
           <CollapseIcon />
@@ -182,12 +204,26 @@ function GroupView({ controller, state, group }: Common & { group: Group }) {
       <div
         className={`qt-strip${stripEnd ? ' qt-drop-end' : ''}`}
         onDragOver={(event) => {
-          if (!drag) return
+          if (!drag) {
+            const transfer = event.dataTransfer
+            if (hasCommandDrop(transfer)) {
+              event.preventDefault()
+              transfer.dropEffect = 'copy'
+            }
+            return
+          }
           event.preventDefault()
           controller.overTabDrag({ kind: 'strip', group: group.id, index: others.length })
         }}
         onDrop={(event) => {
-          if (!drag) return
+          if (!drag) {
+            const transfer = event.dataTransfer
+            if (!hasCommandDrop(transfer)) return
+            event.preventDefault()
+            event.stopPropagation()
+            void controller.dropCommand(transfer, group.id)
+            return
+          }
           event.preventDefault()
           void controller.dropTab({ kind: 'strip', group: group.id, index: others.length })
         }}
@@ -210,12 +246,26 @@ function GroupView({ controller, state, group }: Common & { group: Group }) {
         className="qt-body"
         data-group-body={group.id}
         onDragOver={(event) => {
-          if (!drag) return
+          if (!drag) {
+            const transfer = event.dataTransfer
+            if (hasCommandDrop(transfer)) {
+              event.preventDefault()
+              transfer.dropEffect = 'copy'
+            }
+            return
+          }
           event.preventDefault()
           controller.overTabDrag({ kind: 'zone', group: group.id, zone: zoneAt(event) })
         }}
         onDrop={(event) => {
-          if (!drag) return
+          if (!drag) {
+            const transfer = event.dataTransfer
+            if (!hasCommandDrop(transfer)) return
+            event.preventDefault()
+            event.stopPropagation()
+            void controller.dropCommand(transfer, group.id)
+            return
+          }
           event.preventDefault()
           void controller.dropTab({ kind: 'zone', group: group.id, zone: zoneAt(event) })
         }}

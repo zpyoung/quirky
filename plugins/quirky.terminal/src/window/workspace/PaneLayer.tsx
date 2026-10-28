@@ -3,12 +3,13 @@ import { parseContributionId } from '@quirky/protocol'
 
 import { paneLeaves, paneRects, roundRatio } from '../../layout/tree'
 import type { DividerRect, PaneRect } from '../../layout/tree'
-import type { Edge, Group, PaneLeaf, PaneNode, Tab } from '../../layout/types'
-import { TerminalPaneView } from '../pane/TerminalPaneView'
+import type { Edge, Group, PaneLeaf, PaneNode, Tab, TerminalTab, ViewTab } from '../../layout/types'
+import { DockHost } from '../dock/DockHost'
 import { CollapseIcon, CloseIcon, ExpandIcon, GripIcon } from './icons'
 import type { ControllerState, PaneDropTarget, WorkspaceController } from './controller'
-import { STRUCTURED_VIEW_ID, byPaneId, px } from './model'
+import { isViewTab } from '../../layout/types'
 import { useBoxSize } from './useBoxSize'
+import { byPaneId, px, STRUCTURED_VIEW_ID } from './model'
 
 /** The narrowest a pane may be drawn or dragged to, unless its pair is smaller. */
 export const MIN_PANE_PX = 50
@@ -85,6 +86,30 @@ function StructuredHost({ controller, session }: { controller: WorkspaceControll
     <div className="qt-structured">
       <div ref={host} className="qt-structured-body" />
       {failed ? <p className="qt-muted">The structured session view is not available.</p> : null}
+    </div>
+  )
+}
+
+function HostedViewLayer({ controller, tab }: { controller: WorkspaceController; tab: ViewTab }) {
+  const host = useRef<HTMLDivElement>(null)
+  const [failure, setFailure] = useState<string | null>(null)
+  const inputKey = JSON.stringify(tab.input ?? {})
+  useEffect(() => {
+    const element = host.current
+    if (!element) return
+    setFailure(null)
+    try {
+      return controller.context.mountView(tab.viewId, element, { ...(tab.input ?? {}), tabId: tab.id })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      controller.context.log(`could not mount ${tab.viewId} in tab ${tab.id}: ${message}`)
+      setFailure(message)
+    }
+  }, [controller, tab.id, tab.viewId, inputKey])
+  return (
+    <div className="qt-structured qt-hosted-view" data-hosted-view={tab.id}>
+      <div ref={host} className="qt-structured-body" />
+      {failure ? <p className="qt-muted qt-pad">{failure}</p> : null}
     </div>
   )
 }
@@ -245,7 +270,7 @@ function ExitOverlay({ controller, leaf }: { controller: WorkspaceController; le
   )
 }
 
-function PaneHeader({ controller, state, tab, leaf, multi, onGrip }: { controller: WorkspaceController; state: ControllerState; tab: Tab; leaf: PaneLeaf; multi: boolean; onGrip: (event: ReactMouseEvent) => void }) {
+function PaneHeader({ controller, state, tab, leaf, multi, onGrip }: { controller: WorkspaceController; state: ControllerState; tab: TerminalTab; leaf: PaneLeaf; multi: boolean; onGrip: (event: ReactMouseEvent) => void }) {
   const renaming = state.rename?.kind === 'pane' && state.rename.id === leaf.id
   const expanded = tab.expandedPane !== null
   let close
@@ -333,7 +358,7 @@ function halfOf(rect: PaneRect, edge: Edge): { left: number; top: number; width:
  * its ID and absolutely positioned from rectangles computed off the pane tree, so a split, close
  * or move changes rectangles and never re-parents a terminal.
  */
-export function PaneLayer({ controller, state, group, tab }: Props) {
+function TerminalPaneLayer({ controller, state, group, tab }: Props & { tab: TerminalTab }) {
   const container = useRef<HTMLDivElement>(null)
   const size = useBoxSize(container)
   const { settings, sessions, cwds, workspace } = state
@@ -422,6 +447,10 @@ export function PaneLayer({ controller, state, group, tab }: Props) {
     controller.refocus()
   }, [controller, workspace?.revision])
 
+  useEffect(() => {
+    if (state.focusFlash) controller.focusPendingPane(state.focusFlash.pane)
+  }, [controller, state.focusFlash?.token, state.sessions])
+
   const drag = state.paneDrag
   const preview = drag?.target?.kind === 'edge' && rectOf.has(drag.target.pane) ? halfOf(rectOf.get(drag.target.pane)!, drag.target.edge) : null
 
@@ -454,22 +483,27 @@ export function PaneLayer({ controller, state, group, tab }: Props) {
             ) : session.kind === 'structured' ? (
               <StructuredHost controller={controller} session={leaf.session} />
             ) : (
-              <TerminalPaneView
-                key={state.epoch}
-                ref={(handle) => controller.registerHandle(leaf.id, handle)}
+              <DockHost
+                controller={controller}
                 context={controller.context}
+                paneId={leaf.id}
                 sessionId={leaf.session}
+                workspaceId={workspace?.id}
                 cwd={cwds[leaf.session] ?? session.cwd ?? ''}
                 settings={settings}
                 active={focused}
                 interactive={leaf.exit === null && session.status !== 'exited'}
                 dragging={state.dragging}
+                terminalEpoch={state.epoch}
+                availableHeight={rect.height}
+                onHandle={(handle) => controller.registerHandle(leaf.id, handle)}
                 onFocus={() => void controller.focusPane(leaf.id)}
                 onState={(report) => controller.setPaneState(leaf.id, report)}
                 themeSource={controller.options.themeSource ?? controller.root ?? undefined}
                 createWebgl={controller.options.createWebgl}
               />
             )}
+            {state.focusFlash?.pane === leaf.id ? <div key={state.focusFlash.token} className="qt-focus-flash" data-focus-flash={state.focusFlash.token} aria-hidden /> : null}
             {session ? <PaneAccessories controller={controller} sessionId={leaf.session} paneId={leaf.id} /> : null}
             {focused ? <PaneHeader controller={controller} state={state} tab={tab} leaf={leaf} multi={multi} onGrip={(event) => startPaneDrag(leaf.id, event)} /> : null}
             {leaf.exit ? <ExitOverlay controller={controller} leaf={leaf} /> : null}
@@ -492,4 +526,8 @@ export function PaneLayer({ controller, state, group, tab }: Props) {
       {preview ? <div className="qt-drop-preview" data-drop-preview style={preview} /> : null}
     </div>
   )
+}
+
+export function PaneLayer(props: Props) {
+  return isViewTab(props.tab) ? <HostedViewLayer controller={props.controller} tab={props.tab} /> : <TerminalPaneLayer {...props} tab={props.tab} />
 }

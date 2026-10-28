@@ -1,11 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 import {
-  CODE_BACKED_KINDS,
   DEFAULT_THEME,
-  RESERVED_CHORDS,
   THEME_COLOR_RE,
   THEME_TOKENS,
-  UI_KINDS,
   checkSettingValue,
   chordFromKeyEvent,
   evaluateWhen,
@@ -165,15 +162,6 @@ describe('chordFromKeyEvent', () => {
   })
 })
 
-describe('RESERVED_CHORDS', () => {
-  test('holds only the command palette', () => {
-    expect([...RESERVED_CHORDS]).toEqual(['mod+shift+p'])
-  })
-
-  test('every entry is already canonical', () => {
-    for (const reserved of RESERVED_CHORDS) expect(chord(reserved)).toBe(reserved)
-  })
-})
 
 describe('checkSettingValue', () => {
   const id = 'setting:acme.notes/x'
@@ -261,15 +249,6 @@ describe('theme tokens and the default theme', () => {
   })
 })
 
-describe('UI kinds', () => {
-  test('lists the nine kinds, six of them code-backed', () => {
-    expect([...UI_KINDS].sort()).toEqual<string[]>(
-      ['command', 'keybinding', 'overlay', 'panel', 'setting', 'sidebar-section', 'status-bar', 'theme', 'view'].sort()
-    )
-    expect([...CODE_BACKED_KINDS].sort()).toEqual(['command', 'overlay', 'panel', 'sidebar-section', 'status-bar', 'view'])
-    for (const kind of CODE_BACKED_KINDS) expect(UI_KINDS.includes(kind)).toBe(true)
-  })
-})
 
 function canonicalWhen(text: string): string {
   const result = parseWhen(text)

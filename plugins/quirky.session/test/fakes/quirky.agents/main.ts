@@ -70,6 +70,7 @@ export function activate(context: PluginContext): void {
       canFork: found.canFork
     }
   })
+
   provide('resolveLaunch', (params) => {
     const structured: Record<string, string | boolean> = {}
     const selected: Record<string, { value: string | boolean; source: 'explicit' }> = {}

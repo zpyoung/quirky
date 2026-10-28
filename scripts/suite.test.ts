@@ -1,17 +1,32 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { discover, macosOnly, runFiles, runSuite, slowestFirst, usableSlots } from './suite'
+import { createProcessScope, type ProcessScope } from './test-support/process-scope'
 
 let dir: string
+let previousQuirkyHome: string | undefined
+let previousTestProfile: string | undefined
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'suite-'))
   mkdirSync(join(dir, 'pkg'))
+  previousQuirkyHome = process.env.QUIRKY_HOME
+  previousTestProfile = process.env.QUIRKY_TEST_PROFILE
+  const home = join(dir, 'home')
+  process.env.QUIRKY_HOME = home
+  mkdirSync(home)
+  delete process.env.QUIRKY_TEST_PROFILE
 })
 
-afterEach(() => rmSync(dir, { recursive: true, force: true }))
+afterEach(() => {
+  if (previousQuirkyHome === undefined) delete process.env.QUIRKY_HOME
+  else process.env.QUIRKY_HOME = previousQuirkyHome
+  if (previousTestProfile === undefined) delete process.env.QUIRKY_TEST_PROFILE
+  else process.env.QUIRKY_TEST_PROFILE = previousTestProfile
+  rmSync(dir, { recursive: true, force: true })
+})
 
 const write = (name: string, body: string) =>
   writeFileSync(join(dir, 'pkg', name), `import { expect, test } from 'bun:test'\nimport { existsSync, writeFileSync } from 'node:fs'\n${body}\n`)
@@ -22,52 +37,203 @@ const broken = (name: string) => write(name, `test('broken', () => expect(1).toB
 const flaky = (name: string) =>
   write(name, `test('flaky', () => {\n  const seen = existsSync(import.meta.path + '.ran')\n  writeFileSync(import.meta.path + '.ran', '')\n  expect(seen).toBe(true)\n})`)
 
+const captureOutput = async <T>(run: () => Promise<T>) => {
+  const chunks: string[] = []
+  const write = process.stdout.write
+  process.stdout.write = ((chunk: string | Uint8Array) => {
+    chunks.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString())
+    return true
+  }) as typeof process.stdout.write
+  try {
+    return { result: await run(), output: chunks.join('') }
+  } finally {
+    process.stdout.write = write
+  }
+}
+
 test('a green suite passes without a rerun', async () => {
   passing('a.test.ts')
   expect(await runSuite(dir, ['pkg'])).toEqual({ ok: true, flaky: [] })
-})
+}, 30_000)
 
 test('a file that fails in the suite and passes alone is reported as flaky', async () => {
   passing('a.test.ts')
   flaky('b.test.ts')
   expect(await runSuite(dir, ['pkg'])).toEqual({ ok: true, flaky: ['pkg/b.test.ts'] })
-})
+}, 30_000)
 
 test('a file that fails again alone fails the run', async () => {
   flaky('a.test.ts')
   broken('b.test.ts')
   expect(await runSuite(dir, ['pkg'])).toEqual({ ok: false, flaky: [] })
-})
+}, 30_000)
 
 test('a file that fails to load fails the run, since the report cannot name it', async () => {
   flaky('a.test.ts')
   write('b.test.ts', `throw new Error('load')`)
   expect(await runSuite(dir, ['pkg'])).toEqual({ ok: false, flaky: [] })
-})
+}, 30_000)
 
 test('more failing files than the limit fail the run without a rerun', async () => {
   flaky('a.test.ts')
   flaky('b.test.ts')
   expect(await runSuite(dir, ['pkg'], 1)).toEqual({ ok: false, flaky: [] })
-})
+}, 30_000)
 
 test('runFiles runs each file in its own process and reports one that passes alone as flaky', async () => {
   passing('a.test.ts')
   flaky('b.test.ts')
   expect(await runFiles(dir, ['pkg/a.test.ts', 'pkg/b.test.ts'], [], 2)).toEqual({ ok: true, flaky: ['pkg/b.test.ts'] })
-}, 20_000)
+}, 30_000)
 
+// This fixture includes guarded child startup, an isolated retry and awaited process-tree cleanup.
 test('runFiles fails on a file that fails again, including one that fails to load', async () => {
   passing('a.test.ts')
   write('b.test.ts', `throw new Error('load')`)
   expect(await runFiles(dir, ['pkg/a.test.ts', 'pkg/b.test.ts'], [], 2)).toEqual({ ok: false, flaky: [] })
-}, 20_000)
+}, 30_000)
 
 test('runFiles with more failing files than the limit fails without a rerun', async () => {
   flaky('a.test.ts')
   flaky('b.test.ts')
   expect(await runFiles(dir, ['pkg/a.test.ts', 'pkg/b.test.ts'], [], 2, 1)).toEqual({ ok: false, flaky: [] })
+}, 30_000)
+
+test('actual bun test processes get isolated homes and clean them up', async () => {
+  const report = join(dir, 'home.json')
+  const parentHome = process.env.HOME ?? null
+  const parentQuirkyHome = process.env.QUIRKY_HOME ?? null
+  write('home.test.ts', `import { Database } from 'bun:sqlite'
+test('has an isolated home', () => {
+  const home = process.env.HOME
+  const quirkyHome = process.env.QUIRKY_HOME
+  expect(home).toBeTruthy()
+  expect(quirkyHome).toBeTruthy()
+  expect(home).not.toBe(${JSON.stringify(parentHome)})
+  expect(quirkyHome).not.toBe(${JSON.stringify(parentQuirkyHome)})
+  expect(home).not.toBe(quirkyHome)
+  expect(existsSync(home!)).toBe(true)
+  expect(existsSync(quirkyHome!)).toBe(true)
+  const db = new Database(quirkyHome! + '/quirky.db', { readonly: true })
+  try {
+    const setting = db.query('SELECT value FROM setting_values WHERE id = ?').get('setting:quirky.agent-status/hooks') as { value: string } | null
+    expect(setting && JSON.parse(setting.value)).toBe(false)
+  } finally {
+    db.close()
+  }
+  writeFileSync(${JSON.stringify(report)}, JSON.stringify({ home, quirkyHome }))
+})`)
+
+  expect(await runSuite(dir, ['pkg'])).toEqual({ ok: true, flaky: [] })
+  const first = JSON.parse(readFileSync(report, 'utf8')) as { home: string; quirkyHome: string }
+  expect(first.home).not.toBe(parentHome)
+  expect(first.quirkyHome).not.toBe(parentQuirkyHome)
+  expect(existsSync(first.home)).toBe(false)
+  expect(existsSync(first.quirkyHome)).toBe(false)
+  expect(process.env.HOME ?? null).toBe(parentHome)
+  expect(process.env.QUIRKY_HOME ?? null).toBe(parentQuirkyHome)
+
+  expect(await runFiles(dir, ['pkg/home.test.ts'], [], 1)).toEqual({ ok: true, flaky: [] })
+  const second = JSON.parse(readFileSync(report, 'utf8')) as { home: string; quirkyHome: string }
+  expect(second.home).not.toBe(first.home)
+  expect(second.quirkyHome).not.toBe(first.quirkyHome)
+  expect(existsSync(second.home)).toBe(false)
+  expect(existsSync(second.quirkyHome)).toBe(false)
+  expect(process.env.HOME ?? null).toBe(parentHome)
+  expect(process.env.QUIRKY_HOME ?? null).toBe(parentQuirkyHome)
+}, 30_000)
+
+test('runFiles profiles each file attempt only when enabled', async () => {
+  write('profile-pass.test.ts', `test('does deterministic CPU work', () => {
+  let sum = 0
+  for (let i = 0; i < 10_000_000; i++) sum += i
+  expect(sum).toBe(49_999_995_000_000)
+})`)
+  write('profile-retry.test.ts', `test('does CPU work and passes on retry', () => {
+  let sum = 0
+  for (let i = 0; i < 10_000_000; i++) sum += i
+  const seen = existsSync(import.meta.path + '.ran')
+  writeFileSync(import.meta.path + '.ran', '')
+  expect(sum).toBe(49_999_995_000_000)
+  expect(seen).toBe(true)
+})`)
+  process.env.QUIRKY_TEST_PROFILE = '1'
+
+  const { result, output } = await captureOutput(() =>
+    runFiles(dir, ['pkg/profile-pass.test.ts', 'pkg/profile-retry.test.ts'], [], 1))
+
+  expect(result).toEqual({ ok: true, flaky: ['pkg/profile-retry.test.ts'] })
+  const rows = output
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith('suite-file '))
+    .map((line) => JSON.parse(line.slice('suite-file '.length)) as {
+      file: string
+      wallMs: number
+      userCpuMs: number
+      systemCpuMs: number
+      exitCode: number
+    })
+  expect(rows.map((row) => [row.file.split('/').at(-1), row.exitCode])).toEqual([
+    ['profile-pass.test.ts', 0],
+    ['profile-retry.test.ts', 1],
+    ['profile-retry.test.ts', 0],
+  ])
+  for (const row of rows) {
+    expect(row.file.startsWith('/')).toBe(false)
+    expect(Number.isFinite(row.wallMs)).toBe(true)
+    expect(row.wallMs).toBeGreaterThan(0)
+    expect(row.wallMs).toBeLessThan(60_000)
+    expect(Number.isFinite(row.userCpuMs)).toBe(true)
+    expect(row.userCpuMs).toBeGreaterThanOrEqual(0)
+    expect(row.userCpuMs).toBeLessThan(60_000)
+    expect(Number.isFinite(row.systemCpuMs)).toBe(true)
+    expect(row.systemCpuMs).toBeGreaterThanOrEqual(0)
+    expect(row.userCpuMs + row.systemCpuMs).toBeGreaterThan(0)
+    expect(row.systemCpuMs).toBeLessThan(60_000)
+  }
+}, 20_000)
+
+test('runFiles emits no profile rows when profiling is disabled', async () => {
+  passing('a.test.ts')
+  const { result, output } = await captureOutput(() => runFiles(dir, ['pkg/a.test.ts'], [], 1))
+  expect(result).toEqual({ ok: true, flaky: [] })
+  expect(output).not.toContain('suite-file ')
 })
+
+test('the suite CLI profiles each selected file in local mode', async () => {
+  Bun.spawnSync(['git', 'init', '-q'], { cwd: dir })
+  passing('cli-a.test.ts')
+  write('cli-b.test.ts', `test('does deterministic CPU work', () => {
+  let sum = 0
+  for (let i = 0; i < 1_000_000; i++) sum += i
+  expect(sum).toBe(499_999_500_000)
+})`)
+  const child = Bun.spawn(['bun', join(import.meta.dir, 'suite.ts'), 'pkg/cli-a.test.ts', 'pkg/cli-b.test.ts', '--timeout=5000'], {
+    cwd: dir,
+    env: {
+      ...process.env,
+      QUIRKY_HOME: join(dir, 'home'),
+      QUIRKY_TEST_LOCAL: '1',
+      QUIRKY_TEST_PROFILE: '1',
+    },
+    stdout: 'pipe',
+    stderr: 'pipe',
+  })
+  const [stdout, , exitCode] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ])
+  expect(exitCode).toBe(0)
+  const rows = stdout
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith('suite-file '))
+    .map((line) => JSON.parse(line.slice('suite-file '.length)) as { file: string; exitCode: number })
+  expect(rows.map((row) => [row.file.split('/').at(-1), row.exitCode])).toEqual([
+    ['cli-a.test.ts', 0],
+    ['cli-b.test.ts', 0],
+  ])
+}, 20_000)
 
 test('discover lists the tracked and untracked test files under the given paths, as bun would', () => {
   Bun.spawnSync(['git', 'init', '-q'], { cwd: dir })
@@ -116,7 +282,7 @@ test('a completed test run stops detached subprocess trees left by a test', asyn
       try { process.kill(pid, 'SIGKILL') } catch {}
     }
   }
-}, 15_000)
+}, 30_000)
 
 test('usableSlots leaves all but one slot to a land while one runs', () => {
   expect(usableSlots(6, false, false)).toBe(6)
@@ -131,3 +297,70 @@ test('slowestFirst orders by the last logged time, with unlogged files first', (
   expect(slowestFirst(['a.test.ts', 'b.test.ts', 'new.test.ts'], log)).toEqual(['new.test.ts', 'a.test.ts', 'b.test.ts'])
   expect(slowestFirst(['b.test.ts', 'a.test.ts'], join(dir, 'missing.log'))).toEqual(['b.test.ts', 'a.test.ts'])
 })
+
+test('the CLI installs frozen workspace runtime dependencies before local tests', async () => {
+  const fixture = mkdtempSync(join(tmpdir(), 'suite-cli-'))
+  const home = join(fixture, 'home')
+  let scope: ProcessScope | undefined
+  try {
+    mkdirSync(home)
+    mkdirSync(join(fixture, 'pkg'))
+    mkdirSync(join(fixture, 'packages', 'runtime'), { recursive: true })
+    writeFileSync(join(fixture, 'package.json'), JSON.stringify({
+      name: 'suite-cli-fixture',
+      private: true,
+      type: 'module',
+      workspaces: ['packages/*'],
+      dependencies: { 'suite-fixture-runtime': 'workspace:*' }
+    }))
+    writeFileSync(join(fixture, 'packages/runtime/package.json'), JSON.stringify({
+      name: 'suite-fixture-runtime',
+      version: '1.0.0',
+      main: 'index.ts'
+    }))
+    writeFileSync(join(fixture, 'packages/runtime/index.ts'), `export const runtimeValue = 'installed'`)
+    writeFileSync(join(fixture, 'bun.lock'), JSON.stringify({
+      lockfileVersion: 2,
+      configVersion: 1,
+      workspaces: {
+        '': {
+          name: 'suite-cli-fixture',
+          dependencies: { 'suite-fixture-runtime': 'workspace:*' }
+        },
+        'packages/runtime': {
+          name: 'suite-fixture-runtime',
+          version: '1.0.0'
+        }
+      },
+      packages: {}
+    }))
+    writeFileSync(join(fixture, 'pkg/runtime.test.ts'), `
+import { expect, test } from 'bun:test'
+import { runtimeValue } from 'suite-fixture-runtime'
+
+test('resolves a declared workspace runtime dependency', () => {
+  expect(runtimeValue).toBe('installed')
+})
+`)
+
+    scope = createProcessScope(join(fixture, 'quirky-home'))
+    const cli = scope.spawn([process.execPath, join(import.meta.dir, 'suite.ts'), 'pkg'], {
+      cwd: fixture,
+      env: { ...process.env, HOME: home },
+      stdout: 'pipe',
+      stderr: 'pipe'
+    })
+    const [code, stdout, stderr] = await Promise.all([
+      cli.exited,
+      new Response(cli.stdout).text(),
+      new Response(cli.stderr).text()
+    ])
+    expect(code, `${stdout}${stderr}`).toBe(0)
+  } finally {
+    try {
+      await scope?.cleanup()
+    } finally {
+      rmSync(fixture, { recursive: true, force: true })
+    }
+  }
+}, 30_000)

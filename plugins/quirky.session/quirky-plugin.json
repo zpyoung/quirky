@@ -107,6 +107,10 @@
               },
               "unread": {
                 "description": "Why the session is marked unread: `agent`, `bell` or `notification`; null or absent when it is not."
+              },
+              "badges": {
+                "type": "object",
+                "description": "Chips on the session's tab, keyed `<plugin id>/<key>`; each is {label, tooltip?, command?, args?}. Absent when there are none."
               }
             },
             "required": [
@@ -219,6 +223,10 @@
             },
             "unread": {
               "description": "Why the session is marked unread: `agent`, `bell` or `notification`; null or absent when it is not."
+            },
+            "badges": {
+              "type": "object",
+              "description": "Chips on the session's tab, keyed `<plugin id>/<key>`; each is {label, tooltip?, command?, args?}. Absent when there are none."
             }
           },
           "required": [
@@ -379,6 +387,10 @@
             },
             "unread": {
               "description": "Why the session is marked unread: `agent`, `bell` or `notification`; null or absent when it is not."
+            },
+            "badges": {
+              "type": "object",
+              "description": "Chips on the session's tab, keyed `<plugin id>/<key>`; each is {label, tooltip?, command?, args?}. Absent when there are none."
             }
           },
           "required": [
@@ -405,6 +417,10 @@
               "type": "string",
               "description": "The session to resume."
             },
+            "prompt": {
+              "type": "string",
+              "description": "Optional first prompt for a structured session."
+            },
             "providerSession": {
               "type": "string",
               "description": "The agent CLI's session ID; default: the one stored on the session."
@@ -412,10 +428,6 @@
             "transcriptPath": {
               "type": "string",
               "description": "The transcript file, for agents that resume from one."
-            },
-            "prompt": {
-              "type": "string",
-              "description": "Optional first prompt when resuming a structured session."
             },
             "fork": {
               "type": "boolean",
@@ -496,6 +508,146 @@
             },
             "resumedFrom": {
               "description": "The session this one was resumed or forked from; null otherwise."
+            },
+            "agentStatus": {
+              "description": "The agent-status summary ({state, display, label, detail, progress, stateStartedAt, evidenceAt, restoredUnconfirmed}) the window draws; null or absent when no agent has reported one."
+            },
+            "name": {
+              "description": "The session's name (lowercase; unique among sessions that have not exited), or null when it has none."
+            },
+            "unread": {
+              "description": "Why the session is marked unread: `agent`, `bell` or `notification`; null or absent when it is not."
+            }
+          },
+          "required": [
+            "id",
+            "kind",
+            "agent",
+            "worktreeId",
+            "cwd",
+            "title",
+            "status",
+            "createdAt",
+            "lastActivityAt",
+            "exitCode"
+          ]
+        }
+      },
+      {
+        "id": "resumeExternal",
+        "description": "Starts a new terminal session from an agent-owned transcript, preserving its source cwd independently from the optional destination worktree. Launch planning and hooks remain session-owned.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "agent": {
+              "type": "string"
+            },
+            "cwd": {
+              "type": "string",
+              "description": "The existing source working directory; it is not registered as a project."
+            },
+            "providerSession": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "transcriptPath": {
+                  "description": "The source transcript path, or null for providers that resume by ID."
+                }
+              },
+              "required": [
+                "id",
+                "transcriptPath"
+              ]
+            },
+            "worktree": {
+              "type": "string",
+              "description": "Optional destination workspace selector; omitted uses floating ownership."
+            },
+            "record": {
+              "description": "A recorded launch {command,args,env}, or null to use current provider configuration."
+            },
+            "fork": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "agent",
+            "cwd",
+            "providerSession"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "terminal",
+                "structured"
+              ]
+            },
+            "agent": {
+              "type": "string",
+              "description": "`shell` or the ID of the agent the session runs."
+            },
+            "worktreeId": {
+              "type": "string"
+            },
+            "cwd": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "starting",
+                "running",
+                "working",
+                "waiting",
+                "done",
+                "exited"
+              ]
+            },
+            "createdAt": {
+              "type": "number"
+            },
+            "lastActivityAt": {
+              "type": "number"
+            },
+            "exitCode": {
+              "description": "The exit code, or null while the process is alive."
+            },
+            "exitSignal": {
+              "description": "The signal that ended the process, or null."
+            },
+            "exitCause": {
+              "description": "Why the session ended (exited, killed, host-restart or host-lost), or null while it is alive."
+            },
+            "restorable": {
+              "type": "boolean",
+              "description": "True when the session ended with the PTY host and can be restored."
+            },
+            "launch": {
+              "description": "The actual planner record that was launched."
+            },
+            "launchSettings": {
+              "description": "What the launch applied ({agent, options, args, summary}); null when it applied nothing."
+            },
+            "providerSession": {
+              "description": "The provider identity passed to the resumed agent, or null for a fork."
+            },
+            "promptDelivery": {
+              "description": "How the first prompt reached the agent: null (no prompt), command-line, pending, pasted, unconfirmed or not-delivered."
+            },
+            "resumedFrom": {
+              "description": "Null because this session came from an agent-owned transcript."
             },
             "agentStatus": {
               "description": "The agent-status summary ({state, display, label, detail, progress, stateStartedAt, evidenceAt, restoredUnconfirmed}) the window draws; null or absent when no agent has reported one."
@@ -619,6 +771,10 @@
             },
             "unread": {
               "description": "Why the session is marked unread: `agent`, `bell` or `notification`; null or absent when it is not."
+            },
+            "badges": {
+              "type": "object",
+              "description": "Chips on the session's tab, keyed `<plugin id>/<key>`; each is {label, tooltip?, command?, args?}. Absent when there are none."
             }
           },
           "required": [
@@ -738,6 +894,10 @@
             },
             "unread": {
               "description": "Why the session is marked unread: `agent`, `bell` or `notification`; null or absent when it is not."
+            },
+            "badges": {
+              "type": "object",
+              "description": "Chips on the session's tab, keyed `<plugin id>/<key>`; each is {label, tooltip?, command?, args?}. Absent when there are none."
             }
           },
           "required": [
@@ -764,10 +924,6 @@
               "type": "string",
               "description": "Worktree selector, or `floating` for the workspace outside any repository; default: the caller's current worktree."
             },
-            "cwd": {
-              "type": "string",
-              "description": "Original absolute directory for a structured resumed session; it must still exist."
-            },
             "agent": {
               "type": "string",
               "description": "`shell` or the ID of the agent the session runs."
@@ -781,9 +937,13 @@
             "title": {
               "type": "string"
             },
+            "cwd": {
+              "type": "string",
+              "description": "Original absolute directory for a resumed structured session; it must still exist."
+            },
             "resumedFrom": {
               "type": "string",
-              "description": "The earlier session this structured record resumes."
+              "description": "The earlier session this structured session resumes."
             },
             "launchSettings": {
               "type": "object",
@@ -983,6 +1143,10 @@
             },
             "unread": {
               "description": "Why the session is marked unread: `agent`, `bell` or `notification`; null or absent when it is not."
+            },
+            "badges": {
+              "type": "object",
+              "description": "Chips on the session's tab, keyed `<plugin id>/<key>`; each is {label, tooltip?, command?, args?}. Absent when there are none."
             }
           },
           "required": [
@@ -1139,6 +1303,10 @@
             },
             "unread": {
               "description": "Why the session is marked unread: `agent`, `bell` or `notification`; null or absent when it is not."
+            },
+            "badges": {
+              "type": "object",
+              "description": "Chips on the session's tab, keyed `<plugin id>/<key>`; each is {label, tooltip?, command?, args?}. Absent when there are none."
             }
           },
           "required": [
@@ -1250,6 +1418,10 @@
             },
             "unread": {
               "description": "Why the session is marked unread: `agent`, `bell` or `notification`; null or absent when it is not."
+            },
+            "badges": {
+              "type": "object",
+              "description": "Chips on the session's tab, keyed `<plugin id>/<key>`; each is {label, tooltip?, command?, args?}. Absent when there are none."
             }
           },
           "required": [
@@ -1322,6 +1494,134 @@
             }
           },
           "required": ["operationId", "result"]
+        }
+      },
+      {
+        "id": "setBadge",
+        "description": "Sets or removes one badge on a session's tab. The stored key is `<caller plugin id>/<key>`, so callers cannot touch each other's badges; `changed` is emitted.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The session ID."
+            },
+            "key": {
+              "type": "string",
+              "description": "The badge key, qualified with the calling plugin's ID when stored."
+            },
+            "badge": {
+              "description": "The badge ({label, tooltip?, command?, args?}), or null to remove it."
+            }
+          },
+          "required": [
+            "session",
+            "key",
+            "badge"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "terminal",
+                    "structured"
+                  ]
+                },
+                "agent": {
+                  "type": "string",
+                  "description": "`shell` or the ID of the agent the session runs."
+                },
+                "worktreeId": {
+                  "type": "string"
+                },
+                "cwd": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "starting",
+                    "running",
+                    "working",
+                    "waiting",
+                    "done",
+                    "exited"
+                  ]
+                },
+                "createdAt": {
+                  "type": "number"
+                },
+                "lastActivityAt": {
+                  "type": "number"
+                },
+                "exitCode": {
+                  "description": "The exit code, or null while the process is alive."
+                },
+                "exitSignal": {
+                  "description": "The signal that ended the process, or null."
+                },
+                "exitCause": {
+                  "description": "Why the session ended (exited, killed, host-restart or host-lost), or null while it is alive."
+                },
+                "restorable": {
+                  "type": "boolean",
+                  "description": "True when the session ended with the PTY host and can be restored."
+                },
+                "launch": {
+                  "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
+                },
+                "launchSettings": {
+                  "description": "What the launch applied ({agent, options, args, summary}); null when it applied nothing."
+                },
+                "providerSession": {
+                  "description": "The agent CLI's own session ({id, transcriptPath}) that resume passes back; null until one is stored."
+                },
+                "promptDelivery": {
+                  "description": "How the first prompt reached the agent: null (no prompt), command-line, pending, pasted, unconfirmed or not-delivered."
+                },
+                "resumedFrom": {
+                  "description": "The session this one was resumed or forked from; null otherwise."
+                },
+                "agentStatus": {
+                  "description": "The agent-status summary ({state, display, label, detail, progress, stateStartedAt, evidenceAt, restoredUnconfirmed}) the window draws; null or absent when no agent has reported one."
+                },
+                "unread": {
+                  "description": "Why the session is marked unread: `agent`, `bell` or `notification`; null or absent when it is not."
+                },
+                "badges": {
+                  "type": "object",
+                  "description": "Chips on the session's tab, keyed `<plugin id>/<key>`; each is {label, tooltip?, command?, args?}. Absent when there are none."
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "agent",
+                "worktreeId",
+                "cwd",
+                "title",
+                "status",
+                "createdAt",
+                "lastActivityAt",
+                "exitCode"
+              ]
+            }
+          },
+          "required": [
+            "session"
+          ]
         }
       }
     ],

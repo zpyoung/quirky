@@ -550,17 +550,13 @@ describe('SC-57: inspect lists everything and installs nothing', () => {
     ])
   })
 
-  test('a keybinding on a reserved chord is listed with a warning and is shadowed by the kernel once installed', async () => {
+  test('a distro can bind Mod+Shift+P as an ordinary keybinding', async () => {
     const layer = makeLayer()
     const distro = writeDistro(makeTempDir('qd-n-'), { ...NIGHT, keybindings: { 'mod+shift+p': 'command:night.extras/palette' } })
-    const text = renderDistroInspection(await layer.distros.inspect(distro))
-    expect(text).toContain('warning    mod+shift+p is a shortcut the window keeps for itself, so command:night.extras/palette will not run on it')
-
     await layer.distros.install(distro)
     expect(layer.ui.contributions().keybindings.find((binding) => binding.id === 'keybinding:night/k1')).toMatchObject({
       key: 'mod+shift+p',
-      status: 'shadowed',
-      shadowedBy: 'kernel'
+      status: 'active'
     })
   })
 

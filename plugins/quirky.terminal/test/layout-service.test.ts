@@ -10,7 +10,8 @@ import { InputTracker } from '../src/input-tracker'
 import { LayoutService } from '../src/layout/service'
 import { appendTab, emptyWorkspace, makeTab } from '../src/layout/ops'
 import { sequentialIds, groupsInOrder, paneLeaves } from '../src/layout/tree'
-import type { FloatingState, Group, PaneLeaf, Tab, Workspace } from '../src/layout/types'
+import { isTerminalTab } from '../src/layout/types'
+import type { FloatingState, Group, PaneLeaf, Tab, TerminalTab, Workspace } from '../src/layout/types'
 import { sessionCreates } from './fakes/quirky.session/main'
 import { call, createSession, restartDaemon, startPluginHarness, TERMINAL_PLUGINS, type PluginSet } from './support'
 
@@ -32,9 +33,9 @@ afterEach(async () => {
 
 const api = (method: string, params: Record<string, unknown> = {}, c: QuirkyClient = client) => call<any>(c, `quirky.terminal/${method}`, params)
 const layoutOf = async (workspace = WT, c: QuirkyClient = client) => (await api('workspace', { workspace }, c)).workspace as Workspace
-const tabsOf = (ws: Workspace): Tab[] => groupsInOrder(ws.root).flatMap((group) => group.tabs)
+const tabsOf = (ws: Workspace): TerminalTab[] => groupsInOrder(ws.root).flatMap((group) => group.tabs.filter(isTerminalTab))
 const groupsOf = (ws: Workspace): Group[] => groupsInOrder(ws.root)
-const panesOf = (tab: Tab): PaneLeaf[] => paneLeaves(tab.root)
+const panesOf = (tab: TerminalTab): PaneLeaf[] => paneLeaves(tab.root)
 const titles = (ws: Workspace) => tabsOf(ws).map((tab) => tab.customTitle ?? tab.defaultTitle)
 const tabNamed = (ws: Workspace, title: string) => tabsOf(ws).find((tab) => (tab.customTitle ?? tab.defaultTitle) === title)!
 const newTab = async (params: Record<string, unknown> = {}) => (await api('newTab', { workspace: WT, ...params })).workspace as Workspace
@@ -104,6 +105,69 @@ describe('SC-1: the first tab', () => {
       inMain.close()
       inFloating.close()
     }
+  })
+})
+
+describe('focus context', () => {
+  test('reads, updates and clears the last focused terminal workspace', async () => {
+    expect(await api('focusContext')).toEqual({ workspace: null })
+    const changes = () =>
+      events
+        .filter((event) => event.type === 'quirky.terminal/focusContextChanged')
+        .map((event) => (event as PluginEvent).data as { workspace: string | null })
+    const seen = changes().length
+
+    expect(await api('focusContext', { workspace: WT })).toEqual({ workspace: WT })
+    await waitFor(() => changes().length === seen + 1)
+    expect(changes().at(-1)).toEqual({ workspace: WT })
+    expect(await api('focusContext')).toEqual({ workspace: WT })
+
+    const beforeClear = changes().length
+    expect(await api('focusContext', { workspace: null })).toEqual({ workspace: null })
+    await waitFor(() => changes().length === beforeClear + 1)
+    expect(changes().at(-1)).toEqual({ workspace: null })
+  })
+
+  test('focusPane records its workspace and hiding floating clears its focus target', async () => {
+    const main = await newTab()
+    const mainPane = panesOf(lastTab(main))[0]!
+    await api('focusPane', { pane: mainPane.id })
+    expect(await api('focusContext')).toEqual({ workspace: WT })
+
+    await api('setFloating', { open: true })
+    const floating = (await api('newTab', { workspace: 'floating' })).workspace as Workspace
+    const floatingPane = panesOf(lastTab(floating))[0]!
+    await api('focusPane', { pane: floatingPane.id })
+    expect(await api('focusContext')).toEqual({ workspace: 'floating' })
+
+    await api('setFloating', { open: false })
+    expect(await api('focusContext')).toEqual({ workspace: null })
+    expect(await api('focusContext', { workspace: 'floating' })).toEqual({ workspace: null })
+  })
+})
+
+describe('openSession', () => {
+  test('focuses an existing session pane repeatedly without creating another session or tab', async () => {
+    const session = await createSession(client, { worktree: `id:${WT}`, agent: 'claude' })
+    const existing = await waitForAsync(async () => {
+      const workspace = await layoutOf(session.worktreeId)
+      const pane = tabsOf(workspace).flatMap(panesOf).find((leaf) => leaf.session === session.id)
+      return pane ? { workspace, pane } : null
+    })
+    const created = sessionCreates().length
+
+    const first = (await api('openSession', { session: session.id })) as { workspace: Workspace; pane: string }
+    const second = (await api('openSession', { session: session.id })) as { workspace: Workspace; pane: string }
+    expect(first.pane).toBe(existing.pane.id)
+    expect(second.pane).toBe(first.pane)
+    expect(tabsOf(second.workspace)).toHaveLength(tabsOf(first.workspace).length)
+    expect(sessionCreates()).toHaveLength(created)
+  })
+
+  test('rejects opening a session in a different worktree', async () => {
+    const session = await createSession(client, { worktree: 'id:wt_other', agent: 'claude' })
+    expect((await error(api('openSession', { session: session.id, workspace: WT })))?.code).toBe(RpcErrorCode.InvalidParams)
+    expect(tabsOf(await layoutOf(WT))).toHaveLength(0)
   })
 })
 
@@ -452,7 +516,7 @@ describe('closed tabs', () => {
 })
 
 describe('panes', () => {
-  async function tabWithPanes(count: number): Promise<{ ws: Workspace; tab: Tab }> {
+  async function tabWithPanes(count: number): Promise<{ ws: Workspace; tab: TerminalTab }> {
     let ws = await newTab()
     for (let i = 1; i < count; i++) {
       ws = (await api('splitPane', { pane: lastTab(ws).activePane, direction: 'right' })).workspace
@@ -675,7 +739,7 @@ describe('clearPane and resetPane revision precondition', () => {
       pty: { clear: async (s: string) => void reached.push(s), resetModes: async (s: string) => void reached.push(s) }
     }
     const service = new LayoutService(context as never, store as never, new InputTracker())
-    const pane = paneLeaves(groupsInOrder(ws.root)[0]!.tabs[0]!.root)[0]!
+    const pane = panesOf(tabsOf(ws)[0]!)[0]!
     for (const method of ['clearPane', 'resetPane']) {
       const refused = (await Promise.resolve(service.methods[method]!({ pane: pane.id, revision: ws.revision + 5 }, {} as never)).catch((e: unknown) => e)) as { kind?: string }
       expect(refused.kind).toBe('conflict')

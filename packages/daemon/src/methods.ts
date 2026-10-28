@@ -227,9 +227,20 @@ export function createHandlers(
     },
 
     'ui.state': () => layout.state(),
+    'ui.palette.set': (params) => {
+      const open = optBool(params, 'open')
+      if (params.open !== undefined && open === undefined) throw invalidParams('open must be a boolean')
+      return layout.setPalette(open)
+    },
     'ui.view.open': (params) => layout.openView(str(params, 'id'), params.input),
     'ui.view.close': () => layout.closeView(),
     'ui.panel.open': (params) => layout.openPanel(str(params, 'id')),
+    'ui.panel.configure': (params) =>
+      layout.configurePanel(
+        str(params, 'id'),
+        params.width as number | undefined,
+        params.activityBarPosition as 'top' | 'side' | undefined
+      ),
     'ui.panel.close': () => layout.closePanel(),
     'ui.sidebar.set': (params) => {
       const visible = optBool(params, 'visible')
@@ -238,6 +249,14 @@ export function createHandlers(
     },
     'ui.focus': (params) => layout.focus(focusTarget(params)),
     'ui.command.run': (params) => layout.runCommand(str(params, 'id'), params.args),
+    'ui.toast.dismiss': async (params) => {
+      await layout.dismissToast(str(params, 'key'))
+      return OK
+    },
+    'ui.shell.report': (params, conn) => {
+      layout.reportToasts(conn, params.toasts)
+      return OK
+    },
     'ui.report': (params, conn) => {
       layout.report(conn, str(params, 'slot'), params.state ?? null)
       return OK

@@ -3,11 +3,13 @@ import { RpcErrorCode, type QuirkyEvent, type Session, type UiPluginContext } fr
 import { displayTitle } from '../../layout/titles'
 import { findGroup, groupsInOrder, paneLeaves, setGroupRatio, setPaneRatio } from '../../layout/tree'
 import type { DropZone } from '../../layout/tree'
-import { FLOATING_WORKSPACE, TAB_COLOR_HEX, TAB_COLORS } from '../../layout/types'
-import type { Edge, Group, GroupNode, PaneLeaf, PaneNode, Workspace } from '../../layout/types'
+import { FLOATING_WORKSPACE, isTerminalTab, isViewTab, TAB_COLOR_HEX, TAB_COLORS } from '../../layout/types'
+import type { Edge, Group, GroupNode, PaneLeaf, PaneNode, Tab, Workspace } from '../../layout/types'
 import type { PaneReport, SearchOptions, TerminalPaneHandle, TerminalPaneProps } from '../pane/TerminalPaneView'
+import type { DockState } from '../dock/types'
 import { SEPARATOR, type MenuItem } from './Menu'
 import { AGENTS_VIEW_ID, TERMINAL_ONLY_MENU, filterEntries, loadMenuEntries, type MenuEntry } from './menuEntries'
+import { focusedController } from './registry'
 import {
   DEFAULT_WORKSPACE_SETTINGS,
   focusedPaneOf,
@@ -34,6 +36,7 @@ export const DOUBLE_REQUEST_GUARD_MS = 350
 
 const TERMINAL_PREFIX = 'quirky.terminal/'
 const SETTING_PREFIX = 'setting:quirky.terminal/'
+const EDITOR_VIEW_ID = 'view:quirky.editor/document'
 
 /** What the person closes: one tab, one pane, or the tabs on one side of a tab. */
 export type CloseTarget =
@@ -69,10 +72,14 @@ export type ControllerState = {
   rename: { kind: 'tab' | 'pane'; id: string } | null
   preview: Preview | null
   dragging: boolean
+  focusFlash: { pane: string; token: number } | null
   paneStates: Readonly<Record<string, PaneReport>>
+  dockStates: Readonly<Record<string, DockState>>
+  dockHosts: Readonly<Record<string, DockHostState>>
   tabDrag: { tab: string; over: TabDrop | null } | null
   paneDrag: { pane: string; target: PaneDropTarget | null } | null
 }
+type DockHostState = { mounted: boolean; focused: boolean; composerFocused: boolean }
 
 /** The slots and switches a host of the workspace can set. */
 export type WorkspaceOptions = {
@@ -82,6 +89,8 @@ export type WorkspaceOptions = {
   stripExtras?: (group: Group) => ReactNode
   /** The rows of the pane menu's Quick Commands submenu. */
   paneMenuExtras?: (pane: PaneLeaf) => MenuItem[]
+  /** Rows other plugins contribute to the pane menu, shown right after the Quick Commands row. */
+  paneMenuContributions?: (pane: PaneLeaf, session: Session | undefined) => MenuItem[]
   /** Menus beyond `tab`, `pane`, `plus` and `actions`, opened by `openMenu(kind, target)`. */
   extraMenus?: Record<string, (target: string | null) => MenuItem[]>
   /** The element carrying the theme's custom properties; defaults to the mount element. */
@@ -97,6 +106,10 @@ export type ViewReport = {
   visibleSessions: string[]
   layout: Workspace | null
   focusedPane: string | null
+  /** Whether the active document element is inside this view's root. */
+  focused?: boolean
+  /** The window-local sequence when this view last gained focus; zero if it has never been focused. */
+  focusSequence?: number
   panes: PaneStateReport[]
   /** Mounted terminal accessory contribution IDs by pane ID. */
   mountedAccessories: Record<string, string[]>
@@ -115,6 +128,13 @@ function isEditableControl(element: Element): boolean {
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (element as HTMLElement).isContentEditable === true
 }
 
+/** The MIME type identifies a host-minted one-use token; dragover checks only its presence. */
+export const COMMAND_DROP_MIME = 'application/x-quirky-command'
+
+export function hasCommandDrop(transfer: DataTransfer | null | undefined): transfer is DataTransfer {
+  return transfer !== null && transfer !== undefined && Array.from(transfer.types).includes(COMMAND_DROP_MIME)
+}
+
 /** Writes to the clipboard; the failure case is the caller's to report. */
 async function writeClipboard(text: string): Promise<void> {
   if (!navigator.clipboard) throw new Error('the clipboard is not available')
@@ -129,11 +149,25 @@ async function writeClipboard(text: string): Promise<void> {
  */
 export class WorkspaceController {
   readonly floating: boolean
-  /** The element the view is mounted on; menus anchor to its descendants. */
-  root: HTMLElement | null = null
+  private rootElement: HTMLElement | null = null
+  private dockContextEligible: boolean | undefined
+  private dockContextMounted: boolean | undefined
+  private dockContextFocus: boolean | undefined
+  private rootWasFocused = false
+  private focusSequence = 0
+  private onRootFocusChange = () =>
+    queueMicrotask(() => {
+      const focusWithin = this.hasRootFocus()
+      if (focusWithin && !this.rootWasFocused) this.focusSequence = ++windowFocusSequence
+      this.rootWasFocused = focusWithin
+      this.updateDockContexts()
+      this.publish()
+    })
   private state: ControllerState
   private listeners = new Set<() => void>()
   private handles = new Map<string, TerminalPaneHandle>()
+  private pendingFocusPane: string | null = null
+  private focusFlashToken = 0
   private unsubscribes: (() => void)[] = []
   private settingOverrides: Record<string, unknown> = {}
   private stopped = false
@@ -148,6 +182,22 @@ export class WorkspaceController {
   private mountedAccessories: Record<string, string[]> = {}
   /** Receives the view report whenever it changes. */
   onReport: ((report: ViewReport) => void) | null = null
+
+  get root(): HTMLElement | null {
+    return this.rootElement
+  }
+
+  set root(element: HTMLElement | null) {
+    if (this.rootElement === element) return
+    this.rootElement?.removeEventListener('focusin', this.onRootFocusChange, true)
+    this.rootElement?.removeEventListener('focusout', this.onRootFocusChange, true)
+    this.rootElement = element
+    this.rootElement?.addEventListener('focusin', this.onRootFocusChange, true)
+    this.rootElement?.addEventListener('focusout', this.onRootFocusChange, true)
+    this.rootWasFocused = this.hasRootFocus()
+    if (this.rootWasFocused) this.focusSequence = ++windowFocusSequence
+    this.updateDockContexts()
+  }
 
   constructor(
     readonly context: UiPluginContext,
@@ -172,6 +222,9 @@ export class WorkspaceController {
       preview: null,
       dragging: false,
       paneStates: {},
+      dockStates: {},
+      dockHosts: {},
+      focusFlash: null,
       tabDrag: null,
       paneDrag: null
     }
@@ -192,6 +245,7 @@ export class WorkspaceController {
     this.state = { ...this.state, ...patch }
     for (const listener of [...this.listeners]) listener()
     this.publish()
+    this.updateDockContexts()
   }
 
   /** The workspace's ID: the daemon's once loaded, else the selector. */
@@ -222,9 +276,17 @@ export class WorkspaceController {
 
   stop(): void {
     this.stopped = true
+    this.pendingFocusPane = null
     for (const unsubscribe of this.unsubscribes.splice(0)) unsubscribe()
     this.listeners.clear()
     this.handles.clear()
+    if (dockContextOwner === this) {
+      dockContextOwner = null
+      this.writeDockContextValues(false, false, false)
+    }
+    this.rootElement?.removeEventListener('focusin', this.onRootFocusChange, true)
+    this.rootElement?.removeEventListener('focusout', this.onRootFocusChange, true)
+    this.rootElement = null
     this.onReport = null
   }
 
@@ -298,7 +360,7 @@ export class WorkspaceController {
       if (loc) void this.focusPane(loc.leaf.id)
     }
     const unknown = groupsInOrder(workspace.root).some((group) =>
-      group.tabs.some((tab) => paneLeaves(tab.root).some((leaf) => !this.state.sessions[leaf.session]))
+      group.tabs.some((tab) => isTerminalTab(tab) && paneLeaves(tab.root).some((leaf) => !this.state.sessions[leaf.session]))
     )
     if (unknown) void this.reloadSessions()
   }
@@ -380,6 +442,7 @@ export class WorkspaceController {
   private apply(workspace: Workspace): void {
     const held = this.state.workspace
     if (held && workspace.revision < held.revision) return
+    if (this.pendingFocusPane !== null && !locatePane(workspace, this.pendingFocusPane)) this.pendingFocusPane = null
     this.set({ workspace, status: 'ready', preview: null })
     this.afterWorkspace(workspace)
   }
@@ -399,16 +462,74 @@ export class WorkspaceController {
     this.set({ paneStates: { ...this.state.paneStates, [paneId]: report } })
   }
 
+  setDockState(paneId: string, dock: DockState): void {
+    const previous = this.state.dockStates[paneId]
+    if (
+      previous &&
+      previous.revision === dock.revision &&
+      previous.gutterRows === dock.gutterRows &&
+      previous.agent === dock.agent &&
+      previous.userUndocked === dock.userUndocked &&
+      previous.enabled === dock.enabled &&
+      previous.supported === dock.supported &&
+      previous.docked === dock.docked &&
+      previous.mounted === dock.mounted &&
+      previous.passthrough === dock.passthrough
+    ) {
+      return
+    }
+    this.set({ dockStates: { ...this.state.dockStates, [paneId]: dock } })
+  }
+
+  clearDockState(paneId: string): void {
+    if (!(paneId in this.state.dockStates)) return
+    const { [paneId]: _dock, ...dockStates } = this.state.dockStates
+    this.set({ dockStates })
+  }
+
+  setDockHostState(paneId: string, mounted: boolean, focused: boolean, composerFocused: boolean): void {
+    const previous = this.state.dockHosts[paneId]
+    if (previous?.mounted === mounted && previous.focused === focused && previous.composerFocused === composerFocused) return
+    this.set({ dockHosts: { ...this.state.dockHosts, [paneId]: { mounted, focused, composerFocused } } })
+  }
+
+  clearDockHostState(paneId: string): void {
+    if (!(paneId in this.state.dockHosts)) return
+    const { [paneId]: _host, ...dockHosts } = this.state.dockHosts
+    this.set({ dockHosts })
+  }
+  canFocusDock(paneId: string): boolean {
+    const document = this.root?.ownerDocument
+    // Closing a pane menu temporarily returns focus to body; retain its known owner, not a background pane.
+    const transientBodyFocus = document?.activeElement === document?.body && this.focusSequence > 0 && focusedController() === this
+    return (this.hasRootFocus() || transientBodyFocus) && this.ws !== null && focusedPaneOf(this.ws)?.leaf.id === paneId
+  }
+
   private handleOf(paneId?: string): TerminalPaneHandle | undefined {
     const target = paneId ?? (this.ws ? focusedPaneOf(this.ws)?.leaf.id : undefined)
     return target === undefined ? undefined : this.handles.get(target)
   }
 
-  /** Gives keyboard focus back to the focused pane after the layout changed under it; a text field that holds focus keeps it. */
+  /** Completes a queued terminal focus after the active pane view has mounted. */
+  focusPendingPane(paneId: string): void {
+    if (this.pendingFocusPane !== paneId) return
+    const handle = this.handleOf(paneId)
+    if (!handle) return
+    this.pendingFocusPane = null
+    handle.focus()
+    handle.scrollToBottom()
+  }
+
+  /** Gives keyboard focus back to the focused pane after the layout changed under it; a text field or dock owner keeps it. */
   refocus(): void {
     const { menu, dialog, rename } = this.state
     if (menu || dialog || rename || !this.ws) return
+    const pane = focusedPaneOf(this.ws)?.leaf.id
+    const dock = pane ? this.state.dockStates[pane] : undefined
+    const host = pane ? this.state.dockHosts[pane] : undefined
+    if (dock?.enabled && dock.supported && dock.docked && dock.mounted && host?.mounted && !dock.passthrough) return
     const active = this.root?.ownerDocument.activeElement
+    if (this.floating && (!active || active === this.root?.ownerDocument.body)) return
     if (active && active !== this.root?.ownerDocument.body && !this.root?.contains(active)) return
     if (active && isEditableControl(active)) return
     this.handleOf()?.focus()
@@ -460,6 +581,25 @@ export class WorkspaceController {
     await this.run('pinTab', { tab: tabId, pinned }, pinned ? 'pin the tab' : 'unpin the tab')
   }
 
+  async promoteViewTab(tabId: string): Promise<void> {
+    const loc = this.ws ? locateTab(this.ws, tabId) : null
+    if (!loc || !isViewTab(loc.tab) || !loc.tab.preview) return
+    const bufferId = loc.tab.viewId === EDITOR_VIEW_ID ? loc.tab.input?.bufferId : undefined
+    if (typeof bufferId === 'string') {
+      try {
+        await this.context.call('quirky.editor/view', { bufferId, tabId, action: 'promote' })
+      } catch (error) {
+        this.context.toast('Could not promote the preview', messageOf(error))
+      }
+      return
+    }
+    await this.run('rekeyViewTabs', {
+      workspace: this.workspaceId,
+      viewId: loc.tab.viewId,
+      changes: [{ tab: tabId, key: loc.tab.key, preview: false }]
+    }, 'promote the preview')
+  }
+
   /** Moves a tab to `index` of a group (the end when omitted); it becomes that group's active tab. */
   async moveTabToGroup(tabId: string, group: string, index?: number): Promise<void> {
     await this.run('moveTab', { tab: tabId, group, ...(index === undefined ? {} : { index }) }, 'move the tab')
@@ -504,9 +644,21 @@ export class WorkspaceController {
     await this.run('focusPane', { pane: paneId }, 'focus the pane')
   }
 
+  /** Activates a pane through the daemon, then requests native focus, a scroll to bottom and a visible flash. */
+  async focusPaneForCommand(paneId: string): Promise<boolean> {
+    const workspace = await this.run('focusPane', { pane: paneId }, 'focus the pane')
+    if (!workspace) return false
+    const loc = locatePane(workspace, paneId)
+    if (!loc || this.state.sessions[loc.leaf.session]?.kind === 'structured') return false
+    this.pendingFocusPane = paneId
+    this.set({ focusFlash: { pane: paneId, token: ++this.focusFlashToken } })
+    this.focusPendingPane(paneId)
+    return true
+  }
+
   private async cycleFocus(offset: 1 | -1): Promise<void> {
     const at = this.ws ? focusedTabOf(this.ws) : null
-    if (at) await this.run('focusPane', { tab: at.tab.id, offset }, 'focus the pane')
+    if (at && isTerminalTab(at.tab)) await this.run('focusPane', { tab: at.tab.id, offset }, 'focus the pane')
   }
 
   focusNext(): Promise<void> {
@@ -528,7 +680,9 @@ export class WorkspaceController {
     const at = this.ws ? focusedTabOf(this.ws) : null
     const tab = tabId ?? at?.tab.id
     const loc = tab && this.ws ? locateTab(this.ws, tab) : null
-    if (loc && paneLeaves(loc.tab.root).length > 1) await this.run('equalize', { tab: loc.tab.id }, 'equalize the panes')
+    if (loc && isTerminalTab(loc.tab) && paneLeaves(loc.tab.root).length > 1) {
+      await this.run('equalize', { tab: loc.tab.id }, 'equalize the panes')
+    }
   }
 
   async clearPane(paneId?: string): Promise<void> {
@@ -574,7 +728,7 @@ export class WorkspaceController {
     if (rename.kind === 'tab') {
       const loc = locateTab(ws, rename.id)
       if (!loc) return
-      const current = loc.tab.customTitle ?? displayTitle(loc.tab)
+      const current = isViewTab(loc.tab) ? loc.tab.title : loc.tab.customTitle ?? displayTitle(loc.tab)
       if (value.trim() === current) return
       await this.run('renameTab', { tab: rename.id, title: value }, 'rename the tab')
     } else {
@@ -652,8 +806,22 @@ export class WorkspaceController {
   }
 
   private async execClose(target: CloseTarget): Promise<void> {
-    const params = { ...this.closeParams(target), yes: true }
     const hadTabs = this.ws !== null && hasTabs(this.ws)
+    if (target.kind === 'tab') {
+      const loc = this.ws ? locateTab(this.ws, target.tab) : null
+      if (loc && isViewTab(loc.tab) && loc.tab.closeCommand) {
+        try {
+          await this.context.executeCommand(loc.tab.closeCommand, { ...(loc.tab.closeParams ?? {}), tabId: loc.tab.id })
+        } catch (error) {
+          this.context.toast('Could not close the tab', messageOf(error))
+          return
+        }
+        const after = await this.run('workspace', { workspace: this.workspaceId }, 'refresh the workspace')
+        if (hadTabs && after && !hasTabs(after)) await this.minimizeFloating()
+        return
+      }
+    }
+    const params = { ...this.closeParams(target), yes: true }
     let after: Workspace | null
     if (target.kind === 'tab') after = await this.run('closeTab', params, 'close the tab')
     else if (target.kind === 'pane') after = await this.run('closePane', params, 'close the pane')
@@ -701,8 +869,13 @@ export class WorkspaceController {
     return this.requestClose({ kind: 'tabs', tab: tabId, which })
   }
 
-  /** Closes the focused pane of a split tab, else the focused tab; with nothing open a floating workspace minimizes. */
+  /** Closes the active view tab or terminal pane; with nothing open a floating workspace minimizes. */
   async closeFocused(): Promise<void> {
+    const selected = this.ws ? focusedTabOf(this.ws) : null
+    if (selected && isViewTab(selected.tab)) {
+      await this.requestClose({ kind: 'tab', tab: selected.tab.id })
+      return
+    }
     const at = this.ws ? focusedPaneOf(this.ws) : null
     if (!at) {
       await this.minimizeFloating()
@@ -822,13 +995,13 @@ export class WorkspaceController {
         enabled: group.tabs.length > 1,
         submenu: sides.map(([label, side]) => ({ label, onSelect: () => void this.moveTabToSplit(tabId, side, group.id) }))
       },
-      {
+      ...(isTerminalTab(tab) ? [{
         label: 'Split Terminal',
         submenu: [
           { label: 'Right', onSelect: () => void this.splitRight(tab.activePane) },
           { label: 'Down', onSelect: () => void this.splitDown(tab.activePane) }
         ]
-      },
+      }] : []),
       { label: tab.pinned ? 'Unpin Tab' : 'Pin Tab', onSelect: () => void this.pinTab(tabId, !tab.pinned) },
       { label: 'Copy Tab ID', onSelect: () => void this.copyText(tabId) },
       { label: 'Close', key: '⌘W', onSelect: () => void this.closeTab(tabId) },
@@ -857,15 +1030,29 @@ export class WorkspaceController {
     const { tab, leaf } = loc
     const split = paneLeaves(tab.root).length > 1
     const quick = this.options.paneMenuExtras?.(leaf) ?? []
+    const contributed = this.options.paneMenuContributions?.(leaf, this.state.sessions[leaf.session]) ?? []
     const items: MenuItem[] = [
       { label: 'Copy', key: '⌘C', onSelect: () => this.copy(paneId) },
       { label: 'Select All', key: '⌘A', onSelect: () => this.selectAll(paneId) },
       { label: 'Paste', key: '⌘V', onSelect: () => void this.pasteFromClipboard(paneId) },
       { label: 'Quick Commands', submenu: quick.length > 0 ? quick : [{ label: 'No quick commands', enabled: false }] },
+      ...contributed,
       SEPARATOR,
       { label: 'Split Terminal Right', key: '⌘D', onSelect: () => void this.splitRight(paneId) },
       { label: 'Split Terminal Down', key: '⌘⇧D', onSelect: () => void this.splitDown(paneId) }
     ]
+    const dock = this.state.dockStates[paneId]
+    if (this.state.sessions[leaf.session]?.kind === 'terminal' && dock?.enabled && dock.supported) {
+      items.push(SEPARATOR, {
+        label: dock.docked ? 'Hide agent composer' : 'Show agent composer',
+        key: '⌘⇧K',
+        onSelect: () => {
+          void this.context
+            .executeCommand('command:quirky.terminal-dock/toggle', { pane: paneId })
+            .catch((error) => this.context.toast('Could not toggle the agent composer', messageOf(error)))
+        }
+      })
+    }
     if (split) {
       items.push(
         { label: 'Equalize Pane Sizes', onSelect: () => void this.equalize(tab.id) },
@@ -1072,6 +1259,26 @@ export class WorkspaceController {
     else await this.moveTabToSplit(drag.tab, drop.zone, drop.group)
   }
 
+  /** Executes a trusted command after the daemon validates its explicit group target. */
+  async dropCommand(transfer: DataTransfer | null, groupId: string): Promise<void> {
+    const token = hasCommandDrop(transfer) ? transfer.getData(COMMAND_DROP_MIME) : ''
+    const descriptor = token === '' ? null : this.context.consumeCommandDrag(token)
+    const workspace = this.ws
+    if (!descriptor || !workspace || workspace.id === FLOATING_WORKSPACE || !findGroup(workspace.root, groupId)) return
+    try {
+      const info = await this.context.call('quirky.terminal/groupInfo', { group: groupId })
+      const target = info && typeof info === 'object' && 'workspace' in info && typeof info.workspace === 'string' ? info.workspace : null
+      const current = this.ws
+      if (target === null || target !== workspace.id || current !== workspace || current === null || !findGroup(current.root, groupId)) {
+        this.context.toast('Could not run dropped command', 'The target group is no longer available in this worktree.')
+        return
+      }
+      await this.context.executeCommand(descriptor.command, { ...descriptor.args, group: groupId, worktree: target })
+    } catch (error) {
+      this.context.toast('Could not run dropped command', messageOf(error))
+    }
+  }
+
   // ---- report
 
   setMountedAccessories(paneId: string, ids: string[]): void {
@@ -1099,7 +1306,9 @@ export class WorkspaceController {
       visibleSessions: ws ? visibleSessionsOf(ws) : [],
       layout: ws,
       focusedPane: focused?.leaf.id ?? null,
-      panes: ws ? panesReport(ws, this.state.paneStates, this.state.settings['font-size']) : [],
+      focused: this.hasRootFocus(),
+      focusSequence: this.focusSequence,
+      panes: ws ? panesReport(ws, this.state.paneStates, this.state.settings['font-size'], this.state.dockStates) : [],
       mountedAccessories: this.mountedAccessories,
       menu: menu
         ? {
@@ -1112,6 +1321,50 @@ export class WorkspaceController {
     }
   }
 
+  private hasRootFocus(): boolean {
+    const root = this.rootElement
+    const active = root?.ownerDocument.activeElement
+    return Boolean(root && active && active !== root.ownerDocument.body && root.contains(active))
+  }
+
+  private updateDockContexts(): void {
+    if (!this.hasRootFocus()) {
+      if (dockContextOwner && !dockContextOwner.hasRootFocus()) {
+        const previousOwner = dockContextOwner
+        dockContextOwner = null
+        previousOwner.writeDockContextValues(false, false, false)
+      }
+      return
+    }
+
+    if (dockContextOwner && dockContextOwner !== this) dockContextOwner.writeDockContextValues(false, false, false)
+    dockContextOwner = this
+    const pane = this.ws ? focusedPaneOf(this.ws)?.leaf.id : undefined
+    const dock = pane ? this.state.dockStates[pane] : undefined
+    const host = pane ? this.state.dockHosts[pane] : undefined
+    const eligible = Boolean(dock?.enabled && dock.supported && host?.focused)
+    const mounted = eligible && Boolean(dock?.docked && dock.mounted && host?.mounted)
+    const focused = mounted && Boolean(!dock?.passthrough && host?.composerFocused)
+    this.writeDockContextValues(eligible, mounted, focused)
+  }
+
+  private writeDockContextValues(eligible: boolean, mounted: boolean, focused: boolean): void {
+    if (this.dockContextEligible !== eligible) {
+      this.dockContextEligible = eligible
+      this.context.setContext('terminalDockEligible', eligible)
+    }
+    if (this.dockContextMounted !== mounted) {
+      this.dockContextMounted = mounted
+      this.context.setContext('terminalDockMounted', mounted)
+    }
+    if (this.dockContextFocus !== focused) {
+      this.dockContextFocus = focused
+      this.context.setContext('terminalDockFocus', focused)
+    }
+  }
+
+
+
   private publish(): void {
     if (!this.onReport || this.state.status === 'loading' || this.stopped) return
     const report = this.report()
@@ -1121,3 +1374,5 @@ export class WorkspaceController {
     this.onReport(report)
   }
 }
+let dockContextOwner: WorkspaceController | null = null
+let windowFocusSequence = 0

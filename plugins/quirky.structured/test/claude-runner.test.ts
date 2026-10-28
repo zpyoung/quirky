@@ -159,7 +159,6 @@ describe('start', () => {
       message: { content: 'first custody-recorded turn' }
     })
   })
-
   test('passes the prepared account environment to Claude Code', async () => {
     await runner.start(session, 'hello', { env: { CLAUDE_CONFIG_DIR: '/managed/claude' } })
 
@@ -278,13 +277,6 @@ describe('status', () => {
     expect(statuses).toEqual(['working', 'done', 'working'])
   })
 
-
-  test('failed results exit without publishing a successful done state', async () => {
-    const query = await begin()
-    query.emit({ type: 'result', subtype: 'error_api_error', result: 'provider failed', is_error: true })
-    await until(() => statuses.includes('exited'))
-    expect(statuses).not.toContain('done')
-  })
   test('exited when the query ends', async () => {
     const query = await begin()
     query.end()

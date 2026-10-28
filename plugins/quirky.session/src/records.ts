@@ -9,6 +9,7 @@ import type {
   PromptDeliveryState,
   LaunchSettings,
   Session,
+  SessionBadge,
   SessionLaunch,
   SessionProviderSession,
   SessionStatus,
@@ -37,6 +38,7 @@ type Row = {
   agent_status: string | null
   name: string | null
   unread: Session['unread']
+  badges: string | null
 }
 export type PointerOperationResult =
   | { status: 'submitted'; transport: 'terminal_enter' | 'structured_session' }
@@ -81,6 +83,11 @@ function parseJson<T>(text: string | null): T | null {
   }
 }
 
+const badgesOf = (text: string | null): Pick<Session, 'badges'> => {
+  const badges = parseJson<Record<string, SessionBadge>>(text)
+  return badges ? { badges } : {}
+}
+
 const toSession = (row: Row): Session => ({
   id: row.id,
   kind: row.kind,
@@ -102,7 +109,8 @@ const toSession = (row: Row): Session => ({
   resumedFrom: row.resumed_from,
   agentStatus: parseJson<AgentStatusSummary>(row.agent_status),
   name: row.name,
-  unread: row.unread
+  unread: row.unread,
+  ...badgesOf(row.badges)
 })
 
 const jsonOrNull = (value: unknown) => (value === null || value === undefined ? null : JSON.stringify(value))
@@ -188,6 +196,9 @@ export function sessionMigrations(home: string): StoreMigration[] {
       store.exec('ALTER TABLE sessions ADD COLUMN name TEXT')
     },
     (store) => {
+      store.exec('ALTER TABLE sessions ADD COLUMN badges TEXT')
+    },
+    (store) => {
       store.exec(`
         CREATE TABLE session_pointer_operations (
           operation_id TEXT PRIMARY KEY,
@@ -202,7 +213,6 @@ export function sessionMigrations(home: string): StoreMigration[] {
         CREATE INDEX session_pointer_operations_updated_at ON session_pointer_operations(updated_at)
       `)
     },
-
   ]
 }
 
@@ -293,6 +303,7 @@ export class SessionRecords {
       agentStatus?: AgentStatusSummary | null
       name?: string | null
       unread?: Session['unread']
+      badges?: Record<string, SessionBadge> | null
     }
   ): Session | null {
     const columns: [string, string | number | null][] = []
@@ -310,6 +321,7 @@ export class SessionRecords {
     if (fields.agentStatus !== undefined) columns.push(['agent_status', jsonOrNull(fields.agentStatus)])
     if (fields.name !== undefined) columns.push(['name', fields.name])
     if (fields.unread !== undefined) columns.push(['unread', fields.unread])
+    if (fields.badges !== undefined) columns.push(['badges', fields.badges && Object.keys(fields.badges).length > 0 ? JSON.stringify(fields.badges) : null])
     if (columns.length > 0) {
       this.store.run(
         `UPDATE sessions SET ${columns.map(([name]) => `${name} = ?`).join(', ')} WHERE id = ?`,

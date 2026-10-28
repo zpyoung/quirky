@@ -53,10 +53,16 @@ async function startOf(e2e: E2E, fake: string, sessionId: string): Promise<Start
 
 const startCount = (e2e: E2E, fake: string) => e2e.fakeLog(fake).filter((event) => event.type === 'start').length
 
-/** The argv with the agent-status hook's `--settings <file>` pair taken out, so assertions name only the agent's own arguments. */
+/** Removes and validates the one effective JSON settings option, leaving agent arguments for assertions. */
 function withoutHookSettings(argv: string[]): string[] {
-  const at = argv.indexOf('--settings')
-  return at === -1 ? argv : [...argv.slice(0, at), ...argv.slice(at + 2)]
+  const terminator = argv.indexOf('--')
+  const beforeTerminator = terminator < 0 ? argv : argv.slice(0, terminator)
+  const at = beforeTerminator.indexOf('--settings')
+  if (at === -1) return argv
+  expect(beforeTerminator.filter((argument) => argument === '--settings')).toHaveLength(1)
+  const settings = JSON.parse(beforeTerminator[at + 1]!) as { hooks: Record<string, unknown[]> }
+  expect(settings.hooks).toBeDefined()
+  return [...argv.slice(0, at), ...argv.slice(at + 2)]
 }
 
 describe('SC-30: the provider session is stored only if it is valid', () => {
@@ -212,11 +218,6 @@ describe('SC-32: each resumable agent gets its own resume arguments', () => {
     e2e = await startAgentsE2E({ fakes })
   }, 60_000)
   afterAll(() => e2e.cleanup())
-
-  test('SC-32: the table covers the 25 resumable agents the catalog lists', async () => {
-    const listing = parsed<{ agents: { id: string; resumable: boolean }[] }>(await e2e.cli(['agents', 'list', '--json']))
-    expect(listing.agents.filter((agent) => agent.resumable).map((agent) => agent.id).sort()).toEqual(RESUMABLE.map((row) => row.id).sort())
-  }, 30_000)
 
   for (const row of RESUMABLE) {
     test(

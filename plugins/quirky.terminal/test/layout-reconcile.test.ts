@@ -2,10 +2,11 @@ import { describe, expect, test } from 'bun:test'
 import type { Session } from '@quirky/protocol'
 import { InputTracker } from '../src/input-tracker'
 import { LayoutService } from '../src/layout/service'
-import { emptyWorkspace, makeTab, appendTab, normalize, workspaceTabs } from '../src/layout/ops'
+import { emptyWorkspace, makeTab, appendTab, normalize, workspaceTabs as allWorkspaceTabs } from '../src/layout/ops'
 import { reconcileWorkspace } from '../src/layout/reconcile'
 import { CounterIds, parseWorkspace } from '../src/layout/store'
 import { groupsInOrder, paneLeaves, splitPane } from '../src/layout/tree'
+import { isTerminalTab } from '../src/layout/types'
 import type { Workspace } from '../src/layout/types'
 
 const NOW = '2026-10-27T00:00:00.000Z'
@@ -61,6 +62,8 @@ function withTabsFrom(start: number, ...sessionIds: string[]): Workspace {
   return ws
 }
 
+
+const workspaceTabs = (ws: Workspace) => allWorkspaceTabs(ws).filter(isTerminalTab)
 const sessionsOf = (ws: Workspace) => workspaceTabs(ws).flatMap((tab) => paneLeaves(tab.root).map((leaf) => leaf.session))
 
 describe('adopting sessions', () => {
@@ -225,7 +228,10 @@ describe('repairing a loaded workspace', () => {
     expect(fixed.activeGroup).toBe(repaired!.id)
     expect(repaired!.activeTab).toBe(group!.tabs[1]!.id)
     expect(repaired!.recent).toEqual([group!.tabs[1]!.id])
-    for (const tab of repaired!.tabs) expect([tab.activePane, tab.expandedPane]).toEqual([paneLeaves(tab.root)[0]!.id, null])
+    for (const tab of repaired!.tabs) {
+      if (!isTerminalTab(tab)) throw new Error(`expected terminal tab ${tab.id}`)
+      expect([tab.activePane, tab.expandedPane]).toEqual([paneLeaves(tab.root)[0]!.id, null])
+    }
   })
 })
 
@@ -301,6 +307,43 @@ describe('the service commits a repair that is only normalization', () => {
   })
 })
 
+describe('openSession service binding', () => {
+  test('binds an existing local terminal session into a new tab without creating a session', async () => {
+    const record = session('resumed-session', { worktreeId: 'wt' })
+    const calls: string[] = []
+    const saved: Workspace[] = []
+    const store = {
+      loadWorkspaces: () => ({ workspaces: [], unreadable: [] }),
+      counter: () => 0,
+      floating: () => ({}),
+      save: (workspace: Workspace) => void saved.push(workspace)
+    }
+    const context = {
+      call: async (method: string) => {
+        calls.push(method)
+        if (method === 'quirky.session/get') return record
+        throw new Error(`unexpected call: ${method}`)
+      },
+      pty: { list: async () => [{ sessionId: record.id, state: 'running' }] },
+      log: () => {},
+      error: (_kind: string, message: string) => new Error(message),
+      emit: () => {}
+    }
+    const service = new LayoutService(context as never, store as never, new InputTracker())
+    const result = (await service.methods.openSession!({ session: record.id }, { role: 'cli' } as never)) as {
+      workspace: Workspace
+      pane: string
+    }
+
+    expect(result.workspace.id).toBe('wt')
+    expect(sessionsOf(result.workspace)).toEqual([record.id])
+    expect(paneLeaves(workspaceTabs(result.workspace)[0]!.root)[0]!.id).toBe(result.pane)
+    expect(result.workspace.revision).toBe(1)
+    expect(saved.at(-1)).toEqual(result.workspace)
+    expect(calls).toEqual(['quirky.session/get'])
+  })
+})
+
 describe('driving input and terminal facts across restarts and reconnects', () => {
   const stored = (ws: Workspace) => ({
     loadWorkspaces: () => ({ workspaces: [ws], unreadable: [] }),
@@ -372,6 +415,7 @@ describe('driving input and terminal facts across restarts and reconnects', () =
     let hostCwd = '/old'
     const context = {
       log: () => {},
+      subscribe: () => () => {},
       emit: () => {},
       getSetting: () => undefined,
       error: (_kind: string, message: string) => new Error(message),

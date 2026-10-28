@@ -24,6 +24,7 @@ import { LayoutService } from './layout'
 import { createPtyApi } from './pty-api'
 import { Scheduler } from './scheduler'
 import { openPluginStore, pluginDataDir } from './stores'
+import { FileResourceRegistry } from '../file-resources'
 import { UiService } from './ui-service'
 
 export type PluginRuntimeOptions = {
@@ -45,10 +46,11 @@ export type PluginRuntimeOptions = {
   sessionAuthority: RuntimeSessionAuthority
 }
 
-type LaunchInput = Omit<LaunchHookInput, 'env' | 'args'>
+type LaunchInput = Omit<LaunchHookInput, 'env' | 'args' | 'jsonArgs'>
 
 export type PluginRuntime = {
   extension: ContextExtension
+  fileResources: FileResourceRegistry
   dispatcher: Dispatcher
   events: PluginEvents
   scheduler: Scheduler
@@ -122,6 +124,7 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
   })
   const openedStores = new Map<string, OpenedStore>()
   const ptyApis = new Map<string, { revoke(): void }>()
+  const fileResources = new FileResourceRegistry()
 
   const buildEnv = (input: {
     sessionId: string
@@ -220,6 +223,10 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
           if (!isPlainObject(resolved)) return Promise.reject(invalidParams('params must be an object'))
           return dispatcher.dispatch(method, resolved, { pluginId: id })
         },
+        createFileResource(options) {
+          guard()
+          return fileResources.create(id, options, isRevoked)
+        },
         openStore(migrations: StoreMigration[]) {
           guard()
           if (opened) {
@@ -251,7 +258,8 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
         }
       }
     },
-    revoke(pluginId) {
+    async revoke(pluginId) {
+      await fileResources.revokePlugin(pluginId)
       events.removeAll(pluginId)
       options.sessionAuthority.releasePlugin(pluginId)
       scheduler.revokePlugin(pluginId)
@@ -277,5 +285,5 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
     }
   }
 
-  return { extension, dispatcher, events, scheduler, layout, distros, prepareLaunch }
+  return { extension, dispatcher, events, scheduler, layout, distros, fileResources, prepareLaunch }
 }

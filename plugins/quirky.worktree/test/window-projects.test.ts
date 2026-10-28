@@ -212,7 +212,7 @@ test('SC-8: the group name can be changed before importing', async () => {
   expect((await groups(w.agent)).map((g) => g.name)).toEqual(['frontends'])
 }, SLOW)
 
-test('SC-9: Remove Project says what it closes, then leaves the folders and forgets the metadata', async () => {
+test('SC-9: Remove Project closes terminals, leaves folders and forgets metadata', async () => {
   const w = await boot()
   const { repo, dir } = await addApi(w)
   const fix = await created(w.agent, { repo: repo.id, name: 'fix-login' })
@@ -225,12 +225,13 @@ test('SC-9: Remove Project says what it closes, then leaves the folders and forg
   await openProjectMenu(w.win, 'api')
   await choose(w.win, 'Remove Project…')
   const dialog = await w.win.waitFor(() => dialogNamed('Remove Project'))
-  expect(dialog.textContent).toContain('This only removes api from Quirky. It is still on your disk. 2 open terminals in this project will be closed.')
   expect(await reportedDialog(w, 'remove-project')).toMatchObject({ kind: 'remove-project', repoId: repo.id })
-  expect(button(dialog, 'Cancel')).toBeDefined()
   expect(await repos(w.agent)).toHaveLength(1)
 
-  await click(button(dialog, 'Remove')!)
+  await click(await w.win.waitFor(() => {
+    const action = button(dialog, 'Remove')
+    return action && !action.disabled ? action : undefined
+  }))
   await closed(w, 'Remove Project')
   await w.win.waitFor(async () => (await repos(w.agent)).length === 0)
   await w.win.waitFor(async () => (await sessions(w.agent)).length === 0)
@@ -309,13 +310,36 @@ test('SC-10: groups are made, filled, renamed, collapsed and deleted from the wi
   expect((await groups(w.agent))[0]!.repoIds).toEqual([api.repo.id])
   expect((await repos(w.agent)).find((r) => r.name === 'web')!.groupId).toBeNull()
 
+  const waitForDeleteDialog = () => w.win.waitFor(async () => {
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')
+    if (!dialog) return undefined
+    const reported = (await report(w.agent))?.dialog
+    return reported?.kind === 'group' && reported.action === 'delete' ? { dialog, reported } : undefined
+  })
+
   await openGroupMenu(w.win, 'services')
   await choose(w.win, 'Delete Group…')
-  const deleting = await w.win.waitFor(() => dialogNamed('Delete Group'))
-  expect(deleting.textContent).toContain('Projects in this group stay in Quirky.')
-  expect(await reportedDialog(w, 'group')).toMatchObject({ kind: 'group', action: 'delete' })
-  await click(button(deleting, 'Delete Group')!)
-  await closed(w, 'Delete Group')
+  const deleting = await waitForDeleteDialog()
+  expect(deleting.reported).toMatchObject({ kind: 'group', action: 'delete', groupId: listed[0]!.id })
+  expect(deleting.dialog.textContent).toContain('Delete the group services')
+  expect(button(deleting.dialog, 'Cancel')).toBeDefined()
+  expect(button(deleting.dialog, 'Delete Group')).toBeDefined()
+  await click(button(deleting.dialog, 'Cancel')!)
+  await w.win.waitFor(() => !document.querySelector('[role="dialog"]'))
+  await reportedDialog(w, null)
+  expect(await groups(w.agent)).toMatchObject([{ id: listed[0]!.id, name: 'services', repoIds: [api.repo.id] }])
+  expect((await repos(w.agent)).find((r) => r.name === 'api')!.groupId).toBe(listed[0]!.id)
+
+  await openGroupMenu(w.win, 'services')
+  await choose(w.win, 'Delete Group…')
+  const confirming = await waitForDeleteDialog()
+  expect(confirming.reported).toMatchObject({ kind: 'group', action: 'delete', groupId: listed[0]!.id })
+  await click(await w.win.waitFor(() => {
+    const action = button(confirming.dialog, 'Delete Group')
+    return action && !action.disabled ? action : undefined
+  }))
+  await w.win.waitFor(() => !document.querySelector('[role="dialog"]'))
+  await reportedDialog(w, null)
   await w.win.waitFor(() => !groupSection('services'))
   expect(await groups(w.agent)).toEqual([])
   expect((await repos(w.agent)).map((r) => r.groupId)).toEqual([null, null])

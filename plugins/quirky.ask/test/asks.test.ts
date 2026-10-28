@@ -213,6 +213,7 @@ const askEvents = (events: QuirkyEvent[]) =>
     .map((event) => [event.type.slice('quirky.ask/'.length), (event as any).data.seq as number])
 const eventsOf = (events: QuirkyEvent[], name: string) => events.filter((event) => event.type === `quirky.ask/${name}`) as any[]
 const asksOf = async (c: QuirkyClient, pendingOnly = false) => (await c.callAny('quirky.ask/list', { pendingOnly })) as Ask[]
+
 const ASK_OWNER_ID = 'quirky.ask-owner'
 
 function approvalOwnerPlugins(): string {
@@ -338,6 +339,7 @@ describe('questions and answers', () => {
     expect(Object.values(envelope.answers).map((answer: any) => answer.source)).not.toContain('default')
   })
 })
+
 
 describe('plugin-owned approvals', () => {
   test('ownership is private and disabling an owner cancels its pending asks', async () => {

@@ -18,7 +18,10 @@ function fixture(fields: Pick<Worktree, 'id' | 'repoId' | 'path' | 'branch' | 'i
     baseRef: null,
     keepBranch: false,
     removing: false,
-    groupId: null
+    groupId: null,
+    projectGroupId: null,
+    lastActivityAt: 0,
+    instanceId: `instance:${fields.id}`,
   }
 }
 

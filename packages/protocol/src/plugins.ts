@@ -1,5 +1,7 @@
-import type { ExitCause, PtyFact, PtyHistoryPage, PtySessionInfo, PtySnapshot, PtySubscription } from './pty'
+import type { ExitCause, PtyFact, PtyHistoryPage, PtySessionInfo, PtySnapshot, PtySubscription, PtyWriteErrorCode } from './pty'
 import type { ClientRole, QuirkyEvent } from './rpc'
+import type { ToastAction, ToastKind } from './ui'
+import type { SessionLaunch } from './model'
 
 /** Where a plugin was found: shipped with Quirky, or installed by the user. */
 export type PluginSource = 'builtin' | 'installed'
@@ -49,6 +51,8 @@ export type ContributionInfo = {
 export type PluginContext = {
   readonly pluginId: string
   readonly dir: string
+  /** Absolute file URL for a worker entrypoint declared by name in `workers`; throws for undeclared names. */
+  workerEntrypoint(name: string): string
   /** The plugin's private data directory, `<home>/plugin-data/<pluginId>`; it exists (mode 0700). */
   readonly dataDir: string
   /** Writes to the daemon log, prefixed with the plugin ID. */
@@ -61,6 +65,12 @@ export type PluginContext = {
   subscribe(listener: (event: QuirkyEvent) => void | Promise<void>): () => void
   /** Invokes a daemon or plugin method as this plugin. */
   call(method: string, params?: Record<string, unknown>): Promise<unknown>
+  /** Creates a same-origin opaque capability URL for an authorized local file. */
+  createFileResource(options: {
+    path: string
+    contentType: string
+    disposition?: 'inline' | 'attachment'
+  }): Promise<{ url: string; revoke(): void }>
   /** Opens this plugin's private SQLite store, applying any migrations it has not yet run. */
   openStore(migrations: StoreMigration[]): PluginStore
   /** The current value of a setting: a short name in this plugin's own namespace, or a full setting ID. */
@@ -77,6 +87,12 @@ export type PluginContext = {
   notify(notification: PluginNotification): void
   /** The kernel's session launch environment and launch-hook pipeline. */
   readonly launch: PluginLaunch
+}
+
+/** The certainty metadata attached to a rejected `PluginPty.writeAccepted` call. */
+export type PluginPtyWriteError = Error & {
+  code: PtyWriteErrorCode
+  acceptedBytes: number | null
 }
 
 /** The PTY host operations a plugin may use. */
@@ -96,6 +112,8 @@ export type PluginPty = {
     }
   ): Promise<{ pid: number; restored: boolean; cwd: string; cols: number; rows: number }>
   write(sessionId: string, data: string | Uint8Array): void
+  /** Resolves after every byte is accepted by the live child PTY; rejects with `PluginPtyWriteError` otherwise. */
+  writeAccepted(sessionId: string, data: string | Uint8Array): Promise<void>
   resize(sessionId: string, cols: number, rows: number): Promise<void>
   /**
    * The visible screen plus up to `lines` of scrollback, as text. `unwrap` joins rows the terminal
@@ -148,6 +166,17 @@ export type PluginNotification = {
   sound?: { file: string | null; volume: number }
   /** Whether the webview shows a toast; defaults to true. */
   toast?: boolean
+  /** The toast's look; defaults to `info`. */
+  kind?: ToastKind
+  /** A new toast with the same key replaces the old one without dismissing it. */
+  key?: string
+  /** Keeps the toast until it is dismissed instead of after six seconds. */
+  persistent?: boolean
+  /** A second line under the body. */
+  detail?: string
+  actions?: ToastAction[]
+  /** A window command to run once when the toast is dismissed. */
+  onDismiss?: { command: string; args?: unknown }
 }
 
 
@@ -197,6 +226,11 @@ export type PluginLaunch = {
     cwd: string
     agent: string
     prompt?: string
+    /** Replay launch context; absent on create. */
+    record?: SessionLaunch
+    model?: string
+    options?: Record<string, string | boolean>
+    extraArgs?: string
   }): Promise<{ env: Record<string, string | null>; args: string[] }>
 }
 
@@ -271,16 +305,27 @@ export type LaunchHookInput = {
   cwd: string
   agent: string
   prompt?: string
+  /** Replay launch context; absent on create. */
+  record?: SessionLaunch
+  model?: string
+  options?: Record<string, string | boolean>
+  extraArgs?: string
   /** Additions from earlier hooks only. */
   env: Readonly<Record<string, string>>
   /** Extra args from earlier hooks. */
   args: readonly string[]
+  /** Deeply frozen JSON-valued arguments accumulated from earlier hooks. */
+  jsonArgs: Readonly<Record<string, Readonly<Record<string, unknown>>>>
 }
 
-/** What a launch hook changes: env additions (null removes a name) and extra agent args. */
-export type LaunchPatch = { env?: Record<string, string | null>; args?: string[] }
+/** What a launch hook changes: env additions, extra agent args and JSON-valued long options. */
+export type LaunchPatch = {
+  env?: Record<string, string | null>
+  args?: string[]
+  jsonArgs?: Record<string, Record<string, unknown>>
+}
 
-/** Adjusts a session's launch environment and args before the agent starts. */
+/** Adjusts a session's launch environment, args and JSON args before the agent starts. */
 export type LaunchHook = (launch: LaunchHookInput) => LaunchPatch | void | Promise<LaunchPatch | void>
 
 export type JobRunStatus = 'running' | 'ok' | 'failed' | 'timed-out'
@@ -353,6 +398,8 @@ export type PluginManifest = {
   ui?: string
   /** Relative path of the CLI module. */
   cli?: string
+  /** Worker name to root-relative entrypoint, bundled and rewritten to its packaged path by the desktop bundler. */
+  workers?: Record<string, string>
   /** Extra words that reach this plugin's CLI group. */
   cliAliases?: string[]
   /** Defaults to `lazy`. */

@@ -3,7 +3,31 @@ import type { CliContext, Worktree, WorktreeCreateResult } from '@quirky/protoco
 import { formatRecord, formatTable } from '../../../packages/cli/src/output'
 import { commands } from '../cli'
 
-const worktree = { id: 'wt_1', name: 'x', branch: 'zoe/x', path: '/w/api/x' } as Worktree
+const worktree: Worktree = {
+  id: 'wt_1',
+  repoId: 'repo_api',
+  path: '/w/api/x',
+  branch: 'zoe/x',
+  head: 'a'.repeat(40),
+  isMain: false,
+  name: 'x',
+  kind: 'git',
+  displayName: null,
+  comment: '',
+  status: 'in-progress',
+  pinned: false,
+  unread: false,
+  parentId: null,
+  createdAt: 0,
+  createdBy: 'external',
+  baseRef: null,
+  keepBranch: false,
+  removing: false,
+  groupId: null,
+  projectGroupId: null,
+  lastActivityAt: 0,
+  instanceId: 'instance:wt_1'
+}
 
 /** A CLI context whose daemon answers `result` and which records the call and the lines printed. */
 function fakeContext(result: Partial<WorktreeCreateResult> = {}, json = false) {

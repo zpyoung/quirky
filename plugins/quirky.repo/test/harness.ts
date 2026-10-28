@@ -1,6 +1,8 @@
-import { mkdirSync, symlinkSync } from 'node:fs'
+import { randomUUID } from 'node:crypto'
+import { mkdirSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { QuirkyClient, type CliContext, type ClientRole } from '@quirky/protocol'
+import { pathToFileURL } from 'node:url'
 import { rpcUrl } from '@quirky/protocol/node'
 import { createFakeGit, useTestGit, type FakeGit } from '@quirky/git/testing'
 import { formatRecord, formatTable } from '../../../packages/cli/src/output'
@@ -11,6 +13,80 @@ import { fakeSessionState, type FakeSessionState } from './fakes/quirky.session/
 
 const PLUGINS_ROOT = resolve(import.meta.dir, '..', '..')
 const FAKES_DIR = join(import.meta.dir, 'fakes')
+
+type RepoGroupCreateBarrierState = {
+  armed: boolean
+  claimed: boolean
+  markEntered(): void
+  released: Promise<void>
+}
+
+export type RepoGroupCreateBarrier = {
+  id: string
+  entered: Promise<void>
+  arm(): void
+  release(): void
+  dispose(): void
+}
+
+const repoGroupCreateBarriers = new Map<string, RepoGroupCreateBarrierState>()
+
+export function createRepoGroupCreateBarrier(): RepoGroupCreateBarrier {
+  const id = randomUUID()
+  const { promise: entered, resolve: markEntered } = Promise.withResolvers<void>()
+  const { promise: released, resolve: release } = Promise.withResolvers<void>()
+  const state: RepoGroupCreateBarrierState = { armed: false, claimed: false, markEntered, released }
+  repoGroupCreateBarriers.set(id, state)
+
+  return {
+    id,
+    entered,
+    arm: () => { state.armed = true },
+    release,
+    dispose: () => {
+      release()
+      repoGroupCreateBarriers.delete(id)
+    }
+  }
+}
+
+export async function awaitRepoGroupCreateBarrier(id: string): Promise<void> {
+  const barrier = repoGroupCreateBarriers.get(id)
+  if (!barrier) throw new Error('repo group-create test barrier is no longer active')
+  if (!barrier.armed || barrier.claimed) return
+  barrier.claimed = true
+  barrier.markEntered()
+  await barrier.released
+}
+
+function installRepoGroupCreateBarrierPlugin(builtinPluginsDir: string, barrierId: string): void {
+  const pluginDir = join(builtinPluginsDir, 'quirky.repo')
+  mkdirSync(pluginDir, { recursive: true })
+  symlinkSync(join(PLUGINS_ROOT, 'quirky.repo', 'quirky-plugin.json'), join(pluginDir, 'quirky-plugin.json'))
+  symlinkSync(join(PLUGINS_ROOT, 'quirky.repo', 'cli.ts'), join(pluginDir, 'cli.ts'))
+
+  const realMain = pathToFileURL(join(PLUGINS_ROOT, 'quirky.repo', 'main.ts')).href
+  const harnessModule = JSON.stringify(import.meta.url)
+  writeFileSync(join(pluginDir, 'main.ts'), [
+    `import { activate as activateRepo } from ${JSON.stringify(realMain)}`,
+    `import { awaitRepoGroupCreateBarrier } from ${harnessModule}`,
+    'export function activate(context) {',
+    '  activateRepo(new Proxy(context, {',
+    '    get(target, property) {',
+    `      if (property !== 'provide') return Reflect.get(target, property, target)`,
+    '      return (contributionId, implementation) => {',
+    `        if (contributionId !== 'method:quirky.repo/groupCreate') return target.provide(contributionId, implementation)`,
+    '        return target.provide(contributionId, async (...args) => {',
+    '          const group = await implementation(...args)',
+    `          await awaitRepoGroupCreateBarrier(${JSON.stringify(barrierId)})`,
+    '          return group',
+    '        })',
+    '      }',
+    '    }',
+    '  }))',
+    '}'
+  ].join('\n'))
+}
 
 export type PluginHarness = {
   h: Harness
@@ -36,6 +112,8 @@ export type PluginHarnessOptions = {
   /** Link the fake `quirky.ask` that destructive-call confirmations open asks on (default false). */
   fakeAsk?: boolean
   home?: string
+  /** Installs a test-only wrapper around the real repo groupCreate provider. */
+  repoGroupCreateBarrier?: RepoGroupCreateBarrier
 }
 
 /**
@@ -46,7 +124,11 @@ export async function startPluginHarness(options: PluginHarnessOptions = {}): Pr
   const builtinPluginsDir = makeTempDir('qp-')
   mkdirSync(builtinPluginsDir, { recursive: true })
   for (const id of options.plugins ?? ['quirky.repo', 'quirky.worktree']) {
-    symlinkSync(join(PLUGINS_ROOT, id), join(builtinPluginsDir, id))
+    if (id === 'quirky.repo' && options.repoGroupCreateBarrier) {
+      installRepoGroupCreateBarrierPlugin(builtinPluginsDir, options.repoGroupCreateBarrier.id)
+    } else {
+      symlinkSync(join(PLUGINS_ROOT, id), join(builtinPluginsDir, id))
+    }
   }
   if (options.fakeAsk) symlinkSync(join(FAKES_DIR, 'quirky.ask'), join(builtinPluginsDir, 'quirky.ask'))
   fakeAsks().clear()
@@ -84,8 +166,13 @@ export async function startPluginHarness(options: PluginHarnessOptions = {}): Pr
     },
     async cleanup() {
       useTestGit(null)
-      await h.cleanup()
-      removeTempDirs()
+      options.repoGroupCreateBarrier?.release()
+      try {
+        await h.cleanup()
+      } finally {
+        options.repoGroupCreateBarrier?.dispose()
+        removeTempDirs()
+      }
     }
   }
   return harness

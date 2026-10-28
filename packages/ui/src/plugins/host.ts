@@ -1,12 +1,13 @@
 import {
   DEFAULT_THEME,
-  RESERVED_CHORDS,
   THEME_TOKENS,
   chordFromKeyEvent,
   evaluateWhen,
   whenMentions,
   type QuirkyEvent,
   type SettingInfo,
+  type ToastKind,
+  type ToastOptions,
   type UiCommandEntry,
   type UiKeybinding,
   type UiLayout,
@@ -28,7 +29,9 @@ export type HostDeps = {
   onConnection(listener: (status: 'connected' | 'reconnecting') => void): () => void
   /** The shell's confirm dialog; resolves true when the person confirms. */
   confirm(options: { title: string; body?: string; confirmLabel?: string }): Promise<boolean>
-  toast(title: string, body: string, kind: 'info' | 'error'): void
+  toast(title: string, body: string, kind: ToastKind, options?: ToastOptions): void
+  /** Dismisses the toast keyed `key` and runs its `onDismiss`, for the daemon's `ui.toast.dismiss`; nothing happens when none has it. */
+  dismissToast?(key: string): void
   log(message: string): void
   /** Window focus, reported to the daemon so it can pick the window a routed command runs in. */
   windowFocus?: { hasFocus(): boolean; subscribe(listener: (focused: boolean) => void): () => void }
@@ -79,6 +82,13 @@ type Session = {
   violation: string | null
   revoked: boolean
 }
+type CommandDragCapability = {
+  readonly token: string
+  readonly owner: Session
+  readonly command: string
+  readonly args: Record<string, unknown>
+  dispose(): void
+}
 
 type Runtime = {
   module?: UiPluginModule
@@ -117,6 +127,9 @@ class NoCommand extends Error {
   }
 }
 
+/** The routed request id the daemon uses to dismiss a toast; no plugin command can have it. */
+const TOAST_DISMISS = 'ui.toast.dismiss'
+
 const DEFAULT_ACTIVATION_TIMEOUT_MS = 10000
 
 function isPluginModule(value: unknown): value is UiPluginModule {
@@ -128,7 +141,7 @@ function messageOf(error: unknown): string {
 }
 
 function findSlot(model: UiModel, id: string): UiSlotEntry | undefined {
-  return [...model.sidebarSections, ...model.statusBars, ...model.panels, ...model.views, ...model.overlays].find((entry) => entry.id === id)
+  return [...model.sidebarSections, ...model.activityItems, ...model.statusBars, ...model.panels, ...model.settingsSections, ...model.views, ...model.overlays].find((entry) => entry.id === id)
 }
 
 /** Context keys the kernel gives meaning to: with both true, terminal keys go to the terminal first. */
@@ -189,11 +202,14 @@ export class WindowPluginHost {
   private readonly unsubscribeActivity: (() => void) | undefined
   private lastInputAt: number | null = null
   private lastActivityReportAt: number | null = null
+
   private refreshChain: Promise<unknown> = Promise.resolve()
+  /** Events are newer than any `ui.state` snapshot whose request was already in flight. */
+  private layoutEventVersion = 0
   /** `setting.changed` values seen while a refresh fetches; they are newer than that refresh's snapshot. */
   private settingsSeenDuringFetch: Map<string, boolean | number | string> | null = null
   private stopped = false
-
+  private commandDrag: CommandDragCapability | null = null
   constructor(private readonly deps: HostDeps) {
     this.unsubscribeEvents = deps.onEvent((event) => this.handleEvent(event))
     this.unsubscribeFocus = deps.windowFocus?.subscribe((focused) => this.reportFocus(focused))
@@ -276,17 +292,15 @@ export class WindowPluginHost {
   }
 
   /**
-   * Routes a key press to the `active` keybinding on its chord whose `when` holds and runs that
-   * binding's command without waiting for it. A binding with a `when` beats one without; otherwise
-   * the first in model order wins. When `terminalKeysFirst` and `terminalFocus` are both set, only a
-   * binding whose `when` mentions `terminalFocus` may fire: the others are skipped, the event's
-   * default is prevented so the webview never acts on the chord, and the key is reported as not
-   * consumed so the terminal still receives it. Returns whether the event was consumed; reserved
-   * chords never are.
+   * Routes a key press to an active keybinding on its chord whose `when` holds. A binding with a
+   * `when` beats one without; otherwise the first in model order wins. When `terminalKeysFirst` and
+   * `terminalFocus` are both set, only bindings whose `when` mentions `terminalFocus` may fire.
+   * Skipped keys are prevented so the webview never acts on them, but remain unconsumed so the
+   * terminal receives them. Returns whether the event was consumed.
    */
   handleKey(event: KeyEventLike): boolean {
     const chord = chordFromKeyEvent(event)
-    if (chord === null || RESERVED_CHORDS.includes(chord)) return false
+    if (chord === null) return false
     const applicable = (this.state.model?.keybindings ?? []).filter(
       (b) => b.status === 'active' && b.key === chord && (b.when === undefined || evaluateWhen(b.when, this.contextValues))
     )
@@ -326,6 +340,16 @@ export class WindowPluginHost {
     else if (this.state.layout.panel === id) this.layoutCall('ui.panel.close', {})
   }
 
+  /** Configures one panel's desired geometry through the daemon's public layout API. */
+  configurePanel(id: string, options: { width?: number; activityBarPosition?: 'top' | 'side' }): void {
+    this.layoutCall('ui.panel.configure', { id, ...options })
+  }
+
+  /** Opens or closes the shared palette; omitted `open` toggles its daemon-owned state. */
+  setPalette(open?: boolean): void {
+    this.layoutCall('ui.palette.set', open === undefined ? {} : { open })
+  }
+
   /** Tells the daemon that the person put focus in `target`, unless it is already there. */
   focus(target: 'sidebar' | 'view' | 'panel'): void {
     if (this.state.layout.focus !== target) this.layoutCall('ui.focus', { target })
@@ -360,6 +384,7 @@ export class WindowPluginHost {
   /** Stops listening to the daemon, cleans up every mount and deactivates every active plugin. */
   stop(): void {
     this.stopped = true
+    this.commandDrag?.dispose()
     this.unsubscribeEvents()
     this.unsubscribeFocus?.()
     this.unsubscribeActivity?.()
@@ -376,9 +401,10 @@ export class WindowPluginHost {
     let model: UiModel
     let snapshot: SettingInfo[]
     try {
-      // applied as soon as it arrives, so a `ui.state.changed` that follows it on the wire is newer
+      // A daemon snapshot can arrive after a concurrent state event even when it captured older state.
+      const layoutVersion = this.layoutEventVersion
       const layout = (this.deps.call('ui.state', {}) as Promise<UiState>).then((state) => {
-        if (!this.stopped) this.setLayout(state.layout)
+        if (!this.stopped && layoutVersion === this.layoutEventVersion) this.setLayout(state.layout)
       })
       const [fetchedModel, fetchedSettings] = await Promise.all([
         this.deps.call('ui.contributions', {}) as Promise<UiModel>,
@@ -775,9 +801,32 @@ export class WindowPluginHost {
       executeCommand: live(async (id: string, args?: unknown) => {
         await this.invokeCommand(this.requireCommand(id), args)
       }),
+      createCommandDrag: live((command: string, args?: Record<string, unknown>) => {
+        const snapshot = structuredClone(args ?? {})
+        const token = crypto.randomUUID()
+        this.commandDrag?.dispose()
+        let entry!: CommandDragCapability
+        const dispose = track(() => {
+          if (this.commandDrag === entry) this.commandDrag = null
+        })
+        entry = { token, owner: session, command, args: snapshot, dispose }
+        this.commandDrag = entry
+        return token
+      }),
+      consumeCommandDrag: live((token: string) => {
+        const entry = this.commandDrag
+        if (!entry || entry.token !== token || entry.owner.revoked) return null
+        entry.dispose()
+        return { command: entry.command, args: entry.args }
+      }),
+      cancelCommandDrag: live((token: string) => {
+        const entry = this.commandDrag
+        if (entry?.token === token && entry.owner === session) entry.dispose()
+      }),
       openView: live((id: string, input?: unknown) => this.openView(id, input)),
       closeView: live(() => this.closeView()),
       togglePanel: live((id: string, open?: boolean) => this.togglePanel(id, open)),
+      setPalette: live((open?: boolean) => this.setPalette(open)),
       getLayout: live(() => this.state.layout),
       onLayout: live((listener: (layout: UiLayout) => void) => {
         this.layoutListeners.add(listener)
@@ -790,7 +839,9 @@ export class WindowPluginHost {
         track(this.deps.onConnection(listener))
       ),
       confirm: live((options: { title: string; body?: string; confirmLabel?: string }) => this.deps.confirm(options)),
-      toast: live((title: string, body: string) => this.deps.toast(title, body, 'info')),
+      toast: live((title: string, body: string, options?: ToastOptions) =>
+        this.deps.toast(title, body, options?.kind ?? 'info', options)
+      ),
       setContext: live((key: string, value: boolean | undefined) => {
         if (value === undefined) {
           this.contextValues.delete(key)
@@ -855,7 +906,10 @@ export class WindowPluginHost {
   }
 
   private handleEvent(event: QuirkyEvent): void {
-    if (event.type === 'ui.state.changed') this.setLayout(event.layout)
+    if (event.type === 'ui.state.changed') {
+      this.layoutEventVersion++
+      this.setLayout(event.layout)
+    }
     if (event.type === 'ui.command.request') void this.answerCommand(event.requestId, event.id, event.args)
     if (event.type === 'setting.changed') this.applySetting(event.id, event.value)
     if (event.type === 'plugin.changed' || event.type === 'theme.changed') {
@@ -937,7 +991,7 @@ export class WindowPluginHost {
   private async answerCommand(requestId: string, id: string, args: unknown): Promise<void> {
     let reply: Record<string, unknown>
     try {
-      const result = await this.runCommandForResult(id, args)
+      const result = id === TOAST_DISMISS ? this.dismissToast(args) : await this.runCommandForResult(id, args)
       JSON.stringify(result)
       reply = { requestId, ...(result !== undefined ? { result } : {}) }
     } catch (error) {
@@ -948,6 +1002,12 @@ export class WindowPluginHost {
     } catch (error) {
       this.deps.log(`reply to ${id} failed: ${messageOf(error)}`)
     }
+  }
+
+  private dismissToast(args: unknown): null {
+    const key = (args as { key?: unknown } | null)?.key
+    if (typeof key === 'string') this.deps.dismissToast?.(key)
+    return null
   }
 
   private applySetting(id: string, value: boolean | number | string): void {

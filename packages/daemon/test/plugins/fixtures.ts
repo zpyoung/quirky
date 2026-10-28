@@ -55,8 +55,10 @@ function tryParse(text: string): unknown {
   }
 }
 
-/** Statements spliced into the generated fixture module's `activate` and `deactivate`. */
+/** Statements and static imports spliced into the generated fixture module. */
 export type ModuleBehavior = {
+  /** Static module import declarations used by this fixture. */
+  imports?: string[]
   /** Runs inside `activate(context)`, after the marker line. */
   activate?: string
   /** Runs inside `deactivate()`, after the marker line. */
@@ -77,6 +79,7 @@ export function waitForFile(file: string): string {
 export function moduleSource(marker: string, id: string, behavior: ModuleBehavior = {}): string {
   const lines = [
     "import { appendFileSync, existsSync } from 'node:fs'",
+    ...(behavior.imports ?? []),
     `const record = (line: string) => appendFileSync(${JSON.stringify(marker)}, line + '\\n')`,
     `record('import ${id}')`,
   ]
