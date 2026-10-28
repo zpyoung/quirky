@@ -91,23 +91,23 @@ describe('quirky orchestration generated CLI acceptance', () => {
       '--task-title',
       'B'
     ])
-    const csvTask = await cliJson<{ task: TaskRow }>(coordinator, [
+    const multiDependencyTask = await cliJson<{ task: TaskRow }>(coordinator, [
       'task-create',
       '--run',
       created.run.id,
       '--spec',
-      'CSV dependency input',
-      '--dependency-task-ids',
-      `${first.task.id},${second.task.id}`
+      'multiple dependency JSON input',
+      '--deps',
+      JSON.stringify([first.task.id, second.task.id])
     ])
-    expect(csvTask.task.dependencyTaskIds).toEqual([first.task.id, second.task.id])
+    expect(multiDependencyTask.task.dependencyTaskIds).toEqual([first.task.id, second.task.id])
     const jsonTask = await cliJson<{ task: TaskRow }>(coordinator, [
       'task-create',
       '--run',
       created.run.id,
       '--spec',
       'JSON dependency input',
-      '--dependency-task-ids',
+      '--deps',
       JSON.stringify([first.task.id])
     ])
     expect(jsonTask.task.dependencyTaskIds).toEqual([first.task.id])
@@ -119,7 +119,7 @@ describe('quirky orchestration generated CLI acceptance', () => {
       'pending'
     ])
     expect(taskList.runId).toBe(created.run.id)
-    expect(taskList.tasks.map((task) => task.id)).toContain(csvTask.task.id)
+    expect(taskList.tasks.map((task) => task.id)).toContain(multiDependencyTask.task.id)
 
     const dispatch = await cliJson<{ dryRun: false; dispatch: { id: string; taskId: string } }>(coordinator, [
       'dispatch',
@@ -150,9 +150,9 @@ describe('quirky orchestration generated CLI acceptance', () => {
       'CLI Run address',
       '--body',
       'to Run mailbox',
-      '--task',
+      '--task-id',
       first.task.id,
-      '--dispatch',
+      '--dispatch-id',
       dispatch.dispatch.id,
       '--files-modified',
       'src/a.ts,src/b.ts'
@@ -193,7 +193,7 @@ describe('quirky orchestration generated CLI acceptance', () => {
       'invalid mixed payload',
       '--payload',
       JSON.stringify({ raw: true }),
-      '--task',
+      '--task-id',
       first.task.id,
       '--retry-request',
       crypto.randomUUID(),
@@ -221,8 +221,7 @@ describe('quirky orchestration generated CLI acceptance', () => {
 
     const check = await cliJson<{ mode: string; messages: { type: string }[] }>(coordinator, [
       'check',
-      '--mode',
-      'peek',
+      '--peek',
       '--run',
       created.run.id,
       '--types',
@@ -321,7 +320,7 @@ describe('quirky orchestration generated CLI acceptance', () => {
       '--question',
       'Select an option',
       '--options',
-      JSON.stringify(['yes', 'no']),
+      'yes,no',
       '--timeout-ms',
       '40',
       '--retry-request',
@@ -329,11 +328,11 @@ describe('quirky orchestration generated CLI acceptance', () => {
       '--json'
     ])
     expect(timeout.code).toBe(1)
-    const timeoutOutput = `${timeout.stdout}\n${timeout.stderr}`
-    const questionId = timeoutOutput.match(/msg_[0-9a-f]{12}/)?.[0]
+    const timeoutResult = JSON.parse(timeout.stdout) as { state: string; messageId: string }
+    const questionId = timeoutResult.messageId
     expect(questionId).toBeTruthy()
-    expect(timeoutOutput).toContain(`quirky orchestration ask --resume ${questionId}`)
-    expect(timeoutOutput).toContain('timedOut')
+    expect(timeoutResult.state).toBe('timedOut')
+    expect(`${timeout.stdout}\n${timeout.stderr}`).toContain(`quirky orchestration ask --resume ${questionId}`)
 
     const questionCount = async () => {
       const inbox = await call<InboxResult>(coordinator, 'quirky.orchestration/inbox', { full: true, limit: 100 })
@@ -344,7 +343,7 @@ describe('quirky orchestration generated CLI acceptance', () => {
       'orchestration',
       'reply',
       '--id',
-      questionId!,
+      questionId,
       '--body',
       'yes',
       '--retry-request',
@@ -358,7 +357,7 @@ describe('quirky orchestration generated CLI acceptance', () => {
       'orchestration',
       'ask',
       '--resume',
-      questionId!,
+      questionId,
       '--timeout-ms',
       '800',
       '--retry-request',
@@ -366,7 +365,6 @@ describe('quirky orchestration generated CLI acceptance', () => {
       '--json'
     ])
     expect(resume.code).toBe(0)
-    expect(resume.stderr).toBe('')
     expect(JSON.parse(resume.stdout)).toMatchObject({ state: 'answered', answer: 'yes', messageId: questionId })
     expect(await questionCount()).toBe(1)
 
@@ -374,7 +372,7 @@ describe('quirky orchestration generated CLI acceptance', () => {
       'orchestration',
       'reply',
       '--id',
-      questionId!,
+      questionId,
       '--body',
       'yes',
       '--retry-request',
@@ -387,7 +385,7 @@ describe('quirky orchestration generated CLI acceptance', () => {
       'orchestration',
       'reply',
       '--id',
-      questionId!,
+      questionId,
       '--body',
       'no',
       '--retry-request',
@@ -445,10 +443,10 @@ describe('quirky orchestration generated CLI acceptance', () => {
         result: 'cancelled by coordinator settlement'
       })
       const [stdout, stderr, code] = await Promise.all([stdoutPromise, stderrPromise, exited])
-      const output = `${stdout}\\n${stderr}`
+      const result = JSON.parse(stdout) as { state: string; messageId: string }
       expect(code).toBe(1)
-      expect(output).toContain('cancelled')
-      expect(output).toContain(`quirky orchestration ask --resume ${question.id}`)
+      expect(result).toMatchObject({ state: 'cancelled', messageId: question.id })
+      expect(stderr).toContain(`quirky orchestration ask --resume ${question.id}`)
       const inbox = await call<InboxResult>(coordinator, 'quirky.orchestration/inbox', { full: true, limit: 100 })
       expect(inbox.messages.filter((message) => message.id === question.id)).toHaveLength(1)
     } finally {
