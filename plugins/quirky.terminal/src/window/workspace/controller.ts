@@ -87,10 +87,14 @@ export type WorkspaceOptions = {
   workspace?: 'floating'
   /** Rendered after the `+` button of each group's strip. */
   stripExtras?: (group: Group) => ReactNode
-  /** The rows of the pane menu's Quick Commands submenu. */
+  /** Rows in the pane menu's Quick Commands submenu. */
   paneMenuExtras?: (pane: PaneLeaf) => MenuItem[]
   /** Rows other plugins contribute to the pane menu, shown right after the Quick Commands row. */
   paneMenuContributions?: (pane: PaneLeaf, session: Session | undefined) => MenuItem[]
+  /** Rows other plugins contribute to the + menu for its selected group and workspace. */
+  plusMenuContributions?: (group: Group, workspace: string) => MenuItem[]
+  /** The public menu contribution list changes, keeping an open + menu current. */
+  subscribeMenuContributions?: (listener: () => void) => () => void
   /** Menus beyond `tab`, `pane`, `plus` and `actions`, opened by `openMenu(kind, target)`. */
   extraMenus?: Record<string, (target: string | null) => MenuItem[]>
   /** The element carrying the theme's custom properties; defaults to the mount element. */
@@ -270,6 +274,10 @@ export class WorkspaceController {
         void this.load(false)
       })
     )
+    const unsubscribeMenuContributions = this.options.subscribeMenuContributions?.(() => {
+      if (this.state.menu?.kind === 'plus') this.set({})
+    })
+    if (unsubscribeMenuContributions) this.unsubscribes.push(unsubscribeMenuContributions)
     this.set({ settings: readWorkspaceSettings(this.context, this.settingOverrides) })
     void this.load(!this.floating)
   }
@@ -1077,12 +1085,20 @@ export class WorkspaceController {
   private plusItems(groupId: string | null, query: string): MenuItem[] {
     const group = groupId && this.ws ? findGroup(this.ws.root, groupId) : null
     const target = group?.id
-    const rows: MenuItem[] = filterEntries(this.state.agents, query).map((entry) => ({
-      label: entry.label,
-      key: entry.kind === 'terminal' ? '⌘T' : null,
-      onSelect: () => this.chooseEntry(entry, target)
-    }))
     const needle = query.trim().toLowerCase()
+    const contributed = group
+      ? (this.options.plusMenuContributions?.(group, this.workspaceId) ?? []).filter(
+          (item) => needle === '' || item.label.toLowerCase().includes(needle)
+        )
+      : []
+    const rows: MenuItem[] = [
+      ...filterEntries(this.state.agents, query).map((entry) => ({
+        label: entry.label,
+        key: entry.kind === 'terminal' ? '⌘T' : null,
+        onSelect: () => this.chooseEntry(entry, target)
+      })),
+      ...contributed
+    ]
     if (needle !== '' && this.ws) {
       for (const candidate of groupsInOrder(this.ws.root)) {
         for (const tab of candidate.tabs) {
