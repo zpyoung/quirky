@@ -3,7 +3,7 @@
 ## Status & amendments
 Status: Approved autonomously under LOOP.md night mode; combined logic and technical spec.
 
-**Amendments:** 2026-10-27: creator-lifetime cancellation belongs to checks, because a revoked automation context cannot call cancel during deactivate; D11 records failing-before/passing-after process evidence.
+**Amendments:** 2026-10-27: creator-lifetime cancellation belongs to checks because a revoked automation context cannot cancel during deactivate (D11). Catalog-declared opaque model IDs remain accepted under m1-launch-settings D10; invalid option values still refuse. A dispatched run retains its original provider identity even if the definition changes.
 
 ## Purpose and conceptual model
 A persisted automation run is the evidence of one attempt, not evidence that an agent succeeded. The daemon claims a pending run durably before any precheck, workspace creation or agent launch. The automations built-in owns dispatch policy; public repo/worktree/checks/structured/session APIs own execution. Closing the window cannot stop scheduling or execution.
@@ -62,8 +62,8 @@ After: unique workspaces are retained and identified on runs. Default/skip does 
 
 ### AC6: Fresh launch overrides and immutable snapshot
 Before: Claude/Codex automation with selected model and effort.
-Walkthrough: save valid picks, reject unsupported model/effort, launch; edit definition picks after dispatch.
-After: native provider receives valid structured fields; run launchSettings stays the actual session's snapshot. Agent change clears old picks unless replacements provided. Any raw extra arguments are rejected explicitly before mutation (binding decision, not a shell fallback).
+Walkthrough: save valid picks, reject catalog-disallowed picks, launch; edit the definition's provider and picks after dispatch. Opaque model IDs are accepted when the catalog explicitly allows them.
+After: native provider receives valid structured fields; run launchSettings and completion identity stay those of the actual session. The definition's agent change clears old picks unless replacements are provided and affects only future launches. Raw extra arguments are rejected before mutation (binding decision, not a shell fallback).
 
 ### AC7: Reuse one live completed structured conversation
 Before: same automation/workspace/agent has completed live session S with original settings.

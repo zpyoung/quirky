@@ -168,12 +168,16 @@ describe('automations API', () => {
     await expect(call(fixture, 'quirky.automations/create', createParams('not-registered')))
       .rejects.toThrow()
     await expect(call(fixture, 'quirky.automations/create', createParams(fixture.projectId, {
-      launchOverrides: { model: 'model-not-in-the-catalog' }
+      launchOverrides: { model: 'gpt-5.5', optionValues: { effort: 'not-a-supported-effort' } }
     }))).rejects.toMatchObject({ code: RpcErrorCode.InvalidParams })
     await expect(call(fixture, 'quirky.automations/create', createParams(fixture.projectId, {
       extraAgentArgs: '--unsafe'
-    }))).rejects.toThrow('Raw agent arguments are unsupported for structured automation runs')
+    }))).rejects.toMatchObject({ code: RpcErrorCode.InvalidParams })
     expect(await call(fixture, 'quirky.automations/list')).toEqual([])
+    const opaque = await call(fixture, 'quirky.automations/create', createParams(fixture.projectId, {
+      launchOverrides: { model: 'account-scoped-model' }, enabled: false
+    })) as AutomationDefinition
+    expect(opaque.launchOverrides?.model).toBe('account-scoped-model')
   })
 
   test('checks expectedOwner before edit, remove and manual run actions', async () => {

@@ -132,5 +132,27 @@
 - **Revisit if:** either API contract changes
 - **Source:** assumed — autonomous
 
+## D13: Fix integration failures at their actual contract boundaries
+- **Question:** Why did integration expose no automation methods and later misclassify deleted targets?
+- **Options:** disable dispatch in tests; change kernel schema; fix the plugin declaration and authoritative-path checks
+- **Chose:** use the kernel's documented flat schema subset instead of unsupported anyOf; lowercase CLI positional names; confirm local authoritative paths are directories after captured identity checks; retain normalized registry IDs from capture
+- **Why:** plugin.list reported state invalid with ten unsupported-keyword errors and one positional-name error. After declaration repair the API ran; deleted registry paths then reached workspace creation and failed at spawn instead of target refusal. Existing API regressions now pass and target drift still reports owner-change before filesystem absence.
+- **Evidence:** scratch activation.js plugin.list diagnostic; integrated API17cases, later combined93pass/1target-orderfailure; focused target6pass after ordering correction
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** remote registry paths become supported
+- **Source:** assumed — autonomous
+
+## D14: Preserve catalog opaque-model policy and immutable dispatched-provider identity
+- **Question:** What should happen for an unlisted model or a provider edit after launch?
+- **Options:** duplicate a closed model allowlist; trust current definition during observation; preserve the catalog and actual session snapshot
+- **Chose:** accept opaque IDs when declared by the catalog; reject invalid effort/options. Fresh run snapshots always record the actual provider even without explicit picks; completion/usage use that snapshot, not a later edited definition.
+- **Why:** m1-launch-settings D10 explicitly allows opaque Claude/Codex IDs. A new dispatcher regression timed out before the snapshot fix when the definition changed from Claude to Codex after launch; it passed in the93-test integration result after the correction.
+- **Evidence:** docs/loop/decisions/m1-launch-settings.md D9-D10; test/dispatch.test.ts provider-edit regression red0pass1timeout then green among93passing tests
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** provider discovery introduces an authoritative closed list
+- **Source:** locked by docs/loop/decisions/m1-launch-settings.md
+
 ## Progress
 Design and self-reviewed combined spec written. Shared dispatch-contract.ts committed before implementers. Next: implement three disjoint components, own-file behavioral tests, actual isolated daemon/CLI/native-process smoke, one affected gate and review, catch-up and queue land. Only this item this iteration. No human asks. Follow-up for the two explicitly constrained flows must be added once immediately before land.

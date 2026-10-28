@@ -19,7 +19,7 @@
           "items": {
             "type": "object",
             "properties": {
-              "id": { "type": "string" }, "owner": {"anyOf":[{"type":"object","properties":{"kind":{"type":"string","enum":["local"]},"repoId":{"type":"string"},"repoPath":{"type":"string"},"workspaceId":{},"workspacePath":{},"workspaceInstanceId":{}},"required":["kind","repoId","repoPath","workspaceId","workspacePath","workspaceInstanceId"],"additionalProperties":false},{"type":"null"}]}, "creationKey": { "type": "string" }, "name": { "type": "string" }, "prompt": { "type": "string" },
+              "id": { "type": "string" }, "owner": {"description":"Captured local owner object, or null on an uncaptured legacy definition.","properties":{"kind":{"type":"string","enum":["local"]},"repoId":{"type":"string"},"repoPath":{"type":"string"},"workspaceId":{},"workspacePath":{},"workspaceInstanceId":{}},"required":["kind","repoId","repoPath","workspaceId","workspacePath","workspaceInstanceId"],"additionalProperties":false}, "creationKey": { "type": "string" }, "name": { "type": "string" }, "prompt": { "type": "string" },
               "agentId": { "type": "string", "enum": ["claude", "codex"] }, "projectId": { "type": "string" },
               "workspaceMode": { "type": "string", "enum": ["existing", "new_per_run"] }, "workspaceId": {}, "baseBranch": {},
               "setupDecision": { "type": "string", "enum": ["run", "skip"] }, "reuseSession": { "type": "boolean" },
@@ -42,7 +42,7 @@
         "result": {
           "type": "object",
           "properties": {
-            "id": { "type": "string" }, "owner": {"anyOf":[{"type":"object","properties":{"kind":{"type":"string","enum":["local"]},"repoId":{"type":"string"},"repoPath":{"type":"string"},"workspaceId":{},"workspacePath":{},"workspaceInstanceId":{}},"required":["kind","repoId","repoPath","workspaceId","workspacePath","workspaceInstanceId"],"additionalProperties":false},{"type":"null"}]}, "creationKey": { "type": "string" }, "name": { "type": "string" }, "prompt": { "type": "string" },
+            "id": { "type": "string" }, "owner": {"description":"Captured local owner object, or null on an uncaptured legacy definition.","properties":{"kind":{"type":"string","enum":["local"]},"repoId":{"type":"string"},"repoPath":{"type":"string"},"workspaceId":{},"workspacePath":{},"workspaceInstanceId":{}},"required":["kind","repoId","repoPath","workspaceId","workspacePath","workspaceInstanceId"],"additionalProperties":false}, "creationKey": { "type": "string" }, "name": { "type": "string" }, "prompt": { "type": "string" },
             "agentId": { "type": "string", "enum": ["claude", "codex"] }, "projectId": { "type": "string" },
             "workspaceMode": { "type": "string", "enum": ["existing", "new_per_run"] }, "workspaceId": {}, "baseBranch": {},
             "setupDecision": { "type": "string", "enum": ["run", "skip"] }, "reuseSession": { "type": "boolean" },
@@ -76,7 +76,7 @@
         "result": {
           "type": "object",
           "properties": {
-            "id": { "type": "string" }, "owner": {"anyOf":[{"type":"object","properties":{"kind":{"type":"string","enum":["local"]},"repoId":{"type":"string"},"repoPath":{"type":"string"},"workspaceId":{},"workspacePath":{},"workspaceInstanceId":{}},"required":["kind","repoId","repoPath","workspaceId","workspacePath","workspaceInstanceId"],"additionalProperties":false},{"type":"null"}]}, "creationKey": { "type": "string" }, "name": { "type": "string" }, "prompt": { "type": "string" },
+            "id": { "type": "string" }, "owner": {"description":"Captured local owner object, or null on an uncaptured legacy definition.","properties":{"kind":{"type":"string","enum":["local"]},"repoId":{"type":"string"},"repoPath":{"type":"string"},"workspaceId":{},"workspacePath":{},"workspaceInstanceId":{}},"required":["kind","repoId","repoPath","workspaceId","workspacePath","workspaceInstanceId"],"additionalProperties":false}, "creationKey": { "type": "string" }, "name": { "type": "string" }, "prompt": { "type": "string" },
             "agentId": { "type": "string", "enum": ["claude", "codex"] }, "projectId": { "type": "string" },
             "workspaceMode": { "type": "string", "enum": ["existing", "new_per_run"] }, "workspaceId": {}, "baseBranch": {},
             "setupDecision": { "type": "string", "enum": ["run", "skip"] }, "reuseSession": { "type": "boolean" },
@@ -109,7 +109,7 @@
         "result": {
           "type": "object",
           "properties": {
-            "id": { "type": "string" }, "owner": {"anyOf":[{"type":"object","properties":{"kind":{"type":"string","enum":["local"]},"repoId":{"type":"string"},"repoPath":{"type":"string"},"workspaceId":{},"workspacePath":{},"workspaceInstanceId":{}},"required":["kind","repoId","repoPath","workspaceId","workspacePath","workspaceInstanceId"],"additionalProperties":false},{"type":"null"}]}, "creationKey": { "type": "string" }, "name": { "type": "string" }, "prompt": { "type": "string" },
+            "id": { "type": "string" }, "owner": {"description":"Captured local owner object, or null on an uncaptured legacy definition.","properties":{"kind":{"type":"string","enum":["local"]},"repoId":{"type":"string"},"repoPath":{"type":"string"},"workspaceId":{},"workspacePath":{},"workspaceInstanceId":{}},"required":["kind","repoId","repoPath","workspaceId","workspacePath","workspaceInstanceId"],"additionalProperties":false}, "creationKey": { "type": "string" }, "name": { "type": "string" }, "prompt": { "type": "string" },
             "agentId": { "type": "string", "enum": ["claude", "codex"] }, "projectId": { "type": "string" },
             "workspaceMode": { "type": "string", "enum": ["existing", "new_per_run"] }, "workspaceId": {}, "baseBranch": {},
             "setupDecision": { "type": "string", "enum": ["run", "skip"] }, "reuseSession": { "type": "boolean" },
@@ -144,7 +144,7 @@
             "createdAt": { "type": "integer" }, "startedAt": { "type": "integer" }, "dispatchedAt": { "type": "integer" }, "completedAt": { "type": "integer" },
             "occurrenceCount": { "type": "integer" }, "lastOccurrenceAt": { "type": "integer" }, "runContext": {}, "sourceContext": {},
             "workspaceId": {}, "workspaceDisplayName": {}, "sessionKind": { "type": "string", "enum": ["structured"] }, "sessionId": {},
-            "dispatchState": {"anyOf":[{"type":"object","properties":{"messageCursor":{"type":"integer"},"reused":{"type":"boolean"},"observedWorking":{"type":"boolean"},"observationStartedAt":{"type":"integer"}},"required":["messageCursor","reused","observedWorking","observationStartedAt"],"additionalProperties":false},{"type":"null"}]},
+            "dispatchState": {"description":"Durable observation cursor, or null before dispatch.","properties":{"messageCursor":{"type":"integer"},"reused":{"type":"boolean"},"observedWorking":{"type":"boolean"},"observationStartedAt":{"type":"integer"}},"required":["messageCursor","reused","observedWorking","observationStartedAt"],"additionalProperties":false},
             "launchSettings": {}, "outputSnapshot": {}, "precheckResult": {}, "usage": {}, "error": {}
           },
           "required": ["id", "automationId", "title", "runNumber", "scheduledFor", "trigger", "status", "createdAt", "occurrenceCount", "runContext", "sourceContext", "workspaceId", "sessionKind", "sessionId", "launchSettings", "error"],
@@ -164,7 +164,7 @@
               "type": "object",
               "properties": {
                 "repoId": { "type": "string" }, "repoPath": { "type": "string" }, "cwd": { "type": "string" },
-                "workspaceId": {}, "workspaceDisplayName": {}, "owner": {"anyOf":[{"type":"object","properties":{"kind":{"type":"string","enum":["local"]},"repoId":{"type":"string"},"repoPath":{"type":"string"},"workspaceId":{},"workspacePath":{},"workspaceInstanceId":{}},"required":["kind","repoId","repoPath","workspaceId","workspacePath","workspaceInstanceId"],"additionalProperties":false},{"type":"null"}]}
+                "workspaceId": {}, "workspaceDisplayName": {}, "owner": {"type":"object","properties":{"kind":{"type":"string","enum":["local"]},"repoId":{"type":"string"},"repoPath":{"type":"string"},"workspaceId":{},"workspacePath":{},"workspaceInstanceId":{}},"required":["kind","repoId","repoPath","workspaceId","workspacePath","workspaceInstanceId"],"additionalProperties":false}
               },
               "required": ["repoId", "repoPath", "cwd", "workspaceId", "owner"],
               "additionalProperties": false
@@ -189,7 +189,7 @@
             "createdAt": { "type": "integer" }, "startedAt": { "type": "integer" }, "dispatchedAt": { "type": "integer" }, "completedAt": { "type": "integer" },
             "occurrenceCount": { "type": "integer" }, "lastOccurrenceAt": { "type": "integer" }, "runContext": {}, "sourceContext": {},
             "workspaceId": {}, "workspaceDisplayName": {}, "sessionKind": { "type": "string", "enum": ["structured"] }, "sessionId": {},
-            "dispatchState": {"anyOf":[{"type":"object","properties":{"messageCursor":{"type":"integer"},"reused":{"type":"boolean"},"observedWorking":{"type":"boolean"},"observationStartedAt":{"type":"integer"}},"required":["messageCursor","reused","observedWorking","observationStartedAt"],"additionalProperties":false},{"type":"null"}]},
+            "dispatchState": {"description":"Durable observation cursor, or null before dispatch.","properties":{"messageCursor":{"type":"integer"},"reused":{"type":"boolean"},"observedWorking":{"type":"boolean"},"observationStartedAt":{"type":"integer"}},"required":["messageCursor","reused","observedWorking","observationStartedAt"],"additionalProperties":false},
             "launchSettings": {}, "outputSnapshot": {}, "precheckResult": {}, "usage": {}, "error": {}
           },
           "required": ["id", "automationId", "title", "runNumber", "scheduledFor", "trigger", "status", "createdAt", "occurrenceCount", "runContext", "sourceContext", "workspaceId", "sessionKind", "sessionId", "launchSettings", "error"],
@@ -220,7 +220,7 @@
                   "createdAt": { "type": "integer" }, "startedAt": { "type": "integer" }, "dispatchedAt": { "type": "integer" }, "completedAt": { "type": "integer" },
                   "occurrenceCount": { "type": "integer" }, "lastOccurrenceAt": { "type": "integer" }, "runContext": {}, "sourceContext": {},
                   "workspaceId": {}, "workspaceDisplayName": {}, "sessionKind": { "type": "string", "enum": ["structured"] }, "sessionId": {},
-                  "dispatchState": {"anyOf":[{"type":"object","properties":{"messageCursor":{"type":"integer"},"reused":{"type":"boolean"},"observedWorking":{"type":"boolean"},"observationStartedAt":{"type":"integer"}},"required":["messageCursor","reused","observedWorking","observationStartedAt"],"additionalProperties":false},{"type":"null"}]},
+                  "dispatchState": {"description":"Durable observation cursor, or null before dispatch.","properties":{"messageCursor":{"type":"integer"},"reused":{"type":"boolean"},"observedWorking":{"type":"boolean"},"observationStartedAt":{"type":"integer"}},"required":["messageCursor","reused","observedWorking","observationStartedAt"],"additionalProperties":false},
                   "launchSettings": {}, "outputSnapshot": {},
                   "precheckResult": {}, "usage": {}, "error": {}
                 },
@@ -284,7 +284,7 @@
             "createdAt": { "type": "integer" }, "startedAt": { "type": "integer" }, "dispatchedAt": { "type": "integer" }, "completedAt": { "type": "integer" },
             "occurrenceCount": { "type": "integer" }, "lastOccurrenceAt": { "type": "integer" }, "runContext": {}, "sourceContext": {},
             "workspaceId": {}, "workspaceDisplayName": {}, "sessionKind": { "type": "string", "enum": ["structured"] }, "sessionId": {},
-            "dispatchState": {"anyOf":[{"type":"object","properties":{"messageCursor":{"type":"integer"},"reused":{"type":"boolean"},"observedWorking":{"type":"boolean"},"observationStartedAt":{"type":"integer"}},"required":["messageCursor","reused","observedWorking","observationStartedAt"],"additionalProperties":false},{"type":"null"}]},
+            "dispatchState": {"description":"Durable observation cursor, or null before dispatch.","properties":{"messageCursor":{"type":"integer"},"reused":{"type":"boolean"},"observedWorking":{"type":"boolean"},"observationStartedAt":{"type":"integer"}},"required":["messageCursor","reused","observedWorking","observationStartedAt"],"additionalProperties":false},
             "launchSettings": {}, "outputSnapshot": {},
             "precheckResult": {}, "usage": {}, "error": {}
           },
@@ -321,7 +321,7 @@
             "createdAt": { "type": "integer" }, "startedAt": { "type": "integer" }, "dispatchedAt": { "type": "integer" }, "completedAt": { "type": "integer" },
             "occurrenceCount": { "type": "integer" }, "lastOccurrenceAt": { "type": "integer" }, "runContext": {}, "sourceContext": {},
             "workspaceId": {}, "workspaceDisplayName": {}, "sessionKind": { "type": "string", "enum": ["structured"] }, "sessionId": {},
-            "dispatchState": {"anyOf":[{"type":"object","properties":{"messageCursor":{"type":"integer"},"reused":{"type":"boolean"},"observedWorking":{"type":"boolean"},"observationStartedAt":{"type":"integer"}},"required":["messageCursor","reused","observedWorking","observationStartedAt"],"additionalProperties":false},{"type":"null"}]},
+            "dispatchState": {"description":"Durable observation cursor, or null before dispatch.","properties":{"messageCursor":{"type":"integer"},"reused":{"type":"boolean"},"observedWorking":{"type":"boolean"},"observationStartedAt":{"type":"integer"}},"required":["messageCursor","reused","observedWorking","observationStartedAt"],"additionalProperties":false},
             "launchSettings": {}, "outputSnapshot": {},
             "precheckResult": {}, "usage": {}, "error": {}
           },
@@ -385,7 +385,7 @@
       { "id": "run", "words": "run", "summary": "persist a manual run and dispatch it in the background", "positionals": [{ "name": "id", "description": "automation ID", "required": false }], "flags": { "id": { "type": "string", "description": "automation ID as an alternative to the positional ID" }, "expected-owner": { "type": "string", "description": "JSON owner snapshot for optimistic target fencing" } }, "methods": ["quirky.automations/run"] },
       { "id": "runs", "words": "runs", "summary": "read run history", "positionals": [{ "name": "id", "description": "automation ID filter", "required": false }], "flags": { "id": { "type": "string", "description": "automation ID filter" }, "limit": { "type": "integer", "description": "one-page limit from 1 to 100" }, "cursor": { "type": "string", "description": "one-page cursor" } }, "methods": ["quirky.automations/runs"] },
       { "id": "target", "words": "target", "summary": "inspect a saved automation target", "positionals": [{ "name": "id", "description": "automation ID", "required": false }], "flags": { "id": { "type": "string", "description": "automation ID as an alternative to the positional ID" } }, "methods": ["quirky.automations/target"] },
-      { "id": "dispatch", "words": "dispatch", "summary": "dispatch a pending automation run", "positionals": [{ "name": "runId", "description": "run ID", "required": false }], "flags": { "run-id": { "type": "string", "description": "run ID as an alternative to the positional run ID" } }, "methods": ["quirky.automations/dispatch"] }
+      { "id": "dispatch", "words": "dispatch", "summary": "dispatch a pending automation run", "positionals": [{ "name": "id", "description": "run ID", "required": false }], "flags": { "run-id": { "type": "string", "description": "run ID as an alternative to the positional run ID" } }, "methods": ["quirky.automations/dispatch"] }
     ]
   }
 }

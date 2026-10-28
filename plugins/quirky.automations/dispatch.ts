@@ -160,9 +160,6 @@ function parsePrecheckError(command: string, startedAt: number, finishedAt: numb
   }
 }
 
-function targetFailure(resolution: AutomationTargetResolution): { status: 'skipped_unavailable' | 'skipped_needs_interactive_auth'; error: string } | null {
-  return resolution.available ? null : { status: resolution.status, error: resolution.error }
-}
 
 function sessionIsStructured(value: unknown): value is Session {
   const session = record(value)
@@ -402,8 +399,7 @@ export function createAutomationDispatcher(context: AutomationDispatchContext, h
     const freshDefinition = hooks.store.get(current.automationId)
     if (!freshDefinition) return { kind: 'deleted' }
     if (semanticDefinition(freshDefinition) !== snapshot.definition) return { kind: 'changed', reason: 'Automation definition changed while this run was preparing.' }
-    const unavailable = targetFailure(resolution)
-    if (unavailable) return { kind: 'unavailable', ...unavailable }
+    if (!resolution.available) return { kind: 'unavailable', status: resolution.status, error: resolution.error }
     if (targetIdentity(resolution.target) !== snapshot.target || targetIdentity(resolution.target) !== targetIdentity(baseTarget)) {
       return { kind: 'changed', reason: 'Automation destination changed while this run was preparing.' }
     }
@@ -596,14 +592,15 @@ export function createAutomationDispatcher(context: AutomationDispatchContext, h
           if (!afterRead || (afterRead && finalStatus(afterRead.status))) stopObserving(runId)
           return
         }
-        if (!sessionIsStructured(session) || session.id !== afterRead.sessionId || session.agent !== definition.agentId || session.worktreeId !== afterRead.workspaceId) {
+        const agentId = typeof afterRead.launchSettings?.agent === 'string' ? afterRead.launchSettings.agent : definition.agentId
+        if (!sessionIsStructured(session) || session.id !== afterRead.sessionId || session.agent !== agentId || session.worktreeId !== afterRead.workspaceId) {
           finish(runId, 'dispatch_failed', 'Structured session identity no longer matches the dispatched run.')
           return
         }
-        const providerResult = postCursorResult(messages, afterRead.dispatchState!.messageCursor, definition.agentId)
+        const providerResult = postCursorResult(messages, afterRead.dispatchState!.messageCursor, agentId)
         const output = providerResult ? latestOutput(messages, afterRead.dispatchState!.messageCursor, providerResult) : null
         if (providerResult) {
-          const usage = collectedUsage(afterRead, messages, providerResult, definition.agentId)
+          const usage = collectedUsage(afterRead, messages, providerResult, agentId)
           const outputSnapshot = output ? {
             format: 'plain_text' as const,
             content: output.content,
@@ -697,8 +694,7 @@ export function createAutomationDispatcher(context: AutomationDispatchContext, h
     if (semanticDefinition(afterClaimDefinition) !== snapshot.definition) {
       return finish(runId, 'dispatch_failed', 'Automation definition changed while this run was being claimed.')
     }
-    const unavailable = targetFailure(initialResolution)
-    if (unavailable) return finish(runId, unavailable.status, unavailable.error)
+    if (!initialResolution.available) return finish(runId, initialResolution.status, initialResolution.error)
     const baseTarget = initialResolution.target
     const verified = await verifyOrFinish(runId, snapshot, baseTarget)
     if (!verified || verified.kind !== 'ok') return hooks.store.getRun(runId)
@@ -859,7 +855,7 @@ export function createAutomationDispatcher(context: AutomationDispatchContext, h
       workspaceId,
       workspaceDisplayName,
       sessionId: session.id,
-      launchSettings: session.launchSettings ?? null,
+      launchSettings: session.launchSettings ?? { agent: session.agent, options: {}, summary: session.agent },
       dispatchState: state
     })
     if (!dispatched) return null

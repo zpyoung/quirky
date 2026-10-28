@@ -1,4 +1,5 @@
 import { isAbsolute, resolve as resolvePath } from 'node:path'
+import { statSync } from 'node:fs'
 import { RpcErrorCode } from '@quirky/protocol'
 import type { AutomationDispatchContext, AutomationOwner, AutomationTarget, AutomationTargetResolution, AutomationTargetResolver } from './dispatch-contract'
 import type { AutomationDefinition } from './types'
@@ -23,6 +24,14 @@ const OWNER_KEYS = [
 class TargetLookupError extends Error {
   constructor(readonly kind: ErrorKind, readonly reason: string) {
     super(reason)
+  }
+}
+
+function directoryAvailable(path: string): boolean {
+  try {
+    return statSync(path).isDirectory()
+  } catch {
+    return false
   }
 }
 
@@ -259,6 +268,7 @@ export function createAutomationTargetResolver(context: AutomationDispatchContex
       if (error instanceof TargetLookupError) throw context.error(error.kind, error.reason)
       throw error
     }
+    if (!directoryAvailable(repo.path)) throw context.error('invalid-params', 'automation_project_unavailable')
 
     let workspace: WorkspaceIdentity | null = null
     if (definition.workspaceMode === 'existing') {
@@ -273,6 +283,7 @@ export function createAutomationTargetResolver(context: AutomationDispatchContex
       }
       if (workspace.repoId !== repo.id) throw context.error('conflict', 'automation_workspace_project_mismatch')
       if (workspace.id !== definition.workspaceId) throw context.error('conflict', 'automation_workspace_identity_mismatch')
+      if (!directoryAvailable(workspace.path)) throw context.error('invalid-params', 'automation_workspace_unavailable')
     }
 
     const owner = ownerOf(repo, workspace)
@@ -323,6 +334,7 @@ export function createAutomationTargetResolver(context: AutomationDispatchContex
       if (repo.id !== owner.repoId) return unavailable(ownerChanged('repo_id'))
       if (repo.path !== owner.repoPath) return unavailable(ownerChanged('repo_path'))
     }
+    if (!directoryAvailable(repo.path)) return unavailable('automation_project_unavailable')
 
     let workspace: WorkspaceIdentity | null = null
     if (definition.workspaceMode === 'existing') {
@@ -343,6 +355,7 @@ export function createAutomationTargetResolver(context: AutomationDispatchContex
       } else if (workspace.repoId !== repo.id) {
         return unavailable('automation_workspace_project_mismatch')
       }
+      if (!directoryAvailable(workspace.path)) return unavailable('automation_workspace_unavailable')
     }
 
     const targetOwner = owner ?? ownerOf(repo, workspace)

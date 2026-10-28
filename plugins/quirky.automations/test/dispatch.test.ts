@@ -538,4 +538,16 @@ describe('automation run dispatcher', () => {
     expect(harness.checkCancelCount).toBe(1)
     expect(createCount(harness)).toBe(0)
   })
+  test('a saved provider edit does not change an already dispatched run identity', async () => {
+    const harness = fixture()
+    const { definition, run } = newRun(harness, {}, 'manual')
+    const launched = await harness.dispatcher.dispatch(run.id)
+    expect(launched?.status).toBe('dispatched')
+    const sessionId = launched!.sessionId!
+    harness.store.update(definition.id, { agentId: 'codex', prompt: 'next run uses another provider' })
+    successfulClaudeResult(harness, sessionId, 'original Claude run finished')
+    const completed = await waitRun(harness, run.id, 'completed')
+    expect(completed.outputSnapshot?.content).toBe('original Claude run finished')
+    expect(completed.launchSettings?.agent).toBe('claude')
+  })
 })
