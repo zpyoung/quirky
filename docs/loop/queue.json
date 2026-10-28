@@ -1384,8 +1384,7 @@
       "deps": [
         "sb-mobile-app-panels"
       ],
-      "status": "in-progress",
-      "lane": 2
+      "status": "done"
     },
     {
       "id": "fix-flaky-daemon-pty-client",
