@@ -587,11 +587,16 @@ export class DockService {
         : fresh?.source === 'program-app'
           ? agentForAlias(fresh.value, this.catalog)
           : null
+      // hook.received has no event timestamp, so compare normalized evidence to the exit fence.
+      const statusEvidenceIsFresh = fresh?.source === 'hook'
+        ? fresh.providerSession !== undefined &&
+          status?.lead?.providerSession === fresh.providerSession &&
+          typeof status?.evidenceAt === 'number' && status.evidenceAt > confirmedAt
+        : fresh?.source === 'program-app' &&
+          typeof status?.evidenceAt === 'number' && status.evidenceAt >= fresh.at
       if (
         liveAgent && freshAgent === liveAgent && fresh &&
-        (fresh.providerSession === undefined || status?.lead?.providerSession === fresh.providerSession) &&
-        fresh.at > confirmedAt &&
-        typeof status?.evidenceAt === 'number' && status.evidenceAt >= fresh.at
+        fresh.at > confirmedAt && statusEvidenceIsFresh
       ) {
         this.clearConfirmedExit(session.id)
         this.rememberManualAgent(session, liveAgent)

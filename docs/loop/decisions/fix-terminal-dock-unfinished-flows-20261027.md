@@ -99,5 +99,49 @@
 - **Revisit if:** stale child/foreign exit can close a live lead, or fresh status still shows the old question.
 - **Source:** supersedes m3-terminal-dock D40 lead.ended test wording with actual public contract; assumed — autonomous
 
+## D10: Catch up once and preserve the landed generic loop-tab contracts
+- **Question:** which concurrent decisions bind this repair before final review?
+- **Options:** overwrite integration seams; merge the current roadmap and preserve both features.
+- **Chose:** merged build/roadmap at 58ec89b1c5e0a3314e84904cc73e355f06e3191f into this item (4b482ed8f833c340d4f5ee270653ad11e8bf5830). Read the complete incoming m5-loops-ui decision log. Retain the canonical tab-menu target, hosted close-context ownership, no automatic background-session tab adoption and structured-session lifetime rules. Dock recognition remains terminal-only.
+- **Why:** incoming terminal/controller changes are additive and auto-merged; no separate menu convention or private plugin import is needed.
+- **Evidence:** merge output; m5-loops-ui D2/D3/D7/D12/D15/D24/D25; dock source and public UI regression.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** authoritative landing exposes another concrete shared-seam conflict.
+- **Source:** locked by imported m5-loops-ui decisions
+
+## D11: Compare hook status evidence to the exit fence, not another listener's clock
+- **Question:** why did relaunch pass locally but fail twice on the remote affected gate?
+- **Options:** retry or extend deadlines; compare independent listener timestamps; fence normalized evidence against the confirmed exit and exact provider identity.
+- **Chose:** hook reopening requires the same exact provider-session identity, fresh hook observation after confirmed exit and normalized status evidence after that exit. It no longer requires status.evidenceAt to be greater than the dock listener's later Date.now. Program-app freshness checks remain unchanged.
+- **Why:** hook.received has no public event timestamp; the status plugin and dock record separate observation clocks. A one-millisecond listener-order difference can make legitimate status permanently older than the dock observation.
+- **Evidence:** affected suite 94/95 remote files passed plus both macOS files; sole SC03 relaunch failure repeated in isolation. DockRelaunchRace inspected the hook type/schema/producer and normalized status clock. After the narrow guard fix, the exact remote defects.e2e.test.ts passed with flaky:[].
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** a stale pre-exit row or wrong provider identity reopens a closed dock.
+- **Source:** assumed — autonomous, confirmed remote lifecycle repair
+
+## D12: Use the public plugin-event envelope and realistic shell lifetime in regressions
+- **Question:** what prevented the first lifecycle repair from exercising its intended boundary?
+- **Options:** change correct process semantics; add test-only state; follow actual event and launch contracts.
+- **Chose:** read quirky.agent-status/changed from event.data, as the public event actually carries it. Trace it with a real private daemon, then preserve the existing freshEvidence map. Launch the lifecycle agent inside a real shell so command exit and whole-PTY exit are distinct; keep canonical Session.agent equal to shell. Teach the private fake TUI to consume the real public terminal-send bracketed-paste framing.
+- **Why:** the initial handler looked for sessionId at the wrong envelope level. Managed agent commandArgv intentionally execs the agent, so expecting a shell commandFinished/relaunch after its process exit was an invalid fixture assumption.
+- **Evidence:** private exit-trace.json showed changed.data with working row then row:null; packages/daemon/src/launch.ts commandArgv exec; corrected local SC03 passed 1/0/9 assertions. Subsequent remote clock-skew failure is separately repaired in D11.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the public event or managed-launch contract changes.
+- **Source:** locked by existing public event and launch semantics; assumed — autonomous
+
+## D13: Retain exact guarded results alongside actual visible effects
+- **Question:** how to report driver observations that differ from the visible outcome?
+- **Options:** label the campaign universally passing; preserve each guard status and screenshot.
+- **Chose:** run web/yours/unattended campaign 20261028T102010-951f on the isolated profile. Pane-menu, visible option safety and question-card goals passed. Generic Settings scrolling remained blocked; the normal command-palette route opened dedicated dock settings and enabled the feature. Low visibly applied session-only effort even though the screen hash returned NO_EFFECT; later visible Low safely refused the unsafe default picker with OBSERVED. Actual Stop and Escape both showed STOPPED and retained their distinct newer drafts; keep the Stop goal partial because Escape's act returned UNSETTLED before a stable observation, rather than manufacture a trailing action.
+- **Why:** a formal status and the evidence of an actual effect are different facts. The repaired card controls were genuinely clicked, answered Blue retired immediately, and dismissal retained pending-request enforcement.
+- **Evidence:** .quirk/using-apps-like-a-user/runs/20261028T102010-951f observations 18/20 (pane menus), 24/34 (options), 40–47 (cards), 56–64 (Stop/Escape). Final remaining goals and report are still in progress.
+- **Reversibility:** easy
+- **Confidence:** high for recorded screenshots/actions; no native/default-profile claim.
+- **Revisit if:** final report or owned raw-browser measurement contradicts these visible outcomes.
+- **Source:** assumed — autonomous, required tool-limit reporting
+
 ## Progress
 Regression authoring and minimal source fixes are in place. Genuine red: Stop/Escape queued recovery, SessionEnd stale latch and corrected next-question cache refresh. Host re-enable test passes after its selector correction; no extra focus implementation. Baseline actual browser proved canvas occlusion; terminal stack is now isolated but post-fix browser verification remains. Corrected initial compiler mistakes (missing existing freshEvidence field, fixture closure paths, overbroad fixture report field); latest status-event envelope fix uses public plugin event data. Focused lifecycle/card verification is running. Next: finish green gates, integration catch-up, built private web campaign/exact measurements/acquisition, cross-family final review and canonical queue land. Native chooser handoff is pending in this item's native JSON; prior blocked attempt remains untouched.
