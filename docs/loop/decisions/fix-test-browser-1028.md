@@ -56,4 +56,8 @@
 - **Source:** assumed — autonomous
 
 ## Progress
-Investigation: authoritative LOOP and triage read; BrowserFailureMap scout maps root causes. No tests have been rerun to reconfirm reported failures. Next: bounded repair wave, actual changed-path proof, affected suite/scripts/typecheck, catch up once, final review, and canonical queue land.
+First wave integrated: UI test-only component ebec3ad5 audited at unchanged HEAD9b68ce76 and merged; component worktree removed after preserving inherited .serena via path-only stash. af5fa2fc includes harness, routing and README. Real CLI/browser smoke passed with privateHomeRemoved:true. Typecheck passed (176.08s); scripts passed126/0/1101 assertions (277.55s; before the operator's remote-only note).
+
+Canonical affected suite exited1 (275.75s): remote17files accepted after preferences-integration's one isolated timeout retry; local7files four passed, extras-api timed out once then passed isolated, extras-automation retained selectAll16→0 and network200→204 failures, import retained missing-confirmation failures and one load timeout/Chrome teardown error. No package-green claim.
+
+Two bounded implementers at af5fa2fc: automation owns driver/extras-actions/extras-automation; import owns import.test only. Every worker skips checks; parent must run all further tests through bun scripts/suite.ts per operator note. No owned browser/app remains. Next: receive both, audit scopes/HEAD, integrate, check both files/package, actual selectAll smoke, catch up once/read decisions, final review, typecheck, canonical land.
