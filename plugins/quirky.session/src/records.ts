@@ -30,6 +30,7 @@ type Row = {
   exit_signal: string | null
   exit_cause: ExitCause | null
   restorable: number
+  background: number
   launch: string | null
   provider_session: string | null
   prompt_delivery: PromptDeliveryState | null
@@ -69,6 +70,7 @@ const toSession = (row: Row): Session => ({
   exitSignal: row.exit_signal,
   exitCause: row.exit_cause,
   restorable: row.restorable === 1,
+  background: row.background === 1,
   launch: parseJson<SessionLaunch>(row.launch),
   providerSession: parseJson<SessionProviderSession>(row.provider_session),
   promptDelivery: row.prompt_delivery,
@@ -164,6 +166,9 @@ export function sessionMigrations(home: string): StoreMigration[] {
     },
     (store) => {
       store.exec('ALTER TABLE sessions ADD COLUMN badges TEXT')
+    },
+    (store) => {
+      store.exec('ALTER TABLE sessions ADD COLUMN background INTEGER NOT NULL DEFAULT 0')
     }
   ]
 }
@@ -208,8 +213,8 @@ export class SessionRecords {
   insert(session: Session, repoId: string | null): void {
     this.store.run(
       `INSERT OR IGNORE INTO sessions (id, kind, agent, worktree_id, cwd, title, status, created_at, last_activity_at, exit_code, repo_id,
-        launch, provider_session, prompt_delivery, resumed_from, launch_settings, exit_signal, exit_cause, restorable, agent_status, name)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        launch, provider_session, prompt_delivery, resumed_from, launch_settings, exit_signal, exit_cause, restorable, agent_status, name, background)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       session.id,
       session.kind,
       session.agent,
@@ -230,7 +235,8 @@ export class SessionRecords {
       session.exitCause,
       session.restorable ? 1 : 0,
       jsonOrNull(session.agentStatus),
-      session.name ?? null
+      session.name ?? null,
+      session.background === true ? 1 : 0
     )
   }
 
@@ -248,6 +254,7 @@ export class SessionRecords {
       exitSignal?: string | null
       exitCause?: ExitCause | null
       restorable?: boolean
+      background?: boolean
       launch?: SessionLaunch | null
       providerSession?: SessionProviderSession | null
       promptDelivery?: PromptDeliveryState | null
@@ -266,6 +273,7 @@ export class SessionRecords {
     if (fields.exitSignal !== undefined) columns.push(['exit_signal', fields.exitSignal])
     if (fields.exitCause !== undefined) columns.push(['exit_cause', fields.exitCause])
     if (fields.restorable !== undefined) columns.push(['restorable', fields.restorable ? 1 : 0])
+    if (fields.background !== undefined) columns.push(['background', fields.background ? 1 : 0])
     if (fields.launch !== undefined) columns.push(['launch', jsonOrNull(fields.launch)])
     if (fields.providerSession !== undefined) columns.push(['provider_session', jsonOrNull(fields.providerSession)])
     if (fields.promptDelivery !== undefined) columns.push(['prompt_delivery', fields.promptDelivery])
