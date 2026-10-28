@@ -47,7 +47,8 @@ const loaded = JSON.parse(readFileSync(statePath, 'utf8'))
 const state = loaded && typeof loaded === 'object' && !Array.isArray(loaded) ? loaded : {}
 const args = process.argv.slice(2)
 const inputIndex = args.indexOf('--input')
-const inputText = inputIndex >= 0 && args[inputIndex + 1] === '-' ? readFileSync(0, 'utf8') : ''
+const inputText = process.env.QUIRKY_TEST_GH_INPUT ??
+  (inputIndex >= 0 && args[inputIndex + 1] === '-' ? readFileSync(0, 'utf8') : '')
 const request = inputText ? JSON.parse(inputText) : null
 const isObject = (value) => typeof value === 'object' && value !== null && !Array.isArray(value)
 const requestObject = isObject(request) ? request : {}

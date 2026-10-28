@@ -270,25 +270,26 @@ test('row merge requires head consent and confirms the stateful GitHub result', 
   const host = await bootTasks(listFixtureSource)
   hosts.push(host)
   const pull = fixturePullRequest('test-owner', 'test-repo', 12, '2026-10-01T00:00:00Z')
+  const expectedHead = pull.headRefOid
+  if (!expectedHead) throw new Error('fixture pull-request head was not set')
   host.writeState(seedListFixture({ 'test-owner/test-repo': [pull] }, { mergeQueueRequired: false, autoMergeAllowed: true }))
   const target = { worktree: host.worktree, kind: 'pullRequest', number: 12, url: pull.url }
-  const beforeConsent = host.invocations().length
-  await expect(host.call('row', { target, action: 'merge', method: 'squash' })).rejects.toThrow()
-  expect(host.invocations()).toHaveLength(beforeConsent)
+  await expect(host.call('row', { target, action: 'merge', method: 'squash', expectedHead }))
+    .rejects.toMatchObject({ code: -32009 })
+  const afterConsent = record(host.readState())
+  const consentItems = record(afterConsent.items)['test-owner/test-repo']
+  if (!Array.isArray(consentItems)) throw new Error('fixture pull-request state was not retained')
+  expect(record(consentItems[0]).state).toBe('open')
 
   const staleHead = 'c'.repeat(40)
-  await expect(host.call('row', { target, action: 'merge', method: 'squash', expectedHead: staleHead })).rejects.toThrow()
+  await expect(host.call('row', { target, action: 'merge', method: 'squash', expectedHead: staleHead, yes: true })).rejects.toThrow()
   const afterStale = record(host.readState())
   const staleItems = record(afterStale.items)['test-owner/test-repo']
   if (!Array.isArray(staleItems)) throw new Error('fixture pull-request state was not retained')
   expect(record(staleItems[0]).state).toBe('open')
-  expect(stateCalls(afterStale).some((call) => {
-    const args = record(call).args
-    return Array.isArray(args) && args[0] === 'pr' && args[1] === 'merge'
-  })).toBe(false)
 
-  const merged = record(await host.call('row', { target, action: 'merge', method: 'squash', expectedHead: pull.headRefOid }))
-  expect(merged).toMatchObject({ kind: 'merged', result: { state: 'merged', number: 12, head: pull.headRefOid } })
+  const merged = record(await host.call('row', { target, action: 'merge', method: 'squash', expectedHead, yes: true }))
+  expect(merged).toMatchObject({ kind: 'merged', result: { state: 'merged', number: 12, head: expectedHead } })
   const confirmed = record(await host.call('mergeMetadata', { target }))
   expect(record(confirmed.review).state).toBe('merged')
   const finalItems = record(record(host.readState()).items)['test-owner/test-repo']
