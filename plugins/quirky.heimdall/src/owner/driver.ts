@@ -56,6 +56,18 @@ export function createOwnerDriver(options: DriverOptions): OwnerKernelPort & { c
         return { kind: 'refused', reason: attempted.reason ?? 'owner-action-not-landed' }
       }
       if (!enrollment.enabled || enrollment.paused || enrollment.parkReason !== null) return { kind: 'held', reason: 'owner-work-inactive' }
+      if (snapshot.freshness === 'live' && pending.contentIdentity !== snapshot.contentIdentity) {
+        const naturalKey = `owner-report-stale:${pending.reportKey}:${createHash('sha256').update(snapshot.contentIdentity).digest('hex')}`
+        const alreadyQueued = journal.some(entry => entry.kind === 'owner-deviation-input' &&
+          typeof entry.deviation === 'object' && entry.deviation !== null && 'naturalKey' in entry.deviation && entry.deviation.naturalKey === naturalKey)
+        if (!alreadyQueued) append(enrollment.watcherId, 'owner-deviation-input', {
+          deviation: {
+            kind: 'gate-held', naturalKey,
+            detail: `Owner report was decided from ${pending.contentIdentity}, but live content is ${snapshot.contentIdentity}. Re-decide from the current state. Original deviation: ${deviation.detail}`
+          }
+        })
+        return { kind: 'refused', reason: 'owner-report-stale-evidence' }
+      }
       const kind = registry.get(enrollment.kind)
       let action: KernelAction
       if (intervention.kind === 'kind-action') {

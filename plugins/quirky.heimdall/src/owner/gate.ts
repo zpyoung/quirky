@@ -24,5 +24,5 @@ export function gateOwnerAction(enrollment: OwnerEnrollment, action: KernelActio
     if (!scope || scope.actionKind !== expected.actionKind || scope.contentIdentity !== expected.contentIdentity || scope.evidenceKey !== expected.evidenceKey || scope.preparedCommitSha !== expected.preparedCommitSha) continue
     if (!latest || entry.seq > latest.seq) latest = entry
   }
-  return latest?.status === 'approved' ? { verdict: 'allow' } : { verdict: 'escalate', reason: 'awaiting-owner-approval' }
+  return latest?.status === 'approved' ? { verdict: 'allow' } : { verdict: 'hold', reason: 'awaiting-owner-approval' }
 }
