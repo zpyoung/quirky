@@ -1348,7 +1348,8 @@
       "deps": [
         "sb-mobile-app"
       ],
-      "status": "todo"
+      "status": "in-progress",
+      "lane": 7
     },
     {
       "id": "m7-test-triage",
