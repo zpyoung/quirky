@@ -212,6 +212,7 @@ test('the mounted activity item reports singular, plural and capped status and c
     await item.dirtyRequests[0]!
   })
   expectAccessibleTitle(item.element, singular.title)
+  expect(item.element.textContent).toContain('1')
   expect(item.reports.at(-1)).toMatchObject({
     worktreeId: singular.worktreeId,
     count: 1,
@@ -227,6 +228,7 @@ test('the mounted activity item reports singular, plural and capped status and c
     await item.dirtyRequests[1]!
   })
   expectAccessibleTitle(item.element, plural.title)
+  expect(item.element.textContent).toContain('2')
   expect(item.reports.at(-1)).toMatchObject({ worktreeId: 'wt-other', count: 2, capped: false, title: plural.title, available: true })
 
   await item.setLayout(layout('wt-many'))
@@ -236,6 +238,7 @@ test('the mounted activity item reports singular, plural and capped status and c
     await item.dirtyRequests[2]!
   })
   expectAccessibleTitle(item.element, capped.title)
+  expect(item.element.textContent).toContain('1000+')
   expect(item.reports.at(-1)).toMatchObject({ worktreeId: 'wt-many', count: 1_000, capped: true, title: capped.title, available: true })
 
   await item.reconnect()
@@ -253,10 +256,11 @@ test('the mounted activity item reports singular, plural and capped status and c
     error: expect.stringContaining('Git status unavailable')
   })
   expectAccessibleTitle(item.element, STOCK_TITLE)
+  expect(item.element.textContent).not.toContain('1000+')
 
   await act(async () => item.element.querySelector('button')?.click())
   expect(item.panelToggles.at(-1)?.id).toBe(PANEL)
-})
+
 
 test('a delayed dirty response cannot overwrite a newer workspace status', async () => {
   const delayed = deferred<DirtyResult>()
@@ -290,6 +294,7 @@ test('a delayed dirty response cannot overwrite a newer workspace status', async
     available: true
   })
   expectAccessibleTitle(item.element, STOCK_TITLE)
+  expect(item.element.textContent).not.toContain('3')
 })
 
 test('unmounting ignores an in-flight status response and unsubscribes layout refreshes', async () => {
