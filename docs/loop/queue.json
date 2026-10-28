@@ -2306,6 +2306,16 @@
       ],
       "status": "todo",
       "early": true
+    },
+    {
+      "id": "fix-test-scripts-profile-timeout-1028",
+      "milestone": "M7",
+      "title": "Repair bun test scripts timeout in scripts/suite.test.ts:196: runFiles emits no profile rows when profiling is disabled. During caught-up fix-test-agent-status-1028 gates on macOS, bun test scripts returned125pass/1fail across126tests12files in284.50s; named case exceeded5000ms (5053.94ms). No diagnosed root cause or flake claim; no deadlines/assertions/source changed. Other suite fixture broken/flaky log lines are intentional nested test outputs, not extra top-level failures. Diagnose actual process/profile behavior and preserve deterministic private HOME/QUIRKY_HOME and child cleanup; delete incidental assertions rather than repin. Evidence docs/loop/decisions/fix-test-agent-status-1028.md and lane2 iteration11 raw artifact://30.",
+      "docs": [],
+      "deps": [
+        "m7-test-triage"
+      ],
+      "status": "todo"
     }
   ]
 }
