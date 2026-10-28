@@ -8,6 +8,8 @@ import { StatusDot, UnreadBell } from './StatusDot'
 import { worktreeGlyph } from './status'
 import { OrchestrationRows, type OrchestrationWorkerRow } from './OrchestrationRows'
 import { useOrchestrationRows } from './useOrchestrationRows'
+import { LoopGlyph } from './LoopGlyph'
+import type { LoopProjection } from './loop-status'
 
 export type TreeProps = {
   context: UiPluginContext
@@ -23,11 +25,13 @@ export type TreeProps = {
   requestDelete(worktree: Worktree, descendants: number): void
   onDropPreviewChange(target: MembershipTarget | null): void
   onSeparatorStateChange(state: { enabled: boolean; eligibleBoundaries: string[] }): void
+  loopsByWorktree?: ReadonlyMap<string, LoopProjection>
 }
 
 type OpenMenu = { x: number; y: number; label: string; items: MenuItem[] }
 
 const plural = (count: number) => `${count} ${count === 1 ? 'child' : 'children'}`
+const EMPTY_LOOP_PROJECTIONS: ReadonlyMap<string, LoopProjection> = new Map()
 
 type CardProps = {
   context: UiPluginContext
@@ -37,6 +41,7 @@ type CardProps = {
   collapsed: boolean
   sessions: Session[] | null
   orchestrationWorkers: readonly OrchestrationWorkerRow[]
+  loop?: LoopProjection
   now: number
   selected: boolean
   repoName?: string
@@ -46,7 +51,7 @@ type CardProps = {
   onDragEnd(): void
 }
 
-function WorktreeCard({ context, worktree, depth, childCount, collapsed, sessions, orchestrationWorkers, now, selected, repoName, onToggle, onMenu, onDragStart, onDragEnd }: CardProps) {
+function WorktreeCard({ context, worktree, depth, childCount, collapsed, sessions, orchestrationWorkers, loop, now, selected, repoName, onToggle, onMenu, onDragStart, onDragEnd }: CardProps) {
   const open = () => {
     context.openView(SESSION_VIEW, { worktree: worktree.id })
     if (worktree.unread) void setWorktree(context, worktree.id, { unread: false })
@@ -66,7 +71,7 @@ function WorktreeCard({ context, worktree, depth, childCount, collapsed, session
       }}
     >
       <button className="worktree-main" onClick={open} title={worktree.path}>
-        {worktree.unread ? <UnreadBell /> : <StatusDot glyph={sessions === null ? null : worktreeGlyph(sessions, worktree.id, now)} />}
+        {worktree.unread ? <UnreadBell /> : loop ? <LoopGlyph label={loop.label} /> : <StatusDot glyph={sessions === null ? null : worktreeGlyph(sessions, worktree.id, now)} />}
         <span className={worktree.unread ? 'worktree-name worktree-name-unread' : 'worktree-name'}>{worktree.name}</span>
         {repoName && <span className="tag tag-repo">{repoName}</span>}
         {worktree.isMain && <span className="tag tag-primary">primary</span>}
@@ -130,7 +135,8 @@ export function Tree({
   openDialog,
   requestDelete,
   onDropPreviewChange,
-  onSeparatorStateChange
+  onSeparatorStateChange,
+  loopsByWorktree = EMPTY_LOOP_PROJECTIONS
 }: TreeProps) {
   const orchestrationWorkers = useOrchestrationRows(context)
   const [menu, setMenu] = useState<OpenMenu | null>(null)
@@ -313,6 +319,7 @@ export function Tree({
             collapsed={folded.has(worktree.id)}
             sessions={sessions}
             orchestrationWorkers={worktree.pinned ? [] : orchestrationWorkers}
+            loop={loopsByWorktree.get(worktree.id)}
             now={now}
             selected={worktree.id === selectedId}
             repoName={repoName}
@@ -494,6 +501,7 @@ export function Tree({
                   collapsed={false}
                   sessions={sessions}
                   orchestrationWorkers={orchestrationWorkers}
+                  loop={loopsByWorktree.get(worktree.id)}
                   now={now}
                   selected={worktree.id === selectedId}
                   repoName={repoName}
