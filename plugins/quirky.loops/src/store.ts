@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import type { PluginStore, StoreMigration } from '@quirky/protocol'
-import type { IterationDetail, LoopSnapshot, LoopState, PauseReason } from './types'
+import type { IterationDetail, LoopSnapshot, LoopState, PauseReason, QueueItem, QueueOperation } from './types'
 
+import { applyQueueOperation, claimNextQueueItem, settleQueueClaim, type QueueClaim } from './queue'
 const CREATE_SCHEMA = `
   CREATE TABLE IF NOT EXISTS loops (
     id TEXT PRIMARY KEY,
@@ -60,22 +61,30 @@ const CREATE_SCHEMA = `
     PRIMARY KEY(loop_id, session_id, seq)
   );
 `
+const QUEUE_SCHEMA = `
+  CREATE TABLE IF NOT EXISTS loop_queue_state (
+    loop_id TEXT PRIMARY KEY NOT NULL REFERENCES loops(id) ON DELETE CASCADE,
+    items_json TEXT NOT NULL
+  );
+`
+const ADD_SKIPPED_TICKS_SCHEMA = 'ALTER TABLE loops ADD COLUMN skipped_ticks INTEGER NOT NULL DEFAULT 0;'
 
 export function loopMigrations(): StoreMigration[] {
-  return [CREATE_SCHEMA]
+  return [CREATE_SCHEMA, QUEUE_SCHEMA, ADD_SKIPPED_TICKS_SCHEMA]
 }
 
 type LoopRow = {
   id: string; name: string; slug: string; worktree_id: string; cwd: string; workspace_kind: 'git' | 'folder';
-  agent: LoopSnapshot['agent']; preset: 'until-done'; config_json: string; model: string | null; options_json: string | null;
+  agent: LoopSnapshot['agent']; preset: LoopSnapshot['preset']; config_json: string; model: string | null; options_json: string | null;
   state: LoopState; pause_reason: PauseReason | null; pause_detail: string | null; session_id: string | null;
   iterations_completed: number; active_ms: number; cost_usd: number | null; phase: LoopSnapshot['phase'];
   next_iteration_at: number | null; created_at: number; updated_at: number; ended_at: number | null;
   notes_path: string; warnings_json: string; journal_cursor: number; pause_requested: number; stop_requested: number;
-  stop_now: number; needs_resume: number; resume_native: number;
+  stop_now: number; needs_resume: number; resume_native: number; skipped_ticks: number;
 }
 
 type IterationRow = { detail_json: string }
+type QueueStateRow = { loop_id: string; items_json: string }
 type SteerRow = { id: string; body: string; created_at: number; consumed_by_iteration: number | null }
 
 const OUTPUT_LIMIT = 16_384
@@ -108,7 +117,7 @@ function boundedAttempt(detail: IterationDetail): IterationDetail {
   }
 }
 
-function encodeLoop(snapshot: LoopSnapshot): Omit<LoopRow, 'journal_cursor' | 'pause_requested' | 'stop_requested' | 'stop_now' | 'needs_resume'> {
+function encodeLoop(snapshot: LoopSnapshot): Omit<LoopRow, 'journal_cursor' | 'pause_requested' | 'stop_requested' | 'stop_now' | 'needs_resume' | 'resume_native' | 'skipped_ticks'> {
   return {
     id: snapshot.id,
     name: snapshot.name,
@@ -176,7 +185,7 @@ function writeAttempt(store: PluginStore, detail: IterationDetail): void {
   )
 }
 
-function loopFromRow(row: LoopRow, recentIterations: IterationDetail[]): LoopSnapshot {
+function loopFromRow(row: LoopRow, recentIterations: IterationDetail[], queueItems: QueueItem[]): LoopSnapshot {
   const snapshot: LoopSnapshot = {
     id: row.id,
     name: row.name,
@@ -201,7 +210,9 @@ function loopFromRow(row: LoopRow, recentIterations: IterationDetail[]): LoopSna
     endedAt: row.ended_at,
     notesPath: row.notes_path,
     warnings: safeJson(row.warnings_json, 'warnings'),
-    recentIterations
+    recentIterations,
+    queueItems,
+    skippedTicks: row.skipped_ticks,
   }
   if (row.model !== null) snapshot.model = row.model
   if (row.options_json !== null) snapshot.options = safeJson(row.options_json, 'launch options')
@@ -230,11 +241,46 @@ export class LoopStore {
 
   private recent(loopId: string, limit: number): IterationDetail[] {
     const rows = this.store.all<IterationRow>(
-      'SELECT detail_json FROM loop_iterations WHERE loop_id = ? ORDER BY n DESC, attempt DESC LIMIT ?',
+      `SELECT detail_json FROM loop_iterations
+       WHERE loop_id = ? AND json_extract(detail_json, '$.endedAt') IS NOT NULL
+       ORDER BY n DESC, attempt DESC LIMIT ?`,
       loopId,
       limit
     )
     return rows.reverse().map((row) => safeJson<IterationDetail>(row.detail_json, 'iteration'))
+  }
+  private readQueueItems(loopId: string): QueueItem[] {
+    const row = this.store.get<QueueStateRow>('SELECT items_json FROM loop_queue_state WHERE loop_id = ?', loopId)
+    return row === null ? [] : safeJson<QueueItem[]>(row.items_json, 'queue')
+  }
+
+  private writeQueueItems(loopId: string, items: readonly QueueItem[]): void {
+    this.store.run(
+      `INSERT INTO loop_queue_state (loop_id, items_json) VALUES (?, ?)
+       ON CONFLICT(loop_id) DO UPDATE SET items_json = excluded.items_json`,
+      loopId,
+      JSON.stringify(items)
+    )
+  }
+
+  getLoop(loopId: string): LoopSnapshot | null {
+    const row = this.store.get<LoopRow>('SELECT * FROM loops WHERE id = ?', loopId)
+    return row === null
+      ? null
+      : loopFromRow(row, this.recent(loopId, RECENT_LIMIT), this.readQueueItems(loopId))
+  }
+
+  listLoops(worktreeId?: string): LoopSnapshot[] {
+    const rows = worktreeId === undefined
+      ? this.store.all<LoopRow>('SELECT * FROM loops ORDER BY updated_at DESC, created_at DESC')
+      : this.store.all<LoopRow>('SELECT * FROM loops WHERE worktree_id = ? ORDER BY updated_at DESC, created_at DESC', worktreeId)
+    const queueItems = new Map<string, QueueItem[]>()
+    for (const row of this.store.all<QueueStateRow>('SELECT loop_id, items_json FROM loop_queue_state')) {
+      queueItems.set(row.loop_id, safeJson<QueueItem[]>(row.items_json, 'queue'))
+    }
+    return rows.map((row) =>
+      loopFromRow(row, this.recent(row.id, RECENT_LIMIT), queueItems.get(row.id) ?? [])
+    )
   }
 
   saveLoop(snapshot: LoopSnapshot, requests?: LoopRequests): void {
@@ -244,6 +290,27 @@ export class LoopStore {
       if (requests) writeRequests(this.store, snapshot.id, requests)
     })
   }
+  createLoop(snapshot: LoopSnapshot, requests: LoopRequests, queueItems: readonly QueueItem[]): void {
+    this.requireWritable()
+    this.store.transaction(() => {
+      writeLoop(this.store, snapshot)
+      writeRequests(this.store, snapshot.id, requests)
+      this.writeQueueItems(snapshot.id, queueItems)
+    })
+  }
+
+  mutateQueue(loopId: string, operation: QueueOperation, updatedAt: number): void {
+    this.requireWritable()
+    this.store.transaction(() => {
+      const current = this.readQueueItems(loopId)
+      const newItemId =
+        typeof operation === 'object' && operation !== null && operation.kind === 'add' ? randomUUID() : undefined
+      const updated = applyQueueOperation(current, operation, newItemId)
+      this.writeQueueItems(loopId, updated)
+      this.store.run('UPDATE loops SET updated_at = ? WHERE id = ?', updatedAt, loopId)
+    })
+  }
+
 
   saveLoopAndAttempt(snapshot: LoopSnapshot, detail: IterationDetail, requests?: LoopRequests): void {
     this.requireWritable()
@@ -258,18 +325,77 @@ export class LoopStore {
     this.requireWritable()
     this.store.transaction(() => writeAttempt(this.store, detail))
   }
-
-  getLoop(loopId: string): LoopSnapshot | null {
-    const row = this.store.get<LoopRow>('SELECT * FROM loops WHERE id = ?', loopId)
-    return row === null ? null : loopFromRow(row, this.recent(loopId, RECENT_LIMIT))
+  claimQueueAttempt(snapshot: LoopSnapshot, detail: IterationDetail, repeatQueue: boolean): QueueClaim | null {
+    this.requireWritable()
+    let claim: QueueClaim | null = null
+    this.store.transaction(() => {
+      const latest = this.store.get<IterationRow>(
+        'SELECT detail_json FROM loop_iterations WHERE loop_id = ? ORDER BY n DESC, attempt DESC LIMIT 1',
+        snapshot.id
+      )
+      if (latest !== null) {
+        const attempt = safeJson<IterationDetail>(latest.detail_json, 'iteration')
+        if (attempt.endedAt === null || attempt.endReason === null) return
+      }
+      const current = this.readQueueItems(snapshot.id)
+      const next = claimNextQueueItem(current, repeatQueue)
+      if (next.claim === null) return
+      claim = next.claim
+      detail.queueItemId = next.claim.id
+      if (next.items !== current) this.writeQueueItems(snapshot.id, next.items)
+      writeAttempt(this.store, detail)
+      writeLoop(this.store, snapshot)
+    })
+    return claim
   }
 
-  listLoops(worktreeId?: string): LoopSnapshot[] {
-    const rows = worktreeId === undefined
-      ? this.store.all<LoopRow>('SELECT * FROM loops ORDER BY updated_at DESC, created_at DESC')
-      : this.store.all<LoopRow>('SELECT * FROM loops WHERE worktree_id = ? ORDER BY updated_at DESC, created_at DESC', worktreeId)
-    return rows.map((row) => loopFromRow(row, this.recent(row.id, RECENT_LIMIT)))
+  saveEndedAttempt(
+    snapshot: LoopSnapshot,
+    detail: IterationDetail,
+    queueItemId: string | null,
+    skippedTicks: number,
+    requests?: LoopRequests
+  ): LoopSnapshot {
+    this.requireWritable()
+    if (detail.endReason === null || detail.endedAt === null) throw new TypeError('ended attempts require an end reason and timestamp')
+    if (!Number.isInteger(skippedTicks) || skippedTicks < 0) throw new TypeError('skipped tick delta must be a nonnegative integer')
+    let current = snapshot
+    this.store.transaction(() => {
+      const existing = this.store.get<IterationRow>(
+        'SELECT detail_json FROM loop_iterations WHERE loop_id = ? AND n = ? AND attempt = ?',
+        detail.loopId,
+        detail.n,
+        detail.attempt
+      )
+      if (existing !== null) {
+        const previous = safeJson<IterationDetail>(existing.detail_json, 'iteration')
+        if (previous.endReason !== null && previous.endedAt !== null) {
+          if (requests) writeRequests(this.store, snapshot.id, requests)
+          current = this.getLoop(snapshot.id) ?? snapshot
+          return
+        }
+      }
+
+      if (detail.endReason === 'settled' && queueItemId !== null) {
+        const items = this.readQueueItems(snapshot.id)
+        this.writeQueueItems(snapshot.id, settleQueueClaim(items, queueItemId, 'settled'))
+      }
+      writeAttempt(this.store, detail)
+      writeLoop(this.store, snapshot)
+      if (skippedTicks > 0) {
+        this.store.run(
+          'UPDATE loops SET skipped_ticks = skipped_ticks + ? WHERE id = ?',
+          skippedTicks,
+          snapshot.id
+        )
+      }
+      if (requests) writeRequests(this.store, snapshot.id, requests)
+      current = this.getLoop(snapshot.id) ?? snapshot
+    })
+    return current
   }
+
+
 
   iterations(loopId: string, limit = ENDED_ATTEMPT_LIMIT): IterationDetail[] {
     return this.recent(loopId, Math.max(1, Math.min(1000, Math.floor(limit))))

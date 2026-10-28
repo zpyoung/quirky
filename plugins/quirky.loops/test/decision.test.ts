@@ -23,6 +23,7 @@ const loop = (patch: Partial<LoopSnapshot> = {}): LoopSnapshot => {
     agent: 'claude', preset: 'until-done', config: configValue, state: 'running', pauseReason: null, pauseDetail: null,
     sessionId: 'session-1', iterationsCompleted: 0, activeMs: 0, costUsd: 0, phase: null, nextIterationAt: null,
     createdAt: 1, updatedAt: 1, endedAt: null, notesPath: '/tmp/work/.quirky/loops/build/notes.md', warnings: [], recentIterations: [],
+    queueItems: [], skippedTicks: 0,
     ...patch
   }
 }
@@ -113,13 +114,13 @@ describe('decideNext precedence and completion', () => {
 
   test('protected paths pause before marker and cap decisions', () => {
     const current = loop({ config: config({ caps: { maxIterations: 1 } }), iterationsCompleted: 1 })
-    expect(decide({ loop: current, latest: attempt({ protectedPathHits: ['secret/key'], markers: { blocked: 'blocked' } }) })).toEqual({ kind: 'pause', reason: 'protected-path', detail: 'secret/key' })
+    expect(decide({ loop: current, latest: attempt({ protectedPathHits: ['secret/key'], markers: { done: false, blocked: 'blocked' } }) })).toEqual({ kind: 'pause', reason: 'protected-path', detail: 'secret/key' })
   })
 
   test('blocked and decide markers pause before caps', () => {
     const current = loop({ config: config({ caps: { maxIterations: 1 } }), iterationsCompleted: 1 })
-    expect(decide({ loop: current, latest: attempt({ markers: { blocked: 'need access' } }) })).toEqual({ kind: 'pause', reason: 'agent-blocked', detail: 'need access' })
-    expect(decide({ loop: current, latest: attempt({ markers: { decide: 'which one?' } }) })).toEqual({ kind: 'pause', reason: 'agent-decide', detail: 'which one?' })
+    expect(decide({ loop: current, latest: attempt({ markers: { done: false, blocked: 'need access' } }) })).toEqual({ kind: 'pause', reason: 'agent-blocked', detail: 'need access' })
+    expect(decide({ loop: current, latest: attempt({ markers: { done: false, decide: 'which one?' } }) })).toEqual({ kind: 'pause', reason: 'agent-decide', detail: 'which one?' })
   })
 })
 
@@ -193,5 +194,69 @@ describe('decideNext caps, progress, and holds', () => {
   test('starts with configured session freshness when all holds are clear', () => {
     expect(decide({ latest: null })).toEqual({ kind: 'start-iteration', freshSession: false })
     expect(decide({ loop: loop({ config: config({ sessionPolicy: 'fresh' }) }), latest: null })).toEqual({ kind: 'start-iteration', freshSession: true })
+  })
+})
+
+describe('queue exhaustion and interval precedence', () => {
+  test('empty queue completes before approval or pacing when no done signal is configured', () => {
+    const current = loop({
+      preset: 'queue',
+      config: config({
+        promptSource: { kind: 'queue', repeatQueue: false },
+        pacing: { kind: 'interval', minutes: 1, anchor: 'from-end' },
+        askBeforeNext: true,
+        done: {},
+      }),
+      queueItems: [{ id: 'a', position: 0, body: 'A', state: 'done' }],
+      nextIterationAt: 100,
+    })
+
+    expect(decide({ loop: current, latest: attempt(), now: 10 })).toEqual({ kind: 'complete' })
+  })
+
+  test('queue exhaustion with unmet done signals pauses before approval or pacing', () => {
+    const done = { check: { command: 'false', timeoutSeconds: 5, runWhen: 'every-iteration' as const } }
+    const current = loop({
+      preset: 'queue',
+      config: config({
+        promptSource: { kind: 'queue', repeatQueue: false },
+        pacing: { kind: 'interval', minutes: 1, anchor: 'from-end' },
+        askBeforeNext: true,
+        done,
+      }),
+      queueItems: [{ id: 'a', position: 0, body: 'A', state: 'done' }],
+      nextIterationAt: 100,
+    })
+    const latest = attempt({
+      doneConfig: done,
+      check: { ran: true, pass: false, exitCode: 1, timedOut: false, stdoutTail: '', stderrTail: '', durationMs: 1 },
+    })
+
+    expect(decide({ loop: current, latest, now: 10 })).toEqual({ kind: 'pause', reason: 'queue-exhausted' })
+  })
+
+  test('queue approval precedes interval waiting when another item is available', () => {
+    const current = loop({
+      preset: 'queue',
+      config: config({
+        promptSource: { kind: 'queue', repeatQueue: false },
+        pacing: { kind: 'interval', minutes: 1, anchor: 'from-end' },
+        askBeforeNext: true,
+      }),
+      queueItems: [{ id: 'b', position: 0, body: 'B', state: 'pending' }],
+      nextIterationAt: 100,
+    })
+
+    expect(decide({ loop: current, latest: attempt(), now: 10 })).toEqual({ kind: 'pause', reason: 'ask-before-next' })
+  })
+
+  test('resuming with no held latest still waits for the persisted interval deadline', () => {
+    const current = loop({
+      config: config({ pacing: { kind: 'interval', minutes: 1, anchor: 'from-end' }, askBeforeNext: true }),
+      nextIterationAt: 100,
+    })
+
+    expect(decide({ loop: current, latest: null, now: 99 })).toEqual({ kind: 'wait', reason: 'interval', until: 100 })
+    expect(decide({ loop: current, latest: null, now: 100 })).toEqual({ kind: 'start-iteration', freshSession: false })
   })
 })

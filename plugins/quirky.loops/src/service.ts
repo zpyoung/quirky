@@ -5,13 +5,28 @@ import { dirname, isAbsolute, join, resolve } from 'node:path'
 import type { PluginCaller, PluginContext, PluginStore, StoreMigration, StructuredMessage } from '@quirky/protocol'
 import { EvidenceEngine } from './evidence'
 import { mergeLoopConfig, normalizeLoopConfig, validateLoopAgent } from './config'
+import { computePacing } from './pacing'
+import { QueueConflictError, QueueItemNotFoundError } from './queue'
 import { appendLoopLog, LoopDriver } from './driver'
 import { loopMigrations, LoopStore, type LoopRequests } from './store'
-import type { EvidenceEngineContract, IterationDetail, LoopConfig, LoopConfigPatch, LoopCreateInput, LoopServiceContract, LoopSnapshot, LoopTiming, PauseReason } from './types'
+import type {
+  EvidenceEngineContract,
+  IterationDetail,
+  LoopConfig,
+  LoopConfigPatch,
+  LoopCreateInput,
+  LoopPreset,
+  LoopServiceContract,
+  LoopSnapshot,
+  LoopTiming,
+  PauseReason,
+  QueueItem,
+  QueueOperation,
+} from './types'
 
 const MAX_HISTORY_LIMIT = 1000
 const DEFAULT_HISTORY_LIMIT = 200
-const SUPPORTED_CREATE_KEYS = ['worktree', 'worktreeId', 'name', 'agent', 'preset', 'config', 'model', 'options'] as const
+const SUPPORTED_CREATE_KEYS = ['worktree', 'worktreeId', 'name', 'agent', 'preset', 'queueItems', 'config', 'model', 'options'] as const
 const SUPPORTED_PATCH_KEYS = [
   'name', 'promptSource', 'pacing', 'sessionPolicy', 'done', 'caps', 'noProgress', 'protectedPaths',
   'checkpointCommits', 'askBeforeNext', 'resumeAtLimitReset'
@@ -31,6 +46,39 @@ function isObject(value: unknown): value is Record<string, unknown> {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+function validatePresetConfig(preset: LoopPreset, config: LoopConfig): void {
+  if (preset === 'queue') {
+    if (config.promptSource.kind !== 'queue') throw new TypeError('queue preset requires a queue prompt source')
+    return
+  }
+  if (config.promptSource.kind !== 'repeat') throw new TypeError(`${preset} preset requires a repeat prompt source`)
+  if (preset === 'interval' && config.pacing.kind !== 'interval') {
+    throw new TypeError('interval preset requires interval pacing')
+  }
+  if (preset === 'until-done' && config.pacing.kind !== 'on-idle') {
+    throw new TypeError('until-done preset requires on-idle pacing')
+  }
+}
+
+function queueSeed(preset: LoopPreset, value: unknown): QueueItem[] {
+  if (preset !== 'queue') {
+    if (value !== undefined) throw new TypeError('queueItems are only supported by the queue preset')
+    return []
+  }
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new TypeError('queue preset requires at least one queue item')
+  }
+  return value.map((entry, position) => {
+    if (!isObject(entry) || Object.keys(entry).some((key) => key !== 'body')) {
+      throw new TypeError(`queueItems[${position}] must contain only a body`)
+    }
+    if (typeof entry.body !== 'string' || entry.body.trim() === '') {
+      throw new TypeError(`queueItems[${position}].body must be a non-empty string`)
+    }
+    return { id: randomUUID(), position, body: entry.body, state: 'pending' as const }
+  })
 }
 
 function slugFor(name: string, id: string): string {
@@ -161,20 +209,32 @@ export class LoopService implements LoopServiceContract {
       snapshot.pauseReason = 'interrupted-by-restart'
       snapshot.pauseDetail = null
       snapshot.phase = null
-      snapshot.nextIterationAt = null
       snapshot.updatedAt = this.now()
       const attempt = this.store.unfinishedAttempt(snapshot.id)
       const requests = emptyRequests()
+      let current: LoopSnapshot
       if (attempt) {
         attempt.endedAt = this.now()
         attempt.endReason = 'interrupted'
         attempt.error = 'daemon restarted during this iteration'
-        this.store.saveLoopAndAttempt(snapshot, attempt, requests)
-        appendLoopLog(this.context, attempt, snapshot)
+        current = this.store.saveEndedAttempt(
+          snapshot,
+          attempt,
+          attempt.queueItemId ?? null,
+          computePacing({
+            pacing: attempt.pacingConfig ?? snapshot.config.pacing,
+            createdAt: snapshot.createdAt,
+            iterationStartedAt: attempt.startedAt,
+            iterationEndedAt: attempt.endedAt,
+          }).skippedTicks,
+          requests
+        )
+        appendLoopLog(this.context, attempt, current)
       } else {
         this.store.saveLoop(snapshot, requests)
+        current = this.store.getLoop(snapshot.id) ?? snapshot
       }
-      this.publish(previous, this.store.getLoop(snapshot.id) ?? snapshot)
+      this.publish(previous, current)
     }
   }
 
@@ -270,13 +330,21 @@ export class LoopService implements LoopServiceContract {
     const unsupported = Object.keys(input).find((key) => !SUPPORTED_CREATE_KEYS.includes(key as (typeof SUPPORTED_CREATE_KEYS)[number]))
     if (unsupported !== undefined) throw this.context.error('invalid-params', `unsupported loop field ${unsupported}`)
 
+    let preset: LoopPreset
     let config: LoopConfig
+    let queueItems: QueueItem[]
     let model: string | undefined
     let options: Record<string, string | boolean> | undefined
     try {
       validateLoopAgent(input.agent)
-      if (input.preset !== undefined && input.preset !== 'until-done') throw new TypeError('only the until-done preset is supported')
-      config = normalizeLoopConfig(input.config)
+      const requestedPreset = input.preset ?? 'until-done'
+      if (requestedPreset !== 'until-done' && requestedPreset !== 'queue' && requestedPreset !== 'interval') {
+        throw new TypeError('preset must be until-done, queue, or interval')
+      }
+      preset = requestedPreset
+      config = normalizeLoopConfig(input.config, preset)
+      validatePresetConfig(preset, config)
+      queueItems = queueSeed(preset, input.queueItems)
       model = validateModel(input.model)
       options = validateOptions(input.options)
     } catch (error) {
@@ -291,7 +359,7 @@ export class LoopService implements LoopServiceContract {
       throw this.context.error('conflict', `worktree ${worktree.id} is unavailable: ${errorMessage(error)}`)
     }
 
-    const name = input.name === undefined ? `${input.agent} until-done` : input.name
+    const name = input.name === undefined ? `${input.agent} ${preset}` : input.name
     if (typeof name !== 'string' || name.trim() === '') throw this.context.error('invalid-params', 'name must be a non-empty string')
     const id = randomUUID()
     const slug = slugFor(name.trim(), id)
@@ -313,7 +381,7 @@ export class LoopService implements LoopServiceContract {
       cwd: worktree.path,
       workspaceKind: worktree.kind,
       agent: input.agent,
-      preset: 'until-done',
+      preset,
       config,
       state: 'running',
       pauseReason: null,
@@ -330,10 +398,12 @@ export class LoopService implements LoopServiceContract {
       notesPath,
       warnings: warning ? ['worktree-has-running-loop'] : [],
       recentIterations: [],
+      queueItems,
+      skippedTicks: 0,
       ...(model === undefined ? {} : { model }),
       ...(options === undefined ? {} : { options })
     }
-    this.store.saveLoop(snapshot, emptyRequests())
+    this.store.createLoop(snapshot, emptyRequests(), queueItems)
     const persisted = this.store.getLoop(id) ?? snapshot
     this.publish(null, persisted)
     this.startDriver(id)
@@ -388,7 +458,6 @@ export class LoopService implements LoopServiceContract {
       snapshot.pauseReason = 'user'
       snapshot.pauseDetail = null
       snapshot.phase = null
-      snapshot.nextIterationAt = null
       snapshot.updatedAt = this.now()
       this.store.saveLoop(snapshot, emptyRequests())
       const current = this.store.getLoop(loopId) ?? snapshot
@@ -404,12 +473,16 @@ export class LoopService implements LoopServiceContract {
   async resume(loopId: string, addIterations?: number): Promise<LoopSnapshot> {
     await this.start()
     this.requireWritable()
-    const previous = this.get(loopId)
-    const storedRequests = this.store.requests(loopId)
+    let previous = this.get(loopId)
     if (previous.state !== 'paused') throw this.context.error('conflict', `Loop ${loopId} is ${previous.state}, not paused`)
     if (addIterations !== undefined && (!Number.isFinite(addIterations) || !Number.isInteger(addIterations) || addIterations < 1)) {
       throw this.context.error('invalid-params', 'addIterations must be a finite integer of at least 1')
     }
+    const existingDriver = this.drivers.get(loopId)
+    if (existingDriver) await existingDriver.waitForFinish()
+    previous = this.get(loopId)
+    if (previous.state !== 'paused') throw this.context.error('conflict', `Loop ${loopId} is ${previous.state}, not paused`)
+    const storedRequests = this.store.requests(loopId)
     const snapshot = cloneSnapshot(previous)
     if (addIterations !== undefined) {
       const currentCap = snapshot.config.caps.maxIterations ?? 0
@@ -422,7 +495,6 @@ export class LoopService implements LoopServiceContract {
     snapshot.pauseReason = null
     snapshot.pauseDetail = null
     snapshot.phase = 'waiting'
-    snapshot.nextIterationAt = null
     snapshot.endedAt = null
     snapshot.updatedAt = this.now()
     this.store.saveLoop(snapshot, {
@@ -494,6 +566,7 @@ export class LoopService implements LoopServiceContract {
     if (Object.keys(configPatch).length > 0) {
       try {
         config = mergeLoopConfig(previous.config, configPatch as LoopConfigPatch)
+        validatePresetConfig(previous.preset, config)
       } catch (error) {
         throw this.context.error('invalid-params', errorMessage(error))
       }
@@ -504,9 +577,42 @@ export class LoopService implements LoopServiceContract {
     if (typeof patch.name === 'string') {
       snapshot.name = patch.name.trim()
     }
+    if (Object.hasOwn(configPatch, 'pacing')) {
+      const latest = this.store.latestAttempt(loopId)
+      if (latest?.endReason === 'settled' && latest.endedAt !== null) {
+        snapshot.nextIterationAt = computePacing({
+          pacing: config.pacing,
+          createdAt: snapshot.createdAt,
+          iterationStartedAt: latest.startedAt,
+          iterationEndedAt: latest.endedAt,
+        }).nextIterationAt
+      }
+    }
     snapshot.updatedAt = this.now()
     this.store.saveLoop(snapshot)
     const current = this.store.getLoop(loopId) ?? snapshot
+    this.publish(previous, current)
+    this.drivers.get(loopId)?.wake()
+    return current
+  }
+
+  async queue(loopId: string, op: QueueOperation): Promise<LoopSnapshot> {
+    await this.start()
+    this.requireWritable()
+    const previous = this.get(loopId)
+    if (ended(previous)) throw this.context.error('conflict', `Loop ${loopId} has already ended`)
+    if (previous.preset !== 'queue') throw this.context.error('invalid-params', 'queue operations require a queue preset')
+
+    try {
+      this.store.mutateQueue(loopId, op, this.now())
+    } catch (error) {
+      if (error instanceof QueueItemNotFoundError) throw this.context.error('not-found', error.message)
+      if (error instanceof QueueConflictError) throw this.context.error('conflict', error.message)
+      if (error instanceof TypeError) throw this.context.error('invalid-params', error.message)
+      throw error
+    }
+
+    const current = this.get(loopId)
     this.publish(previous, current)
     this.drivers.get(loopId)?.wake()
     return current
@@ -562,6 +668,7 @@ export class LoopService implements LoopServiceContract {
     snapshot.pauseReason = null
     snapshot.pauseDetail = null
     snapshot.phase = null
+    snapshot.nextIterationAt = null
     snapshot.endedAt = this.now()
     snapshot.updatedAt = snapshot.endedAt
     if (attempt) {
@@ -569,10 +676,27 @@ export class LoopService implements LoopServiceContract {
       attempt.endReason = 'stopped'
       if (attempt.promptSent === '') attempt.error = 'stopped before prompt delivery'
       else delete attempt.error
-      this.store.saveLoopAndAttempt(snapshot, attempt, emptyRequests())
-    } else this.store.saveLoop(snapshot, emptyRequests())
+    }
+    const requests = emptyRequests()
+    let current: LoopSnapshot
+    if (attempt) {
+      current = this.store.saveEndedAttempt(
+        snapshot,
+        attempt,
+        attempt.queueItemId ?? null,
+        computePacing({
+          pacing: attempt.pacingConfig ?? snapshot.config.pacing,
+          createdAt: snapshot.createdAt,
+          iterationStartedAt: attempt.startedAt,
+          iterationEndedAt: attempt.endedAt,
+        }).skippedTicks,
+        requests
+      )
+    } else {
+      this.store.saveLoop(snapshot, requests)
+      current = this.store.getLoop(snapshot.id) ?? snapshot
+    }
     this.store.pruneEndedAttempts()
-    const current = this.store.getLoop(snapshot.id) ?? snapshot
     this.publish(previous, current)
     return current
   }

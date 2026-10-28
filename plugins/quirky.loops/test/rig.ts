@@ -206,7 +206,7 @@ printf '%s\\n' 'VERDICT: not-met' 'REASON: isolated evaluator fixture'
       events,
       starts: controller.starts,
       sends: controller.sends,
-      call<T = unknown>(method, params = {}) { return client.callAny(method, params) as Promise<T> },
+      call<T = unknown>(method: string, params: Record<string, unknown> = {}) { return client.callAny(method, params) as Promise<T> },
       snapshot(loopId) { return rig.call<LoopSnapshot>('quirky.loops/get', { loopId }) },
       waitForLoop(loopId, predicate, timeoutMs = 10_000) {
         return waitForAsync(async () => {
