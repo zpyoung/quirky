@@ -1529,8 +1529,7 @@
       "title": "UI redesign: dark and light graphite tokens, the 15 shared components and a gallery page showing every component in both themes, plus a UI lint check wired into bun run typecheck that fails raw colors, raw pixel values and plugin CSS, enforced only for packages/ui and the plugins on an enforced list (empty at first; each ui-restyle item adds its plugins), so plugins not yet restyled never block a land. Follow docs/quirk/specs/2026-10-28-ui-redesign/logic.md (approved). Use only the shared components and tokens; the UI lint check must pass. Build-first mode applies: typecheck gates the land.",
       "docs": [],
       "deps": [],
-      "status": "in-progress",
-      "lane": 5
+      "status": "done"
     },
     {
       "id": "ui-terminal-theme",

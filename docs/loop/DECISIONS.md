@@ -481,6 +481,9 @@ files, not this one.
 | medium | high | [m1-notifications D7](decisions/m1-notifications.md) | The old "Notify when agents finish" switch becomes Agent Task Complete, and its value carries over | supersedes m0-core D13 |
 | medium | high | [m1-notifications D11](decisions/m1-notifications.md) | The window reports input activity, and focus and presence changes reach plugins as an event | assumed — autonomous |
 | medium | high | [m1-notifications D28](decisions/m1-notifications.md) | The PTY host recognises OSC 9, OSC 99 and OSC 777 notifications | assumed — autonomous |
+| medium (public component props become consumer contracts) | high | [ui-tokens-and-components D1](decisions/ui-tokens-and-components.md) | Implement the approved system row, not the area restyles | locked by docs/quirk/specs/2026-10-28-ui-redesign/logic.md |
+| medium (import contract) | high | [ui-tokens-and-components D4](decisions/ui-tokens-and-components.md) | Public package entrypoint and separate static gallery | assumed — autonomous |
+| medium (cross-item seam) | high | [ui-tokens-and-components D5](decisions/ui-tokens-and-components.md) | Lane4 owns appearance resolution and terminal adapter | locked by lane4 ownership agreement |
 | medium | high | [m6-orchestration-idle-pointer-shutdown D1](decisions/m6-orchestration-idle-pointer-shutdown.md) | Restore exactly the deferred automatic hint flow | locked by docs/loop/decisions/m6-orchestration-core.md |
 | medium | high for lifetime dependency; medium for historical hang cause | [m6-orchestration-idle-pointer-shutdown D3](decisions/m6-orchestration-idle-pointer-shutdown.md) | Fence scheduler lifetime rather than wait indefinitely for external work | assumed — autonomous |
 | medium | high | [m6-orchestration-idle-pointer-shutdown D4](decisions/m6-orchestration-idle-pointer-shutdown.md) | Keep existing identity, waiter and consumption authority | locked by research/orca-features/orchestration.md |
@@ -914,6 +917,7 @@ files, not this one.
 | easy | medium | [m1-notifications D45](decisions/m1-notifications.md) | Opening a worktree from its card counts as Mark Read | locked by research/orca-features/notifications.md |
 | easy | medium | [m1-notifications D50](decisions/m1-notifications.md) | The W1 gate's 65 `EBADF` failures are the suite's descriptor exhaustion, not a regression | assumed — autonomous |
 | easy | medium | [m1-notifications D55](decisions/m1-notifications.md) | The suite is over the descriptor limit after the catch-up; this item moves the remaining harnesses to shared plugin directories | supersedes m1-term-ui D51 |
+| easy (owning restyles remove obsolete compatibility values) | medium | [ui-tokens-and-components D3](decisions/ui-tokens-and-components.md) | Preserve legacy host geometry with centralized compatibility tokens | assumed — autonomous |
 | easy | medium | [m1-agent-status-scripting D8](decisions/m1-agent-status-scripting.md) | Unsafe patterns reject the file they are in | assumed — autonomous |
 | easy | medium | [m1-agent-status-scripting D9](decisions/m1-agent-status-scripting.md) | Built-in rules ship for the agents whose screens Orca's published rules describe | assumed — autonomous |
 | easy | medium | [m1-agent-status-scripting D12](decisions/m1-agent-status-scripting.md) | Send refuses only a blocked agent; a working agent gets the prompt | assumed — autonomous |
@@ -1795,6 +1799,12 @@ files, not this one.
 | easy | high | [m1-notifications D60](decisions/m1-notifications.md) | The descriptor fix lives in `startHarness`, shared by every symlink-only built-in directory | supersedes m1-term-ui D51 |
 | easy | high | [m1-notifications D61](decisions/m1-notifications.md) | The final gate passes; nothing goes to BLOCKERS.md | locked by docs/loop/LOOP.md |
 | easy | high | [m1-notifications D62](decisions/m1-notifications.md) | The first land failed on the integration tree's missing package links for the new plugin; they were copied in, as m1-term-daemon D49 did | assumed — autonomous |
+| easy (each restyle adds its plugin ids) | high | [ui-tokens-and-components D2](decisions/ui-tokens-and-components.md) | Enforce all UI source and only explicitly opted-in plugins | locked by operator update to ui-tokens-and-components title |
+| easy | high | [ui-tokens-and-components D6](decisions/ui-tokens-and-components.md) | Build-first execution uses three disjoint implementers and one typecheck gate | locked by docs/loop/LOOP.md |
+| easy | high | [ui-tokens-and-components D7](decisions/ui-tokens-and-components.md) | Accept only the audited three-component source at the all-worker barrier | assumed — autonomous |
+| easy | high | [ui-tokens-and-components D8](decisions/ui-tokens-and-components.md) | Fix scanner sibling traversal and theme-scope text inheritance from observed evidence | assumed — autonomous |
+| easy | high | [ui-tokens-and-components D9](decisions/ui-tokens-and-components.md) | Record focused runtime proof without claiming suites or automated visual review | assumed — autonomous |
+| easy | high | [ui-tokens-and-components D10](decisions/ui-tokens-and-components.md) | Compose landed theme exports and admit only the canonical shared stylesheet | assumed — autonomous |
 | easy | high | [m6-orchestration-idle-pointer-shutdown D2](decisions/m6-orchestration-idle-pointer-shutdown.md) | Resolve standard gray areas autonomously using build-first rules | locked by docs/loop/LOOP.md |
 | easy | high | [m6-orchestration-idle-pointer-shutdown D5](decisions/m6-orchestration-idle-pointer-shutdown.md) | One isolated implementation component with already committed public contracts | assumed — autonomous |
 | easy | high | [m6-orchestration-idle-pointer-shutdown D6](decisions/m6-orchestration-idle-pointer-shutdown.md) | Isolate macOS runtime proof and preserve platform limits | deferred: platform |
