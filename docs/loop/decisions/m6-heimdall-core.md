@@ -419,3 +419,10 @@ Iteration4: source checkpoint8ce174fb includes the terminal-summary and confirme
 | Ordinary API acceptance | PASS,23tests253assertions |
 | Broad affected scope |193files,187passed before fixes; corrected files re-exercised below |
 | Corrected affected plugin scope |52files, gate ok:true; acceptance-restart passed its isolated retry and was recorded flaky by the suite |
+
+Landing attempt1 reported an integration conflict, not a test failure. The required repair merge
+is aa34887f: retain landed native follow-up model/effort and cumulative-usage coverage, preserve
+session migrations8/9/10 and background ownership rules. Both newly incoming decision logs were
+read without an M6 authority conflict. Changed-scope verification passed34/34 files with no flaky
+retry; full typecheck passed0diagnostics22.46s; the native kernel process smoke passed again in6.04s.
+Retry queue land without another review or repeat of unchanged green scopes.
