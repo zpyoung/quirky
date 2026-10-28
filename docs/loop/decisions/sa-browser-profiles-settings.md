@@ -143,5 +143,55 @@
 - **Revisit if:** actual surface or native nightly contradicts the recorded outcomes
 - **Source:** assumed — autonomous
 
+## D14: Cut URL gestures over from the temporary copy mapping
+- **Question:** Which URL gesture contract wins over the earlier terminal-only implementation?
+- **Decision:** Supersede m1-term-ui D21's temporary Shift+modifier URL-copy mapping with Browser.md's alternate-destination routing. Keep explicit Copy Link and existing file editor/reveal behavior. Use the application's CHORD_PLATFORM for modifier interpretation.
+- **Why:** terminal and rich-editor URL gestures must agree with the Browser contract and the existing application chord engine; navigator.platform disagreed with the remote Mac fixture.
+- **Evidence:** actual terminal link feature tests4pass30asserts after platform/routing repair; Markdown ordinary-click edit-preservation negative regression1pass3asserts.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the owning source specification changes
+- **Source:** assumed — autonomous
+
+## D15: Read click policy from the current model, not a stale render
+- **Question:** Can a setting update precede its React render and affect the next URL click?
+- **Decision:** Read and validate the two canonical terminal click settings at event time, retaining one small cached object. Resolve disabled settings to the owning pane's defaults. Update FakeContext's model before its listeners, and unmount the headless React root inside act before unregistering its DOM.
+- **Why:** the real model changes before deferred plugin events/render; an event handler captured stale policy. A guessed teardown delay did not guarantee that React stopped before window disappeared.
+- **Evidence:** deterministic model-before-event regression6pass20asserts; actual link features4pass30asserts with no window-undefined teardown error. React nested-root warnings observed in other affected runs are not hidden or called a clean bill of health.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the public UI model ordering contract changes
+- **Source:** assumed — autonomous
+
+## D16: Count actual Find occurrences without replacing page content
+- **Question:** How should Watch Find handle three matches in one text node?
+- **Decision:** Keep a self-contained Range/escaped-RegExp page function and return the actual current/total pair. Preserve the original text node, support directional wrap/query reset/clear, and serialize the literal query. Do not import private UI helpers or synthesize an ordinal in the service.
+- **Why:** DOM.performSearch counted matching nodes, not occurrences. Changing the fixture to three nodes concealed the defect.
+- **Evidence:** source Watch case1pass27asserts after73d57ae3; packaged real Chrome smoke reports first1/3, next2/3, textNodePreserved=true. Eligibility follows text nodes; cross-node phrases, shadow roots and frames are not claimed.
+- **Reversibility:** easy
+- **Confidence:** high for exercised scope
+- **Revisit if:** the owning Find eligibility contract expands
+- **Source:** assumed — autonomous
+
+## D17: Reconcile incoming public UI contracts
+- **Question:** Do the incoming Hosting, sidebar, worktree, automation, orchestration and mobile decisions change preference ownership?
+- **Decision:** Preserve their public API, flat-schema, confirmation/private-home conventions. Mark Browser Settings as a settings view and await ui.view.open so public Settings links and navigation failures work. Keep pane lifecycle contracts from the dependency; do not merge22d17dfd wholesale because it removes our main exports.
+- **Why:** the incoming public view.settings link is distinct from SettingDeclaration.menu; another routing alias is unnecessary.
+- **Evidence:** reconciliation read the complete incoming decision logs (Hosting reviews D1–25/tasks D1–24, sidebar D1–12, worktree creation D1–23, automation D1–13, orchestration D1–42, mobile D1–23), plus pane D13–25. Packaged UI exercised Browser Settings from both the Browser menu and public Settings link.
+- **Reversibility:** easy
+- **Confidence:** high
+- **Revisit if:** the final roadmap catchup adds a binding conflict
+- **Source:** assumed — autonomous
+
+## D18: Separate passing evidence from the remaining source-runtime failure
+- **Question:** What is currently verified, and what still prevents landing?
+- **Decision:** Record root types/build and required script gates as passing, the non-Browser affected suite as passing with its configured Search readiness retry, and the Browser source runtime suite as failing. Retain consumer-visible acceptance; delete only C5's copied API-inventory assertion rather than re-pin it to today's method list. Do not call the failed suite green or use the pane scope cut as a waiver.
+- **Why:** nine remote Browser files pass, but macOS automation/Watch tests timed out and reported lost CDP/helper mapping. Their configured retry also failed. A dedicated runtime repair owns the actual cause.
+- **Evidence:** scripts68pass532asserts; root typecheck EXIT0; final build27plugins/20UI modules EXIT0 (missing icon/release URL warnings retained). Non-Browser220remote files passed after one configured features-search SC73 readiness retry, plus3macOS files. Packaged runtime Find and profile/menu/Settings navigation passed; initial fixture launch omitted packaged PTY paths, corrected launch did not. Allowlist UI still reports omitted quirky.git status and a missing quirky.sidebar-extras setting; these are not whole-app approval.
+- **Reversibility:** evidence can be extended
+- **Confidence:** high for the receipts, source runtime unresolved
+- **Revisit if:** the runtime repair and final integrated gates finish
+- **Source:** assumed — autonomous
+
 ## Progress
-2026-10-28: real dependency789f50/e31 integrated, all preference contributions/API/CLI/native gates wired. Own actual daemon/CLI/profile/hosted-close/routing5tests43asserts pass; root typecheck EXIT0 after7 concrete diagnostics fixed; plus-menu14pass26asserts. Required scripts68pass532asserts, with intentional synthetic failure output preserved. Full build passed22plugins (missing icon/release URL warnings retained), then focused actual UI smoke passed as D13. Ready non-Browser affected dirs are running remotely as bg_13. Browser acceptance remains blocked by a real Watch occurrence-Find defect (DOM.performSearch returns1 matching node for3 occurrences); an isolated WatchOccurrenceFindFix worker owns that repair, no fake counter or private UI import. Next: accept/merge Find repair, merge lane4 acceptance deltas before final Browser gate, collect remote result, rebuild final artifact/types if changed, deps ready, one roadmap catchup/read decisions and controller land. No native deletion/isolation, full parity campaign or final-review pass is claimed.
+2026-10-28: preference implementation and dependency f4489799 integrated; final typecheck/build and scripts pass, non-Browser affected suite passes with one recorded configured readiness retry. Packaged real Chrome occurrence Find and actual compiled profile/menu/Settings navigation exercised; owned UI browser closed and runtime stopping. Browser source suite is red (CDP/helper mapping timeouts); BrowserSourceRuntimeFix owns investigation without weakening acceptance. Obsolete C5 API-list mirror removed, literal/unsupported-command assertions preserved. Dependency deps wait bg_24 active. Next: resolve the runtime cause, collect passing integrated Browser gate, final roadmap catchup/read decisions, controller land and notes. No native clear/isolation, full parity campaign or final-review pass claimed.
