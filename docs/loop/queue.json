@@ -2009,8 +2009,7 @@
       "deps": [
         "m7-test-triage"
       ],
-      "status": "in-progress",
-      "lane": 12
+      "status": "done"
     },
     {
       "id": "fix-test-browser-1028",
