@@ -245,6 +245,7 @@ export function createPRMutationMethods(env: HostingEnv, lookup: PRLookup): Reco
     const read = await freshRead(env, lookup, { ...params, number }, caller)
     const expectedHead = expectedHeadParam(env, params.expectedHead, action === 'enable')
     if (expectedHead) verifyHead(env, read, expectedHead)
+    if (action === 'enable' && read.metadata.autoMergeAllowed === false) invalid(env, 'auto_merge_disabled', 'This repository does not allow auto-merge.')
     if (action === 'enable' && (!read.stackKnown || !read.metadata.known || read.metadata.mergeQueueRequired === null)) {
       invalid(env, 'unknown_safety_metadata', 'Could not verify stack and merge metadata. Refresh and try again.')
     }

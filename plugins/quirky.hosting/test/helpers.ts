@@ -27,7 +27,7 @@ export type HostingTestOptions = {
   upstream?: string
   branch?: string
   tracked?: boolean
-  /** Additional built-in plugins for downstream feature integration tests. */
+  /** Additional real built-ins used by downstream feature integration tests. */
   extraBuiltins?: string[]
 }
 
@@ -179,7 +179,7 @@ export async function bootHosting(ghSource: string, options: HostingTestOptions 
   symlinkSync(join(PLUGINS_ROOT, 'quirky.repo'), join(builtinPluginsDir, 'quirky.repo'))
   symlinkSync(join(PLUGINS_ROOT, 'quirky.worktree'), join(builtinPluginsDir, 'quirky.worktree'))
   for (const id of options.extraBuiltins ?? []) {
-    if (!/^quirky\.[a-z0-9-]+$/.test(id)) throw new Error('invalid additional built-in plugin ID')
+    if (!/^quirky\.[a-z][a-z0-9-]*$/.test(id)) throw new Error('invalid additional builtin fixture ID')
     if (['quirky.hosting', 'quirky.repo', 'quirky.worktree'].includes(id)) continue
     symlinkSync(join(PLUGINS_ROOT, id), join(builtinPluginsDir, id))
   }
