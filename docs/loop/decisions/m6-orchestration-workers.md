@@ -110,5 +110,16 @@
 - **Revisit if:** another platform is authorized
 - **Source:** deferred: platform
 
+## D11: Reserve service coordinator APIs to lane11 without forged sessions
+- **Question:** priority cross-lane coordination for headless Heimdall service Runs
+- **Options:** forge runtime session evidence for plugins; add a distinct owner-Run coordinator principal
+- **Chose:** a genuine CoordinatorEvidence union for worker start/control with kernel-validated service pluginId/runId; preserve RuntimeCallerEvidence for actual worker reports/heartbeat. Lane11 owns serviceRunCreate/Show, serviceWorkerStart, serviceCheck with positive question rows, serviceWorkerRelease/Stop and serviceReply after dependency merges. Explicit run/placement and exact expectedIdentity stop guard; no synthetic coordinator session or authority casts.
+- **Why:** PluginContext.call supplies kernel plugin identity but no session attestation. Headless coordination is valid authority distinct from worker process ownership; conflating them would violate core D4/D15.
+- **Evidence:** lane11 priority interjections; lane1 confirmation in /tmp/quirky-lane11-orchestration-service-reply.md; src/worker-contracts.ts CoordinatorEvidence/WorkerControlParams. Lane1 owns the after-commit message-arrived event; worker hooks do not conflict.
+- **Reversibility:** medium
+- **Confidence:** high
+- **Revisit if:** service ownership or mailbox generation cannot be represented without false process provenance
+- **Source:** assumed — autonomous
+
 ## Progress
 Iteration3 claimed this new early item. Requirements and locked decisions read; core contracts researched. Initial core merge was aborted cleanly to merge latest transitive structured dependency first; conflict-resolution implementer is working only on conflicted paths. No worker feature runtime code or acceptance claim yet. Next: finish prerequisite merges, write combined logic/technical spec, commit contracts, dispatch at most3 implementers, exercise complete API/CLI acceptance and visible custody scenarios, merge dependency updates, final targeted suite/scripts/typecheck and independent review, wait deps ready and queue-controlled landing. Do not revive the old preparation-only dependency gate.

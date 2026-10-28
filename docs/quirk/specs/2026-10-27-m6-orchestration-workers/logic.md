@@ -6,6 +6,8 @@ Status: Autonomous design approved under LOOP night-mode defaults; implementatio
 
 **Amendments:** 2026-10-27 — initial combined specification for the complete two-part queue item.
 
+2026-10-27 — lane11 service coordination adds a genuine kernel-plugin-owned coordinator variant to worker start/control, not worker report authority. Service API implementation is owned by lane11 after dependency integration; ordinary session entry points remain session-attested.
+
 ## Purpose and conceptual model
 
 A coordinator creates durable Tasks, starts supervised attempts, receives exactly authorized completion and decides the next owner of each settled resource. A Worker is execution of one Dispatch in a terminal or background structured session; a Dispatch, not a display title or copied Task ID, carries authority. A terminal resource records custody independently from Task success. Settlement never closes a terminal automatically.
@@ -177,6 +179,8 @@ Persist WorkerRow plus private runtimeEpoch/startOptions/identity; terminal reso
 ### Integration boundary
 
 Before dispatching workers, commit exact worker types and same-store bridge signatures. Reconcile bridge with lane1's published store/service implementation; do not implement a mock core or a no-op lifecycle hook. Worker runtime receives public context and exact incarnation evidence. It does not trust from strings, titles, client metadata or speculative process PID reuse.
+
+Worker coordinator inputs use `CoordinatorEvidence = RuntimeCallerEvidence | ServiceCoordinatorEvidence`. The service variant is `{kind:'service',pluginId,runId,authority:'kernel_plugin'}`, constructed only after kernel plugin caller and owner-Run validation. It is not accepted as request data. Worker report/heartbeat hooks remain RuntimeCallerEvidence. Headless service starts require explicit existing workspace or new-top-level; no fabricated session/current/new-child context. Controls accept explicit runId and stop expectedIdentity session/incarnation, verified before fencing/close. Lane11 owns additive service APIs/core provenance extension, ordinary worker API callers still authenticate real sessions.
 
 Input-origin tracking must distinguish human UI input from injected prompts/query replies through a public origin-bearing event/API. Existing PluginPty.onInput hears every plugin write and cannot alone authorize takeover. Extend public runtime seam where needed, with its actual consumers and behavioral tests; do not infer source from byte content.
 

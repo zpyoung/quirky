@@ -1,11 +1,20 @@
 import type { PluginContext, PluginStore, Session, StoreMigration } from '@quirky/protocol'
 import type {
   DeclaredCallerAliases, DispatchId, DispatchRow, JsonValue, MutationRequest,
-  MutationResult, RunId, RuntimeCallerEvidence, TaskCreateParams, TaskId,
+  MutationResult, RunId, RunRow, RuntimeCallerEvidence, TaskCreateParams, TaskId,
   TaskRow, UtcTimestamp, WorkerRow,
 } from './contracts'
 import type { SessionIdentity } from './runtime-contracts'
 import type { OrchestrationWorkerCore, WorkerLifecyclePort } from './worker-integration'
+
+/** A service principal is constructed only after kernel plugin-caller and owned-Run checks. */
+export interface ServiceCoordinatorEvidence {
+  kind: 'service'
+  pluginId: string
+  runId: RunId
+  authority: 'kernel_plugin'
+}
+export type CoordinatorEvidence = RuntimeCallerEvidence | ServiceCoordinatorEvidence
 
 export type WorkerMode = 'terminal' | 'structured'
 export type TurnStart = 'observed' | 'permission' | 'unsupported' | 'unobserved'
@@ -26,7 +35,11 @@ export interface WorkerStartParams extends MutationRequest, DeclaredCallerAliase
   displayName?: string; comment?: string; setup?: 'run' | 'skip' | 'inherit'
   retryOfDispatchId?: DispatchId; timeoutMs?: number
 }
-export interface WorkerControlParams extends MutationRequest, DeclaredCallerAliases { dispatchId: DispatchId }
+export interface WorkerControlParams extends MutationRequest, DeclaredCallerAliases {
+  dispatchId: DispatchId
+  runId?: RunId
+  expectedIdentity?: { sessionId: string; processIncarnation: string }
+}
 export interface WorkerShowParams { dispatchId: DispatchId }
 export interface WorkerReadParams {
   dispatchId: DispatchId; source?: 'auto' | 'transcript' | 'terminal'; cursor?: string; limit?: number
@@ -112,10 +125,11 @@ export interface WorkerReadResult {
 
 /** Adapter to core's concrete task/receipt/staged-authority APIs, never another store. */
 export interface WorkerCore extends OrchestrationWorkerCore {
-  createTask(input: Omit<TaskCreateParams, keyof MutationRequest>, caller: RuntimeCallerEvidence): TaskRow
-  reserveWorkerDispatch(input: { taskId: TaskId; runId: RunId; retryOfDispatchId?: DispatchId }, caller: RuntimeCallerEvidence): DispatchRow
-  attachWorkerAuthority(dispatchId: DispatchId, identity: SessionIdentity, caller: RuntimeCallerEvidence): DispatchRow
-  mutateWorker<T extends object>(method: string, params: MutationRequest & object, caller: RuntimeCallerEvidence, work: () => Promise<T> | T): Promise<MutationResult<T>>
+  requireCoordinator(caller: CoordinatorEvidence, runId?: RunId): RunRow
+  createTask(input: Omit<TaskCreateParams, keyof MutationRequest>, caller: CoordinatorEvidence): TaskRow
+  reserveWorkerDispatch(input: { taskId: TaskId; runId: RunId; retryOfDispatchId?: DispatchId }, caller: CoordinatorEvidence): DispatchRow
+  attachWorkerAuthority(dispatchId: DispatchId, identity: SessionIdentity, caller: CoordinatorEvidence): DispatchRow
+  mutateWorker<T extends object>(method: string, params: MutationRequest & object, caller: CoordinatorEvidence, work: () => Promise<T> | T): Promise<MutationResult<T>>
   emitWorkerStatus(dispatchId: DispatchId, subject: string, body: string, high: boolean): void
   closeWorkerQuestions(dispatchId: DispatchId, at: UtcTimestamp): void
   listDispatches(): DispatchRow[]
@@ -145,8 +159,8 @@ export interface WorkerPlacement {
 }
 export interface WorkerRuntime {
   readonly context: PluginContext; readonly epoch: string
-  validate(params: WorkerStartParams, caller: RuntimeCallerEvidence): Promise<{ worktreeId: string | null; decision: WorkerModeDecision }>
-  place(params: WorkerStartParams, task: TaskRow, dispatch: DispatchRow, caller: RuntimeCallerEvidence, onCustody: (placement: WorkerPlacement) => void): Promise<WorkerPlacement>
+  validate(params: WorkerStartParams, caller: CoordinatorEvidence): Promise<{ worktreeId: string | null; decision: WorkerModeDecision }>
+  place(params: WorkerStartParams, task: TaskRow, dispatch: DispatchRow, caller: CoordinatorEvidence, onCustody: (placement: WorkerPlacement) => void): Promise<WorkerPlacement>
   waitReady(placement: WorkerPlacement, deadline: number, reused: boolean): Promise<void>
   submit(placement: WorkerPlacement, text: string, operationId: string, deadline: number): Promise<TurnStart>
   observe(record: WorkerRecord | null, dispatch: DispatchRow): Promise<WorkerObservation>
@@ -158,16 +172,16 @@ export interface WorkerOutput {
   capture(dispatchId: DispatchId): Promise<WorkerArchive>
 }
 export interface WorkerLifecycle extends WorkerLifecyclePort {
-  stop(params: WorkerControlParams, caller: RuntimeCallerEvidence): Promise<MutationResult<WorkerControlResult>>
-  abandon(params: WorkerControlParams, caller: RuntimeCallerEvidence): Promise<MutationResult<WorkerControlResult>>
-  release(params: WorkerControlParams, caller: RuntimeCallerEvidence): Promise<MutationResult<WorkerControlResult>>
-  retain(params: WorkerControlParams, caller: RuntimeCallerEvidence): Promise<MutationResult<WorkerControlResult>>
+  stop(params: WorkerControlParams, caller: CoordinatorEvidence): Promise<MutationResult<WorkerControlResult>>
+  abandon(params: WorkerControlParams, caller: CoordinatorEvidence): Promise<MutationResult<WorkerControlResult>>
+  release(params: WorkerControlParams, caller: CoordinatorEvidence): Promise<MutationResult<WorkerControlResult>>
+  retain(params: WorkerControlParams, caller: CoordinatorEvidence): Promise<MutationResult<WorkerControlResult>>
   userInput(params: WorkerUserInputParams): { takenOver: boolean }
   recoverReleases(): Promise<void>
   onExit(sessionId: string, incarnation: string | null, reason: string, exitCode: number | null): void
   dispose(): void
 }
-export interface WorkerStarter { start(params: WorkerStartParams, caller: RuntimeCallerEvidence): Promise<MutationResult<WorkerStartReceipt>> }
+export interface WorkerStarter { start(params: WorkerStartParams, caller: CoordinatorEvidence): Promise<MutationResult<WorkerStartReceipt>> }
 export interface WorkerFleet {
   show(params: WorkerShowParams): Promise<WorkerShowResult>
   list(params: WorkerListParams, caller: RuntimeCallerEvidence | null): Promise<WorkerListResult>
