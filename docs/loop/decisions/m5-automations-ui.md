@@ -308,5 +308,16 @@
 - **Revisit if:** the next merged gate reports a concrete failure
 - **Source:** assumed — autonomous
 
+## D29: Compose equivalent canonical publication and verify new Heimdall/profile contracts
+- **Question:** Why did the second land stop before tests, and how does the new canonical source compose?
+- **Options:** overwrite incoming source; preserve the canonical equivalent implementation and rerun affected boundaries
+- **Chose:** second land stopped on an equivalent atomic-reply filename conflict only. Keep canonical staging.pending plus rename, retaining the corrected CLI-owned recovery test. Read all Heimdall D1-D37 and Browser profiles/settings D1-D25; no binding conflict with explicit session routing, background non-adoption, session privacy/migrations, owner liveness or native evidence.
+- **Why:** Heimdall's kernel-attested service coordinator is distinct from native worker identity; canonical launchSettings/model/effort and accepted-work evidence remain authoritative. Browser paneOpen's resolved worktree route composes with the UI's explicit worktree/session input and does not add SessionKind values.
+- **Evidence:** merge8ae21c13; bg36 exit0/225.30seconds: complete typecheck596installs/610packages,3affected worker/view/Codex files passed without retries; actual CLI crash/recovery and actual PTY FIFO smokes passed again; actual concurrent remote-base CLI creates wt_94998063d465/wt_889fc5b1917f both matched897990729312c57f3682d629c89ba84f59040cd9; native automation3e82c2d8-1703-4761-8bf2-6d62d15d3531/session s_c4e8e20f6a5a completed; packaged29plugins/21UI build passed. No second-land test gate or independent model-review clearance is inferred.
+- **Reversibility:** medium
+- **Confidence:** high for reconciled contracts and exercised paths
+- **Revisit if:** the next authoritative merged gate reports a concrete conflict/failure
+- **Source:** locked by docs/loop/LOOP.md step7.3
+
 ## Progress
-Step7 retry ready: D25-D27 repairs passed owning regressions, complete typecheck, actual CLI/PTY/remote-base/native smokes and packaged build as D28 records. All repair agents and finite verification jobs returned. Commit the seven owning source/test files and this log, detach and retry canonical queue land. Keep the one registered remote follow-up and prior UI evidence; no independent-review clearance, second follow-up or second item.
+Step7 third-attempt ready: canonical equivalent publication and incoming Heimdall/profile contracts are composed and verified as D29 records. All agents and finite checks returned. Commit this evidence, detach and retry canonical queue land; preserve the single registered remote follow-up, existing UI/native evidence and explicit no-review-clearance limit. Handle only concrete land failures; do not start another item.
