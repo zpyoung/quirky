@@ -1,3 +1,4 @@
+import type { NativeBrowserCapability } from './native-browser'
 import type { QuirkyEvent } from './rpc'
 
 /** The contribution kinds the UI plugin API adds. */
@@ -90,14 +91,15 @@ export type UiCommandEntry = {
   module: string | null
 }
 
-/** The menu a `menu-item` contribution may target. */
+/** The window menus a `menu-item` contribution may target. */
 export const TERMINAL_PANE_MENU = 'quirky.terminal/pane'
+export const TERMINAL_TAB_MENU = 'quirky.terminal/tab'
 
-/** A row a plugin adds to a window menu; `command` is a full command ID run with `{ session }`. */
+/** A plugin menu row; pane commands receive `{ session }`, new-tab commands receive `{ worktree, workspace, group }`. */
 export type UiMenuItemEntry = {
   id: string
   plugin: string
-  menu: typeof TERMINAL_PANE_MENU
+  menu: typeof TERMINAL_PANE_MENU | typeof TERMINAL_TAB_MENU
   title: string
   command: string
   /** `agent: 'any'` shows the row only on a pane whose session runs an agent other than the shell. */
@@ -266,6 +268,7 @@ export type CommandHandler = (args?: unknown) => unknown
 
 /** What a plugin's `activate` receives in the window. */
 export type UiPluginContext = {
+  readonly nativeBrowser: NativeBrowserCapability
   readonly pluginId: string
   /** Writes to the window log, prefixed with the plugin ID. */
   log(message: string): void

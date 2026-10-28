@@ -1,10 +1,14 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
+import { act } from 'react'
+import type { UiMenuItemEntry } from '@quirky/protocol'
+import type * as UiModule from '../../src/ui'
 import { dropText } from '../../src/window/pane/drop'
 import { shellEscapePaths } from '../../src/shell-escape'
 import { shellEscapePaths as reexported } from '../../src/open-external'
 import {
   callsTo,
   click,
+  fakeContext,
   fakeDaemon,
   group,
   key,
@@ -12,6 +16,7 @@ import {
   makeWorkspace,
   mountFixture,
   pane,
+  settle,
   startRecording,
   stopRecording,
   tab,
@@ -20,6 +25,17 @@ import {
   type MountedWorkspace
 } from './workspace-support'
 
+let ui: typeof UiModule
+const pluginViews: { unmount(): Promise<void> }[] = []
+const WORKTREE_VIEW = 'view:quirky.session/worktree'
+
+const TAB_CONTRIBUTION: UiMenuItemEntry = {
+  id: 'menu-item:acme.browser/new-tab',
+  plugin: 'acme.browser',
+  menu: 'quirky.terminal/tab',
+  title: 'New Browser Tab',
+  command: 'command:acme.browser/newTab'
+}
 let mounted: MountedWorkspace | null = null
 
 const AGENTS = {
@@ -32,10 +48,16 @@ const AGENTS = {
   ]
 }
 
-beforeAll(loadWorkspace)
+beforeAll(async () => {
+  await loadWorkspace()
+  // The UI imports terminal modules that need the browser fixture initialized first.
+  ui = await import('../../src/ui')
+})
+
 afterAll(unloadWorkspace)
 beforeEach(startRecording)
 afterEach(async () => {
+  for (const view of pluginViews.splice(0)) await view.unmount()
   await mounted?.unmount()
   mounted = null
   stopRecording()
@@ -51,11 +73,88 @@ async function mount() {
   return mounted
 }
 
+async function mountWithMenuItems(menuItems: UiMenuItemEntry[]) {
+  const ws = makeWorkspace(
+    group('grp-1', [tab('tab-1', pane('pane-1', 's-1'), { defaultTitle: 'Terminal 1' }), tab('tab-2', pane('pane-2', 's-2'), { defaultTitle: 'Build' })], { activeTab: 'tab-1' })
+  )
+  const daemon = fakeDaemon(ws, { agents: AGENTS })
+  const fake = fakeContext({
+    ...daemon.handlers,
+    'quirky.terminal/quickCommands': () => ({ commands: [] }),
+    'quirky.worktree/resolve': () => ({ repoId: 'repo-1' }),
+    'ui.contributions': () => ({ menuItems })
+  })
+  const executed: { id: string; args: unknown }[] = []
+  fake.context.executeCommand = async (id, args) => {
+    executed.push({ id, args })
+  }
+  ui.activate(fake.context)
+  fake.layout.view = { id: WORKTREE_VIEW, input: { worktree: 'wt-main' } }
+
+  const element = document.createElement('div')
+  document.body.appendChild(element)
+  let cleanup: (() => void) | void
+  await act(async () => {
+    cleanup = fake.provided.get(WORKTREE_VIEW)!(element, {
+      input: { worktree: 'wt-main' },
+    }) as () => void
+  })
+  await settle()
+  await settle()
+
+  const view = {
+    fake,
+    executed,
+    element,
+    last: () => reports.at(-1),
+    unmount: async () => {
+      await act(async () => void (cleanup as (() => void) | undefined)?.())
+      await settle()
+      element.remove()
+    }
+  }
+  pluginViews.push(view)
+  return view
+}
+
+const contributionRow = (view: { element: HTMLElement }, label: string) =>
+  [...view.element.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((el) => el.querySelector('.qt-menu-label')?.textContent === label) ?? null
+
+const contributionRows = (view: { element: HTMLElement }) =>
+  [...view.element.querySelectorAll<HTMLElement>('[role="menuitem"]')].map((el) => el.querySelector('.qt-menu-label')?.textContent ?? '')
+
 const open = (view: MountedWorkspace) => click(view.q('[data-plus="grp-1"]'))
 const rows = (view: MountedWorkspace) => view.last().menu.items.map((item: any) => item.label)
 const row = (view: MountedWorkspace, label: string) =>
   [...view.element.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((el) => el.querySelector('.qt-menu-label')!.textContent === label)!
 const search = (view: MountedWorkspace) => view.q<HTMLInputElement>('input[aria-label="Search open tabs and agents…"]')!
+
+describe('public tab menu contributions', () => {
+  test('shows a contributed row once in the + menu and runs it for that worktree and group', async () => {
+    const view = await mountWithMenuItems([TAB_CONTRIBUTION])
+    await click(view.element.querySelector('[data-plus="grp-1"]'))
+    expect(contributionRows(view).filter((label) => label === 'New Browser Tab')).toHaveLength(1)
+    await click(contributionRow(view, 'New Browser Tab'))
+    expect(view.executed).toEqual([{
+      id: 'command:acme.browser/newTab',
+      args: { worktree: 'wt-main', workspace: 'wt-main', group: 'grp-1' }
+    }])
+  })
+
+  test('plugin changes refresh an already open + menu', async () => {
+    const menuItems = [TAB_CONTRIBUTION]
+    const view = await mountWithMenuItems(menuItems)
+    await click(view.element.querySelector('[data-plus="grp-1"]'))
+    expect(contributionRows(view)).toContain('New Browser Tab')
+
+    menuItems.splice(0, 1, { ...TAB_CONTRIBUTION, title: 'Open Browser' })
+    await view.fake.emit({ type: 'plugin.changed' })
+    await settle()
+
+    expect(contributionRows(view)).toContain('Open Browser')
+    expect(contributionRows(view)).not.toContain('New Browser Tab')
+  })
+})
 
 describe('SC-22: the + menu', () => {
   test('shows the search box, New Terminal with its key, the agent rows and Agent settings', async () => {
