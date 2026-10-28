@@ -50,7 +50,7 @@ type PublicSearchStatus = { status: SearchStatus; hosts: HostOutcome[] }
 type PublicSearchResponse = SearchResponse & { hosts?: HostOutcome[] }
 type SearchHost = { id: string; label: string; local: boolean; contribution?: VaultHost }
 type ScopeResolution = { localPaths?: string[]; remoteWithin?: { worktree?: string; repo?: string }; remoteScopePaths?: string[]; localError?: string }
-type ScopeIdentity = { cwd?: string; worktreeId?: string }
+type ScopeIdentity = { cwd?: string; worktreeId?: string; repoId?: string }
 type AggregateHostState = { cursor: string | null; hasMore: boolean; generation: number }
 type AggregateCursor = {
   requestKey: string
@@ -508,14 +508,17 @@ export class VaultService {
       const worktree = await this.currentWorktree(identity)
       return worktree ? { repo: worktree.repoId } : { worktree: identity.worktreeId }
     }
+    if (identity.repoId !== undefined) return { repo: identity.repoId }
     if (identity.cwd !== undefined) return { repo: `path:${identity.cwd}` }
     return undefined
   }
+
   private async defaultScope(caller: PluginCaller): Promise<ViewState['scope']> {
     if (caller.role === 'plugin') return 'all'
     const identity = await this.scopeIdentity(caller)
     if (await this.currentWorktree(identity)) return 'workspace'
     if (await this.currentRepo(identity)) return 'project'
+    if (identity.repoId !== undefined) return 'project'
     return identity.worktreeId === undefined ? 'all' : 'workspace'
   }
 
@@ -530,12 +533,12 @@ export class VaultService {
       layout?: { view?: { input?: unknown } | null }
     }
     const input = state.layout?.view?.input
-    const worktreeId = typeof input === 'object' && input !== null && !Array.isArray(input)
-      ? (input as RecordValue).worktree
-      : undefined
-    return typeof worktreeId === 'string' && worktreeId !== ''
-      ? { ...identity, worktreeId }
-      : identity
+    if (typeof input !== 'object' || input === null || Array.isArray(input)) return identity
+    const viewInput = input as RecordValue
+    const worktreeId = viewInput.worktree
+    if (typeof worktreeId === 'string' && worktreeId !== '') return { ...identity, worktreeId }
+    const repoId = viewInput.repo
+    return typeof repoId === 'string' && repoId !== '' ? { repoId } : identity
   }
 
   private async currentWorktree(identity: ScopeIdentity): Promise<{ id: string; path: string; repoId: string } | null> {
@@ -553,11 +556,12 @@ export class VaultService {
     }
   }
 
-  private async currentRepo(identity: ScopeIdentity): Promise<{ id: string; path: string; name: string } | null> {
+  private async currentRepo(identity: ScopeIdentity): Promise<{ id: string; name: string; path: string } | null> {
     if (identity.worktreeId !== undefined) {
       const worktree = await this.currentWorktree(identity)
       return worktree ? this.repoBySelector(worktree.repoId) : null
     }
+    if (identity.repoId !== undefined) return this.repoBySelector(identity.repoId)
     if (identity.cwd === undefined) return null
     const worktree = await this.currentWorktree(identity)
     if (worktree) return this.repoBySelector(worktree.repoId)
@@ -566,6 +570,7 @@ export class VaultService {
       .filter((repo) => pathContains(repo.path, identity.cwd!))
       .sort((a, b) => b.path.length - a.path.length)[0] ?? null
   }
+
 
 
   private async resolveWithin(
